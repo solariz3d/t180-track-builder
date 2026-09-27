@@ -15,17 +15,22 @@
 // Loading accepts only the schema's keys. A value finer than its quantum is snapped to it, so a hand-edited file loads,
 // and its next save is canonical; canonical text round-trips exactly.
 //
-// SCHEMA VERSIONS. This is schema 1, the first. §2 says a document carries a schema version; it says nothing about
-// migrating one, and there is no older schema to migrate from. So a document of any other schema is REFUSED with a
-// named error: newer ones were written by a newer builder, and older ones do not exist. MIGRATIONS is where a step from
-// schema n to n + 1 goes when there is one; it is empty on purpose.
+// SCHEMA VERSIONS. This is schema 2. Schema 1 (the first) had no texture slots; schema 2 gives every word `textures`, its
+// texture-slot overrides (src/doc/textures.js, ARCHITECTURE §5b). An older document is MIGRATED on load, step by
+// step through MIGRATIONS: 1 -> 2 gives every word (and every word of a phrase) `textures: {}`, so it looks exactly as
+// its fonts' defaults make it. The track it resolves to is unchanged. A newer schema is refused (written by a newer
+// builder); an older one with no migration, or a malformed one, is refused as unknown.
 'use strict';
 
 const { DEG, TEMPOS, FONTS, WORDS, handlesOf } = require('./vocab.js');
+const TX = require('./textures.js');
 
-const SCHEMA = 1;
+const SCHEMA = 2;
 const GENERATOR = 't180-track-builder/doc 0.1.0';
-const MIGRATIONS = {};
+const withTextures = (w) => ({ ...w, textures: {} });
+const MIGRATIONS = {
+  1: (o) => ({ ...o, schema: 2, words: (o.words || []).map((e) => (e && e.phrase !== undefined ? { ...e, words: (e.words || []).map(withTextures) } : withTextures(e))) }),
+};
 
 class DocError extends Error {
   constructor(code, message) { super(`${code}: ${message}`); this.name = 'DocError'; this.code = code; }
@@ -73,6 +78,8 @@ function checkWordBody(w, at) {
   }
   if (w.word !== 'jump' && w.handles.easeIn + w.handles.easeOut > 1 + 1e-12) throw new DocError('HANDLE_RANGE', `${at}: easeIn + easeOut exceeds 1`);
   if (w.speed !== null && !(Number.isFinite(w.speed) && w.speed > 0)) throw new DocError('BAD_SPEED', `${at}: speed must be null or a positive number of m/s`);
+  const tp = TX.problem(w.textures, w.word);
+  if (tp) throw new DocError('BAD_TEXTURES', `${at}: ${tp}`);
 }
 
 /** Check a whole document. Throws DocError on the first problem; returns the document. */
@@ -110,7 +117,8 @@ const str = (s) => JSON.stringify(s);
 function wordText(w) {
   const h = handlesOf(w.word).map((k) => `${str(k)}:${num(UNIT[k], w.handles[k])}`).join(',');
   return `${str('word')}:${str(w.word)},${str('font')}:${w.font === null ? 'null' : str(w.font)},${str('tempo')}:${str(w.tempo)},` +
-    `${str('speedKmh')}:${w.speed === null ? 'null' : num('kmh', w.speed)},${str('handles')}:{${h}}`;
+    `${str('speedKmh')}:${w.speed === null ? 'null' : num('kmh', w.speed)},${str('handles')}:{${h}},` +
+    `${str('textures')}:${TX.text(w.textures, (x) => num('m', x))}`;
 }
 function entryText(e) {
   if (e.phrase !== undefined) return `{${str('id')}:${str(e.id)},${str('phrase')}:${str(e.phrase)},${str('words')}:[${e.words.map((w) => `{${wordText(w)}}`).join(',')}]}`;
@@ -135,7 +143,7 @@ function onlyKeys(o, keys, at) {
   if (extra.length) throw new DocError('UNKNOWN_KEY', `${at}: ${extra.join(', ')} ${extra.length > 1 ? 'are' : 'is'} not part of schema ${SCHEMA}`);
 }
 function loadWord(w, at, withId) {
-  onlyKeys(w, withId ? ['id', 'word', 'font', 'tempo', 'speedKmh', 'handles'] : ['word', 'font', 'tempo', 'speedKmh', 'handles'], at);
+  onlyKeys(w, withId ? ['id', 'word', 'font', 'tempo', 'speedKmh', 'handles', 'textures'] : ['word', 'font', 'tempo', 'speedKmh', 'handles', 'textures'], at);
   const handles = {};
   if (w.handles && typeof w.handles === 'object') for (const [k, v] of Object.entries(w.handles)) {
     if (!UNIT[k]) throw new DocError('BAD_HANDLES', `${at}: ${k} is not a handle`);
@@ -144,7 +152,12 @@ function loadWord(w, at, withId) {
   }
   const sp = w.speedKmh;
   if (sp !== null && typeof sp !== 'number') throw new DocError('BAD_SPEED', `${at}: speedKmh must be null or a number`);
-  return { word: w.word, font: w.font === undefined ? undefined : w.font, tempo: w.tempo, handles, speed: sp === null ? null : fromQ.kmh(Math.round(sp * 100) || 0) };
+  // the texture overrides' lengths are snapped to the length quantum; anything malformed is left for checkWordBody to refuse
+  const qm = (v) => (typeof v === 'number' ? fromQ.m(toQ.m(v) || 0) : v);
+  const tx = w.textures && typeof w.textures === 'object' && !Array.isArray(w.textures)
+    ? Object.fromEntries(Object.entries(w.textures).map(([s, o]) => [s, o && typeof o === 'object' && !Array.isArray(o) ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, TX.LENGTHS.includes(k) ? qm(v) : v])) : o]))
+    : w.textures;
+  return { word: w.word, font: w.font === undefined ? undefined : w.font, tempo: w.tempo, handles, speed: sp === null ? null : fromQ.kmh(Math.round(sp * 100) || 0), textures: tx };
 }
 
 /** Load a document from text. Refuses other schemas, unknown keys, and anything checkDoc refuses. */
@@ -152,7 +165,8 @@ function parse(text) {
   let o;
   try { o = JSON.parse(text); } catch (e) { throw new DocError('BAD_JSON', e.message); }
   if (!o || typeof o !== 'object') throw new DocError('BAD_DOC', 'not an object');
-  while (o.schema !== SCHEMA && MIGRATIONS[o.schema]) o = MIGRATIONS[o.schema](o);   // none exist yet (see the header)
+  // only an INTEGER schema migrates: MIGRATIONS["1"] would otherwise match the string "1", which is refused
+  while (Number.isInteger(o.schema) && o.schema !== SCHEMA && MIGRATIONS[o.schema]) o = MIGRATIONS[o.schema](o);   // 1 -> 2
   if (o.schema !== SCHEMA) checkDoc({ schema: o.schema });   // throws the named schema error
   onlyKeys(o, ['schema', 'generator', 'name', 'closed', 'nextId', 'words', 'constraints'], 'document');
   if (!Array.isArray(o.words)) throw new DocError('BAD_DOC', 'words must be an array');

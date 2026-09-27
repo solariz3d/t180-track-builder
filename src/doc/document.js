@@ -11,6 +11,7 @@
 'use strict';
 
 const { DEG, TEMPOS, FONTS, WORDS, RAMP_M, handlesOf } = require('./vocab.js');
+const TX = require('./textures.js');
 const { SCHEMA, GENERATOR, DocError, UNIT, quantise, checkDoc, checkWordBody, deepFreeze } = require('./serial.js');
 
 function createDoc(name = '') {
@@ -36,7 +37,7 @@ function defaultWord(word, { dir = 'L', tempo = 'standard', font, roll0 = 0 } = 
   const T = TEMPOS[tempo]; if (!T) throw new DocError('UNKNOWN_TEMPO', `tempo "${tempo}" (known: ${Object.keys(TEMPOS).join(', ')})`);
   if (dir !== 'L' && dir !== 'R') throw new DocError('BAD_DIR', `dir must be 'L' or 'R', got ${dir}`);
   const W = WORDS[word];
-  if (word === 'jump') return { word, font: null, tempo, speed: null, handles: { gap: W.gap, drop: W.drop, land: W.land } };
+  if (word === 'jump') return { word, font: null, tempo, speed: null, handles: { gap: W.gap, drop: W.drop, land: W.land }, textures: {} };
   const sign = dir === 'L' ? 1 : -1, turn = sign * W.turn, ease = T.ease;
   // Curved words: the length that makes the PEAK radius equal R × scale, given the ease (INTERFACES 4b: easeIn/easeOut).
   const length = W.length !== undefined ? W.length : (Math.abs(turn) * W.R * T.scale) / (1 - ease);
@@ -44,12 +45,18 @@ function defaultWord(word, { dir = 'L', tempo = 'standard', font, roll0 = 0 } = 
   // A font with an outside wall puts it on the outside of the turn: the right for a left turn.
   const out = F.psiOut !== undefined, psiL = out ? (sign > 0 ? F.psiIn : F.psiOut) : F.psiL, psiR = out ? (sign > 0 ? F.psiOut : F.psiIn) : F.psiR;
   return { word, font: f, tempo, speed: null, handles: {
-    length, turn, climb: 0, easeIn: ease, easeOut: ease, roll0, roll1: roll0 + (W.roll || 0), heartline: 0, psiL, psiR, width: F.width, wall: F.wall, ramp: RAMP_M } };
+    length, turn, climb: 0, easeIn: ease, easeOut: ease, roll0, roll1: roll0 + (W.roll || 0), heartline: 0, psiL, psiR, width: F.width, wall: F.wall, ramp: RAMP_M }, textures: {} };
 }
 
 function finishWord(body, overrides = {}, at) {
   const handles = qHandles({ ...body.handles, ...(overrides.handles || {}) });
-  const w = { word: body.word, font: overrides.font !== undefined ? overrides.font : body.font, tempo: body.tempo, speed: qSpeed(overrides.speed !== undefined ? overrides.speed : body.speed), handles };
+  // Texture overrides are laid over the word's own (a slot patched to null drops back to the font's), checked BEFORE
+  // their lengths are quantised, so a malformed set is refused by name rather than tripping the quantiser.
+  const tx = TX.merge(body.textures, overrides.textures);
+  const tp = TX.problem(tx, body.word);
+  if (tp) throw new DocError('BAD_TEXTURES', `${at}: ${tp}`);
+  const w = { word: body.word, font: overrides.font !== undefined ? overrides.font : body.font, tempo: body.tempo, speed: qSpeed(overrides.speed !== undefined ? overrides.speed : body.speed), handles,
+    textures: TX.quantised(tx, (v) => quantise('m', v)) };
   checkWordBody(w, at);
   return w;
 }
@@ -93,7 +100,7 @@ function replaceHead(doc, word, opts = {}) {
   return appendWord(removeHead(doc), word, opts);
 }
 
-/** Sculpt one word: patch { font?, speed?, handles?: {...} }. Every other word, and every id, is untouched. */
+/** Sculpt one word: patch { font?, speed?, handles?: {...}, textures?: { <slot>: {...} | null } }. Every other word, and every id, is untouched. */
 function editWord(doc, id, patch = {}) {
   const i = doc.words.findIndex((e) => e.id === id);
   if (i < 0) throw new DocError('NO_SUCH_WORD', `no word with id ${id}`);
