@@ -55,4 +55,11 @@ const RAMP_M = 20;
 const JUMP_HANDLES = ['gap', 'drop', 'land'];
 const handlesOf = (word) => (word === 'jump' ? JUMP_HANDLES : ROAD_HANDLES);
 
-module.exports = { DEG, TEMPOS, FONTS, WORDS, ROAD_HANDLES, JUMP_HANDLES, RAMP_M, handlesOf };
+// THE LANDING RAMP a jump carries (the D170 review: "a jump word should carry its landing ramp, so the head sits on road
+// and the next piece starts on the landing"). Its length is validation's: src/validate/jumps.js landingRamp() solves
+// where the flight comes down at both measured falls (MACH6.jumpG, 3.2 g and 6.3 g, FINDINGS.md:336-337) and adds its
+// margin. The one number kept here is DEFAULT_KMH, 300: the speed a jump with no speed of its own is sized for (the
+// platform test's design speed, the middle of its 250–350 km/h band; inferred, to be tuned).
+const LANDING = Object.freeze({ DEFAULT_KMH: 300 });
+
+module.exports = { DEG, TEMPOS, FONTS, WORDS, ROAD_HANDLES, JUMP_HANDLES, RAMP_M, LANDING, handlesOf };

@@ -38,10 +38,14 @@ test('an OPEN track: no lap result, only the reason, and no red at the open end'
   assert.deepStrictEqual(r.red, []);
 });
 
-test('an OPEN track whose head is a gap (mid-build): no gap-in-road red, and the jump is pending, not failed', () => {
+// CHANGED 2026-09-27 (D170): the head in the air was exempt; it is now red, `head-in-the-air`, the librarian's item 3
+// ("an open end must sit on road"). What stays true is kept: no gap-in-road red, and the jump pending, not failed.
+test('an OPEN track whose head is a gap (mid-build): no gap-in-road red, the jump is pending, and the head in the air is red', () => {
   const { path, segs } = grow([[X.seg({ speed: 150 }), straightPiece(80)], [X.seg({ id: 'g', kind: 'gap', word: 'straight', speed: 150 }), straightPiece(20)]]);
   const r = validate(path, segs);
-  assert.deepStrictEqual(r.red, []);
+  // the red runs over the flight: from its first station (the take-off road owns s = 80) to the head
+  const inFlight = path.samples.filter((p) => p.seg === 1);
+  assert.deepStrictEqual(r.red.map((x) => [x.reason, x.s0, x.s1]), [['head-in-the-air', inFlight[0].s, path.samples[path.samples.length - 1].s]]);
   assert.strictEqual(r.jumps[0].pending, true);
   assert.deepStrictEqual(r.lap, { ok: null, reason: 'open' });
 });

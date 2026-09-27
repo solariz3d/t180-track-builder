@@ -49,6 +49,15 @@ test('undo, redo and save-as-piece are live only when they can do something', as
   assert.equal(paletteModel(s.getState(), s.pickers()).can.saveSelection, true);
 });
 
+test('"Close the loop" is live only for an open track with words on it', async () => {
+  const s = await createShell({ storage: mem() });
+  assert.equal(paletteModel(s.getState(), s.pickers()).can.closeLoop, false);
+  s.place('turn');
+  assert.equal(paletteModel(s.getState(), s.pickers()).can.closeLoop, true);
+  s.adopt({ ...s.getState().history.present, closed: true });
+  assert.equal(paletteModel(s.getState(), s.pickers()).can.closeLoop, false);
+});
+
 test('the head is named: the word the next piece will follow, or none on an empty track', async () => {
   const s = await createShell({ storage: mem() });
   assert.equal(paletteModel(s.getState(), s.pickers()).head, null);

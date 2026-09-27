@@ -10,35 +10,45 @@ its open end, and the user picks the next piece, font, tempo and direction there
     cargo tauri dev        # the app window
     cargo build            # the native side alone
 
-`src-tauri/build.rs` copies `app/` and `src/` into `src-tauri/dist/` before every build, keeping the repository's
-layout, so a relative `require` means the same thing in the webview as under node.
+`src-tauri/build.rs` copies `app/`, `src/` and `tools/` into `src-tauri/dist/` before every build, keeping the
+repository's layout, so a relative `require` means the same thing in the webview as under node.
+`app/test/shell-dist.test.js` checks that every file the page loads is inside a copied folder. It reruns only when
+`app/`, `src/` or `tools/` change, so an edit made in `dist/` by hand stays until one of those does.
 
 - **The geometry core, validation and the document model all run in the webview.** No mesh data crosses IPC, during a
   drag or otherwise (ARCHITECTURE §9).
-- **The native side only reads and writes the user's tracks and piece library,** by name, in the app's data folder
-  (`src-tauri/src/lib.rs`).
+- **The native side only reads and writes the user's tracks, piece library and autosave,** by name, in the app's
+  data folder, and writes an exported track into the folder the user picks (`src-tauri/src/lib.rs`).
+- **Export runs `src/export/fromwords.js` `exportTrack()` unchanged, in the webview,** against an in-memory disk
+  (`app/export/node-shim.js`: the few node calls the exporter makes). The files it wrote go to the native side, which
+  writes them. It is tested byte-identical to node's own export, apart from the PNG compression. No game is launched
+  and nothing is installed. **The self-intersection check is always on;** the app has no switch for it, and a refused
+  export lists its reds (the ruling of 2026-09-27: settle a false red in the geometry, never by loosening the check).
 
 ## The pieces, and who owns them
 
 | path | owner | what |
 |---|---|---|
-| `src-tauri/` | A | the native shell: window, commands `list_tracks`, `save_track`, `open_track`, `save_library`, `open_library` |
+| `src-tauri/` | A | the native shell: window, file commands (tracks, library, autosave), `write_export`, the folder dialog |
 | `app/index.html` | A | the page and its glue: loads the modules, wires storage to the Tauri commands, keyboard shortcuts |
 | `app/shell.js` | A | the app's state and actions, with no DOM (tested headless) |
 | `app/lib/cjs.js` | A | runs the program's CommonJS files in the webview |
-| `app/palette/` | A | the build palette at the open end, the pickers, the track list, and saving pieces |
+| `app/palette/` | A | the build palette at the open end, the pickers, the track list, saving pieces; `panels.js` mounts the panels below |
+| `app/export/` | A | the Export button's logic: the AC guard, and the exporter run in memory (`node-shim.js`) |
 | `app/preview/` | C | the WebGL preview of the track |
 | `app/camera/` | C | the camera modes: build view, the fixed angles, free |
 | `app/validate-ui/` | E | live colour along the track, jump arcs |
 | `app/handles/` | E | sculpt handles with their physics bounds |
-| `app/test/` | each owner, by prefix | `shell*`, `palette*` are A's; others as named |
+| `app/test/` | each owner, by prefix | `shell*`, `palette*`, `export*` are A's; others as named |
 
 ## The seam: what C and E plug into
 
 **Each panel is a directory with an `index.js` that exports `mount(root, shell)`.** `app/index.html` loads
 `app/preview/index.js`, `app/camera/index.js`, `app/validate-ui/index.js` and `app/handles/index.js` through the loader.
-Each one is optional: if it is not there yet, the page shows a placeholder naming the missing module, and everything
-else works.
+Each one is optional: if it is not there yet, the page shows a quiet "not plugged in yet" note, and everything else
+works. **If it is there and FAILS** (it does not load, exports no `mount`, or `mount` throws, rejects, or returns an
+`Error` or `{ error }`), its area shows "The <panel> could not start: <why>" as an alert (`app/palette/panels.js`).
+So a panel can report its own failure by returning it.
 
 - **`root`** is the element the panel owns:
   - `#preview` for `preview` (a `<canvas>` is theirs to create);
@@ -65,7 +75,8 @@ else works.
 - **The camera** reads the head from the path (`path.head` from `src/geom`), not from the shell. The shell holds no
   derived geometry, so the frame is never stored twice.
 
-**Keys (in `index.html`):** Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo · Backspace remove the head · Ctrl+S save. A
+**Keys (`app/shell.js` `keyAction`, bound in `index.html`):** Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo ·
+Ctrl+Backspace remove the head (a bare Backspace does nothing: it is too easy to hit by accident) · Ctrl+S save. A
 panel that wants a key asks for it in this file first, so two panels never bind the same one.
 
 ## Files on disk
@@ -73,5 +84,11 @@ panel that wants a key asks for it in this file first, so two panels never bind 
 - **A track** is `<name>.t180track`: the document's canonical text (`src/doc/serial.js`), in
   `<app data>/tracks/`.
 - **The user's pieces** are `library.t180lib` (`src/doc/library.js` `serializeLibrary`), in `<app data>/`.
+- **The autosave** is `autosave.t180auto` in `<app data>/`: `{ schema, name, doc }` with the canonical text, written
+  about 1.5 s after the last edit while the track is unsaved. It is cleared by saving under a name, or by closing with
+  nothing unsaved. Closing with unsaved changes keeps it, so the next start offers the track back rather than losing
+  it.
+- **An export** is a `t180b_<name>` folder in the folder the user picks. Inside an AC install's `content	racks`, only
+  `t180b_*` folders are written: another track's folder is refused, by the page and again by the native side.
 - A name is 1–64 letters, digits, spaces, `_` or `-`, starting with a letter or digit. The shell checks it, and the
   native side checks it again: no path in a name ever reaches the disk.

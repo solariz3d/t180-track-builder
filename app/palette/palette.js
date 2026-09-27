@@ -20,7 +20,8 @@ function paletteModel(state, pickers) {
       { title: 'My pieces', items: items.filter((p) => !p.builtin) },
     ],
     pickers: { font: pick('font'), tempo: pick('tempo'), dir: pick('dir') },
-    can: { undo: h.past.length > 0 && !h.dragBase, redo: h.future.length > 0 && !h.dragBase, saveSelection: sel.size > 0, removeHead: doc.words.length > 0 },
+    can: { undo: h.past.length > 0 && !h.dragBase, redo: h.future.length > 0 && !h.dragBase, saveSelection: sel.size > 0, removeHead: doc.words.length > 0,
+      closeLoop: doc.words.length > 0 && !doc.closed },
     head: last ? { id: last.id, word: last.phrase !== undefined ? last.phrase : last.word } : null,
     track: doc.words.map((w) => ({ id: w.id, word: w.phrase !== undefined ? w.phrase : w.word, phrase: w.phrase !== undefined, selected: sel.has(w.id) })),
     message: state.message, resolveError: state.resolveError,
@@ -45,7 +46,7 @@ function el(tag, attrs = {}, kids = []) {
 
 /**
  * Draw the palette into `root`. `on` holds the shell's actions: { place(name), setPicker(k, v), undo(), redo(),
- * removeHead(), select(from, to), saveSelection() }. The whole panel is redrawn per state change; it is small.
+ * removeHead(), select(from, to), saveSelection(), closeLoop(), ghost(name | null) }. The whole panel is redrawn per state change; it is small.
  */
 function renderPalette(root, model, on) {
   let anchor = null;
@@ -59,14 +60,17 @@ function renderPalette(root, model, on) {
     g.items.length
       ? el('div', { class: 'pieces' }, g.items.map((p) => el('button', {
         class: `piece ${p.builtin ? 'builtin' : 'mine'}`, title: p.kind === 'phrase' ? p.words.join(' → ') : p.words[0],
-        on: { click: () => on.place(p.name) }, text: p.name,
+        // pointing at (or tabbing to) a piece shows its ghost at the head; leaving hides it; a click places it
+        on: { click: () => on.place(p.name), mouseenter: () => on.ghost && on.ghost(p.name), mouseleave: () => on.ghost && on.ghost(null),
+          focus: () => on.ghost && on.ghost(p.name), blur: () => on.ghost && on.ghost(null) }, text: p.name,
       })))
       : el('p', { class: 'empty', text: 'Nothing saved yet. Select placed words below and save them as your own piece.' }),
   ]));
   const actions = el('div', { class: 'actions' }, [
     el('button', { disabled: !model.can.undo, on: { click: on.undo }, text: 'Undo', title: 'Ctrl+Z' }),
     el('button', { disabled: !model.can.redo, on: { click: on.redo }, text: 'Redo', title: 'Ctrl+Y' }),
-    el('button', { disabled: !model.can.removeHead, on: { click: on.removeHead }, text: 'Remove head', title: 'Backspace' }),
+    el('button', { disabled: !model.can.removeHead, on: { click: on.removeHead }, text: 'Remove head', title: 'Ctrl+Backspace' }),
+    el('button', { disabled: !model.can.closeLoop, on: { click: on.closeLoop }, text: 'Close the loop', title: 'Join the open end back to the start (takes a few seconds)' }),
   ]);
   const track = el('ol', { class: 'track' }, model.track.map((t) => el('li', {
     class: `${t.selected ? 'selected' : ''} ${t.phrase ? 'phrase' : ''}`.trim(), 'data-id': t.id,
@@ -76,13 +80,14 @@ function renderPalette(root, model, on) {
     el('input', { id: 'piece-name', placeholder: 'name for the selection', 'aria-label': 'piece name' }),
     el('button', { disabled: !model.can.saveSelection, on: { click: () => on.saveSelection(root.querySelector('#piece-name').value) }, text: 'Save selection as my piece' }),
   ]);
-  root.replaceChildren(
+  // Only real nodes: the DOM turns a null child into the text "null" (it showed as "nullnull" under the track list).
+  root.replaceChildren(...[
     el('div', { class: 'head', text: model.head ? `Building on from ${model.head.id} (${model.head.word})` : 'Empty track: place the first piece' }),
     el('div', { class: 'pickers' }, pickerRow), ...groups, actions,
     el('h3', { text: 'The track' }), track, save,
     model.message ? el('p', { class: 'message', role: 'alert', text: model.message }) : null,
     model.resolveError ? el('p', { class: 'message', role: 'alert', text: model.resolveError }) : null,
-  );
+  ].filter(Boolean));
 }
 
 module.exports = { paletteModel, renderPalette };

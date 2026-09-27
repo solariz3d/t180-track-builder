@@ -16,15 +16,15 @@ const { createValidationController, summary, STEP } = require('../validate-ui/pa
 const REPO = path.resolve(__dirname, '..', '..');
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
 const levels = (map) => map.stations.map((e) => Array.from(e.levels));
+// CHANGED 2026-09-27 (D169): the reference now validates at the controller's own default design speed, the picker's
+// 460 km/h (FINDINGS.md:476); before D169 the controller had none. The made-up lap-sim car these tests used to force
+// loads onto a shell-built track (accel 15, inferred) is gone: the picker is how a shell-built track gets loads now.
+const DESIGN = MACH6.designSpeedKmh / 3.6;
 /** What a fresh, full validation of the shell's current document colours: the reference every live state must equal. */
-function fresh(shell, csp = true, extra = {}) {
+function fresh(shell, csp = true, designSpeed = DESIGN) {
   const r = shell.getState().resolved, p = G.buildPath(r.segments, { step: STEP });
-  return colourMap(validate(p, r.segments, { ...extra, csp }), { path: p, car: extra.car });
+  return colourMap(validate(p, r.segments, { csp, ...(designSpeed == null ? {} : { designSpeed }) }), { path: p });
 }
-// The shell places words with no design speed, and FINDINGS has no car acceleration (src/validate/limits.js accel:
-// null), so a shell-built track has NO loads. Tests that must see loads give the lap sim an acceleration: inferred,
-// a test value only (the plan's 745 km/h cap is reached either way).
-const LOADED = { car: { ...MACH6, accel: 15 }, startSpeed: 50 };
 
 test('the first word builds and colours the whole track (full), and an empty document shows nothing', async () => {
   const shell = await createShell({ storage: mem() });
@@ -37,7 +37,7 @@ test('the first word builds and colours the whole track (full), and an empty doc
 
 test('placing at the head is an APPEND: extendPath, revalidate, only the new span re-coloured, and equal to a full run', async () => {
   const shell = await createShell({ storage: mem() });
-  const ctl = createValidationController(shell, { validate: LOADED });
+  const ctl = createValidationController(shell);
   shell.place('straight'); shell.place('turn');
   const before = ctl.state.map, oldEnd = ctl.state.path.lengthM;
   shell.place('straight');
@@ -45,9 +45,9 @@ test('placing at the head is an APPEND: extendPath, revalidate, only the new spa
   const firstNew = ctl.state.map.stations.findIndex((e) => e.s >= oldEnd - 1e-9);
   assert.ok(Math.min(...ctl.state.changed) >= firstNew - 1);
   for (let k = 0; k < firstNew - 1; k++) assert.strictEqual(ctl.state.map.stations[k], before.stations[k]);
-  assert.ok(ctl.state.result.lines.length > 0, 'the lap sim gives loads, or this equality proves nothing');
-  assert.deepStrictEqual(ctl.state.result.lines.map((l) => [l.s, l.u, l.fN_g]), (() => { const r = shell.getState().resolved, p = G.buildPath(r.segments, { step: STEP }); return validate(p, r.segments, { ...LOADED, csp: true }).lines.map((l) => [l.s, l.u, l.fN_g]); })());
-  assert.deepStrictEqual(levels(ctl.state.map), levels(fresh(shell, true, LOADED)));
+  assert.ok(ctl.state.result.lines.length > 0, 'the picker\'s design speed gives loads, or this equality proves nothing');
+  assert.deepStrictEqual(ctl.state.result.lines.map((l) => [l.s, l.u, l.fN_g]), (() => { const r = shell.getState().resolved, p = G.buildPath(r.segments, { step: STEP }); return validate(p, r.segments, { csp: true, designSpeed: DESIGN }).lines.map((l) => [l.s, l.u, l.fN_g]); })());
+  assert.deepStrictEqual(levels(ctl.state.map), levels(fresh(shell)));
 });
 
 test('a drag on an earlier word is a SCULPT from that word, and still equals a full run', async () => {
@@ -84,11 +84,15 @@ test('the CSP switch re-validates for vanilla AC: a 60° wall turns red, and bac
   assert.strictEqual(summary(ctl.state).red, 0);
 });
 
-test('a jump placed at the open head is pending, and drawn once its landing road is placed', async () => {
+// CHANGED 2026-09-27 (D170): a jump word now carries its landing ramp (A's model, D170), so at the head it is either
+// waiting (the model without the ramp) or already landed (with it). What holds either way: no arcs while it waits, and
+// both landings drawn once there is landing road.
+test('a jump placed at the open head is drawn once it has landing road (its own ramp, or the next word)', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createValidationController(shell);
   shell.place('straight'); shell.place('jump');
-  assert.deepStrictEqual(ctl.state.arcs, []);
+  const waits = ctl.state.path.samples[ctl.state.path.samples.length - 1].seg === shell.getState().resolved.segments.findIndex((g) => g.kind === 'gap');
+  assert.strictEqual(ctl.state.arcs.length, waits ? 0 : 1);
   shell.place('straight');
   assert.strictEqual(ctl.state.arcs.length, 1);
   assert.deepStrictEqual(ctl.state.arcs[0].arcs.map((a) => a.g), [3.2, 6.3]);

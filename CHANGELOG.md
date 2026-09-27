@@ -174,6 +174,48 @@ All notable changes to this project are recorded here. The format follows
   - It follows the build head: an append or a sculpt re-validates only from the changed word, and the result equals a
     full run.
   - Each jump's 3.2 g and 6.3 g landing arcs and the landing zone are drawn from validation's own numbers.
+- Export from the app: an Export… button writes the closed track as an Assetto Corsa track folder into a folder picked
+  in the native dialog.
+  - It runs the same exporter as the command line (`src/export/fromwords.js`) inside the window. The output is
+    byte-identical to it, apart from PNG compression.
+  - A red track is refused and its reds are listed.
+  - Inside an AC install only `t180b_*` folders are ever written, and another track's folder is refused, by the page
+    and again natively. Nothing is installed or launched.
+- Close the loop from the palette: it appends the safest connector as one undo step, since a track must be a closed lap
+  before it exports.
+- Autosave and crash recovery: an unsaved track is written to the app's data folder shortly after each edit, and the
+  next start offers to restore it or discard it. Nothing is written inside the repository.
+- A design-speed picker in the validation panel, starting at 460 km/h: the median speed of seven clean Mach 6 laps
+  (`docs/FINDINGS.md` §3d).
+  - Every word without its own speed is validated at it, so the load colours appear while building: information at the
+    20 g suspension stop, amber above the proven 90 g.
+  - It edits no document.
+- `tools/speed.cjs`: speed percentiles and propulsive acceleration per speed band, measured from replays.
+  `docs/FINDINGS.md` §3d records the measurements with their command and sample. No replay bytes are in this
+  repository.
+- A window proof (`scripts/prove_render.js`, `scripts/prove_render.ps1`). It starts the built app, places a real track
+  through the palette, and captures the app's own window (PrintWindow, never the screen) in the build, overhead, chase
+  and free views. It checks that the track is drawn, that the build view looks along the growth direction, and that the
+  head is in frame. The captures stay outside the repository.
+- A jump now carries its landing ramp: after the flight, a straight stretch of road at the landing pitch, long enough
+  that the car touches down on it at both measured falls (3.2 g and 6.3 g) with a margin. It is sized by validation's
+  own `landingRamp()` in `src/validate/jumps.js`. The build head sits on road after a jump, and the next piece starts on
+  the landing, blending from the ramp's cross-section like any other join.
+- The ghost of the next piece: pointing at a piece in the palette shows it, see-through, at the head, exactly as a click
+  would place it. Leaving hides it.
+- The preview reads as a track:
+  - lit surfaces, so floors, banks and walls differ;
+  - white edge and centre lines, and a tie across the road every 10 m;
+  - a faint ground grid at height 0, which is editor UI, not scenery;
+  - a marker at the build head that stays readable from any distance.
+  The overhead camera frames the whole track.
+- A load graph in the validation panel: the hardest line's load along the track, with the 20 g and 90 g limits and the
+  red and amber stretches shaded. It is hidden while there is no load.
+- Validation:
+  - an open track's head must sit on road; a head in a jump's flight is red (`head-in-the-air`);
+  - at a known take-off speed, a landing the road does not catch is red (`landing-misses-zone`).
+- A headless end-to-end test (`test/doc-e2e.test.js`): words become a closed loop, which is exported with every check
+  on and read back with every start, pit and timing marker.
 - Sculpt handles (`app/handles/`): every handle of a placed word, with its physics bounds.
   - A drag stops at the red bound (known breakage, which the export refuses) and passes amber (unproven, never
     blocked).
@@ -188,6 +230,15 @@ All notable changes to this project are recorded here. The format follows
 - Validation's steep check (red above 50° without CSP) now measures the actual surface normal at every station and
   lateral line, so a banked road counts as well as a steep wall.
 - `npm test` now also runs the app's headless tests (`app/test/*.test.js`).
+- The lap sim runs at the measured full-thrust acceleration, a table against speed: about 25 m/s² below 400 km/h and
+  11.5 m/s² at 700–800. So a closed track's lap proof runs with no speed given. With the default car it runs only on a
+  closed loop; an open track without a design speed claims no load.
+- Backspace alone no longer removes the head; Ctrl+Backspace does, so a stray key cannot delete track.
+
+### Removed
+
+- The app's "skip self-intersection check" switch, and its pass-through to the exporter. The check is always on in the
+  app. A track it refuses shows its reds; a false red is fixed in the geometry, never by switching the check off.
 
 ### Fixed
 
@@ -197,3 +248,19 @@ All notable changes to this project are recorded here. The format follows
   `src/geom/mesh.js` named cells by the id alone, so the names repeated (16 of 31 nodes on a five-word track). That also
   made the self-intersection check report crossings on tracks that do not cross, which refused every default export.
   Pieces are now named by id and part.
+- The palette no longer shows "nullnull" under the track list.
+- The window no longer scrolls: the panels scroll inside themselves.
+- A panel that fails to start (the preview, the camera, validation, handles) now says why in its own area.
+- The built app now carries `tools/`, which the exporter needs. The in-window module loader no longer breaks on a file
+  that declares a name it also provides.
+- The preview canvas follows devicePixelRatio (sharp on scaled displays) and resizes with it.
+- Ctrl, Alt and Meta shortcuts no longer switch the camera (Ctrl+C is copy).
+- The lap sim's speed cap was 745 km/h, read from the speed at Centrifuge's hardest moment rather than a top speed, and
+  both Centrifuge laps run above it. It is now the measured p99, 764 km/h (`docs/FINDINGS.md` §3d).
+- The self-intersection check pairs each mesh with its own cell by position, never by name. A repeated name can no
+  longer make one pass of the road "meet" itself. Real crossings and stacks are still found.
+- The jump counter read "0 jumps" with a jump placed, because it counted drawn landing arcs, which leave out a jump
+  still waiting for its landing. It now counts every jump and names the ones waiting.
+- Validation measured every jump one station step too long (from the station before the lip), so a 12 m gap read as 13
+  m, and the 6.3 g landing seemed to need 311 km/h instead of 287.
+- The right-hand panel no longer scrolls sideways: wide content (the load graph) is held to the panel's width.

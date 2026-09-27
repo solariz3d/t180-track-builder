@@ -64,6 +64,11 @@ const MUTATIONS = [
     from: "if (!(rampM > 0) || !prev || prev.kind === 'gap' || sameProfile(prev.profile, seg.profile)) return seg;", to: 'return seg;', caughtBy: 'no step at the seam, half-pipe → flat' },
   { id: 'M23 the ramp ends early (w reaches 1 at half the ramp)', file: 'mesh.js',
     from: 'const w = smoothstep((ramp.s0 + sm.s - S[0].s) / ramp.length);', to: 'const w = smoothstep(2 * (ramp.s0 + sm.s - S[0].s) / ramp.length);', caughtBy: 'the ramp ends on the entering font' },
+  // D170 addendum: the self-check pairs scene nodes with cell records by position, and groups by cell, never by name
+  { id: 'M26 the self-check finds cell records by NAME again', file: 'bvh.js',
+    from: 'rec = mesh.cells[k];', to: 'rec = mesh.cells.slice().reverse().find((c) => c.name === m.name);', caughtBy: 'names repeat (two adjacent pieces' },
+  { id: 'M27 the self-check groups findings by cell NAME', file: 'bvh.js',
+    from: "const kx = S.s[ia] <= S.s[io] ? `${S.triCell[t]}|${S.triCell[o]}` : `${S.triCell[o]}|${S.triCell[t]}`;", to: 'const kx = `${x[0]}|${y[0]}`;', caughtBy: 'names repeat: a real same-height crossing' },
   { id: 'M24 the document blend offset s0 ignored (a transition split across segments restarts)', file: 'mesh.js',
     from: 'const w = smoothstep((ramp.s0 + sm.s - S[0].s) / ramp.length);', to: 'const w = smoothstep((sm.s - S[0].s) / ramp.length);', caughtBy: 'document blend: a transition split across two segments' },
   { id: "M25 blend: null overridden by the geometry's own inheritance", file: 'mesh.js',

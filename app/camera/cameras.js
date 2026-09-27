@@ -69,8 +69,30 @@ function sampleAt(path, s) {
   return { s: a, pos: lerp(A.pos, B.pos, t), T: unit(lerp(A.T, B.T, t)), U: unit(lerp(A.U, B.U, t)) };
 }
 
-/** The exact pose of a follow mode for a head (and a path, for chase). Free mode's pose is the rig's own state. */
-function poseFor(mode, { head, path } = {}, opts = DEFAULTS) {
+/**
+ * OVERHEAD, FIT TO THE WHOLE TRACK (the D170 review, item 2). Straight down over the centre of the track's world
+ * box, the growth direction still up the screen. The box's 8 corners are measured along the screen's up (f) and right
+ * axes; the eye rises until both half-extents fit the field of view (with 8% margin) at the depth of the box's TOP, the
+ * nearest any vertex can be. Every vertex of the box then lands inside the view (app/test/look.test.js projects them).
+ * `far` covers the box's bottom.
+ */
+function fitOverhead(bounds, aspect, f, fov) {
+  const c = [(bounds.min[0] + bounds.max[0]) / 2, 0, (bounds.min[2] + bounds.max[2]) / 2], r = cross(f, WORLD_UP);
+  let hf = 0, hr = 0;
+  for (let i = 0; i < 8; i++) {
+    const p = [i & 1 ? bounds.max[0] : bounds.min[0], 0, i & 4 ? bounds.max[2] : bounds.min[2]], d = sub(p, c);
+    hf = Math.max(hf, Math.abs(dot(d, f))); hr = Math.max(hr, Math.abs(dot(d, r)));
+  }
+  const t = Math.tan(fov / 2), dist = Math.max(hf / t, hr / (t * aspect), 10) * 1.08;
+  const eye = [c[0], bounds.max[1] + dist, c[2]];
+  return { eye, target: [c[0], bounds.min[1], c[2]], up: f, fov, far: dist + (bounds.max[1] - bounds.min[1]) + 100 };
+}
+
+/**
+ * The exact pose of a follow mode for a head (and a path, for chase). Free mode's pose is the rig's own state.
+ * `bounds` (the track's world box) and `aspect` (width / height of the view) switch overhead to fit the whole track.
+ */
+function poseFor(mode, { head, path, bounds, aspect } = {}, opts = DEFAULTS) {
   checkHead(head);
   const fov = opts.fov || DEFAULTS.fov;
   if (mode === 'build') {
@@ -78,8 +100,9 @@ function poseFor(mode, { head, path } = {}, opts = DEFAULTS) {
     return { eye: c.eye, target: c.target, up: c.up, fov };
   }
   if (mode === 'overhead') {
-    const o = opts.overhead || DEFAULTS.overhead;
-    return { eye: add(head.pos, mul(WORLD_UP, o.height)), target: head.pos.slice(), up: groundForward(head), fov };
+    const o = opts.overhead || DEFAULTS.overhead, f = groundForward(head);
+    if (bounds && aspect > 0) return fitOverhead(bounds, aspect, f, fov);
+    return { eye: add(head.pos, mul(WORLD_UP, o.height)), target: head.pos.slice(), up: f, fov };   // no bounds: over the head
   }
   if (mode === 'side') {
     const o = opts.side || DEFAULTS.side, right = cross(groundForward(head), WORLD_UP);   // forward × up = right
@@ -126,7 +149,7 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
       const want = rig.pose(ctx);
       if (!shown || mode === 'free') { shown = { ...want, eye: want.eye.slice(), target: want.target.slice(), up: want.up.slice() }; return shown; }
       const k = 1 - Math.exp(-(opts.rate || DEFAULTS.rate) * Math.max(0, Math.min(0.1, dt)));
-      shown = { eye: lerp(shown.eye, want.eye, k), target: lerp(shown.target, want.target, k), up: unit(lerp(shown.up, want.up, k)) || want.up, fov: want.fov };
+      shown = { eye: lerp(shown.eye, want.eye, k), target: lerp(shown.target, want.target, k), up: unit(lerp(shown.up, want.up, k)) || want.up, fov: want.fov, far: want.far };
       return shown;
     },
     free: {
@@ -147,4 +170,4 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
   return rig;
 }
 
-module.exports = { MODES, KEYS, DEFAULTS, createRig, poseFor, groundForward, sampleAt };
+module.exports = { MODES, KEYS, DEFAULTS, createRig, poseFor, groundForward, sampleAt, fitOverhead };

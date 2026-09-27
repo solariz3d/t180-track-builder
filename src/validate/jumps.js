@@ -64,4 +64,28 @@ function checkJump({ D, dh, thetaRad, v, landingRoad = [], jumpG = MACH6.jumpG, 
   };
 }
 
-module.exports = { flightY, minSpeed, checkJump };
+/**
+ * The landing ramp a jump needs so that BOTH landings touch down on road (ARCHITECTURE.md:75-78; the librarian's item 3,
+ * 2026-09-27: "a jump word should carry its landing ramp"). The ramp starts at the landing lip, D ahead and dh above the
+ * take-off lip, and runs straight at pitch landRad. On a straight ramp the touchdown is exact: the flight
+ * y = x·tanθ − k·x² (k = g_eff·G / (2v²cos²θ), flightY above) meets y = dh + (x − D)·tan(land) at the larger root of
+ *   k·x² − (tanθ − tan land)·x + (dh − D·tan land) = 0.
+ * Returns { length, touchdowns: [{ g, clear, x }], v }. `length` runs from the landing lip to the FARTHEST touchdown (the
+ * lighter fall, 3.2 g, carries farthest) plus marginM. A landing no speed ≤ v clears has x null and adds nothing: the
+ * ramp cannot fix a gap the car does not cross, which checkJump reports. marginM 10: inferred, about two car lengths.
+ */
+function landingRamp({ D, dh, thetaRad, landRad, v, jumpG = MACH6.jumpG, marginM = 10 }) {
+  if (!(D > 0)) throw new Error(`landingRamp: the gap must be positive, got ${D}`);
+  if (!(v > 0)) throw new Error(`landingRamp: a take-off speed is needed, got ${v}`);
+  const c = Math.cos(thetaRad), tl = Math.tan(landRad), b = Math.tan(thetaRad) - tl;
+  const touchdowns = jumpG.map((g) => {
+    const clear = v >= minSpeed(D, dh, thetaRad, g);
+    if (!clear) return { g, clear, x: null };
+    const k = g * G / (2 * v * v * c * c), disc = b * b - 4 * k * (dh - D * tl);
+    return { g, clear, x: Math.max(D, (b + Math.sqrt(Math.max(0, disc))) / (2 * k)) };
+  });
+  const far = touchdowns.filter((t) => t.x != null).reduce((m, t) => Math.max(m, t.x), D);
+  return { length: far - D + marginM, touchdowns, v };
+}
+
+module.exports = { flightY, minSpeed, checkJump, landingRamp };

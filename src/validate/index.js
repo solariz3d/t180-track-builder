@@ -16,7 +16,7 @@
 // inferred: the roll RATE's contribution (the line swinging about T as φ changes) is left out; it is second order next to
 // v²κ on any roll a road can drive.
 'use strict';
-const { G, MACH6, kmh } = require('./limits.js');
+const { G, MACH6, kmh, accelAt } = require('./limits.js');
 const { checkJump } = require('./jumps.js');
 const P = require('../geom/profile.js');
 
@@ -38,24 +38,38 @@ const SRC = Object.freeze({
   'load-above-proven': 'FINDINGS.md:105, :112-113',
   'seam-past-envelope': 'FINDINGS.md:24, :110-111',
   'on-the-stops': 'FINDINGS.md:103-104',
+  'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
+  'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp must catch both landings)',
 });
 
 function segProfiles(segments) {
   return segments.map((g) => (g.kind === 'gap' ? null : P.normalize(g.profile)));
 }
 
-/** v(s) per sample: every road word's design speed, else the point-mass lap sim, else none (INTERFACES §3 `speed`). */
+/**
+ * v(s) per sample (INTERFACES §3 `speed`), in this order:
+ *   1. DESIGN: every road word has a speed, its own or, where it has none, opts.designSpeed (m/s; the app's picker,
+ *      defaulting to MACH6.designSpeedKmh, FINDINGS.md:476).
+ *   2. LAPSIM, the ghost lap: full thrust from car.accel (the measured table, FINDINGS.md:494). With the DEFAULT car it
+ *      runs only on a CLOSED loop: a lap from a standing start on a half-built open track is not a lap, and a load
+ *      from it would be claimed without anyone having asked for a speed. A caller that passes its own opts.car.accel
+ *      asks for the ghost explicitly, and gets it on an open path too (as before 2026-09-27).
+ *   3. NONE: no loads are claimed.
+ */
 function speedProfile(path, segments, car, opts) {
   const S = path.samples, n = S.length;
   const road = segments.filter((g) => g.kind !== 'gap');
-  if (road.length && road.every((g) => Number.isFinite(g.speed) && g.speed > 0)) {
-    const v = S.map((p) => { const g = segments[p.seg]; return g.kind === 'gap' ? null : g.speed; });
-    for (let i = 0; i < n; i++) if (v[i] == null) v[i] = i ? v[i - 1] : road[0].speed;   // flight carries its speed
+  const fill = Number.isFinite(opts.designSpeed) && opts.designSpeed > 0 ? opts.designSpeed : null;
+  const own = (g) => (Number.isFinite(g.speed) && g.speed > 0 ? g.speed : fill);
+  if (road.length && road.every((g) => own(g) != null)) {
+    const v = S.map((p) => { const g = segments[p.seg]; return g.kind === 'gap' ? null : own(g); });
+    for (let i = 0; i < n; i++) if (v[i] == null) v[i] = i ? v[i - 1] : own(road[0]);   // flight carries its speed
     return { from: 'design', v };
   }
-  if (!Number.isFinite(car.accel)) return { from: 'none', v: null };
-  // The ghost point-mass lap (ARCHITECTURE.md:88-89): full throttle at car.accel, gravity along T, capped at vmax; the
-  // flight over a gap keeps its speed. A closed loop runs three laps so the start speed is the carried one.
+  const asked = !!(opts.car && opts.car.accel != null);
+  if (!Number.isFinite(accelAt(car, 0)) || !(path.closed || asked)) return { from: 'none', v: null };
+  // The ghost point-mass lap (ARCHITECTURE.md:88-89): full thrust at accelAt(car, v), gravity along T, capped at vmax;
+  // the flight over a gap keeps its speed. A closed loop runs three laps so the start speed is the carried one.
   const vmax = kmh(car.vmaxKmh);
   const v = new Array(n).fill(0);
   let cur = Number.isFinite(opts.startSpeed) ? opts.startSpeed : 0;
@@ -64,7 +78,7 @@ function speedProfile(path, segments, car, opts) {
       if (i || lap) {
         const a = S[i ? i - 1 : n - 1], b = S[i], ds = i ? b.s - a.s : 0;
         if (segments[b.seg].kind !== 'gap' && ds > 0) {
-          const along = car.accel - G * (a.T[1] + b.T[1]) / 2;
+          const along = accelAt(car, cur) - G * (a.T[1] + b.T[1]) / 2;
           cur = Math.sqrt(Math.max(0, cur * cur + 2 * along * ds));
           if (cur > vmax) cur = vmax;
         }
@@ -115,7 +129,7 @@ function core(path, segments, opts, from, carried) {
   const step = (S[n - 1].s - S[0].s) / (n - 1);
   const isRoad = (i) => segments[S[i].seg].kind !== 'gap';
   const sp = speedProfile(path, segments, car, opts);
-  const raw = { lines: [], pts: [], segReds: [], stacked: new Map(), speedFrom: sp.from }, rederive = new Set();
+  const raw = { lines: [], pts: [], segReds: [], stacked: new Map(), speedFrom: sp.from, designSpeed: opts.designSpeed }, rederive = new Set();
   if (carried) {
     for (const l of carried.lines) if (l.i < from) raw.lines.push(l);
     for (const p of carried.pts) if (p.i < from) raw.pts.push(p);
@@ -192,8 +206,17 @@ function core(path, segments, opts, from, carried) {
     if (g.kind !== 'gap') return;
     const first = S.findIndex((p) => p.seg === j); if (first < 0) return;
     let last = first; while (last + 1 < n && S[last + 1].seg === j) last++;
-    const take = first - 1, land = last + 1;
-    if (take < 0 || land >= n) { jumps.push({ s: S[first].s, id: g.id, pending: true, reason: land >= n ? 'no landing yet (open head)' : 'no take-off road' }); return; }
+    // THE LIP is the station AT the gap's start, the end of the take-off road. C's buildPath samples every boundary and
+    // gives it to the segment it starts, so there it is the flight's first station, S[first]; a path sampled the other
+    // way (the boundary kept by the road before) has it at S[first − 1]. So the lip is whichever of the two sits at the
+    // gap's start s. (Until D170 it was always S[first − 1], which on buildPath's paths is one station BEFORE the edge:
+    // every jump read one station step too long, a 12 m gap as 13 m at a 1 m step. test/validate_head.test.js pins it.)
+    // the gap's start s, from the segment lengths (on C's paths this is exactly path.starts[j].s). Where segments carry no
+    // length it is NaN, and the older rule (the road's last station) stands, right for a path that keeps the boundary on
+    // the road before.
+    const sGap = S[0].s + segments.slice(0, j).reduce((a, x) => a + x.length, 0);
+    const take = first > 0 && !(Math.abs(S[first].s - sGap) < Math.abs(S[first - 1].s - sGap)) ? first - 1 : first, land = last + 1;
+    if (first === 0 || land >= n) { jumps.push({ s: S[first].s, id: g.id, pending: true, reason: land >= n ? 'no landing yet (open head)' : 'no take-off road' }); return; }
     const A = S[take], axis = (() => { const h = [A.T[0], 0, A.T[2]], l = len(h); return l > 0 ? mul(h, 1 / l) : [0, 0, 1]; })();
     const x = (p) => dot(sub(p, A.pos), axis), D = x(S[land].pos), dh = S[land].pos[1] - A.pos[1];
     const landingRoad = [];
@@ -202,6 +225,22 @@ function core(path, segments, opts, from, carried) {
     const r = checkJump({ D, dh, thetaRad: Math.asin(Math.max(-1, Math.min(1, A.T[1]))), v, landingRoad, jumpG: car.jumpG, reach: car.reach });
     jumps.push({ s: A.s, id: g.id, speed: v, ...r });
   });
+
+  // ── the open end and the landings (D170, the librarian's item 3, 2026-09-27) ──
+  // An OPEN end must sit on road. A head that is a jump's flight is over nothing: a hole at the head (ARCHITECTURE.md:82).
+  // The open-head exemption above is for a gap word that is still being placed; a jump's flight never ends on road by
+  // itself, so it is red until a landing is there (the jump word's own landing ramp, or the next word).
+  if (!path.closed && n && segments[lastSeg].kind === 'gap') {
+    const first = S.findIndex((p) => p.seg === lastSeg);
+    red.push({ s: S[first].s, s1: S[n - 1].s, u: null, reason: 'head-in-the-air' });
+  }
+  // With a known take-off speed, the landing road must catch BOTH landings (ARCHITECTURE.md:75-78; jumps.js). A missed
+  // one is red on an open track too, not only in the closed lap's proof; `worst` is the heaviest fall that misses.
+  for (const jp of jumps) {
+    if (jp.pending || !Number.isFinite(jp.speed)) continue;
+    const missed = jp.landings.filter((L) => !L.caught);
+    if (missed.length) red.push({ s: jp.s, s1: jp.s + jp.gap, u: null, reason: 'landing-misses-zone', worst: Math.max(...missed.map((L) => L.g)) });
+  }
 
   // ── the lap (ARCHITECTURE.md:88-89) ──
   let lap;
@@ -250,7 +289,8 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
   if (from < 0) from = S.length - 1;
   from = Math.max(0, from - 1);   // look-back: one station (loads, seams, holes)
   const car = { ...MACH6, ...(opts.car || {}) };
-  if (speedProfile(path, segments, car, opts).from !== prev._raw.speedFrom) return validate(path, segments, opts);
+  // a different speed model, or a different design speed from the picker, changes every load: re-validate everything
+  if (speedProfile(path, segments, car, opts).from !== prev._raw.speedFrom || opts.designSpeed !== prev._raw.designSpeed) return validate(path, segments, opts);
   return core(path, segments, opts, from, prev._raw);
 }
 

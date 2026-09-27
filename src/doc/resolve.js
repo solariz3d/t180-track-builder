@@ -25,7 +25,8 @@
 // loop (§2: a G1/G2 connector ranked by physics margin) needs the path's end frame, and is not built in this lap.
 'use strict';
 
-const { TEMPOS, FONTS } = require('./vocab.js');
+const { TEMPOS, FONTS, LANDING } = require('./vocab.js');
+const jumps = require('../validate/jumps.js');
 const { checkDoc } = require('./serial.js');
 
 class ResolveError extends Error {
@@ -74,6 +75,27 @@ const START = Object.freeze({ kIn: 0, kpIn: 0, pitch: 0, roll: 0, heart: 0, firs
 const sameProfile = (a, b) => a.u.length === b.u.length && a.u.every((x, i) => x === b.u[i]) && a.psi.every((x, i) => x === b.psi[i]);
 const flatten = (e) => (e.phrase !== undefined ? e.words.map((w, n) => ({ id: `${e.id}/${n + 1}`, ...w })) : [e]);
 
+const flatProfile = () => profileOf('flat', { width: FONTS.flat.width, wall: 0, psiL: 0, psiR: 0 });
+
+/**
+ * Size a jump's landing ramp with VALIDATION'S OWN function, src/validate/jumps.js landingRamp(): the ramp is the line
+ * from the landing lip at the landing pitch, the flight meets it exactly at each measured fall, and the ramp runs past
+ * the farther touchdown by that function's margin. Its length is horizontal; along the straight ramp it is that over
+ * cos(landing pitch). With no speed on the jump it is sized for LANDING.DEFAULT_KMH, and says so. A fall the car does
+ * not clear adds nothing (the jump is then red in validation, not here), and `landing.why` says so.
+ */
+function landingRamp(lipPitch, h, speed) {
+  const v = Number.isFinite(speed) && speed > 0 ? speed : LANDING.DEFAULT_KMH / 3.6, speedFrom = speed > 0 ? 'word' : 'default';
+  const r = jumps.landingRamp({ D: h.gap, dh: -h.drop, thetaRad: lipPitch, landRad: h.land, v });
+  const cosL = Math.cos(h.land), touchdownsM = r.touchdowns.map((t) => (t.x == null ? null : (t.x - h.gap) / cosL));
+  let far = -1, sizedBy = null;
+  r.touchdowns.forEach((t, i) => { if (touchdownsM[i] != null && touchdownsM[i] > far) { far = touchdownsM[i]; sizedBy = `${t.g}g`; } });
+  const missed = r.touchdowns.filter((t) => t.x == null).map((t) => `${t.g} g`);
+  const why = sizedBy === null ? `neither fall clears the ${h.gap} m gap at ${(v * 3.6).toFixed(0)} km/h, so the ramp is only the margin`
+    : missed.length ? `at ${missed.join(' and ')} the car does not clear the gap at ${(v * 3.6).toFixed(0)} km/h` : null;
+  return { length: r.length / cosL, landing: { speed: v, speedFrom, touchdownsM, sizedBy, marginM: r.length - (sizedBy === null ? 0 : far * cosL), why } };
+}
+
 /** Resolve one flat word from carried state st; pushes its segments, returns the state after it. */
 function resolveWord(w, st, segments) {
   let { kIn, kpIn, pitch, roll, heart, first, prevId, prof } = st;
@@ -82,7 +104,12 @@ function resolveWord(w, st, segments) {
     const J = solveJump(pitch, h.gap, h.drop, h.land, w.id);
     segments.push({ id: w.id, word: 'jump', part: 'gap', kind: 'gap', length: J.L, k0: 0, k1: 0, kp0: J.kp0, kp1: J.kp1,
       roll0: roll, roll1: roll, heartline: heart, profile: null, speed: w.speed, tempo });
-    return { kIn: 0, kpIn: 0, pitch: h.land, roll, heart, first, prevId: w.id, prof: null };   // no surface to blend from after a gap
+    // THE LANDING RAMP: road straight at the landing pitch, on the take-off road's cross-section, long enough that the
+    // flight comes down on it at both measured falls (vocab.js LANDING). So the head always sits on road.
+    const rampProfile = prof || flatProfile(), R = landingRamp(pitch, h, w.speed);
+    segments.push({ id: w.id, word: 'jump', part: 'land', kind: 'road', length: R.length, k0: 0, k1: 0, kp0: 0, kp1: 0,
+      roll0: roll, roll1: roll, heartline: heart, profile: rampProfile, blend: null, speed: w.speed, tempo, landing: R.landing });
+    return { kIn: 0, kpIn: 0, pitch: h.land, roll, heart, first: false, prevId: w.id, prof: rampProfile };
   }
   if (!first && Math.abs(h.roll0 - roll) > TOL_ROLL) throw new ResolveError('ROLL_STEP', `${w.id} starts at roll ${h.roll0} rad but ${prevId} ends at ${roll} rad: the surface would tear`);
   if (!first && Math.abs(h.heartline - heart) > TOL_HEART) throw new ResolveError('HEARTLINE_STEP', `${w.id}'s heartline ${h.heartline} m differs from ${prevId}'s ${heart} m, and a segment has no field for a heartline ramp`);

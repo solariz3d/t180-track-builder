@@ -217,9 +217,11 @@ test('a heartline step between words is refused', () => {
   assert.throws(() => D.resolve(d), (e) => e.code === 'HEARTLINE_STEP');
 });
 
-test('a jump is one gap segment whose flight covers the gap, comes down the drop, and lands at its pitch', () => {
+// Changed at D170 by the ruling that a jump carries its landing ramp (test/doc-jump.test.js): the word is its gap
+// and then its ramp. Everything this test checks of the flight is unchanged; only the segment count is.
+test('a jump\x27s flight is one gap segment that covers the gap, comes down the drop, and lands at its pitch', () => {
   const d = sample(), j = d.words.find((w) => w.word === 'jump'), g = segsOf(d, j.id);
-  assert.equal(g.length, 1); assert.equal(g[0].kind, 'gap'); assert.equal(g[0].profile, null);
+  assert.deepEqual(g.map((x) => x.part), ['gap', 'land']); assert.equal(g[0].kind, 'gap'); assert.equal(g[0].profile, null);
   const p0 = 4 * DEG;   // the straight before it climbs 4°
   const [X, Y] = flight(p0, g[0].length, g[0].kp0, g[0].kp1);
   assert.ok(Math.abs(X - j.handles.gap) < 1e-9 && Math.abs(Y + j.handles.drop) < 1e-9, `flight ${X}, ${Y}`);

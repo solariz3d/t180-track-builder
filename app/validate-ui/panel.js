@@ -1,6 +1,8 @@
 // panel.js: the validation panel's logic, with no DOM (tested headless against A's real shell). index.js mounts it.
 //
-//   const ctl = createValidationController(shell, { csp: true, validate, onUpdate, schedule })
+//   const ctl = createValidationController(shell, { csp: true, designSpeedKmh, validate, onUpdate, schedule })
+//     designSpeedKmh: the picker's speed for words without their own (default MACH6.designSpeedKmh, FINDINGS.md:476;
+//     null = none). ctl.setDesignSpeed(kmh | null) re-validates the whole track at it.
 //     validate: further src/validate options (e.g. a `car` with an acceleration, so the lap sim gives loads).
 //     schedule(fn): when to run a pending update. Default: at once (headless). The app passes one animation frame, and
 //     changes arriving before it runs are coalesced into one update (several appends are still one append).
@@ -24,11 +26,13 @@
 const { buildPath, extendPath, rebuildPathFrom } = require('../../src/geom/index.js');
 const { createLive, fromSOf } = require('./live.js');
 const { jumpArcs } = require('./jumparcs.js');
+const { MACH6 } = require('../../src/validate/limits.js');
 
 const STEP = 2;   // m between stations: the step the export and the D167 tests use (inferred: not tuned for the preview)
 
-function createValidationController(shell, { csp = true, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn() } = {}) {
-  const vo = () => ({ ...extra, csp });
+function createValidationController(shell, { csp = true, designSpeedKmh = MACH6.designSpeedKmh, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn() } = {}) {
+  let design = designSpeedKmh;
+  const vo = () => ({ ...extra, csp, ...(design == null ? {} : { designSpeed: design / 3.6 }) });
   let live = createLive({ validate: vo() });
   let segs = null, path = null, resolvedSeen = null;
   const out = { state: { path: null, result: null, map: null, arcs: [], changed: null, full: true, how: null, error: null } };
@@ -71,15 +75,21 @@ function createValidationController(shell, { csp = true, validate: extra = {}, o
   return {
     get state() { return out.state; },
     setCsp(v) { csp = !!v; live = createLive({ validate: vo() }); update(shell.getState(), true); },
+    setDesignSpeed(kmh) { design = kmh == null ? null : kmh; live = createLive({ validate: vo() }); update(shell.getState(), true); },
+    get designSpeedKmh() { return design; },
     dispose() { unsubscribe(); },
   };
 }
 
-/** Counts for the panel's summary line. */
+/**
+ * Counts for the panel's summary line. `jumps` is every jump validation checked, including one still PENDING at the
+ * open head (no landing road yet): D170 fixed a counter that read the drawn arcs, which leave a pending jump out, so a
+ * placed jump read "0 jumps" (the librarian's item 4, 2026-09-27).
+ */
 function summary(state) {
   const r = state.result;
-  if (!r) return { red: 0, amber: 0, lap: null, jumps: 0 };
-  return { red: r.red.length, amber: r.amber.length, lap: r.lap, jumps: state.arcs.length };
+  if (!r) return { red: 0, amber: 0, lap: null, jumps: 0, jumpsPending: 0 };
+  return { red: r.red.length, amber: r.amber.length, lap: r.lap, jumps: r.jumps.length, jumpsPending: r.jumps.filter((j) => j.pending).length };
 }
 
 module.exports = { createValidationController, summary, STEP };

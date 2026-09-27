@@ -26,6 +26,7 @@
 //
 // The BVH: a binary tree of triangle bounding boxes, split at the median centroid of the longest axis, 4 per leaf.
 // Findings are grouped per pair of cells (a crossing is hundreds of triangle pairs); each group keeps its lowest-s hit.
+// Cells are identified by their POSITION in the mesh, never by name (names are for people and may repeat).
 'use strict';
 
 const EPS_PLANE = 1e-4;   // m: float32 vertices of a 100 m cell are good to ~1e-5 m, so 1e-4 is "the same plane"
@@ -47,11 +48,17 @@ function soup(mesh) {
     for (let t = 0; t < arr.indices.length; t++) tris.push(base + arr.indices[t]);
     for (let t = 0; t < arr.indices.length / 3; t++) triCell.push(ci);
   };
-  const names = new Map(mesh.cells.map((c) => [c.name, c]));
-  for (const node of mesh.scene.root.children) {
-    const m = node.children[0], M = node.matrix, pc = st.pieces[names.get(m.name).piece];
-    if (names.get(m.name).seam) {
-      const g = names.get(m.name).piece, sm = st.seams[g], A = st.pieces[g > 0 ? g - 1 : st.pieces.length - 1], Ka = A.K;   // on a closed loop seam 0 joins the last piece
+  // Each scene node is paired with its cell record BY POSITION (mesh.js assemble pushes them in the same order), never
+  // by name: two pieces may share a name (a word's parts did, before names carried the part), and a lookup by name then
+  // gives a triangle ANOTHER piece's s, which makes neighbours in one pass look far apart and "meet" (D170 addendum).
+  const kids = mesh.scene.root.children;
+  if (kids.length !== mesh.cells.length) throw new Error(`selfCheck: ${kids.length} scene nodes but ${mesh.cells.length} cell records`);
+  for (let k = 0; k < kids.length; k++) {
+    const node = kids[k], m = node.children[0], M = node.matrix, rec = mesh.cells[k];
+    if (rec.name !== m.name) throw new Error(`selfCheck: scene node ${k} is ${m.name} but its cell record is ${rec.name}`);
+    const pc = st.pieces[rec.piece];
+    if (rec.seam) {
+      const g = rec.piece, sm = st.seams[g], A = st.pieces[g > 0 ? g - 1 : st.pieces.length - 1], Ka = A.K;   // on a closed loop seam 0 joins the last piece
       add(m, M, () => sm.s, (i) => (i < Ka ? A.Us[i] : pc.Us[i - Ka]), m.name);
     } else {
       const c = pc.cells[Number(m.name.slice(m.name.lastIndexOf('_') + 1))], K = pc.K;
@@ -174,7 +181,8 @@ function selfCheck(mesh, opts = {}) {
       if (trace) trace.pairs.push([t, o]);
       const ia = S.tris[t * 3], io = S.tris[o * 3], ca = S.cells[S.triCell[t]], co = S.cells[S.triCell[o]];
       const [x, y] = S.s[ia] <= S.s[io] ? [[ca, ia], [co, io]] : [[co, io], [ca, ia]];
-      keep(groups, `${x[0]}|${y[0]}`, { s: S.s[x[1]], u: S.u[x[1]], cell: x[0], other: y[0], sOther: S.s[y[1]], uOther: S.u[y[1]] });
+      const kx = S.s[ia] <= S.s[io] ? `${S.triCell[t]}|${S.triCell[o]}` : `${S.triCell[o]}|${S.triCell[t]}`;   // grouped by cell INDEX, not name
+      keep(groups, kx, { s: S.s[x[1]], u: S.u[x[1]], cell: x[0], other: y[0], sOther: S.s[y[1]], uOther: S.u[y[1]] });
     });
   }
   // stacked: a segment along each vertex normal, `reach` each way
@@ -192,7 +200,7 @@ function selfCheck(mesh, opts = {}) {
     if (best && trace) trace.stacked.set(i, best.gap);
     if (best) {
       const cell = S.cells[S.vCell[i]], other = S.cells[S.triCell[best.o]];
-      const key = `${cell}|${other}`, g = sgroups.get(key);
+      const key = `${S.vCell[i]}|${S.triCell[best.o]}`, g = sgroups.get(key);   // by cell index, not name
       const rec = { s: S.s[i], u: S.u[i], cell, other, sOther: B.s0[best.o], gap: best.gap };
       if (!g) sgroups.set(key, { ...rec, vertices: 1 }); else { g.vertices++; if (rec.gap < g.gap || (rec.gap === g.gap && rec.s < g.s)) Object.assign(g, rec, { vertices: g.vertices }); }
     }

@@ -450,3 +450,56 @@ and identical file size) are counted once: Miandros 20-06 14:10/14:21/14:28, and
   counting §3b's two; corrected.)
 - Still unmeasured: the online autosaves (`AC_*_O_*`), and the Sakura 28-03 replay, which blackbox also rejects as
   one.
+
+## 3d. How fast, and how hard it accelerates: the design speed and the lap sim (2026-09-27; `node tools/speed.cjs`)
+The builder needs two numbers FINDINGS did not have: a **design speed** to compute loads with, and the car's
+**acceleration** for the ghost lap (ARCHITECTURE §4, "full-lap proof"). Both are measured here, from the same seven
+clean Mach 6 laps as §3b: Centrifuge 11-08 (`…centrifuge__110826-222423`), Centrifuge 16-08 (`…160826-102442`), Hazen
+Loop 21-08 (`…hazenloop__210826-054910`), Thunderhead night-optimized (`…130926-180804`), Thunderhead no-dogbowls
+22-08 (`…220826-131336`), Eagleton 30-12 (`…301225-025411`) and Rainbow 28-05 (`…280526-234643`).
+Command, from the replay folder: `node tools/speed.cjs <those seven .acreplay files>`. The replays are read locally, and
+none of their bytes is in this repository.
+
+**Speed** (the same smoothing, frame filter and teleport filter as `loads.cjs`), km/h:
+
+| replay | frames | p10 | p50 | p90 | p99 | max |
+|---|---|---|---|---|---|---|
+| Centrifuge 11-08 | 6,969 | 432 | 576 | 764 | 820 | 833 |
+| Centrifuge 16-08 | 16,551 | 398 | 569 | 776 | 956 | 967 |
+| Hazen Loop 21-08 | 22,904 | 272 | 433 | 580 | 623 | 655 |
+| Thunderhead night-optimized | 7,255 | 274 | 387 | 501 | 611 | 651 |
+| Thunderhead no-dogbowls 22-08 | 12,983 | 267 | 374 | 472 | 554 | 592 |
+| Eagleton 30-12 | 17,353 | 248 | 417 | 513 | 599 | 629 |
+| Rainbow 28-05 | 176,644 | 286 | 470 | 647 | 723 | 741 |
+| **all seven, pooled** | **260,659** | **285** | **460** | **645** | **764** | 967 |
+
+- **The design-speed default is the pooled p50, 460 km/h:** the speed a T-180 is at on a typical frame of a clean lap.
+  It is the program's default where a word gives no speed of its own, and the user can change it.
+- **745 km/h is not the top speed.** §3's "89.8 g at 745 km/h" is the speed at Centrifuge's hardest *moment*, and
+  §3b's "Centrifuge, which reaches 745 km/h" read it as a maximum. Both Centrifuge laps spend over 10% of their frames
+  above 760 km/h. The builder had taken 745 as its speed cap (src/validate/limits.js, D166); that was a misreading,
+  corrected here.
+- **Centrifuge 16-08 above 900 km/h is unchecked.** Its top 1% of frames (956–967 km/h) is a single stretch that no
+  other lap comes near. It may be a glitch the teleport filter lets through. It is not used below.
+- **The lap sim's speed cap is the pooled p99, 764 km/h:** exceeded on 1% of the driven frames. It is a choice of
+  percentile, stated as one, not a measured top speed.
+
+**Propulsive acceleration**, the part of dv/dt the car's own thrust gave, with gravity's pull along the path removed:
+a_prop = dv/dt + g·(v_y/|v|). Pooled over the same 260,659 frames, per speed band, m/s²:
+
+| band (km/h) | 0–200 | 200–300 | 300–400 | 400–500 | 500–600 | 600–700 | 700–800 |
+|---|---|---|---|---|---|---|---|
+| frames | 6,682 | 25,108 | 55,395 | 73,190 | 57,167 | 33,262 | 8,554 |
+| p50 | 1.50 | 2.35 | 3.38 | 4.00 | 4.57 | 2.83 | 0.05 |
+| **p95** | **24.71** | **25.52** | **23.20** | **20.07** | **17.73** | **14.75** | **11.50** |
+
+- **The lap sim's acceleration is the p95 per band, as a table against speed:** about 25 m/s² (2.5 g) below 400 km/h,
+  falling to 11.5 m/s² at 700–800. Thrust falls with speed, so one constant would misstate it at one end or the other.
+- **The p95 as "full thrust" is an INFERENCE.** A replay carries no throttle (blackbox reads inputs only from a
+  separate telemetry file), so it is read as the upper envelope: the driver at full thrust for at least 5% of each
+  band's frames. The p50 is much lower because braking, lifting and cornering are in it too.
+- dv/dt is a ±6-frame central difference of the smoothed speed. Eagleton's frame interval is 0.030 s where the others
+  are 0.015 s, so its window spans twice the time. It is pooled as measured.
+- **What the ghost lap is, and is not.** It is a point mass at full thrust from this table, never braking, capped at
+  764 km/h (ARCHITECTURE §4's author drive). That is harder than any driver, and it is meant to be: a track that holds
+  under it holds under a driver. Its loads are an upper bound, not a prediction.

@@ -173,16 +173,21 @@ test('every red and amber carries a source (INTERFACES §3: "A red or amber with
 });
 
 // ── the lap ──
+// CHANGED 2026-09-27 (D169): the second assertion used the DEFAULT car, which then had no acceleration. The car now has
+// the measured one (FINDINGS.md:494), and a closed loop's lap proof runs with it (tested below); "no speed model" is
+// still said, for a car that truly has none.
 test('lap: an open path has no lap proof yet; a closed one without a speed model says so instead of inventing one', () => {
   assert.deepStrictEqual(validate(X.pathOf(X.straight(10)), [X.seg({ speed: 30 })]).lap, { ok: null, reason: 'open' });
-  assert.deepStrictEqual(validate(X.pathOf(X.loop(20), true), [X.seg()]).lap, { ok: null, reason: 'no-speed-model' });
+  assert.deepStrictEqual(validate(X.pathOf(X.loop(20), true), [X.seg()], { car: { accel: null } }).lap, { ok: null, reason: 'no-speed-model' });
 });
 
-test('lap sim: full throttle at car.accel, gravity along T, capped at the 745 km/h of FINDINGS.md:37', () => {
+// CHANGED 2026-09-27 (D169): the cap was 745 km/h, read off FINDINGS.md:37, which is the speed at Centrifuge's hardest
+// moment, not a top speed (FINDINGS.md:478-481). The cap is now the measured 764 km/h of FINDINGS.md:484.
+test('lap sim: full throttle at car.accel, gravity along T, capped at the 764 km/h of FINDINGS.md:484', () => {
   const flatRun = validate(X.pathOf(X.straight(5000, { step: 10 })), [X.seg()], { car: { accel: 20 } });
   assert.strictEqual(flatRun.speedFrom, 'lapsim');
   close(flatRun.speed[10].v, Math.sqrt(2 * 20 * 100), 1e-9, 'v² = 2·a·s on the flat');
-  close(Math.max(...flatRun.speed.map((x) => x.v)), 745 / 3.6, 1e-9, 'capped');
+  close(Math.max(...flatRun.speed.map((x) => x.v)), 764 / 3.6, 1e-9, 'capped');
   const up = validate(X.pathOf(X.straight(100, { grade: 0.1 })), [X.seg()], { car: { accel: 20 } });
   const T1 = 0.1 / Math.hypot(1, 0.1);
   close(up.speed[100].v, Math.sqrt(2 * (20 - G * T1) * 100), 1e-6, 'uphill: gravity along T subtracts');
@@ -195,9 +200,12 @@ test('lap: a closed loop driven fast enough proves out, with a lap time', () => 
   close(r.lap.minV, v, 1e-12);
 });
 
+// CHANGED 2026-09-27 (D169), as this test exists to make happen: vmax 745 → 764 (FINDINGS.md:484), accel null → the
+// measured table (FINDINGS.md:494), and the new design-speed default 460 km/h (FINDINGS.md:476).
 test('MACH6 defaults are the FINDINGS numbers (a changed number must fail here, beside its citation)', () => {
-  assert.deepStrictEqual([MACH6.suspensionStopG, MACH6.provenG, [...MACH6.jumpG], MACH6.reach.downDeg, MACH6.reach.fallG, MACH6.reach.minTakeoffKmh, MACH6.seamP90Deg, MACH6.stackedM, MACH6.steepDeg, MACH6.vmaxKmh, MACH6.accel],
-    [20, 90, [3.2, 6.3], 10, 6.5, 375, 5.9, 2, 50, 745, null]);
+  assert.deepStrictEqual([MACH6.suspensionStopG, MACH6.provenG, [...MACH6.jumpG], MACH6.reach.downDeg, MACH6.reach.fallG, MACH6.reach.minTakeoffKmh, MACH6.seamP90Deg, MACH6.stackedM, MACH6.steepDeg, MACH6.vmaxKmh, MACH6.designSpeedKmh],
+    [20, 90, [3.2, 6.3], 10, 6.5, 375, 5.9, 2, 50, 764, 460]);
+  assert.deepStrictEqual(MACH6.accel.map((r) => [...r]), [[100, 24.71], [250, 25.52], [350, 23.20], [450, 20.07], [550, 17.73], [650, 14.75], [750, 11.50]]);
 });
 
 test('the along-track term: accelerating at a on the flat reads fAlong = a/g (the dv/dt·T of the specific force)', () => {
