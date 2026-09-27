@@ -153,6 +153,31 @@ All notable changes to this project are recorded here. The format follows
   - Tests: `test/export_words.test.js`.
 - `src/validate/bounds.js`: `handleBounds(doc, id)` gives each sculpt handle's clean range and what stops it, found by
   the same validation. Tests: `test/validate_bounds.test.js`.
+- **The app** (`src-tauri/`, `app/`): a Tauri v2 desktop program in which the user builds the track from its open end.
+  v1 is the track alone, with no environment.
+  - A build palette lists the built-in words and the user's own saved pieces, with font, tempo and turn pickers.
+  - Place, undo, redo and remove-head each make one step. A selection of placed words can be saved as a named piece.
+  - Tracks save and open as the canonical text.
+  - The document model, geometry and validation run in the window itself. Only file names and text cross to the
+    native side, so no mesh data crosses it during a drag or otherwise.
+  - `app/README.md` says how the panels plug in.
+  - Tests: `app/test/` (headless), and 3 Rust tests of the native file commands.
+- The 3D preview (`app/preview/`): the track the geometry builds, drawn with WebGL in the app's own process, one colour
+  per placed word. Appending and sculpting update it incrementally and re-upload only what changed.
+- Cameras (`app/camera/`):
+  - the **build view**, the default: behind and above the open end, looking where the track grows, banking with the
+    road;
+  - overhead, side, chase along the road, and free flight.
+  - **C** cycles the modes, and **B** returns to the build view in one press from any mode.
+- The validation panel (`app/validate-ui/`): red and amber colour along the track, from validation's loads and its red
+  and amber lists.
+  - It follows the build head: an append or a sculpt re-validates only from the changed word, and the result equals a
+    full run.
+  - Each jump's 3.2 g and 6.3 g landing arcs and the landing zone are drawn from validation's own numbers.
+- Sculpt handles (`app/handles/`): every handle of a placed word, with its physics bounds.
+  - A drag stops at the red bound (known breakage, which the export refuses) and passes amber (unproven, never
+    blocked).
+  - Each drag is one undo step. Alt goes past red and shows it.
 
 ### Changed
 
@@ -162,6 +187,7 @@ All notable changes to this project are recorded here. The format follows
   tolerance. The canonical text changes accordingly.
 - Validation's steep check (red above 50° without CSP) now measures the actual surface normal at every station and
   lateral line, so a banked road counts as well as a steep wall.
+- `npm test` now also runs the app's headless tests (`app/test/*.test.js`).
 
 ### Fixed
 

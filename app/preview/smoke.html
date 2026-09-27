@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>preview smoke</title>
+<!-- A browser smoke check of the preview, outside the app: served from the repository root, it runs A's shell with an
+     in-memory store, places a few words, mounts the preview and reads its pixels back in every camera mode. The result
+     lands in #result as JSON (headless: msedge --headless=new --dump-dom http://127.0.0.1:<port>/app/preview/smoke.html). -->
+<style>html,body{margin:0;background:#111;color:#ccc;font:12px ui-monospace,Consolas,monospace}#preview{position:relative;width:640px;height:400px}</style>
+<div id="preview"></div>
+<pre id="result">running</pre>
+<script src="../lib/cjs.js"></script>
+<script>
+'use strict';
+(async () => {
+  const out = document.getElementById('result'), res = { ok: false, modes: {} };
+  try {
+    const get = (p) => fetch(`../../${p}`).then((r) => { if (!r.ok) throw new Error(`${r.status} ${p}`); return r.text(); });
+    const S = await loadCjs('app/shell.js', get), panel = await loadCjs('app/preview/index.js', get);
+    const mem = new Map(), storage = { saveDoc: async (n, t) => mem.set(n, t), openDoc: async (n) => mem.get(n), listDocs: async () => [...mem.keys()], saveLibrary: async () => {}, openLibrary: async () => null };
+    const shell = await S.createShell({ storage });
+    for (const w of ['straight', 'turn', 'straight', 'turn', 'straight']) shell.place(w);
+    res.words = shell.getState().history.present.words.length; res.segments = shell.getState().resolved.segments.length;
+    const m = panel.mount(document.getElementById('preview'), shell), canvas = document.querySelector('#preview canvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    res.gl = gl ? (gl.getParameter(gl.VERSION) + ' | ' + gl.getParameter(gl.RENDERER)) : null;
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    /** Pixels that are not the background, read in a frame callback queued after the preview's own draw. */
+    const lit = () => new Promise((r) => requestAnimationFrame(() => {
+      const w = canvas.width, h = canvas.height, px = new Uint8Array(w * h * 4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      let n = 0; for (let i = 0; i < px.length; i += 4) if (Math.abs(px[i] - 18) + Math.abs(px[i + 1] - 20) + Math.abs(px[i + 2] - 26) > 12) n++;
+      r({ lit: n, of: w * h });
+    }));
+    for (const mode of ['build', 'overhead', 'side', 'chase', 'free']) {
+      document.dispatchEvent(new CustomEvent('t180-camera', { detail: { mode } }));
+      for (let i = 0; i < 90; i++) await frame();      // let the eased camera arrive
+      res.modes[mode] = { ...(await lit()), hud: document.querySelector('#preview div').textContent, stats: m.preview.renderer.stats() };
+    }
+    res.ok = Object.values(res.modes).every((x) => x.lit > 0);
+  } catch (e) { res.error = String(e && e.stack || e); }
+  out.textContent = JSON.stringify(res, null, 1);
+  document.title = res.ok ? 'SMOKE OK' : 'SMOKE FAIL';
+})();
+</script>
