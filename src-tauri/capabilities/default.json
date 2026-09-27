@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window. The app's own commands (list_tracks, save_track, open_track, save_library, open_library) read and write named files in the app's data folder only.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

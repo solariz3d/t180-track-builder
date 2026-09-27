@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-180 Track Builder</title>
+<style>
+  :root { --bg: #101318; --panel: #171b22; --line: #2a303b; --text: #e6e9ef; --dim: #8b93a3; --accent: #57b3ff; --mine: #ffb357; --bad: #ff6b6b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: grid; grid-template-columns: 280px 1fr 300px; grid-template-rows: 44px 1fr; height: 100vh; }
+  header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 14px; margin: 0 12px 0 0; letter-spacing: .04em; }
+  header input, header select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
+  button { background: #222834; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; cursor: pointer; }
+  button:hover:not([disabled]) { border-color: var(--accent); }
+  button[disabled] { opacity: .4; cursor: default; }
+  #palette { overflow: auto; padding: 10px; border-right: 1px solid var(--line); background: var(--panel); }
+  #stage { position: relative; display: grid; grid-template-rows: 1fr auto; min-width: 0; }
+  #preview { position: relative; min-height: 0; }
+  #camera { border-top: 1px solid var(--line); padding: 6px 10px; }
+  #side { overflow: auto; border-left: 1px solid var(--line); background: var(--panel); }
+  #side > section { padding: 10px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 14px 0 6px; }
+  .pickers { display: grid; gap: 6px; }
+  .picker { display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 6px; }
+  .picker select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px; }
+  .pieces { display: flex; flex-wrap: wrap; gap: 6px; }
+  .piece.mine { border-color: #5a4528; color: var(--mine); }
+  .actions, .save-piece { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .save-piece input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
+  .track { list-style: none; padding: 0; margin: 0; max-height: 30vh; overflow: auto; font-family: ui-monospace, Consolas, monospace; }
+  .track li { padding: 2px 6px; border-radius: 3px; cursor: pointer; }
+  .track li.selected { background: #1f3550; }
+  .head { color: var(--dim); margin-bottom: 8px; }
+  .message { color: var(--bad); white-space: pre-wrap; }
+  .empty { color: var(--dim); margin: 0; }
+  .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>T-180 TRACK BUILDER</h1>
+  <button id="new" title="New track">New</button>
+  <input id="name" placeholder="track name" aria-label="track name" size="18">
+  <button id="save" title="Ctrl+S">Save</button>
+  <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
+  <span id="status" style="color: var(--dim)"></span>
+</header>
+<aside id="palette"></aside>
+<main id="stage">
+  <div id="preview"><div class="placeholder">The preview (app/preview) is not here yet.</div></div>
+  <div id="camera"></div>
+</main>
+<aside id="side">
+  <section id="validation"></section>
+  <section id="handles"></section>
+</aside>
+<script src="lib/cjs.js"></script>
+<script>
+'use strict';
+// The page's glue: storage through the native commands, the palette, the keys, and the panels C and E own
+// (app/README.md, "The seam"). Nothing here edits a document; every action is the shell's.
+(async () => {
+  const status = document.getElementById('status');
+  // Served from src-tauri/dist, which mirrors the repository: this page is app/index.html, the program is ../src/.
+  const get = (p) => fetch(`../${p}`).then((r) => { if (!r.ok) throw new Error(`${r.status} ${p}`); return r.text(); });
+  const tauri = window.__TAURI__ && window.__TAURI__.core;
+  const call = (cmd, args) => (tauri ? tauri.invoke(cmd, args) : Promise.reject(new Error('not running inside the app: no native side')));
+  const storage = {
+    saveDoc: (name, text) => call('save_track', { name, text }),
+    openDoc: (name) => call('open_track', { name }),
+    listDocs: () => call('list_tracks'),
+    saveLibrary: (text) => call('save_library', { text }),
+    openLibrary: () => (tauri ? call('open_library') : Promise.resolve(null)),
+  };
+  let shell, pal;
+  try {
+    const S = await loadCjs('app/shell.js', get);
+    pal = await loadCjs('app/palette/palette.js', get);
+    shell = await S.createShell({ storage });
+  } catch (e) { document.getElementById('palette').textContent = `The app could not start: ${e.message}`; return; }
+
+  const paletteRoot = document.getElementById('palette');
+  const on = {
+    place: (n) => shell.place(n), setPicker: (k, v) => shell.setPicker(k, v), undo: () => shell.undo(), redo: () => shell.redo(),
+    removeHead: () => shell.removeHead(), select: (a, b) => shell.select(a, b),
+    saveSelection: (name) => shell.saveSelectionAsPiece(name).catch((e) => { status.textContent = e.message; }),
+  };
+  const draw = (st) => {
+    pal.renderPalette(paletteRoot, pal.paletteModel(st, shell.pickers()), on);
+    status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}`;
+  };
+  shell.subscribe(draw); draw(shell.getState());
+
+  const refreshList = async () => {
+    const sel = document.getElementById('open');
+    try { const names = await shell.list(); sel.replaceChildren(new Option('Open…', ''), ...names.map((n) => new Option(n, n))); }
+    catch (e) { status.textContent = e.message; }
+  };
+  document.getElementById('new').onclick = () => shell.newDoc();
+  document.getElementById('save').onclick = async () => { try { await shell.save(document.getElementById('name').value.trim()); await refreshList(); } catch (e) { status.textContent = e.message; } };
+  document.getElementById('open').onchange = async (e) => { const n = e.target.value; if (!n) return; try { await shell.open(n); document.getElementById('name').value = n; } catch (err) { status.textContent = err.message; } e.target.value = ''; };
+  refreshList();
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, select, textarea')) return;
+    const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && k === 'z' && !e.shiftKey) { e.preventDefault(); shell.undo(); }
+    else if (ctrl && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); shell.redo(); }
+    else if (ctrl && k === 's') { e.preventDefault(); document.getElementById('save').click(); }
+    else if (k === 'backspace') { e.preventDefault(); shell.removeHead(); }
+  });
+
+  // C's and E's panels: each optional, each mount(root, shell).
+  for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation'], ['handles', 'handles']]) {
+    const root = document.getElementById(id);
+    try {
+      const m = await loadCjs(`app/${dir}/index.js`, get);
+      if (typeof m.mount !== 'function') throw new Error('it exports no mount(root, shell)');
+      root.replaceChildren(); m.mount(root, shell);
+    } catch (e) {
+      if (id !== 'preview') root.replaceChildren(Object.assign(document.createElement('p'), { className: 'empty', textContent: `app/${dir} is not plugged in yet (${e.message}).` }));
+    }
+  }
+})();
+</script>
+</body>
+</html>
