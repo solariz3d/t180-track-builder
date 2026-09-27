@@ -445,7 +445,8 @@ and identical file size) are counted once: Miandros 20-06 14:10/14:21/14:28, and
   - **Thunderhead at 100.5 s is at 65 km/h on a 70° wall.** That is a slow car on a steep wall, not a high-speed
     compression. `boxdepth.cjs` assumes rigid tyres, so a car sliding or tipping on a wall can read as below the road
     without having clipped. Not a clipping case.
-- **Thunderhead is remarkably consistent.** Across nine distinct laps and three versions of the track, p99 is
-  20.2–21.8 g and p99.9 is 29.6–33.8 g.
+- **Thunderhead is remarkably consistent.** Across ten distinct laps (§3b and §3c) and three versions of the
+  track, p99 is 19.4–21.8 g and p99.9 is 29.6–36.6 g. (First written as "nine laps, 20.2–21.8 / 29.6–33.8" without
+  counting §3b's two; corrected.)
 - Still unmeasured: the online autosaves (`AC_*_O_*`), and the Sakura 28-03 replay, which blackbox also rejects as
   one.
