@@ -72,6 +72,12 @@ Anything marked **(unverified)** needs a test before we rely on it.
 - **Jump check** (`FINDINGS.md` §8): gap, climb and ramp angle give makeable-or-not and the minimum take-off speed.
   - ~~g_eff ≈ 3.3 g for the Mach 6 from two flights.~~ The fall is 3.2–6.3 g over fifteen flights (FINDINGS §7d),
     and not a function of speed alone: a jump must hold at both ends of that range.
+  - **Show two landings, not one.** The spread is largely the driver's: the turbine override pitches the nose down
+    in the air (thrust acts 0.77 m above the origin), about +0.4 g per degree, on top of about +1.9 g per 100 km/h
+    (FINDINGS §7e). So the check draws the clean-flight landing (about 3.2 g) and the override-dive landing (about
+    6.3 g), and the landing ramp must catch both.
+  - **A landing must be reachable.** The same bound the reader now uses (FINDINGS §7d) keeps the editor from
+    snapping a jump onto a road below it.
 - **Red, for known breakage:**
   - holes or gaps in the road
   - a missing soft-collision block
@@ -209,6 +215,13 @@ renderer. Reuse blackbox's `kn5.js`, `kn5tex.js`, renderer, `collider.js`, `road
    and one small jump, as a kn5 with markers and the soft-collision block.
    - Drive it with a T-180 in AC+CSP.
    - Proves: direct kn5 writing, wall contact, the soft road, and our jump math.
+   - **Run the registered soft-road prediction here** (FINDINGS §4c), in its words: *"a T-180 glitches through hard
+     compressions on a normal track, which has no block, and stops glitching when the block is added to that track's
+     surfaces.ini"*; falsified *"if the glitch persists with the block added, or never happened without it."* Drive
+     the same test track twice, once without the block and once with it, and measure both with `tools/boxdepth.cjs`.
+   - **Record the drive with blackbox's telemetry logger** so the replay carries inputs, which settles whether the
+     override was held on the jump (FINDINGS §7e, the one inferred link).
+   - Needs the keeper: the loop can write the track, but only a person can drive it in AC.
 2. **A generated AI line** for that track: does AC accept it, and do AI laps run?
 3. **Round-trip:**
    - The reader reads the exported track back into the same words it was written from.
@@ -241,4 +254,5 @@ renderer. Reuse blackbox's `kn5.js`, `kn5tex.js`, renderer, `collider.js`, `road
 7. **Onboarding:** the first ten minutes (a guided first track, defaults, a starter phrasebook) decide whether a
    Blender-averse community stays.
 
-**Where it lives:** its own repo, decided at home. `track_study/` is the research that seeds it.
+**Where it lives:** this repo (github.com/solariz3d/t180-track-builder). `tools/` and `docs/FINDINGS.md` are the research
+that seeds it.
