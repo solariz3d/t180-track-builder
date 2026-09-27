@@ -414,3 +414,38 @@ Rainbow 6,975 g), so that figure is not quoted for those tracks.
   reduce, and Hazen's output is unchanged (max 34.07).
 - Not measured: the online autosaves (`AC_*_O_*`: Miandros, Eagleton, Thunderhead January, Centrifuge 13-07), which
   blackbox cannot parse yet.
+
+## 3c. The rest of the desktop replays (2026-09-27; the keeper: "there had to have been miandros and thunder head and centrifuge times")
+§3b ran only the largest replays, and then said the rest were online autosaves. They were not. Every hotlap/practice
+and race (`_R_`) replay for Miandros, Thunderhead, Centrifuge and Sakura is now measured. Duplicates (identical output
+and identical file size) are counted once: Miandros 20-06 14:10/14:21/14:28, and Thunderhead no-dogbowls
+24-08 10:45:49/10:45:51.
+
+| replay | frames | p50 | p99 | p99.9 | max ≤700 | box below the road |
+|---|---|---|---|---|---|---|
+| Centrifuge 12-07 | 8,721 | 9.12 | 43.92 | 64.45 | 56.41 (77.31 overall, at 706 km/h) | 1 episode, 14 frames, 15.5 cm, t 43.29–43.68 s, at the 77.3 g peak |
+| Centrifuge 19-07 | 16,577 | 9.40 | 48.07 | 74.90 | 66.11 (89.79 overall) | 27 frames, 1 episode — the laptop's §4b result, reproduced exactly |
+| Sakura 27-03 | 6,260 | 5.87 | 34.76 | 40.46 | 46.69 | 3 episodes, 9 frames: 2.1 cm at 37.8 s (38.8 g), 4.5 cm at 41.9 s (46.7 g), 16.2 cm for 2 frames at 50.8 s (21.8 g, 596 km/h) |
+| Miandros 17-03 | 5,598 | 4.58 | 24.10 | 31.40 | 32.79 | 0 |
+| Miandros 20-06 (×3, identical) | 4,419 | 4.47 | 23.44 | 30.65 | 33.62 | 0 |
+| Thunderhead 14-03 | 2,344 | 5.72 | 21.00 | 30.38 | 31.28 | 0 |
+| Thunderhead 22-01 | 3,325 | 3.36 | 21.19 | 30.72 | 32.22 | 0 |
+| Thunderhead race 21-01 | 10,413 | 3.84 | 21.80 | 29.56 | — (bands max 16.41 at 500–700) | 0 |
+| Thunderhead race 31-12 | 16,710 | 5.32 | 21.35 | 31.96 | 30.95 | 0 |
+| Thunderhead no-dogbowls 24-08 10:36 | 7,495 | 4.77 | 20.22 | 33.69 | 22.00 | 0 |
+| Thunderhead no-dogbowls 24-08 10:45 (×2) | 8,167 | 5.52 | 20.29 | 33.77 | 23.36 | 0 |
+| Thunderhead no-dogbowls 24-08 11:21 | 6,752 | 5.11 | 20.27 | 32.79 | 34.41 | 1 episode, 21 frames, 7.7 cm, t 100.48–100.78 s, at **65 km/h**, 7.2 g, 70° tilt |
+| Thunderhead no-dogbowls 27-08 | 7,316 | 4.99 | 20.45 | 33.51 | 20.78 | 0 |
+
+- **Every box-below episode at speed sits on a load peak of 38–77 g.** Centrifuge 12-07 at 77.3 g, and Sakura's
+  first two at 38.8 and 46.7 g, are the same pattern as §4b. All are a few cm deep and under half a second.
+- **Two do not fit that pattern:**
+  - **Sakura at 50.8 s is 16.2 cm deep at only 21.8 g**, but for 2 frames (0.03 s). That looks like something
+    local, such as a seam or a bump, rather than load. Unchecked.
+  - **Thunderhead at 100.5 s is at 65 km/h on a 70° wall.** That is a slow car on a steep wall, not a high-speed
+    compression. `boxdepth.cjs` assumes rigid tyres, so a car sliding or tipping on a wall can read as below the road
+    without having clipped. Not a clipping case.
+- **Thunderhead is remarkably consistent.** Across nine distinct laps and three versions of the track, p99 is
+  20.2–21.8 g and p99.9 is 29.6–33.8 g.
+- Still unmeasured: the online autosaves (`AC_*_O_*`), and the Sakura 28-03 replay, which blackbox also rejects as
+  one.
