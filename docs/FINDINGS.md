@@ -350,3 +350,39 @@ layout. Their header names the track `onuris`, recorded in January 2026. The ins
 its road lies elsewhere: the replay car spans x −255…2609, z −192…1720, while the long read spans x −639…1057,
 z −1331…2593. These are a different version of the track, so they say nothing about the reads.
 **Hazen replay `050926-123658`** cannot be parsed yet (blackbox: online multi-car autosave).
+
+## 7e. Why the same jump falls differently: the turbine override pitches the nose down (2026-09-27)
+The keeper: **"the turbine override pushes the pitch down."** The source agrees (github.com/ohyeah2389/Assetto-T-180):
+- `Source/base/data/script_turbojet.lua:120`: the core thrust is applied at `thrustApplicationPoint`, which defaults to
+  `(0, 0.77, -2)`. The Mach 6's `car_config.lua` does not override it, so the forward push acts 0.77 m above the
+  origin, and that is a nose-down moment.
+- `Source/base/data/script.lua:221-230`: with the override (`controls.turbine.burner`) held, the throttle goes to 1,
+  with afterburner above 90% throttle. Without it, the throttle is `baseThrottle * wheelsOnGroundMultiplier`. So in
+  the air, the override is what gives thrust, and with it the pitch.
+
+The replays don't record the button, but they do record the wheels, so the attitude can be measured.
+`jump_flight.cjs` now prints the nose angle against the flight path: negative means the nose is below the path.
+- **Prediction registered before the run:** "the harder-falling flights are more nose-down relative to their velocity,
+  and the 6.25 g lap at jump 3922 is more nose-down than the 4.68 g lap."
+- **Result, 13 Hazen flights:**
+  - Jump 3922 at the same 639 km/h: mean nose angle **−3.3° at 6.25 g, −1.3° at 4.68 g**. It held.
+  - Jump 3531: −3.5° at 5.65 g, −0.8° at 3.97 g.
+  - Jump 14510: −2.2° at 4.07 g, −0.7° at 3.84 g.
+  - Where the pair fell alike (12310, 16300), the angles match to within 0.3°.
+  - One pair reverses by a small margin: 22419 is −2.5° at 4.36 g and −3.2° at 4.03 g.
+  - Across all 13: r = −0.48.
+- **Separating the two inputs** (least squares, g = a + b·speed + c·nose angle):
+  - Speed alone explains R² 0.68 of the fall.
+  - Speed plus nose angle explains R² 0.86.
+  - Fitted: about **+1.9 g per 100 km/h** and **+0.39 g per degree nose-down**.
+  - That is n = 13 with three parameters: a working model, not a law.
+- **A second footprint:** thrust in the air should also add speed. On the two clearly different pairs, the
+  harder-falling lap gained more along the gap: 639→650 vs 639→644 km/h (3922), and 599→606 vs 568→566 (3531). That
+  fits the unexplained 555→570 km/h gain in the air on Sakura (§8).
+
+**For the builder:** the fall in the air is partly **the driver's choice**. Holding the override pulls the car down
+and shortens the jump, by roughly 0.4 g per degree of nose-down. So the 3.2–6.3 g range is not noise. It is the
+envelope between flying clean and diving. A jump check should show both landings, and the landing ramp has to catch
+both.
+**Limit:** the override itself is inferred from attitude and speed gain, not read from input. A replay carrying
+blackbox's telemetry tail, with the button state, would settle it.

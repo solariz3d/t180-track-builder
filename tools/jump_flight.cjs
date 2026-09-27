@@ -36,4 +36,11 @@ for (const [s, e] of passes) {
   console.log(`${path.basename(file)}  frames ${s}-${e}: in the air ${(e - s) * dt} s over ${gapH.toFixed(0)} m`);
   console.log(`  take-off: ${(vh0 * 3.6).toFixed(0)} km/h along the gap, climbing ${vy.toFixed(1)} m/s (${(Math.atan2(vy, vh0) * 180 / Math.PI).toFixed(1)}°)   landing-side: ${(vh1 * 3.6).toFixed(0)} km/h`);
   console.log(`  vertical acceleration in flight: ${a.toFixed(1)} m/s² = ${(-a / G).toFixed(2)} g down   (fit residual ${resid.toFixed(2)} m)   height ${ys[0].toFixed(1)} -> ${ys[n - 1].toFixed(1)} m`);
+  // attitude in the air: the body's nose (front axle minus rear axle, from the recorded wheels) against the flight
+  // path. Negative = nose below the path. The turbine's thrust acts 0.77 m above the origin, so throttle in the air
+  // (only the override gives it) pitches the nose down (FINDINGS §7e).
+  const rel = [], body = []; for (let k = s + 1; k < e; k++) { const f = [ex.fwd[k * 3], ex.fwd[k * 3 + 1], ex.fwd[k * 3 + 2]], fl = Math.hypot(...f);
+    const v = [0, 1, 2].map(c => (P[(k + 1) * 3 + c] - P[(k - 1) * 3 + c]) / (2 * dt)), vl = Math.hypot(...v); if (!fl || !vl) continue;
+    const bp = Math.asin(f[1] / fl) * 180 / Math.PI; body.push(bp); rel.push(bp - Math.asin(v[1] / vl) * 180 / Math.PI); }
+  if (rel.length > 1) console.log(`  nose vs flight path: ${rel[0].toFixed(1)}° at take-off, mean ${(rel.reduce((q, x) => q + x, 0) / rel.length).toFixed(1)}°, ${rel[rel.length - 1].toFixed(1)}° at landing   body pitch rate ${((body[body.length - 1] - body[0]) / ((body.length - 1) * dt)).toFixed(1)} °/s`);
 }
