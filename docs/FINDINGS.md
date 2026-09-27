@@ -386,3 +386,30 @@ envelope between flying clean and diving. A jump check should show both landings
 both.
 **Limit:** the override itself is inferred from attitude and speed gain, not read from input. A replay carrying
 blackbox's telemetry tail, with the button state, would settle it.
+
+## 3b. Loads and depth on the desktop replays (2026-09-27; `node tools/loads.cjs`, `node tools/boxdepth.cjs`)
+Seven replays, all clean laps. Load into the road, in g. "Max ≤700" is the highest value in the speed bands up to
+700 km/h. The overall max also includes frames above 700 km/h; that is real on Centrifuge, which reaches 745 km/h, but
+elsewhere those frames are resets that the teleport filter lets through (Eagleton 4,601 g, Thunderhead 23,274 g,
+Rainbow 6,975 g), so that figure is not quoted for those tracks.
+
+| replay | frames | p50 | p99 | p99.9 | max ≤700 | box below the road |
+|---|---|---|---|---|---|---|
+| Centrifuge 11-08 | 6,981 | 9.96 | 56.95 | 78.80 | 65.98 (83.71 overall) | 1 episode, 12 frames, 3.8 cm, t 42.31–42.48 s |
+| Centrifuge 16-08 | 16,563 | 9.56 | 49.39 | 73.21 | 68.38 (85.84 overall) | 1 episode, 15 frames, 6.7 cm, t 63.88–64.09 s |
+| Hazen Loop 21-08 | 22,916 | 3.81 | 17.26 | 22.77 | 34.07 | 0 |
+| Thunderhead night-optimized | 7,267 | 4.86 | 20.14 | 30.80 | 32.63 | 0 |
+| Thunderhead no-dogbowls 22-08 | 12,995 | 4.91 | 19.39 | 36.62 | 39.04 | 0 |
+| Eagleton 30-12 | 17,426 | 3.79 | 17.99 | 22.82 | 24.41 | 0 |
+| Rainbow 28-05 | 176,737 | 3.94 | 15.21 | 23.75 | 34.84 | 0 |
+
+- **Only Centrifuge ever puts the collision box under the road.** Each replay has one brief episode, a few cm deep,
+  under 0.25 s, at 70–85 g. Both cases are consistent with the soft-collision block (§4c) and with the keeper's
+  "flows so smooth". Everything else, 5.2 hours of driving in total, has zero frames below the road.
+- **Centrifuge is the limit track, and the others sit far below it.** Their p99 is 15–20 g and their worst moment is
+  24–39 g, beside Centrifuge's 49–57 g p99 and 83–90 g peaks. That is the flow-vs-limits split the keeper named
+  (Sakura/Rainbow for flow, Centrifuge for limits), now in numbers across four more tracks.
+- `loads.cjs` crashed on Rainbow's length (`Math.max(...L)` over 176k values overflows the stack). It now uses
+  reduce, and Hazen's output is unchanged (max 34.07).
+- Not measured: the online autosaves (`AC_*_O_*`: Miandros, Eagleton, Thunderhead January, Centrifuge 13-07), which
+  blackbox cannot parse yet.

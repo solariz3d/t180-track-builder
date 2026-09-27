@@ -30,10 +30,10 @@ for (let i = W + 2; i < N - W - 2; i++) {
 const q = (arr, p) => { const s = [...arr].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1)))]; };
 const L = rows.map(r => r.load), R = rows.filter(r => isFinite(r.R) && r.kph > 150).map(r => r.R);
 console.log(`${path.basename(file)}: ${rows.length} frames measured of ${N}, car ${ex.car.carId || ''}`);
-console.log(`load into the road (g):  p50 ${q(L, .5).toFixed(2)}  p90 ${q(L, .9).toFixed(2)}  p99 ${q(L, .99).toFixed(2)}  p99.9 ${q(L, .999).toFixed(2)}  max ${Math.max(...L).toFixed(2)}`);
+console.log(`load into the road (g):  p50 ${q(L, .5).toFixed(2)}  p90 ${q(L, .9).toFixed(2)}  p99 ${q(L, .99).toFixed(2)}  p99.9 ${q(L, .999).toFixed(2)}  max ${L.reduce((m, x) => Math.max(m, x), -Infinity).toFixed(2)}`);
 console.log(`curve radius driven through above 150 km/h (m):  p0.1 ${q(R, .001).toFixed(0)}  p1 ${q(R, .01).toFixed(0)}  p10 ${q(R, .1).toFixed(0)}  median ${q(R, .5).toFixed(0)}`);
 console.log('the ten hardest moments (load, speed, road tilt, implied radius):');
 const top = [...rows].sort((x, y) => y.load - x.load); const seen = [];
 for (const r of top) { if (seen.some(s => Math.abs(s - r.i) < 40)) continue; seen.push(r.i); console.log(`  t ${String(r.t).padStart(6)} s   ${r.load.toFixed(2)} g   ${r.kph.toFixed(0).padStart(4)} km/h   tilt ${r.tilt.toFixed(0).padStart(3)} deg   R ${isFinite(r.R) ? r.R.toFixed(0) + ' m' : '-'}`); if (seen.length >= 10) break; }
 // load by speed band: where the envelope gets tight
-for (const [lo, hi] of [[0, 200], [200, 300], [300, 400], [400, 500], [500, 700]]) { const b = rows.filter(r => r.kph >= lo && r.kph < hi).map(r => r.load); if (b.length) console.log(`  ${lo}-${hi} km/h: ${b.length} frames, load p50 ${q(b, .5).toFixed(2)} p99 ${q(b, .99).toFixed(2)} max ${Math.max(...b).toFixed(2)} g`); }
+for (const [lo, hi] of [[0, 200], [200, 300], [300, 400], [400, 500], [500, 700]]) { const b = rows.filter(r => r.kph >= lo && r.kph < hi).map(r => r.load); if (b.length) console.log(`  ${lo}-${hi} km/h: ${b.length} frames, load p50 ${q(b, .5).toFixed(2)} p99 ${q(b, .99).toFixed(2)} max ${b.reduce((m, x) => Math.max(m, x), -Infinity).toFixed(2)} g`); }
