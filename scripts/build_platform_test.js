@@ -4,6 +4,7 @@
 //   node scripts/build_platform_test.js                 build into out/ (git-ignored)
 //   node scripts/build_platform_test.js --install       build, then copy into <AC>/content/tracks/
 //   node scripts/build_platform_test.js --install --ac "<assettocorsa dir>"
+//   node scripts/build_platform_test.js --ai-mode floor   the AI line on the floor centre (a control; default: wall)
 //
 // It glues three packets together: the scene from scripts/platform_test.js, the kn5 from src/export/kn5write.js, and
 // every other file from src/export/trackfiles.js. The §5c marker checks (src/export/markers.js) and the scene validator
@@ -51,10 +52,18 @@ function loadKn5Writer() {
   return fn;
 }
 
-function build() {
+/** The scene validator. Missing is a loud error: a build that cannot validate must not go on without it. */
+function loadValidator() {
+  let mod;
+  try { mod = require('../src/export/scene.js'); } catch (e) { throw new Error(`src/export/scene.js could not be loaded, so the scene cannot be validated: ${e.message}`); }
+  if (typeof mod.validateScene !== 'function') throw new Error('src/export/scene.js does not export validateScene');
+  return mod.validateScene;
+}
+
+function build({ aiMode = 'wall' } = {}) {
   const pt = require('./platform_test.js');
-  const { scene, dsn } = pt.buildTrack();
-  try { require('../src/export/scene.js').validateScene(scene); } catch (e) { if (e.name === 'SceneError') throw e; if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+  const { scene, dsn, secs } = pt.buildTrack();
+  loadValidator()(scene);
   const mc = checkMarkers(scene);
   const red = mc.checks.filter((c) => !c.ok);
   if (red.length) throw new Error('marker checks are RED, nothing written:\n' + red.map((c) => `  ${c.id}: ${c.problems.join('; ')}`).join('\n'));
@@ -63,6 +72,11 @@ function build() {
   const tmp = path.join(OUT, '.readback.kn5');
   fs.mkdirSync(OUT, { recursive: true }); fs.writeFileSync(tmp, kn5);
   let back; try { back = require('../tools/kn5.cjs').readKn5(tmp); } finally { fs.rmSync(tmp, { force: true }); }
+  // The AI line (ai/fast_lane.ai v7, hasGrid 0): one line for both variants, since their geometry is the same.
+  const ailine = require('../src/export/ailine.js');
+  const line = ailine.generateAiLine(dsn, secs, { mode: aiMode });
+  const ai = ailine.encodeAiLine(line);
+  ailine.readAiLine(ai);   // self-test: our own reader takes it back, or the build stops here
   const built = [];
   for (const v of VARIANTS) {
     const dir = path.join(OUT, v.folder);
@@ -71,11 +85,17 @@ function build() {
     fs.writeFileSync(path.join(dir, KN5_NAME), kn5);
     const desc = { name: v.title, description: 'Milestone 1 platform test: a half-pipe, a wall-ride above 90 degrees and one small jump. Built by t180-track-builder.', length: dsn.length, run: 'counterclockwise' /* C's loop turns left only (hand-back p-d165-geometry-C §1) */, tags: ['t180', 'original', 'test'], author: 't180-track-builder', version: '0.1' };
     const files = [KN5_NAME, ...trackfiles.writeTrackFiles(dir, scene, { softCollision: v.softCollision, kn5Files: [KN5_NAME], desc })];
+    fs.mkdirSync(path.join(dir, 'ai'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'ai', 'fast_lane.ai'), ai);
+    files.push('ai/fast_lane.ai');
     built.push({ ...v, dir, files });
   }
   const shas = built.map((b) => sha256(fs.readFileSync(path.join(b.dir, KN5_NAME))));
   if (new Set(shas).size !== 1) throw new Error('the two variants carry different kn5 bytes; the geometry must be identical');
-  return { built, kn5Sha: shas[0], kn5Bytes: kn5.length, readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) }, markers: mc };
+  const aiShas = built.map((b) => sha256(fs.readFileSync(path.join(b.dir, 'ai', 'fast_lane.ai'))));
+  if (new Set(aiShas).size !== 1) throw new Error('the two variants carry different AI lines');
+  return { built, kn5Sha: shas[0], kn5Bytes: kn5.length, readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) }, markers: mc,
+    ai: { mode: aiMode, points: line.points.length, bytes: ai.length, sha: aiShas[0], lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh } };
 }
 
 /** Copy one built folder into <ac>/content/tracks/<folder>, under the safety rules above. Returns what it did. */
@@ -101,10 +121,12 @@ function main(argv) {
   const install = argv.includes('--install');
   const ai = argv.indexOf('--ac');
   const acRoot = ai >= 0 ? argv[ai + 1] : (process.env.AC_ROOT || DEFAULT_AC);
-  const r = build();
+  const mi = argv.indexOf('--ai-mode');
+  const r = build({ aiMode: mi >= 0 ? argv[mi + 1] : 'wall' });
   console.log(`built ${r.built.length} folders in ${path.relative(REPO, OUT)}/, kn5 ${r.kn5Bytes} B sha256 ${r.kn5Sha.slice(0, 16)}… (identical in both)`);
   console.log(`  read back by tools/kn5.cjs: version ${r.readback.version}, ${r.readback.meshes} meshes, markers ${r.readback.dummies.join(' ')}`);
   console.log(`  marker checks: ${r.markers.checks.map((c) => `${c.id} ${c.ok ? 'ok' : 'RED'}`).join(', ')}`);
+  console.log(`  ai/fast_lane.ai: v7, hasGrid 0, ${r.ai.mode} line, ${r.ai.points} points, ${r.ai.lengthM.toFixed(2)} m closed, ${r.ai.speedKmh} km/h, ${r.ai.bytes} B sha256 ${r.ai.sha.slice(0, 16)}… (identical in both)`);
   for (const b of r.built) console.log(`  ${b.folder}: ${b.files.length} files, surfaces.ini ${b.softCollision ? 'WITH' : 'WITHOUT'} the soft-collision block`);
   if (install) for (const b of r.built) { const i = installOne(b, acRoot); console.log(`installed ${i.target} (${i.files} files, ${i.existed ? 'updated our own folder' : 'new folder'})`); }
 }
