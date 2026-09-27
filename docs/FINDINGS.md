@@ -275,3 +275,24 @@ refines g_eff.
 - **Not yet shown:** that clipping happens where the mesh is coarse under 20+ g. The next test is a replay of a track
   where cars DO clip, measured the same way.
 - **The piece vocabulary and reading tracks back into pieces:** not started.
+
+## 7c. The desktop library, first pass (2026-09-27 morning, desktop)
+The keeper's rule for the learning library: **only ohyeah2389's tracks, Dogeish's tracks, and Chase's Onuris**; the
+rest are "made by people who have not gotten good yet". So Aurora Cryopticon (author **Cash**, not Chase) is outside
+the rule and is dropped from the learning set unless the keeper says otherwise. AC install on the desktop:
+`G:\SteamLibrary\steamapps\common\assettocorsa\content\tracks` (64 tracks).
+
+New layouts read, all closed (`node tools/read_track.cjs <dir> <len> <width> [layout] > reads/x.read.json`):
+| layout | author | lap | words | jumps |
+|---|---|---|---|---|
+| Hazen Loop | Dogeish | 27.5 km (stated 32.1) | 514 | 7 (65–225 m) |
+| Onuris Long | Chase | 23.8 km | 377 | 4 |
+| Onuris Medium | Chase | 19.2 km | 340 | 3 |
+| Onuris Short | Chase | 7.4 km | 135 | 0 |
+| The Bowltrack | Dogeish | 2.5 km | 39 | 0 |
+| T-180 Bowl Track | Dogeish | 2.1 km | 30 | 0 |
+
+Not yet done: replay checks for these (desktop replays exist: Hazen Loop ×3, T-180 Bowl Track, Onuris ×3, plus large
+sessions for Rainbow, Centrifuge, Thunderhead, Miandros, Eagleton, Sakura); Hazen's 27.5 vs 32.1 km gap unexplained;
+the Hazen jump with 77 m drop over 65 m is suspicious (possible wrong landing, cf. Coast §7b) — verify with its replay.
+The replay tools now find blackbox at `%USERPROFILE%\blackbox` or `%USERPROFILE%\Desktop\blackbox`, or `BLACKBOX`.

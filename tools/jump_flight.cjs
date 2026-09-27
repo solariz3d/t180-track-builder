@@ -4,7 +4,7 @@
 // pulled down by gravity AND by its own downforce, which grows with speed, so it falls harder than 1 g.
 //   node jump_flight.cjs <replay> <takeoff x,y,z> <landing x,y,z>
 const fs = require('fs'), path = require('path');
-const { parseReplay, extractCar } = require(path.join(process.env.USERPROFILE, 'blackbox/ui/acreplay.js'));
+const { parseReplay, extractCar } = require(process.env.BLACKBOX ? path.join(process.env.BLACKBOX, 'ui/acreplay.js') : [path.join(process.env.USERPROFILE, 'blackbox'), path.join(process.env.USERPROFILE, 'Desktop', 'blackbox')].map(d => path.join(d, 'ui/acreplay.js')).find(p => fs.existsSync(p)) || (() => { throw new Error('blackbox not found: set BLACKBOX to its folder'); })());
 const [file, A, B] = process.argv.slice(2), to = A.split(',').map(Number), la = B.split(',').map(Number);
 const buf = fs.readFileSync(file), rep = parseReplay(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
 const ex = extractCar(rep, 0), N = ex.N, P = ex.pos, dt = ex.dt, G = 9.81;

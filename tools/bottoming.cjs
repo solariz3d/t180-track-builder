@@ -5,7 +5,7 @@
 // show where that happens.
 //   node bottoming.cjs <replay.acreplay>
 const fs = require('fs'), path = require('path');
-const { parseReplay, extractCar } = require(path.join(process.env.USERPROFILE, 'blackbox/ui/acreplay.js'));
+const { parseReplay, extractCar } = require(process.env.BLACKBOX ? path.join(process.env.BLACKBOX, 'ui/acreplay.js') : [path.join(process.env.USERPROFILE, 'blackbox'), path.join(process.env.USERPROFILE, 'Desktop', 'blackbox')].map(d => path.join(d, 'ui/acreplay.js')).find(p => fs.existsSync(p)) || (() => { throw new Error('blackbox not found: set BLACKBOX to its folder'); })());
 const file = process.argv[2]; if (!file) throw new Error('usage: node bottoming.cjs <replay.acreplay>');
 const buf = fs.readFileSync(file), rep = parseReplay(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
 const ex = extractCar(rep, 0), N = ex.N, dt = ex.dt, P = ex.pos, G = 9.81, Wh = ex.wheels;

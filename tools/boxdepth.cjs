@@ -3,7 +3,7 @@
 // So the box is under the road when the body sits more than 0.345 m below its wheel-centre plane. Tyre squash only
 // makes it deeper, so these counts are a floor, not an estimate.   node boxdepth.cjs <replay>
 const fs = require('fs'), path = require('path');
-const { parseReplay, extractCar } = require(path.join(process.env.USERPROFILE, 'blackbox/ui/acreplay.js'));
+const { parseReplay, extractCar } = require(process.env.BLACKBOX ? path.join(process.env.BLACKBOX, 'ui/acreplay.js') : [path.join(process.env.USERPROFILE, 'blackbox'), path.join(process.env.USERPROFILE, 'Desktop', 'blackbox')].map(d => path.join(d, 'ui/acreplay.js')).find(p => fs.existsSync(p)) || (() => { throw new Error('blackbox not found: set BLACKBOX to its folder'); })());
 const buf = fs.readFileSync(process.argv[2]), rep = parseReplay(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
 const ex = extractCar(rep, 0), N = ex.N, P = ex.pos, Wh = ex.wheels, CLEAR = 0.345;
 let n = 0, under = 0, deepest = 0, at = -1; const runs = []; let run = null;
