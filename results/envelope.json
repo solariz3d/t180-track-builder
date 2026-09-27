@@ -1,0 +1,475 @@
+[
+ {
+  "track": "serpents_spiral",
+  "road_triangles": 79872,
+  "shared_edges": 119004,
+  "triangle_longest_edge_m": {
+   "p50": 1.805,
+   "p90": 2.338,
+   "p99": 2.923
+  },
+  "seam_angle_deg": {
+   "p50": 0.327,
+   "p90": 2.222,
+   "p99": 6.435,
+   "p99.9": 7.075,
+   "p100": 7.219
+  },
+  "creases_over_30deg_pct": 0,
+  "smooth_seam_deg": {
+   "p50": 0.327,
+   "p90": 2.222,
+   "p99": 6.435,
+   "p99.9": 7.075
+  },
+  "concave_radius_m": {
+   "p0.1": 5.7,
+   "p1": 6.745,
+   "p5": 11.665,
+   "p50": 98.969
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 5.698,
+   "p1": 6.753,
+   "p5": 12.437,
+   "p50": 96.933
+  },
+  "convex_radius_m": {
+   "p0.1": 21.361,
+   "p1": 34.306,
+   "p5": 38.911,
+   "p50": 143.919
+  },
+  "ms": 265
+ },
+ {
+  "track": "ohyeah2389_t180testtrack",
+  "road_triangles": 285596,
+  "shared_edges": 425763,
+  "triangle_longest_edge_m": {
+   "p50": 2.927,
+   "p90": 3.689,
+   "p99": 4.813
+  },
+  "seam_angle_deg": {
+   "p50": 1.134,
+   "p90": 5.875,
+   "p99": 21.579,
+   "p99.9": 23.087,
+   "p100": 179.105
+  },
+  "creases_over_30deg_pct": 0.06,
+  "smooth_seam_deg": {
+   "p50": 1.132,
+   "p90": 5.874,
+   "p99": 21.285,
+   "p99.9": 22.944
+  },
+  "concave_radius_m": {
+   "p0.1": 0.313,
+   "p1": 0.318,
+   "p5": 0.739,
+   "p50": 80.959
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 0.315,
+   "p1": 0.328,
+   "p5": 0.832,
+   "p50": 62.61
+  },
+  "convex_radius_m": {
+   "p0.1": 0.973,
+   "p1": 1.883,
+   "p5": 9.153,
+   "p50": 17.562
+  },
+  "ms": 1054
+ },
+ {
+  "track": "cash_auroracryopticon",
+  "road_triangles": 1394546,
+  "shared_edges": 2037712,
+  "triangle_longest_edge_m": {
+   "p50": 2.491,
+   "p90": 6.977,
+   "p99": 9.185
+  },
+  "seam_angle_deg": {
+   "p50": 0.312,
+   "p90": 5.813,
+   "p99": 126.123,
+   "p99.9": 178.765,
+   "p100": 180
+  },
+  "creases_over_30deg_pct": 5.82,
+  "smooth_seam_deg": {
+   "p50": 0.276,
+   "p90": 5.391,
+   "p99": 25.183,
+   "p99.9": 29.89
+  },
+  "concave_radius_m": {
+   "p0.1": 3.877,
+   "p1": 5.951,
+   "p5": 9.557,
+   "p50": 170.274
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 2.756,
+   "p1": 4.792,
+   "p5": 9.511,
+   "p50": 170.583
+  },
+  "convex_radius_m": {
+   "p0.1": 0.433,
+   "p1": 4.239,
+   "p5": 9.469,
+   "p50": 202.944
+  },
+  "ms": 6548
+ },
+ {
+  "track": "centrifuge",
+  "road_triangles": 3197827,
+  "shared_edges": 4778986,
+  "triangle_longest_edge_m": {
+   "p50": 1.58,
+   "p90": 2.194,
+   "p99": 13.936
+  },
+  "seam_angle_deg": {
+   "p50": 0.209,
+   "p90": 4.409,
+   "p99": 179.749,
+   "p99.9": 179.992,
+   "p100": 180
+  },
+  "creases_over_30deg_pct": 2.1,
+  "smooth_seam_deg": {
+   "p50": 0.197,
+   "p90": 3.594,
+   "p99": 7.563,
+   "p99.9": 14.718
+  },
+  "concave_radius_m": {
+   "p0.1": 1.632,
+   "p1": 1.928,
+   "p5": 4.198,
+   "p50": 65.65
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 1.592,
+   "p1": 2.002,
+   "p5": 4.226,
+   "p50": 58.155
+  },
+  "convex_radius_m": {
+   "p0.1": 1.432,
+   "p1": 1.589,
+   "p5": 2.277,
+   "p50": 104.351
+  },
+  "ms": 18991
+ },
+ {
+  "track": "coast",
+  "road_triangles": 657868,
+  "shared_edges": 933118,
+  "triangle_longest_edge_m": {
+   "p50": 4.521,
+   "p90": 5.451,
+   "p99": 8.793
+  },
+  "seam_angle_deg": {
+   "p50": 0.591,
+   "p90": 90.001,
+   "p99": 106.383,
+   "p99.9": 179.952,
+   "p100": 180
+  },
+  "creases_over_30deg_pct": 19.7,
+  "smooth_seam_deg": {
+   "p50": 0.366,
+   "p90": 1.712,
+   "p99": 15.931,
+   "p99.9": 26.813
+  },
+  "concave_radius_m": {
+   "p0.1": 3.935,
+   "p1": 5.741,
+   "p5": 20.163,
+   "p50": 190.237
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 3.936,
+   "p1": 5.744,
+   "p5": 11.234,
+   "p50": 143.812
+  },
+  "convex_radius_m": {
+   "p0.1": 6.02,
+   "p1": 13.453,
+   "p5": 37.268,
+   "p50": 192.802
+  },
+  "ms": 3351
+ },
+ {
+  "track": "eagleton",
+  "road_triangles": 269687,
+  "shared_edges": 300737,
+  "triangle_longest_edge_m": {
+   "p50": 4.533,
+   "p90": 5.059,
+   "p99": 6.494
+  },
+  "seam_angle_deg": {
+   "p50": 0.751,
+   "p90": 84.755,
+   "p99": 95.129,
+   "p99.9": 178.856,
+   "p100": 180
+  },
+  "creases_over_30deg_pct": 10.45,
+  "smooth_seam_deg": {
+   "p50": 0.597,
+   "p90": 4.08,
+   "p99": 17.241,
+   "p99.9": 18.483
+  },
+  "concave_radius_m": {
+   "p0.1": 13.68,
+   "p1": 16.606,
+   "p5": 21.164,
+   "p50": 159.42
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 13.682,
+   "p1": 18.062,
+   "p5": 22.381,
+   "p50": 166.161
+  },
+  "convex_radius_m": {
+   "p0.1": 1.593,
+   "p1": 1.594,
+   "p5": 4.815,
+   "p50": 166.598
+  },
+  "ms": 1167
+ },
+ {
+  "track": "Miandros",
+  "road_triangles": 472992,
+  "shared_edges": 652838,
+  "triangle_longest_edge_m": {
+   "p50": 2.988,
+   "p90": 3.126,
+   "p99": 3.566
+  },
+  "seam_angle_deg": {
+   "p50": 1.036,
+   "p90": 90.038,
+   "p99": 107.797,
+   "p99.9": 179.984,
+   "p100": 180
+  },
+  "creases_over_30deg_pct": 19.34,
+  "smooth_seam_deg": {
+   "p50": 0.67,
+   "p90": 3.38,
+   "p99": 6.288,
+   "p99.9": 8.223
+  },
+  "concave_radius_m": {
+   "p0.1": 7.737,
+   "p1": 9.869,
+   "p5": 12.757,
+   "p50": 89.658
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 7.737,
+   "p1": 10.311,
+   "p5": 15.468,
+   "p50": 90.052
+  },
+  "convex_radius_m": {
+   "p0.1": 7.233,
+   "p1": 12.951,
+   "p5": 19.964,
+   "p50": 90.834
+  },
+  "ms": 2132
+ },
+ {
+  "track": "ohyeah2389_nordic",
+  "road_triangles": 926104,
+  "shared_edges": 1382364,
+  "triangle_longest_edge_m": {
+   "p50": 2.92,
+   "p90": 3.392,
+   "p99": 3.656
+  },
+  "seam_angle_deg": {
+   "p50": 0.511,
+   "p90": 5.884,
+   "p99": 22.581,
+   "p99.9": 176.028,
+   "p100": 179.985
+  },
+  "creases_over_30deg_pct": 0.39,
+  "smooth_seam_deg": {
+   "p50": 0.506,
+   "p90": 5.873,
+   "p99": 10.444,
+   "p99.9": 22.95
+  },
+  "concave_radius_m": {
+   "p0.1": 0.314,
+   "p1": 0.315,
+   "p5": 0.735,
+   "p50": 124.058
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 0.314,
+   "p1": 0.317,
+   "p5": 0.763,
+   "p50": 101.52
+  },
+  "convex_radius_m": {
+   "p0.1": 0.323,
+   "p1": 0.843,
+   "p5": 9.047,
+   "p50": 20.291
+  },
+  "ms": 5014
+ },
+ {
+  "track": "rainbow_rd",
+  "road_triangles": 827912,
+  "shared_edges": 1241526,
+  "triangle_longest_edge_m": {
+   "p50": 5.499,
+   "p90": 5.915,
+   "p99": 7.044
+  },
+  "seam_angle_deg": {
+   "p50": 0.363,
+   "p90": 1.713,
+   "p99": 90.075,
+   "p99.9": 126.926,
+   "p100": 180
+  },
+  "creases_over_30deg_pct": 7.66,
+  "smooth_seam_deg": {
+   "p50": 0.317,
+   "p90": 1.109,
+   "p99": 2.149,
+   "p99.9": 4.088
+  },
+  "concave_radius_m": {
+   "p0.1": 32.42,
+   "p1": 54.874,
+   "p5": 92.043,
+   "p50": 322.163
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 31.842,
+   "p1": 60.322,
+   "p5": 99.751,
+   "p50": 300.385
+  },
+  "convex_radius_m": {
+   "p0.1": 32.164,
+   "p1": 54.148,
+   "p5": 80.004,
+   "p50": 367.61
+  },
+  "ms": 4142
+ },
+ {
+  "track": "sakura_speedway",
+  "road_triangles": 1166100,
+  "shared_edges": 1720059,
+  "triangle_longest_edge_m": {
+   "p50": 2.303,
+   "p90": 3.884,
+   "p99": 4.836
+  },
+  "seam_angle_deg": {
+   "p50": 0.373,
+   "p90": 5.399,
+   "p99": 65.622,
+   "p99.9": 174.97,
+   "p100": 179.971
+  },
+  "creases_over_30deg_pct": 3.1,
+  "smooth_seam_deg": {
+   "p50": 0.35,
+   "p90": 4.862,
+   "p99": 23.15,
+   "p99.9": 23.641
+  },
+  "concave_radius_m": {
+   "p0.1": 0.495,
+   "p1": 1.761,
+   "p5": 5.649,
+   "p50": 98.203
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 0.496,
+   "p1": 1.79,
+   "p5": 6.238,
+   "p50": 95.615
+  },
+  "convex_radius_m": {
+   "p0.1": 0.497,
+   "p1": 8.93,
+   "p5": 29.271,
+   "p50": 221.056
+  },
+  "ms": 6079
+ },
+ {
+  "track": "thunderhead_raceway",
+  "road_triangles": 156000,
+  "shared_edges": 219117,
+  "triangle_longest_edge_m": {
+   "p50": 2.195,
+   "p90": 2.455,
+   "p99": 2.705
+  },
+  "seam_angle_deg": {
+   "p50": 0.463,
+   "p90": 2.364,
+   "p99": 113.806,
+   "p99.9": 179.994,
+   "p100": 180
+  },
+  "creases_over_30deg_pct": 6.7,
+  "smooth_seam_deg": {
+   "p50": 0.394,
+   "p90": 1.784,
+   "p99": 2.878,
+   "p99.9": 4.466
+  },
+  "concave_radius_m": {
+   "p0.1": 8.631,
+   "p1": 15.246,
+   "p5": 25.53,
+   "p50": 112.523
+  },
+  "concave_radius_on_walls_over35deg_m": {
+   "p0.1": 10.27,
+   "p1": 16.356,
+   "p5": 33.876,
+   "p50": 105.59
+  },
+  "convex_radius_m": {
+   "p0.1": 7.773,
+   "p1": 12.891,
+   "p5": 18.358,
+   "p50": 88.08
+  },
+  "ms": 1032
+ }
+]
