@@ -405,7 +405,8 @@ Rainbow 6,975 g), so that figure is not quoted for those tracks.
 
 - **Only Centrifuge ever puts the collision box under the road.** Each replay has one brief episode, a few cm deep,
   under 0.25 s, at 70–85 g. Both cases are consistent with the soft-collision block (§4c) and with the keeper's
-  "flows so smooth". Everything else, 5.2 hours of driving in total, has zero frames below the road.
+  "flows so smooth". Everything else, about 66 minutes of driving (Rainbow alone 46.2), has zero frames below the road. (The first
+  version of this line said "5.2 hours", written without computing it; the durations are N·dt from the replays.)
 - **Centrifuge is the limit track, and the others sit far below it.** Their p99 is 15–20 g and their worst moment is
   24–39 g, beside Centrifuge's 49–57 g p99 and 83–90 g peaks. That is the flow-vs-limits split the keeper named
   (Sakura/Rainbow for flow, Centrifuge for limits), now in numbers across four more tracks.
