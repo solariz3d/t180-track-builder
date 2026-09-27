@@ -102,7 +102,10 @@ function surfaceUnder(p, road) {
   return best;
 }
 
-const DEFAULTS = { minHeight: 1, maxHeight: 2, surfaceTiltSin: Math.sin(15 * Math.PI / 180), raceCos: Math.cos(30 * Math.PI / 180), slotHalfWidth: 1.0, slotHalfLength: 2.4 };
+// raceHeading: which markers must point along the grid's race direction. Default: every racing marker, as before D171.
+// The export (D171) narrows it to the grid and the start gate: a hotlap run-up or a sector can sit on a curve, where
+// "along the road" is not the grid's direction; src/markers checks those along their own road.
+const DEFAULTS = { minHeight: 1, maxHeight: 2, surfaceTiltSin: Math.sin(15 * Math.PI / 180), raceCos: Math.cos(30 * Math.PI / 180), slotHalfWidth: 1.0, slotHalfLength: 2.4, raceHeading: /^AC_START_|^AC_TIME_|^AC_HOTLAP_START_/ };
 const byIndex = (re) => (d) => { const m = re.exec(d.name); return m ? +m[1] : -1; };
 
 function collect(dummies) {
@@ -121,10 +124,25 @@ function raceDirection(grid) {
   return len(h) > 0 ? h : null;
 }
 
+/**
+ * The race AXIS the checks use (D171): raceDirection with the across-the-road part removed, along the pole's own left
+ * axis. The ORDER still gives the sign (back slot → pole), so a grid whose axes point backwards still fails; but a grid
+ * whose back slot sits in another column than the pole (3 abreast: 12 m along and 10 m across, 40° off) no longer reads
+ * as pointing off the road. raceDirection itself is kept as it was (exported, and pinned by test/markers.test.js).
+ */
+function raceAxis(grid) {
+  const g = raceDirection(grid);
+  if (!g || grid.length < 2) return g;
+  const M = grid[0].matrix, left = unit([M[0], 0, M[2]]);
+  if (len(left) === 0) return g;
+  const a = unit(sub(g, scale(left, dot(g, left))));
+  return len(a) > 0 ? a : g;
+}
+
 // ── the five checks ────────────────────────────────────────────────────────────────────────────────────────────────
 function checkStartAheadOfGrid(m) {
   const problems = [];
-  const g = raceDirection(m.grid);
+  const g = raceAxis(m.grid);
   if (!g) problems.push('no AC_START_n markers, so no grid and no race direction');
   if (!m.L || !m.R) problems.push('no AC_TIME_0_L / AC_TIME_0_R gate, so no start line');
   if (!problems.length) {
@@ -137,7 +155,7 @@ function checkStartAheadOfGrid(m) {
 
 function checkGateOrientation(m) {
   const problems = [];
-  const g = raceDirection(m.grid);
+  const g = raceAxis(m.grid);
   if (!m.L || !m.R) problems.push('no AC_TIME_0_L / AC_TIME_0_R gate');
   else if (!g) problems.push('no grid, so no race direction to tell left from right');
   else {
@@ -149,7 +167,7 @@ function checkGateOrientation(m) {
 
 function checkHeightAndHeading(m, road, o) {
   const problems = [];
-  const g = raceDirection(m.grid);
+  const g = raceAxis(m.grid);
   const all = [...m.grid, ...m.pits, m.hotlap, m.L, m.R].filter(Boolean);
   if (!all.length) problems.push('no markers');
   if (!road.length) problems.push('no drivable physics mesh (<digit><KEY>, KEY not WALL) to stand the markers on');
@@ -161,7 +179,7 @@ function checkHeightAndHeading(m, road, o) {
     const f = unit(d.fwd);
     if (len(d.fwd) === 0) { problems.push(`${d.name} has no forward axis`); continue; }
     if (Math.abs(dot(f, s.n)) > o.surfaceTiltSin) problems.push(`${d.name} points ${(Math.asin(Math.min(1, Math.abs(dot(f, s.n)))) * 180 / Math.PI).toFixed(0)}° out of the surface (along the road means parallel to it)`);
-    const racing = /^AC_START_|^AC_TIME_|^AC_HOTLAP_START_/.test(d.name);
+    const racing = o.raceHeading.test(d.name);
     if (racing && g && dot(unit([f[0], 0, f[2]]), g) < o.raceCos) problems.push(`${d.name} does not point along the race direction (forward · race = ${dot(unit([f[0], 0, f[2]]), g).toFixed(2)})`);
   }
   return { id: 'height-and-heading', ok: !problems.length, problems };
@@ -206,4 +224,4 @@ function checkMarkers(scene, { expectedPits = null, ...opts } = {}) {
 /** The count `ui_track.json` must carry: the AC_PIT_n markers in the scene, never typed by hand (§5c). */
 function countPits(scene) { return walkScene(scene).dummies.filter((d) => /^AC_PIT_\d+$/.test(d.name)).length; }
 
-module.exports = { checkMarkers, countPits, walkScene, isDrivable, raceDirection, DEFAULTS, _internal: { closestOnTri, surfaceUnder, mul } };
+module.exports = { checkMarkers, countPits, walkScene, isDrivable, raceDirection, raceAxis, DEFAULTS, _internal: { closestOnTri, surfaceUnder, mul } };

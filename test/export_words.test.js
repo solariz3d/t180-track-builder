@@ -76,13 +76,20 @@ test('the AI line runs at the design speed when every word has one (200 km/h her
   assert.ok(line.extra.every((e) => Math.abs(e.speed - 200 / 3.6) < 1e-3), line.extra[0].speed);
 });
 
-test('the markers stand on the start straight, pole nearest the line, the hotlap start behind every slot', () => {
+// CHANGED 2026-09-27 (D171): the hotlap start was 12 m behind the pits on the start straight. §5c places it "a run-up
+// before the start line, with its distance chosen so the car arrives at speed": src/markers/layout.js runUpM, 352 m to
+// the 460 km/h design speed, which on this closed loop wraps back round the loop.
+test('the markers stand on the start straight, pole nearest the line; the hotlap starts the run-up to the design speed', () => {
+  const { runUpM } = require('../src/markers/layout.js');
+  const { MACH6 } = require('../src/validate/limits.js');
   const m = Object.fromEntries(sample.r.markers.map((x) => [x.name, x]));
-  const line = m.AC_TIME_0_L.s;
+  const line = m.AC_TIME_0_L.s, L = sample.r.lengthM;
   assert.strictEqual(m.AC_TIME_0_R.s, line);
-  const order = ['AC_START_0', 'AC_START_1', 'AC_START_2', 'AC_START_3', 'AC_PIT_0', 'AC_PIT_1', 'AC_HOTLAP_START_0'].map((n) => m[n].s);
+  const order = ['AC_START_0', 'AC_START_1', 'AC_START_2', 'AC_START_3', 'AC_PIT_0', 'AC_PIT_1'].map((n) => m[n].s);
   for (let k = 1; k < order.length; k++) assert.ok(order[k] < order[k - 1], order.join(' '));
   assert.ok(order[0] < line);
+  const behind = ((line - m.AC_HOTLAP_START_0.s) % L + L) % L;
+  assert.ok(Math.abs(behind - runUpM(MACH6.designSpeedKmh / 3.6)) < 1e-6, `${behind}`);
 });
 
 test('a red document is refused, the reason named, and nothing written (the 60° bowl walls, for vanilla AC)', () => {
@@ -182,9 +189,11 @@ test('the §5c marker checks guard the output: markers 3 m above the road (band 
   assert.deepStrictEqual(fs.readdirSync(out), []);
 });
 
+// CHANGED 2026-09-27 (D171): 20 slots no longer overrun the sample's 200 m straight (they need 195 m, now the hotlap
+// start is not on the straight), so the grid is 30 (275 m).
 test('a grid longer than the longest straight is refused with the lengths named', () => {
   const out = tmp();
-  assert.throws(() => exportTrack(SAMPLE, { outDir: out, grid: 20 }), (e) => e.code === 'NO_START_STRAIGHT' && /the longest straight is \d+\.\d m; a grid of 20/.test(e.message));
+  assert.throws(() => exportTrack(SAMPLE, { outDir: out, grid: 30 }), (e) => e.code === 'NO_START_STRAIGHT' && /the longest straight is \d+\.\d m; a grid of 30/.test(e.message));
   assert.deepStrictEqual(fs.readdirSync(out), []);
 });
 

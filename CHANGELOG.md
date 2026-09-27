@@ -220,6 +220,31 @@ All notable changes to this project are recorded here. The format follows
   - A drag stops at the red bound (known breakage, which the export refuses) and passes amber (unproven, never
     blocked).
   - Each drag is one undo step. Alt goes past red and shows it.
+- Race markers placed by the program (`docs/ARCHITECTURE.md` §5c), in `src/markers/` and a markers panel
+  (`app/markers/`, built and tested headless; not yet mounted in the page):
+  - every marker sits in track coordinates, anchored to a word and a distance into it, on the surface the mesh builds,
+    so it moves with its word when earlier words are edited and stands correctly on banked floors and half-pipe walls;
+  - the grid comes from a pattern (2 staggered, 2 abreast, 3 abreast) with count, spacing and slot-by-slot edits,
+    numbered from pole;
+  - pit boxes, with `pitboxes` counted from them; they can stand on a pit lane once one is built;
+  - the hotlap start sits at the run-up that reaches the design speed at the line, from the measured thrust;
+  - start/finish and sector gates stand at the edges of the cross-section;
+  - the start/finish line, grid boxes and pit boxes are painted as surface meshes generated from the markers, so paint
+    and markers cannot disagree;
+  - §5c's red checks (start line ahead of the grid, L/R gates, height and heading, slot overlap and off-road, pit
+    count, a marker whose word is gone) refuse the export.
+- `exportTrack` takes a marker layout (`opts.markers`). Without one it places the default layout on the longest
+  straight, where it did before.
+- Texture slots in the document (`docs/ARCHITECTURE.md` §5b, part 1): floor, walls, lines, kerbs and edge glow. A font
+  carries defaults and any word can override them. The document is now schema 2; schema-1 documents and piece libraries
+  migrate on load and resolve to the same track.
+- Texture tools in `src/texture/`, not yet used by the mesh, the preview or the export:
+  - mapping by each lateral line's own arc length and the profile's own width, so a texture does not stretch through
+    tight turns, walls or loops (the mesh's current centreline mapping is off by up to 650% on a 15 m turn);
+  - PNG and baseline JPEG import, converted to uncompressed DDS with a full mip chain; progressive JPEG, interlaced PNG,
+    images over 8192 px and a compressed normal map are refused with a named reason;
+  - one texture set feeding both sides: the preview reads its images back from the same DDS bytes the kn5 embeds.
+- A texture panel (`app/texture/`), built and tested headless; not yet mounted in the page.
 
 ### Changed
 
@@ -234,6 +259,9 @@ All notable changes to this project are recorded here. The format follows
   11.5 m/s² at 700–800. So a closed track's lap proof runs with no speed given. With the default car it runs only on a
   closed loop; an open track without a design speed claims no load.
 - Backspace alone no longer removes the head; Ctrl+Backspace does, so a stray key cannot delete track.
+- The default hotlap start is no longer 12 m behind the pit boxes. It is where the run-up reaches the design speed at
+  the line (352 m at 460 km/h), which on a short loop wraps back round the track.
+- The document's canonical text now carries each word's `textures` (schema 2).
 
 ### Removed
 
@@ -264,3 +292,6 @@ All notable changes to this project are recorded here. The format follows
 - Validation measured every jump one station step too long (from the station before the lip), so a 12 m gap read as 13
   m, and the 6.3 g landing seemed to need 311 km/h instead of 287.
 - The right-hand panel no longer scrolls sideways: wide content (the load graph) is held to the panel's width.
+- The marker check read a 3-abreast grid as pointing 40° off the road. It took the race direction from the back slot to
+  pole, which crosses the road when they stand in different columns; it now removes the across part, and a grid
+  pointing backwards is still refused.

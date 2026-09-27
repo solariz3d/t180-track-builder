@@ -35,7 +35,7 @@ const isBuiltinName = (name) => Object.keys(WORDS).some((w) => key(w) === key(na
 function builtinLibrary() {
   const pieces = Object.keys(WORDS).map((w) => {
     const d = defaultWord(w);
-    return { id: `b-${w}`, name: w, author: 't180-track-builder', builtin: true, kind: 'word', words: [{ word: d.word, font: d.font, tempo: d.tempo, speed: d.speed, handles: d.handles }] };
+    return { id: `b-${w}`, name: w, author: 't180-track-builder', builtin: true, kind: 'word', words: [{ word: d.word, font: d.font, tempo: d.tempo, speed: d.speed, handles: d.handles, textures: d.textures }] };
   });
   return deepFreeze({ schema: SCHEMA, generator: GENERATOR, nextId: 1, pieces });
 }
@@ -65,7 +65,7 @@ function savePiece(lib, { name, author = '', doc, ids }) {
   const at = ids.map((id) => { const i = doc.words.findIndex((e) => e.id === id); if (i < 0) throw new DocError('NO_SUCH_WORD', `no word with id ${id}`); return i; });
   for (let k = 1; k < at.length; k++) if (at[k] !== at[k - 1] + 1) throw new DocError('NOT_A_RUN', `${ids.join(', ')} are not consecutive words of the document`);
   let words = [];
-  for (const i of at) { const e = doc.words[i]; for (const w of e.phrase !== undefined ? e.words : [e]) words.push({ word: w.word, font: w.font, tempo: w.tempo, speed: w.speed, handles: w.handles }); }
+  for (const i of at) { const e = doc.words[i]; for (const w of e.phrase !== undefined ? e.words : [e]) words.push({ word: w.word, font: w.font, tempo: w.tempo, speed: w.speed, handles: w.handles, textures: w.textures }); }
   words = shiftRoll(words, -firstRoll(words));
   words.forEach((w, j) => checkWordBody(w, `${name}[${j}]`));
   const piece = { id: `u${lib.nextId}`, name, author, builtin: false, kind: words.length === 1 ? 'word' : 'phrase', words };
@@ -83,7 +83,7 @@ function placePiece(doc, lib, name) {
   const p = findPiece(lib, name);
   if (p.builtin) return appendWord(doc, p.words[0].word);
   const words = shiftRoll(p.words, headRoll(doc));
-  const opts = (w) => ({ tempo: w.tempo, font: w.font === null ? undefined : w.font, speed: w.speed, handles: w.handles });
+  const opts = (w) => ({ tempo: w.tempo, font: w.font === null ? undefined : w.font, speed: w.speed, handles: w.handles, textures: w.textures });
   if (p.kind === 'word') return appendWord(doc, words[0].word, opts(words[0]));
   return appendPhrase(doc, p.name, words.map((w) => ({ word: w.word, opts: opts(w) })));
 }
@@ -108,6 +108,11 @@ function serializeLibrary(lib) {
 function readJson(text) {
   let o; try { o = JSON.parse(text); } catch (e) { throw new DocError('BAD_JSON', e.message); }
   if (!o || typeof o !== 'object') throw new DocError('BAD_DOC', 'not an object');
+  // Schema 1 -> 2: every piece's words get `textures: {}`, exactly as serial.js migrates a document's words.
+  if (o.schema === 1) {   // strictly the integer, as serial.js
+    const up = (q) => (q && Array.isArray(q.words) ? { ...q, words: q.words.map((w) => ({ ...w, textures: {} })) } : q);
+    o = { ...o, schema: 2, ...(o.piece !== undefined ? { piece: up(o.piece) } : {}), ...(Array.isArray(o.pieces) ? { pieces: o.pieces.map(up) } : {}) };
+  }
   if (o.schema !== SCHEMA) S.checkDoc({ schema: o.schema });   // throws SCHEMA_TOO_NEW / SCHEMA_UNKNOWN
   if (typeof o.generator !== 'string' || !o.generator) throw new DocError('BAD_DOC', 'generator must be a non-empty string');
   return o;

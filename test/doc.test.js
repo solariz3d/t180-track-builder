@@ -30,8 +30,8 @@ const pitch = (gs) => gs.reduce((a, g) => a + ((g.kp0 + g.kp1) / 2) * g.length, 
 // ── serialisation ──────────────────────────────────────────────────────────────────────────────────────────────────
 test('the canonical text of a one-word document, byte for byte', () => {
   const t = D.serialize(D.appendWord(D.createDoc('t'), 'straight'));
-  assert.equal(t, '{\n  "schema": 1,\n  "generator": "t180-track-builder/doc 0.1.0",\n  "name": "t",\n  "closed": false,\n  "nextId": 2,\n' +
-    '  "words": [\n    {"id":"w1","word":"straight","font":"flat","tempo":"standard","speedKmh":null,"handles":{"length":100,"turn":0,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":0,"psiR":0,"width":20,"wall":0,"ramp":20}}\n  ],\n' +
+  assert.equal(t, '{\n  "schema": 2,\n  "generator": "t180-track-builder/doc 0.1.0",\n  "name": "t",\n  "closed": false,\n  "nextId": 2,\n' +
+    '  "words": [\n    {"id":"w1","word":"straight","font":"flat","tempo":"standard","speedKmh":null,"handles":{"length":100,"turn":0,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":0,"psiR":0,"width":20,"wall":0,"ramp":20},"textures":{}}\n  ],\n' +
     '  "constraints": {"pins":[],"free":[]}\n}\n');
 });
 
@@ -73,9 +73,9 @@ test('the empty document serialises, loads back byte-exact, and resolves to no s
 });
 
 // ── schema versions ────────────────────────────────────────────────────────────────────────────────────────────────
-test('a newer schema is refused as written by a newer builder; an older one is refused, as no migration exists', () => {
+test('a newer schema is refused as written by a newer builder; one with no migration to it is refused as unknown', () => {
   const o = JSON.parse(D.serialize(sample()));
-  assert.throws(() => D.parse(JSON.stringify({ ...o, schema: 2 })), (e) => e.code === 'SCHEMA_TOO_NEW');
+  assert.throws(() => D.parse(JSON.stringify({ ...o, schema: 3 })), (e) => e.code === 'SCHEMA_TOO_NEW');
   assert.throws(() => D.parse(JSON.stringify({ ...o, schema: 0 })), (e) => e.code === 'SCHEMA_UNKNOWN');
   assert.throws(() => D.parse(JSON.stringify({ ...o, schema: '1' })), (e) => e.code === 'SCHEMA_UNKNOWN');
 });

@@ -34,13 +34,13 @@
 // 'noblock' or 'both'), and it carries that red as a warning naming why it was written anyway. Validation itself runs
 // with the block present, so every OTHER red still refuses both folders.
 //
-// THE MARKERS (§5c), placed in track coordinates on the LONGEST STRAIGHT: the run of consecutive `straight` road
-// segments with no yaw, pitch or roll. From its far end backwards: the start line (AC_TIME_0_L/R, a gate across the
-// floor), the grid (AC_START_0 is pole, two staggered columns), the pit boxes, then the hotlap start behind all of them
-// so the car runs up to the line. v1 builds no pit lane (§5c's side road is not built), so the boxes sit single file on
-// the start straight behind the grid: a placement choice, stated here, not a measurement. Every marker stands `height`
-// above the surface along its normal and points along the road. The distances are DEFAULTS (inferred, not measured):
-// lineMarginM 15, poleBackM 10, gridBackM 8, pitBackM 8, hotlapBackM 12, height 1.5, gridU 3.
+// THE MARKERS (§5c) are src/markers (D171): a LAYOUT in track coordinates, anchored to words, placed on the surface the
+// mesh builds, checked by §5c's red checks (a red refuses, MARKERS), and PAINTED (start line, grid and pit boxes, as
+// visual meshes generated from the markers). opts.markers is the layout (the app's markers panel); without one, the
+// default layout drops the grid on the longest straight exactly where D167 did (line 15 m before its end, slots 8 m
+// apart, 2 pit boxes behind), and the hotlap now starts the run-up that reaches the design speed at the line (§5c:
+// "so the car arrives at speed"; 352 m at 460 km/h). opts.grid, opts.pits and opts.height still set its count, pits
+// and height. T1's scene checks (./markers.js) still run on the built scene as a second, geometric check.
 //
 // THE AI LINE is A's generator in its 'floor' mode: the centre of the floor, at one speed. Its 'wall' mode reads the
 // platform test's own wall constants (ailine.js wallTarget: WF 5, LW 8), which an arbitrary profile does not have, so it
@@ -62,13 +62,13 @@ const { validate } = require('../validate/index.js');
 const { validateScene } = require('./scene.js');
 const { writeKn5 } = require('./kn5write.js');
 const { checkMarkers } = require('./markers.js');
+const Markers = require('../markers/index.js');
 const trackfiles = require('./trackfiles.js');
 const ailine = require('./ailine.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
 
 const MARKER_FILE = '.t180b-builder.json';   // the same ownership marker scripts/build_platform_test.js writes
-const LAYOUT = { lineMarginM: 15, poleBackM: 10, gridBackM: 8, pitBackM: 8, hotlapBackM: 12, height: 1.5, gridU: 3, grid: 4, pits: 2 };
-const SLOT_HALF_WIDTH = 1.0;                 // src/export/markers.js DEFAULTS.slotHalfWidth
+const LAYOUT = { height: 1.5, grid: 4, pits: 2 };   // the default layout's count, pits and height (src/markers/layout.js DEFAULTS)
 const VARIANTS = { block: [{ variant: 'block', suffix: '', softCollision: true }], noblock: [{ variant: 'noblock', suffix: '_noblock', softCollision: false }] };
 VARIANTS.both = [...VARIANTS.block, ...VARIANTS.noblock];
 
@@ -103,63 +103,6 @@ function stations(p) {
   const out = p.samples.slice();
   if (p.closed && out.length > 1 && Math.abs(out[out.length - 1].s - p.lengthM) < 1e-6) out.pop();
   return out;
-}
-
-/** Half-width of the flat floor (ψ = 0 on both sides of the centreline) of a normalised profile. */
-function floorHalf(P) {
-  const i0 = P.u.indexOf(0); let r = i0, l = i0;
-  while (r > 0 && P.psi[r - 1] === 0) r--;
-  while (l < P.u.length - 1 && P.psi[l + 1] === 0) l++;
-  return Math.min(P.u[l], -P.u[r]);
-}
-
-const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1].every((x) => x === 0);
-
-/** The longest run of consecutive straight segments, as { a, b, half } in s (half = its narrowest floor half-width). */
-function startStraight(segs) {
-  let best = null, s = 0, run = null;
-  for (let g = 0; g < segs.length; g++) {
-    const seg = segs[g];
-    if (isStraight(seg)) {
-      // the entering piece ramps from the previous road font over its first metres (mesh.js FONT RAMPS): count that floor too
-      const prev = run ? null : segs.slice(0, g).reverse().find((x) => x.kind === 'road');
-      const h = Math.min(floorHalf(Prof.normalize(seg.profile)), prev ? floorHalf(Prof.normalize(prev.profile)) : Infinity);
-      run = run ? { ...run, b: s + seg.length, half: Math.min(run.half, h) } : { a: s, b: s + seg.length, half: h };
-      if (!best || run.b - run.a > best.b - best.a) best = run;
-    } else run = null;
-    s += seg.length;
-  }
-  return best;
-}
-
-/** A marker dummy at station s (snapped to the nearest station), u across (+ left), height h along the surface normal. */
-function marker(st, segs, name, s, u, h) {
-  let i = 0; for (let k = 1; k < st.length; k++) if (Math.abs(st[k].s - s) < Math.abs(st[i].s - s)) i = k;
-  const sm = st[i], P = Prof.normalize(segs[sm.seg].profile);
-  const [X, Y] = Prof.offsetAt(P, u), [nl, nu] = Prof.normalAt(P, u);
-  const up = unit(add(mul(sm.L, nl), mul(sm.U, nu)));
-  const fwd = unit(add(sm.T, mul(up, -dot(sm.T, up)))), left = cross(up, fwd);
-  const pos = add(add(sm.pos, add(mul(sm.L, X), mul(sm.U, Y))), mul(up, h));
-  return { type: 'dummy', name, matrix: [...left, 0, ...up, 0, ...fwd, 0, ...pos, 1], children: [], track: { s: sm.s, u, h } };
-}
-
-/** Every §5c marker, generated from the words. */
-function markersFor(segs, st, o) {
-  const run = startStraight(segs);
-  const need = o.lineMarginM + o.poleBackM + o.gridBackM * (o.grid - 1) + o.pitBackM * o.pits + o.hotlapBackM;
-  if (!run) throw new ExportError('NO_START_STRAIGHT', 'the track has no straight word to put the grid on');
-  if (run.b - run.a < need) throw new ExportError('NO_START_STRAIGHT', `the longest straight is ${(run.b - run.a).toFixed(1)} m; a grid of ${o.grid} and ${o.pits} pit boxes with a hotlap start need ${need.toFixed(1)} m`);
-  const gridU = Math.min(o.gridU, run.half - SLOT_HALF_WIDTH - 0.5), gateU = run.half - 0.5;
-  if (!(gridU > SLOT_HALF_WIDTH) || !(gateU > 1)) throw new ExportError('NO_START_STRAIGHT', `the start straight's floor is ${(2 * run.half).toFixed(2)} m wide, too narrow for a two-column grid`);
-  const line = run.b - o.lineMarginM, out = [];
-  let s = line - o.poleBackM;
-  for (let n = 0; n < o.grid; n++, s -= o.gridBackM) out.push(marker(st, segs, `AC_START_${n}`, s, n % 2 ? -gridU : gridU, o.height));
-  s += o.gridBackM - o.pitBackM;
-  for (let k = 0; k < o.pits; k++, s -= o.pitBackM) out.push(marker(st, segs, `AC_PIT_${k}`, s, 0, o.height));
-  out.push(marker(st, segs, 'AC_HOTLAP_START_0', s + o.pitBackM - o.hotlapBackM, 0, o.height));
-  out.push(marker(st, segs, 'AC_TIME_0_L', line, +gateU, o.height));
-  out.push(marker(st, segs, 'AC_TIME_0_R', line, -gateU, o.height));
-  return { nodes: out, straight: run, line };
 }
 
 /** A's AI generator reads a design { stations } and one right → left cross-section per station, centre vertex in the middle. */
@@ -211,8 +154,17 @@ function buildExport(doc, opts = {}) {
   for (const n of v.notChecked || []) warnings.push(`not checked by validation: ${n}`);
 
   // markers, from the words
-  const st = stations(p), mk = markersFor(segs, st, o);
-  const scene = { ...mesh.scene, root: { ...mesh.scene.root, children: [...mesh.scene.root.children, ...mk.nodes] } };
+  // the markers (§5c): the layout given, or the default one; a red check refuses, an amber warns
+  let layout;
+  try { layout = o.markers || Markers.defaultLayout(p, segs, { count: o.grid, pits: o.pits, height: o.height }); } catch (e) {
+    if (e.code === 'NO_START_STRAIGHT' || e.code === 'BAD_LAYOUT') throw new ExportError(e.code, e.message);
+    throw e;
+  }
+  const mk = Markers.placeAll(layout, p, segs, { paintMaterial: mesh.scene.materials.length });
+  if (!mk.check.ok) throw new ExportError('MARKERS', mk.check.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.problems.join('; ')}`).join(' | '), { markerChecks: mk.check });
+  for (const a of mk.check.amber) warnings.push(`markers: ${a.text}`);
+  const scene = { ...mesh.scene, materials: [...mesh.scene.materials, mk.paint.material],
+    root: { ...mesh.scene.root, children: [...mesh.scene.root.children, ...mk.nodes, ...mk.paint.meshes] } };
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);
@@ -220,7 +172,9 @@ function buildExport(doc, opts = {}) {
   const dup = [...names].filter(([, c]) => c > 1);
   if (dup.length) warnings.push(`${dup.length} mesh-node names repeat (e.g. ${dup[0][0]} ×${dup[0][1]}); INTERFACES §2 DEFECT, C's mesh.js safeId`);
   try { validateScene(scene); } catch (e) { throw new ExportError('BAD_SCENE', e.message); }
-  const mc = checkMarkers(scene, { expectedPits: o.pits });
+  // the race-direction heading test only where the grid's direction applies: the grid and the start gate (the hotlap and
+  // sectors sit wherever the run-up and the words put them, and are checked along their own road by src/markers)
+  const mc = checkMarkers(scene, { expectedPits: layout.pits.count, raceHeading: /^AC_START_|^AC_TIME_0_/ });
   if (!mc.ok) throw new ExportError('MARKERS', mc.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.problems.join('; ')}`).join(' | '), { markerChecks: mc });
 
   // the kn5, read back by our own reader (ARCHITECTURE §6 self-test) before any folder is touched
@@ -272,7 +226,7 @@ function exportTrack(doc, { outDir, variant = 'block', ...opts } = {}) {
   const folders = vs.map((v) => writeFolder(b, outDir, v));
   const warnings = [...b.warnings];
   if (vs.some((v) => !v.softCollision)) warnings.push('noblock: the folder WITHOUT the soft-collision block is RED by ARCHITECTURE §4 (a missing soft-collision block); written only as the §10.1 soft-road control, on request');
-  return { folders, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: sha256(b.ai), aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.nodes.map((n) => ({ name: n.name, ...n.track })), warnings };
+  return { folders, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: sha256(b.ai), aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.placed.filter((m) => !m.error).map((m) => ({ name: m.name, kind: m.kind, s: m.s, u: m.u, h: m.h })), paint: b.markers.paint.items, layout: b.markers.layout, warnings };
 }
 
-module.exports = { exportTrack, buildExport, ExportError, folderName, LAYOUT, MARKER_FILE, _internal: { startStraight, floorHalf, stations, aiInput, markersFor } };
+module.exports = { exportTrack, buildExport, ExportError, folderName, LAYOUT, MARKER_FILE, _internal: { stations, aiInput } };
