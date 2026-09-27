@@ -52,6 +52,20 @@ test('each file runs once, and a require cycle sees the partial exports, as in n
   assert.equal(runs, 2);
 });
 
+test('an injected global does not clash with a file that declares the same name at its top level', async () => {
+  const files = { 'g/a.js': "class Buffer { static tag() { return 'own'; } }\nmodule.exports = Buffer.tag();", 'g/b.js': 'module.exports = typeof Buffer;' };
+  const get = async (p) => files[p];
+  assert.equal(await loadCjs('g/a.js', get, { globals: { Buffer: function Injected() {} } }), 'own');
+  assert.equal(await loadCjs('g/b.js', get, { globals: { Buffer: function Injected() {} } }), 'function');
+});
+
+test('a bare name the page supplies as a builtin is served; any other still fails loudly', async () => {
+  const files = { 'b/a.js': "module.exports = require('zlib').name;", 'b/c.js': "module.exports = require('net');" };
+  const get = async (p) => files[p];
+  assert.equal(await loadCjs('b/a.js', get, { builtins: { zlib: { name: 'shim' } } }), 'shim');
+  await assert.rejects(loadCjs('b/c.js', get, { builtins: { zlib: {} } }), /"net" \(required by b\/c\.js\) is not available/);
+});
+
 test('paths are normalised, and none may climb above the served root', () => {
   assert.equal(norm('app/./palette/../shell.js'), 'app/shell.js');
   assert.throws(() => norm('../outside.js'), /climbs above the served root/);

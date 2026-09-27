@@ -87,3 +87,30 @@ test('BVH = brute force: every meeting triangle pair and every stacked vertex, o
   assert.deepStrictEqual([...trace.stacked.keys()].sort((x, y) => x - y), [...bs.keys()].sort((x, y) => x - y));
   for (const [i, g] of bs) assert.ok(Math.abs(trace.stacked.get(i) - g) < 1e-12, `vertex ${i}: ${trace.stacked.get(i)} vs ${g}`);
 });
+
+// D170 addendum: the self-check must not depend on node NAMES. A's D169 report: "a default export of most tracks is
+// refused" because a word's parts shared one cell name and bvh.js found each mesh's cell record BY NAME, so a triangle
+// took another piece's s and u, and neighbours inside one pass were tested and "met". B's naming by (id, part) removed
+// the repeat at the D167 landing; these tests pin the check itself, so a repeated name can never bring it back.
+// Stated before the fix: pieces that share a name give NO intersection and NO stack on a plain straight run, and a real
+// same-height crossing whose pieces share names still fires.
+test('names repeat (two adjacent pieces with one id and no part): a plain straight run is still clean', () => {
+  const segs = [{ id: 'w1', kind: 'road', length: 60, profile: F.FLAT }, { id: 'w1', kind: 'road', length: 60, k0: 0, k1: 0.004, profile: F.FLAT }, { id: 'w2', kind: 'road', length: 60, profile: F.FLAT }];
+  const { m, r } = run(segs);
+  const names = m.cells.map((c) => c.name);
+  assert.ok(names.length > new Set(names).size, 'the fixture really repeats a name');
+  assert.deepEqual(r.intersections, [], JSON.stringify(r.intersections.map((x) => [x.cell, x.other, x.s, x.sOther])));
+  assert.deepEqual(r.stacked, []);
+});
+test('names repeat: a real same-height crossing still fires, between the right passes', () => {
+  // the lead straight split into two pieces (0–50 m and 50–80 m) that the over road crosses both of (z 42–68), with
+  // every piece named alike: two different cells meet the over road under ONE name pair
+  const split = (ids) => { const [lead, ...rest] = F.crossing(0); return [{ ...lead, id: ids[0], length: 50 }, { ...lead, id: ids[1], length: 30 }, ...rest.map((g, i) => ({ ...g, id: ids[2 + i] }))]; };
+  const segs = split(['w1', 'w1', 'w1', 'w1']);
+  const { r } = run(segs);
+  assert.ok(r.intersections.length >= 1, 'the crossing is found');
+  const unique = run(split(['a', 'b', 'c', 'd'])).r.intersections.length;
+  assert.ok(unique > 1, `the over road crosses both lead pieces (${unique} findings)`);
+  assert.equal(r.intersections.length, unique, 'the same findings as with unique names (grouped per cell, not per name)');
+  for (const x of r.intersections) assert.ok(Number.isFinite(x.s) && Number.isFinite(x.sOther) && Math.abs(x.s - x.sOther) >= 25, `a real crossing is two passes apart: ${x.s} / ${x.sOther}`);
+});

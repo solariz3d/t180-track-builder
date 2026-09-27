@@ -2,9 +2,11 @@
 //
 // What it shows, in #validation:
 //   · a summary: red and amber counts, the lap (open while building), the jumps;
+//   · the design-speed picker (speed.js): loads for every word without its own speed, default 460 km/h (FINDINGS.md:476);
 //   · a CSP toggle: off validates for vanilla AC, where surfaces above 50° are red (ARCHITECTURE.md:87);
-//   · the colour ribbon: the whole track unrolled, s left to right and u (right edge at the bottom, left edge at the
-//     top) up the strip, one pixel column per station, from the same colour map the preview should paint;
+//   · the load graph (graph.js): the hardest line's load along the track, the 20 g and 90 g limits, red and amber
+//     stretches shaded. HIDDEN while there is no load (no speed model). It replaced, in D170, a colour ribbon that
+//     painted an all-grey bar while there were no loads (the librarian's item 5);
 //   · every red and amber range with its reason and FINDINGS/ARCHITECTURE source; every jump with both landings.
 //
 // WHAT IT GIVES THE PREVIEW (a seam proposed here, not yet agreed with C): after every update, root dispatches a
@@ -16,44 +18,29 @@
 'use strict';
 const { createValidationController, summary } = require('./panel.js');
 const { levelAt, rgbaAt, PALETTE, LEVEL } = require('./colour.js');
+const { createSpeedPicker, mountSpeedPicker } = require('./speed.js');
+const { graphModel, drawGraph } = require('./graph.js');
 
 const css = (rgba) => `rgb(${Math.round(rgba[0] * 255)}, ${Math.round(rgba[1] * 255)}, ${Math.round(rgba[2] * 255)})`;
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-function drawRibbon(canvas, state) {
-  const g = canvas.getContext('2d'), W = canvas.width, Hh = canvas.height;
-  g.clearRect(0, 0, W, Hh);
-  const st = state.map ? state.map.stations : [];
-  if (!st.length) return;
-  let uMin = Infinity, uMax = -Infinity;
-  for (const e of st) for (const u of e.u) { uMin = Math.min(uMin, u); uMax = Math.max(uMax, u); }
-  if (uMin === uMax) { uMin -= 1; uMax += 1; }
-  const L = st[st.length - 1].s || 1;
-  for (let k = 0; k < st.length; k++) {
-    const e = st[k], x0 = Math.floor((e.s / L) * (W - 1)), x1 = k + 1 < st.length ? Math.floor((st[k + 1].s / L) * (W - 1)) : W;
-    for (let j = 0; j < e.u.length; j++) {
-      const lo = j ? (e.u[j - 1] + e.u[j]) / 2 : uMin, hi = j + 1 < e.u.length ? (e.u[j] + e.u[j + 1]) / 2 : uMax;
-      const y0 = Hh - ((hi - uMin) / (uMax - uMin)) * Hh, y1 = Hh - ((lo - uMin) / (uMax - uMin)) * Hh;
-      g.fillStyle = css(PALETTE[e.levels[j]]);
-      g.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
-    }
-  }
-}
-
 function mount(root, shell) {
   const head = el('div', { className: 'v-summary' });
   const csp = el('input', { type: 'checkbox', checked: true });
-  const ribbon = el('canvas', { width: 480, height: 48, className: 'v-ribbon' });
+  const graph = el('canvas', { width: 480, height: 96, className: 'v-graph' });
   const list = el('ul', { className: 'v-list' });
-  root.append(el('label', {}, [csp, ' CSP (wall raycasting)']), head, ribbon, list);
+  const speedRow = el('div', { className: 'v-speed-row' });
+  root.append(speedRow, el('label', {}, [csp, ' CSP (wall raycasting)']), head, graph, list);
 
   const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (f) => setTimeout(f, 16);
   function render(state) {
     const s = summary(state);
     head.textContent = state.error ? `not validated: ${state.error}`
-      : `${s.red} red · ${s.amber} amber · lap ${s.lap ? (s.lap.ok === null ? `not run (${s.lap.reason})` : s.lap.ok ? 'proved' : 'FAILS') : '—'} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}`;
+      : `${s.red} red · ${s.amber} amber · lap ${s.lap ? (s.lap.ok === null ? `not run (${s.lap.reason})` : s.lap.ok ? 'proved' : 'FAILS') : '—'} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}${s.jumpsPending ? ` (${s.jumpsPending} waiting for ${s.jumpsPending === 1 ? 'its landing' : 'their landings'})` : ''}`;
     head.style.color = state.error ? css(PALETTE[LEVEL.RED]) : '';
-    drawRibbon(ribbon, state);
+    const gm = graphModel(state);
+    graph.style.display = gm ? '' : 'none';   // hidden while there is no load to draw
+    drawGraph(graph, gm);
     list.replaceChildren();
     const r = state.result;
     if (r) {
@@ -68,11 +55,14 @@ function mount(root, shell) {
     }
     const map = state.map;
     root.dispatchEvent(new CustomEvent('t180:validation', { bubbles: true, detail: {
-      path: state.path, result: state.result, map, arcs: state.arcs,
+      path: state.path, result: state.result, map, arcs: state.arcs, speedPicker: picker,
       levelAt: (s, u) => (map ? levelAt(map, s, u) : LEVEL.CLEAR), rgbaAt: (s, u) => (map ? rgbaAt(map, s, u) : PALETTE[LEVEL.CLEAR]),
     } }));
   }
-  const ctl = createValidationController(shell, { onUpdate: render, schedule: raf });
+  let ctl = null;
+  const picker = createSpeedPicker({ onChange: (kmh) => { if (ctl) ctl.setDesignSpeed(kmh); } });
+  ctl = createValidationController(shell, { designSpeedKmh: picker.kmh, onUpdate: render, schedule: raf });
+  mountSpeedPicker(speedRow, picker);
   csp.onchange = () => ctl.setCsp(csp.checked);
   return { dispose: () => ctl.dispose() };
 }

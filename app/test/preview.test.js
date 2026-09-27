@@ -109,23 +109,28 @@ function fakeGL({ compiles = true } = {}) {
   const gl = {
     VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4, ARRAY_BUFFER: 5, ELEMENT_ARRAY_BUFFER: 6, STATIC_DRAW: 7,
     COLOR_BUFFER_BIT: 8, DEPTH_BUFFER_BIT: 16, DEPTH_TEST: 9, CULL_FACE: 10, TRIANGLES: 11, FLOAT: 12, UNSIGNED_SHORT: 13,
+    BLEND: 14, LINES: 15, SRC_ALPHA: 17, ONE_MINUS_SRC_ALPHA: 18, depthMask() {}, blendFunc() {}, disableVertexAttribArray() {},
     createShader: () => ({ id: ++id }), shaderSource() {}, compileShader() {}, getShaderParameter: () => compiles, getShaderInfoLog: () => "ERROR: 0:3: 'foo' : undeclared identifier",
     createProgram: () => ({ id: ++id }), attachShader() {}, linkProgram() {}, getProgramParameter: () => true, getProgramInfoLog: () => '',
     getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport() {}, clearColor() {}, clear() {}, enable() {}, disable() {},
     uniformMatrix4fv() {}, uniform3f() {}, uniform1f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     createBuffer: () => ({ id: ++id }), bindBuffer() {}, bufferData() { calls.bufferData++; }, deleteBuffer() { calls.deleteBuffer++; }, deleteProgram() {},
     drawElements() { calls.drawElements++; },
+    drawArrays() { calls.drawArrays = (calls.drawArrays || 0) + 1; },
   };
   return { gl, calls };
 }
 const pose = { eye: [0, 50, -50], target: [0, 0, 0], up: [0, 1, 0], fov: 1 };
+/** The arrays a batch puts on the GPU: positions, normals, indices, and (D170) a road cell's two line arrays. */
+const arraysOf = (b) => 3 + (b.seam ? 0 : 2);
+const sum = (bs) => bs.reduce((a, b) => a + arraysOf(b), 0);
 
 test('renderer: every array is uploaded once; drawing the same batches again uploads nothing', () => {
   const { gl, calls } = fakeGL(), r = R.createRenderer(gl), bs = fullOf(words(6));
   r.draw(bs, pose, { width: 800, height: 600 });
-  assert.equal(calls.bufferData, bs.length * 3); assert.equal(calls.drawElements, bs.length);
+  assert.equal(calls.bufferData, sum(bs)); assert.equal(calls.drawElements, bs.length);
   r.draw(bs, pose, { width: 800, height: 600 });
-  assert.equal(calls.bufferData, bs.length * 3, 'no upload for arrays already on the GPU');
+  assert.equal(calls.bufferData, sum(bs), 'no upload for arrays already on the GPU');
 });
 test('renderer: after a sculpt that moves later pieces, only the edited piece and its seams are uploaded; stale buffers are deleted', () => {
   const { gl, calls } = fakeGL(), r = R.createRenderer(gl), tm = TM.createTrackModel(), segs = words(12);
@@ -136,9 +141,9 @@ test('renderer: after a sculpt that moves later pieces, only the edited piece an
   const fresh = t.batches.filter((b) => !before.has(b.positions));
   assert.ok(fresh.every((b) => b.key.includes(`_${segs[4].id}`) || b.key.includes(`_${segs[5].id}`)), `fresh: ${fresh.map((b) => b.key)}`);
   r.draw(t.batches, pose, { width: 800, height: 600 });
-  assert.equal(calls.bufferData - up0, fresh.length * 3, 'uploads = the new arrays only');
+  assert.equal(calls.bufferData - up0, sum(fresh), 'uploads = the new arrays only');
   assert.ok(fresh.length < t.batches.length / 3, `${fresh.length} of ${t.batches.length} batches re-uploaded`);
-  assert.equal(r.stats().buffers, t.batches.length * 3, 'no buffer kept for an array no longer drawn');
+  assert.equal(r.stats().buffers, sum(t.batches), 'no buffer kept for an array no longer drawn');
   assert.ok(calls.deleteBuffer > 0);
 });
 test('renderer: a shader that does not compile throws with the compiler\'s log; a canvas without size is refused', () => {

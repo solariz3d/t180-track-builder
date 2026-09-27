@@ -141,7 +141,9 @@ test('each caught arc ends exactly at validation\'s touchdown x, and the landing
   assert.ok(ja.zone.s0 > jp.s + jp.gap - 1, 'the zone is on the landing road, past the gap');
 });
 test('a landing the flight misses has no touchdown and no zone', () => {
-  const { segs, path } = jumpTrack(300);   // 83.3 m/s: the 3.2 g flight lands, the 6.3 g one needs 86.4
+  // CHANGED 2026-09-27 (D170): was 300 km/h, "the 6.3 g one needs 86.4 m/s", a figure from validation's one-station-long
+  // gap (13 m for a 12 m jump). Measured from the lip, the 6.3 g landing needs 287 km/h, so 300 now lands both. 250 misses it.
+  const { segs, path } = jumpTrack(250);
   const r = validate(path, segs, {}), [ja] = jumpArcs(r, path);
   assert.deepStrictEqual(ja.arcs.map((a) => a.caught), [true, false]);
   assert.strictEqual(ja.arcs[1].touchdown, null); assert.strictEqual(ja.zone, null);
@@ -161,8 +163,12 @@ test('with no speed model, each landing is drawn at its own minimum speed, which
     }
   });
 });
+// CHANGED 2026-09-27 (D170): a jump word now carries its landing ramp (A's model, D170), so a jump at the head is no
+// longer waiting. A flight that ends the path is still possible below the model; it is built here from resolve's
+// segments with any landing ramp removed.
 test('a jump still waiting for its landing at the open head is not drawn', () => {
-  const { segs, path } = build([['straight'], ['jump']], 300);
+  const { segs: all } = build([['straight'], ['jump']], 300);
+  const segs = all.filter((g) => !(g.word === 'jump' && g.part === 'land')), path = G.buildPath(segs, { step: 2 });
   const r = validate(path, segs, {});
   assert.ok(r.jumps[0].pending);
   assert.deepStrictEqual(jumpArcs(r, path), []);

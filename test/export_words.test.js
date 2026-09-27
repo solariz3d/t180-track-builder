@@ -15,9 +15,8 @@ const { readAiLine } = require('../src/export/ailine.js');
 const { readKn5 } = require('../tools/kn5.cjs');
 
 const REPO = path.resolve(__dirname, '..');
-// Self-intersection is off in these tests by name: C's BVH currently reports crossings its own rules exclude on every
-// multi-part word (src/export/fromwords.js SELF-INTERSECTION). The default is covered by the todo test at the end.
-const OPTS = { selfCheck: false };
+// CHANGED 2026-09-27 (D170 follow-up): every test here runs with the self-check ON (the default). The OPTS workaround
+// (selfCheck: false) is gone: C fixed the BVH's false crossings at source (src/geom/bvh.js, p-d170-look-ghost-C §0).
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-export-test-')); made.push(d); return d; };
 test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
@@ -40,7 +39,7 @@ const SAMPLE = sampleDoc();
 let sample;   // one export of the sample, shared by the read-only tests below
 test('the sample exports: the kn5 reads back through tools/kn5.cjs with every AC_ marker', () => {
   const out = tmp();
-  sample = { out, r: exportTrack(SAMPLE, { outDir: out, ...OPTS }) };
+  sample = { out, r: exportTrack(SAMPLE, { outDir: out }) };
   const f = sample.r.folders[0];
   assert.strictEqual(f.folder, 't180b_sample_loop');
   const back = readKn5(path.join(f.dir, 't180b_sample_loop.kn5'));
@@ -88,19 +87,22 @@ test('the markers stand on the start straight, pole nearest the line, the hotlap
 
 test('a red document is refused, the reason named, and nothing written (the 60° bowl walls, for vanilla AC)', () => {
   const out = tmp();
-  assert.throws(() => exportTrack(SAMPLE, { outDir: out, csp: false, ...OPTS }), (e) => e instanceof ExportError && e.code === 'RED'
+  assert.throws(() => exportTrack(SAMPLE, { outDir: out, csp: false }), (e) => e instanceof ExportError && e.code === 'RED'
     && e.red.some((r) => r.reason === 'steep-without-raycast') && /steep-without-raycast/.test(e.message));
   assert.deepStrictEqual(fs.readdirSync(out), []);
 });
 
+// CHANGED 2026-09-27 (D170): was 300 km/h. Validation then measured a jump one station long (a 12 m gap as 13 m), and
+// the 6.3 g landing needed about 311 km/h. Measured from the lip, it needs 287 km/h (D170 hand-back §2), so 300 now
+// lands it, and the jump is taken at 250 km/h instead: still below what the 6.3 g landing needs.
 test('a lap the proof fails is refused: a jump taken below the speed its 6.3 g landing needs, each failing point named', () => {
   let d = D.createDoc('Jump Loop');
-  for (const w of ['straight', 'straight', 'jump', 'straight', 'tight', 'straight', 'tight']) d = D.appendWord(d, w, { speed: kmh(300) });
+  for (const w of ['straight', 'straight', 'jump', 'straight', 'tight', 'straight', 'tight']) d = D.appendWord(d, w, { speed: kmh(250) });
   const c = closeLoop(d);
   assert.ok(c.candidates.length, c.reason);
-  const jl = withSpeed(c.candidates.slice().sort((a, b) => a.lengthM - b.lengthM)[0].doc, kmh(300));
+  const jl = withSpeed(c.candidates.slice().sort((a, b) => a.lengthM - b.lengthM)[0].doc, kmh(250));
   const out = tmp();
-  assert.throws(() => exportTrack(jl, { outDir: out, ...OPTS }), (e) => e.code === 'RED'
+  assert.throws(() => exportTrack(jl, { outDir: out }), (e) => e.code === 'RED'
     && e.red.some((r) => r.reason === 'lap-proof' && r.where.some((x) => x.reason === 'jump-not-caught-6.3g'))
     && /lap-proof \[jump-not-caught-6\.3g at s \d/.test(e.message));
   assert.deepStrictEqual(fs.readdirSync(out), []);
@@ -108,25 +110,25 @@ test('a lap the proof fails is refused: a jump taken below the speed its 6.3 g l
 
 test('an empty document is refused and nothing written', () => {
   const out = tmp();
-  assert.throws(() => exportTrack(D.createDoc('Empty'), { outDir: out, ...OPTS }), (e) => e.code === 'EMPTY_DOC');
+  assert.throws(() => exportTrack(D.createDoc('Empty'), { outDir: out }), (e) => e.code === 'EMPTY_DOC');
   assert.deepStrictEqual(fs.readdirSync(out), []);
 });
 
 test('an open track is refused: an AC lap and the AI line need a closed loop', () => {
   const out = tmp();
   const open = D.appendWord(D.appendWord(D.createDoc('Open'), 'straight'), 'turn');
-  assert.throws(() => exportTrack(open, { outDir: out, ...OPTS }), (e) => e.code === 'OPEN_TRACK');
+  assert.throws(() => exportTrack(open, { outDir: out }), (e) => e.code === 'OPEN_TRACK');
   assert.deepStrictEqual(fs.readdirSync(out), []);
 });
 
 test('an amber document exports, and the amber is in the warnings with its source (745 km/h through the 50 m tight)', () => {
-  const r = exportTrack(withSpeed(SAMPLE, kmh(745)), { outDir: tmp(), ...OPTS });
+  const r = exportTrack(withSpeed(SAMPLE, kmh(745)), { outDir: tmp() });
   assert.ok(r.warnings.some((w) => /^amber: load-above-proven .*FINDINGS\.md/.test(w)), r.warnings.join('\n'));
 });
 
 test('both variants: the same kn5 bytes, the soft-collision block only in the first, and the noblock red said', () => {
   const out = tmp();
-  const r = exportTrack(SAMPLE, { outDir: out, variant: 'both', ...OPTS });
+  const r = exportTrack(SAMPLE, { outDir: out, variant: 'both' });
   assert.deepStrictEqual(r.folders.map((f) => f.folder), ['t180b_sample_loop', 't180b_sample_loop_noblock']);
   const kn5 = r.folders.map((f) => fs.readFileSync(path.join(f.dir, 't180b_sample_loop.kn5')));
   assert.ok(kn5[0].equals(kn5[1]));
@@ -143,18 +145,20 @@ test('only block is written by default', () => {
 test('a folder this builder did not write is refused, untouched', () => {
   const out = tmp(), dir = path.join(out, 't180b_sample_loop');
   fs.mkdirSync(dir); fs.writeFileSync(path.join(dir, 'theirs.txt'), 'x');
-  assert.throws(() => exportTrack(SAMPLE, { outDir: out, ...OPTS }), (e) => e.code === 'NOT_OURS');
+  assert.throws(() => exportTrack(SAMPLE, { outDir: out }), (e) => e.code === 'NOT_OURS');
   assert.deepStrictEqual(fs.readdirSync(dir), ['theirs.txt']);
 });
 
 test('turning the self-check off is said in the warnings', () => {
-  assert.ok(sample.r.warnings.some((w) => /self-intersection NOT checked/.test(w)));
+  // this one tests the switch itself, so it turns it off by name
+  const r = exportTrack(SAMPLE, { outDir: tmp(), selfCheck: false });
+  assert.ok(r.warnings.some((w) => /self-intersection NOT checked/.test(w)));
 });
 
 test('the CLI writes the folder from a document file, and refuses an empty one with exit 1', () => {
   const dir = tmp(), file = path.join(dir, 'sample.json'), empty = path.join(dir, 'empty.json'), out = path.join(dir, 'out');
   fs.writeFileSync(file, D.serialize(SAMPLE)); fs.writeFileSync(empty, D.serialize(D.createDoc('Empty')));
-  const ok = spawnSync(process.execPath, ['scripts/export_words.js', file, '--out', out, '--no-self-check'], { cwd: REPO, encoding: 'utf8' });
+  const ok = spawnSync(process.execPath, ['scripts/export_words.js', file, '--out', out], { cwd: REPO, encoding: 'utf8' });
   assert.strictEqual(ok.status, 0, ok.stderr);
   assert.ok(fs.existsSync(path.join(out, 't180b_sample_loop', 't180b_sample_loop.kn5')));
   const bad = spawnSync(process.execPath, ['scripts/export_words.js', empty, '--out', out], { cwd: REPO, encoding: 'utf8' });
@@ -174,13 +178,13 @@ test('with the self-check on (the default), the sample exports', () => {
 
 test('the §5c marker checks guard the output: markers 3 m above the road (band 1–2 m) are refused, nothing written', () => {
   const out = tmp();
-  assert.throws(() => exportTrack(SAMPLE, { outDir: out, height: 3, ...OPTS }), (e) => e.code === 'MARKERS' && /3\.00 m above the surface \(1–2 m required\)/.test(e.message));
+  assert.throws(() => exportTrack(SAMPLE, { outDir: out, height: 3 }), (e) => e.code === 'MARKERS' && /3\.00 m above the surface \(1–2 m required\)/.test(e.message));
   assert.deepStrictEqual(fs.readdirSync(out), []);
 });
 
 test('a grid longer than the longest straight is refused with the lengths named', () => {
   const out = tmp();
-  assert.throws(() => exportTrack(SAMPLE, { outDir: out, grid: 20, ...OPTS }), (e) => e.code === 'NO_START_STRAIGHT' && /the longest straight is \d+\.\d m; a grid of 20/.test(e.message));
+  assert.throws(() => exportTrack(SAMPLE, { outDir: out, grid: 20 }), (e) => e.code === 'NO_START_STRAIGHT' && /the longest straight is \d+\.\d m; a grid of 20/.test(e.message));
   assert.deepStrictEqual(fs.readdirSync(out), []);
 });
 

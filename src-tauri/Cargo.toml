@@ -13,8 +13,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# The same two crates blackbox builds on (blackbox/src-tauri/Cargo.toml), and nothing else: the native side only
-# reads and writes named files in the app's data folder.
+# The crates blackbox builds on (blackbox/src-tauri/Cargo.toml), plus the dialog plugin, so Export picks its folder in
+# the native dialog rather than a typed path. The native side only reads and writes named files, and writes an
+# exported track into the folder the user picked.
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

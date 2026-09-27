@@ -86,7 +86,21 @@ test('a font change in the document reaches the geometry: resolve emits blend, a
   assert.ok(first.blend && first.blend.from.font === 'flat' && first.blend.s0 === 0, 'the entering word blends from the flat font');
   assert.equal(first.blend.length, Math.min(d.words[1].handles.ramp, d.words[1].handles.length));
   assert.ok(r.segments.filter((g) => g.id === 'w1').every((g) => g.blend === null), 'the first word has nothing to blend from');
-  assert.ok(r.segments.filter((g) => g.id === 'w4').every((g) => g.blend === null), 'after a jump the road starts on its own font');
+  // CHANGED at the D169+D170 landing (B's own test; B's read, p-d170-read-B §3): this line asserted "after a jump the
+  // road starts on its own font" (w4 blend === null). Since D170 a jump resolves to its flight AND a landing ramp
+  // (part 'land'), which is road on the take-off font. The old line then demanded a surface step at every landing: with
+  // w4's blend forced null the mesh needs a SEAM strip across mismatched rows (half-pipe walls meeting flat road). That
+  // is what "fonts never jump" forbids, so the old line was verifiably wrong. What holds now is stronger:
+  const ramp = r.segments.filter((g) => g.id === 'w3' && g.part === 'land');
+  assert.equal(ramp.length, 1, 'the jump carries one landing ramp');
+  assert.ok(ramp[0].blend === null && ramp[0].profile.font === 'half-pipe', 'the ramp sits on the take-off road\'s font, unblended');
+  const w4 = r.segments.filter((g) => g.id === 'w4');
+  assert.ok(w4[0].blend && w4[0].blend.from.font === 'half-pipe' && w4[0].blend.s0 === 0, 'the road after the ramp blends from the ramp\'s font');
+  // The join between the ramp and w4 is SEAM_w4_in's place: none is built when the two rows coincide (src/geom/mesh.js).
+  // (SEAM_w4_body, inside w4, is a zipper between two samplings of the same flat curve, not a step.) Measured at this
+  // landing: no SEAM_w4_in with the blend; with w4's blend forced null a SEAM_w4_in appears whose rows are 5.99 m apart.
+  const seams = []; (function walk(n) { if (n.name === 'SEAM_w4_in') seams.push(n.name); (n.children || []).forEach(walk); })(G.buildMesh(G.buildPath(r.segments, { step: STEP }), r.segments, {}).scene.root);
+  assert.deepEqual(seams, [], 'the ramp and the next word meet with no seam strip: their rows coincide');
   const p = G.buildPath(r.segments, { step: STEP });
   const ramped = G.buildMesh(p, r.segments, {}), stepped = G.buildMesh(p, r.segments.map((g) => (g.blend ? { ...g, blend: null } : g)), {});
   assert.notEqual(sceneText(ramped), sceneText(stepped), 'the blend field changed nothing in the mesh');

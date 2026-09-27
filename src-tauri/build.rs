@@ -1,4 +1,4 @@
-// build.rs: before tauri-build embeds the frontend, copy the web UI (app/) and the program it runs (src/) into
+// build.rs: before tauri-build embeds the frontend, copy the web UI (app/), the program it runs (src/) and tools/ into
 // src-tauri/dist, side by side, as they sit in the repository. So a relative require('../src/doc/index.js') in
 // app/shell.js means the same file in the webview (app/lib/cjs.js) as it does under node --test. app/test/ is left
 // out: tests do not ship. dist/ is rebuilt from scratch every time, so nothing stale survives a deleted file.
@@ -32,7 +32,11 @@ fn main() {
     }
     copy_dir(&root.join("app"), &dist.join("app"), &["test"]).expect("build.rs: could not copy app/ into dist/");
     copy_dir(&root.join("src"), &dist.join("src"), &[]).expect("build.rs: could not copy src/ into dist/");
+    // The exporter reads its kn5 back through tools/kn5.cjs (src/export/fromwords.js). Without this the app could not
+    // start: app/test/shell-dist.test.js checks every file the page loads is inside a folder copied here.
+    copy_dir(&root.join("tools"), &dist.join("tools"), &[]).expect("build.rs: could not copy tools/ into dist/");
     println!("cargo:rerun-if-changed=../app");
     println!("cargo:rerun-if-changed=../src");
+    println!("cargo:rerun-if-changed=../tools");
     tauri_build::build()
 }

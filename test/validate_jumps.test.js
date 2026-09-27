@@ -113,9 +113,11 @@ test('validate: a jump taken too slowly is not caught, and a closed lap over it 
   assert.ok(r.lap.where.some((w) => w.reason === 'jump-not-caught-6.3g'));
 });
 
-test('validate: an open head that ends in the air is a pending jump, not a failure', () => {
+// CHANGED 2026-09-27 (D170): "not a failure" was the rule until the librarian's item 3 ("an open end must sit on
+// road"). The jump itself is still pending, not failed; the HEAD, in the air, is now red.
+test('validate: an open head that ends in the air is a pending jump, and the head in the air is red', () => {
   const run = X.straight(50, { seg: 0 }), gap = X.straight(20, { seg: 1, start: [0, 0, 50], s0: 50 }).slice(1);
   const r = validate(X.pathOf([...run, ...gap]), [X.seg({ speed: 100 }), X.seg({ id: 'j', kind: 'gap', word: 'jump', speed: 100 })]);
   assert.strictEqual(r.jumps[0].pending, true);
-  assert.deepStrictEqual(r.red, []);
+  assert.deepStrictEqual(r.red.map((x) => x.reason), ['head-in-the-air']);
 });

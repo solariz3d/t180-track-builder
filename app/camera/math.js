@@ -29,4 +29,9 @@ function mul(a, b) {
 /** Apply a column-major matrix to a point (w = 1), returning [x, y, z, w]. */
 const apply = (M, p) => [0, 1, 2, 3].map((r) => M[r] * p[0] + M[4 + r] * p[1] + M[8 + r] * p[2] + M[12 + r]);
 
-module.exports = { perspective, lookAt, mul, apply };
+/** The view-projection of a camera pose ({ eye, target, up, fov, far? }) for a view of the given aspect. Near 0.5 m;
+ *  far is the pose's own (the fitted overhead of a long track needs more) and never under 20 km. */
+const NEAR = 0.5, FAR = 20000;
+const viewProj = (pose, aspect) => mul(perspective(pose.fov, aspect, NEAR, Math.max(FAR, pose.far || 0)), lookAt(pose.eye, pose.target, pose.up));
+
+module.exports = { perspective, lookAt, mul, apply, viewProj, NEAR, FAR };
