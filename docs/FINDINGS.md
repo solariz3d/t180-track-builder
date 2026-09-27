@@ -248,7 +248,7 @@ time in the air goes as 1/v and downforce as v². So every T-180 jump has:
 - The "geometric ceiling no speed beats" was derived from one point with an assumed law, and the second point refutes
   that law.
 
-**Working model now:** an ordinary projectile with g_eff ≈ 3.3 g for the Mach 6. More speed helps as usual. Two
+**Superseded by §7d (thirteen Hazen flights: 3.2–6.3 g, not one number).** ~~**Working model now:** an ordinary projectile with g_eff ≈ 3.3 g~~ for the Mach 6. More speed helps as usual. Two
 flights are still thin, and the in-air attitude is unmeasured.
 
 **Builder tool (holds under either model):** for any jump placed, compute makeable or not and the minimum take-off
@@ -285,7 +285,7 @@ the rule and is dropped from the learning set unless the keeper says otherwise. 
 New layouts read, all closed (`node tools/read_track.cjs <dir> <len> <width> [layout] > reads/x.read.json`):
 | layout | author | lap | words | jumps |
 |---|---|---|---|---|
-| Hazen Loop | Dogeish | 27.5 km (stated 32.1) | 514 | 7 (65–225 m) |
+| Hazen Loop | Dogeish | ~~27.5 km~~ 31.0 km after §7d (stated 32.1) | ~~514~~ 590 | 7 |
 | Onuris Long | Chase | 23.8 km | 377 | 4 |
 | Onuris Medium | Chase | 19.2 km | 340 | 3 |
 | Onuris Short | Chase | 7.4 km | 135 | 0 |
@@ -296,3 +296,57 @@ Not yet done: replay checks for these (desktop replays exist: Hazen Loop ×3, T-
 sessions for Rainbow, Centrifuge, Thunderhead, Miandros, Eagleton, Sakura); Hazen's 27.5 vs 32.1 km gap unexplained;
 the Hazen jump with 77 m drop over 65 m is suspicious (possible wrong landing, cf. Coast §7b) — verify with its replay.
 The replay tools now find blackbox at `%USERPROFILE%\blackbox` or `%USERPROFILE%\Desktop\blackbox`, or `BLACKBOX`.
+
+## 7d. The desktop library, checked against replays (2026-09-27, desktop)
+New instrument: `node tools/coverage.cjs <read.json> <replay>`. It gives the share of moving replay frames within 25 m
+of the read line, the station order (forward/backward), and every stretch the car drove off the line, with where it
+left and rejoined the read.
+
+**Hazen Loop: the "65 m gap, 77 m drop" jump was a wrong landing, and it hid 3.8 km of track.**
+- Replay `hazenloop__210826-054910`, v1 read: 87.5% covered. One stretch of **3,553 m** off the line, leaving the read
+  at d 26305 and rejoining at d 26536.
+- The car does not drop there. It takes off at 606 km/h and flies **245 m in 1.44 s, 8.8° up, 15 m down**. There is
+  nothing within 8 m under it from t 225.6 to 226.5 s. It lands on `1ROAD_MainTrack` and drives a loop of about
+  3.8 km out to x −1642, which comes back under the take-off. The reader's search runs nearest-first, so it hit that
+  returning road at 65 m out, 77 m down, and skipped the loop. This is the same failure as Coast's "83 m drop" (§7b).
+- **Fix (read_track.cjs):** a landing must be reachable by a flight. The deepest allowed drop is
+  `dist·tan10° + ½·6.5 g·(dist / 375 km/h)²`, taken from the flights below. At 65 m that is about 21 m; at 226 m it is
+  about 100 m, and the real 74 m drop there passes.
+- **Prediction registered before the re-run:** "Hazen reads 30.8–31.5 km, the 3.5 km miss disappears, the 21-08 lap's
+  coverage rises above 95%; the six real jumps unchanged." **Result: 30,963 m, closed, 590 words; the miss is gone;
+  98.3% covered (22514/22915); the 22-08 lap is 97.0%; the six jumps are identical, and the seventh reads 141 m / 14 m
+  drop.** Every remaining off-line stretch is a jump flight. The stated 32.1 km is still 1.1 km more than the read, and
+  that is unexplained.
+- **Regression check:** the rule changed no other read. Onuris ×3 and both Bowl tracks re-read to the same lengths and
+  the same jump lists.
+
+**The jump fall is not one number. This supersedes §8's "g_eff ≈ 3.3 g".** Thirteen Hazen flights over two laps
+(`node tools/jump_flight.cjs`, with takeoff/landing from the read):
+
+| jump (read d) | lap 21-08 | lap 22-08 |
+|---|---|---|
+| 3531 | 599 km/h, 6.7° → 5.65 g | 568 km/h, 4.3° → 3.97 g |
+| 3922 | 639 km/h, 8.7° → 6.25 g | 639 km/h, 7.2° → 4.68 g |
+| 12310 | 551 km/h, 10.1° → 3.84 g | 535 km/h, 9.9° → 3.69 g |
+| 14510 | 560 km/h, 11.0° → 4.07 g | 554 km/h, 9.9° → 3.84 g |
+| 16300 | 598 km/h, 5.4° → 5.38 g | 603 km/h, 5.5° → 5.57 g |
+| 22419 | 545 km/h, −5.9° → 4.36 g | 535 km/h, −7.0° → 4.03 g |
+| 26305 (the missed one) | 606 km/h, 8.8° → 5.40 g | lap ended before it |
+
+- Around 535–560 km/h the fall is 3.7–4.4 g. Around 600–640 km/h it is 4.7–6.3 g. With Sakura (3.17 g at 555) and
+  Coast (3.51 g at 375), the measured range is **3.2–6.3 g**.
+- The same jump at the same speed (3922, 639 km/h) fell at 6.25 g on one lap and 4.68 g on the other. So speed is not
+  the only input. On both jumps where the pair differs, the steeper take-off fell harder. That is two pairs, so it is
+  a lead, not a law. In-air attitude is still unmeasured.
+- **For the builder:** a jump check has to hold at both ends of the range. The landing must catch the long flight
+  (3.2 g) and the short one (6.3 g), which is an argument for long landing ramps. Fit residuals were 0.05–0.36 m.
+
+**T-180 Bowl Track (Dogeish): verified.** Replay `AC_090825-070749_O_…_t180_bowltrack_`: 100.0% covered
+(9377/9377), 6.5 laps, all forward (3314/0). `BBXTEST_appended_bowltrack` is the same data. The Bowltrack
+(bowltrack_2) has no replay.
+
+**Onuris: not checkable with these replays.** All three (`AC_090126`, `AC_100126` ×2) are 2.4–3.9% covered on every
+layout. Their header names the track `onuris`, recorded in January 2026. The installed track is `Chases_Onuris`, and
+its road lies elsewhere: the replay car spans x −255…2609, z −192…1720, while the long read spans x −639…1057,
+z −1331…2593. These are a different version of the track, so they say nothing about the reads.
+**Hazen replay `050926-123658`** cannot be parsed yet (blackbox: online multi-car autosave).

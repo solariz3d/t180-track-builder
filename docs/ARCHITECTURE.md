@@ -70,7 +70,8 @@ Anything marked **(unverified)** needs a test before we rely on it.
   - The ~20 g suspension-stop line and the proven ~90 g come from `FINDINGS.md` §4–5, **per car** from its open
     config.
 - **Jump check** (`FINDINGS.md` §8): gap, climb and ramp angle give makeable-or-not and the minimum take-off speed.
-  - g_eff ≈ 3.3 g for the Mach 6 from two flights. Thin; every recorded flight refines it.
+  - ~~g_eff ≈ 3.3 g for the Mach 6 from two flights.~~ The fall is 3.2–6.3 g over fifteen flights (FINDINGS §7d),
+    and not a function of speed alone: a jump must hold at both ends of that range.
 - **Red, for known breakage:**
   - holes or gaps in the road
   - a missing soft-collision block

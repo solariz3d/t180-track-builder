@@ -145,10 +145,14 @@ for (let step = 0, wallUp = false; travelled < maxLen; step++) { wallUp = false;
       // a landing is where a road BEGINS after the gap: road ahead of it, almost none behind it. A road that only passes
       // underneath (or runs the other way) carries on behind the landing point too — that is a fall, not a jump.
       const ahead = along.left.length, behind = along.right.length; return ahead >= 20 && behind < 15; };
+    // a landing no flight could reach is a road below, not the landing (Hazen: 65 m out, 77 m down, cut a 3.8 km loop).
+    // Deepest reachable drop: take-off no slower than 375 km/h, pointing up to 10° down, falling at up to 6.5 g
+    // (measured flights: 375-639 km/h, -7..+11°, 3.2-6.3 g; FINDINGS §7d)
+    const reachDrop = (dist) => dist * Math.tan(10 * Math.PI / 180) + 0.5 * 6.5 * 9.81 * (dist / (375 / 3.6)) ** 2;
     // (sweeping sideways too: the ramps taper to narrow tips, and a heading skewed by a few degrees misses a 5 m tip)
     for (let dist = 25; dist <= 400 && !land; dist += 4) for (const side of [0, 4, -4, 8, -8, 12, -12, 16, -16]) for (let dh = 40; dh >= -100 && !land; dh -= 3) {
       const probe = add(add(add(c, f, dist), [0, 1, 0], dh), Lat, side), hit = onSurface(probe, 3, nc, 35);
-      if (hit && len(sub(hit.q, probe)) < 3 && runsAlong(hit)) land = { hit, dist, dh };
+      if (hit && len(sub(hit.q, probe)) < 3 && runsAlong(hit) && -dh <= reachDrop(dist)) land = { hit, dist, dh };
     }
     if (!land && process.env.DEBUGJUMP) { const seen = []; for (let dist = 25; dist <= 400; dist += 8) for (let dh = 40; dh >= -100; dh -= 4) { const probe = add(add(c, f, dist), [0, 1, 0], dh), hit = onSurface(probe, 3, null); if (!hit) continue; const hn = dot(hit.n, nc) < 0 ? hit.n.map(v => -v) : hit.n; seen.push({ dist, dh, angle: +rel(hn, nc).toFixed(0), along: runsAlong({ q: hit.q, n: hn }) }); if (seen.length > 25) break; } console.error('JUMP CANDIDATES', JSON.stringify(seen.slice(0, 25))); }
     if (!land) { const raw = onSurface(add(c, f, STEP), 12, null); const why = raw ? { ahead_m: +len(sub(raw.q, add(c, f, STEP))).toFixed(1), rise_m: +(raw.q[1] - c[1]).toFixed(1), angle_deg: +rel(raw.n[1] * nc[1] < 0 ? raw.n.map(v => -v) : raw.n, nc).toFixed(0) } : 'no surface within 12 m'; rows.push({ lost: true, d: Math.round(travelled), at: c.map(v => +v.toFixed(1)), f: f.map(v => +v.toFixed(3)), why }); break; }
