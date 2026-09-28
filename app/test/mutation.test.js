@@ -88,7 +88,7 @@ const MUTATIONS = [
   { id: 'B15 the head marker is never drawn', file: 'preview/renderer.js',
     from: 'if (extras.marker) {', to: 'if (false) {', caughtBy: 'preview: a frame draws the grid and the head marker' },
   // D175: hardening (the soak, per-cell rebuild, no mesh over IPC)
-  { id: 'P1 a sculpt re-places the path but keeps the old mesh', file: 'preview/trackmodel.js', from: 'geom.rebuildPathFrom(path, segs, g); mesh = geom.sculptMesh(mesh, path, segs, g);', to: 'geom.rebuildPathFrom(path, segs, g);', caughtBy: 'soak:' },
+  { id: 'P1 a sculpt re-places the path but keeps the old mesh', file: 'preview/trackmodel.js', from: 'from = s0; fromS = path.starts[s0].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), s0);', to: 'from = s0; fromS = path.starts[s0].s;', caughtBy: 'soak:' },   // re-pointed D186 (C): the sculpt branch now meshes the LIFTED path from min(g, first lift change)
   { id: 'P2 every change rebuilds the whole track (no per-cell reuse)', file: 'preview/trackmodel.js', from: 'else if (nk.length >= keys.length) {', to: 'else if (false) {', caughtBy: 'per-cell rebuild: a length sculpt' },
   { id: 'P3 the preview reaches for the native side', file: 'preview/preview.js', from: 'const FLY = ', to: 'const leak = (s) => s && s.storage.saveDoc; const FLY = ', caughtBy: 'no mesh over IPC: app/preview and app/camera' },
   // D173: the texture maker's editor and panel

@@ -5,6 +5,34 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+**The equation builder is in the app, and it is what the app opens in.** The track is shaped as equations: extend it from
+its open end, brush it on the preview, close it in one click, and pour water down it to see where it spills, lifts off or
+piles into one line. The piece builder is still there, paused: pick "Pieces (paused)" at the top left.
+- **Extend:** keep going the way the track goes, or set a turn, climb, bank or width. The piece you are about to add shows
+  as a see-through ghost at the head.
+- **Brush:** switch it on and drag on the track. The height and sideways brush is the default once it is in the build; the
+  rate brush (turn, climb, bank, width, wall rise) is the second mode. One drag is one undo. A narrow brush that had to be
+  widened says so, with the width it used.
+- **Close:** one click. It avoids the stretch you edited last and your straights, so a straight stays straight (radius
+  over 5 km, where it used to bend to about 370 m). A lap too far from closed says so and stays open.
+- **Water:** on while the box is ticked, redrawn after every change, over 1.5 km of road at the speed you set. Every red is
+  listed in plain words with where it is. It stops at a jump: the flight is not modelled.
+- **Export:** the same exporter as before, with the same checks. The grid goes on the longest nearly straight stretch
+  (radius 5 km or more). The export warns that the grid is "on a core, not a straight"; that is a warning, not a refusal.
+- **A real track as a local example:** pick its fit and its read from your own reads/ folder. It is never part of the
+  program.
+- **Hills and sideways moves show everywhere:** the preview, the water and the export read the road as brushed. A track that
+  starts on a slope is built from where it really starts.
+- **Two tests fail, and are recorded as failing:**
+  - **The round trip** (a real track rebuilt in the builder, exported, and read back): the export refuses both rebuilt tracks.
+    Serpents Spiral's longest straight is 18 m, and a grid of 4 with 2 pit boxes needs 67.4 m. Thunderhead's export is refused
+    for a gap under the car's downforce ray at 2,257.5 m along the track. No exported track exists yet to compare.
+  - **The 40 km speed test:** one extend step on a 40 km track takes 438 ms at the median and 505 ms at the 95th percentile,
+    where the bar is 50 ms. The time goes to rebuilding the whole track's segments on every step (about 191 ms), finding where
+    each piece starts along the track (about 234 ms), and the preview comparing its whole list of pieces (about 135 ms). The
+    height brush takes minutes per stroke on a track that long.
+  - **So editing a 40 km track is slow for now.** Tracks of a few kilometres respond at interactive speed.
+
 The built-in pieces are now measured from real T-180 tracks instead of being set by hand. No installer is built from
 this yet: 0.2.2 below is still the one to install.
 

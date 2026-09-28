@@ -60,6 +60,7 @@
 <body>
 <header>
   <h1>T-180 TRACK BUILDER</h1>
+  <select id="mode" aria-label="builder" title="Equation track: shape the track as equations (extend, brush, close, water). Pieces: the earlier piece builder, paused but kept."><option value="core">Equation track</option><option value="pieces">Pieces (paused)</option></select>
   <button id="new" title="New track">New</button>
   <input id="name" placeholder="track name" aria-label="track name" size="16">
   <button id="save" title="Ctrl+S">Save</button>
@@ -105,6 +106,65 @@
     clearAutosave: () => (tauri ? call('clear_autosave') : Promise.resolve()),
     writeExport: (dir, folder, files) => call('write_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }),
   };
+
+  // TWO BUILDERS, ONE PAGE (D186). The EQUATION TRACK (the core: app/core, src/core) is the default; the PIECE builder (app/shell.js,
+  // the palette) is paused, not deleted, and one switch away. The switch reloads the page into the other builder, so the two
+  // never share a live shell or a panel: ?mode=pieces or ?mode=core in the address picks one (the window proofs use it), and
+  // the last choice is remembered on this machine.
+  const MODE = (() => { const q = new URLSearchParams(location.search).get('mode'); if (q === 'core' || q === 'pieces') return q; try { return localStorage.getItem('t180.mode') === 'pieces' ? 'pieces' : 'core'; } catch (e) { return 'core'; } })();
+  $('mode').value = MODE;
+  $('mode').onchange = (e) => { try { localStorage.setItem('t180.mode', e.target.value); } catch (err) { /* a private window: the address still carries it */ } location.search = `?mode=${e.target.value}`; };
+  if (MODE === 'core') { await startCore(); return; }
+
+  async function startCore() {
+    let C, panels, shell, exporter;
+    try {
+      // the core's modules reach tools/piecewise.cjs (its solver), whose command-line half requires fs and path: they are given
+      // the exporter's in-memory node shim, so they load and nothing touches the disk (the core calls only the solver)
+      const shim = (await loadCjs('app/export/node-shim.js', get)).createShim();
+      C = await loadCjs('app/core/coreshell.js', get, { builtins: shim.builtins, globals: { Buffer: shim.Buffer } });
+      panels = await loadCjs('app/palette/panels.js', get);
+      exporter = await (await loadCjs('app/export/export.js', get)).makeExporter(get);
+      shell = await C.createCoreShell({ storage, exporter, now: () => performance.now() });
+    } catch (e) { $('palette').textContent = `The equation builder could not start: ${e.message}`; return; }
+    const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+    const drawReds = (st) => {
+      const r = $('reds');
+      if (!st.exportReds) { r.replaceChildren(); return; }
+      const list = el('ul', null, 'reds');
+      for (const x of st.exportReds) list.append(el('li', `${x.reason}${Number.isFinite(x.s0) ? ` at s ${Math.round(x.s0)} m` : ''} ${x.source ? `(${x.source})` : ''}`));
+      r.replaceChildren(el('h3', 'Not exported: red on the track'), list);
+    };
+    const draw = (st) => { drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
+    shell.subscribe(draw); draw(shell.getState());
+    const refreshList = async () => { try { const names = await shell.list(); $('open').replaceChildren(new Option('Open…', ''), ...names.map((n) => new Option(n, n))); } catch (e) { status.textContent = e.message; } };
+    $('new').onclick = () => shell.newDoc();
+    $('save').onclick = async () => { try { await shell.save($('name').value.trim()); await refreshList(); } catch (e) { status.textContent = e.message; } };
+    $('open').onchange = async (e) => { const n = e.target.value; if (!n) return; try { await shell.open(n); $('name').value = n; } catch (err) { status.textContent = err.message; } e.target.value = ''; };
+    $('export').onclick = async () => {
+      try {
+        const dir = (await call('test_export_folder')) || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
+        if (!dir) return;
+        status.textContent = 'exporting…';
+        await shell.exportTo(dir);   // the self-intersection check is always on (app/export/export.js)
+      } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
+    };
+    refreshList();
+    // the keys: undo, redo, save (the piece builder's removeHead has no meaning here)
+    const S0 = await loadCjs('app/shell.js', get).catch(() => null);
+    document.addEventListener('keydown', (e) => {
+      const act = S0 && S0.keyAction({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, inField: !!e.target.matches && e.target.matches('input, select, textarea') });
+      if (!act || !['undo', 'redo', 'save'].includes(act)) return;
+      e.preventDefault();
+      if (act === 'save') $('save').click(); else shell[act]();
+    });
+    // the panels that read only the shared path (preview, camera, validation) are the piece builder's, reused unchanged; the
+    // core's own controls take the left column. Handles, textures, share, install and the guide are the piece builder's.
+    await panels.mountPanel($('palette'), 'equation track', () => loadCjs('app/core/index.js', get), shell);
+    for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation']]) {
+      await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
+    }
+  }
 
   let S, pal, panels, shell, exporter;
   // the texture set the textures panel announces (the one the preview draws); the export and the install write it

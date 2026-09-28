@@ -143,6 +143,16 @@ const CHECKS = [
     const r = W.pour(open(W, [{ length: 60, profile: flat(20) }]), { speed: 30, count: 3 });
     assert.deepEqual(r.streams.map((s) => s.outcome), ['end', 'end', 'end']); assert.deepEqual(r.reds, []);
   } },
+  { name: 'a road whose s is NOT arc length (a lifted sample, D186) rides right when its samples carry d1 = dpos/ds and d2; without them it is refused', run(W) {
+    // the 06 §8 crest, re-parameterised by s' = s/σ (σ = 1.3 m of road per unit of s'): d1 = σ·T, d2 = σ²·kvec, exact
+    const Rv = 50, p0 = 0.3, v0 = 15, sig = 1.3, segs = [{ length: Rv * 1.4, kp0: -1 / Rv, kp1: -1 / Rv, profile: flat(20) }], p = buildPath(segs, { start: { p: p0 } });
+    const re = p.samples.map((m) => ({ s: m.s / sig, seg: m.seg, pos: m.pos, T: m.T, L: m.L, U: m.U, kvec: m.kvec, d1: m.T.map((x) => x * sig), d2: m.kvec.map((x) => x * sig * sig) }));
+    const st = W.pour(W.surfaceFrom({ samples: re, profileAt: () => segs[0].profile }), { speed: v0, streams: [{ u: 0 }] }).streams[0], c = (v0 * v0 / Rv + 2 * g * Math.cos(p0)) / (3 * g);
+    assert.equal(st.outcome, 'liftoff'); close(st.at.s * sig, Rv * (p0 + Math.acos(c)), 0.2, 'lift-off station, in metres of road');
+    assert.ok(st.energy.maxRelDrift < 1e-6, `energy ${st.energy.maxRelDrift}`);
+    assert.throws(() => W.surfaceFrom({ samples: re.map(({ d1, d2, ...m }) => m), profileAt: () => segs[0].profile }), /not ∫T ds/, 'without d1, d2');
+    assert.throws(() => W.surfaceFrom({ samples: re.map(({ d2, ...m }) => m), profileAt: () => segs[0].profile }), /come together/);
+  } },
   { name: 'refused loudly: no speed, zero speed, no profile, no streams, and samples whose pos is not ∫T ds (a heartline offset)', run(W) {
     const segs = [{ length: 60, profile: flat(20) }], s = open(W, segs);
     assert.throws(() => W.pour(s, {}), /speed/); assert.throws(() => W.pour(s, { speed: 0 }), /speed/);

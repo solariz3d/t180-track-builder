@@ -5,6 +5,7 @@
 //   const exporter = await makeExporter(get);            // get(path) -> text, as app/lib/cjs.js takes it
 //   exporter.checkTarget(dir)  -> { ok } | { ok: false, code, reason }
 //   exporter.run(doc, { variant })  -> { result, folders: [{ folder, files: [{ path, bytes }] }] }   (throws ExportError)
+//   exporter.runSegments(segments, { name, description?, via? }, { variant })   the same, for the equation core (D186)
 //
 // THE SELF-INTERSECTION CHECK IS ALWAYS ON. run() passes exportTrack no `selfCheck`, so its default (on) always holds,
 // and there is no way to turn it off from the app: a false red is settled in the geometry, never by loosening the check
@@ -48,6 +49,14 @@ async function makeExporter(get) {
     run(doc, { variant = 'block', textures = null } = {}) {
       shim.reset();
       const result = fromwords.exportTrack(doc, { outDir: OUT, variant, textures });   // no selfCheck: the check is always on
+      return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
+    },
+    // the equation core's track (D186): src/geom segments from src/core/adapter.js, through the SAME exporter
+    // (fromwords.js exportSegments: the same validation, self-check, markers, read-back and AI line); the check stays on
+    // markers: the grid layout (app/core/coreshell.js startLayout), or undefined for the export's default
+    runSegments(segments, meta, { variant = 'block', textures = null, markers } = {}) {
+      shim.reset();
+      const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers });
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
   };

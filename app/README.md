@@ -79,6 +79,33 @@ So a panel can report its own failure by returning it.
 Ctrl+Backspace remove the head (a bare Backspace does nothing: it is too easy to hit by accident) · Ctrl+S save. A
 panel that wants a key asks for it in this file first, so two panels never bind the same one.
 
+## Two builders, one page (D186)
+
+The page opens the **equation builder** (the core: `src/core`, `app/core`). The **piece builder** (`app/shell.js`, the palette,
+the handles, textures, share, install, the guide) is paused, not deleted: the header's switch reloads the page into it, and
+`?mode=pieces` or `?mode=core` in the address picks one. The last choice is remembered on this machine. The two never share a
+live shell or a panel.
+
+| path | what |
+|---|---|
+| `app/core/coreshell.js` | the core's state and actions, no DOM (tested headless): extend, the brush drag, close, water, export, a local example, save/open under the `eq-` prefix |
+| `app/core/panel.js` | the core's controls in the left column |
+| `app/core/index.js` | its `mount(root, shell)` |
+
+**The core shell keeps the seam's state shape,** `state.resolved = { segments, closed }` from `src/core/adapter.js toSegments`,
+so the preview, the cameras and validation are reused unchanged. The trackmodel diffs the segments and extends or sculpts the
+mesh itself.
+
+**In the webview, the core is loaded with the exporter's node shim** (`app/export/node-shim.js`), because it reaches
+`tools/piecewise.cjs`, whose command-line half requires `fs` and `path`. Nothing touches the disk.
+
+**Events the core's panel adds** (the preview answers them, `app/preview/index.js`):
+- `t180:overlay` `{ lines }`: world line pairs drawn over the track (the water and its reds), or null;
+- `t180-pick` `{ x, y, reply }`: the track station under a canvas point.
+
+**Export** goes through `src/export/fromwords.js exportSegments`, the same route as `exportTrack` after the words resolve, via
+`app/export/export.js runSegments`.
+
 ## Files on disk
 
 - **A track** is `<name>.t180track`: the document's canonical text (`src/doc/serial.js`), in

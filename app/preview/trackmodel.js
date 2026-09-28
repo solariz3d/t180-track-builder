@@ -39,27 +39,56 @@ const STEP = 2;
 
 function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   const pathOpts = { step: STEP, ...po };
-  let path = null, mesh = null, keys = [], closed = false, last = null;
-  function full(segs, isClosed) {
-    path = geom.buildPath(segs, { ...pathOpts, closed: isClosed }); mesh = geom.buildMesh(path, segs, meshOpts); return 'full';
+  // `path` is the BASE path the geometry grows incrementally; `shown` is what everything reads (the mesh, the cameras, the shared
+  // track): the base path LIFTED by resolved.lift when the document has offsets (D186: the equation core's hill and swerve, A's
+  // src/core/adapter.js offsetPath, which recomputes the frame from the lifted centreline). With no lift they are the same object.
+  let path = null, shown = null, mesh = null, keys = [], liftKeys = [], closed = false, last = null, startKey = null, startOpt = null;
+  /**
+   * The segments the MESH is given: a segment whose lifted samples differ from the base carries `_lift`, a key made from those
+   * samples. So its handles (mesh.js handleKey) change exactly where the lift changed, and sculptMesh remeshes exactly those
+   * pieces (a piece whose start is outside a hill but whose inside is lifted is remeshed too); an unlifted segment is unchanged.
+   */
+  const liftOf = (base, lifted, j) => {
+    if (lifted === base) return null;
+    const a = lifted.samples[lifted.segFirst[j]], b = lifted.segEnd[j];
+    if (a === base.samples[base.segFirst[j]] && b === base.segEnd[j]) return null;
+    return JSON.stringify([a.pos, a.T, b.pos, b.T]);
+  };
+  const meshSegs = (segs, lk) => segs.map((s, j) => (lk[j] === null ? s : { ...s, _lift: lk[j] }));
+  function full(segs, isClosed, lift) {
+    path = geom.buildPath(segs, { ...pathOpts, closed: isClosed, ...(startOpt ? { start: startOpt } : {}) }); shown = lift ? lift(path) : path;
+    liftKeys = segs.map((_, j) => liftOf(path, shown, j)); mesh = geom.buildMesh(shown, meshSegs(segs, liftKeys), meshOpts); return 'full';
   }
   return {
     update(resolved) {
       if (!resolved) { if (!last) throw new Error('trackModel: no resolved document yet'); return { ...last, how: 'kept', stale: true }; }
-      const segs = resolved.segments, isClosed = !!resolved.closed;
+      const segs = resolved.segments, isClosed = !!resolved.closed, lift = typeof resolved.lift === 'function' ? resolved.lift : null;
+      // resolved.start (D186, the equation core): where the track starts, its heading and PITCH; a new start rebuilds in full
+      const sk = resolved.start ? JSON.stringify(resolved.start) : null, startMoved = sk !== startKey; startKey = sk; startOpt = resolved.start || null;
       if (!Array.isArray(segs)) throw new Error('trackModel: resolved.segments is missing');
-      if (!segs.length) { path = null; mesh = null; keys = []; closed = isClosed; last = { path, mesh, how: 'empty', batches: [], segments: segs, g: null, fromS: null }; return last; }
+      if (!segs.length) { path = null; shown = null; mesh = null; keys = []; liftKeys = []; closed = isClosed; last = { path: null, mesh, how: 'empty', batches: [], segments: segs, g: null, fromS: null }; return last; }
       const nk = segs.map(keyOf);
       let g = 0; while (g < keys.length && g < nk.length && keys[g] === nk[g]) g++;
       let how, from = null, fromS = null;
-      if (!path || isClosed || closed) how = full(segs, isClosed);
-      else if (g === keys.length && g === nk.length) how = 'same';
-      else if (g === keys.length) { from = g; fromS = path.lengthM; geom.extendPath(path, segs); mesh = geom.extendMesh(mesh, path, segs); how = 'extend'; }
-      else if (nk.length >= keys.length) { from = g; fromS = path.starts[g].s; geom.rebuildPathFrom(path, segs, g); mesh = geom.sculptMesh(mesh, path, segs, g); how = 'sculpt'; }
-      else how = full(segs, isClosed);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
+      // the lift, redone on the base path after any growth; the first segment whose lifted samples changed
+      const relift = () => { shown = lift ? lift(path) : path; const lk = segs.map((_, j) => liftOf(path, shown, j)); let a = 0; while (a < lk.length && a < liftKeys.length && lk[a] === liftKeys[a]) a++; return { lk, a }; };
+      if (!path || isClosed || closed || startMoved) how = full(segs, isClosed, lift);
+      else if (g === keys.length && g === nk.length) {
+        const { lk, a } = relift();
+        if (a === lk.length && a === liftKeys.length) how = 'same';
+        else { from = a; fromS = path.starts[a].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), a); liftKeys = lk; how = 'sculpt'; }   // only the offsets changed (a hill brush)
+      } else if (g === keys.length) {
+        from = g; fromS = path.lengthM; geom.extendPath(path, segs);
+        const { lk, a } = relift();
+        mesh = a < keys.length ? geom.sculptMesh(mesh, shown, meshSegs(segs, lk), a) : geom.extendMesh(mesh, shown, meshSegs(segs, lk)); liftKeys = lk; how = 'extend';
+      } else if (nk.length >= keys.length) {
+        geom.rebuildPathFrom(path, segs, g);
+        const { lk, a } = relift(), s0 = Math.min(g, a);
+        from = s0; fromS = path.starts[s0].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), s0); liftKeys = lk; how = 'sculpt';
+      } else how = full(segs, isClosed, lift);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
       keys = nk; closed = isClosed;
       const batches = how === 'same' && last ? last.batches : batchesOf(mesh);
-      last = { path, mesh, how, batches, bounds: how === 'same' && last ? last.bounds : worldBounds(batches), segments: segs, g: from, fromS };
+      last = { path: shown, mesh, how, batches, bounds: how === 'same' && last ? last.bounds : worldBounds(batches), segments: segs, g: from, fromS };
       return last;
     },
     ghostFor(candidate) {
@@ -67,7 +96,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
       const nk = segs.map(keyOf);
       if (nk.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
-      if (!path) { const p = geom.buildPath(segs, pathOpts); return { batches: batchesOf(geom.buildMesh(p, segs, meshOpts)), path: p, head: p.head, segments: segs }; }
+      if (!path) { const p = geom.buildPath(segs, { ...pathOpts, ...(candidate.start ? { start: candidate.start } : {}) }); return { batches: batchesOf(geom.buildMesh(p, segs, meshOpts)), path: p, head: p.head, segments: segs }; }
       if (closed) throw new Error('ghost: a closed loop has no open end');
       // copies: extendPath only pops and pushes these arrays and never edits a sample, and of the blocks it changes only the
       // last one's sample count (so that block is copied); extendMesh only sets new pieces and seams
@@ -78,7 +107,8 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const gm = geom.extendMesh(m, p, segs), from = keys.length;
       return { batches: batchesOf(gm).filter((b) => b.piece >= from), path: p, head: p.head, segments: segs };
     },
-    get path() { return path; },
+    /** The path everything reads: the base path lifted by the document's offsets (the same object when there are none). */
+    get path() { return shown; },
     get mesh() { return mesh; },
   };
 }

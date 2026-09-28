@@ -139,11 +139,28 @@ function buildExport(doc, opts = {}) {
   try { D.checkDoc(doc); } catch (e) { throw new ExportError('BAD_DOC', e.message); }
   if (!doc.words.length) throw new ExportError('EMPTY_DOC', 'the document has no words');
   if (!doc.closed) throw new ExportError('OPEN_TRACK', 'the loop is not closed: an AC lap needs a closed loop, and the AI line must close. Close it first (src/doc/connector.js closeLoop)');
+  const { r, via } = resolveClosed(doc);
+  return buildFromSegments(r.segments, { name: doc.name, pitLane: doc.pitLane, via, description: 'Built from words by t180-track-builder.' }, opts);
+}
+
+/**
+ * Everything after the words are resolved: the SAME route for any source of `src/geom` segments (D186: the equation core's
+ * adapter, src/core/adapter.js toSegments, emits them too). `meta` = { name, pitLane?, via?, description?, liftPath?, start? }: the track's name
+ * (the folder and ui_track.json), an optional pit lane, and how the segments were made (reported as resolvedVia). The
+ * segments must close a loop (buildPath closed); everything else (validation, the mesh self-check, markers, the kn5 read back,
+ * the AI line) is exactly buildExport's, because buildExport now calls this. Throws ExportError on every refusal.
+ */
+function buildFromSegments(segs, meta = {}, opts = {}) {
   const o = { step: 2, csp: true, ...LAYOUT, ...opts };
-  const { r, via } = resolveClosed(doc), segs = r.segments;
-  if (!segs.some((g) => g.kind === 'road')) throw new ExportError('EMPTY_DOC', 'the document resolves to no road');
+  const doc = { name: meta.name, pitLane: meta.pitLane || null }, via = meta.via || 'segments';
+  if (!Array.isArray(segs) || !segs.some((g) => g.kind === 'road')) throw new ExportError('EMPTY_DOC', 'the document resolves to no road');
   let p;
-  try { p = buildPath(segs, { step: o.step, closed: true }); } catch (e) { throw new ExportError('NOT_CLOSED', e.message); }
+  // meta.start (D186): where the lap starts and its heading and PITCH ({ pos, theta, p }, src/geom buildPath's start); a word
+  // document resolves from the origin, level, so it has none. The geometry's shape depends on the start pitch.
+  try { p = buildPath(segs, { step: o.step, closed: true, ...(meta.start ? { start: meta.start } : {}) }); } catch (e) { throw new ExportError('NOT_CLOSED', e.message); }
+  // meta.liftPath (D186): a source whose segments do not carry the whole road (the equation core's offsets, A's adapter offsetPath)
+  // lifts the path here, before the mesh, validation, markers and the AI line read it
+  if (typeof meta.liftPath === 'function') p = meta.liftPath(p);
   const selfCheck = o.selfCheck !== false;
   const mesh = buildMesh(p, segs, { ...(o.mesh || {}), selfCheck });
   const warnings = [];
@@ -214,7 +231,7 @@ function buildExport(doc, opts = {}) {
     folder: o.folder || folderName(doc), scene, kn5, ai, path: p, segments: segs, resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh },
-    desc: { name: doc.name || 'Untitled', description: 'Built from words by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original'], author: 't180-track-builder', version: '0.1' },
+    desc: { name: doc.name || 'Untitled', description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original'], author: 't180-track-builder', version: '0.1' },
     warnings,
   };
 }
@@ -259,8 +276,19 @@ function exportTrack(doc, { outDir, variant = 'block', t180 = true, ...opts } = 
   if (!outDir) throw new ExportError('NO_OUT_DIR', 'exportTrack needs an outDir');
   if (!VARIANTS[variant]) throw new ExportError('BAD_VARIANT', `variant "${variant}" is not block, noblock or both`);
   if (!t180 && variant !== 'block') throw new ExportError('BAD_VARIANT', `variant "${variant}" is the T-180 soft-road control; it needs "T-180 track" on`);
+  return writeExport(buildExport(doc, opts), { outDir, variant, t180 });
+}
+
+/** exportTrack for `src/geom` segments that close a loop (the equation core's adapter): the same checks and files. */
+function exportSegments(segs, meta, { outDir, variant = 'block', t180 = true, ...opts } = {}) {
+  if (!outDir) throw new ExportError('NO_OUT_DIR', 'exportSegments needs an outDir');
+  if (!VARIANTS[variant]) throw new ExportError('BAD_VARIANT', `variant "${variant}" is not block, noblock or both`);
+  if (!t180 && variant !== 'block') throw new ExportError('BAD_VARIANT', `variant "${variant}" is the T-180 soft-road control; it needs "T-180 track" on`);
+  return writeExport(buildFromSegments(segs, meta, opts), { outDir, variant, t180 });
+}
+
+function writeExport(b, { outDir, variant, t180 }) {
   const vs = VARIANTS[variant].map((v) => ({ ...v, softCollision: !!t180 && v.softCollision, extendedPhysics: !!t180 }));
-  const b = buildExport(doc, opts);
   const folders = vs.map((v) => writeFolder(b, outDir, v));
   const warnings = [...b.warnings];
   if (t180) warnings.push(trackfiles.CSP_ONLY_WARNING);
@@ -268,4 +296,4 @@ function exportTrack(doc, { outDir, variant = 'block', t180 = true, ...opts } = 
   return { folders, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: sha256(b.ai), aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.placed.filter((m) => !m.error).map((m) => ({ name: m.name, kind: m.kind, s: m.s, u: m.u, h: m.h })), paint: b.markers.paint.items, layout: b.markers.layout, warnings };
 }
 
-module.exports = { exportTrack, buildExport, ExportError, folderName, LAYOUT, MARKER_FILE, _internal: { stations, aiInput, roadWidthM } };
+module.exports = { exportTrack, buildExport, exportSegments, buildFromSegments, ExportError, folderName, LAYOUT, MARKER_FILE, _internal: { stations, aiInput, roadWidthM } };

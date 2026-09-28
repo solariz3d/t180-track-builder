@@ -12,6 +12,8 @@
 //   · L and U are CUBIC Hermite, their slopes by central differences over the samples (one-sided at an open end);
 //   · where two samples carry different profiles, X and Y are blended by the smoothstep 3t² − 2t³ (references/02 §4), so
 //     the surface stays C1 along s.
+// A sample may carry d1 = dpos/ds and d2 = d²pos/ds² (D186: a LIFTED sample, whose s is the base parameter, not arc length, so
+// its T is dpos/ds normalised and its kvec is per metre of road); then those are the Hermite's slopes instead of T and kvec.
 // pos' = T holds only when the samples' pos is ∫T ds (no heartline offset). That is checked when the surface is built,
 // and a sample list that breaks it is refused, loudly, never ridden.
 //
@@ -70,7 +72,11 @@ function surfaceFrom({ samples, closed = false, lengthM, profileAt } = {}) {
     const m = samples[i];
     for (const f of ['pos', 'T', 'L', 'U', 'kvec']) if (!Array.isArray(m[f]) && !(m[f] && m[f].length === 3)) throw new Error(`water: sample ${i} has no ${f}`);
     if (!Number.isFinite(m.s) || (i && !(m.s > S[i - 1]))) throw new Error(`water: sample ${i}: s must be finite and strictly ascending`);
-    S[i] = m.s; pos.push([...m.pos]); T.push([...m.T]); K.push([...m.kvec]); L.push([...m.L]); U.push([...m.U]);
+    // a sample whose s is NOT arc length (a lifted one: A's offset channels) carries its own d1 = dpos/ds and d2 = d²pos/ds²; the
+    // Hermite and the pos′ check then use them instead of T and kvec, which are per metre of ROAD there
+    for (const f of ['d1', 'd2']) if (m[f] !== undefined && !(m[f] && m[f].length === 3 && [0, 1, 2].every((c) => Number.isFinite(m[f][c])))) throw new Error(`water: sample ${i}: ${f} must be 3 finite numbers`);
+    if ((m.d1 === undefined) !== (m.d2 === undefined)) throw new Error(`water: sample ${i}: d1 and d2 come together`);
+    S[i] = m.s; pos.push([...m.pos]); T.push([...(m.d1 || m.T)]); K.push([...(m.d2 || m.kvec)]); L.push([...m.L]); U.push([...m.U]);
     const raw = profileAt(m);
     if (raw == null) throw new Error(`water: sample ${i} (s ${m.s}) has no road under it (a flight's gap); pour each road run on its own. The flight itself is not modelled here`);
     if (!cache.has(raw)) cache.set(raw, normalize(raw)); prof.push(cache.get(raw));
