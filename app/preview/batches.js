@@ -26,7 +26,7 @@ function batchesOf(mesh) {
     const id = m.name.replace(/^\d[A-Z]+_(seam_)?/, '').replace(/_\d+$/, '');
     // for the road lines (app/preview/look.js): vertices across, their u, and each row's s (cells only, not seams)
     const pc = !cell.seam && mesh._state ? mesh._state.pieces[cell.piece] : null, c = pc ? pc.cells[Number(m.name.slice(m.name.lastIndexOf('_') + 1))] : null;
-    out.push({ key: m.name, piece: cell.piece, seam: !!cell.seam, model: node.matrix, positions: m.positions, normals: m.normals, indices: m.indices,
+    out.push({ key: m.name, piece: cell.piece, seam: !!cell.seam, model: node.matrix, positions: m.positions, normals: m.normals, uvs: m.uvs, indices: m.indices, materialIndex: m.material, segId: pc ? pc.id : (cell.seam && mesh._state ? (mesh._state.pieces[cell.piece] || {}).id : null),
       colour: colourOf(cell.piece, id, !!cell.seam), cols: pc ? pc.K : null, us: pc ? pc.Us : null, rowS: c ? c.rowS : null });
   }
   return out;

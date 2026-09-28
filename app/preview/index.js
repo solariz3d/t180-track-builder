@@ -10,6 +10,8 @@
 //                                                              appended, not committed), or a built-in word, resolved here
 //                                                              the way shell.place() would (app/testhook/ghostword.js)
 //   't180-ghost-clear'                                         hide it
+// And the TEXTURE SET (D177), from the textures panel (app/texture/index.js, A's), bubbling to the document:
+//   't180:textures'     { detail: { set } }            the set the export writes from; the preview's AC look draws it
 // And the ONE SHARED PATH (D177), for validation (app/validate-ui, E's) instead of a second path of its own:
 //   't180:track'          { detail: { path, segments, closed, how, g, fromS } }   sent after every change that moved the
 //                          track (how 'extend' | 'sculpt' | 'full' | 'empty'; g the first changed segment, fromS where
@@ -33,7 +35,7 @@ function mount(root, shell) {
   const doc = root.ownerDocument, win = doc.defaultView;
   const canvas = doc.createElement('canvas'), hud = doc.createElement('div');
   canvas.style.cssText = 'display:block;width:100%;height:100%;outline:none';
-  hud.style.cssText = 'position:absolute;left:8px;bottom:6px;font:12px ui-monospace,Consolas,monospace;color:#9aa4b2;pointer-events:none';
+  hud.style.cssText = 'position:absolute;left:8px;bottom:6px;font:12px ui-monospace,Consolas,monospace;color:#c3cad4;background:rgba(10,12,16,0.6);padding:1px 5px;border-radius:3px;pointer-events:none';   // legible on the light AC road too (D177)
   root.append(canvas, hud);
   const announce = (mode) => doc.dispatchEvent(new win.CustomEvent('t180-camera-mode', { detail: { mode, modes: MODES.slice() } }));
   let p;
@@ -52,13 +54,15 @@ function mount(root, shell) {
     if (typeof d.reply === 'function') d.reply({ ok: true });
   };
   const hideGhost = () => p.clearGhost();
+  const textures = (e) => { p.setTextureSet(e.detail ? e.detail.set : null); };
   const trackNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.track()); };
+  doc.addEventListener('t180:textures', textures);
   doc.addEventListener('t180:track-request', trackNow);
   doc.addEventListener('t180-camera', ask);
   doc.addEventListener('t180-probe', answer);
   doc.addEventListener('t180-ghost', showGhost);
   doc.addEventListener('t180-ghost-clear', hideGhost);
-  return { preview: p, unmount() { doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); p.dispose(); root.replaceChildren(); } };
+  return { preview: p, unmount() { doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };
