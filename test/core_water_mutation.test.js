@@ -28,6 +28,7 @@ const MUTANTS = [
   ['W15 energy instrument reads nothing', 'maxAbs = Math.max(maxAbs, Math.abs(E - E0));', 'maxAbs = 0;'],
   ['W16 the pos′ = T refusal disabled', 'if (!(off <= 1e-3))', 'if (!(off <= 1e9))'],
   ['W18 the pos′ = T check without the h²/12 correction', 'mul(sub(K[i], K[i + 1]), h * h / 12)', 'mul(sub(K[i], K[i + 1]), 0)'],
+  ['W19 a lifted sample\'s d1 ignored', 'T.push([...(m.d1 || m.T)]);', 'T.push([...m.T]);'],
   ['W17 closed seam: the wrap sample not appended', 'if (closed && S[n - 1] < S[0] + Lm - 1e-9) {', 'if (false) {'],
 ];
 

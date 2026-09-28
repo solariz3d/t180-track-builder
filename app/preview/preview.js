@@ -9,6 +9,8 @@
 //       t = { path, segments, closed, how, g, fromS }   how: 'extend' | 'sculpt' | 'full' | 'empty'
 //   p.track()   the same object for the current track, or null (for a reader that arrives later)
 //   p.setTextureSet(set)    A's texture set (src/texture/set.js; the textures panel sends it as 't180:textures'), or null
+//   p.setOverlay([{ positions, colour }])   world line pairs over the track (D186: the water and its reds), or null
+//   p.pick(x, y)            the track station under a canvas point (css px): { s, pos, px } or null (D186: the brush)
 //   p.setLook('ac' | 'words')   'ac' (the default): the AC shaders with the exported materials and textures
 //                               (app/preview/aclook.js, acshaders.js); 'words': the D170 colour per placed word
 //
@@ -27,6 +29,7 @@ const { gridLines, headMarker } = require('./look.js');
 const { resolveLook } = require('./aclook.js');
 const { previewTextures } = require('../../src/texture/set.js');
 const { normalize, spanOf } = require('../../src/geom/profile.js');
+const M = require('../camera/math.js');
 
 const FLY = { w: [1, 0, 0], s: [-1, 0, 0], d: [0, 1, 0], a: [0, -1, 0], e: [0, 0, 1], q: [0, 0, -1] };
 const TURN = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
@@ -53,7 +56,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const renderer = createRenderer(gl), model = createTrackModel(), rig = createRig();
   let track = null, err = null, raf = 0, prev = 0, shownPose = null;
   const held = new Set();
-  let ghost = null, grid = null, gridFor = null;
+  let ghost = null, grid = null, gridFor = null, overlay = null;
   let set = null, images = [], look = 'ac', resolved = null, resolvedFor = null;
   // the look is resolved again only when the scene's materials or the set change, never per frame
   const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
@@ -104,7 +107,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       if (tb !== gridFor) { grid = gridLines(tb); gridFor = tb; }       // the grid follows the track's box, rebuilt only when it changes
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(track && track.batches ? track.batches : [], shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head)), ghost: ghost ? ghost.batches : null,
+      renderer.draw(track && track.batches ? track.batches : [], shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head)), ghost: ghost ? ghost.batches : null, overlay,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null });
     }
     if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? 'AC look' : 'word colours'} (L)${err ? ` · ${err}` : ''}`;
@@ -128,6 +131,10 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
      */
     showGhost(candidate) { ghost = model.ghostFor(candidate); return ghost.batches.length; },
     clearGhost() { ghost = null; },
+    /** D186: world line pairs drawn over the track (the water and its reds): [{ positions, colour, alpha? }], or null. */
+    setOverlay(list) { overlay = list && list.length ? list : null; return overlay ? overlay.length : 0; },
+    /** D186: the track station under a point of the canvas (css px from its top-left): { s, pos, px } or null (pickAt). */
+    pick(x, y) { return shownPose && track && track.path ? pickAt(track.path, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
     dispose() {
       win.cancelAnimationFrame(raf); unsub();
@@ -136,6 +143,22 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       renderer.dispose();
     },
   };
+}
+
+/**
+ * THE PICK (D186, the brush on the preview): the path station drawn nearest the canvas point (x, y), css px from the top-left,
+ * for a view `w` × `h` css px under `pose` (the matrices the renderer draws with, app/camera/math.js viewProj). Stations behind
+ * the camera are skipped. Returns { s, pos, px } (px: its distance on screen), or null when none lies within `maxPx`.
+ */
+function pickAt(path, pose, x, y, w, h, maxPx = 40) {
+  if (!(w > 0 && h > 0)) return null;
+  const VP = M.viewProj(pose, w / h); let best = null;
+  for (const m of path.samples) {
+    const c = M.apply(VP, m.pos); if (!(c[3] > 0)) continue;
+    const sx = (c[0] / c[3] * 0.5 + 0.5) * w, sy = (1 - (c[1] / c[3] * 0.5 + 0.5)) * h, d = Math.hypot(sx - x, sy - y);
+    if (d <= maxPx && (!best || d < best.px)) best = { s: m.s, pos: m.pos.slice(), px: d };
+  }
+  return best;
 }
 
 /** The road's span at the head (m): the last road segment's cross-section (profile.js spanOf), for the build view's framing. */
@@ -161,4 +184,4 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, backingSize, MAX_SIDE, markerSize, widthAtHead };
+module.exports = { createPreview, keyAction, backingSize, MAX_SIDE, markerSize, widthAtHead, pickAt };
