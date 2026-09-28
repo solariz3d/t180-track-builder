@@ -29,6 +29,7 @@
 const { TEMPOS, FONTS, LANDING } = require('./vocab.js');
 const jumps = require('../validate/jumps.js');
 const { checkDoc } = require('./serial.js');
+const { fontProfile, isMeasured } = require('../geom/fonts.js');
 
 class ResolveError extends Error {
   constructor(code, message) { super(`${code}: ${message}`); this.name = 'ResolveError'; this.code = code; }
@@ -37,7 +38,10 @@ class ResolveError extends Error {
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const TOL_ROLL = 1e-9, TOL_HEART = 1e-9;
 
+// D182: the three MEASURED fonts (bowl, half-pipe, flat) take their floor from the library's cross-sections
+// (src/geom/fonts.js: ψ at ¼, ½, ¾ and the edge of each half-width, then the wall handle above it). Any other font is as before.
 function profileOf(font, h) {
+  if (isMeasured(font)) return fontProfile(font, h);
   const wall = h.wall, w = h.width / 2;
   if (wall === 0) return { font, u: [-w, 0, w], psi: [0, 0, 0], material: 'ROAD' };
   return { font, u: [-(w + wall), -w, 0, w, w + wall], psi: [h.psiR, 0, 0, 0, h.psiL], material: 'ROAD' };

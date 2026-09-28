@@ -1,0 +1,1286 @@
+{
+ "schema": "t180b.corpus/1",
+ "what": "Per reader word class: 10th/50th/90th percentiles over the words of the learning library (FINDINGS §7f). Numbers only.",
+ "method": "tools/corpus.cjs: one word = one sample; percentiles by linear interpolation; ψ in degrees from the centre normal at ¼, ½, ¾ and the edge of each side; shared road counted once. RUNS: consecutive words of the same class and turn direction (wall-ride and inversion included), broken by a shared word, not wrapped; TRANSITIONS: the class of the run that follows each run; CORNERS: consecutive curved words turning the same way, keyed by the tightest class reached",
+ "layouts": [
+  {
+   "layout": "Rainbow Road",
+   "readM": 43316,
+   "words": 695
+  },
+  {
+   "layout": "Centrifuge",
+   "readM": 34353,
+   "words": 514
+  },
+  {
+   "layout": "Hazen Loop",
+   "readM": 30963,
+   "words": 590
+  },
+  {
+   "layout": "Onuris Long",
+   "readM": 23791,
+   "words": 375
+  },
+  {
+   "layout": "Onuris Medium",
+   "readM": 19227,
+   "words": 74
+  },
+  {
+   "layout": "Onuris Short",
+   "readM": 7415,
+   "words": 92
+  },
+  {
+   "layout": "Sakura Speedway",
+   "readM": 20968,
+   "words": 338
+  },
+  {
+   "layout": "Coast",
+   "readM": 20681,
+   "words": 354
+  },
+  {
+   "layout": "Nordic",
+   "readM": 20298,
+   "words": 394
+  },
+  {
+   "layout": "Thunderhead",
+   "readM": 9166,
+   "words": 205
+  },
+  {
+   "layout": "Eagleton",
+   "readM": 8327,
+   "words": 147
+  },
+  {
+   "layout": "Eagleton (short)",
+   "readM": 2308,
+   "words": 4
+  },
+  {
+   "layout": "T-180 Test Track",
+   "readM": 7852,
+   "words": 162
+  },
+  {
+   "layout": "The Bowltrack",
+   "readM": 2459,
+   "words": 39
+  },
+  {
+   "layout": "T-180 Bowl Track",
+   "readM": 2058,
+   "words": 30
+  },
+  {
+   "layout": "Serpents Spiral",
+   "readM": 2008,
+   "words": 32
+  }
+ ],
+ "sharedWordsSkipped": {
+  "Centrifuge": 4,
+  "Onuris Long": 1,
+  "Onuris Medium": 264,
+  "Onuris Short": 41,
+  "Sakura Speedway": 4,
+  "Eagleton": 1,
+  "Eagleton (short)": 37,
+  "T-180 Test Track": 5,
+  "Serpents Spiral": 3
+ },
+ "classes": {
+  "straight": {
+   "n": 668,
+   "byTrack": {
+    "Rainbow Road": 81,
+    "Centrifuge": 72,
+    "Hazen Loop": 122,
+    "Onuris Long": 77,
+    "Onuris Medium": 4,
+    "Onuris Short": 19,
+    "Sakura Speedway": 60,
+    "Coast": 59,
+    "Nordic": 85,
+    "Thunderhead": 32,
+    "Eagleton": 26,
+    "T-180 Test Track": 24,
+    "The Bowltrack": 1,
+    "Serpents Spiral": 6
+   },
+   "length_m": {
+    "p10": 16,
+    "p50": 40,
+    "p90": 168,
+    "n": 668
+   },
+   "radius_m": null,
+   "heading_deg": {
+    "p10": 0.064,
+    "p50": 0.421,
+    "p90": 1.649,
+    "n": 668
+   },
+   "width_m": {
+    "p10": 28,
+    "p50": 33,
+    "p90": 46,
+    "n": 668
+   },
+   "bank_deg": {
+    "p10": 2.65,
+    "p50": 11.35,
+    "p90": 37.02,
+    "n": 668
+   },
+   "climb_deg": {
+    "p10": -11.106,
+    "p50": 0,
+    "p90": 9.718,
+    "n": 668
+   },
+   "climb_m": {
+    "p10": -6.59,
+    "p50": 0,
+    "p90": 9.2,
+    "n": 668
+   },
+   "psi_deg": {
+    "at": [
+     0.25,
+     0.5,
+     0.75,
+     1
+    ],
+    "low": [
+     {
+      "p10": 0.2,
+      "p50": 2.125,
+      "p90": 6.1,
+      "n": 668
+     },
+     {
+      "p10": 0.7,
+      "p50": 7.1,
+      "p90": 16.63,
+      "n": 668
+     },
+     {
+      "p10": 2.7,
+      "p50": 14.9,
+      "p90": 26.745,
+      "n": 668
+     },
+     {
+      "p10": 0.3,
+      "p50": 6.1,
+      "p90": 30.165,
+      "n": 668
+     }
+    ],
+    "high": [
+     {
+      "p10": 0.3,
+      "p50": 2.5,
+      "p90": 6.3,
+      "n": 668
+     },
+     {
+      "p10": 0.785,
+      "p50": 8.2,
+      "p90": 17.3,
+      "n": 668
+     },
+     {
+      "p10": 2.67,
+      "p50": 14.6,
+      "p90": 28.155,
+      "n": 668
+     },
+     {
+      "p10": 0.8,
+      "p50": 11.65,
+      "p90": 31.23,
+      "n": 668
+     }
+    ]
+   },
+   "shape": {
+    "flat": 0.219,
+    "pipe": 0.213,
+    "bowl": 0.569
+   },
+   "slope": {
+    "level": 0.521,
+    "down": 0.247,
+    "up": 0.232
+   }
+  },
+  "tight": {
+   "n": 909,
+   "byTrack": {
+    "Rainbow Road": 196,
+    "Centrifuge": 82,
+    "Hazen Loop": 153,
+    "Onuris Long": 15,
+    "Onuris Medium": 5,
+    "Sakura Speedway": 63,
+    "Coast": 95,
+    "Nordic": 22,
+    "Thunderhead": 101,
+    "Eagleton": 36,
+    "Eagleton (short)": 3,
+    "T-180 Test Track": 65,
+    "The Bowltrack": 34,
+    "T-180 Bowl Track": 29,
+    "Serpents Spiral": 10
+   },
+   "length_m": {
+    "p10": 20,
+    "p50": 48,
+    "p90": 128,
+    "n": 909
+   },
+   "radius_m": {
+    "p10": 50.768,
+    "p50": 101.637,
+    "p90": 163.452,
+    "n": 909
+   },
+   "heading_deg": {
+    "p10": 7.938,
+    "p50": 30.179,
+    "p90": 91.022,
+    "n": 909
+   },
+   "width_m": {
+    "p10": 24,
+    "p50": 31,
+    "p90": 66.5,
+    "n": 909
+   },
+   "bank_deg": {
+    "p10": 15.7,
+    "p50": 30.6,
+    "p90": 42.42,
+    "n": 909
+   },
+   "climb_deg": {
+    "p10": -6.809,
+    "p50": 0,
+    "p90": 7.418,
+    "n": 909
+   },
+   "climb_m": {
+    "p10": -6.72,
+    "p50": 0.1,
+    "p90": 8.02,
+    "n": 909
+   },
+   "psi_deg": {
+    "at": [
+     0.25,
+     0.5,
+     0.75,
+     1
+    ],
+    "inside": [
+     {
+      "p10": 0.4,
+      "p50": 3.35,
+      "p90": 12.83,
+      "n": 909
+     },
+     {
+      "p10": 0.8,
+      "p50": 10.3,
+      "p90": 17.67,
+      "n": 909
+     },
+     {
+      "p10": 1.7,
+      "p50": 15.8,
+      "p90": 28.8,
+      "n": 909
+     },
+     {
+      "p10": 1.39,
+      "p50": 13.8,
+      "p90": 30.8,
+      "n": 909
+     }
+    ],
+    "outside": [
+     {
+      "p10": 0.3,
+      "p50": 2.4,
+      "p90": 6.3,
+      "n": 909
+     },
+     {
+      "p10": 1.09,
+      "p50": 9.4,
+      "p90": 17.5,
+      "n": 909
+     },
+     {
+      "p10": 2.35,
+      "p50": 15.3,
+      "p90": 28.7,
+      "n": 909
+     },
+     {
+      "p10": 1.9,
+      "p50": 15.35,
+      "p90": 31.2,
+      "n": 909
+     }
+    ]
+   },
+   "shape": {
+    "flat": 0.206,
+    "bowl": 0.517,
+    "pipe": 0.277
+   },
+   "slope": {
+    "level": 0.454,
+    "up": 0.296,
+    "down": 0.25
+   }
+  },
+  "turn": {
+   "n": 1032,
+   "byTrack": {
+    "Rainbow Road": 236,
+    "Centrifuge": 128,
+    "Hazen Loop": 176,
+    "Onuris Long": 50,
+    "Onuris Medium": 10,
+    "Onuris Short": 24,
+    "Sakura Speedway": 87,
+    "Coast": 109,
+    "Nordic": 80,
+    "Thunderhead": 33,
+    "Eagleton": 46,
+    "Eagleton (short)": 1,
+    "T-180 Test Track": 37,
+    "The Bowltrack": 4,
+    "T-180 Bowl Track": 1,
+    "Serpents Spiral": 10
+   },
+   "length_m": {
+    "p10": 16,
+    "p50": 36,
+    "p90": 116,
+    "n": 1032
+   },
+   "radius_m": {
+    "p10": 217.54,
+    "p50": 296.329,
+    "p90": 448.43,
+    "n": 1032
+   },
+   "heading_deg": {
+    "p10": 2.445,
+    "p50": 6.516,
+    "p90": 21.748,
+    "n": 1032
+   },
+   "width_m": {
+    "p10": 29,
+    "p50": 33,
+    "p90": 48,
+    "n": 1032
+   },
+   "bank_deg": {
+    "p10": 10.55,
+    "p50": 27.5,
+    "p90": 43.895,
+    "n": 1032
+   },
+   "climb_deg": {
+    "p10": -8.973,
+    "p50": 0.071,
+    "p90": 8.469,
+    "n": 1032
+   },
+   "climb_m": {
+    "p10": -6.79,
+    "p50": 0.1,
+    "p90": 6.49,
+    "n": 1032
+   },
+   "psi_deg": {
+    "at": [
+     0.25,
+     0.5,
+     0.75,
+     1
+    ],
+    "inside": [
+     {
+      "p10": 0.3,
+      "p50": 2.7,
+      "p90": 7.59,
+      "n": 1032
+     },
+     {
+      "p10": 0.6,
+      "p50": 8.675,
+      "p90": 17.3,
+      "n": 1032
+     },
+     {
+      "p10": 1.21,
+      "p50": 15.3,
+      "p90": 28.55,
+      "n": 1032
+     },
+     {
+      "p10": 0.9,
+      "p50": 9.05,
+      "p90": 30.1,
+      "n": 1032
+     }
+    ],
+    "outside": [
+     {
+      "p10": 0.2,
+      "p50": 1.8,
+      "p90": 5.9,
+      "n": 1032
+     },
+     {
+      "p10": 0.7,
+      "p50": 7.8,
+      "p90": 17.3,
+      "n": 1032
+     },
+     {
+      "p10": 1.555,
+      "p50": 14.625,
+      "p90": 28.5,
+      "n": 1032
+     },
+     {
+      "p10": 1,
+      "p50": 9.425,
+      "p90": 30.39,
+      "n": 1032
+     }
+    ]
+   },
+   "shape": {
+    "flat": 0.247,
+    "bowl": 0.519,
+    "pipe": 0.233,
+    "bowl+": 0.001
+   },
+   "slope": {
+    "level": 0.454,
+    "up": 0.277,
+    "down": 0.268
+   }
+  },
+  "sweep": {
+   "n": 934,
+   "byTrack": {
+    "Rainbow Road": 167,
+    "Centrifuge": 114,
+    "Hazen Loop": 130,
+    "Onuris Long": 93,
+    "Onuris Medium": 14,
+    "Onuris Short": 26,
+    "Sakura Speedway": 81,
+    "Coast": 89,
+    "Nordic": 112,
+    "Thunderhead": 33,
+    "Eagleton": 39,
+    "T-180 Test Track": 30,
+    "Serpents Spiral": 6
+   },
+   "length_m": {
+    "p10": 12,
+    "p50": 28,
+    "p90": 76,
+    "n": 934
+   },
+   "radius_m": {
+    "p10": 585.437,
+    "p50": 800,
+    "p90": 1204.819,
+    "n": 934
+   },
+   "heading_deg": {
+    "p10": 0.75,
+    "p50": 1.899,
+    "p90": 5.922,
+    "n": 934
+   },
+   "width_m": {
+    "p10": 29,
+    "p50": 33,
+    "p90": 46,
+    "n": 934
+   },
+   "bank_deg": {
+    "p10": 5.13,
+    "p50": 20.275,
+    "p90": 42.4,
+    "n": 934
+   },
+   "climb_deg": {
+    "p10": -12.473,
+    "p50": 0,
+    "p90": 10.057,
+    "n": 934
+   },
+   "climb_m": {
+    "p10": -6.2,
+    "p50": 0,
+    "p90": 5.7,
+    "n": 934
+   },
+   "psi_deg": {
+    "at": [
+     0.25,
+     0.5,
+     0.75,
+     1
+    ],
+    "inside": [
+     {
+      "p10": 0.2,
+      "p50": 2.5,
+      "p90": 6.635,
+      "n": 934
+     },
+     {
+      "p10": 0.6,
+      "p50": 6.4,
+      "p90": 17.235,
+      "n": 934
+     },
+     {
+      "p10": 1.565,
+      "p50": 14.55,
+      "p90": 28.2,
+      "n": 934
+     },
+     {
+      "p10": 0.7,
+      "p50": 7.45,
+      "p90": 30.47,
+      "n": 934
+     }
+    ],
+    "outside": [
+     {
+      "p10": 0.2,
+      "p50": 1.8,
+      "p90": 6,
+      "n": 934
+     },
+     {
+      "p10": 0.6,
+      "p50": 6.4,
+      "p90": 17.3,
+      "n": 934
+     },
+     {
+      "p10": 1.665,
+      "p50": 13.3,
+      "p90": 28.3,
+      "n": 934
+     },
+     {
+      "p10": 0.7,
+      "p50": 7.8,
+      "p90": 30.5,
+      "n": 934
+     }
+    ]
+   },
+   "shape": {
+    "flat": 0.252,
+    "bowl": 0.519,
+    "pipe": 0.229
+   },
+   "slope": {
+    "up": 0.232,
+    "level": 0.496,
+    "down": 0.272
+   }
+  },
+  "jump": {
+   "n": 19,
+   "byTrack": {
+    "Rainbow Road": 3,
+    "Hazen Loop": 7,
+    "Onuris Long": 4,
+    "Sakura Speedway": 1,
+    "Coast": 2,
+    "Thunderhead": 1,
+    "T-180 Test Track": 1
+   },
+   "gap_m": {
+    "p10": 81,
+    "p50": 125,
+    "p90": 205.8,
+    "n": 19
+   },
+   "drop_m": {
+    "p10": 2,
+    "p50": 14,
+    "p90": 27.8,
+    "n": 19
+   }
+  },
+  "wall-ride": {
+   "n": 334,
+   "byTrack": {
+    "Rainbow Road": 7,
+    "Centrifuge": 89,
+    "Hazen Loop": 2,
+    "Onuris Long": 102,
+    "Onuris Medium": 18,
+    "Onuris Short": 15,
+    "Sakura Speedway": 27,
+    "Nordic": 70,
+    "Thunderhead": 2,
+    "T-180 Test Track": 2
+   },
+   "length_m": {
+    "p10": 12,
+    "p50": 36,
+    "p90": 106.8,
+    "n": 334
+   },
+   "radius_m": {
+    "p10": 166.423,
+    "p50": 645.892,
+    "p90": 2777.778,
+    "n": 334
+   },
+   "heading_deg": {
+    "p10": 0.47,
+    "p50": 3.036,
+    "p90": 19.251,
+    "n": 334
+   },
+   "width_m": {
+    "p10": 29,
+    "p50": 36,
+    "p90": 42,
+    "n": 334
+   },
+   "bank_deg": {
+    "p10": 63.03,
+    "p50": 79.8,
+    "p90": 101.985,
+    "n": 334
+   },
+   "climb_deg": {
+    "p10": -36.427,
+    "p50": -0.444,
+    "p90": 37.452,
+    "n": 334
+   },
+   "climb_m": {
+    "p10": -34.11,
+    "p50": -0.1,
+    "p90": 27.46,
+    "n": 334
+   },
+   "psi_deg": {
+    "at": [
+     0.25,
+     0.5,
+     0.75,
+     1
+    ],
+    "inside": [
+     {
+      "p10": 1.13,
+      "p50": 3.025,
+      "p90": 7.34,
+      "n": 334
+     },
+     {
+      "p10": 3.8,
+      "p50": 8.425,
+      "p90": 17.6,
+      "n": 334
+     },
+     {
+      "p10": 4.7,
+      "p50": 12.6,
+      "p90": 28.8,
+      "n": 334
+     },
+     {
+      "p10": 1,
+      "p50": 13.85,
+      "p90": 30.285,
+      "n": 334
+     }
+    ],
+    "outside": [
+     {
+      "p10": 0.73,
+      "p50": 2.5,
+      "p90": 6.385,
+      "n": 334
+     },
+     {
+      "p10": 3.8,
+      "p50": 7.4,
+      "p90": 17.6,
+      "n": 334
+     },
+     {
+      "p10": 4.7,
+      "p50": 12.55,
+      "p90": 28.8,
+      "n": 334
+     },
+     {
+      "p10": 1.1,
+      "p50": 14.35,
+      "p90": 30.07,
+      "n": 334
+     }
+    ]
+   },
+   "shape": {
+    "flat": 0.075,
+    "pipe": 0.431,
+    "bowl": 0.494
+   },
+   "slope": {
+    "up": 0.41,
+    "down": 0.422,
+    "level": 0.168
+   }
+  },
+  "inversion": {
+   "n": 149,
+   "byTrack": {
+    "Rainbow Road": 5,
+    "Centrifuge": 29,
+    "Onuris Long": 34,
+    "Onuris Medium": 23,
+    "Onuris Short": 8,
+    "Sakura Speedway": 19,
+    "Nordic": 25,
+    "Thunderhead": 3,
+    "T-180 Test Track": 3
+   },
+   "length_m": {
+    "p10": 12,
+    "p50": 32,
+    "p90": 92,
+    "n": 149
+   },
+   "radius_m": {
+    "p10": 291.555,
+    "p50": 819.672,
+    "p90": 2970.368,
+    "n": 149
+   },
+   "heading_deg": {
+    "p10": 0.404,
+    "p50": 2.12,
+    "p90": 13.16,
+    "n": 149
+   },
+   "width_m": {
+    "p10": 29,
+    "p50": 37,
+    "p90": 50.2,
+    "n": 149
+   },
+   "bank_deg": {
+    "p10": 115.6,
+    "p50": 138.7,
+    "p90": 168.21,
+    "n": 149
+   },
+   "climb_deg": {
+    "p10": -28.506,
+    "p50": 0.057,
+    "p90": 30.643,
+    "n": 149
+   },
+   "climb_m": {
+    "p10": -30.82,
+    "p50": 0,
+    "p90": 25.88,
+    "n": 149
+   },
+   "psi_deg": {
+    "at": [
+     0.25,
+     0.5,
+     0.75,
+     1
+    ],
+    "inside": [
+     {
+      "p10": 1.2,
+      "p50": 2.9,
+      "p90": 6.41,
+      "n": 149
+     },
+     {
+      "p10": 3.09,
+      "p50": 6.8,
+      "p90": 17.72,
+      "n": 149
+     },
+     {
+      "p10": 3.7,
+      "p50": 9.2,
+      "p90": 29.01,
+      "n": 149
+     },
+     {
+      "p10": 1.98,
+      "p50": 10.7,
+      "p90": 31.4,
+      "n": 149
+     }
+    ],
+    "outside": [
+     {
+      "p10": 1.4,
+      "p50": 2.5,
+      "p90": 6.76,
+      "n": 149
+     },
+     {
+      "p10": 2.95,
+      "p50": 6.3,
+      "p90": 18.02,
+      "n": 149
+     },
+     {
+      "p10": 3.79,
+      "p50": 10.2,
+      "p90": 28.81,
+      "n": 149
+     },
+     {
+      "p10": 2.26,
+      "p50": 11,
+      "p90": 31.2,
+      "n": 149
+     }
+    ]
+   },
+   "shape": {
+    "flat": 0.134,
+    "pipe": 0.383,
+    "bowl": 0.483
+   },
+   "slope": {
+    "up": 0.477,
+    "level": 0.121,
+    "down": 0.403
+   }
+  }
+ },
+ "runs": {
+  "straight": {
+   "n": 534,
+   "words": {
+    "p10": 1,
+    "p50": 1,
+    "p90": 2,
+    "n": 534
+   },
+   "length_m": {
+    "p10": 16,
+    "p50": 48,
+    "p90": 224,
+    "n": 534
+   },
+   "heading_deg": {
+    "p10": 0.088,
+    "p50": 0.555,
+    "p90": 2.11,
+    "n": 534
+   },
+   "climb_m": {
+    "p10": -10.47,
+    "p50": 0,
+    "p90": 12.24,
+    "n": 534
+   }
+  },
+  "tight": {
+   "n": 527,
+   "words": {
+    "p10": 1,
+    "p50": 1,
+    "p90": 3,
+    "n": 527
+   },
+   "length_m": {
+    "p10": 24,
+    "p50": 91,
+    "p90": 212,
+    "n": 527
+   },
+   "heading_deg": {
+    "p10": 8.97,
+    "p50": 52.792,
+    "p90": 180.608,
+    "n": 527
+   },
+   "climb_m": {
+    "p10": -10.08,
+    "p50": 0.2,
+    "p90": 11.4,
+    "n": 527
+   }
+  },
+  "turn": {
+   "n": 903,
+   "words": {
+    "p10": 1,
+    "p50": 1,
+    "p90": 2,
+    "n": 903
+   },
+   "length_m": {
+    "p10": 16,
+    "p50": 36,
+    "p90": 132,
+    "n": 903
+   },
+   "heading_deg": {
+    "p10": 2.543,
+    "p50": 6.807,
+    "p90": 25.75,
+    "n": 903
+   },
+   "climb_m": {
+    "p10": -7.88,
+    "p50": 0.1,
+    "p90": 7.38,
+    "n": 903
+   }
+  },
+  "sweep": {
+   "n": 880,
+   "words": {
+    "p10": 1,
+    "p50": 1,
+    "p90": 1,
+    "n": 880
+   },
+   "length_m": {
+    "p10": 12,
+    "p50": 28,
+    "p90": 84,
+    "n": 880
+   },
+   "heading_deg": {
+    "p10": 0.763,
+    "p50": 2.032,
+    "p90": 6.275,
+    "n": 880
+   },
+   "climb_m": {
+    "p10": -7.3,
+    "p50": 0,
+    "p90": 6.23,
+    "n": 880
+   }
+  },
+  "jump": {
+   "n": 19,
+   "words": {
+    "p10": 1,
+    "p50": 1,
+    "p90": 1,
+    "n": 19
+   },
+   "length_m": {
+    "p10": 81,
+    "p50": 125,
+    "p90": 205.8,
+    "n": 19
+   },
+   "heading_deg": {
+    "p10": 0,
+    "p50": 0,
+    "p90": 0,
+    "n": 19
+   },
+   "climb_m": {
+    "p10": -27.8,
+    "p50": -14,
+    "p90": -2,
+    "n": 19
+   }
+  },
+  "wall-ride": {
+   "n": 187,
+   "words": {
+    "p10": 1,
+    "p50": 1,
+    "p90": 4,
+    "n": 187
+   },
+   "length_m": {
+    "p10": 16,
+    "p50": 48,
+    "p90": 213.8,
+    "n": 187
+   },
+   "heading_deg": {
+    "p10": 0.261,
+    "p50": 2.251,
+    "p90": 43.687,
+    "n": 187
+   },
+   "climb_m": {
+    "p10": -47.32,
+    "p50": -0.3,
+    "p90": 46.88,
+    "n": 187
+   }
+  },
+  "inversion": {
+   "n": 93,
+   "words": {
+    "p10": 1,
+    "p50": 1,
+    "p90": 3,
+    "n": 93
+   },
+   "length_m": {
+    "p10": 12,
+    "p50": 44,
+    "p90": 161.6,
+    "n": 93
+   },
+   "heading_deg": {
+    "p10": 0.292,
+    "p50": 1.641,
+    "p90": 23.045,
+    "n": 93
+   },
+   "climb_m": {
+    "p10": -31.94,
+    "p50": -0.4,
+    "p90": 28.02,
+    "n": 93
+   }
+  }
+ },
+ "corners": {
+  "sweep": {
+   "n": 257,
+   "words": {
+    "p10": 1,
+    "p50": 1,
+    "p90": 1,
+    "n": 257
+   },
+   "length_m": {
+    "p10": 12,
+    "p50": 24,
+    "p90": 77.6,
+    "n": 257
+   },
+   "heading_deg": {
+    "p10": 0.575,
+    "p50": 1.247,
+    "p90": 4.316,
+    "n": 257
+   },
+   "climb_m": {
+    "p10": -12.46,
+    "p50": -0.1,
+    "p90": 9.72,
+    "n": 257
+   }
+  },
+  "turn": {
+   "n": 116,
+   "words": {
+    "p10": 1,
+    "p50": 3,
+    "p90": 6.5,
+    "n": 116
+   },
+   "length_m": {
+    "p10": 24,
+    "p50": 100,
+    "p90": 482,
+    "n": 116
+   },
+   "heading_deg": {
+    "p10": 2.636,
+    "p50": 12.417,
+    "p90": 61.724,
+    "n": 116
+   },
+   "climb_m": {
+    "p10": -32.6,
+    "p50": -0.8,
+    "p90": 40.9,
+    "n": 116
+   }
+  },
+  "tight": {
+   "n": 383,
+   "words": {
+    "p10": 2,
+    "p50": 5,
+    "p90": 10,
+    "n": 383
+   },
+   "length_m": {
+    "p10": 64,
+    "p50": 212,
+    "p90": 618.4,
+    "n": 383
+   },
+   "heading_deg": {
+    "p10": 32.425,
+    "p50": 88.297,
+    "p90": 255.52,
+    "n": 383
+   },
+   "climb_m": {
+    "p10": -21.84,
+    "p50": 0.1,
+    "p90": 22.6,
+    "n": 383
+   }
+  }
+ },
+ "transitions": {
+  "inversion": {
+   "n": 93,
+   "counts": {
+    "inversion": 65,
+    "wall-ride": 28
+   },
+   "p": {
+    "inversion": 0.6989,
+    "wall-ride": 0.3011
+   }
+  },
+  "jump": {
+   "n": 19,
+   "counts": {
+    "straight": 19
+   },
+   "p": {
+    "straight": 1
+   }
+  },
+  "straight": {
+   "n": 525,
+   "counts": {
+    "tight": 15,
+    "turn": 69,
+    "sweep": 411,
+    "jump": 18,
+    "wall-ride": 12
+   },
+   "p": {
+    "tight": 0.0286,
+    "turn": 0.1314,
+    "sweep": 0.7829,
+    "jump": 0.0343,
+    "wall-ride": 0.0229
+   }
+  },
+  "sweep": {
+   "n": 874,
+   "counts": {
+    "turn": 387,
+    "tight": 12,
+    "straight": 428,
+    "jump": 1,
+    "sweep": 32,
+    "wall-ride": 14
+   },
+   "p": {
+    "turn": 0.4428,
+    "tight": 0.0137,
+    "straight": 0.4897,
+    "jump": 0.0011,
+    "sweep": 0.0366,
+    "wall-ride": 0.016
+   }
+  },
+  "tight": {
+   "n": 520,
+   "counts": {
+    "tight": 78,
+    "straight": 13,
+    "sweep": 25,
+    "turn": 396,
+    "wall-ride": 7,
+    "inversion": 1
+   },
+   "p": {
+    "tight": 0.15,
+    "straight": 0.025,
+    "sweep": 0.0481,
+    "turn": 0.7615,
+    "wall-ride": 0.0135,
+    "inversion": 0.0019
+   }
+  },
+  "turn": {
+   "n": 897,
+   "counts": {
+    "tight": 417,
+    "sweep": 388,
+    "straight": 45,
+    "turn": 24,
+    "wall-ride": 23
+   },
+   "p": {
+    "tight": 0.4649,
+    "sweep": 0.4326,
+    "straight": 0.0502,
+    "turn": 0.0268,
+    "wall-ride": 0.0256
+   }
+  },
+  "wall-ride": {
+   "n": 187,
+   "counts": {
+    "inversion": 27,
+    "wall-ride": 102,
+    "sweep": 21,
+    "turn": 21,
+    "straight": 13,
+    "tight": 3
+   },
+   "p": {
+    "inversion": 0.1444,
+    "wall-ride": 0.5455,
+    "sweep": 0.1123,
+    "turn": 0.1123,
+    "straight": 0.0695,
+    "tight": 0.016
+   }
+  }
+ }
+}

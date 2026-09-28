@@ -70,3 +70,8 @@ test('paths are normalised, and none may climb above the served root', () => {
   assert.equal(norm('app/./palette/../shell.js'), 'app/shell.js');
   assert.throws(() => norm('../outside.js'), /climbs above the served root/);
 });
+
+test('a relative require of a .json file gives its parsed content, as node\'s require does', async () => {
+  const files = { 'x/a.js': "module.exports = require('./d.json').classes.turn.n;", 'x/d.json': '{ "classes": { "turn": { "n": 7 } } }' };
+  assert.equal(await loadCjs('x/a.js', async (p) => { if (!(p in files)) throw new Error('404 ' + p); return files[p]; }), 7);
+});

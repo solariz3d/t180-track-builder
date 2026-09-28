@@ -16,6 +16,11 @@ const MACH6 = Object.freeze({
   // FINDINGS.md:336-337 (§7d): "the measured range is 3.2–6.3 g"; ARCHITECTURE.md:73-78: "a jump must hold at both
   // ends of that range … the landing ramp must catch both". The clean flight and the override dive (FINDINGS.md:383-386).
   jumpG: Object.freeze([3.2, 6.3]),
+  // THE DOWNFORCE RAY (R1, docs/research/04_ac_physics_drivability.md §4, SOURCED there from the INSTALLED car's
+  // mach6_active/data/script.lua:424-433): cast from upM above the car's origin and aheadM ahead of it, lengthM long, down
+  // the car's up axis; suction full within fullWithinM of the ray's start, none at noneAtM, and none on a miss (inferred
+  // there from the code). src/validate/raygap.js uses aheadM as the reach of a gap the ray can fall into.
+  downforceRay: Object.freeze({ upM: 0.4, aheadM: 1.0, lengthM: 1.0, fullWithinM: 0.5, noneAtM: 0.9 }),
   // FINDINGS.md:312-313 (§7d), as tools/read_track.cjs:149-151 implements it: "The deepest allowed drop is
   // dist·tan10° + ½·6.5 g·(dist / 375 km/h)²". ARCHITECTURE.md:79: "A landing must be reachable. The same bound".
   reach: Object.freeze({ downDeg: 10, fallG: 6.5, minTakeoffKmh: 375 }),

@@ -1,0 +1,496 @@
+{
+ "schema": "t180b.corpus/1",
+ "what": "TEST FIXTURE, NOT MEASUREMENTS: src/doc/corpus.json's shape (schema t180b.corpus/1) with round numbers. For test/vocabgen.test.js and test/grammar.test.js only.",
+ "classes": {
+  "straight": {
+   "n": 500,
+   "length_m": {
+    "p10": 20,
+    "p50": 40,
+    "p90": 170
+   },
+   "width_m": {
+    "p10": 28,
+    "p50": 33,
+    "p90": 46
+   },
+   "bank_deg": {
+    "p10": 3,
+    "p50": 11,
+    "p90": 37
+   },
+   "climb_deg": {
+    "p10": -6,
+    "p50": 0,
+    "p90": 6
+   },
+   "shape": {
+    "flat": 0.22,
+    "pipe": 0.21,
+    "bowl": 0.57
+   },
+   "radius_m": null,
+   "heading_deg": {
+    "p10": 0.1,
+    "p50": 0.4,
+    "p90": 1.6
+   }
+  },
+  "sweep": {
+   "n": 500,
+   "length_m": {
+    "p10": 12,
+    "p50": 28,
+    "p90": 76
+   },
+   "width_m": {
+    "p10": 29,
+    "p50": 33,
+    "p90": 46
+   },
+   "bank_deg": {
+    "p10": 5,
+    "p50": 20,
+    "p90": 42
+   },
+   "climb_deg": {
+    "p10": -6,
+    "p50": 0,
+    "p90": 6
+   },
+   "shape": {
+    "flat": 0.25,
+    "bowl": 0.52,
+    "pipe": 0.23
+   },
+   "radius_m": {
+    "p10": 590,
+    "p50": 800,
+    "p90": 1200
+   },
+   "heading_deg": {
+    "p10": 0.8,
+    "p50": 1.9,
+    "p90": 5.9
+   }
+  },
+  "turn": {
+   "n": 500,
+   "length_m": {
+    "p10": 16,
+    "p50": 36,
+    "p90": 116
+   },
+   "width_m": {
+    "p10": 29,
+    "p50": 33,
+    "p90": 48
+   },
+   "bank_deg": {
+    "p10": 10,
+    "p50": 27,
+    "p90": 44
+   },
+   "climb_deg": {
+    "p10": -6,
+    "p50": 0,
+    "p90": 6
+   },
+   "shape": {
+    "flat": 0.25,
+    "bowl": 0.52,
+    "pipe": 0.23
+   },
+   "radius_m": {
+    "p10": 220,
+    "p50": 300,
+    "p90": 450
+   },
+   "heading_deg": {
+    "p10": 2.4,
+    "p50": 6.5,
+    "p90": 21.7
+   }
+  },
+  "tight": {
+   "n": 500,
+   "length_m": {
+    "p10": 20,
+    "p50": 48,
+    "p90": 128
+   },
+   "width_m": {
+    "p10": 24,
+    "p50": 31,
+    "p90": 66
+   },
+   "bank_deg": {
+    "p10": 16,
+    "p50": 30,
+    "p90": 42
+   },
+   "climb_deg": {
+    "p10": -6,
+    "p50": 0,
+    "p90": 6
+   },
+   "shape": {
+    "flat": 0.2,
+    "bowl": 0.52,
+    "pipe": 0.28
+   },
+   "radius_m": {
+    "p10": 50,
+    "p50": 100,
+    "p90": 160
+   },
+   "heading_deg": {
+    "p10": 8,
+    "p50": 30,
+    "p90": 91
+   }
+  },
+  "wall-ride": {
+   "n": 500,
+   "length_m": {
+    "p10": 12,
+    "p50": 36,
+    "p90": 107
+   },
+   "width_m": {
+    "p10": 29,
+    "p50": 36,
+    "p90": 42
+   },
+   "bank_deg": {
+    "p10": 63,
+    "p50": 80,
+    "p90": 102
+   },
+   "climb_deg": {
+    "p10": -6,
+    "p50": 0,
+    "p90": 6
+   },
+   "shape": {
+    "flat": 0.08,
+    "pipe": 0.43,
+    "bowl": 0.49
+   },
+   "radius_m": {
+    "p10": 170,
+    "p50": 650,
+    "p90": 2780
+   },
+   "heading_deg": {
+    "p10": 0.5,
+    "p50": 3,
+    "p90": 19
+   }
+  },
+  "inversion": {
+   "n": 500,
+   "length_m": {
+    "p10": 12,
+    "p50": 32,
+    "p90": 92
+   },
+   "width_m": {
+    "p10": 29,
+    "p50": 37,
+    "p90": 50
+   },
+   "bank_deg": {
+    "p10": 116,
+    "p50": 139,
+    "p90": 168
+   },
+   "climb_deg": {
+    "p10": -6,
+    "p50": 0,
+    "p90": 6
+   },
+   "shape": {
+    "flat": 0.13,
+    "pipe": 0.38,
+    "bowl": 0.49
+   },
+   "radius_m": {
+    "p10": 290,
+    "p50": 820,
+    "p90": 2970
+   },
+   "heading_deg": {
+    "p10": 0.4,
+    "p50": 2.1,
+    "p90": 13
+   }
+  },
+  "jump": {
+   "n": 19,
+   "gap_m": {
+    "p10": 81,
+    "p50": 125,
+    "p90": 206
+   },
+   "drop_m": {
+    "p10": 2,
+    "p50": 14,
+    "p90": 28
+   }
+  }
+ },
+ "runs": {
+  "straight": {
+   "n": 500,
+   "length_m": {
+    "p10": 16,
+    "p50": 48,
+    "p90": 224
+   },
+   "heading_deg": {
+    "p10": 0.1,
+    "p50": 0.6,
+    "p90": 2.1
+   }
+  },
+  "sweep": {
+   "n": 800,
+   "length_m": {
+    "p10": 12,
+    "p50": 28,
+    "p90": 84
+   },
+   "heading_deg": {
+    "p10": 0.8,
+    "p50": 2,
+    "p90": 6.3
+   }
+  },
+  "turn": {
+   "n": 900,
+   "length_m": {
+    "p10": 16,
+    "p50": 36,
+    "p90": 132
+   },
+   "heading_deg": {
+    "p10": 2.5,
+    "p50": 7,
+    "p90": 26
+   }
+  },
+  "tight": {
+   "n": 500,
+   "length_m": {
+    "p10": 24,
+    "p50": 91,
+    "p90": 212
+   },
+   "heading_deg": {
+    "p10": 9,
+    "p50": 53,
+    "p90": 180
+   }
+  },
+  "wall-ride": {
+   "n": 180,
+   "length_m": {
+    "p10": 16,
+    "p50": 48,
+    "p90": 214
+   },
+   "heading_deg": {
+    "p10": 0.3,
+    "p50": 2.3,
+    "p90": 44
+   }
+  },
+  "inversion": {
+   "n": 90,
+   "length_m": {
+    "p10": 12,
+    "p50": 32,
+    "p90": 92
+   },
+   "heading_deg": {
+    "p10": 0.4,
+    "p50": 2,
+    "p90": 13
+   }
+  },
+  "jump": {
+   "n": 19,
+   "length_m": {
+    "p10": 81,
+    "p50": 125,
+    "p90": 206
+   },
+   "heading_deg": {
+    "p10": 0,
+    "p50": 0,
+    "p90": 0
+   }
+  }
+ },
+ "corners": {
+  "sweep": {
+   "n": 250,
+   "length_m": {
+    "p10": 12,
+    "p50": 24,
+    "p90": 78
+   },
+   "heading_deg": {
+    "p10": 0.6,
+    "p50": 1.2,
+    "p90": 4.3
+   }
+  },
+  "turn": {
+   "n": 116,
+   "length_m": {
+    "p10": 24,
+    "p50": 100,
+    "p90": 482
+   },
+   "heading_deg": {
+    "p10": 3,
+    "p50": 12,
+    "p90": 62
+   }
+  },
+  "tight": {
+   "n": 383,
+   "length_m": {
+    "p10": 64,
+    "p50": 212,
+    "p90": 618
+   },
+   "heading_deg": {
+    "p10": 32,
+    "p50": 88,
+    "p90": 256
+   }
+  }
+ },
+ "transitions": {
+  "straight": {
+   "n": 642,
+   "counts": {
+    "sweep": 420,
+    "turn": 180,
+    "tight": 20,
+    "wall-ride": 10,
+    "jump": 12
+   },
+   "p": {
+    "sweep": 0.6542,
+    "turn": 0.2804,
+    "tight": 0.0312,
+    "wall-ride": 0.0156,
+    "jump": 0.0187
+   }
+  },
+  "sweep": {
+   "n": 800,
+   "counts": {
+    "straight": 300,
+    "sweep": 60,
+    "turn": 380,
+    "tight": 40,
+    "wall-ride": 15,
+    "jump": 5
+   },
+   "p": {
+    "straight": 0.375,
+    "sweep": 0.075,
+    "turn": 0.475,
+    "tight": 0.05,
+    "wall-ride": 0.0187,
+    "jump": 0.0063
+   }
+  },
+  "turn": {
+   "n": 967,
+   "counts": {
+    "straight": 150,
+    "sweep": 360,
+    "turn": 90,
+    "tight": 330,
+    "wall-ride": 30,
+    "inversion": 3,
+    "jump": 4
+   },
+   "p": {
+    "straight": 0.1551,
+    "sweep": 0.3723,
+    "turn": 0.0931,
+    "tight": 0.3413,
+    "wall-ride": 0.031,
+    "inversion": 0.0031,
+    "jump": 0.0041
+   }
+  },
+  "tight": {
+   "n": 482,
+   "counts": {
+    "straight": 25,
+    "sweep": 60,
+    "turn": 340,
+    "tight": 30,
+    "wall-ride": 25,
+    "jump": 2
+   },
+   "p": {
+    "straight": 0.0519,
+    "sweep": 0.1245,
+    "turn": 0.7054,
+    "tight": 0.0622,
+    "wall-ride": 0.0519,
+    "jump": 0.0041
+   }
+  },
+  "wall-ride": {
+   "n": 93,
+   "counts": {
+    "straight": 10,
+    "sweep": 20,
+    "turn": 40,
+    "tight": 15,
+    "inversion": 8
+   },
+   "p": {
+    "straight": 0.1075,
+    "sweep": 0.2151,
+    "turn": 0.4301,
+    "tight": 0.1613,
+    "inversion": 0.086
+   }
+  },
+  "inversion": {
+   "n": 13,
+   "counts": {
+    "wall-ride": 9,
+    "turn": 4
+   },
+   "p": {
+    "wall-ride": 0.6923,
+    "turn": 0.3077
+   }
+  },
+  "jump": {
+   "n": 25,
+   "counts": {
+    "straight": 12,
+    "sweep": 8,
+    "turn": 5
+   },
+   "p": {
+    "straight": 0.48,
+    "sweep": 0.32,
+    "turn": 0.2
+   }
+  }
+ }
+}

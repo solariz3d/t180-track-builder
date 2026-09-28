@@ -14,7 +14,7 @@ const TM = require('../src/texmaker/index.js');
 const png = (r) => { const rgba = new Uint8Array(8 * 8 * 4); for (let i = 0; i < rgba.length; i += 4) rgba.set([r, i & 255, 40, 255], i); return T.png.encodePng({ width: 8, height: 8, rgba }, zlib.deflateSync); };
 const LANES = TM.serialize(TM.PRESETS.lanes);
 function look() {
-  let d = D.appendWord(D.appendWord(D.createDoc(), 'tight'), 'straight');   // w1 a bowl, w2 flat
+  let d = D.appendWord(D.appendWord(D.createDoc(), 'tight', { font: 'bowl' }), 'straight', { font: 'flat' });   // w1 a bowl, w2 flat (named: D182 made the defaults the library's)
   return D.editWord(d, 'w1', { textures: { floor: { texture: 'kerbstripe', tileLength: 4 }, lines: { make: LANES, size: 64 }, walls: { texture: 'wallpaint', fit: 'fit' } } });
 }
 const images = () => ({ kerbstripe: { bytes: png(200) }, wallpaint: { bytes: png(90) }, unused: { bytes: png(1) } });
@@ -45,7 +45,7 @@ test('base64 round-trips every length (0 to 5 bytes, and a PNG)', () => {
 });
 
 test('an imported pack applies to every word of its font, in one edit (one undo step)', () => {
-  let d = D.appendPhrase(D.appendWord(D.appendWord(D.createDoc(), 'tight'), 'straight'), 'S', [{ word: 'tight' }, { word: 'straight' }]);
+  let d = D.appendPhrase(D.appendWord(D.appendWord(D.createDoc(), 'tight', { font: 'bowl' }), 'straight', { font: 'flat' }), 'S', [{ word: 'tight', opts: { font: 'bowl' } }, { word: 'straight', opts: { font: 'flat' } }]);
   const col = P.importPack({ packs: [], images: {} }, P.serializePack(pack()));
   let h = D.createHistory(d); const before = D.serialize(h.present);
   const r = P.applyPack(h.present, col.packs[0]);

@@ -109,12 +109,24 @@ function resolveLayout(layout, path, segments) {
   return { markers, notes, missing };
 }
 
-/** Half-width of the flat floor of a normalised profile (ψ = 0 on both sides of u = 0). */
+// THE GRID'S FLOOR (D182, pane C): the central band where the cross-section tilts no more than FLOOR_MAX_DEG from the centre's
+// normal. It was "exactly ψ = 0", which the measured fonts (src/geom/fonts.js) never are: they rise from the centre, as the
+// library's roads do, so no grid could stand on a default road. Measured on the learning library (the tilt under every
+// AC_START_n dummy, projected on the read's start section; pane C's scratchpad d182/gridtilt.js): the steepest slot per track
+// is 6.1° at the median, every slot is at most 12.4° on 12 of 17 layouts, and 5 put a slot at 17-31° (the bowl tracks,
+// Centrifuge, Eagleton). 15° holds every slot of those 12, and the measured fonts' floor is then at least ½ the road.
+const FLOOR_MAX_DEG = 15;
+/** Half-width of the grid's floor of a normalised profile: the |u| where ψ first passes FLOOR_MAX_DEG, on the narrower side. */
 function floorHalf(P) {
-  const i0 = P.u.indexOf(0); let r = i0, l = i0;
-  while (r > 0 && P.psi[r - 1] === 0) r--;
-  while (l < P.u.length - 1 && P.psi[l + 1] === 0) l++;
-  return Math.min(P.u[l], -P.u[r]);
+  const lim = FLOOR_MAX_DEG * Math.PI / 180, i0 = P.u.indexOf(0);
+  const reach = (dir) => {
+    for (let i = i0; i + dir >= 0 && i + dir < P.u.length; i += dir) {
+      const a = Math.abs(P.psi[i]), b = Math.abs(P.psi[i + dir]);
+      if (b > lim) return Math.abs(P.u[i] + (P.u[i + dir] - P.u[i]) * (a >= lim ? 0 : (lim - a) / (b - a)));
+    }
+    return Math.abs(P.u[dir > 0 ? P.u.length - 1 : 0]);
+  };
+  return Math.min(reach(1), reach(-1));
 }
 const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1].every((x) => x === 0);
 
@@ -147,4 +159,4 @@ function defaultLayout(path, segments, o = {}) {
   return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: [] };
 }
 
-module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout };
+module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, FLOOR_MAX_DEG, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf };

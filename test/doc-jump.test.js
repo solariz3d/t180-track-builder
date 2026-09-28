@@ -18,7 +18,8 @@ function jumpDoc(speedKmh = 300) {
   let d = D.createDoc('j');
   d = D.appendWord(d, 'straight', { handles: { length: 80 }, speed: kmh(speedKmh) });
   d = D.appendWord(d, 'straight', { handles: { length: 40, climb: 4 * DEG }, speed: kmh(speedKmh) });
-  d = D.appendWord(d, 'jump', { speed: kmh(speedKmh) });
+  // the jump NAMED: from D182 the default jump is the library's p10 gap (81 m, 14 m down), not this one
+  d = D.appendWord(d, 'jump', { speed: kmh(speedKmh), handles: { gap: 12, drop: 0.7, land: -2 * DEG } });
   return D.appendWord(d, 'straight', { handles: { length: 60 }, speed: kmh(speedKmh) });
 }
 const jumpSegs = (d) => D.resolve(d).segments.filter((g) => g.word === 'jump');
@@ -102,7 +103,7 @@ test('fonts never jump across a landing: a flat road after a half-pipe take-off 
   let d = D.createDoc('f');
   d = D.appendWord(d, 'straight', { font: 'half-pipe', handles: { climb: 4 * DEG } });
   d = D.appendWord(d, 'jump');
-  d = D.appendWord(d, 'straight');   // flat
+  d = D.appendWord(d, 'straight', { font: 'flat' });   // flat, NAMED: from D182 an unchosen font continues the half-pipe
   const segs = D.resolve(d).segments, ramp = segs.find((g) => g.part === 'land'), after = segs.filter((g) => g.id === 'w3');
   assert.equal(ramp.profile.font, 'half-pipe', 'the ramp continues the take-off road');
   assert.ok(after[0].blend && after[0].blend.from.font === 'half-pipe', 'the road after the ramp must ramp from it, or the surface steps');

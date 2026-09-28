@@ -17,15 +17,15 @@ replace Blender for track making.
 
 ## Install
 
-**0.2.1** is the current release (0.2.0 was the first): a Windows installer,
-`T-180 Track Builder_0.2.1_x64-setup.exe`. It installs for the current user, with no administrator rights. It is not
+**0.2.2** is the current release (0.2.0 was the first): a Windows installer,
+`T-180 Track Builder_0.2.2_x64-setup.exe`. It installs for the current user, with no administrator rights. It is not
 code-signed, so Windows SmartScreen warns about an unknown publisher the first time. To build the installer yourself: `node src-tauri/release.cjs` (it needs Rust and `tauri-cli`
 2; see `docs/RELEASE.md`). What changed, release by release, is in `CHANGELOG.md`.
 
 Your tracks, pieces, autosave and settings live in your own app-data folder
 (`%APPDATA%\com.solariz3d.t180-track-builder`), never in the program's folder, and uninstalling leaves them in place.
 
-## Status: 0.2.1, and it is the track only
+## Status: 0.2.2, and it is the track only
 
 **v1 scope, in the author's words:** *"the first thing I want it to be is simply the track, no environmental
 elements."* So v1 has no terrain, scenery or props, only the road the user builds. The user builds it: the track grows
@@ -35,8 +35,8 @@ from its open end, like a coaster builder, one word or phrase at a time.
 launch at any point. Whether AC loads, drives, times and renders these tracks as intended is unverified until someone
 drives one.
 
-**How to read the table.** It judges every item of ARCHITECTURE §1–§6, §5b and §5c against the code of the 0.2.1
-release (2026-09-27), including the installed app: the release installer was installed into a throwaway folder,
+**How to read the table.** It judges every item of ARCHITECTURE §1–§6, §5b and §5c against the code of the 0.2.2
+release (2026-09-28), including the installed app: the release installer was installed into a throwaway folder,
 started, and used for a first track, following the guide (a starter phrase, one word with a handle dragged, closing
 the loop, saving under a name) before it was uninstalled. The Export button's folder dialog was opened there but not
 answered, so the export was checked headless (app/test/export.test.js), not in the installed window.
@@ -64,12 +64,17 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | item | status | where |
 |---|---|---|
 | Words: straight, sweep, turn, tight, wall-ride, inversion, jump | tested | `src/doc/vocab.js`, `src/doc/document.js` · `test/doc.test.js` |
+| Every word's defaults measured from the library: its size the median corner of its kind (the median run for a straight and a wall-ride), its radius and bank the median word | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/vocabgen.js` from `src/doc/corpus.json` · `test/vocab-corpus.test.js` (each word inside its class's p10–p90), `test/vocabgen.test.js`. Not a median: the jump's gap (the p10, 81 m, because the median 125 m cannot be cleared off a level road at 460 km/h) and the inversion's length and roll |
+| A word placed with no font chosen continues the previous word's font; the first takes the bowl; the width follows the font | tested, unreleased (after 0.2.2): new vocab and new fonts (the width is each measured font's) | `src/doc/document.js`, `src/doc/vocab.js` · `test/vocab-corpus.test.js` |
+| No wall by default: a wall is only ever sculpted | tested, unreleased (after 0.2.2): new vocab and new fonts (the measured fonts have no wall) | `src/doc/vocab.js` · `test/vocab-corpus.test.js` |
+| The bank ramps no faster than real tracks bank (0.849°/m, the measured p90) | tested, unreleased (after 0.2.2): new vocab (the rate measured from the library's tracks) | `src/doc/document.js`, `tools/bankrate.cjs` · `test/vocab-corpus.test.js` |
+| The grammar suggests the next word, from the library's transitions, and forces nothing | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/grammar.js`, `app/palette/palette.js` · `test/grammar.test.js`, `app/test/palette-grammar.test.js` |
 | A jump carries its landing ramp | tested | `src/doc/resolve.js` · `test/doc-jump.test.js` |
 | Phrases: a saved word sequence | tested | `src/doc/document.js` `appendPhrase`, `src/doc/library.js` · `test/doc-library.test.js` |
 | Starter phrasebook: spiral climb, bowl hairpin, S, Sakura's grammar | tested | `src/doc/phrasebook.js` · `test/phrasebook.test.js`; listed in the palette under "Starter phrases" (`src/doc/library.js`, `app/palette/palette.js`) |
 | A phrase's "parameters exposed" | not yet | no phrase-level handles. The document can sculpt a phrase's words one by one (`editPhraseWord` in `src/doc/document.js`), but the app cannot yet: a placed starter phrase has no handles in the handles panel, which says so |
-| Fonts: half-pipe, bowl, flat banked ribbon, wall-ride, tube (ψ(u) past vertical) | tested | `src/doc/vocab.js`, `src/geom/profile.js` · `test/geom_path.test.js`, `test/geom_mesh.test.js` |
-| Tempos: standard, aurora, serpents | tested | `src/doc/vocab.js` · `test/doc.test.js` |
+| Fonts: half-pipe, bowl, flat banked ribbon, wall-ride, tube (ψ(u) past vertical) | tested; changed after 0.2.2, unreleased: new fonts (half-pipe, bowl and flat are measured from the library, `src/geom/fonts.js`) | `src/doc/vocab.js`, `src/geom/profile.js` · `test/geom_path.test.js`, `test/geom_mesh.test.js` |
+| Tempos: standard, compact, grand (the size of the library's corners, p50, p10, p90), and the older aurora, serpents | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/vocab.js` · `test/vocab-corpus.test.js`, `test/doc.test.js` |
 | Handles, bounded live by physics | tested | `src/validate/bounds.js`, `app/handles/` · `test/validate_bounds.test.js`, `app/test/handles*.test.js` |
 | Document: stable ids, canonical serialisation, schema and generator versions | tested | `src/doc/serial.js` · `test/doc.test.js` |
 | Undo as history; a whole drag is one entry | tested | `src/doc/history.js` · `test/doc.test.js`, `app/test/handles-panel.test.js` |

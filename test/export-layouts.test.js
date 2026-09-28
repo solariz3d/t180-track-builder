@@ -18,10 +18,14 @@ test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: 
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-layouts-')); made.push(d); return d; };
 const kmh = (v) => v / 3.6;
 
+// D182 (the ripple): the words below NAME the inputs these tests relied on as defaults before the measured vocabulary (a flat
+// straight, a 90° tight at 120 m: (π/2)·120/(1 − 0.3) m long), so they test the same behaviour whatever the defaults are.
+const TIGHT90 = { turn: Math.PI / 2, length: (Math.PI / 2) * 120 / 0.7 };
 /** A stadium that closes by symmetry: straight, 180° of flat turn, straight, 180° of flat turn. */
 function stadium(name, straightM) {
   let d = D.createDoc(name);
-  for (const [w, o] of [['straight', { handles: { length: straightM } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }], ['straight', { handles: { length: straightM } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }]]) d = D.appendWord(d, w, { ...o, speed: kmh(200) });
+  const S = { font: 'flat', handles: { length: straightM, width: 20 } }, T = { font: 'flat', handles: { ...TIGHT90, width: 20 } };
+  for (const [w, o] of [['straight', S], ['tight', T], ['tight', T], ['straight', S], ['tight', T], ['tight', T]]) d = D.appendWord(d, w, { ...o, speed: kmh(200) });
   return D.checkDoc({ ...d, closed: true });
 }
 const withLane = (d) => D.setPitLane(d, { side: 'R', leave: { word: 'w1', along: 60 }, rejoin: { word: 'w1', along: 540 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80 });
@@ -71,8 +75,9 @@ test('one red layout writes nothing at all, and a folder the builder did not wri
 
 test('a lane laid across another pass of the road is RED: the lane\'s findings refuse the export', () => {
   let d = D.createDoc('Cross');
-  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', { font: 'flat', handles: { length: 150 } }], ['tight', { font: 'flat', handles: { length: 150 } }],
-    ['straight', { handles: { length: 600 } }], ['tight', { font: 'flat', handles: { length: 150 } }], ['tight', { font: 'flat', handles: { length: 150 } }]]) d = D.appendWord(d, w, { ...o, speed: kmh(200) });
+  // D182: fonts, widths and the tights' 90° NAMED, so the straights stay 181 m apart whatever the defaults are
+  const S = { font: 'flat', handles: { length: 600, width: 20 } }, T = { font: 'flat', handles: { turn: Math.PI / 2, length: 150, width: 20 } };
+  for (const [w, o] of [['straight', S], ['tight', T], ['tight', T], ['straight', S], ['tight', T], ['tight', T]]) d = D.appendWord(d, w, { ...o, speed: kmh(200) });
   // the straights are 181 m apart (centre to centre, measured): a lane on the inside, 167 m out, lies on the far straight
   d = D.setPitLane(D.checkDoc({ ...d, closed: true }), { side: 'L', leave: { word: 'w1', along: 60 }, rejoin: { word: 'w1', along: 540 }, offsetM: 167, width: 8, divergeM: 80, mergeM: 80 });
   assert.throws(() => buildExport(d), (e) => e.code === 'RED' && e.red.some((x) => /pit lane/.test(x.detail || '')));

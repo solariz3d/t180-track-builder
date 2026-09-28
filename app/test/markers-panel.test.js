@@ -8,6 +8,8 @@ const path = require('path');
 const { createShell } = require('../shell.js');
 const { loadCjs } = require('../lib/cjs.js');
 const { createMarkersController } = require('../markers/panel.js');
+const D = require('../../src/doc/index.js');
+const { appendOld } = require('../../test/pre_d182_words.js');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
@@ -16,9 +18,11 @@ const by = (st, n) => st.placed.find((m) => m.name === n);
 test('the panel drops the default layout on the first straight long enough, and says what stops it before that', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createMarkersController(shell);
-  shell.place('turn');
+  // named (p-d182-walltests-E): 100 m straights, the pre-D182 default. The measured default straight is 48 m, shorter than
+  // the 67.4 m the default grid needs, and this test is about the LAYOUT, not the straight's default length
+  shell.adopt(['turn'].reduce((d, w) => appendOld(D, d, w), D.createDoc('t')));
   assert.match(ctl.state.error, /no straight word/);
-  shell.place('straight'); shell.place('straight');
+  shell.adopt(['turn', 'straight', 'straight'].reduce((d, w) => appendOld(D, d, w), D.createDoc('t')));
   assert.deepStrictEqual([ctl.state.error, ctl.state.custom, ctl.state.check.ok], [null, false, true]);
   assert.strictEqual(ctl.state.placed.filter((m) => m.kind === 'grid').length, 4);
 });
@@ -26,7 +30,9 @@ test('the panel drops the default layout on the first straight long enough, and 
 test('once edited the layout is kept, and its markers ride along when an upstream word is sculpted', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createMarkersController(shell);
-  for (const w of ['straight', 'straight', 'straight']) shell.place(w);
+  // named (p-d182-walltests-E): 100 m straights, the pre-D182 default. The measured default straight is 48 m, shorter than
+  // the 67.4 m the default grid needs, and this test is about the LAYOUT, not the straight's default length
+  shell.adopt(['straight', 'straight', 'straight'].reduce((d, w) => appendOld(D, d, w), D.createDoc('t')));
   ctl.edit((l) => { l.grid.pattern = '3-abreast'; l.grid.count = 6; l.grid.colGapM = 5; return l; });
   assert.strictEqual(ctl.state.custom, true);
   const before = by(ctl.state, 'AC_START_5').s;

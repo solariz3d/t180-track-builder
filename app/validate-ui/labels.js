@@ -15,6 +15,7 @@ const { MACH6 } = require('../../src/validate/limits.js');
 function reasonText(reason, car = MACH6) {
   const T = {
     'gap-in-road': 'a hole in the road',
+    'downforce-ray-gap': 'a gap in the road under the car\'s downforce ray: the car loses all its downforce over it',
     'missing-soft-collision': 'the export has no soft-collision block',
     fold: 'the surface folds over itself here (too tight for its width)',
     'self-intersection': 'the road passes through itself here',

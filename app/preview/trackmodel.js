@@ -67,7 +67,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
       const nk = segs.map(keyOf);
       if (nk.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
-      if (!path) { const p = geom.buildPath(segs, pathOpts); return { batches: batchesOf(geom.buildMesh(p, segs, meshOpts)), path: p, head: p.head }; }
+      if (!path) { const p = geom.buildPath(segs, pathOpts); return { batches: batchesOf(geom.buildMesh(p, segs, meshOpts)), path: p, head: p.head, segments: segs }; }
       if (closed) throw new Error('ghost: a closed loop has no open end');
       // copies: extendPath only pops and pushes these arrays and never edits a sample, and of the blocks it changes only the
       // last one's sample count (so that block is copied); extendMesh only sets new pieces and seams
@@ -76,7 +76,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const st = mesh._state, m = { ...mesh, _state: { ...st, pieces: st.pieces.slice(), seams: st.seams.slice() } };
       geom.extendPath(p, segs);
       const gm = geom.extendMesh(m, p, segs), from = keys.length;
-      return { batches: batchesOf(gm).filter((b) => b.piece >= from), path: p, head: p.head };
+      return { batches: batchesOf(gm).filter((b) => b.piece >= from), path: p, head: p.head, segments: segs };
     },
     get path() { return path; },
     get mesh() { return mesh; },

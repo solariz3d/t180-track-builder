@@ -60,6 +60,11 @@ function samplesAcross(P, { maxAcross = 1, maxSeam = Math.PI / 180, count } = {}
   out[0] = u0; out[K - 1] = u1;
   return { u: out, need };
 }
+/**
+ * How wide the cross-section stands across the road (m): the spread of X, the offset along L, over every knot. A wall
+ * past vertical folds back, so this is the extreme X, not the edges'. The build view is framed on it (app/camera).
+ */
+function spanOf(P) { const X = P.u.map((u) => offsetAt(P, u)[0]); return Math.max(...X) - Math.min(...X); }
 /** Largest |ψ| on the profile, for reporting (rad). */
 const maxPsi = (P) => Math.max(...P.psi.map(Math.abs));
 
@@ -113,4 +118,4 @@ const usOf = (P, fr) => { const E = edgesOf(P); return fr.map((f) => uAt(E, f));
 /** smoothstep, clamped: 0 below 0, 1 above 1, zero slope at both ends (no kink where a ramp starts or ends). */
 const smoothstep = (t) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
 
-module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, blend, blendSamples, usOf, smoothstep };
+module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, usOf, smoothstep };

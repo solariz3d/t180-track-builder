@@ -6,7 +6,10 @@
 // Works on meshes alone: no replay, no AI line. Walls, inversions and banking are followed by keeping each normal
 // continuous with the last, not by assuming "up".
 const fs = require('fs'), path = require('path'); const { readKn5 } = require('./kn5.cjs');
-const dir = process.argv[2], lengthHint = +(process.argv[3] || 0), widthHint = +(process.argv[4] || 0), STEP = 4;
+// a hint is ABSENT (no argument) or a finite number ≥ 0 (0 = no hint); anything else is REFUSED by name (D182: an empty ui_track.json
+// width arrived as "NaN", which silently disarmed the narrowest-cut search and lost two builder laps)
+const hint = (x, what) => { if (x === undefined) return 0; const v = Number(x); if (x.trim() === '' || !Number.isFinite(v) || v < 0) throw new Error(`read_track: the ${what} hint must be a number ≥ 0 (0 = no hint), not ${JSON.stringify(x)}`); return v; };
+const dir = process.argv[2], lengthHint = hint(process.argv[3], 'length'), widthHint = hint(process.argv[4], 'width'), STEP = 4;
 function validKeys(d) { const keys = new Set(['ROAD']); const files = [];
   (function walk(x) { for (const e of fs.readdirSync(x, { withFileTypes: true })) { const p = path.join(x, e.name); if (e.isDirectory()) walk(p); else if (e.name.toLowerCase() === 'surfaces.ini') files.push(p); } })(d);
   for (const f of files) { let key = null; for (const line of fs.readFileSync(f, 'latin1').split(/\r?\n/)) { const k = line.match(/^\s*KEY\s*=\s*([^\s;]+)/i); if (k) key = k[1].toUpperCase(); if (/^\s*IS_VALID_TRACK\s*=\s*1/i.test(line) && key && !/PIT/i.test(key)) keys.add(key.replace(/^\d+/, '').replace(/\?$/, '')); } }
@@ -111,7 +114,10 @@ for (let step = 0, wallUp = false; travelled < maxLen; step++) { wallUp = false;
   if (junction) f = rows.length ? unit(sub(f, nc.map(v => v * dot(f, nc)))) : f;
   const tl = cs.left.map(x => rel(x.n, nc)), tr = cs.right.map(x => rel(x.n, nc));
   rows.push({ d: Math.round(travelled), junction: junction || undefined, c: c.map(v => +v.toFixed(1)), up: +(Math.acos(Math.max(-1, Math.min(1, nc[1]))) * 180 / Math.PI).toFixed(1), width,
-    edgeL: tl.length ? +Math.max(...tl).toFixed(1) : 0, edgeR: tr.length ? +Math.max(...tr).toFixed(1) : 0, f: f.map(v => +v.toFixed(4)), n: nc.map(v => +v.toFixed(4)) });
+    edgeL: tl.length ? +Math.max(...tl).toFixed(1) : 0, edgeR: tr.length ? +Math.max(...tr).toFixed(1) : 0, f: f.map(v => +v.toFixed(4)), n: nc.map(v => +v.toFixed(4)),
+    // READ_PROFILE=1 (D182, the corpus): each side's width in 1 m points and its tilt at ¼, ½, ¾ of the way out and at
+    // the edge (degrees from the centre's normal). Off by default, so every earlier read is unchanged
+    ...(process.env.READ_PROFILE ? { wl: tl.length, wr: tr.length, psiL: [.25, .5, .75, 1].map(q => tl.length ? +tl[Math.max(0, Math.round(q * tl.length) - 1)].toFixed(1) : 0), psiR: [.25, .5, .75, 1].map(q => tr.length ? +tr[Math.max(0, Math.round(q * tr.length) - 1)].toFixed(1) : 0) } : {}) });
   let next = onSurface(add(c, f, STEP), 3, nc, 40);
   // the road curling up in front (floor into a wall-ride, a quarter-pipe): a CONCAVE fold ahead, facing back at us,
   // followed in short steps even when it folds far more than a plain seam would

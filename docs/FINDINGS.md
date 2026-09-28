@@ -50,7 +50,7 @@ ignored. **Result: confirmed on both replays.**
 - **Past about 60 g it sinks again** (Centrifuge only, 49 frames, about 0.7 s): median −27.9 cm, worst −53 cm. That is
   the body being pushed into the surface, the edge of clipping.
 - **Cross-check:** the front-to-rear wheel-pair distance reads 3.430 m in every band, the same as `WHEELBASE=3.43` in
-  the car's config.
+  the car's config. *(2026-09-28: which car this figure holds for is a dated note, §4d at the end of this file.)*
 
 ## 4b. Visual clipping versus physics clipping (`node boxdepth.cjs <replay>`)
 The keeper's check, 2026-09-27: *"the back end of the mach 6 … dips below the track, but i think its not interactive to
@@ -503,3 +503,213 @@ a_prop = dv/dt + g·(v_y/|v|). Pooled over the same 260,659 frames, per speed ba
 - **What the ghost lap is, and is not.** It is a point mass at full thrust from this table, never braking, capped at
   764 km/h (ARCHITECTURE §4's author drive). That is harder than any driver, and it is meant to be: a track that holds
   under it holds under a driver. Its loads are an upper bound, not a prediction.
+
+## 7f. The measured corpus: what each word class builds, per the library (2026-09-27 night, desktop D; D182)
+The keeper, 23:36, after 0.2.1: the pieces "arent good for t-180s". They were hand-set, not seeded from the words the
+reader measured. This section measures them, per word class, into `src/doc/corpus.json` (numbers only).
+
+**The reads** (read-only on the track folders; `READ_PROFILE=1` adds each side's tilt at ¼, ½, ¾ and the edge, and
+leaves every other field of a read byte-identical, checked on T-180 Bowl Track):
+`READ_PROFILE=1 node tools/read_track.cjs <dir> <length> <width> [layout] > reads/<name>.read.json`, with the length
+and width from each track's own `ui_track.json`. All run by `node reads/readall.js`.
+
+| layout | read | words | closed |
+|---|---|---|---|
+| Rainbow Road | 43,316 m | 696 | yes |
+| Centrifuge | 34,353 m | 518 | yes |
+| Hazen Loop | 30,963 m | 590 | yes |
+| Onuris Long / Medium / Short | 23,791 / 19,227 / 7,415 m | 377 / 340 / 135 | yes |
+| Sakura Speedway | 20,968 m | 342 | yes |
+| Coast | 20,681 m | 354 | yes |
+| Nordic | 20,298 m | 394 | yes |
+| Thunderhead (the normal layout) | 9,166 m | 205 | yes |
+| Eagleton (full, new) / Eagleton (short) | 8,327 / 2,308 m | 148 / 41 | yes |
+| T-180 Test Track | 7,852 m | 167 | yes |
+| The Bowltrack / T-180 Bowl Track | 2,459 / 2,058 m | 39 / 30 | yes |
+| Serpents Spiral | 2,008 m | 35 | yes |
+
+**Against §7b/§7c:**
+- Sakura, Rainbow, Centrifuge, Hazen, Onuris ×3, the Test Track, Serpents and both bowl tracks read exactly as before.
+- Coast (354 words, not 323), Nordic (20.3 km and 394 words, not 19.2 km and 312) and Thunderhead (205, not 222) read
+  differently. §7b does not record their width arguments. They close, and are used as read.
+
+**Excluded, each by name:**
+- **Miandros: its read no longer closes.** It stops at the walk limit (11.8 km) or loses the road, with 8 jumps where
+  §7b had 6. The §7d reach rule was regression-checked on Onuris and the bowl tracks, not on Miandros, and Miandros
+  drops up to 41 m. That is not diagnosed here, and Miandros is left out rather than counted from a wrong walk.
+- Aurora Cryopticon (Cash): outside the learning library (§7c).
+- Chase's tracks other than Onuris, the Mtbcooler-only Eagleton copies, and an authorless track: outside the §7c rule.
+- Thunderhead's night and no-dogbowls layouts: the same road as the normal one.
+
+**The corpus:** `node tools/corpus.cjs reads > src/doc/corpus.json` (`test/corpus.test.js` rebuilds it from the reads
+and requires it byte-equal when the reads are present).
+- **One word of the reader's text is one sample.** Per class the table gives the median (p10–p90), by linear
+  interpolation between order statistics.
+- **Shared road counts once.** Layouts are taken longest first, and a later layout's word counts only if fewer than
+  half its stations lie within 5 m of an earlier layout's. Onuris Medium is 79% Onuris Long's road, and Eagleton
+  (short) is 85% the full layout's. 360 words were skipped as shared (`sharedWordsSkipped`).
+
+| class | N | length m | radius m | heading ° | width m | bank ° | climb ° | bowl / pipe / flat |
+|---|---|---|---|---|---|---|---|---|
+| straight | 668 | 40 (16–168) | – | 0.4 (0.06–1.6) | 33 (28–46) | 11 (3–37) | 0 (−11–10) | 57% / 21% / 22% |
+| sweep | 934 | 28 (12–76) | 800 (585–1,205) | 1.9 (0.8–5.9) | 33 (29–46) | 20 (5–42) | 0 (−12–10) | 52% / 23% / 25% |
+| turn | 1,032 | 36 (16–116) | 296 (218–448) | 6.5 (2.4–21.7) | 33 (29–48) | 28 (11–44) | 0 (−9–8) | 52% / 23% / 25% |
+| tight | 909 | 48 (20–128) | 102 (51–163) | 30 (8–91) | 31 (24–67) | 31 (16–42) | 0 (−7–7) | 52% / 28% / 21% |
+| wall-ride | 334 | 36 (12–107) | 646 (166–2,778) | 3.0 (0.5–19.3) | 36 (29–42) | 80 (63–102) | 0 (−36–37) | 49% / 43% / 8% |
+| inversion | 149 | 32 (12–92) | 820 (292–2,970) | 2.1 (0.4–13.2) | 37 (29–50) | 139 (116–168) | 0 (−29–31) | 48% / 38% / 13% |
+
+**Jumps:** N 19 (Hazen 7, Onuris Long 4, Rainbow 3, Coast 2, Sakura, Thunderhead and the Test Track 1 each). The gap
+is 125 m (81–206), and the drop 14 m (2–28).
+
+**The profile ψ** (median tilt from the centre's normal at ¼ / ½ / ¾ / the edge of each side, in degrees):
+
+| class | inside (low side on a straight) | outside (high side on a straight) |
+|---|---|---|
+| straight | 2.1 / 7.1 / 14.9 / 6.1 | 2.5 / 8.2 / 14.6 / 11.7 |
+| turn | 2.7 / 8.7 / 15.3 / 9.1 | 1.8 / 7.8 / 14.6 / 9.4 |
+| tight | 3.4 / 10.3 / 15.8 / 13.8 | 2.4 / 9.4 / 15.3 / 15.4 |
+
+All of these are in `src/doc/corpus.json`, with p10 and p90.
+
+**What these numbers are, and are not:**
+- **A word is short.** The reader names every 4 m station and merges runs under 12 m, so a word is 28–48 m at the
+  median. A builder piece is a few words: its length is not one word's.
+- **ψ is the cross-section up to the lip, not the lip.** The reader's side walk stops at a fold sharper than 35° in a
+  metre (§7), so ψ tops out near 30°, and the edge value can sit below ¾. The steep part of a wall shows in the bank
+  (`up`, 80° on a wall-ride), not in ψ.
+- **Radius is the centreline's**, as in §7 (Sakura's 454 m against the 300 m a replay drives).
+- **Each word counts once**, however long. Weighting by length would shift the straights and sweeps up.
+
+
+**RUNS, CORNERS AND TRANSITIONS** (added 2026-09-28 night; the same command, `node tools/corpus.cjs reads > src/doc/corpus.json`).
+
+A reader word is a run-length token of 4 m stations, 28–48 m at the median, so a word is NOT a piece. Three aggregates say what a piece spans:
+- **A RUN** is consecutive words of exactly the same class and the same turn direction. The reader names a wall-ride
+  or an inversion by the turn under it too (e.g. `bowl-turnL^wall`), so those runs split by direction as well. Only a
+  straight has no direction.
+  - No tolerance for a one-token interruption: the reader already folds runs under 12 m into their neighbours, and a
+    second tolerance would hide real short pieces behind a tuning parameter.
+  - A left-then-right is two runs.
+  - A skipped (shared-road) word breaks a run, and no transition is counted across it. The lap is not wrapped from its
+    end to its start.
+- **A CORNER** is consecutive curved words (sweep, turn, tight) turning the same way, whatever the class, keyed by the
+  tightest class it reaches.
+  - A straight, a wall-ride, an inversion, a jump, a change of direction or a shared word ends it.
+  - It is what a user's "turn" piece spans: in the library a corner opens and closes through the classes (§7's
+    `sweep → turn → tight → turn → sweep`), so a run of one class is only a part of it.
+
+| run of | N runs | words per run | length m | heading ° | climb m |
+|---|---|---|---|---|---|
+| straight | 534 | 1 (1–2) | 48 (16–224) | 0.6 (0.1–2.1) | 0 (-10.5–12.2) |
+| tight | 527 | 1 (1–3) | 91 (24–212) | 52.8 (9–180.6) | 0.2 (-10.1–11.4) |
+| turn | 903 | 1 (1–2) | 36 (16–132) | 6.8 (2.5–25.8) | 0.1 (-7.9–7.4) |
+| sweep | 880 | 1 (1–1) | 28 (12–84) | 2 (0.8–6.3) | 0 (-7.3–6.2) |
+| jump | 19 | 1 (1–1) | 125 (81–205.8) | 0 (0–0) | -14 (-27.8–-2) |
+| wall-ride | 187 | 1 (1–4) | 48 (16–213.8) | 2.3 (0.3–43.7) | -0.3 (-47.3–46.9) |
+| inversion | 93 | 1 (1–3) | 44 (12–161.6) | 1.6 (0.3–23) | -0.4 (-31.9–28) |
+
+| a corner reaching | N | words | length m | heading ° | climb m |
+|---|---|---|---|---|---|
+| sweep | 257 | 1 (1–1) | 24 (12–77.6) | 1.2 (0.6–4.3) | -0.1 (-12.5–9.7) |
+| turn | 116 | 3 (1–6.5) | 100 (24–482) | 12.4 (2.6–61.7) | -0.8 (-32.6–40.9) |
+| tight | 383 | 5 (2–10) | 212 (64–618.4) | 88.3 (32.4–255.5) | 0.1 (-21.8–22.6) |
+
+**TRANSITIONS:** the class of the run that follows a run of each class. P, with the rows' N; an aggregate over all layouts, no track's sequence.
+
+| from ↓ to → | N | straight | sweep | turn | tight | wall-ride | inversion | jump |
+|---|---|---|---|---|---|---|---|---|
+| straight | 525 | · | 0.78 | 0.13 | 0.03 | 0.02 | · | 0.03 |
+| sweep | 874 | 0.49 | 0.04 | 0.44 | 0.01 | 0.02 | · | 0.00 |
+| turn | 897 | 0.05 | 0.43 | 0.03 | 0.46 | 0.03 | · | · |
+| tight | 520 | 0.03 | 0.05 | 0.76 | 0.15 | 0.01 | 0.00 | · |
+| wall-ride | 187 | 0.07 | 0.11 | 0.11 | 0.02 | 0.55 | 0.14 | · |
+| inversion | 93 | · | · | · | · | 0.30 | 0.70 | · |
+| jump | 19 | 1.00 | · | · | · | · | · | · |
+
+**What they say:**
+- **A run is mostly one word:** the median is 1 word per run in every class, since the classes change as a corner opens and closes.
+- **A whole corner reaching tight** spans 212 m (64–618) and turns 88° (32–256). One tight word is 48 m and 30°.
+- **The grammar, measured:**
+  - straight → sweep 0.78;
+  - sweep → straight 0.49 or turn 0.44;
+  - turn → tight 0.46 or sweep 0.43;
+  - tight → turn 0.76.
+  - A straight goes straight into tight only 0.03 of the time: FINDINGS §7's "never straight into tight", as a number.
+- **Diagonal entries are real:** a run reversing its turn direction within the same class. Tight → tight is 0.15,
+  turn → turn 0.03, wall-ride → wall-ride 0.55, inversion → inversion 0.70. A straight cannot follow itself.
+- **Every jump is followed by a straight** (19 of 19): the landing ramp.
+
+## 7g. M1: do T-180 tracks share a spectrum? (2026-09-28 night, desktop D; a measurement of the design notes' M1)
+**The prediction (design notes §8):** "T-180 tracks share a spectral signature (falloff and load-rhythm period)
+distinct from the normal circuits. It fails if the T-180 spectra are no closer to each other than to the normal
+circuits."
+
+**The method was registered before anything was computed:**
+- **Signals:** κ_h (the reader's curvature), κ_v (the change of the grade angle along s) and bank (`up`), on a 4 m grid,
+  mean removed.
+- **Estimator:** a Welch PSD with 1,024 m Hann segments and 50% overlap.
+- **Band:** 16–512 m wavelengths.
+- **Distance:** the RMS difference of the unit-power-normalised log-PSDs (shape, not level), averaged over the three
+  signals.
+- **Verdict:** W is the mean T-180 × T-180 distance, B the mean T-180 × circuit distance. **PASS iff W < B.**
+- **Tracks:** 13 T-180 tracks, one layout each (the §7f reads; one layout per track so near-duplicate layouts cannot
+  flatter the group).
+- **The two circuits** were the two best-closing reads of seventeen tried: Silverstone 1967 (4,516 of 4,710 m) and
+  Magione (2,352 of 2,507 m). The reader, built for T-180 meshes, loses most circuits' road or closes them far short;
+  Monza 1966 (road) also closed, at 93%.
+
+**The command:** `node tools/spectrum.cjs reads` (prints summary numbers only).
+
+**The estimator, checked first on known signals:** a 128 m sine peaks at 128 m, white noise gives β −0.03, and a
+random walk β −1.98 (expected −2).
+
+**Result: PASS.**
+- **W = 0.808, B = 1.215, B/W = 1.50** (78 and 26 pairs).
+- **Not part of the verdict:**
+  - permutation (10,000 shuffles, seed 1): p = 0.012;
+  - each T-180 track's nearest spectrum is another T-180 track, 13 of 13;
+  - all three pairs of the three closing circuits pass (B/W 1.36, 1.45, 1.50).
+
+**Per signal** (not registered, a decomposition):
+
+| signal | W | B | B/W |
+|---|---|---|---|
+| κ_h (turning) | 0.873 | 0.987 | 1.13 |
+| κ_v (cresting and dipping) | 0.614 | 1.344 | 2.19 |
+| bank | 0.936 | 1.313 | 1.40 |
+
+**Falloff slopes β** (log-log, over 16–512 m; T-180 range across 13 tracks, then the circuits):
+
+| signal | T-180 | Silverstone 1967 | Magione |
+|---|---|---|---|
+| κ_h | −3.3 to −5.1 | −5.0 | −5.7 |
+| κ_v | −1.9 to −3.6 | −1.1 | −0.1 |
+| bank | −1.7 to −4.2 | −1.8 | −2.6 |
+
+**What it does NOT say:**
+- **The "load-rhythm period" half is not supported by a peak.** The dominant period sits at the band's longest
+  wavelength, 512 m, for nearly every track and signal: the spectra rise toward long wavelengths, with no rhythm
+  inside 16–512 m.
+- **Most of the separation is vertical, and partly because circuits are flat.** Their κ_v is 10–50× smaller (RMS
+  1.2×10⁻⁴ and 3.9×10⁻⁵ 1/m against ~1.7×10⁻³), so its spectrum is closer to measurement noise. In turning alone
+  (κ_h), T-180 tracks are only a little closer to each other than to the circuits (1.13).
+- **Two circuits are two points,** read by a reader built for other meshes. The PASS says the T-180 group sits apart
+  from these two, not from normal circuits in general.
+
+## 4d. Which car §4's "~20 g" holds for (note, 2026-09-28)
+**The note (R1; §4's text is kept as it was registered).** The "~20 g" was registered from the GitHub
+`Source/base` car's coilover rate, 80,000 N/m front and rear. It is not the rate of every installed Mach 6:
+- **The installed `ohyeah2389_t180_mach6_active`** has 15,000 N/m front and 100,000 rear, `MIN_LENGTH` 0.975 (0.425 m
+  of range), a bump stop (`END_RATE`) of 750,000 against 250,000, and a different downforce ray. These are C's R1
+  table, read on disk: `docs/research/04_ac_physics_drivability.md` §5.
+- **Both replays this section measured were driven with `ohyeah2389_t180_mach6`,** not `_active`: the replay's own car
+  id, read with blackbox's parser (`extractCar(...).car.carId`) from `samples/centrifuge.acreplay` and
+  `samples/ohyeah2389_t180_mach6_ohyeah2389_t180testtrack__240726-143319.acreplay`.
+  - That car's config is packed in `data.acd` on D, so its coilover rate is NOT read here.
+  - Of the 74 replay files in D's replay folder, 69 carry `t180_mach6` in their file names and none `mach6_active`.
+    That count is from file names; the car id inside was read only for the two above.
+- **So the figure holds for** the car the replays recorded, `ohyeah2389_t180_mach6`: measured, not registered, since
+  its springs were not read.
+  - The registration's input (80,000 N/m) is the GitHub base car's.
+  - **Nothing here says where the installed `mach6_active` runs out.** A replay driven with it, measured by
+    `node bottoming.cjs`, would say.

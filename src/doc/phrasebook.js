@@ -16,7 +16,7 @@
 'use strict';
 
 const { appendPhrase, defaultWord } = require('./document.js');
-const { WORDS, TEMPOS } = require('./vocab.js');
+const { TEMPOS, radiusOf } = require('./vocab.js');
 const { DocError } = require('./serial.js');
 
 const DEG = Math.PI / 180;
@@ -24,7 +24,7 @@ const DEG = Math.PI / 180;
 /** A curved word turned `deg` degrees LEFT at its OWN radius and tempo: the length defaultWord gives for that angle. */
 function angled(word, deg, tempo) {
   const T = TEMPOS[tempo];
-  return { turn: deg * DEG, length: (deg * DEG * WORDS[word].R * T.scale) / (1 - T.ease) };
+  return { turn: deg * DEG, length: (deg * DEG * radiusOf(word, tempo)) / (1 - T.ease) };
 }
 
 // THE ORDER is the palette's, and a user who clicks the starter phrases in turn chains them in it. Chained as
@@ -43,21 +43,23 @@ const PHRASES = Object.freeze([
       'FINDINGS.md:139 "the highest half-pipe share of the eleven tracks (26% of its profiles)"',
       'FINDINGS.md:172 "cross-section | half-pipe, 32 m wide"',
     ],
-    note: 'Sakura\'s grammar word for word, in Sakura\'s font, each word at its own radius (sweep 1,000 m, turn 300 m, tight 120 m at the standard tempo). The ANGLES are chosen: one 90° corner shared 10° / 20° / 30° / 20° / 10°, because the words at their default angles turn 270° and cross their own lead-in (red: self-intersection and stacked, measured). The half-pipe is the vocabulary\'s (16 m floor, 8 m walls), not Sakura\'s 32 m.',
+    note: 'Sakura\'s grammar word for word, in Sakura\'s font, each word at its class\'s median radius in the measured library at the standard tempo (vocab.js, D182). The ANGLES are chosen: one 90° corner shared 10° / 20° / 30° / 20° / 10° (with the hand-set words before D182, the default angles turned 270° and crossed their own lead-in: red, measured). The half-pipe\'s shape is the vocabulary\'s font; each word\'s width is its class\'s measured median.',
   },
   {
     name: 'S',
-    words: [{ word: 'turn', dir: 'L', font: 'bowl', tempo: 'serpents' }, { word: 'turn', dir: 'R', font: 'bowl', tempo: 'serpents' }],
+    // the angles NAMED (they were the hand-set default, 60°): at the measured median turn an S would be a wiggle
+    words: [{ word: 'turn', dir: 'L', font: 'bowl', tempo: 'serpents', handles: angled('turn', 60, 'serpents') }, { word: 'turn', dir: 'R', font: 'bowl', tempo: 'serpents', handles: { ...angled('turn', 60, 'serpents'), turn: -60 * DEG } }],
     source: [
       'ARCHITECTURE.md:36 "… spiral climb, bowl hairpin, S."',
-      'ARCHITECTURE.md:44 "Measured: Aurora sweeps at ~1.2 km radius, Serpents and the Test Track at 100–170 m." (the serpents tempo, src/doc/vocab.js: turns at 135 m)',
+      'ARCHITECTURE.md:44 "Measured: Aurora sweeps at ~1.2 km radius, Serpents and the Test Track at 100–170 m." (the serpents tempo, src/doc/vocab.js: 0.45 × the turn class\'s median radius; before D182, 135 m)',
       'FINDINGS.md:199 "| Serpents Spiral | 2.0 km | 35 | 0 | – |" (the track the tempo is named for; FINDINGS gives its lap, not its radii)',
     ],
     note: 'A left turn into a right turn at the serpents tempo, in the bowl font (its outside wall changes side with the turn). The 100–170 m radius is quoted by ARCHITECTURE §2, not by a FINDINGS line.',
   },
   {
     name: 'bowl hairpin',
-    words: ['turn', 'tight', 'turn'].map((word) => ({ word, dir: 'L', font: 'bowl', tempo: 'standard' })),
+    // the angles NAMED (they were the hand-set defaults, 60° and 90°): at the measured median angles it would not be a hairpin
+    words: [['turn', 60], ['tight', 90], ['turn', 60]].map(([word, deg]) => ({ word, dir: 'L', font: 'bowl', tempo: 'standard', handles: angled(word, deg, 'standard') })),
     source: [
       'ARCHITECTURE.md:36 "**Phrase:** a saved word sequence with some parameters exposed (a macro): spiral climb, bowl hairpin, S."',
       'FINDINGS.md:14 "The dominant form is a **bowl**, a flatter floor curving up the outside. It is 50–88% of profiles on most tracks."',
@@ -68,11 +70,12 @@ const PHRASES = Object.freeze([
   {
     name: 'spiral climb',
     words: [
-      { word: 'turn', dir: 'L', font: 'bowl', tempo: 'standard', handles: { climb: 6 * DEG } },
-      { word: 'tight', dir: 'L', font: 'bowl', tempo: 'standard' },
-      { word: 'tight', dir: 'L', font: 'bowl', tempo: 'standard' },
-      { word: 'tight', dir: 'L', font: 'bowl', tempo: 'standard' },
-      { word: 'turn', dir: 'L', font: 'bowl', tempo: 'standard', handles: { climb: -6 * DEG } },
+      // the angles NAMED (they were the hand-set defaults, 60° and 90°): the 390° is what makes it pass over its own start
+      { word: 'turn', dir: 'L', font: 'bowl', tempo: 'standard', handles: { ...angled('turn', 60, 'standard'), climb: 6 * DEG } },
+      { word: 'tight', dir: 'L', font: 'bowl', tempo: 'standard', handles: angled('tight', 90, 'standard') },
+      { word: 'tight', dir: 'L', font: 'bowl', tempo: 'standard', handles: angled('tight', 90, 'standard') },
+      { word: 'tight', dir: 'L', font: 'bowl', tempo: 'standard', handles: angled('tight', 90, 'standard') },
+      { word: 'turn', dir: 'L', font: 'bowl', tempo: 'standard', handles: { ...angled('turn', 60, 'standard'), climb: -6 * DEG } },
     ],
     source: [
       'ARCHITECTURE.md:36 "… spiral climb, bowl hairpin, S."',

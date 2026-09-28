@@ -12,6 +12,8 @@ const { validate } = require('../../src/validate/index.js');
 const { colourMap } = require('../validate-ui/colour.js');
 const { MACH6 } = require('../../src/validate/limits.js');
 const { createValidationController, summary, STEP } = require('../validate-ui/panel.js');
+const D = require('../../src/doc/index.js');
+const { appendOld } = require('../../test/pre_d182_words.js');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
@@ -73,9 +75,10 @@ test('removing the head, and undo, take the full route and still equal a full ru
 
 test('the CSP switch re-validates for vanilla AC: a 60° wall turns red, and back', async () => {
   const shell = await createShell({ storage: mem() });
-  shell.setPicker('font', 'half-pipe');
   const ctl = createValidationController(shell);
-  shell.place('straight'); shell.place('straight');
+  // named (the walled-bowl tests, p-d182-walltests-E): two pre-D182 half-pipe straights, a 16 m floor and 8 m walls rising to
+  // 60°, red for vanilla AC. The half-pipe the font picker gives now is the MEASURED one, with no wall (C's fonts, D182).
+  shell.adopt(['straight', 'straight'].reduce((d, w) => appendOld(D, d, w, { font: 'half-pipe' }), D.createDoc('t')));
   assert.strictEqual(summary(ctl.state).red, 0);
   ctl.setCsp(false);
   assert.ok(ctl.state.result.red.some((r) => r.reason === 'steep-without-raycast'));

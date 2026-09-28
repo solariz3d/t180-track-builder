@@ -31,12 +31,50 @@ const SOFT_COLLISION_BLOCK = [
 const SURFACES_HEADER = [
   '; data/surfaces.ini, written by t180-track-builder.',
   '; The road and walls use AC\'s own surfaces (system/data/surfaces.ini: ROAD, GRASS, KERB, SAND); none are redefined.',
+  '; A T-180 track also defines PIT, which no mesh here uses, to carry CSP\'s extended-physics flag.',
   '',
 ].join('\n');
 
-/** surfaces.ini with the soft-collision block (`softCollision: true`, the T-180 default) or without it. */
-function surfacesIni({ softCollision = true } = {}) {
-  return SURFACES_HEADER + (softCollision ? '\n' + SOFT_COLLISION_BLOCK : '');
+// CSP'S EXTENDED-PHYSICS SWITCH (ARCHITECTURE §6: the soft-collision block "plus CSP's WAV_PITCH=extended-0 opt-in with a
+// CSP-only warning"; missed until R1, docs/research/04_ac_physics_drivability.md §2). SOURCED there from the CSP wiki
+// (Tracks – Enabling extended physics): one surface in surfaces.ini with `WAV_PITCH=extended-0` marks the track as using
+// extended physics, and plain AC without CSP would crash on that value. MEASURED there: 25 of the 39 installed
+// surfaces.ini files with the soft block also carry it (Sakura, Centrifuge, the Test Track, Hazen, Coast, Rainbow), on a
+// `KEY=PIT` surface. It is written the same way, with AC's standard surface keys. No mesh of this builder is keyed PIT
+// (the pit lane is `1ROAD_PIT_…`, src/geom/pitlane.js), so defining it changes nothing but the flag. Whether the soft
+// block NEEDS the switch is UNVERIFIED (research §2: the keeper's one AC test settles it); it is written because
+// ARCHITECTURE §6 says so and the proven tracks do.
+const EXTENDED_PHYSICS_SURFACE = [
+  '[SURFACE_0]',
+  '; CSP extended physics (ARCHITECTURE §6). Needs Custom Shaders Patch: plain AC can crash loading this file.',
+  'KEY=PIT',
+  'FRICTION=1',
+  'DAMPING=0',
+  'WAV=',
+  'WAV_PITCH=extended-0',
+  'FF_EFFECT=NULL',
+  'DIRT_ADDITIVE=0',
+  'BLACK_FLAG_TIME=0',
+  'IS_VALID_TRACK=1',
+  'SIN_HEIGHT=0',
+  'SIN_LENGTH=0',
+  'IS_PITLANE=1',
+  'VIBRATION_GAIN=0',
+  'VIBRATION_LENGTH=0',
+  '',
+].join('\n');
+
+/** The warning that goes with the switch, wherever an export writes it (the app shows export warnings). */
+const CSP_ONLY_WARNING = 'csp-only: surfaces.ini sets WAV_PITCH=extended-0, CSP\'s extended physics (ARCHITECTURE §6). Assetto Corsa without Custom Shaders Patch can crash loading this track (CSP wiki, "Tracks – Enabling extended physics"; docs/research/04_ac_physics_drivability.md §2). Turn off "T-180 track" to export without it.';
+
+/**
+ * surfaces.ini. `softCollision`: the T-180 soft-collision block. `extendedPhysics`: CSP's extended-0 surface. Both default
+ * to on (a T-180 track). They are separate so the soft-road CONTROL (the noblock variant) differs from the block variant
+ * by the block ALONE (FINDINGS §4c's registered prediction must not test two things at once); the app's "T-180 track"
+ * toggle turns both on or both off.
+ */
+function surfacesIni({ softCollision = true, extendedPhysics = true } = {}) {
+  return SURFACES_HEADER + (extendedPhysics ? '\n' + EXTENDED_PHYSICS_SURFACE : '') + (softCollision ? '\n' + SOFT_COLLISION_BLOCK : '');
 }
 
 // ── models.ini / models_<layout>.ini ───────────────────────────────────────────────────────────────────────────────
@@ -160,11 +198,11 @@ function encodePng(width, height, rgba) {
 // ── the whole folder ───────────────────────────────────────────────────────────────────────────────────────────────
 /**
  * Write every non-kn5 file of one track folder. Returns the list of relative paths written (for the install marker).
- * opts: { softCollision, kn5Files: ['x.kn5'], desc }.
+ * opts: { softCollision, extendedPhysics, kn5Files: ['x.kn5'], desc }.
  */
-function writeTrackFiles(dir, scene, { softCollision = true, kn5Files, desc } = {}) {
+function writeTrackFiles(dir, scene, { softCollision = true, extendedPhysics = true, kn5Files, desc } = {}) {
   const files = {
-    'data/surfaces.ini': surfacesIni({ softCollision }),
+    'data/surfaces.ini': surfacesIni({ softCollision, extendedPhysics }),
     [modelsIniName(null)]: modelsIni(kn5Files),
     'ui/ui_track.json': JSON.stringify(uiTrack(scene, desc), null, 2) + '\n',
     'ui/preview.png': previewPng(scene),
@@ -177,4 +215,4 @@ function writeTrackFiles(dir, scene, { softCollision = true, kn5Files, desc } = 
   return Object.keys(files);
 }
 
-module.exports = { SOFT_COLLISION_BLOCK, surfacesIni, modelsIni, modelsIniName, uiTrack, mapParams, mapIni, mapPng, outlinePng, previewPng, encodePng, crc32, writeTrackFiles };
+module.exports = { SOFT_COLLISION_BLOCK, EXTENDED_PHYSICS_SURFACE, CSP_ONLY_WARNING, surfacesIni, modelsIni, modelsIniName, uiTrack, mapParams, mapIni, mapPng, outlinePng, previewPng, encodePng, crc32, writeTrackFiles };

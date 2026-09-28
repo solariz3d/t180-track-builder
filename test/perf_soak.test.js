@@ -47,3 +47,10 @@ test('soak: a phrase in the track is not sculpted as a word (seed 17, 29 ops: NO
   const r = await runSoak({ seed: 17, ops: 29, maxWords: 6, fullEvery: 10 });
   assert.equal(r.ops, 29);
 });
+
+test('soak: --progress holds the LAST op begun, with its index, its name and the memory (D181: a native crash prints nothing)', async () => {
+  const fs = require('fs'), os = require('os');
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 't180-soak-')), 'progress.txt');
+  await runSoak({ seed: 7, ops: 12, maxWords: 6, fullEvery: 10, progress: f });
+  assert.match(fs.readFileSync(f, 'utf8'), /^11 (place|sculpt|undo|redo|removeHead|save|open|picker) rss=\d+\.\d heap=\d+\.\d external=\d+\.\d arrayBuffers=\d+\.\d\n$/);
+});

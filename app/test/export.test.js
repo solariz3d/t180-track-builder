@@ -149,7 +149,10 @@ test('the app\'s exporter writes a textured floor into the kn5 it hands the nati
   const get = async (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
   const ex = await makeExporter(get);
   let d = D.createDoc('Tex');
-  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }], ['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }]]) d = D.appendWord(d, w, { ...o, speed: 200 / 3.6 });
+  // the stadium closes by symmetry only with four 90° tights, level: NAMED, since from D182 the default tight is the
+  // library's median corner (88.3°) and banks into the turn
+  const tight90 = { font: 'flat', handles: { turn: Math.PI / 2, roll1: 0 } };
+  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', tight90], ['tight', tight90], ['straight', { handles: { length: 600 } }], ['tight', tight90], ['tight', tight90]]) d = D.appendWord(d, w, { ...o, speed: 200 / 3.6 });
   d = D.editWord(D.checkDoc({ ...d, closed: true }), 'w1', { textures: { floor: { make: TM.serialize(TM.PRESETS.asphalt), size: 32 } } });
   const set = T.buildTextureSet(d, {});
   const out = ex.run(d, { textures: set }), files = out.folders[0].files;

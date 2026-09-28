@@ -66,7 +66,7 @@ test('every word keeps its own radius: Sakura\'s angles change the length, not t
   const { d } = run('sakura flow'), words = d.words[1].words;
   for (const w of words) {
     const R = w.handles.length * (1 - w.handles.easeIn) / Math.abs(w.handles.turn);
-    const own = { sweep: 1000, turn: 300, tight: 120 }[w.word];
+    const dw = D.defaultWord(w.word), own = dw.handles.length * (1 - dw.handles.easeIn) / Math.abs(dw.handles.turn);   // the word's own, from vocab.js
     assert.ok(Math.abs(R - own) < 0.01, `${w.word}: peak radius ${R}, its own ${own}`);
   }
 });
@@ -79,7 +79,8 @@ test('the grammar holds in every phrase: never straight into tight, in or out', 
 });
 
 test('the spiral\'s climb is what keeps it clear: without it the lap stacks on its own start (red)', () => {
-  const flat = phrase('spiral climb').words.map((w) => ({ word: w.word, opts: { dir: w.dir, tempo: w.tempo, font: w.font } }));
+  // only the climb taken away: the phrase's named angles stay (D182: they are no longer the defaults)
+  const flat = phrase('spiral climb').words.map((w) => ({ word: w.word, opts: { dir: w.dir, tempo: w.tempo, font: w.font, handles: { ...w.handles, climb: 0 } } }));
   const red = run('spiral climb', { words: flat }).r.red.map((x) => x.reason);
   assert.ok(red.includes('stacked-within-2m') || red.includes('self-intersection'), JSON.stringify(red));
 });

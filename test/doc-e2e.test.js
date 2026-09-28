@@ -59,7 +59,12 @@ test('words → closed loop → exported with every default → the kn5 reads ba
 });
 
 test('the same with a jump in the loop: the jump carries its landing ramp, and the whole lap exports and reads back', (t) => {
-  const doc = closedLoop('E2E Jump Loop', [['straight'], ['straight', { handles: { length: 40, climb: 4 * DEG } }], ['jump'], ['straight'], ['tight'], ['straight'], ['tight']], 300);
+  // the jump NAMED (12 m across, 0.7 m down): from D182 the default jump is the library's p10 gap, 81 m, sized to be caught
+  // at the 460 km/h design speed; this loop flies it at 300 km/h off a 4° climb, where 81 m is not caught at 6.3 g (red)
+  // and the straights NAMED at 100 m: the default straight is now the library's median run, 48 m, shorter than a grid
+  // of 4 and 2 pit boxes need (67.4 m, NO_START_STRAIGHT)
+  const jump = { handles: { gap: 12, drop: 0.7, land: -2 * DEG } }, s100 = { handles: { length: 100 } };
+  const doc = closedLoop('E2E Jump Loop', [['straight', s100], ['straight', { handles: { length: 40, climb: 4 * DEG } }], ['jump', jump], ['straight', s100], ['tight'], ['straight', s100], ['tight']], 300);
   const e = exportOrTodo(t, doc); if (!e) return;
   const k = checkEveryMarker(e.out, e.r);
   assert.ok(D.resolve({ ...doc, closed: false }).segments.some((g) => g.part === 'land'), 'the jump has its ramp');

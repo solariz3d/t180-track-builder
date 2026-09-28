@@ -10,7 +10,7 @@
 // still resolves an old document to the same track.
 'use strict';
 
-const { DEG, TEMPOS, FONTS, WORDS, RAMP_M, handlesOf } = require('./vocab.js');
+const { DEG, TEMPOS, FONTS, WORDS, RAMP_M, BANK_RATE, handlesOf, pieceOf, widthOf } = require('./vocab.js');
 const TX = require('./textures.js');
 const PL = require('./pitlane.js');
 const { SCHEMA, GENERATOR, DocError, UNIT, quantise, checkDoc, checkWordBody, deepFreeze } = require('./serial.js');
@@ -32,6 +32,15 @@ function headRoll(doc) {
   return 0;
 }
 
+/** The font of the last ROAD word (a phrase's last road word; a jump carries it through), or undefined on an empty track. */
+function headFont(doc) {
+  for (let i = doc.words.length - 1; i >= 0; i--) {
+    const e = doc.words[i], ws = e.phrase !== undefined ? e.words : [e];
+    for (let j = ws.length - 1; j >= 0; j--) if (ws[j].word !== 'jump') return ws[j].font;
+  }
+  return undefined;
+}
+
 /** A word's full content from the vocabulary, its tempo and its turn direction, before any override. */
 function defaultWord(word, { dir = 'L', tempo = 'standard', font, roll0 = 0 } = {}) {
   if (!Object.prototype.hasOwnProperty.call(WORDS, word)) throw new DocError('UNKNOWN_WORD', `"${word}" is not a word (known: ${Object.keys(WORDS).join(', ')})`);
@@ -39,14 +48,26 @@ function defaultWord(word, { dir = 'L', tempo = 'standard', font, roll0 = 0 } = 
   if (dir !== 'L' && dir !== 'R') throw new DocError('BAD_DIR', `dir must be 'L' or 'R', got ${dir}`);
   const W = WORDS[word];
   if (word === 'jump') return { word, font: null, tempo, speed: null, handles: { gap: W.gap, drop: W.drop, land: W.land }, textures: {} };
-  const sign = dir === 'L' ? 1 : -1, turn = sign * W.turn, ease = T.ease;
-  // Curved words: the length that makes the PEAK radius equal R × scale, given the ease (INTERFACES 4b: easeIn/easeOut).
-  const length = W.length !== undefined ? W.length : (Math.abs(turn) * W.R * T.scale) / (1 - ease);
+  // The piece at this tempo (vocab.js pieceOf): its total turn and length from the class's runs, its radius the median.
+  const piece = pieceOf(word, tempo), sign = dir === 'L' ? 1 : -1, turn = sign * piece.turn, ease = T.ease;
+  const length = piece.length;
   const f = font || W.font, F = FONTS[f]; if (!F) throw new DocError('UNKNOWN_FONT', `font "${f}" (known: ${Object.keys(FONTS).join(', ')})`);
   // A font with an outside wall puts it on the outside of the turn: the right for a left turn.
   const out = F.psiOut !== undefined, psiL = out ? (sign > 0 ? F.psiIn : F.psiOut) : F.psiL, psiR = out ? (sign > 0 ? F.psiOut : F.psiIn) : F.psiR;
+  // The bank (vocab.js WORDS: the class's median tilt) leans INTO the turn: positive roll raises the left edge
+  // (src/geom/path.js bankG = asin(L.y)), so a left turn ends at -bank. It is reached in the HEAD'S REVOLUTION: after an
+  // inversion the head is at 2π, and the turn leans from there, never unwinding a whole roll inside one word. A word
+  // with no bank keeps the head's roll, plus its own full roll if it has one (the inversion). The width follows the
+  // font (vocab.js widthOf: C's measured widths, else the class median).
+  const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
+  const roll1 = W.bank !== undefined ? roll0 + wrap(-sign * W.bank - roll0) : roll0 + (W.roll || 0);
+  // THE BANK RAMPS (vocab.js BANK_RATE): roll follows one smoothstep over the word, steepest at 1.5 × |Δroll| / length.
+  // A word too short to bank that far at the measured rate is made longer at its radius, so it turns further; the
+  // inversion's roll is the word itself and is not ramped.
+  const need = W.roll ? 0 : (1.5 * Math.abs(roll1 - roll0)) / (BANK_RATE * DEG);
+  const len = Math.max(length, need), bent = len > length && piece.R !== undefined ? (sign * len * (1 - ease)) / piece.R : turn;
   return { word, font: f, tempo, speed: null, handles: {
-    length, turn, climb: 0, easeIn: ease, easeOut: ease, roll0, roll1: roll0 + (W.roll || 0), heartline: 0, psiL, psiR, width: F.width, wall: F.wall, ramp: RAMP_M }, textures: {} };
+    length: len, turn: bent, climb: 0, easeIn: ease, easeOut: ease, roll0, roll1, heartline: 0, psiL, psiR, width: widthOf(word, f), wall: F.wall, ramp: RAMP_M }, textures: {} };
 }
 
 function finishWord(body, overrides = {}, at) {
@@ -67,7 +88,9 @@ function finishWord(body, overrides = {}, at) {
  * Its roll starts where the head's ends. One undo entry (history.js).
  */
 function appendWord(doc, word, opts = {}) {
-  const body = defaultWord(word, { dir: opts.dir, tempo: opts.tempo, font: opts.font, roll0: headRoll(doc) });
+  // no font chosen: CONTINUITY, the previous road word's font (vocab.js says why); the first road word takes its class's
+  const font = opts.font !== undefined ? opts.font : headFont(doc);
+  const body = defaultWord(word, { dir: opts.dir, tempo: opts.tempo, font, roll0: headRoll(doc) });
   const id = `w${doc.nextId}`;
   const w = finishWord(body, opts, id);
   return deepFreeze(checkDoc({ ...doc, generator: GENERATOR, nextId: doc.nextId + 1, words: [...doc.words, { id, ...w }] }));

@@ -2,7 +2,7 @@
 // overnight plan's step 4). No game is launched and nothing is placed by hand.
 //
 //   buildExport(doc, opts)            -> { scene, kn5, ai, path, segments, validation, markers, warnings, ... }  (writes nothing)
-//   exportTrack(doc, { outDir, variant = 'block', ...opts }) -> { folders: [{ variant, folder, dir, files }], kn5Sha, warnings, ... }
+//   exportTrack(doc, { outDir, variant = 'block', t180 = true, ...opts }) -> { folders: [{ variant, folder, dir, files }], kn5Sha, warnings, ... }
 //
 // THE PIPELINE, each part called and none edited:
 //   A's src/doc resolve → C's src/geom buildPath + buildMesh (with its self-intersection check) → the markers, generated
@@ -35,6 +35,11 @@
 // 'noblock' or 'both'), and it carries that red as a warning naming why it was written anyway. Validation itself runs
 // with the block present, so every OTHER red still refuses both folders.
 //
+// THE "T-180 TRACK" TOGGLE (ARCHITECTURE §6), opts.t180, default on: surfaces.ini carries the soft-collision block AND
+// CSP's WAV_PITCH=extended-0 surface (trackfiles.js), and the warnings carry CSP_ONLY_WARNING, because plain AC without
+// CSP can crash on that file. Off, it writes neither (a track for ordinary cars), and only the block variant exists.
+// The noblock control keeps the switch: it differs from the block folder by the block alone.
+//
 // THE MARKERS (§5c) are src/markers (D171): a LAYOUT in track coordinates, anchored to words, placed on the surface the
 // mesh builds, checked by §5c's red checks (a red refuses, MARKERS), and PAINTED (start line, grid and pit boxes, as
 // visual meshes generated from the markers). opts.markers is the layout (the app's markers panel); without one, the
@@ -62,7 +67,7 @@ const Prof = require('../geom/profile.js');
 const { validate } = require('../validate/index.js');
 const { validateScene } = require('./scene.js');
 const { writeKn5 } = require('./kn5write.js');
-const { checkMarkers } = require('./markers.js');
+const { checkMarkers, walkScene, isDrivable } = require('./markers.js');
 const Markers = require('../markers/index.js');
 const trackfiles = require('./trackfiles.js');
 const ailine = require('./ailine.js');
@@ -145,7 +150,9 @@ function buildExport(doc, opts = {}) {
   if (!selfCheck) warnings.push('self-intersection NOT checked: selfCheck is false (ARCHITECTURE.md:58, :84)');
 
   // validation first: a red refuses, amber warns
-  const v = validate(p, segs, { csp: o.csp, softCollision: true, folds: mesh.folds });
+  // the built physics road, in world space, for the downforce-ray gap check (src/validate/raygap.js; R1)
+  const roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
+  const v = validate(p, segs, { csp: o.csp, softCollision: true, folds: mesh.folds, roadMesh });
   const red = [...v.red];
   // the pit lane (D174): built beside the road, self-checked against it with the same tests; its findings are red
   let pit = null;
@@ -207,9 +214,28 @@ function buildExport(doc, opts = {}) {
     folder: o.folder || folderName(doc), scene, kn5, ai, path: p, segments: segs, resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh },
-    desc: { name: doc.name || 'Untitled', description: 'Built from words by t180-track-builder.', length: p.lengthM, run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original'], author: 't180-track-builder', version: '0.1' },
+    desc: { name: doc.name || 'Untitled', description: 'Built from words by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original'], author: 't180-track-builder', version: '0.1' },
     warnings,
   };
+}
+
+/**
+ * THE ROAD'S WIDTH for ui_track.json (AC tracks write e.g. "32m"; an empty "" was the root of a NaN downstream, B's
+ * CORRECTION in p-d182-plike-reg-B). It is the LENGTH-WEIGHTED MEDIAN, over the road segments, of each segment's
+ * edge-to-edge width ACROSS ITS SURFACE (the profile's u span: floor plus both walls, u being arc length across, as
+ * src/geom/profile.js defines it). Why this statistic:
+ *   · edge to edge along the surface is how the track reader measures an AC track's width (tools/read_track.cjs: 1 m
+ *     points across, wall included), and it is what the corpus and FINDINGS compare against (Sakura 28.7, Rainbow 50);
+ *   · the MEDIAN, weighted by length, is the width most of the lap has; a short wide pit apron, a blend or one sculpted
+ *     word does not move it, as it would move a mean;
+ *   · not the dominant FONT's width: a font is a starting shape, and the user sculpts width and wall per word.
+ * Jump flights (no surface) are left out. Null when there is no road.
+ */
+function roadWidthM(segs) {
+  const w = segs.filter((g) => g.kind !== 'gap' && g.profile && g.length > 0).map((g) => { const P = Prof.normalize(g.profile); return { x: P.u[P.u.length - 1] - P.u[0], L: g.length }; }).sort((a, b) => a.x - b.x);
+  const tot = w.reduce((a, e) => a + e.L, 0); if (!(tot > 0)) return null;
+  let acc = 0; for (const e of w) { acc += e.L; if (acc >= tot / 2) return e.x; }
+  return w[w.length - 1].x;
 }
 
 /** Write one folder under outDir. A folder that exists without our marker file is refused untouched; nothing is deleted. */
@@ -221,7 +247,7 @@ function writeFolder(b, outDir, v) {
   fs.mkdirSync(dir, { recursive: true });
   const kn5Name = `${b.folder}.kn5`;
   fs.writeFileSync(path.join(dir, kn5Name), b.kn5);
-  const files = [kn5Name, ...trackfiles.writeTrackFiles(dir, b.scene, { softCollision: v.softCollision, kn5Files: [kn5Name], desc: b.desc })];
+  const files = [kn5Name, ...trackfiles.writeTrackFiles(dir, b.scene, { softCollision: v.softCollision, extendedPhysics: v.extendedPhysics, kn5Files: [kn5Name], desc: b.desc })];
   fs.mkdirSync(path.join(dir, 'ai'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'ai', 'fast_lane.ai'), b.ai);
   files.push('ai/fast_lane.ai');
@@ -229,15 +255,17 @@ function writeFolder(b, outDir, v) {
   return { variant: v.variant, folder, dir, files };
 }
 
-function exportTrack(doc, { outDir, variant = 'block', ...opts } = {}) {
+function exportTrack(doc, { outDir, variant = 'block', t180 = true, ...opts } = {}) {
   if (!outDir) throw new ExportError('NO_OUT_DIR', 'exportTrack needs an outDir');
-  const vs = VARIANTS[variant];
-  if (!vs) throw new ExportError('BAD_VARIANT', `variant "${variant}" is not block, noblock or both`);
+  if (!VARIANTS[variant]) throw new ExportError('BAD_VARIANT', `variant "${variant}" is not block, noblock or both`);
+  if (!t180 && variant !== 'block') throw new ExportError('BAD_VARIANT', `variant "${variant}" is the T-180 soft-road control; it needs "T-180 track" on`);
+  const vs = VARIANTS[variant].map((v) => ({ ...v, softCollision: !!t180 && v.softCollision, extendedPhysics: !!t180 }));
   const b = buildExport(doc, opts);
   const folders = vs.map((v) => writeFolder(b, outDir, v));
   const warnings = [...b.warnings];
-  if (vs.some((v) => !v.softCollision)) warnings.push('noblock: the folder WITHOUT the soft-collision block is RED by ARCHITECTURE §4 (a missing soft-collision block); written only as the §10.1 soft-road control, on request');
+  if (t180) warnings.push(trackfiles.CSP_ONLY_WARNING);
+  if (t180 && vs.some((v) => !v.softCollision)) warnings.push('noblock: the folder WITHOUT the soft-collision block is RED by ARCHITECTURE §4 (a missing soft-collision block); written only as the §10.1 soft-road control, on request');
   return { folders, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: sha256(b.ai), aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.placed.filter((m) => !m.error).map((m) => ({ name: m.name, kind: m.kind, s: m.s, u: m.u, h: m.h })), paint: b.markers.paint.items, layout: b.markers.layout, warnings };
 }
 
-module.exports = { exportTrack, buildExport, ExportError, folderName, LAYOUT, MARKER_FILE, _internal: { stations, aiInput } };
+module.exports = { exportTrack, buildExport, ExportError, folderName, LAYOUT, MARKER_FILE, _internal: { stations, aiInput, roadWidthM } };

@@ -8,6 +8,8 @@
 'use strict';
 
 const { palette } = require('../../src/doc/library.js');
+const { suggestNext } = require('../../src/doc/grammar.js');
+const { GRAMMAR } = require('../../src/doc/vocab.js');
 
 function paletteModel(state, pickers) {
   const items = palette(state.lib), h = state.history, doc = h.present;
@@ -24,6 +26,8 @@ function paletteModel(state, pickers) {
     can: { undo: h.past.length > 0 && !h.dragBase, redo: h.future.length > 0 && !h.dragBase, saveSelection: sel.size > 0, removeHead: doc.words.length > 0,
       closeLoop: doc.words.length > 0 && !doc.closed },
     head: last ? { id: last.id, word: last.phrase !== undefined ? last.phrase : last.word } : null,
+    // what usually comes next in the measured library (src/doc/grammar.js): a hint, and nothing is refused; none once closed
+    next: doc.closed ? { after: null, suggestions: [] } : suggestNext(doc, GRAMMAR, 3),
     track: doc.words.map((w) => ({ id: w.id, word: w.phrase !== undefined ? w.phrase : w.word, phrase: w.phrase !== undefined, selected: sel.has(w.id) })),
     message: state.message, messageKind: state.messageKind || (state.message ? 'error' : null), resolveError: state.resolveError,
   };
@@ -56,11 +60,12 @@ function renderPalette(root, model, on) {
     el('select', { 'aria-label': LABEL[k], on: { change: (e) => on.setPicker(k, e.target.value) } },
       p.options.map((o) => el('option', { value: o, selected: o === p.value, text: (OPTION_TEXT[k] && OPTION_TEXT[k][o]) || o }))),
   ]));
+  const next = model.next || { suggestions: [] }, suggested = new Set(next.suggestions.map((s) => s.word));
   const groups = model.groups.map((g) => el('section', { class: 'group' }, [
     el('h3', { text: g.title }),
     g.items.length
       ? el('div', { class: 'pieces' }, g.items.map((p) => el('button', {
-        class: `piece ${p.builtin ? 'builtin' : 'mine'}`, title: p.kind === 'phrase' ? p.words.join(' → ') : p.words[0],
+        class: `piece ${p.builtin ? 'builtin' : 'mine'}${g.title === 'Words' && suggested.has(p.name) ? ' suggested' : ''}`, title: p.kind === 'phrase' ? p.words.join(' → ') : p.words[0],
         // pointing at (or tabbing to) a piece shows its ghost at the head; leaving hides it; a click places it
         on: { click: () => on.place(p.name), mouseenter: () => on.ghost && on.ghost(p.name), mouseleave: () => on.ghost && on.ghost(null),
           focus: () => on.ghost && on.ghost(p.name), blur: () => on.ghost && on.ghost(null) }, text: p.name,
@@ -84,6 +89,7 @@ function renderPalette(root, model, on) {
   // Only real nodes: the DOM turns a null child into the text "null" (it showed as "nullnull" under the track list).
   root.replaceChildren(...[
     el('div', { class: 'head', text: model.head ? `Building on from ${model.head.id} (${model.head.word})` : 'Empty track: place the first piece' }),
+    next.suggestions.length ? el('div', { class: 'next', text: `Usually next after ${/^[aeiou]/.test(next.after) ? 'an' : 'a'} ${next.after}: ${next.suggestions.map((s) => `${s.word} (${Math.round(s.share * 100)}%)`).join(', ')}` }) : null,
     el('div', { class: 'pickers' }, pickerRow), ...groups, actions,
     el('h3', { text: 'The track' }), track, save,
     // a success (the loop closed, the track exported) is a status in the normal colour; a refusal is a red alert

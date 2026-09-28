@@ -128,3 +128,60 @@ test('edges: a missing head, an unknown mode and a rig without the build view ar
   assert.throws(() => C.createRig({ order: ['overhead', 'free'], start: 'overhead' }), /build view/);
   assert.throws(() => C.createRig().setMode('orbit'), /unknown mode/);
 });
+
+// D182: the build view FRAMES the road. T-180 roads are 31-37 m wide at the median and 67 m at the tight class's p90
+// (FINDINGS §7f). Stated before the test: every point of a 67 m cross-section at the head, walls included, projects
+// inside the view at the aspects 16:9, 1:1 and 9:16; the fixed 15 m / 6 m pose does NOT (so the test can fail); and a
+// road narrow enough for 15 m / 6 m keeps exactly that pose.
+const { fontProfile } = require('../../src/geom/fonts.js');
+const { normalize, offsetAt, spanOf } = require('../../src/geom/profile.js');
+/** Where p lands in the pose's view, as a fraction of the half-width (x) and half-height (y): inside when both ≤ 1. */
+function inView(pose, aspect, p) {
+  const f = unit(sub(pose.target, pose.eye)), cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const right = unit(cr(f, pose.up)), up = cr(right, f), d = sub(p, pose.eye), z = dot(d, f), t = Math.tan(pose.fov / 2);
+  return { z, x: Math.abs(dot(d, right)) / (z * t * aspect), y: Math.abs(dot(d, up)) / (z * t) };
+}
+function wideRoad(width) {
+  const prof = fontProfile('half-pipe', { width, wall: 8, psiL: 60 * Math.PI / 180, psiR: 60 * Math.PI / 180 });
+  const segs = [{ id: 'w', kind: 'road', length: 120, k0: 0, k1: 1 / 300, profile: prof }], p = G.buildPath(segs), h = p.head, P = normalize(prof);
+  const pts = P.u.map((u) => { const [X, Y] = offsetAt(P, u); return h.pos.map((v, k) => v + h.L[k] * X + h.U[k] * Y); });
+  return { h, p, pts, span: spanOf(P) };
+}
+
+test('build view frames a 67 m road: every cross-section point at the head is in view at 16:9, 1:1 and 9:16', () => {
+  const { h, p, pts, span } = wideRoad(67);
+  assert.ok(span > 67, `the cross-section spans ${span} m with its walls`);
+  for (const aspect of [16 / 9, 1, 9 / 16]) {
+    const pose = C.createRig().pose({ head: h, path: p, width: span, aspect });
+    for (const q of pts) { const v = inView(pose, aspect, q); assert.ok(v.z > 0 && v.x <= 1 && v.y <= 1, `aspect ${aspect.toFixed(2)}: ${JSON.stringify(v)}`); }
+  }
+});
+
+test('build view: without the road\'s width, 15 m behind does NOT frame a 67 m road (what the framing fixes)', () => {
+  const { h, p, pts } = wideRoad(67), pose = C.createRig().pose({ head: h, path: p, aspect: 16 / 9 });
+  assert.ok(pts.some((q) => { const v = inView(pose, 16 / 9, q); return v.x > 1; }), 'some edge should be out of view');
+});
+
+test('build view: a road narrow enough keeps exactly 15 m behind and 6 m up; the backed-off view keeps the same angle', () => {
+  const { path: p } = track(), h = p.head, rig = C.createRig();
+  const narrow = sub(rig.pose({ head: h, path: p, width: 20, aspect: 16 / 9 }).eye, h.pos);
+  assert.ok(Math.abs(dot(narrow, h.T) + 15) < 1e-9 && Math.abs(dot(narrow, h.U) - 6) < 1e-9, `${narrow}`);
+  const wide = sub(rig.pose({ head: h, path: p, width: 67, aspect: 1 }).eye, h.pos);
+  assert.ok(-dot(wide, h.T) > 15 && Math.abs(dot(wide, h.U) / -dot(wide, h.T) - 6 / 15) < 1e-12, `${wide}`);
+});
+
+test('the preview gives the build view the LAST road piece\'s span (a jump after it has no profile), and null with no road', () => {
+  const { widthAtHead } = require(path.join(ADIR, 'preview', 'preview.js'));
+  const wide = fontProfile('half-pipe', { width: 67, wall: 8, psiL: 1, psiR: 1 });
+  const segs = [{ id: 'a', kind: 'road', length: 40, profile: F.FLAT }, { id: 'b', kind: 'road', length: 40, profile: wide }, { id: 'j', kind: 'gap', length: 81 }];
+  assert.equal(widthAtHead(segs), spanOf(normalize(wide)));
+  assert.equal(widthAtHead([{ id: 'j', kind: 'gap', length: 81 }]), null);
+  assert.equal(widthAtHead([]), null);
+});
+
+test('the ghost (the first word before anything is placed) carries its segments, so the build view frames it too', () => {
+  const TM = require(path.join(ADIR, 'preview', 'trackmodel.js')), tm = TM.createTrackModel();
+  tm.update({ segments: [] });
+  const g = tm.ghostFor({ segments: [{ id: 'b', kind: 'road', length: 40, profile: fontProfile('flat', { width: 67 }) }] });
+  assert.equal(g.segments.length, 1);
+});

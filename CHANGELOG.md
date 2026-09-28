@@ -5,6 +5,67 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+The built-in pieces are now measured from real T-180 tracks instead of being set by hand. No installer is built from
+this yet: 0.2.2 below is still the one to install.
+
+**How alike the new pieces are to real tracks: the stretch-rebuild test (a result, not a gate).** Before the pieces were
+changed, a test was written down and fixed: rebuild the first 3 km of two real tracks, Sakura Speedway and Centrifuge,
+from the new pieces only (each piece at its own defaults, with only its length, turn and climb set), read the rebuild
+back the same way as the real track, and compare the two with tolerances chosen in advance. The old pieces were run
+through the same test first, and failed it badly.
+
+- **Result: not alike yet, on either track.**
+- **The rims are fixed.** On Sakura every cross-section measure passes: the tilt a quarter, half and three quarters of
+  the way out and at the edge, and how sharply the tilt changes across the road. The rim tilts about 30°, as the real
+  track's does, where the old half-pipe rose to about 60°. On Centrifuge the tilt changes as gently as on the real track
+  too, and its banking is now in range.
+- **Centrifuge's sides are too flat half way and three quarters of the way up.** Its cross-section is the deeper of the
+  two half-pipe shapes measured in the library, and there is no piece for that deeper half-pipe yet.
+- **Sakura banks 1.8° less than the real track** at the median.
+- **The height changes are off in the same way as with the old pieces.** That points at how the test rebuilds climbs,
+  not at the pieces.
+- **Not exportable as built:** each rebuild fails the builder's own lap check once (the car would leave the surface
+  about 600–700 m in), so both were measured with that check lifted.
+
+### Changed
+
+- **The built-in words are measured from the T-180 library, not hand-set.** Before, they were set by hand, partly from
+  the 500 m test loop of the first milestone: roads 8–20 m wide, flat straights and sweeps, no bank, walls 8 m high
+  and a 12 m jump. Now each word's defaults come from the measured library (`src/doc/corpus.json`, 16 layouts). A
+  corner piece is the size of the library's median corner of its kind: a tight turns 88° at about 100 m radius, a turn
+  12° at about 300 m, a sweep 1° at 800 m, and a straight is 48 m. Corners bank into the turn, about 20–31°.
+  The jump is 81 m across and 14 m down; its gap is the library's shorter jumps rather than the median, because a jump
+  taken off a level road at the default 460 km/h cannot clear the median 125 m.
+- **A word placed with no font chosen keeps the previous word's font,** so a track holds one cross-section for long
+  stretches as the real tracks do, and you change it on purpose. The first word of a track takes the bowl, the
+  cross-section the library uses most. The road's width follows the font: 31 m for the bowl, 31.5 m for the half-pipe,
+  45 m for the flat ribbon.
+- **No wall by default.** The bowl, the half-pipe and the flat are the library's measured cross-sections, which rise
+  across the whole width and stop at the edge. The old 8 m walls rose past that edge, the rims that flipped up. A wall
+  can still be sculpted on any word.
+- **The bank ramps.** A word banks no faster than real T-180 roads do (0.849°/m, the fastest tenth of the library's
+  banking, measured by `tools/bankrate.cjs`). A word that would bank faster is made longer at its radius, so it turns
+  further. Before, a wall-ride after a turn banked 52° inside 36 m, and validation marked the seam sharper than measured.
+- The tempos now set a piece's size from the library's corners: standard is the median corner, compact a small one,
+  grand a large one. The older aurora and serpents stay, so tracks that use them still open.
+- The bowl hairpin, the S and the spiral climb name their turn angles, so they stay a hairpin, an S and a spiral at the
+  new sizes.
+- Tracks made before this change open and build with the same centreline: a document stores every handle of every
+  word, so only words placed from now on get the new defaults. A bowl, half-pipe or flat word in an old track keeps its
+  wall and gets the measured floor under it.
+
+### Added
+
+- The palette suggests what usually comes next, from how often each kind of word follows another on the real tracks.
+  It only suggests: every word can still be placed after any other.
+
+## [0.2.2] - 2026-09-28
+
+The first installer built from the published source (`main` at 484be9e): it holds every change listed under 0.2.1
+below, and adds none of its own. The 0.2.1 installer was built from a working copy before all of them had landed. It
+did not have the starter phrases in their clean order, or the test seam for the Export dialog; whether it had the
+plain-word red and amber reasons and the faster drags is not established. Install 0.2.2.
+
 ## [0.2.1] - 2026-09-27
 
 The first 0.2.0 build could not place a word in its own window (see Fixed). 0.2.1 is the build to install. It also

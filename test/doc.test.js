@@ -29,7 +29,9 @@ const pitch = (gs) => gs.reduce((a, g) => a + ((g.kp0 + g.kp1) / 2) * g.length, 
 
 // ── serialisation ──────────────────────────────────────────────────────────────────────────────────────────────────
 test('the canonical text of a one-word document, byte for byte', () => {
-  const t = D.serialize(D.appendWord(D.createDoc('t'), 'straight'));
+  // named: D182 made the defaults the library's (the measured flat is 45 m wide and rises 3° at its edge)
+  const flat100 = { font: 'flat', handles: { length: 100, width: 20, psiL: 0, psiR: 0, wall: 0 } };
+  const t = D.serialize(D.appendWord(D.createDoc('t'), 'straight', flat100));
   assert.equal(t, '{\n  "schema": 3,\n  "generator": "t180-track-builder/doc 0.1.0",\n  "name": "t",\n  "closed": false,\n  "nextId": 2,\n' +
     '  "words": [\n    {"id":"w1","word":"straight","font":"flat","tempo":"standard","speedKmh":null,"handles":{"length":100,"turn":0,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":0,"psiR":0,"width":20,"wall":0,"ramp":20},"textures":{}}\n  ],\n' +
     '  "pitLane": null,\n  "constraints": {"pins":[],"free":[]}\n}\n');
@@ -59,7 +61,7 @@ test('numbers are quantised: 0.1 mm on lengths, 0.00001° on angles; a finer val
 });
 
 test('a hand-edited file with a value finer than its quantum loads snapped, and its next save is canonical', () => {
-  const t = D.serialize(D.appendWord(D.createDoc(), 'straight')).replace('"length":100,', '"length":100.000049,');
+  const t = D.serialize(D.appendWord(D.createDoc(), 'straight', { handles: { length: 100 } })).replace('"length":100,', '"length":100.000049,');
   const d = D.parse(t);
   assert.equal(d.words[0].handles.length, 100);
   assert.match(D.serialize(d), /"length":100,/);
@@ -172,11 +174,11 @@ test('a turn word turns by exactly its turn handle, and climbs by exactly its cl
   }
 });
 
-test('a default turn peaks at its word\'s radius: 300 m for turn, 1,200 m for an aurora sweep', () => {
+test('a default turn peaks at its word\'s radius, and an aurora sweep at 1.2 × the sweep\'s (vocab.js, not a number pinned here)', () => {
   const d = D.appendWord(D.appendWord(D.createDoc(), 'turn'), 'sweep', { tempo: 'aurora' });
   // Within 0.02 m, not exactly: length is quantised to 1 mm and turn to 0.001°, which moves a 1,200 m peak by up to ~0.01 m.
-  assert.ok(Math.abs(1 / segsOf(d, 'w1').find((g) => g.part === 'body').k0 - 300) < 0.02);
-  assert.ok(Math.abs(1 / segsOf(d, 'w2').find((g) => g.part === 'body').k0 - 1200) < 0.02);
+  assert.ok(Math.abs(1 / segsOf(d, 'w1').find((g) => g.part === 'body').k0 - D.WORDS.turn.R) < 0.02);
+  assert.ok(Math.abs(1 / segsOf(d, 'w2').find((g) => g.part === 'body').k0 - D.WORDS.sweep.R * D.TEMPOS.aurora.scale) < 0.02);
 });
 
 test('curvature is continuous everywhere on the road: across parts and across words', () => {
@@ -231,12 +233,17 @@ test('a jump\'s flight is one gap segment that covers the gap, comes down the dr
 });
 
 test('an outside wall goes on the outside of the turn: the right for a left turn, the left for a right turn', () => {
-  const d = D.appendWord(D.appendWord(D.createDoc(), 'turn'), 'turn', { dir: 'R' });
+  // the walled font NAMED: from D182 the measured bowl is symmetric with no wall; the wall-ride font keeps an outside
+  // wall (110° out, 30° in), so it is the one this rule still acts on
+  const walled = { font: 'wall-ride', handles: { width: 16, wall: 8 } };
+  const d = D.appendWord(D.appendWord(D.createDoc(), 'turn', walled), 'turn', { dir: 'R', ...walled });
   const [l, r] = [segsOf(d, 'w1')[0].profile, segsOf(d, 'w2')[0].profile];
-  assert.deepEqual([l.psi[0], l.psi[4]].map((x) => Math.round(x / DEG)), [60, 15]);
-  assert.deepEqual([r.psi[0], r.psi[4]].map((x) => Math.round(x / DEG)), [15, 60]);
+  assert.deepEqual([l.psi[0], l.psi[4]].map((x) => Math.round(x / DEG)), [110, 30]);
+  assert.deepEqual([r.psi[0], r.psi[4]].map((x) => Math.round(x / DEG)), [30, 110]);
   assert.deepEqual(l.u, [-16, -8, 0, 8, 16]);
-  const wr = D.resolve(D.appendWord(D.createDoc(), 'wall-ride')).segments[0].profile;
+  // the wall-ride FONT still walls its outside at 110°; from D182 the wall-ride WORD's default is the library's (its most-used
+  // measured font, no wall, the whole road banked: test/vocab-corpus.test.js NO WALL BY DEFAULT), so the font is named
+  const wr = D.resolve(D.appendWord(D.createDoc(), 'wall-ride', { font: 'wall-ride' })).segments[0].profile;
   assert.equal(Math.round(wr.psi[0] / DEG), 110);
 });
 

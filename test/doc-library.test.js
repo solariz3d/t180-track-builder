@@ -13,7 +13,9 @@ const geometry = (segs) => segs.map(({ id, ...g }) => g);   // a placed piece ha
 /** A track with a sculpted two-word run (w2, w3) in the middle. */
 function sculpted() {
   let d = D.appendWord(D.appendWord(D.appendWord(D.appendWord(D.createDoc('s'), 'straight'), 'turn'), 'tight', { dir: 'R' }), 'straight');
-  d = D.editWord(d, 'w2', { handles: { length: 222.5, turn: 50 * DEG, easeIn: 0.2, climb: 2 * DEG, width: 24, wall: 10, psiR: 70 * DEG } });
+  // roll1 named: from D182 a default turn banks into itself, and w3 below starts level
+  // the font NAMED, a walled one (tube): from D182 the three measured fonts build a floor across the width and no wall
+  d = D.editWord(d, 'w2', { font: 'tube', handles: { length: 222.5, turn: 50 * DEG, easeIn: 0.2, climb: 2 * DEG, width: 24, wall: 10, psiR: 70 * DEG, roll1: 0 } });
   d = D.editWord(d, 'w3', { handles: { easeOut: 0.1, roll0: 0, roll1: 5 * DEG } });
   return D.editWord(d, 'w4', { handles: { roll0: 5 * DEG, roll1: 0 } });   // the next word carries the bank, then levels
 }
@@ -86,9 +88,10 @@ test('a piece keeps its roll RELATIVE: placed after an inversion it starts at th
 test('a run saved after an inversion is stored starting at roll 0, and places level on a level track', () => {
   const d = D.appendWord(D.appendWord(D.createDoc(), 'inversion'), 'turn');   // the turn starts at roll 2π
   const lib = L.savePiece(L.builtinLibrary(), { name: 'after-roll', author: 'k', doc: d, ids: ['w2'] });
-  assert.match(L.exportPiece(lib, 'after-roll'), /"roll0":0,"roll1":0,/);
-  const placed = L.placePiece(D.appendWord(D.createDoc(), 'straight'), lib, 'after-roll');
-  assert.equal(placed.words[1].handles.roll0, 0);
+  assert.match(L.exportPiece(lib, 'after-roll'), /"roll0":0,/);
+  const placed = L.placePiece(D.appendWord(D.createDoc(), 'straight'), lib, 'after-roll'), h = placed.words[1].handles, own = d.words[1].handles;
+  assert.equal(h.roll0, 0);
+  assert.ok(Math.abs((h.roll1 - h.roll0) - (own.roll1 - own.roll0)) < 1e-9, 'it keeps its own lean (0 before D182, its bank after)');
 });
 
 test('placing a piece is one undo step, and undo is byte-identical', () => {

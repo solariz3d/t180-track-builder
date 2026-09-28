@@ -149,3 +149,20 @@ test('validate: a closed lap over a jump with no forward gap FAILS with that rea
   assert.strictEqual(r.lap.ok, false);
   assert.ok(r.lap.where.some((w) => w.reason === 'jump-gap-not-forward'), JSON.stringify(r.lap.where));
 });
+
+// ── the landing search covers the jump's own landing ramp (the ripple, p-d182-ripple-E) ──
+// The measured jump (81 m gap, 14 m drop: A's D182 vocabulary) at 755 km/h: the 3.2 g flight comes down about 152 m past
+// the landing lip, and resolve sizes the jump's landing ramp (about 162 m) to catch it. Validation searched only 150 m of
+// landing road, so a touchdown ON the ramp read as a miss. Named inputs, so it holds under either vocabulary.
+test('validate: a landing on the jump\'s own ramp more than 150 m past the lip is found (the search covers the ramp)', () => {
+  const D = require('../src/doc/index.js'), G = require('../src/geom/index.js');
+  let d = D.createDoc('t');
+  for (const w of ['straight', 'straight']) d = D.appendWord(d, w, { font: 'flat', handles: { length: 100, roll1: 0 } });
+  d = D.appendWord(d, 'jump', { handles: { gap: 81, drop: 14, land: -2 * Math.PI / 180 } });
+  const segs = D.resolve(d, { designSpeedKmh: 755 }).segments, ramp = segs.find((g) => g.part === 'land');
+  const v = validate(G.buildPath(segs, { step: 2 }), segs, { designSpeed: 755 / 3.6 }), j = v.jumps[0];
+  const L32 = j.landings.find((L) => L.g === 3.2);
+  assert.ok(ramp.length > 150, `the ramp is ${ramp.length} m`);
+  assert.ok(L32.caught && L32.x - j.gap > 150, JSON.stringify(j.landings));
+  assert.deepStrictEqual(v.red.map((r) => r.reason), []);
+});
