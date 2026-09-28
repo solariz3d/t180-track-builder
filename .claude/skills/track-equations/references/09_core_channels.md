@@ -76,3 +76,60 @@ straight interpolation by (roll₁ − roll₀)·(S(t) − t).
 (0.06°).
 
 **Test:** `test/core_adapter.test.js` "the samples' roll is within the smoothstep bound of the φ channel".
+
+## §6 Knot insertion (Boehm): finer knots under a brush, with the curve unchanged
+**SOURCED** (SHENE-KNOT, opened 2026-09-28: C.-K. Shene's course notes, CS3621 Michigan Tech, "B-spline/NURBS Curves: Knot
+Insertion", pages.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/NURBS-knot-insert.html). The primary source is W. Boehm,
+"Inserting new knots into B-spline curves", *Computer-Aided Design* 12(4), 1980 (BOEHM80, not opened).
+
+Insert a knot t into [u_k, u_{k+1}) of a degree-p spline with control points p₀ … p_{n−1}. The new points q₀ … qₙ are:
+- qᵢ = pᵢ for i ≤ k − p;
+- qᵢ = (1 − aᵢ)·p_{i−1} + aᵢ·pᵢ, with aᵢ = (t − uᵢ)/(u_{i+p} − uᵢ), for k − p + 1 ≤ i ≤ k;
+- qᵢ = p_{i−1} for i ≥ k + 1.
+
+The notes: "The shape of the curve does not change; however, the defining control polyline is changed."
+
+**DERIVED, what it means for the core (p = 3):**
+- only the three points q_{k−2}, q_{k−1}, q_k are new, and every other one is an old one;
+- the curve on a span uses the four points below it, so only the new knot's span and the TWO spans on either side of it see
+  a new point (in the old knots, [u_{k−2}, u_{k+3}]);
+- every other span keeps the same knots and the same four points, and is evaluated by the same arithmetic: bit for bit.
+
+**In the document the new points are quantised** to the channel's step (src/core/README.md), because canonical text is
+quantised. So the stored curve moves by at most half a step within the three affected spans (partition of unity, ref 03 §1).
+Before quantisation the change is float rounding only.
+
+**Test:** `test/core_knots.test.js` "inserting knots leaves every channel unchanged at dense samples".
+
+## §7 The offset channels (a hill, a swerve): the lifted centreline, its frame and its curvature, EXACT
+The base geometry gives, at each sample (s its arc length): position r, unit tangent T, the curvature vector K = dT/ds
+(src/geom's `kvec`), the heading θ with its rate θ′ = k and its derivative θ″ = k′ (the segment's linear yaw rate, ref 02 §2),
+and the roll φ. The offsets h(s) (along world up ŷ) and l(s) (along the gravity frame's horizontal left
+R = (cos θ, 0, −sin θ)) come from the channels with their first two derivatives (ref 09 §1, WIKI-BSPLINE).
+
+**DERIVED** (differentiate twice; ∂R/∂θ = R_θ = (−sin θ, 0, −cos θ), ∂²R/∂θ² = −R):
+- r̃ = r + h·ŷ + l·R;
+- r̃′ = T + h′ŷ + l′R + l·R′, where R′ = θ′R_θ;
+- r̃″ = K + h″ŷ + l″R + 2l′R′ + l·R″, where R″ = θ″R_θ − θ′²R.
+
+**The tangent and the curvature vector of the lifted curve,** per metre of the LIFTED road (s is no longer its arc length):
+- T̃ = r̃′/|r̃′|;
+- K̃ = (r̃″ − (r̃″·T̃)T̃)/|r̃′|².
+- This is the vector form of WIKI-CURV's κ = |r′ × r″|/|r′|³ (ref 02 §1). DERIVED: its magnitude is exactly that, since
+  |r″ − (r″·T̃)T̃| = |r′ × r″|/|r′|.
+
+**The frame is rebuilt from T̃ the geometry's way, with the SAME roll φ** (src/geom/path.js FRAME; lifting the road does not
+tilt it about its tangent):
+- R̃ from θ̃ = atan2(T̃ₓ, T̃_z), and U₀ = T̃ × R̃;
+- L = R̃cos φ + U₀sin φ, and U = T̃ × L;
+- bankG = asin(L_y), and grade = T̃_y/|T̃_xz|.
+
+**The known answer the hill test uses:** on a LEVEL STRAIGHT base, K = 0 and θ′ = θ″ = 0, so the lifted road is the plane
+graph y = h(s):
+- grade = h′;
+- |K̃| = |h″|/(1 + h′²)^{3/2}. That is WIKI-CURV's plane formula, on the shelf as ref 02 §1.
+
+**Where h = h′ = h″ = l = l′ = l″ = 0,** the sample is not recomputed at all: the SAME object. So everything outside a hill is
+bit for bit.
+
+**Tests:** `test/core_offset.test.js`.

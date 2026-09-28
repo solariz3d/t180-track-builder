@@ -16,11 +16,15 @@
 
 const { basis, bandChol } = require('../../tools/piecewise.cjs');
 
-const SCHEMA = 't180b.core/1', GENERATOR = 't180-track-builder/core 0.1.0';
-const CHANNELS = Object.freeze(['kh', 'kv', 'phi', 'w', 'r']);
+// core/2 (D186) adds the OFFSET channels h and l; a core/1 file is read and upgraded with both at zero (parse).
+const SCHEMA = 't180b.core/2', OLD_SCHEMAS = Object.freeze(['t180b.core/1']), GENERATOR = 't180-track-builder/core 0.2.0';
+// kh, kv, phi, w, r shape the base geometry; h (height, m, along WORLD up) and l (lateral, m, along the gravity frame's
+// horizontal left) are VALUE channels the adapter applies AFTER it (src/core/README.md "the offset channels")
+const CHANNELS = Object.freeze(['kh', 'kv', 'phi', 'w', 'r', 'h', 'l']);
+const OFFSETS = Object.freeze(['h', 'l']);
 const FAMILIES = Object.freeze(['bowl', 'half-pipe', 'flat']);
 // decimals each number is quantised to when it enters (src/core/README.md "numbers are quantised")
-const DEC = Object.freeze({ m: 4, kh: 9, kv: 9, phi: 9, w: 4, r: 6, rad: 9 });
+const DEC = Object.freeze({ m: 4, kh: 9, kv: 9, phi: 9, w: 4, r: 6, h: 4, l: 4, rad: 9 });
 const KNOT_M = 20;   // default interior knot spacing, m
 
 class CoreError extends Error {
@@ -54,7 +58,7 @@ function endState(doc) {
     const P = doc.pieces[i];
     if (P.type === 'flight') { flightAfter = true; continue; }
     const e = pieceEnd(P);
-    return flightAfter ? { ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 } } : e;
+    return flightAfter ? { ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h: { v: 0, m: 0 }, l: { v: 0, m: 0 } } : e;
   }
   return null;   // an empty track: the first piece starts where its channels say
 }
@@ -100,6 +104,7 @@ function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM =
   const L = q(length, DEC.m), K = (knots || evenKnots(L, knotM)).map((t) => q(t, DEC.m)), out = {};
   for (const ch of CHANNELS) {
     const src = channels[ch];
+    if (src === undefined && OFFSETS.includes(ch)) { const e = from ? from[ch] : { v: 0, m: 0 }; out[ch] = qChannel(ch, fitChannel((s) => e.v + e.m * s, L, K, from ? e : null)); continue; }
     if (src === undefined) throw new CoreError('NO_CHANNEL', `channel ${ch} is missing`);
     if (Array.isArray(src)) {
       if (src.length !== K.length + 4) throw new CoreError('BAD_CHANNEL', `${ch} has ${src.length} control points, the knots need ${K.length + 4}`);
@@ -148,6 +153,7 @@ function checkDoc(doc) {
     const at = `piece ${i} (${P && P.id})`;
     if (!P || typeof P.id !== 'string' || ids.has(P.id)) bad(`${at}: needs a unique string id`); ids.add(P.id);
     if (P.type === 'flight') {
+      if (prev) { const e = pieceEnd(prev); for (const ch of OFFSETS) if (Math.abs(e[ch].v) > 10 ** -DEC[ch] || Math.abs(e[ch].m) > 1e-6) throw new CoreError('FLIGHT_OFFSET', `${at}: ${ch} must fade to 0 (value and slope) before a jump, got ${e[ch].v} m, slope ${e[ch].m}: the adapter cannot lift a jump's gap or its landing ramp`); }
       if (!(P.gap > 0) || !Number.isFinite(P.drop) || !Number.isFinite(P.land)) bad(`${at}: a flight needs gap > 0, drop and land`);
       if (!prev) bad(`${at}: a flight must follow a road piece`);
       afterFlight = true; return;
@@ -158,7 +164,7 @@ function checkDoc(doc) {
     if (!Array.isArray(P.knots) || P.knots.some((t, k) => !(t > 0 && t < P.length) || (k && !(t > P.knots[k - 1])))) bad(`${at}: knots must be ascending, strictly inside (0, length)`);
     for (const ch of CHANNELS) { const c = P.channels && P.channels[ch]; if (!Array.isArray(c) || c.length !== P.knots.length + 4 || !c.every(Number.isFinite)) bad(`${at}: channel ${ch} needs ${P.knots.length + 4} finite control points`); }
     if (prev) {
-      const e = pieceEnd(prev), want = afterFlight ? { ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 } } : e;
+      const e = pieceEnd(prev), want = afterFlight ? { ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h: { v: 0, m: 0 }, l: { v: 0, m: 0 } } : e;
       const p = jointProblem(want, P); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint is C1 in every channel, ref 09 §1)`);
     }
     prev = P; afterFlight = false;
@@ -181,11 +187,12 @@ function serialize(doc) {
 /** Parse a document; every number is quantised as it enters, so a hand-edited value finer than its quantum is snapped. */
 function parse(text) {
   let o; try { o = JSON.parse(text); } catch (e) { throw new CoreError('BAD_JSON', e.message); }
-  if (!o || o.schema !== SCHEMA) throw new CoreError('BAD_DOC', `schema must be ${SCHEMA}, got ${o && o.schema} (a newer file needs a newer builder)`);
+  if (!o || (o.schema !== SCHEMA && !OLD_SCHEMAS.includes(o.schema))) throw new CoreError('BAD_DOC', `schema must be ${SCHEMA} (or an older ${OLD_SCHEMAS.join(', ')}), got ${o && o.schema} (a newer file needs a newer builder)`);
+  const upgrade = o.schema !== SCHEMA;   // a core/1 file has no offsets: they are zero, one per control point
   const pieces = (o.pieces || []).map((P) => (P && P.type === 'flight'
     ? { id: P.id, type: 'flight', gap: q(P.gap, DEC.m), drop: q(P.drop, DEC.m), land: q(P.land, DEC.rad) }
     : { id: P.id, type: P.type, length: q(P.length, DEC.m), family: P.family, knots: (P.knots || []).map((t) => q(t, DEC.m)),
-      channels: Object.fromEntries(CHANNELS.map((ch) => [ch, ((P.channels || {})[ch] || []).map((x) => q(x, DEC[ch]))])) }));
+      channels: Object.fromEntries(CHANNELS.map((ch) => [ch, (upgrade && OFFSETS.includes(ch) ? new Array(((P.knots || []).length) + 4).fill(0) : ((P.channels || {})[ch] || [])).map((x) => q(x, DEC[ch]))])) }));
   const s = o.start || {};
   return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start: { pos: (s.pos || []).map((x) => q(x, DEC.m)), heading: q(s.heading, DEC.rad), pitch: q(s.pitch, DEC.rad) }, nextId: o.nextId, pieces }));
 }
@@ -258,16 +265,82 @@ function fromPositionFit(fit, read, { name = 'Local example', family = 'bowl', s
       const a = pieces[i - 1].rows[pieces[i - 1].rows.length - 1], b = pc.rows[0];
       doc = appendPiece(doc, flightPiece({ gap: Math.hypot(b.r[0] - a.r[0], b.r[2] - a.r[2]), drop: a.r[1] - b.r[1], land: b.p }));
     }
-    const from = endState(doc), ch = { kh: interp(pc.rows, 'kh'), kv: interp(pc.rows, 'kv'), phi: interp(pc.rows, 'phi'), w: interp(pc.rows, 'w'), r: () => RATES[family] };
+    const from = endState(doc), ch = { kh: interp(pc.rows, 'kh'), kv: interp(pc.rows, 'kv'), phi: interp(pc.rows, 'phi'), w: interp(pc.rows, 'w'), h: () => 0, l: () => 0, r: () => RATES[family] };
     if (from) { const off = from.phi.v - ch.phi(0); const base = ch.phi; ch.phi = (s) => base(s) + 2 * Math.PI * Math.round(off / (2 * Math.PI)); }
     doc = appendPiece(doc, roadPiece({ length: pc.L, family, from, channels: ch }));
   });
   return doc;
 }
 
+// ── knot insertion (ref 09 §6, Boehm): finer knots under a brush, the curve unchanged ─────────────────────────────────
+/**
+ * The control points of a clamped cubic (full knot vector U, points P) after inserting t, by Boehm's rule (ref 09 §6):
+ * t in [U_k, U_{k+1}); q_i = P_i for i ≤ k − 3; q_i = (1 − a_i)P_{i−1} + a_i P_i with a_i = (t − U_i)/(U_{i+3} − U_i) for
+ * k − 2 ≤ i ≤ k; q_i = P_{i−1} for i ≥ k + 1. Pure and unquantised: the curve is unchanged up to float rounding.
+ */
+function boehm(U, P, t) {
+  let k = 3; while (k + 1 < U.length - 4 && U[k + 1] <= t) k++;
+  const Q = [];
+  for (let i = 0; i <= P.length; i++) {
+    if (i <= k - 3) Q.push(P[i]);
+    else if (i <= k) { const a = (t - U[i]) / (U[i + 3] - U[i]); Q.push((1 - a) * P[i - 1] + a * P[i]); }
+    else Q.push(P[i - 1]);
+  }
+  return Q;
+}
+/**
+ * A road piece with the knot t inserted into every channel (ref 09 §6). t is quantised like any knot, must lie strictly
+ * inside (0, length) and must not be a knot already. Only the three control points around t are new; they are quantised to
+ * their channel's step, so the stored curve moves by at most half a step there and not at all elsewhere.
+ */
+function insertKnot(P, t) {
+  if (!P || P.type !== 'road') throw new CoreError('NOT_ROAD', 'knots are inserted into road pieces only');
+  const tq = q(t, DEC.m);
+  if (!(tq > 0 && tq < P.length)) throw new CoreError('BAD_KNOT', `a knot must lie strictly inside (0, ${P.length}), got ${t}`);
+  if (P.knots.includes(tq)) throw new CoreError('BAD_KNOT', `${tq} is a knot already`);
+  const U = knotVector(P), channels = {};
+  for (const ch of CHANNELS) {
+    const Q = boehm(U, P.channels[ch], tq);
+    // the untouched points are the SAME numbers (no requantising moves them); only the three new ones are quantised
+    let k = 3; while (k + 1 < U.length - 4 && U[k + 1] <= tq) k++;
+    channels[ch] = Q.map((x, i) => (i >= k - 2 && i <= k ? q(x, DEC[ch]) : x));
+  }
+  const knots = [...P.knots, tq].sort((a, b) => a - b);
+  return { ...P, knots, channels };
+}
+/** Several knots, in any order (each by insertKnot). */
+function insertKnots(P, ts) { return ts.reduce((acc, t) => insertKnot(acc, t), P); }
+
+/**
+ * THE API FOR A NARROW BRUSH (src/core/README.md "knot insertion"). Every span of road piece `pieceId` that overlaps [a, b]
+ * (the piece's own s) and is longer than maxSpan is cut into equal spans no longer than maxSpan, by exact insertion. Spans
+ * outside [a, b] keep their knots and control points. Returns { doc: a new checked document, inserted: [t …] } (doc is the
+ * same object when nothing was needed). Undo removes the knots like any other edit.
+ */
+function refineKnots(doc, pieceId, a, b, maxSpan) {
+  const i = doc.pieces.findIndex((P) => P.id === pieceId);
+  if (i < 0) throw new CoreError('NO_PIECE', `no piece ${pieceId}`);
+  const P = doc.pieces[i];
+  if (P.type !== 'road') throw new CoreError('NOT_ROAD', `${pieceId} is a ${P.type}, not road`);
+  if (!(maxSpan >= 0.01)) throw new CoreError('BAD_SPAN', `maxSpan must be at least 0.01 m, got ${maxSpan}`);
+  if (!(b > a)) throw new CoreError('BAD_RANGE', `the range must have b > a, got [${a}, ${b}]`);
+  const t = [0, ...P.knots, P.length], add = [];
+  for (let j = 0; j + 1 < t.length; j++) {
+    const x = t[j], y = t[j + 1];
+    if (!(y > a && x < b) || y - x <= maxSpan) continue;
+    const m = Math.ceil((y - x) / maxSpan - 1e-9);
+    for (let n = 1; n < m; n++) { const v = q(x + ((y - x) * n) / m, DEC.m); if (v > x && v < y && !add.includes(v)) add.push(v); }
+  }
+  if (add.length > 20000) throw new CoreError('TOO_MANY', `refining would add ${add.length} knots; use a larger maxSpan`);
+  if (!add.length) return { doc, inserted: [] };
+  const pieces = doc.pieces.slice(); pieces[i] = insertKnots(P, add);
+  return { doc: deepFreeze(checkDoc({ ...doc, pieces })), inserted: add.sort((u, v) => u - v) };
+}
+
 module.exports = {
+  boehm, insertKnot, insertKnots, refineKnots,
   fromPositionFit,
-  SCHEMA, CHANNELS, FAMILIES, DEC, KNOT_M, CoreError,
+  SCHEMA, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CoreError,
   createDoc, roadPiece, flightPiece, appendPiece, endState, pieceEnd, channelAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };

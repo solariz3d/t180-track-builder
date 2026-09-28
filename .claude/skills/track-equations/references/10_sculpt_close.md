@@ -39,6 +39,11 @@ from it would leave a curvature step at the brush edge.
   kink anywhere, including at the window's edges.
 - **Known answer** (`evals/10_known_answers.test.js`): V reproduces a straight line exactly, Σⱼ (α + βτ*ⱼ) Bⱼ(x) = α + βx on
   non-uniform clamped knots (to 1e-12); and V of the bump agrees with the bump to within the knot spacing's square.
+- **Sharp (opt-in; the chair's D186 ruling 2).** `brush(…, { sharp: true })` refines the knots under the brush first (A's
+  `refineKnots`, ref 09) and acts at the asked radius. **Its spill is declared** (`sculpt.js` `SHARP_BOUND`, `SHARP_NOTE`):
+  outside W⁺ every channel moves by under HALF a quantum, and the track past W⁺ by under 0.1 mm. MEASURED on 21 brushes at
+  r = 20 m (pane E, D186 hand-back §10): at most 0.355 of a quantum and 70 µm. The cause: the knots are shared by every channel,
+  so the refinement re-quantises new control points of all of them, heading and pitch rate included.
 - **The smallest brush (E's rule, not a formula).** A window narrower than 4 knot spans holds no whole support and could change
   nothing, so a brush narrower than 3 spans is WIDENED to 3 spans, and says so. The change then stays inside the asked window
   widened by 2 spans on each side whenever r ≥ one span. A finer brush needs finer knots under it (knot insertion, Boehm's rule,
@@ -71,3 +76,21 @@ is not moved). Every other control point gets 1.
   `test/core_close.test.js`: relative error ≤ 1.2e-4 measured, 5e-4 asserted (dropping the half-step term gives ≥ 9.6e-4).
 - A joint's first two coefficients on the next piece are not free parameters: c₀ is the previous piece's last, and
   c₁ = c₀ + (h_b/h_a)(c_{n−1} − c_{n−2}) (the README's end-slope rule), so they follow the columns they depend on.
+
+## §4 The hill and the swerve: offsets of the centreline (D186)
+The brush side. The offsets' formulas are ref 09 §7 (A); what is here is why a hill is an offset, measured, and the brush's rule for its peak.
+
+**Why not through the pitch rate.** A hill made as κv = h″ brings the height and the pitch back, but s is ARC LENGTH, so the
+road over the hill is longer and everything past it moves back by ∫(1 − cos h′) ds. That is second order in the slope, so no
+choice of κv removes it. MEASURED (t180 17c2301, level straight, pane E's `scratchpad/d186/probe.js`): 8.9 mm (H 1 m, r 100 m),
+22 cm (5 m, 100 m), 64 cm (10 m, 200 m).
+
+**The offsets** are A's: height h and lateral l are document channels, and the adapter lifts the path by them after the
+geometry and recomputes the frame, the tangent and the curvature from the lifted curve, exactly. The derivation and its known
+answers are **ref 09 §7** (`src/core/adapter.js` `offsetPath`, `test/core_offset.test.js`). The brush drives them
+(`sculpt.js` `brush`, modes `hill` and `swerve`). Where both offsets and their first two derivatives are zero, a sample is
+the geometry's own object, so outside a hill nothing changes, bit for bit.
+
+**The peak (E's rule, a ratio).** A hill asks for its peak Δ. The bump on the control points peaks below Δ when few control points
+carry it, and off s₀ when the knots under it are uneven. So the brush runs once at unit Δ, reads its own LARGEST change over the
+window it used (every 0.25 m), and scales by that.

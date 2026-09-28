@@ -44,6 +44,25 @@ function pieceOffsets(doc) {
   let off = 0; return doc.pieces.map((P) => { const o = off; off += len.get(P.id) || 0; return o; });
 }
 
+/** The largest knot span of any road piece that overlaps [lo, hi] (lap distance), counting only the spans that overlap it. */
+function spanUnder(doc, off, lo, hi) {
+  let m = 0;
+  doc.pieces.forEach((P, p) => {
+    if (P.type !== 'road' || off[p] + P.length < lo || off[p] > hi) return;
+    const t = [0, ...P.knots, P.length];
+    for (let k = 0; k + 1 < t.length; k++) if (off[p] + t[k + 1] >= lo && off[p] + t[k] <= hi) m = Math.max(m, t[k + 1] - t[k]);
+  });
+  return m;
+}
+
+/** A channel's value at lap distance s (the road piece holding s; ref 03 §1 through document.js channelAt). */
+function valueAt(doc, ch, s) {
+  const off = pieceOffsets(doc); let p = -1;
+  doc.pieces.forEach((P, i) => { if (P.type === 'road' && s >= off[i] && s <= off[i] + P.length) p = i; });
+  if (p < 0) throw new D.CoreError('BAD_BRUSH', `brush: no road at ${s} m`);
+  return D.channelAt(doc.pieces[p], ch, s - off[p]).v;
+}
+
 const freeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) freeze(o[k]); } return o; };
 
 /**
@@ -58,9 +77,12 @@ function sculpt(doc, { channel, s0, r, delta }) {
   // THE SMALLEST BRUSH: a control point's support is 4 knot spans, so a window narrower than that holds none and would change
   // nothing. A brush narrower than 3 spans is widened to 3 (E's rule; the hand-back's declared deviation): then 2–3 control points
   // carry the bump, and the change stays inside the asked window widened by 2 spans on each side whenever r ≥ one span.
-  const off = pieceOffsets(doc), near = doc.pieces.filter((P, p) => P.type === 'road' && off[p] + P.length >= s0 - r && off[p] <= s0 + r);
-  const span = Math.max(0, ...near.map((P) => { const t = [0, ...P.knots, P.length]; return Math.max(...t.slice(1).map((x, k) => x - t[k])); }));
-  const rUsed = Math.max(r, 3 * span);
+  // The span is the largest knot span UNDER THE WINDOW, not in the whole piece, so the rule narrows after a local refinement
+  // (A's catch, D186: document.js refineKnots).
+  const off = pieceOffsets(doc);
+  // (a widened window can reach coarser spans, so widen until it holds: at most as many rounds as there are pieces)
+  let rUsed = r;
+  for (let k = 0; k <= doc.pieces.length; k++) { const w = Math.max(r, 3 * spanUnder(doc, off, s0 - rUsed, s0 + rUsed)); if (w === rUsed) break; rUsed = w; }
   const res = doc.pieces.map((P, p) => {
     if (P.type !== 'road' || off[p] + P.length < s0 - rUsed || off[p] > s0 + rUsed) return null;
     return brushControls(P.channels[channel], D.knotVector(P), { s0: s0 - off[p], r: rUsed, delta });
@@ -97,4 +119,63 @@ function sculpt(doc, { channel, s0, r, delta }) {
   return { doc: out, changed, radiusUsed: rUsed, note: changed.length ? (rUsed > r ? `the brush was widened from ${r} m to ${+rUsed.toFixed(3)} m, 3 knot spans, the smallest that moves whole control points` : null) : 'the brush window holds no whole control-point support: nothing changed' };
 }
 
-module.exports = { smootherstep, falloff, knotAverage, brushControls, sculpt, pieceOffsets };
+// ── THE BRUSH MODES (D186) ──────────────────────────────────────────────────────────────────────────────────────────────
+// "Push a hill up" must be LOCAL: the track past the brush unchanged, with no re-close. A brush on the pitch RATE cannot be:
+// its ∫Δκv tilts everything after it. Nor can a hill made THROUGH the rate, κv = h″: the height and pitch come back, but the road
+// over the hill is longer in arc length, so the track past it moves back by ∫(1 − cos h′) ds (measured on 17c2301: 22 cm for a
+// 5 m hill over r = 100 m; the D186 hand-back §1). So a hill and a swerve are brushes on the document's OFFSET channels, height
+// `h` and lateral `l`: value channels like phi, w and r, which the adapter adds to the position. Zero outside the window, so the
+// track past it is untouched by construction. Whether the document carries them is A's (src/core/README.md); until it does, a
+// hill or a swerve is refused by name, and nothing is faked through the rate.
+/**
+ * THE SHARP BRUSH'S DECLARED SPILL (the chair's D186 ruling 2: opt-in, and its cost stated in the UI and the docs). Measured on the
+ * 21 sharp brushes at r = 20 m of the D186 hand-back §10 (every channel, 25/50/75% of generated track 0): outside W⁺ every channel
+ * changed by at most 0.355 of its quantum, and the track past W⁺ moved by at most 70 µm (6.98e-5 m). Declared with margin below.
+ * SHARP_NOTE is the sentence the app shows when the user turns sharp on.
+ */
+const SHARP_BOUND = Object.freeze({ quantaOutside: 0.5, pathM: 1e-4 });
+const SHARP_NOTE = 'Sharp brush: acts at exactly the size you set by adding finer control points first. It can nudge the track just outside the brush by up to 0.1 mm, and the road values there by less than half their stored step. Leave it off for an exactly local edit.';
+const MODES = Object.freeze({
+  hill: { channels: ['h'], what: 'height offset, m' },
+  swerve: { channels: ['l'], what: 'lateral offset, m (+ = left)' },
+  value: { channels: ['phi', 'w', 'r', 'h', 'l'], what: 'a value channel: bank, width, rise, height or lateral offset' },
+  rate: { channels: ['kh', 'kv'], what: 'turn or climb harder from here on: a heading- or pitch-rate brush, which re-closes a closed lap' },
+});
+
+/**
+ * THE brush. `mode` is 'hill' (the default), 'swerve', 'value' or 'rate'; `channel` is needed only for 'value' and 'rate'.
+ * Returns what `sculpt` returns, plus `mode`, and for a rate brush on a CLOSED track `close`: the re-close's report. The lap is
+ * re-closed with the brushed stretch protected (close's `edited`), and a re-close that fails leaves the track OPEN and says so.
+ */
+function brush(doc, { mode = 'hill', channel, s0, r, delta, sharp = false } = {}) {
+  const M = MODES[mode];
+  // SHARP (opt-in): refine the knots under the brush first (A's refineKnots, Boehm), so it acts at the asked radius instead of
+  // widening. Its cost, measured (the D186 hand-back §3): the new control points are re-quantised in EVERY channel, so values up to
+  // 2.7e-5 change outside the window and the track past it moves by up to 70 µm. So it is never the default.
+  if (sharp) {
+    if (typeof D.refineKnots !== 'function') throw new D.CoreError('NOT_YET', 'brush: a sharp brush needs document.js refineKnots (A)');
+    const h = (2 * r) / 6, lo = s0 - r - 3 * h, hi = s0 + r + 3 * h, off = pieceOffsets(doc);
+    doc.pieces.forEach((P, p) => { if (P.type !== 'road' || off[p] + P.length < lo || off[p] > hi) return; doc = D.refineKnots(doc, P.id, Math.max(0, lo - off[p]), Math.min(P.length, hi - off[p]), h).doc; });
+  }
+  if (!M) throw new D.CoreError('BAD_MODE', `brush: mode "${mode}" (known: ${Object.keys(MODES).join(', ')})`);
+  const ch = channel || (M.channels.length === 1 ? M.channels[0] : null);
+  if (!ch || !M.channels.includes(ch)) throw new D.CoreError('BAD_CHANNEL', `brush: mode "${mode}" takes ${M.channels.join(' or ')} (${M.what}), got ${channel}`);
+  if (!D.CHANNELS.includes(ch)) throw new D.CoreError('NOT_YET', `brush: the document has no "${ch}" channel yet (${M.what}); a ${mode} brush needs it (src/core/README.md, A)`);
+  // A hill or a swerve asks for its PEAK: "raise the road by Δ". The bump on the control points peaks lower than Δ when few control
+  // points carry it (a narrow brush), and off s₀ when the knots are uneven under it, so the brush is run once at unit Δ, its own
+  // largest change over the window used is read (every 0.25 m), and Δ is scaled by that (a ratio, E's rule; ref 10 §4).
+  let d = delta;
+  if (mode === 'hill' || mode === 'swerve') {
+    const unit = sculpt(doc, { channel: ch, s0, r, delta: 1 }), ru = unit.radiusUsed;
+    let got = 0; for (let s = Math.max(0, s0 - ru); s <= s0 + ru; s += 0.25) { let v; try { v = valueAt(unit.doc, ch, s) - valueAt(doc, ch, s); } catch (e) { continue; } if (Math.abs(v) > Math.abs(got)) got = v; }
+    if (!(Math.abs(got) > 1e-6)) throw new D.CoreError('BAD_BRUSH', `brush: a ${mode} at ${s0} m moves no control point (${unit.note || 'a joint the window only half covers'})`);
+    d = delta / got;
+  }
+  const res0 = sculpt(doc, { channel: ch, s0, r, delta: d }), res = sharp ? { ...res0, note: SHARP_NOTE, sharp: SHARP_BOUND } : res0;
+  if (mode !== 'rate' || !doc.closed || !res.changed.length) return { ...res, mode };
+  const { close } = require('./close.js');
+  const c = close({ ...res.doc, closed: false }, { edited: res.changed.map((x) => x.piece) });
+  return { ...res, mode, doc: c.doc, close: { converged: c.converged, iterations: c.iterations, gapM: c.gapM, report: c.report } };
+}
+
+module.exports = { smootherstep, falloff, knotAverage, brushControls, sculpt, pieceOffsets, brush, MODES, SHARP_BOUND, SHARP_NOTE };

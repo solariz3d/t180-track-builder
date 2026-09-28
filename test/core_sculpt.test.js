@@ -86,10 +86,11 @@ test('a brush never reaches a control point whose support leaves the window (the
   assert.deepEqual(changed, [5]);                           // control point 5's support [t₅, t₉] = [20, 60] is the only one inside [15, 65]
   ctrl.forEach((v, i) => { if (i !== 5) assert.ok(Object.is(v, c[i])); });
 });
-test('a brush smaller than 3 knot spans is widened to 3, and says so', () => {
-  const s0 = LEN / 2, res = S.sculpt(BASE, { channel: 'phi', s0, r: 5, delta: 0.1 });
-  const near = BASE.pieces.filter((P, p) => OFF[p] + P.length >= s0 - 5 && OFF[p] <= s0 + 5), span = Math.max(...near.map((P) => { const t = [0, ...P.knots, P.length]; return Math.max(...t.slice(1).map((x, k) => x - t[k])); }));
-  assert.ok(res.changed.length && res.radiusUsed === 3 * span, `radius ${res.radiusUsed}, 3 spans ${3 * span}`);
+test('a brush smaller than 3 knot spans is widened to 3 of the spans UNDER it, and says so', () => {
+  const s0 = LEN / 2, res = S.sculpt(BASE, { channel: 'phi', s0, r: 5, delta: 0.1 }), ru = res.radiusUsed;
+  // the spans that overlap the window actually used (A's catch, D186: not the whole piece's largest span)
+  let under = 0; BASE.pieces.forEach((P, p) => { const t = [0, ...P.knots, P.length]; for (let k = 0; k + 1 < t.length; k++) if (OFF[p] + t[k + 1] >= s0 - ru && OFF[p] + t[k] <= s0 + ru) under = Math.max(under, t[k + 1] - t[k]); });
+  assert.ok(res.changed.length && ru === 3 * under, `radius ${ru}, 3 spans under it ${3 * under}`);
   assert.match(res.note, /widened/);
 });
 test('the joints stay C1: a brush across a joint passes the document\'s own joint check, and the input is untouched', () => {
