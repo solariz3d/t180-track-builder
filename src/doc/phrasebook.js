@@ -27,6 +27,12 @@ function angled(word, deg, tempo) {
   return { turn: deg * DEG, length: (deg * DEG * WORDS[word].R * T.scale) / (1 - T.ease) };
 }
 
+// THE ORDER is the palette's, and a user who clicks the starter phrases in turn chains them in it. Chained as
+// sakura flow → bowl hairpin → S → spiral climb (the order until D180), the spiral's flat first turn crossed the sakura
+// flow's road 0.4 m above it (stacked-within-2m at 476–521 and 2513–2559 m, A's D180 check of the installed app). Of the
+// 24 orders of the four, 22 chain clean; this one keeps sakura flow first (the guide's suggested first piece) and is
+// clean (test/phrasebook.test.js). Every phrase after every other is clean too, but for bowl hairpin → bowl hairpin: two
+// flat 180° hairpins the same way come back over their own start, which no default can avoid.
 const PHRASES = Object.freeze([
   {
     name: 'sakura flow',
@@ -40,16 +46,6 @@ const PHRASES = Object.freeze([
     note: 'Sakura\'s grammar word for word, in Sakura\'s font, each word at its own radius (sweep 1,000 m, turn 300 m, tight 120 m at the standard tempo). The ANGLES are chosen: one 90° corner shared 10° / 20° / 30° / 20° / 10°, because the words at their default angles turn 270° and cross their own lead-in (red: self-intersection and stacked, measured). The half-pipe is the vocabulary\'s (16 m floor, 8 m walls), not Sakura\'s 32 m.',
   },
   {
-    name: 'bowl hairpin',
-    words: ['turn', 'tight', 'turn'].map((word) => ({ word, dir: 'L', font: 'bowl', tempo: 'standard' })),
-    source: [
-      'ARCHITECTURE.md:36 "**Phrase:** a saved word sequence with some parameters exposed (a macro): spiral climb, bowl hairpin, S."',
-      'FINDINGS.md:14 "The dominant form is a **bowl**, a flatter floor curving up the outside. It is 50–88% of profiles on most tracks."',
-      'FINDINGS.md:180-181 "Sakura\'s corners open and close in steps … never straight into tight."',
-    ],
-    note: 'A hairpin in the dominant font, opened and closed through a turn on each side of the tight, never straight into tight: 60° + 90° + 60° = 210°. The name is ARCHITECTURE\'s; the sequence is chosen by the grammar, not measured.',
-  },
-  {
     name: 'S',
     words: [{ word: 'turn', dir: 'L', font: 'bowl', tempo: 'serpents' }, { word: 'turn', dir: 'R', font: 'bowl', tempo: 'serpents' }],
     source: [
@@ -58,6 +54,16 @@ const PHRASES = Object.freeze([
       'FINDINGS.md:199 "| Serpents Spiral | 2.0 km | 35 | 0 | – |" (the track the tempo is named for; FINDINGS gives its lap, not its radii)',
     ],
     note: 'A left turn into a right turn at the serpents tempo, in the bowl font (its outside wall changes side with the turn). The 100–170 m radius is quoted by ARCHITECTURE §2, not by a FINDINGS line.',
+  },
+  {
+    name: 'bowl hairpin',
+    words: ['turn', 'tight', 'turn'].map((word) => ({ word, dir: 'L', font: 'bowl', tempo: 'standard' })),
+    source: [
+      'ARCHITECTURE.md:36 "**Phrase:** a saved word sequence with some parameters exposed (a macro): spiral climb, bowl hairpin, S."',
+      'FINDINGS.md:14 "The dominant form is a **bowl**, a flatter floor curving up the outside. It is 50–88% of profiles on most tracks."',
+      'FINDINGS.md:180-181 "Sakura\'s corners open and close in steps … never straight into tight."',
+    ],
+    note: 'A hairpin in the dominant font, opened and closed through a turn on each side of the tight, never straight into tight: 60° + 90° + 60° = 210°. The name is ARCHITECTURE\'s; the sequence is chosen by the grammar, not measured.',
   },
   {
     name: 'spiral climb',

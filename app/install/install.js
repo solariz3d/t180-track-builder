@@ -18,7 +18,7 @@
 
 const PREFIX_NOTE = 'the builder names every track t180b_…, so it can never overwrite a track it did not make';
 
-function createInstaller({ exporter, native, getDoc }) {
+function createInstaller({ exporter, native, getDoc, getTextures = () => null }) {
   return {
     root: () => native.getAcRoot(),
     async chooseRoot(path) {
@@ -27,8 +27,10 @@ function createInstaller({ exporter, native, getDoc }) {
     async install() {
       const root = await native.getAcRoot();
       if (!root) return { ok: false, needsRoot: true, message: 'pick your Assetto Corsa folder first (the one that holds content\\tracks); it is remembered' };
+      const name = String(getDoc().name || '').trim();
+      if (!name || /^untitled$/i.test(name)) return { ok: false, message: 'name the track first (Save, with a name): it installs as t180b_<name>, and an unnamed track would replace the last unnamed one' };
       let out;
-      try { out = exporter.run(getDoc()); } catch (e) {
+      try { out = exporter.run(getDoc(), { textures: getTextures() }); } catch (e) {
         if (e.name !== 'ExportError') throw e;
         return { ok: false, message: e.message, reds: e.code === 'RED' ? e.red : null };
       }

@@ -42,7 +42,7 @@ test('every built-in word and starter phrase is a button, and a click places it 
     const s = await createShell({ storage: mem() }), root = new fake.Element('aside'), placed = [];
     renderPalette(root, paletteModel(s.getState(), s.pickers()), { ...noop, place: (n) => placed.push(n) });
     const buttons = root.querySelectorAll('.builtin');
-    assert.deepEqual(buttons.map((b) => b.textContent), ['straight', 'sweep', 'turn', 'tight', 'wall-ride', 'inversion', 'jump', 'sakura flow', 'bowl hairpin', 'S', 'spiral climb']);
+    assert.deepEqual(buttons.map((b) => b.textContent), ['straight', 'sweep', 'turn', 'tight', 'wall-ride', 'inversion', 'jump', 'sakura flow', 'S', 'bowl hairpin', 'spiral climb']);   // D180: the phrasebook's order, whose chain is clean
     buttons[2].dispatch('click'); buttons[7].dispatch('click');
     assert.deepEqual(placed, ['turn', 'sakura flow']);
   } finally { restore(); }
@@ -63,4 +63,23 @@ test('undo is disabled on an empty history, and live after a placement', async (
   const undoOf = (root) => root.querySelectorAll('button').find((b) => b.textContent === 'Undo');
   assert.ok(undoOf(await drawn()).hasAttribute('disabled'));
   assert.ok(!undoOf(await drawn((s) => s.place('turn'))).hasAttribute('disabled'));
+});
+
+// A first-time user read "loop closed with 3 words …" in red, as an alert: a success looked like an error (the
+// installed app's fresh-eyes check, 2026-09-27). A success is a status in the normal colour; a refusal stays an alert.
+test('a success message is a status, not a red alert; a refusal after it is an alert again', async () => {
+  const restore = fake.install();
+  try {
+    const s = await createShell({ storage: mem(), autosaveMs: 0 });
+    for (const w of ['straight', 'straight', 'tight', 'straight', 'tight']) s.place(w);
+    s.closeLoop();
+    let root = new fake.Element('aside'); renderPalette(root, paletteModel(s.getState(), s.pickers()), noop);
+    let m = root.querySelectorAll('.message');
+    assert.equal(m.length, 1); assert.match(m[0].textContent, /^loop closed/);
+    assert.deepEqual([m[0].getAttribute('role'), m[0].className.includes('ok')], ['status', true]);
+    s.sculpt('w9', { handles: { length: 10 } });   // a refusal: no such word
+    root = new fake.Element('aside'); renderPalette(root, paletteModel(s.getState(), s.pickers()), noop);
+    m = root.querySelectorAll('.message');
+    assert.deepEqual([m[0].getAttribute('role'), m[0].className.includes('ok')], ['alert', false]);
+  } finally { restore(); }
 });

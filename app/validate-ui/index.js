@@ -26,6 +26,7 @@ const { createValidationController, summary } = require('./panel.js');
 const { levelAt, rgbaAt, PALETTE, LEVEL } = require('./colour.js');
 const { createSpeedPicker, mountSpeedPicker } = require('./speed.js');
 const { graphModel, drawGraph } = require('./graph.js');
+const { lapText, lapWhereText, findingLine } = require('./labels.js');
 
 const css = (rgba) => `rgb(${Math.round(rgba[0] * 255)}, ${Math.round(rgba[1] * 255)}, ${Math.round(rgba[2] * 255)})`;
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
@@ -33,7 +34,7 @@ const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.cr
 function mount(root, shell) {
   const head = el('div', { className: 'v-summary' });
   const csp = el('input', { type: 'checkbox', checked: true });
-  const graph = el('canvas', { width: 480, height: 96, className: 'v-graph' });
+  const graph = el('canvas', { width: 480, height: 96, className: 'v-graph', style: 'width: 100%; height: 96px;' });
   const list = el('ul', { className: 'v-list' });
   const speedRow = el('div', { className: 'v-speed-row' });
   root.append(speedRow, el('label', {}, [csp, ' CSP (wall raycasting)']), head, graph, list);
@@ -42,18 +43,22 @@ function mount(root, shell) {
   function render(state) {
     const s = summary(state);
     head.textContent = state.error ? `not validated: ${state.error}`
-      : `${s.red} red · ${s.amber} amber · lap ${s.lap ? (s.lap.ok === null ? `not run (${s.lap.reason})` : s.lap.ok ? 'proved' : 'FAILS') : '—'} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}${s.jumpsPending ? ` (${s.jumpsPending} waiting for ${s.jumpsPending === 1 ? 'its landing' : 'their landings'})` : ''}`;
+      : `${s.red} red · ${s.amber} amber · ${lapText(s.lap)} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}${s.jumpsPending ? ` (${s.jumpsPending} waiting for ${s.jumpsPending === 1 ? 'its landing' : 'their landings'})` : ''}${s.pendingFrom != null ? ` · checked to ${Math.round(s.pendingFrom)} m, the rest when the drag ends` : ''}`;
     head.style.color = state.error ? css(PALETTE[LEVEL.RED]) : '';
     const gm = graphModel(state);
     graph.style.display = gm ? '' : 'none';   // hidden while there is no load to draw
+    // the canvas's backing store follows its SHOWN size (D177 window pass: drawn at 480 px and shown at ~265, its labels
+    // were too small to read); DPR-aware, so the 10 px labels are 10 css px on any screen
+    const dpr = (typeof devicePixelRatio === 'number' && devicePixelRatio > 0) ? devicePixelRatio : 1, cw = graph.clientWidth;
+    if (cw > 0 && graph.width !== Math.round(cw * dpr)) { graph.width = Math.round(cw * dpr); graph.height = Math.round(96 * dpr); }
     drawGraph(graph, gm);
     list.replaceChildren();
     const r = state.result;
     if (r) {
       for (const [kind, items, lvl] of [['red', r.red, LEVEL.RED], ['amber', r.amber, LEVEL.AMBER]]) {
-        for (const x of items) list.append(el('li', { textContent: `${kind}: ${x.reason}, s ${x.s0.toFixed(0)}–${x.s1.toFixed(0)} m${x.source ? ` (${x.source})` : ''}`, style: `color: ${css(PALETTE[lvl])}` }));
+        for (const x of items) { const f = findingLine(kind, x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${css(PALETTE[lvl])}` })); }   // the rule and its source in the tooltip
       }
-      if (r.lap && r.lap.ok === false) for (const w of r.lap.where) list.append(el('li', { textContent: `lap: ${w.reason} at s ${w.s.toFixed(0)} m`, style: `color: ${css(PALETTE[LEVEL.RED])}` }));
+      if (r.lap && r.lap.ok === false) for (const w of r.lap.where) list.append(el('li', { textContent: `lap: ${lapWhereText(w)}, at ${w.s.toFixed(0)} m`, title: w.reason, style: `color: ${css(PALETTE[LEVEL.RED])}` }));
     }
     for (const j of state.arcs) {
       const legs = j.arcs.map((a) => `${a.g} g ${a.caught ? `lands at ${a.touchdown.x.toFixed(1)} m` : a.clear ? 'clears, no touchdown found' : `falls short (needs ${(a.minSpeed * 3.6).toFixed(0)} km/h)`}`);
@@ -66,7 +71,12 @@ function mount(root, shell) {
     } }));
   }
   let ctl = null;
-  const picker = createSpeedPicker({ onChange: (kmh) => { if (ctl) ctl.setDesignSpeed(kmh); } });
+  // D179: the slider's speed also sizes the open track's jump ramps (A's shell setDesignSpeed re-resolves; derived, no
+  // undo step), so a jump is never checked at a speed its ramp was not built for. The shell first, then validation at it
+  const picker = createSpeedPicker({ onChange: (kmh) => {
+    if (typeof shell.setDesignSpeed === 'function') shell.setDesignSpeed(kmh);
+    if (ctl) ctl.setDesignSpeed(kmh);
+  } });
   // ONE PATH (D177): the preview's path, asked for through C's seam ('t180:track-request', { reply(track) }, answered
   // with { path, segments, closed, how, g, fromS }: app/preview/index.js); with no answer, or a path for another
   // document, the controller grows its own

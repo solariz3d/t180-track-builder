@@ -95,3 +95,17 @@ test('on a word already red there is no bound to stop at, so the document\'s own
   assert.notStrictEqual(m.value, 0.9);
   ctl.cancel();
 });
+
+test('why no handles show, in words: nothing selected, several words, or a starter phrase (D177 window pass)', async () => {
+  const shell = await createShell({ storage: mem() }), ctl = createHandlesController(shell);
+  assert.match(ctl.why(), /^Select one placed word/);
+  shell.place('sakura flow'); shell.place('straight');
+  const [phrase, word] = shell.getState().history.present.words.map((w) => w.id);
+  shell.select(phrase, phrase);
+  assert.strictEqual(ctl.target(), null);
+  assert.match(ctl.why(), /starter phrase "sakura flow".*cannot be sculpted here yet.*single word/);
+  shell.select(phrase, word);
+  assert.match(ctl.why(), /2 words are selected/);
+  shell.select(word, word);
+  assert.ok(ctl.target(), 'a single word has handles');
+});

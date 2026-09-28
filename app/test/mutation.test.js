@@ -111,6 +111,9 @@ const MUTATIONS = [
   { id: 'L14 setTextureSet drops the set', file: 'preview/preview.js', from: 'set = s || null;', to: 'set = null;', caughtBy: 'preview: a texture set with a made floor' },
   { id: 'L15 a property is read from the wrong material', file: 'preview/aclook.js', from: 'const m = scene.materials[b.materialIndex];', to: 'const m = scene.materials[0] && { ...scene.materials[0], name: String(b.materialIndex) };', caughtBy: 'list: every mesh the preview draws is in the kn5' },
   { id: 'L16 L does not change the look (the colour per word is unreachable)', file: 'preview/preview.js', from: "if (a.look) { look = look === 'ac' ? 'words' : 'ac';", to: 'if (a.look) {', caughtBy: 'preview: L toggles the look' },
+  // D179, the usability pass
+  { id: 'L17 the ties never fade (they hatch the road dark at a distance)', file: 'preview/renderer.js', from: 'drawLines(L.ties, model, COLOURS.tie, alpha, TIE_FADE);', to: 'drawLines(L.ties, model, COLOURS.tie, alpha);', caughtBy: 'renderer: the ties fade out' },
+  { id: 'L18 the canvas is cleared to the fog colour again', file: 'preview/renderer.js', from: 'gl.clearColor(clear[0], clear[1], clear[2], 1);', to: 'gl.clearColor(fog[0], fog[1], fog[2], 1);', caughtBy: 'renderer: the canvas is cleared to CLEAR' },
 ];
 
 function runMutant(m) {

@@ -8,6 +8,7 @@
 // No key is bound here: Alt is read from the pointer event, not claimed (app/README.md: keys are asked for there first).
 'use strict';
 const { createHandlesController } = require('./panel.js');
+const { stopLine, refusalText } = require('../validate-ui/labels.js');
 
 const DEG = 180 / Math.PI;
 const COLOUR = { clean: '', amber: 'rgb(255, 173, 26)', red: 'rgb(230, 41, 31)', refused: 'rgb(230, 41, 31)' };
@@ -28,12 +29,13 @@ function mount(root, shell) {
     if (ctl.dragging) return;                                        // never rebuild under the pointer
     if (t && shownFor && shownFor.id === t.id) { refresh(t); return; }
     shownFor = t; rows.replaceChildren(); note.textContent = '';
-    if (!t) { title.textContent = 'Select one placed word to sculpt it.'; return; }
+    if (!t) { title.textContent = ctl.why(); return; }
     title.textContent = `${t.id}: ${t.word}${t.font ? ` (${t.font})` : ''}`;
     for (const r of t.rows) {
       const input = el('input', { type: 'range', min: r.range[0], max: r.range[1], step: 'any', value: r.value });
       const val = el('span', { className: 'h-val', textContent: shown(r.unit, r.value) });
-      const why = el('span', { className: 'h-why' });
+      // the reason on its own line under the slider (D177 window pass: inline, it read "23.800 mred past …")
+      const why = el('div', { className: 'h-why', style: 'font-size: 11px; opacity: 0.9;' });
       input.dataset.handle = r.handle;
       input.addEventListener('pointerdown', (e) => {
         try {
@@ -45,7 +47,10 @@ function mount(root, shell) {
         if (!ctl.dragging) return;
         const m = ctl.move(Number(input.value));
         input.value = m.value; val.textContent = shown(r.unit, m.value);
-        val.style.color = COLOUR[m.level] || ''; why.textContent = m.why || '';
+        // plain words shown, the rule ids and sources in the tooltip (A's D180 check: no rule id or .md line in the panel)
+        val.style.color = COLOUR[m.level] || '';
+        const shownWhy = m.stop ? stopLine(m.stop, r.unit === 'm' ? ' m' : '').text : m.level === 'refused' ? `the document refuses it: ${refusalText(m.why)}` : (m.why || '');
+        why.textContent = shownWhy; why.title = m.why || '';
       });
       input.addEventListener('pointerup', () => { ctl.end(); build(); });
       input.addEventListener('pointercancel', () => { ctl.cancel(); build(); });

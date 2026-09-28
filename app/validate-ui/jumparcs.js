@@ -43,7 +43,7 @@ function sAtX(path, f, x) {
 function jumpArcs(result, path, { points = 48 } = {}) {
   const out = [];
   for (const jp of result.jumps) {
-    if (jp.pending) continue;
+    if (jp.pending || jp.badGap) continue;   // badGap: no flight to draw (validation's red 'jump-gap-not-forward' says why)
     const f = lipFrame(path, jp.s), known = Number.isFinite(jp.speed) && jp.speed > 0;
     const at = (x, v, g) => [f.A.pos[0] + f.axis[0] * x, f.A.pos[1] + flightY(x, v, f.theta, g), f.A.pos[2] + f.axis[2] * x];
     const arcs = jp.landings.map((L) => {

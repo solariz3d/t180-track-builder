@@ -114,7 +114,7 @@ function fakeGL({ compiles = true } = {}) {
     createShader: () => ({ id: ++id }), shaderSource() {}, compileShader() {}, getShaderParameter: () => compiles, getShaderInfoLog: () => "ERROR: 0:3: 'foo' : undeclared identifier",
     createProgram: () => ({ id: ++id }), attachShader() {}, linkProgram() {}, getProgramParameter: () => true, getProgramInfoLog: () => '',
     getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport() {}, clearColor() {}, clear() {}, enable() {}, disable() {},
-    uniformMatrix4fv() {}, uniform3f() {}, uniform1f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
+    uniformMatrix4fv() {}, uniform3f() {}, uniform1f() {}, uniform2f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     createBuffer: () => ({ id: ++id }), bindBuffer() {}, bufferData() { calls.bufferData++; }, deleteBuffer() { calls.deleteBuffer++; }, deleteProgram() {},
     drawElements() { calls.drawElements++; },
     drawArrays() { calls.drawArrays = (calls.drawArrays || 0) + 1; },

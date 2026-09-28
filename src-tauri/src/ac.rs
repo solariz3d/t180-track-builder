@@ -35,9 +35,22 @@ pub fn tracks_of(root: &Path) -> Result<PathBuf, String> {
 /// Remember the AC folder in `data`. Refused unless it is one (it has content/tracks).
 pub fn remember_ac_root(data: &Path, root: &Path) -> Result<PathBuf, String> {
     tracks_of(root)?;
-    let abs = fs::canonicalize(root).map_err(|e| format!("could not resolve {}: {e}", root.display()))?;
+    let abs = plain_path(fs::canonicalize(root).map_err(|e| format!("could not resolve {}: {e}", root.display()))?);
     super::write_atomic(&data.join(ROOT_FILE), &abs.to_string_lossy())?;
     Ok(abs)
+}
+
+/// The path as a user would type it: Windows' canonicalize returns the verbatim form (`\\?\C:\…`, `\\?\UNC\server\…`),
+/// which the install message showed as it is.
+pub fn plain_path(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy().into_owned();
+    if let Some(r) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{r}"))
+    } else if let Some(r) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(r)
+    } else {
+        p
+    }
 }
 
 /// The remembered AC folder, or None when none was picked yet (or the remembered one is gone).
@@ -45,7 +58,7 @@ pub fn recall_ac_root(data: &Path) -> Result<Option<PathBuf>, String> {
     let f = data.join(ROOT_FILE);
     match fs::read_to_string(&f) {
         Ok(s) => {
-            let p = PathBuf::from(s.trim());
+            let p = plain_path(PathBuf::from(s.trim()));   // a folder remembered before the fix carries \\?\
             Ok(if tracks_of(&p).is_ok() { Some(p) } else { None })
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -200,6 +213,18 @@ mod tests {
         let abs = remember_ac_root(&data, &ac).unwrap();
         assert_eq!(recall_ac_root(&data).unwrap(), Some(abs));
         assert!(remember_ac_root(&data, &d).unwrap_err().contains("no content\\tracks"));
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn the_remembered_ac_folder_is_the_path_a_user_would_type_with_no_verbatim_prefix() {
+        let (d, ac, data) = fake("plain");
+        let abs = remember_ac_root(&data, &ac).unwrap();
+        let said = abs.to_string_lossy().to_string();
+        assert!(!said.starts_with(r"\\?\"), "the install message would show {said}");
+        assert!(abs.is_absolute() && tracks_of(&abs).is_ok(), "{said}");
+        assert_eq!(fs::read_to_string(data.join(ROOT_FILE)).unwrap(), said);
+        assert_eq!(plain_path(PathBuf::from(r"\\?\UNC\server\share\ac")), PathBuf::from(r"\\server\share\ac"));
         fs::remove_dir_all(&d).unwrap();
     }
 

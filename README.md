@@ -8,13 +8,24 @@ replace Blender for track making.
   them in a *font* (half-pipe, bowl, flat banked ribbon) and a *tempo*, or sculpt freely.
 - **See it turn red where a T-180 can't survive it,** measured against real replays and real working tracks, not
   guesses.
-- **Preview how it will look in AC with CSP** before exporting. Geometry and textures are identical to the export, and
-  the lighting gap is measured against real screenshots.
+- **Preview how it will look in AC with CSP** before exporting. Geometry and materials are the export's own (the painted
+  start and grid boxes are not drawn yet), and fixed reference views are ready for measuring the lighting gap against
+  real screenshots.
 - **Export a working track directly:** no Blender, no ksEditor. Markers, grid, pits, timing, the T-180 soft-collision
   road, and an AI line.
 - **It keeps learning** the language from good tracks on your PC.
 
-## Status: v1 is being built, and it is the track only
+## Install
+
+**0.2.1** is the current release (0.2.0 was the first): a Windows installer,
+`T-180 Track Builder_0.2.1_x64-setup.exe`. It installs for the current user, with no administrator rights. It is not
+code-signed, so Windows SmartScreen warns about an unknown publisher the first time. To build the installer yourself: `node src-tauri/release.cjs` (it needs Rust and `tauri-cli`
+2; see `docs/RELEASE.md`). What changed, release by release, is in `CHANGELOG.md`.
+
+Your tracks, pieces, autosave and settings live in your own app-data folder
+(`%APPDATA%\com.solariz3d.t180-track-builder`), never in the program's folder, and uninstalling leaves them in place.
+
+## Status: 0.2.1, and it is the track only
 
 **v1 scope, in the author's words:** *"the first thing I want it to be is simply the track, no environmental
 elements."* So v1 has no terrain, scenery or props, only the road the user builds. The user builds it: the track grows
@@ -24,9 +35,11 @@ from its open end, like a coaster builder, one word or phrase at a time.
 launch at any point. Whether AC loads, drives, times and renders these tracks as intended is unverified until someone
 drives one.
 
-**How to read the table.** It was judged against ARCHITECTURE §1–§6, §5b and §5c from the code on `main` at `aa4d565`
-(2026-09-27), then updated for the work that lands after it: the starter phrasebook, texture packs, the soak and bench
-scripts, share codes, Install to AC and the "See it in Assetto" button.
+**How to read the table.** It judges every item of ARCHITECTURE §1–§6, §5b and §5c against the code of the 0.2.1
+release (2026-09-27), including the installed app: the release installer was installed into a throwaway folder,
+started, and used for a first track, following the guide (a starter phrase, one word with a handle dragged, closing
+the loop, saving under a name) before it was uninstalled. The Export button's folder dialog was opened there but not
+answered, so the export was checked headless (app/test/export.test.js), not in the installed window.
 - **tested:** built, and a test file exercises it (named).
 - **built:** the code exists (file named), with no test that exercises this item.
 - **not yet:** what is missing.
@@ -39,9 +52,11 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 |---|---|---|
 | The track is text; the mesh is derived | tested | `src/doc/serial.js` canonical text · `test/doc.test.js` |
 | Identical where it can be: the preview draws the export's geometry | tested | `app/preview/trackmodel.js` from `src/geom` · `app/test/preview.test.js` |
-| … lighting matched to AC+CSP, the gap measured | not yet | no look-match instrument (§5.3) |
+| … lighting matched to AC+CSP, the gap measured | not yet | the look-match instrument is built (`src/lookmatch/`, `scripts/lookmatch.js` · `test/lookmatch.test.js`), but no reference shots from AC exist yet, so the gap is not measured |
 | Guardrails, not gates: physics as colour while building | tested | `app/validate-ui/` · `app/test/validate-ui*.test.js` |
 | One tool: place words, restyle them, sculpt | tested | `app/palette/`, `app/handles/` · `app/test/palette.test.js`, `app/test/handles*.test.js` |
+| A guided first track for new users (five skippable steps; the user makes every move) | tested | `app/onboarding/` · `app/test/onboarding.test.js` |
+| The app works in its real window, not only headless (timers as strict as a browser's) | tested | `app/shell.js` · `app/test/timers-regression.test.js` |
 | Stability and export reliability | tested | export self-test (kn5 read back) · `test/export_words.test.js`; the soak and bench scripts (`scripts/soak.js`, `scripts/bench.js`) · `test/perf.test.js`, `test/perf_soak.test.js` |
 
 ### §2 The language
@@ -52,7 +67,7 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | A jump carries its landing ramp | tested | `src/doc/resolve.js` · `test/doc-jump.test.js` |
 | Phrases: a saved word sequence | tested | `src/doc/document.js` `appendPhrase`, `src/doc/library.js` · `test/doc-library.test.js` |
 | Starter phrasebook: spiral climb, bowl hairpin, S, Sakura's grammar | tested | `src/doc/phrasebook.js` · `test/phrasebook.test.js`; listed in the palette under "Starter phrases" (`src/doc/library.js`, `app/palette/palette.js`) |
-| A phrase's "parameters exposed" | not yet | a phrase's words are sculpted one by one; no phrase-level handles |
+| A phrase's "parameters exposed" | not yet | no phrase-level handles. The document can sculpt a phrase's words one by one (`editPhraseWord` in `src/doc/document.js`), but the app cannot yet: a placed starter phrase has no handles in the handles panel, which says so |
 | Fonts: half-pipe, bowl, flat banked ribbon, wall-ride, tube (ψ(u) past vertical) | tested | `src/doc/vocab.js`, `src/geom/profile.js` · `test/geom_path.test.js`, `test/geom_mesh.test.js` |
 | Tempos: standard, aurora, serpents | tested | `src/doc/vocab.js` · `test/doc.test.js` |
 | Handles, bounded live by physics | tested | `src/validate/bounds.js`, `app/handles/` · `test/validate_bounds.test.js`, `app/test/handles*.test.js` |
@@ -98,21 +113,22 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 
 | item | status | where |
 |---|---|---|
-| 1. Geometry and materials exactly what is exported | tested | `app/preview/trackmodel.js` builds the export's scene · `app/test/preview.test.js` |
-| 2. The preview uses AC's shader set (`ksPerPixel`, `ksMultilayer` …) | not yet | the preview has its own lighting (`app/preview/look.js`, tested in `app/test/look.test.js`), not a port of AC's shaders |
-| 3. The look-match instrument (screenshots vs renders, the difference tracked) | not yet | nothing built |
+| 1. Geometry and materials exactly what is exported | tested, with two gaps | `app/preview/trackmodel.js` builds the export's scene · `app/test/aclook.test.js`: every mesh the preview draws has the export's name and material, but the painted start line, grid and pit boxes and the closing seam are not drawn yet (a visible todo) |
+| 2. The preview uses AC's shader set (`ksPerPixel`, `ksMultilayer` …) | tested | `app/preview/acshaders.js`, `app/preview/aclook.js`: `ksPerPixel` and `ksPerPixelNM` ported from Content Manager's Custom Showroom (Ms-PL, licence in `app/preview/`), under one stated reference light; the `ksMultilayer` layer blend is inferred, not verified against AC · `app/test/aclook.test.js`. **L** switches back to a colour per placed word |
+| 3. The look-match instrument (screenshots vs renders, the difference tracked) | built, number not yet measured | `src/lookmatch/` (fixed reference views, a render in the preview's look, the difference as mean CIEDE2000), `scripts/lookmatch.js` · `test/lookmatch.test.js`. No reference shots from AC yet, so no difference is tracked |
 | 4. One-click "see it in Assetto" | tested, with the game launch mocked | `src-tauri/src/ac.rs` (its tests use a mock launcher), `app/install/` · `app/test/share-install.test.js`: built, OFF by default, and never run (the author, for v1: "No in game testing needed") |
 
 ### §5b Textures
 
 | item | status | where |
 |---|---|---|
-| Texture slots per surface strip; fonts give defaults, words override | tested | `src/texture/slots.js`, `src/doc/textures.js` · `test/texture-set.test.js`, `test/doc-textures.test.js` |
-| Automatic mapping (along by distance, across by width), with tiling handles | tested | `src/texture/mapping.js` · `test/texture-mapping.test.js` |
+| Texture slots per surface strip; fonts give defaults, words override | tested | `src/texture/slots.js`, `src/doc/textures.js`, the textures panel in the side panel (`app/texture/`) · `test/texture-set.test.js`, `test/doc-textures.test.js` |
+| … drawn by the preview and written by the export alike (a textured floor) | tested | `src/texture/set.js` `withTextureSet`, `app/preview/aclook.js` · `test/export-textures.test.js`, `app/test/export.test.js`. Only the FLOOR slot reaches the road mesh yet: walls, lines, kerbs and edge glow are stored in the document but not yet split onto their own strips of the mesh, so neither the preview nor the export draws them |
+| Automatic mapping (along by distance, across by width), with tiling handles | built, not yet used | `src/texture/mapping.js` · `test/texture-mapping.test.js` tests the mapping itself, but the road mesh still maps textures along its centreline (`src/geom/mesh.js`), so the tiling handles are stored and not yet applied |
 | Bring your own PNG or JPG, converted to DDS with mipmaps | tested | `src/texture/png.js`, `jpeg.js`, `dds.js` · `test/texture-image.test.js` |
 | Warnings about what AC can't do (e.g. compressed normal maps) | tested | `src/texture/warnings.js` · `test/texture-set.test.js` |
 | A texture maker: procedural layers, decals, every layer a parameter set | tested | `src/texmaker/`, `app/texmaker/` · `test/texmaker.test.js` |
-| Materials mapped onto AC's shaders (`ksPerPixel`, `ksPerPixelNM`, `ksMultilayer`) | not yet | `ksPerPixel` only |
+| Materials mapped onto AC's shaders (`ksPerPixel`, `ksPerPixelNM`, `ksMultilayer`) | not yet | the preview draws all three (§5 row 2); the export writes `ksPerPixel` materials only |
 | Texture packs: save, share and import | tested | `src/doc/packs.js` · `test/doc-packs.test.js` |
 | Budget: texture memory and resolution per track | tested | `src/texture/set.js`, `app/texture/` · `app/test/texture-panel.test.js` |
 
@@ -156,7 +172,8 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
   - `geom/`: paths, profiles, meshes, the BVH.
   - `validate/`: loads, jumps, the reds and ambers, handle bounds.
   - `markers/`: §5c.
-  - `texture/`: §5b part 1.
+  - `texture/`: §5b: slots, mapping, PNG/JPG to DDS, packs, the texture set the preview and the export share.
+  - `texmaker/`: §5b, the procedural texture maker (a texture as text).
   - `export/`: kn5, the track files, the AI line.
 - **`app/`:** the Tauri v2 desktop app around the build head: palette, preview, cameras, validation, handles, markers,
   textures. See `app/README.md`.
@@ -168,6 +185,9 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
   - the whole library read as text: 12 layouts, ~241 km, laps verified against 5 replays
   - jump flights; how fast and how hard the car accelerates
   - Wrong turns are kept and marked, not deleted.
+- **`src-tauri/`:** the native side of the app (file access, Install to AC, the launch that is off by default) and
+  `release.cjs`, which builds the installer.
+- **`docs/RELEASE.md`:** how the installer is built, what is in it, and what it does not do.
 - **`docs/ARCHITECTURE.md`:** the plan.
   - the language as data model; geometry; validation
   - the AC+CSP look-match; textures; spawns, pits and timing

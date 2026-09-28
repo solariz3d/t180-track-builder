@@ -7,6 +7,7 @@
 //   live.update(path, segments, { fromS })      after an append (fromS = the old path's end) or a sculpt (fromS = the
 //                                               edited word's start, fromSOf): incremental
 //   live.update(…, { lap: false })              a closed loop's lap proof is DEFERRED (src/validate lapOf proves it later)
+//   live.update(…, { uptoS })                   only stations before uptoS are checked; the rest is PENDING (D179 drag window)
 //   -> { result, map, changed, full }           `full` says whether the whole track was validated
 //
 // Nothing here touches a mesh, so nothing crosses IPC (ARCHITECTURE §9): the preview asks colour.js levelAt(map, s, u).
@@ -23,8 +24,8 @@ function fromSOf(path, g) {
 function createLive({ validate: vopts = {} } = {}) {
   let result = null, map = null;
   return {
-    update(path, segments, { fromS, lap = true } = {}) {
-      const full = !result || fromS === undefined, o = lap === false ? { ...vopts, lap: false } : vopts;
+    update(path, segments, { fromS, lap = true, uptoS = null } = {}) {
+      const full = !result || fromS === undefined, o = { ...vopts, ...(lap === false ? { lap: false } : {}), ...(uptoS != null ? { uptoS } : {}) };
       const next = full ? validate(path, segments, o) : revalidate(result, path, segments, fromS, o);
       const rc = map && !full ? recolour(map, next, { car: vopts.car, path }) : { map: colourMap(next, { car: vopts.car, path }), changed: null };
       result = next; map = rc.map;

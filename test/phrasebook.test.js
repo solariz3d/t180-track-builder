@@ -23,7 +23,7 @@ function run(name, { designSpeed = MACH6.designSpeedKmh / 3.6, words } = {}) {
 }
 
 test('the phrasebook holds the four starter phrases ARCHITECTURE §2 and FINDINGS name', () => {
-  assert.deepStrictEqual(PHRASES.map((p) => p.name), ['sakura flow', 'bowl hairpin', 'S', 'spiral climb']);
+  assert.deepStrictEqual(PHRASES.map((p) => p.name), ['sakura flow', 'S', 'bowl hairpin', 'spiral climb']);   // D180: the order whose chain is clean
 });
 
 for (const { name } of PHRASES) {
@@ -103,7 +103,7 @@ test('as library pieces the phrases are built-in, kind phrase, with the words an
 });
 
 test('an unknown phrase is refused by name', () => {
-  assert.throws(() => placePhrase(D.createDoc('x'), 'loop de loop'), /NO_SUCH_PHRASE.*known: sakura flow, bowl hairpin, S, spiral climb/);
+  assert.throws(() => placePhrase(D.createDoc('x'), 'loop de loop'), /NO_SUCH_PHRASE.*known: sakura flow, S, bowl hairpin, spiral climb/);
 });
 
 test('bowl hairpin is turn → tight → turn, all in the bowl, one way round (FINDINGS.md:14, :180)', () => {
@@ -116,4 +116,19 @@ test('the spiral climbs 6° and comes back to level, so the next word starts fla
   assert.ok(Math.abs(pitchEnd) < 1e-9, `pitch at the end ${pitchEnd}`);
   assert.deepStrictEqual(phrase('spiral climb').words.map((w) => w.word), ['turn', 'tight', 'tight', 'tight', 'turn']);
   assert.ok(Math.abs(phrase('spiral climb').words[0].handles.climb - 6 * DEG) < 1e-12);
+});
+
+// ── D180: chained, the starter phrases come out clean (A's check of the installed app found the old order red) ──
+const chainRed = (names) => {
+  let d = D.createDoc('chain'); for (const n of names) d = placePhrase(d, n);
+  const segs = D.resolve(d).segments;
+  return validate(G.buildPath(segs, { step: 2 }), segs, { designSpeed: MACH6.designSpeedKmh / 3.6 }).red.map((x) => `${x.reason} ${x.s0.toFixed(0)}–${x.s1.toFixed(0)} m`);
+};
+test('the four starter phrases chained in the palette\'s order (a user clicking them in turn) come out with no red', () => {
+  assert.deepStrictEqual(chainRed(PHRASES.map((p) => p.name)), []);
+});
+test('each starter phrase chained after each other one is clean, except bowl hairpin after bowl hairpin, the one pair no default can clear', () => {
+  const red = [];
+  for (const a of PHRASES) for (const b of PHRASES) { const r = chainRed([a.name, b.name]); if (r.length) red.push(`${a.name} → ${b.name}: ${r.join(', ')}`); }
+  assert.deepStrictEqual(red.map((x) => x.split(':')[0]), ['bowl hairpin → bowl hairpin'], red.join('; '));
 });

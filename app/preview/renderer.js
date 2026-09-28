@@ -65,14 +65,22 @@ void main(){ gl_Position = uVP * uModel * vec4(aPos, 1.0); vDepth = gl_Position.
 const LFS = `
 precision mediump float;
 varying float vDepth;
-uniform vec3 uColour; uniform float uAlpha; uniform vec3 uFog; uniform float uFogDensity;
-void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); gl_FragColor = vec4(mix(uFog, uColour, fog), uAlpha); }`;
+uniform vec3 uColour; uniform float uAlpha; uniform vec3 uFog; uniform float uFogDensity; uniform vec2 uFade;
+/* uFade = (near, far): the line fades out between them (D179: ties at a distance); far <= near: no fade */
+void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = uFade.y > uFade.x ? clamp((uFade.y - vDepth) / (uFade.y - uFade.x), 0.0, 1.0) : 1.0; gl_FragColor = vec4(mix(uFog, uColour, fog), uAlpha * f); }`;
 
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.55, 0.85, 1.0] });
 const GHOST_ALPHA = 0.42;
+// D179, the usability pass (p-d179-lookpass-C §1): the ties are one near-black line per station; from overhead or far
+// away they outnumber the pixels and hatch the lit road dark (measured: 42–51% of the overhead's drawn pixels near-black),
+// so they fade out between 60 and 250 m (the edges stay). And the canvas is cleared darker than the FOG colour: surfaces
+// facing away from the sun (a tube's ceiling, L* about 14) were only ΔE00 about 6 from a background that was the fog colour.
+// The fog colour itself is part of the look and is unchanged (src/lookmatch/raster.js uses the same).
+const TIE_FADE = Object.freeze([60, 250]);
+const CLEAR = Object.freeze([0.03, 0.035, 0.045]);
 
-function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012 } = {}) {
+function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clear = CLEAR } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -86,6 +94,7 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012 } = {
     return { p, pos: gl.getAttribLocation(p, 'aPos'), nrm: gl.getAttribLocation(p, 'aNrm'), vp: u('uVP'), model: u('uModel'), colour: u('uColour'), alpha: u('uAlpha'), fog: u('uFog'), fogD: u('uFogDensity') };
   };
   const surf = program(VS, FS), line = program(LVS, LFS);
+  line.fade = gl.getUniformLocation(line.p, 'uFade');
   const buffers = new Map();   // typed array → { buf, gen }
   let gen = 0, uploads = 0, draws = 0, lines = 0;
   function bufferFor(arr, target) {
@@ -176,19 +185,23 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012 } = {
     }
     gl.disableVertexAttribArray(surf.nrm);
   }
-  function drawLines(arr, model, colour, alpha) {
+  function drawLines(arr, model, colour, alpha, fade = [0, 0]) {
     if (!arr || !arr.length) return;
     gl.uniformMatrix4fv(line.model, false, model); gl.uniform3f(line.colour, colour[0], colour[1], colour[2]); gl.uniform1f(line.alpha, alpha);
+    gl.uniform2f(line.fade, fade[0], fade[1]);
     bufferFor(arr, gl.ARRAY_BUFFER); gl.vertexAttribPointer(line.pos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.LINES, 0, arr.length / 3); lines++;
   }
-  function drawRoadLines(batches, vp, alpha) {
+  function drawRoadLines(batches, vp, alpha, blending = false) {
     use(line, vp); gl.enableVertexAttribArray(line.pos);
+    // the ties fade with distance, which needs blending; the ghost pass has it on already
+    if (!blending) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
     for (const b of batches) {
       const L = linesFor(b); if (!L) continue;
       const model = new Float32Array(b.model);
-      drawLines(L.edges, model, COLOURS.edge, alpha); drawLines(L.ties, model, COLOURS.tie, alpha);
+      drawLines(L.edges, model, COLOURS.edge, alpha); drawLines(L.ties, model, COLOURS.tie, alpha, TIE_FADE);
     }
+    if (!blending) gl.disable(gl.BLEND);
   }
   return {
     draw(batches, pose, { width, height }, extras = {}) {
@@ -197,7 +210,7 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012 } = {
       const look = extras.look || 'ac';
       if (look !== 'ac' && look !== 'words') throw new Error(`renderer: unknown look ${look}`);
       gl.viewport(0, 0, width, height);
-      gl.clearColor(fog[0], fog[1], fog[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.clearColor(clear[0], clear[1], clear[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
       const vp = new Float32Array(M.viewProj(pose, width / height));
       if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, COLOURS.grid, 1); }
@@ -207,7 +220,7 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012 } = {
       if (extras.ghost && extras.ghost.length) {       // see-through, over the placed track, without writing depth
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
         drawSurfaces(extras.ghost, vp, GHOST_ALPHA, COLOURS.ghost);
-        drawRoadLines(extras.ghost, vp, 0.8);
+        drawRoadLines(extras.ghost, vp, 0.8, true);
         gl.depthMask(true); gl.disable(gl.BLEND);
       }
       if (extras.marker) { gl.disable(gl.DEPTH_TEST); use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.marker.positions, IDENTITY, COLOURS.marker, 1); gl.enable(gl.DEPTH_TEST); }
@@ -223,4 +236,4 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012 } = {
   };
 }
 
-module.exports = { createRenderer, VS, FS, LVS, LFS, COLOURS, GHOST_ALPHA };
+module.exports = { createRenderer, VS, FS, LVS, LFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR };

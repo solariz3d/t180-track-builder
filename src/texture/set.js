@@ -108,8 +108,38 @@ function applyToScene(scene, set) {
   };
 }
 
+/**
+ * The EXPORT's side of the preview's rule (app/preview/aclook.js resolveLook): every road cell of `mesh` (buildMesh's
+ * output, its cells paired with its root's children by position) whose segment's word has a textured FLOOR slot (an
+ * image or a made texture) wears that slot's material. Only the materials such cells use, and only the textures those
+ * materials sample, are added to `scene`; an untextured set returns `scene` itself, so an untextured track's kn5 is
+ * unchanged. `segments` are the resolved segments the mesh was built from.
+ */
+function withTextureSet(scene, mesh, segments, set) {
+  if (!set) return scene;
+  const kids = mesh.scene.root.children, byMat = new Map(set.materials.map((m) => [m.material.name, m.material]));
+  if (kids.length !== mesh.cells.length) throw new TextureError('BAD_TEXTURE_SET', `the mesh has ${kids.length} nodes but ${mesh.cells.length} cell records`);
+  const wear = new Map();                                   // mesh node -> material name
+  kids.forEach((node, k) => {
+    const seg = segments[mesh.cells[k].piece], slots = seg ? set.bySegment(seg.id) : null;
+    if (slots && slots.floor && (slots.floor.settings.texture || slots.floor.settings.make)) wear.set(node.children[0], slots.floor.material);
+  });
+  if (!wear.size) return scene;
+  const used = [...new Set(wear.values())], mats = scene.materials.slice(), index = new Map();
+  for (const name of used) {
+    const m = byMat.get(name); if (!m) throw new TextureError('BAD_TEXTURE_SET', `the set names material ${name} but does not carry it`);
+    index.set(name, mats.push(m) - 1);
+  }
+  const files = new Set(used.flatMap((n) => byMat.get(n).samplers.map((s) => s.texture)));
+  const toBuf = (u8) => (typeof Buffer !== 'undefined' ? Buffer.from(u8.buffer, u8.byteOffset, u8.byteLength) : u8);
+  const taken = new Set(scene.textures.map((t) => t.name));
+  const add = set.textures.filter((t) => files.has(t.file)).map((t) => { if (taken.has(t.file)) throw new TextureError('BAD_TEXTURE_NAME', `the scene already has a texture called ${t.file}`); return { name: t.file, data: toBuf(t.dds) }; });
+  const remap = (n) => (n.type === 'mesh' ? (wear.has(n) ? { ...n, material: index.get(wear.get(n)) } : n) : { ...n, children: (n.children || []).map(remap) });
+  return { ...scene, textures: [...scene.textures, ...add], materials: mats, root: remap(scene.root) };
+}
+
 function previewTextures(set) {
   return set.textures.map((t) => { const l = ddsLevel(t.dds, 0); return { name: t.name, file: t.file, width: l.width, height: l.height, rgba: l.rgba }; });
 }
 
-module.exports = { buildTextureSet, applyToScene, previewTextures, fileOf, wordsOf, madeName, hash16 };
+module.exports = { buildTextureSet, applyToScene, withTextureSet, previewTextures, fileOf, wordsOf, madeName, hash16 };

@@ -1,0 +1,18 @@
+{
+  "about": "ARCHITECTURE §5.3 look-match reference views (D179, C). Each view is a fixed camera on a known AC track, anchored to one of the track's own AC_ dummies (every AC track has them; the start grid and pit boxes carry the race direction). The camera sits `up` m above the anchor, `forward` m along its race direction and `right` m to its right, and looks along the race direction turned by `yawDeg` (+ = left) and `pitchDeg` (+ = up), with a vertical field of view `fovDeg`, at `width` × `height` pixels. src/lookmatch/cameras.js resolves a view to a world pose; scripts/lookmatch.js prints those poses so the same views can be set up in AC. The values are C's choice (inferred: a driver's eye height of 1.1 m, AC's default 56° field of view), not measured in AC. The reference weather and time are the preview's (app/preview/aclook.js LIGHT: 14:00, sun 42° up at azimuth 225°), and the AC shots must be taken at that time, in clear weather, with CSP.",
+  "version": 1,
+  "tracks": {
+    "centrifuge": { "folder": "centrifuge", "models": ["centrifuge.kn5"] },
+    "sakura": { "folder": "sakura_speedway", "models": ["sktrack.kn5", "env.kn5", "trees.kn5"] }
+  },
+  "views": [
+    { "id": "centrifuge-grid", "track": "centrifuge", "anchor": "AC_START_0", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": -2, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "centrifuge-grid-high", "track": "centrifuge", "anchor": "AC_START_0", "up": 12, "forward": -30, "right": 0, "yawDeg": 0, "pitchDeg": -12, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "centrifuge-pit", "track": "centrifuge", "anchor": "AC_PIT_0", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": 0, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "centrifuge-hotlap", "track": "centrifuge", "anchor": "AC_HOTLAP_START_0", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": -2, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "sakura-grid", "track": "sakura", "anchor": "AC_START_0", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": -2, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "sakura-grid-high", "track": "sakura", "anchor": "AC_START_0", "up": 12, "forward": -30, "right": 0, "yawDeg": 0, "pitchDeg": -12, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "sakura-pit", "track": "sakura", "anchor": "AC_PIT_3", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": 0, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "sakura-grid-back", "track": "sakura", "anchor": "AC_START_25", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": -2, "fovDeg": 56, "width": 960, "height": 540 }
+  ]
+}

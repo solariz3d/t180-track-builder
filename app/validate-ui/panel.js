@@ -44,7 +44,21 @@ const { MACH6 } = require('../../src/validate/limits.js');
 /** A result with its lap replaced, keeping the non-enumerable raw findings the next revalidate carries. */
 const withLap = (res, lap) => { const o = { ...res, lap }; Object.defineProperty(o, '_raw', { value: res._raw, enumerable: false }); return o; };
 
-const STEP = 2;   // m between stations: the step the export and the D167 tests use (inferred: not tuned for the preview)
+const STEP = 2;
+
+/**
+ * Where the drag window ends: the start of the second word after the dragged one (segment g's word, then the next
+ * word, both checked), or null when that is past the track's end (then nothing is pending). Words are told apart by
+ * the segments' id (one word resolves to several segments: a jump's flight and ramp, a turn's parts).
+ */
+function windowEnd(path, segments, g) {
+  const idAt = (k) => segments[k] && segments[k].id;
+  let k = g; while (k < segments.length && idAt(k) === idAt(g)) k++;          // the next word
+  if (k >= segments.length) return null;
+  let m = k; while (m < segments.length && idAt(m) === idAt(k)) m++;          // the one after it
+  if (m >= segments.length) return null;
+  return fromSOf(path, m);
+}   // m between stations: the step the export and the D167 tests use (inferred: not tuned for the preview)
 
 function createValidationController(shell, { csp = true, designSpeedKmh = MACH6.designSpeedKmh, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn(), sharedPath = null } = {}) {
   let design = designSpeedKmh;
@@ -79,8 +93,16 @@ function createValidationController(shell, { csp = true, designSpeedKmh = MACH6.
     const r = state.resolved, dragging = !!(state.history && state.history.dragBase);
     if (!r) { out.state = { ...out.state, error: state.resolveError || 'the document does not resolve' }; onUpdate(out.state); return; }
     if (r === resolvedSeen && !force) {
-      // the same document: only a lap deferred during a drag may be owed, once the drag has ended
-      if (!dragging && out.state.result && out.state.result.lap && out.state.result.lap.reason === 'deferred') { out.state = { ...out.state, result: withLap(out.state.result, lapOf(out.state.path, segs, out.state.result)) }; onUpdate(out.state); }
+      // the same document, and the drag has ended: what the drag deferred is owed now. Stations past the drag window are
+      // checked (revalidate from pendingFrom, equal to a full validate exactly), or, on a closed loop, the lap is proven
+      const res = out.state.result;
+      if (!dragging && res && res.pendingFrom != null && path) {
+        try {
+          const u = live.update(path, segs, { fromS: res.pendingFrom });
+          out.state = { ...out.state, result: u.result, map: u.map, arcs: jumpArcs(u.result, path), changed: u.changed, full: false, how: 'drag-end' };
+        } catch (e) { path = null; segs = null; source = null; live = createLive({ validate: vo() }); out.state = { ...out.state, error: e.message }; }
+        onUpdate(out.state);
+      } else if (!dragging && res && res.lap && res.lap.reason === 'deferred') { out.state = { ...out.state, result: withLap(res, lapOf(out.state.path, segs, res)) }; onUpdate(out.state); }
       return;
     }
     resolvedSeen = r;
@@ -107,7 +129,10 @@ function createValidationController(shell, { csp = true, designSpeedKmh = MACH6.
       }
       const pathFrom = np.src ? 'shared' : 'own';
       // the lap is proven when no drag is open (a closed loop's lap, never on a drag tick)
-      const u = live.update(np, r.segments, p.how === 'full' ? { lap: !dragging } : { fromS, lap: !dragging });
+      // THE DRAG WINDOW (D179): while a drag is open, a sculpt checks the dragged word and the word after it; the rest of
+      // the track is PENDING until the drag ends (above). Only a sculpt: an append or a full build checks everything
+      const uptoS = dragging && p.how === 'sculpt' ? windowEnd(np, r.segments, p.g) : null;
+      const u = live.update(np, r.segments, p.how === 'full' ? { lap: !dragging } : { fromS, lap: !dragging, uptoS });
       path = np; segs = r.segments; source = pathFrom;
       out.state = { path, result: u.result, map: u.map, arcs: jumpArcs(u.result, path), changed: u.changed, full: u.full, how: p.how, error: null, pathFrom };
     } catch (e) {
@@ -136,8 +161,9 @@ function createValidationController(shell, { csp = true, designSpeedKmh = MACH6.
  */
 function summary(state) {
   const r = state.result;
-  if (!r) return { red: 0, amber: 0, lap: null, jumps: 0, jumpsPending: 0 };
-  return { red: r.red.length, amber: r.amber.length, lap: r.lap, jumps: r.jumps.length, jumpsPending: r.jumps.filter((j) => j.pending).length };
+  if (!r) return { red: 0, amber: 0, lap: null, jumps: 0, jumpsPending: 0, pendingFrom: null };
+  // pendingFrom (D179): during a drag the counts cover the track up to it; a jump past it is deferred, not waiting for a landing
+  return { red: r.red.length, amber: r.amber.length, lap: r.lap, jumps: r.jumps.length, jumpsPending: r.jumps.filter((j) => j.pending && !j.deferred).length, pendingFrom: r.pendingFrom == null ? null : r.pendingFrom };
 }
 
-module.exports = { createValidationController, summary, STEP };
+module.exports = { createValidationController, summary, STEP, windowEnd };

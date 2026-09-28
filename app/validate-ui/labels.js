@@ -1,0 +1,64 @@
+// labels.js: validation's findings in plain words, for the panels (the D177 window pass and A's D180 check of the
+// installed app: the red list read "stacked-within-2m … ARCHITECTURE.md:85", which a track builder has to look up). The
+// words are what the user reads; the rule id and its source go in the TOOLTIP (title), where the docs, the tests and a
+// search still find them. No shown string carries a rule id or a ".md:" line.
+//
+//   reasonText(reason, car)       plain words for a validation reason id (src/validate SRC), or a plain fallback
+//   lapText(lap)                  the lap as the summary line shows it
+//   lapWhereText(where)           one reason the lap fails, in words
+//   findingLine(kind, range)      { text, title } for one red or amber range in the list
+//   stopLine(stop)                { text, title } for a handle drag stopped at a bound (app/handles)
+//   refusalText(message)          a document refusal without its error code ("HANDLE_RANGE: …" → "…")
+'use strict';
+const { MACH6 } = require('../../src/validate/limits.js');
+
+function reasonText(reason, car = MACH6) {
+  const T = {
+    'gap-in-road': 'a hole in the road',
+    'missing-soft-collision': 'the export has no soft-collision block',
+    fold: 'the surface folds over itself here (too tight for its width)',
+    'self-intersection': 'the road passes through itself here',
+    'stacked-within-2m': `two roads are stacked less than ${car.stackedM} m apart here`,
+    'wall-ride-from-wall-object': 'a wall-ride is built on a wall object',
+    'steep-without-raycast': `a surface is steeper than ${car.steepDeg}°, which needs CSP's wall raycasting`,
+    'load-above-proven': `the load is over ${car.provenG} g, more than any track has proven`,
+    'seam-past-envelope': `a seam is sharper than measured on real tracks (over ${car.seamP90Deg}°)`,
+    'on-the-stops': `the car is on its suspension stops (${car.suspensionStopG} g or more)`,
+    'head-in-the-air': 'the open end is in the air: place the landing',
+    'landing-misses-zone': 'a jump landing misses its ramp',
+    'jump-gap-not-forward': 'a jump lands behind its own take-off',
+  };
+  return T[reason] || 'a problem with no description yet';
+}
+
+function lapText(lap) {
+  if (!lap) return 'lap —';
+  if (lap.ok === true) return 'lap proved';
+  if (lap.ok === false) return 'lap FAILS';
+  return { open: 'lap: the loop is still open', deferred: 'lap: checked when the drag ends', 'no-speed-model': 'lap: no speed set' }[lap.reason] || 'lap not run';
+}
+
+function lapWhereText(w) {
+  const r = w.reason || '';
+  if (r === 'stall') return 'the car stops here: it has no speed';
+  if (r === 'leaves-surface') return 'the car leaves the road surface here';
+  if (r === 'landing-unreachable') return 'a jump lands too deep below its take-off to be reached';
+  const m = /^jump-not-caught-([\d.]+)g$/.exec(r);
+  if (m) return `a jump is not caught (the ${m[1]} g landing)`;
+  return reasonText(r);
+}
+
+const at = (x) => (x.s1 != null && x.s1 !== x.s0 ? `at ${x.s0.toFixed(0)}–${x.s1.toFixed(0)} m` : `at ${x.s0.toFixed(0)} m`);
+function findingLine(kind, x) {
+  return { text: `${kind}: ${reasonText(x.reason)}, ${at(x)}`, title: `${x.reason}${x.source ? ` · ${x.source}` : ''}` };
+}
+
+/** stop: { at, reasons: [id], sources: [src] } from handles.js clamp; the value the drag stopped at is at. */
+function stopLine(stop, unitText = '') {
+  const words = [...new Set(stop.reasons.map((r) => reasonText(r)))].join('; ');
+  return { text: `stopped at ${stop.at}${unitText}: past it, ${words}`, title: `${stop.reasons.join(', ')} · ${stop.sources.join(', ')}` };
+}
+
+const refusalText = (message) => String(message).replace(/^[A-Z][A-Z_]+:\s*/, '');
+
+module.exports = { reasonText, lapText, lapWhereText, findingLine, stopLine, refusalText };

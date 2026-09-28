@@ -8,9 +8,10 @@ const { createShell } = require('../shell.js');
 const { createTrackModel } = require('../preview/trackmodel.js');
 const G = require('../../src/geom/index.js');
 const P = require('../../src/geom/profile.js');
-const { validate, lapOf } = require('../../src/validate/index.js');
+const { validate, revalidate, lapOf } = require('../../src/validate/index.js');
+const D = require('../../src/doc/index.js');
 const { MACH6 } = require('../../src/validate/limits.js');
-const { colourMap, rangeLevel, rangeLevels } = require('../validate-ui/colour.js');
+const { colourMap, rangeLevel, rangeLevels, LEVEL } = require('../validate-ui/colour.js');
 const { createValidationController, STEP } = require('../validate-ui/panel.js');
 const { viewOf } = require('../validate-ui/pathview.js');
 
@@ -54,6 +55,36 @@ function samePath(shell, p, at) {
   }
 }
 
+const levelsOf = (map) => map.stations.map((e) => Array.from(e.levels));
+/**
+ * The controller's state against a full validate of the same path (D179 drag window included):
+ *   · no pending stretch: the result equals a full validate exactly, and so do the colours;
+ *   · a pending stretch (a drag is open): the result equals a full validate BOUNDED at the same point exactly; every
+ *     station before it has the colour an UNBOUNDED full validate gives it (nothing stale), and every station from it on
+ *     is PENDING (never shown clean).
+ */
+function checkState(shell, ctl, at) {
+  assert.strictEqual(ctl.state.error, null, `${at}: ${ctl.state.error}`);
+  samePath(shell, ctl.state.path, at);
+  const ref = reference(shell, ctl), res = ctl.state.result, pend = res.pendingFrom;
+  if (pend == null) {
+    assert.deepStrictEqual(res, ref.result, `${at}: the incremental result differs from a full validate`);
+    assert.deepStrictEqual(levelsOf(ctl.state.map), levelsOf(colourMap(ref.result, { path: ref.p })), `${at}: the colours differ`);
+    return 'full';
+  }
+  assert.ok(shell.getState().history.dragBase, `${at}: a pending stretch without an open drag`);
+  // the contract: a windowed result reports nothing at or past pendingFrom (those stations are PENDING, not judged)
+  for (const x of [...res.red, ...res.amber, ...res.info]) assert.ok(x.s0 < pend - 1e-9, `${at}: a ${x.reason} finding at s ${x.s0}, inside the pending stretch from ${pend}`);
+  const r = shell.getState().resolved;
+  assert.deepStrictEqual(res, validate(ref.p, r.segments, { ...OPTS, lap: false, uptoS: pend }), `${at}: the windowed result differs from a full validate bounded at the same window`);
+  const truth = levelsOf(colourMap(ref.result, { path: ref.p })), shown = levelsOf(ctl.state.map);
+  ref.p.samples.forEach((smp, k) => {
+    if (smp.s < pend - 1e-9) assert.deepStrictEqual(shown[k], truth[k], `${at}: station ${k} (s ${smp.s}) before the window's end is not what a full validate says`);
+    else assert.deepStrictEqual(shown[k], [LEVEL.PENDING], `${at}: station ${k} (s ${smp.s}) past the window is not shown PENDING`);
+  });
+  return 'windowed';
+}
+
 /** One random edit, the way a user makes them. Returns what it did, for the failure message. */
 function edit(shell, rnd) {
   const doc = shell.getState().history.present, n = doc.words.length, x = rnd();
@@ -83,13 +114,9 @@ for (const share of [true, false]) {
         const st = shell.getState();
         if (!st.resolved || !st.resolved.segments.length) { closeDrag(shell); continue; }
         const at = `seed ${seed}, edit ${k} (${did})`;
-        assert.strictEqual(ctl.state.error, null, `${at}: ${ctl.state.error}`);
-        samePath(shell, ctl.state.path, at);
-        const ref = reference(shell, ctl);
-        assert.deepStrictEqual(ctl.state.result, ref.result, `${at}: the incremental result differs from a full validate`);
-        assert.deepStrictEqual(ctl.state.map.stations.map((e) => Array.from(e.levels)), colourMap(ref.result, { path: ref.p }).stations.map((e) => Array.from(e.levels)), `${at}: the colours differ`);
+        checkState(shell, ctl, at);
         hows.add(ctl.state.how); from.add(ctl.state.pathFrom);
-        closeDrag(shell);
+        if (shell.getState().history.dragBase) { closeDrag(shell); checkState(shell, ctl, `${at}, after the drag ended`); }
       }
       assert.ok(hows.has('append') && hows.has('sculpt'), `seed ${seed}: the edits exercised ${[...hows]}`);
       assert.deepStrictEqual([...from], [share ? 'shared' : 'own'], `seed ${seed}: the path came from ${[...from]}`);
@@ -129,6 +156,72 @@ test('a shared path the preview REBUILT (a new object) is viewed afresh, never s
   assert.deepStrictEqual([ctl.state.pathFrom, ctl.state.how], ['shared', 'full']);
   samePath(shell, ctl.state.path, 'a rebuilt preview path');
   assert.deepStrictEqual(ctl.state.result, reference(shell, ctl).result);
+});
+
+// ── the drag window (D179): the dragged word and the next are live, the rest is pending until the drag ends ──
+test('a drag held OPEN on a mid-track word: every tick is windowed and exact where settled, and ending it equals a full validate', async () => {
+  for (const seed of [21, 22, 23]) {
+    const { shell, ctl } = await rig({ share: true }), rnd = prng(seed);
+    for (let k = 0; k < 14; k++) { shell.setPicker('dir', rnd() < 0.6 ? 'L' : 'R'); shell.place(WORDS[Math.floor(rnd() * WORDS.length)]); }
+    const ws = shell.getState().history.present.words, w = ws.find((x, i) => i >= 2 && i < ws.length - 3 && x.handles && x.handles.length != null);
+    shell.beginDrag();
+    let windowed = 0;
+    for (let t = 1; t <= 4; t++) {
+      shell.dragTo(w.id, { handles: { length: Math.max(5, w.handles.length + (rnd() - 0.4) * 8 * t) } });
+      if (checkState(shell, ctl, `seed ${seed}, drag ${w.id} tick ${t}`) === 'windowed') windowed++;
+    }
+    shell.endDrag();
+    assert.strictEqual(checkState(shell, ctl, `seed ${seed}, the drag of ${w.id} ended`), 'full');
+    assert.strictEqual(ctl.state.how, 'drag-end');
+    assert.ok(windowed >= 3, `seed ${seed}: only ${windowed} of 4 ticks were windowed`);
+  }
+});
+test('never a stale "clean": a settled station stacked on road that the drag moved shows RED during the drag, and the moved road shows PENDING', async () => {
+  // the tight left spiral stacks on itself; dragging an early word swings the whole tail over the road before it
+  const { shell, ctl } = await rig({ share: true });
+  shell.setPicker('dir', 'L');
+  for (let k = 0; k < 16; k++) shell.place(k % 4 === 3 ? 'straight' : 'tight');
+  const w = shell.getState().history.present.words[1];
+  shell.beginDrag(); shell.dragTo(w.id, { handles: { length: w.handles.length * 1.3 } });
+  assert.strictEqual(checkState(shell, ctl, 'the spiral, w2 dragged'), 'windowed');
+  const S = ctl.state.path.samples, pend = ctl.state.result.pendingFrom, end = S.findIndex((p) => p.s >= pend - 1e-9);
+  const onMoved = [...ctl.state.result._raw.stacked.values()].filter((e) => e.i < end && e.p >= end);
+  assert.ok(onMoved.length > 0, 'a settled station is stacked on a partner in the pending stretch: that pair was measured, not deferred');
+  for (const e of onMoved) assert.strictEqual(Array.from(ctl.state.map.stations[e.i].levels).every((v) => v === LEVEL.RED), true, `station ${e.i} (s ${e.s}) shows red`);
+  shell.endDrag();
+  assert.strictEqual(checkState(shell, ctl, 'the spiral, drag ended'), 'full');
+});
+test('a windowed result revalidated from BEYOND its pending start still finishes the whole track exactly', () => {
+  // revalidate never carries past a windowed prev's pendingFrom, whatever fromS it is given
+  let d = D.createDoc('w'); for (const w of ['straight', 'turn', 'straight', 'sweep', 'straight', 'turn', 'straight', 'tight']) d = D.appendWord(d, w);
+  const segs = D.resolve(d).segments, p = G.buildPath(segs, { step: STEP }), mid = p.samples[Math.floor(p.samples.length / 3)].s, late = p.samples[Math.floor(p.samples.length * 0.8)].s;
+  const windowed = validate(p, segs, { ...OPTS, uptoS: mid });
+  assert.ok(windowed.pendingFrom != null && windowed.pendingFrom < late);
+  assert.deepStrictEqual(revalidate(windowed, p, segs, late, OPTS), validate(p, segs, OPTS));
+});
+test('the panel says what is pending: the load graph shades it to the track end, the summary counts no deferred jump as waiting', async () => {
+  const { graphModel } = require('../validate-ui/graph.js'), { summary } = require('../validate-ui/panel.js');
+  const { shell, ctl } = await rig({ share: true });
+  for (const w of ['straight', 'turn', 'straight', 'jump', 'straight', 'sweep', 'straight', 'turn']) shell.place(w);
+  const w = shell.getState().history.present.words[1];
+  shell.beginDrag(); shell.dragTo(w.id, { handles: { length: w.handles.length + 2 } });
+  const st = ctl.state, pend = st.result.pendingFrom;
+  assert.ok(pend != null);
+  const band = graphModel(st).bands.find((b) => b.level === LEVEL.PENDING);
+  assert.deepStrictEqual([band.s0, band.s1], [pend, st.path.lengthM]);
+  const s = summary(st);
+  assert.strictEqual(s.pendingFrom, pend);
+  assert.ok(st.result.jumps.some((j) => j.deferred), 'the jump past the window is deferred');
+  assert.strictEqual(s.jumpsPending, 0, 'a deferred jump is not "waiting for its landing"');
+  shell.endDrag();
+  assert.strictEqual(summary(ctl.state).pendingFrom, null);
+});
+test('the window ends at the second word after the dragged one; none when that is past the end', async () => {
+  const { windowEnd } = require('../validate-ui/panel.js');
+  const segs = ['a', 'a', 'b', 'c', 'c', 'd'].map((id) => ({ id }));
+  const path = { samples: segs.map((g, k) => ({ s: k * 10, seg: k })), lengthM: 60 };
+  assert.strictEqual(windowEnd(path, segs, 0), 30, 'a, then b, checked; c on is pending');
+  assert.strictEqual(windowEnd(path, segs, 3), null, 'c, then d: nothing after, so nothing pending');
 });
 
 // ── the path view ──

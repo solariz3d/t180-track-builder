@@ -48,15 +48,19 @@ function handlesOf(doc, id, { bounds, validate: vopts, step } = {}) {
   return Object.fromEntries(names.map((h) => [h, { ...info.handles[h], bounds: info.physics.handles[h] }]));
 }
 
-/** Clamp a value to a handle's bounds. Returns { value, clamped, level, why }. */
+/**
+ * Clamp a value to a handle's bounds. Returns { value, clamped, level, why, stop }: `why` is the technical reason (ids and
+ * sources, for tooltips and tests); `stop` { at, reasons, sources } when a red bound stopped it, for the panel's plain words.
+ */
 function clampTo(b, v, pastRed) {
-  if (b.min == null || b.max == null) return { value: v, clamped: false, level: 'red', why: 'the word is already red (red-now): there is no clean range to hold to' };
+  if (b.min == null || b.max == null) return { value: v, clamped: false, level: 'red', why: 'the word is already red: there is no clean range to hold to' };
   if (v > b.max || v < b.min) {
     const stop = v > b.max ? b.above : b.below;
-    const why = stop.kind === 'red' ? `red past ${v > b.max ? b.max : b.min}: ${stop.reasons.join(', ')} (${stop.sources.join(', ')})`
+    const why = stop.kind === 'red' ? `stopped at ${v > b.max ? b.max : b.min}: past it the track is red: ${stop.reasons.join(', ')} (${stop.sources.join(', ')})`
       : stop.kind === 'refused' ? `refused by the document: ${stop.message}` : `the handle's range ends at ${v > b.max ? b.max : b.min}`;
-    if (pastRed && stop.kind === 'red') return { value: v, clamped: false, level: 'red', why };
-    return { value: v > b.max ? b.max : b.min, clamped: true, level: amberLevel(b, v > b.max ? b.max : b.min), why };
+    const stopAt = stop.kind === 'red' ? { at: v > b.max ? b.max : b.min, reasons: stop.reasons, sources: stop.sources } : null;
+    if (pastRed && stop.kind === 'red') return { value: v, clamped: false, level: 'red', why, stop: stopAt };
+    return { value: v > b.max ? b.max : b.min, clamped: true, level: amberLevel(b, v > b.max ? b.max : b.min), why, stop: stopAt };
   }
   return { value: v, clamped: false, level: amberLevel(b, v), why: null };
 }

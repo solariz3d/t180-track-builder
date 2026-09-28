@@ -141,3 +141,27 @@ test('the shim\'s Buffer reads and writes like node\'s for every call the export
   assert.deepEqual([...shim.Buffer.concat([shim.Buffer.from([1, 2]), shim.Buffer.from([3])])], [1, 2, 3]);
   assert.ok(shim.Buffer.isBuffer(shim.Buffer.alloc(1).subarray(0, 1)));
 });
+
+// The app's exporter carries the texture set to the kn5, as the preview draws it (fresh-eyes run of the installed app,
+// 2026-09-27: a textured floor showed in the preview and was missing from the export).
+test('the app\'s exporter writes a textured floor into the kn5 it hands the native side', async () => {
+  const T = require('../../src/texture/index.js'), TM = require('../../src/texmaker/index.js');
+  const get = async (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
+  const ex = await makeExporter(get);
+  let d = D.createDoc('Tex');
+  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }], ['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }]]) d = D.appendWord(d, w, { ...o, speed: 200 / 3.6 });
+  d = D.editWord(D.checkDoc({ ...d, closed: true }), 'w1', { textures: { floor: { make: TM.serialize(TM.PRESETS.asphalt), size: 32 } } });
+  const set = T.buildTextureSet(d, {});
+  const out = ex.run(d, { textures: set }), files = out.folders[0].files;
+  const kn5 = files.find((f) => /\.kn5$/.test(f.path)), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-apptex-')), f = path.join(tmp, 'x.kn5');
+  try { fs.writeFileSync(f, kn5.bytes); const back = readKn5(f); assert.ok(back.meshes.some((m) => /^1ROAD_w1_/.test(m.name) && m.material === set.bySegment('w1').floor.material)); }
+  finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  assert.ok(Buffer.from(kn5.bytes).includes(Buffer.from(set.textures[0].file)), 'the DDS is embedded under its file name');
+});
+
+test('a track saved under a name exports as t180b_<that name>, not as the name it was started with', async () => {
+  const { s, st } = await shellWith(D.checkDoc({ ...SAMPLE, name: 'untitled' }));
+  await s.save('Monza');
+  await s.exportTo(tmp());
+  assert.deepEqual(st.writes.map((w) => w.folder), ['t180b_monza'], s.getState().message);
+});

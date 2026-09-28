@@ -93,6 +93,27 @@ const MUTATIONS = [
     from: 'const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1], c * v[2] - sn * v[0]];', to: 'const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1] * (1 + (1 - c) * 1e-3 + 1e-15), c * v[2] - sn * v[0]];', caughtBy: 'rigid: the displayed bank after the move' },
 ];
 
+// D181 (a load-flaky catch made deterministic, p-d181-flaky-C): a mutant is judged by its NAMED test, run ALONE
+// (--test-name-pattern, anchored and escaped), from that test's own line: ✖ = caught, ✔ = NOT CAUGHT. Before, every geometry
+// test ran with the mutant and a crash of ANY of them under load (a file-level failure of geom_sculpt.test.js, seen with M15
+// by B in the D178 read and by me in D179) hid the named test's failing line, so the catch depended on the machine's load.
+// A run in which the named test gives NO verdict (its file ended before reporting it) is not counted either way: it is
+// repeated, at most twice, and every attempt is reported. Nothing here waits on time.
+const TEST_FILES = ['geom_path', 'geom_mesh', 'geom_grow', 'geom_sculpt', 'geom_bvh', 'geom_ramp', 'geom_loop'].map((n) => path.join(__dirname, `${n}.test.js`));
+const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function runOnce(geom, pattern) {
+  const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', ...(pattern ? [`--test-name-pattern=${pattern}`] : []), ...TEST_FILES],
+    // NODE_TEST_CONTEXT is set by the parent runner and would switch the child to the parent's protocol: clear it
+    { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), GEOM_DIR: geom }, encoding: 'utf8', timeout: 300000, maxBuffer: 1 << 26 });
+  if (r.error) throw r.error;
+  return (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
+}
+/** The named test's verdict in one run's output: 'fail', 'pass', or null (it never reported). */
+function verdictOf(out, name) {
+  let v = null;
+  for (const l of out.split('\n')) if (/^[✔✖] /.test(l) && l.slice(2).startsWith(name)) { if (l[0] === '✖') return 'fail'; v = 'pass'; }
+  return v;
+}
 function runMutant(m) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-geom-mut-')), geom = path.join(dir, 'geom');
   try {
@@ -100,23 +121,43 @@ function runMutant(m) {
     const f = path.join(geom, m.file), src = fs.readFileSync(f, 'utf8');
     const applied = src.includes(m.from);
     if (applied) fs.writeFileSync(f, src.replace(m.from, m.to));
-    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'geom_path.test.js'), path.join(__dirname, 'geom_mesh.test.js'), path.join(__dirname, 'geom_grow.test.js'), path.join(__dirname, 'geom_sculpt.test.js'), path.join(__dirname, 'geom_bvh.test.js'), path.join(__dirname, 'geom_ramp.test.js'), path.join(__dirname, 'geom_loop.test.js')],
-      // NODE_TEST_CONTEXT is set by the parent runner and would switch the child to the parent's protocol: clear it
-      { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), GEOM_DIR: geom }, encoding: 'utf8', timeout: 300000 });
-    if (r.error) throw r.error;
-    const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
-    // a todo's failure is not a failure, and "✖ failing tests:" is only the summary's header
-    const failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l) && !/# TODO/.test(l)).map((l) => l.slice(2));
-    if (!/ℹ tests \d+/.test(out)) throw new Error('the mutant test run printed no summary:\n' + out.slice(0, 2000));
-    return { applied, caught: failed.some((l) => l.includes(m.caughtBy)), failed: [...new Set(failed)] };
+    const attempts = [];
+    for (let k = 0; k < 3; k++) {
+      const out = runOnce(geom, `^${escapeRe(m.caughtBy)}`), v = verdictOf(out, m.caughtBy);
+      attempts.push({ verdict: v, tail: v ? '' : out.slice(-1500) });
+      if (v) break;
+    }
+    const last = attempts[attempts.length - 1];
+    return { applied, caught: last.verdict === 'fail', verdict: last.verdict, attempts };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
+// the judge itself (D181): a named test's line decides; a file-level failure alone decides nothing
+test('harness: the verdict is the own line of the named test (✖ caught, ✔ not caught), and a file-level failure alone is NO verdict', () => {
+  const name = 'sculpt: path re-placement costs';
+  assert.deepEqual([
+    verdictOf('✔ other test (1ms)\n✖ sculpt: path re-placement costs the edited piece (12ms)\n', name),
+    verdictOf('✔ sculpt: path re-placement costs the edited piece (12ms)\n', name),
+    verdictOf('✖ C:\\repo\\test\\geom_sculpt.test.js (6718.3ms)\n✖ failing tests:\n', name),
+    verdictOf('✖ sculpt: path re-placement costs more (3ms)\n', 'sculpt: path re-placement costs the edited'),
+  ], ['fail', 'pass', null, null]);
+});
+// THE CONTROL: the unmutated copy passes EVERY geometry test (the whole files, not one name), so a catch means something
+test('control: the unmutated copy passes every geometry test', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-geom-mut-')), geom = path.join(dir, 'geom');
+  try {
+    fs.cpSync(SRC, geom, { recursive: true });
+    const out = runOnce(geom, null), failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l) && !/# TODO/.test(l));
+    assert.ok(/ℹ tests \d+/.test(out), 'the control printed no summary');
+    assert.deepEqual(failed, [], `the unmutated copy fails: ${failed.join(' | ')}`);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
     const r = runMutant(m);
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" is not in src/geom/${m.file}`);
-    assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);
+    assert.notEqual(r.verdict, null, `NO VERDICT in ${r.attempts.length} runs: the named test never reported. Last output:\n${r.attempts[r.attempts.length - 1].tail}`);
+    assert.ok(r.caught, `NOT CAUGHT: "${m.caughtBy}…" passed on the mutant (${r.attempts.length} run(s))`);
   });
 }
 module.exports = { MUTATIONS, runMutant };

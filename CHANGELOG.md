@@ -1,16 +1,89 @@
 # Changelog
 
 All notable changes to this project are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project has no releases yet; everything below is under
-**Unreleased**.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-27
+
+The first 0.2.0 build could not place a word in its own window (see Fixed). 0.2.1 is the build to install. It also
+brings the Assetto Corsa look in the preview, a guided first track, and textures that reach the exported track.
+
 ### Added
 
-- **Milestone 1, the platform test track, written directly as AC files** (`docs/ARCHITECTURE.md` §10.1). Three packets
+- The 3D preview draws the track with Assetto Corsa's own shaders (`ksPerPixel`, `ksPerPixelNM`, `ksMultilayer`, ported
+  from Content Manager's Custom Showroom under the Ms-PL, whose licence is in `app/preview/`) and the materials and
+  textures the export writes, under one stated reference light (14:00 sun). L switches to a colour per placed word. Not
+  drawn yet: the painted start line, grid and pit boxes, and the closing seam.
+- A guided first track for new users: five short, skippable steps (place a few pieces, sculpt one handle, close the
+  loop, read the colours, export). The guide only shows the moves; the user makes them. It opens once, on first run,
+  which it remembers in the app's own data folder, and "Show the guide" brings it back. It sets the starting font and
+  tempo, each with its source, and points at the starter phrases.
+- A textures panel in the side panel, under the sculpt handles: pick a road word, then give each of its slots an image
+  or a made texture. The texture maker opens from each slot's "Make…" button.
+- The export writes the texture set the preview draws: a word whose floor slot holds a texture (an image or a made
+  one) is exported in that slot's material, with its DDS embedded; an untextured track's kn5 is unchanged. "Install to
+  AC" carries it too.
+- Look-match reference views (ARCHITECTURE §5.3): fixed cameras on two reference tracks (`src/lookmatch/views.json`),
+  rendered in the builder's look (`node scripts/lookmatch.js render`), and the difference measured as mean CIEDE2000
+  (`node scripts/lookmatch.js diff`). The number stays unmeasured until reference shots from AC exist; renders of
+  other authors' tracks are never written into the repository.
+- A test seam for the Export dialog (`T180_TEST_EXPORT_FOLDER`, read only from the app's launch environment), so the
+  installed app's Export can be checked end to end. Normal use always gets the native folder dialog.
+
+### Changed
+
+- While a handle is dragged, only the dragged word and the word after it are re-checked on every frame. The rest of
+  the track is shown as "not checked yet" (never as clear) and is checked in full the moment the handle is let go,
+  with exactly the result a full check gives. On the 40 km benchmark track (`node --expose-gc scripts/bench.js --km 40
+  --seed 17`, one run on a shared machine) placing a word takes 30 ms, a drag step 26–44 ms and a full revalidate
+  0.17 s, all inside their budgets (100 ms, 50 ms, 1 s), against 1,000 ms, 1.3–3.7 s and 5.9 s before 0.2.0.
+- Validation's red and amber list reads in plain words ("two roads are stacked less than 2 m apart here"); the rule
+  and its source are in the tooltip.
+- The starter phrases are ordered sakura flow, S, bowl hairpin, spiral climb, so clicking them in turn builds a track
+  with no red (in the old order the spiral climb crossed the sakura flow's road).
+- The 3D preview's cross lines fade with distance (from overhead they darkened the whole road), and the background is
+  darker than the fog, so surfaces facing away from the sun no longer merge into it.
+
+### Fixed
+
+- **In the app's real window, placing any word did nothing.** The shell called the browser's `setTimeout` as a method of
+  another object, which WebView2 refuses ("Illegal invocation") and Node allows, so every headless test passed. It was
+  in the app from the first autosave onward; a test now makes the timers as strict as a browser's.
+- A jump taken off a road that had climbed past vertical produced a flight that turned the pitch through vertical, so
+  the car would have flown backwards, and validation then threw on a negative gap. Such a jump is now refused by name
+  (`JUMP_PAST_VERTICAL`), at the take-off and anywhere in its flight, so the edit that would make one changes nothing.
+  Found by the soak at 10,000 operations.
+- A refused edit returns nothing, as every other refused action does, so the sculpt handles see the refusal.
+- The first jump a new user placed was red straight away: its landing ramp was sized for 300 km/h while the track is
+  checked at the design speed (460 km/h by default). The ramp is now sized for the design speed (41 m at 460 km/h
+  instead of 19 m), and on a track still being built it follows the design-speed slider. A closed loop keeps its ramps.
+  Below 290 km/h the default 12 m jump cannot be cleared at all, and it says so.
+- A success ("loop closed…", "exported…") was shown in red, as an alert, like a refusal. It is now a plain status line.
+- A track saved under a name still exported and installed as `t180b_untitled`: saving names the file, not the
+  track, and the folder was taken from the track. Both now use the saved name, so a track saved as "Monza" installs as
+  `t180b_monza`. Install to AC refuses a track that has no name yet, because a second unnamed install would replace
+  the first.
+- The AC folder was remembered, and shown in the install message, with Windows' `\\?\` prefix
+  (`\\?\C:\…`). It is now the plain path.
+- The Install to AC tooltip read "content<tab>racks": a `\t` had become a tab.
+- The soak no longer crashes on a track that contains a starter phrase (it sculpted a phrase as if it were a word).
+- The geometry mutation harness judges each mutant by its named test run alone, from that test's own result, so a heavy
+  test file failing under machine load can no longer hide a catch.
+
+## [0.2.0] - 2026-09-27
+
+The first release: a Windows installer for the track builder (see `docs/RELEASE.md`). A track is written in words,
+built from its open end in a 3D preview, checked against measured T-180 limits while it is built, and exported as a
+complete Assetto Corsa track folder. Nothing in it has been driven in the game yet. Version 0.1.0 was only the app's
+version string; it was never released. **This build cannot place a word in its own window; install 0.2.1.**
+
+### Added
+
+- **Milestone 1, the platform test track, written directly as AC files** (`docs/ARCHITECTURE.md` §10.1). Three parts
   build to one shared scene shape (`src/export/scene.js`), so each part could be written and tested on its own.
-- `src/export/scene.js` and `src/export/kn5write.js` (packet A).
+- `src/export/scene.js` and `src/export/kn5write.js`.
   - `validateScene(scene)` refuses anything outside the shared shape, with a coded `SceneError`.
   - `writeKn5(scene)` writes a kn5 version 5 directly, with AcTools' `Kn5Writer.cs` as the byte reference. The track
     reads back through the repo's own `tools/kn5.cjs`.
@@ -18,13 +91,13 @@ All notable changes to this project are recorded here. The format follows
   - Triangle winding is kept as given: measured CCW-from-outside on the two reference tracks it checked.
   - It refuses meshes over 65,535 vertices or with no triangles.
   - Tests: `test/kn5write.test.js`.
-- `scripts/platform_test.js` (packet C). It builds the 500 m test loop the milestone names as a scene: a half-pipe
+- `scripts/platform_test.js`. It builds the 500 m test loop the milestone names as a scene: a half-pipe
   turn, a wall-ride turn whose outside wall passes vertical (110°), and one small jump sized by `docs/FINDINGS.md`
   §7d-e / §8 to hold at both the 3.2 g and the 6.3 g landing. It adds the race markers and `1ROAD` physics meshes.
   - The loop closes by construction (500.000 m, and the end is 2.52e-12 m from the start).
   - Every cell stays under 65,536 vertices.
   - Tests: `test/platform_test.test.js`.
-- `src/export/markers.js` (packet E). These are the §5c "red if wrong" checks, run before anything is written:
+- `src/export/markers.js`. These are the §5c "red if wrong" checks, run before anything is written:
   - the start line is ahead of the grid, and the grid is numbered from pole;
   - the L and R timing gates are the right way round;
   - every marker is 1–2 m above the road and points along it;
@@ -33,7 +106,7 @@ All notable changes to this project are recorded here. The format follows
 
   Why: swapped gates or a grid past the line break a track silently in AC. **The left/right and race-direction
   conventions were measured** on the five reference tracks installed locally, not assumed.
-- `src/export/trackfiles.js` (packet E) writes every non-kn5 file of a track folder:
+- `src/export/trackfiles.js` writes every non-kn5 file of a track folder:
   - `data/surfaces.ini`, with or without the T-180 soft-collision block of FINDINGS §4c;
   - `models.ini`;
   - `ui/ui_track.json`, whose `pitboxes` is counted from the `AC_PIT_n` markers and never typed;
@@ -41,7 +114,7 @@ All notable changes to this project are recorded here. The format follows
     AcTools' `TrackMapRenderer.cs`, so AC's map app lines up.
 
   The PNGs are encoded with no dependency beyond node's zlib.
-- `scripts/build_platform_test.js` (packet E) glues the scene, the kn5 writer and the track files into two installable
+- `scripts/build_platform_test.js` glues the scene, the kn5 writer and the track files into two installable
   folders:
   - `t180b_platform_test`, WITH the soft-collision block;
   - `t180b_platform_test_noblock`, WITHOUT it.
@@ -53,7 +126,7 @@ All notable changes to this project are recorded here. The format follows
     create (a `.t180b-builder.json` marker tells), and deletes nothing.
 - Tests: `test/markers.test.js`, `test/trackfiles.test.js` (node's built-in runner, no dependencies).
 - `CHANGELOG.md` (this file).
-- `src/export/ailine.js` (packet A, milestone 2). It generates `ai/fast_lane.ai` (version 7, hasGrid 0) from the
+- `src/export/ailine.js` (milestone 2). It generates `ai/fast_lane.ai` (version 7, hasGrid 0) from the
   track's centreline, with a constant 300 km/h speed profile.
   - The line climbs the outside walls to their balance angle: about 87° on the wall-ride, capped at 50° on the
     half-pipe. `--ai-mode floor` keeps it on the floor as a control.
@@ -61,7 +134,7 @@ All notable changes to this project are recorded here. The format follows
     the file.
   - Tests: `test/ailine.test.js` (round trip, header, closure and length, the wall angles, the jump crossing, and
     refusals).
-- `scripts/roundtrip.js` (packet C, milestone 3, first half). It writes the platform test as a kn5, reads it back with
+- `scripts/roundtrip.js` (milestone 3, first half). It writes the platform test as a kn5, reads it back with
   `tools/read_track.cjs`, and compares the result with the words it was built from. The quantities are width, tilt
   run, curvature, turn angle, grade, lap length and the word sequence, each against a tolerance stated before the first
   run.
@@ -266,7 +339,7 @@ All notable changes to this project are recorded here. The format follows
   DDS and a compressed normal map; wearing a pack is one undo step.
 - A starter phrasebook (`src/doc/phrasebook.js`, ARCHITECTURE §11.7): sakura flow, bowl hairpin, S and spiral climb.
   Each resolves, builds and validates with no red at its default tempo, and each quotes the FINDINGS and ARCHITECTURE
-  lines it comes from. Not yet in the palette.
+  lines it comes from. They are in the palette (below).
 - Shareable codes (one line of text) for a track, a piece or phrase, and a texture pack. They import byte-exact, and a
   corrupted, cut or foreign code is refused whole with nothing changed.
 - "Install to AC": pick the Assetto Corsa folder once (remembered in the app's own data folder), and the track is
@@ -328,7 +401,7 @@ All notable changes to this project are recorded here. The format follows
 ### Fixed
 
 - `scripts/build_platform_test.js` no longer continues when `src/export/scene.js` cannot be loaded: validation fails
-  loudly instead of being skipped (found by B's read of T1, fixed by A).
+  loudly instead of being skipped.
 - Built meshes no longer repeat node names. A word resolves into up to three segments that share its id, and
   `src/geom/mesh.js` named cells by the id alone, so the names repeated (16 of 31 nodes on a five-word track). That also
   made the self-intersection check report crossings on tracks that do not cross, which refused every default export.

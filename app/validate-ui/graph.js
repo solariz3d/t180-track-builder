@@ -24,10 +24,14 @@ function graphModel(state, { car = MACH6 } = {}) {
     else { s.push(l.s); fN.push(l.fN_g); }
   }
   const top = Math.max(fN.reduce((m, x) => Math.max(m, x), -Infinity), 1.1 * car.provenG);
+  const pending = r.pendingFrom != null, sEnd = pending && state.path ? Math.max(state.path.lengthM, s[s.length - 1]) : s[s.length - 1];
   return {
     s, fN, top,
     lines: [{ g: car.suspensionStopG, label: `${car.suspensionStopG} g stop`, source: 'FINDINGS.md:103-104' }, { g: car.provenG, label: `${car.provenG} g proven`, source: 'FINDINGS.md:105' }],
-    bands: [...r.red.map((x) => ({ s0: x.s0, s1: x.s1, level: LEVEL.RED })), ...r.amber.map((x) => ({ s0: x.s0, s1: x.s1, level: LEVEL.AMBER }))],
+    bands: [...r.red.map((x) => ({ s0: x.s0, s1: x.s1, level: LEVEL.RED })), ...r.amber.map((x) => ({ s0: x.s0, s1: x.s1, level: LEVEL.AMBER })),
+      // D179: while a drag is open the stretch past the window is not checked yet; it is shaded PENDING to the track's end
+      ...(pending ? [{ s0: r.pendingFrom, s1: sEnd, level: LEVEL.PENDING }] : [])],
+    sEnd,
   };
 }
 
@@ -35,11 +39,12 @@ function drawGraph(canvas, m) {
   const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
   g.clearRect(0, 0, W, H);
   if (!m) return;
-  const s0 = m.s[0], s1 = m.s[m.s.length - 1] > s0 ? m.s[m.s.length - 1] : s0 + 1;
+  const last = m.sEnd != null ? m.sEnd : m.s[m.s.length - 1], s0 = m.s[0], s1 = last > s0 ? last : s0 + 1;
   const X = (s) => ((s - s0) / (s1 - s0)) * (W - 1), Y = (v) => H - 1 - (Math.max(0, v) / m.top) * (H - 2);
   const rgba = (c, a) => `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)}, ${a})`;
   for (const b of m.bands) { g.fillStyle = rgba(PALETTE[b.level], 0.25); g.fillRect(X(b.s0), 0, Math.max(1, X(b.s1) - X(b.s0)), H); }
-  g.font = '10px sans-serif';
+  const k = canvas.clientWidth > 0 ? W / canvas.clientWidth : 1;   // backing pixels per css pixel: labels stay 10 css px
+  g.font = `${Math.round(10 * k)}px sans-serif`;
   for (const [k, l] of m.lines.entries()) {
     g.strokeStyle = rgba(PALETTE[k ? LEVEL.AMBER : LEVEL.INFO], 0.9); g.setLineDash([4, 3]);
     g.beginPath(); g.moveTo(0, Y(l.g)); g.lineTo(W, Y(l.g)); g.stroke();

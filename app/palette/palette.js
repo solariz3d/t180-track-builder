@@ -25,7 +25,7 @@ function paletteModel(state, pickers) {
       closeLoop: doc.words.length > 0 && !doc.closed },
     head: last ? { id: last.id, word: last.phrase !== undefined ? last.phrase : last.word } : null,
     track: doc.words.map((w) => ({ id: w.id, word: w.phrase !== undefined ? w.phrase : w.word, phrase: w.phrase !== undefined, selected: sel.has(w.id) })),
-    message: state.message, resolveError: state.resolveError,
+    message: state.message, messageKind: state.messageKind || (state.message ? 'error' : null), resolveError: state.resolveError,
   };
 }
 
@@ -86,7 +86,8 @@ function renderPalette(root, model, on) {
     el('div', { class: 'head', text: model.head ? `Building on from ${model.head.id} (${model.head.word})` : 'Empty track: place the first piece' }),
     el('div', { class: 'pickers' }, pickerRow), ...groups, actions,
     el('h3', { text: 'The track' }), track, save,
-    model.message ? el('p', { class: 'message', role: 'alert', text: model.message }) : null,
+    // a success (the loop closed, the track exported) is a status in the normal colour; a refusal is a red alert
+    model.message ? el('p', { class: model.messageKind === 'ok' ? 'message ok' : 'message', role: model.messageKind === 'ok' ? 'status' : 'alert', text: model.message }) : null,
     model.resolveError ? el('p', { class: 'message', role: 'alert', text: model.resolveError }) : null,
   ].filter(Boolean));
 }

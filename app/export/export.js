@@ -44,9 +44,10 @@ async function makeExporter(get) {
   return {
     checkTarget,
     ExportError: fromwords.ExportError,
-    run(doc, { variant = 'block' } = {}) {
+    // textures: the texture set the textures panel announces (the one the preview draws), or null
+    run(doc, { variant = 'block', textures = null } = {}) {
       shim.reset();
-      const result = fromwords.exportTrack(doc, { outDir: OUT, variant });   // no selfCheck: the check is always on
+      const result = fromwords.exportTrack(doc, { outDir: OUT, variant, textures });   // no selfCheck: the check is always on
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
   };

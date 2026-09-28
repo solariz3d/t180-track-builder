@@ -16,7 +16,7 @@ test('the palette lists every built-in word, then the starter phrases, then the 
   const m = paletteModel(s.getState(), s.pickers());
   assert.deepEqual(m.groups.map((g) => g.title), ['Words', 'Starter phrases', 'My pieces']);
   assert.deepEqual(m.groups[0].items.map((i) => i.name), Object.keys(D.WORDS));
-  assert.deepEqual(m.groups[1].items.map((i) => i.name), ['sakura flow', 'bowl hairpin', 'S', 'spiral climb']);
+  assert.deepEqual(m.groups[1].items.map((i) => i.name), ['sakura flow', 'S', 'bowl hairpin', 'spiral climb']);   // D180: src/doc/phrasebook.js's order, whose chain is clean
   assert.deepEqual(m.groups[2].items.map((i) => [i.name, i.kind, i.words.join(' ')]), [['my-bend', 'phrase', 'turn tight']]);
 });
 

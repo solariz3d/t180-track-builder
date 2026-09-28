@@ -6,8 +6,8 @@ const { createInstaller, createLauncher, PREFIX_NOTE } = require('./install.js')
 
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-function mount(root, shell, { exporter, native, pickFolder }) {
-  const inst = createInstaller({ exporter, native, getDoc: () => shell.getState().history.present });
+function mount(root, shell, { exporter, native, pickFolder, getTextures }) {
+  const inst = createInstaller({ exporter, native, getDoc: () => shell.exportDoc(), getTextures });
   const see = createLauncher({ native });
   const install = el('button', { textContent: 'Install to AC', title: `export straight into Assetto Corsa's content\\tracks (${PREFIX_NOTE})` });
   const change = el('button', { textContent: 'AC folder…' });

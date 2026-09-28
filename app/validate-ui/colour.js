@@ -23,13 +23,16 @@
 'use strict';
 const { MACH6 } = require('../../src/validate/limits.js');
 
-const LEVEL = Object.freeze({ CLEAR: 0, INFO: 1, AMBER: 2, RED: 3 });
+// PENDING (D179): a station not checked yet, while a drag is open (validation's result.pendingFrom). It is never shown as
+// clear: it was not found clean, it was not looked at. It sits above RED in number only so a max() never hides it.
+const LEVEL = Object.freeze({ CLEAR: 0, INFO: 1, AMBER: 2, RED: 3, PENDING: 4 });
 // inferred: display choices, not measurements. Red and amber as the program names them; info a quiet blue.
 const PALETTE = Object.freeze([
   Object.freeze([0.62, 0.64, 0.68, 1]),   // clear: the road's own grey
   Object.freeze([0.36, 0.58, 0.92, 1]),   // info
   Object.freeze([1.00, 0.68, 0.10, 1]),   // amber
   Object.freeze([0.90, 0.16, 0.12, 1]),   // red
+  Object.freeze([0.42, 0.40, 0.55, 1]),   // pending: a dim violet-grey, unlike the road's own grey (inferred, display)
 ]);
 
 /** A line's level from its load alone. */
@@ -88,9 +91,13 @@ function entry(st, rl, car) {
   return Object.freeze({ s: st.s, u: Float64Array.from(st.lines, (l) => l.u), levels, rangeLevel: rl, lines: st.lines });
 }
 
+/** A station past validation's pendingFrom: not checked yet, so PENDING across its width, whatever it was before. */
+const isPending = (result, s) => result.pendingFrom != null && s >= result.pendingFrom - 1e-9;
+const pendingEntry = (s) => Object.freeze({ s, u: Float64Array.of(0), levels: Uint8Array.of(LEVEL.PENDING), rangeLevel: LEVEL.PENDING, lines: [] });
+
 function colourMap(result, { car = MACH6, path } = {}) {
   const sts = stationsOf(result, path), rl = rangeLevels(result, sts.map((st) => st.s));
-  return Object.freeze({ stations: Object.freeze(sts.map((st, k) => entry(st, rl[k], car))) });
+  return Object.freeze({ stations: Object.freeze(sts.map((st, k) => (isPending(result, st.s) ? pendingEntry(st.s) : entry(st, rl[k], car)))), pendingFrom: result.pendingFrom == null ? null : result.pendingFrom });
 }
 
 /**
@@ -100,12 +107,14 @@ function colourMap(result, { car = MACH6, path } = {}) {
 function recolour(prev, result, { car = MACH6, path } = {}) {
   const sts = stationsOf(result, path), changed = [], levels = rangeLevels(result, sts.map((st) => st.s));
   const stations = sts.map((st, k) => {
-    const rl = levels[k], old = prev && prev.stations[k];
+    const old = prev && prev.stations[k];
+    if (isPending(result, st.s)) { if (old && old.s === st.s && old.rangeLevel === LEVEL.PENDING) return old; changed.push(k); return pendingEntry(st.s); }
+    const rl = levels[k];
     if (old && old.s === st.s && old.rangeLevel === rl && old.lines.length === st.lines.length && old.lines.every((l, j) => l === st.lines[j])) return old;
     changed.push(k);
     return entry(st, rl, car);
   });
-  return { map: Object.freeze({ stations: Object.freeze(stations) }), changed };
+  return { map: Object.freeze({ stations: Object.freeze(stations), pendingFrom: result.pendingFrom == null ? null : result.pendingFrom }), changed };
 }
 
 /** The level at (s, u): the last station at or before s (the first, before the start), and the nearest line in u. */

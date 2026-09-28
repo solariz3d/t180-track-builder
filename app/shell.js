@@ -29,7 +29,10 @@ const L = require('../src/doc/library.js');
 const PICKERS = { font: ['auto', ...Object.keys(D.FONTS)], tempo: Object.keys(D.TEMPOS), dir: ['L', 'R'] };
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$/;
 
-async function createShell({ storage, exporter = null, autosaveMs = 1500, timers = { setTimeout, clearTimeout } } = {}) {
+// The default timers CALL the globals rather than hold them as methods: a browser's setTimeout refuses to run as a
+// method of another object ("Illegal invocation", WebView2), which Node does not, so the real window could not place a
+// word while every headless test passed (app/test/timers-regression.test.js).
+async function createShell({ storage, exporter = null, autosaveMs = 1500, timers = { setTimeout: (f, ms) => setTimeout(f, ms), clearTimeout: (t) => clearTimeout(t) } } = {}) {
   if (!storage) throw new Error('createShell: a storage is needed');
   let lib = L.builtinLibrary();
   const saved = await storage.openLibrary();
@@ -46,6 +49,9 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
   let st = {
     history: D.createHistory(D.createDoc('untitled')), lib, resolved: null, resolveError: null,
     pickers: { font: 'auto', tempo: 'standard', dir: 'L' }, selection: null, name: null, dirty: false, message: startMessage, recovery,
+    // the design speed a jump with no speed of its own sizes its landing ramp for, while the track is OPEN (D179); the
+    // validation panel's speed slider sets it (setDesignSpeed). Not part of the document, so not an undo step
+    designSpeedKmh: null,
     exportReds: null,
   };
   st.resolved = D.resolve(st.history.present);
@@ -53,6 +59,8 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
   const emit = () => { for (const f of subs) f(st); };
   let autoDue = false, autoTimer = null;
   const set = (patch) => {
+    // a message is a refusal unless it says it is a success ('ok'): a stale 'ok' must never colour a later refusal
+    if ('message' in patch && !('messageKind' in patch)) patch = { ...patch, messageKind: patch.message ? 'error' : null };
     const before = st.history.present;
     st = Object.freeze({ ...st, ...patch });
     if (canAutosave && st.dirty && st.history.present !== before) {
@@ -80,7 +88,7 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
    */
   const commit = (doc, extra = {}) => {
     const r = resolved(doc);
-    if (r.resolveError) return set({ message: `not applied: ${r.resolveError}` });
+    if (r.resolveError) { set({ message: `not applied: ${r.resolveError}` }); return null; }   // null, as attempt() gives a refused action
     return set({ history: D.commit(st.history, doc), ...r, dirty: true, message: null, ...extra });
   };
   // A CLOSED track resolves through its open twin, marked closed: resolve still refuses closed documents
@@ -89,7 +97,11 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
   function resolved(doc) {
     try {
       const open = doc.closed ? { ...doc, closed: false } : doc;
-      const r = st.resolved && !st.resolved.closed === !doc.closed ? D.resolveFrom(st.resolved._open || st.resolved, open) : D.resolve(open);
+      // D179: an OPEN track's jumps size their ramps for the slider's design speed. A CLOSED track keeps the default:
+      // a ramp's length moves everything after it, so resizing would open the loop, and the connector closed it with
+      // the default (connector.js resolves without a speed). On a closed loop the words after a jump carry its landing.
+      const ro = doc.closed || st.designSpeedKmh == null ? undefined : { designSpeedKmh: st.designSpeedKmh };
+      const r = st.resolved && !st.resolved.closed === !doc.closed ? D.resolveFrom(st.resolved._open || st.resolved, open, ro) : D.resolve(open, ro);
       return { resolved: doc.closed ? Object.freeze({ ...r, closed: true, _open: r }) : r, resolveError: null };
     } catch (e) { if (e.name === 'ResolveError') return { resolved: null, resolveError: e.message }; throw e; }
   }
@@ -141,8 +153,19 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
     commitDoc: (d) => attempt(() => { D.checkDoc(d); return commit(d); }),
     beginDrag: () => attempt(() => set({ history: D.beginDrag(st.history) })),
     // a drag frame that would not resolve is skipped: the drag keeps its last good frame, and says why
-    dragTo: (id, patch) => attempt(() => { const d = D.editWord(doc(), id, patch), r = resolved(d); if (r.resolveError) return set({ message: `not applied: ${r.resolveError}` }); return set({ history: D.dragTo(st.history, d), ...r, dirty: true, message: null }); }),
+    dragTo: (id, patch) => attempt(() => { const d = D.editWord(doc(), id, patch), r = resolved(d); if (r.resolveError) { set({ message: `not applied: ${r.resolveError}` }); return null; } return set({ history: D.dragTo(st.history, d), ...r, dirty: true, message: null }); }),
     endDrag: () => attempt(() => set({ history: D.endDrag(st.history) })),
+    /**
+     * The design speed an open track's jumps size their landing ramps for (D179), from the validation panel's slider;
+     * null for the default (vocab.js LANDING). DERIVED, so no undo step: the document does not change, and moving the
+     * slider back gives the same ramps again.
+     */
+    setDesignSpeed: (kmh) => attempt(() => {
+      if (!(kmh === null || (Number.isFinite(kmh) && kmh > 0))) throw new D.DocError('BAD_DESIGN_SPEED', `the design speed must be a positive number of km/h, or null, got ${kmh}`);
+      if (kmh === st.designSpeedKmh) return st;
+      st = { ...st, designSpeedKmh: kmh };
+      return set({ ...resolved(doc()) });
+    }),
 
     /** Select the placed words from id `from` to id `to` (inclusive, in track order). */
     select(from, to = from) {
@@ -208,7 +231,7 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
         const r = require('../src/doc/connector.js').closeLoop(doc());
         if (!r.candidates.length) return set({ message: r.reason });
         const c = r.candidates[0];
-        return commit(c.doc, { message: `loop closed with ${c.words.length} words (${Math.round(c.lengthM)} m), worst load on the connector ${c.maxG.toFixed(1)} g`, selection: null });
+        return commit(c.doc, { message: `loop closed with ${c.words.length} words (${Math.round(c.lengthM)} m), worst load on the connector ${c.maxG.toFixed(1)} g`, messageKind: 'ok', selection: null });
       });
     },
 
@@ -226,14 +249,17 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
       const g = exporter.checkTarget(dir);
       if (!g.ok) return set({ message: g.reason, exportReds: null });
       let out;
-      try { out = exporter.run(doc(), opts); } catch (e) {
+      try { out = exporter.run(api.exportDoc(), opts); } catch (e) {
         if (e.name !== 'ExportError') throw e;
         return set({ message: e.message, exportReds: e.code === 'RED' ? e.red : null });
       }
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);
       const warn = out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '';
-      return set({ message: `exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${warn}`, exportReds: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
+      return set({ message: `exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${warn}`, messageKind: 'ok', exportReds: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
     },
+    /** The track as the export and the install name it: under the name it was SAVED as (the t180b_<name> folder), since
+     *  saving names the file and not the document, and a track started as "untitled" would otherwise always export so. */
+    exportDoc() { const d = doc(); return st.name && st.name !== d.name ? { ...d, name: st.name } : d; },
     list: () => storage.listDocs(),
     text: () => D.serialize(doc()),
   };
