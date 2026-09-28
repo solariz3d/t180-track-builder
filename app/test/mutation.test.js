@@ -94,6 +94,23 @@ const MUTATIONS = [
   // D173: the texture maker's editor and panel
   { id: 'T1 the editor ignores the value it is given', file: 'texmaker/model.js', from: 'L[i] = { ...L[i], [key]: value };', to: 'L[i] = { ...L[i], [key]: L[i][key] };', caughtBy: 'editor: an accepted edit changes the canonical text' },
   { id: 'T2 the panel never calls onChange', file: 'texmaker/index.js', from: 'if (onChange) onChange(now);', to: '', caughtBy: 'panel: an accepted edit calls onChange' },
+  // D177: the AC look (app/preview/aclook.js, acshaders.js, the renderer's AC path, the preview's texture set)
+  { id: 'L1 ksAmbient is read from ksDiffuse', file: 'preview/aclook.js', from: "ambient: propA(m, 'ksAmbient')", to: "ambient: propA(m, 'ksDiffuse')", caughtBy: 'mapping: ksAmbient, ksDiffuse' },
+  { id: 'L2 a missing property reads 1, not 0', file: 'preview/aclook.js', from: 'return p ? p.value[0] : 0; };', to: 'return p ? p.value[0] : 1; };', caughtBy: 'mapping: a property the material lacks reads 0' },
+  { id: 'L3 the multilayer R and G scales are swapped', file: 'preview/aclook.js', from: "multR: propA(m, 'multR'), multG: propA(m, 'multG')", to: "multR: propA(m, 'multG'), multG: propA(m, 'multR')", caughtBy: 'mapping: ksMultilayer takes' },
+  { id: 'L4 ksPerPixelNM falls to ksPerPixel', file: 'preview/aclook.js', from: "if (NM.has(m.shader)) return 'ksPerPixelNM';", to: '', caughtBy: 'mapping: the shader picks the program' },
+  { id: 'L5 the renderer never sets ksSpecular', file: 'preview/renderer.js', from: 'gl.uniform1f(pr.ksSpecular, u.specular);', to: '', caughtBy: 'renderer: an AC material' },
+  { id: 'L6 every sampler gets the white texel', file: 'preview/renderer.js', from: 'textureFor(u.textures[name] && images ? images.get(u.textures[name]) : null)', to: 'textureFor(null)', caughtBy: 'renderer: a named texture is uploaded' },
+  { id: 'L7 the multilayer scales never reach the shader', file: 'preview/renderer.js', from: 'if (u.detail) for (', to: 'if (false) for (', caughtBy: 'renderer: the multilayer scales' },
+  { id: 'L8 textures are never deleted', file: 'preview/renderer.js', from: 'if (e.gen !== gen) { gl.deleteTexture(e.t);', to: 'if (false) { gl.deleteTexture(e.t);', caughtBy: 'renderer: a texture no longer drawn' },
+  { id: 'L9 a shader loses a uniform declaration', file: 'preview/acshaders.js', from: 'uniform float ksSpecular;', to: 'float ksSpecular;', caughtBy: 'shaders: every uniform the renderer sets' },
+  { id: 'L10 an untextured set slot replaces the exported material', file: 'preview/aclook.js', from: 'if (slots && slots.floor && (slots.floor.settings.texture || slots.floor.settings.make)) {', to: 'if (slots && slots.floor) {', caughtBy: 'textured: an untextured floor' },
+  { id: 'L11 the set is ignored', file: 'preview/aclook.js', from: 'const slots = set && b.segId != null ? set.bySegment(b.segId) : null;', to: 'const slots = null;', caughtBy: 'textured: a word whose floor names' },
+  { id: 'L12 textures are keyed by name, not by the kn5 file', file: 'preview/aclook.js', from: 'images.map((t) => [t.file,', to: 'images.map((t) => [t.name,', caughtBy: "textured: the preview's texels" },
+  { id: 'L13 the default look is the word colours', file: 'preview/preview.js', from: "let set = null, images = [], look = 'ac'", to: "let set = null, images = [], look = 'words'", caughtBy: 'preview: the AC look is the default' },
+  { id: 'L14 setTextureSet drops the set', file: 'preview/preview.js', from: 'set = s || null;', to: 'set = null;', caughtBy: 'preview: a texture set with a made floor' },
+  { id: 'L15 a property is read from the wrong material', file: 'preview/aclook.js', from: 'const m = scene.materials[b.materialIndex];', to: 'const m = scene.materials[0] && { ...scene.materials[0], name: String(b.materialIndex) };', caughtBy: 'list: every mesh the preview draws is in the kn5' },
+  { id: 'L16 L does not change the look (the colour per word is unreachable)', file: 'preview/preview.js', from: "if (a.look) { look = look === 'ac' ? 'words' : 'ac';", to: 'if (a.look) {', caughtBy: 'preview: L toggles the look' },
 ];
 
 function runMutant(m) {
@@ -105,7 +122,7 @@ function runMutant(m) {
     fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });   // src/export/fromwords.js reads its kn5 back with tools/kn5.cjs (D177: the export is in the look's list test)
     const f = m.root === 'scripts' ? path.join(dir, 'scripts', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), applied = m.from === null || src.includes(m.from);
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
-    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')],
+    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(__dirname, 'aclook.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')],
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), APP_DIR: app, SCRIPTS_DIR: path.join(dir, 'scripts') }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');

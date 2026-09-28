@@ -59,6 +59,7 @@ function parseArgs(argv) {
  *   head in frame        the head's NDC x and y are inside (−1, 1), in front of the camera (w > 0) and the far plane
  *   looks along growth   build view only: view direction · T ≥ 0.9
  *   dpr                  the canvas backing store is css size × DPR (rounded)
+ *   ac look drawn        (D177) in the AC look: at least one batch was drawn with an AC shader, so they compiled here
  */
 function judge(mode, probe, cap) {
   const out = [];
@@ -67,6 +68,8 @@ function judge(mode, probe, cap) {
   const n = probe && probe.headNdc;
   out.push({ name: 'head in frame', pass: !!n && Math.abs(n[0]) < 1 && Math.abs(n[1]) < 1 && n[2] < 1, detail: n ? `head at NDC (${n.map((x) => x.toFixed(3)).join(', ')})` : 'head behind the camera or no track' });
   if (mode === 'build') out.push({ name: 'looks along growth', pass: !!probe && probe.lookAlongT >= 0.9, detail: probe ? `view · T = ${probe.lookAlongT && probe.lookAlongT.toFixed(4)}` : 'no probe' });
+  // D177: in the AC look, the AC programs compiled in this window's WebGL (createRenderer compiles them at mount) and drew
+  if (probe && probe.look === 'ac') out.push({ name: 'ac look drawn', pass: !!probe.stats && probe.stats.acDraws > 0, detail: `${probe.stats ? probe.stats.acDraws : 0} batches with AC shaders, ${probe.stats ? probe.stats.draws : 0} draws` });
   const c = probe && probe.canvas;
   if (probe && probe.ghostExpected) out.push({ name: 'ghost shown', pass: probe.ghost > 0, detail: `${probe.ghost} ghost batches` });
   out.push({ name: 'dpr', pass: !!c && c.width === Math.round(c.cssWidth * c.dpr) && c.height === Math.round(c.cssHeight * c.dpr), detail: c ? `${c.width}×${c.height} backing for ${c.cssWidth}×${c.cssHeight} css at DPR ${c.dpr}` : 'no probe' });
@@ -228,7 +231,7 @@ async function runFlow(o) {
     let d; try { d = JSON.parse(dlg.stdout.trim().split(/\r?\n/).pop()); } catch { d = { ok: false, reason: dlg.stderr || dlg.stdout }; }
     report.steps.push({ step: 'folder dialog', ...d });
     if (!d.ok) throw new Error(`the folder dialog: ${d.reason}`);
-    const done = await until(async () => { const t = await texts(); return t.messages.find((m) => /^exported |Not exported|export failed/.test(m)) || (/export failed/.test(t.status) ? t.status : null); }, 'the export to finish', 180000);
+    const done = await until(async () => { const t = await texts(); return t.messages.find((m) => /^exported |Not exported|export failed/.test(m)) || (/export failed/.test(t.status) ? t.status : null); }, 'the export to finish', 60000);   // 60 s: an unanswered native dialog stays on the desktop meanwhile
     report.steps.push({ step: 'export', result: done, ...(await texts()) });
     await capture('flow-exported');
     cdp.close();

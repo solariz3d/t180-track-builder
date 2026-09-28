@@ -101,4 +101,32 @@ function headMarker(head, size = 3) {
   return { positions: new Float32Array([...head.pos, ...at(up, size * 10 / 3), ...at(head.T, -size), ...at(head.T, size), ...at(head.L, -size), ...at(head.L, size), ...ring]) };
 }
 
-module.exports = { LIGHT, shade, linesFor, localBounds, worldBounds, gridLines, headMarker, TIE_M, LIFT };
+/**
+ * Per-vertex tangents (the direction of increasing u, orthogonalised against the normal), for the normal-mapped shader:
+ * each triangle's dPosition/du is summed into its vertices, then made perpendicular to the normal, as
+ * src/export/kn5write.js writes the kn5's tangents. Memoised per positions array. A degenerate one falls back to the
+ * normal's own perpendicular.
+ */
+const tanMemo = new WeakMap();
+function tangentsFor(b) {
+  const hit = tanMemo.get(b.positions); if (hit) return hit;
+  const P = b.positions, N = b.normals, U = b.uvs, I = b.indices, T = new Float32Array(P.length);
+  for (let t = 0; t < I.length; t += 3) {
+    const [a, c, d] = [I[t], I[t + 1], I[t + 2]], du1 = U[c * 2] - U[a * 2], dv1 = U[c * 2 + 1] - U[a * 2 + 1], du2 = U[d * 2] - U[a * 2], dv2 = U[d * 2 + 1] - U[a * 2 + 1];
+    const det = du1 * dv2 - du2 * dv1; if (Math.abs(det) < 1e-12) continue;
+    const r = 1 / det;
+    for (let k = 0; k < 3; k++) {
+      const e1 = P[c * 3 + k] - P[a * 3 + k], e2 = P[d * 3 + k] - P[a * 3 + k], tk = (e1 * dv2 - e2 * dv1) * r;
+      T[a * 3 + k] += tk; T[c * 3 + k] += tk; T[d * 3 + k] += tk;
+    }
+  }
+  for (let v = 0; v < P.length; v += 3) {
+    const n = [N[v], N[v + 1], N[v + 2]], t = [T[v], T[v + 1], T[v + 2]], nt = n[0] * t[0] + n[1] * t[1] + n[2] * t[2];
+    let o = [t[0] - n[0] * nt, t[1] - n[1] * nt, t[2] - n[2] * nt], l = Math.hypot(o[0], o[1], o[2]);
+    if (!(l > 1e-9)) { o = Math.abs(n[0]) < 0.9 ? [0, -n[2], n[1]] : [-n[1], n[0], 0]; l = Math.hypot(o[0], o[1], o[2]); }
+    T[v] = o[0] / l; T[v + 1] = o[1] / l; T[v + 2] = o[2] / l;
+  }
+  tanMemo.set(b.positions, T); return T;
+}
+
+module.exports = { LIGHT, shade, linesFor, tangentsFor, localBounds, worldBounds, gridLines, headMarker, TIE_M, LIFT };

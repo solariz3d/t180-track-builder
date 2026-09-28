@@ -46,6 +46,9 @@ test('judge: each failure is caught on its own', () => {
   assert.equal(names(R.judge('build', { ...good, lookAlongT: 0.5 }, cap))['looks along growth'], false);
   assert.equal(names(R.judge('build', { ...good, canvas: { ...good.canvas, width: 800 } }, cap)).dpr, false, 'backing store ignores DPR');
 });
+test('judge (D177): in the AC look, a view that drew no batch with an AC shader fails "ac look drawn"', () => {
+  assert.deepEqual([names(R.judge('build', { ...good, look: 'ac', stats: { acDraws: 12, draws: 12 } }, cap))['ac look drawn'], names(R.judge('build', { ...good, look: 'ac', stats: { acDraws: 0, draws: 12 } }, cap))['ac look drawn']], [true, false]);
+});
 test('judge: only the build view is held to looking along the growth direction', () => {
   assert.ok(!('looks along growth' in names(R.judge('overhead', { ...good, lookAlongT: 0 }, cap))));
 });
