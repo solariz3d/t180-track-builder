@@ -47,9 +47,10 @@ test('the sculpt hook reports each handle with its value, unit and range, and pa
 });
 
 // ── the library ────────────────────────────────────────────────────────────────────────────────────────────────────
-test('the built-in library holds one piece per word, and the palette reads from it', () => {
+test('the built-in library holds one piece per word and the starter phrases, and the palette reads from it', () => {
   const lib = L.builtinLibrary(), pal = L.palette(lib);
-  assert.deepEqual(pal.filter((p) => p.builtin).map((p) => p.name), Object.keys(D.WORDS));
+  assert.deepEqual(pal.filter((p) => p.builtin && p.kind === 'word').map((p) => p.name), Object.keys(D.WORDS));
+  assert.deepEqual(pal.filter((p) => p.builtin && p.kind === 'phrase').map((p) => p.name), require('../src/doc/phrasebook.js').PHRASES.map((p) => p.name));
   assert.ok(pal.every((p) => typeof p.id === 'string' && Array.isArray(p.words)));
 });
 

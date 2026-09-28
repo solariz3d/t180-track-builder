@@ -121,14 +121,14 @@ that the flight covers the `gap` handle horizontally, comes down `drop` (+ = lan
 | field | type | meaning | ARCHITECTURE |
 |---|---|---|---|
 | `lengthM` | m | the total centreline length | — |
-| `closed` | bool | as resolved; if true, the closing twist is spread along the loop | §3 `:54-55` |
-| `twist` | rad | the closing twist that was spread (0 when open) | §3 `:54-55` |
+| `closed` | bool | as resolved; if true, the loop must meet itself (position and tangent). *(2026-09-27, D177 deviation below: there is no closing twist to spread any more)* | §3 `:54-55` |
+| `twist` | rad | 0 always since 2026-09-27 (D177 deviation below): the gravity frame closes with the heading. Kept so readers do not break | §3 `:54-55` |
 | `samples[]` | array | one entry per station, in `s` order | — |
 | · `s` | m | the station | — |
 | · `seg` | index | which segment the station is in | — |
 | · `pos` | [3] m | the **road's** centre at u = 0 (on the surface). The curve itself is integrated along the heartline, and `pos` = heartline point − `heartline`·U | §2 `:33` |
 | · `T` | [3] unit | tangent | §3 `:54` |
-| · `L` | [3] unit | the frame's **left** axis: rotation-minimising (double reflection, f64), then rolled by φ | §3 `:54-55` |
+| · `L` | [3] unit | the frame's **left** axis: the heading's left (cos θ, 0, −sin θ), then rolled by φ. *(2026-09-27, D177 deviation below; until then rotation-minimising, by double reflection)* | §3 `:54-55` |
 | · `U` | [3] unit | the frame's **up** axis, T × … so that (T, L, U) is right-handed; L = U × T | §3 `:54-55` |
 | · `kvec` | [3] 1/m | the curvature **vector** dT/ds. The fold check needs its direction, not only its size | §3 `:57` "1 − κ·(q·N)" |
 | · `roll` | rad | φ at this station | §2 `:33` |
@@ -136,7 +136,25 @@ that the flight covers the `gap` handle horizontally, comes down `drop` (+ = lan
 | · `grade` | ratio | rise over run of T, for display | — |
 
 **Why L/U rather than N/B:** N and B read as the Frenet normal and binormal, which flip at inflections and are
-undefined on straights. The frame here is rotation-minimising (§3 `:54`), and its axes are named for what they are.
+undefined on straights. The frame's axes are named for what they are.
+
+**DEVIATION from ARCHITECTURE §3, 2026-09-27 (D177, C; the librarian's ruling on p-d177-rigid-C §2, "option 2").**
+ARCHITECTURE §3 says "rotation-minimising frames by the double-reflection method (f64), with the closing twist spread
+along the loop, plus explicit roll". The geometry now uses **the curve model's yaw-pitch (gravity) frame + roll**: the
+unrolled left is the heading's left H(θ) = (cos θ, 0, −sin θ), horizontal and perpendicular to T at every pitch,
+±90° and inversions included, and the explicit roll φ is applied about T. ARCHITECTURE.md itself is NOT edited (the
+keeper's document); this paragraph is the record.
+- **Why (measured, p-d177-rigid-C §2):** the RMF spins against gravity on a climbing turn at k·sin p per metre. A 360°
+  turn at 10° pitch with roll 0 ended banked 61° against gravity, so a word's roll was not its bank, while §3 says to
+  show the user bank against gravity and the loads f = v²κN − g need it. The same twist made a piece's shape depend on
+  the frame carried in from upstream, so no edit on a slope could move what follows rigidly.
+- **What it changes:** a word's roll IS its bank against gravity (`bankG` = asin(cos p · sin φ); φ on the level). A
+  closed loop's frame closes with its heading, so there is no closing twist (`twist` = 0). Every sculpt that keeps the
+  next piece's start pitch moves what follows rigidly and exactly (§4b). Centrelines are unchanged; the language, A's
+  connector and jumps are unchanged. Old documents keep their shape; on pitched turns their banks change (by the
+  twist the RMF used to add).
+- **What it does not change:** yaw is still about world up and pitch still absolute, so a PITCH edit still reshapes
+  what follows (that is the language's meaning).
 
 **(built) The curve model: yaw is about WORLD up.** Heading θ turns about world up at k(s), and pitch p at kp(s), so
 T = (cos p sin θ, sin p, cos p cos θ). A "turn left" word turns left on the map whatever the pitch. **The consequence:**
@@ -241,7 +259,7 @@ support **append at the head** without rebuilding what is already there.
 - `extendMesh(prev, path, segments)` redoes only the new pieces and the seam at the old end. It is byte-identical to a
   full `buildMesh` after an append, and its cost does not grow with the track (C's operation counts: the same work at
   385 m and at 14 km).
-- A closed loop cannot be extended or sculpted in place, because its closing twist spans the loop: that is a full
+- A closed loop cannot be extended or sculpted in place, because it must still close (the connector's job): that is a full
   rebuild.
 
 **Validation (E):**
@@ -276,6 +294,16 @@ ARCHITECTURE's handles (§2 `:46`: "the continuous parameters sculpt mode drags,
   word's first segment (`rebuildPathFrom(path, segments, g)`), remeshes it (`sculptMesh(prev, path, segments, g)`),
   and re-places every later piece whose shape in its own frame is unchanged instead of remeshing it. The result equals a
   full rebuild: the path exactly, the mesh within 1e-5 m (`test/join.test.js`, `test/geom_sculpt.test.js`).
+  **Changed, D177 (rigid downstream edits):** the PATH is re-placed too, not regrown. Every segment is grown once in its
+  own local coordinates (a block), and placed by ONE chain (position and heading carried from the block before). A full
+  build and a sculpt run the same chain on the same floats, so the path still equals a full rebuild EXACTLY. The
+  unchanged tail (the trailing segments whose path handles are the same) is regrown block by block only until the next
+  block's local start (pitch and frame) is bit for bit its old one; from there its blocks are kept and only their
+  placements are recomputed: O(1) per segment, whatever its length (`path.replaced` counts them). Every re-placed
+  sample's `bankG` is bit-identical to before the edit. *(2026-09-27, with the gravity frame, §2's deviation:)* every
+  block's local frame is the same, so EVERY edit that keeps the next piece's start pitch (length, turn, roll, font,
+  speed, heartline, on the level or on a slope) re-places the whole tail; a pitch edit regrows it. `path.samples` of an OPEN path are read-only views (the fields above, through getters; `toJSON`
+  gives the plain object).
 - A whole drag is **one** undo entry (§2 `:49`).
 - **Open, for the app:** sculpting a word's `roll1` makes a roll step against the next word's `roll0`, and resolve
   refuses it. Either the app edits both together, or an edit carries the end roll into the next word. The model does

@@ -30,7 +30,7 @@ test('soak: a failure names the seed and the op index, and gives the command tha
 // FOUND BY THE SOAK, routed to A (src/doc, app/shell.js): a sculpt of a word's END ROLL to a value inside its own range
 // is committed, and leaves the document unable to resolve ("ROLL_STEP … the surface would tear"). The shell's contract is
 // "A FAILED ACTION changes nothing and says why". Either the edit is refused, or the next word follows; A's call.
-test('A: a sculpt that would tear the surface is refused, or the document still resolves', { todo: 'A: src/doc editWord / app/shell.js sculpt (D175 soak, seed 1 op #67)' }, async () => {
+test('A: a sculpt that would tear the surface is refused, or the document still resolves', async () => {
   const { createShell } = require(path.join(R, 'app/shell.js'));
   const st = { saveDoc: async () => {}, openDoc: async () => null, listDocs: async () => [], saveLibrary: async () => {}, openLibrary: async () => null, saveAutosave: async () => {}, openAutosave: async () => null };
   const s = await createShell({ storage: st, autosaveMs: 0 });

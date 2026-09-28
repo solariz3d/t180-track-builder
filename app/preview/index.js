@@ -10,6 +10,11 @@
 //                                                              appended, not committed), or a built-in word, resolved here
 //                                                              the way shell.place() would (app/testhook/ghostword.js)
 //   't180-ghost-clear'                                         hide it
+// And the ONE SHARED PATH (D177), for validation (app/validate-ui, E's) instead of a second path of its own:
+//   't180:track'          { detail: { path, segments, closed, how, g, fromS } }   sent after every change that moved the
+//                          track (how 'extend' | 'sculpt' | 'full' | 'empty'; g the first changed segment, fromS where
+//                          it starts, the old end for an append). The path is the preview's own: READ IT, never edit it.
+//   't180:track-request'  { detail: { reply(track) } }   the current one, at once, for a reader mounted after the preview
 //
 // A MOUNT THAT FAILS says why, twice: the reason is left visible in the panel ("The preview could not start: …"), and
 // mount throws a PreviewMountError with the same message, for the page to show where it likes (A's display half).
@@ -32,7 +37,8 @@ function mount(root, shell) {
   root.append(canvas, hud);
   const announce = (mode) => doc.dispatchEvent(new win.CustomEvent('t180-camera-mode', { detail: { mode, modes: MODES.slice() } }));
   let p;
-  try { p = createPreview({ canvas, shell, win, hud, onMode: announce }); } catch (e) {
+  const publish = (t) => doc.dispatchEvent(new win.CustomEvent('t180:track', { detail: t }));
+  try { p = createPreview({ canvas, shell, win, hud, onMode: announce, onTrack: publish }); } catch (e) {
     const msg = `The preview could not start: ${e.message}`, note = doc.createElement('p');
     note.textContent = msg; note.setAttribute && note.setAttribute('role', 'alert');
     root.replaceChildren(note);
@@ -46,11 +52,13 @@ function mount(root, shell) {
     if (typeof d.reply === 'function') d.reply({ ok: true });
   };
   const hideGhost = () => p.clearGhost();
+  const trackNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.track()); };
+  doc.addEventListener('t180:track-request', trackNow);
   doc.addEventListener('t180-camera', ask);
   doc.addEventListener('t180-probe', answer);
   doc.addEventListener('t180-ghost', showGhost);
   doc.addEventListener('t180-ghost-clear', hideGhost);
-  return { preview: p, unmount() { doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); p.dispose(); root.replaceChildren(); } };
+  return { preview: p, unmount() { doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };

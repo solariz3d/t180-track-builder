@@ -36,15 +36,15 @@ test('a message, when there is one, is shown once as an alert', async () => {
   assert.equal(alerts[0].getAttribute('role'), 'alert');
 });
 
-test('every built-in word is a button, and a click places it through the handler it was given', async () => {
+test('every built-in word and starter phrase is a button, and a click places it through the handler it was given', async () => {
   const restore = fake.install();
   try {
     const s = await createShell({ storage: mem() }), root = new fake.Element('aside'), placed = [];
     renderPalette(root, paletteModel(s.getState(), s.pickers()), { ...noop, place: (n) => placed.push(n) });
     const buttons = root.querySelectorAll('.builtin');
-    assert.deepEqual(buttons.map((b) => b.textContent), ['straight', 'sweep', 'turn', 'tight', 'wall-ride', 'inversion', 'jump']);
-    buttons[2].dispatch('click');
-    assert.deepEqual(placed, ['turn']);
+    assert.deepEqual(buttons.map((b) => b.textContent), ['straight', 'sweep', 'turn', 'tight', 'wall-ride', 'inversion', 'jump', 'sakura flow', 'bowl hairpin', 'S', 'spiral climb']);
+    buttons[2].dispatch('click'); buttons[7].dispatch('click');
+    assert.deepEqual(placed, ['turn', 'sakura flow']);
   } finally { restore(); }
 });
 

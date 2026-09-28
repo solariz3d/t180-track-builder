@@ -278,6 +278,11 @@ All notable changes to this project are recorded here. The format follows
   byte-identical undo, save/open and the preview against a full build, and tests that an edit rebuilds only the cells
   it touches and that no mesh crosses to the native side during a drag. The benchmark shows every edit on a 40 km track
   over its budget, mostly in revalidation.
+- The starter phrases (sakura flow, bowl hairpin, S, spiral climb) in the palette, as their own "Starter phrases"
+  group. Placing one is one undo step.
+- The first Windows installer (T-180 Track Builder 0.2.0, NSIS, per user, no administrator rights), built by
+  `node src-tauri/release.cjs`. That script keeps the build machine's paths out of the binary and refuses to finish if
+  any are left. See `docs/RELEASE.md`. The installer is not code-signed, so SmartScreen warns.
 
 ### Changed
 
@@ -303,6 +308,17 @@ All notable changes to this project are recorded here. The format follows
 - The texture decoder takes a size cap, so a small hostile code cannot demand a large buffer.
 - README: the status is no longer "planned, not built". A table judges every item of ARCHITECTURE §1–§6, §5b and §5c
   as tested, built or not yet, naming the file and the test.
+- The track's frame is the yaw-pitch (gravity) frame plus the word's roll, instead of a rotation-minimising frame, so a
+  word's roll is its bank against gravity. Before, a climbing turn silently banked the road (61° over a full turn at
+  10° pitch). This is a deviation from ARCHITECTURE §3, recorded in `docs/INTERFACES.md` §2. Old documents keep their
+  centreline; on pitched turns their bank changes to what the words say.
+- Sculpting a word moves everything after it rigidly, unless the edit changes the pitch the next piece starts at. The
+  pieces after it are re-placed, not regrown or re-meshed, and the path stays bit-identical to a full rebuild.
+- The 3D preview builds its path at the export's station step (2 m), so it shows the stations the kn5 is built from,
+  and it publishes that one path (`t180:track`) for validation instead of each keeping its own.
+- Validation reads the preview's path and re-checks only from the changed word on, plus the stations within stacking
+  reach (at most 34 m with the built-in words) of what moved. The stacking check measures only pairs of stations that
+  could be within 2 m, with the same findings bit for bit. A closed loop's lap proof waits for the end of a drag.
 
 ### Removed
 
@@ -336,3 +352,9 @@ All notable changes to this project are recorded here. The format follows
 - The marker check read a 3-abreast grid as pointing 40° off the road. It took the race direction from the back slot to
   pole, which crosses the road when they stand in different columns; it now removes the across part, and a grid
   pointing backwards is still refused.
+- An edit that would leave the track unable to resolve (for example an end roll the next word cannot follow) is refused
+  with a message and changes nothing, as a drag frame is; before, it was committed with a hidden resolve error. Found
+  by the soak.
+- The colour levels no longer scan every red and amber range for every station on every edit.
+- The soak script sculpts only top-level words, so a starter phrase in the palette no longer crashes it.
+- The app mutation harness copies `tools/` as well as `src/`, so the export's kn5 read-back works in its temp copies.

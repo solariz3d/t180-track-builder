@@ -46,6 +46,29 @@ function rangeLevel(result, s) {
   return LEVEL.CLEAR;
 }
 
+/**
+ * rangeLevel for every station at once (D177: per station it scanned every red and amber range, O(stations × ranges) on
+ * each edit). For stations in s order, each range marks the stations inside it, found by binary search, through a
+ * difference array: O(stations + ranges · log stations), and the same level rangeLevel gives each station. Stations out of
+ * order fall back to rangeLevel one by one.
+ */
+function rangeLevels(result, ss) {
+  const n = ss.length, out = new Uint8Array(n);
+  for (let k = 1; k < n; k++) if (!(ss[k] >= ss[k - 1])) { for (let j = 0; j < n; j++) out[j] = rangeLevel(result, ss[j]); return out; }
+  const first = (x) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (ss[m] >= x) hi = m; else lo = m + 1; } return lo; };   // first s ≥ x
+  const past = (x) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (ss[m] <= x) lo = m + 1; else hi = m; } return lo; };   // first s > x
+  const cover = (ranges) => {
+    const d = new Int32Array(n + 1);
+    for (const r of ranges) { const a = first(r.s0 - 1e-9), b = past(r.s1 + 1e-9); if (a < b) { d[a]++; d[b]--; } }
+    const c = new Uint8Array(n); let run = 0;
+    for (let k = 0; k < n; k++) { run += d[k]; c[k] = run > 0 ? 1 : 0; }
+    return c;
+  };
+  const red = cover(result.red), amber = cover(result.amber);
+  for (let k = 0; k < n; k++) out[k] = red[k] ? LEVEL.RED : amber[k] ? LEVEL.AMBER : LEVEL.CLEAR;
+  return out;
+}
+
 /** Group validation's lines (station order, u order within) into stations; with a path, every path station, lines or not. */
 function stationsOf(result, path) {
   const out = [];
@@ -66,7 +89,8 @@ function entry(st, rl, car) {
 }
 
 function colourMap(result, { car = MACH6, path } = {}) {
-  return Object.freeze({ stations: Object.freeze(stationsOf(result, path).map((st) => entry(st, rangeLevel(result, st.s), car))) });
+  const sts = stationsOf(result, path), rl = rangeLevels(result, sts.map((st) => st.s));
+  return Object.freeze({ stations: Object.freeze(sts.map((st, k) => entry(st, rl[k], car))) });
 }
 
 /**
@@ -74,9 +98,9 @@ function colourMap(result, { car = MACH6, path } = {}) {
  * untouched ones by identity) and whose range level did not change. `changed` lists the stations built anew.
  */
 function recolour(prev, result, { car = MACH6, path } = {}) {
-  const sts = stationsOf(result, path), changed = [];
+  const sts = stationsOf(result, path), changed = [], levels = rangeLevels(result, sts.map((st) => st.s));
   const stations = sts.map((st, k) => {
-    const rl = rangeLevel(result, st.s), old = prev && prev.stations[k];
+    const rl = levels[k], old = prev && prev.stations[k];
     if (old && old.s === st.s && old.rangeLevel === rl && old.lines.length === st.lines.length && old.lines.every((l, j) => l === st.lines[j])) return old;
     changed.push(k);
     return entry(st, rl, car);
@@ -96,4 +120,4 @@ function levelAt(map, s, u) {
 }
 const rgbaAt = (map, s, u) => PALETTE[levelAt(map, s, u)];
 
-module.exports = { LEVEL, PALETTE, loadLevel, rangeLevel, colourMap, recolour, levelAt, rgbaAt };
+module.exports = { LEVEL, PALETTE, loadLevel, rangeLevel, rangeLevels, colourMap, recolour, levelAt, rgbaAt };

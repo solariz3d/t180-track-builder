@@ -51,3 +51,36 @@ test('loop-the-loop: the exit over the entry at the bottom is found by selfCheck
   const segs = F.loopTheLoop(), p = G.buildPath(segs), r = G.selfCheck(G.buildMesh(p, segs), { lengthM: p.lengthM });
   assert.ok(r.intersections.length > 0);
 });
+
+// D177, option 2 (the gravity frame, left = (cos θ, 0, −sin θ)): the frame depends on the heading only, so it must stay
+// well-defined where the tangent is vertical. The old level-left rule (up × T) is undefined there; the heading's left is not.
+test('gravity frame at EXACTLY ±90° pitch: finite, orthonormal, right-handed, and its left is the heading\'s left', () => {
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  let worst = 0;
+  for (const p of [Math.PI / 2, -Math.PI / 2]) for (const theta of [0, 0.7, -2.1, Math.PI]) {
+    const path = G.buildPath([{ id: 'v', kind: 'road', length: 20, kp0: 0.01, kp1: 0.01, profile: F.FLAT }], { start: { pos: [0, 0, 0], theta, p }, step: 0.5 });
+    const s = path.samples[0], H = [Math.cos(theta), 0, -Math.sin(theta)];
+    assert.ok(Math.abs(Math.abs(s.T[1]) - 1) < 1e-15, `the start is vertical: T.y ${s.T[1]}`);
+    for (const k of ['T', 'L', 'U']) assert.ok(s[k].every(Number.isFinite), `${k} is finite at p ${p}, θ ${theta}`);
+    worst = Math.max(worst, len(sub(s.L, H)), Math.abs(len(s.L) - 1), Math.abs(len(s.U) - 1), Math.abs(dot(s.T, s.L)), Math.abs(dot(s.T, s.U)), Math.abs(dot(s.L, s.U)), len(sub(s.L, cross(s.U, s.T))));
+  }
+  assert.ok(worst < 1e-12, `worst ${worst}`);
+});
+test('corkscrew: a full roll about a heartline turns the road upside down halfway, continuously, and exits as it entered', () => {
+  // a 60 m straight rolled 0 → 2π (smoothstep) about a heartline 1.2 m above the road: an inversion with no pitch
+  const segs = [{ id: 'in', kind: 'road', length: 20, profile: F.FLAT }, { id: 'cork', kind: 'road', length: 60, roll0: 0, roll1: 2 * Math.PI, heartline: 1.2, profile: F.FLAT },
+    { id: 'out', kind: 'road', length: 20, profile: F.FLAT }];
+  const step = 0.25, p = G.buildPath(segs, { step }), cork = p.samples.filter((s) => s.seg === 1);
+  assert.ok(Math.min(...cork.map((s) => s.U[1])) < -0.9999, 'upside down in the middle');
+  // continuity: the frame turns by at most the roll rate × the step (smoothstep's peak rate is 1.5 · 2π / 60 per metre)
+  const bound = step * 1.5 * 2 * Math.PI / 60 + 1e-9;
+  for (let i = 1; i < p.samples.length; i++) {
+    const a = p.samples[i - 1], b = p.samples[i];
+    for (const k of ['L', 'U']) assert.ok(ang(a[k], b[k]) <= bound * (b.s - a.s) / step + 1e-9, `${k} jumps by ${ang(a[k], b[k])} at s = ${b.s}`);
+    assert.ok(Math.abs(len(b.L) - 1) < 1e-9 && Math.abs(dot(b.T, b.L)) < 1e-9 && Math.abs(dot(b.L, b.U)) < 1e-9, `orthonormal at ${b.s}`);
+  }
+  // on the level the bank against gravity IS the roll (folded into ±90°), which the gravity frame makes exact
+  for (const s of cork) assert.ok(Math.abs(s.bankG - Math.asin(Math.sin(s.roll))) < 1e-9, `bankG ${s.bankG} vs roll ${s.roll} at ${s.s}`);
+  const e = p.segEnd[1], a0 = p.samples[p.segFirst[1]];
+  for (const k of ['T', 'L', 'U']) assert.ok(len(sub(e[k], a0[k])) < 1e-9, `${k} exits as it entered: ${len(sub(e[k], a0[k]))}`);
+});

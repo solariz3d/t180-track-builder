@@ -31,7 +31,8 @@ function words(n) {
     : i % 3 === 1 ? { id: `s${i}`, kind: 'road', length: 45, profile: F.FLAT } : { id: `w${i}`, kind: 'road', length: 30, k0: 0.02, k1: 0, profile: F.WALLRIDE });
   return out;
 }
-const fullOf = (segs) => B.batchesOf(G.buildMesh(G.buildPath(segs), segs));
+// a full build with the model's own path options (D177: the model's path is at the export's step, TM.STEP)
+const fullOf = (segs) => B.batchesOf(G.buildMesh(G.buildPath(segs, { step: TM.STEP }), segs));
 /**
  * Equal to a full build: the same batches and indices exactly, matrices within 1e-9, positions within 1e-5 m. Why not
  * exact: a piece a sculpt only MOVED keeps the local arrays made at its old placement, and a full build makes them at

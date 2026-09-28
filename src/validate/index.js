@@ -114,12 +114,25 @@ function ranges(list, step) {
 //   · folds                 0: local to the station
 //   · segment-level reds    the segment of the look-back station, i.e. the word before the change: an open head's gap
 //                           is exempt, and stops being the head on an append
-//   · stacked-within-2m     every new surface point is checked against EVERY point, old and new, and a hit marks
-//                           both stations, so an old road that a new piece lands on turns red too
-//   · jumps                 recomputed whole: a jump's landing depends on road up to landingSearchM after it, and
-//                           jumps are few (each costs at most its landing search)
+//   · stacked-within-2m     every changed station is checked against every station, old and new, that can hold a
+//                           surface point within 2 m of its own: a SPATIAL reach of r_i + r_j + 2 m around it (r the
+//                           station's half-section, at most 15.9 m for the built-in words, the bowl; so ≤ 33.8 m), at
+//                           ANY s, since a new piece can land on road laid kilometres earlier. A hit marks both stations,
+//                           so an old road that a new piece lands on turns red too; an old station whose deepest stack
+//                           was on a changed one is re-derived. The work is the stations near the changed ones, not the
+//                           track (stacked() below)
+//   · jumps                 recomputed whole: a jump's landing depends on road up to landingSearchM (150 m) after its
+//                           flight, so a word placed within 150 m of an earlier jump can change it; jumps are few, and
+//                           each costs at most its landing search
+//   · self-intersection     not computed here: it is buildMesh's (C's BVH between cells), passed in as opts.folds
+//   · the speed             v(s) is O(stations) per call (a design speed per word, or the closed loop's ghost lap)
 //   · the lap               only on a closed path, and closing re-validates everything (C spreads the closing twist
-//                           along the whole loop, so every frame changes: docs/INTERFACES.md §4)
+//                           along the whole loop, so every frame changes: docs/INTERFACES.md §4). opts.lap === false
+//                           defers its proof (a drag tick); lapOf() gives it afterwards
+// DOWNSTREAM of a sculpt every station is recomputed, per station: a sculpt moves what follows it (C's rigid re-placement
+// turns and shifts it about world up), and a full validate of the moved path reads the moved coordinates, so carrying the
+// old figures would differ from it in rounding. Per station this is cheap (the profile's constants are per segment);
+// what made a sculpt cost seconds was the stacking check measuring every surface point of the whole track (D177).
 function core(path, segments, opts, from, carried) {
   if (!path || !Array.isArray(path.samples) || !Array.isArray(segments)) throw new Error('validate: needs a path with samples and the segments');
   const car = { ...MACH6, ...(opts.car || {}) };
@@ -140,32 +153,47 @@ function core(path, segments, opts, from, carried) {
   }
 
   // ── loads per lateral line, folds, seams, holes: stations from `from` on ──
-  const normalOf = (i, u) => { const [nl, nu] = P.normalAt(profiles[S[i].seg], u); return add(mul(S[i].L, nl), mul(S[i].U, nu)); };
+  // What depends only on the profile and u (offset, normal, ψ) is computed once per segment (D177: this loop allocated
+  // several vectors per station and line); each station then combines it with its own frame, in the same arithmetic
+  // order as the vector helpers above, so every figure is bit-identical to the per-station form it replaced.
+  const perSeg = new Map();
+  const segConst = (j) => {
+    let c = perSeg.get(j);
+    if (c) return c;
+    const prof = profiles[j];
+    c = prof.u.map((u) => { const [X, Y] = P.offsetAt(prof, u), [nl, nu] = P.normalAt(prof, u), psi = P.psiAt(prof, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
+      return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; });
+    perSeg.set(j, c); return c;
+  };
+  // the normal n(u) at a station: L·nl + U·nu (add(mul(L, nl), mul(U, nu)))
+  const nx = (p, c) => p.L[0] * c.nl + p.U[0] * c.nu, ny = (p, c) => p.L[1] * c.nl + p.U[1] * c.nu, nz = (p, c) => p.L[2] * c.nl + p.U[2] * c.nu;
   for (let i = from; i < n; i++) {
     if (!isRoad(i)) continue;
-    const p = S[i], prof = profiles[p.seg];
+    const p = S[i], cs = segConst(p.seg), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
     let aT = 0;
     if (sp.v) { const a = S[Math.max(0, i - 1)], b = S[Math.min(n - 1, i + 1)]; const va = sp.v[Math.max(0, i - 1)], vb = sp.v[Math.min(n - 1, i + 1)]; if (b.s > a.s) aT = (vb * vb - va * va) / (2 * (b.s - a.s)); }
-    for (const u of prof.u) {
+    for (const c of cs) {
+      const u = c.u;
       // steep: the surface's angle to gravity, so a wall's ψ and the whole section's bank both count (ARCHITECTURE.md:87
       // "surfaces above ~50°"); red only for an export without CSP's wall raycasting
-      if (opts.csp === false) { const up = Math.max(-1, Math.min(1, normalOf(i, u)[1])); if (Math.acos(up) > car.steepDeg * DEG + 1e-12) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'steep-without-raycast', worst: Math.acos(up) / DEG }); }
-      const [X, Y] = P.offsetAt(prof, u), o = add(mul(p.L, X), mul(p.U, Y)), margin = 1 - dot(p.kvec, o);
+      if (opts.csp === false) { const up = Math.max(-1, Math.min(1, ny(p, c))); if (Math.acos(up) > car.steepDeg * DEG + 1e-12) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'steep-without-raycast', worst: Math.acos(up) / DEG }); }
+      const o0 = Lv[0] * c.X + Uv[0] * c.Y, o1 = Lv[1] * c.X + Uv[1] * c.Y, o2 = Lv[2] * c.X + Uv[2] * c.Y;
+      const margin = 1 - (K[0] * o0 + K[1] * o1 + K[2] * o2);
       if (margin <= 0) { raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'fold', worst: -margin }); continue; }
       if (!sp.v) continue;
-      const v = sp.v[i], nrm = normalOf(i, u);
-      const psi = P.psiAt(prof, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
-      const lat = sg === 0 ? p.L : add(mul(p.L, Math.cos(psi)), mul(p.U, sg * Math.sin(psi)));
-      const f = add(add(mul(p.kvec, v * v / margin), mul(p.T, aT)), [0, G, 0]);
-      const line = { s: p.s, u, fN_g: dot(f, nrm) / G, fLat_g: dot(f, lat) / G, fAlong_g: dot(f, p.T) / G, f_g: len(f) / G };
+      const v = sp.v[i], n0 = nx(p, c), n1 = ny(p, c), n2 = nz(p, c);
+      const l0 = c.sg === 0 ? Lv[0] : Lv[0] * c.cos + Uv[0] * c.sgsin, l1 = c.sg === 0 ? Lv[1] : Lv[1] * c.cos + Uv[1] * c.sgsin, l2 = c.sg === 0 ? Lv[2] : Lv[2] * c.cos + Uv[2] * c.sgsin;
+      const w = v * v / margin, f0 = (K[0] * w + Tv[0] * aT) + 0, f1 = (K[1] * w + Tv[1] * aT) + G, f2 = (K[2] * w + Tv[2] * aT) + 0;
+      const line = { s: p.s, u, fN_g: (f0 * n0 + f1 * n1 + f2 * n2) / G, fLat_g: (f0 * l0 + f1 * l1 + f2 * l2) / G, fAlong_g: (f0 * Tv[0] + f1 * Tv[1] + f2 * Tv[2]) / G, f_g: Math.hypot(f0, f1, f2) / G };
       raw.lines.push({ i, line });
       if (line.fN_g > car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-above-proven', worst: line.fN_g });
       else if (line.fN_g >= car.suspensionStopG) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'on-the-stops', worst: line.fN_g });
     }
-    if (i + 1 < n && isRoad(i + 1) && S[i + 1].seg === p.seg) for (const u of prof.u) {
-      const c = Math.max(-1, Math.min(1, dot(normalOf(i, u), normalOf(i + 1, u))));
-      const deg = Math.acos(c) / DEG;
-      if (deg > car.seamP90Deg) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'seam-past-envelope', worst: deg });
+    if (i + 1 < n && isRoad(i + 1) && S[i + 1].seg === p.seg) for (const c of cs) {
+      const q = S[i + 1];
+      const d = Math.max(-1, Math.min(1, nx(p, c) * nx(q, c) + ny(p, c) * ny(q, c) + nz(p, c) * nz(q, c)));
+      const deg = Math.acos(d) / DEG;
+      if (deg > car.seamP90Deg) raw.pts.push({ i, kind: 'amber', s: p.s, u: c.u, reason: 'seam-past-envelope', worst: deg });
     }
     // a hole inside a road word: consecutive road stations further apart than their s says
     if (i + 1 < n && isRoad(i + 1) && len(sub(S[i + 1].pos, S[i].pos)) > (S[i + 1].s - S[i].s) * 1.5 + 1e-6) raw.pts.push({ i, kind: 'red', s: S[i].s, u: null, reason: 'gap-in-road' });
@@ -176,11 +204,13 @@ function core(path, segments, opts, from, carried) {
   // the change, so the old head (whose gap exemption ends when it stops being the head) is always re-checked
   const fromSeg = S[Math.min(from, n - 1)].seg, lastSeg = S[n - 1].seg;
   raw.fromSeg = fromSeg;
+  // each segment's first and last station, in one pass (D177: this was a scan of every station per segment)
+  const firstOf = new Array(segments.length).fill(-1), lastOf = new Array(segments.length).fill(-1);
+  for (let i = 0; i < n; i++) { const j = S[i].seg; if (firstOf[j] < 0) firstOf[j] = i; lastOf[j] = i; }
   segments.forEach((g, j) => {
     if (j < fromSeg) return;
-    const idx = S.map((p, i) => (p.seg === j ? i : -1)).filter((i) => i >= 0);
-    if (!idx.length) return;
-    const s0 = S[idx[0]].s, s1 = S[idx[idx.length - 1]].s;
+    if (firstOf[j] < 0) return;
+    const s0 = S[firstOf[j]].s, s1 = S[lastOf[j]].s;
     // a gap that is not a jump is a hole; the open head is exempt (INTERFACES §4: "no 'gap in road' red at the head")
     if (g.kind === 'gap' && g.word !== 'jump' && !(!path.closed && j === lastSeg)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'gap-in-road' });
     if (g.kind !== 'gap' && g.word === 'wall-ride' && /^WALL/i.test(profiles[j].material)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'wall-ride-from-wall-object' });
@@ -204,7 +234,7 @@ function core(path, segments, opts, from, carried) {
   const jumps = [];
   segments.forEach((g, j) => {
     if (g.kind !== 'gap') return;
-    const first = S.findIndex((p) => p.seg === j); if (first < 0) return;
+    const first = firstOf[j]; if (first < 0) return;
     let last = first; while (last + 1 < n && S[last + 1].seg === j) last++;
     // THE LIP is the station AT the gap's start, the end of the take-off road. C's buildPath samples every boundary and
     // gives it to the segment it starts, so there it is the flight's first station, S[first]; a path sampled the other
@@ -231,7 +261,7 @@ function core(path, segments, opts, from, carried) {
   // The open-head exemption above is for a gap word that is still being placed; a jump's flight never ends on road by
   // itself, so it is red until a landing is there (the jump word's own landing ramp, or the next word).
   if (!path.closed && n && segments[lastSeg].kind === 'gap') {
-    const first = S.findIndex((p) => p.seg === lastSeg);
+    const first = firstOf[lastSeg];
     red.push({ s: S[first].s, s1: S[n - 1].s, u: null, reason: 'head-in-the-air' });
   }
   // With a known take-off speed, the landing road must catch BOTH landings (ARCHITECTURE.md:75-78; jumps.js). A missed
@@ -243,25 +273,13 @@ function core(path, segments, opts, from, carried) {
   }
 
   // ── the lap (ARCHITECTURE.md:88-89) ──
+  // opts.lap === false DEFERS the proof (D177: "the lap proof runs on demand or debounced, NEVER on every drag tick"):
+  // the result says so, and lapOf() gives the proof from the result afterwards, the same as it would have been
   let lap;
   if (!path.closed) lap = { ok: null, reason: 'open' };
   else if (!sp.v) lap = { ok: null, reason: 'no-speed-model' };
-  else {
-    const where = [];
-    let t = 0, minV = Infinity;
-    for (let i = 0; i < n; i++) {
-      minV = Math.min(minV, sp.v[i]);
-      if (i) { const va = (sp.v[i] + sp.v[i - 1]) / 2; t += va > 0 ? (S[i].s - S[i - 1].s) / va : Infinity; }
-      if (isRoad(i) && !(sp.v[i] > 0)) where.push({ s: S[i].s, reason: 'stall' });
-    }
-    for (const l of lines) if (l.u === 0 && l.fN_g < 0) where.push({ s: l.s, reason: 'leaves-surface', fN_g: l.fN_g });
-    for (const jp of jumps) {
-      if (jp.pending) continue;
-      for (const L of jp.landings) if (!L.caught) where.push({ s: jp.s, reason: `jump-not-caught-${L.g}g`, speed: jp.speed, minSpeed: L.minSpeed });
-      if (!jp.reachable) where.push({ s: jp.s, reason: 'landing-unreachable' });
-    }
-    lap = { ok: where.length === 0, timeS: t, minV, where };
-  }
+  else if (opts.lap === false) lap = { ok: null, reason: 'deferred' };
+  else lap = proveLap(S, isRoad, sp.v, lines, jumps);
 
   const result = {
     speed: sp.v ? S.map((p, i) => ({ s: p.s, v: sp.v[i], from: sp.from })) : [],
@@ -271,6 +289,35 @@ function core(path, segments, opts, from, carried) {
   // the raw findings ride along, NOT enumerable, so a result compares and serialises as the INTERFACES shape alone
   Object.defineProperty(result, '_raw', { value: raw, enumerable: false });
   return result;
+}
+
+/** The ghost lap's proof on a closed loop: its time, its slowest speed, and every place the lap would fail. */
+function proveLap(S, isRoad, v, lines, jumps) {
+  const n = S.length, where = [];
+  let t = 0, minV = Infinity;
+  for (let i = 0; i < n; i++) {
+    minV = Math.min(minV, v[i]);
+    if (i) { const va = (v[i] + v[i - 1]) / 2; t += va > 0 ? (S[i].s - S[i - 1].s) / va : Infinity; }
+    if (isRoad(i) && !(v[i] > 0)) where.push({ s: S[i].s, reason: 'stall' });
+  }
+  for (const l of lines) if (l.u === 0 && l.fN_g < 0) where.push({ s: l.s, reason: 'leaves-surface', fN_g: l.fN_g });
+  for (const jp of jumps) {
+    if (jp.pending) continue;
+    for (const L of jp.landings) if (!L.caught) where.push({ s: jp.s, reason: `jump-not-caught-${L.g}g`, speed: jp.speed, minSpeed: L.minSpeed });
+    if (!jp.reachable) where.push({ s: jp.s, reason: 'landing-unreachable' });
+  }
+  return { ok: where.length === 0, timeS: t, minV, where };
+}
+
+/**
+ * The lap a result DEFERRED (validate with opts.lap === false), proven now from the result itself: its speeds, lines and
+ * jumps are the ones the proof reads, so this equals the lap an undeferred validate gives (tested). Any other lap is
+ * returned as it is. O(stations + lines + jumps): no load or stack is recomputed.
+ */
+function lapOf(path, segments, result) {
+  if (!result.lap || result.lap.reason !== 'deferred') return result.lap;
+  const S = path.samples, isRoad = (i) => segments[S[i].seg].kind !== 'gap';
+  return proveLap(S, isRoad, result.speed.map((x) => x.v), result.lines, result.jumps);
 }
 
 function validate(path, segments, opts = {}) { return core(path, segments, opts, 0, null); }
@@ -298,42 +345,96 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
  * Drivable surfaces stacked within `car.stackedM` (ARCHITECTURE.md:85): surface points of two passes of the road closer
  * than that. Points on the same pass (within `minSeparationM` of s, default 25 m, inferred: well beyond any cross-section
  * and any radius a T-180 drives, FINDINGS.md:39 "about 33–50 m radius at the tightest") are not a stack.
- * Only points from station `from` on (plus the `rederive` stations) are QUERIED, against every point; a hit marks both
- * stations, each keeping its
- * worst (deepest) overlap. With from = 0 that is the whole-track check.
+ * Only stations from `from` on (plus the `rederive` stations) are QUERIED, against every station; a hit marks both
+ * stations, each keeping its worst (deepest) overlap. With from = 0 that is the whole-track check.
+ *
+ * THE POINTS are each road station's surface: the profile's u, with points at most 1 m apart laterally between them, at
+ * q = pos + L·X + U·Y. Two points of different passes closer than `cell` are a stack. Which pairs are measured (D177, the
+ * incremental-validation ruling) is decided per STATION PAIR first, by two lower bounds on the distance between any
+ * point of station i and any point of station j, where r is a station's largest |(X, Y)| (its points lie within r of
+ * pos, in the plane through pos normal to T):
+ *   · the sphere bound   |pos_j − pos_i| − r_i − r_j
+ *   · the plane bound    |T_i·(pos_j − pos_i)| − r_j·sinθ, and the same from j's side   (θ the angle between T_i and T_j:
+ *                        i's points have no T_i component, j's have at most r_j·sinθ; this is what rejects the
+ *                        same road 25 m on, which the sphere bound cannot)
+ * Only a pair both bounds leave under cell (+ SLACK for rounding) has its points measured, with the same arithmetic as
+ * the point-by-point check this replaced, so a finding is bit-identical; a pair that is rejected has no point within
+ * cell of the other's. Candidates come from a grid over station positions whose cell is 2·r_max + cell, so every pair
+ * that can hold a stack is in neighbouring grid cells. The cost is the stations near each queried station, not every
+ * surface point of the track (the point grid this replaced was 95% of a full validate at 40 km: 3.1 of 3.3 s).
  */
+const SLACK = 1e-4;   // m: a pair whose bounds clear the stack distance by less than this is measured anyway
 function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new Set()) {
-  const cell = car.stackedM, sep = opts.minSeparationM || 25, L = path.lengthM || (S[S.length - 1].s - S[0].s);
-  const grid = new Map(), pts = [];
-  const key = (a, b, c) => `${a},${b},${c}`;
-  for (let i = 0; i < S.length; i++) {
+  const cell = car.stackedM, sep = opts.minSeparationM || 25, L = path.lengthM || (S[S.length - 1].s - S[0].s), n = S.length;
+  // the lateral points of each segment's profile, with their (X, Y) and the largest |(X, Y)|, once per segment
+  const lat = new Map();
+  const latOf = (j) => {
+    let e = lat.get(j);
+    if (e) return e;
+    const prof = profiles[j], us = [];
+    for (let k = 0; k < prof.u.length; k++) { us.push(prof.u[k]); if (k + 1 < prof.u.length) { const m = Math.ceil((prof.u[k + 1] - prof.u[k]) / 1); for (let jj = 1; jj < m; jj++) us.push(prof.u[k] + (prof.u[k + 1] - prof.u[k]) * jj / m); } }
+    const xy = us.map((u) => P.offsetAt(prof, u));
+    e = { us, xy, r: Math.max(0, ...xy.map(([X, Y]) => Math.hypot(X, Y))) };
+    lat.set(j, e); return e;
+  };
+  let rMax = 0;
+  // each station's r, whether it is queried, and its s and pos in flat arrays (the pair loop reads them for every candidate)
+  const rOf = new Float64Array(n), qd = new Uint8Array(n), sOf = new Float64Array(n), px = new Float64Array(n), py = new Float64Array(n), pz = new Float64Array(n);
+  for (let i = 0; i < n; i++) if (isRoad(i)) { rOf[i] = latOf(S[i].seg).r; rMax = Math.max(rMax, rOf[i]); qd[i] = i >= from || rederive.has(i) ? 1 : 0; sOf[i] = S[i].s; px[i] = S[i].pos[0]; py[i] = S[i].pos[1]; pz[i] = S[i].pos[2]; }
+  const B = 2 * rMax + cell + SLACK, grid = new Map();
+  // an exact integer key per grid cell, counted from the track's own lowest cell (one row of margin each side), so on
+  // any track up to ~2^30 cells in its box the key is a small integer, which a Map hashes fastest
+  let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < n; i++) if (isRoad(i)) for (let d = 0; d < 3; d++) { const c = Math.floor(S[i].pos[d] / B); if (c < lo[d]) lo[d] = c; if (c > hi[d]) hi[d] = c; }
+  const NY = hi[1] - lo[1] + 3, NZ = hi[2] - lo[2] + 3;
+  const keyOf = (a, b, c) => (a * NY + b) * NZ + c;   // exact while (hi − lo + 3)³ < 2^53: any track on Earth
+  const kx = new Int32Array(n), ky = new Int32Array(n), kz = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
     if (!isRoad(i)) continue;
-    const prof = profiles[S[i].seg], us = [];
-    for (let k = 0; k < prof.u.length; k++) { us.push(prof.u[k]); if (k + 1 < prof.u.length) { const m = Math.ceil((prof.u[k + 1] - prof.u[k]) / 1); for (let j = 1; j < m; j++) us.push(prof.u[k] + (prof.u[k + 1] - prof.u[k]) * j / m); } }
-    for (const u of us) {
-      const [X, Y] = P.offsetAt(prof, u), q = add(S[i].pos, add(mul(S[i].L, X), mul(S[i].U, Y)));
-      const pt = { q, s: S[i].s, u, i }, c = q.map((x) => Math.floor(x / cell));
-      pts.push(pt);
-      const k = key(c[0], c[1], c[2]); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(pt);
-    }
+    const p = S[i].pos; kx[i] = Math.floor(p[0] / B) - lo[0] + 1; ky[i] = Math.floor(p[1] / B) - lo[1] + 1; kz[i] = Math.floor(p[2] / B) - lo[2] + 1;
+    const k = keyOf(kx[i], ky[i], kz[i]), list = grid.get(k);
+    if (list) list.push(i); else grid.set(k, [i]);
   }
+  // the points of a station, computed only when a pair needs them (q exactly as pos + (L·X + U·Y), per component)
+  const ptsCache = new Map();
+  const ptsOf = (i) => {
+    let q = ptsCache.get(i);
+    if (q) return q;
+    const { us, xy } = latOf(S[i].seg), { pos, L: l, U: w } = S[i];
+    q = us.map((u, k) => { const [X, Y] = xy[k]; return { q: add(pos, add(mul(l, X), mul(w, Y))), s: S[i].s, u, i }; });
+    ptsCache.set(i, q); return q;
+  };
   // one entry per station: its deepest overlap, the smaller u on a tie, so the answer never depends on visiting order
   const mark = (pt, worst, partner) => {
     const k = pt.i, e = out.get(k);
     if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner });
   };
-  for (const pt of pts) {
-    if (pt.i < from && !rederive.has(pt.i)) continue;
-    const c = pt.q.map((x) => Math.floor(x / cell));
+  const lim = cell + SLACK;
+  for (let i = 0; i < n; i++) {
+    if (!qd[i]) continue;   // not a road station, or not queried
+    const A = S[i], ri = rOf[i], sA = sOf[i], ax = px[i], ay = py[i], az = pz[i];
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let d = -1; d <= 1; d++) {
-      for (const o of grid.get(key(c[0] + a, c[1] + b, c[2] + d)) || []) {
-        let ds = Math.abs(o.s - pt.s); if (path.closed) ds = Math.min(ds, L - ds);
-        const dist = len(sub(o.q, pt.q));
-        if (ds < sep || dist >= cell) continue;
-        mark(pt, cell - dist, o.i); mark(o, cell - dist, pt.i);
+      const list = grid.get(keyOf(kx[i] + a, ky[i] + b, kz[i] + d));
+      if (!list) continue;
+      for (let t = 0; t < list.length; t++) {
+        const j = list[t];
+        if (qd[j] && j <= i) continue;   // a pair of two queried stations is measured once
+        let ds = Math.abs(sOf[j] - sA); if (path.closed) ds = Math.min(ds, L - ds);
+        if (ds < sep) continue;
+        const rj = rOf[j], dx = px[j] - ax, dy = py[j] - ay, dz = pz[j] - az;
+        if (Math.sqrt(dx * dx + dy * dy + dz * dz) - ri - rj >= lim) continue;   // a bound, with SLACK: its rounding does not matter
+        const Bj = S[j];
+        const c = dot(A.T, Bj.T), sin = Math.sqrt(Math.max(0, 1 - c * c));
+        if (Math.abs(A.T[0] * dx + A.T[1] * dy + A.T[2] * dz) - rj * sin >= lim) continue;
+        if (Math.abs(Bj.T[0] * dx + Bj.T[1] * dy + Bj.T[2] * dz) - ri * sin >= lim) continue;
+        for (const pt of ptsOf(i)) for (const o of ptsOf(j)) {
+          const dist = len(sub(o.q, pt.q));
+          if (dist >= cell) continue;
+          mark(pt, cell - dist, o.i); mark(o, cell - dist, pt.i);
+        }
       }
     }
   }
 }
 
-module.exports = { validate, revalidate, speedProfile, SRC, _internal: { ranges } };
+module.exports = { validate, revalidate, lapOf, speedProfile, SRC, _internal: { ranges } };

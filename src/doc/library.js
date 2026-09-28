@@ -27,17 +27,18 @@ const { WORDS } = require('./vocab.js');
 const S = require('./serial.js');
 const { DocError, UNIT, RANGE, quantise, checkWordBody, wordText, loadWord, onlyKeys, deepFreeze, SCHEMA, GENERATOR } = S;
 const { appendWord, appendPhrase, defaultWord, headRoll } = require('./document.js');
+const { PHRASES, phrasebookPieces, placePhrase } = require('./phrasebook.js');   // the starter phrasebook (ARCHITECTURE §11.7)
 
 const SI_UNIT = { m: 'm', deg: 'rad', ratio: 'ratio' };
 const key = (s) => s.trim().toLowerCase();
-const isBuiltinName = (name) => Object.keys(WORDS).some((w) => key(w) === key(name));
+const isBuiltinName = (name) => [...Object.keys(WORDS), ...PHRASES.map((p) => p.name)].some((w) => key(w) === key(name));
 
 function builtinLibrary() {
   const pieces = Object.keys(WORDS).map((w) => {
     const d = defaultWord(w);
     return { id: `b-${w}`, name: w, author: 't180-track-builder', builtin: true, kind: 'word', words: [{ word: d.word, font: d.font, tempo: d.tempo, speed: d.speed, handles: d.handles, textures: d.textures }] };
   });
-  return deepFreeze({ schema: SCHEMA, generator: GENERATOR, nextId: 1, pieces });
+  return deepFreeze({ schema: SCHEMA, generator: GENERATOR, nextId: 1, pieces: [...pieces, ...phrasebookPieces()] });
 }
 
 function palette(lib) {
@@ -81,7 +82,7 @@ function findPiece(lib, name) {
 /** Append a piece at the head of doc. A built-in appends its word with the defaults; a user piece, its handles. */
 function placePiece(doc, lib, name) {
   const p = findPiece(lib, name);
-  if (p.builtin) return appendWord(doc, p.words[0].word);
+  if (p.builtin) return p.kind === 'phrase' ? placePhrase(doc, p.name) : appendWord(doc, p.words[0].word);
   const words = shiftRoll(p.words, headRoll(doc));
   const opts = (w) => ({ tempo: w.tempo, font: w.font === null ? undefined : w.font, speed: w.speed, handles: w.handles, textures: w.textures });
   if (p.kind === 'word') return appendWord(doc, words[0].word, opts(words[0]));

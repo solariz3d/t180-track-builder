@@ -16,7 +16,7 @@ replace Blender for track making.
 
 ## Status: v1 is being built, and it is the track only
 
-**v1 scope, in the keeper's words:** *"the first thing I want it to be is simply the track, no environmental
+**v1 scope, in the author's words:** *"the first thing I want it to be is simply the track, no environmental
 elements."* So v1 has no terrain, scenery or props, only the road the user builds. The user builds it: the track grows
 from its open end, like a coaster builder, one word or phrase at a time.
 
@@ -25,8 +25,8 @@ launch at any point. Whether AC loads, drives, times and renders these tracks as
 drives one.
 
 **How to read the table.** It was judged against ARCHITECTURE §1–§6, §5b and §5c from the code on `main` at `aa4d565`
-(D171–D174 landed there on 2026-09-27, after `59ff906`). Work that is on disk but not yet on `main` (the starter
-phrasebook, texture packs, and the soak and bench scripts) is marked **built, landing pending**.
+(2026-09-27), then updated for the work that lands after it: the starter phrasebook, texture packs, the soak and bench
+scripts, share codes, Install to AC and the "See it in Assetto" button.
 - **tested:** built, and a test file exercises it (named).
 - **built:** the code exists (file named), with no test that exercises this item.
 - **not yet:** what is missing.
@@ -42,7 +42,7 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | … lighting matched to AC+CSP, the gap measured | not yet | no look-match instrument (§5.3) |
 | Guardrails, not gates: physics as colour while building | tested | `app/validate-ui/` · `app/test/validate-ui*.test.js` |
 | One tool: place words, restyle them, sculpt | tested | `app/palette/`, `app/handles/` · `app/test/palette.test.js`, `app/test/handles*.test.js` |
-| Stability and export reliability | tested | export self-test (kn5 read back) · `test/export_words.test.js`; the soak and bench scripts (`scripts/soak.js`, `scripts/bench.js`) are built, landing pending |
+| Stability and export reliability | tested | export self-test (kn5 read back) · `test/export_words.test.js`; the soak and bench scripts (`scripts/soak.js`, `scripts/bench.js`) · `test/perf.test.js`, `test/perf_soak.test.js` |
 
 ### §2 The language
 
@@ -51,7 +51,7 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | Words: straight, sweep, turn, tight, wall-ride, inversion, jump | tested | `src/doc/vocab.js`, `src/doc/document.js` · `test/doc.test.js` |
 | A jump carries its landing ramp | tested | `src/doc/resolve.js` · `test/doc-jump.test.js` |
 | Phrases: a saved word sequence | tested | `src/doc/document.js` `appendPhrase`, `src/doc/library.js` · `test/doc-library.test.js` |
-| Starter phrasebook: spiral climb, bowl hairpin, S, Sakura's grammar | built, landing pending | `src/doc/phrasebook.js` · `test/phrasebook.test.js`; the palette registration is proposed to A |
+| Starter phrasebook: spiral climb, bowl hairpin, S, Sakura's grammar | tested | `src/doc/phrasebook.js` · `test/phrasebook.test.js`; listed in the palette under "Starter phrases" (`src/doc/library.js`, `app/palette/palette.js`) |
 | A phrase's "parameters exposed" | not yet | a phrase's words are sculpted one by one; no phrase-level handles |
 | Fonts: half-pipe, bowl, flat banked ribbon, wall-ride, tube (ψ(u) past vertical) | tested | `src/doc/vocab.js`, `src/geom/profile.js` · `test/geom_path.test.js`, `test/geom_mesh.test.js` |
 | Tempos: standard, aurora, serpents | tested | `src/doc/vocab.js` · `test/doc.test.js` |
@@ -65,7 +65,7 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 
 | item | status | where |
 |---|---|---|
-| Rotation-minimising frames (double reflection), closing twist spread, explicit roll | tested | `src/geom/path.js` · `test/geom_path.test.js`, `test/geom_loop.test.js` |
+| Frames: the curve model's yaw-and-pitch (gravity) frame plus the explicit roll. A DEVIATION from §3's "rotation-minimising frames", made on 2026-09-27; the reason and what changes are recorded in `docs/INTERFACES.md` §2 | tested | `src/geom/path.js` · `test/geom_path.test.js`, `test/geom_loop.test.js` |
 | Bank relative to gravity shown to the user | not yet | computed (`bankG` in `src/geom/path.js`), not shown in the app |
 | Fold check, 1 − κ·(q·N) ≤ 0, on every profile vertex | tested | `src/geom/mesh.js` · `test/geom_mesh.test.js`, `test/validate.test.js` |
 | Self-intersection between non-adjacent cells (BVH) | tested | `src/geom/bvh.js` · `test/geom_bvh.test.js` |
@@ -101,7 +101,7 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | 1. Geometry and materials exactly what is exported | tested | `app/preview/trackmodel.js` builds the export's scene · `app/test/preview.test.js` |
 | 2. The preview uses AC's shader set (`ksPerPixel`, `ksMultilayer` …) | not yet | the preview has its own lighting (`app/preview/look.js`, tested in `app/test/look.test.js`), not a port of AC's shaders |
 | 3. The look-match instrument (screenshots vs renders, the difference tracked) | not yet | nothing built |
-| 4. One-click "see it in Assetto" | not yet | no AC launch in v1 (the keeper, 2026-09-27: "No in game testing needed") |
+| 4. One-click "see it in Assetto" | tested, with the game launch mocked | `src-tauri/src/ac.rs` (its tests use a mock launcher), `app/install/` · `app/test/share-install.test.js`: built, OFF by default, and never run (the author, for v1: "No in game testing needed") |
 
 ### §5b Textures
 
@@ -113,7 +113,7 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | Warnings about what AC can't do (e.g. compressed normal maps) | tested | `src/texture/warnings.js` · `test/texture-set.test.js` |
 | A texture maker: procedural layers, decals, every layer a parameter set | tested | `src/texmaker/`, `app/texmaker/` · `test/texmaker.test.js` |
 | Materials mapped onto AC's shaders (`ksPerPixel`, `ksPerPixelNM`, `ksMultilayer`) | not yet | `ksPerPixel` only |
-| Texture packs: save, share and import | built, landing pending | `src/doc/packs.js` · `test/doc-packs.test.js` |
+| Texture packs: save, share and import | tested | `src/doc/packs.js` · `test/doc-packs.test.js` |
 | Budget: texture memory and resolution per track | tested | `src/texture/set.js`, `app/texture/` · `app/test/texture-panel.test.js` |
 
 ### §5c Spawns, pits and timing
@@ -127,7 +127,7 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | Hotlap start: a run-up to the design speed | tested | `src/markers/layout.js` `runUpM` · `test/markers_track.test.js` |
 | Timing gates `AC_TIME_0_L/R`, sectors 1 and 2 | tested | `src/markers/layout.js` · `test/markers_track.test.js`, `test/markers_export.test.js` |
 | The red checks before export (start ahead of grid, L/R, height and heading, slots, pit count) | tested | `src/markers/checks.js`, `src/export/markers.js` · `test/markers_track.test.js`, `test/markers.test.js` |
-| "Spawn here": launch AC at a marker | not yet | no AC launch in v1 |
+| "Spawn here": launch AC at a marker | not yet | "See it in Assetto" (off by default, never run) sets only the track, so AC starts wherever its session puts the car; choosing a marker is not built |
 | Paint: start/finish line (wall to wall), grid boxes, pit boxes | tested | `src/markers/paint.js` (surface meshes) · `test/markers_track.test.js`, `test/markers_export.test.js` |
 | … as texture layers (§5b), with grid numbers and the pit lane's entry and exit lines | not yet | paint is geometry; texture layers exist now (§5b) but do not carry the marks yet |
 | Race furniture: gantry, lights, sector boards | not yet | nothing built; working start lights are a parked idea |

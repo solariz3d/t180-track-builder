@@ -74,7 +74,7 @@ const MUTATIONS = [
   { id: 'B9 the world box takes one corner of each local box', file: 'preview/look.js',
     from: 'for (let c = 0; c < 8; c++) {', to: 'for (let c = 0; c < 1; c++) {', caughtBy: 'overhead fit' },
   { id: 'B10 the ghost is built on the live path (no copy)', file: 'preview/trackmodel.js',
-    from: 'const p = { ...path, samples: path.samples.slice(), starts: path.starts.slice(), segFirst: path.segFirst.slice(), segEnd: path.segEnd.slice() };', to: 'const p = path;', caughtBy: 'ghost: the ghost of a segment tail' },
+    from: 'const p = { ...path, samples: path.samples.slice(), starts: path.starts.slice(), segFirst: path.segFirst.slice(), segEnd: path.segEnd.slice(), blocks };', to: 'const p = path;', caughtBy: 'ghost: the ghost of a segment tail' },
   { id: 'B11 placing the word does not retire its ghost', file: 'preview/preview.js',
     from: "if (track.how !== 'same' && track.how !== 'kept') ghost = null;", to: '', caughtBy: 'preview: showGhost draws the ghost' },
   { id: 'B12 the candidate ignores the font picker', file: 'testhook/ghostword.js',
@@ -102,6 +102,7 @@ function runMutant(m) {
     for (const d of ['camera', 'preview', 'testhook', 'texmaker']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });
     fs.mkdirSync(path.join(dir, 'scripts')); fs.copyFileSync(path.join(ROOT, 'scripts', 'prove_render.js'), path.join(dir, 'scripts', 'prove_render.js'));
     fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });   // all of src/: the modules reach across it (src/doc now requires src/validate)
+    fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });   // src/export/fromwords.js reads its kn5 back with tools/kn5.cjs (D177: the export is in the look's list test)
     const f = m.root === 'scripts' ? path.join(dir, 'scripts', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), applied = m.from === null || src.includes(m.from);
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
     const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')],

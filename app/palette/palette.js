@@ -16,7 +16,8 @@ function paletteModel(state, pickers) {
   const pick = (k) => ({ options: pickers[k].slice(), value: state.pickers[k] });
   return {
     groups: [
-      { title: 'Words', items: items.filter((p) => p.builtin) },
+      { title: 'Words', items: items.filter((p) => p.builtin && p.kind === 'word') },
+      { title: 'Starter phrases', items: items.filter((p) => p.builtin && p.kind === 'phrase') },   // src/doc/phrasebook.js
       { title: 'My pieces', items: items.filter((p) => !p.builtin) },
     ],
     pickers: { font: pick('font'), tempo: pick('tempo'), dir: pick('dir') },

@@ -10,19 +10,20 @@ const D = require('../../src/doc/index.js');
 
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
 
-test('the palette lists every built-in word, then the user\'s own pieces, in two groups', async () => {
+test('the palette lists every built-in word, then the starter phrases, then the user\'s own pieces, in three groups', async () => {
   const s = await createShell({ storage: mem() });
   s.place('turn'); s.place('tight'); s.select('w1', 'w2'); await s.saveSelectionAsPiece('my-bend');
   const m = paletteModel(s.getState(), s.pickers());
-  assert.deepEqual(m.groups.map((g) => g.title), ['Words', 'My pieces']);
+  assert.deepEqual(m.groups.map((g) => g.title), ['Words', 'Starter phrases', 'My pieces']);
   assert.deepEqual(m.groups[0].items.map((i) => i.name), Object.keys(D.WORDS));
-  assert.deepEqual(m.groups[1].items.map((i) => [i.name, i.kind, i.words.join(' ')]), [['my-bend', 'phrase', 'turn tight']]);
+  assert.deepEqual(m.groups[1].items.map((i) => i.name), ['sakura flow', 'bowl hairpin', 'S', 'spiral climb']);
+  assert.deepEqual(m.groups[2].items.map((i) => [i.name, i.kind, i.words.join(' ')]), [['my-bend', 'phrase', 'turn tight']]);
 });
 
-test('with no saved pieces the second group is present and empty, so the palette does not jump when the first is saved', async () => {
+test('with no saved pieces the last group is present and empty, so the palette does not jump when the first is saved', async () => {
   const s = await createShell({ storage: mem() });
   const m = paletteModel(s.getState(), s.pickers());
-  assert.deepEqual(m.groups[1], { title: 'My pieces', items: [] });
+  assert.deepEqual(m.groups[2], { title: 'My pieces', items: [] });
 });
 
 test('the pickers show every font, tempo and direction, with the current choice', async () => {

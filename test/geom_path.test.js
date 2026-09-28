@@ -1,4 +1,14 @@
-// geom_path.test.js: node --test test/geom_path.test.js. The centreline and its rotation-minimising frame.
+// geom_path.test.js: node --test test/geom_path.test.js. The centreline and its frame.
+// D177 (the librarian's ruling on p-d177-rigid-C §2, OPTION 2): the frame is the curve model's gravity frame, unrolled
+// left = (cos θ, 0, −sin θ), no longer rotation-minimising. Two tests that pinned the RMF were REPLACED, not deleted:
+//   "closure: a NON-planar closed loop closes in frame too, because its closing twist is spread along the loop"
+//     → "closure: a NON-planar closed loop closes in frame with no twist to spread (the gravity frame follows the heading)"
+//   "RMF: on an open non-planar curve the frame does not spin about T (spin under 1e-3 of its own turning rate)"
+//     → "gravity frame: on an open non-planar curve the unrolled left is the heading's left, so roll 0 means level"
+// The reason: the RMF spins against gravity on a climbing turn (k·sin p per metre, 61° over a 360° turn at 10°), so a
+// word's roll was not its bank; and it made a piece's shape depend on the twist carried in from upstream, so no edit
+// on a slope could move what follows rigidly. The new tests pin the new rule on the same fixture (twistLoop, which
+// carries a real RMF twist). The closing-twist spread itself is gone with the RMF (the frame closes with the heading).
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -16,29 +26,30 @@ test('closure: a planar closed stadium closes in position (≤ 1e-6 m) and in fr
   assert.ok(len(sub(a.pos, b.pos)) < 1e-6, `position gap ${len(sub(a.pos, b.pos))}`);
   for (const k of ['T', 'L', 'U']) assert.ok(len(sub(a[k], b[k])) < 1e-9, `${k} gap ${len(sub(a[k], b[k]))}`);
 });
-test('closure: a NON-planar closed loop closes in frame too, because its closing twist is spread along the loop', () => {
-  // twistLoop closes in heading and pitch exactly, in position only to ~0.1 m (see the fixture), hence closeTol
+test('closure: a NON-planar closed loop closes in frame with no twist to spread (the gravity frame follows the heading)', () => {
+  // twistLoop closes in heading and pitch exactly, in position only to ~0.1 m (see the fixture), hence closeTol. Under the
+  // RMF it carried a closing twist of about rise/R (measured 0.075 rad before D177); the gravity frame has none
   const p = G.buildPath(F.twistLoop(), { closed: true, step: 0.5, closeTol: 0.5 });
   const a = first(p), b = last(p);
-  assert.ok(Math.abs(p.twist) > 1e-3, `the fixture must carry a real twist to spread, got ${p.twist}`);
+  assert.ok(Math.abs(p.twist) < 1e-9, `closing twist ${p.twist}`);
   for (const k of ['T', 'L', 'U']) assert.ok(len(sub(a[k], b[k])) < 1e-9, `${k} gap ${len(sub(a[k], b[k]))}`);
 });
-test('RMF: twist is zero on a planar curve, and the frame stays level (|L·Y| < 1e-9 everywhere)', () => {
+test('frame: twist is zero on a planar curve, and the frame stays level (|L·Y| < 1e-9 everywhere)', () => {
   const p = G.buildPath(F.stadium(), { closed: true, step: 0.5 });
   assert.ok(Math.abs(p.twist) < 1e-9, `twist ${p.twist}`);
   for (const s of p.samples) assert.ok(Math.abs(s.L[1]) < 1e-9, `L tilts at s=${s.s}: ${s.L[1]}`);
 });
-test('RMF: on an open non-planar curve the frame does not spin about T (spin under 1e-3 of its own turning rate)', () => {
+test("gravity frame: on an open non-planar curve the unrolled left is the heading's left, so roll 0 means level", () => {
+  // twistLoop climbs while turning (the case where the RMF spun against gravity). With roll 0 the left must be horizontal
+  // (L·Y = 0) and equal to (cos θ, 0, −sin θ) for the heading θ of T, and the bank against gravity must be 0, everywhere
   const p = G.buildPath(F.twistLoop(), { closed: false, step: 0.25 });
   let worst = 0;
-  for (let i = 1; i < p.samples.length; i++) {
-    const a = p.samples[i - 1], b = p.samples[i], ds = b.s - a.s;
-    // central difference: against the mid-step U (the start-of-step U carries an O(ds·κ²) bias of its own)
-    const um = [(a.U[0] + b.U[0]) / 2, (a.U[1] + b.U[1]) / 2, (a.U[2] + b.U[2]) / 2];
-    worst = Math.max(worst, Math.abs(dot(sub(b.L, a.L), um)) / ds);
+  for (const s of p.samples) {
+    const th = Math.atan2(s.T[0], s.T[2]), H = [Math.cos(th), 0, -Math.sin(th)];
+    worst = Math.max(worst, Math.abs(s.L[1]), len(sub(s.L, H)), Math.abs(s.bankG));
   }
-  const kmax = Math.max(...p.samples.map((x) => len(x.kvec)));
-  assert.ok(worst < 1e-3 * kmax, `frame spin ${worst} rad/m against the frame's turning rate ${kmax} rad/m`);
+  assert.ok(Math.max(...p.samples.map((x) => Math.abs(x.T[1]))) > 0.01, 'the fixture must climb');
+  assert.ok(worst < 1e-12, `the left leaves the heading's left by ${worst}`);
 });
 test('frame: (T, L, U) is orthonormal and right-handed, with L = U × T, at every sample', () => {
   const p = G.buildPath(F.saddleLoop(), { closed: true, step: 1 });

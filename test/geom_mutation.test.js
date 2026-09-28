@@ -9,13 +9,13 @@ const fs = require('fs'), os = require('os'), path = require('path'), { spawnSyn
 const SRC = path.join(__dirname, '..', 'src', 'geom');
 
 const MUTATIONS = [
-  // M1 was first "drop the 2nd reflection". With the re-orthogonalisation that follows it, that is the PROJECTION
-  // method, itself approximately rotation-minimising at 0.25 m substeps: a near-equivalent mutant, NOT CAUGHT, and
-  // reported as such in the D166 hand-back. The regression that matters is replacing the RMF with a naive level frame:
-  { id: 'M1 RMF replaced by a gravity-referenced frame (left = up × T)', file: 'path.js',
-    from: 'R = unit(doubleReflect(x, T, R, x1, T1));', to: 'R = unit(cross([0, 1, 0], T1));', caughtBy: 'RMF: on an open non-planar curve' },
-  { id: 'M2 closing twist not spread', file: 'path.js',
-    from: 'const a2 = twist * (sm.s / total);', to: 'const a2 = 0;', caughtBy: 'closure: a NON-planar closed loop' },
+  // D177 option 2 (the gravity frame): the old M1 (the RMF replaced by a level frame) and M2 (the closing twist not
+  // spread) mutated code that is gone with the RMF: the double reflection no longer grows the frame, and there is no
+  // closing twist to spread. Their replacements mutate the new rule:
+  { id: 'M1 the unrolled left from up × T (the level left): undefined at a vertical tangent', file: 'path.js',
+    from: 'const R = [Math.cos(theta), 0, -Math.sin(theta)];', to: 'const R = unit(cross([0, 1, 0], T));', caughtBy: 'gravity frame at EXACTLY ±90° pitch' },
+  { id: "M2 the unrolled left does not follow the heading (it stays the start's)", file: 'path.js',
+    from: 'const R = [Math.cos(theta), 0, -Math.sin(theta)];', to: 'const R = [1, 0, 0];', caughtBy: 'gravity frame: on an open non-planar curve' },
   { id: 'M3 fold check disabled (margin ≤ 0 never fires)', file: 'mesh.js',
     from: 'if (margin <= 0) folds.push', to: 'if (margin < -1e9) folds.push', caughtBy: 'fold check: a crafted fold fires' },
   { id: 'M4 chord-error limit removed from the adaptive step', file: 'mesh.js',
@@ -46,7 +46,7 @@ const MUTATIONS = [
   { id: "M14 a moved piece's boundary rows are not recomputed for the seam beside the sculpted piece", file: 'mesh.js',
     from: 'old.stale = { first: true, last: true };', to: 'old.stale = null;', caughtBy: "sculpt: editing one piece's length" },
   { id: 'M15 rebuildPathFrom regrows from the path start instead of segment g (right answer, path cost grows)', file: 'path.js',
-    from: 'const st = path.starts[g];', to: 'if (g > 0) return rebuildPathFrom(path, segments, 0); const st = path.starts[g];', caughtBy: 'sculpt: path re-placement' },
+    from: 'const oldN = path._nseg, newN = segments.length, work = { n: 0 };', to: 'if (g > 0) return rebuildPathFrom(path, segments, 0); const oldN = path._nseg, newN = segments.length, work = { n: 0 };', caughtBy: 'sculpt: path re-placement' },
   // D167: self-intersection, stacked surfaces, font ramps
   { id: 'M16 coplanar triangles never meet (the 2D branch disabled)', file: 'bvh.js',
     from: 'if (dist2.every((x) => Math.abs(x) <= EPS_PLANE) && dist1.every((x) => Math.abs(x) <= EPS_PLANE)) {', to: 'if (false) {', caughtBy: 'figure-8, same height' },
@@ -73,6 +73,24 @@ const MUTATIONS = [
     from: 'const w = smoothstep((ramp.s0 + sm.s - S[0].s) / ramp.length);', to: 'const w = smoothstep((sm.s - S[0].s) / ramp.length);', caughtBy: 'document blend: a transition split across two segments' },
   { id: "M25 blend: null overridden by the geometry's own inheritance", file: 'mesh.js',
     from: "if (!seg || seg.kind === 'gap' || seg.profileIn !== undefined || seg.blend !== undefined) return seg;", to: "if (!seg || seg.kind === 'gap' || seg.profileIn !== undefined || seg.blend) return seg;", caughtBy: 'document blend: null means no ramp' },
+  // D177: rigid downstream edits (path.js: blocks, one placement chain, the unchanged tail re-placed; exact)
+  { id: 'R1 the tail is always regrown (nothing is ever re-placed)', file: 'path.js',
+    from: 'const same = (t) => t.p0 === inp.p0 && same3(t.R0, inp.R0);', to: 'const same = () => false;', caughtBy: "rigid: a straight's length edit on a 1° climb re-places" },
+  { id: 'R2 a re-placed block keeps its old placement (its views never move)', file: 'path.js',
+    from: 'if (!(same3(P.x, Q.x) && P.th === Q.th && P.s0 === Q.s0 && P.seg === Q.seg)) blk.pl = Q;', to: '', caughtBy: 'rigid: the re-placed path equals a full rebuild' },
+  { id: 'R3 the tail test ignores the start pitch', file: 'path.js',
+    from: 'const same = (t) => t.p0 === inp.p0 && same3(t.R0, inp.R0);', to: 'const same = (t) => same3(t.R0, inp.R0);', caughtBy: 'sculpt: a start-pitch change with NO bank change' },
+  { id: "R4 the tail's first-sample indices are not advanced", file: 'path.js',
+    from: 'path.segFirst[j] = at; at += blk.n;', to: 'path.segFirst[j] = at;', caughtBy: 'rigid: every downstream cell keeps its local arrays' },
+  { id: 'R5 the tail stops regrowing after one block (the rest is re-placed although its inputs differ)', file: 'path.js',
+    from: 'while (k < tailBlocks.length && !same(tailBlocks[k]))', to: 'if (k < tailBlocks.length && !same(tailBlocks[k]))', caughtBy: 'rigid: a pitch edit upstream is NOT rigid' },
+  // R6 (the tail test ignores the frame) is EQUIVALENT under option 2: every block's R0 is exactly (1, 0, 0). Removed.
+  { id: "R7 an append does not drop the old open end from its block's count", file: 'path.js',
+    from: 'const last = path.blocks[from - 1]; last.n--;', to: 'const last = path.blocks[from - 1];', caughtBy: 'rigid: an append, then a sculpt upstream' },
+  { id: "R8 a segment's roll is not part of its path handles (a roll edit downstream is taken as unchanged tail)", file: 'path.js',
+    from: 'const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline]', to: 'const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.heartline]', caughtBy: 'rigid: a later segment whose ROLL changed' },
+  { id: 'R9 a placed sample turns its y component too (the bank against gravity drifts)', file: 'path.js',
+    from: 'const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1], c * v[2] - sn * v[0]];', to: 'const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1] * (1 + (1 - c) * 1e-3 + 1e-15), c * v[2] - sn * v[0]];', caughtBy: 'rigid: the displayed bank after the move' },
 ];
 
 function runMutant(m) {
