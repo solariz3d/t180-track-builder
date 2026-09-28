@@ -33,7 +33,7 @@ function extend(doc, { length, transition, targets = {}, family, knotM, first } 
   const fam = family || (last ? last.family : 'bowl');
   let from = D.endState(doc), held = true;
   if (!from) {   // an empty track: the start state, and nothing held
-    const f = { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], r: RATES[fam], ...(first || {}) };
+    const f = { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], r: RATES[fam], h: 0, l: 0, ...(first || {}) };
     from = Object.fromEntries(D.CHANNELS.map((ch) => [ch, { v: f[ch], m: 0 }])); held = false;
   }
   const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lt)]));

@@ -44,6 +44,18 @@ test('a joint that is not C1 is refused by name (JOINT)', () => {
   assert.throws(() => D.appendPiece(d, D.roadPiece({ length: 50, channels: consts({ kh: 0.02 }) })), (e) => e.code === 'JOINT' && /kh starts at/.test(e.message));
 });
 
+test('checkDoc REFUSES a hand-built document with a broken joint, by the name JOINT (a κh step, a bank tear, a slope kink)', () => {
+  // Built as plain objects, not through appendPiece, so only checkDoc stands between them and the adapter. Position and
+  // tangent are not stored in this document: they are integrated from the channels, so a broken joint IS a channel that
+  // jumps (a curvature step, a torn bank) or kinks (a slope mismatch) at the joint.
+  const piece = (id, ch) => ({ id, type: 'road', length: 40, family: 'bowl', knots: [20], channels: { kh: [0, 0, 0, 0, 0], kv: [0, 0, 0, 0, 0], phi: [0, 0, 0, 0, 0], w: [31, 31, 31, 31, 31], r: [3, 3, 3, 3, 3], h: [0, 0, 0, 0, 0], l: [0, 0, 0, 0, 0], ...ch } });
+  const doc = (b) => ({ schema: D.SCHEMA, generator: 'x', name: 'bad', closed: false, start: { pos: [0, 0, 0], heading: 0, pitch: 0 }, nextId: 3, pieces: [piece('p1', {}), b] });
+  assert.doesNotThrow(() => D.checkDoc(doc(piece('p2', {}))), 'the same two pieces with a clean joint pass');
+  for (const [what, ch] of [['a κh step', { kh: [0.01, 0.01, 0.01, 0.01, 0.01] }], ['a bank tear', { phi: [0.2, 0.2, 0.2, 0.2, 0.2] }], ['a slope kink', { kh: [0, 0.001, 0.002, 0.003, 0.004] }]]) {
+    assert.throws(() => D.checkDoc(doc(piece('p2', ch))), (e) => e.code === 'JOINT' && e.name === 'CoreError', what);
+  }
+});
+
 test('a flight must follow road; the road after it starts level (κh = κv = 0), the rest carried', () => {
   const d0 = D.createDoc('f');
   assert.throws(() => D.appendPiece(d0, D.flightPiece({ gap: 20, drop: 1, land: -2 * DEG })), (e) => e.code === 'BAD_DOC' && /follow a road/.test(e.message));
@@ -77,7 +89,7 @@ test('a piece whose keys come in another order (as another module may build it) 
 });
 
 test('a file of a different schema version is refused, saying a newer file needs a newer builder', () => {
-  const t = D.serialize(D.createDoc('v')).replace('t180b.core/1', 't180b.core/2');
+  const t = D.serialize(D.createDoc('v')).replace(D.SCHEMA, 't180b.core/99');
   assert.throws(() => D.parse(t), (e) => e.code === 'BAD_DOC' && /newer builder/.test(e.message));
 });
 
