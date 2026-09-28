@@ -236,8 +236,8 @@ All notable changes to this project are recorded here. The format follows
 - `exportTrack` takes a marker layout (`opts.markers`). Without one it places the default layout on the longest
   straight, where it did before.
 - Texture slots in the document (`docs/ARCHITECTURE.md` §5b, part 1): floor, walls, lines, kerbs and edge glow. A font
-  carries defaults and any word can override them. The document is now schema 2; schema-1 documents and piece libraries
-  migrate on load and resolve to the same track.
+  carries defaults and any word can override them (schema 2); older documents and piece libraries migrate on load and
+  resolve to the same track.
 - Texture tools in `src/texture/`, not yet used by the mesh, the preview or the export:
   - mapping by each lateral line's own arc length and the profile's own width, so a texture does not stretch through
     tight turns, walls or loops (the mesh's current centreline mapping is off by up to 650% on a 15 m turn);
@@ -245,6 +245,20 @@ All notable changes to this project are recorded here. The format follows
     images over 8192 px and a compressed normal map are refused with a named reason;
   - one texture set feeding both sides: the preview reads its images back from the same DDS bytes the kn5 embeds.
 - A texture panel (`app/texture/`), built and tested headless; not yet mounted in the page.
+- A procedural texture maker (`src/texmaker/`, `app/texmaker/`): asphalt grain, noise, gradient bands, stripes, lane
+  lines, panels and seams, emissive glow strips, and stamped decals, each a parameter set. A texture is canonical text
+  that regenerates byte-exact at any resolution; `makeTexture(text, w, h)` gives the RGBA pixels the texture tools turn
+  into DDS. Four presets: asphalt, rainbow, lanes, neon-night. The editor panel is built and tested headless; not yet
+  mounted in the page.
+- A pit lane in the document (`docs/ARCHITECTURE.md` §11.1): a side road anchored to the loop at a leave and a rejoin
+  point, easing out to its own run beside the road and back in, with no step and a continuous tangent at both joins.
+  Setting, editing and removing it are one undo step each. The document is now schema 3; schema-1 and schema-2
+  documents migrate on load. Not yet editable in the app.
+- The pit lane in the export: its own drivable cells, the pit boxes placed on it, and its crossings with the road
+  refused as red, with the self-intersection check on. No AI pit line (`ai/pit_lane.ai`) is written yet, so AI cars
+  cannot pit.
+- Projects of several layouts, each its own document, exported as one track folder with one set of files per layout
+  (`models_<layout>.ini`, `<layout>/`, `ui/<layout>/`), laid out the way AC's installed multi-layout tracks are.
 
 ### Changed
 
@@ -261,7 +275,9 @@ All notable changes to this project are recorded here. The format follows
 - Backspace alone no longer removes the head; Ctrl+Backspace does, so a stray key cannot delete track.
 - The default hotlap start is no longer 12 m behind the pit boxes. It is where the run-up reaches the design speed at
   the line (352 m at 460 km/h), which on a short loop wraps back round the track.
-- The document's canonical text now carries each word's `textures` (schema 2).
+- The document's canonical text now carries each word's `textures` (schema 2) and the document's `pitLane` (schema 3).
+- The geometry and app mutation harnesses run their child test processes at `--test-concurrency=4`, so a full-suite
+  run no longer fans each child out across every core.
 
 ### Removed
 

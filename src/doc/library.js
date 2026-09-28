@@ -113,6 +113,7 @@ function readJson(text) {
     const up = (q) => (q && Array.isArray(q.words) ? { ...q, words: q.words.map((w) => ({ ...w, textures: {} })) } : q);
     o = { ...o, schema: 2, ...(o.piece !== undefined ? { piece: up(o.piece) } : {}), ...(Array.isArray(o.pieces) ? { pieces: o.pieces.map(up) } : {}) };
   }
+  if (o.schema === 2) o = { ...o, schema: 3 };   // 2 -> 3 added the document's pitLane; a library carries none
   if (o.schema !== SCHEMA) S.checkDoc({ schema: o.schema });   // throws SCHEMA_TOO_NEW / SCHEMA_UNKNOWN
   if (typeof o.generator !== 'string' || !o.generator) throw new DocError('BAD_DOC', 'generator must be a non-empty string');
   return o;

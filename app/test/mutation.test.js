@@ -87,17 +87,20 @@ const MUTATIONS = [
     from: 'Math.max(3, 0.02 * Math.hypot(', to: 'Math.max(3, 0 * Math.hypot(', caughtBy: 'head marker: it grows' },
   { id: 'B15 the head marker is never drawn', file: 'preview/renderer.js',
     from: 'if (extras.marker) {', to: 'if (false) {', caughtBy: 'preview: a frame draws the grid and the head marker' },
+  // D173: the texture maker's editor and panel
+  { id: 'T1 the editor ignores the value it is given', file: 'texmaker/model.js', from: 'L[i] = { ...L[i], [key]: value };', to: 'L[i] = { ...L[i], [key]: L[i][key] };', caughtBy: 'editor: an accepted edit changes the canonical text' },
+  { id: 'T2 the panel never calls onChange', file: 'texmaker/index.js', from: 'if (onChange) onChange(now);', to: '', caughtBy: 'panel: an accepted edit calls onChange' },
 ];
 
 function runMutant(m) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-app-mut-')), app = path.join(dir, 'app');
   try {
-    for (const d of ['camera', 'preview', 'testhook']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });
+    for (const d of ['camera', 'preview', 'testhook', 'texmaker']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });
     fs.mkdirSync(path.join(dir, 'scripts')); fs.copyFileSync(path.join(ROOT, 'scripts', 'prove_render.js'), path.join(dir, 'scripts', 'prove_render.js'));
     fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });   // all of src/: the modules reach across it (src/doc now requires src/validate)
     const f = m.root === 'scripts' ? path.join(dir, 'scripts', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), applied = m.from === null || src.includes(m.from);
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
-    const r = spawnSync(process.execPath, ['--test', path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')],
+    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')],
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), APP_DIR: app, SCRIPTS_DIR: path.join(dir, 'scripts') }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');

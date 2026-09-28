@@ -82,7 +82,7 @@ function runMutant(m) {
     const f = path.join(geom, m.file), src = fs.readFileSync(f, 'utf8');
     const applied = src.includes(m.from);
     if (applied) fs.writeFileSync(f, src.replace(m.from, m.to));
-    const r = spawnSync(process.execPath, ['--test', path.join(__dirname, 'geom_path.test.js'), path.join(__dirname, 'geom_mesh.test.js'), path.join(__dirname, 'geom_grow.test.js'), path.join(__dirname, 'geom_sculpt.test.js'), path.join(__dirname, 'geom_bvh.test.js'), path.join(__dirname, 'geom_ramp.test.js'), path.join(__dirname, 'geom_loop.test.js')],
+    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'geom_path.test.js'), path.join(__dirname, 'geom_mesh.test.js'), path.join(__dirname, 'geom_grow.test.js'), path.join(__dirname, 'geom_sculpt.test.js'), path.join(__dirname, 'geom_bvh.test.js'), path.join(__dirname, 'geom_ramp.test.js'), path.join(__dirname, 'geom_loop.test.js')],
       // NODE_TEST_CONTEXT is set by the parent runner and would switch the child to the parent's protocol: clear it
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), GEOM_DIR: geom }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;

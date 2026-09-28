@@ -160,8 +160,8 @@ test('the whole library saves and loads byte-exact, and a newer schema is refuse
   lib = L.savePiece(lib, { name: 'b', author: 'k', doc: sculpted(), ids: ['w2', 'w3'] });
   const t = L.serializeLibrary(lib);
   assert.equal(L.serializeLibrary(L.parseLibrary(t)), t);
-  assert.throws(() => L.parseLibrary(t.replace('"schema": 2', '"schema": 3')), (e) => e.code === 'SCHEMA_TOO_NEW');
-  assert.throws(() => L.importPiece(L.builtinLibrary(), L.exportPiece(lib, 'a').replace('"schema": 2', '"schema": 3')), (e) => e.code === 'SCHEMA_TOO_NEW');
+  assert.throws(() => L.parseLibrary(t.replace('"schema": 3', '"schema": 4')), (e) => e.code === 'SCHEMA_TOO_NEW');
+  assert.throws(() => L.importPiece(L.builtinLibrary(), L.exportPiece(lib, 'a').replace('"schema": 3', '"schema": 4')), (e) => e.code === 'SCHEMA_TOO_NEW');
 });
 
 test('a saved library holds only the user\'s pieces; the built-ins come from the program, not the file', () => {
