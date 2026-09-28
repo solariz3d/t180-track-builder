@@ -1,0 +1,22 @@
+{
+  "schema": 3,
+  "generator": "t180-track-builder/doc 0.1.0",
+  "name": "before d182",
+  "closed": false,
+  "nextId": 12,
+  "words": [
+    {"id":"w1","word":"straight","font":"flat","tempo":"standard","speedKmh":null,"handles":{"length":100,"turn":0,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":0,"psiR":0,"width":20,"wall":0,"ramp":20},"textures":{}},
+    {"id":"w2","word":"sweep","font":"flat","tempo":"aurora","speedKmh":null,"handles":{"length":1047.1976,"turn":30,"climb":0,"easeIn":0.4,"easeOut":0.4,"roll0":0,"roll1":0,"heartline":0,"psiL":0,"psiR":0,"width":20,"wall":0,"ramp":20},"textures":{}},
+    {"id":"w3","word":"turn","font":"bowl","tempo":"serpents","speedKmh":null,"handles":{"length":188.4956,"turn":-60,"climb":0,"easeIn":0.25,"easeOut":0.25,"roll0":0,"roll1":0,"heartline":0,"psiL":60,"psiR":15,"width":16,"wall":8,"ramp":20},"textures":{}},
+    {"id":"w4","word":"tight","font":"half-pipe","tempo":"standard","speedKmh":null,"handles":{"length":269.2794,"turn":90,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":60,"psiR":60,"width":16,"wall":8,"ramp":20},"textures":{}},
+    {"id":"w5","word":"wall-ride","font":"wall-ride","tempo":"standard","speedKmh":null,"handles":{"length":134.6397,"turn":180,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":30,"psiR":110,"width":10,"wall":8,"ramp":20},"textures":{}},
+    {"id":"w6","word":"straight","font":"tube","tempo":"standard","speedKmh":null,"handles":{"length":100,"turn":0,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":160,"psiR":160,"width":8,"wall":12,"ramp":20},"textures":{}},
+    {"id":"w7","word":"jump","font":null,"tempo":"standard","speedKmh":null,"handles":{"gap":12,"drop":0.7,"land":-2},"textures":{}},
+    {"id":"w8","word":"straight","font":"flat","tempo":"standard","speedKmh":null,"handles":{"length":100,"turn":0,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":0,"psiR":0,"width":20,"wall":0,"ramp":20},"textures":{}},
+    {"id":"w9","word":"inversion","font":"half-pipe","tempo":"standard","speedKmh":null,"handles":{"length":200,"turn":0,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":360,"heartline":0,"psiL":60,"psiR":60,"width":16,"wall":8,"ramp":20},"textures":{}},
+    {"id":"w10","word":"turn","font":"wall-ride","tempo":"standard","speedKmh":null,"handles":{"length":448.799,"turn":60,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":360,"roll1":360,"heartline":0,"psiL":30,"psiR":110,"width":10,"wall":8,"ramp":20},"textures":{}},
+    {"id":"w11","phrase":"bowl hairpin","words":[{"word":"turn","font":"bowl","tempo":"standard","speedKmh":null,"handles":{"length":448.799,"turn":60,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":360,"roll1":360,"heartline":0,"psiL":15,"psiR":60,"width":16,"wall":8,"ramp":20},"textures":{}},{"word":"tight","font":"bowl","tempo":"standard","speedKmh":null,"handles":{"length":269.2794,"turn":90,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":360,"roll1":360,"heartline":0,"psiL":15,"psiR":60,"width":16,"wall":8,"ramp":20},"textures":{}},{"word":"turn","font":"bowl","tempo":"standard","speedKmh":null,"handles":{"length":448.799,"turn":60,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":360,"roll1":360,"heartline":0,"psiL":15,"psiR":60,"width":16,"wall":8,"ramp":20},"textures":{}}]}
+  ],
+  "pitLane": null,
+  "constraints": {"pins":[],"free":[]}
+}

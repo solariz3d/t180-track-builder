@@ -37,6 +37,8 @@ const OUT = path.join(REPO, 'out');
 const MARKER_FILE = '.t180b-builder.json';
 const DEFAULT_AC = 'G:\\SteamLibrary\\steamapps\\common\\assettocorsa';   // the path docs/FINDINGS.md:283 already names
 const KN5_NAME = 't180b_platform_test.kn5';
+// BOTH variants carry CSP's extended-physics switch (trackfiles.js EXTENDED_PHYSICS_SURFACE; R1): they must differ by the soft
+// block ALONE, or FINDINGS §4c's registered prediction would test two things at once.
 const VARIANTS = [
   { folder: 't180b_platform_test', softCollision: true, title: 'T-180B Platform Test (soft road)' },
   { folder: 't180b_platform_test_noblock', softCollision: false, title: 'T-180B Platform Test (no soft-road block)' },
@@ -83,8 +85,8 @@ function build({ aiMode = 'wall' } = {}) {
     fs.rmSync(dir, { recursive: true, force: true });   // out/ is ours alone
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, KN5_NAME), kn5);
-    const desc = { name: v.title, description: 'Milestone 1 platform test: a half-pipe, a wall-ride above 90 degrees and one small jump. Built by t180-track-builder.', length: dsn.length, run: 'counterclockwise' /* C's loop turns left only (hand-back p-d165-geometry-C §1) */, tags: ['t180', 'original', 'test'], author: 't180-track-builder', version: '0.1' };
-    const files = [KN5_NAME, ...trackfiles.writeTrackFiles(dir, scene, { softCollision: v.softCollision, kn5Files: [KN5_NAME], desc })];
+    const desc = { name: v.title, description: 'Milestone 1 platform test: a half-pipe, a wall-ride above 90 degrees and one small jump. Built by t180-track-builder.', length: dsn.length, width: 2 * (pt.CONST.WF + pt.CONST.LW) /* edge to edge across the surface, fixed on this track (platform_test.js: '2·WF + 2·LW') */, run: 'counterclockwise' /* C's loop turns left only (hand-back p-d165-geometry-C §1) */, tags: ['t180', 'original', 'test'], author: 't180-track-builder', version: '0.1' };
+    const files = [KN5_NAME, ...trackfiles.writeTrackFiles(dir, scene, { softCollision: v.softCollision, extendedPhysics: true, kn5Files: [KN5_NAME], desc })];
     fs.mkdirSync(path.join(dir, 'ai'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'ai', 'fast_lane.ai'), ai);
     files.push('ai/fast_lane.ai');

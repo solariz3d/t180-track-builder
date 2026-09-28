@@ -26,6 +26,7 @@ const { createRenderer } = require('./renderer.js');
 const { gridLines, headMarker } = require('./look.js');
 const { resolveLook } = require('./aclook.js');
 const { previewTextures } = require('../../src/texture/set.js');
+const { normalize, spanOf } = require('../../src/geom/profile.js');
 
 const FLY = { w: [1, 0, 0], s: [-1, 0, 0], d: [0, 1, 0], a: [0, -1, 0], e: [0, 0, 1], q: [0, 0, -1] };
 const TURN = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
@@ -67,8 +68,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   /** The camera's context: the head and path, the track's box (the overhead fit) and the view's aspect. With nothing
    *  placed yet but a ghost showing, the ghost's head and path stand in, so the first word can be previewed too. */
   const ctx = (aspect) => {
-    if (track && track.path) return { head: track.path.head, path: track.path, bounds: track.bounds, aspect };
-    if (ghost && ghost.path) return { head: ghost.head, path: ghost.path, bounds: null, aspect };
+    if (track && track.path) return { head: track.path.head, path: track.path, bounds: track.bounds, aspect, width: widthAtHead(track.segments) };
+    if (ghost && ghost.path) return { head: ghost.head, path: ghost.path, bounds: null, aspect, width: widthAtHead(ghost.segments) };
     return null;
   };
 
@@ -137,6 +138,12 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   };
 }
 
+/** The road's span at the head (m): the last road segment's cross-section (profile.js spanOf), for the build view's framing. */
+function widthAtHead(segments) {
+  for (let i = (segments || []).length - 1; i >= 0; i--) if (segments[i] && segments[i].profile) return spanOf(normalize(segments[i].profile));
+  return null;
+}
+
 /** The head marker's size: 3 m up close, growing with the camera's distance (2%) so it stays readable from overhead. */
 const markerSize = (pose, head) => Math.max(3, 0.02 * Math.hypot(pose.eye[0] - head.pos[0], pose.eye[1] - head.pos[1], pose.eye[2] - head.pos[2]));
 
@@ -154,4 +161,4 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, backingSize, MAX_SIDE, markerSize };
+module.exports = { createPreview, keyAction, backingSize, MAX_SIDE, markerSize, widthAtHead };

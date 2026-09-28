@@ -74,7 +74,10 @@ function fakeNative({ seeIt = false } = {}) {
 }
 function stadium(name) {
   let d = D.createDoc(name);
-  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }], ['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }]]) d = D.appendWord(d, w, { ...o, speed: 200 / 3.6 });
+  // the stadium closes by symmetry only with four 90° tights, level: NAMED, since from D182 the default tight is the
+  // library's median corner (88.3°) and banks into the turn
+  const tight90 = { font: 'flat', handles: { turn: Math.PI / 2, roll1: 0 } };
+  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', tight90], ['tight', tight90], ['straight', { handles: { length: 600 } }], ['tight', tight90], ['tight', tight90]]) d = D.appendWord(d, w, { ...o, speed: 200 / 3.6 });
   return D.checkDoc({ ...d, closed: true });
 }
 

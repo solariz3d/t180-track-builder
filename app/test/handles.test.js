@@ -12,14 +12,17 @@ const { UNIT } = require('../../src/doc/serial.js');
 const { SCULPT, ALL, handlesOf, startDrag } = require('../handles/handles.js');
 
 const DEG = Math.PI / 180, kmh = (v) => v / 3.6;
-function doc(words) { let d = D.createDoc('t'); for (const [w, o, patch] of words) { d = D.appendWord(d, w, { speed: kmh(216), ...o }); if (patch) d = D.editWord(d, d.words[d.words.length - 1].id, { handles: patch }); } return d; }
+// The ripple (p-d182-ripple-E): this file names the words it relies on (test/pre_d182_words.js: the pre-D182 words), because it
+// tests a BEHAVIOUR, not the defaults. Under D182's measured words a straight is a 31 m bowl with 60° walls and a turn banks.
+const { appendOld } = require('../../test/pre_d182_words.js');
+function doc(words) { let d = D.createDoc('t'); for (const [w, o, patch] of words) { d = appendOld(D, d, w, { speed: kmh(216), ...o }); if (patch) d = D.editWord(d, d.words[d.words.length - 1].id, { handles: patch }); } return d; }
 const handle = (d, id, h) => d.words.find((w) => w.id === id).handles[h];
 const redOf = (d, opts = {}) => { const segs = D.resolve(d).segments; return validate(G.buildPath(segs, { step: 2 }), segs, opts).red; };
 const HEAD = { validate: { csp: false }, step: 2 };   // roll at the head, for a non-CSP export: red past 50° (ARCHITECTURE.md:87)
 
 test('the sculpt set is the plan\'s list: length, curvature and ramps, pitch, bank, width, wall height, ψ, font transition', () => {
   assert.deepStrictEqual(Object.keys(SCULPT), ['length', 'curvature', 'ramps', 'pitch', 'bank', 'width', 'wall', 'psi', 'transition']);
-  const w = D.appendWord(D.createDoc('t'), 'wall-ride').words[0];
+  const w = appendOld(D, D.createDoc('t'), 'wall-ride').words[0];
   assert.deepStrictEqual(ALL.filter((h) => !(h in w.handles)), [], 'every sculpt handle exists on a road word');
 });
 

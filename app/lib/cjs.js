@@ -53,6 +53,8 @@ async function loadCjs(entry, fetchText, { builtins = {}, globals = {} } = {}) {
     if (!src.has(p)) throw new Error(`cjs: ${p} (required by ${from}) could not be loaded${missing.has(p) ? `: ${missing.get(p).message}` : ''}`);
     const module = { exports: {} };
     done.set(p, module);   // set before running, so a require cycle sees the partial exports, as node's does
+    // A .json file is data, as node's require gives it (src/doc/corpus.json, the measured library): parsed, never run.
+    if (p.endsWith('.json')) { module.exports = JSON.parse(src.get(p)); return module.exports; }
     // The file runs in an inner function of its own, so a top-level declaration in it (say, the shim's own
     // `class Buffer`) shadows an injected global of the same name instead of clashing with the parameter.
     new Function('require', 'module', 'exports', ...gNames, `return (function () {\n${src.get(p)}\n}).call(module.exports);\n//# sourceURL=${p}`)((s) => req(p, s), module, module.exports, ...gValues);

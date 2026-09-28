@@ -81,7 +81,16 @@ test('a resolved multi-part word meshes with unique node names, and the self-che
 });
 
 test('a font change in the document reaches the geometry: resolve emits blend, and the mesh ramps by it', () => {
-  const d = build([['straight'], ['straight', { font: 'half-pipe' }], ['jump'], ['straight']]), r = D.resolve(d);
+  // D182 (B, the ripple): the plain straights NAME their font, flat. They used the old default (flat); under font
+  // continuity (A, p-d182-vocab-A §10.1) an unnamed first straight is a bowl and w4 would carry the half-pipe through the
+  // jump, so neither blend below would be tested. The subject is the blend, not the default.
+  // They also NAME one width, 32 m. The width now follows the font (half-pipe 31.5, flat 45), and pieces of different
+  // widths sample their rows at different counts (94 against 108), so the ramp→w4 join grew a zipper SEAM between two
+  // samplings of the SAME curve (every point within 0.54 mm of the other row: B's probe, p-d182-ripple-B §4), not a step.
+  // At one named width the rows coincide exactly on the old vocabulary and the new, so the no-seam line below still
+  // tests what it was written for: a landing blend that starts on the take-off font leaves no step.
+  const W = { width: 32 };
+  const d = build([['straight', { font: 'flat', handles: W }], ['straight', { font: 'half-pipe', handles: W }], ['jump'], ['straight', { font: 'flat', handles: W }]]), r = D.resolve(d);
   const w2 = r.segments.filter((g) => g.id === 'w2'), first = w2[0];
   assert.ok(first.blend && first.blend.from.font === 'flat' && first.blend.s0 === 0, 'the entering word blends from the flat font');
   assert.equal(first.blend.length, Math.min(d.words[1].handles.ramp, d.words[1].handles.length));

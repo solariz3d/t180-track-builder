@@ -8,6 +8,8 @@ const { MACH6 } = require('../../src/validate/limits.js');
 const { LEVEL } = require('../validate-ui/colour.js');
 const { createSpeedPicker, MIN_KMH, MAX_KMH } = require('../validate-ui/speed.js');
 const { createValidationController } = require('../validate-ui/panel.js');
+const D = require('../../src/doc/index.js');
+const { appendOld } = require('../../test/pre_d182_words.js');
 
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
 const anyLevel = (map, lvl) => map.stations.some((e) => Array.from(e.levels).includes(lvl));
@@ -52,7 +54,9 @@ test('with the picker off, an open track built through the shell claims no load 
 test('a faster design speed turns a tight curve amber (above the proven 90 g), and a slower one takes it away again', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createValidationController(shell, { designSpeedKmh: 200 });
-  shell.place('straight'); shell.place('tight'); shell.beginDrag(); shell.dragTo('w2', { handles: { length: 50 } }); shell.endDrag();
+  // named words (the ripple, p-d182-ripple-E): a flat straight and a 16 m bowl tight (the pre-D182 words), so 200 km/h is
+  // clean and only the speed brings amber
+  shell.adopt(['straight', 'tight'].reduce((d, w) => appendOld(D, d, w), D.createDoc('t'))); shell.beginDrag(); shell.dragTo('w2', { handles: { length: 50 } }); shell.endDrag();
   assert.ok(!anyLevel(ctl.state.map, LEVEL.AMBER), 'clean at 200 km/h');
   ctl.setDesignSpeed(764);
   assert.ok(ctl.state.result.amber.some((a) => a.reason === 'load-above-proven'), 'amber at the cap');
@@ -63,9 +67,10 @@ test('a faster design speed turns a tight curve amber (above the proven 90 g), a
 
 test('with the picker off (no loads anywhere), a geometry red still colours the live map, station by station along the path', async () => {
   const shell = await createShell({ storage: mem() });
-  shell.setPicker('font', 'half-pipe');   // 60° walls: red for vanilla AC
   const ctl = createValidationController(shell, { designSpeedKmh: null, csp: false });
-  shell.place('straight'); shell.place('straight');
+  // named (the walled-bowl tests, p-d182-walltests-E): two pre-D182 half-pipe straights, a 16 m floor and 8 m walls rising to
+  // 60°, red for vanilla AC. The half-pipe the font picker gives now is the MEASURED one, with no wall (C's fonts, D182).
+  shell.adopt(['straight', 'straight'].reduce((d, w) => appendOld(D, d, w, { font: 'half-pipe' }), D.createDoc('t')));
   assert.strictEqual(ctl.state.result.lines.length, 0);
   shell.place('straight');                 // an append: the live route, not a fresh map
   assert.strictEqual(ctl.state.how, 'append');

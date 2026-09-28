@@ -22,13 +22,16 @@ const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-expor
 test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 
 // A document's speed is m/s (its text form is speedKmh, src/doc/serial.js).
+// The ripple (p-d182-ripple-E): the sample's words are named explicitly (the pre-D182 words), because this file tests
+// that a closed loop EXPORTS, not what the defaults are. Under the measured vocabulary a 50 m tight on a 31 m road folds.
+const { appendOld } = require('./pre_d182_words.js');
 const kmh = (v) => v / 3.6;
 const withSpeed = (doc, speed) => doc.words.reduce((d, w) => D.editWord(d, w.id, { speed }), doc);
 /** The sample: two straights, a tight word shortened to 50 m, a straight, a tight word, closed by the shortest
- *  candidate A's connector offers, every word at 200 km/h. The tight words are bowls with a 60° wall (vocab default). */
+ *  candidate A's connector offers, every word at 200 km/h. The tight words are bowls with a 60° wall (named, pre-D182). */
 function sampleDoc() {
   let d = D.createDoc('Sample Loop');
-  for (const w of ['straight', 'straight', 'tight', 'straight', 'tight']) d = D.appendWord(d, w, { speed: kmh(200) });
+  for (const w of ['straight', 'straight', 'tight', 'straight', 'tight']) d = appendOld(D, d, w, { speed: kmh(200) });
   d = D.editWord(d, 'w3', { handles: { length: 50 } });
   const c = closeLoop(d);
   assert.ok(c.candidates.length, c.reason);
@@ -104,7 +107,7 @@ test('a red document is refused, the reason named, and nothing written (the 60°
 // lands it, and the jump is taken at 250 km/h instead: still below what the 6.3 g landing needs.
 test('a lap the proof fails is refused: a jump taken below the speed its 6.3 g landing needs, each failing point named', () => {
   let d = D.createDoc('Jump Loop');
-  for (const w of ['straight', 'straight', 'jump', 'straight', 'tight', 'straight', 'tight']) d = D.appendWord(d, w, { speed: kmh(250) });
+  for (const w of ['straight', 'straight', 'jump', 'straight', 'tight', 'straight', 'tight']) d = appendOld(D, d, w, { speed: kmh(250) });
   const c = closeLoop(d);
   assert.ok(c.candidates.length, c.reason);
   const jl = withSpeed(c.candidates.slice().sort((a, b) => a.lengthM - b.lengthM)[0].doc, kmh(250));

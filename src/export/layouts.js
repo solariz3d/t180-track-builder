@@ -24,7 +24,7 @@ const crypto = require('crypto');
 const { buildExport, ExportError, folderName, MARKER_FILE } = require('./fromwords.js');
 const tf = require('./trackfiles.js');
 
-function exportProject(project, { outDir, softCollision = true, ...opts } = {}) {
+function exportProject(project, { outDir, softCollision = true, t180 = true, ...opts } = {}) {
   if (!outDir) throw new ExportError('NO_OUT_DIR', 'exportProject needs an outDir');
   if (!project.layouts.length) throw new ExportError('EMPTY_DOC', 'the project has no layouts');
   const folder = folderName({ name: project.name });
@@ -40,7 +40,7 @@ function exportProject(project, { outDir, softCollision = true, ...opts } = {}) 
     Object.assign(files, {
       [kn5]: b.kn5,
       [tf.modelsIniName(L)]: tf.modelsIni([kn5]),
-      [`${L}/data/surfaces.ini`]: tf.surfacesIni({ softCollision }),
+      [`${L}/data/surfaces.ini`]: tf.surfacesIni({ softCollision: !!t180 && softCollision, extendedPhysics: !!t180 }),
       [`${L}/data/map.ini`]: tf.mapIni(mp),
       [`${L}/map.png`]: tf.mapPng(b.scene, mp),
       [`${L}/ai/fast_lane.ai`]: b.ai,
@@ -53,7 +53,7 @@ function exportProject(project, { outDir, softCollision = true, ...opts } = {}) 
   const list = Object.keys(files);
   fs.writeFileSync(path.join(dir, MARKER_FILE), JSON.stringify({ tool: 't180-track-builder', module: 'src/export/layouts.js', written: new Date().toISOString(), files: list }, null, 2) + '\n');
   const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
-  return { folder, dir, files: list, layouts: built.map(({ layout, b }) => ({ layout, kn5Sha: sha(b.kn5), lengthM: b.path.lengthM, pitLane: !!b.pitLane, warnings: b.warnings })) };
+  return { folder, dir, files: list, warnings: t180 ? [tf.CSP_ONLY_WARNING] : [], layouts: built.map(({ layout, b }) => ({ layout, kn5Sha: sha(b.kn5), lengthM: b.path.lengthM, pitLane: !!b.pitLane, warnings: b.warnings })) };
 }
 
 module.exports = { exportProject };

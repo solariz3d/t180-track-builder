@@ -13,10 +13,13 @@ const TM = require('../src/texmaker/index.js');
 const { buildExport } = require('../src/export/fromwords.js');
 const { resolveLook } = require('../app/preview/aclook.js');
 
+// The ripple (p-d182-ripple-E): the stadium closes by construction only with 90° tights, so its words are named
+// explicitly (the pre-D182 words); this file tests textures in the export, not the defaults.
+const { appendOld } = require('./pre_d182_words.js');
 const kmh = (v) => v / 3.6, RAINBOW = TM.serialize(TM.PRESETS.rainbow);
 function stadium() {
   let d = D.createDoc('Tex');
-  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }], ['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }]]) d = D.appendWord(d, w, { ...o, speed: kmh(200) });
+  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }], ['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }]]) d = appendOld(D, d, w, { ...o, speed: kmh(200) });
   return D.checkDoc({ ...d, closed: true });
 }
 const withFloor = (d) => D.editWord(d, 'w1', { textures: { floor: { make: RAINBOW, size: 64 } } });

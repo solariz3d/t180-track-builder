@@ -12,12 +12,19 @@
 //   g(s)  = the gap from that edge to the lane's inner edge: 0 at the leave, easing out over divergeM of main road to
 //           offsetM, offsetM along the run, easing back to 0 over mergeM. The ease is profile.js smoothstep, the one the
 //           font ramps use: zero slope at both ends, so the lane's inner edge leaves the road's edge TANGENTIALLY.
-//   inner = e + σ·L·g,  centre = e + σ·L·(g + width/2)      σ = +1 on the left (+u), −1 on the right
+//   φ(s)  = the lane's TILT about the road's T: the road's edge angle ψe(s) at the joins, easing to 0 with the gap
+//           (φ = ψe·(1 − g/offsetM)), so the lane runs level beside the road and leaves it in the edge's own plane
+//   A(s)  = the edge's outward tangent tilted by φ: σ·L·cos φ + U·sin φ (the road's own across-direction there, at φ = ψe)
+//   inner = e + A·g,  centre = e + A·(g + width/2)      σ = +1 on the left (+u), −1 on the right
 // JOINS WITH NO STEP, AND G1. At the leave and the rejoin g = 0 and g' = 0, so the lane's inner edge IS the road's edge
-// (same point) and runs along it (same tangent: inner' = e' + σ(L'g + Lg') = e'). The lane is flat and its rows are laid
-// along the main road's own L, in the main road's own U, so across that shared edge the surface continues in the same
-// plane (the road's edge must itself be flat there: PIT_JOIN_NOT_FLAT, |ψ| ≤ 1°). The lane never overlaps the road's
-// surface, so there is no stacked surface at a join: the two meshes share an edge line and nothing else.
+// (same point) and runs along it (same tangent: inner' = e' + A'g + Ag' = e'). There φ = ψe, so the lane's rows lie along
+// the road's own surface tangent at its edge and its normal is the road's there (profile.js normalAt): across that shared
+// edge the surface continues in the same plane, whatever the edge's tilt.
+// D182 (pane C): this was "the lane is flat, and the edge must be flat (≤ 1°)". The measured fonts (src/geom/fonts.js) rise
+// from the centre, 15.5° at the bowl's edge and 30.6° at the half-pipe's, so no lane could leave a default road. Now an
+// edge is refused only past JOIN_MAX (35°, the reader's own lip: a fold sharper than 35° in a metre is an edge, not road,
+// tools/read_track.cjs), still as PIT_JOIN_NOT_FLAT. The lane never overlaps the road's surface, so there is no stacked
+// surface at a join: the two meshes share an edge line and nothing else.
 // THE ROWS ARE THE MAIN ROAD'S. Each lane station lies at a main-road s and its cross-section runs along the main road's
 // L: on the run that is square to the lane; in a diverge it is sheared by the lane's angle to the road (at most
 // atan(1.5·offsetM/divergeM): 12.8° for the defaults 12 m over 80 m, so the lane measures width·cos 12.8° = 97.5 % of its
@@ -30,13 +37,13 @@
 // the leave: a lane across the loop's start is not built), PIT_TOO_SHORT (diverge + merge longer than the lane),
 // PIT_OVER_GAP (a jump's flight inside the lane's span), PIT_JOIN_NOT_FLAT.
 //
-// NOT DONE HERE: banking. The lane lies in the main road's plane, so beside a banked road it is banked too, and rises or
-// falls by offset·sin(bank). Pit lanes run beside flat straights; a lane off a banked turn would need its own roll.
+// NOT DONE HERE: banking. Along the run the lane lies in the main road's plane (φ = 0), so beside a banked road it is banked
+// too, and rises or falls by offset·sin(bank). Pit lanes run beside straights; a lane off a banked turn would need its own roll.
 'use strict';
 const Prof = require('./profile.js');
 const { triTri, segTri, _internal: { soup, build, query } } = require('./bvh.js');
 
-const JOIN_FLAT = Math.PI / 180;       // 1°: the edge a lane joins must be flat to this
+const JOIN_MAX = 35 * Math.PI / 180;  // the steepest road edge a lane joins: the reader's lip (a sharper fold is an edge, not road)
 const MAT = 'ROAD';                    // drivable: its cells are 1ROAD_PIT_<part>_<n> (surfaces.ini MESHES=1ROAD?)
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -84,11 +91,13 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
     const P = profileAt(seg, s - st[k]), uE = sg > 0 ? P.u[P.u.length - 1] : P.u[0];
     const T = unit(lerp(a.T, b.T, t)), L = unit(lerp(a.L, b.L, t)), U = unit(lerp(a.U, b.U, t)), pos = lerp(a.pos, b.pos, t);
     const kv = lerp(a.kvec, b.kvec, t);
-    const [X, Y] = Prof.offsetAt(P, uE), edge = add(pos, add(mul(L, X), mul(U, Y))), g = gapAt(s);
-    return { s, T, L, U, pos, kvec: kv, edge, psiEdge: Prof.psiAt(P, uE), g, inner: add(edge, mul(L, sg * g)), centre: add(edge, mul(L, sg * (g + w / 2))) };
+    const [X, Y] = Prof.offsetAt(P, uE), edge = add(pos, add(mul(L, X), mul(U, Y))), g = gapAt(s), psiEdge = Prof.psiAt(P, uE);
+    const phi = psiEdge * (lane.offsetM > 0 ? 1 - Math.min(1, g / lane.offsetM) : 1), c = Math.cos(phi), sn = Math.sin(phi);
+    const A = add(mul(L, sg * c), mul(U, sn)), Ll = add(mul(L, c), mul(U, sg * sn)), Ul = add(mul(U, c), mul(L, -sg * sn));   // the lane's across (+u = L side) and up
+    return { s, T, L, U, pos, kvec: kv, edge, psiEdge, phi, Ll, Ul, g, inner: add(edge, mul(A, g)), centre: add(edge, mul(A, g + w / 2)) };
   }
   for (const [name, s] of [['leave', s0], ['rejoin', s1]]) {
-    const x = at(s); if (Math.abs(x.psiEdge) > JOIN_FLAT) throw err('PIT_JOIN_NOT_FLAT', `the road's ${lane.side === 'L' ? 'left' : 'right'} edge at the ${name} (s ${s.toFixed(1)} m) turns ${(x.psiEdge * 180 / Math.PI).toFixed(1)}° from flat; a lane joins a flat edge only (≤ 1°)`);
+    const x = at(s); if (Math.abs(x.psiEdge) > JOIN_MAX) throw err('PIT_JOIN_NOT_FLAT', `the road's ${lane.side === 'L' ? 'left' : 'right'} edge at the ${name} (s ${s.toFixed(1)} m) turns ${(x.psiEdge * 180 / Math.PI).toFixed(1)}° from flat; a lane joins an edge of at most 35° (the reader's lip)`);
   }
 
   // stations: the main road's own samples inside the span, the four part boundaries, and every stepM between
@@ -102,8 +111,8 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
   const samples = pts.map((x, j) => {
     if (j) arc += len(sub(x.centre, pts[j - 1].centre));
     const Q = sub(x.centre, x.pos), kq = 1 - dot(x.kvec, Q);
-    return { s: arc, seg: partOf(x.s), sMain: x.s, pos: x.centre, T: x.T, L: x.L, U: x.U, kvec: kq > 1e-9 ? mul(x.kvec, 1 / kq) : x.kvec,
-      roll: 0, bankG: Math.asin(Math.max(-1, Math.min(1, x.L[1]))), grade: x.T[1] };
+    return { s: arc, seg: partOf(x.s), sMain: x.s, pos: x.centre, T: x.T, L: x.Ll, U: x.Ul, kvec: kq > 1e-9 ? mul(x.kvec, 1 / kq) : x.kvec,
+      roll: 0, bankG: Math.asin(Math.max(-1, Math.min(1, x.Ll[1]))), grade: x.T[1] };
   });
   const sLane = (sMain) => samples.find((x) => Math.abs(x.sMain - sMain) < 1e-9).s;
   const bounds = [0, sLane(sa), sLane(sb), arc];
@@ -159,4 +168,4 @@ function laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5 } = {})
   return { intersections: inter, stacked, stats };
 }
 
-module.exports = { buildPitLane, laneCheck, JOIN_FLAT };
+module.exports = { buildPitLane, laneCheck, JOIN_MAX };

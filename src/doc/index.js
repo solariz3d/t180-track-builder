@@ -12,5 +12,5 @@ module.exports = {
   SCHEMA: serial.SCHEMA, GENERATOR: serial.GENERATOR,
   resolve, resolveFrom, ResolveError,
   ...history,
-  WORDS: vocab.WORDS, FONTS: vocab.FONTS, TEMPOS: vocab.TEMPOS,
+  WORDS: vocab.WORDS, FONTS: vocab.FONTS, TEMPOS: vocab.TEMPOS, GRAMMAR: vocab.GRAMMAR, pieceOf: vocab.pieceOf, radiusOf: vocab.radiusOf,
 };

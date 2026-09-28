@@ -139,10 +139,15 @@ test('ghost through A\'s real shell: the candidate for a word equals what shell.
   const store = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], saveLibrary: async () => {}, openLibrary: async () => null };
   const s = await createShell({ storage: store }), tm = TM.createTrackModel();
   s.place('straight'); s.setPicker('font', 'half-pipe'); s.place('turn'); tm.update(s.getState().resolved);
-  s.setPicker('font', 'half-pipe');                       // not the turn's own font (bowl), so a candidate that ignored the pickers would differ
+  // the picker NAMES a font that no default would give (D182, B12): the head is a half-pipe, so font continuity (a new word
+  // takes the previous word's font) gives half-pipe, and the old per-class default gave bowl; a candidate that ignored the
+  // picker would therefore differ from what place() builds, whichever vocabulary is in force
+  s.setPicker('font', 'flat');
+  const head = s.getState().history.present.words.at(-1).font;
+  assert.notEqual(head, 'flat', 'the head must not already wear the picked font, or the check tests nothing');
   const n0 = s.getState().resolved.segments.length, g = tm.ghostFor(GW.candidateFor(s.getState(), 'turn'));
   s.place('turn'); const placed = tm.update(s.getState().resolved);
-  assert.equal(s.getState().history.present.words.at(-1).font, 'half-pipe', 'the placed word took the picker');
+  assert.equal(s.getState().history.present.words.at(-1).font, 'flat', 'the placed word took the picker');
   assert.equal(placed.how, 'extend');
   sameBatches(placed.batches.filter((b) => b.piece >= n0), g.batches);
 });

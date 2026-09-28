@@ -5,6 +5,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { createShell } = require('../shell.js');
 const { createHandlesController } = require('../handles/panel.js');
+const D = require('../../src/doc/index.js');
+const { appendOld } = require('../../test/pre_d182_words.js');
 
 const DEG = Math.PI / 180;
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
@@ -26,7 +28,9 @@ test('no handles until exactly one placed word is selected', async () => {
 test('through the shell: a drag clamps at the bound, and the whole drag is one undo step', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createHandlesController(shell, { csp: false });
-  shell.place('straight'); shell.place('straight'); shell.select('w2');
+  // named words (the ripple, p-d182-ripple-E): two FLAT straights (the pre-D182 words), so the only red a bank can meet
+  // is the 50° non-CSP limit; a D182 straight is a bowl with 60° walls, red without CSP before any bank
+  shell.adopt(['straight', 'straight'].reduce((d, w) => appendOld(D, d, w), D.createDoc('t'))); shell.select('w2');
   const undoBefore = shell.getState().history.past.length;
   const { bounds } = ctl.begin('roll1');
   for (const v of [0.2, 0.6, 3]) ctl.move(v);
@@ -84,9 +88,10 @@ test('cancel through the shell puts the value back (the shell has no cancel, so 
 
 test('on a word already red there is no bound to stop at, so the document\'s own refusal stops the drag, through the shell', async () => {
   const shell = await createShell({ storage: mem() });
-  shell.setPicker('font', 'half-pipe');
-  const ctl = createHandlesController(shell, { csp: false });   // 60° walls: red for vanilla AC
-  shell.place('straight'); shell.place('straight'); shell.select('w2');
+  const ctl = createHandlesController(shell, { csp: false });
+  // named (the walled-bowl tests, p-d182-walltests-E): two pre-D182 half-pipe straights, a 16 m floor and 8 m walls rising to
+  // 60°, red for vanilla AC. The half-pipe the font picker gives now is the MEASURED one, with no wall (C's fonts, D182).
+  shell.adopt(['straight', 'straight'].reduce((d, w) => appendOld(D, d, w, { font: 'half-pipe' }), D.createDoc('t'))); shell.select('w2');
   const { bounds } = ctl.begin('easeIn');
   assert.strictEqual(bounds.min, null);
   const m = ctl.move(0.9);

@@ -15,12 +15,19 @@
 //   const rig = createRig();
 //   rig.key('c')               the switch key: the next mode (free → build closes the cycle)
 //   rig.key('b')               the build view, from any mode, in one key
-//   rig.pose(ctx)              the exact pose for ctx = { head, path } ({ eye, target, up, fov }), no smoothing
+//   rig.pose(ctx)              the exact pose for ctx = { head, path, width?, aspect? } ({ eye, target, up, fov }), no smoothing
 //   rig.update(ctx, dt)        the pose shown this frame, eased toward rig.pose(ctx) (no snap on a mode switch)
 //   rig.free.move(fwd, right, up)   rig.free.look(dYaw, dPitch)     only in free mode
 //
 // `head` is path.head (src/geom/path.js buildHead): { s, pos, T, L, U } with L = U × T, u + = left. `path` is needed
 // only by chase (it reads the road behind the head).
+//
+// THE BUILD VIEW FRAMES THE ROAD (D182: T-180 roads are 31-37 m wide at the median and 67 m at the tight p90, FINDINGS
+// §7f). `width` is the cross-section's span at the head (src/geom/profile.js spanOf). The build view keeps its 15 m / 6 m
+// on a narrow road and backs off, at the same angle, until the whole width sits inside FRAME of the view's half-width:
+// the edges pos ± L·width/2 lie at depth back·k along the view direction, k = (2 + r²) / √(4 + r²) with r = up / back
+// (the eye is at −T·back + U·up, looking at +T·back), so back ≥ (width / 2) / (FRAME · tan(fov / 2) · aspect · k).
+// With no aspect known, 1 is assumed (a square view, the narrowest the window is given), so the road is never cut off.
 'use strict';
 
 const { headCamera } = require('../../src/geom/index.js');
@@ -36,6 +43,7 @@ const DEFAULTS = Object.freeze({
   rate: 8,                                       // 1/s: the ease toward the target pose (≈ 95% in 0.37 s)
 });
 const WORLD_UP = [0, 1, 0];
+const FRAME = 0.85;   // the road's edges sit inside 85% of the view's half-width
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -92,11 +100,19 @@ function fitOverhead(bounds, aspect, f, fov) {
  * The exact pose of a follow mode for a head (and a path, for chase). Free mode's pose is the rig's own state.
  * `bounds` (the track's world box) and `aspect` (width / height of the view) switch overhead to fit the whole track.
  */
-function poseFor(mode, { head, path, bounds, aspect } = {}, opts = DEFAULTS) {
+/** The build view's offsets for a road `width` m wide: the defaults, or backed off at the same angle to frame it. */
+function buildOffsets(o, width, fov, aspect) {
+  if (!(Number.isFinite(width) && width > 0)) return o;
+  const r = o.up / o.back, k = (2 + r * r) / Math.sqrt(4 + r * r), a = aspect > 0 ? aspect : 1;
+  const back = Math.max(o.back, (width / 2) / (FRAME * Math.tan(fov / 2) * a * k));
+  return { back, up: back * r };
+}
+
+function poseFor(mode, { head, path, bounds, aspect, width } = {}, opts = DEFAULTS) {
   checkHead(head);
   const fov = opts.fov || DEFAULTS.fov;
   if (mode === 'build') {
-    const c = headCamera(head, opts.build || DEFAULTS.build);
+    const c = headCamera(head, buildOffsets(opts.build || DEFAULTS.build, width, fov, aspect));
     return { eye: c.eye, target: c.target, up: c.up, fov };
   }
   if (mode === 'overhead') {

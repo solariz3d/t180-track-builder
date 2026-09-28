@@ -23,10 +23,13 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b) / (len(a) * len(b)))));
 
+// D182 (the ripple): the words below NAME the inputs these tests relied on as defaults before the measured vocabulary (a flat
+// straight, a 90° tight at 120 m: (π/2)·120/(1 − 0.3) m long), so they test the same behaviour whatever the defaults are.
+const TIGHT90 = { turn: Math.PI / 2, length: (Math.PI / 2) * 120 / 0.7 };
 /** Straight 600, two flat tights (a 180° left turn), straight 600: open, so the geometry needs no closing. */
 function track(lane) {
   let d = D.createDoc('lane');
-  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', { font: 'flat' }], ['tight', { font: 'flat' }], ['straight', { handles: { length: 600 } }]]) d = D.appendWord(d, w, o);
+  for (const [w, o] of [['straight', { font: 'flat', handles: { length: 600 } }], ['tight', { font: 'flat', handles: TIGHT90 }], ['tight', { font: 'flat', handles: TIGHT90 }], ['straight', { font: 'flat', handles: { length: 600 } }]]) d = D.appendWord(d, w, o);
   d = D.setPitLane(d, lane);
   const r = D.resolve(d), path = G.buildPath(r.segments, { step: 0.5 });
   return { d, segs: r.segments, path, lane: buildPitLane(path, r.segments, d.pitLane) };
@@ -53,9 +56,11 @@ for (const [name, spec] of [['on a straight', ON_STRAIGHT], ['leaving on a strai
       const nrm = (k) => { const i = (r * K + k) * 3, x = [cell.normals[i], cell.normals[i + 1], cell.normals[i + 2]]; return [0, 1, 2].map((d) => M.L[d] * x[0] + M.U[d] * x[1] + M.T[d] * x[2]); };
       const j = lane.at(s), innerK = spec.side === 'L' ? 0 : K - 1;     // u ascends right → left: the inner edge is on the road's side
       assert.ok(len(sub(world(innerK), j.edge)) <= 1e-4, `inner vertex off the road's edge by ${len(sub(world(innerK), j.edge))} m at s ${s}`);
+      // the road's plane AT THE SHARED EDGE: its surface normal there, j.Ul (src/geom/pitlane.js). D182: that is the centre's
+      // U only on a dead-level edge; the measured flat font rises 3° at its edge, and the check is about the edge's plane.
       for (let k = 0; k < K; k++) {
-        assert.ok(Math.abs(dot(sub(world(k), j.edge), j.U)) <= 1e-4, `vertex ${k} ${dot(sub(world(k), j.edge), j.U)} m off the road's plane at s ${s}`);
-        assert.ok(ang(nrm(k), j.U) <= 1e-5, `normal ${k} turned ${ang(nrm(k), j.U)} rad from the road's at s ${s}`);
+        assert.ok(Math.abs(dot(sub(world(k), j.edge), j.Ul)) <= 1e-4, `vertex ${k} ${dot(sub(world(k), j.edge), j.Ul)} m off the road's plane at s ${s}`);
+        assert.ok(ang(nrm(k), j.Ul) <= 1e-5, `normal ${k} turned ${ang(nrm(k), j.Ul)} rad from the road's at s ${s}`);
       }
     }
   });
@@ -106,7 +111,8 @@ test('a lane is refused by name: a missing anchor, backwards, too short for its 
   code({ ...ON_STRAIGHT, rejoin: { word: 'w9', along: 0 } }, 'PIT_ANCHOR_MISSING');
   code({ ...ON_STRAIGHT, leave: { word: 'w1', along: 500 }, rejoin: { word: 'w1', along: 100 } }, 'PIT_BACKWARDS');
   code({ ...ON_STRAIGHT, divergeM: 300, mergeM: 300 }, 'PIT_TOO_SHORT');
-  let d = D.appendWord(D.appendWord(D.createDoc(), 'straight', { handles: { length: 300 } }), 'tight');   // a bowl: its outside (right) wall
+  // a walled edge, NAMED (D182: the default bowl is measured and has no wall): an 8 m wall to 60° on both sides
+  let d = D.appendWord(D.appendWord(D.createDoc(), 'straight', { font: 'flat', handles: { length: 300 } }), 'tight', { font: 'bowl', handles: { ...TIGHT90, wall: 8, psiL: Math.PI / 3, psiR: Math.PI / 3 } });
   d = D.setPitLane(d, { side: 'R', leave: { word: 'w1', along: 50 }, rejoin: { word: 'w2', along: 100 }, divergeM: 40, mergeM: 40 });
   const r = D.resolve(d), p = G.buildPath(r.segments, { step: 0.5 });
   assert.throws(() => buildPitLane(p, r.segments, d.pitLane), (e) => e.code === 'PIT_JOIN_NOT_FLAT');

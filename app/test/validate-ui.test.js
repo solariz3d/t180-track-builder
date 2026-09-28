@@ -1,6 +1,9 @@
 // Headless tests for app/validate-ui: the colour along the track, its live update at the build head, and the jump's
 // two landings. They drive the real src/doc, src/geom and src/validate. Run: node --test "app/test/*.test.js"
 'use strict';
+// The ripple (p-d182-ripple-E): this file names the words it relies on (test/pre_d182_words.js: the pre-D182 words), because it
+// tests a BEHAVIOUR, not the defaults. Under D182's measured words a straight is a 31 m bowl with 60° walls and a turn banks.
+const { appendOld } = require('../../test/pre_d182_words.js');
 const test = require('node:test');
 const assert = require('node:assert');
 const D = require('../../src/doc/index.js');
@@ -15,7 +18,7 @@ const { jumpArcs } = require('../validate-ui/jumparcs.js');
 const kmh = (v) => v / 3.6;   // a document's speed is m/s
 function build(words, speed) {
   let d = D.createDoc('t');
-  for (const [w, patch] of words) { d = D.appendWord(d, w, speed ? { speed: kmh(speed) } : {}); if (patch) d = D.editWord(d, d.words[d.words.length - 1].id, { handles: patch }); }
+  for (const [w, patch] of words) { d = appendOld(D, d, w, speed ? { speed: kmh(speed) } : {}); if (patch) d = D.editWord(d, d.words[d.words.length - 1].id, { handles: patch }); }
   const segs = D.resolve(d).segments;
   return { d, segs, path: G.buildPath(segs, { step: 2 }) };
 }
@@ -98,7 +101,7 @@ test('an append re-colours only the new span: earlier stations are kept as the s
   let { d, segs, path } = build([['straight'], ['turn'], ['straight']], 300);
   const live = createLive(), first = live.update(path, segs);
   const oldEnd = path.lengthM, nOld = first.map.stations.length;
-  d = D.appendWord(d, 'tight', { speed: kmh(300) });
+  d = appendOld(D, d, 'tight', { speed: kmh(300) });
   const segs2 = D.resolve(d).segments, path2 = G.extendPath(path, segs2);
   const out = live.update(path2, segs2, { fromS: oldEnd });
   assert.strictEqual(out.full, false);

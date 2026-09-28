@@ -16,11 +16,18 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 function track(words, { font } = {}) {
   let d = D.createDoc('m');
-  for (const [w, patch] of words) { d = D.appendWord(d, w, font ? { font } : {}); if (patch) d = D.editWord(d, d.words[d.words.length - 1].id, { handles: patch }); }
+  for (const [w, patch, own] of words) { const f = own || font; d = D.appendWord(d, w, f ? { font: f } : {}); if (patch) d = D.editWord(d, d.words[d.words.length - 1].id, { handles: patch }); }
   return build(d);
 }
 function build(d) { const segs = D.resolve(d).segments; return { d, segs, path: buildPath(segs, { step: 2 }) }; }
-const BASE = [['straight'], ['straight'], ['turn'], ['straight']];
+// D182 (the ripple): BASE NAMES what these tests relied on as defaults before the measured vocabulary: 100 m flat straights
+// 20 m wide, and a level 60° bowl turn at 300 m with its 8 m wall (15° inside, 60° outside), so the markers are tested on the
+// same track whatever the defaults are. HP is the old half-pipe, 16 m walled 8 m to 60° (the measured one has no wall, and the
+// half-pipe tests below are about the wall).
+const ST = { length: 100, width: 20 }, DEG_ = Math.PI / 180;
+const HP = { length: 100, width: 16, wall: 8, psiL: 60 * DEG_, psiR: 60 * DEG_ };
+const BASE = [['straight', ST, 'flat'], ['straight', ST, 'flat'],
+  ['turn', { turn: 60 * DEG_, length: (60 * DEG_) * 300 / 0.7, width: 16, wall: 8, psiL: 15 * DEG_, psiR: 60 * DEG_, roll0: 0, roll1: 0 }, 'bowl'], ['straight', ST, 'flat']];
 const by = (r, n) => r.placed.find((m) => m.name === n);
 const failing = (r) => r.check.checks.filter((c) => !c.ok).map((c) => c.id);
 
@@ -53,14 +60,17 @@ test('markers on a BANKED floor stand h along the rolled normal, not world up, a
   const r = M.placeAll(M.defaultLayout(t.path, t.segs), path, segs);
   assert.deepStrictEqual(failing(r), []);
   const pole = by(r, 'AC_START_0'), sf = surfaceAt(path, segs, pole.s, pole.u);
-  close(Math.acos(pole.up[1]), bank, 1e-6, 'the marker\'s up is tilted by the bank');
+  // D182: the marker's up IS the surface normal where it stands (the rolled normal), tilted from world up by at least the bank;
+  // exactly the bank only on a dead-level floor, and the measured flat font rises about 0.6° under the pole slot
+  close(Math.acos(pole.up[1]), Math.acos(sf.n[1]), 1e-6, 'the marker\'s up is the surface normal');
+  assert.ok(Math.acos(pole.up[1]) >= bank - 1e-9, 'tilted by at least the bank');
   const off = sub(pole.pos, sf.pos);
   close(dot(off, sf.n), 1.5, 1e-9); close(Math.hypot(...off), 1.5, 1e-9, 'straight off the surface');
   close(dot(pole.fwd, sf.n), 0, 1e-9, 'forward lies in the banked surface');
 });
 
 test('on a half-pipe the start gates sit on the walls\' edges, standing off the WALL along its normal', () => {
-  const t = track([['straight'], ['straight'], ['straight']], { font: 'half-pipe' });
+  const t = track([['straight', HP], ['straight', HP], ['straight', HP]], { font: 'half-pipe' });   // D182: the walled half-pipe named (HP)
   const r = M.placeAll(M.defaultLayout(t.path, t.segs), t.path, t.segs), l = by(r, 'AC_TIME_0_L');
   const sf = surfaceAt(t.path, t.segs, l.s, l.u);
   assert.ok(sf.n[1] < Math.cos(30 * DEG), 'the wall is steep there');
@@ -184,7 +194,7 @@ test('the paint and the markers agree: every mark comes from a marker, at its (s
 });
 
 test('the start/finish line wraps the whole cross-section, up a half-pipe\'s walls', () => {
-  const t = track([['straight'], ['straight'], ['straight']], { font: 'half-pipe' });
+  const t = track([['straight', HP], ['straight', HP], ['straight', HP]], { font: 'half-pipe' });   // D182: the walled half-pipe named (HP)
   const r = M.placeAll(M.defaultLayout(t.path, t.segs), t.path, t.segs), line = r.paint.meshes.find((x) => x.name === 'PAINT_START_LINE');
   const l = by(r, 'AC_TIME_0_L'), P = line.positions, n = P.length / 3;
   const floorY = surfaceAt(t.path, t.segs, l.s, 0).pos[1];
@@ -196,8 +206,10 @@ test('the start/finish line wraps the whole cross-section, up a half-pipe\'s wal
 // ── closing the D171 mutation survivors: each a real property, tested where it was not ──
 function fonts() {   // a flat straight, then a half-pipe straight (a 20 m font transition at its start), then a jump
   let d = D.createDoc('f');
-  d = D.appendWord(d, 'straight'); d = D.appendWord(d, 'straight', { font: 'half-pipe' }); d = D.appendWord(d, 'straight', { font: 'half-pipe' });
-  d = D.appendWord(d, 'jump'); d = D.appendWord(d, 'straight', { font: 'half-pipe' });
+  // D182: every font and width NAMED (a flat 20 m straight into 16 m half-pipes walled to 60°), as the defaults were before
+  const hp = { font: 'half-pipe', handles: { length: 100, width: 16, wall: 8, psiL: 60 * DEG_, psiR: 60 * DEG_ } };
+  d = D.appendWord(d, 'straight', { font: 'flat', handles: { length: 100, width: 20 } }); d = D.appendWord(d, 'straight', hp); d = D.appendWord(d, 'straight', hp);
+  d = D.appendWord(d, 'jump'); d = D.appendWord(d, 'straight', hp);
   return build(d);
 }
 test('inside a font transition a marker sits on the BLENDED surface the mesh builds, not the new font\'s', () => {
@@ -212,7 +224,8 @@ test('inside a font transition a marker sits on the BLENDED surface the mesh bui
 // does not (up to |T·n| 0.0022 between stations, measured with a node -e probe on this track). The marker still gets an
 // orthonormal frame, because its forward is the tangent laid into the surface.
 test('between stations on a banking turn the marker\'s axes are still an orthonormal frame (a valid kn5 matrix)', () => {
-  const t = track([['straight'], ['tight']]);
+  // D182: the lengths and the tight's turn NAMED (100 m, then 90° at 120 m), so s 101-300 stays on this track
+  const t = track([['straight', ST, 'flat'], ['tight', { turn: 90 * DEG_, length: (90 * DEG_) * 120 / 0.7, width: 16 }, 'flat']]);
   const segs = t.segs.map((g) => (g.word === 'tight' ? { ...g, roll0: 0.1, roll1: 0.9 } : g)), path = buildPath(segs, { step: 2 });
   const { placeMarker } = require('../src/markers/place.js');
   let worst = 0;
@@ -223,7 +236,7 @@ test('between stations on a banking turn the marker\'s axes are still an orthono
   assert.ok(worst < 1e-12, `${worst}`);
 });
 test('a marker between stations is interpolated along the road, not snapped to the station before', () => {
-  const t = track([['straight']]);   // along +z from the origin
+  const t = track([['straight', ST, 'flat']]);   // along +z from the origin (D182: its 100 m named)
   close(surfaceAt(t.path, t.segs, 51, 0).pos[2], 51, 1e-9);
 });
 test('a marker over a jump\'s flight is red, off the road (no surface under it)', () => {

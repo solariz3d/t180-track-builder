@@ -12,7 +12,8 @@ const DEG = Math.PI / 180;
 function track() {
   let d = D.createDoc('contract');
   for (const [w, o] of [['straight'], ['sweep', { tempo: 'aurora', handles: { easeOut: 0 } }], ['turn'], ['tight', { dir: 'R' }],
-    ['straight', { handles: { climb: 4 * DEG } }], ['jump'], ['straight', { handles: { length: 60 } }], ['wall-ride'], ['inversion']]) d = D.appendWord(d, w, o || {});
+    // the jump NAMED (12 m across, 0.7 m down, landing at −2°): from D182 the default jump is the library's p10 gap
+    ['straight', { handles: { climb: 4 * DEG } }], ['jump', { handles: { gap: 12, drop: 0.7, land: -2 * DEG } }], ['straight', { handles: { length: 60 } }], ['wall-ride'], ['inversion']]) d = D.appendWord(d, w, o || {});
   return D.resolve(d);
 }
 

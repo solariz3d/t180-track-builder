@@ -10,7 +10,10 @@ const { UNIT } = require('../src/doc/serial.js');
 const { handleBounds, probe, QUANTUM } = require('../src/validate/bounds.js');
 
 const DEG = Math.PI / 180;
-function doc(words) { let d = D.createDoc('t'); for (const [w, o, patch] of words) { d = D.appendWord(d, w, { speed: 60, ...o }); if (patch) d = D.editWord(d, d.words[d.words.length - 1].id, { handles: patch }); } return d; }
+// The ripple (p-d182-ripple-E): this file names the words it relies on (test/pre_d182_words.js: the pre-D182 words), because it
+// tests a BEHAVIOUR, not the defaults. Under D182's measured words a straight is a 31 m bowl with 60° walls and a turn banks.
+const { appendOld } = require('./pre_d182_words.js');
+function doc(words) { let d = D.createDoc('t'); for (const [w, o, patch] of words) { d = appendOld(D, d, w, { speed: 60, ...o }); if (patch) d = D.editWord(d, d.words[d.words.length - 1].id, { handles: patch }); } return d; }
 
 /** The packet's test: at the bound it is clean, one quantum outside it is red, and the red names its source. */
 function edgeHolds(d, id, h, bounds, side, opts = {}) {

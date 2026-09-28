@@ -47,7 +47,7 @@ test('resolve with no speed given sizes the ramp for the same default, so every 
 
 test(`the slider swept over its whole range (${MIN}–${MAX} km/h, its own step of ${STEP}): clean wherever the car clears the gap, and nowhere else`, async () => {
   // "clears the gap" is computed independently of the ramp: both falls come down past the gap (jumps.js landingRamp's
-  // touchdowns) off the default jump (12 m gap, 0.7 m drop, level lip, −2° landing). Below that speed no ramp can help,
+  // touchdowns) off the default jump, whatever the vocabulary makes it (12 m / 0.7 m before D182; 81 m / 14 m measured). Below that speed no ramp can help,
   // and the red says why; above it the ramp resized to the slider must catch both landings at EVERY step.
   const J = D.WORDS ? D.WORDS.jump : require('../../src/doc/vocab.js').WORDS.jump;
   const clears = (kmh) => landingRamp({ D: J.gap, dh: -J.drop, thetaRad: 0, landRad: J.land, v: kmh / 3.6 }).touchdowns.every((t) => t.x != null);
@@ -63,7 +63,10 @@ test(`the slider swept over its whole range (${MIN}–${MAX} km/h, its own step 
     assert.deepStrictEqual([Math.round(rampOf(t.shell).landing.speed * 3.6), rampOf(t.shell).landing.speedFrom], [k, 'design'], `${k} km/h: the ramp follows the slider, and says so`);
   }
   assert.deepStrictEqual(dirty, [], 'red at a speed where the car clears the gap');
-  assert.ok(clean.length > 80 && clean[clean.length - 1] === MAX, `clean at ${clean[0]}–${clean[clean.length - 1]} km/h (${clean.length} steps)`);
+  // clean at EXACTLY the speeds that clear the gap (the ripple, p-d182-ripple-E: this was "more than 80 steps", the 12 m
+  // jump's own figure; the measured 81 m jump clears from 435 km/h), and at the slider's maximum
+  assert.deepStrictEqual(clean, speeds.filter(clears), `clean at ${clean[0]}–${clean[clean.length - 1]} km/h (${clean.length} steps)`);
+  assert.strictEqual(clean[clean.length - 1], MAX);
 });
 
 test('a jump sculpted past what the car can clear is red, and says so: the landings that miss, the heaviest fall', async () => {
@@ -71,7 +74,9 @@ test('a jump sculpted past what the car can clear is red, and says so: the landi
   // the flight: a gap sculpted far longer than 460 km/h carries the car
   const { shell, ctl } = await firstJump();
   const jump = shell.getState().history.present.words.find((w) => w.word === 'jump');
-  shell.sculpt(jump.id, { handles: { gap: 80 } });
+  // named (the ripple, p-d182-ripple-E): an 80 m gap off a 0.7 m drop, which the 6.3 g landing cannot reach at 460 km/h.
+  // The measured default jump is itself 81 m with a 14 m drop, so "sculpted past" has to say what it was sculpted to
+  shell.sculpt(jump.id, { handles: { gap: 80, drop: 0.7, land: -2 * DEG } });
   assert.strictEqual(shell.getState().message, null, shell.getState().message);
   const r = reds(ctl).filter((x) => x.reason === 'landing-misses-zone');
   assert.strictEqual(r.length, 1, JSON.stringify(reds(ctl)));

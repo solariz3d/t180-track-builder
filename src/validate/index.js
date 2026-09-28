@@ -26,6 +26,7 @@ const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const DEG = Math.PI / 180;
+const { rayGaps } = require('./raygap.js');
 
 const SRC = Object.freeze({
   'gap-in-road': 'ARCHITECTURE.md:82; FINDINGS.md:110',
@@ -40,8 +41,15 @@ const SRC = Object.freeze({
   'on-the-stops': 'FINDINGS.md:103-104',
   'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
   'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp must catch both landings)',
+  'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
   'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check)',
 });
+
+// THE DOWNFORCE STEP a jump carries (R1, research §4): the car's downforce is a ray 1 m ahead of it, so it goes to zero
+// the moment the ray passes the take-off lip, and comes back IN ONE STEP when the ray finds the landing, not gradually.
+// The landing should expect that step, not only the fall. Its size is not given: the research's figure (about 2.4 g at
+// 100 m/s) rests on UNVERIFIED arithmetic (the script's speed unit), so only the fact and its source are carried.
+const DOWNFORCE_STEP = (car) => ({ aheadM: car.downforceRay.aheadM, note: `the downforce drops to zero as the car's downforce ray, ${car.downforceRay.aheadM} m ahead, passes the lip, and returns in one step when it finds the landing (docs/research/04_ac_physics_drivability.md §4)` });
 
 function segProfiles(segments) {
   return segments.map((g) => (g.kind === 'gap' ? null : P.normalize(g.profile)));
@@ -122,9 +130,9 @@ function ranges(list, step) {
 //                           so an old road that a new piece lands on turns red too; an old station whose deepest stack
 //                           was on a changed one is re-derived. The work is the stations near the changed ones, not the
 //                           track (stacked() below)
-//   · jumps                 recomputed whole: a jump's landing depends on road up to landingSearchM (150 m) after its
-//                           flight, so a word placed within 150 m of an earlier jump can change it; jumps are few, and
-//                           each costs at most its landing search
+//   · jumps                 recomputed whole: a jump's landing depends on road up to its landing search after its flight
+//                           (150 m, or the jump's own landing ramp when that is longer), so a word placed within that of
+//                           an earlier jump can change it; jumps are few, and each costs at most its landing search
 //   · self-intersection     not computed here: it is buildMesh's (C's BVH between cells), passed in as opts.folds
 //   · the speed             v(s) is O(stations) per call (a design speed per word, or the closed loop's ghost lap)
 //   · the lap               only on a closed path, and closing re-validates everything (C spreads the closing twist
@@ -229,6 +237,10 @@ function core(path, segments, opts, from, carried, upto) {
   if (Array.isArray(opts.folds)) {
     for (const f of opts.folds) if (end === n || f.s < S[end].s) red.push({ s: f.s, u: f.u == null ? null : f.u, reason: f.other ? 'self-intersection' : 'fold', worst: f.margin == null ? null : -f.margin });
   } else notChecked.push('self-intersection: needs buildMesh folds[] (a BVH between cells, ARCHITECTURE.md:58); pass opts.folds');
+  // gaps in the PHYSICS road the downforce ray can fall into (raygap.js): needs the built road, which the export has
+  if (Array.isArray(opts.roadMesh)) {
+    for (const g of rayGaps(opts.roadMesh, S, car.downforceRay)) if (g.s != null && (end === n || g.s < S[end].s)) red.push({ s: g.s, u: g.u, reason: 'downforce-ray-gap', worst: g.widthM });
+  } else notChecked.push('downforce-ray-gap: needs the built physics road (src/validate/raygap.js); pass opts.roadMesh');
   for (const p of raw.pts) if (p.kind === 'red') red.push(p);
   for (const r of raw.segReds) red.push(r);
   for (const e of raw.stacked.values()) red.push({ s: e.s, u: e.u, reason: 'stacked-within-2m', worst: e.worst });
@@ -255,8 +267,14 @@ function core(path, segments, opts, from, carried, upto) {
     if (first === 0 || land >= n) { jumps.push({ s: S[first].s, id: g.id, pending: true, reason: land >= n ? 'no landing yet (open head)' : 'no take-off road' }); return; }
     const A = S[take], axis = (() => { const h = [A.T[0], 0, A.T[2]], l = len(h); return l > 0 ? mul(h, 1 / l) : [0, 0, 1]; })();
     const x = (p) => dot(sub(p, A.pos), axis), D = x(S[land].pos), dh = S[land].pos[1] - A.pos[1];
+    // THE LANDING SEARCH: 150 m of road past the landing lip (opts.landingSearchM), and never less than the jump's OWN
+    // landing ramp, the road resolve sized to catch both measured falls at the design speed (resolve.js landingRamp). A
+    // search shorter than the ramp read a touchdown ON the ramp as a miss: the measured 81 m jump at 755 km/h comes down
+    // about 152 m past the lip, on a 162 m ramp (the ripple, p-d182-ripple-E; test/validate_jumps.test.js).
+    const own = segments[j + 1] && segments[j + 1].part === 'land' && segments[j + 1].id === g.id ? segments[j + 1].length : 0;
+    const searchM = Math.max(opts.landingSearchM || 150, own);
     const landingRoad = [];
-    for (let i = land; i < n && isRoad(i) && S[i].s - S[land].s <= (opts.landingSearchM || 150); i++) landingRoad.push({ x: x(S[i].pos), y: S[i].pos[1] - A.pos[1] });
+    for (let i = land; i < n && isRoad(i) && S[i].s - S[land].s <= searchM; i++) landingRoad.push({ x: x(S[i].pos), y: S[i].pos[1] - A.pos[1] });
     const v = sp.v ? sp.v[take] : null;
     // A landing lip NOT AHEAD of the take-off lip (a measured gap ≤ 0: the flight would go straight up or backwards) has
     // no flight to check. It is RED, with that reason, and never a throw: validation runs under the user's hand, and a
@@ -267,7 +285,7 @@ function core(path, segments, opts, from, carried, upto) {
       return;
     }
     const r = checkJump({ D, dh, thetaRad: Math.asin(Math.max(-1, Math.min(1, A.T[1]))), v, landingRoad, jumpG: car.jumpG, reach: car.reach });
-    jumps.push({ s: A.s, id: g.id, speed: v, ...r });
+    jumps.push({ s: A.s, id: g.id, speed: v, ...r, downforceStep: DOWNFORCE_STEP(car) });
   });
 
   // ── the open end and the landings (D170, the librarian's item 3, 2026-09-27) ──
