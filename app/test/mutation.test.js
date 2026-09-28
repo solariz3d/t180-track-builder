@@ -87,6 +87,10 @@ const MUTATIONS = [
     from: 'Math.max(3, 0.02 * Math.hypot(', to: 'Math.max(3, 0 * Math.hypot(', caughtBy: 'head marker: it grows' },
   { id: 'B15 the head marker is never drawn', file: 'preview/renderer.js',
     from: 'if (extras.marker) {', to: 'if (false) {', caughtBy: 'preview: a frame draws the grid and the head marker' },
+  // D175: hardening (the soak, per-cell rebuild, no mesh over IPC)
+  { id: 'P1 a sculpt re-places the path but keeps the old mesh', file: 'preview/trackmodel.js', from: 'geom.rebuildPathFrom(path, segs, g); mesh = geom.sculptMesh(mesh, path, segs, g);', to: 'geom.rebuildPathFrom(path, segs, g);', caughtBy: 'soak:' },
+  { id: 'P2 every change rebuilds the whole track (no per-cell reuse)', file: 'preview/trackmodel.js', from: 'else if (nk.length >= keys.length) {', to: 'else if (false) {', caughtBy: 'per-cell rebuild: a length sculpt' },
+  { id: 'P3 the preview reaches for the native side', file: 'preview/preview.js', from: 'const FLY = ', to: 'const leak = (s) => s && s.storage.saveDoc; const FLY = ', caughtBy: 'no mesh over IPC: app/preview and app/camera' },
   // D173: the texture maker's editor and panel
   { id: 'T1 the editor ignores the value it is given', file: 'texmaker/model.js', from: 'L[i] = { ...L[i], [key]: value };', to: 'L[i] = { ...L[i], [key]: L[i][key] };', caughtBy: 'editor: an accepted edit changes the canonical text' },
   { id: 'T2 the panel never calls onChange', file: 'texmaker/index.js', from: 'if (onChange) onChange(now);', to: '', caughtBy: 'panel: an accepted edit calls onChange' },
@@ -100,12 +104,13 @@ function runMutant(m) {
     fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });   // all of src/: the modules reach across it (src/doc now requires src/validate)
     const f = m.root === 'scripts' ? path.join(dir, 'scripts', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), applied = m.from === null || src.includes(m.from);
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
-    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')],
+    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')],
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), APP_DIR: app, SCRIPTS_DIR: path.join(dir, 'scripts') }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
     if (!/ℹ tests \d+/.test(out)) throw new Error('the mutant test run printed no summary:\n' + out.slice(0, 2000));
-    const failed = out.split('\n').filter((l) => /^✖ /.test(l)).map((l) => l.slice(2));
+    // a todo's failure is not a failure, and "✖ failing tests:" is only the summary's header
+    const failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l) && !/# TODO/.test(l)).map((l) => l.slice(2));
     return { applied, caught: failed.some((l) => l.includes(m.caughtBy)), failed: [...new Set(failed)] };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }

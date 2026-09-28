@@ -4,6 +4,9 @@
 //   list_tracks · save_track(name, text) · open_track(name) · save_library(text) · open_library
 //   save_autosave(text) · open_autosave · clear_autosave: the unsaved track, for crash recovery
 //   write_export(dir, folder, files): an exported track into the folder the user picked (never an AC install's other tracks)
+//   get_ac_root · set_ac_root(path) · install_track(folder, files): INSTALL TO AC, into the remembered AC folder's
+//   content/tracks (ac.rs); get_see_it_setting · set_see_it_setting(on) · see_it_in_assetto(track, layout): the launch,
+//   OFF by default and never run by the builder's own tests (ac.rs header)
 // plus the dialog plugin for picking that folder.
 // Tracks live in <app data>/tracks/<name>.t180track and the user's pieces in <app data>/library.t180lib, as the
 // canonical text the document model writes (src/doc/serial.js). A name is checked here as well as in app/shell.js,
@@ -13,6 +16,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
+
+mod ac;
 
 const TRACK_EXT: &str = "t180track";
 const LIBRARY_FILE: &str = "library.t180lib";
@@ -246,13 +251,60 @@ fn write_export(dir: String, folder: String, files: Vec<ExportFile>) -> Result<u
     write_export_to(Path::new(&dir), &folder, &decoded?)
 }
 
+// ---- Assetto Corsa: install, and the launch that is off by default (ac.rs) ----
+fn decode_files(files: Vec<ExportFile>) -> Result<Vec<(String, Vec<u8>)>, String> {
+    files.into_iter().map(|f| decode_base64(&f.data).map(|b| (f.path, b))).collect()
+}
+
+#[tauri::command]
+fn get_ac_root(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    Ok(ac::recall_ac_root(&data_dir(&app)?)?.map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+fn set_ac_root(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    Ok(ac::remember_ac_root(&data_dir(&app)?, Path::new(&path))?.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn install_track(app: tauri::AppHandle, folder: String, files: Vec<ExportFile>) -> Result<usize, String> {
+    let root = ac::recall_ac_root(&data_dir(&app)?)?.ok_or("no Assetto Corsa folder picked yet")?;
+    ac::install_to(&root, &folder, &decode_files(files)?)
+}
+
+#[tauri::command]
+fn get_see_it_setting(app: tauri::AppHandle) -> Result<bool, String> {
+    Ok(ac::launch_enabled(&data_dir(&app)?))
+}
+
+#[tauri::command]
+fn set_see_it_setting(app: tauri::AppHandle, on: bool) -> Result<(), String> {
+    write_atomic(&data_dir(&app)?.join(ac::LAUNCH_SETTING), if on { "yes" } else { "no" })
+}
+
+/// Launches the game. Refused unless the user turned the setting on; the builder's own tests never call this.
+// async: it waits for the game (up to the hard timeout), so it must not hold the window's thread.
+#[tauri::command(async)]
+fn see_it_in_assetto(app: tauri::AppHandle, track: String, layout: String) -> Result<i32, String> {
+    let data = data_dir(&app)?;
+    if !ac::launch_enabled(&data) {
+        return Err("\"See it in Assetto\" is off. It launches the game; turn it on in the settings first.".into());
+    }
+    let root = ac::recall_ac_root(&data)?.ok_or("no Assetto Corsa folder picked yet")?;
+    let docs = app.path().document_dir().map_err(|e| format!("no Documents folder: {e}"))?.join("Assetto Corsa");
+    let plan = ac::launch_plan(&root, &docs, &track, &layout)?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs().to_string();
+    ac::launch_with(&plan, &ac::RealSpawner, &stamp)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_tracks, save_track, open_track, save_library, open_library,
-            save_autosave, open_autosave, clear_autosave, write_export
+            save_autosave, open_autosave, clear_autosave, write_export,
+            get_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto
         ])
         .run(tauri::generate_context!())
         .expect("error while running the T-180 Track Builder");

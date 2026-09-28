@@ -24,10 +24,11 @@ function huffman(lengths) {
   return { count, symbol };
 }
 
-function inflateRaw(src, start = 0, sizeHint = 0) {
+/** maxOut: refuse (BAD_DEFLATE) once the output would pass it, so a small hostile stream cannot demand a large buffer. */
+function inflateRaw(src, start = 0, sizeHint = 0, maxOut = Infinity) {
   let pos = start, bitbuf = 0, bitcnt = 0;
-  let out = new Uint8Array(Math.max(1024, sizeHint)), n = 0;
-  const need = (k) => { while (n + k > out.length) { const o = new Uint8Array(out.length * 2); o.set(out.subarray(0, n)); out = o; } };
+  let out = new Uint8Array(Math.max(1024, Math.min(sizeHint, maxOut))), n = 0;
+  const need = (k) => { if (n + k > maxOut) throw new InflateError(`the output passes ${maxOut} bytes`); while (n + k > out.length) { const o = new Uint8Array(out.length * 2); o.set(out.subarray(0, n)); out = o; } };
   const bits = (k) => {
     while (bitcnt < k) { if (pos >= src.length) throw new InflateError('the stream ends early'); bitbuf |= src[pos++] << bitcnt; bitcnt += 8; }
     const v = bitbuf & ((1 << k) - 1); bitbuf >>>= k; bitcnt -= k; return v;

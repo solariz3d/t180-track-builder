@@ -87,7 +87,8 @@ function runMutant(m) {
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), GEOM_DIR: geom }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
-    const failed = out.split('\n').filter((l) => /^✖ /.test(l)).map((l) => l.slice(2));
+    // a todo's failure is not a failure, and "✖ failing tests:" is only the summary's header
+    const failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l) && !/# TODO/.test(l)).map((l) => l.slice(2));
     if (!/ℹ tests \d+/.test(out)) throw new Error('the mutant test run printed no summary:\n' + out.slice(0, 2000));
     return { applied, caught: failed.some((l) => l.includes(m.caughtBy)), failed: [...new Set(failed)] };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
