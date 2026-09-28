@@ -17,6 +17,7 @@
 //   RED                validation is red; err.red lists every range with its reason and FINDINGS/ARCHITECTURE source.
 //                      A lap proof that FAILS (lap.ok === false) is red too, reason 'lap-proof' (ARCHITECTURE.md:88-89).
 //   NO_START_STRAIGHT  no straight long enough, and flat enough across, for the grid, the pits and the hotlap start
+//   PIT_LANE           the document's pit lane cannot be built (src/geom/pitlane.js names why); its crossings are RED
 //   BAD_SCENE          T1's validateScene refused the scene
 //   MARKERS            a §5c marker check is red (every problem is listed)
 //   NOT_OURS           the target folder exists and was not written by this builder (no .t180b-builder.json)
@@ -65,6 +66,7 @@ const { checkMarkers } = require('./markers.js');
 const Markers = require('../markers/index.js');
 const trackfiles = require('./trackfiles.js');
 const ailine = require('./ailine.js');
+const PitLane = require('./pitlane.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
 
 const MARKER_FILE = '.t180b-builder.json';   // the same ownership marker scripts/build_platform_test.js writes
@@ -144,6 +146,12 @@ function buildExport(doc, opts = {}) {
   // validation first: a red refuses, amber warns
   const v = validate(p, segs, { csp: o.csp, softCollision: true, folds: mesh.folds });
   const red = [...v.red];
+  // the pit lane (D174): built beside the road, self-checked against it with the same tests; its findings are red
+  let pit = null;
+  if (doc.pitLane) {
+    try { pit = PitLane.laneForExport(p, segs, mesh, doc.pitLane, { selfCheck, mesh: o.mesh }); } catch (e) { if (e.name === 'PitLaneError') throw new ExportError('PIT_LANE', e.message); throw e; }
+    red.push(...pit.red);
+  }
   if (v.lap && v.lap.ok === false) {
     const w = v.lap.where, ss = w.map((x) => x.s);
     red.push({ reason: 'lap-proof', s0: Math.min(...ss), s1: Math.max(...ss), source: 'ARCHITECTURE.md:88-89', where: w, detail: w.map((x) => `${x.reason} at s ${x.s.toFixed(1)} m`).join(', ') });
@@ -160,11 +168,12 @@ function buildExport(doc, opts = {}) {
     if (e.code === 'NO_START_STRAIGHT' || e.code === 'BAD_LAYOUT') throw new ExportError(e.code, e.message);
     throw e;
   }
-  const mk = Markers.placeAll(layout, p, segs, { paintMaterial: mesh.scene.materials.length });
+  const mk = Markers.placeAll(layout, p, segs, { paintMaterial: mesh.scene.materials.length, lane: pit ? { path: pit.lane.path, segments: pit.lane.segments } : null });
   if (!mk.check.ok) throw new ExportError('MARKERS', mk.check.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.problems.join('; ')}`).join(' | '), { markerChecks: mk.check });
   for (const a of mk.check.amber) warnings.push(`markers: ${a.text}`);
-  const scene = { ...mesh.scene, materials: [...mesh.scene.materials, mk.paint.material],
+  const scene0 = { ...mesh.scene, materials: [...mesh.scene.materials, mk.paint.material],
     root: { ...mesh.scene.root, children: [...mesh.scene.root.children, ...mk.nodes, ...mk.paint.meshes] } };
+  const scene = pit ? PitLane.withLane(scene0, pit.mesh) : scene0;
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);
@@ -193,7 +202,7 @@ function buildExport(doc, opts = {}) {
 
   const turn = segs.reduce((a, g) => a + ((g.k0 + g.k1) / 2) * g.length, 0);
   return {
-    folder: o.folder || folderName(doc), scene, kn5, ai, path: p, segments: segs, resolvedVia: via, validation: v, markers: mk, markerChecks: mc,
+    folder: o.folder || folderName(doc), scene, kn5, ai, path: p, segments: segs, resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh },
     desc: { name: doc.name || 'Untitled', description: 'Built from words by t180-track-builder.', length: p.lengthM, run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original'], author: 't180-track-builder', version: '0.1' },

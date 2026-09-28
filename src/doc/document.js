@@ -12,10 +12,11 @@
 
 const { DEG, TEMPOS, FONTS, WORDS, RAMP_M, handlesOf } = require('./vocab.js');
 const TX = require('./textures.js');
+const PL = require('./pitlane.js');
 const { SCHEMA, GENERATOR, DocError, UNIT, quantise, checkDoc, checkWordBody, deepFreeze } = require('./serial.js');
 
 function createDoc(name = '') {
-  return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name, closed: false, nextId: 1, words: [], constraints: { pins: [], free: [] } }));
+  return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name, closed: false, nextId: 1, words: [], pitLane: null, constraints: { pins: [], free: [] } }));
 }
 
 const q = (k, v) => quantise(UNIT[k], v);
@@ -121,7 +122,22 @@ function editPhraseWord(doc, id, n, patch = {}) {
   return deepFreeze(checkDoc({ ...doc, generator: GENERATOR, words }));
 }
 
+/**
+ * Give the document a pit lane (src/doc/pitlane.js), replace it, or remove it with null. One operation, so one undo
+ * entry (history.js). `lane` may leave out any key of PL.DEFAULTS; leave and rejoin are required.
+ */
+function setPitLane(doc, lane) {
+  const full = lane === null ? null : { ...PL.DEFAULTS, ...lane };
+  const p = PL.problem(full); if (p) throw new DocError('BAD_PIT_LANE', p);
+  return deepFreeze(checkDoc({ ...doc, generator: GENERATOR, pitLane: PL.quantised(full, (v) => quantise('m', v), (v) => Math.round(v * 100) / 100) }));
+}
+/** Sculpt the pit lane: patch any of its keys (leave and rejoin are replaced whole). One undo entry. */
+function editPitLane(doc, patch = {}) {
+  if (!doc.pitLane) throw new DocError('NO_PIT_LANE', 'the document has no pit lane to edit; setPitLane adds one');
+  return setPitLane(doc, { ...doc.pitLane, ...patch });
+}
+
 /** The document's open end: the last word's id, and whether the loop is closed (INTERFACES §4). */
 function head(doc) { return { id: doc.words.length ? doc.words[doc.words.length - 1].id : null, closed: doc.closed }; }
 
-module.exports = { createDoc, appendWord, appendPhrase, removeHead, replaceHead, editWord, editPhraseWord, head, defaultWord, headRoll, handlesOf };
+module.exports = { createDoc, appendWord, appendPhrase, removeHead, replaceHead, editWord, editPhraseWord, setPitLane, editPitLane, head, defaultWord, headRoll, handlesOf };

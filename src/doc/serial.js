@@ -15,21 +15,27 @@
 // Loading accepts only the schema's keys. A value finer than its quantum is snapped to it, so a hand-edited file loads,
 // and its next save is canonical; canonical text round-trips exactly.
 //
-// SCHEMA VERSIONS. This is schema 2. Schema 1 (the first) had no texture slots; schema 2 gives every word `textures`, its
-// texture-slot overrides (src/doc/textures.js, ARCHITECTURE §5b). An older document is MIGRATED on load, step by
+// SCHEMA VERSIONS. This is schema 3. Schema 1 (the first) had no texture slots; schema 2 gives every word `textures`, its
+// texture-slot overrides (src/doc/textures.js, ARCHITECTURE §5b); schema 3 gives the document `pitLane`, a side road
+// anchored to the loop or null (src/doc/pitlane.js, ARCHITECTURE §11.1). An older document is MIGRATED on load, step by
 // step through MIGRATIONS: 1 -> 2 gives every word (and every word of a phrase) `textures: {}`, so it looks exactly as
-// its fonts' defaults make it. The track it resolves to is unchanged. A newer schema is refused (written by a newer
+// its fonts' defaults make it; 2 -> 3 gives the document `pitLane: null`. The track it resolves to is unchanged. A newer schema is refused (written by a newer
 // builder); an older one with no migration, or a malformed one, is refused as unknown.
 'use strict';
 
 const { DEG, TEMPOS, FONTS, WORDS, handlesOf } = require('./vocab.js');
 const TX = require('./textures.js');
+const PL = require('./pitlane.js');
 
-const SCHEMA = 2;
+const SCHEMA = 3;
 const GENERATOR = 't180-track-builder/doc 0.1.0';
 const withTextures = (w) => ({ ...w, textures: {} });
 const MIGRATIONS = {
   1: (o) => ({ ...o, schema: 2, words: (o.words || []).map((e) => (e && e.phrase !== undefined ? { ...e, words: (e.words || []).map(withTextures) } : withTextures(e))) }),
+  2: (o) => {   // schema 2 had no pitLane: a file that says 2 and carries one is malformed, and is refused, never overwritten
+    if (o.pitLane !== undefined) throw new DocError('UNKNOWN_KEY', 'document: pitLane is not part of schema 2 (the file says schema 2 but carries a pit lane)');
+    return { ...o, schema: 3, pitLane: null };
+  },
 };
 
 class DocError extends Error {
@@ -106,6 +112,8 @@ function checkDoc(d) {
       e.words.forEach((w, j) => checkWordBody(w, `${at}.words[${j}]`));
     } else checkWordBody(e, at);
   });
+  const lp = PL.problem(d.pitLane);
+  if (lp) throw new DocError('BAD_PIT_LANE', lp);
   const c = d.constraints;
   if (!c || !Array.isArray(c.pins) || !Array.isArray(c.free) || ![...c.pins, ...c.free].every((x) => typeof x === 'string'))
     throw new DocError('BAD_DOC', 'constraints must be { pins: [string], free: [string] }');
@@ -133,6 +141,7 @@ function serialize(d) {
   return '{\n' +
     `  ${str('schema')}: ${d.schema},\n  ${str('generator')}: ${str(d.generator)},\n  ${str('name')}: ${str(d.name)},\n` +
     `  ${str('closed')}: ${d.closed},\n  ${str('nextId')}: ${d.nextId},\n  ${str('words')}: ${words},\n` +
+    `  ${str('pitLane')}: ${PL.text(d.pitLane, (x) => num('m', x), (x) => fmt(Math.round(x * 100), DIGITS.kmh))},\n` +
     `  ${str('constraints')}: {${str('pins')}:${list(d.constraints.pins)},${str('free')}:${list(d.constraints.free)}}\n}\n`;
 }
 
@@ -160,6 +169,12 @@ function loadWord(w, at, withId) {
   return { word: w.word, font: w.font === undefined ? undefined : w.font, tempo: w.tempo, handles, speed: sp === null ? null : fromQ.kmh(Math.round(sp * 100) || 0), textures: tx };
 }
 
+/** A loaded pit lane with its lengths and speed snapped to their quanta; a malformed one is left for checkDoc to refuse. */
+function loadPitLane(l) {
+  if (PL.problem(l)) return l;
+  return PL.quantised(l, (v) => fromQ.m(toQ.m(v) || 0), (v) => (Math.round(v * 100) || 0) / 100);
+}
+
 /** Load a document from text. Refuses other schemas, unknown keys, and anything checkDoc refuses. */
 function parse(text) {
   let o;
@@ -168,7 +183,7 @@ function parse(text) {
   // only an INTEGER schema migrates: MIGRATIONS["1"] would otherwise match the string "1", which is refused
   while (Number.isInteger(o.schema) && o.schema !== SCHEMA && MIGRATIONS[o.schema]) o = MIGRATIONS[o.schema](o);   // 1 -> 2
   if (o.schema !== SCHEMA) checkDoc({ schema: o.schema });   // throws the named schema error
-  onlyKeys(o, ['schema', 'generator', 'name', 'closed', 'nextId', 'words', 'constraints'], 'document');
+  onlyKeys(o, ['schema', 'generator', 'name', 'closed', 'nextId', 'words', 'pitLane', 'constraints'], 'document');
   if (!Array.isArray(o.words)) throw new DocError('BAD_DOC', 'words must be an array');
   const words = o.words.map((e, i) => {
     const at = `words[${i}]`;
@@ -181,7 +196,7 @@ function parse(text) {
     return { id: e && e.id, ...x };
   });
   onlyKeys(o.constraints, ['pins', 'free'], 'constraints');
-  const d = { schema: o.schema, generator: o.generator, name: o.name, closed: o.closed, nextId: o.nextId, words, constraints: { pins: o.constraints.pins, free: o.constraints.free } };
+  const d = { schema: o.schema, generator: o.generator, name: o.name, closed: o.closed, nextId: o.nextId, words, pitLane: loadPitLane(o.pitLane), constraints: { pins: o.constraints.pins, free: o.constraints.free } };
   return deepFreeze(checkDoc(d));
 }
 

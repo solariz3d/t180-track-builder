@@ -30,9 +30,9 @@ const pitch = (gs) => gs.reduce((a, g) => a + ((g.kp0 + g.kp1) / 2) * g.length, 
 // ── serialisation ──────────────────────────────────────────────────────────────────────────────────────────────────
 test('the canonical text of a one-word document, byte for byte', () => {
   const t = D.serialize(D.appendWord(D.createDoc('t'), 'straight'));
-  assert.equal(t, '{\n  "schema": 2,\n  "generator": "t180-track-builder/doc 0.1.0",\n  "name": "t",\n  "closed": false,\n  "nextId": 2,\n' +
+  assert.equal(t, '{\n  "schema": 3,\n  "generator": "t180-track-builder/doc 0.1.0",\n  "name": "t",\n  "closed": false,\n  "nextId": 2,\n' +
     '  "words": [\n    {"id":"w1","word":"straight","font":"flat","tempo":"standard","speedKmh":null,"handles":{"length":100,"turn":0,"climb":0,"easeIn":0.3,"easeOut":0.3,"roll0":0,"roll1":0,"heartline":0,"psiL":0,"psiR":0,"width":20,"wall":0,"ramp":20},"textures":{}}\n  ],\n' +
-    '  "constraints": {"pins":[],"free":[]}\n}\n');
+    '  "pitLane": null,\n  "constraints": {"pins":[],"free":[]}\n}\n');
 });
 
 test('load then save is byte-exact, for every word, a phrase and a jump', () => {
@@ -47,7 +47,7 @@ test('the loaded document resolves to the very same segments as the one it was s
 
 test('the same document always serialises to the same bytes, whatever order its text had its keys in', () => {
   const t = D.serialize(sample()), o = JSON.parse(t);
-  const shuffled = JSON.stringify({ constraints: o.constraints, words: o.words.map((w) => Object.fromEntries(Object.entries(w).reverse())), nextId: o.nextId, closed: o.closed, name: o.name, generator: o.generator, schema: o.schema });
+  const shuffled = JSON.stringify({ constraints: o.constraints, words: o.words.map((w) => Object.fromEntries(Object.entries(w).reverse())), pitLane: o.pitLane, nextId: o.nextId, closed: o.closed, name: o.name, generator: o.generator, schema: o.schema });
   assert.equal(D.serialize(D.parse(shuffled)), t);
 });
 
@@ -75,7 +75,7 @@ test('the empty document serialises, loads back byte-exact, and resolves to no s
 // ── schema versions ────────────────────────────────────────────────────────────────────────────────────────────────
 test('a newer schema is refused as written by a newer builder; one with no migration to it is refused as unknown', () => {
   const o = JSON.parse(D.serialize(sample()));
-  assert.throws(() => D.parse(JSON.stringify({ ...o, schema: 3 })), (e) => e.code === 'SCHEMA_TOO_NEW');
+  assert.throws(() => D.parse(JSON.stringify({ ...o, schema: 4 })), (e) => e.code === 'SCHEMA_TOO_NEW');
   assert.throws(() => D.parse(JSON.stringify({ ...o, schema: 0 })), (e) => e.code === 'SCHEMA_UNKNOWN');
   assert.throws(() => D.parse(JSON.stringify({ ...o, schema: '1' })), (e) => e.code === 'SCHEMA_UNKNOWN');
 });
@@ -219,7 +219,7 @@ test('a heartline step between words is refused', () => {
 
 // Changed at D170 by the ruling that a jump carries its landing ramp (test/doc-jump.test.js): the word is its gap
 // and then its ramp. Everything this test checks of the flight is unchanged; only the segment count is.
-test('a jump\x27s flight is one gap segment that covers the gap, comes down the drop, and lands at its pitch', () => {
+test('a jump\'s flight is one gap segment that covers the gap, comes down the drop, and lands at its pitch', () => {
   const d = sample(), j = d.words.find((w) => w.word === 'jump'), g = segsOf(d, j.id);
   assert.deepEqual(g.map((x) => x.part), ['gap', 'land']); assert.equal(g[0].kind, 'gap'); assert.equal(g[0].profile, null);
   const p0 = 4 * DEG;   // the straight before it climbs 4°
