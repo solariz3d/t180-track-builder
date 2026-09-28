@@ -29,8 +29,21 @@ function createHandlesController(shell, { csp = true } = {}) {
     for (const [group, hs] of Object.entries(SCULPT)) for (const h of hs) if (info.handles[h]) rows.push({ group, handle: h, ...info.handles[h] });
     return { id: w.id, word: w.word, font: w.font, rows };
   }
+  /**
+   * Why no handles show, in words for the panel (D177 window pass: after placing a starter phrase and selecting it,
+   * the panel said "Select one placed word", which the user had just done).
+   */
+  function why() {
+    const st = shell.getState(), sel = st.selection;
+    if (!sel || !sel.length) return 'Select one placed word to sculpt it.';
+    if (sel.length > 1) return `${sel.length} words are selected: select one to sculpt it.`;
+    const w = st.history.present.words.find((x) => x.id === sel[0]);
+    if (w && w.phrase !== undefined) return `${w.id} is the starter phrase "${w.phrase}": its words cannot be sculpted here yet. Place a single word (from Words) to sculpt one.`;
+    return 'Select one placed word to sculpt it.';
+  }
   return {
     target,
+    why,
     setCsp(v) { csp = !!v; },
     begin(handle, { pastRed = false } = {}) {
       const t = target();

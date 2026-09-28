@@ -47,6 +47,7 @@
   .track li.selected { background: #1f3550; }
   .head { color: var(--dim); margin-bottom: 8px; }
   .message, .panel-error { color: var(--bad); white-space: pre-wrap; }
+  .message.ok { color: var(--text); }
   .panel-error { margin: 12px; }
   .empty { color: var(--dim); margin: 0; }
   .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); text-align: center; padding: 20px; }
@@ -62,7 +63,7 @@
   <button id="save" title="Ctrl+S">Save</button>
   <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
   <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
-  <span id="install" title="Install to AC writes into Assetto Corsa's content	racks, always as a t180b_ folder"></span>
+  <span id="install" title="Install to AC writes into Assetto Corsa's content\tracks, always as a t180b_ folder"></span>
   <span id="status" style="color: var(--dim)"></span>
 </header>
 <div id="banner"></div>
@@ -70,11 +71,13 @@
 <main id="stage">
   <div id="preview"><div class="placeholder">Loading the preview…</div></div>
   <div id="camera"></div>
+  <div id="guide" style="position: absolute; inset: 0; pointer-events: none; z-index: 5;"></div>
 </main>
 <aside id="side">
   <section id="reds"></section>
   <section id="validation"></section>
   <section id="handles"></section>
+  <section id="textures"></section>
   <section id="share"></section>
 </aside>
 <script src="lib/cjs.js"></script>
@@ -102,6 +105,9 @@
   };
 
   let S, pal, panels, shell, exporter;
+  // the texture set the textures panel announces (the one the preview draws); the export and the install write it
+  let textureSet = null;
+  document.addEventListener('t180:textures', (e) => { textureSet = e.detail ? e.detail.set : null; });
   try {
     S = await loadCjs('app/shell.js', get);
     pal = await loadCjs('app/palette/palette.js', get);
@@ -166,10 +172,12 @@
   $('open').onchange = async (e) => { const n = e.target.value; if (!n) return; try { await shell.open(n); $('name').value = n; } catch (err) { status.textContent = err.message; } e.target.value = ''; };
   $('export').onclick = async () => {
     try {
-      const dir = await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
+      // D181 test seam (C): the app answers the dialog itself only when LAUNCHED with T180_TEST_EXPORT_FOLDER set (src-tauri
+      // test_export_folder); in normal use that is null and the native dialog opens, as before. The export below is the same.
+      const dir = (await call('test_export_folder')) || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
       if (!dir) return;
       status.textContent = 'exporting…';
-      await shell.exportTo(dir);   // the self-intersection check is always on
+      await shell.exportTo(dir, { textures: textureSet });   // the self-intersection check is always on; the set is the preview's
     } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
   };
   refreshList();
@@ -197,8 +205,8 @@
   };
   const pickFolder = (title) => call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
   await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get), shell);
-  await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { exporter, native, pickFolder }) })), shell);
-  for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation'], ['handles', 'handles']]) {
+  await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { exporter, native, pickFolder, getTextures: () => textureSet }) })), shell);
+  for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation'], ['handles', 'handles'], ['texture', 'textures'], ['onboarding', 'guide']]) {
     await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
   }
 })();

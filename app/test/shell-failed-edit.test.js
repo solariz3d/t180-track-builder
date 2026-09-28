@@ -41,3 +41,13 @@ test('a good edit after a refused one commits normally and clears the message', 
   s.sculpt('w1', { handles: { length: 120 } });
   assert.deepStrictEqual([s.getState().message, s.getState().history.present.words[0].handles.length], [null, 120]);
 });
+
+test('a refused edit returns null, as every other failed action does (app/handles reads null as REFUSED)', async () => {
+  const s = await createShell({ storage: mem(), autosaveMs: 0 });
+  s.place('straight'); s.place('straight');
+  assert.strictEqual(s.sculpt('w1', { handles: { roll1: 0.74 } }), null, 'a sculpt that would not resolve');
+  assert.strictEqual(s.sculpt('w9', { handles: { length: 50 } }), null, 'a sculpt of a missing word (a DocError)');
+  s.beginDrag();
+  assert.strictEqual(s.dragTo('w1', { handles: { roll1: 0.74 } }), null, 'a drag frame that would not resolve');
+  s.endDrag();
+});

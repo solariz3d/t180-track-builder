@@ -73,12 +73,12 @@ test('the ramp follows the speed: a faster jump flies farther and gets a longer 
   assert.ok(jumpSegs(jumpDoc(350))[1].length > jumpSegs(jumpDoc(250))[1].length);
 });
 
-test('with no speed on the jump the ramp is sized for the stated default, 300 km/h, and says so', () => {
+test('with no speed on the jump the ramp is sized for the stated default, the design speed 460 km/h, and says so', () => {
   let d = D.createDoc('n');
   d = D.appendWord(d, 'straight', { handles: { climb: 4 * DEG } }); d = D.appendWord(d, 'jump');
   const L = jumpSegs(d)[1].landing;
   assert.equal(L.speedFrom, 'default');
-  assert.ok(Math.abs(L.speed - kmh(300)) < 1e-9);
+  assert.ok(Math.abs(L.speed - kmh(460)) < 1e-9);   // D179: MACH6.designSpeedKmh (FINDINGS.md:476), was 300
 });
 
 test('a jump no fall clears at its speed still gets a ramp, the margin alone, and says why it was not sized', () => {
@@ -123,4 +123,32 @@ test('a document with jumps round-trips byte-exact and resolves to the same ramp
   const d = jumpDoc(), t = D.serialize(d);
   assert.equal(D.serialize(D.parse(t)), t);
   assert.deepEqual(D.resolve(D.parse(t)), D.resolve(d));
+});
+
+// FOUND BY THE SOAK (seed 17, op #4649; seed 7, op #9849, with the soak's phrase fix applied): a jump taken off a road
+// that has climbed PAST VERTICAL (pitch 120.41° there) resolved to a "flight" that swung 122° of pitch through vertical in
+// 16 m, so the car would fly backwards; validation then measured the gap as −12 m and threw. A jump takes off, and flies,
+// with its pitch strictly inside (−90°, 90°), or it is refused by name.
+test('a jump off a road climbed past vertical is refused by name (JUMP_PAST_VERTICAL); one at 80° still resolves', () => {
+  const at = (climbs) => { let d = D.createDoc(); for (const c of climbs) d = D.appendWord(d, 'straight', { handles: { climb: c } }); return D.appendWord(d, 'jump'); };
+  assert.throws(() => D.resolve(at([1.2, 0.9016])), (e) => e.code === 'JUMP_PAST_VERTICAL' && /w3/.test(e.message));
+  const ok = D.resolve(at([1.2, 0.2])).segments.find((g) => g.kind === 'gap');
+  assert.ok(ok && ok.length > 0);
+});
+test('every jump the resolver flies keeps its pitch inside (−90°, 90°) along the whole flight', () => {
+  for (const climbs of [[0.5], [1.2, 0.2], [-1.0], [-1.2, -0.3]]) {
+    let d = D.createDoc(); for (const c of climbs) d = D.appendWord(d, 'straight', { handles: { climb: c } });
+    const g = D.resolve(D.appendWord(d, 'jump')).segments.find((x) => x.kind === 'gap'), p0 = climbs.reduce((a, b) => a + b, 0);
+    for (let i = 0; i <= 100; i++) { const s = (g.length * i) / 100, p = p0 + g.kp0 * s + ((g.kp1 - g.kp0) * s * s) / (2 * g.length); assert.ok(Math.abs(p) < Math.PI / 2, `climbs ${climbs}: pitch ${(p * 180 / Math.PI).toFixed(1)}° at s ${s.toFixed(1)}`); }
+  }
+});
+test('a take-off steep enough that no flight converges is still refused as PAST VERTICAL, not as unsolvable', () => {
+  let d = D.createDoc(); for (const c of [1.2, 1.0]) d = D.appendWord(d, 'straight', { handles: { climb: c } });   // 126°
+  assert.throws(() => D.resolve(D.appendWord(d, 'jump')), (e) => e.code === 'JUMP_PAST_VERTICAL' && /126\.1°/.test(e.message));
+});
+test('a take-off BELOW vertical whose only flight turns through vertical mid-air is refused (the vertex of its pitch)', () => {
+  // found by search: from 51.6°, 3 m across and 8 m UP (drop −8), landing at −0.5 rad, the solved pitch peaks at 99°
+  let d = D.appendWord(D.createDoc(), 'straight', { handles: { climb: 0.9 } });
+  d = D.appendWord(d, 'jump', { handles: { gap: 3, drop: -8, land: -0.5 } });
+  assert.throws(() => D.resolve(d), (e) => e.code === 'JUMP_PAST_VERTICAL' && /through vertical/.test(e.message));
 });

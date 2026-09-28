@@ -1,0 +1,18 @@
+{
+  "about": "ARCHITECTURE §5.3 look-match reference views (D179, C). Each view is a fixed camera on an AC track installed locally (set each track's folder and models to it), anchored to one of the track's own AC_ dummies (every AC track has them; the start grid and pit boxes carry the race direction). The camera sits `up` m above the anchor, `forward` m along its race direction and `right` m to its right, and looks along the race direction turned by `yawDeg` (+ = left) and `pitchDeg` (+ = up), with a vertical field of view `fovDeg`, at `width` × `height` pixels. src/lookmatch/cameras.js resolves a view to a world pose; scripts/lookmatch.js prints those poses so the same views can be set up in AC. The values are C's choice (inferred: a driver's eye height of 1.1 m, AC's default 56° field of view), not measured in AC. The reference weather and time are the preview's (app/preview/aclook.js LIGHT: 14:00, sun 42° up at azimuth 225°), and the AC shots must be taken at that time, in clear weather, with CSP.",
+  "version": 1,
+  "tracks": {
+    "a": { "folder": "track_a", "models": ["track_a.kn5"] },
+    "b": { "folder": "track_b", "models": ["track_b.kn5", "env.kn5"] }
+  },
+  "views": [
+    { "id": "a-grid", "track": "a", "anchor": "AC_START_0", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": -2, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "a-grid-high", "track": "a", "anchor": "AC_START_0", "up": 12, "forward": -30, "right": 0, "yawDeg": 0, "pitchDeg": -12, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "a-pit", "track": "a", "anchor": "AC_PIT_0", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": 0, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "a-hotlap", "track": "a", "anchor": "AC_HOTLAP_START_0", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": -2, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "b-grid", "track": "b", "anchor": "AC_START_0", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": -2, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "b-grid-high", "track": "b", "anchor": "AC_START_0", "up": 12, "forward": -30, "right": 0, "yawDeg": 0, "pitchDeg": -12, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "b-pit", "track": "b", "anchor": "AC_PIT_3", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": 0, "fovDeg": 56, "width": 960, "height": 540 },
+    { "id": "b-grid-back", "track": "b", "anchor": "AC_START_25", "up": 1.1, "forward": 0, "right": 0, "yawDeg": 0, "pitchDeg": -2, "fovDeg": 56, "width": 960, "height": 540 }
+  ]
+}

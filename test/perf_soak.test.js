@@ -40,3 +40,10 @@ test('A: a sculpt that would tear the surface is refused, or the document still 
   const refused = s.getState().message && D.serialize(s.getState().history.present) === before;
   assert.ok(refused || !s.getState().resolveError, `committed and unresolvable: ${s.getState().resolveError}`);
 });
+
+// D179 (routed by A, p-d179-soakfix-A §1): since the phrasebook a top-level entry can be a PHRASE, which the soak must not
+// sculpt as a word (the shell and the handles panel do not edit a phrase's words). The shortest of A's three reproducers.
+test('soak: a phrase in the track is not sculpted as a word (seed 17, 29 ops: NO_SUCH_WORD before D179)', async () => {
+  const r = await runSoak({ seed: 17, ops: 29, maxWords: 6, fullEvery: 10 });
+  assert.equal(r.ops, 29);
+});

@@ -263,3 +263,27 @@ test('preview: L toggles the look between the AC shaders and the colour per word
   assert.deepStrictEqual([keyAction('l'), keyAction('l', { ctrlKey: true }), a, b, c],
     [{ look: true }, null, ['ac', true, 'build view · AC look (L)'], ['words', 0, 'build view · word colours (L)'], 'ac']);
 });
+
+// D179, the usability pass: the ties fade with distance (they hatched the road dark from overhead), and the canvas is
+// cleared darker than the fog colour (a tube's ceiling had merged into the background)
+function lineGL() {
+  const log = { fades: [], blend: [], clear: null }; let id = 0;
+  const gl = new Proxy({ BLEND: 7, getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({ id: ++id }), createProgram: () => ({ id: ++id }),
+    createBuffer: () => ({ id: ++id }), createTexture: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0,
+    uniform2f: (n, a, b) => { if (n === 'uFade') log.fades.push([a, b]); }, enable: (c) => { if (c === 7) log.blend.push('on'); }, disable: (c) => { if (c === 7) log.blend.push('off'); },
+    clearColor: (r, g, b) => { log.clear = [r, g, b]; } }, { get: (t, k) => (k in t ? t[k] : () => {}) });
+  return { gl, log };
+}
+const cell = () => { const b = tri({ key: '1ROAD_w1_0', seam: false, cols: 3 }); return b; };
+test('renderer: the ties fade out between TIE_FADE\'s distances, with blending; the edges do not fade', () => {
+  const { createRenderer: mk, TIE_FADE } = require(path.join(ADIR, 'preview', 'renderer.js')), LK = require(path.join(ADIR, 'preview', 'look.js'));
+  const { gl, log } = lineGL(), r = mk(gl), b = { ...cell(), positions: new Float32Array([-1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 5, 0, 0, 5, 1, 0, 5]), normals: new Float32Array(18).map((_, i) => (i % 3 === 1 ? 1 : 0)), uvs: new Float32Array(12), indices: new Uint16Array([0, 3, 1, 1, 3, 4, 1, 4, 2, 2, 4, 5]), cols: 3, us: [-1, 0, 1], rowS: [0, 5] };
+  const L = LK.linesFor(b);
+  r.draw([b], pose, { width: 10, height: 10 }, { materialOf: () => mat('ksPerPixel', {}) });
+  assert.deepStrictEqual([!!(L && L.ties && L.ties.length), log.fades.some(([a, c]) => a === TIE_FADE[0] && c === TIE_FADE[1]), log.fades.some(([a, c]) => a === 0 && c === 0), log.blend.includes('on') && log.blend[log.blend.length - 1] === 'off'], [true, true, true, true]);
+});
+test('renderer: the canvas is cleared to CLEAR, darker than the fog colour (the fog colour is the look and is unchanged)', () => {
+  const { createRenderer: mk, CLEAR } = require(path.join(ADIR, 'preview', 'renderer.js')), { gl, log } = lineGL(), r = mk(gl);
+  r.draw([tri()], pose, { width: 10, height: 10 }, { lines: false });
+  assert.deepStrictEqual([log.clear, CLEAR.every((c, i) => c < [0.07, 0.08, 0.1][i])], [CLEAR.slice(), true]);
+});

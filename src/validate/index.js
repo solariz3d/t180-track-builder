@@ -40,6 +40,7 @@ const SRC = Object.freeze({
   'on-the-stops': 'FINDINGS.md:103-104',
   'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
   'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp must catch both landings)',
+  'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check)',
 });
 
 function segProfiles(segments) {
@@ -133,11 +134,14 @@ function ranges(list, step) {
 // turns and shifts it about world up), and a full validate of the moved path reads the moved coordinates, so carrying the
 // old figures would differ from it in rounding. Per station this is cheap (the profile's constants are per segment);
 // what made a sculpt cost seconds was the stacking check measuring every surface point of the whole track (D177).
-function core(path, segments, opts, from, carried) {
+function core(path, segments, opts, from, carried, upto) {
   if (!path || !Array.isArray(path.samples) || !Array.isArray(segments)) throw new Error('validate: needs a path with samples and the segments');
   const car = { ...MACH6, ...(opts.car || {}) };
   const S = path.samples, n = S.length;
   if (n < 2) throw new Error('validate: the path needs at least two samples');
+  // THE WINDOW (D179 drag budget): stations from `end` on are PENDING, not checked. `end` is n unless the caller bounds
+  // it (revalidate's opts.uptoS); the result says where the pending stretch starts (pendingFrom), so no one reads it as clean
+  const end = upto === undefined ? n : Math.max(Math.min(from, n), Math.min(n, upto));
   const profiles = segProfiles(segments);
   const step = (S[n - 1].s - S[0].s) / (n - 1);
   const isRoad = (i) => segments[S[i].seg].kind !== 'gap';
@@ -167,7 +171,7 @@ function core(path, segments, opts, from, carried) {
   };
   // the normal n(u) at a station: L·nl + U·nu (add(mul(L, nl), mul(U, nu)))
   const nx = (p, c) => p.L[0] * c.nl + p.U[0] * c.nu, ny = (p, c) => p.L[1] * c.nl + p.U[1] * c.nu, nz = (p, c) => p.L[2] * c.nl + p.U[2] * c.nu;
-  for (let i = from; i < n; i++) {
+  for (let i = from; i < end; i++) {
     if (!isRoad(i)) continue;
     const p = S[i], cs = segConst(p.seg), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
     let aT = 0;
@@ -209,20 +213,21 @@ function core(path, segments, opts, from, carried) {
   for (let i = 0; i < n; i++) { const j = S[i].seg; if (firstOf[j] < 0) firstOf[j] = i; lastOf[j] = i; }
   segments.forEach((g, j) => {
     if (j < fromSeg) return;
-    if (firstOf[j] < 0) return;
+    if (firstOf[j] < 0 || firstOf[j] >= end) return;   // a segment wholly in the pending stretch is not checked yet
     const s0 = S[firstOf[j]].s, s1 = S[lastOf[j]].s;
     // a gap that is not a jump is a hole; the open head is exempt (INTERFACES §4: "no 'gap in road' red at the head")
     if (g.kind === 'gap' && g.word !== 'jump' && !(!path.closed && j === lastSeg)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'gap-in-road' });
     if (g.kind !== 'gap' && g.word === 'wall-ride' && /^WALL/i.test(profiles[j].material)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'wall-ride-from-wall-object' });
   });
 
-  stacked(S, isRoad, profiles, path, car, opts, from, raw.stacked, rederive);
+  stacked(S, isRoad, profiles, path, car, opts, from, raw.stacked, rederive, end);
+  raw.end = end;
 
   // ── whole-track reds that do not depend on stations ──
   const red = [], notChecked = [];
   if (opts.softCollision === false) red.push({ s: S[0].s, s1: S[n - 1].s, u: null, reason: 'missing-soft-collision' });
   if (Array.isArray(opts.folds)) {
-    for (const f of opts.folds) red.push({ s: f.s, u: f.u == null ? null : f.u, reason: f.other ? 'self-intersection' : 'fold', worst: f.margin == null ? null : -f.margin });
+    for (const f of opts.folds) if (end === n || f.s < S[end].s) red.push({ s: f.s, u: f.u == null ? null : f.u, reason: f.other ? 'self-intersection' : 'fold', worst: f.margin == null ? null : -f.margin });
   } else notChecked.push('self-intersection: needs buildMesh folds[] (a BVH between cells, ARCHITECTURE.md:58); pass opts.folds');
   for (const p of raw.pts) if (p.kind === 'red') red.push(p);
   for (const r of raw.segReds) red.push(r);
@@ -235,6 +240,7 @@ function core(path, segments, opts, from, carried) {
   segments.forEach((g, j) => {
     if (g.kind !== 'gap') return;
     const first = firstOf[j]; if (first < 0) return;
+    if (first >= end) { jumps.push({ s: S[first].s, id: g.id, pending: true, deferred: true, reason: 'not checked until the drag ends' }); return; }
     let last = first; while (last + 1 < n && S[last + 1].seg === j) last++;
     // THE LIP is the station AT the gap's start, the end of the take-off road. C's buildPath samples every boundary and
     // gives it to the segment it starts, so there it is the flight's first station, S[first]; a path sampled the other
@@ -252,6 +258,14 @@ function core(path, segments, opts, from, carried) {
     const landingRoad = [];
     for (let i = land; i < n && isRoad(i) && S[i].s - S[land].s <= (opts.landingSearchM || 150); i++) landingRoad.push({ x: x(S[i].pos), y: S[i].pos[1] - A.pos[1] });
     const v = sp.v ? sp.v[take] : null;
+    // A landing lip NOT AHEAD of the take-off lip (a measured gap ≤ 0: the flight would go straight up or backwards) has
+    // no flight to check. It is RED, with that reason, and never a throw: validation runs under the user's hand, and a
+    // throw there is a crash path (D179: checkJump threw on it, and buildExport passed the throw straight through)
+    if (!(D > 0)) {
+      jumps.push({ s: A.s, id: g.id, speed: v, gap: D, climb: dh, rampDeg: Math.asin(Math.max(-1, Math.min(1, A.T[1]))) * 180 / Math.PI, minSpeed: null, landings: [], reachable: false, badGap: true });
+      red.push({ s: A.s, s1: S[last].s, u: null, reason: 'jump-gap-not-forward', worst: Number.isFinite(D) ? -D : null });
+      return;
+    }
     const r = checkJump({ D, dh, thetaRad: Math.asin(Math.max(-1, Math.min(1, A.T[1]))), v, landingRoad, jumpG: car.jumpG, reach: car.reach });
     jumps.push({ s: A.s, id: g.id, speed: v, ...r });
   });
@@ -260,7 +274,7 @@ function core(path, segments, opts, from, carried) {
   // An OPEN end must sit on road. A head that is a jump's flight is over nothing: a hole at the head (ARCHITECTURE.md:82).
   // The open-head exemption above is for a gap word that is still being placed; a jump's flight never ends on road by
   // itself, so it is red until a landing is there (the jump word's own landing ramp, or the next word).
-  if (!path.closed && n && segments[lastSeg].kind === 'gap') {
+  if (end === n && !path.closed && n && segments[lastSeg].kind === 'gap') {
     const first = firstOf[lastSeg];
     red.push({ s: S[first].s, s1: S[n - 1].s, u: null, reason: 'head-in-the-air' });
   }
@@ -277,6 +291,7 @@ function core(path, segments, opts, from, carried) {
   // the result says so, and lapOf() gives the proof from the result afterwards, the same as it would have been
   let lap;
   if (!path.closed) lap = { ok: null, reason: 'open' };
+  else if (end < n) lap = { ok: null, reason: 'deferred' };
   else if (!sp.v) lap = { ok: null, reason: 'no-speed-model' };
   else if (opts.lap === false) lap = { ok: null, reason: 'deferred' };
   else lap = proveLap(S, isRoad, sp.v, lines, jumps);
@@ -285,6 +300,7 @@ function core(path, segments, opts, from, carried) {
     speed: sp.v ? S.map((p, i) => ({ s: p.s, v: sp.v[i], from: sp.from })) : [],
     speedFrom: sp.from,
     lines, red: ranges(red, step), amber: ranges(amber, step), info: ranges(info, step), jumps, lap, notChecked,
+    pendingFrom: end < n ? S[end].s : null,
   };
   // the raw findings ride along, NOT enumerable, so a result compares and serialises as the INTERFACES shape alone
   Object.defineProperty(result, '_raw', { value: raw, enumerable: false });
@@ -303,6 +319,7 @@ function proveLap(S, isRoad, v, lines, jumps) {
   for (const l of lines) if (l.u === 0 && l.fN_g < 0) where.push({ s: l.s, reason: 'leaves-surface', fN_g: l.fN_g });
   for (const jp of jumps) {
     if (jp.pending) continue;
+    if (jp.badGap) { where.push({ s: jp.s, reason: 'jump-gap-not-forward', gap: jp.gap }); continue; }
     for (const L of jp.landings) if (!L.caught) where.push({ s: jp.s, reason: `jump-not-caught-${L.g}g`, speed: jp.speed, minSpeed: L.minSpeed });
     if (!jp.reachable) where.push({ s: jp.s, reason: 'landing-unreachable' });
   }
@@ -320,7 +337,14 @@ function lapOf(path, segments, result) {
   return proveLap(S, isRoad, result.speed.map((x) => x.v), result.lines, result.jumps);
 }
 
-function validate(path, segments, opts = {}) { return core(path, segments, opts, 0, null); }
+/** The station index of opts.uptoS (the first station at or past it), or undefined: no window. */
+const uptoOf = (S, opts) => { if (opts.uptoS == null) return undefined; const k = S.findIndex((p) => p.s >= opts.uptoS - 1e-9); return k < 0 ? S.length : k; };
+
+/**
+ * validate(path, segments, opts): the whole track. With opts.uptoS, only the stations before it; the rest is PENDING
+ * (result.pendingFrom), checked by the next revalidate.
+ */
+function validate(path, segments, opts = {}) { return core(path, segments, opts, 0, null, uptoOf(path.samples, opts)); }
 
 /**
  * Re-check after the path changed from `fromS` on (an append at the head, or an edit of the word starting there):
@@ -328,17 +352,25 @@ function validate(path, segments, opts = {}) { return core(path, segments, opts,
  * carried from `prev`; the rest is recomputed. The result equals `validate(path, segments, opts)` exactly (tested).
  * A full `validate` runs instead when the carried part could have changed: the path is closed (the closing twist moves
  * every frame), `prev` has no raw findings, or the speed model changed (e.g. a word without a design speed was added).
+ *
+ * THE DRAG WINDOW (D179, the librarian's direction). opts.uptoS bounds the recheck: stations from it on are PENDING, and
+ * result.pendingFrom says where they start. Every station before it is exact: a pending station still has its stacking
+ * measured against them. A `prev` that was windowed carries nothing past its pendingFrom, so the next revalidate starts
+ * no later than there; revalidate(windowed, …, prev.pendingFrom) with no uptoS finishes the track, equal to a full
+ * validate exactly (tested).
  */
 function revalidate(prev, path, segments, fromS, opts = {}) {
   if (!prev || !prev._raw || path.closed) return validate(path, segments, opts);
   const S = path.samples;
+  // before the edit's cut nothing moved, so the previous pending start still names the same station
+  if (prev.pendingFrom != null && prev.pendingFrom < fromS) fromS = prev.pendingFrom;
   let from = S.findIndex((p) => p.s >= fromS - 1e-9);
   if (from < 0) from = S.length - 1;
   from = Math.max(0, from - 1);   // look-back: one station (loads, seams, holes)
   const car = { ...MACH6, ...(opts.car || {}) };
   // a different speed model, or a different design speed from the picker, changes every load: re-validate everything
   if (speedProfile(path, segments, car, opts).from !== prev._raw.speedFrom || opts.designSpeed !== prev._raw.designSpeed) return validate(path, segments, opts);
-  return core(path, segments, opts, from, prev._raw);
+  return core(path, segments, opts, from, prev._raw, uptoOf(S, opts));
 }
 
 /**
@@ -364,7 +396,7 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
  * surface point of the track (the point grid this replaced was 95% of a full validate at 40 km: 3.1 of 3.3 s).
  */
 const SLACK = 1e-4;   // m: a pair whose bounds clear the stack distance by less than this is measured anyway
-function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new Set()) {
+function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new Set(), end = S.length) {
   const cell = car.stackedM, sep = opts.minSeparationM || 25, L = path.lengthM || (S[S.length - 1].s - S[0].s), n = S.length;
   // the lateral points of each segment's profile, with their (X, Y) and the largest |(X, Y)|, once per segment
   const lat = new Map();
@@ -406,6 +438,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   };
   // one entry per station: its deepest overlap, the smaller u on a tie, so the answer never depends on visiting order
   const mark = (pt, worst, partner) => {
+    if (pt.i >= end) return;   // a pending station keeps no finding: it is checked in full when the window ends
     const k = pt.i, e = out.get(k);
     if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner });
   };
@@ -418,6 +451,9 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
       if (!list) continue;
       for (let t = 0; t < list.length; t++) {
         const j = list[t];
+        // a pair of two PENDING stations waits for the window to end; a pending station is still measured against the
+        // window and everything before it, so a station that is not pending never shows a stale "clean" (D179)
+        if (i >= end && j >= end) continue;
         if (qd[j] && j <= i) continue;   // a pair of two queried stations is measured once
         let ds = Math.abs(sOf[j] - sA); if (path.closed) ds = Math.min(ds, L - ds);
         if (ds < sep) continue;

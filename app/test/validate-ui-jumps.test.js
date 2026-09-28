@@ -92,3 +92,14 @@ test('through the shell: the head is red exactly when it is the flight of a jump
   assert.ok(!ctl.state.result.red.some((x) => x.reason === 'head-in-the-air'));
   assert.strictEqual(summary(ctl.state).jumpsPending, 0);
 });
+
+// D179 addendum: a jump with no forward gap has no flight, so it draws no arc (validation's red says why instead)
+test('jump arcs: a jump whose landing lip is behind its take-off lip draws no arc, and nothing throws', () => {
+  const X = require('../../test/validate_paths.js'), { validate } = require('../../src/validate/index.js'), { jumpArcs } = require('../validate-ui/jumparcs.js');
+  const run = X.straight(100, { seg: 0 }), flight = X.straight(20, { seg: 1, start: [0, 0, 100], s0: 100 }).slice(1, -1);
+  const land = X.straight(120, { seg: 2, start: [0, -1, 95], s0: 120 });
+  const segs = [X.seg({ id: 'run', speed: 120 }), X.seg({ id: 'j', kind: 'gap', word: 'jump', speed: 120 }), X.seg({ id: 'land', speed: 120 })];
+  const path = X.pathOf([...run, ...flight, ...land]), r = validate(path, segs);
+  assert.strictEqual(r.jumps[0].badGap, true);
+  assert.deepStrictEqual(jumpArcs(r, path), []);
+});

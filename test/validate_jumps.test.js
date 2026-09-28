@@ -121,3 +121,31 @@ test('validate: an open head that ends in the air is a pending jump, and the hea
   assert.strictEqual(r.jumps[0].pending, true);
   assert.deepStrictEqual(r.red.map((x) => x.reason), ['head-in-the-air']);
 });
+
+// ── D179 addendum: validation REPORTS a jump with no forward gap, it never throws (A's soak finding, captured-17) ──
+/** A jump whose landing road starts `gapM` m along the take-off direction from the lip: 0 = straight below, < 0 = behind. */
+function backwardJump(gapM, closed = false) {
+  const run = X.straight(100, { seg: 0 });
+  const flight = X.straight(20, { seg: 1, start: [0, 0, 100], s0: 100 }).slice(1, -1);   // the flight's own stations
+  const land = X.straight(120, { seg: 2, start: [0, -1, 100 + gapM], s0: 120 });
+  const segs = [X.seg({ id: 'run', speed: 120 }), X.seg({ id: 'j', kind: 'gap', word: 'jump', speed: 120 }), X.seg({ id: 'land', speed: 120 })];
+  return { path: X.pathOf([...run, ...flight, ...land], closed), segs };
+}
+for (const [what, gapM] of [['a gap of 0 (landing lip straight below the take-off lip)', 0], ['a NEGATIVE gap (landing lip 5 m behind the take-off lip)', -5]]) {
+  test(`validate: ${what} is a named RED with its reason and source, and nothing throws`, () => {
+    const { path, segs } = backwardJump(gapM);
+    let r;
+    assert.doesNotThrow(() => { r = validate(path, segs); });
+    const bad = r.red.filter((x) => x.reason === 'jump-gap-not-forward');
+    assert.strictEqual(bad.length, 1, JSON.stringify(r.red));
+    assert.match(bad[0].source, /ARCHITECTURE\.md:72/);
+    close(bad[0].worst, -gapM, 1e-9, 'worst is how far the landing lip is behind the take-off lip');
+    assert.deepStrictEqual([r.jumps[0].badGap, r.jumps[0].landings], [true, []]);
+  });
+}
+test('validate: a closed lap over a jump with no forward gap FAILS with that reason, and is not thrown either', () => {
+  const { path, segs } = backwardJump(-5, true);
+  const r = validate(path, segs);
+  assert.strictEqual(r.lap.ok, false);
+  assert.ok(r.lap.where.some((w) => w.reason === 'jump-gap-not-forward'), JSON.stringify(r.lap.where));
+});

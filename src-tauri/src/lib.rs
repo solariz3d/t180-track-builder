@@ -106,6 +106,17 @@ fn open_library(app: tauri::AppHandle) -> Result<Option<String>, String> {
     fs::read_to_string(&path).map(Some).map_err(|e| format!("could not open {}: {e}", path.display()))
 }
 
+// ---- D181 test seam (C, for the installed app's Export check): the folder the Export dialog would return, when and ONLY
+// when the app was LAUNCHED with T180_TEST_EXPORT_FOLDER set to an existing absolute folder. A page cannot set a process's
+// environment and nothing in normal use sets this one, so normal use always gets the native dialog (app/index.html
+// falls back to it on None). It returns a path and does nothing else: the export is the unchanged write_export.
+#[tauri::command]
+fn test_export_folder() -> Option<String> {
+    let p = std::env::var("T180_TEST_EXPORT_FOLDER").ok()?;
+    let path = std::path::Path::new(&p);
+    if path.is_absolute() && path.is_dir() { Some(p) } else { None }
+}
+
 // ---- the autosave: one file in the app data folder, written while a track has unsaved changes (app/shell.js)
 const AUTOSAVE_FILE: &str = "autosave.t180auto";
 
@@ -304,7 +315,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_tracks, save_track, open_track, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export,
-            get_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto
+            get_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
+            test_export_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running the T-180 Track Builder");

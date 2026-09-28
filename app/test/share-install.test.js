@@ -105,3 +105,49 @@ test('See it in Assetto is OFF by default: the native launch is never asked for 
 test('the share and install panels load through the webview loader and export mount', async () => {
   for (const p of ['app/share/index.js', 'app/install/index.js']) assert.strictEqual(typeof (await loadCjs(p, get)).mount, 'function', p);
 });
+
+test('Install to AC hands the exporter the texture set the page holds, as Export does', async () => {
+  const native = fakeNative(); native.root = 'G:/games/assettocorsa';
+  let seen = null;
+  const exporter = { run: (doc, opts) => { seen = opts; return { result: {}, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }; } };
+  const inst = createInstaller({ exporter, native, getDoc: () => D.createDoc('x'), getTextures: () => 'THE-SET' });
+  assert.strictEqual((await inst.install()).ok, true);
+  assert.deepStrictEqual(seen, { textures: 'THE-SET' });
+});
+
+test('an unnamed track is not installed: the user is asked to name it, and nothing is written', async () => {
+  const native = fakeNative(); native.root = 'G:/games/assettocorsa';
+  const exporter = await makeExporter(get);
+  for (const name of ['', 'untitled', ' Untitled ']) {
+    const r = await createInstaller({ exporter, native, getDoc: () => stadium(name) }).install();
+    assert.deepStrictEqual([r.ok, native.installs.length], [false, 0], name);
+    assert.match(r.message, /name the track/, name);
+  }
+});
+
+test('a track saved as "Monza" installs as t180b_monza, so a second unsaved track cannot replace it', async () => {
+  const native = fakeNative(); native.root = 'G:/games/assettocorsa';
+  const s = await createShell({ storage: mem() }); s.adopt(stadium('untitled')); await s.save('Monza');
+  const r = await createInstaller({ exporter: await makeExporter(get), native, getDoc: () => s.exportDoc() }).install();
+  assert.strictEqual(r.ok, true, r.message);
+  assert.strictEqual(native.installs[0].folder, 't180b_monza');
+});
+
+test('no tooltip on the page carries a tab or a line break (the install one said "content<TAB>racks")', () => {
+  const titles = [...fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8').matchAll(/title="([^"]*)"/g)].map((m) => m[1]);
+  assert.deepStrictEqual(titles.filter((t) => /[\t\r\n]/.test(t)), []);
+});
+
+test('the Install to AC button installs the track under the name it was saved as', async () => {
+  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js');
+  const restore = fake.install();
+  try {
+    const native = fakeNative(); native.root = 'G:/games/assettocorsa';
+    const s = await createShell({ storage: mem() }); s.adopt(stadium('untitled')); await s.save('Monza');
+    const root = new fake.Element('div');
+    mount(root, s, { exporter: await makeExporter(get), native, pickFolder: async () => null, getTextures: () => null });
+    const button = [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Install to AC');
+    await button.onclick();
+    assert.deepStrictEqual(native.installs.map((i) => i.folder), ['t180b_monza']);
+  } finally { restore(); }
+});

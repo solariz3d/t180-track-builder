@@ -21,6 +21,7 @@
 //   · E's validate runs without throwing, every 50 ops.
 // A FAILURE prints the seed, the op index and the op, and a command that replays exactly up to it.
 'use strict';
+const fs = require('fs');
 
 const path = require('path');
 const R = path.join(__dirname, '..');
@@ -56,7 +57,9 @@ function sameAsFull(model, resolved) {
   return null;
 }
 
-async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery = 250, quiet = true, log = () => {} } = {}) {
+// progress (D181): a file to which, BEFORE each op, "<index> <op> rss=<MB> heap=<MB> external=<MB> arrayBuffers=<MB>" is written (overwritten
+// each time), so a native crash of node, which prints nothing, still leaves the op it was on and the memory it held
+async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery = 250, quiet = true, log = () => {}, progress = null } = {}) {
   SoakFailure.maxWords = maxWords;
   const rnd = prng(seed), pick = (xs) => xs[Math.floor(rnd() * xs.length)];
   const store = new Map();
@@ -72,13 +75,14 @@ async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery 
   for (let i = 0; i < ops; i++) {
     let r = rnd() * total, op = OPS[0][0]; for (const [name, w] of OPS) { if (r < w) { op = name; break; } r -= w; }
     if (op === 'place' && words().length >= maxWords) op = 'removeHead';
+    if (progress) { const m = process.memoryUsage(), mb = (x) => (x / 1048576).toFixed(1); fs.writeFileSync(progress, `${i} ${op} rss=${mb(m.rss)} heap=${mb(m.heapUsed)} external=${mb(m.external)} arrayBuffers=${mb(m.arrayBuffers)}\n`); }
     const before = text(), fail = (msg) => { throw new SoakFailure(seed, i, op, msg); };
     let committed = false;
     try {
       if (op === 'place') { const p = pick(shell.palette().filter((x) => x.builtin)); shell.place(p.name); committed = !shell.getState().message; }
       else if (op === 'sculpt') {
-        // only top-level words: the shell sculpts a word through editWord, which refuses a phrase (B, D178 read: a starter
-        // phrase in the palette made this pick a phrase id, and handleInfo threw NO_SUCH_WORD at seed 1, op #33)
+        // a sculpt edits a top-level WORD: since the phrasebook (D178) an entry can be a phrase, which neither the shell
+        // (sculpt → editWord) nor the handles panel (app/handles/panel.js:26) edits, so phrases are not picked (D179)
         const ws = words().filter((e) => e.phrase === undefined); if (!ws.length) { op = 'sculpt (no word)'; }
         else {
           const w = pick(ws), info = L.handleInfo(shell.getState().history.present, w.id), keys = Object.keys(info.handles).filter((k) => info.handles[k].range);
@@ -145,7 +149,8 @@ async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery 
 if (require.main === module) {
   const argv = process.argv.slice(2), arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? Number(argv[i + 1]) : d; };
   const t0 = Date.now();
-  runSoak({ seed: arg('--seed', 1), ops: arg('--ops', 10000), maxWords: arg('--max-words', MAX_WORDS), quiet: argv.includes('--quiet'), log: (s) => console.log(s) })
+  const pi = argv.indexOf('--progress');
+  runSoak({ seed: arg('--seed', 1), ops: arg('--ops', 10000), maxWords: arg('--max-words', MAX_WORDS), quiet: argv.includes('--quiet'), log: (s) => console.log(s), progress: pi >= 0 ? argv[pi + 1] : null })
     .then((r) => { console.log(JSON.stringify({ ...r, seconds: +((Date.now() - t0) / 1000).toFixed(1) })); })
     .catch((e) => { console.error(e.message); process.exit(1); });
 }

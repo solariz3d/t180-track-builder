@@ -25,7 +25,7 @@ function fakeGL() {
     createShader: () => ({}), shaderSource() {}, compileShader() {}, getShaderParameter: () => true, getShaderInfoLog: () => '',
     createProgram: () => ({}), attachShader() {}, linkProgram() {}, getProgramParameter: () => true, getProgramInfoLog: () => '',
     getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport(x, y, w, h) { calls.viewport.push([w, h]); }, clearColor() {}, clear() {}, enable() {}, disable() {},
-    uniformMatrix4fv() {}, uniform3f() {}, uniform1f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
+    uniformMatrix4fv() {}, uniform3f() {}, uniform1f() {}, uniform2f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     createBuffer: () => ({}), bindBuffer() {}, bufferData() {}, deleteBuffer() {}, deleteProgram() {}, drawElements() {}, drawArrays() {},
     // the texture calls the AC look makes (D177)
     TEXTURE_2D: 19, TEXTURE0: 20, RGBA: 21, UNSIGNED_BYTE: 22, uniform1i() {}, activeTexture() {}, createTexture: () => ({}), bindTexture() {},

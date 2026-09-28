@@ -40,9 +40,12 @@ test('load → colour reads the car it is given, not constants', () => {
   const car = { ...MACH6, suspensionStopG: 10, provenG: 50 };
   assert.deepStrictEqual([9.9, 10, 50, 50.1].map((g) => loadLevel(g, car)), [LEVEL.CLEAR, LEVEL.INFO, LEVEL.INFO, LEVEL.AMBER]);
 });
-test('the palette has one colour per level, red and amber distinct', () => {
-  assert.strictEqual(PALETTE.length, 4);
+// CHANGED 2026-09-27 (D179): was PALETTE.length === 4. The drag window added a fifth level, PENDING; the test's claim,
+// one colour per level, is now counted from LEVEL, and pending must not look like clear (it was not checked, not found clean)
+test('the palette has one colour per level, red and amber distinct, and pending unlike clear', () => {
+  assert.strictEqual(PALETTE.length, Object.keys(LEVEL).length);
   assert.notDeepStrictEqual(PALETTE[LEVEL.RED], PALETTE[LEVEL.AMBER]);
+  assert.notDeepStrictEqual(PALETTE[LEVEL.PENDING], PALETTE[LEVEL.CLEAR]);
 });
 
 // ── the map, against validation ──
@@ -172,4 +175,33 @@ test('a jump still waiting for its landing at the open head is not drawn', () =>
   const r = validate(path, segs, {});
   assert.ok(r.jumps[0].pending);
   assert.deepStrictEqual(jumpArcs(r, path), []);
+});
+
+// D177 window pass and A's D180 check of the installed app: the panel shows findings in PLAIN WORDS; the rule id and
+// its source are kept, in the tooltip. No shown string carries a rule id or a ".md:" line.
+const L = require('../validate-ui/labels.js'), { SRC: RULES } = require('../../src/validate/index.js');
+const IDS = Object.keys(RULES);
+const plain = (t, what) => {
+  assert.ok(!/.md:/.test(t), `${what}: "${t}" shows a doc line`);
+  // a rule id that is not a word (hyphenated: stacked-within-2m); "fold" is also plain English, and may be said
+  for (const id of IDS.filter((x) => x.includes('-'))) assert.ok(!t.includes(id), `${what}: "${t}" shows the rule id ${id}`);
+  assert.ok(!/[a-z]+(-[a-z0-9]+){2,}/.test(t), `${what}: "${t}" shows an id-like token`);
+};
+test('every red and amber reason has plain words; the list line shows them, and its tooltip keeps the rule and source', () => {
+  for (const id of IDS) {
+    const f = L.findingLine('red', { reason: id, source: RULES[id], s0: 100, s1: 140 });
+    plain(f.text, id);
+    assert.match(f.text, /^red: .+, at 100–140 m$/);
+    assert.ok(f.title.includes(id) && f.title.includes(RULES[id]), `${id}: the tooltip keeps the rule and its source`);
+  }
+  plain(L.reasonText('no-such-rule'), 'an unknown rule');
+});
+test('the lap, a stopped handle and a refusal read as plain words too', () => {
+  for (const w of [{ reason: 'stall' }, { reason: 'leaves-surface' }, { reason: 'jump-not-caught-3.2g' }, { reason: 'jump-not-caught-6.3g' }, { reason: 'landing-unreachable' }, { reason: 'jump-gap-not-forward' }]) plain(L.lapWhereText(w), w.reason);
+  for (const lap of [{ ok: true }, { ok: false }, { ok: null, reason: 'open' }, { ok: null, reason: 'deferred' }, { ok: null, reason: 'no-speed-model' }, null]) plain(L.lapText(lap), JSON.stringify(lap));
+  const st = L.stopLine({ at: 23.8, reasons: ['fold', 'seam-past-envelope'], sources: ['ARCHITECTURE.md:57, :84', 'FINDINGS.md:24'] }, ' m');
+  plain(st.text, 'a stopped handle');
+  assert.match(st.text, /^stopped at 23.8 m: past it, the surface folds/);
+  assert.ok(st.title.includes('fold') && st.title.includes('ARCHITECTURE.md:57'));
+  assert.strictEqual(L.refusalText('HANDLE_RANGE: w2: gap = 0 is outside [0.001, 10000]'), 'w2: gap = 0 is outside [0.001, 10000]');
 });

@@ -3,7 +3,22 @@
 // camera mode with PrintWindow (scripts/prove_render.ps1). D169: "PROVE THE RENDERING in the real window".
 //
 //   node scripts/prove_render.js --exe <path to the built app .exe> --out <folder outside the repo>
-//        [--port 9340] [--timeout 600] [--shim-timers]
+//        [--port N] [--timeout 600] [--shim-timers] [--plan <plan.json>]
+//   node scripts/prove_render.js --flow --exe … --out … [--export-seam]
+//
+// --export-seam (D181, with --flow): the app is launched with T180_TEST_EXPORT_FOLDER=<out>/export, and its Export button
+// takes that folder from the app's test_export_folder command INSTEAD of the native dialog, in the same code path the
+// dialog returns into (app/index.html; A's seam, gated by the launch environment: nothing in normal use sets it). The
+// native dialog cannot be driven: its folder box is not exposed to UI Automation (A's D180 §6).
+//
+// THE DEVTOOLS PORT IS OURS ALONE (D179: a seat's script once attached to another seat's browser left running on a fixed
+// port). With no --port a free one is taken from the OS; a --port given must be free before the app starts, or the run is
+// refused; and once connected, the process LISTENING on the port must be the app this run started or one of its
+// children (WebView2 runs as a child), or the run stops before sending anything.
+//
+// --plan (D179, the usability pass): the track to build and the views to capture, instead of PLAN and VIEWS. The file is
+// { "steps": [{ "word", "font", "capture"?, "ghost"?: { "word", "capture" } }], "views"?: ["overhead", "chase", …] } (loadPlan
+// checks it). Views are still reached by VIEWS' own keys, in order; a view not listed is passed through, not captured.
 //
 // --shim-timers (D170, DISCLOSED in the report): before the page's scripts run, window.setTimeout / clearTimeout are
 // wrapped so they work when called as a method of another object. A's in-progress app/shell.js (D169) calls
@@ -24,6 +39,62 @@
 'use strict';
 
 const { spawn, spawnSync } = require('child_process');
+const net = require('net');
+
+/** A port the OS says is free now (listen on 0, read it, close). */
+function freePort() { return new Promise((res, rej) => { const s = net.createServer(); s.once('error', rej); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); }); }
+/** True when nothing listens on the port (a listen on it succeeds). */
+function portFree(port) { return new Promise((res) => { const s = net.createServer(); s.once('error', () => res(false)); s.listen(port, '127.0.0.1', () => s.close(() => res(true))); }); }
+/**
+ * The pid listening on the port, and whether it is `root` or a descendant of it (Windows: Get-NetTCPConnection and the
+ * process table). { pid, ours }; pid null when nothing listens.
+ */
+function portOwner(port, root) {
+  const ps = spawnSync('powershell', ['-NoProfile', '-Command', `$c = Get-NetTCPConnection -LocalPort ${Number(port)} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $c) { 'none'; exit }; $p = [int]$c.OwningProcess; $chain = @($p); for ($i = 0; $i -lt 16 -and $p -gt 0; $i++) { $q = Get-CimInstance Win32_Process -Filter "ProcessId=$p" -ErrorAction SilentlyContinue; if (-not $q) { break }; $p = [int]$q.ParentProcessId; $chain += $p }; $chain -join ','`], { encoding: 'utf8', timeout: 30000 });
+  const out = (ps.stdout || '').trim();
+  if (!out || out === 'none') return { pid: null, ours: false };
+  const chain = out.split(',').map(Number);
+  return { pid: chain[0], ours: chain.includes(Number(root)) };
+}
+/**
+ * THE RUN'S OWN WEBVIEW2 PROFILE (D179). WebView2 shares one browser process per user-data folder, keyed to the app's
+ * identifier: a second instance of the app joined the first one's browser and its DevTools port was silently ignored
+ * (two runs found no page on their port; the app launched alone, a minute later, opened it). WEBVIEW2_USER_DATA_FOLDER
+ * gives each run a fresh folder of its own (measured: the folder fills with EBWebView and the page opens on its port), so a
+ * run never shares a browser with the keeper's app or another seat's, and never writes into the keeper's webview storage
+ * (the first-run guide's state, app/onboarding/firstrun.js, lives in its localStorage).
+ */
+function profileDir(out) { const d = path.join(path.resolve(out), 'webview2-profile'); fs.rmSync(d, { recursive: true, force: true }); return d; }
+/**
+ * THE KEEPER'S AUTOSAVE IS PUT BACK (D179). The app writes its unsaved track to <app data>/autosave.t180auto from the Rust
+ * side (src-tauri/src/lib.rs AUTOSAVE_FILE), which the WebView2 profile does not cover, so a run would overwrite the
+ * keeper's own unsaved session. Before the launch it is copied into the run's out folder; after the run it is written back
+ * byte for byte, or, if there was none, the one the run made is removed. Returns restore() -> 'restored' | 'removed' | 'none'.
+ */
+function appDataDir() {
+  const conf = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'tauri.conf.json'), 'utf8'));
+  if (!process.env.APPDATA || !/^[A-Za-z0-9.-]+$/.test(conf.identifier || '')) throw new Error('prove_render: no APPDATA folder or app identifier');
+  return path.join(process.env.APPDATA, conf.identifier);
+}
+function guardAutosave(dataDir, out) {
+  const file = path.join(dataDir, 'autosave.t180auto'), had = fs.existsSync(file), backup = path.join(path.resolve(out), 'autosave-backup.t180auto');
+  if (had) fs.copyFileSync(file, backup);
+  return () => {
+    if (had) { fs.copyFileSync(backup, file); return 'restored'; }
+    if (fs.existsSync(file)) { fs.rmSync(file); return 'removed'; }
+    return 'none';
+  };
+}
+/** Pick or check the port before launching, and after connecting check it is the app's own. */
+async function preparePort(o) {
+  if (o.port === null) o.port = await freePort();
+  else if (!(await portFree(o.port))) throw new Error(`prove_render: port ${o.port} is already in use (pid ${portOwner(o.port, -1).pid}); pick another, or leave --port out for a free one`);
+}
+function checkOwner(port, appPid) {
+  const w = portOwner(port, appPid);
+  if (!w.ours) throw new Error(`prove_render: the DevTools port ${port} is held by pid ${w.pid}, not by the app this run started (pid ${appPid}): refusing to attach`);
+  return w.pid;
+}
 const fs = require('fs'), path = require('path');
 
 /**
@@ -40,15 +111,32 @@ const VIEWS = Object.freeze([
   { mode: 'build', keys: [] }, { mode: 'overhead', keys: ['c'] }, { mode: 'chase', keys: ['c', 'c'] }, { mode: 'free', keys: ['c'] },
 ]);
 
+const NAME_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
+/** A --plan file's text → { steps, views }, or a thrown Error naming what is wrong. */
+function loadPlan(text) {
+  let p; try { p = JSON.parse(text); } catch (e) { throw new Error(`prove_render: the plan is not JSON (${e.message})`); }
+  if (!p || !Array.isArray(p.steps) || !p.steps.length) throw new Error('prove_render: the plan needs a non-empty "steps" list');
+  p.steps.forEach((st, i) => {
+    if (!st || typeof st.word !== 'string' || typeof st.font !== 'string') throw new Error(`prove_render: plan step ${i} needs a word and a font`);
+    if (st.capture !== undefined && !NAME_RE.test(st.capture)) throw new Error(`prove_render: plan step ${i}: capture "${st.capture}" is not a file-safe name`);
+    if (st.ghost !== undefined && !(st.ghost && typeof st.ghost.word === 'string' && NAME_RE.test(st.ghost.capture || ''))) throw new Error(`prove_render: plan step ${i}: a ghost needs a word and a file-safe capture name`);
+  });
+  const modes = VIEWS.map((v) => v.mode), views = p.views === undefined ? modes : p.views;
+  if (!Array.isArray(views) || views.some((m) => !modes.includes(m))) throw new Error(`prove_render: plan views must be among ${modes.join(', ')}`);
+  return { steps: p.steps, views };
+}
+
 function parseArgs(argv) {
-  const o = { port: 9340, timeout: 600, shimTimers: false };
+  const o = { port: null, timeout: 600, shimTimers: false };   // null: a free port, taken at run time (freePort)
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i], v = argv[i + 1];
     if (k === '--exe') { o.exe = v; i++; } else if (k === '--out') { o.out = v; i++; } else if (k === '--port') { o.port = Number(v); i++; } else if (k === '--timeout') { o.timeout = Number(v); i++; } else if (k === '--shim-timers') o.shimTimers = true;
+    else if (k === '--plan') { o.plan = loadPlan(fs.readFileSync(v, 'utf8')); i++; }
+    else if (k === '--export-seam') o.exportSeam = true;
     else throw new Error(`prove_render: unknown argument ${k}`);
   }
   if (!o.exe || !o.out) throw new Error('prove_render: needs --exe <app.exe> and --out <folder>');
-  if (!(Number.isInteger(o.port) && o.port > 1024 && o.port < 65536)) throw new Error('prove_render: --port must be 1025..65535');
+  if (o.port !== null && !(Number.isInteger(o.port) && o.port > 1024 && o.port < 65536)) throw new Error('prove_render: --port must be 1025..65535');
   if (!(o.timeout > 0 && o.timeout <= 600)) throw new Error('prove_render: --timeout is 1..600 s (the night\'s hard cap is 10 min)');
   return o;
 }
@@ -97,13 +185,17 @@ async function until(fn, what, ms = 20000) { const end = Date.now() + ms; let v;
 
 async function run(o) {
   fs.mkdirSync(o.out, { recursive: true });
-  const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${o.port}` };
+  await preparePort(o);
+  fs.mkdirSync(o.out, { recursive: true });
+  const restoreAutosave = guardAutosave(o.appData || appDataDir(), o.out);
+  const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${o.port}`, WEBVIEW2_USER_DATA_FOLDER: profileDir(o.out) };
   const app = spawn(o.exe, [], { env, stdio: 'ignore', windowsHide: false });
   const kill = () => { if (app.exitCode === null) spawnSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); };
   const hard = setTimeout(() => { kill(); process.stderr.write(`prove_render: hard timeout ${o.timeout} s, killed PID ${app.pid}\n`); process.exit(2); }, o.timeout * 1000);
   const report = { pid: app.pid, started: new Date().toISOString(), placed: [], views: {}, ctrlC: null, ok: false };
   try {
     const cdp = await cdpConnect(o.port, Date.now() + 60000);
+    report.port = { port: o.port, owner: checkOwner(o.port, app.pid) };
     report.shimTimers = o.shimTimers;
     if (o.shimTimers) {
       await cdp.send('Page.enable');
@@ -111,6 +203,9 @@ async function run(o) {
       await cdp.send('Page.reload', { ignoreCache: true }); await sleep(1500);
     }
     await until(() => cdp.evaluate(`document.querySelectorAll('#palette button.piece').length >= 7 && !!document.querySelector('#preview canvas')`), 'the palette and the preview');
+    // E's first-run guide (app/onboarding) would sit over the preview in every capture: hidden for THIS page only, by a style
+    // rule (its close button would record "closed" in storage; the run's own profile is thrown away anyway)
+    report.guideHidden = await cdp.evaluate(`(() => { const st = document.createElement('style'); st.textContent = '.guide-card{display:none!important}'; document.head.append(st); return true; })()`);
     const click = async (sel, text) => {
       const r = await cdp.evaluate(`(() => { const b = [...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.textContent === ${JSON.stringify(text)}); if (!b) return null; b.scrollIntoView({ block: 'center' }); const q = b.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; })()`);
       if (!r) throw new Error(`no ${sel} button "${text}"`);
@@ -141,7 +236,8 @@ async function run(o) {
       if (cap.ok && cap.title !== 'T-180 Track Builder') { fs.rmSync(file, { force: true }); cap = { ok: false, reason: `captured window "${cap.title}" is not the app; deleted` }; }
       report.views[name] = { file: cap.ok ? file : null, probe: p, capture: cap, checks: judge(mode, p, cap) };
     };
-    for (const step of PLAN) {
+    const plan = o.plan ? o.plan.steps : PLAN, wanted = o.plan ? o.plan.views : VIEWS.map((v) => v.mode);
+    for (const step of plan) {
       const set = await cdp.evaluate(`(() => { const s = document.querySelector('#palette select[aria-label="Font"]'); if (!s) return false; s.value = ${JSON.stringify(step.font)}; s.dispatchEvent(new Event('change', { bubbles: true })); return s.value === ${JSON.stringify(step.font)}; })()`);
       if (!set) throw new Error(`could not set the font to ${step.font}`);
       const before = await trackLen();
@@ -171,7 +267,7 @@ async function run(o) {
     const m0 = (await probe()).mode; await key('c', 2); await sleep(300); report.ctrlC = { before: m0, after: (await probe()).mode };
     for (const v of VIEWS) {
       for (const k of v.keys) { await key(k); await sleep(150); }
-      await shoot(v.mode, v.mode);
+      if (wanted.includes(v.mode)) await shoot(v.mode, v.mode);
     }
     // DPR in the real window: emulate a 1.5× display (the page's devicePixelRatio changes, as it does when the window moves
     // to a scaled monitor); the canvas backing store must follow on the next frame, then go back when the emulation ends
@@ -181,7 +277,7 @@ async function run(o) {
     report.dpr = { at15: c15, after: c1, pass: follows(c15, 1.5) && c1.width === Math.round(c1.cssWidth * c1.dpr) };
     report.ok = report.ctrlC.before === report.ctrlC.after && report.dpr.pass && Object.values(report.views).every((v) => v.checks.every((c) => c.pass));
     cdp.close();
-  } finally { clearTimeout(hard); kill(); report.ended = new Date().toISOString(); }
+  } finally { clearTimeout(hard); kill(); report.autosave = restoreAutosave(); report.ended = new Date().toISOString(); }
   fs.writeFileSync(path.join(o.out, 'prove_render.json'), JSON.stringify(report, null, 1));
   return report;
 }
@@ -197,17 +293,22 @@ const FLOW_WORDS = Object.freeze(['straight', 'straight', 'tight', 'straight', '
 async function runFlow(o) {
   fs.mkdirSync(o.out, { recursive: true });
   const exportDir = path.join(o.out, 'export'); fs.mkdirSync(exportDir, { recursive: true });
-  const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${o.port}` };
+  await preparePort(o);
+  fs.mkdirSync(o.out, { recursive: true });
+  const restoreAutosave = guardAutosave(o.appData || appDataDir(), o.out);
+  const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${o.port}`, WEBVIEW2_USER_DATA_FOLDER: profileDir(o.out), ...(o.exportSeam ? { T180_TEST_EXPORT_FOLDER: path.resolve(exportDir) } : {}) };
   const app = spawn(o.exe, [], { env, stdio: 'ignore', windowsHide: false });
   const kill = () => { if (app.exitCode === null) spawnSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); };
   const hard = setTimeout(() => { kill(); process.stderr.write(`prove_render: hard timeout ${o.timeout} s, killed PID ${app.pid}\n`); process.exit(2); }, o.timeout * 1000);
-  const report = { pid: app.pid, started: new Date().toISOString(), flow: true, shimTimers: o.shimTimers, exportDir, steps: [], captures: {}, ok: false };
+  const report = { pid: app.pid, started: new Date().toISOString(), flow: true, exportSeam: !!o.exportSeam, shimTimers: o.shimTimers, exportDir, steps: [], captures: {}, ok: false };
   try {
     const cdp = await cdpConnect(o.port, Date.now() + 60000);
+    report.port = { port: o.port, owner: checkOwner(o.port, app.pid) };
     await cdp.send('Page.enable');
     if (o.shimTimers) await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: '(() => { const s = window.setTimeout, c = window.clearTimeout; window.setTimeout = function (f, ms, ...a) { return s.call(window, f, ms, ...a); }; window.clearTimeout = function (t) { return c.call(window, t); }; })();' });
     await cdp.send('Page.reload', { ignoreCache: true }); await sleep(1500);
     await until(() => cdp.evaluate(`document.querySelectorAll('#palette button.piece').length >= 7 && !!document.querySelector('#preview canvas') && !!(window.__TAURI__ && window.__TAURI__.core)`), 'the app');
+    report.guideHidden = await cdp.evaluate(`(() => { const st = document.createElement('style'); st.textContent = '.guide-card{display:none!important}'; document.head.append(st); return true; })()`);
     const at = (sel, text) => cdp.evaluate(`(() => { const b = [...document.querySelectorAll(${JSON.stringify(sel)})].find((x) => x.textContent.trim() === ${JSON.stringify(text)}); if (!b) return null; b.scrollIntoView({ block: 'center' }); const q = b.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2, disabled: !!b.disabled }; })()`);
     const click = async (sel, text) => { const r = await at(sel, text); if (!r) throw new Error(`no ${sel} "${text}"`); if (r.disabled) throw new Error(`"${text}" is disabled`); for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x: r.x, y: r.y, button: 'left', clickCount: 1 }); };
     const away = async () => { const r = await cdp.evaluate(`(() => { const q = document.querySelector('#preview canvas').getBoundingClientRect(); return { x: q.left + 12, y: q.top + 12 }; })()`); await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: r.x, y: r.y }); };
@@ -227,15 +328,18 @@ async function runFlow(o) {
     await cdp.evaluate(`document.dispatchEvent(new CustomEvent('t180-camera', { detail: { mode: 'overhead' } })); true`); await sleep(2500);
     await capture('flow-closed-overhead');
     await click('button', 'Export…');
+    if (o.exportSeam) report.steps.push({ step: 'folder dialog', ok: true, via: `the seam: T180_TEST_EXPORT_FOLDER=${path.resolve(exportDir)} (the native dialog is not shown)` });
+    else {
     const dlg = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'prove_render_dialog.ps1'), '-ProcId', String(app.pid), '-Dir', exportDir, '-TimeoutSec', '30'], { encoding: 'utf8', timeout: 60000 });
     let d; try { d = JSON.parse(dlg.stdout.trim().split(/\r?\n/).pop()); } catch { d = { ok: false, reason: dlg.stderr || dlg.stdout }; }
     report.steps.push({ step: 'folder dialog', ...d });
     if (!d.ok) throw new Error(`the folder dialog: ${d.reason}`);
+    }
     const done = await until(async () => { const t = await texts(); return t.messages.find((m) => /^exported |Not exported|export failed/.test(m)) || (/export failed/.test(t.status) ? t.status : null); }, 'the export to finish', 60000);   // 60 s: an unanswered native dialog stays on the desktop meanwhile
     report.steps.push({ step: 'export', result: done, ...(await texts()) });
     await capture('flow-exported');
     cdp.close();
-  } catch (e) { report.error = e.message; } finally { clearTimeout(hard); kill(); report.ended = new Date().toISOString(); }
+  } catch (e) { report.error = e.message; } finally { clearTimeout(hard); kill(); report.autosave = restoreAutosave(); report.ended = new Date().toISOString(); }
   // the folder, listed and read back outside the app
   const folders = fs.readdirSync(exportDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
   report.folders = folders.map((f) => {
@@ -266,4 +370,4 @@ if (require.main === module && process.argv.includes('--flow')) {
   run(o).then((r) => { console.log(JSON.stringify({ ok: r.ok, ctrlC: r.ctrlC, dpr: r.dpr, views: Object.fromEntries(Object.entries(r.views).map(([k, v]) => [k, v.checks])) }, null, 1)); process.exit(r.ok ? 0 : 3); })
     .catch((e) => { console.error(`prove_render: ${e.message}`); process.exit(1); });
 }
-module.exports = { PLAN, VIEWS, FLOW_WORDS, parseArgs, judge, summarise };
+module.exports = { PLAN, VIEWS, FLOW_WORDS, parseArgs, loadPlan, judge, summarise, freePort, portFree, portOwner, guardAutosave, profileDir };
