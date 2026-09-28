@@ -15,6 +15,12 @@
 // It is mesh-free: colours are looked up per vertex by (s, u), and the arcs are short polylines.
 // Validation is batched to one run per animation frame (the controller's `schedule`), so a drag does not validate more
 // often than the screen draws.
+//
+// WHAT IT ASKS THE PREVIEW (D177, one shared path): before each update it dispatches C's 't180:track-request' on the
+// document; the preview replies { path, segments, … }, its path and the segments it was built from. The controller
+// validates a 2 m view of that path (pathview.js; the identity while the preview's step is 2 m too) when `segments` is
+// the very array of the document being validated, and otherwise grows its own path, so an unanswered event costs
+// speed, never correctness.
 'use strict';
 const { createValidationController, summary } = require('./panel.js');
 const { levelAt, rgbaAt, PALETTE, LEVEL } = require('./colour.js');
@@ -61,7 +67,11 @@ function mount(root, shell) {
   }
   let ctl = null;
   const picker = createSpeedPicker({ onChange: (kmh) => { if (ctl) ctl.setDesignSpeed(kmh); } });
-  ctl = createValidationController(shell, { designSpeedKmh: picker.kmh, onUpdate: render, schedule: raf });
+  // ONE PATH (D177): the preview's path, asked for through C's seam ('t180:track-request', { reply(track) }, answered
+  // with { path, segments, closed, how, g, fromS }: app/preview/index.js); with no answer, or a path for another
+  // document, the controller grows its own
+  const sharedPath = () => { let got = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { got = x; } } })); return got; };
+  ctl = createValidationController(shell, { designSpeedKmh: picker.kmh, onUpdate: render, schedule: raf, sharedPath });
   mountSpeedPicker(speedRow, picker);
   csp.onchange = () => ctl.setCsp(csp.checked);
   return { dispose: () => ctl.dispose() };

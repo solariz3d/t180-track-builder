@@ -5,6 +5,9 @@
 //
 //   const p = createPreview({ canvas, shell, win: window, hud, onMode })   shell = app/shell.js createShell(...)
 //   p.setMode('overhead')   p.dispose()                  onMode(mode) is called whenever the camera mode changes
+//   onTrack(t) is called after every change that moved the track, with the ONE shared path (trackmodel.js):
+//       t = { path, segments, closed, how, g, fromS }   how: 'extend' | 'sculpt' | 'full' | 'empty'
+//   p.track()   the same object for the current track, or null (for a reader that arrives later)
 //
 // KEYS (keyAction below, tested headless):  C  next camera      B  the build view, from anywhere
 //   free mode:  W / S forward and back,  A / D left and right,  Q / E down and up,  arrow keys or a mouse drag turn,
@@ -34,7 +37,7 @@ function keyAction(key, mods = {}) {
   return null;
 }
 
-function createPreview({ canvas, shell, win, hud = null, onMode = null, flySpeed = 30, turnSpeed = 1.6 }) {
+function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6 }) {
   if (!canvas || !shell || !win) throw new Error('preview: needs { canvas, shell, win }');
   const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
   if (!gl) throw new Error('preview: WebGL is not available in this window');
@@ -43,7 +46,11 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, flySpeed
   const held = new Set();
   let ghost = null, grid = null, gridFor = null;
   // a change to the placed track retires the ghost: it was built on the old head (the palette shows it again on hover)
-  const refresh = (st) => { try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; } catch (e) { err = e.message; } };
+  const shared = () => (track && track.how !== 'kept' ? { path: track.path, segments: track.segments, closed: !!(track.path && track.path.closed), how: track.how, g: track.g, fromS: track.fromS } : null);
+  const refresh = (st) => {
+    try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; } catch (e) { err = e.message; return; }
+    if (onTrack && track.how !== 'same' && track.how !== 'kept') onTrack(shared());
+  };
   const unsub = shell.subscribe(refresh);
   refresh(shell.getState());
   /** The camera's context: the head and path, the track's box (the overhead fit) and the view's aspect. With nothing
@@ -93,6 +100,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, flySpeed
     rig, model, renderer,
     /** What is on screen now, for the window proof (app/testhook/probe.js): read-only. */
     view: () => ({ track, pose: shownPose, mode: rig.mode, error: err, ghost: ghost ? ghost.batches.length : 0, grid: grid ? grid.positions.length / 6 : 0 }),
+    track: () => shared(),
     /**
      * Show the GHOST of the next piece (the D170 review, item 6): `candidate` is the resolved document with the
      * word appended (A's shell: the same appendWord that place() uses, not committed). It is drawn see-through at the

@@ -73,8 +73,16 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
     if (canAutosave && typeof storage.clearAutosave === 'function') await storage.clearAutosave();
   }
 
-  /** Commit a new document (one undo entry) and re-resolve from the first changed word. */
-  const commit = (doc, extra = {}) => set({ history: D.commit(st.history, doc), ...resolved(doc), dirty: true, message: null, ...extra });
+  /**
+   * Commit a new document (one undo entry) and re-resolve from the first changed word. A document that is valid but does
+   * NOT RESOLVE (an end roll the next word cannot follow: ROLL_STEP, the surface would tear) is a FAILED action: it is
+   * not committed, the track stays as it was, and the reason is the message (the soak's find, seed 1 op #71).
+   */
+  const commit = (doc, extra = {}) => {
+    const r = resolved(doc);
+    if (r.resolveError) return set({ message: `not applied: ${r.resolveError}` });
+    return set({ history: D.commit(st.history, doc), ...r, dirty: true, message: null, ...extra });
+  };
   // A CLOSED track resolves through its open twin, marked closed: resolve still refuses closed documents
   // (CLOSE_NOT_BUILT) until the model takes them, and src/export/fromwords.js takes the same route. The panels then
   // build it with buildPath(…, { closed: true }) from `resolved.closed`.
@@ -97,7 +105,7 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
   function placed(name) {
     const p = st.lib.pieces.find((x) => x.name === name);
     if (!p) throw new D.DocError('NO_SUCH_PIECE', `no piece called "${name}" in the palette`);
-    if (!p.builtin) return L.placePiece(doc(), st.lib, name);
+    if (!p.builtin || p.kind === 'phrase') return L.placePiece(doc(), st.lib, name);   // a starter phrase keeps its own words
     const word = p.words[0].word, { font, tempo, dir } = st.pickers;
     return D.appendWord(doc(), word, { tempo, dir, font: font === 'auto' || word === 'jump' ? undefined : font });
   }
@@ -132,7 +140,8 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
     /** One whole edit, made elsewhere from the present document (a texture pack worn by every word of a font): checked, then one undo step. */
     commitDoc: (d) => attempt(() => { D.checkDoc(d); return commit(d); }),
     beginDrag: () => attempt(() => set({ history: D.beginDrag(st.history) })),
-    dragTo: (id, patch) => attempt(() => { const d = D.editWord(doc(), id, patch); return set({ history: D.dragTo(st.history, d), ...resolved(d), dirty: true }); }),
+    // a drag frame that would not resolve is skipped: the drag keeps its last good frame, and says why
+    dragTo: (id, patch) => attempt(() => { const d = D.editWord(doc(), id, patch), r = resolved(d); if (r.resolveError) return set({ message: `not applied: ${r.resolveError}` }); return set({ history: D.dragTo(st.history, d), ...r, dirty: true, message: null }); }),
     endDrag: () => attempt(() => set({ history: D.endDrag(st.history) })),
 
     /** Select the placed words from id `from` to id `to` (inclusive, in track order). */

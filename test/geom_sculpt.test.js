@@ -137,3 +137,136 @@ test('sculpt: a start-pitch change with NO bank change still remeshes the curve 
   const { sm, full } = sculpt(segs, 1, { kp0: 0.003, kp1: 0.003 });
   sameAsFull(sm, full);
 });
+
+// ── D177: RIGID DOWNSTREAM EDITS (the librarian's ruling: an upstream edit moves everything downstream rigidly, a
+// transform of the existing cells, never a regrow or a re-mesh). Stated before these tests were run:
+//   · an edit that leaves the next piece's start pitch and frame the same up to a turn about world up re-places the
+//     rest of the path, one motion per segment: path.replaced counts them, and no downstream sample is regrown;
+//   · every downstream cell's LOCAL arrays are byte-identical before and after; only its node matrix changes;
+//   · the operation count of the edit (path.work + mesh work) does not depend on how LONG the downstream is, in metres,
+//     and grows by exactly one per extra downstream segment (its re-placement);
+//   · on a pitched stretch the bank against gravity (bankG) of every re-placed sample is BIT-IDENTICAL to before (a turn
+//     about world up leaves every y component alone), and equals a full rebuild's to 1e-12;
+//   · a re-placed path equals a full rebuild EXACTLY (amended 18:5x, the chair: the keeper's rule, exact where it is
+//     achievable; a first version agreed only to 2.2e-12, and was rebuilt as one placement chain for both).
+const PITCHED = 1 * D;
+/** A track on a steady 1° climb (a pitched start, no pitch curvature): straights and turns, then `after` downstream. */
+function pitched(after, lengthM = 40) {
+  const lead = [{ id: 'a', kind: 'road', length: 60, profile: F.FLAT }, { id: 'e', kind: 'road', length: 80, profile: F.FLAT },
+    { id: 'b', kind: 'road', length: 50, k0: 0.01, k1: 0.01, profile: F.FLAT }];
+  return [...lead, ...Array.from({ length: after }, (_, i) => ({ id: `x${i}`, kind: 'road', length: lengthM, k0: 0.004 * ((i % 3) - 1), k1: 0.004 * ((i % 3) - 1), roll0: 0.1, roll1: 0.1, profile: i % 2 ? F.FLAT : F.HALFPIPE }))];
+}
+const START = { start: { pos: [0, 0, 0], theta: 0.3, p: PITCHED } };
+function edit(segs, g, change, opts = START) {
+  const p = G.buildPath(segs, opts), m = G.buildMesh(p, segs);
+  const snap = (mm) => children(mm).map((c) => ({ name: c.name, M: c.matrix.slice(), arr: ['positions', 'normals', 'uvs', 'indices'].map((f) => Buffer.from(c.children[0][f].buffer).toString('base64')) }));
+  const bank0 = p.samples.map((x) => x.bankG), before = snap(m), n0 = p.samples.length;
+  const edited = segs.slice(); edited[g] = { ...segs[g], ...change };
+  PATH.rebuildPathFrom(p, edited, g); const pw = p.work; const sm = G.sculptMesh(m, p, edited, g);
+  return { p, pw, sm, before, after: snap(sm), bank0, n0, edited, full: G.buildPath(edited, opts) };
+}
+const pathDiff = (a, b) => { let d = 0; a.samples.forEach((x, i) => { const y = b.samples[i]; d = Math.max(d, Math.abs(x.s - y.s), Math.abs(x.bankG - y.bankG)); for (const f of ['pos', 'T', 'L', 'U', 'kvec']) for (let c = 0; c < 3; c++) d = Math.max(d, Math.abs(x[f][c] - y[f][c])); }); return d; };
+
+test('rigid: a straight\'s length edit on a 1° climb re-places every later segment, and regrows none of them', () => {
+  const segs = pitched(8), { p } = edit(segs, 1, { length: 80.5 });
+  assert.strictEqual(p.replaced, segs.length - 2);
+});
+test('rigid: every downstream cell keeps its local arrays byte for byte; only its matrix moves', () => {
+  const segs = pitched(8), { before, after } = edit(segs, 1, { length: 80.5 }), down = segs.slice(2).map((s) => s.id);
+  const moved = [];
+  for (const a of after.filter((x) => touches(x.name, down))) {
+    const b = before.find((x) => x.name === a.name);
+    assert.ok(b, `${a.name} is new`);
+    assert.deepStrictEqual(a.arr, b.arr, `${a.name}: local arrays changed`);
+    if (maxDiff(a.M, b.M) > 0) moved.push(a.name);
+  }
+  assert.strictEqual(moved.length, after.filter((x) => touches(x.name, down)).length, 'every downstream cell\'s matrix moved by the 0.5 m');
+});
+test('rigid: the bank against gravity of every re-placed sample is bit-identical to before the edit (Δbank exactly 0)', () => {
+  const segs = pitched(8), { p, bank0, n0 } = edit(segs, 1, { length: 80.5 }), first = p.segFirst[2];
+  const dn = p.samples.length - n0, diffs = [];
+  for (let i = first; i < p.samples.length; i++) if (p.samples[i].bankG !== bank0[i - dn]) diffs.push(i);
+  assert.deepStrictEqual([p.samples.length - first > 100, diffs], [true, []]);
+});
+test('rigid: the displayed bank after the move is the moved frame\'s bank against gravity, and a full rebuild\'s to 1e-12', () => {
+  const segs = pitched(8), { p, full } = edit(segs, 1, { length: 80.5 });
+  let worst = 0; for (let i = p.segFirst[2]; i < p.samples.length; i++) { const x = p.samples[i]; worst = Math.max(worst, Math.abs(x.bankG - Math.asin(x.L[1])), Math.abs(x.bankG - full.samples[i].bankG)); }
+  assert.ok(worst <= 1e-12, `worst ${worst}`);
+});
+test('rigid: the re-placed path equals a full rebuild of the edited track EXACTLY (the same chain, the same floats)', () => {
+  const segs = pitched(8), { p, full } = edit(segs, 1, { length: 80.5 });
+  assert.deepStrictEqual([p.replaced, pathDiff(p, full)], [segs.length - 2, 0]);
+});
+test('rigid: a turn edit (heading) re-places everything after it, turned about world up, equal to a full rebuild', () => {
+  const segs = pitched(8), start = { start: { pos: [0, 0, 0], theta: 0.3, p: 0 } };
+  const { p, full } = edit(segs, 2, { k0: 0.02, k1: 0.02 }, start);
+  assert.deepStrictEqual([p.replaced, pathDiff(p, full)], [segs.length - 3, 0]);
+});
+test('rigid cost: the operation count of an edit is the same whether the downstream pieces are 40 m or 4 km long', () => {
+  const ops = (lengthM) => { const r = edit(pitched(8, lengthM), 1, { length: 80.5 }); return r.pw + r.sm.stats.work; };
+  assert.strictEqual(ops(4000), ops(40));
+});
+test('rigid cost: each extra downstream segment adds exactly one operation to the path (its re-placement)', () => {
+  const ops = (after) => edit(pitched(after), 1, { length: 80.5 }).pw;
+  assert.strictEqual(ops(108) - ops(8), 100);
+});
+test('rigid: the path grows on from a re-placed tail exactly as from a grown one (append after a sculpt)', () => {
+  const segs = pitched(6), { p, edited } = edit(segs, 1, { length: 80.5 });
+  const more = [...edited, { id: 'z', kind: 'road', length: 30, k0: 0.02, k1: 0.02, profile: F.FLAT }];
+  PATH.extendPath(p, more);
+  assert.ok(pathDiff(p, G.buildPath(more, START)) <= 1e-9);
+});
+test('rigid: a pitch edit upstream is NOT rigid under the world-up model: the tail is regrown and equals a full rebuild', () => {
+  const segs = pitched(6), { p, full } = edit(segs, 1, { kp0: 0.002, kp1: 0.002 });
+  assert.deepStrictEqual([p.replaced, pathDiff(p, full) <= 1e-9], [0, true]);
+});
+test('rigid: a TURN edit on a pitched stretch moves downstream rigidly (Δbank 0)', () => {
+  // D177 option 2 (the gravity frame): the edit that measured Δbank 8.7e-6 under the rotation-minimising frame. Every
+  // later segment is re-placed, and every re-placed sample's bank against gravity is bit-identical to before
+  const segs = pitched(6), p0 = G.buildPath(segs, START), bank0 = p0.samples.map((x) => x.bankG), n0 = p0.samples.length;
+  const e = segs.slice(); e[2] = { ...segs[2], length: 50.5 }; PATH.rebuildPathFrom(p0, e, 2);
+  const first = p0.segFirst[3], dn = p0.samples.length - n0, moved = p0.samples.slice(first);
+  assert.deepStrictEqual([p0.replaced, moved.filter((x, k) => x.bankG !== bank0[first + k - dn]).length, pathDiff(p0, G.buildPath(e, START))], [segs.length - 3, 0, 0]);
+});
+test('rigid: a level turn edited before a climb re-places the pitched, banked tail with L·y and bankG bit for bit, bankG = asin(L·y)', () => {
+  // the edited turn is level (no frame twist, k·sin 0 = 0), so the tail is re-placed with a real turn (d ≠ 0); the tail
+  // climbs and turns while pitched, so its frames have L·y ≠ 0 for a turn about y to preserve
+  const segs = [{ id: 'a', kind: 'road', length: 40, profile: F.FLAT }, { id: 't', kind: 'road', length: 60, k0: 0.01, k1: 0.01, profile: F.FLAT },
+    { id: 'up', kind: 'road', length: 60, kp0: 0.003, kp1: 0.003, profile: F.FLAT },
+    { id: 'c1', kind: 'road', length: 80, k0: 0.02, k1: 0.02, roll0: 0.2, roll1: 0.2, profile: F.WALLRIDE }, { id: 'c2', kind: 'road', length: 70, k0: -0.015, k1: -0.015, roll0: -0.1, roll1: -0.1, profile: F.FLAT }];
+  // with the gravity frame every block after the edited turn is re-placed ('up', c1, c2); under the rotation-minimising
+  // frame (before option 2) the rounding noise in R0 made 'up' and c1 regrow
+  const p = G.buildPath(segs), before = p.samples.map((x) => [x.L[1], x.bankG]);
+  const e = segs.slice(); e[1] = { ...segs[1], k0: 0.014, k1: 0.014 }; PATH.rebuildPathFrom(p, e, 1);
+  const first = p.segFirst[segs.length - p.replaced], moved = p.samples.slice(first);
+  assert.deepStrictEqual([p.replaced === segs.length - 2, p.samples.length, moved.filter((x, i) => x.L[1] !== before[first + i][0] || x.bankG !== before[first + i][1] || Math.abs(x.bankG - Math.asin(x.L[1])) > 1e-12).length, moved.some((x) => Math.abs(x.L[1]) > 0.05), pathDiff(p, G.buildPath(e))],
+    [true, before.length, 0, true, 0]);
+});
+test('rigid: two sculpts in a row compose their motions; the path still equals a full rebuild', () => {
+  const segs = pitched(6), p = G.buildPath(segs, START), e1 = segs.slice(); e1[1] = { ...segs[1], length: 80.5 };
+  PATH.rebuildPathFrom(p, e1, 1);
+  const e2 = e1.slice(); e2[0] = { ...e1[0], length: 61.25 }; PATH.rebuildPathFrom(p, e2, 0);
+  assert.deepStrictEqual([p.replaced, pathDiff(p, G.buildPath(e2, START)) <= 1e-9], [segs.length - 1, true]);
+});
+test('rigid: an append, then a sculpt upstream: the re-placed tail includes the appended piece, equal to a full rebuild', () => {
+  const segs = pitched(4), p = G.buildPath(segs, START), more = [...segs, { id: 'z', kind: 'road', length: 30, k0: 0.02, k1: 0.02, profile: F.FLAT }];
+  PATH.extendPath(p, more);
+  const e = more.slice(); e[1] = { ...more[1], length: 80.5 }; PATH.rebuildPathFrom(p, e, 1);
+  const f = G.buildPath(e, START);   // segFirst too: the mesh reads each piece's samples by it (mutant R7 kept the samples right and these wrong)
+  assert.deepStrictEqual([p.replaced, p.samples.length, p.segFirst, pathDiff(p, f) <= 1e-9], [more.length - 2, f.samples.length, f.segFirst, true]);
+});
+test('rigid: a later segment whose ROLL changed is regrown, not re-placed (the unchanged tail starts after it)', () => {
+  const segs = pitched(6), p = G.buildPath(segs, START), e = segs.slice();
+  e[1] = { ...segs[1], length: 80.5 }; e[4] = { ...segs[4], roll1: 0.3 };
+  PATH.rebuildPathFrom(p, e, 1);
+  assert.deepStrictEqual([p.replaced, pathDiff(p, G.buildPath(e, START)) <= 1e-9], [segs.length - 5, true]);
+});
+test('exact: a turn edit on a pitched stretch re-places the whole tail and equals a full rebuild exactly', () => {
+  // (before option 2, under the rotation-minimising frame, this edit regrew the whole tail: the frame's twist was real)
+  const segs = pitched(6), { p, full } = edit(segs, 2, { length: 50.5 });
+  assert.deepStrictEqual([p.replaced, pathDiff(p, full)], [segs.length - 3, 0]);
+});
+test('exact: a level turn edit equals a full rebuild exactly (the tail is regrown with the RMF frame)', () => {
+  const segs = pitched(6), start = { start: { pos: [0, 0, 0], theta: 0.3, p: 0 } }, { p, full } = edit(segs, 2, { k0: 0.02, k1: 0.02 }, start);
+  assert.strictEqual(pathDiff(p, full), 0);
+});

@@ -30,7 +30,7 @@ const G = require(path.join(R, 'src/geom/index.js'));
 const { validate } = require(path.join(R, 'src/validate/index.js'));
 const { createShell } = require(path.join(R, 'app/shell.js'));
 const APP = process.env.APP_DIR || path.join(R, 'app');   // the mutation harness points this at a mutant copy
-const { createTrackModel } = require(path.join(APP, 'preview/trackmodel.js'));
+const { createTrackModel, STEP } = require(path.join(APP, 'preview/trackmodel.js'));
 const { batchesOf } = require(path.join(APP, 'preview/batches.js'));
 
 function prng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -44,7 +44,7 @@ class SoakFailure extends Error {
 /** The incremental preview must equal a full build: same batches and indices, matrices 1e-9, positions 1e-5 m. */
 function sameAsFull(model, resolved) {
   if (!resolved || !resolved.segments.length || !model.mesh) return null;
-  const segs = resolved.segments, full = batchesOf(G.buildMesh(G.buildPath(segs, { closed: !!resolved.closed }), segs)), inc = batchesOf(model.mesh);
+  const segs = resolved.segments, full = batchesOf(G.buildMesh(G.buildPath(segs, { step: STEP, closed: !!resolved.closed }), segs)), inc = batchesOf(model.mesh);
   if (inc.length !== full.length) return `${inc.length} batches incrementally, ${full.length} in a full build`;
   for (let i = 0; i < inc.length; i++) {
     if (inc[i].key !== full[i].key) return `batch ${i}: ${inc[i].key} vs ${full[i].key}`;
@@ -77,7 +77,9 @@ async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery 
     try {
       if (op === 'place') { const p = pick(shell.palette().filter((x) => x.builtin)); shell.place(p.name); committed = !shell.getState().message; }
       else if (op === 'sculpt') {
-        const ws = words(); if (!ws.length) { op = 'sculpt (no word)'; }
+        // only top-level words: the shell sculpts a word through editWord, which refuses a phrase (B, D178 read: a starter
+        // phrase in the palette made this pick a phrase id, and handleInfo threw NO_SUCH_WORD at seed 1, op #33)
+        const ws = words().filter((e) => e.phrase === undefined); if (!ws.length) { op = 'sculpt (no word)'; }
         else {
           const w = pick(ws), info = L.handleInfo(shell.getState().history.present, w.id), keys = Object.keys(info.handles).filter((k) => info.handles[k].range);
           if (keys.length) {
@@ -130,7 +132,7 @@ async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery 
     if ((i + 1) % fullEvery === 0) { const d = sameAsFull(model, shell.getState().resolved); if (d) fail(`the incremental preview differs from a full build: ${d}`); stats.fullChecks++; }
     if ((i + 1) % 50 === 0 && shell.getState().resolved && shell.getState().resolved.segments.length) {
       const segs = shell.getState().resolved.segments;
-      try { validate(G.buildPath(segs, { closed: !!shell.getState().resolved.closed }), segs, { csp: true }); stats.validations++; } catch (e) { fail(`validate threw: ${e.stack || e.message}`); }
+      try { validate(G.buildPath(segs, { step: STEP, closed: !!shell.getState().resolved.closed }), segs, { csp: true }); stats.validations++; } catch (e) { fail(`validate threw: ${e.stack || e.message}`); }
     }
     if (!quiet && (i + 1) % 1000 === 0) log(`soak: ${i + 1}/${ops} ops, ${words().length} words, ${stats.committed} committed, ${stats.undoChecks} undo checks`);
   }

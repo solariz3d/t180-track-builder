@@ -2,7 +2,13 @@
 // §9: "The geometry core runs in the UI process … Mesh data must never cross Tauri IPC during a drag"). No GL, no DOM.
 //
 //   const tm = createTrackModel();
-//   tm.update(resolved)  -> { path, mesh, how, batches }     resolved = the shell's state.resolved (src/doc resolve)
+//   tm.update(resolved)  -> { path, mesh, how, batches, bounds, segments, g, fromS }
+//                           resolved = the shell's state.resolved (src/doc resolve). g is the first segment that changed
+//                           and fromS where it starts (the old end for an append); both null for 'full', 'same', 'empty'.
+// ONE SHARED PATH (D177, the librarian's ruling "one shared path between the preview and validation"): the path this
+// model keeps IS the track's path. Validation reads it with segments/how/g/fromS instead of growing a second one
+// (app/preview/index.js publishes it as the 't180:track' event). Its step is STEP, the export's own
+// (src/export/fromwords.js `step: 2`), so the preview meshes the stations the kn5 is meshed from.
 //
 // It does the least work the geometry allows for the change:
 //   'same'     nothing changed
@@ -28,8 +34,11 @@ const { batchesOf } = require('./batches.js');
 const { worldBounds } = require('./look.js');
 
 const keyOf = (seg) => JSON.stringify(seg);
+/** m between path stations: the export's (src/export/fromwords.js buildExport `step: 2`) and validation's. */
+const STEP = 2;
 
-function createTrackModel({ geom = G, pathOpts = {}, meshOpts = {} } = {}) {
+function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
+  const pathOpts = { step: STEP, ...po };
   let path = null, mesh = null, keys = [], closed = false, last = null;
   function full(segs, isClosed) {
     path = geom.buildPath(segs, { ...pathOpts, closed: isClosed }); mesh = geom.buildMesh(path, segs, meshOpts); return 'full';
@@ -39,18 +48,18 @@ function createTrackModel({ geom = G, pathOpts = {}, meshOpts = {} } = {}) {
       if (!resolved) { if (!last) throw new Error('trackModel: no resolved document yet'); return { ...last, how: 'kept', stale: true }; }
       const segs = resolved.segments, isClosed = !!resolved.closed;
       if (!Array.isArray(segs)) throw new Error('trackModel: resolved.segments is missing');
-      if (!segs.length) { path = null; mesh = null; keys = []; closed = isClosed; last = { path, mesh, how: 'empty', batches: [] }; return last; }
+      if (!segs.length) { path = null; mesh = null; keys = []; closed = isClosed; last = { path, mesh, how: 'empty', batches: [], segments: segs, g: null, fromS: null }; return last; }
       const nk = segs.map(keyOf);
       let g = 0; while (g < keys.length && g < nk.length && keys[g] === nk[g]) g++;
-      let how;
+      let how, from = null, fromS = null;
       if (!path || isClosed || closed) how = full(segs, isClosed);
       else if (g === keys.length && g === nk.length) how = 'same';
-      else if (g === keys.length) { geom.extendPath(path, segs); mesh = geom.extendMesh(mesh, path, segs); how = 'extend'; }
-      else if (nk.length >= keys.length) { geom.rebuildPathFrom(path, segs, g); mesh = geom.sculptMesh(mesh, path, segs, g); how = 'sculpt'; }
+      else if (g === keys.length) { from = g; fromS = path.lengthM; geom.extendPath(path, segs); mesh = geom.extendMesh(mesh, path, segs); how = 'extend'; }
+      else if (nk.length >= keys.length) { from = g; fromS = path.starts[g].s; geom.rebuildPathFrom(path, segs, g); mesh = geom.sculptMesh(mesh, path, segs, g); how = 'sculpt'; }
       else how = full(segs, isClosed);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
       keys = nk; closed = isClosed;
       const batches = how === 'same' && last ? last.batches : batchesOf(mesh);
-      last = { path, mesh, how, batches, bounds: how === 'same' && last ? last.bounds : worldBounds(batches) };
+      last = { path, mesh, how, batches, bounds: how === 'same' && last ? last.bounds : worldBounds(batches), segments: segs, g: from, fromS };
       return last;
     },
     ghostFor(candidate) {
@@ -60,8 +69,10 @@ function createTrackModel({ geom = G, pathOpts = {}, meshOpts = {} } = {}) {
       if (nk.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
       if (!path) { const p = geom.buildPath(segs, pathOpts); return { batches: batchesOf(geom.buildMesh(p, segs, meshOpts)), path: p, head: p.head }; }
       if (closed) throw new Error('ghost: a closed loop has no open end');
-      // copies: extendPath only pops and pushes these arrays and never edits a sample; extendMesh only sets new pieces and seams
-      const p = { ...path, samples: path.samples.slice(), starts: path.starts.slice(), segFirst: path.segFirst.slice(), segEnd: path.segEnd.slice() };
+      // copies: extendPath only pops and pushes these arrays and never edits a sample, and of the blocks it changes only the
+      // last one's sample count (so that block is copied); extendMesh only sets new pieces and seams
+      const blocks = path.blocks.slice(); blocks[blocks.length - 1] = { ...blocks[blocks.length - 1] };
+      const p = { ...path, samples: path.samples.slice(), starts: path.starts.slice(), segFirst: path.segFirst.slice(), segEnd: path.segEnd.slice(), blocks };
       const st = mesh._state, m = { ...mesh, _state: { ...st, pieces: st.pieces.slice(), seams: st.seams.slice() } };
       geom.extendPath(p, segs);
       const gm = geom.extendMesh(m, p, segs), from = keys.length;
@@ -72,4 +83,4 @@ function createTrackModel({ geom = G, pathOpts = {}, meshOpts = {} } = {}) {
   };
 }
 
-module.exports = { createTrackModel };
+module.exports = { createTrackModel, STEP };
