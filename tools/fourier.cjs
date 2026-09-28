@@ -288,11 +288,17 @@ function fitOne(read, opts = {}) {
 // ── the privacy guard ────────────────────────────────────────────────────────────────────────────────────────────────
 /** Write a coefficient file only where git ignores it and tracks nothing: fail closed if git cannot say. */
 function writeLocal(file, text) {
-  const dir = path.dirname(path.resolve(file)), git = (args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+  // git runs from the nearest folder that EXISTS: in a fresh checkout reads/ is not there yet, and a git run from a missing folder
+  // crashed the first read (D184 gap G1, p-d184-read-B). The folder is created only AFTER both checks pass, so a refused path
+  // never leaves a folder behind.
+  const dir = path.dirname(path.resolve(file));
+  let cwd = dir; while (!fs.existsSync(cwd) && path.dirname(cwd) !== cwd) cwd = path.dirname(cwd);
+  const git = (args) => spawnSync('git', args, { cwd, encoding: 'utf8' });
   const ign = git(['check-ignore', '-q', path.resolve(file)]);
   if (ign.status !== 0) throw new Error(`refusing to write ${path.basename(file)}: git does not ignore that path (an equation of a real track is its layout; it stays in reads/)`);
   const tracked = git(['ls-files', '--error-unmatch', path.resolve(file)]);
   if (tracked.status === 0) throw new Error(`refusing to write ${path.basename(file)}: that path is tracked`);
+  fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, text);
 }
 

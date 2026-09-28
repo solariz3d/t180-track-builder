@@ -86,6 +86,26 @@ test('privacy: the writer refuses a path git does not ignore', () => {
   assert.throws(() => F.writeLocal(path.join(REPO, 'docs', 'probe.equation.json'), '{}'), /does not ignore/);
 });
 
+// D184 gap G1 (p-d184-read-B): in a FRESH checkout reads/ does not exist yet, and the first read crashed there
+function freshCheckout(t) {
+  const fs = require('fs'), os = require('os'), dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-fresh-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  assert.strictEqual(spawnSync('git', ['init', '-q'], { cwd: dir }).status, 0, 'git init');
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'reads/\n');
+  return dir;
+}
+test('privacy: in a fresh checkout with no reads/ folder, the writer creates it and writes there', (t) => {
+  const fs = require('fs'), dir = freshCheckout(t), file = path.join(dir, 'reads', 'probe.read.json');
+  assert.ok(!fs.existsSync(path.join(dir, 'reads')), 'reads/ must start absent');
+  F.writeLocal(file, '{}');
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), '{}');
+});
+test('privacy: a refused path in a missing folder leaves no folder behind', (t) => {
+  const fs = require('fs'), dir = freshCheckout(t);
+  assert.throws(() => F.writeLocal(path.join(dir, 'docs', 'probe.equation.json'), '{}'), /does not ignore/);
+  assert.ok(!fs.existsSync(path.join(dir, 'docs')), 'the refused folder was created');
+});
+
 // ── the shelf's known answers for the formulas M4 adds (docs/math 03 §1 "the half-sample shift", 01 §5) ──
 test('03 §1, the half-sample shift: a cosine sampled at chord midpoints comes back as exactly that cosine in s', () => {
   const M = 64, L = 256, k = 3, f = (s) => Math.cos(2 * Math.PI * k * s / L) + 0.5 * Math.sin(2 * Math.PI * 5 * s / L);
