@@ -7,7 +7,13 @@
 //   ctl.setSlot(id, slot, patch)   a word's slot override: { texture?, tileLength?, fit?, tileWidth?, offset?, dir? };
 //                                  one undo step (the shell's sculpt)
 //   ctl.clearSlot(id, slot)        drop the override: the slot goes back to its font's default
-//   ctl.state -> { images: [{ name, format, width, height, warnings }], set, error, budget }
+//   ctl.setMade(id, slot, text, size)  a MADE texture (src/texmaker's canonical text) in the slot, at size px (D175);
+//                                  an image the slot held is dropped, as a slot holds one or the other
+//   ctl.savePack(id, { name, author })  -> the pack FILE's text: word id's whole look, with the images it names
+//   ctl.importPack(text)           a pack file: its images join the panel's (a clash refused, as the piece library's)
+//   ctl.applyPack(name)            every word of the pack's font wears it: ONE edit, one undo step (shell.commitDoc)
+//   ctl.state -> { images: [{ name, format, width, height, warnings }], set, error, budget, packs: [{ name, font, author }] }
+//   state.budget is the live texture-memory counter (src/texture/warnings.js budget: per texture, per slot, total, level)
 //
 // state.set IS THE SEAM (src/texture/set.js): the preview draws previewTextures(state.set) and asks
 // state.set.bySegment(id) for each segment's slots; the export takes the same set (applyToScene). One set, rebuilt
@@ -15,10 +21,12 @@
 'use strict';
 const T = require('../../src/texture/index.js');
 const { NAME_RE, SLOTS } = require('../../src/doc/textures.js');
+const P = require('../../src/doc/packs.js');
 
 function createTextureController(shell, { onUpdate = () => {} } = {}) {
   const images = new Map();                    // name -> { bytes, format, width, height, warnings }
-  const out = { state: { images: [], set: null, error: null, budget: null } };
+  const packs = [];
+  const out = { state: { images: [], set: null, error: null, budget: null, packs: [] } };
   const assets = () => Object.fromEntries([...images].map(([n, v]) => [n, { bytes: v.bytes }]));
 
   function update(error = null) {
@@ -29,7 +37,7 @@ function createTextureController(shell, { onUpdate = () => {} } = {}) {
       err = err || e.message;
     }
     out.state = { images: [...images].map(([name, v]) => ({ name, format: v.format, width: v.width, height: v.height, warnings: v.warnings })),
-      set, error: err, budget: set ? set.budget : null };
+      set, error: err, budget: set ? set.budget : null, packs: packs.map((q) => ({ name: q.name, font: q.font, author: q.author })) };
     onUpdate(out.state);
     return out.state;
   }
@@ -61,8 +69,31 @@ function createTextureController(shell, { onUpdate = () => {} } = {}) {
     },
     setSlot(id, slot, patch) {
       if (patch.texture && !images.has(patch.texture)) return refuse(`add the image "${patch.texture}" before a slot can use it`);
-      shell.sculpt(id, { textures: { [slot]: patch } });
+      shell.sculpt(id, { textures: { [slot]: patch.texture ? { make: null, ...patch } : patch } });
       return update(shell.getState().message || null);
+    },
+    setMade(id, slot, text, size) {
+      shell.sculpt(id, { textures: { [slot]: { texture: null, make: text, ...(size !== undefined ? { size } : {}) } } });
+      return update(shell.getState().message || null);
+    },
+    savePack(id, { name, author = '' }) {
+      return P.serializePack(P.packFromWord(shell.getState().history.present, id, { name, author, images: assets() }));
+    },
+    importPack(text) {
+      let col;
+      try { col = P.importPack({ packs, images: Object.fromEntries([...images].map(([n, v]) => [n, v.bytes])) }, text); } catch (e) { if (e.name !== 'DocError') throw e; return refuse(e.message); }
+      const p = col.packs[col.packs.length - 1];
+      for (const im of p.images) if (!images.has(im.name)) {
+        const img = T.decodeImage(im.bytes);
+        images.set(im.name, { bytes: im.bytes, format: img.format, width: img.width, height: img.height, warnings: T.checkTexture(img, { name: im.name }) });
+      }
+      packs.push(p); return update();
+    },
+    applyPack(name) {
+      const p = packs.find((q) => q.name === name); if (!p) return refuse(`there is no pack called "${name}"`);
+      const r = P.applyPack(shell.getState().history.present, p);
+      if (!r.words) return refuse(`no ${p.font} word to wear "${name}"`);
+      shell.commitDoc(r.doc); return update(shell.getState().message || null);
     },
     clearSlot(id, slot) { shell.sculpt(id, { textures: { [slot]: null } }); return update(shell.getState().message || null); },
     dispose() { unsubscribe(); },

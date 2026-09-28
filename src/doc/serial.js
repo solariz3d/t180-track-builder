@@ -164,7 +164,7 @@ function loadWord(w, at, withId) {
   // the texture overrides' lengths are snapped to the length quantum; anything malformed is left for checkWordBody to refuse
   const qm = (v) => (typeof v === 'number' ? fromQ.m(toQ.m(v) || 0) : v);
   const tx = w.textures && typeof w.textures === 'object' && !Array.isArray(w.textures)
-    ? Object.fromEntries(Object.entries(w.textures).map(([s, o]) => [s, o && typeof o === 'object' && !Array.isArray(o) ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, TX.LENGTHS.includes(k) ? qm(v) : v])) : o]))
+    ? Object.fromEntries(Object.entries(w.textures).map(([s, o]) => [s, o && typeof o === 'object' && !Array.isArray(o) ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, TX.LENGTHS.includes(k) ? qm(v) : k === 'make' ? TX.canonMake(v) : v])) : o]))
     : w.textures;
   return { word: w.word, font: w.font === undefined ? undefined : w.font, tempo: w.tempo, handles, speed: sp === null ? null : fromQ.kmh(Math.round(sp * 100) || 0), textures: tx };
 }

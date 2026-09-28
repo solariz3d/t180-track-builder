@@ -62,6 +62,7 @@
   <button id="save" title="Ctrl+S">Save</button>
   <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
   <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
+  <span id="install" title="Install to AC writes into Assetto Corsa's content	racks, always as a t180b_ folder"></span>
   <span id="status" style="color: var(--dim)"></span>
 </header>
 <div id="banner"></div>
@@ -74,6 +75,7 @@
   <section id="reds"></section>
   <section id="validation"></section>
   <section id="handles"></section>
+  <section id="share"></section>
 </aside>
 <script src="lib/cjs.js"></script>
 <script>
@@ -99,13 +101,14 @@
     writeExport: (dir, folder, files) => call('write_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }),
   };
 
-  let S, pal, panels, shell;
+  let S, pal, panels, shell, exporter;
   try {
     S = await loadCjs('app/shell.js', get);
     pal = await loadCjs('app/palette/palette.js', get);
     panels = await loadCjs('app/palette/panels.js', get);
     const ex = await loadCjs('app/export/export.js', get);
-    shell = await S.createShell({ storage, exporter: await ex.makeExporter(get) });
+    exporter = await ex.makeExporter(get);
+    shell = await S.createShell({ storage, exporter });
   } catch (e) { $('palette').textContent = `The app could not start: ${e.message}`; return; }
 
   // THE GHOST (the preview's seam, app/preview/index.js): pointing at a palette piece sends 't180-ghost' with the shell's
@@ -184,6 +187,17 @@
   if (win && win.onCloseRequested) win.onCloseRequested(async () => { if (!shell.getState().dirty) await shell.cleanExit(); else await shell.flushAutosave(); });
 
   // C's and E's panels: each optional, each mount(root, shell); a failure is shown in its own area (app/palette/panels.js).
+  // Share codes, and Install to AC / See it in Assetto (the launch is off by default; src-tauri/src/ac.rs).
+  const b64files = (files) => files.map((f) => ({ path: f.path, data: b64(f.bytes) }));
+  const native = {
+    getAcRoot: () => call('get_ac_root'), setAcRoot: (path) => call('set_ac_root', { path }),
+    installTrack: (folder, files) => call('install_track', { folder, files: b64files(files) }),
+    getSeeItSetting: () => (tauri ? call('get_see_it_setting') : Promise.resolve(false)), setSeeItSetting: (on) => call('set_see_it_setting', { on }),
+    seeIt: (track, layout) => call('see_it_in_assetto', { track, layout }),
+  };
+  const pickFolder = (title) => call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
+  await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get), shell);
+  await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { exporter, native, pickFolder }) })), shell);
   for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation'], ['handles', 'handles']]) {
     await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
   }

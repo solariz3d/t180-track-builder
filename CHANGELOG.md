@@ -259,6 +259,25 @@ All notable changes to this project are recorded here. The format follows
   cannot pit.
 - Projects of several layouts, each its own document, exported as one track folder with one set of files per layout
   (`models_<layout>.ini`, `<layout>/`, `ui/<layout>/`), laid out the way AC's installed multi-layout tracks are.
+- A texture slot can hold a texture made in the program: its parameter text, rendered at a chosen size (a power of two,
+  16 to 8192) in both the preview and the export, so a track's look is text that regenerates byte-exact. A "Make…"
+  button per slot opens the texture maker.
+- Texture packs: one shareable file with a font's full look and the images it uses. Importing refuses a name clash, a
+  DDS and a compressed normal map; wearing a pack is one undo step.
+- A starter phrasebook (`src/doc/phrasebook.js`, ARCHITECTURE §11.7): sakura flow, bowl hairpin, S and spiral climb.
+  Each resolves, builds and validates with no red at its default tempo, and each quotes the FINDINGS and ARCHITECTURE
+  lines it comes from. Not yet in the palette.
+- Shareable codes (one line of text) for a track, a piece or phrase, and a texture pack. They import byte-exact, and a
+  corrupted, cut or foreign code is refused whole with nothing changed.
+- "Install to AC": pick the Assetto Corsa folder once (remembered in the app's own data folder), and the track is
+  exported straight into `content\tracks` as `t180b_<name>`. It never writes over a folder the builder did not make.
+- "See it in Assetto": a launch that backs up and restores `race.ini` around the game. It is off by default behind a
+  setting labelled as launching the game, and has never been run: the builder's tests drive it only with a mock.
+- Hardening: a Rainbow-scale benchmark (`scripts/bench.js`, 40 km along the app's own edit path), a seeded soak of
+  random edits (`scripts/soak.js`; 60 ops in the default suite, 10,000 behind `T180_SOAK`) checking round-trips,
+  byte-identical undo, save/open and the preview against a full build, and tests that an edit rebuilds only the cells
+  it touches and that no mesh crosses to the native side during a drag. The benchmark shows every edit on a 40 km track
+  over its budget, mostly in revalidation.
 
 ### Changed
 
@@ -278,6 +297,12 @@ All notable changes to this project are recorded here. The format follows
 - The document's canonical text now carries each word's `textures` (schema 2) and the document's `pitLane` (schema 3).
 - The geometry and app mutation harnesses run their child test processes at `--test-concurrency=4`, so a full-suite
   run no longer fans each child out across every core.
+- The texture-memory budget reports per texture, per slot and in total. It turns amber above the median and red above
+  the largest embedded texture load of the eleven T-180 tracks measured (56.3 MB and 328.9 MB of kn5 file bytes),
+  replacing an inferred 256 MiB line. Red is shown, not a refusal.
+- The texture decoder takes a size cap, so a small hostile code cannot demand a large buffer.
+- README: the status is no longer "planned, not built". A table judges every item of ARCHITECTURE §1–§6, §5b and §5c
+  as tested, built or not yet, naming the file and the test.
 
 ### Removed
 

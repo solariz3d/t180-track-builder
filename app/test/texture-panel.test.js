@@ -73,3 +73,32 @@ test('the textures panel loads through the webview loader and exports mount(root
   const m = await loadCjs('app/texture/index.js', async (p) => fs.readFileSync(path.join(REPO, p), 'utf8'));
   assert.strictEqual(typeof m.mount, 'function');
 });
+
+// ── D175: made textures, packs, the budget ─────────────────────────────────────────────────────────────────────────
+const TM = require('../../src/texmaker/index.js');
+test('a made texture in a slot replaces an image there, reaches the set, and shows in the live budget', async () => {
+  const shell = await createShell({ storage: mem() });
+  const ctl = createTextureController(shell);
+  shell.place('straight'); ctl.addImage('a', png());
+  ctl.setSlot('w1', 'floor', { texture: 'a' });
+  const st = ctl.setMade('w1', 'floor', TM.serialize(TM.PRESETS.asphalt), 32);
+  assert.deepStrictEqual([st.error, shell.getState().history.present.words[0].textures.floor.texture], [null, null]);
+  assert.strictEqual(st.set.textures.length, 1);
+  assert.strictEqual(st.budget.bytes, T.ddsBytes(32, 32));
+  assert.deepStrictEqual([st.budget.level, st.budget.perSlot.floor], ['ok', T.ddsBytes(32, 32)]);
+});
+test('a look saved as a pack imports into another session and is worn by every word of its font in one undo step', async () => {
+  const s1 = await createShell({ storage: mem() }), c1 = createTextureController(s1);
+  s1.place('straight'); c1.addImage('a', png());
+  c1.setSlot('w1', 'walls', { texture: 'a' }); c1.setMade('w1', 'lines', TM.serialize(TM.PRESETS.lanes), 16);
+  const text = c1.savePack('w1', { name: 'Mine' });
+  const s2 = await createShell({ storage: mem() }), c2 = createTextureController(s2);
+  s2.place('straight'); s2.place('straight');
+  assert.deepStrictEqual([c2.importPack(text).error, c2.state.packs.map((p) => p.name), c2.state.images.map((i) => i.name)], [null, ['Mine'], ['a']]);
+  const before = s2.getState().history.past.length;
+  c2.applyPack('Mine');
+  assert.strictEqual(s2.getState().history.past.length, before + 1);
+  assert.deepStrictEqual(s2.getState().history.present.words.map((w) => w.textures.walls.texture), ['a', 'a']);
+  assert.match(c2.importPack(text).error, /already called "Mine"/);
+  s2.undo(); assert.deepStrictEqual(s2.getState().history.present.words.map((w) => w.textures), [{}, {}]);
+});

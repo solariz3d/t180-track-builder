@@ -11,7 +11,7 @@
 // - It mounts: the area is the panel's, and nothing of ours is left in it.
 'use strict';
 
-const TITLE = { preview: 'preview', camera: 'camera', 'validate-ui': 'validation panel', handles: 'handles panel' };
+const TITLE = { preview: 'preview', camera: 'camera', 'validate-ui': 'validation panel', handles: 'handles panel', share: 'share codes', install: 'install to AC' };
 const NOT_THERE = /could not load app\/[^:]+\/index\.js: 404/;
 
 function show(root, cls, text, alert) {

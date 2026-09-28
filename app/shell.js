@@ -129,6 +129,8 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
 
     /** Sculpt one word (handles, font, speed): one undo entry. For a drag, use beginDrag / dragTo / endDrag. */
     sculpt: (id, patch) => attempt(() => commit(D.editWord(doc(), id, patch))),
+    /** One whole edit, made elsewhere from the present document (a texture pack worn by every word of a font): checked, then one undo step. */
+    commitDoc: (d) => attempt(() => { D.checkDoc(d); return commit(d); }),
     beginDrag: () => attempt(() => set({ history: D.beginDrag(st.history) })),
     dragTo: (id, patch) => attempt(() => { const d = D.editWord(doc(), id, patch); return set({ history: D.dragTo(st.history, d), ...resolved(d), dirty: true }); }),
     endDrag: () => attempt(() => set({ history: D.endDrag(st.history) })),
@@ -146,6 +148,14 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
     async saveSelectionAsPiece(name, author = '') {
       if (!st.selection || !st.selection.length) return set({ message: 'select one or more placed words first' });
       const lib = attempt(() => L.savePiece(st.lib, { name, author, doc: doc(), ids: st.selection }));
+      if (!lib) return st;
+      await storage.saveLibrary(L.serializeLibrary(lib));
+      return set({ lib, message: null });
+    },
+
+    /** A piece or phrase from its file text (a pasted code decodes to this): it joins the palette and the library file. */
+    async importPieceText(text) {
+      const lib = attempt(() => L.importPiece(st.lib, text));
       if (!lib) return st;
       await storage.saveLibrary(L.serializeLibrary(lib));
       return set({ lib, message: null });
