@@ -33,6 +33,10 @@ const MUTANTS = [
   ['K21 dished corner: cos β', 'const dishedCornerK = (kh, beta, dpsidu) => kh * Math.sin(beta) * dpsidu;', 'const dishedCornerK = (kh, beta, dpsidu) => kh * Math.cos(beta) * dpsidu;'],
   ['K22 particle: gravity sign', 'const s = surf(x, z), q = g + s.fxx', 'const s = surf(x, z), q = -g + s.fxx'],
   ['K23 particle: no 1/D', 'return { ax: -s.fx * q / D, az: -s.fz * q / D, N: q / Math.sqrt(D) };', 'return { ax: -s.fx * q, az: -s.fz * q, N: q / Math.sqrt(D) };'],
+  ['K25 normal force: gravity term dropped', 'const normalForce = (knv2, nUp, g) => knv2 + g * nUp;', 'const normalForce = (knv2, nUp, g) => knv2 + g;'],
+  ['K26 banked speed: sin β for tan β', 'Math.sqrt(r * g * Math.tan(beta))', 'Math.sqrt(r * g * Math.sin(beta))'],
+  ['K27 cone turn: 4·g·tan β under the root', '8 * g * t * v * v * r0', '4 * g * t * v * v * r0'],
+  ['K28 crest lift-off: 2g for 3g', '/ (3 * g);', '/ (2 * g);'],
   ['K24 Fourier: 1/M not 2/M', 'a.push(2 * ak / M); b.push(2 * bk / M);', 'a.push(ak / M); b.push(bk / M);'],
 ];
 

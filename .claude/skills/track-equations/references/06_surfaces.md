@@ -96,6 +96,40 @@ triangulation.
 - Also, at 20–90 g the car's balance bank is 87–89°, and grip, downforce and throttle let it leave the water line on purpose.
 - Source: `exo_memory/research/t180_be_like_water_2026-09-28.md`.
 
+## §8 The water's laws (added for D185's water, `src/core/water.js`, before it used them)
+**1. The normal force in the surface's own frame** (DERIVED from §7):
+
+  **N/m = κn·v² + g·(n·up)**,  with κn·v² = n·(S_ss ṡ² + 2 S_su ṡ u̇ + S_uu u̇²) for a surface S(s, u).
+
+- It is §7's q/√D in the graph form, rewritten for a surface that need not be a graph (walls, inversions).
+- **N < 0 is lift-off.**
+- **Test (06 §8):** equal to q/√D on a graph, to 1e-12. **Mutant K25** (gravity term dropped) **is caught.**
+
+**2. The frictionless banked turn** (SOURCED: Wikipedia, "Banked turn", §"Frictionless banked turn", opened 2026-09-28):
+
+  **v² = r·g·tan β**
+
+**3. A particle on a surface of revolution about the vertical** (DERIVED from Newton's law):
+- Gravity is parallel to the axis, and the normal force lies in the meridian plane. Neither has a torque about the axis, so
+  r²·dφ/dt is conserved, and so is ½v² + g·y.
+- **On a cone y = (r − R)·tan β,** a particle released at radius r0 moving along the ring at speed v turns again at the
+  root r ≠ r0 of **v²(r + r0) = 2g·tan β·r²**.
+  - At the balance speed, the only root is r0: it holds its radius.
+  - Slower, it slides in; faster, it climbs out.
+  - If the root lies beyond a lip, it spills there.
+
+**4. Lift-off over a circular crest** (DERIVED from 1 and energy). A crest of radius Rv, entered at pitch p0 at speed v0:
+
+  **cos p\* = (v0²/Rv + 2g·cos p0) / (3g)**
+
+**Tests:**
+- 06 §8, three checks, each against §7's graph particle: the normal force, the banked ring (held radius, and the other
+  turning radius), and the crest.
+- **Mutants K25–K28 are caught.**
+
+**Where the water is held to them:** `test/core_water.test.js`. There, TEST 5 (B's sealed registration,
+`exo_memory/loop/d185_registration_2026-09-28.md`) scores the banked ring at 45° and at 10°.
+
 ## True of T-180 tracks (MEASURED)
 - **M3, per vertex: FAILS** (FINDINGS §7i, `node tools/meshcurv.cjs <track dir> <read.json>`).
   - Share of K < 0 area, corners against straights:

@@ -190,6 +190,33 @@ module.exports = [
     const R = 100, crest = (x) => ({ f: -x * x / (2 * R), fx: -x / R, fz: 0, fxx: -1 / R, fxz: 0, fzz: 0 }), N = (v) => M.particleOnGraph(crest, [0, 0, v, 0], { steps: 0 })[0].N;
     close(N(20), 9.81 - 4, 1e-12); assert.ok(N(Math.sqrt(9.81 * R) * 0.99) > 0); assert.ok(N(Math.sqrt(9.81 * R) * 1.01) < 0);
   } },
+  // ── 06 §8 the water's laws (D185): each against an independent route, the graph particle of 06 §7 ──
+  { section: '06 §8', name: 'the normal force in the surface frame, κn·v² + g·(n·up), equals the graph particle\'s q/√D', run(M) {
+    const f = (x, z) => ({ fx: 0.03 * x - 0.01 * z, fz: 0.05 * z - 0.01 * x, fxx: 0.03, fxz: -0.01, fzz: 0.05 });
+    for (const [x, z, vx, vz] of [[3, -2, 20, 5], [-7, 4, -3, 30], [0.5, 9, 12, -12]]) {
+      const s = f(x, z), D = 1 + s.fx * s.fx + s.fz * s.fz, n = [-s.fx / Math.sqrt(D), 1 / Math.sqrt(D), -s.fz / Math.sqrt(D)];
+      const knv2 = n[1] * (s.fxx * vx * vx + 2 * s.fxz * vx * vz + s.fzz * vz * vz);   // n · (0, the path's y″, 0)
+      const want = (9.81 + s.fxx * vx * vx + 2 * s.fxz * vx * vz + s.fzz * vz * vz) / Math.sqrt(D);
+      close(M.normalForce(knv2, n[1], 9.81), want, 1e-12);
+    }
+  } },
+  { section: '06 §8', name: 'a banked ring (a cone): at v² = r·g·tan β the particle holds its radius; slower, it turns at the radius energy + angular momentum give', run(M) {
+    const g = 9.81, R = 200, beta = 0.3, t = Math.tan(beta);
+    close(M.bankedSpeed(10, Math.PI / 4, g) ** 2, 10 * g, 1e-9, '45°: v² = g·r');
+    const cone = (x, z) => { const r = Math.hypot(x, z), r3 = r ** 3; return { f: (r - R) * t, fx: t * x / r, fz: t * z / r, fxx: t * z * z / r3, fxz: -t * x * z / r3, fzz: t * x * x / r3 }; };
+    const radii = (v, r0, T) => { const h = 2e-3, out = M.particleOnGraph(cone, [r0, 0, 0, v], { g, h, steps: Math.round(T / h) }); return out.map((p) => Math.hypot(p.x, p.z)); };
+    const vb = M.bankedSpeed(R, beta, g), held = radii(vb, R, 2 * Math.PI * R / vb);
+    for (const r of held) close(r, R, 1e-6 * R, 'balanced: radius');
+    const r0 = R + 8, run = radii(vb, r0, 60), want = M.coneTurn(r0, vb, beta, g);
+    assert.ok(want < r0 - 1, `the other turning radius is inside (${want})`); close(Math.min(...run), want, 0.02, 'turning radius');
+  } },
+  { section: '06 §8', name: 'over a circular crest a particle lifts off where cos p = (v0²/Rv + 2g·cos p0)/(3g)', run(M) {
+    const g = 9.81, Rv = 50, p0 = 0.3, v0 = 15, crest = (x) => { const f = Math.sqrt(Rv * Rv - x * x); return { f, fx: -x / f, fz: 0, fxx: -(Rv * Rv) / f ** 3, fxz: 0, fzz: 0 }; };
+    const out = M.particleOnGraph(crest, [-Rv * Math.sin(p0), 0, v0 * Math.cos(p0), 0], { g, h: 1e-4, steps: 60000 });
+    const i = out.findIndex((p) => p.N < 0); assert.ok(i > 0, 'it lifts off');
+    const cosAt = (p) => Math.sqrt(Rv * Rv - p.x * p.x) / Rv, want = M.crestLiftoffCos(v0, Rv, p0, g);
+    assert.ok(out[i].x > 0, 'past the top'); close(cosAt(out[i]), want, 1e-4);
+  } },
   // ── 07 Fourier ──
   { section: '07 §1', name: 'a Fourier fit of cos(3·2πs/L) gives a₃ = 1; a square wave (a jump) gives b_k = 4/(πk) on odd k: 1/k decay', run(M) {
     const f = Array.from({ length: 256 }, (_, i) => Math.cos(TAU * 3 * i / 256)), c = M.fourierFit(f, 6);

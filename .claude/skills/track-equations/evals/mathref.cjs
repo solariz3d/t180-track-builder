@@ -174,6 +174,19 @@ function fourierFit(f, N) {
   return { a0, a, b };
 }
 
+// ── 06 §8: the water's laws (D185). The normal force in the surface's own frame; the frictionless banked turn; a particle on a
+// surface of revolution about the vertical (energy + angular momentum about the axis); lift-off over a circular crest ──
+// N/m = κn·v² + g·(n·up), with κn·v² = n·(the path's second derivative on the surface)
+const normalForce = (knv2, nUp, g) => knv2 + g * nUp;
+// the frictionless balanced speed of a banked turn: v² = r·g·tan β
+const bankedSpeed = (r, beta, g) => Math.sqrt(r * g * Math.tan(beta));
+// on a cone y = (r − R)·tan β, released at radius r0 moving along the ring at speed v: the OTHER turning radius, from
+// ½v²·r0²/r² + g·tan β·(r − r0) = ½v² (energy, with r²·dφ/dt = r0·v conserved), i.e. v²(r + r0) = 2g·tan β·r²
+const coneTurn = (r0, v, beta, g) => { const t = Math.tan(beta); return (v * v + Math.sqrt(v ** 4 + 8 * g * t * v * v * r0)) / (4 * g * t); };
+// over a circular crest of radius Rv, entered at pitch p0 at speed v0: lift-off where g·cos p = v²/Rv with
+// v² = v0² − 2g·Rv·(cos p − cos p0), so cos p* = (v0²/Rv + 2g·cos p0) / (3g)
+const crestLiftoffCos = (v0, Rv, p0, g) => (v0 * v0 / Rv + 2 * g * Math.cos(p0)) / (3 * g);
+
 module.exports = {
   rayTriangle, nearestHit, midpoint,
   curvature, tangent, rebuild, discreteCurvature, clothoidKappa, smoothstep,
@@ -181,5 +194,6 @@ module.exports = {
   solve, lstsq, kkt, leastNorm, closeLoop,
   projectile, timeToHeight,
   sphereK, torusK, dishedCornerK, particleOnGraph,
+  normalForce, bankedSpeed, coneTurn, crestLiftoffCos,
   fourierFit,
 };

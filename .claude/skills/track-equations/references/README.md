@@ -4,7 +4,7 @@ The mathematics the skill's method uses: read a track's true centreline from its
 joined at G2, close it, check it. Each formula has a SOURCE and a KNOWN-ANSWER TEST.
 
 **THE RULE: a formula is in these references only when a test exercises it.** The tests are in `../evals/`:
-`known_answers.test.js` holds 25 checks against the reference implementations (`mathref.cjs`), and `mutation.test.js` shows
+`known_answers.test.js` holds 28 checks against the reference implementations (`mathref.cjs`), and `mutation.test.js` shows
 that a one-formula change is caught. A formula a packet needs that is not here is ADDED, with its source and a test, BEFORE
 it is used.
 
@@ -21,6 +21,7 @@ it is used.
 | [06 surfaces](06_surfaces.md) | Gaussian curvature, measured integrated or smoothed; T-180 corners measure ELLIPTIC; the particle on the surface |
 | [07 Fourier](07_fourier.md) | Fourier on a loop (M1, M4), and why jumps and long laps break a single series |
 | [08 what failed](08_what_failed.md) | tonight's failures and the rule each one left, so the skill does not repeat them |
+| [10 sculpt and close](10_sculpt_close.md) | the core's brush (the quintic smootherstep falloff, knot averages on whole-support control points) and the one-click close (Gauss–Newton with the least-norm step) |
 | [MATH_SOURCES](MATH_SOURCES.md) | the citation index: what each source is, and whether it was opened |
 
 ## Labels
