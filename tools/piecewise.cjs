@@ -361,7 +361,7 @@ function summarise(t, tol) {
     bankWithin5: +(ok.filter((e) => e.bank <= 5 * DEG).length / ok.length).toFixed(4), bankP95Deg: +(pct(ok.map((e) => e.bank), 0.95) / DEG).toFixed(2), iterations: t.iterations, capped: t.capped };
 }
 
-module.exports = { roadTris, rayIndex, crossSection, meshCentreline, splitPoints, piecesOf, knotsOf, basis, bandChol, fitSystem, evalPiece, rmf, fitTrack, jumpChecks, summarise };
+module.exports = { roadTris, rayIndex, crossSection, meshCentreline, splitPoints, piecesOf, knotsOf, basis, bandChol, denseSolve, fitSystem, evalPiece, rmf, fitTrack, jumpChecks, summarise };
 
 if (require.main === module) {
   const args = process.argv.slice(2), flag = (k, d) => { const i = args.indexOf(k); return i < 0 ? d : args[i + 1]; };
