@@ -87,6 +87,14 @@ through the same test first, and failed it badly.
 - The palette suggests what usually comes next, from how often each kind of word follows another on the real tracks.
   It only suggests: every word can still be placed after any other.
 
+### Fixed
+
+- Holding a movement key and pressing C or B no longer snaps the camera back to free on the key’s auto-repeat.
+- A sideways trackpad swipe no longer zooms the view, or changes the lens with Ctrl. Shift+wheel on a device that reports
+  it as deltaX still works (×4).
+- The label of the piece at the build head is always drawn, even when that piece is off-screen, and label boxes are opaque
+  (no border), so their text stays at least 4.5:1 over bright road.
+
 ## [0.2.2] - 2026-09-28
 
 The first installer built from the published source (`main` at 484be9e): it holds every change listed under 0.2.1
