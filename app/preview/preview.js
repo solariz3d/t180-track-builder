@@ -16,8 +16,9 @@
 //
 // KEYS (keyAction below, tested headless):  C  next camera      B  the build view, from anywhere
 //   L  the look: the AC shaders (default) or the colour per placed word (ARCHITECTURE §4's feedback layer)
-//   flying:  W / S forward and back,  A / D left and right,  Q / E down and up,  Shift sprints (×4, rising to ×20 over 2.5 s held). Only the most recently
-//   pressed of the keys held moves; on its release the next newest does. From any view the first move takes the view over
+//   flying:  W / S forward and back,  A / D left and right,  Q / E down and up,  Shift sprints (×4, rising to ×20 over 2.5 s held). Movement is PER AXIS
+//   (the keeper, D188): W/S, A/D and Q/E each resolve on their own, the NEWER key of an axis winning and the other taking over on its
+//   release, and the axes combine, so W+D goes diagonally at the same speed as a straight line. From any view the first move takes the view over
 //   into free mode, once (C and B after it are not undone by a key still held). Looking: the right-button drag (any view) or the left in free mode, or
 //   the arrow keys; drag right turns right. Moving and looking work at the same time. The scroll wheel zooms every view (free mode
 //   dollies); Ctrl + wheel is the LENS (the field of view, 10° to 100°, in every view) and a middle click resets it to 60°.
@@ -148,9 +149,16 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {
       const k = sprint * flySpeed * dt;
-      let fly = null;   // ONLY the most recently pressed movement key moves; on its release the next newest does (the keeper, 2026-09-29). The look keys all turn.
-      for (const a of held.values()) { if (a.fly) fly = a.fly; if (a.turn) rig.free.look(a.turn[0] * turnSpeed * dt, a.turn[1] * turnSpeed * dt); }
-      if (fly) rig.free.move(fly[0] * k, fly[1] * k, fly[2] * k);
+      // MOVEMENT IS PER AXIS (the keeper, 2026-09-29 13:05: "say I am W forward, then I press D, it should go diagonally"). `held` is in the order
+      // pressed, so on each of forward/back, right/left and up/down the LAST key seen is the NEWER and wins; a key-up hands the axis to the other.
+      // The axes combine and the direction is normalised, so a diagonal is 1.0× a straight line. The look keys all turn.
+      const dir = [0, 0, 0];
+      for (const a of held.values()) {
+        if (a.fly) for (let i = 0; i < 3; i++) if (a.fly[i]) dir[i] = a.fly[i];
+        if (a.turn) rig.free.look(a.turn[0] * turnSpeed * dt, a.turn[1] * turnSpeed * dt);
+      }
+      const n = Math.hypot(dir[0], dir[1], dir[2]);
+      if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);
     }
     const { width: w, height: h } = backingSize(canvas.clientWidth, canvas.clientHeight, win.devicePixelRatio);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // follows DPR and resizes
