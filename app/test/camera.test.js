@@ -185,3 +185,64 @@ test('the ghost (the first word before anything is placed) carries its segments,
   const g = tm.ghostFor({ segments: [{ id: 'b', kind: 'road', length: 40, profile: fontProfile('flat', { width: 67 }) }] });
   assert.equal(g.segments.length, 1);
 });
+
+// ── 2026-09-29, the keeper: "the mouse look to be inverted from what is now left and right", "zoom in and out from all camera
+//    views with scroll wheel". Stated before these were written: a + yaw turns the view RIGHT on screen (what was ahead
+//    slides left); every follow view comes nearer on a + wheel step and backs off on a −, keeps its own zoom per view, and
+//    stays inside [ZOOM.min, ZOOM.max]; in free mode the wheel flies along the view. ──
+const M = require(path.join(ADIR, 'camera', 'math.js'));
+test('free look: a + yaw turns the view right on screen (what was straight ahead slides to the left)', () => {
+  const { path: p } = track(), ctx = { head: p.head, path: p }, rig = C.createRig();
+  rig.setMode('free', ctx);
+  const f0 = rig.pose(ctx), ahead = [f0.target[0] + (f0.target[0] - f0.eye[0]) * 50, f0.target[1] + (f0.target[1] - f0.eye[1]) * 50, f0.target[2] + (f0.target[2] - f0.eye[2]) * 50];
+  rig.free.look(0.3, 0);
+  const c = M.apply(M.viewProj(rig.pose(ctx), 1), ahead);
+  assert.ok(c[3] > 0 && c[0] / c[3] < -0.1, `the old ahead point is left of centre after a right turn (ndc x ${c[0] / c[3]})`);
+});
+test('zoom: every follow view comes nearer on + and backs off on −, per view, within its limits', () => {
+  const { path: p } = track(), ctx = { head: p.head, path: p, aspect: 1.6 }, rig = C.createRig();
+  for (const m of ['build', 'overhead', 'side', 'chase']) {
+    rig.setMode(m, ctx);
+    const d0 = len(sub(rig.pose(ctx).eye, p.head.pos));
+    rig.zoom(3); const dIn = len(sub(rig.pose(ctx).eye, p.head.pos));
+    rig.zoom(-6); const dOut = len(sub(rig.pose(ctx).eye, p.head.pos));
+    assert.ok(dIn < d0 && dOut > d0, `${m}: ${dIn.toFixed(1)} < ${d0.toFixed(1)} < ${dOut.toFixed(1)}`);
+  }
+  rig.setMode('build', ctx); assert.ok(Math.abs(rig.zoomOf('build') - Math.pow(C.ZOOM.step, 3)) < 1e-12, 'build kept its own zoom while the others were visited');
+  rig.zoom(1000); assert.equal(rig.zoomOf(), C.ZOOM.min); rig.zoom(-1000); assert.equal(rig.zoomOf(), C.ZOOM.max);
+  assert.equal(rig.zoomOf('free'), 1);
+});
+test('zoom in free mode flies along the view instead', () => {
+  const { path: p } = track(), ctx = { head: p.head, path: p }, rig = C.createRig();
+  rig.setMode('free', ctx); const e0 = rig.pose(ctx).eye, d = unit(sub(rig.pose(ctx).target, e0));
+  rig.zoom(2); const e1 = rig.pose(ctx).eye;
+  assert.ok(Math.abs(dot(sub(e1, e0), d) - 2 * C.ZOOM.freeStep) < 1e-9);
+});
+
+// ── L130-R: the overhead view, zoomed IN, was BLACK. Measured (scratchpad l130r/black2.js): the fit centres the view on the
+//    track's box, and zooming in shrinks the view around that centre; on a curved or closed track the centre lies OFF the road,
+//    and with no ground drawn the view is empty: on a 400 m arc 0 of 201 centreline samples were in view from zoom 0.25 down, and
+//    on the stadium 0 of 217 from 0.12. Stated: the view slides from the box centre (zoom 1 and out: the whole track, unchanged)
+//    to the HEAD as it zooms in, and the head stays in view at every zoom. ──
+{
+  const M = require(path.join(ADIR, 'camera', 'math.js')), { createTrackModel } = require(path.join(ADIR, 'preview', 'trackmodel.js'));
+  const arcs = [{ id: 'a', kind: 'road', length: 200, k0: 0.01, k1: 0.01, profile: F.FLAT }, { id: 'b', kind: 'road', length: 200, k0: 0.01, k1: 0.01, profile: F.FLAT }];
+  const cases = [['a 300 m straight (the head at the edge of the box: the slide must reach it)', [{ id: 'a', kind: 'road', length: 300, profile: F.FLAT }], false], ['a 400 m arc (box centre off the road)', arcs, false], ['the closed stadium (box centre in the infield)', F.stadium().segments || F.stadium(), true]];
+  const inView = (VP, p) => { const c = M.apply(VP, p); return c[3] > 0 && Math.abs(c[0]) <= c[3] && Math.abs(c[1]) <= c[3] && c[2] <= c[3]; };
+  for (const [name, segs, closed] of cases) {
+    test(`overhead zoomed in (0.05 to 50): the head and the road near it stay in view, on ${name}`, () => {
+      const t = createTrackModel().update({ segments: segs, closed }), aspect = 1.6, ctx = { head: t.path.head, path: t.path, bounds: t.bounds, aspect };
+      for (const steps of [-10, 0, 3, 6, 10, 15, 20, 25]) {
+        const rig = C.createRig({ start: 'overhead' }); rig.zoom(steps); const pose = rig.pose(ctx), VP = M.viewProj(pose, aspect);
+        assert.ok(inView(VP, t.path.head.pos), `zoom ${rig.zoomOf().toFixed(3)}: the head is in view`);
+        const road = t.path.samples.filter((m) => inView(VP, m.pos)).length;
+        assert.ok(road >= 2, `zoom ${rig.zoomOf().toFixed(3)}: ${road} centreline samples in view`);
+      }
+    });
+  }
+  test('overhead at zoom 1 and out is unchanged by the head-following: the box centre, the whole track (the D170 fit)', () => {
+    const t = createTrackModel().update({ segments: arcs, closed: false }), ctx = { head: t.path.head, path: t.path, bounds: t.bounds, aspect: 1.6 };
+    const c = [(t.bounds.min[0] + t.bounds.max[0]) / 2, (t.bounds.min[2] + t.bounds.max[2]) / 2];
+    for (const steps of [0, -3, -10]) { const rig = C.createRig({ start: 'overhead' }); rig.zoom(steps); const p = rig.pose(ctx); assert.ok(Math.abs(p.eye[0] - c[0]) < 1e-9 && Math.abs(p.eye[2] - c[1]) < 1e-9, `zoom ${rig.zoomOf()}`); }
+  });
+}

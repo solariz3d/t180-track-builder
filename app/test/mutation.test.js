@@ -70,7 +70,7 @@ const MUTATIONS = [
   { id: 'B7 the overhead fit ignores the aspect', file: 'camera/cameras.js',
     from: 'hr / (t * aspect)', to: 'hr / t', caughtBy: 'overhead fit (aspect 0.6)' },
   { id: 'B8 the overhead fit measures from the box bottom (the top is clipped)', file: 'camera/cameras.js',
-    from: 'const eye = [c[0], bounds.max[1] + dist, c[2]];', to: 'const eye = [c[0], bounds.min[1] + dist * 0.85, c[2]];', caughtBy: 'overhead fit' },
+    from: 'const eye = [ex, bounds.max[1] + dist, ez];', to: 'const eye = [ex, bounds.min[1] + dist * 0.85, ez];', caughtBy: 'overhead fit' },
   { id: 'B9 the world box takes one corner of each local box', file: 'preview/look.js',
     from: 'for (let c = 0; c < 8; c++) {', to: 'for (let c = 0; c < 1; c++) {', caughtBy: 'overhead fit' },
   { id: 'B10 the ghost is built on the live path (no copy)', file: 'preview/trackmodel.js',
@@ -114,6 +114,17 @@ const MUTATIONS = [
   // D179, the usability pass
   { id: 'L17 the ties never fade (they hatch the road dark at a distance)', file: 'preview/renderer.js', from: 'drawLines(L.ties, model, COLOURS.tie, alpha, TIE_FADE);', to: 'drawLines(L.ties, model, COLOURS.tie, alpha);', caughtBy: 'renderer: the ties fade out' },
   { id: 'L18 the canvas is cleared to the fog colour again', file: 'preview/renderer.js', from: 'gl.clearColor(clear[0], clear[1], clear[2], 1);', to: 'gl.clearColor(fog[0], fog[1], fog[2], 1);', caughtBy: 'renderer: the canvas is cleared to CLEAR' },
+  // L130-R: the newest movement key, the takeover once, the wheel's deltaX, the key's action at key-down, the overhead sliding to the head
+  { id: 'N1 every held movement key moves (not only the newest)', file: 'preview/preview.js', from: 'if (a.fly) fly = a.fly;', to: 'if (a.fly) rig.free.move(a.fly[0] * k, a.fly[1] * k, a.fly[2] * k);', caughtBy: 'keys: with W and D held only the NEWEST' },
+  { id: 'N2 the OLDEST held movement key moves', file: 'preview/preview.js', from: 'if (a.fly) fly = a.fly;', to: 'if (a.fly && !fly) fly = a.fly;', caughtBy: 'keys: with W and D held only the NEWEST' },
+  { id: 'N3 a repeated key-down makes the key the newest again', file: 'preview/preview.js', from: 'if (!held.has(id)) held.set(id, a);', to: 'held.delete(id); held.set(id, a);', caughtBy: 'a held key that repeats' },
+  { id: 'N4 a key-up lets go of every key', file: 'preview/preview.js', from: 'const onUp = (e) => { held.delete(heldKey(e));', to: 'const onUp = (e) => { held.clear();', caughtBy: 'releasing the OLDER' },
+  { id: 'N5 the takeover re-fires every frame a key is held (C and B are undone)', file: 'preview/preview.js', from: 'if (takeover) { if (rig.mode ===', to: 'if (held.size) { if (rig.mode ===', caughtBy: 'P3: C or B pressed while a movement key is held' },
+  { id: 'N6 the wheel ignores deltaX (Shift+wheel is dead on a device that reports it there)', file: 'preview/preview.js', from: 'e.deltaY || e.deltaX || 0', to: 'e.deltaY || 0', caughtBy: 'P5: Shift+wheel is ×4' },
+  { id: 'N7 the key action is looked up by the physical key name, not fixed at key-down', file: 'preview/preview.js', from: 'if (!held.has(id)) held.set(id, a);', to: 'if (!held.has(id)) held.set(id, keyAction(id) || {});', caughtBy: 'P2: a key that flies by its label' },
+  { id: 'N8 the overhead never slides to the head (a black view on a curved track)', file: 'camera/cameras.js', from: 'const w = head ? Math.min(1, zoom) : 1,', to: 'const w = 1,', caughtBy: 'overhead zoomed in (0.05 to 50)' },
+  { id: 'N9 the overhead slides to the head at half the rate', file: 'camera/cameras.js', from: 'const w = head ? Math.min(1, zoom) : 1,', to: 'const w = head ? Math.min(1, 2 * zoom) : 1,', caughtBy: 'overhead zoomed in (0.05 to 50)' },
+  { id: 'N10 the overhead slides past the box centre when zoomed OUT', file: 'camera/cameras.js', from: 'const w = head ? Math.min(1, zoom) : 1,', to: 'const w = head ? zoom : 1,', caughtBy: 'overhead at zoom 1 and out is unchanged' },
 ];
 
 function runMutant(m) {

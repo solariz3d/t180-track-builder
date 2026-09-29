@@ -177,13 +177,21 @@ test('preview: showGhost draws the ghost, clearGhost removes it, and placing the
   p.showGhost({ segments: all.slice(0, 4) }); resolved = { segments: all.slice(0, 4), closed: false }; sub(shell.getState());
   assert.equal(p.view().ghost, 0, 'placing the word retires its ghost');
 });
-test('preview: a frame draws the grid and the head marker as lines', () => {
+// The keeper, 2026-09-29: "there shouldnt be a ground net its just the track for now". The grid is opt-in ({ ground: true }).
+test('preview: a frame draws the grid and the head marker as lines (the grid only with ground: true)', () => {
   const shell = { getState: () => ({ resolved: { segments: words(3), closed: false } }), subscribe: () => () => {} };
-  const { calls, win, canvas } = fake(), p = P.createPreview({ canvas, shell, win }); win.step();
+  const { calls, win, canvas } = fake(), p = P.createPreview({ canvas, shell, win, ground: true }); win.step();
   const cells = p.view().track.batches.filter((b) => !b.seam).length;
   assert.ok(p.view().grid > 0);
   assert.equal(p.renderer.stats().lines, 1 + 1 + 2 * cells, 'the grid, the head marker, and the edges and ties of each road cell');
   assert.equal(calls.drawArrays, 1 + 1 + 2 * cells);
+});
+test('preview: by default there is no ground grid, only the track and the head marker', () => {
+  const shell = { getState: () => ({ resolved: { segments: words(3), closed: false } }), subscribe: () => () => {} };
+  const { calls, win, canvas } = fake(), p = P.createPreview({ canvas, shell, win }); win.step();
+  const cells = p.view().track.batches.filter((b) => !b.seam).length;
+  assert.equal(p.view().grid, 0);
+  assert.equal(calls.drawArrays, 1 + 2 * cells, 'the head marker and each road cell, no grid');
 });
 
 // ── grid and marker ──

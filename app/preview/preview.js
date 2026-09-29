@@ -16,8 +16,11 @@
 //
 // KEYS (keyAction below, tested headless):  C  next camera      B  the build view, from anywhere
 //   L  the look: the AC shaders (default) or the colour per placed word (ARCHITECTURE §4's feedback layer)
-//   free mode:  W / S forward and back,  A / D left and right,  Q / E down and up,  arrow keys or a mouse drag turn,
-//   Shift flies faster.
+//   flying:  W / S forward and back,  A / D left and right,  Q / E down and up,  Shift sprints (×4). Only the most recently
+//   pressed of the keys held moves; on its release the next newest does. From any view the first move takes the view over
+//   into free mode, once (C and B after it are not undone by a key still held). Looking: the right-button drag (any view) or the left in free mode, or
+//   the arrow keys; drag right turns right. Moving and looking work at the same time. The scroll wheel zooms every view.
+//   No ground grid unless createPreview({ ground: true }): just the track (the keeper, 2026-09-29).
 // No mesh data crosses Tauri IPC here (ARCHITECTURE §9): the geometry runs in this process and hands the renderer its
 // own arrays.
 'use strict';
@@ -49,13 +52,22 @@ function keyAction(key, mods = {}) {
   return null;
 }
 
-function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6 }) {
+/** The held-key name of a key event: the physical key (e.code 'KeyW' → 'w'; arrows as they are), else e.key. */
+function heldKey(e) {
+  if (e && typeof e.code === 'string' && /^Key[A-Z]$/.test(e.code)) return e.code.slice(3).toLowerCase();
+  if (e && typeof e.code === 'string' && /^Arrow/.test(e.code)) return e.code;
+  const k = String(e && e.key); return k.length === 1 ? k.toLowerCase() : k;
+}
+const BOOST = 4;   // Shift: the camera's sprint
+
+function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false }) {
   if (!canvas || !shell || !win) throw new Error('preview: needs { canvas, shell, win }');
   const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
   if (!gl) throw new Error('preview: WebGL is not available in this window');
   const renderer = createRenderer(gl), model = createTrackModel(), rig = createRig();
   let track = null, err = null, raf = 0, prev = 0, shownPose = null;
-  const held = new Set();
+  const held = new Map();   // the keys down, in the order pressed: physical key (e.code) → its action, fixed at key-down
+  let takeover = false;     // a movement key went down in a follow view: the next frame takes the view over into free (once)
   let ghost = null, grid = null, gridFor = null, overlay = null;
   let set = null, images = [], look = 'ac', resolved = null, resolvedFor = null;
   // the look is resolved again only when the scene's materials or the set change, never per frame
@@ -78,33 +90,57 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
 
   const said = () => { if (onMode) onMode(rig.mode); };
   const onKey = (e) => {
+    boost = !!e.shiftKey;   // Shift is the sprint: read on every key-down, typing included
     if (e.target && typeof e.target.matches === 'function' && e.target.matches('input, select, textarea')) return;   // typing, not flying
     const a = keyAction(e.key, e); if (!a) return;
-    if (a.camera) { rig.key(a.camera, ctx()); said(); e.preventDefault(); return; }
+    if (a.camera) { takeover = false; rig.key(a.camera, ctx()); said(); e.preventDefault(); return; }
     if (a.look) { look = look === 'ac' ? 'words' : 'ac'; e.preventDefault(); return; }
-    held.add(e.key.length === 1 ? e.key.toLowerCase() : e.key); if (rig.mode === 'free') e.preventDefault();
+    const id = heldKey(e); if (!held.has(id)) held.set(id, a);   // a repeat of a held key keeps its place in the order
+    takeover = true; e.preventDefault();
   };
-  const onUp = (e) => held.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+  // HELD KEYS are keyed by the PHYSICAL key (e.code), so a key pressed as 'w' and released as 'W' (Shift in between) still
+  // lets go; and every held key is dropped when the window loses focus or is hidden, since the key-up then never arrives.
+  // That lost key-up was the camera that kept flying forward by itself (the keeper, 2026-09-29).
+  const onUp = (e) => { held.delete(heldKey(e)); boost = !!e.shiftKey; };
+  const letGo = () => { held.clear(); takeover = false; boost = false; drag = null; };
+  const onVis = () => { if (win.document && win.document.hidden) letGo(); };
+  let boost = false;
+  // MOUSE LOOK: the right button drags the look from any view (it takes the view over into free); the left button does in
+  // free mode (outside it, the left button is the brush's). Keys and the mouse work at the same time.
   let drag = null;
-  const onDown = (e) => { if (rig.mode === 'free') drag = [e.clientX, e.clientY]; };
+  const onDown = (e) => {
+    if (e.button === 2 || (e.button === 0 && rig.mode === 'free')) {
+      if (rig.mode !== 'free') { const c = ctx(); if (!c) return; rig.setMode('free', c); said(); }
+      drag = [e.clientX, e.clientY]; e.preventDefault();
+    }
+  };
   const onMove = (e) => { if (!drag) return; rig.free.look((e.clientX - drag[0]) * 0.004, -(e.clientY - drag[1]) * 0.004); drag = [e.clientX, e.clientY]; };
   const onRelease = () => { drag = null; };
-  win.addEventListener('keydown', onKey); win.addEventListener('keyup', onUp);
+  const noMenu = (e) => e.preventDefault();
+  // THE SCROLL WHEEL zooms every view: a follow view comes nearer or backs off, free mode flies along its view
+  const onWheel = (e) => { const steps = -Math.sign(e.deltaY || e.deltaX || 0) * (e.shiftKey ? 4 : 1); if (steps) rig.zoom(steps); e.preventDefault(); };
+  win.addEventListener('keydown', onKey); win.addEventListener('keyup', onUp); win.addEventListener('blur', letGo);
+  if (win.document) win.document.addEventListener('visibilitychange', onVis);
   canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease);
+  canvas.addEventListener('contextmenu', noMenu); canvas.addEventListener('wheel', onWheel, { passive: false });
 
   function frame(t) {
     raf = win.requestAnimationFrame(frame);
     const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0; prev = t;
+    if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {
-      const k = (held.has('Shift') ? 4 : 1) * flySpeed * dt;
-      for (const h of held) { const a = keyAction(h); if (a && a.fly) rig.free.move(a.fly[0] * k, a.fly[1] * k, a.fly[2] * k); if (a && a.turn) rig.free.look(a.turn[0] * turnSpeed * dt, a.turn[1] * turnSpeed * dt); }
+      const k = (boost ? BOOST : 1) * flySpeed * dt;
+      let fly = null;   // ONLY the most recently pressed movement key moves; on its release the next newest does (the keeper, 2026-09-29). The look keys all turn.
+      for (const a of held.values()) { if (a.fly) fly = a.fly; if (a.turn) rig.free.look(a.turn[0] * turnSpeed * dt, a.turn[1] * turnSpeed * dt); }
+      if (fly) rig.free.move(fly[0] * k, fly[1] * k, fly[2] * k);
     }
     const { width: w, height: h } = backingSize(canvas.clientWidth, canvas.clientHeight, win.devicePixelRatio);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // follows DPR and resizes
     const c = ctx(w > 0 && h > 0 ? w / h : 0);
     if (c && w > 0 && h > 0) {
       const tb = track && track.bounds ? track.bounds : null;
-      if (tb !== gridFor) { grid = gridLines(tb); gridFor = tb; }       // the grid follows the track's box, rebuilt only when it changes
+      if (!ground) grid = null;   // no ground: just the track, so the camera goes anywhere with nothing to clip (the keeper, 2026-09-29)
+      else if (tb !== gridFor) { grid = gridLines(tb); gridFor = tb; }       // the grid follows the track's box, rebuilt only when it changes
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
       renderer.draw(track && track.batches ? track.batches : [], shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head)), ghost: ghost ? ghost.batches : null, overlay,
@@ -138,8 +174,10 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
     dispose() {
       win.cancelAnimationFrame(raf); unsub();
-      win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp);
+      win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
+      if (win.document) win.document.removeEventListener('visibilitychange', onVis);
       canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease);
+      canvas.removeEventListener('contextmenu', noMenu); canvas.removeEventListener('wheel', onWheel);
       renderer.dispose();
     },
   };

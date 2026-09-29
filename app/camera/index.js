@@ -17,7 +17,7 @@ function mount(root) {
     b.onclick = () => doc.dispatchEvent(new win.CustomEvent('t180-camera', { detail: { mode: m } }));
     buttons.set(m, b); bar.append(b);
   }
-  keys.textContent = `${KEYS.cycle.toUpperCase()}: next camera · ${KEYS.build.toUpperCase()}: build view · free: W A S D, Q E, arrows or drag`;
+  keys.textContent = `${KEYS.cycle.toUpperCase()}: next camera · ${KEYS.build.toUpperCase()}: build view · move: W A S D, Q E down/up, Shift sprint · look: right-drag or arrows · zoom: scroll`;
   root.append(bar, keys);
   const follow = (e) => { for (const [m, b] of buttons) b.setAttribute('aria-pressed', String(e.detail && e.detail.mode === m)); };
   doc.addEventListener('t180-camera-mode', follow);

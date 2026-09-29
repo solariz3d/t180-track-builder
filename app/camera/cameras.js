@@ -17,7 +17,8 @@
 //   rig.key('b')               the build view, from any mode, in one key
 //   rig.pose(ctx)              the exact pose for ctx = { head, path, width?, aspect? } ({ eye, target, up, fov }), no smoothing
 //   rig.update(ctx, dt)        the pose shown this frame, eased toward rig.pose(ctx) (no snap on a mode switch)
-//   rig.free.move(fwd, right, up)   rig.free.look(dYaw, dPitch)     only in free mode
+//   rig.free.move(fwd, right, up)   rig.free.look(dYaw, dPitch)     only in free mode (dYaw + turns RIGHT on screen)
+//   rig.zoom(steps)            the scroll wheel, + nearer: a follow view scales its distance (kept per mode), free dollies
 //
 // `head` is path.head (src/geom/path.js buildHead): { s, pos, T, L, U } with L = U × T, u + = left. `path` is needed
 // only by chase (it reads the road behind the head).
@@ -44,6 +45,7 @@ const DEFAULTS = Object.freeze({
 });
 const WORLD_UP = [0, 1, 0];
 const FRAME = 0.85;   // the road's edges sit inside 85% of the view's half-width
+const ZOOM = Object.freeze({ step: 1.15, min: 0.05, max: 50, freeStep: 4 });   // one wheel notch: ×1.15 nearer; in free, 4 m
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -84,16 +86,21 @@ function sampleAt(path, s) {
  * nearest any vertex can be. Every vertex of the box then lands inside the view (app/test/look.test.js projects them).
  * `far` covers the box's bottom.
  */
-function fitOverhead(bounds, aspect, f, fov) {
+function fitOverhead(bounds, aspect, f, fov, zoom = 1, head = null) {
   const c = [(bounds.min[0] + bounds.max[0]) / 2, 0, (bounds.min[2] + bounds.max[2]) / 2], r = cross(f, WORLD_UP);
   let hf = 0, hr = 0;
   for (let i = 0; i < 8; i++) {
     const p = [i & 1 ? bounds.max[0] : bounds.min[0], 0, i & 4 ? bounds.max[2] : bounds.min[2]], d = sub(p, c);
     hf = Math.max(hf, Math.abs(dot(d, f))); hr = Math.max(hr, Math.abs(dot(d, r)));
   }
-  const t = Math.tan(fov / 2), dist = Math.max(hf / t, hr / (t * aspect), 10) * 1.08;
-  const eye = [c[0], bounds.max[1] + dist, c[2]];
-  return { eye, target: [c[0], bounds.min[1], c[2]], up: f, fov, far: dist + (bounds.max[1] - bounds.min[1]) + 100 };
+  const t = Math.tan(fov / 2), dist = Math.max(hf / t, hr / (t * aspect), 10) * 1.08 * zoom;
+  // ZOOMED IN, THE VIEW SLIDES FROM THE BOX CENTRE TO THE HEAD (L130-R, measured): the box centre of a curved or closed track is off the
+  // road, and a view shrunk around it holds no road (a black preview). With w = min(1, zoom) the centre lies w of the way from the head to
+  // the box centre: at zoom ≥ 1 it is the box centre (the whole track, unchanged), and the head's offset from the view's centre is
+  // ≤ w·(its offset in the box) ≤ zoom·hf, inside the view's half-extent 1.08·zoom·hf, so the head is in view at every zoom.
+  const w = head ? Math.min(1, zoom) : 1, ex = head ? head.pos[0] + (c[0] - head.pos[0]) * w : c[0], ez = head ? head.pos[2] + (c[2] - head.pos[2]) * w : c[2];
+  const eye = [ex, bounds.max[1] + dist, ez];
+  return { eye, target: [ex, bounds.min[1], ez], up: f, fov, far: dist + (bounds.max[1] - bounds.min[1]) + 100 };
 }
 
 /**
@@ -108,25 +115,26 @@ function buildOffsets(o, width, fov, aspect) {
   return { back, up: back * r };
 }
 
-function poseFor(mode, { head, path, bounds, aspect, width } = {}, opts = DEFAULTS) {
+/** `zoom` (the scroll wheel, rig.zoom) scales each follow view's distance: < 1 nearer, > 1 farther. */
+function poseFor(mode, { head, path, bounds, aspect, width, zoom = 1 } = {}, opts = DEFAULTS) {
   checkHead(head);
-  const fov = opts.fov || DEFAULTS.fov;
+  const fov = opts.fov || DEFAULTS.fov, z = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
   if (mode === 'build') {
-    const c = headCamera(head, buildOffsets(opts.build || DEFAULTS.build, width, fov, aspect));
+    const o = buildOffsets(opts.build || DEFAULTS.build, width, fov, aspect), c = headCamera(head, { back: o.back * z, up: o.up * z });
     return { eye: c.eye, target: c.target, up: c.up, fov };
   }
   if (mode === 'overhead') {
     const o = opts.overhead || DEFAULTS.overhead, f = groundForward(head);
-    if (bounds && aspect > 0) return fitOverhead(bounds, aspect, f, fov);
-    return { eye: add(head.pos, mul(WORLD_UP, o.height)), target: head.pos.slice(), up: f, fov };   // no bounds: over the head
+    if (bounds && aspect > 0) return fitOverhead(bounds, aspect, f, fov, z, head);
+    return { eye: add(head.pos, mul(WORLD_UP, o.height * z)), target: head.pos.slice(), up: f, fov };   // no bounds: over the head
   }
   if (mode === 'side') {
     const o = opts.side || DEFAULTS.side, right = cross(groundForward(head), WORLD_UP);   // forward × up = right
-    return { eye: add(add(head.pos, mul(right, o.dist)), mul(WORLD_UP, o.height)), target: head.pos.slice(), up: WORLD_UP.slice(), fov };
+    return { eye: add(add(head.pos, mul(right, o.dist * z)), mul(WORLD_UP, o.height * z)), target: head.pos.slice(), up: WORLD_UP.slice(), fov };
   }
   if (mode === 'chase') {
     if (!path || !Array.isArray(path.samples) || !path.samples.length) throw new Error('camera: chase needs the path');
-    const o = opts.chase || DEFAULTS.chase, e = sampleAt(path, head.s - o.lag), t = sampleAt(path, Math.min(head.s, e.s + o.lookAhead));
+    const oc = opts.chase || DEFAULTS.chase, o = { ...oc, lag: oc.lag * z, height: oc.height * z }, e = sampleAt(path, head.s - o.lag), t = sampleAt(path, Math.min(head.s, e.s + o.lookAhead));
     let target = add(t.pos, mul(t.U, o.height / 3));
     if (len(sub(target, add(e.pos, mul(e.U, o.height)))) < 1e-6) target = add(target, e.T);   // a path shorter than nothing
     return { eye: add(e.pos, mul(e.U, o.height)), target, up: e.U, fov };
@@ -138,6 +146,7 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
   if (!order.includes('build')) throw new Error('camera: the build view must be one of the modes');
   if (!order.includes(start)) throw new Error(`camera: unknown start mode "${start}"`);
   let mode = start, shown = null;
+  const zooms = Object.fromEntries(order.map((m) => [m, 1]));   // each view keeps its own zoom while you visit the others
   const free = { eye: [0, 10, -20], yaw: 0, pitch: 0 };
   const freeDir = () => [Math.cos(free.pitch) * Math.sin(free.yaw), Math.sin(free.pitch), Math.cos(free.pitch) * Math.cos(free.yaw)];
   const freePose = () => ({ eye: free.eye.slice(), target: add(free.eye, freeDir()), up: WORLD_UP.slice(), fov: opts.fov || DEFAULTS.fov });
@@ -159,7 +168,9 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
       return mode;
     },
     setMode(m, ctx) { if (!order.includes(m)) throw new Error(`camera: unknown mode "${m}"`); const was = mode; mode = m; if (m === 'free' && was !== 'free') enterFree(shown || lastExact || poseFor('build', ctx, opts)); return mode; },
-    pose(ctx) { const p = mode === 'free' ? freePose() : poseFor(mode, ctx, opts); lastExact = p; return p; },
+    pose(ctx) {
+      if (ctx) ctx = { ...ctx, zoom: zooms[mode] };
+      const p = mode === 'free' ? freePose() : poseFor(mode, ctx, opts); lastExact = p; return p; },
     /** The pose shown this frame: eased toward the exact pose (free mode is flown directly, not eased). */
     update(ctx, dt) {
       const want = rig.pose(ctx);
@@ -168,6 +179,15 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
       shown = { eye: lerp(shown.eye, want.eye, k), target: lerp(shown.target, want.target, k), up: unit(lerp(shown.up, want.up, k)) || want.up, fov: want.fov, far: want.far };
       return shown;
     },
+    /** The scroll wheel: `steps` notches, + nearer. A follow view scales its distance (returns its zoom factor); free
+     *  mode flies along its view instead (returns 1). */
+    zoom(steps) {
+      if (!Number.isFinite(steps) || steps === 0) return mode === 'free' ? 1 : zooms[mode];
+      if (mode === 'free') { rig.free.move(steps * ZOOM.freeStep, 0, 0); return 1; }
+      zooms[mode] = Math.max(ZOOM.min, Math.min(ZOOM.max, zooms[mode] * Math.pow(ZOOM.step, -steps)));
+      return zooms[mode];
+    },
+    zoomOf: (m = mode) => zooms[m],
     free: {
       /** Fly in the camera's own frame (metres): forward along the view, right, and world up. */
       move(fwd = 0, right = 0, up = 0) {
@@ -175,10 +195,11 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
         const d = freeDir(), r = unit(cross(d, WORLD_UP)) || [1, 0, 0];
         free.eye = add(add(add(free.eye, mul(d, fwd)), mul(r, right)), mul(WORLD_UP, up)); return true;
       },
-      /** Turn the view (radians); the pitch stays within ±89° so up never flips. */
+      /** Turn the view (radians): dYaw + turns RIGHT on screen, dPitch + looks up; the pitch stays within ±89° so up never
+       *  flips. (yaw + swings the view toward +x, which is screen LEFT here (math.js lookAt), hence the minus.) */
       look(dYaw = 0, dPitch = 0) {
         if (mode !== 'free') return false;
-        const lim = 89 * Math.PI / 180; free.yaw += dYaw; free.pitch = Math.max(-lim, Math.min(lim, free.pitch + dPitch)); return true;
+        const lim = 89 * Math.PI / 180; free.yaw -= dYaw; free.pitch = Math.max(-lim, Math.min(lim, free.pitch + dPitch)); return true;
       },
       state: () => ({ eye: free.eye.slice(), yaw: free.yaw, pitch: free.pitch }),
     },
@@ -186,4 +207,4 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
   return rig;
 }
 
-module.exports = { MODES, KEYS, DEFAULTS, createRig, poseFor, groundForward, sampleAt, fitOverhead };
+module.exports = { MODES, KEYS, DEFAULTS, ZOOM, createRig, poseFor, groundForward, sampleAt, fitOverhead };

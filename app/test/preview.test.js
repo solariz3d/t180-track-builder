@@ -159,3 +159,124 @@ test('keys: C switches, B is the build view, WASD/QE fly, arrows turn, anything 
 test('the preview shader sources carry no environment (v1 is the track only): no sky, texture or sampler', () => {
   assert.ok(!/sampler|texture|sky/i.test(R.VS + R.FS));
 });
+
+// ── 2026-09-29, the keeper: "the camera will keep moving forward by itself", "shift to speed camera too", "move and mouse look
+//    simultaneously". Stated first: a key held when the window loses focus is let go (its key-up never comes); a key pressed
+//    as 'w' and released as 'W' lets go; Shift sprints; the first move from a follow view takes it over into free; a right
+//    drag looks from any view, and a drag to the right turns right. ──
+function liveFake() {
+  const L = {}, on = (t) => (k, f) => { (t[k] = t[k] || []).push(f); }, off = () => {};
+  const winL = {}, canL = {}, docL = {};
+  const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0 }, { get: (t, k) => (k in t ? t[k] : () => {}) });
+  let q = [], t = 0;
+  const win = { devicePixelRatio: 1, document: { hidden: false, addEventListener: on(docL), removeEventListener: off }, addEventListener: on(winL), removeEventListener: off, requestAnimationFrame: (f) => q.push(f), cancelAnimationFrame() {},
+    step(ms = 100) { t += ms; const f = q; q = []; for (const g of f) g(t); } };
+  const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener: on(canL), removeEventListener: off };
+  const fire = (tbl, k, e) => (tbl[k] || []).forEach((f) => f({ preventDefault() {}, ...e }));
+  return { win, canvas, key: (type, e) => fire(winL, type, e), mouse: (type, e) => fire(type === 'mousedown' || type === 'wheel' ? canL : winL, type, e), blur: () => fire(winL, 'blur', {}) };
+}
+function livePreview() {
+  const G2 = require('../../src/geom/index.js'), F2 = require('../../test/geom_fixtures.js');
+  const segs = [{ id: 'a', kind: 'road', length: 60, profile: F2.FLAT }];
+  const shell = { getState: () => ({ resolved: { segments: segs, closed: false } }), subscribe: () => () => {} };
+  const f = liveFake(), p = P.createPreview({ canvas: f.canvas, shell, win: f.win });
+  f.win.step(16); f.win.step(16);
+  return { ...f, p };
+}
+test('keys: a key held when the window loses focus is let go, so the camera stops (the drift)', () => {
+  const { p, key, blur, win } = livePreview();
+  key('keydown', { key: 'w', code: 'KeyW', target: {} }); win.step(); assert.equal(p.rig.mode, 'free');
+  blur(); const e0 = p.rig.free.state().eye; win.step(); win.step();
+  assert.deepEqual(p.rig.free.state().eye, e0, 'no movement after the blur');
+});
+// B's V11 (L130 camera read): the camera is ALREADY in free, W is held, the window loses focus, and three frames pass. At HEAD (no blur
+// handler) it drifted 4.5 m; the old 'pressed as w, released as W' test could not fail (HEAD lowercased both events).
+test('keys: already in free, a key held when the window loses focus is let go, so the camera stops (V11 of B: 4.5 m of drift at HEAD)', () => {
+  const { p, key, blur, win } = livePreview();
+  p.setMode('free'); assert.equal(p.rig.mode, 'free');
+  key('keydown', { key: 'w', code: 'KeyW', target: {} }); win.step();
+  const moving = p.rig.free.state().eye; win.step(); assert.ok(len3(p.rig.free.state().eye, moving) > 0, 'it was flying');
+  blur(); const e0 = p.rig.free.state().eye; win.step(); win.step(); win.step();
+  assert.deepEqual(p.rig.free.state().eye, e0, 'no movement after the blur');
+});
+test('keys: Shift sprints (×4 the distance per frame)', () => {
+  const a = livePreview(), b = livePreview();
+  for (const x of [a, b]) { x.key('keydown', { key: 'w', code: 'KeyW', target: {} }); x.win.step(); }
+  b.key('keydown', { key: 'Shift', code: 'ShiftLeft', shiftKey: true, target: {} });
+  const ea = a.p.rig.free.state().eye, eb = b.p.rig.free.state().eye; a.win.step(); b.win.step();
+  const da = len3(a.p.rig.free.state().eye, ea), db = len3(b.p.rig.free.state().eye, eb);
+  assert.ok(Math.abs(db / da - 4) < 1e-9, `${db} vs ${da}`);
+});
+test('mouse: a right drag looks from the build view (taking it over), a drag right turns right, and keys move at the same time', () => {
+  const { p, key, mouse, win } = livePreview();
+  assert.equal(p.rig.mode, 'build');
+  mouse('mousedown', { button: 2, clientX: 100, clientY: 100 }); assert.equal(p.rig.mode, 'free');
+  const y0 = p.rig.free.state().yaw;
+  key('keydown', { key: 'w', code: 'KeyW', target: {} });
+  mouse('mousemove', { clientX: 150, clientY: 100 });
+  const e0 = p.rig.free.state().eye; win.step();
+  assert.ok(p.rig.free.state().yaw < y0, 'a drag right is a right turn (yaw −)');
+  assert.ok(len3(p.rig.free.state().eye, e0) > 0, 'and it flew while looking');
+});
+test('mouse: the scroll wheel zooms the build view', () => {
+  const { p, mouse } = livePreview();
+  mouse('wheel', { deltaY: -100 }); assert.ok(p.rig.zoomOf('build') < 1);
+  mouse('wheel', { deltaY: 100 }); mouse('wheel', { deltaY: 100 }); assert.ok(p.rig.zoomOf('build') > 1);
+});
+// ── L130-R, the keeper (03:0x): "only the most recently pressed movement key moves; on release, the next newest." And B's probes:
+//    P3 (C or B pressed while a move key is held snapped back to free), P5 (Shift+wheel on a device that reports deltaX), P2 (the
+//    key's ACTION is fixed at key-down, so a key that flies on the label but sits on another physical key still lets go). ──
+const W_DOWN = { key: 'w', code: 'KeyW', target: {} }, D_DOWN = { key: 'd', code: 'KeyD', target: {} };
+/** The eye's move over one frame with the given keys held, on a fresh preview, for comparing the movement direction. */
+function oneFrame(downs) { const x = livePreview(); for (const d of downs) x.key('keydown', d); x.win.step(); const e0 = x.p.rig.free.state().eye; x.win.step(); return sub(x.p.rig.free.state().eye, e0); }
+const close3 = (a, b) => len(sub(a, b)) < 1e-9;
+test('keys: with W and D held only the NEWEST (D) moves; releasing D hands the movement back to W; releasing W stops', () => {
+  const w = oneFrame([W_DOWN]), d = oneFrame([D_DOWN]), x = livePreview();
+  x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', D_DOWN); x.win.step();
+  let e0 = x.p.rig.free.state().eye; x.win.step(); const both = sub(x.p.rig.free.state().eye, e0);
+  assert.ok(len(d) > 0 && len(w) > 0 && !close3(w, d), 'W and D are different directions');
+  assert.ok(close3(both, d), `W then D moves as D alone: ${both} vs ${d}`);
+  x.key('keyup', { key: 'd', code: 'KeyD' }); e0 = x.p.rig.free.state().eye; x.win.step();
+  assert.ok(close3(sub(x.p.rig.free.state().eye, e0), w), 'D released: W moves again');
+  x.key('keyup', { key: 'w', code: 'KeyW' }); e0 = x.p.rig.free.state().eye; x.win.step();
+  assert.deepEqual(x.p.rig.free.state().eye, e0, 'both released: still');
+});
+test('keys: releasing the OLDER of two held movement keys leaves the newest moving', () => {
+  const d = oneFrame([D_DOWN]), x = livePreview();
+  x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', D_DOWN); x.win.step(); x.key('keyup', { key: 'w', code: 'KeyW' });
+  const e0 = x.p.rig.free.state().eye; x.win.step();
+  assert.ok(close3(sub(x.p.rig.free.state().eye, e0), d));
+});
+test('keys: a held key that repeats (auto-repeat key-down) keeps its place, and is not made the newest again', () => {
+  const d = oneFrame([D_DOWN]), x = livePreview();
+  x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', D_DOWN); x.win.step(); x.key('keydown', { ...W_DOWN, repeat: true });
+  const e0 = x.p.rig.free.state().eye; x.win.step();
+  assert.ok(close3(sub(x.p.rig.free.state().eye, e0), d), 'D is still the newest');
+});
+test('keys: the arrow (look) keys are not movement keys: they turn while the newest movement key flies', () => {
+  const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); const y0 = x.p.rig.free.state().yaw;
+  x.key('keydown', { key: 'ArrowRight', code: 'ArrowRight', target: {} }); const e0 = x.p.rig.free.state().eye; x.win.step();
+  assert.ok(x.p.rig.free.state().yaw < y0, 'turned right (yaw −)'); assert.ok(len3(x.p.rig.free.state().eye, e0) > 0, 'and still flew');
+});
+test('P3: C or B pressed while a movement key is held leaves free mode and stays out of it', () => {
+  for (const [k, want] of [['c', 'build'], ['b', 'build']]) {
+    const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); assert.equal(x.p.rig.mode, 'free');
+    x.key('keydown', { key: k, code: 'Key' + k.toUpperCase(), target: {} }); x.win.step(); x.win.step(); x.win.step();
+    assert.equal(x.p.rig.mode, want, `${k}: the camera key is not undone by the held W`);
+  }
+});
+test('P3: a NEW movement key-down after C takes the view over again', () => {
+  const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', { key: 'c', code: 'KeyC', target: {} }); x.win.step();
+  x.key('keyup', { key: 'w', code: 'KeyW' }); x.key('keydown', W_DOWN); x.win.step(); assert.equal(x.p.rig.mode, 'free');
+});
+test('P5: Shift+wheel is ×4 when the device reports the scroll as deltaX (deltaY 0), not only as deltaY', () => {
+  const a = livePreview(), b = livePreview(); a.mouse('wheel', { deltaY: -100, shiftKey: true }); b.mouse('wheel', { deltaY: 0, deltaX: -100, shiftKey: true });
+  assert.ok(a.p.rig.zoomOf('build') < 1 && Math.abs(a.p.rig.zoomOf('build') - Math.pow(1.15, -4)) < 1e-12);
+  assert.equal(b.p.rig.zoomOf('build'), a.p.rig.zoomOf('build'));
+});
+test('P2: a key that flies by its label but sits on another physical key (another layout) flies, and lets go by its own code', () => {
+  const x = livePreview(), lab = { key: 'w', code: 'KeyZ', target: {} };
+  x.key('keydown', lab); x.win.step(); const e0 = x.p.rig.free.state().eye; x.win.step(); assert.ok(len3(x.p.rig.free.state().eye, e0) > 0, 'it flies forward');
+  x.key('keyup', { key: 'w', code: 'KeyZ' }); const e1 = x.p.rig.free.state().eye; x.win.step(); assert.deepEqual(x.p.rig.free.state().eye, e1);
+});
+function len3(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); }
