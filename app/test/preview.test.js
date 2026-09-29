@@ -403,3 +403,22 @@ test('the pick still hits the station under the cursor after the lens changes (t
   assert.ok(tried >= 3, 'tried ' + tried);
 });
 function len3(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); }
+
+// ── D187 (E's L130-R review, W1 and W2; the reproducers, verbatim in intent). A held key REPEATS: a real keyboard sends key-downs with
+//    repeat: true about 30 times a second, and a trackpad swiping SIDEWAYS sends wheel events with deltaX only and no Shift. ──
+for (const k of ['c', 'b']) {
+  test(`W1: W held and REPEATING, ${k.toUpperCase()} pressed: W's next auto-repeats do not take the view back into free`, () => {
+    const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); assert.equal(x.p.rig.mode, 'free');
+    x.key('keydown', { key: k, code: 'Key' + k.toUpperCase(), target: {} }); x.win.step(); const after = x.p.rig.mode; assert.notEqual(after, 'free');
+    for (let i = 0; i < 3; i++) { x.key('keydown', { ...W_DOWN, repeat: true }); x.win.step(); }
+    assert.equal(x.p.rig.mode, after, `after ${k.toUpperCase()}, W's key-repeat snapped the view back into ${x.p.rig.mode}`);
+  });
+}
+test('W2: a trackpad swipe SIDEWAYS (deltaX only, no Shift: 20 events of 2 px) does not zoom', () => {
+  const x = livePreview(); for (let i = 0; i < 20; i++) x.mouse('wheel', { deltaY: 0, deltaX: 2 });
+  assert.equal(x.p.rig.zoomOf('build'), 1, `a sideways swipe zoomed the build view to ×${x.p.rig.zoomOf('build').toFixed(2)}`);
+});
+test('W2: the same sideways swipe with Ctrl held does not move the LENS either (the lens shares the wheel line)', () => {
+  const x = livePreview(), f0 = x.p.rig.fov; for (let i = 0; i < 20; i++) x.mouse('wheel', { deltaY: 0, deltaX: 2, ctrlKey: true });
+  assert.equal(x.p.rig.fov, f0, `a sideways swipe with Ctrl moved the lens from ${(f0 * 180 / Math.PI).toFixed(1)}° to ${(x.p.rig.fov * 180 / Math.PI).toFixed(1)}°`);
+});

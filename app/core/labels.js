@@ -7,9 +7,9 @@
 // preview is not changed: its pose comes from the 't180:view' event (app/preview/index.js), the track from 't180:track-request'.
 // - FIXED PIXEL SIZE: a label is the same size at every zoom (0.05 to 50), so it is readable at all of them.
 // - NEVER OVER THE BUILD HEAD: the head and its marker are kept clear; a label that would cover them is moved, and if it cannot
-//   be, it is not drawn.
+//   be, it is not drawn. The head's own label, which is always drawn, keeps at least the head's point and 7 px clear.
 // - NEVER OVER EACH OTHER: labels are placed in priority order (the head's own piece first, then the nearest on screen) and a
-//   label with no clear place is left out (culled). The head's own piece's label is always tried first.
+//   label with no clear place is left out (culled). The head's own piece's label is placed first and is NEVER culled (D187).
 // - FOR THE TESTS (E's seal): labels() returns what was DRAWN, [{ piece, text, rect: { x, y, w, h } }] in css px of the preview,
 //   and the 't180:labels' event answers the same.
 //
@@ -42,7 +42,8 @@ const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && 
  * Place the labels. `items` = [{ piece, text, x, y, w, h, priority }] (x, y the anchor on screen, w × h the label's size; lower
  * priority first). `view` = { width, height, head: { x, y, r } | null } (r: the head's keep-out radius in px). A label is tried
  * above its anchor, then below, then to the sides, then farther out; the first place that is inside the view, clear of the head's
- * keep-out square and clear of every label already placed is taken. A label with none is culled. Returns { drawn, culled }.
+ * keep-out square and clear of every label already placed is taken. A label with none is culled, EXCEPT the head's own (an item
+ * with `head: true`), which is never culled (headPlace). Returns { drawn, culled }.
  */
 const OFFSETS = [[0, -1], [0, 1], [1, 0], [-1, 0], [1, -1], [-1, -1], [1, 1], [-1, 1]];
 function layout(items, view) {
@@ -64,9 +65,31 @@ function layout(items, view) {
       }
       if (placed) break;
     }
+    // THE HEAD'S OWN LABEL IS NEVER CULLED (E's M5 (d); B's score, D187: missing in 6 of 15 states). It is placed first, so the
+    // others make way for it, never the reverse; and when no ring fits, headPlace looks for a place anywhere in the view.
+    if (!placed && it.head) placed = headPlace(it, view, keep);
     if (placed) drawn.push({ piece: it.piece, text: it.text, rect: placed }); else culled.push(it.piece);
   }
   return { drawn, culled };
+}
+/**
+ * A place for the head's own label when no ring around its anchor fits: every place in the view on an 8 px grid (and flush with
+ * its far edges), nearest the anchor first, clear of the head's keep-out; failing that, clear of only the head itself (its point
+ * and 7 px: E's M4 needs 6); and last, pulled inside the view. It always returns a place.
+ */
+function headPlace(it, view, keep) {
+  const W = view.width, H = view.height, w = it.w, h = it.h, spots = [];
+  const xs = [], ys = [];
+  for (let x = 0; x + w <= W; x += 8) xs.push(x);
+  for (let y = 0; y + h <= H; y += 8) ys.push(y);
+  if (W >= w) xs.push(W - w);
+  if (H >= h) ys.push(H - h);
+  for (const y of ys) for (const x of xs) spots.push({ x, y });
+  const d2 = (s) => (s.x + w / 2 - it.x) ** 2 + (s.y + h / 2 - it.y) ** 2;
+  spots.sort((a, b) => d2(a) - d2(b));
+  const core = view.head ? { x: view.head.x - 7, y: view.head.y - 7, w: 14, h: 14 } : null;
+  for (const avoid of [keep, core]) for (const s of spots) { const r = { x: s.x, y: s.y, w, h }; if (!avoid || !hits(r, avoid)) return r; }
+  return { x: Math.max(0, Math.min(W - w, it.x - w / 2)), y: Math.max(0, Math.min(H - h, it.y - h / 2)), w, h };
 }
 
 /**
@@ -101,9 +124,13 @@ function mount(stage, shell, win) {
   const box = (i) => {
     if (!pool[i]) {
       const e = doc.createElement('div');
-      // 16 px bold, near-white on near-black: its ink is ≥ 11 device px tall and its contrast far above 4.5 : 1 (E's M5)
-      e.style.cssText = 'position:absolute;font:bold 16px/1.25 system-ui,"Segoe UI",sans-serif;color:#f4f6fa;background:rgba(10,12,16,0.94);'
-        + 'padding:3px 7px;border-radius:4px;white-space:pre;border:1px solid #3a4250';
+      // 16 px bold, white on an OPAQUE near-black: its ink is ≥ 11 device px tall and its contrast far above 4.5 : 1 over any road
+      // (E's M5). Measured by pixels, everything in the box that is not background counts as ink, so the box holds ONLY its
+      // background and its text (B's score, D187: a border, rounded corners the road showed through, and a background the road
+      // bled into put grey "ink" in the box and dragged the median below 4.5 : 1). The 2 px ring of the same colour outside the
+      // box keeps the road off the box's own edge pixels.
+      e.style.cssText = 'position:absolute;font:bold 16px/1.25 system-ui,"Segoe UI",sans-serif;color:#ffffff;background:#0b0d11;'
+        + 'padding:3px 7px;border:0;border-radius:0;box-shadow:0 0 0 2px #0b0d11;white-space:pre';
       layer.append(e); pool[i] = e;
     }
     return pool[i];
@@ -127,9 +154,9 @@ function mount(stage, shell, win) {
       const reads = shell.pieceReadouts ? shell.pieceReadouts() : [], VP = M.viewProj(view.pose, W / H);
       const toScreen = (p) => { const c = M.apply(VP, p); return c[3] > 0 ? { x: (c[0] / c[3] * 0.5 + 0.5) * W, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * H, z: c[2] / c[3] } : null; };
       // the head's keep-out: its marker (look.js headMarker: max(3 m, 2% of the camera's distance)) projected, and never under 24 px
-      let head = null;
+      let head = null, hp = null;
       if (view.head) {
-        const hp = toScreen(view.head.pos);
+        hp = toScreen(view.head.pos);
         if (hp) {
           const e = view.pose.eye, d = Math.hypot(e[0] - view.head.pos[0], e[1] - view.head.pos[1], e[2] - view.head.pos[2]), size = Math.max(3, 0.02 * d);
           const off = toScreen([view.head.pos[0], view.head.pos[1] + size, view.head.pos[2]]), rPx = off ? Math.hypot(off.x - hp.x, off.y - hp.y) : 0;
@@ -146,9 +173,13 @@ function mount(stage, shell, win) {
         // the first candidate (the middle, then outward) that lands in view, in front of the camera and before the far plane
         let p = null;
         for (const a of cands) { const q = toScreen(a); if (q && q.z <= 1 && q.x >= 0 && q.y >= 0 && q.x <= W && q.y <= H) { p = q; break; } }
+        const isHead = r.id === headId;
+        // the head's own piece is labelled even when none of it is on screen (E's M5 (d)): pinned at the edge nearest the head, or
+        // in the top-left corner when the head is behind the camera
+        if (!p && isHead) p = hp ? { x: Math.max(0, Math.min(W, hp.x)), y: Math.max(0, Math.min(H, hp.y)) } : { x: 0, y: 0 };
         if (!p) return;
         const text = labelText(r).join('\n'), size = sizeOf(text);
-        items.push({ piece: r.id, text, x: p.x, y: p.y, w: size.w, h: size.h, priority: r.id === headId ? -1 : head ? Math.hypot(p.x - head.x, p.y - head.y) : 0 });
+        items.push({ piece: r.id, text, x: p.x, y: p.y, w: size.w, h: size.h, head: isHead, priority: isHead ? -1 : head ? Math.hypot(p.x - head.x, p.y - head.y) : 0 });
       });
       placed = layout(items, { width: W, height: H, head });
     }

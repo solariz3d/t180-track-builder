@@ -107,7 +107,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (a.camera) { takeover = false; rig.key(a.camera, ctx()); said(); e.preventDefault(); return; }
     if (a.look) { look = look === 'ac' ? 'words' : 'ac'; e.preventDefault(); return; }
     const id = heldKey(e); if (!held.has(id)) held.set(id, a);   // a repeat of a held key keeps its place in the order
-    takeover = true; e.preventDefault();
+    if (!e.repeat) takeover = true;   // an OS key-REPEAT of a key already held is not a new move: after C or B it must not take the view back
+    e.preventDefault();
   };
   // HELD KEYS are keyed by the PHYSICAL key (e.code), so a key pressed as 'w' and released as 'W' (Shift in between) still
   // lets go; and every held key is dropped when the window loses focus or is hidden, since the key-up then never arrives.
@@ -133,7 +134,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const noMenu = (e) => e.preventDefault();
   // THE SCROLL WHEEL zooms every view: a follow view comes nearer or backs off, free mode flies along its view. CTRL + WHEEL is the
   // LENS instead (rig.lens: the field of view; the camera does not move).
-  const onWheel = (e) => { const steps = -Math.sign(e.deltaY || e.deltaX || 0) * (e.shiftKey ? 4 : 1); if (steps) { if (e.ctrlKey) rig.lens(steps); else rig.zoom(steps); } e.preventDefault(); };
+  // deltaX counts only when Shift turned the wheel sideways: a trackpad's sideways swipe (deltaX, no Shift) is not a zoom, nor a lens
+  const onWheel = (e) => { const steps = -Math.sign(e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0) * (e.shiftKey ? 4 : 1); if (steps) { if (e.ctrlKey) rig.lens(steps); else rig.zoom(steps); } e.preventDefault(); };
   win.addEventListener('keydown', onKey); win.addEventListener('keyup', onUp); win.addEventListener('blur', letGo);
   if (win.document) win.document.addEventListener('visibilitychange', onVis);
   canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease);

@@ -88,6 +88,84 @@ test('the layout: a label anchored on a large head keep-out is placed clear of i
   assert.ok(!(d.x < keep.x + keep.w && keep.x < d.x + d.w && d.y < keep.y + keep.h && keep.y < d.y + d.h), 'and clear of the keep-out');
 });
 
+// B'S SCORE (D187): the head's own label was MISSING in 6 of 15 states (E's M5 (d): "at least the label of the piece ending at the
+// head is drawn"). Near the view's edge every ring around its anchor can fail; the head's label is then placed elsewhere in the
+// view, never culled, and still clear of the head (E's M4: the head's point and 6 px inside no label).
+test('the layout: the head\'s own label is never culled, even where no ring around its anchor fits; it stays clear of the head', () => {
+  const view = { width: 320, height: 240, head: { x: 10, y: 10, r: 24 } };
+  const r = LB.layout([{ piece: 'head', text: 'head', x: 10, y: 10, w: 290, h: 47, priority: -1, head: true }], view);
+  assert.deepEqual(r.culled, [], 'the head\'s label is not culled');
+  const d = r.drawn[0].rect;
+  assert.ok(d.x >= 0 && d.y >= 0 && d.x + d.w <= 320 && d.y + d.h <= 240, 'inside the view');
+  assert.ok(!(10 + 6 > d.x && 10 - 6 < d.x + d.w && 10 + 6 > d.y && 10 - 6 < d.y + d.h), 'clear of the head\'s point and 6 px');
+  // and the others make way for it: with the head's label placed first, a label that wants the same place moves or is culled
+  const both = LB.layout([{ piece: 'other', text: 'o', x: 150, y: 60, w: 290, h: 47, priority: 1 }, { piece: 'head', text: 'head', x: 10, y: 10, w: 290, h: 47, priority: -1, head: true }], view);
+  assert.ok(both.drawn.some((x) => x.piece === 'head'), 'the head\'s label is drawn beside another');
+});
+
+// R11's own test since D187: the head's piece now gets a label however little of it is in view, so only a piece that is NOT the
+// head's shows whether a label slides along its piece to the part that is on screen
+test('a piece whose middle is behind the camera is labelled on the part of it that is in view', async () => {
+  const P = await mountPanel(), { toPath } = require('../../src/core/adapter.js');
+  let track = null, view = null;
+  P.doc.addEventListener('t180:track-request', (e) => e.detail.reply(track));
+  P.doc.addEventListener('t180:view', (e) => e.detail.reply(view));
+  for (const o of [{ length: 250 }, { length: 400 }, { length: 100 }]) P.shell.extend(o);
+  const d = P.shell.getState().history.present, tp = toPath(d, { step: 2 }), h = tp.path.head;
+  track = { path: tp.path, segments: tp.segments };
+  const at = tp.path.samples.find((m) => m.s >= 520), look = at.pos.map((v, i) => v + at.T[i] * 100);   // inside piece 2 (250–650), past its middle
+  view = { pose: { eye: [at.pos[0], at.pos[1] + 6, at.pos[2]], target: look, up: [0, 1, 0], fov: Math.PI / 3 }, mode: 'free', head: { pos: h.pos, T: h.T } };
+  P.tick();
+  const L = P.panel.labels.labels();
+  assert.ok(L.some((x) => x.piece === d.pieces[1].id), `the middle piece is drawn (drawn: ${L.map((x) => x.piece).join(', ') || 'none'})`);
+  P.panel.unmount();
+});
+
+test('the head\'s own piece is labelled even when none of it is on screen (the camera looks ahead, past the head)', async () => {
+  const P = await mountPanel(), { toPath } = require('../../src/core/adapter.js');
+  let track = null, view = null;
+  P.doc.addEventListener('t180:track-request', (e) => e.detail.reply(track));
+  P.doc.addEventListener('t180:view', (e) => e.detail.reply(view));
+  for (const o of [{ length: 200 }, { length: 150, targets: { kh: 0.01 } }, { length: 180, targets: { kh: 0 } }]) P.shell.extend(o);
+  const d = P.shell.getState().history.present, tp = toPath(d, { step: 2 }), h = tp.path.head;
+  track = { path: tp.path, segments: tp.segments };
+  const ahead = (k) => h.pos.map((v, i) => v + h.T[i] * k);
+  view = { pose: { eye: [ahead(5)[0], h.pos[1] + 2, ahead(5)[2]], target: ahead(500), up: [0, 1, 0], fov: Math.PI / 3 }, mode: 'free', head: { pos: h.pos, T: h.T } };
+  P.tick();
+  const L = P.panel.labels.labels(), headPiece = d.pieces[d.pieces.length - 1].id, got = L.find((x) => x.piece === headPiece);
+  assert.ok(got, `the head's piece is drawn (drawn: ${L.map((x) => x.piece).join(', ') || 'none'})`);
+  assert.ok(got.rect.x >= 0 && got.rect.y >= 0 && got.rect.x + got.rect.w <= 900 && got.rect.y + got.rect.h <= 600, 'inside the view');
+  assert.equal(got.text, LB.labelText(RD.pieceReadout(d, d.pieces.length - 1)).join('\n'), 'with A\'s numbers');
+  P.panel.unmount();
+});
+
+// B'S SCORE (D187): contrast under 4.5 : 1 on labels over bright road. E's M5 (b) is measured in pixels: every pixel in the label's
+// rectangle that differs from its median background counts as INK, and the median ink pixel is held against the background. So the
+// box must hold only its background and its text: an opaque background (no road bleeding in), no border and no rounded corners (the
+// road showed through them), and text far from the background.
+test('the label box holds only an opaque background and its text: no border, square corners, contrast ≥ 4.5 : 1', async () => {
+  const P = await mountPanel(), { toPath } = require('../../src/core/adapter.js');
+  let track = null, view = null;
+  P.doc.addEventListener('t180:track-request', (e) => e.detail.reply(track));
+  P.doc.addEventListener('t180:view', (e) => e.detail.reply(view));
+  P.shell.extend({ length: 200 });
+  const d = P.shell.getState().history.present, tp = toPath(d, { step: 2 }), h = tp.path.head;
+  track = { path: tp.path, segments: tp.segments };
+  view = { pose: { eye: [h.pos[0], h.pos[1] + 900, h.pos[2] - 1], target: h.pos, up: [0, 0, 1], fov: Math.PI / 3 }, mode: 'overhead', head: { pos: h.pos, T: h.T } };
+  P.tick();
+  // the label's own box: the element holding the text itself (the layer around it has the same textContent, through its child)
+  const box = P.stage.all().find((e) => e.children.length === 0 && e.textContent === P.panel.labels.labels()[0].text && e.style.cssText), css = box.style.cssText;
+  const prop = (k) => { const m = new RegExp(`(?:^|;)${k}:([^;]+)`).exec(css); return m ? m[1].trim() : null; };
+  const bg = prop('background'), fg = prop('color');
+  assert.match(bg, /^#[0-9a-f]{6}$/i, `the background is an opaque colour (got ${bg})`);
+  assert.ok(prop('border') === '0' || prop('border') === 'none', `no border (got ${prop('border')})`);
+  assert.equal(prop('border-radius'), '0', 'square corners');
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)), lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const L = (c) => { const [r, g, b] = rgb(c).map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }, a = L(fg), b = L(bg);
+  assert.ok((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.5, 'text against background ≥ 4.5 : 1');
+  P.panel.unmount();
+});
+
 test('the shell\'s readouts are A\'s, once per document; the ghost\'s strings are the placed piece\'s strings', async () => {
   const s = await createCoreShell({ brushFn: null });
   for (const o of [{ length: 100 }, { length: 150, targets: { kh: Math.PI / 2 / 150 } }, { length: 60, targets: { kh: 0.01, kv: 0.002, phi: -0.2 } }]) {
