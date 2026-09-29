@@ -26,6 +26,7 @@ public static class PW {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr c);
   public static IntPtr Find(uint want) {
     IntPtr found = IntPtr.Zero;
     EnumWindows((h, l) => { uint pid; GetWindowThreadProcessId(h, out pid);
@@ -35,6 +36,7 @@ public static class PW {
   }
 }
 "@
+[void][PW]::SetProcessDpiAwarenessContext([IntPtr](-4))   # PER_MONITOR_AWARE_V2: physical window sizes, not the 96-dpi virtualised ones
 function Say($o) { $o | ConvertTo-Json -Compress; exit 0 }
 $h = [PW]::Find([uint32]$ProcId)
 if ($h -eq [IntPtr]::Zero) { Say @{ ok = $false; reason = "process $ProcId has no visible top-level window" } }

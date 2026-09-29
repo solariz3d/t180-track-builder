@@ -30,6 +30,9 @@ const { toSegments } = AD;
 // read the road AS BRUSHED (the segments alone do not carry the offsets).
 const offsetPath = typeof AD.offsetPath === 'function' ? AD.offsetPath : null;
 const W = require('../../src/core/water.js');
+// THE READOUT (L130, A's src/core/readout.js): a piece's length and the change it makes in turn, climb and bank, for the panel
+// (the ghost, candidateReadout) and the labels on the track (every placed piece, pieceReadout)
+const RD = require('../../src/core/readout.js');
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored beside the piece builder's under this prefix
@@ -53,6 +56,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     st = Object.freeze({ ...st, ...patch }); for (const f of subs) f(st); return st;
   };
   const doc = () => st.history.present;
+  let reads = [], readsFor = null;
   const segmentsOf = (d) => (d.pieces.length ? toSegments(d) : []);
   // THE START POSE travels with the segments (found by test 1, D186): the geometry's shape depends on the start PITCH, so a path
   // grown from the origin at pitch 0 is not the document's lap. A real track opened as an example starts where its first station is.
@@ -86,6 +90,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     extend: (opts) => commit('extend', () => extend(doc(), opts), { lastEdited: [doc().pieces.length] }),
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
     candidate: (opts) => { const d = extend(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) }; },
+    /** The ghost's readout: what extend(opts) would place, before it is placed (A: the same numbers as after). Throws on bad fields. */
+    candidateReadout: (opts) => RD.candidateReadout(doc(), opts),
+    /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
+    pieceReadouts() { const d = doc(); if (readsFor !== d) { reads = d.pieces.map((_, i) => RD.pieceReadout(d, i)); readsFor = d; } return reads; },
 
     /**
      * THE BRUSH, one drag = one undo step. beginBrush fixes the brush (its mode, channel, centre s0 and radius r, all on the

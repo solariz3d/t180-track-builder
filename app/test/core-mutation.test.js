@@ -8,8 +8,23 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..');
+// the tests every mutant is run against (L130 adds the readout display's)
+const TESTS = ['core-shell.test.js', 'core-readout-display.test.js'];
 
 const MUTATIONS = [
+  // L130, the readout display (app/core/labels.js, app/core/panel.js)
+  { id: 'R1 the sign of an angle flipped', file: 'core/labels.js', from: "return `${v > 0 ? '+' : MINUS}", to: "return `${v > 0 ? MINUS : '+'}", caughtBy: 'the strings' },
+  { id: 'R2 zero is signed', file: 'core/labels.js', from: "if (v === 0) return '0.0°';", to: '', caughtBy: 'the strings' },
+  { id: 'R3 bank shown as its end value, not the change', file: 'core/labels.js', from: 'bank: fmtDeg(r.bankToDeg - r.bankFromDeg)', to: 'bank: fmtDeg(r.bankToDeg)', caughtBy: 'the strings' },
+  { id: 'R4 rounding without the binary guard', file: 'core/labels.js', from: 'Math.abs(x) * 10 + 1e-7', to: 'Math.abs(x) * 10', caughtBy: 'the strings' },
+  { id: 'R5 the head keep-out ignored', file: 'core/labels.js', from: 'if (keep && hits(rect, keep)) continue;', to: '', caughtBy: 'the layout' },
+  { id: 'R6 labels may overlap', file: 'core/labels.js', from: 'if (drawn.some((d) => hits(rect, d.rect))) continue;', to: '', caughtBy: 'the layout' },
+  { id: 'R7 anchors cached by the path object', file: 'core/labels.js', from: 'if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; }', to: 'if (anchorsFor !== track.path) { anchors = anchorsOf(track); anchorsFor = track.path; }', caughtBy: 'the labels follow a path the preview extends IN PLACE' },
+  { id: 'R8 the layer is not put back in the page', file: 'core/labels.js', from: 'if (!layer.isConnected) stage.append(layer);', to: '', caughtBy: 'the labels follow a path the preview extends IN PLACE' },
+  { id: 'R11 a label never slides off its piece\'s middle', file: 'core/labels.js', from: 'for (const a of cands) {', to: 'for (const a of cands.slice(0, 1)) {', caughtBy: 'the head\'s own piece is labelled in the build view' },
+  { id: 'R12 no ring clears a large head keep-out', file: 'core/labels.js', from: 'if (view.head) { const d = Math.hypot(it.x - view.head.x, it.y - view.head.y); gaps.push(view.head.r + d + 12, 2 * view.head.r + d + 12); }', to: '', caughtBy: 'the layout: a label anchored on a large head keep-out' },
+  { id: 'R9 the panel readout waits for the next state change', file: 'core/panel.js', from: 'readout();   // first, and synchronously', to: '//', caughtBy: 'the panel shows the ghost' },
+  { id: 'R10 the ghost readout is the LAST placed piece, not the candidate', file: 'core/coreshell.js', from: 'candidateReadout: (opts) => RD.candidateReadout(doc(), opts),', to: "candidateReadout: (opts) => RD.pieceReadout(doc(), doc().pieces.length - 1),", caughtBy: 'the panel shows the ghost' },
   { id: 'C1 a brush frame builds on the last frame, not the drag\'s base', file: 'core/coreshell.js',
     from: 'const t0 = now(), res = brushed(b, delta)', to: 'const t0 = now(), res = brushed({ ...b, base: doc() }, delta)', caughtBy: 'the rate brush' },
   { id: 'C2 the drag never ends in the history', file: 'core/coreshell.js',
@@ -78,12 +93,13 @@ function runMutant(m) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-mut-')), app = path.join(dir, 'app');
   try {
     for (const d of ['core', 'preview', 'camera', 'export', 'lib', 'testhook']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });
-    fs.mkdirSync(path.join(app, 'test')); fs.copyFileSync(path.join(__dirname, 'core-shell.test.js'), path.join(app, 'test', 'core-shell.test.js'));
+    fs.mkdirSync(path.join(app, 'test'));
+    for (const t of TESTS) fs.copyFileSync(path.join(__dirname, t), path.join(app, 'test', t));
     fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });
     fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });
     const f = m.root === 'src' ? path.join(dir, 'src', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
-    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(app, 'test', 'core-shell.test.js')],
+    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', ...TESTS.map((t) => path.join(app, 'test', t))],
       { env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), encoding: 'utf8', timeout: 600000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');

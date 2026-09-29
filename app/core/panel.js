@@ -8,8 +8,14 @@
 //          it is in the build; the rate brush (one channel) is the explicit second mode.
 //   CLOSE as one click. WATER, drawn LIVE: while it is on, every change to the track pours again (the preview's 't180:track'
 //          event), and the streams and reds are drawn over the track ('t180:overlay'). Every red is listed in plain words.
+//   THE READOUT (L130): beside Extend's fields, the piece they describe, BEFORE it is placed: its length and the change it makes
+//          in turn, climb and bank (A's src/core/readout.js, candidateReadout), redrawn inside every field's input handler; and on
+//          the track, a label at every placed piece with the same numbers (app/core/labels.js). The strings are the same function's
+//          (labels.js formatReadout), so what the ghost promised is what the placed piece's label says.
 //   OPEN A LOCAL EXAMPLE: a real track's D184 fit and its read, picked from the user's own reads/ folder (never in the program).
 'use strict';
+
+const LB = require('./labels.js');
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, height: 0.03, lateral: 0.03 });
@@ -53,7 +59,18 @@ function mount(root, shell) {
     width = num('', 1, 'road width in m; empty keeps it');
   const opts = () => extendOptions({ length: len.value, turn: turn.value, climb: climb.value, bank: bank.value, width: width.value });
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
+  // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
+  const RO = ['length', 'turn', 'climb', 'bank'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
+  const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:#eef1f6' },
+    ...RO.flatMap((k) => [el('span', { text: k === 'length' ? 'length' : `${k} change`, style: 'color:#aab2c0;font-weight:600' }), roCells[k]]));
+  const readout = () => {
+    let f = null, why = '';
+    try { if (shell.getState().history.present.closed) why = 'the loop is closed'; else f = LB.formatReadout(shell.candidateReadout(opts())); } catch (e) { why = e.message; }
+    for (const k of RO) roCells[k].textContent = f ? f[k] : '—';
+    roBox.title = why;
+  };
   const ghost = () => {
+    readout();   // first, and synchronously: the numbers follow the fields with no timer and no frame wait
     let why = null;
     try { send('t180-ghost', { candidate: shell.candidate(opts()), reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }
     if (why) { send('t180-ghost-clear'); msg.textContent = `no preview of this piece: ${why}`; msg.className = 'message'; }
@@ -110,6 +127,7 @@ function mount(root, shell) {
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', onclick: () => shell.undo() }), el('button', { text: 'Redo', onclick: () => shell.redo() })),
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), field('turn °/100m', turn), field('climb °/100m', climb), field('bank °', bank), field('width m', width)),
+    roBox,
     el('div', { class: 'actions' }, extendBtn),
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'actions' }, closeBtn),
@@ -127,9 +145,12 @@ function mount(root, shell) {
     else reds.replaceChildren(...w.reds.map((x) => el('li', { text: x.text, style: 'color: var(--bad)' })));
     if (w && w.cutAt !== null) reds.append(el('li', { text: `The water stops at ${Math.round(w.cutAt)} m: a jump's flight is not modelled.`, class: 'src' }));
     send('t180:overlay', { lines: overlayOf(w) });
+    readout();   // the track changed, so the piece the fields would add changed
   };
+  // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
+  const labels = stage ? LB.mount(stage, shell, win) : null;
   const unsub = shell.subscribe(draw); draw(shell.getState());
-  return { unmount() { unsub(); doc.removeEventListener('t180:track', onTrack); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, unmount() { unsub(); if (labels) labels.unmount(); doc.removeEventListener('t180:track', onTrack); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, overlayOf, extendOptions, PER_PX };

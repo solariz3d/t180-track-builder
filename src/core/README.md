@@ -12,6 +12,7 @@ does not edit it; it imports one of its functions, `solveJump`, for a jump.
 | `sculpt.js` | a C2 brush on one channel over a window |
 | `close.js` | the least-norm closure |
 | `water.js` | particles on the surface the adapter emits |
+| `readout.js` | a piece's length (m) and its change in turn, climb and bank (°), for placed pieces and the extend ghost |
 
 Every formula is on the skill's shelf, `.claude/skills/track-equations/references/`, cited at its use as `ref NN §k`.
 
@@ -141,6 +142,32 @@ channels: { kh, kv, phi, w, r,
 - **`s` stays the base's parameter,** and `path.lengthM` the base's length. The road over a hill is a little longer than s says;
 - **a path from `src/geom`'s incremental `extendPath` or `rebuildPathFrom` is the BASE path.** Run `offsetPath(doc, segments,
   path)` on it again before reading it.
+
+## The readout: what each piece does, in numbers (`readout.js`, ref 09 §8)
+
+For the display beside Extend's fields (the ghost) and the label at each placed piece. Pure: it reads the document only.
+
+```js
+pieceReadout(doc, i)          // i = 0-based piece index; throws EMPTY on an empty track, BAD_INDEX out of range
+candidateReadout(doc, opts)   // the piece extend(doc, opts) would place (the SAME opts as extend): the ghost's numbers
+// → { type: 'road' | 'flight', id,
+//     lengthM,                     // the piece's length along s, m (a flight: its flight plus its landing ramp, as built)
+//     turnDeg,                     // ∫κh ds, degrees, + = left
+//     climbDeg,                    // ∫κv ds, degrees, + = nosing up (a flight: landing pitch − take-off pitch)
+//     bankFromDeg, bankToDeg,      // φ at the two ends, degrees, + = left side up
+//     pitchFromDeg, pitchToDeg,    // the pitch entering and leaving the piece, degrees
+//     offsets }                    // null, or the EFFECTIVE numbers with h/l applied (below)
+```
+
+- **Exact:** turn and climb are the channels' own integrals (3-point Gauss–Legendre per knot span, exact for a cubic). The
+  drawn geometry integrates by the trapezoid at 2 m and differs by under 1e-6 rad (measured). Show one decimal; both agree to it.
+- **`candidateReadout` IS `pieceReadout` on the extended document,** so the ghost's numbers equal the placed piece's.
+- **`offsets`** (only when the piece has h or l): `{ turnDeg, climbDeg, pitchFromDeg, pitchToDeg, roadLengthM }`.
+  - A hill or swerve that fades to zero slope INSIDE the piece leaves the turn and climb unchanged. It only moves the road
+    in between.
+  - One still rising at an end tilts that end: on level road, by atan(h′).
+  - `roadLengthM` is the length over the lifted road, a little more than `lengthM`.
+  - Bank is never changed by h or l.
 
 ## What the adapter emits (`adapter.js`)
 
