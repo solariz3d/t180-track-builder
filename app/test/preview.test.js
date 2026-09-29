@@ -251,9 +251,9 @@ test('keys: W then D goes diagonally: both axes at once, the same 3 m a frame as
 test('keys: D then W is the same diagonal (the order across axes does not matter)', () => {
   assert.ok(close3(nextMove(pressed(['d', 'w'])), nextMove(pressed(['w', 'd']))));
 });
-test('keys: three axes at once (W, D and E) move along (W + D + up) / √3 (the input direction is normalised)', () => {
-  const w = unit('w'), d = unit('d'), u = unit('e'), m = nextMove(pressed(['w', 'd', 'e']));
-  assert.ok(close3(m, mul3(add3(add3(w, d), u), 1 / Math.sqrt(3))));
+test('keys: three axes at once (W, D and E) move along the sum W + D + up at 1.0× in METRES (D189: the world displacement is normalised, not the input)', () => {
+  const w = unit('w'), d = unit('d'), u = unit('e'), m = nextMove(pressed(['w', 'd', 'e'])), sum = add3(add3(w, d), u);
+  assert.ok(close3(m, mul3(sum, len(w) / len(sum))), 'the direction of the sum, 3 m long: ' + m);
 });
 test('keys: D and E (right and up are perpendicular) go at 1.0× too: (D + up) / √2, 3 m a frame', () => {
   const d = unit('d'), u = unit('e'), m = nextMove(pressed(['d', 'e']));

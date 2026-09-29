@@ -93,6 +93,8 @@ through the same test first, and failed it badly.
 ### Fixed
 
 - Holding a movement key and pressing C or B no longer snaps the camera back to free on the key’s auto-repeat.
+- Flying forward or back together with up or down no longer slows to a crawl as the view looks down (it was 0.9× at the
+  starting view and 0.01× straight down). Every key combination flies at the same speed, in any direction you look.
 - A sideways trackpad swipe no longer zooms the view, or changes the lens with Ctrl. Shift+wheel on a device that reports
   it as deltaX still works (×4).
 - The label of the piece at the build head is always drawn, even when that piece is off-screen, and label boxes are opaque

@@ -264,3 +264,44 @@ test('the lens changes the pose\'s fov and nothing else, in every view (the eye,
     assert.deepEqual([b.eye, b.target, b.up], [a.eye, a.target, a.up], m); assert.ok(b.fov < a.fov - 0.1 && Math.abs(b.fov - rig.fov) < 1e-15, m);
   }
 });
+
+// ── D189, the keeper's feel: flying was slower the more the view looked down when W or S was held with Q or E ("0.0123× at −89°",
+//    E's measurement). Forward follows the view's pitch, up is the WORLD's up, so the two are not perpendicular and their sum is
+//    shorter than either. Stated: free.move(fwd, right, up) moves the eye by exactly hypot(fwd, right, up) METRES, in the direction
+//    of  d·fwd + r·right + U·up  (d the view direction, r = d × up normalised, U world up), at every pitch and yaw and for every
+//    combination of axes. Where forward and up nearly cancel (W+E looking almost straight down) that direction is the part that does
+//    not cancel, and the speed is still 1.0×. ──
+{
+  const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const enterFree = () => { const { path: p } = track(), ctx = { head: p.head, path: p }, rig = C.createRig(); rig.update(ctx, 0); rig.key('b', ctx); for (let i = 0; i < 4; i++) rig.key('c', ctx); assert.equal(rig.mode, 'free'); return rig; };
+  const setView = (rig, yaw, pitch) => { const st = rig.free.state(); rig.free.look(st.yaw - yaw, pitch - st.pitch); };   // look(dYaw): yaw −= dYaw
+  const basis = (rig) => { const { yaw, pitch } = rig.free.state(), d = [Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch), Math.cos(pitch) * Math.cos(yaw)]; return { d, r: unit(cross3(d, [0, 1, 0])), U: [0, 1, 0] }; };
+  const DEGS = [-89, -85, -75, -60, -45, -22, 0, 22, 45, 60, 75, 85, 89];
+  test('free.move moves EXACTLY hypot(fwd, right, up) metres, along d·fwd + r·right + U·up, at every pitch and for every combination of axes', () => {
+    let worst = 0, cases = 0;
+    for (const yaw of [0, 0.7, -2.1]) for (const deg of DEGS) {
+      const rig = enterFree(); setView(rig, yaw, deg * Math.PI / 180); assert.ok(Math.abs(rig.free.state().pitch - deg * Math.PI / 180) < 1e-9, 'the pitch was set');
+      for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) for (const c of [-1, 0, 1]) {
+        if (!a && !b && !c) continue;
+        const rg = enterFree(); setView(rg, yaw, deg * Math.PI / 180); const B = basis(rg), S = 3.7, e0 = rg.free.state().eye;
+        rg.free.move(a * S, b * S, c * S); const m = sub(rg.free.state().eye, e0), L = S * Math.hypot(a, b, c);
+        const v = [0, 1, 2].map((i) => B.d[i] * a + B.r[i] * b + B.U[i] * c);
+        worst = Math.max(worst, Math.abs(len(m) - L)); cases++;
+        assert.ok(Math.abs(len(m) - L) < 1e-9, 'yaw ' + yaw + ' pitch ' + deg + ' keys (' + a + ',' + b + ',' + c + '): ' + len(m) + ' m vs ' + L + ' m');
+        assert.ok(dot(unit(m), unit(v)) > 1 - 1e-9, 'yaw ' + yaw + ' pitch ' + deg + ' keys (' + a + ',' + b + ',' + c + '): the direction is the sum d·fwd + r·right + U·up');
+      }
+    }
+    assert.ok(cases === 3 * DEGS.length * 26, 'cases ' + cases);
+  });
+  test('W+E looking almost straight down (−89°, where forward and up nearly cancel) does not stop: it goes 1.0× along the part that does not cancel, the heading', () => {
+    const rig = enterFree(); setView(rig, 0.7, -89 * Math.PI / 180); const e0 = rig.free.state().eye;
+    rig.free.move(3 / Math.SQRT2, 0, 3 / Math.SQRT2); const m = sub(rig.free.state().eye, e0);
+    assert.ok(Math.abs(len(m) - 3) < 1e-9, len(m) + ' m, not ~0.04 m');
+    assert.ok(dot(unit(m), [Math.sin(0.7), 0, Math.cos(0.7)]) > 0.999, 'along the horizontal heading, the non-cancelled part');
+  });
+  test('a single-axis move is unchanged (backward is along −d), and a zero move is a no-op (no NaN)', () => {
+    const rig = enterFree(); setView(rig, 0, -60 * Math.PI / 180); const e0 = rig.free.state().eye, B = basis(rig);
+    assert.ok(rig.free.move(0, 0, 0)); assert.deepEqual(rig.free.state().eye, e0);
+    rig.free.move(-5, 0, 0); assert.ok(near(rig.free.state().eye, [0, 1, 2].map((i) => e0[i] - 5 * B.d[i]), 1e-9), 'a backward move is along −d');
+  });
+}
