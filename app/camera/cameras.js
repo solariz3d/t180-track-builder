@@ -17,7 +17,8 @@
 //   rig.key('b')               the build view, from any mode, in one key
 //   rig.pose(ctx)              the exact pose for ctx = { head, path, width?, aspect? } ({ eye, target, up, fov }), no smoothing
 //   rig.update(ctx, dt)        the pose shown this frame, eased toward rig.pose(ctx) (no snap on a mode switch)
-//   rig.free.move(fwd, right, up)   rig.free.look(dYaw, dPitch)     only in free mode (dYaw + turns RIGHT on screen)
+//   rig.free.move(fwd, right, up)   rig.free.look(dYaw, dPitch)     only in free mode (dYaw + turns RIGHT on screen); a move is
+//                              hypot(fwd, right, up) metres in the direction d·fwd + r·right + U·up, whatever the pitch and the combination
 //   rig.zoom(steps)            the scroll wheel, + nearer: a follow view scales its distance (kept per mode), free dollies
 //   rig.lens(steps)            Ctrl + the wheel, + zooms IN: the field of view, ×1/1.15 a notch, 10° to 100°, the same in every view;
 //                              the camera does not move (the framing above is worked at the default lens). rig.resetLens(), rig.fov
@@ -201,11 +202,16 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
     get fov() { return fovNow; },
     fovDefault,
     free: {
-      /** Fly in the camera's own frame (metres): forward along the view, right, and world up. */
+      /** Fly in the camera's own frame (metres): forward along the view, right, and world up. The move is EXACTLY hypot(fwd, right, up)
+       *  metres, in the direction of the three axes' sum, so any combination of keys flies at the same speed as one. Forward follows the
+       *  view's pitch and up is the world's up, so those two are not perpendicular and their plain sum shrinks toward nothing as the view
+       *  looks down (W + E: 0.0123× at −89°, D189). Where they nearly cancel the direction is the part that does not (the heading).
+       *  d, r and up are independent while the pitch is within ±89°, so the sum is never shorter than 0.0123 of the request. */
       move(fwd = 0, right = 0, up = 0) {
         if (mode !== 'free') return false;
         const d = freeDir(), r = unit(cross(d, WORLD_UP)) || [1, 0, 0];
-        free.eye = add(add(add(free.eye, mul(d, fwd)), mul(r, right)), mul(WORLD_UP, up)); return true;
+        const v = add(add(mul(d, fwd), mul(r, right)), mul(WORLD_UP, up)), L = Math.hypot(fwd, right, up), n = len(v);
+        free.eye = add(free.eye, n > 0 && n > 1e-12 * L ? mul(v, L / n) : v); return true;   // a sum that is nothing at all stays nothing
       },
       /** Turn the view (radians): dYaw + turns RIGHT on screen, dPitch + looks up; the pitch stays within ±89° so up never
        *  flips. (yaw + swings the view toward +x, which is screen LEFT here (math.js lookAt), hence the minus.) */
