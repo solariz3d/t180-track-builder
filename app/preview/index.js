@@ -20,6 +20,8 @@
 // And for the EQUATION CORE's panel (D186, app/core/panel.js):
 //   't180:overlay'        { detail: { lines } }          world line pairs drawn over the track (the water, its reds), or null
 //   't180-pick'           { detail: { x, y, reply(hit) } } the station under a canvas point (css px): { s, pos, px } or null
+// And for the READOUT labels (L130, app/core/labels.js), answered read-only from the preview's own view():
+//   't180:view'           { detail: { reply(v) } }        { pose, mode, head } (head: the placed track's build head, or null)
 //
 // A MOUNT THAT FAILS says why, twice: the reason is left visible in the panel ("The preview could not start: …"), and
 // mount throws a PreviewMountError with the same message, for the page to show where it likes (A's display half).
@@ -59,6 +61,7 @@ function mount(root, shell) {
   const hideGhost = () => p.clearGhost();
   const textures = (e) => { p.setTextureSet(e.detail ? e.detail.set : null); };
   const overlayNow = (e) => { p.setOverlay(e.detail ? e.detail.lines : null); };
+  const viewNow = (e) => { if (!e.detail || typeof e.detail.reply !== 'function') return; const v = p.view(), h = v.track && v.track.path ? v.track.path.head : null; e.detail.reply({ pose: v.pose, mode: v.mode, head: h ? { pos: h.pos.slice(), T: h.T.slice() } : null }); };
   const pickNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.pick(e.detail.x, e.detail.y)); };
   const trackNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.track()); };
   doc.addEventListener('t180:textures', textures);
@@ -69,7 +72,8 @@ function mount(root, shell) {
   doc.addEventListener('t180-ghost-clear', hideGhost);
   doc.addEventListener('t180:overlay', overlayNow);
   doc.addEventListener('t180-pick', pickNow);
-  return { preview: p, unmount() { doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180:overlay', overlayNow); doc.removeEventListener('t180-pick', pickNow); p.dispose(); root.replaceChildren(); } };
+  doc.addEventListener('t180:view', viewNow);
+  return { preview: p, unmount() { doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180:overlay', overlayNow); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };

@@ -133,3 +133,40 @@ graph y = h(s):
 bit for bit.
 
 **Tests:** `test/core_offset.test.js`.
+
+## §8 The readout: a piece's length, turn, climb, bank and pitch, from its channels
+**The integrals are EXACT by Gauss–Legendre.** On each knot span a channel is one cubic polynomial (ref 03 §1). An n-point
+Gauss–Legendre rule "is … constructed to yield an exact result for polynomials of degree 2n − 1 or less" (WIKI-GAUSS, opened
+2026-09-28, "Gaussian quadrature"). So the 3-point rule on each span integrates a channel exactly, up to float rounding:
+- nodes 0 and ±√(3/5), weights 8/9 and 5/9 on [−1, 1];
+- the change of interval ∫ₐᵇ f = (b − a)/2 · Σ wᵢ f((b − a)/2·ξᵢ + (a + b)/2).
+
+**The quantities** (DERIVED from ref 02 §2: θ′ = κh, p′ = κv, and the roll is φ):
+- turn = ∫₀ᴸ κh ds, the heading change about world up (+ left);
+- climb = ∫₀ᴸ κv ds, the pitch change (+ nosing up);
+- bank from = φ(0) and bank to = φ(L);
+- pitch from = the document's start pitch plus every earlier road piece's climb, with a flight setting it to its landing
+  pitch; pitch to = pitch from + climb.
+
+**The known answers the tests use:**
+- a constant κ turns κ·L;
+- a Bloss ramp 0 → T, where κ = T·S(s/L) and S(u) = 3u² − 2u³ (ref 02 §4), turns T·L·∫₀¹S = T·L·(1 − ½) = **T·L/2**;
+- a flat piece climbs 0.
+
+**The geometry the adapter draws is a close neighbour, not identical.** The adapter hands src/geom segments whose κ is linear
+between 2 m ends (ref 09 §5), so its heading and pitch integrate the channel by the TRAPEZOID rule. They differ from the exact
+integral by O(segM²·κ″). That difference is measured in `test/core_readout.test.js`, not assumed.
+
+**With offsets h and l (ref 09 §7): the effective ends.**
+- The lifted tangent at a piece's end is T̃ ∝ T + h′ŷ + l′R + l·θ′R_θ (ref 09 §7).
+- The EFFECTIVE turn is turn + (θ̃ − θ) at the end − (θ̃ − θ) at the start. The effective climb is p̃(end) − p̃(start), with
+  θ̃ = atan2(T̃ₓ, T̃_z) and p̃ = asin T̃_y.
+- **A hill that fades to zero slope inside the piece changes neither.** It moves the road in between, not the ends.
+- **Bank is not changed by h or l:** the lift keeps the roll (ref 09 §7).
+- **Length:** s stays the base length. The ROAD over a hill is longer: ∫|r̃′| ds.
+- **DERIVED:** using T·R = 0, T·R_θ = −cos p and ŷ·R = ŷ·R_θ = R·R_θ = 0,
+  |r̃′|² = 1 + h′² + l′² + (l·θ′)² + 2h′·sin p − 2l·θ′·cos p.
+  It is integrated by composite 5-point Gauss–Legendre over 1 m panels. That is not exact, since |r̃′| is not polynomial;
+  the test measures it against the lifted path's chords.
+
+**Test:** `test/core_readout.test.js`.
