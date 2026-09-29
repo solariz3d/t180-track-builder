@@ -115,8 +115,6 @@ const MUTATIONS = [
   { id: 'L17 the ties never fade (they hatch the road dark at a distance)', file: 'preview/renderer.js', from: 'drawLines(L.ties, model, COLOURS.tie, alpha, TIE_FADE);', to: 'drawLines(L.ties, model, COLOURS.tie, alpha);', caughtBy: 'renderer: the ties fade out' },
   { id: 'L18 the canvas is cleared to the fog colour again', file: 'preview/renderer.js', from: 'gl.clearColor(clear[0], clear[1], clear[2], 1);', to: 'gl.clearColor(fog[0], fog[1], fog[2], 1);', caughtBy: 'renderer: the canvas is cleared to CLEAR' },
   // L130-R: the newest movement key, the takeover once, the wheel's deltaX, the key's action at key-down, the overhead sliding to the head
-  { id: 'N1 every held movement key moves (not only the newest)', file: 'preview/preview.js', from: 'if (a.fly) fly = a.fly;', to: 'if (a.fly) rig.free.move(a.fly[0] * k, a.fly[1] * k, a.fly[2] * k);', caughtBy: 'keys: with W and D held only the NEWEST' },
-  { id: 'N2 the OLDEST held movement key moves', file: 'preview/preview.js', from: 'if (a.fly) fly = a.fly;', to: 'if (a.fly && !fly) fly = a.fly;', caughtBy: 'keys: with W and D held only the NEWEST' },
   { id: 'N3 a repeated key-down makes the key the newest again', file: 'preview/preview.js', from: 'if (!held.has(id)) held.set(id, a);', to: 'held.delete(id); held.set(id, a);', caughtBy: 'a held key that repeats' },
   { id: 'N4 a key-up lets go of every key', file: 'preview/preview.js', from: 'const onUp = (e) => { held.delete(heldKey(e));', to: 'const onUp = (e) => { held.clear();', caughtBy: 'releasing the OLDER' },
   { id: 'N5 the takeover re-fires every frame a key is held (C and B are undone)', file: 'preview/preview.js', from: 'if (takeover) { if (rig.mode ===', to: 'if (held.size) { if (rig.mode ===', caughtBy: 'P3: C or B pressed while a movement key is held' },
@@ -147,6 +145,16 @@ const MUTATIONS = [
   { id: "N26 the lens zooms the wrong way", file: "camera/cameras.js", from: "fovNow * Math.pow(LENS.step, -steps)", to: "fovNow * Math.pow(LENS.step, steps)", caughtBy: "the lens: a notch in narrows" },
   { id: "N27 the lens is not clamped at 10°", file: "camera/cameras.js", from: "Math.max(LENS.min, Math.min(LENS.max, fovNow", to: "Math.max(0.001, Math.min(LENS.max, fovNow", caughtBy: "the lens: a notch in narrows" },
   { id: "N28 the pose ignores the lens", file: "camera/cameras.js", from: "p.fov = fovNow; lastExact = p;", to: "lastExact = p;", caughtBy: "the lens changes the pose" },
+  // D188: movement per axis
+  { id: "D1 movement is newest-key-only again (a newer key zeroes the other axes: no diagonal)", file: 'preview/preview.js', from: "if (a.fly[i]) dir[i] = a.fly[i];", to: "dir[i] = a.fly[i];", caughtBy: "keys: W then D goes diagonally" },
+  { id: "D2 on one axis the OLDER key wins", file: 'preview/preview.js', from: "if (a.fly[i]) dir[i] = a.fly[i];", to: "if (a.fly[i] && !dir[i]) dir[i] = a.fly[i];", caughtBy: "on one axis the NEWER key wins" },
+  { id: "D3 both keys of an axis cancel (W and S held: stand still)", file: 'preview/preview.js', from: "if (a.fly[i]) dir[i] = a.fly[i];", to: "if (a.fly[i]) dir[i] += a.fly[i];", caughtBy: "on one axis the NEWER key wins" },
+  { id: "D4 a diagonal is not normalised (√2 times a straight line)", file: 'preview/preview.js', from: "if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);", to: "rig.free.move(dir[0] * k, dir[1] * k, dir[2] * k);", caughtBy: "keys: W then D goes diagonally" },
+  { id: "D5 a diagonal is normalised to the wrong length (÷ n², not ÷ n)", file: 'preview/preview.js', from: "dir[0] / n * k, dir[1] / n * k, dir[2] / n * k", to: "dir[0] / (n * n) * k, dir[1] / (n * n) * k, dir[2] / (n * n) * k", caughtBy: "three axes at once" },
+  { id: "D6 a newer key on an axis drops the older for good (no handover on release)", file: 'preview/preview.js', from: "if (!held.has(id)) held.set(id, a);", to: "if (!held.has(id)) { for (const [k2, v2] of held) if (v2.fly && a.fly && v2.fly.some((c, i) => c && a.fly[i])) held.delete(k2); held.set(id, a); }", caughtBy: "on its release the" },
+  { id: "D7 a key-up lets go of every key (the other axis stops too)", file: 'preview/preview.js', from: "const onUp = (e) => { held.delete(heldKey(e));", to: "const onUp = (e) => { held.clear();", caughtBy: "releasing one key of a diagonal" },
+  { id: "D8 a repeated key-down makes the key the newer again", file: 'preview/preview.js', from: "if (!held.has(id)) held.set(id, a);", to: "held.delete(id); held.set(id, a);", caughtBy: "a held key that repeats" },
+  { id: "D9 the arrow keys stop turning while a movement key is held", file: 'preview/preview.js', from: "if (a.turn) rig.free.look(", to: "if (a.turn && ![...held.values()].some((b) => b.fly)) rig.free.look(", caughtBy: "the arrow (look) keys are not movement keys" },
 ];
 
 function runMutant(m) {

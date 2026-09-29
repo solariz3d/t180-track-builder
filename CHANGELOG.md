@@ -81,6 +81,9 @@ through the same test first, and failed it badly.
 - Tracks made before this change open and build with the same centreline: a document stores every handle of every
   word, so only words placed from now on get the new defaults. A bowl, half-pipe or flat word in an old track keeps its
   wall and gets the measured floor under it.
+- **Flying is per axis.** W/S, A/D and Q/E each move on their own, so W and D together go diagonally, at the same speed as a
+  straight line. If both keys of one pair are held, the newer one wins, and the other takes over when it is released.
+  Before, only the last key you pressed moved.
 
 ### Added
 

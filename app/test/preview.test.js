@@ -223,37 +223,75 @@ test('mouse: the scroll wheel zooms the build view', () => {
   mouse('wheel', { deltaY: -100 }); assert.ok(p.rig.zoomOf('build') < 1);
   mouse('wheel', { deltaY: 100 }); mouse('wheel', { deltaY: 100 }); assert.ok(p.rig.zoomOf('build') > 1);
 });
-// ── L130-R, the keeper (03:0x): "only the most recently pressed movement key moves; on release, the next newest." And B's probes:
+// ── L130-R (its 03:0x newest-key rule is REPLACED below by D188's per-axis rule). B's probes:
 //    P3 (C or B pressed while a move key is held snapped back to free), P5 (Shift+wheel on a device that reports deltaX), P2 (the
 //    key's ACTION is fixed at key-down, so a key that flies on the label but sits on another physical key still lets go). ──
 const W_DOWN = { key: 'w', code: 'KeyW', target: {} }, D_DOWN = { key: 'd', code: 'KeyD', target: {} };
 /** The eye's move over one frame with the given keys held, on a fresh preview, for comparing the movement direction. */
 function oneFrame(downs) { const x = livePreview(); for (const d of downs) x.key('keydown', d); x.win.step(); const e0 = x.p.rig.free.state().eye; x.win.step(); return sub(x.p.rig.free.state().eye, e0); }
 const close3 = (a, b) => len(sub(a, b)) < 1e-9;
-test('keys: with W and D held only the NEWEST (D) moves; releasing D hands the movement back to W; releasing W stops', () => {
-  const w = oneFrame([W_DOWN]), d = oneFrame([D_DOWN]), x = livePreview();
-  x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', D_DOWN); x.win.step();
-  let e0 = x.p.rig.free.state().eye; x.win.step(); const both = sub(x.p.rig.free.state().eye, e0);
-  assert.ok(len(d) > 0 && len(w) > 0 && !close3(w, d), 'W and D are different directions');
-  assert.ok(close3(both, d), `W then D moves as D alone: ${both} vs ${d}`);
-  x.key('keyup', { key: 'd', code: 'KeyD' }); e0 = x.p.rig.free.state().eye; x.win.step();
-  assert.ok(close3(sub(x.p.rig.free.state().eye, e0), w), 'D released: W moves again');
-  x.key('keyup', { key: 'w', code: 'KeyW' }); e0 = x.p.rig.free.state().eye; x.win.step();
-  assert.deepEqual(x.p.rig.free.state().eye, e0, 'both released: still');
+// ── D188, the keeper (13:05): "say I am W forward, then I press D, it should go diagonally". MOVEMENT IS PER AXIS: forward/back (W S),
+//    left/right (A D) and down/up (Q E) each resolve on their own; on an axis where both keys are held the NEWER wins, and on its
+//    release the other takes over; the axes combine (W+D is a diagonal) and the direction is normalised (a diagonal is 1.0× a straight
+//    line, not √2). This REPLACES the 03:0x rule "only the newest movement key moves" and its tests. ──
+const K = (k) => ({ key: k, code: 'Key' + k.toUpperCase(), target: {} }), UPK = (k) => ({ key: k, code: 'Key' + k.toUpperCase() });
+const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], mul3 = (a, k) => [a[0] * k, a[1] * k, a[2] * k], neg3 = (a) => mul3(a, -1);
+/** The eye's move over one frame for a straight line on one key (3 m at 30 m/s and 100 ms). */
+const unit = (k) => oneFrame([K(k)]);
+/** The eye's move over the next frame on a live preview. */
+const nextMove = (x) => { const e0 = x.p.rig.free.state().eye; x.win.step(); return sub(x.p.rig.free.state().eye, e0); };
+/** A preview with the keys pressed in order (one frame between, so the takeover and the order are both settled). */
+function pressed(keys) { const x = livePreview(); for (const k of keys) { x.key('keydown', K(k)); x.win.step(); } return x; }
+test('keys: W then D goes diagonally: both axes at once, the same 3 m a frame as a straight line (1.0×, not √2)', () => {
+  const w = unit('w'), d = unit('d'), x = pressed(['w', 'd']), m = nextMove(x);
+  assert.ok(len(w) > 0 && len(d) > 0 && !close3(w, d), 'W and D are different directions');
+  assert.ok(close3(m, mul3(add3(w, d), Math.SQRT1_2)), 'the diagonal is (W + D) / √2: ' + m + ' vs ' + mul3(add3(w, d), Math.SQRT1_2));
+  assert.ok(Math.abs(len(m) - len(w)) < 1e-9, 'a diagonal is as fast as a straight line: ' + len(m) + ' m vs ' + len(w) + ' m');
 });
-test('keys: releasing the OLDER of two held movement keys leaves the newest moving', () => {
-  const d = oneFrame([D_DOWN]), x = livePreview();
-  x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', D_DOWN); x.win.step(); x.key('keyup', { key: 'w', code: 'KeyW' });
-  const e0 = x.p.rig.free.state().eye; x.win.step();
-  assert.ok(close3(sub(x.p.rig.free.state().eye, e0), d));
+test('keys: D then W is the same diagonal (the order across axes does not matter)', () => {
+  assert.ok(close3(nextMove(pressed(['d', 'w'])), nextMove(pressed(['w', 'd']))));
 });
-test('keys: a held key that repeats (auto-repeat key-down) keeps its place, and is not made the newest again', () => {
-  const d = oneFrame([D_DOWN]), x = livePreview();
-  x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', D_DOWN); x.win.step(); x.key('keydown', { ...W_DOWN, repeat: true });
-  const e0 = x.p.rig.free.state().eye; x.win.step();
-  assert.ok(close3(sub(x.p.rig.free.state().eye, e0), d), 'D is still the newest');
+test('keys: three axes at once (W, D and E) move along (W + D + up) / √3 (the input direction is normalised)', () => {
+  const w = unit('w'), d = unit('d'), u = unit('e'), m = nextMove(pressed(['w', 'd', 'e']));
+  assert.ok(close3(m, mul3(add3(add3(w, d), u), 1 / Math.sqrt(3))));
 });
-test('keys: the arrow (look) keys are not movement keys: they turn while the newest movement key flies', () => {
+test('keys: D and E (right and up are perpendicular) go at 1.0× too: (D + up) / √2, 3 m a frame', () => {
+  const d = unit('d'), u = unit('e'), m = nextMove(pressed(['d', 'e']));
+  assert.ok(close3(m, mul3(add3(d, u), Math.SQRT1_2))); assert.ok(Math.abs(len(m) - len(d)) < 1e-9);
+});
+test('keys: releasing one key of a diagonal leaves a straight line on the other, and releasing both stops', () => {
+  const x = pressed(['w', 'd']); x.key('keyup', UPK('d')); assert.ok(close3(nextMove(x), unit('w')), 'D released: W alone');
+  x.key('keydown', K('d')); x.win.step(); x.key('keyup', UPK('w')); assert.ok(close3(nextMove(x), unit('d')), 'W released: D alone');
+  x.key('keyup', UPK('d')); const e0 = x.p.rig.free.state().eye; x.win.step(); assert.deepEqual(x.p.rig.free.state().eye, e0, 'both released: still');
+});
+for (const [older, newer] of [['w', 's'], ['s', 'w'], ['d', 'a'], ['a', 'd'], ['e', 'q'], ['q', 'e']]) {
+  test('keys: on one axis the NEWER key wins (' + older + ' then ' + newer + '), and on its release the ' + older + ' takes over', () => {
+    const x = pressed([older, newer]);
+    assert.ok(close3(nextMove(x), unit(newer)), newer + ' is newer: it moves, not still, not ' + older);
+    x.key('keyup', UPK(newer)); assert.ok(close3(nextMove(x), unit(older)), newer + ' released: ' + older + ' takes over');
+    x.key('keyup', UPK(older)); const e0 = x.p.rig.free.state().eye; x.win.step(); assert.deepEqual(x.p.rig.free.state().eye, e0, 'both released: still');
+  });
+}
+test('keys: releasing the OLDER key of an axis leaves the newer moving', () => {
+  const x = pressed(['w', 's']); x.key('keyup', UPK('w')); assert.ok(close3(nextMove(x), unit('s')));
+});
+test('keys: an axis with both keys held still combines with another axis: W, S (newer) and D go along (D − W) / √2, and on S released (W + D) / √2', () => {
+  const w = unit('w'), d = unit('d'), x = pressed(['w', 's', 'd']);
+  assert.ok(close3(nextMove(x), mul3(add3(neg3(w), d), Math.SQRT1_2)), 'S wins the forward axis, D the other');
+  x.key('keyup', UPK('s')); assert.ok(close3(nextMove(x), mul3(add3(w, d), Math.SQRT1_2)), 'S released: W takes over, D stays');
+});
+test('keys: a held key that repeats (auto-repeat key-down) keeps its place: with W, S (newer) held a repeat of W does not make W the newer', () => {
+  const x = pressed(['w', 's']); x.key('keydown', { ...K('w'), repeat: true });
+  assert.ok(close3(nextMove(x), unit('s')), 'S is still the newer');
+});
+test('keys: Shift multiplies the diagonal as it does a straight line: ×4 at the press, so 12 m a frame, not 12·√2', () => {
+  const x = pressed(['w', 'd']); x.key('keydown', SHIFT_DOWN); const m = nextMove(x);
+  assert.ok(Math.abs(len(m) - 12) < 1e-9, len(m) + ' m');
+});
+test('keys: a blur lets go of a diagonal (both keys), so the camera stops', () => {
+  const x = pressed(['w', 'd']); x.blur(); const e0 = x.p.rig.free.state().eye; x.win.step(); x.win.step(); assert.deepEqual(x.p.rig.free.state().eye, e0);
+});
+test('keys: the arrow (look) keys are not movement keys: they turn while the movement keys fly', () => {
   const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); const y0 = x.p.rig.free.state().yaw;
   x.key('keydown', { key: 'ArrowRight', code: 'ArrowRight', target: {} }); const e0 = x.p.rig.free.state().eye; x.win.step();
   assert.ok(x.p.rig.free.state().yaw < y0, 'turned right (yaw −)'); assert.ok(len3(x.p.rig.free.state().eye, e0) > 0, 'and still flew');
