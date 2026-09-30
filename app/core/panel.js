@@ -42,7 +42,12 @@ function overlayOf(water) {
  * it every channel started at its default and ramped (D194a, the keeper: "would alway make a bottle neck of width at the start of the track").
  * An untyped field is in neither, so that channel keeps its default start.
  */
-function extendOptions({ length, turn, climb, bank, width, cup, empty = false }) {
+// AT THE START (D194b): a ticked field's target is reached within AT_START_M, one knot span (src/core/document.js KNOT_M; the piece's length
+// if that is shorter: the core needs a transition no longer than the piece), then held for the rest of the piece. Unticked, it blends over
+// the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres (A's D194b contract).
+const AT_START_M = 20;
+const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c' });
+function extendOptions({ length, turn, climb, bank, width, cup, empty = false, atStart = {} }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup);
   if (t !== null) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
@@ -52,8 +57,13 @@ function extendOptions({ length, turn, climb, bank, width, cup, empty = false })
   // the CUP (D190): the channel c holds DEGREES, so the typed value goes in as it is. It is NOT clamped here: the core's guard
   // binds the DOCUMENT to [0, 150] and refuses by name (E's seal row 2 and V5), and a clamp here would hide that guard
   if (k !== null) targets.c = k;
-  if (empty && Object.keys(targets).length) return { length: Number(length), targets, first: { ...targets } };   // the same values, the same units
-  return { length: Number(length), targets };
+  const out = { length: Number(length), targets };
+  // only a field WITH a target can be "at the start" (an untouched field has none, D193); none ticked: no `transition`, exactly as before
+  const transition = {};
+  for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) transition[ch] = Math.min(AT_START_M, out.length);
+  if (Object.keys(transition).length) out.transition = transition;
+  if (empty && Object.keys(targets).length) out.first = { ...targets };   // D194a: on an empty track the typed values are the first piece's start
+  return out;
 }
 /** A cup angle as the readout shows it: the bank cell's rounding (one decimal, half away from zero), no sign on a depth. */
 const fmtCup = (x) => LB.fmtDeg(x).replace(/^\+/, '');
@@ -62,6 +72,8 @@ function mount(root, shell) {
   const doc = root.ownerDocument, win = doc.defaultView;
   const el = (tag, attrs = {}, ...kids) => { const e = doc.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; };
   const field = (label, input) => el('label', { class: 'picker' }, el('span', { text: label }), input);
+  // a channel field with its "at start" box after the input (D194b); the input stays the label's second child
+  const fieldAt = (label, input, k) => el('label', { class: 'picker' }, el('span', { text: label }), input, el('span', { class: 'at-start', style: 'white-space:nowrap;font-size:12px', title: atStart[k].getAttribute ? atStart[k].getAttribute('title') : '' }, atStart[k], el('span', { text: ' at start' })));
   const num = (value, step, title) => el('input', { type: 'number', value: String(value), step: String(step), title: title || '' });
   const send = (name, detail) => doc.dispatchEvent(new win.CustomEvent(name, { detail }));
 
@@ -83,7 +95,12 @@ function mount(root, shell) {
   const show = (x) => { const v = Math.round(x * 100) / 100; return String(Object.is(v, -0) ? 0 : v); };   // two decimals, no trailing zeros, no "-0"
   const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } };
   const asTyped = (k) => (HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
+  // "at start" (D194b): one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
+  // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
+  const atStart = Object.fromEntries(Object.keys(HEAD).map((k) => [k, el('input', { type: 'checkbox', 'aria-label': `${k} at the start`,
+    title: `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
   const opts = () => extendOptions({ length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: asTyped('bank'), width: asTyped('width'), cup: asTyped('cup'),
+    atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length });
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
@@ -110,7 +127,7 @@ function mount(root, shell) {
   };
   // the ghost follows the fields as they change, not only a fresh hover (a pointer resting on the button fires no new mouseenter,
   // so the ghost showed the piece before the last edit, or none: found in the window proof, D186)
-  for (const f of [len, turn, climb, bank, width, cup]) f.oninput = f.onchange = ghost;
+  for (const f of [len, turn, climb, bank, width, cup, ...Object.values(atStart)]) f.oninput = f.onchange = ghost;
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
     onclick: () => { send('t180-ghost-clear'); shell.extend(opts()); }, onmouseenter: ghost, onmouseleave: () => send('t180-ghost-clear') });
 
@@ -159,7 +176,7 @@ function mount(root, shell) {
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', onclick: () => shell.undo() }), el('button', { text: 'Redo', onclick: () => shell.redo() })),
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), field('turn °/100m', turn), field('climb °/100m', climb), field('bank °', bank), field('cup °', cup), field('width m', width)),
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width')),
     roBox,
     el('div', { class: 'actions' }, extendBtn),
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
