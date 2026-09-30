@@ -98,6 +98,7 @@ through the same test first, and failed it badly.
 
 ### Fixed
 
+- The window's X no longer does nothing. After switching between the equation and piece builders (which reloads the page) the close request was left waiting on a handler that no longer existed, so the X, and Alt+F4, did nothing in the equation builder; a failing autosave could hold the piece builder open the same way. One close handler is now registered for both builders, cleans up (the piece builder still clears or saves its autosave), and always closes the window, even if the cleanup fails or hangs.
 - The cup's migration-fixture test no longer fails on a fresh Windows checkout: git's line-ending conversion (core.autocrlf, on by default there) rewrote the hashed fixture files to CRLF, so every digest read "FIXTURE FILE CHANGED". A .gitattributes now keeps test/fixtures exactly as committed.
 - Holding a movement key and pressing C or B no longer snaps the camera back to free on the key’s auto-repeat.
 - Flying forward or back together with up or down no longer slows to a crawl as the view looks down (it was 0.9× at the

@@ -107,6 +107,20 @@
     writeExport: (dir, folder, files) => call('write_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }),
   };
 
+  // THE WINDOW'S X (D192). ONE close handler, registered here BEFORE the mode branch so both builders have it (app/closer.js says why:
+  // a script close listener makes Tauri wait for destroy(); the listener registry outlives a page reload, so the pieces builder's handler
+  // used to be left behind, callback gone, by the mode switch, and the X did nothing in core; and a throwing autosave did the same in
+  // pieces). The handler cleans up through closeCleanup (the mode sets it), never lets an error or a hang stand in its way, and ends in
+  // destroy(). If the module cannot load, a bare handler that only destroys is registered, so a stale listener can still not trap the window.
+  let closeCleanup = null;
+  const win = window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow && window.__TAURI__.window.getCurrentWindow();
+  try {
+    const registered = (await loadCjs('app/closer.js', get)).installCloseHandler(win, () => closeCleanup);
+    if (registered && registered.catch) registered.catch((e) => console.error(`close handler not registered: ${e && e.message}`));
+  } catch (e) {
+    if (win && win.onCloseRequested) win.onCloseRequested(async (ev) => { ev.preventDefault(); try { await win.destroy(); } catch (err) { /* nothing more to try */ } });
+  }
+
   // TWO BUILDERS, ONE PAGE (D186). The EQUATION TRACK (the core: app/core, src/core) is the default; the PIECE builder (app/shell.js,
   // the palette) is paused, not deleted, and one switch away. The switch reloads the page into the other builder, so the two
   // never share a live shell or a panel: ?mode=pieces or ?mode=core in the address picks one (the window proofs use it), and
@@ -252,9 +266,9 @@
     if (act === 'save') $('save').click(); else shell[act]();
   });
 
-  // A clean exit clears the autosave; a crash leaves it for the next start to offer back.
-  const win = window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow && window.__TAURI__.window.getCurrentWindow();
-  if (win && win.onCloseRequested) win.onCloseRequested(async () => { if (!shell.getState().dirty) await shell.cleanExit(); else await shell.flushAutosave(); });
+  // A clean exit clears the autosave; a crash leaves it for the next start to offer back. The one close handler (above) runs this inside its try:
+  // if it fails or hangs the window still closes, and the autosave is simply left for the next start to offer back.
+  closeCleanup = async () => { if (!shell.getState().dirty) await shell.cleanExit(); else await shell.flushAutosave(); };
 
   // C's and E's panels: each optional, each mount(root, shell); a failure is shown in its own area (app/palette/panels.js).
   // Share codes, and Install to AC / See it in Assetto (the launch is off by default; src-tauri/src/ac.rs).
