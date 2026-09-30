@@ -28,7 +28,7 @@ test('every file the page loads through the loader is inside a folder build.rs c
   const opts = { builtins: shim.builtins, globals: { Buffer: shim.Buffer } };
   // the page's own loads (app/index.html), each the way the page makes it: the app's modules plain, the exporter with
   // the node shim (app/export/export.js makeExporter)
-  for (const entry of ['app/shell.js', 'app/palette/palette.js', 'app/palette/panels.js', 'app/export/export.js']) await loadCjs(entry, get);
+  for (const entry of ['app/shell.js', 'app/closer.js', 'app/palette/palette.js', 'app/palette/panels.js', 'app/export/export.js']) await loadCjs(entry, get);
   await loadCjs('src/export/fromwords.js', get, opts);
   const roots = new Set(copied());
   const outside = [...asked].filter((p) => !roots.has(p.split('/')[0]));
