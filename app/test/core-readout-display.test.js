@@ -42,16 +42,17 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs = frames.splice(0); for (const f of fs) f(0); } };
 }
-async function mountPanel(wrap = (s) => s) {
+async function mountPanel(wrap = (s) => s, shellOpts = {}) {
   const { doc, win, tick } = fakeWindow();
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
-  const root = doc.createElement('div'), shell = wrap(await createCoreShell({ brushFn: null }));
+  const root = doc.createElement('div'), shell = wrap(await createCoreShell({ brushFn: null, ...shellOpts }));
   const panel = require('../core/panel.js').mount(root, shell);
   const label = (text) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text);
   const field = (text) => label(text).children[1];
   const cell = (k) => root.all().find((e) => e.attrs['data-readout'] === k).textContent;
   const type = (text, v) => { const f = field(text); f.value = String(v); f.oninput(); };
-  const opts = () => extendOptions({ length: field('length m').value, turn: field('turn °/100m').value, climb: field('climb °/100m').value, bank: field('bank °').value, width: field('width m').value, cup: label('cup °') ? field('cup °').value : '' });
+  // the options the PANEL uses (D193: a field left as shown sends no target, so the raw field text is no longer the options)
+  const opts = () => panel.options();
   return { doc, win, tick, stage, root, shell, panel, label, field, cell, type, opts };
 }
 
@@ -65,16 +66,16 @@ async function mountPanel(wrap = (s) => s) {
 // It also records every options object the panel hands the core (sent), so a test can read what went in.
 const LEGACY_EDGE = 11.679, RING = 0.871;
 function stubCup(real) {
-  const cupOf = new Map(), sent = [];
+  const cupOf = new Map(), sent = [], extended = [];   // sent: every options object; extended: only those Extend was called with
   const strip = (o) => { const { c, ...rest } = (o && o.targets) || {}; return { o: { ...o, targets: rest }, c }; };
   const guard = (c) => { if (c !== undefined && !(c >= 0 && c <= 150)) throw new Error(`cup ${c}° is outside 0–150 (the core refuses it: stub)`); };
   const lastTo = () => { const P = real.getState().history.present.pieces; const id = P.length ? P[P.length - 1].id : null; return id && cupOf.has(id) ? cupOf.get(id)[1] : LEGACY_EDGE; };
   const withCup = (r, from, to) => ({ ...r, cupFromDeg: from, cupToDeg: to });
   return Object.assign(Object.create(real), {
-    sent,
+    sent, extended,
     candidateReadout(o) { sent.push(o); const { o: bare, c } = strip(o); guard(c); const from = lastTo(); return withCup(real.candidateReadout(bare), from, c === undefined ? from : c + RING); },
     candidate(o) { return real.candidate(strip(o).o); },
-    extend(o) { sent.push(o); const { o: bare, c } = strip(o); guard(c); const from = lastTo(); real.extend(bare); const P = real.getState().history.present.pieces; cupOf.set(P[P.length - 1].id, [from, c === undefined ? from : c + RING]); },
+    extend(o) { sent.push(o); extended.push(o); const { o: bare, c } = strip(o); guard(c); const from = lastTo(); real.extend(bare); const P = real.getState().history.present.pieces; cupOf.set(P[P.length - 1].id, [from, c === undefined ? from : c + RING]); },
     pieceReadouts() { return real.pieceReadouts().map((r) => withCup(r, ...(cupOf.get(r.id) || [LEGACY_EDGE, LEGACY_EDGE]))); },
   });
 }
@@ -316,7 +317,8 @@ test('the Extend panel has a "cup °" field beside bank, 0 to 150, and Extend ha
   const f = P.field('cup °'); assert.equal(f.attrs.min, '0'); assert.equal(f.attrs.max, '150');
   P.type('length m', 100); P.type('cup °', 90);   // (the fake DOM keeps a field's initial value as an attribute: type the length)
   const btn = P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend'); btn.onclick();
-  assert.equal(S.stub.sent.at(-1).targets.c, 90, 'the click extends with c = 90');
+  // (D193: after Extend the fields show the new head and the readout asks again, so the click's options are the last EXTEND call's)
+  assert.equal(S.stub.extended.at(-1).targets.c, 90, 'the click extends with c = 90');
   P.panel.unmount();
 });
 
@@ -355,5 +357,90 @@ test('the brush\'s channel list gains cup (channel c), with a drag rate in degre
   assert.ok(opt, `a cup channel in the rate brush's list (got ${sel.children.map((o) => o.value).join(', ')})`);
   assert.equal(opt.textContent, 'cup');
   const { PER_PX } = require('../core/panel.js'); assert.ok(PER_PX.c > 0 && PER_PX.c < 1, 'degrees per pixel of drag');
+  P.panel.unmount();
+});
+
+// ── D193, THE FIELDS SHOW THE HEAD (the keeper, 02:25: "show the original value the first piece starts as instead of it being blank") ──
+const Dc = require('../../src/core/document.js'), { extend: extendDoc } = require('../../src/core/extend.js'), { WIDTHS, RATES } = require('../../src/geom/fonts.js');
+const DEGt = Math.PI / 180, BLANK = { turn: '', climb: '', bank: '', width: '', cup: '' };
+const FIELDS = { turn: 'turn °/100m', climb: 'climb °/100m', bank: 'bank °', width: 'width m', cup: 'cup °' };
+const shownAll = (P) => Object.fromEntries(Object.entries(FIELDS).map(([k, l]) => [k, P.field(l).value]));
+/** What the fields must show for a head state, in their own units, as the panel rounds (two decimals, no trailing zeros). */
+const expectShown = (h) => { const r = (x) => String(Math.round(x * 100) / 100 || 0); return { turn: r(h.kh * 100 / DEGt), climb: r(h.kv * 100 / DEGt), bank: r(h.phi / DEGt), width: r(h.w), cup: r(h.c) }; };
+
+test('on an EMPTY track the fields show the first piece\'s start (level, straight, the bowl\'s 31 m and the edge it renders), not blanks', async () => {
+  const P = await mountPanel();
+  const edge = Dc.legacyEdgeDeg('bowl', WIDTHS.bowl, RATES.bowl);
+  assert.deepEqual(shownAll(P), { turn: '0', climb: '0', bank: '0', width: '31', cup: String(Math.round(edge * 100) / 100) });
+  assert.ok(Object.values(shownAll(P)).every((v) => v !== ''), 'no field is blank');
+  P.type('length m', 100);
+  assert.deepEqual(P.opts(), extendOptions({ length: 100, ...BLANK }), 'left as shown, Extend is asked exactly what blanks asked');
+  P.panel.unmount();
+});
+
+test('after Extend, Undo and Redo the fields show the head\'s END state in their own units (°/100m, °, m)', async () => {
+  const P = await mountPanel();
+  const start = shownAll(P);
+  P.type('length m', 120); P.type('turn °/100m', 20); P.type('bank °', 10); P.type('width m', 25); P.type('cup °', 60);
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
+  assert.equal(P.shell.getState().history.present.pieces.length, 1, P.shell.getState().message || 'extended');
+  const after = shownAll(P);
+  assert.deepEqual(after, expectShown(P.shell.headState()), 'the head\'s end state');
+  // the units round-trip: what was typed is what the head now does, to the display's 0.01
+  for (const [k, typed] of [['turn', 20], ['bank', 10], ['width', 25], ['cup', 60]]) assert.ok(Math.abs(Number(after[k]) - typed) <= 0.01, `${k}: typed ${typed}, shown ${after[k]}`);
+  assert.equal(after.climb, '0');
+  P.shell.undo(); assert.deepEqual(shownAll(P), start, 'undo: back to the empty track\'s start');
+  P.shell.redo(); assert.deepEqual(shownAll(P), after, 'redo: the head again');
+  P.panel.unmount();
+});
+
+test('on OPENING a saved track the fields show its head', async () => {
+  let d = Dc.createDoc('opened'); d = extendDoc(d, { length: 150, targets: { kh: 15 * DEGt / 100, phi: -12 * DEGt, w: 27 } });
+  const storage = { openDoc: async () => Dc.serialize(d), saveDoc: async () => {}, listDocs: async () => [] };
+  const P = await mountPanel(undefined, { storage });
+  await P.shell.open('opened');
+  assert.equal(P.shell.getState().history.present.pieces.length, 1, P.shell.getState().message || 'opened');
+  const s = shownAll(P);
+  assert.deepEqual(s, expectShown(P.shell.headState()));
+  assert.deepEqual([s.turn, s.bank, s.width], ['15', '-12', '27']);
+  P.panel.unmount();
+});
+
+test('a CHANGED value is a target in the core\'s units; a value typed back to exactly what was shown is untouched again', async () => {
+  const P = await mountPanel();
+  P.shell.extend({ length: 100, targets: { kh: 20 * DEGt / 100 } }); P.type('length m', 100);
+  P.type('turn °/100m', 25); assert.ok(Math.abs(P.opts().targets.kh - 25 * DEGt / 100) < 1e-15, 'turn: °/100m to rad/m');
+  P.type('turn °/100m', '20'); assert.equal(P.opts().targets.kh, undefined, 'typed back to the shown 20: no target');
+  P.type('climb °/100m', 3); assert.ok(Math.abs(P.opts().targets.kv - 3 * DEGt / 100) < 1e-15, 'climb: °/100m to rad/m');
+  P.type('bank °', -7.5); assert.ok(Math.abs(P.opts().targets.phi + 7.5 * DEGt) < 1e-15, 'bank: ° to rad');
+  P.type('width m', 28); assert.equal(P.opts().targets.w, 28, 'width: m');
+  P.type('cup °', 90); assert.equal(P.opts().targets.c, 90, 'cup: degrees, as typed');
+  P.type('bank °', ''); assert.equal(P.opts().targets.phi, undefined, 'a cleared field is blank: continue');
+  P.panel.unmount();
+});
+
+// CHECKED, NOT ASSUMED (the chair): a blank field CONTINUES a channel (its end value AND slope, src/core/extend.js), and a target equal to
+// the shown value would NOT: it bends a channel still changing at the head, and any cup target turns a legacy piece into a cup piece. So a
+// field left as shown sends no target. This test builds a head where turn and bank are still changing, and shows both halves.
+test('a field left as shown builds the SAME piece, ghost and readout as a blank, even where turn and bank are still changing at the head; a literal target would not', async () => {
+  const P = await mountPanel();
+  P.shell.extend({ length: 200 });
+  P.shell.sculptOnce({ channel: 'kh', s0: 190, r: 40, delta: 0.004 });
+  P.shell.sculptOnce({ channel: 'phi', s0: 190, r: 40, delta: 0.3 });
+  const d = P.shell.getState().history.present, e = Dc.endState(d);
+  assert.ok(Math.abs(e.kh.m) > 1e-6 && Math.abs(e.phi.m) > 1e-6, `turn and bank still changing at the head (slopes ${e.kh.m}, ${e.phi.m}; ${P.shell.getState().message || ''})`);
+  let ghosts = []; P.doc.addEventListener('t180-ghost', (ev) => ghosts.push(ev.detail.candidate));
+  P.type('length m', 100);
+  const blank = extendOptions({ length: 100, ...BLANK }), untouched = P.opts();
+  assert.deepEqual(untouched, blank, 'the options are the blank ones');
+  assert.deepEqual(P.shell.candidate(untouched), P.shell.candidate(blank), 'the same piece');
+  assert.deepEqual(P.shell.candidateReadout(untouched), P.shell.candidateReadout(blank), 'the same readout');
+  assert.deepEqual(ghosts.at(-1), P.shell.candidate(blank), 'the ghost drawn is the blank one');
+  // the other half: the shown values taken LITERALLY as targets make a different piece (bank ramps back to the shown value)...
+  const s = shownAll(P), literal = extendOptions({ length: 100, ...s });
+  assert.notDeepEqual(extendDoc(d, literal).pieces.at(-1).channels.phi, extendDoc(d, blank).pieces.at(-1).channels.phi, 'a bank target equal to the shown value is not a blank');
+  // ...and a cup target, even the rendered edge itself, turns this legacy track's next piece into a cup piece
+  assert.equal(!!extendDoc(d, blank).pieces.at(-1).cup, false, 'blank: the next piece stays legacy');
+  assert.equal(!!extendDoc(d, { length: 100, targets: { c: Number(s.cup) } }).pieces.at(-1).cup, true, 'a cup target equal to the shown edge makes a cup piece');
   P.panel.unmount();
 });

@@ -60,13 +60,24 @@ function mount(root, shell) {
   const send = (name, detail) => doc.dispatchEvent(new win.CustomEvent(name, { detail }));
 
   // EXTEND
-  const len = num(100, 10, 'metres added'), turn = num('', 1, 'degrees of heading per 100 m, + = left; empty keeps turning as now'),
-    climb = num('', 1, 'degrees of pitch per 100 m, + = up; empty keeps climbing as now'), bank = num('', 1, 'degrees of bank, + = left side up; empty keeps it'),
-    width = num('', 1, 'road width in m; empty keeps it');
+  // (a field SHOWS what the track does at the head; left as shown, the track keeps going the way it goes; a changed value is a target)
+  const len = num(100, 10, 'metres added'), turn = num('', 1, 'degrees of heading per 100 m, + = left. Shows the turn at the head; left as shown, the track keeps turning as now'),
+    climb = num('', 1, 'degrees of pitch per 100 m, + = up. Shows the climb at the head; left as shown, the track keeps climbing as now'), bank = num('', 1, 'degrees of bank, + = left side up. Shows the bank at the head; left as shown, it keeps it'),
+    width = num('', 1, 'road width in m. Shows the width at the head; left as shown, it keeps it');
   // the CUP (D190): how deep the road's cross-section is, as its edge angle — 0 flat, ~15 today's bowl, ~31 today's half-pipe,
   // 90 vertical walls, 150 a partial tube. Independent of bank: bank still rolls the whole section
-  const cup = el('input', { type: 'number', value: '', step: '1', min: '0', max: '150', title: 'cup: the edge angle of the cross-section in degrees, 0 (flat) to 150; 90 = vertical walls. Bank still rolls the whole section. Empty keeps it' });
-  const opts = () => extendOptions({ length: len.value, turn: turn.value, climb: climb.value, bank: bank.value, width: width.value, cup: cup.value });
+  const cup = el('input', { type: 'number', value: '', step: '1', min: '0', max: '150', title: 'cup: the edge angle of the cross-section in degrees, 0 (flat) to 150; 90 = vertical walls. Bank still rolls the whole section. Shows the cup at the head; left as shown, it keeps it' });
+  // THE FIELDS SHOW THE HEAD (D193, the keeper: "show the original value the first piece starts as instead of it being blank"). Each
+  // channel field shows the head's END state in its own units (the first piece's start on an empty track), refreshed whenever the
+  // document changes (Extend, Undo, Redo, open, a brush). A field whose text is exactly what was shown sends NO target, the same as a
+  // blank did: the core CONTINUES a channel (value + slope, src/core/extend.js), and a target equal to the value is not that — it
+  // bends a channel that was still changing, and any cup target turns a legacy piece into a cup piece. Only a changed value is a target.
+  const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => h.phi / DEG], width: [width, (h) => h.w], cup: [cup, (h) => h.c] };
+  const shown = {};
+  const show = (x) => { const v = Math.round(x * 100) / 100; return String(Object.is(v, -0) ? 0 : v); };   // two decimals, no trailing zeros, no "-0"
+  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } };
+  const asTyped = (k) => (HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
+  const opts = () => extendOptions({ length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: asTyped('bank'), width: asTyped('width'), cup: asTyped('cup') });
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
   // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
@@ -93,7 +104,7 @@ function mount(root, shell) {
   // the ghost follows the fields as they change, not only a fresh hover (a pointer resting on the button fires no new mouseenter,
   // so the ghost showed the piece before the last edit, or none: found in the window proof, D186)
   for (const f of [len, turn, climb, bank, width, cup]) f.oninput = f.onchange = ghost;
-  const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; empty fields keep going the way the track goes',
+  const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
     onclick: () => { send('t180-ghost-clear'); shell.extend(opts()); }, onmouseenter: ghost, onmouseleave: () => send('t180-ghost-clear') });
 
   // BRUSH
@@ -150,8 +161,10 @@ function mount(root, shell) {
     el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
     msg,
   );
+  let shownFor = null;
   const draw = (st) => {
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
+    if (d !== shownFor) { showHead(); shownFor = d; }   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
     extendBtn.disabled = !!d.closed; closeBtn.disabled = !!d.closed || !d.pieces.length;
     msg.textContent = st.message || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
@@ -165,7 +178,8 @@ function mount(root, shell) {
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
   const unsub = shell.subscribe(draw); draw(shell.getState());
-  return { labels, unmount() { unsub(); if (labels) labels.unmount(); doc.removeEventListener('t180:track', onTrack); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
+  return { labels, options: opts, unmount() { unsub(); if (labels) labels.unmount(); doc.removeEventListener('t180:track', onTrack); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, overlayOf, extendOptions, PER_PX };
