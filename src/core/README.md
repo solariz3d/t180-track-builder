@@ -135,6 +135,12 @@ centreline, the bank nor the readout's turn and climb.
 - **The brush.** `brush({ mode: 'value', channel: 'c' })` works on cup pieces only; a window that reaches a legacy piece is refused (`NOT_CUP`). A cup piece's segments are re-expressed when its c range changes only under `cupRuns`; by default a brush re-expresses the segments under its window.
 - **The API for the UI:** the channel name is `c` (Extend `targets.c`, `first.c`), and the readout's `cupFromDeg` / `cupToDeg`.
 
+## Extend's `transition`: one ramp for every channel, or one per channel (`extend.js`, D194b, ref 09 §9)
+
+`extend(doc, { length, transition, targets, … })`. **`transition` is a number of metres** (one ramp for every channel; the default is the piece's length; unchanged from before, byte for byte) **or a map** `{ w: 20, phi: 'start', … }` of channel → metres. A channel missing from the map uses the piece's length. The value `'start'` is the short ramp at the start of the piece: the piece's first knot span, at most 20 m, or the whole piece if it is shorter (`startRampM(length, knotM)`). A channel with a target and a ramp shorter than the piece REACHES its target inside the ramp and HOLDS it for the rest of the piece: the whole piece at the new width, with no jump, so the joint into the piece is still C1 (a later piece cannot step; only a ramp is allowed). A bad map (unknown channel, zero, negative, longer than the piece, not a number) is refused by name, `BAD_TRANSITION`.
+
+A short-ramp channel is not least-squares fitted (it would ring: ref 09 §9 has the measurements); its control points are the ideal ramp at the knot averages, the joint's first two are kept, and the rest are clamped into [start, target], so the curve never leaves that range, is monotone for a monotone ramp, and is exactly the target after the ramp. The piece carries 4 extra knots inside the ramp (`rampKnots`, `RAMP_KNOTS`). **Open, in the adapter and not here:** a legacy piece draws each 2 m segment at its own middle width, so a fast width ramp is a staircase of width steps between segments and a joint step into the ramp (up to 0.26 m for a 19 m change over 20 m); the cup piece draws a width change as a chord and has none.
+
 ## Knot insertion: finer knots under a narrow brush (`document.js`)
 
 Knots are every ≤ 20 m by default (`KNOT_M`), and a C2 brush moves whole control points, each spanning 4 knot spans. So a
