@@ -77,24 +77,29 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   let track = null, err = null, raf = 0, prev = 0, shownPose = null;
   const held = new Map();   // the keys down, in the order pressed: physical key (e.code) → its action, fixed at key-down
   let takeover = false;     // a movement key went down in a follow view: the next frame takes the view over into free (once)
-  let ghost = null, grid = null, gridFor = null, overlay = null;
+  let ghost = null, grid = null, gridFor = null, overlay = null, start = null;
   let set = null, images = [], look = 'ac', resolved = null, resolvedFor = null;
   // the look is resolved again only when the scene's materials or the set change, never per frame
   const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
   // a change to the placed track retires the ghost: it was built on the old head (the palette shows it again on hover)
   const shared = () => (track && track.how !== 'kept' ? { path: track.path, segments: track.segments, closed: !!(track.path && track.path.closed), how: track.how, g: track.g, fromS: track.fromS } : null);
   const refresh = (st) => {
+    start = st.resolved && st.resolved.start ? st.resolved.start : null;   // where the first piece starts (the equation core's doc.start)
     try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; } catch (e) { err = e.message; return; }
     if (onTrack && track.how !== 'same' && track.how !== 'kept') onTrack(shared());
   };
   const unsub = shell.subscribe(refresh);
   refresh(shell.getState());
   /** The camera's context: the head and path, the track's box (the overhead fit) and the view's aspect. With nothing
-   *  placed yet but a ghost showing, the ghost's head and path stand in, so the first word can be previewed too. */
+   *  placed yet but a ghost showing, the ghost's head and path stand in, so the first word can be previewed too. With
+   *  NOTHING placed and no ghost, the track's START stands in (D195): before it, the context was null there, so no frame
+   *  drew, the view froze, and the wheel and keys pressed meanwhile were applied late, when a ghost first appeared (the
+   *  keeper, 2026-09-30 02:56: "very laggy ... until the first piece is put down"). */
   const ctx = (aspect) => {
     if (track && track.path) return { head: track.path.head, path: track.path, bounds: track.bounds, aspect, width: widthAtHead(track.segments) };
     if (ghost && ghost.path) return { head: ghost.head, path: ghost.path, bounds: null, aspect, width: widthAtHead(ghost.segments) };
-    return null;
+    const head = startHead(start);
+    return { head, path: { samples: [head] }, bounds: null, aspect, width: null };
   };
 
   const said = () => { if (onMode) onMode(rig.mode); };
@@ -231,6 +236,19 @@ function widthAtHead(segments) {
   return null;
 }
 
+/**
+ * THE HEAD OF AN EMPTY TRACK (D195): where its first piece will start, `start` = { pos, theta, p } (the equation core's doc.start,
+ * as src/geom buildPath takes it), or the origin, heading 0, level when there is none (buildPath's own default). The frame is the
+ * geometry's gravity frame at zero roll (src/geom/path.js): T = (cos p sin θ, sin p, cos p cos θ), L = (cos θ, 0, −sin θ),
+ * U = T × L; so it is the frame the first piece's first sample will have, before anything is placed.
+ */
+function startHead(start) {
+  const s = { pos: [0, 0, 0], theta: 0, p: 0, ...(start || {}) }, th = s.theta, p = s.p;
+  const T = [Math.cos(p) * Math.sin(th), Math.sin(p), Math.cos(p) * Math.cos(th)], L = [Math.cos(th), 0, -Math.sin(th)];
+  const U = [T[1] * L[2] - T[2] * L[1], T[2] * L[0] - T[0] * L[2], T[0] * L[1] - T[1] * L[0]];
+  return { s: 0, seg: 0, pos: s.pos.slice(), T, L, U };
+}
+
 /** The head marker's size: 3 m up close, growing with the camera's distance (2%) so it stays readable from overhead. */
 const markerSize = (pose, head) => Math.max(3, 0.02 * Math.hypot(pose.eye[0] - head.pos[0], pose.eye[1] - head.pos[1], pose.eye[2] - head.pos[2]));
 
@@ -248,4 +266,4 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, pickAt };
+module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, pickAt, startHead };
