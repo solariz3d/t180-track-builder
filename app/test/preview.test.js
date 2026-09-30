@@ -460,3 +460,54 @@ test('W2: the same sideways swipe with Ctrl held does not move the LENS either (
   const x = livePreview(), f0 = x.p.rig.fov; for (let i = 0; i < 20; i++) x.mouse('wheel', { deltaY: 0, deltaX: 2, ctrlKey: true });
   assert.equal(x.p.rig.fov, f0, `a sideways swipe with Ctrl moved the lens from ${(f0 * 180 / Math.PI).toFixed(1)}° to ${(x.p.rig.fov * 180 / Math.PI).toFixed(1)}°`);
 });
+
+// ── D195, the keeper (2026-09-30 02:56): "before pressing extend for the first piece, the preview is very laggy and continues to lag
+//    until the first piece is put down". Measured in the real window (pane E's hand-back): with NOTHING placed and no ghost, the
+//    camera's context was null, so no frame drew (0 draws), the wheel and keys changed nothing on screen, and a key pressed then
+//    took the view over only when a ghost later appeared. Stated first: with nothing placed, a frame draws at once, looking at
+//    where the first piece will start; the wheel and a movement key show on the NEXT frame; every camera mode works. ──
+const START = { pos: [5, 2, -3], theta: 0.7, p: 0.1 };
+function emptyPreview(start = START) {
+  const shell = { getState: () => ({ resolved: { segments: [], closed: false, ...(start ? { start } : {}) } }), subscribe: () => () => {} };
+  const f = liveFake(), p = P.createPreview({ canvas: f.canvas, shell, win: f.win });
+  f.win.step(16); f.win.step(16);
+  return { ...f, p };
+}
+test('D195: with nothing placed and no ghost, a frame draws, looking at where the first piece will start', () => {
+  const x = emptyPreview(), v = x.p.view();
+  assert.ok(v.pose, 'a pose was drawn');
+  const d = sub(START.pos, v.pose.eye), T = P.startHead(START).T, dl = len(d);
+  assert.ok((d[0] * T[0] + d[1] * T[1] + d[2] * T[2]) / dl > 0.5, 'the build view looks along the start direction, toward the start');
+});
+test('D195: with nothing placed, the wheel zooms on the next frame (not later, when a ghost appears)', () => {
+  const x = emptyPreview(); for (let i = 0; i < 30; i++) x.win.step(100);   // settled
+  const e0 = x.p.view().pose.eye; x.mouse('wheel', { deltaY: -100 }); x.win.step(100);
+  assert.ok(len(sub(x.p.view().pose.eye, e0)) > 0.1, 'the drawn eye moved on the next frame');
+});
+test('D195: with nothing placed, W takes the view over and flies on the next frame', () => {
+  const x = emptyPreview(); x.key('keydown', W_DOWN); x.win.step(100);
+  assert.equal(x.p.rig.mode, 'free');
+  const e0 = x.p.view().pose.eye; x.win.step(100);
+  assert.ok(Math.abs(len(sub(x.p.view().pose.eye, e0)) - 3) < 1e-9, 'W flies 3 m a frame (30 m/s, 100 ms), as on a placed track');
+});
+test('D195: with nothing placed, every camera mode draws (chase included, on the start alone)', () => {
+  const x = emptyPreview();
+  for (const m of ['overhead', 'side', 'chase', 'free', 'build']) { x.p.setMode(m); x.win.step(100); const v = x.p.view(); assert.equal(v.mode, m); assert.ok(v.pose && v.pose.eye.every(Number.isFinite), `${m} drew a finite pose`); }
+});
+test('D195: with no start in the document (the piece builder), the empty view looks from the origin along +z, level', () => {
+  const x = emptyPreview(null), h = P.startHead(null);
+  for (const [k, want] of [['pos', [0, 0, 0]], ['T', [0, 0, 1]], ['U', [0, 1, 0]]]) assert.ok(len(sub(h[k], want)) < 1e-15, `${k}: ${h[k]}`);   // a cross product gives −0 here, so not deepEqual
+  assert.ok(x.p.view().pose);
+});
+test('D195: the empty track\'s head is the frame the first piece starts with (src/geom buildPath\'s first sample, no roll)', () => {
+  for (const st of [START, { pos: [0, 0, 0], theta: -2.1, p: -0.3 }, null]) {
+    const h = P.startHead(st), s0 = G.buildPath([{ id: 'a', kind: 'road', length: 20, profile: F.FLAT }], { step: 2, ...(st ? { start: st } : {}) }).samples[0];
+    for (const k of ['pos', 'T', 'L', 'U']) assert.ok(len(sub(h[k], s0[k])) < 1e-12, `${k}: ${h[k]} vs ${s0[k]}`);
+  }
+});
+test('D195: once a ghost shows on the empty track, the camera follows the ghost\'s head, as before', () => {
+  const x = emptyPreview(null), segs = [{ id: 'a', kind: 'road', length: 60, profile: F.FLAT }];
+  x.p.showGhost({ segments: segs, closed: false }); for (let i = 0; i < 60; i++) x.win.step(100);
+  const v = x.p.view(), h = G.buildPath(segs, { step: 2 }).head;
+  assert.ok(len(sub(v.pose.target, h.pos)) < len(sub(v.pose.target, [0, 0, 0])), 'framed on the ghost\'s head, not the start');
+});
