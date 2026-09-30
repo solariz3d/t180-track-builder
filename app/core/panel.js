@@ -36,8 +36,13 @@ function overlayOf(water) {
   return out;
 }
 
-/** The extend options the controls describe (pure: tested headless). Empty fields continue the channel. */
-function extendOptions({ length, turn, climb, bank, width, cup }) {
+/**
+ * The extend options the controls describe (pure: tested headless). Empty fields continue the channel. On an EMPTY track (`empty`) the
+ * typed values are also the first piece's START (`first`, src/core/extend.js), so the whole first piece is what was typed from s = 0; without
+ * it every channel started at its default and ramped (D194a, the keeper: "would alway make a bottle neck of width at the start of the track").
+ * An untyped field is in neither, so that channel keeps its default start.
+ */
+function extendOptions({ length, turn, climb, bank, width, cup, empty = false }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup);
   if (t !== null) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
@@ -47,6 +52,7 @@ function extendOptions({ length, turn, climb, bank, width, cup }) {
   // the CUP (D190): the channel c holds DEGREES, so the typed value goes in as it is. It is NOT clamped here: the core's guard
   // binds the DOCUMENT to [0, 150] and refuses by name (E's seal row 2 and V5), and a clamp here would hide that guard
   if (k !== null) targets.c = k;
+  if (empty && Object.keys(targets).length) return { length: Number(length), targets, first: { ...targets } };   // the same values, the same units
   return { length: Number(length), targets };
 }
 /** A cup angle as the readout shows it: the bank cell's rounding (one decimal, half away from zero), no sign on a depth. */
@@ -77,7 +83,8 @@ function mount(root, shell) {
   const show = (x) => { const v = Math.round(x * 100) / 100; return String(Object.is(v, -0) ? 0 : v); };   // two decimals, no trailing zeros, no "-0"
   const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } };
   const asTyped = (k) => (HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
-  const opts = () => extendOptions({ length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: asTyped('bank'), width: asTyped('width'), cup: asTyped('cup') });
+  const opts = () => extendOptions({ length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: asTyped('bank'), width: asTyped('width'), cup: asTyped('cup'),
+    empty: !shell.getState().history.present.pieces.length });
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
   // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never

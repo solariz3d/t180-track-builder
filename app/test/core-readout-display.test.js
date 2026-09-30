@@ -444,3 +444,81 @@ test('a field left as shown builds the SAME piece, ghost and readout as a blank,
   assert.equal(!!extendDoc(d, { length: 100, targets: { c: Number(s.cup) } }).pieces.at(-1).cup, true, 'a cup target equal to the shown edge makes a cup piece');
   P.panel.unmount();
 });
+
+// ── D194a, THE FIRST PIECE IS WHAT WAS TYPED FROM ITS START (the keeper, 02:39: "the standard width stays the same while toward the front it
+// grows bigger ... would alway make a bottle neck of width at the start of the track"). On an empty track the typed values are the first
+// piece's START as well as its targets, so every typed channel is constant from s = 0; an untyped one keeps its default start ──
+const AD = require('../../src/core/adapter.js');
+/** Place the first piece through the PANEL: type the fields, then click Extend. */
+function placeFirst(P, fields) {
+  for (const [k, v] of Object.entries(fields)) P.type(k, v);
+  const want = P.shell.candidateReadout(P.opts());   // what the ghost's readout promised
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
+  const d = P.shell.getState().history.present;
+  assert.equal(d.pieces.length, 1, P.shell.getState().message || 'the first piece was placed');
+  assert.deepEqual(P.shell.pieceReadouts()[0], want, 'the placed piece is the ghost\'s, readout for readout');
+  return d;
+}
+const along = (L) => [0, 0.5, 1, 10, 20, L / 2, L - 1, L];
+const constant = (P, ch, v, tol = 1e-9) => { for (const s of along(P.length)) { const got = Dc.channelAt(P, ch, s).v; assert.ok(Math.abs(got - v) <= tol, `${ch}(${s}) = ${got}, not ${v}`); } };
+
+test('the first piece is the typed WIDTH along its whole length, from s = 0 (no bottleneck); untyped channels keep their default start', async () => {
+  const P = await mountPanel(), d = placeFirst(P, { 'length m': 200, 'width m': 45 }), P0 = d.pieces[0];
+  constant(P0, 'w', 45);
+  constant(P0, 'phi', 0); constant(P0, 'kh', 0); constant(P0, 'kv', 0);
+  assert.equal(!!P0.cup, false, 'cup was not typed: the first piece stays legacy');
+  constant(P0, 'r', RATES.bowl);
+  P.panel.unmount();
+});
+
+test('the first piece is the typed BANK, TURN and CLIMB from s = 0', async () => {
+  const P = await mountPanel(), d = placeFirst(P, { 'length m': 150, 'bank °': 30, 'turn °/100m': 12, 'climb °/100m': 4 }), P0 = d.pieces[0];
+  constant(P0, 'phi', 30 * DEGt); constant(P0, 'kh', 12 * DEGt / 100); constant(P0, 'kv', 4 * DEGt / 100);
+  constant(P0, 'w', WIDTHS.bowl);
+  const r = P.shell.pieceReadouts()[0];
+  // (the document stores bank to its quantum, ~1e-9 rad = ~6e-8°: held to 1e-6°, far under the readout's 0.05° rounding)
+  assert.ok(Math.abs(r.bankFromDeg - 30) < 1e-6 && Math.abs(r.bankToDeg - 30) < 1e-6, `bank from ${r.bankFromDeg} to ${r.bankToDeg}`);
+  P.panel.unmount();
+});
+
+// the chair: a typed cup makes the first piece a CUP piece from its start; E's seal row 1 (the profile's edge ψ = c on BOTH sides, 0.05°)
+// must then hold from s = 0, on every segment the adapter hands the geometry
+test('a typed CUP makes the first piece a cup piece from its start, and the rendered edge equals c on both sides from s = 0 (seal row 1)', async () => {
+  const P = await mountPanel(), d = placeFirst(P, { 'length m': 120, 'cup °': 90 }), P0 = d.pieces[0];
+  assert.equal(P0.cup, true); constant(P0, 'c', 90);
+  const segs = AD.toSegments(d).filter((g) => g.id === P0.id && g.kind === 'road');
+  assert.ok(segs.length >= 2, 'the piece is in segments');
+  for (const g of segs) for (const psi of [g.profile.psi[0], g.profile.psi[g.profile.psi.length - 1]]) {
+    assert.ok(Math.abs(Math.abs(psi) / DEGt - 90) <= 0.05, `edge ${Math.abs(psi) / DEGt}° on the segment at ${g.length ? 'len ' + g.length.toFixed(2) : ''}, not 90`);
+  }
+  P.panel.unmount();
+});
+
+test('the SECOND piece is unchanged: it starts where the first ends and ramps to its target, exactly as before', async () => {
+  const P = await mountPanel(), d1 = placeFirst(P, { 'length m': 200, 'width m': 45 });
+  P.type('length m', 100); P.type('width m', 50);
+  const o = P.opts();
+  assert.equal(o.first, undefined, 'no start is passed once the track has a piece');
+  assert.deepEqual(o, extendOptions({ length: 100, ...BLANK, width: '50' }), 'the options are what they were before D194a');
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
+  const P1 = P.shell.getState().history.present.pieces[1];
+  assert.deepEqual(P1, extendDoc(d1, { length: 100, targets: { w: 50 } }).pieces[1], 'the same piece extend made before');
+  assert.ok(Math.abs(Dc.channelAt(P1, 'w', 0).v - 45) < 1e-9 && Math.abs(Dc.channelAt(P1, 'w', 100).v - 50) < 1e-9, 'from 45 at the joint to 50');
+  P.panel.unmount();
+});
+
+test('a lap whose first piece was typed (width 40, cup 30) closes, and exports through the app\'s route with no red (csp on)', async () => {
+  const P = await mountPanel();
+  placeFirst(P, { 'length m': 300, 'width m': 40, 'cup °': 30 });
+  const R = 180, Q = (Math.PI * R) / 2;
+  for (let i = 0; i < 4; i++) P.shell.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
+  P.shell.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  P.shell.close();
+  const doc = P.shell.getState().history.present;
+  assert.equal(doc.closed, true, P.shell.getState().message || 'closed');
+  const FW = require('../../src/export/fromwords.js'), { startLayout } = require('../core/coreshell.js');
+  const segs = AD.toSegments(doc), lift = (q) => AD.offsetPath(doc, segs, q), start = { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch };
+  const out = FW.buildFromSegments(segs, { name: 'd194a', via: 'test', liftPath: lift, start }, { markers: startLayout(segs, lift, start) });
+  assert.ok(out.kn5 && out.kn5.length > 1000, 'a kn5 came out, so validation found no red');
+  P.panel.unmount();
+});

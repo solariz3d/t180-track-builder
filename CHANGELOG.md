@@ -103,6 +103,10 @@ through the same test first, and failed it badly.
 
 ### Fixed
 
+- The first piece of a track is now what you typed along its whole length. Before, a width, bank, turn, climb or cup typed for the
+  first piece started at the default and grew to your value by its far end, so every new track began with a bottleneck (31 m
+  widening to what you asked). The fields you leave as shown keep their default start; pieces after the first still ease from
+  where the track is to what you type.
 - The window's X no longer does nothing. After switching between the equation and piece builders (which reloads the page) the close request was left waiting on a handler that no longer existed, so the X, and Alt+F4, did nothing in the equation builder; a failing autosave could hold the piece builder open the same way. One close handler is now registered for both builders, cleans up (the piece builder still clears or saves its autosave), and always closes the window, even if the cleanup fails or hangs.
 - The cup's migration-fixture test no longer fails on a fresh Windows checkout: git's line-ending conversion (core.autocrlf, on by default there) rewrote the hashed fixture files to CRLF, so every digest read "FIXTURE FILE CHANGED". A .gitattributes now keeps test/fixtures exactly as committed.
 - Holding a movement key and pressing C or B no longer snaps the camera back to free on the key’s auto-repeat.
