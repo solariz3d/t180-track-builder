@@ -1,7 +1,8 @@
 // adapter.js: the core's document → the SAME path samples src/geom builds (the spec's GO §6), so the preview, cameras,
 // mesh, validation and export are reused unchanged.
 //
-//   toSegments(doc, { segM = 2, designKmh, cupRuns = true }) -> src/geom segments (each carries its profile, and a cup's a blend)
+//   toSegments(doc, { segM = 2, designKmh, cupRuns = true }) -> src/geom segments (each carries its profile; a cup's, and a legacy segment whose
+//                                               width or r changes (D196, a CHORD, `chord: true`), also a blend: see legacySeg)
 //   toPath(doc, { step = 0.5, segM = 2, designKmh }) -> { segments, path }; path = buildPath(segments, { step, closed, start }),
 //                                               samples { s, seg, pos, T, L, U, kvec, roll, bankG, grade }
 //   profileAt(family, w, r)                    the LEGACY cross-section at a station (ref 09 §3), unchanged since D186
@@ -183,6 +184,22 @@ function cupSegmentsLocal(P, n, at) {
   return out;
 }
 
+/** Two profiles are the same cross-section when every u and ψ agrees to 1e-12 (an r that does not bind the cap gives the same profile at any r). */
+const sameProfile = (A, B) => A.u.length === B.u.length && A.u.every((x, i) => Math.abs(x - B.u[i]) <= 1e-12) && A.psi.every((x, i) => Math.abs(x - B.psi[i]) <= 1e-12);
+/**
+ * A LEGACY segment (D196). Where the width or the rise rate changes inside the segment so that its cross-section does, it is drawn as a CHORD, like the cup's
+ * chord segments: the profile at its END, blended from the profile at its START (the mesh's smoothstep weight over the segment), so the rows at its two ends
+ * are the ends' own cross-sections and neighbouring segments share their row: no staircase of width steps and no step at a joint (before: one profile at the
+ * MIDDLE width per segment: 0.29 m steps between segments in fixture F4, 0.86 m in F8, 4.8 m for a 20 m ramp of 19 m). Where the two ends draw the same
+ * cross-section (a constant width and r, or an r that does not bind the cap) it is exactly today's segment, the profile at the middle width and no blend,
+ * so such a piece renders byte for byte as before. `start` and `end` are the segment's first and last rows; `chord` marks it for the readers.
+ */
+function legacySeg(fam, a, b, mid, length) {
+  const A = profileAt(fam, a.w, a.r), B = profileAt(fam, b.w, b.r);
+  if (sameProfile(A, B)) { const p = profileAt(fam, mid.w, mid.r); return { profile: p, blend: null, start: p, end: p, chord: false }; }
+  return { profile: B, blend: { from: A, s0: 0, length }, start: A, end: B, chord: true };
+}
+
 function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns = true } = {}) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
@@ -194,8 +211,9 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
   const seam = doc.closed && roadIdx.length > 1 && !!doc.pieces[firstRoad].cup !== !!doc.pieces[lastRoad].cup && cupRuns;
   const chan = (P, s) => Object.fromEntries(D.CHANNELS.map((ch) => [ch, D.channelAt(P, ch, s).v]));
   const nOf = (P) => Math.max(1, Math.ceil(P.length / segM - 1e-9));
-  const legacyFirst = (P) => { const m = chan(P, P.length / nOf(P) / 2); return profileAt(P.family, m.w, m.r); };   // the profile of the piece's first segment
-  const legacyLast = (P) => { const n = nOf(P), m = chan(P, (P.length * (2 * n - 1)) / (2 * n)); return profileAt(P.family, m.w, m.r); };   // and of its last
+  const legacyAt = (P, j) => { const n = nOf(P), s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n; return legacySeg(P.family, chan(P, s0), chan(P, s1), chan(P, (s0 + s1) / 2), s1 - s0); };
+  const legacyFirst = (P) => legacyAt(P, 0).start;   // the first row of the piece's first segment
+  const legacyLast = (P) => legacyAt(P, nOf(P) - 1).end;   // and the last row of its last
   doc.pieces.forEach((P, pi) => {
     if (P.type === 'flight') {
       const J = solveJump(pitch, P.gap, P.drop, P.land, P.id);
@@ -218,10 +236,10 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
     lastLegacy = !P.cup;
     for (let j = 0; j < n; j++) {
       const s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n, b = at(s1), mid = at((s0 + s1) / 2);
-      const profile = cup ? cup[j].profile : profileAt(P.family, mid.w, mid.r);   // a legacy piece: today's profileAt, unchanged
-      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup ? cup[j].blend : null, speed: null, ...(cup ? { cup: true } : {}) });
+      const L = cup ? null : legacySeg(P.family, a, b, mid, s1 - s0), profile = cup ? cup[j].profile : L.profile;   // a legacy piece: today's profileAt, or a chord where the width or r changes
+      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup ? cup[j].blend : L.blend, speed: null, ...(cup ? { cup: true } : L.chord ? { chord: true } : {}) });
       pitch += ((a.kv + b.kv) / 2) * (s1 - s0);   // the geometry's pitch: kp linear over the segment (src/geom/path.js)
-      a = b; lastProfile = cup ? cup[j].end : profile;
+      a = b; lastProfile = cup ? cup[j].end : L.end;
     }
     roll = a.phi;
   });

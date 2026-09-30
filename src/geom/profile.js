@@ -136,7 +136,9 @@ function atSegment(seg, d) {
  * segment's own profile for every other. A word document's font-transition blends have always been ignored by the readers (they judge the
  * target font for the whole word); D190 does not change that, so the paused piece builder's validation, layout and export read as before.
  */
-function readAt(seg, d) { return seg.cup ? atSegment(seg, d) : normalize(seg.profile); }
+function readAt(seg, d) { return readsBlend(seg) ? atSegment(seg, d) : normalize(seg.profile); }
+/** The segments whose blend a reader evaluates: a cup's, and a legacy CHORD (D196: the core's width or r changing inside a segment); never a word document's font transition. */
+function readsBlend(seg) { return !!(seg && (seg.cup || seg.chord)); }
 
 /**
  * The largest distance (m) between two cross-sections at the same fractions of each side's width: the step a zip between a segment's last row
@@ -157,13 +159,13 @@ function stepBetween(A, B) {
  * piece is 0 by construction (the run scheme shares rows); the legacy <-> cup joints are matched by the morphs (src/core/adapter.js).
  */
 function jointSteps(segments, closed) {
-  if (!segments.some((g) => g.cup)) return [];
+  if (!segments.some(readsBlend)) return [];
   const out = [], road = (g) => g && g.kind === 'road' && g.profile;
   const step = (a, b) => stepBetween(readAt(a, a.length), readAt(b, 0));
-  for (let j = 1; j < segments.length; j++) { const a = segments[j - 1], b = segments[j]; if (road(a) && road(b) && (a.cup || b.cup)) out.push({ j, lap: false, m: step(a, b) }); }
+  for (let j = 1; j < segments.length; j++) { const a = segments[j - 1], b = segments[j]; if (road(a) && road(b) && (readsBlend(a) || readsBlend(b))) out.push({ j, lap: false, m: step(a, b) }); }
   const a = segments[segments.length - 1], b = segments[0];
-  if (closed && segments.length > 1 && road(a) && road(b) && (a.cup || b.cup)) out.push({ j: 0, lap: true, m: step(a, b) });
+  if (closed && segments.length > 1 && road(a) && road(b) && (readsBlend(a) || readsBlend(b))) out.push({ j: 0, lap: true, m: step(a, b) });
   return out;
 }
 
-module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, usOf, smoothstep, atSegment, readAt, stepBetween, jointSteps };
+module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, usOf, smoothstep, atSegment, readAt, readsBlend, stepBetween, jointSteps };

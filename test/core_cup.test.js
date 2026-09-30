@@ -283,14 +283,27 @@ test('R2: past the joint\'s morph the road is the pure cup shape (ψ at every qu
 });
 
 // ── 5 · legacy stays legacy ─────────────────────────────────────────────────────────────────────────────────────────────
-test('row 5: a /2 file loads as LEGACY pieces (no cup flag, no c in the canonical text), renders through profileAt with no blend and no new key, and saves as /3', () => {
+// AMENDED BY NAME (D196, the librarian's ruling (b)): "no blend and no new key" held for EVERY legacy segment; a legacy segment whose width or r changes is now a
+// CHORD (blend from the profile at its start to the one at its end, marked `chord: true`), so the assertion is split: a segment whose ends draw the same
+// cross-section (constant width and r) has no blend and no new key, byte for byte as before; a changing one is a chord.
+test('row 5 (amended D196): a /2 file loads as LEGACY pieces (no cup flag, no c in the canonical text), a constant segment renders through profileAt with no blend and no new key, a changing one is a chord, and it saves as /3', () => {
   const d = extend(extend(D.createDoc('old'), { length: 120, family: 'half-pipe', first: { w: 24 } }), { length: 80, transition: 40, targets: { w: 12, phi: 0.3 } });
   const text = D.serialize(d), old = text.replace('"t180b.core/3"', '"t180b.core/2"');
   assert.ok(!/"c"/.test(text), 'a legacy piece has no c in its text');
   const back = D.parse(old); assert.equal(back.schema, 't180b.core/3'); assert.ok(back.pieces.every((P) => P.cup === undefined));
   assert.equal(D.serialize(back), text, 'a /2 file saves as the same /3 text');
-  for (const g of A.toSegments(back)) { assert.equal(g.blend, null); assert.deepEqual(Object.keys(g).sort(), ['blend', 'heartline', 'id', 'k0', 'k1', 'kind', 'kp0', 'kp1', 'length', 'part', 'profile', 'roll0', 'roll1', 'speed', 'word']); }
-  assert.deepEqual(A.toSegments(back)[0].profile, A.profileAt('half-pipe', D.channelAt(back.pieces[0], 'w', 1).v, D.channelAt(back.pieces[0], 'r', 1).v));
+  const KEYS = ['blend', 'heartline', 'id', 'k0', 'k1', 'kind', 'kp0', 'kp1', 'length', 'part', 'profile', 'roll0', 'roll1', 'speed', 'word'];
+  let chords = 0, constants = 0, s0 = 0; const segs = A.toSegments(back);
+  for (const g of segs) {
+    const P = back.pieces.find((p) => p.id === g.id), a = s0 - back.pieces.slice(0, back.pieces.indexOf(P)).reduce((t, p) => t + p.length, 0), b = a + g.length; s0 += g.length;
+    if (g.chord) {
+      chords++; assert.ok(g.blend, 'a chord carries its blend'); assert.deepEqual(Object.keys(g).sort(), [...KEYS, 'chord'].sort());
+      assert.deepEqual(g.profile, A.profileAt(P.family, D.channelAt(P, 'w', b).v, D.channelAt(P, 'r', b).v), 'a chord\'s profile is the one at its END');
+      assert.deepEqual(g.blend.from, A.profileAt(P.family, D.channelAt(P, 'w', a).v, D.channelAt(P, 'r', a).v), 'and it blends from the one at its START');
+    } else { constants++; assert.equal(g.blend, null); assert.deepEqual(Object.keys(g).sort(), KEYS); }
+  }
+  assert.ok(chords > 0 && constants > 0, `chords ${chords}, constants ${constants}: the document has both a constant piece and a width change`);
+  assert.deepEqual(segs[0].profile, A.profileAt('half-pipe', D.channelAt(back.pieces[0], 'w', 1).v, D.channelAt(back.pieces[0], 'r', 1).v));
 });
 test('row 5c / 5d: extending a legacy piece with NO cup typed makes a legacy piece (nothing changes for a user who never types one); with a cup target it starts at the rendered edge', () => {
   const d = extend(D.createDoc('m'), { length: 100, family: 'bowl', first: { w: 12 } });
