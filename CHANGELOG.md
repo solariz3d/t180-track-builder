@@ -92,6 +92,7 @@ through the same test first, and failed it badly.
 
 ### Added
 
+- **A piece can take its new width (or bank, or cup) in a short ramp at its start and hold it.** Extending after another piece blends a width toward its target over the whole piece; the keeper wanted the whole piece at the new width without a bottleneck at its start. Each field can now be set to ease in over the whole piece (as before) or to reach its target within about one knot span (at most 20 m) and hold it for the rest of the piece; the joint into the piece is still smooth (a later piece cannot jump), and the ramp cannot overshoot its target or ring. The first piece of a track already holds what was typed from its start.
 - The palette suggests what usually comes next, from how often each kind of word follows another on the real tracks.
   It only suggests: every word can still be placed after any other.
 - **Cup: the road's cross-section deepens toward a half-pipe, apart from bank.** A new channel sets the angle the walls have
