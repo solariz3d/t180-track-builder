@@ -1,0 +1,3 @@
+# The /2 migration fixtures and their manifest are hashed as raw bytes (test/core_cup_fixtures.test.js, row 5a): never convert their line endings.
+# core.autocrlf=true (the Windows default) would rewrite them to CRLF and every digest check would read "FIXTURE FILE CHANGED".
+test/fixtures/** -text

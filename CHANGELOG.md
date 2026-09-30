@@ -98,6 +98,7 @@ through the same test first, and failed it badly.
 
 ### Fixed
 
+- The cup's migration-fixture test no longer fails on a fresh Windows checkout: git's line-ending conversion (core.autocrlf, on by default there) rewrote the hashed fixture files to CRLF, so every digest read "FIXTURE FILE CHANGED". A .gitattributes now keeps test/fixtures exactly as committed.
 - Holding a movement key and pressing C or B no longer snaps the camera back to free on the key’s auto-repeat.
 - Flying forward or back together with up or down no longer slows to a crawl as the view looks down (it was 0.9× at the
   starting view and 0.01× straight down). Every key combination flies at the same speed, in any direction you look.
