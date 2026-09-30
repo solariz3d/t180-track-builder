@@ -1,0 +1,113 @@
+{
+ "made_at": "t180 c964c2d",
+ "schema": "t180b.core/2",
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "file": "F1-bowl-default-lap-closed.core2.json",
+   "text_sha256": "0c8a78d1358ff21a733c5798896e0c780d3e1276a6a966320ee8e0d7ecb6d2af",
+   "pieces": 6,
+   "closed": true,
+   "render": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "f3d6a3face7470effa1a57afbed02274e9fb80e6cf88d242759c4d5f4ff659dc"
+   }
+  },
+  "F2-halfpipe-default-lap-closed": {
+   "file": "F2-halfpipe-default-lap-closed.core2.json",
+   "text_sha256": "465b8caadac60fc5f4eb0d05afd7a618b42e334585951bb14a0c21c03851ce1a",
+   "pieces": 6,
+   "closed": true,
+   "render": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "9cef8b8bbb40272991884abc9980365a1c1335880db192656a5257ad4fe67f51"
+   }
+  },
+  "F3-bowl-narrow-12m-cap-binds": {
+   "file": "F3-bowl-narrow-12m-cap-binds.core2.json",
+   "text_sha256": "83b83ace2b2c45ae5ab96a004cf3df04d7ccb4c3e10d598cfdd2e319ac33ed2d",
+   "pieces": 3,
+   "closed": false,
+   "render": {
+    "segs": "e4a0344fbaa24967b100880fe34b510c253624f977cb6aa32e6ce356575279e2",
+    "path": "70907e693b630ed51e7ba0718d687ed5d42f7fdfc6c22435a95fd54b7cdd0501",
+    "mesh": "26d5916b9c173962a8bdb41b28f075d74984ddbdaa1ea3ef2371810fec19c69e",
+    "meshParts": 1050
+   }
+  },
+  "F4-halfpipe-width-31.5-to-12-along-s": {
+   "file": "F4-halfpipe-width-31.5-to-12-along-s.core2.json",
+   "text_sha256": "e64f813c5f438b7bcb82e4763645ce1a9f1586b60c83169b84d8d3176750f770",
+   "pieces": 2,
+   "closed": false,
+   "render": {
+    "segs": "5642afa4319495f699031c795dd0c04a2acd298936caa84eecb21755c4fece5c",
+    "path": "643f4b3f2e713b0eb7207f32558f676da1b29b8cec079bc694900a5a026bb318",
+    "mesh": "5fea7a30e4026f1bdf841ffc5c8ccafab67b5eb7f6fb47c4495e921ea3415064",
+    "meshParts": 1250
+   }
+  },
+  "F5-flat-20m-bank-30": {
+   "file": "F5-flat-20m-bank-30.core2.json",
+   "text_sha256": "2b5adf2ed9ff7ed533bbbbd00f9483b608f4fad4050fb7078e5a60c0a3578797",
+   "pieces": 2,
+   "closed": false,
+   "render": {
+    "segs": "f37ef9665d37d73002a463129c01f97eeeaf8fa4fea44e25ac44861d7b91d2d4",
+    "path": "e9a962198f3441169a9ad48dae3450287c736a1a61940be78d4c3abff5260669",
+    "mesh": "829a4449e68f5697b4b2c124df942a390829ccd2151941e09d985703bf884a3a",
+    "meshParts": 600
+   }
+  },
+  "F6-bowl-r-brushed": {
+   "file": "F6-bowl-r-brushed.core2.json",
+   "text_sha256": "2e6af793422c085534a412e21d3feaca9a71271234cb8f441fe1448a7a7041ef",
+   "pieces": 2,
+   "closed": false,
+   "render": {
+    "segs": "35e85953972f2d5b6954aae89ed5bc783935fb5ac423d1658b652560e275f056",
+    "path": "9326ec158697955fb3a6e00d4fab697164fee157fb1d879940d6af6421e88a27",
+    "mesh": "5d3e2e51d52ea99ef0f9b11b2cc72fb84aaa52dc93d91edd6d92c4abf9dcff90",
+    "meshParts": 1105
+   }
+  },
+  "F7-hill-then-jump": {
+   "file": "F7-hill-then-jump.core2.json",
+   "text_sha256": "b071b48380a75a158df0cdaf89c62007710b9ee1a10ec364bfe3b8dd4d1f6755",
+   "pieces": 3,
+   "closed": false,
+   "render": {
+    "segs": "0da1ae2bd5f461de272f06caba70456f97240966975e9bff61aa8e8645d68f9e",
+    "path": "710df38a2ae085543f6e7d7be9c48a8d1b6b8731950c3aa1667a38c510252014",
+    "mesh": "6c45e85bd795922ce4dd11a686c597e1fd8ba465aadcdab8aa8ff7e5564d0883",
+    "meshParts": 805
+   }
+  },
+  "F8-mixed-families": {
+   "file": "F8-mixed-families.core2.json",
+   "text_sha256": "8090b467228d5f94672972eea590f995c0d52210811aeda2dd3e56988c509500",
+   "pieces": 3,
+   "closed": false,
+   "render": {
+    "segs": "f1cfb6970d512f4869bb9da9d539e4d233eea9640251386ae597f60fa1d4f8f7",
+    "path": "447202421a049a3f82f40bc90a081300436c5b605bbfef4aeb242be31628f4f7",
+    "mesh": "6dbabf747e7576dd4678af8547d036a79c1954a7a18e15c7c9b53e49d4965c89",
+    "meshParts": 1250
+   }
+  },
+  "F9-empty": {
+   "file": "F9-empty.core2.json",
+   "text_sha256": "f0eea64e97e55a17fdb9abb3491ef6cc29e2eb894e7016b55cede360c33ced84",
+   "pieces": 0,
+   "closed": false,
+   "render": {
+    "segs": "refused EMPTY"
+   }
+  }
+ }
+}

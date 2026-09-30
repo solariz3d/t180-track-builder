@@ -160,7 +160,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const a = fromS !== undefined ? fromS : closed ? 0 : Math.max(0, L - lengthM), b = Math.min(L, a + lengthM);
         const run = waterRun(p, track.segments, a, b);
         if (run.samples.length < 2) return set({ message: `no road to pour on between ${Math.round(a)} and ${Math.round(b)} m${run.gap ? ' (a jump\'s flight)' : ''}` });
-        const t0 = now(), F = W.surfaceFrom({ samples: run.samples, profileAt: (m) => track.segments[m.seg].profile });
+        const t0 = now(), F = W.surfaceFrom({ samples: run.samples, profileAt: profilerOf(p, track.segments) });
         const res = W.pour(F, { speed: speedKmh / 3.6, count, h, distance: run.samples[run.samples.length - 1].s - run.samples[0].s });
         const streams = res.streams.map((sm) => sm.track.s.map((s, i) => W._at(F, s, sm.track.u[i]).p));
         // a shock carries no position (water.js): it is placed on the surface at its (s, u), for the overlay
@@ -230,6 +230,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   return api;
 }
 
+/**
+ * The cross-section under a path sample, as the mesh draws it: the segment's profile, or, where the segment carries a blend (a cup's do,
+ * D190), the blend evaluated at the sample. A segment without a blend gives its own profile object, so the water reads it as before.
+ */
+function profilerOf(path, segments) {
+  const Prof = require('../../src/geom/profile.js'), starts = []; let a = path.samples[0].s;
+  for (const g of segments) { starts.push(a); a += g.length; }
+  return (m) => { const g = segments[m.seg]; return g.cup && g.blend ? Prof.atSegment(g, m.s - starts[m.seg]) : g.profile; };
+}
+
 /** The road pieces the user built exactly straight and level (κh, κv and φ all exactly 0): close.js is told to go round them. */
 function straightPieces(doc) { return doc.pieces.map((P, i) => (P.type === 'road' && ['kh', 'kv', 'phi'].every((ch) => P.channels[ch].every((c) => c === 0)) ? i : -1)).filter((i) => i >= 0); }
 
@@ -283,4 +293,4 @@ function redText(x, speedKmh) {
   return `${x.type} at ${at}`;
 }
 
-module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, STRAIGHT_K, waterRun, redText, piecesIn, straightPieces, startLayout };
+module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, STRAIGHT_K, waterRun, redText, piecesIn, straightPieces, startLayout, profilerOf };

@@ -141,7 +141,9 @@ function defaultLayout(path, segments, o = {}) {
   segments.forEach((g, k) => {
     if (isStraight(g)) {
       const prev = run ? null : segments.slice(0, k).reverse().find((x) => x.kind === 'road');
-      const hw = Math.min(floorHalf(Prof.normalize(g.profile)), prev ? floorHalf(Prof.normalize(prev.profile)) : Infinity);
+      // the floor of a segment is the narrowest of its start, middle and end cross-sections (a cup's segments carry a blend, not one shape)
+      const floorOf = (x) => Math.min(floorHalf(Prof.readAt(x, 0)), floorHalf(Prof.readAt(x, x.length / 2)), floorHalf(Prof.readAt(x, x.length)));
+      const hw = Math.min(floorOf(g), prev ? floorHalf(Prof.readAt(prev, prev.length)) : Infinity);
       run = run ? { ...run, b: starts[k] + g.length, half: Math.min(run.half, hw) } : { a: starts[k], b: starts[k] + g.length, half: hw };
       if (!best || run.b - run.a > best.b - best.a) best = run;
     } else run = null;

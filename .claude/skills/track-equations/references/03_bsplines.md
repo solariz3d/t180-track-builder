@@ -25,6 +25,14 @@ it (`mathref` `inside()`), or the fit loses its last point.
 
 **Mutant K10** (dropping the right-hand term) **is caught.**
 
+## §1b Non-negativity and the convex hull (added for the D190 cup, before it was used)
+
+**SOURCED** (WIKI-BSPLINE, section "Computer-aided design and computer graphics", opened 2026-09-29): the basis is non-negative, "at all times each B_{i,n}(x) ≥ 0", and it sums to one, "∑ᵢ B_{i,n}(x) = 1" (§1). Together they make every point of the curve a convex combination of its control points, which is the page's statement that "the curve remains inside the bounding box of the control points".
+
+**So, for one channel:** min over i of P_i ≤ c(s) ≤ max over i of P_i for every s. A guard on the CONTROL POINTS of a channel (the cup: every point in [0, 150]) therefore bounds the whole curve, with no need to sample it. The bound is not tight (a curve can stay well inside its hull), and it does not say where the extremes fall.
+
+**Not used:** the variation-diminishing property (LYCHE-MORKEN, in 10_sculpt_close.md) is a stronger statement about oscillation, and nothing in the cup needs it.
+
 ## §2 The least-squares fit
 **SOURCED** (WIKI-BSPLINE; VMLS ch. 12). Minimise Σ‖Σⱼ cⱼBⱼ(sₖ) − yₖ‖² over the control points c. Its normal equations are
 AᵀA c = Aᵀy, with A_{kj} = Bⱼ(sₖ).

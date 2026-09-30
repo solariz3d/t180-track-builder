@@ -89,6 +89,12 @@ through the same test first, and failed it badly.
 
 - The palette suggests what usually comes next, from how often each kind of word follows another on the real tracks.
   It only suggests: every word can still be placed after any other.
+- **Cup: the road's cross-section deepens toward a half-pipe, apart from bank.** A new channel sets the angle the walls have
+  turned by at the edges, from 0 (flat) to 150 (a partial tube): about 15 is the old bowl, 31 the old half-pipe, 90 vertical
+  walls. It blends along the piece like the others, moves neither the line nor the bank, and rolls with bank (bank 30 with cup 60
+  stands the left wall vertical). Tracks made before this open and render exactly as they did: a cup is only there when you set one.
+  Closing a lap whose cup meets an uncupped start holds the cup at the start's edge and fades it into the start's shape over the last 10 m,
+  or refuses by name if it cannot; the validation panel reds any cup joint or lap seam that steps more than 1 mm.
 
 ### Fixed
 

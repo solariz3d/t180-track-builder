@@ -116,12 +116,13 @@ function stations(p) {
 /** A's AI generator reads a design { stations } and one right → left cross-section per station, centre vertex in the middle. */
 function aiInput(segs, p, K = 16) {
   const all = stations(p), dsn = { stations: [], length: p.lengthM }, secs = [];
+  const segS0 = []; { let a = p.samples[0].s; for (const g of segs) { segS0.push(a); a += g.length; } }   // where each segment starts, for a blend's distance (D190)
   let lastKept = -1;
   all.forEach((sm, i) => {
     const g = segs[sm.seg];
     if (g.kind !== 'road') return;
     if (lastKept >= 0 && i > lastKept + 1) dsn.stations[dsn.stations.length - 1].gapNext = true;   // stations dropped: a jump's flight
-    const P = Prof.normalize(g.profile), r = P.u[0], l = P.u[P.u.length - 1];
+    const P = Prof.readAt(g, sm.s - segS0[sm.seg]), r = P.u[0], l = P.u[P.u.length - 1];
     const us = [...Array.from({ length: K }, (_, j) => r * (1 - j / K)), 0, ...Array.from({ length: K }, (_, j) => l * ((j + 1) / K))];
     const pts = [], nrm = [];
     for (const u of us) { const [X, Y] = Prof.offsetAt(P, u), [nl, nu] = Prof.normalAt(P, u); pts.push(add(sm.pos, add(mul(sm.L, X), mul(sm.U, Y)))); nrm.push(unit(add(mul(sm.L, nl), mul(sm.U, nu)))); }

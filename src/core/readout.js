@@ -6,17 +6,18 @@
 //   candidateReadout(doc, opts)   -> the readout of the piece extend(doc, opts) would place (the ghost), before it is placed
 //
 // A ROAD piece's readout:
-//   { type: 'road', id, lengthM, turnDeg, climbDeg, bankFromDeg, bankToDeg, pitchFromDeg, pitchToDeg, offsets }
+//   { type: 'road', id, lengthM, turnDeg, climbDeg, bankFromDeg, bankToDeg, cupFromDeg, cupToDeg, pitchFromDeg, pitchToDeg, offsets }
 //   turnDeg = ∫κh ds (+ = left), climbDeg = ∫κv ds (+ = nosing up): EXACT, by 3-point Gauss–Legendre on each knot span, where
 //   the channel is one cubic (ref 09 §8). bankFrom/To = φ at the ends. pitchFrom = the start pitch plus every earlier road
-//   piece's climb, a flight setting it to its landing pitch; pitchTo = pitchFrom + climb.
+//   piece's climb, a flight setting it to its landing pitch; pitchTo = pitchFrom + climb. cupFrom/To = the cup c(0) and c(L), degrees, of a
+//   CUP piece (D190); of a LEGACY piece the edge its road renders, profileAt(family, w, r) at each end (D.legacyEdgeDeg).
 //   offsets: null when the piece has no h/l; otherwise the EFFECTIVE { turnDeg, climbDeg, pitchFromDeg, pitchToDeg,
 //   roadLengthM } with the lift of ref 09 §7 applied at the ends (a hill that fades inside the piece changes none of them) and
 //   the road length over the lifted curve (∫|r̃′| ds by composite Gauss–Legendre, not exact). Bank is not changed by h or l.
 // A FLIGHT piece's readout:
-//   { type: 'flight', id, lengthM, turnDeg: 0, climbDeg, bankFromDeg, bankToDeg, pitchFromDeg, pitchToDeg, offsets: null }
+//   { type: 'flight', id, lengthM, turnDeg: 0, climbDeg, bankFromDeg, bankToDeg, cupFromDeg, cupToDeg, pitchFromDeg, pitchToDeg, offsets: null }
 //   lengthM = the flight plus its landing ramp, as the adapter builds them (src/core/adapter.js toSegments), and climbDeg =
-//   landing pitch − take-off pitch. The bank is carried through a jump.
+//   landing pitch − take-off pitch. The bank and the cup are carried through a jump.
 'use strict';
 
 const D = require('./document.js');
@@ -82,14 +83,16 @@ function pieceReadout(doc, i) {
   if (!Number.isInteger(i) || i < 0 || i >= doc.pieces.length) throw new D.CoreError('BAD_INDEX', `piece ${i} does not exist: the track has ${doc.pieces.length} (0 to ${doc.pieces.length - 1})`);
   const P = doc.pieces[i], pose = poseBefore(doc, i);
   if (P.type === 'flight') {
-    let bank = 0; for (let j = i - 1; j >= 0; j--) if (doc.pieces[j].type === 'road') { bank = D.pieceEnd(doc.pieces[j]).phi.v; break; }
+    let bank = 0, cupEnd = 0; for (let j = i - 1; j >= 0; j--) if (doc.pieces[j].type === 'road') { const e = D.pieceEnd(doc.pieces[j]); bank = e.phi.v; cupEnd = e.c.v; break; }
     const lengthM = toSegments(doc).filter((g) => g.id === P.id).reduce((a, g) => a + g.length, 0);
-    return { type: 'flight', id: P.id, lengthM, turnDeg: 0, climbDeg: (P.land - pose.p) * DEG, bankFromDeg: bank * DEG, bankToDeg: bank * DEG,
+    return { type: 'flight', id: P.id, lengthM, turnDeg: 0, climbDeg: (P.land - pose.p) * DEG, bankFromDeg: bank * DEG, bankToDeg: bank * DEG, cupFromDeg: cupEnd, cupToDeg: cupEnd,
       pitchFromDeg: pose.p * DEG, pitchToDeg: P.land * DEG, offsets: null };
   }
   const turn = channelIntegral(P, 'kh'), climb = channelIntegral(P, 'kv');
   const out = { type: 'road', id: P.id, lengthM: P.length, turnDeg: turn * DEG, climbDeg: climb * DEG,
     bankFromDeg: D.channelAt(P, 'phi', 0).v * DEG, bankToDeg: D.channelAt(P, 'phi', P.length).v * DEG,
+    cupFromDeg: P.cup ? D.channelAt(P, 'c', 0).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', 0).v, D.channelAt(P, 'r', 0).v),
+    cupToDeg: P.cup ? D.channelAt(P, 'c', P.length).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', P.length).v, D.channelAt(P, 'r', P.length).v),
     pitchFromDeg: pose.p * DEG, pitchToDeg: (pose.p + climb) * DEG, offsets: null };
   if (D.OFFSETS.some((ch) => P.channels[ch].some((v) => v !== 0))) {
     const a = liftedAngles(P, 0, pose.theta, pose.p), b = liftedAngles(P, P.length, pose.theta + turn, pose.p + climb);

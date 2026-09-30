@@ -118,4 +118,52 @@ const usOf = (P, fr) => { const E = edgesOf(P); return fr.map((f) => uAt(E, f));
 /** smoothstep, clamped: 0 below 0, 1 above 1, zero slope at both ends (no kink where a ramp starts or ends). */
 const smoothstep = (t) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
 
-module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, usOf, smoothstep };
+/**
+ * The cross-section of a road segment at distance d into it, as the mesh builds it: the segment's own profile, or, where it carries a
+ * `blend: { from, s0, length }`, the mix from `from` at weight smoothstep((s0 + d)/length). A reader of segment.profile that is not the mesh
+ * must use this, or it sees a blended segment's TARGET for the whole segment (D190: the cup's segments carry blends; markers/place.js and
+ * geom/pitlane.js evaluate the same blend for their own purposes).
+ */
+function atSegment(seg, d) {
+  const P = normalize(seg.profile);
+  if (!seg.blend) return P;
+  const w = smoothstep((seg.blend.s0 + d) / seg.blend.length);
+  return w >= 1 ? P : normalize(blend(normalize(seg.blend.from), P, w));
+}
+
+/**
+ * The cross-section a READER of a segment (not the mesh) takes at distance d into it: the blend evaluated for a CUP segment (`seg.cup`), the
+ * segment's own profile for every other. A word document's font-transition blends have always been ignored by the readers (they judge the
+ * target font for the whole word); D190 does not change that, so the paused piece builder's validation, layout and export read as before.
+ */
+function readAt(seg, d) { return seg.cup ? atSegment(seg, d) : normalize(seg.profile); }
+
+/**
+ * The largest distance (m) between two cross-sections at the same fractions of each side's width: the step a zip between a segment's last row
+ * and the next one's first row would span (both are piecewise linear in ψ on the same fractions, so the vertex distance is the curve's gap to
+ * within the chord). 0 for identical profiles.
+ */
+function stepBetween(A, B) {
+  A = normalize(A); B = normalize(B);
+  const EA = edgesOf(A), EB = edgesOf(B), fs = [...new Set([...fractions(A), ...fractions(B), 0])];
+  let worst = 0;
+  for (const f of fs) { const pa = offsetAt(A, uAt(EA, f)), pb = offsetAt(B, uAt(EB, f)); worst = Math.max(worst, Math.hypot(pa[0] - pb[0], pa[1] - pb[1])); }
+  return worst;
+}
+/**
+ * The joints of a segment list whose two sides are drawn from different rows, for the segments a CUP touches (a word document's joints between
+ * pieces are what they always were): [{ j, lap, m }] with j the segment that STARTS the joint and m the step in metres between the previous
+ * segment's last cross-section and its first. lap is true for the closed lap's seam (last road segment to the first). A joint inside a cup
+ * piece is 0 by construction (the run scheme shares rows); the legacy <-> cup joints are matched by the morphs (src/core/adapter.js).
+ */
+function jointSteps(segments, closed) {
+  if (!segments.some((g) => g.cup)) return [];
+  const out = [], road = (g) => g && g.kind === 'road' && g.profile;
+  const step = (a, b) => stepBetween(readAt(a, a.length), readAt(b, 0));
+  for (let j = 1; j < segments.length; j++) { const a = segments[j - 1], b = segments[j]; if (road(a) && road(b) && (a.cup || b.cup)) out.push({ j, lap: false, m: step(a, b) }); }
+  const a = segments[segments.length - 1], b = segments[0];
+  if (closed && segments.length > 1 && road(a) && road(b) && (a.cup || b.cup)) out.push({ j: 0, lap: true, m: step(a, b) });
+  return out;
+}
+
+module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, usOf, smoothstep, atSegment, readAt, stepBetween, jointSteps };

@@ -42,16 +42,41 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs = frames.splice(0); for (const f of fs) f(0); } };
 }
-async function mountPanel() {
+async function mountPanel(wrap = (s) => s) {
   const { doc, win, tick } = fakeWindow();
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
-  const root = doc.createElement('div'), shell = await createCoreShell({ brushFn: null });
+  const root = doc.createElement('div'), shell = wrap(await createCoreShell({ brushFn: null }));
   const panel = require('../core/panel.js').mount(root, shell);
-  const field = (label) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === label).children[1];
+  const label = (text) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text);
+  const field = (text) => label(text).children[1];
   const cell = (k) => root.all().find((e) => e.attrs['data-readout'] === k).textContent;
-  const type = (label, v) => { const f = field(label); f.value = String(v); f.oninput(); };
-  const opts = () => extendOptions({ length: field('length m').value, turn: field('turn °/100m').value, climb: field('climb °/100m').value, bank: field('bank °').value, width: field('width m').value });
-  return { doc, win, tick, stage, root, shell, panel, field, cell, type, opts };
+  const type = (text, v) => { const f = field(text); f.value = String(v); f.oninput(); };
+  const opts = () => extendOptions({ length: field('length m').value, turn: field('turn °/100m').value, climb: field('climb °/100m').value, bank: field('bank °').value, width: field('width m').value, cup: label('cup °') ? field('cup °').value : '' });
+  return { doc, win, tick, stage, root, shell, panel, label, field, cell, type, opts };
+}
+
+// THE STUB (D190): A's core, which adds the channel c, cupFromDeg / cupToDeg and Extend's target c, does not exist at c964c2d. These
+// tests stand in for it with stubCup(shell), which wraps the REAL shell and does exactly three things, nothing else:
+//   1. it removes targets.c before the real core sees it (c964c2d refuses an unknown channel), and keeps what c was asked for;
+//   2. it adds cupFromDeg / cupToDeg to the real readouts from its own record: a legacy piece reads 11.679 (the rendered edge E's seal
+//      row 7 names for F3), and a piece given a cup reads the target PLUS 0.871 (the Extend fit ringing past it, E's V5), so a panel
+//      that shows the typed value instead of the document's is caught;
+//   3. it refuses a target outside [0, 150] by name, as the core's document guard will (E's row 2); the panel must not clamp first.
+// It also records every options object the panel hands the core (sent), so a test can read what went in.
+const LEGACY_EDGE = 11.679, RING = 0.871;
+function stubCup(real) {
+  const cupOf = new Map(), sent = [];
+  const strip = (o) => { const { c, ...rest } = (o && o.targets) || {}; return { o: { ...o, targets: rest }, c }; };
+  const guard = (c) => { if (c !== undefined && !(c >= 0 && c <= 150)) throw new Error(`cup ${c}° is outside 0–150 (the core refuses it: stub)`); };
+  const lastTo = () => { const P = real.getState().history.present.pieces; const id = P.length ? P[P.length - 1].id : null; return id && cupOf.has(id) ? cupOf.get(id)[1] : LEGACY_EDGE; };
+  const withCup = (r, from, to) => ({ ...r, cupFromDeg: from, cupToDeg: to });
+  return Object.assign(Object.create(real), {
+    sent,
+    candidateReadout(o) { sent.push(o); const { o: bare, c } = strip(o); guard(c); const from = lastTo(); return withCup(real.candidateReadout(bare), from, c === undefined ? from : c + RING); },
+    candidate(o) { return real.candidate(strip(o).o); },
+    extend(o) { sent.push(o); const { o: bare, c } = strip(o); guard(c); const from = lastTo(); real.extend(bare); const P = real.getState().history.present.pieces; cupOf.set(P[P.length - 1].id, [from, c === undefined ? from : c + RING]); },
+    pieceReadouts() { return real.pieceReadouts().map((r) => withCup(r, ...(cupOf.get(r.id) || [LEGACY_EDGE, LEGACY_EDGE]))); },
+  });
 }
 
 test('the strings: one decimal, the unit written, a sign on angles, 0.0° bare, half away from zero, no wrap', () => {
@@ -270,5 +295,65 @@ test('the labels follow a path the preview extends IN PLACE, and survive the pre
   assert.equal(L.length + C.length, 5, `every piece is labelled or culled (drawn ${L.length}, culled ${C.length})`);
   assert.ok(L.length >= 2, 'more than the first piece is drawn');
   for (const x of L) assert.ok(x.rect.w > 0 && x.rect.h > 0, `${x.piece} has a size: the layer is in the page`);
+  P.panel.unmount();
+});
+
+// ── D190, THE CUP (E's seal row 7, the UI half). A's core is stubbed: see stubCup above for exactly what it stands in for ──
+
+test('extendOptions: the cup field is the target c, in DEGREES, typed as it is (0 is a target; empty continues; never clamped here)', () => {
+  const base = { length: 100, turn: '', climb: '', bank: '', width: '' };
+  assert.deepEqual(extendOptions({ ...base, cup: '' }).targets, {}, 'empty: no target, the channel continues');
+  assert.deepEqual(extendOptions({ ...base, cup: '90' }).targets, { c: 90 }, '90 degrees is c = 90, not radians');
+  assert.deepEqual(extendOptions({ ...base, cup: '0' }).targets, { c: 0 }, 'a flat road is a target, not an empty field');
+  assert.deepEqual(extendOptions({ ...base, cup: '200' }).targets, { c: 200 }, 'out of range goes to the core as typed: its guard refuses it by name');
+  assert.deepEqual(extendOptions({ ...base, bank: '30', cup: '60' }).targets, { phi: 30 * Math.PI / 180, c: 60 }, 'bank and cup are separate targets');
+});
+
+test('the Extend panel has a "cup °" field beside bank, 0 to 150, and Extend hands its value to the core as c', async () => {
+  const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubCup(s)));
+  const pickers = P.label('bank °').parent.children.map((e) => e.children[0] && e.children[0].textContent);
+  assert.equal(pickers[pickers.indexOf('bank °') + 1], 'cup °', `cup sits right after bank (fields: ${pickers.join(', ')})`);
+  const f = P.field('cup °'); assert.equal(f.attrs.min, '0'); assert.equal(f.attrs.max, '150');
+  P.type('length m', 100); P.type('cup °', 90);   // (the fake DOM keeps a field's initial value as an attribute: type the length)
+  const btn = P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend'); btn.onclick();
+  assert.equal(S.stub.sent.at(-1).targets.c, 90, 'the click extends with c = 90');
+  P.panel.unmount();
+});
+
+test('the readout shows cup from → to: the DOCUMENT\'s values with the bank cell\'s rounding, never the typed target, never bank\'s', async () => {
+  const P = await mountPanel(stubCup);
+  P.shell.extend({ length: 200 }); P.type('length m', 100);
+  assert.equal(P.cell('cup'), '11.7° → 11.7°', 'a legacy piece reads its rendered edge (the core\'s number), rounded as bank is');
+  P.type('cup °', 90);
+  assert.equal(P.cell('cup'), '11.7° → 90.9°', 'the document rings to 90.871: the readout shows that, not the typed 90.0');
+  P.type('bank °', 30);
+  assert.equal(P.cell('bank'), '+30.0°'); assert.equal(P.cell('cup'), '11.7° → 90.9°', 'bank moves the bank cell only');
+  const r = P.shell.candidateReadout(P.opts());
+  assert.equal(P.cell('cup'), `${LB.fmtDeg(r.cupFromDeg).replace('+', '')} → ${LB.fmtDeg(r.cupToDeg).replace('+', '')}`, 'each number is the core\'s, rounded as the bank cell rounds');
+  // the on-track labels stay as they are (the seal): a readout carrying cup fields labels exactly as one without
+  const { cupFromDeg, cupToDeg, ...plain } = r;
+  assert.deepEqual(LB.labelText(r), LB.labelText(plain));
+  P.panel.unmount();
+});
+
+test('the cup cell follows the cup field inside its input handler, and a cup the core refuses shows — and says why', async () => {
+  const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubCup(s)));
+  P.shell.extend({ length: 200 }); P.type('length m', 100);
+  P.type('cup °', 45); assert.equal(P.cell('cup'), '11.7° → 45.9°', 'no tick, no frame: the cell changed inside the handler');
+  P.type('cup °', 200);
+  const box = P.root.all().find((e) => e.attrs.class === 'readout');
+  assert.equal(P.cell('cup'), '—'); assert.match(box.title, /outside 0–150/, 'the core\'s reason is shown (the box\'s title)');
+  assert.equal(S.stub.sent.at(-1).targets.c, 200, 'the panel handed the core the typed 200: it did not clamp');
+  P.panel.unmount();
+});
+
+test('the brush\'s channel list gains cup (channel c), with a drag rate in degrees', async () => {
+  const P = await mountPanel();
+  const sel = P.root.all().find((e) => e.attrs['aria-label'] === 'brush channel'), mode = P.root.all().find((e) => e.attrs['aria-label'] === 'brush mode');
+  mode.value = 'rate'; mode.onchange();
+  const opt = sel.children.find((o) => o.value === 'c');
+  assert.ok(opt, `a cup channel in the rate brush's list (got ${sel.children.map((o) => o.value).join(', ')})`);
+  assert.equal(opt.textContent, 'cup');
+  const { PER_PX } = require('../core/panel.js'); assert.ok(PER_PX.c > 0 && PER_PX.c < 1, 'degrees per pixel of drag');
   P.panel.unmount();
 });
