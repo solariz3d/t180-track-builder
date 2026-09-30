@@ -42,6 +42,7 @@ const SRC = Object.freeze({
   'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
   'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp must catch both landings)',
   'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
+  'joint-step': 'FINDINGS.md:110 (a step in the road mesh is a gap: the D190 round-3 ruling (c) reds a lap seam or a cup joint that steps more than 1 mm)',
   'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check)',
 });
 
@@ -169,19 +170,24 @@ function core(path, segments, opts, from, carried, upto) {
   // several vectors per station and line); each station then combines it with its own frame, in the same arithmetic
   // order as the vector helpers above, so every figure is bit-identical to the per-station form it replaced.
   const perSeg = new Map();
+  const constOf = (prof) => prof.u.map((u) => { const [X, Y] = P.offsetAt(prof, u), [nl, nu] = P.normalAt(prof, u), psi = P.psiAt(prof, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
+    return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; });
   const segConst = (j) => {
     let c = perSeg.get(j);
     if (c) return c;
-    const prof = profiles[j];
-    c = prof.u.map((u) => { const [X, Y] = P.offsetAt(prof, u), [nl, nu] = P.normalAt(prof, u), psi = P.psiAt(prof, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
-      return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; });
+    c = constOf(profiles[j]);
     perSeg.set(j, c); return c;
   };
+  // a segment that carries a BLEND (the cup's) has a different cross-section at every station: the blend is evaluated at the station (D190),
+  // so the loads, the folds and the steepness read the road as the mesh draws it, not the blend's target for the whole segment
+  const segS0 = new Array(segments.length);
+  for (let i = 0; i < n; i++) if (segS0[S[i].seg] === undefined) segS0[S[i].seg] = S[i].s;
+  const constAt = (p) => { const g = segments[p.seg]; return g.cup && g.blend ? constOf(P.atSegment(g, p.s - segS0[p.seg])) : segConst(p.seg); };   // only a cup's blend: a word's font transition is judged at its target, as before
   // the normal n(u) at a station: L·nl + U·nu (add(mul(L, nl), mul(U, nu)))
   const nx = (p, c) => p.L[0] * c.nl + p.U[0] * c.nu, ny = (p, c) => p.L[1] * c.nl + p.U[1] * c.nu, nz = (p, c) => p.L[2] * c.nl + p.U[2] * c.nu;
   for (let i = from; i < end; i++) {
     if (!isRoad(i)) continue;
-    const p = S[i], cs = segConst(p.seg), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
+    const p = S[i], cs = constAt(p), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
     let aT = 0;
     if (sp.v) { const a = S[Math.max(0, i - 1)], b = S[Math.min(n - 1, i + 1)]; const va = sp.v[Math.max(0, i - 1)], vb = sp.v[Math.min(n - 1, i + 1)]; if (b.s > a.s) aT = (vb * vb - va * va) / (2 * (b.s - a.s)); }
     for (const c of cs) {
@@ -219,10 +225,14 @@ function core(path, segments, opts, from, carried, upto) {
   // each segment's first and last station, in one pass (D177: this was a scan of every station per segment)
   const firstOf = new Array(segments.length).fill(-1), lastOf = new Array(segments.length).fill(-1);
   for (let i = 0; i < n; i++) { const j = S[i].seg; if (firstOf[j] < 0) firstOf[j] = i; lastOf[j] = i; }
+  // a cup's joint (legacy <-> cup, the lap seam) or any joint inside a cup whose curve steps more than 1 mm (D190 R3, the chair's ruling (c)): red, so
+  // the panel never reads "0 red · lap proved" over a cliff. Word documents' joints are unchanged (jointSteps looks only where a cup is).
+  const jointStep = new Map(P.jointSteps(segments, path.closed).filter((x) => x.m > 1e-3).map((x) => [x.j, x]));
   segments.forEach((g, j) => {
     if (j < fromSeg) return;
     if (firstOf[j] < 0 || firstOf[j] >= end) return;   // a segment wholly in the pending stretch is not checked yet
     const s0 = S[firstOf[j]].s, s1 = S[lastOf[j]].s;
+    if (jointStep.has(j)) raw.segReds.push({ j, s: s0, s1: s0, u: null, reason: 'joint-step', worst: jointStep.get(j).m });
     // a gap that is not a jump is a hole; the open head is exempt (INTERFACES §4: "no 'gap in road' red at the head")
     if (g.kind === 'gap' && g.word !== 'jump' && !(!path.closed && j === lastSeg)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'gap-in-road' });
     if (g.kind !== 'gap' && g.word === 'wall-ride' && /^WALL/i.test(profiles[j].material)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'wall-ride-from-wall-object' });

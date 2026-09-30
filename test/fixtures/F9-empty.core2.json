@@ -1,0 +1,9 @@
+{
+  "schema": "t180b.core/2",
+  "generator": "t180-track-builder/core 0.2.0",
+  "name": "F9 empty",
+  "closed": false,
+  "start": {"pos":[0,0,0],"heading":0,"pitch":0},
+  "nextId": 1,
+  "pieces": []
+}

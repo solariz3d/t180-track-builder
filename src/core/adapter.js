@@ -1,16 +1,26 @@
 // adapter.js: the core's document → the SAME path samples src/geom builds (the spec's GO §6), so the preview, cameras,
 // mesh, validation and export are reused unchanged.
 //
-//   toSegments(doc, { segM = 2, designKmh })   -> src/geom segments (each carries its profile)
+//   toSegments(doc, { segM = 2, designKmh, cupRuns = true }) -> src/geom segments (each carries its profile, and a cup's a blend)
 //   toPath(doc, { step = 0.5, segM = 2, designKmh }) -> { segments, path }; path = buildPath(segments, { step, closed, start }),
 //                                               samples { s, seg, pos, T, L, U, kvec, roll, bankG, grade }
-//   profileAt(family, w, r)                    the cross-section at a station (ref 09 §3)
+//   profileAt(family, w, r)                    the LEGACY cross-section at a station (ref 09 §3), unchanged since D186
+//   cupProfile(family, w, c)                   the CUP cross-section (D190, ref 09 §9): the edge angle is c degrees on both sides
 //
 // A ROAD piece becomes consecutive segments of at most segM metres. Each is the geometry's own clothoid: heading rate
 // k and pitch rate kp run linearly from the channel's values at its two ends, and roll runs between them by the
 // geometry's smoothstep (src/geom/path.js "CURVE MODEL"). So between knots the adapter follows the cubic channels by
 // chords of segM metres. The error that costs is measured by test/core_adapter.test.js, not assumed (src/core/README.md
 // "stated deviation").
+// A CUP piece (P.cup) is meshed from the same segments, but each carries a cupProfile at c. By DEFAULT (cupRuns: true) a stretch where c changes
+// and the width does not shares ONE blend pair (blend: { from, s0, length }, src/geom/mesh.js), with s0 and length chosen per segment so the mesh's
+// smoothstep weight lands on c(s) at both ends of the segment: the rows are the same cross-section at the same sample fractions, so no seam zip
+// is emitted inside the piece and the wall follows c on the road (measured: 0 seams, the edge within 0.05° of c at every row on a smoothstep ramp).
+// The price: segment.profile is then the TARGET of the blend (the run's widest), so every reader of it that is not the mesh evaluates the blend at
+// its station with src/geom/profile.js atSegment (the marker layout's floor, validation, the water, the camera's span, the export's sections).
+// Where a cup follows a LEGACY piece the first MORPH_M metres also fade out the legacy shape's difference from the cup shape (morphZone), so the
+// joint has no step inside the road either. cupRuns: false is the other scheme (each segment's profile the local end profile, a seam zip wherever
+// c changes, the edge up to 0.95° off c inside a segment): kept for comparison; see README "the cup".
 // A FLIGHT piece becomes the old jump's two segments, by the same two functions the paused resolver used: the gap solved by
 // src/doc/resolve.js solveJump, and the landing ramp sized by src/validate/jumps.js landingRamp at the design speed.
 'use strict';
@@ -39,11 +49,153 @@ function profileAt(family, w, r) {
   };
 }
 
-function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh } = {}) {
+/** The CUP cross-section at width w (m) and edge angle c (degrees), ref 09 §9: ψ at the four quarters of each half-width is c·Fᵢ/F_edge, both sides. */
+function cupProfile(family, w, c) {
+  if (!Object.prototype.hasOwnProperty.call(FLOORS, family)) throw new D.CoreError('BAD_FAMILY', 'family "' + family + '"');
+  if (!(w > 0)) throw new D.CoreError('BAD_WIDTH', 'the road\'s width must be positive, got ' + w + ' m');
+  if (!Number.isFinite(c) || c < 0) throw new D.CoreError('BAD_CUP', 'the cup must be a number of degrees from 0, got ' + c);
+  const F = FLOORS[family], side = AT.map((f, i) => [(f * w) / 2, ((c * F[i]) / F[F.length - 1]) * DEG]);
+  return {
+    font: family,
+    u: [...side.slice().reverse().map(([x]) => -x), 0, ...side.map(([x]) => x)],
+    psi: [...side.slice().reverse().map(([, p]) => p), 0, ...side.map(([, p]) => p)],
+    material: 'ROAD',
+  };
+}
+
+const smooth = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));   // the mesh's weight (src/geom/profile.js smoothstep)
+/** z in [0, 1] with smooth(z) = y (the mesh's weight inverted), by the closed form then two Newton steps. */
+function unsmooth(y) {
+  if (y <= 0) return 0; if (y >= 1) return 1;
+  let z = 0.5 - Math.sin(Math.asin(1 - 2 * y) / 3);
+  for (let k = 0; k < 2; k++) { const d = 6 * z * (1 - z); if (d > 1e-12) z = Math.min(1, Math.max(0, z - (smooth(z) - y) / d)); }
+  return z;
+}
+
+/**
+ * The profile and blend of each of a cup piece's n segments (D190 row 1b). at(s) gives the channels; segment j spans s_j to s_{j+1}.
+ * A RUN is consecutive segments over which the width stays put. Its ends make ONE pair: A at the run's lowest c and B at its highest.
+ * At a fixed width the cup profile is linear in c (ref 09 §9), so blend(A, B, x) IS the cup profile at c = (1 − x)·c_lo + x·c_hi, and
+ * a segment's blend puts the mesh's smoothstep weight on x at both of its ends (s0 and length solve smoothstep((s0 + d)/length) = x
+ * at d = 0 and at d = the segment's length). A segment where c falls swaps the pair (from B, own A, weight 1 − x): blendSamples is
+ * symmetric in its two profiles, so every segment of the run has the same sample fractions and the same K, and the boundary rows of
+ * two segments are the same cross-section at the same u: no seam zip between them, and the wall follows c along the road instead of
+ * stepping every segM metres. A run where c does not move is one profile with no blend. A segment where the width moves is a run of
+ * its own (its chord, from the profile at its start to the one at its end).
+ */
+function cupSegmentsRuns(P, n, at, join = null, tail = null) {
+  const s = (j) => (P.length * j) / n, E = Array.from({ length: n + 1 }, (_, j) => at(s(j))), out = new Array(n);
+  const wTol = (w) => 1e-9 * Math.max(1, w), cTol = 1e-9;
+  let j = 0;
+  if (join) j = morphZone(P, n, E, s, join, out);   // the first metres of a cup that follows a legacy piece
+  const nr = tail ? tailZone(P, n, E, s, tail, out, j) : n;   // the last metres of a cup that closes onto a legacy start: the runs stop where the fade begins
+  while (j < nr) {
+    const wRun = E[j].w, chord = Math.abs(E[j + 1].w - wRun) > wTol(wRun);
+    if (chord) {
+      const A = cupProfile(P.family, wRun, E[j].c), B = cupProfile(P.family, E[j + 1].w, E[j + 1].c);
+      out[j] = { profile: B, blend: { from: A, s0: 0, length: s(j + 1) - s(j) }, end: B };
+      j++; continue;
+    }
+    let k = j; while (k + 1 < nr && Math.abs(E[k + 2].w - wRun) <= wTol(wRun)) k++;   // the run is segments j..k
+    let lo = Infinity, hi = -Infinity; for (let m = j; m <= k + 1; m++) { lo = Math.min(lo, E[m].c); hi = Math.max(hi, E[m].c); }
+    if (hi - lo <= cTol) {
+      const prof = cupProfile(P.family, wRun, E[j].c);
+      for (let m = j; m <= k; m++) out[m] = { profile: prof, blend: null, end: prof };
+    } else {
+      const A = cupProfile(P.family, wRun, lo), B = cupProfile(P.family, wRun, hi), X = (m) => Math.min(1, Math.max(0, (E[m].c - lo) / (hi - lo)));
+      for (let m = j; m <= k; m++) {
+        const len = s(m + 1) - s(m), up = X(m + 1) >= X(m);
+        const from = up ? A : B, own = up ? B : A, ya = up ? X(m) : 1 - X(m), yb = up ? X(m + 1) : 1 - X(m + 1);   // the weight of own runs ya → yb, rising
+        let blend;
+        if (ya >= 1 - 1e-12) blend = { from, s0: len, length: len };            // weight 1 all along: the segment is own
+        else if (yb <= 1e-12) blend = { from, s0: 0, length: 1e15 };            // weight 0 all along: the segment is from
+        else { const za = unsmooth(ya), zb = Math.max(unsmooth(yb), za + 1e-12), length = len / (zb - za); blend = { from, s0: za * length, length }; }
+        out[m] = { profile: own, blend, end: cupProfile(P.family, wRun, E[m + 1].c) };
+      }
+    }
+    j = k + 1;
+  }
+  return out;
+}
+
+/**
+ * THE MORPH OUT OF A LEGACY CROSS-SECTION (D190 R2). Where the r cap binds, the legacy piece's last profile is the CAPPED shape and the cup's
+ * first is the proportional one at the same edge: they agree at the edge and differ inside the road (36.0 mm on a 12 m bowl, 148.2 mm on a 24 m
+ * half-pipe, B's score). So the first metres of the cup carry the legacy profile's difference from the cup shape at c(0), fading by smoothstep
+ * over MORPH_M metres: the first row IS the legacy piece's last row (no step), the edge stays c throughout, and past MORPH_M the road is the pure
+ * cup shape. Each morph segment is a chord (from the morph profile at its start to the one at its end). Returns the index of the first segment
+ * after the zone. `join.profile` is the profile of the segment before the cup (the legacy piece's last).
+ */
+const MORPH_M = 10;
+function morphZone(P, n, E, s, join, out) {
+  const Lg = join.profile, C0 = cupProfile(P.family, E[0].w, E[0].c);
+  if (!Lg || !Array.isArray(Lg.psi) || Lg.psi.length !== C0.psi.length || Lg.u.length !== C0.u.length) return 0;
+  const dpsi = Lg.psi.map((x, i) => x - C0.psi[i]);
+  if (dpsi.every((x) => Math.abs(x) < 1e-9)) return 0;   // (measured: the legacy and cup profiles' u are equal at the same width, so only ψ morphs)
+  const Lm = Math.min(MORPH_M, P.length), mu = (x) => 1 - smooth(x / Lm);
+  const at = (j) => { const cw = cupProfile(P.family, E[j].w, E[j].c), m = mu(s(j)); return { font: cw.font, material: cw.material, u: cw.u, psi: cw.psi.map((x, i) => x + m * dpsi[i]) }; };
+  let j = 0;
+  while (j < n && s(j) < Lm - 1e-9) { const B = at(j + 1); out[j] = { profile: B, blend: { from: at(j), s0: 0, length: s(j + 1) - s(j) }, end: B }; j++; }
+  return j;
+}
+
+/**
+ * THE MORPH INTO A LEGACY CROSS-SECTION (D190 round 3, R3): the mirror of morphZone, for a cup that CLOSES a lap onto a legacy start (the zip at
+ * s = 0 joins the cup's last row to the legacy start's first row: B measured 23.2 mm on a 16 m bowl and 148.2 mm on a 24 m half-pipe where the r
+ * cap binds). close() holds c at the seam to the legacy start's rendered edge, so the two shapes agree at the edge and differ inside the road; the
+ * last metres of the cup (at least MORPH_M, from the last segment boundary at or before length − MORPH_M, and never into the head morph) fade
+ * the difference d = T.psi − cupProfile(c end).psi in by smoothstep, and the width the same way: the last row IS the legacy start's first row.
+ * T is that first row's profile (the legacy piece's first segment). Returns the index of the first segment of the zone (the runs stop there).
+ */
+function tailZone(P, n, E, s, T, out, jStart) {
+  if (!T || !Array.isArray(T.psi)) return n;
+  const Cend = cupProfile(P.family, E[n].w, E[n].c);
+  if (T.psi.length !== Cend.psi.length || T.u.length !== Cend.u.length) return n;
+  const dpsi = T.psi.map((x, i) => x - Cend.psi[i]), du = T.u.map((x, i) => x - Cend.u[i]);
+  if (dpsi.every((x) => Math.abs(x) < 1e-9) && du.every((x) => Math.abs(x) < 1e-9)) return n;
+  let m0 = n; while (m0 > jStart && s(m0) > P.length - MORPH_M + 1e-9) m0--;   // s(m0) <= length - MORPH_M (or the piece is too short: the zone is what is left after the head morph)
+  m0 = Math.max(m0, jStart); if (m0 >= n) return n;
+  const a0 = s(m0), Lz = P.length - a0, mu = (x) => smooth((x - a0) / Lz);
+  const at = (j) => { const cw = cupProfile(P.family, E[j].w, E[j].c), m = mu(s(j)); return { font: cw.font, material: cw.material, u: cw.u.map((x, i) => x + m * du[i]), psi: cw.psi.map((x, i) => x + m * dpsi[i]) }; };
+  for (let j = m0; j < n; j++) { const B = at(j + 1); out[j] = { profile: B, blend: { from: at(j), s0: 0, length: s(j + 1) - s(j) }, end: B }; }
+  return m0;
+}
+
+/**
+ * The LOCAL cup segments (cupRuns: false): each segment's profile is the cup profile at its END and its blend runs from the profile at its START,
+ * so segment.profile is the local cross-section (within one segment's change of c of the road it draws) and the rows still follow
+ * c(s) at every segment end. Where neither c nor the width moves by more than CFLAT_DEG = 0.02° (the fit's ringing decays for
+ * about a hundred metres after a transition, so c is never exactly constant), the segments share ONE profile (the first one's, the ANCHOR) with no blend:
+ * identical profiles have identical rows, so no seam zip is emitted along a held cup. The price is at most CFLAT_DEG of wall.
+ */
+const CFLAT_DEG = 0.02;
+function cupSegmentsLocal(P, n, at) {
+  const s = (j) => (P.length * j) / n, out = new Array(n), wTol = (w) => 1e-9 * Math.max(1, w);
+  const near = (x, y) => Math.abs(x.c - y.c) <= CFLAT_DEG && Math.abs(x.w - y.w) <= wTol(y.w);
+  let a = at(0), anchor = null, anchorProfile = null;
+  for (let j = 0; j < n; j++) {
+    const b = at(s(j + 1));
+    if (anchor && near(a, anchor) && near(b, anchor)) out[j] = { profile: anchorProfile, blend: null, end: anchorProfile };
+    else if (near(a, b)) { anchor = a; anchorProfile = cupProfile(P.family, a.w, a.c); out[j] = { profile: anchorProfile, blend: null, end: anchorProfile }; }
+    else { anchor = null; const B = cupProfile(P.family, b.w, b.c); out[j] = { profile: B, blend: { from: cupProfile(P.family, a.w, a.c), s0: 0, length: s(j + 1) - s(j) }, end: B }; }
+    a = b;
+  }
+  return out;
+}
+
+function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns = true } = {}) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
   if (!(segM > 0)) throw new D.CoreError('BAD_STEP', `segM must be positive, got ${segM}`);
-  const segs = []; let pitch = doc.start.pitch, roll = 0, lastProfile = null;
+  const segs = []; let pitch = doc.start.pitch, roll = 0, lastProfile = null, lastLegacy = false;
+  // A CLOSED lap whose two ends are not the same kind (D190 R3): the cup end fades into the legacy end's rendered profile (tailZone; or, when the
+  // cup is the START, the first metres fade out of the legacy END's last profile: morphZone), so the zip at s = 0 has no step
+  const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), firstRoad = roadIdx[0], lastRoad = roadIdx[roadIdx.length - 1];
+  const seam = doc.closed && roadIdx.length > 1 && !!doc.pieces[firstRoad].cup !== !!doc.pieces[lastRoad].cup && cupRuns;
+  const chan = (P, s) => Object.fromEntries(D.CHANNELS.map((ch) => [ch, D.channelAt(P, ch, s).v]));
+  const nOf = (P) => Math.max(1, Math.ceil(P.length / segM - 1e-9));
+  const legacyFirst = (P) => { const m = chan(P, P.length / nOf(P) / 2); return profileAt(P.family, m.w, m.r); };   // the profile of the piece's first segment
+  const legacyLast = (P) => { const n = nOf(P), m = chan(P, (P.length * (2 * n - 1)) / (2 * n)); return profileAt(P.family, m.w, m.r); };   // and of its last
   doc.pieces.forEach((P, pi) => {
     if (P.type === 'flight') {
       const J = solveJump(pitch, P.gap, P.drop, P.land, P.id);
@@ -56,20 +208,28 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh } = {}) {
     const n = Math.max(1, Math.ceil(P.length / segM - 1e-9)), at = (s) => Object.fromEntries(D.CHANNELS.map((ch) => [ch, D.channelAt(P, ch, s).v]));
     let a = at(0);
     if (pi === 0) roll = a.phi;
+    let join = P.cup && lastLegacy && lastProfile ? { profile: lastProfile } : null;   // a cup handed over from a legacy cross-section
+    if (seam && pi === firstRoad && P.cup) join = { profile: legacyLast(doc.pieces[lastRoad]) };   // the lap's start is a cup that follows the legacy END round the seam
+    // a cup piece followed by a LEGACY road piece (a file can hold one; Extend never makes one) fades into that piece's first profile, and so does the
+    // lap's last cup piece into the legacy START: the last metres of the cup are the reverse morph (tailZone)
+    const nextP = doc.pieces[pi + 1];
+    const tail = !P.cup || !cupRuns ? null : nextP && nextP.type === 'road' && !nextP.cup ? legacyFirst(nextP) : seam && pi === lastRoad ? legacyFirst(doc.pieces[firstRoad]) : null;
+    const cup = P.cup ? (cupRuns ? cupSegmentsRuns(P, n, at, join, tail) : cupSegmentsLocal(P, n, at)) : null;
+    lastLegacy = !P.cup;
     for (let j = 0; j < n; j++) {
       const s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n, b = at(s1), mid = at((s0 + s1) / 2);
-      const profile = profileAt(P.family, mid.w, mid.r);
-      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: null, speed: null });
+      const profile = cup ? cup[j].profile : profileAt(P.family, mid.w, mid.r);   // a legacy piece: today's profileAt, unchanged
+      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup ? cup[j].blend : null, speed: null, ...(cup ? { cup: true } : {}) });
       pitch += ((a.kv + b.kv) / 2) * (s1 - s0);   // the geometry's pitch: kp linear over the segment (src/geom/path.js)
-      a = b; lastProfile = profile;
+      a = b; lastProfile = cup ? cup[j].end : profile;
     }
     roll = a.phi;
   });
   return segs;
 }
 
-function toPath(doc, { step = 0.5, segM = 2, designKmh } = {}) {
-  const segments = toSegments(doc, { segM, designKmh });
+function toPath(doc, { step = 0.5, segM = 2, designKmh, cupRuns } = {}) {
+  const segments = toSegments(doc, { segM, designKmh, cupRuns });
   const path = buildPath(segments, { step, closed: doc.closed, start: { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch } });
   return { segments, path: offsetPath(doc, segments, path) };
 }
@@ -120,4 +280,4 @@ function offsetPath(doc, segments, path) {
   return { ...path, samples, segEnd, head };
 }
 
-module.exports = { toSegments, toPath, profileAt, offsetPath };
+module.exports = { toSegments, toPath, profileAt, cupProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath };

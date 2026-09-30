@@ -16,12 +16,12 @@ does not edit it; it imports one of its functions, `solveJump`, for a jump.
 
 Every formula is on the skill's shelf, `.claude/skills/track-equations/references/`, cited at its use as `ref NN §k`.
 
-## The document (schema `t180b.core/2`; a `core/1` file is read and upgraded)
+## The document (schema `t180b.core/3`; a `core/1` or `core/2` file is read and upgraded)
 
 ```js
 {
-  schema: 't180b.core/2',
-  generator: 't180-track-builder/core 0.2.0',
+  schema: 't180b.core/3',
+  generator: 't180-track-builder/core 0.3.0',
   name: 'My track',
   closed: false,
   start: { pos: [x, y, z], heading: θ0, pitch: p0 },   // m, rad: where the first piece starts (heading about world up)
@@ -83,6 +83,57 @@ and `redo`, with snapshots of frozen documents, and a drag as one entry.
 At each station, the profile is the measured family floor (`src/geom/fonts.js` FLOORS: ψ at ¼, ½, ¾ and the edge of each
 half-width) for the road width w(s). Each quarter's rise is capped at r(s) · (w/8), which is the measured law with the family's
 fixed rate replaced by the channel r(s). There is no wall. The rule is written up on the shelf (ref 09 §3).
+
+## The cup: the cross-section's edge angle (schema core/3, ref 09 §9)
+
+The cup **c(s)** is a channel in DEGREES: the angle ψ the surface has turned by at both edges u = ±w/2, from 0 (a flat ribbon) up to **150**.
+About 15 is today's bowl, 31 today's half-pipe, 90 vertical walls, 150 a partial tube open at the top. It is independent of bank: the
+section is cupped first and then rolled (bank 30° with cup 60° makes the left wall stand exactly vertical). A cup moves neither the
+centreline, the bank nor the readout's turn and climb.
+
+- **A cup piece and a legacy piece.** A road piece is a **cup piece** (`P.cup === true`, and a `c` array in its text) only when a cup was set on it:
+  an Extend `c` target, `first: { c }` on an empty track, or being extended after a cup piece (the cup then continues like any channel).
+  Every other road piece, including everything read from a /1 or /2 file, is a **legacy piece**: it renders through the old
+  `profileAt(family, w, r)` unchanged (byte for byte: the nine /2 fixtures in `test/fixtures/`, digests in `manifest.json`), and its `c` is zeros
+  in memory and absent in the text. So a user who never types a cup sees nothing change. (The plan's "migrate every /2 piece to a c that
+  reproduces its profile" cannot: where the r cap binds the SHAPE differs, up to 4.458°; the D190 seal, V1.)
+- **The shape** is the family's measured floor scaled to the edge: ψ at the four quarters is c·Fᵢ/F_edge on both sides
+  (`cupProfile(family, w, c)`; ref 09 §9). The r rate cap does not apply to a cup piece.
+- **Range.** `0 ≤ c ≤ 150` for every control point (`CUP_MAX`), refused by name (`BAD_CUP`) in `checkDoc`, `parse`, Extend and a brush; by the convex hull
+  (ref 03 §1b) the curve stays inside too. 150 leaves 9.68° to the bowl's touch (159.681°). The Extend fit rings past a short
+  transition's target (174.65° for 150° over 10 m before the guard), so a cup piece's control points are clamped to [0, 150] after the
+  fit, and the readout reports the DOCUMENT's c. A clamp can leave the curve short of the target at the top: 144.499° for 150° over 20 m of a 60 m piece.
+- **Joints.** c is C1 between two cup pieces like every channel and is carried through a flight. Between a legacy and a cup piece the
+  RENDERED edge must be continuous to 0.05° (a legacy piece's cup, for this, is the edge it renders: `D.legacyEdgeDeg`, held), so a cup that
+  follows a legacy piece starts there. A lap closes `c` (value and slope) only when its first and last road pieces are both cup pieces;
+  a cup meeting a legacy piece at the seam is reported by `close` (`cupSeamStepDeg`), not solved.
+- **On the road (no stair-step).** The plan's one profile per 2 m stepped the wall tip 0.33 to 1.41 m (seal V4). By default a stretch where c changes
+  and the width does not shares ONE blend pair (`blend: { from, s0, length }`, the lowest and highest c), with `s0` and `length` chosen per segment so
+  the mesh's smoothstep weight lands on c(s) at both ends of every 2 m segment (a segment where c falls swaps the pair): the rows of neighbouring
+  segments are the same vertices, so **no seam zip is emitted inside the piece** (measured 0) and the edge is within 0.05° of c at every row
+  (exact where c is a smoothstep, which is what Extend's Bloss blend makes it). Where the width changes too, the pair is per segment (a chord). A
+  segment where c and the width stay within 0.02° of one anchor is one profile with no blend.
+- **`segment.profile` is the blend's TARGET.** For a cup segment that is the run's widest cross-section, not the local one, so every reader that
+  is not the mesh evaluates a CUP segment's blend (`cup: true` on the segment) at its station with `src/geom/profile.js readAt(seg, d)` (a word document's font-transition blends are read as before) (as `markers/place.js` and `geom/pitlane.js`
+  already do): the marker layout's floor, validation's loads and steepness, the water's surface, the camera's span, and the export's sections. A
+  reader that takes `segment.profile` directly sees a cup's widest shape for the whole run (measured: the grid's straight refused as 4.45 m wide).
+- **The legacy → cup joint has no step.** Where the r cap binds the legacy piece's last profile is the capped shape and the cup shape at the same
+  edge differs inside the road (36 mm on a 12 m bowl, 148 mm on a 24 m half-pipe). The first 10 m of the cup (`MORPH_M`) fade that difference out by
+  smoothstep (the shape only: the legacy and cup widths are equal at the same w, measured): the first row IS the legacy piece's last row, the edge stays c, and past 10 m the road is the pure cup shape.
+- **The lap seam between a cup and a legacy end (D190 round 3).** Closing a lap whose first and last road pieces are not the same kind: `close()` HOLDS
+  the cup's value at the seam to the legacy piece's rendered edge (an extra residual row, `cup edge at the seam`), and the adapter fades the cup shape into
+  the legacy start's first profile over the cup's last `MORPH_M` metres (`tailZone`; when the cup is the START, `morphZone` fades out of the legacy END's last
+  profile), so the zip at s = 0 meets within 1 mm (B measured 23.2 mm bowl 16 m, 148.2 mm half-pipe 24 m, 9,488 mm when the cup was not returned). A cup
+  piece that is followed by a legacy piece anywhere in the track (a loaded file can hold one) fades the same way. If the closing piece is too short to fade
+  (an 8 m cup piece straight after a legacy piece leaves the seam 148 mm on a 24 m half-pipe), `close()` refuses by name (`CUP_SEAM`), and never reports
+  converged over a step. Validation reds any cup joint or lap seam whose curve steps more than 1 mm (`joint-step`, `geom/profile.js
+  jointSteps`), so the panel cannot read "lap proved" over one. The standard for a ramp is "rows land on c(s) (0.05°) and never change faster than c"; the
+  seal's literal "≤ 1° between rows" is retired (it is c's own change per 0.5 m sample).
+- **`toSegments(doc, { cupRuns: false })`** is the other scheme, kept for comparison: each segment's profile is the local end profile with a blend
+  from the start profile. Readers need no change, but a seam zip is emitted wherever c changes (19 of 50 on a 40 m ramp) and the edge is up to
+  0.95° off c inside a segment (the mesh's smoothstep runs 1.5x c's rate mid-segment, and a 150° ramp shows a 102 mm ripple in the tip).
+- **The brush.** `brush({ mode: 'value', channel: 'c' })` works on cup pieces only; a window that reaches a legacy piece is refused (`NOT_CUP`). A cup piece's segments are re-expressed when its c range changes only under `cupRuns`; by default a brush re-expresses the segments under its window.
+- **The API for the UI:** the channel name is `c` (Extend `targets.c`, `first.c`), and the readout's `cupFromDeg` / `cupToDeg`.
 
 ## Knot insertion: finer knots under a narrow brush (`document.js`)
 
@@ -155,6 +206,7 @@ candidateReadout(doc, opts)   // the piece extend(doc, opts) would place (the SA
 //     turnDeg,                     // ∫κh ds, degrees, + = left
 //     climbDeg,                    // ∫κv ds, degrees, + = nosing up (a flight: landing pitch − take-off pitch)
 //     bankFromDeg, bankToDeg,      // φ at the two ends, degrees, + = left side up
+//     cupFromDeg, cupToDeg,        // the cup c at the two ends, degrees (a legacy piece: the edge its road renders; a flight: carried)
 //     pitchFromDeg, pitchToDeg,    // the pitch entering and leaving the piece, degrees
 //     offsets }                    // null, or the EFFECTIVE numbers with h/l applied (below)
 ```

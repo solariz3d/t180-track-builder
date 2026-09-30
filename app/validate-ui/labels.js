@@ -28,6 +28,7 @@ function reasonText(reason, car = MACH6) {
     'head-in-the-air': 'the open end is in the air: place the landing',
     'landing-misses-zone': 'a jump landing misses its ramp',
     'jump-gap-not-forward': 'a jump lands behind its own take-off',
+    'joint-step': 'the road steps between two pieces here (the cup and the piece next to it do not meet)',
   };
   return T[reason] || 'a problem with no description yet';
 }

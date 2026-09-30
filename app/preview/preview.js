@@ -34,7 +34,7 @@ const { createRenderer } = require('./renderer.js');
 const { gridLines, headMarker } = require('./look.js');
 const { resolveLook } = require('./aclook.js');
 const { previewTextures } = require('../../src/texture/set.js');
-const { normalize, spanOf } = require('../../src/geom/profile.js');
+const { normalize, spanOf, readAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
 
 const FLY = { w: [1, 0, 0], s: [-1, 0, 0], d: [0, 1, 0], a: [0, -1, 0], e: [0, 0, 1], q: [0, 0, -1] };
@@ -227,7 +227,7 @@ function pickAt(path, pose, x, y, w, h, maxPx = 40) {
 
 /** The road's span at the head (m): the last road segment's cross-section (profile.js spanOf), for the build view's framing. */
 function widthAtHead(segments) {
-  for (let i = (segments || []).length - 1; i >= 0; i--) if (segments[i] && segments[i].profile) return spanOf(normalize(segments[i].profile));
+  for (let i = (segments || []).length - 1; i >= 0; i--) if (segments[i] && segments[i].profile) return spanOf(readAt(segments[i], segments[i].length));   // at the HEAD: the end of the last segment (a cup's segments carry a blend)
   return null;
 }
 

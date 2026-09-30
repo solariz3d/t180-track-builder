@@ -1,7 +1,7 @@
 // panel.js: the EQUATION CORE's controls (D186, pane C), in the left column where the piece builder's palette is. DOM only; every
 // action is the core shell's (app/core/coreshell.js), every number it shows is the shell's state.
 //
-//   EXTEND at the build head: keep going (no handle), or turn / climb / bank / width targets over a length. Hovering the button
+//   EXTEND at the build head: keep going (no handle), or turn / climb / bank / cup / width targets over a length. Hovering the button
 //          shows the ghost (the preview's 't180-ghost' candidate), so what a click adds is seen before it is added.
 //   BRUSH on the preview: arm it, then drag on the track. The pick is the preview's ('t180-pick'); the drag's vertical distance is
 //          the change at the brush's centre; one drag is one undo step. The local height/lateral brush (E) is the default when
@@ -18,8 +18,9 @@
 const LB = require('./labels.js');
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
-const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, height: 0.03, lateral: 0.03 });
-const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', height: 'height', lateral: 'sideways' });
+// (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
+const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, height: 0.03, lateral: 0.03 });
+const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', height: 'height', lateral: 'sideways' });
 const COLOURS = Object.freeze({ water: [0.35, 0.72, 1.0], red: [1.0, 0.25, 0.25] });
 const DEG = Math.PI / 180;
 
@@ -36,15 +37,20 @@ function overlayOf(water) {
 }
 
 /** The extend options the controls describe (pure: tested headless). Empty fields continue the channel. */
-function extendOptions({ length, turn, climb, bank, width }) {
+function extendOptions({ length, turn, climb, bank, width, cup }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
-  const t = num(turn), c = num(climb), b = num(bank), w = num(width);
+  const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup);
   if (t !== null) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
   if (c !== null) targets.kv = c * DEG / 100;          // degrees of pitch per 100 m
   if (b !== null) targets.phi = b * DEG;                // degrees of bank, + = left side up
   if (w !== null) targets.w = w;                        // m
+  // the CUP (D190): the channel c holds DEGREES, so the typed value goes in as it is. It is NOT clamped here: the core's guard
+  // binds the DOCUMENT to [0, 150] and refuses by name (E's seal row 2 and V5), and a clamp here would hide that guard
+  if (k !== null) targets.c = k;
   return { length: Number(length), targets };
 }
+/** A cup angle as the readout shows it: the bank cell's rounding (one decimal, half away from zero), no sign on a depth. */
+const fmtCup = (x) => LB.fmtDeg(x).replace(/^\+/, '');
 
 function mount(root, shell) {
   const doc = root.ownerDocument, win = doc.defaultView;
@@ -57,15 +63,24 @@ function mount(root, shell) {
   const len = num(100, 10, 'metres added'), turn = num('', 1, 'degrees of heading per 100 m, + = left; empty keeps turning as now'),
     climb = num('', 1, 'degrees of pitch per 100 m, + = up; empty keeps climbing as now'), bank = num('', 1, 'degrees of bank, + = left side up; empty keeps it'),
     width = num('', 1, 'road width in m; empty keeps it');
-  const opts = () => extendOptions({ length: len.value, turn: turn.value, climb: climb.value, bank: bank.value, width: width.value });
+  // the CUP (D190): how deep the road's cross-section is, as its edge angle — 0 flat, ~15 today's bowl, ~31 today's half-pipe,
+  // 90 vertical walls, 150 a partial tube. Independent of bank: bank still rolls the whole section
+  const cup = el('input', { type: 'number', value: '', step: '1', min: '0', max: '150', title: 'cup: the edge angle of the cross-section in degrees, 0 (flat) to 150; 90 = vertical walls. Bank still rolls the whole section. Empty keeps it' });
+  const opts = () => extendOptions({ length: len.value, turn: turn.value, climb: climb.value, bank: bank.value, width: width.value, cup: cup.value });
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
-  const RO = ['length', 'turn', 'climb', 'bank'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
+  // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
+  // the typed target, which the core's fit may ring past and its guard may refuse (E's seal row 7)
+  const RO = ['length', 'turn', 'climb', 'bank', 'cup'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
+  const roName = (k) => (k === 'length' ? 'length' : k === 'cup' ? 'cup from → to' : `${k} change`);
   const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:#eef1f6' },
-    ...RO.flatMap((k) => [el('span', { text: k === 'length' ? 'length' : `${k} change`, style: 'color:#aab2c0;font-weight:600' }), roCells[k]]));
+    ...RO.flatMap((k) => [el('span', { text: roName(k), style: 'color:#aab2c0;font-weight:600' }), roCells[k]]));
   const readout = () => {
     let f = null, why = '';
-    try { if (shell.getState().history.present.closed) why = 'the loop is closed'; else f = LB.formatReadout(shell.candidateReadout(opts())); } catch (e) { why = e.message; }
+    try {
+      if (shell.getState().history.present.closed) why = 'the loop is closed';
+      else { const r = shell.candidateReadout(opts()); f = { ...LB.formatReadout(r), cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}` }; }
+    } catch (e) { why = e.message; }
     for (const k of RO) roCells[k].textContent = f ? f[k] : '—';
     roBox.title = why;
   };
@@ -77,7 +92,7 @@ function mount(root, shell) {
   };
   // the ghost follows the fields as they change, not only a fresh hover (a pointer resting on the button fires no new mouseenter,
   // so the ghost showed the piece before the last edit, or none: found in the window proof, D186)
-  for (const f of [len, turn, climb, bank, width]) f.oninput = f.onchange = ghost;
+  for (const f of [len, turn, climb, bank, width, cup]) f.oninput = f.onchange = ghost;
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; empty fields keep going the way the track goes',
     onclick: () => { send('t180-ghost-clear'); shell.extend(opts()); }, onmouseenter: ghost, onmouseleave: () => send('t180-ghost-clear') });
 
@@ -86,7 +101,7 @@ function mount(root, shell) {
   const armed = el('input', { type: 'checkbox', 'aria-label': 'brush on' });
   // SHARP (E's opt-in, the chair's ruling 2): its spill is declared right here, in the words of E's own SHARP_NOTE
   const sharp = el('input', { type: 'checkbox', 'aria-label': 'sharp brush', title: 'Sharp brush: acts at exactly the size you set by adding finer control points first. It can nudge the track just outside the brush by up to 0.1 mm. Leave it off for an exactly local edit.' });
-  const channelsFor = (m) => (m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r']);
+  const channelsFor = (m) => (m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r', 'c']);
   const fillChannels = () => { channel.replaceChildren(...channelsFor(mode.value).map((c) => new win.Option(CHANNEL_NAMES[c], c))); };
   mode.replaceChildren(...shell.brushModes().map((m) => new win.Option(m === 'local' ? 'height / sideways (local)' : 'rate (one channel)', m)));
   mode.onchange = fillChannels; fillChannels();
@@ -126,7 +141,7 @@ function mount(root, shell) {
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', onclick: () => shell.undo() }), el('button', { text: 'Redo', onclick: () => shell.redo() })),
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), field('turn °/100m', turn), field('climb °/100m', climb), field('bank °', bank), field('width m', width)),
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), field('turn °/100m', turn), field('climb °/100m', climb), field('bank °', bank), field('cup °', cup), field('width m', width)),
     roBox,
     el('div', { class: 'actions' }, extendBtn),
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),

@@ -19,6 +19,9 @@
 const { basis, denseSolve } = require('../../tools/piecewise.cjs');
 const D = require('./document.js');
 const { toPath, toSegments } = require('./adapter.js');
+const { jointSteps } = require('../geom/profile.js');
+
+const SEAM_MAX_M = 1e-3;   // D190 round 3: a lap seam steps at most 1 mm on the curve
 
 const TAU = 2 * Math.PI;
 const q = (x, dec) => { const v = Number(x.toFixed(dec)); return Object.is(v, -0) ? 0 : v; };   // document.js's quantisation
@@ -43,7 +46,7 @@ function parameters(doc, edited) {
       if (P.type !== 'road') return;
       const n = P.channels[ch].length, e = new Array(n);
       for (let i = 0; i < n; i++) {
-        if (prev >= 0 && i < 2) {
+        if (prev >= 0 && i < 2 && (ch !== 'c' || (doc.pieces[prev].cup && P.cup))) {   // the cup joins only cup to cup (a legacy piece's c is a placeholder)
           const A = expand[ch][prev], na = A.length, rho = hStart(P) / hEnd(doc.pieces[prev]);
           e[i] = i === 0 ? A[na - 1] : [...A[na - 1].map(([c, k]) => [c, k * (1 + rho)]), ...A[na - 2].map(([c, k]) => [c, -k * rho])];
           if (edited.has(p)) for (const [c] of e[i]) cols[c].edited = true;
@@ -116,6 +119,17 @@ function netRows(doc) {
   return out;
 }
 
+/**
+ * The seam between a cup end and a legacy end (D190 round 3): the cup's value there is HELD at the edge the legacy piece renders (its rendered
+ * edge is the legacy piece's c, `D.pieceEnd`, or `D.legacyEdgeDeg` at its start). Null when both ends are the same kind (cup to cup closes c as a channel).
+ * `value` is the cup's c minus that edge; `piece` and `index` say which control point moves it.
+ */
+function heldCup(F, L) {
+  if (!!F.cup === !!L.cup) return null;
+  if (L.cup) return { value: L.channels.c.at(-1) - D.legacyEdgeDeg(F.family, F.channels.w[0], F.channels.r[0]), end: 'last' };
+  return { value: F.channels.c[0] - D.pieceEnd(L).c.v, end: 'first' };
+}
+
 /** The residual, measured on the adapter's path and the document itself (ref 10 §3). */
 function residual(doc) {
   if (!doc.pieces.some((P) => P.type === 'road')) throw new D.CoreError('EMPTY', 'close: no road to close');
@@ -126,8 +140,12 @@ function residual(doc) {
   const turns = Math.round(net.kh / TAU), bank = L.channels.phi.at(-1) - F.channels.phi[0], m = Math.round(bank / TAU);
   const r = [z.pos[0] - a.pos[0], z.pos[1] - a.pos[1], z.pos[2] - a.pos[2], net.kh - TAU * turns, net.kv, bank - TAU * m];
   const names = ['x', 'y', 'z', 'net heading − 2πk', 'net pitch', 'bank at the seam'];
-  for (const ch of ['kh', 'kv', 'w', 'r']) { r.push(L.channels[ch].at(-1) - F.channels[ch][0]); names.push(`${ch} value at the seam`); }
+  const cupBoth = !!(F.cup && L.cup);   // the cup continues round the seam only when both ends are cup pieces (a mixed seam is reported, not solved)
+  for (const ch of cupBoth ? ['kh', 'kv', 'w', 'r', 'c'] : ['kh', 'kv', 'w', 'r']) { r.push(L.channels[ch].at(-1) - F.channels[ch][0]); names.push(`${ch} value at the seam`); }
+  const held = heldCup(F, L);   // a cup meeting a legacy piece round the seam is held at the legacy piece's RENDERED edge (D190 R3)
+  if (held) { r.push(held.value); names.push('cup edge at the seam (held at the legacy end rendered edge)'); }
   for (const ch of D.CHANNELS) {
+    if (ch === 'c' && !cupBoth) continue;
     const cl = L.channels[ch], n = cl.length, cf = F.channels[ch];
     r.push((3 * (cl[n - 1] - cl[n - 2])) / hEnd(L) - (3 * (cf[1] - cf[0])) / hStart(F)); names.push(`${ch} slope at the seam`);
   }
@@ -141,9 +159,11 @@ function residual(doc) {
  * report "NOT CLOSED …"), and still returns its best document with closed false, so nothing silently claims a closure.
  */
 function close(doc, opts = {}) {
-  D.checkDoc(doc);
+  D.checkDoc(doc); doc = D.fillCup(doc);
   if (doc.pieces.some((P) => P.type === 'flight')) throw new D.CoreError('NOT_YET', 'close: a track with a jump is not closed by this version (the flight fixes a displacement the close would have to carry; not built)');
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0);
+  const cupBoth = !!(doc.pieces[roadIdx[0]].cup && doc.pieces[roadIdx[roadIdx.length - 1]].cup);
+  const held = heldCup(doc.pieces[roadIdx[0]], doc.pieces[roadIdx[roadIdx.length - 1]]);
   const edited = new Set(opts.edited || [roadIdx[roadIdx.length - 1]]), wEdit = opts.wEdit || 1e6, tolM = opts.tolM || 1e-3, maxIter = opts.maxIter || 30;
   const { cols, expand } = parameters(doc, edited), N = cols.length, winv = cols.map((c) => (c.edited ? 1 / wEdit : 1));
   let x = Float64Array.from(cols, (c) => doc.pieces[c.p].channels[c.ch][c.i]);
@@ -164,8 +184,9 @@ function close(doc, opts = {}) {
     for (let k = 0; k < 3; k++) { const row = new Float64Array(N); toCols('kh', Jp.kh, row, k); toCols('kv', Jp.kv, row, k); J.push(row); }
     for (const ch of ['kh', 'kv']) { const row = new Float64Array(N); toCols(ch, nr[ch], row); J.push(row); }
     J.push(valueRow('phi', 'value'));
-    for (const ch of ['kh', 'kv', 'w', 'r']) J.push(valueRow(ch, 'value'));
-    for (const ch of D.CHANNELS) J.push(valueRow(ch, 'slope'));
+    for (const ch of cupBoth ? ['kh', 'kv', 'w', 'r', 'c'] : ['kh', 'kv', 'w', 'r']) J.push(valueRow(ch, 'value'));
+    if (held) { const row = new Float64Array(N), Pi = held.end === 'last' ? roadIdx[roadIdx.length - 1] : roadIdx[0], ii = held.end === 'last' ? doc.pieces[Pi].channels.c.length - 1 : 0; for (const [c, coef] of expand.c[Pi][ii]) row[c] += coef; J.push(row); }
+    for (const ch of D.CHANNELS) { if (ch === 'c' && !cupBoth) continue; J.push(valueRow(ch, 'slope')); }
     // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹ r (ref 04 §3)
     const M = J.map((a) => J.map((b) => { let s = 0; for (let k = 0; k < N; k++) s += a[k] * winv[k] * b[k]; return s; }));
     const y = denseSolve(M, m.r.map((v) => -v)), delta = new Float64Array(N);
@@ -177,9 +198,16 @@ function close(doc, opts = {}) {
   // what is STORED is quantised (README): measure the quantised document, and report that
   const stored = apply(doc, expand, x, true), ms = residual(stored), converged = done(m) && ms.gapM < 0.01;
   const out = freeze(D.checkDoc({ ...stored, closed: converged }));
-  return { doc: out, converged, iterations: it, turns: ms.turns, gapM: ms.gapM, tangentRad: ms.tangentRad,
+  if (held && converged) {   // never converged over a step: the seam's curve, measured on the segments the lap will be drawn from
+    const lap = jointSteps(toSegments({ ...out, closed: true }), true).find((x) => x.lap);
+    if (lap && lap.m > SEAM_MAX_M) throw new D.CoreError('CUP_SEAM', `close: the lap seam would step ${(lap.m * 1000).toFixed(2)} mm (more than ${SEAM_MAX_M * 1000} mm) between the cup and the legacy piece at the start: the closing piece is too short to fade one into the other; lengthen it`);
+  }
+  // a seam between a cup piece and a legacy one is not solved (the cup would have to move to a rendered edge): its step is reported
+  const endE = D.pieceEnd(stored.pieces[roadIdx[roadIdx.length - 1]]).c.v, startP = stored.pieces[roadIdx[0]];
+  const cupSeamStepDeg = cupBoth || !(startP.cup || stored.pieces[roadIdx[roadIdx.length - 1]].cup) ? 0 : Math.abs(endE - (startP.cup ? startP.channels.c[0] : D.legacyEdgeDeg(startP.family, startP.channels.w[0], startP.channels.r[0])));
+  return { doc: out, converged, iterations: it, turns: ms.turns, gapM: ms.gapM, tangentRad: ms.tangentRad, cupSeamStepDeg,
     residual: Object.fromEntries(ms.names.map((n, i) => [n, ms.r[i]])),
-    report: converged ? `closed in ${it} step(s): ${(ms.gapM * 1000).toFixed(3)} mm, tangent ${ms.tangentRad.toExponential(1)} rad`
+    report: converged ? `closed in ${it} step(s): ${(ms.gapM * 1000).toFixed(3)} mm, tangent ${ms.tangentRad.toExponential(1)} rad${cupSeamStepDeg > D.CUP_JOINT_DEG ? `; the cup steps ${cupSeamStepDeg.toFixed(2)}° at the seam (a cup meets a legacy piece there)` : ''}`
       : `NOT CLOSED after ${it} step(s): ${ms.gapM.toFixed(4)} m, tangent ${ms.tangentRad.toExponential(1)} rad` };
 }
 
