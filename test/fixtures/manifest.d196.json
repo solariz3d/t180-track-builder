@@ -1,0 +1,102 @@
+{
+ "amends": "the D190 seal, row 5a (\"every /2 fixture renders identically as /3\")",
+ "made_at": "D196, a-d195-wt on commit b7c7676",
+ "reason": "D196 draws a legacy segment whose width or r changes as a CHORD (the profile at its end, blended from its start) instead of one profile at its middle width, so the staircase of width steps between segments and the step at a joint are gone. The seal's \"legacy renders as before\" guarded against UNINTENDED change; this change is intended and removes a visible defect. Only the three fixtures below change; the path (the geometry) is byte-identical in all nine, and F1 F2 F3 F5 F7 F9 are byte-identical to c964c2d in every digest.",
+ "unchanged": [
+  "F1-bowl-default-lap-closed",
+  "F2-halfpipe-default-lap-closed",
+  "F3-bowl-narrow-12m-cap-binds",
+  "F5-flat-20m-bank-30",
+  "F7-hill-then-jump",
+  "F9-empty"
+ ],
+ "fixtures": {
+  "F4-halfpipe-width-31.5-to-12-along-s": {
+   "before_c964c2d": {
+    "segs": "5642afa4319495f699031c795dd0c04a2acd298936caa84eecb21755c4fece5c",
+    "path": "643f4b3f2e713b0eb7207f32558f676da1b29b8cec079bc694900a5a026bb318",
+    "mesh": "5fea7a30e4026f1bdf841ffc5c8ccafab67b5eb7f6fb47c4495e921ea3415064",
+    "meshParts": 1250
+   },
+   "after_d196": {
+    "segs": "1c2d9039647ae34bf2da7e415d1f5c2b5f68b060447b613796169f45996be77d",
+    "path": "643f4b3f2e713b0eb7207f32558f676da1b29b8cec079bc694900a5a026bb318",
+    "mesh": "31ba12435d95ca332386711ac535472c7798150e02bf0bb03f772c4481f2fb53",
+    "meshParts": 1245
+   },
+   "measure": {
+    "before": {
+     "widthStepM": 0.2925,
+     "rowGapInsidePiecesMm": 144.506,
+     "jointGapMm": 0.722,
+     "chordSegments": 0
+    },
+    "after": {
+     "widthStepM": 0,
+     "rowGapInsidePiecesMm": 0.526,
+     "jointGapMm": 0,
+     "chordSegments": 100
+    }
+   }
+  },
+  "F6-bowl-r-brushed": {
+   "before_c964c2d": {
+    "segs": "35e85953972f2d5b6954aae89ed5bc783935fb5ac423d1658b652560e275f056",
+    "path": "9326ec158697955fb3a6e00d4fab697164fee157fb1d879940d6af6421e88a27",
+    "mesh": "5d3e2e51d52ea99ef0f9b11b2cc72fb84aaa52dc93d91edd6d92c4abf9dcff90",
+    "meshParts": 1105
+   },
+   "after_d196": {
+    "segs": "b5dacdef6ceb60e2db420774965a844cbf14523a5b4c67883b938fbc8c6fb09d",
+    "path": "9326ec158697955fb3a6e00d4fab697164fee157fb1d879940d6af6421e88a27",
+    "mesh": "540dca559d435f0fad45beaab151441e8b974e3418650c9a8d2a2bab7cf37ea7",
+    "meshParts": 1110
+   },
+   "measure": {
+    "before": {
+     "widthStepM": 0,
+     "rowGapInsidePiecesMm": 191.838,
+     "jointGapMm": 71.81,
+     "chordSegments": 0
+    },
+    "after": {
+     "widthStepM": 0,
+     "rowGapInsidePiecesMm": 0.554,
+     "jointGapMm": 0.541,
+     "chordSegments": 21
+    }
+   }
+  },
+  "F8-mixed-families": {
+   "before_c964c2d": {
+    "segs": "f1cfb6970d512f4869bb9da9d539e4d233eea9640251386ae597f60fa1d4f8f7",
+    "path": "447202421a049a3f82f40bc90a081300436c5b605bbfef4aeb242be31628f4f7",
+    "mesh": "6dbabf747e7576dd4678af8547d036a79c1954a7a18e15c7c9b53e49d4965c89",
+    "meshParts": 1250
+   },
+   "after_d196": {
+    "segs": "c8ff96b70d4e9639e27a48b99611630ece3247092fb2177d4caa69cc0a8dfbc3",
+    "path": "447202421a049a3f82f40bc90a081300436c5b605bbfef4aeb242be31628f4f7",
+    "mesh": "ff3098c61c0fd7678892255b8153454ab594222e4a805f5092a11decf3958f03",
+    "meshParts": 1075
+   },
+   "measure": {
+    "before": {
+     "widthStepM": 0.8633,
+     "rowGapInsidePiecesMm": 431.698,
+     "jointGapMm": 239.126,
+     "sameFamilyJointGapMm": 0,
+     "chordSegments": 0
+    },
+    "after": {
+     "widthStepM": 0,
+     "rowGapInsidePiecesMm": 0.556,
+     "jointGapMm": 239.277,
+     "sameFamilyJointGapMm": 0,
+     "chordSegments": 100
+    },
+    "note": "the 239 mm joint is the bowl -> half-pipe FAMILY change, a different cross-section by design, not a width step; unchanged by D196"
+   }
+  }
+ }
+}

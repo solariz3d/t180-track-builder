@@ -250,7 +250,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
 function profilerOf(path, segments) {
   const Prof = require('../../src/geom/profile.js'), starts = []; let a = path.samples[0].s;
   for (const g of segments) { starts.push(a); a += g.length; }
-  return (m) => { const g = segments[m.seg]; return g.cup && g.blend ? Prof.atSegment(g, m.s - starts[m.seg]) : g.profile; };
+  return (m) => { const g = segments[m.seg]; return Prof.readsBlend(g) && g.blend ? Prof.atSegment(g, m.s - starts[m.seg]) : g.profile; };
 }
 
 /** The road pieces the user built exactly straight and level (κh, κv and φ all exactly 0): close.js is told to go round them. */
