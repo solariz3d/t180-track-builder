@@ -33,6 +33,9 @@ const W = require('../../src/core/water.js');
 // THE READOUT (L130, A's src/core/readout.js): a piece's length and the change it makes in turn, climb and bank, for the panel
 // (the ghost, candidateReadout) and the labels on the track (every placed piece, pieceReadout)
 const RD = require('../../src/core/readout.js');
+// THE HEAD'S STATE (D193): what the track is doing at its open end, for Extend's fields to SHOW instead of blanks. On an empty track it
+// is the state extend() starts the first piece from (src/core/extend.js: level, straight, the family's measured width and rate)
+const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored beside the piece builder's under this prefix
@@ -92,6 +95,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     candidate: (opts) => { const d = extend(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) }; },
     /** The ghost's readout: what extend(opts) would place, before it is placed (A: the same numbers as after). Throws on bad fields. */
     candidateReadout: (opts) => RD.candidateReadout(doc(), opts),
+    /**
+     * The head's END state in the core's units: kh, kv (rad/m), phi (rad), w (m), c (degrees; a legacy piece's is the edge it renders).
+     * An empty track gives the first piece's START (extend.js's own: bowl, level, straight, WIDTHS.bowl, the edge that renders). Read only.
+     */
+    headState() {
+      const e = D.endState(doc());
+      if (e) return { kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v };
+      const fam = 'bowl';   // extend.js: `family || (last ? last.family : 'bowl')`
+      return { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], c: D.legacyEdgeDeg(fam, WIDTHS[fam], RATES[fam]) };
+    },
     /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
     pieceReadouts() { const d = doc(); if (readsFor !== d) { reads = d.pieces.map((_, i) => RD.pieceReadout(d, i)); readsFor = d; } return reads; },
 

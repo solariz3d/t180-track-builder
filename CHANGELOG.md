@@ -57,6 +57,11 @@ through the same test first, and failed it badly.
 
 ### Changed
 
+- **Extend's fields show what the track is doing instead of being blank.** Turn, climb, bank, width and cup show the head's
+  values in their own units (°/100 m, °, m): on an empty track, the first piece's start (level, straight, 31 m wide, the bowl's
+  edge); after every Extend, Undo, Redo, brush or open, the head's end. A field left as shown keeps the track going exactly as a
+  blank field did (it continues the turn, bank or cup that is still changing, and an old track's cup stays as it was); a
+  changed value is a target, as before. Length keeps what you typed (100 m to start).
 - **The built-in words are measured from the T-180 library, not hand-set.** Before, they were set by hand, partly from
   the 500 m test loop of the first milestone: roads 8–20 m wide, flat straights and sweeps, no bank, walls 8 m high
   and a 12 m jump. Now each word's defaults come from the measured library (`src/doc/corpus.json`, 16 layouts). A
