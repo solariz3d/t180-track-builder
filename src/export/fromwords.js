@@ -67,6 +67,7 @@ const Prof = require('../geom/profile.js');
 const { validate } = require('../validate/index.js');
 const { validateScene } = require('./scene.js');
 const { writeKn5 } = require('./kn5write.js');
+const { flattenForAc, ensureDiffuse } = require('./acready.js');
 const { checkMarkers, walkScene, isDrivable } = require('./markers.js');
 const Markers = require('../markers/index.js');
 const trackfiles = require('./trackfiles.js');
@@ -206,15 +207,16 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);
   if (dupMarkers.length) throw new ExportError('MARKERS', `marker names appear twice: ${dupMarkers.join(', ')}`);
   const dup = [...names].filter(([, c]) => c > 1);
-  if (dup.length) warnings.push(`${dup.length} mesh-node names repeat (e.g. ${dup[0][0]} ×${dup[0][1]}); INTERFACES §2 DEFECT, C's mesh.js safeId`);
+  if (dup.length) warnings.push(`${dup.length} mesh-node names repeat in the builder's scene (e.g. ${dup[0][0]} ×${dup[0][1]}); the kn5 gets unique names (acready.js), INTERFACES §2, C's mesh.js safeId`);
   try { validateScene(scene); } catch (e) { throw new ExportError('BAD_SCENE', e.message); }
   // the race-direction heading test only where the grid's direction applies: the grid and the start gate (the hotlap and
   // sectors sit wherever the run-up and the words put them, and are checked along their own road by src/markers)
   const mc = checkMarkers(scene, { expectedPits: layout.pits.count, raceHeading: /^AC_START_|^AC_TIME_0_/ });
   if (!mc.ok) throw new ExportError('MARKERS', mc.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.problems.join('; ')}`).join(' | '), { markerChecks: mc });
 
-  // the kn5, read back by our own reader (ARCHITECTURE §6 self-test) before any folder is touched
-  const kn5 = Buffer.from(writeKn5(scene));
+  // the kn5, read back by our own reader (ARCHITECTURE §6 self-test) before any folder is touched. Flattened and given
+  // diffuse textures first, as AC needs (src/export/acready.js: without these the car fell through and the road was black)
+  const kn5 = Buffer.from(writeKn5(ensureDiffuse(flattenForAc(scene))));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-')), tf = path.join(tmp, 'readback.kn5');
   let back;
   try { fs.writeFileSync(tf, kn5); back = readKn5(tf); } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

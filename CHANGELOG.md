@@ -103,6 +103,20 @@ through the same test first, and failed it badly.
 
 ### Fixed
 
+- **Exported tracks now work in Assetto Corsa: the car stays on the road, and the road is lit.** Found in the first drive
+  of an exported track in AC with CSP (2026-10-02, a 6 km oval). Two causes, both in the kn5 the export writes:
+  - The car fell through the road. Every road cell sat under its own transformed node and reused its piece's mesh name
+    (3,001 of 3,003 road meshes transformed; 9 distinct names for 3,003 meshes). AC drew that, but its physics did not
+    collide with it. The export now writes every mesh in world space under identity nodes, with a unique name
+    (`src/export/acready.js`). A copy with only that change drove at over 900 km/h. The preview keeps its per-cell
+    transforms, so sculpting is as fast as before. Not yet split: whether AC needs the flattening, the unique names, or
+    both.
+  - The road rendered black under any light. Its `ksPerPixel` material had no `txDiffuse` texture, and that shader takes
+    its colour from one. Every material without a diffuse now gets a small solid one (grey for the road, near-white for
+    the paint), and the preview draws the same textures, so the preview and the kn5 still list the same materials.
+  - To adapt: re-export a track to get the fix. A track exported before this still falls through.
+  - Known, not changed here: the sealed fixture digests (D190 row 5) no longer match for the two closed-loop fixtures,
+    because their kn5 bytes changed on purpose. They need re-sealing.
 - The first piece of a track is now what you typed along its whole length. Before, a width, bank, turn, climb or cup typed for the
   first piece started at the default and grew to your value by its far end, so every new track began with a bottleneck (31 m
   widening to what you asked). The fields you leave as shown keep their default start; pieces after the first still ease from
