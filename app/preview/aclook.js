@@ -85,6 +85,8 @@ function shade(u, texRgb, n, toLight = LIGHT.toSun, toEye = [0, 1, 0]) {
  * `drawn` is [{ key, material }]. Returns { byMesh: { key: materialName }, materials: [material] (unique, first seen
  * order), textures: [name] (unique, sorted) }.
  */
+const { ensureDiffuse } = require('../../src/export/acready.js');
+const { ddsLevel } = require('../../src/texture/dds.js');
 function lookList(drawn) {
   const byMesh = {}, mats = new Map();
   for (const d of drawn) { byMesh[d.key] = d.material.name; if (!mats.has(d.material.name)) mats.set(d.material.name, d.material); }
@@ -102,8 +104,12 @@ function lookList(drawn) {
  * t180b_floor, which the export does not write. NOTE (D177): src/export/fromwords.js does not apply the set yet, so for
  * a TEXTURED floor the preview is ahead of the kn5 until it does (routed to A). Returns { materialOf(batch), textures: Map(file -> { width, height, rgba }) }.
  */
-function resolveLook(scene, set = null, images = []) {
-  if (!scene || !Array.isArray(scene.materials)) throw new Error('aclook: resolveLook needs a scene with materials');
+function resolveLook(scene0, set = null, images0 = []) {
+  if (!scene0 || !Array.isArray(scene0.materials)) throw new Error('aclook: resolveLook needs a scene with materials');
+  // the export gives every material without a diffuse a solid one (src/export/acready.js, AC draws ksPerPixel black
+  // without it); the preview draws the same materials and textures, read back from the same DDS bytes
+  const ready = ensureDiffuse({ textures: [], materials: scene0.materials }), scene = { ...scene0, materials: ready.materials };
+  const images = [...images0, ...ready.textures.map((t) => ({ file: t.name, ...ddsLevel(t.data, 0) }))];
   const byName = new Map(set ? set.materials.map((x) => [x.material.name, x.material]) : []);
   const materialOf = (b) => {
     const slots = set && b.segId != null ? set.bySegment(b.segId) : null;

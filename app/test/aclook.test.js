@@ -25,6 +25,7 @@ const { ddsLevel } = require(path.join(SRC, 'texture/dds.js'));
 const TM = require(path.join(SRC, 'texmaker/text.js'));
 const { PRESETS } = require(path.join(SRC, 'texmaker/presets.js'));
 const { readKn5 } = require('../../tools/kn5.cjs');
+const { ensureDiffuse } = require(path.join(SRC, 'export/acready.js'));
 
 const mat = (shader, props, samplers = [], extra = {}) => ({ name: 'm', shader, alphaBlend: 0, alphaTested: false, depthMode: 0,
   props: Object.entries(props).map(([name, value]) => ({ name, value: Array.isArray(value) ? value : [value] })),
@@ -186,9 +187,12 @@ test('list: each material the preview draws equals the kn5\'s, property for prop
   const L = loop(), inKn5 = new Map(L.kn5.materials.map((m) => [m.name, fromKn5(m)]));
   assert.deepStrictEqual(L.list.materials.map(asKn5), L.list.materials.map((m) => inKn5.get(m.name)));
 });
-test('list: the textures the preview draws equal the kn5\'s (none today: the export writes no texture yet)', () => {
-  const L = loop();
-  assert.deepStrictEqual([L.list.textures, L.look.textures.size], [L.kn5.textures.map((t) => t.name).sort(), 0]);
+test('list: the textures the preview draws equal the kn5\'s (an untextured track: the export\'s solid diffuse, src/export/acready.js)', () => {
+  // over the materials the preview draws (it does not draw the paint yet: the todo below), the textures are the kn5's own
+  const L = loop(), drawn = new Set(L.list.materials.map((m) => m.name));
+  const want = [...new Set(L.kn5.materials.filter((m) => drawn.has(m.name)).flatMap((m) => (m.samplers || []).map((s) => s.texture)))].sort();
+  assert.ok(want.length > 0, 'the kn5 binds a texture to what the preview draws');
+  assert.deepStrictEqual([L.list.textures, L.look.textures.size], [want, want.length]);
 });
 test('list: the preview\'s material and texture list EQUALS the kn5\'s', { todo: 'the preview does not draw the start and grid paint (t180b_paint, PAINT_* meshes) or the closing seam the export builds (D177 §3)' }, () => {
   const L = loop();
@@ -202,7 +206,7 @@ function texturedCase() {
   d = D.editWord(d, 'w1', { textures: { floor: { make: TM.serialize(PRESETS.lanes), size: 64 } } });
   const set = T.buildTextureSet(d, {}), t = createTrackModel().update(D.resolve(d));
   const look = A.resolveLook(t.mesh.scene, set, T.previewTextures(set)), list = A.lookList(t.batches.map((x) => ({ key: x.key, material: look.materialOf(x) })));
-  const kn5 = readLook(writeKn5(T.applyToScene(t.mesh.scene, set).scene));
+  const kn5 = readLook(writeKn5(ensureDiffuse(T.applyToScene(t.mesh.scene, set).scene)));   // as the export writes it
   return { set, t, look, list, kn5 };
 }
 test('textured: a word whose floor names a made texture is drawn with the set\'s material; the others keep the scene\'s', () => {
@@ -216,7 +220,7 @@ test('textured: the textured material the preview draws equals the one the set w
 test('textured: the preview\'s texels are the kn5\'s DDS level 0, byte for byte', () => {
   const { list, look, kn5 } = texturedCase(), file = list.textures[0], inKn5 = kn5.textures.find((x) => x.name === file);
   const l0 = ddsLevel(new Uint8Array(inKn5.bytes), 0), mine = look.textures.get(file);
-  assert.deepStrictEqual([list.textures.length, mine.width, mine.height, Buffer.from(mine.rgba).equals(Buffer.from(l0.rgba))], [1, l0.width, l0.height, true]);
+  assert.deepStrictEqual([list.textures.length, mine.width, mine.height, Buffer.from(mine.rgba).equals(Buffer.from(l0.rgba))], [kn5.textures.length, l0.width, l0.height, true]);
 });
 test('textured: an untextured floor in a set still draws the scene\'s material, not the set\'s untextured one the export does not write', () => {
   let d = D.createDoc('Plain'); d = D.appendWord(d, 'straight', { speed: 30 });
