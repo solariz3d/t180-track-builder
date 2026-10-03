@@ -713,3 +713,22 @@ random walk β −1.98 (expected −2).
   - The registration's input (80,000 N/m) is the GitHub base car's.
   - **Nothing here says where the installed `mach6_active` runs out.** A replay driven with it, measured by
     `node bottoming.cjs`, would say.
+
+## 3e. Top speed, on a lap that does not limit it (2026-10-03; `node tools/speed.cjs <replay>`)
+§3d's speed cap (764 km/h, the pooled p99 of seven laps) was measured on tracks whose straights never let the Mach 6
+reach its top speed: the lap limited the speed, not the car. The first track exported from the builder and driven in AC
+(a 6 km oval of 1 km bowls, 2026-10-02) has straights long enough to reach it.
+
+- **Replay:** `AC_021026-161036_O_ohyeah2389_t180_mach6_t180b_test_oval_flat_.acreplay` (AC's autosave, `replay/temp/`),
+  car `ohyeah2389_t180_mach6`, dt 0.015 s, 6,643 frames kept by speed.cjs.
+- **Speed:** p10 347, p50 901, p90 951, **p99 970**, p99.9 971, **max 971 km/h**. The keeper's own figure for the car,
+  stated before the measurement: "the mach 6 can go 970kmh".
+- **Against the old cap:** 57% of the lap's moving frames are above 764 km/h (a separate count over 8,399 frames with
+  resets removed).
+- **The lap sim's cap is now 970 km/h** (`src/validate/limits.js` vmaxKmh), the p99 of this lap: the same percentile
+  §3d chose, now on a lap that does not cut it short. Loads go with v², so at 970 instead of 764 a corner's load is
+  (970/764)² = 1.61 times what the old cap let validation compute.
+- **Not changed:** the acceleration table above 800 km/h. §3d's table ends where its laps did, and `accelAt` holds its last
+  value beyond. This lap has frames above 800, so the table could be extended from it; not done here.
+- **Limits:** one lap on one track. A lap whose straights are longer still could exceed 971; the cap is a measured
+  percentile, not the car's physical top speed.

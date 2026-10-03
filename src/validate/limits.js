@@ -33,10 +33,12 @@ const MACH6 = Object.freeze({
   // ARCHITECTURE.md:87 "surfaces above ~50° without CSP's wall raycasting (vanilla AC tyres ignore steep surfaces;
   // community-reported)" (RED only when the export does not target CSP).
   steepDeg: 50,
-  // FINDINGS.md:484 (§3d): the lap sim's speed cap, the pooled p99 of seven Mach 6 laps (FINDINGS.md:474), a stated
-  // choice of percentile. It was 745 until 2026-09-27, read off FINDINGS.md:37, which is the speed at Centrifuge's
-  // hardest MOMENT, not a top speed (FINDINGS.md:478-481): both Centrifuge laps spend over 10% of their frames above it.
-  vmaxKmh: 764,
+  // FINDINGS.md §3e: the lap sim's speed cap, the p99 of a Mach 6 lap with straights long enough to reach top speed (the
+  // exported 6 km oval, 2026-10-02; tools/speed.cjs: p99 970, max 971 km/h). Same percentile as before, on a lap that
+  // is not speed-limited by its track. It was 764 until 2026-10-03, the pooled p99 of seven laps on tracks whose
+  // straights never let the car reach top speed (FINDINGS.md:484); the oval spent 57% of its frames above that. Before
+  // 2026-09-27 it was 745 (FINDINGS.md:37), the speed at Centrifuge's hardest moment, not a top speed.
+  vmaxKmh: 970,
   // FINDINGS.md:476 (§3d): the design-speed default, the pooled p50 of the same laps (FINDINGS.md:474). Validation uses
   // it only when asked to (opts.designSpeed); the app's picker starts at it.
   designSpeedKmh: 460,
