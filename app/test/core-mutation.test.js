@@ -38,7 +38,7 @@ const MUTATIONS = [
   { id: 'U4 the cup cell shows the typed target, not the document', file: 'core/panel.js', from: 'cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`', to: 'cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(cup.value === \'\' ? r.cupToDeg : Number(cup.value))}`', caughtBy: 'the readout shows cup from → to' },
   { id: 'U5 (K7-4) the cup cell wired to the bank values', file: 'core/panel.js', from: 'cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`', to: 'cup: `${fmtCup(r.bankFromDeg)} → ${fmtCup(r.bankToDeg)}`', caughtBy: 'the readout shows cup from → to' },
   { id: 'U6 (K7-3) the cup shown in radians', file: 'core/panel.js', from: 'const fmtCup = (x) => LB.fmtDeg(x)', to: 'const fmtCup = (x) => LB.fmtDeg(x * DEG)', caughtBy: 'the readout shows cup from → to' },
-  { id: 'U7 the cup field does not redraw the readout', file: 'core/panel.js', from: 'for (const f of [len, turn, climb, bank, width, cup, ...Object.values(atStart)])', to: 'for (const f of [len, turn, climb, bank, width, ...Object.values(atStart)])', caughtBy: 'the cup cell follows the cup field' },
+  { id: 'U7 the cup field does not redraw the readout', file: 'core/panel.js', from: 'f.oninput = f.onchange = () => { exclusive(f); ghost(); };', to: 'f.oninput = f.onchange = () => { exclusive(f); };', caughtBy: 'the cup cell follows the cup field' },
   { id: 'U8 the brush has no cup channel', file: 'core/panel.js', from: "['kv', 'kh', 'phi', 'w', 'r', 'c', 'e', 's', 't']", to: "['kv', 'kh', 'phi', 'w', 'r', 'e', 's', 't']", caughtBy: 'the brush\'s channel list gains cup' },
   { id: 'U9 the cup field is not on the panel', file: 'core/panel.js', from: "fieldAt('cup °', cup, 'cup'), ", to: '', caughtBy: 'the Extend panel has a "cup °" field' },
   // D194b, "at start": a ticked field with a target goes in transition as { channel: min(20 m, length) }; nothing else changes
@@ -48,7 +48,7 @@ const MUTATIONS = [
   { id: 'V4 transition sent as one number for all channels', file: 'core/panel.js', from: 'if (Object.keys(transition).length) out.transition = transition;', to: 'if (Object.keys(transition).length) out.transition = AT_START_M;', caughtBy: 'extendOptions "at start"' },
   { id: 'V5 a field sent on the wrong channel', file: 'core/panel.js', from: "bank: 'phi', width: 'w'", to: "bank: 'w', width: 'phi'", caughtBy: 'extendOptions "at start"' },
   { id: 'V6 the panel never passes the boxes', file: 'core/panel.js', from: 'atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),', to: '', caughtBy: 'the panel: an "at start" box' },
-  { id: 'V7 ticking a box does not redraw', file: 'core/panel.js', from: 'cup, ...Object.values(atStart)]) f.oninput', to: 'cup]) f.oninput', caughtBy: 'the panel: an "at start" box' },  { id: 'C1 a brush frame builds on the last frame, not the drag\'s base', file: 'core/coreshell.js',
+  { id: 'V7 ticking a box does not redraw', file: 'core/panel.js', from: 'width, ...Object.values(atStart)]) f.oninput', to: 'width]) f.oninput', caughtBy: 'the panel: an "at start" box' },  { id: 'C1 a brush frame builds on the last frame, not the drag\'s base', file: 'core/coreshell.js',
     from: 'const t0 = now(), res = brushed(b, delta)', to: 'const t0 = now(), res = brushed({ ...b, base: doc() }, delta)', caughtBy: 'the rate brush' },
   { id: 'C2 the drag never ends in the history', file: 'core/coreshell.js',
     from: 'history: D.endDrag(st.history), brush: null', to: 'history: st.history, brush: null', caughtBy: 'the rate brush' },

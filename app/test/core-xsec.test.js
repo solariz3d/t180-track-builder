@@ -141,14 +141,24 @@ test('xsec extendOptions: the new fields take the "at start" box like the others
 });
 
 // ── the shell's head state ──
-test('xsec headState: the shell reads the seal\'s defaults where the core has no such channel', async () => {
+test('xsec headState (A\'s core): a non-tube head shows tube sweep 0 ("none"); an edge head and a tube head show the document\'s values', async () => {
   const sh = await createCoreShell({ brushFn: null });
   const h0 = sh.headState();
   assert.deepEqual([h0[E], h0[S], h0[T]], [0, 0.64, 0], 'an empty track');
   sh.extend(extendOptions({ length: 100 }));
   const h1 = sh.headState();
-  assert.deepEqual([h1[E], h1[S], h1[T]], [0, 0.64, 0], 'after a piece with no cross-section channel');
-  assert.deepEqual(XS.headOf({ [E]: { v: 12 }, [S]: { v: 0.8 }, [T]: { v: 90 } }), { [E]: 12, [S]: 0.8, [T]: 90 }, 'a channel the core has is read');
+  assert.deepEqual([h1[E], h1[S], h1[T]], [0, 0.64, 0], 'after a plain piece: no edge, the default start, and NO tube (RULING 2), whatever the core keeps to start a later tube');
+  sh.extend(extendOptions({ length: 100, edge: '15', start: '0.7' }));
+  const end2 = D.endState(sh.getState().history.present), h2 = sh.headState();
+  assert.equal(h2[E], end2[E].v, 'an edge head shows the document\'s e'); assert.equal(h2[S], end2[S].v, 'and its s');
+  assert.equal(h2[T], 0, 'still no tube');
+  sh.extend(extendOptions({ length: 100, tube: '180' }));
+  const end3 = D.endState(sh.getState().history.present), h3 = sh.headState();
+  assert.ok(sh.getState().history.present.pieces.slice(-1)[0].tube, 'the piece is a tube');
+  assert.equal(h3[T], end3[T].v, 'a tube head shows its sweep');
+  assert.ok(Math.abs(h3[T] - 180) < 1, `about the 180 asked for (${h3[T]})`);
+  assert.deepEqual(XS.headOf({ [E]: { v: 12 }, [S]: { v: 0.8 }, [T]: { v: 90 } }, true), { [E]: 12, [S]: 0.8, [T]: 90 }, 'a tube head: every channel the core has is read');
+  assert.equal(XS.headOf({ [T]: { v: 31 } })[T], 0, 'a non-tube head: the sweep the core keeps internally is not shown');
 });
 
 // ── the panel ──
@@ -180,9 +190,24 @@ test('xsec panel: after Extend the fields read back what the document holds', as
   assert.equal(p.field('tube sweep °').value, '89.13');
   assert.equal(p.field('edge start').value, '0.64', 'an untouched start keeps the default');
 });
-test('xsec panel: the cells say — when the core reports no such readout', async () => {
-  const p = await mountPanel();   // the real b3364df core: no cross-section readout keys
-  p.type('length m', 100);   // (the fake DOM keeps an input's first value as an attribute, so a test types it)
+// A's core reports the readout keys for every piece; each cell must be the core's own value, rounded as the cup cell is (E's seal E7)
+const fmtDegCell = (x) => require('../core/labels.js').fmtDeg(x).replace(/^\+/, ''), fmtShareCell = (x) => (Math.round(Math.abs(x) * 100 + 1e-7) / 100 * Math.sign(x) || 0).toFixed(2);
+test('xsec panel (A\'s core): each cross-section cell is the core\'s own readout of the candidate', async () => {
+  for (const typed of [{}, { 'edge angle °': 15, 'edge start': 0.7 }, { 'tube sweep °': 180 }, { 'tube sweep °': 300, 'edge angle °': 20 }]) {
+    const p = await mountPanel();   // the REAL core (A's, in this tree): no stub
+    p.type('length m', 100); for (const [f, v] of Object.entries(typed)) p.type(f, v);
+    const ro = p.root.all().find((e) => e.attrs.class === 'readout');
+    assert.equal(ro.title, '', `the core accepted ${JSON.stringify(typed)}: "${ro.title}"`);
+    const r = p.shell.candidateReadout(p.opts());
+    assert.equal(p.cell('edge'), `${fmtDegCell(r.edgeFromDeg)} → ${fmtDegCell(r.edgeToDeg)}`, `${JSON.stringify(typed)}: edge`);
+    assert.equal(p.cell('start'), `${fmtShareCell(r.sliceFrom)} → ${fmtShareCell(r.sliceTo)}`, `${JSON.stringify(typed)}: edge start`);
+    assert.equal(p.cell('tube'), `${fmtDegCell(r.tubeFromDeg)} → ${fmtDegCell(r.tubeToDeg)}`, `${JSON.stringify(typed)}: tube`);
+    if (!typed['tube sweep °']) assert.equal(p.cell('tube'), '0.0° → 0.0°', 'a piece that is not a tube reads a sweep of 0 ("none")');
+  }
+});
+test('xsec panel: a core that reports no cross-section readout shows — in those cells', async () => {
+  const p = await mountPanel((real) => Object.assign(Object.create(real), { candidateReadout(o) { const r = { ...real.candidateReadout(o) }; for (const pair of Object.values(XS.READOUT)) for (const k of pair) delete r[k]; return r; } }));
+  p.type('length m', 100);
   for (const k of ['edge', 'start', 'tube']) assert.equal(p.cell(k), '—');
   assert.match(p.cell('length'), /m/, 'the other cells still read');
 });
@@ -298,6 +323,8 @@ test('xsec validation words: the tube-too-narrow and roll-rate reds read in plai
     assert.ok(!f.text.includes(id), `${id}: the shown line carries the id`);
     assert.ok(f.title.includes(id), `${id}: the tooltip keeps the id`);
   }
+  // the corrected minimum (the librarian's RULING 1 corrected, A's TUBE_MIN_W at 9f92a324): the words say 9.74 m, not the first 9.43
+  assert.match(VL.reasonText('tube-too-narrow'), /narrower than 9\.74 m/);
 });
 
 // ── the webview ──

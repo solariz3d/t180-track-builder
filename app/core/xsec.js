@@ -15,10 +15,19 @@ const CHANNEL = Object.freeze({ edge: 'e', start: 's', tube: 't' });
 const READOUT = Object.freeze({ edge: ['edgeFromDeg', 'edgeToDeg'], start: ['sliceFrom', 'sliceTo'], tube: ['tubeFromDeg', 'tubeToDeg'] });
 const DEFAULTS = Object.freeze({ edge: 0, start: 0.64, tube: 0 });
 
-/** The head's value of each cross-section channel from D.endState's result (null on an empty track): the channel's `.v`, else the default. */
-function headOf(end) {
+/**
+ * The head's value of each cross-section channel from D.endState's result (null on an empty track): the channel's `.v`, else the default.
+ * THE TUBE (the librarian's RULING 2, D225): the sweep is the head's only when the head piece IS a tube (`headIsTube`); at any other head the
+ * field shows 0 ("none"), as the contract says, whatever the core keeps internally to start a later tube from (A's endState at 3e17b28 held
+ * t = 2 × the rendered edge, 31 at a bowl's head; from 9f92a324 that value is the INTERNAL key `tNext`, which the app never reads, and t is
+ * 0 at a non-tube head). That is the rule A's own readout uses (src/core/readout.js: `P.tube ? … : 0`).
+ */
+function headOf(end, headIsTube = false) {
   const out = {};
-  for (const [k, ch] of Object.entries(CHANNEL)) out[ch] = end && end[ch] && Number.isFinite(end[ch].v) ? end[ch].v : DEFAULTS[k];
+  for (const [k, ch] of Object.entries(CHANNEL)) {
+    const has = end && end[ch] && Number.isFinite(end[ch].v) && (k !== 'tube' || headIsTube);
+    out[ch] = has ? end[ch].v : DEFAULTS[k];
+  }
   return out;
 }
 
