@@ -80,7 +80,10 @@ function pieceEnd(P) {
   // the RENDERED edge angle c: a cup's own channel, a legacy piece's profileAt edge, a tube's t/2 (held: the morph into a different kind carries the rest)
   if (P.tube) out.c = { v: out.t.v / 2, m: 0 };
   else if (!P.cup) out.c = { v: legacyEdgeDeg(P.family, out.w.v, out.r.v), m: 0 };
-  if (!P.tube) out.t = { v: 2 * out.c.v, m: 0 };   // a tube started after another kind starts at twice the edge that piece renders
+  // out.t is the tube's sweep and exists ONLY at a tube head: a non-tube head reads 0 (the shell shows "none", the contract for C). tNext is the INTERNAL value a tube started
+  // after this piece continues from: a tube head's own end, otherwise twice the edge the piece renders, held (extend reads it; nothing else should)
+  out.tNext = P.tube ? { v: out.t.v, m: out.t.m } : { v: 2 * out.c.v, m: 0 };
+  if (!P.tube) out.t = { v: 0, m: 0 };
   if (!P.edge) { out.e = { v: 0, m: 0 }; out.s = { v: S_DEFAULT, m: 0 }; }
   return out;
 }

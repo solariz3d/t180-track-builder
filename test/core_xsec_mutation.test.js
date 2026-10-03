@@ -55,7 +55,9 @@ const MUTANTS = [
   { id: 'KT3-1 CUP_MAX is applied to an open tube\'s t/2 + e', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'if (v / 2 + e[i] > TUBE_EDGE_MAX + EDGE_EPS) throw', 'if (v / 2 + e[i] > CUP_MAX + EDGE_EPS) throw']] },
   { id: 'KT3-2 a closed tube takes an edge', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'if (t.some((v) => v >= TUBE_MAX - 1e-9) && e.some((v) => v > EDGE_EPS)) throw', 'if (false) throw']] },
   { id: 'KT4-1 a cup and a tube are allowed together (extend)', file: 'core', pattern: 'CUP OR A TUBE', edits: [[C + 'extend.js', 'if (given(o.c) && given(o.t)) throw', 'if (false) throw']] },
-  { id: 'KT4-2 a tube starts at the wrong edge after another kind (t = edge, not 2·edge)', file: 'core', pattern: 'A TUBE JOINT', edits: [[C + 'document.js', 'if (!P.tube) out.t = { v: 2 * out.c.v, m: 0 };', 'if (!P.tube) out.t = { v: out.c.v, m: 0 };']] },
+  { id: 'KT4-2 a tube starts at the wrong edge after another kind (t = edge, not 2·edge)', file: 'core', pattern: 'A TUBE JOINT', edits: [[C + 'document.js', 'out.tNext = P.tube ? { v: out.t.v, m: out.t.m } : { v: 2 * out.c.v, m: 0 };', 'out.tNext = P.tube ? { v: out.t.v, m: out.t.m } : { v: out.c.v, m: 0 };']] },
+  { id: 'KT4-4 endState reports t at a non-tube head (twice the edge, the internal value leaks)', file: 'core', pattern: 'ENDSTATE', edits: [[C + 'document.js', 'if (!P.tube) out.t = { v: 0, m: 0 };', 'if (!P.tube) out.t = { v: 2 * out.c.v, m: 0 };']] },
+  { id: 'KT4-5 a tube after another kind starts from the head\'s t (0), not from tNext', file: 'core', pattern: 'A TUBE JOINT|ENDSTATE', edits: [[C + 'extend.js', 'if (from.tNext) from = { ...from, t: from.tNext };', 'if (false) from = { ...from, t: from.tNext };']] },
   { id: 'KT4-3 a cup after a closed tube is not refused by name', file: 'val', pattern: 'X1 and T2', edits: [[C + 'extend.js', 'if (cup && from && from.c.v > D.CUP_MAX + 1e-6) throw', 'if (false) throw']] },
   // ── the spiral (KS*) ──
   { id: 'KS2-1 the roll stays the per-segment smoothstep under a heartline', file: 'val', pattern: 'S2 \\(iii\\)', edits: [[G + 'path.js', 'if (g.rollRate0 === undefined || g.rollRate1 === undefined) phi =', 'if (true) phi =']] },
@@ -65,13 +67,15 @@ const MUTANTS = [
   { id: 'KS2-5 water over a heartline is an anonymous throw', file: 'val', pattern: 'S2 \\(iv\\)', edits: [[C + 'water.js', "e.code = 'WATER_HEARTLINE'; throw e; }", "e.code = undefined; throw e; }"]] },
   { id: 'KS3-1 the roll rate is read over a 0.5 m chord', file: 'val', pattern: 'S3: a full 360', edits: [[V + 'index.js', 'ROLL_CHORD_M = 20;', 'ROLL_CHORD_M = 0.5;']] },
   { id: 'KS3-2 the bar is raised to 2.0', file: 'val', pattern: 'S3: a full 360', edits: [[V + 'index.js', 'ROLL_RED_DEG_M = 1.2144,', 'ROLL_RED_DEG_M = 2.0,']] },
+  { id: 'KS3-3 the gravity-frame φ′ is read instead of the frame-intrinsic rate (blind on a climbing turn at constant bank)', file: 'val', pattern: 'S3 \\(KS3-3\\)', edits: [[V + 'index.js', 'out.push({ i, s: p.s, rate: Math.atan2(c, dot(pa, pb)) / DEG / ROLL_CHORD_M });', 'out.push({ i, s: p.s, rate: Math.abs(S[Math.min(n - 1, i + 20)].roll - S[Math.max(0, i - 20)].roll) / DEG / ROLL_CHORD_M });']] },
   { id: 'KS3-4 the amber bar is dropped', file: 'val', pattern: 'S3: a full 360', edits: [[V + 'index.js', 'ROLL_AMBER_DEG_M = 0.9338,', 'ROLL_AMBER_DEG_M = 9,']] },
   { id: 'KS3-5 the roll rate is never checked', file: 'val', pattern: 'S3: a full 360', edits: [[V + 'index.js', 'if (q.rate > ROLL_RED_DEG_M) red.push(', 'if (false) red.push(']] },
   { id: 'KS4-1 the spiral\'s curvature is not given to the validator (kvec of the integrated curve)', file: 'val', pattern: 'S4', edits: [[C + 'adapter.js', 'if (!segments.some((g) => g.heartline || g.heartline1)) return path;', 'return path;']] },
   { id: 'KS4-2 a lifted sample keeps only its own fields (spread of a view)', file: 'val', pattern: 'S4|S2 \\(i, ii\\)', edits: [[C + 'adapter.js', 'return { s: x.s, seg: x.seg, pos: x.pos, T: x.T, L: x.L, U: x.U, kvec:', 'return { ...x, kvec:']] },
   // ── the validator rows ──
   { id: 'KV1 tube-too-narrow is never raised', file: 'val', pattern: 'T1 iv', edits: [[V + 'index.js', 'w < TUBE_MIN_W) raw.segReds.push', 'w < 0) raw.segReds.push']] },
-  { id: 'KV2 the narrowest tube bar is 5 m', file: 'val', pattern: 'T1 iv', edits: [[V + 'index.js', 'TUBE_MIN_W = 9.43;', 'TUBE_MIN_W = 5;']] },
+  { id: 'KV2 the narrowest tube bar is 5 m', file: 'val', pattern: 'T1 iv', edits: [[V + 'index.js', 'TUBE_MIN_W = 9.74;', 'TUBE_MIN_W = 5;']] },
+  { id: 'KV2b the narrowest tube bar is the old 9.43 (the eye on the ceiling)', file: 'val', pattern: 'T1 iv', edits: [[V + 'index.js', 'TUBE_MIN_W = 9.74;', 'TUBE_MIN_W = 9.43;']] },
   { id: 'KV3 edge-past-cap is never raised', file: 'val', pattern: 'E2: the validator', edits: [[V + 'index.js', 'if (cap !== null && edgeDeg > cap + 1e-3) raw.segReds.push', 'if (false) raw.segReds.push']] },
   // ── close ──
   { id: 'KC1 close does not refuse a seam that joins a tube to another kind', file: 'core', pattern: 'CLOSE \\(E4 iii', edits: [[C + 'close.js', "if (!!F.tube !== !!L.tube) throw new D.CoreError('TUBE_SEAM'", "if (false) throw new D.CoreError('TUBE_SEAM'"]] },

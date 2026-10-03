@@ -77,6 +77,15 @@ test('JOINT (E4 i, KE4-1): e and s join C1 like every channel: a 5° step in e a
   assert.ok(Math.abs(D.channelAt(d.pieces[1], 'e', 0).v) < 1e-9, 'a first edge piece starts at e = 0 (the joint with a plain piece)');
   throwsCode(() => D.checkDoc({ ...d, pieces: [d.pieces[0], { ...d.pieces[1], channels: { ...d.pieces[1].channels, e: e1.map((v, k) => (k < 2 ? 4 : v)) } }] }), 'JOINT');
 });
+test('ENDSTATE (ruling 2): endState reports the tube sweep t ONLY for a tube head (a non-tube head reads 0, so the shell shows none); a tube started after another kind still starts at twice the edge it renders (the internal tNext)', () => {
+  const plain = start(), e0 = D.endState(plain), edge = D.pieceEnd(plain.pieces[0]).c.v;
+  assert.deepStrictEqual(e0.t, { v: 0, m: 0 }, 'a legacy head reads t = 0'); assert.ok(Math.abs(e0.tNext.v - 2 * edge) < 1e-9 && e0.tNext.m === 0, 'the internal continuation is 2 x the rendered edge');
+  const cup = extend(start(), { length: 60, targets: { c: 40 } }); assert.deepStrictEqual(D.endState(cup).t, { v: 0, m: 0 }, 'a cup head reads t = 0');
+  const tube = extend(start(), { length: 100, targets: { t: 200 }, transition: 100 }), te = D.endState(tube);
+  assert.ok(Math.abs(te.t.v - D.channelAt(last(tube), 't', last(tube).length).v) < 1e-9 && te.t.v > 150, 'a tube head reads its own sweep'); assert.strictEqual(te.tNext.v, te.t.v);
+  const fl = D.appendPiece(tube, D.flightPiece({ gap: 30, drop: 0, land: 0 })); assert.ok(Math.abs(D.endState(fl).t.v - te.t.v) < 1e-9, 'the sweep is carried through a flight');
+  const started = extend(plain, { length: 100, targets: { t: 200 }, transition: 100 }); assert.ok(Math.abs(started.pieces[1].channels.t[0] - 2 * edge) < 1e-5, 'a tube after a plain piece starts at 2 x its edge');
+});
 test('A TUBE JOINT: a tube after another kind starts at the edge that piece renders (t = 2·edge); a cup after a tube starts at t/2; tube to tube is C1 in t', () => {
   const a = start(), edge0 = D.pieceEnd(a.pieces[0]).c.v, t = extend(a, { length: 100, targets: { t: 200 } });
   assert.ok(Math.abs(t.pieces[1].channels.t[0] - 2 * edge0) < 1e-5, `the tube starts at ${t.pieces[1].channels.t[0]}, twice the legacy edge ${edge0}`);

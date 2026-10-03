@@ -47,12 +47,33 @@ test('S3: the rate is the frame-intrinsic one: a plain climbing turn (constant b
   const rv = V.revalidate(a, path, segments, path.samples[half].s, { designSpeed: V460 }); assert.deepStrictEqual(rv.red, v.red); assert.deepStrictEqual(rv.amber, v.amber);
 });
 
+// ── S3 (KS3-3): the roll rate is the FRAME-INTRINSIC one ──
+/** §1's rate, written here independently of the validator: the angle between the surface normal U at s − 10 and s + 10, each projected onto the plane normal to T(s), over 20 m (°/m); U by linear interpolation of the neighbouring samples. */
+function intrinsic(S, i) {
+  const at = (x) => { let lo = 0, hi = S.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].s <= x) lo = m; else hi = m; } const a = S[lo], b = S[hi], t = b.s > a.s ? (x - a.s) / (b.s - a.s) : 0, U = [0, 1, 2].map((k) => a.U[k] + (b.U[k] - a.U[k]) * t), l = Math.hypot(...U); return U.map((v) => v / l); };
+  const T = S[i].T, x0 = S[i].s - 10, x1 = S[i].s + 10; if (x0 < S[0].s || x1 > S[S.length - 1].s) return null;
+  const proj = (u) => { const d = u[0] * T[0] + u[1] * T[1] + u[2] * T[2]; return [u[0] - d * T[0], u[1] - d * T[1], u[2] - d * T[2]]; }, a = proj(at(x0)), b = proj(at(x1));
+  const cr = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  return (Math.atan2(Math.hypot(...cr), a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / DEG) / 20;
+}
+test('S3 (KS3-3): on a climbing turn at constant bank the validator\'s roll rate EQUALS §1\'s frame-intrinsic rate value for value (worst difference < 1e-9 °/m), and is not the gravity-frame φ′, which is 0 there', () => {
+  // B\'s case: 200 m at κh 1/150 with κv 0.002 and a constant bank: φ′ = 0 while the road\'s own frame twists about T
+  const d = extend(extend(start({ length: 60 }), { length: 200, transition: 20, targets: { kh: 1 / 150, kv: 0.002 } }), { length: 100 }), { path } = A.toPath(d), S = path.samples;
+  const rates = V._internal.rollRates(S, () => true, false, path.lengthM); assert.ok(rates.length > 500, `${rates.length} stations`);
+  let worst = 0, peak = 0, gravity = 0;
+  for (const q of rates) { const want = intrinsic(S, q.i); assert.ok(want !== null); worst = Math.max(worst, Math.abs(q.rate - want)); peak = Math.max(peak, q.rate); gravity = Math.max(gravity, Math.abs(S[Math.min(S.length - 1, q.i + 20)].roll - S[Math.max(0, q.i - 20)].roll) / DEG / 20); }
+  assert.ok(worst < 1e-9, `the validator's rate differs from §1's by ${worst} °/m`);
+  assert.ok(peak > 0.2 && peak < 0.3, `control: the intrinsic rate on this climbing turn peaks at ${peak} °/m (B measured 0.25518)`); assert.ok(gravity < 1e-6, `control: the gravity-frame roll change is ${gravity} °/m (the bank is constant)`);
+});
+
 // ── T1 iv and the cap ───────────────────────────────────────────────────────────────────────────────────────────────────
 const tubeTrack = (w, { closedLen = 120 } = {}) => extend(extend(start({ length: 80, first: { w } }), { length: 100, transition: 100, targets: { t: 360 } }), { length: closedLen });
-test('T1 iv (ruling 1): a CLOSED tube narrower than 9.43 m is red by name (tube-too-narrow); 12 m and 31 m are not', () => {
+test('T1 iv (ruling 1, corrected to 9.74 m): a CLOSED tube narrower than 9.74 m is red by name (tube-too-narrow), 9.8 m, 12 m and 31 m are not: the 3 m chase eye plus the seal\'s 0.1 m margin must fit under the ceiling 2R = w/π', () => {
   const reds = (w) => check(tubeTrack(w)).v.red.filter((r) => r.reason === 'tube-too-narrow');
-  assert.ok(reds(8).length >= 1 && reds(8)[0].worst < 9.43, 'w 8 is refused by name');
-  assert.strictEqual(reds(12).length, 0); assert.strictEqual(reds(31).length, 0);
+  assert.ok(reds(8).length >= 1 && reds(8)[0].worst < 9.74, 'w 8 is refused by name');
+  assert.ok(reds(9.5).length >= 1, 'w 9.5 (inside the old 9.43 to 9.74 band, where the eye is 1.488 m from the axis against a limit of 1.412) is refused'); assert.ok(reds(9.6).length >= 1);
+  assert.strictEqual(reds(9.8).length, 0, 'w 9.8 clears the margin'); assert.strictEqual(reds(12).length, 0); assert.strictEqual(reds(31).length, 0);
+  assert.strictEqual(V.TUBE_MIN_W, 9.74); assert.ok(V.TUBE_MIN_W / Math.PI > 3.1 && V.TUBE_MIN_W / Math.PI < 3.11, 'the bar is where the ceiling clears the 3 m eye by 0.1 m');
 });
 test('E2: the validator reds an edge past the cap by name (edge-past-cap) on a segment built past it, and not on any a document can hold', () => {
   const ok = extend(extend(start({ length: 60 }), { length: 60, targets: { c: 100 } }), { length: 100, transition: 20, targets: { e: 40 } });
