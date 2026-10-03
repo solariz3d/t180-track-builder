@@ -123,15 +123,19 @@ function weldSeams(scene) {
   return { ...scene, root: { ...scene.root, children } };
 }
 
-/** A solid-colour diffuse for every material that has none. Paint is near-white; everything else mid-grey. */
-function ensureDiffuse(scene) {
+/**
+ * A solid-colour diffuse for every material that has none. Paint is near-white; everything else mid-grey. PURE: no node, texture data is a
+ * plain Uint8Array. The PREVIEW (app/preview/aclook.js) calls this one in the webview, where there is no Buffer (D224: 5debee8 called the
+ * Buffer version from the preview and the first Extend drew nothing). The export uses ensureDiffuse below, which is this plus a Buffer wrap.
+ */
+function ensureDiffusePlain(scene) {
   const textures = [...scene.textures], made = new Map();
   const tex = (v) => {
     const name = `t180b_solid_${v}.dds`;
     if (!made.has(name)) {
       const W = 4, rgba = new Uint8Array(W * W * 4);
       for (let k = 0; k < W * W; k++) { rgba[4 * k] = v; rgba[4 * k + 1] = v; rgba[4 * k + 2] = v; rgba[4 * k + 3] = 255; }
-      if (!textures.some((t) => t.name === name)) textures.push({ name, data: Buffer.from(encodeDds({ width: W, height: W, rgba })) });
+      if (!textures.some((t) => t.name === name)) textures.push({ name, data: encodeDds({ width: W, height: W, rgba }) });
       made.set(name, true);
     }
     return name;
@@ -141,4 +145,10 @@ function ensureDiffuse(scene) {
   return { ...scene, textures, materials };
 }
 
-module.exports = { flattenForAc, ensureDiffuse, weldSeams, SNAP, SLIVER };
+/** The export's: ensureDiffusePlain with every texture's bytes as a Buffer (the scene contract, src/export/scene.js). Buffer is touched only here, at the write. */
+function ensureDiffuse(scene) {
+  const r = ensureDiffusePlain(scene);
+  return { ...r, textures: r.textures.map((t) => (Buffer.isBuffer(t.data) ? t : { ...t, data: Buffer.from(t.data) })) };
+}
+
+module.exports = { flattenForAc, ensureDiffuse, ensureDiffusePlain, weldSeams, SNAP, SLIVER };
