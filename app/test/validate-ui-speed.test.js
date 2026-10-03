@@ -21,10 +21,10 @@ test('the picker starts at the FINDINGS default, 460 km/h (FINDINGS.md:476), rea
   assert.strictEqual(p.ms(), 460 / 3.6);
 });
 
-test('the picker holds to its range: 50 km/h up to the lap sim\'s 764 km/h cap (FINDINGS.md:484)', () => {
+test('the picker holds to its range: 50 km/h up to the lap sim\'s 970 km/h cap (FINDINGS.md §3e; 764 until 2026-10-03)', () => {
   assert.deepStrictEqual([MIN_KMH, MAX_KMH], [50, MACH6.vmaxKmh]);
   const p = createSpeedPicker();
-  assert.deepStrictEqual([p.set(10), p.set(5000), p.set(300)], [50, 764, 300]);
+  assert.deepStrictEqual([p.set(10), p.set(5000), p.set(300)], [50, 970, 300]);
 });
 
 test('off is no design speed; a value that is not a number is refused loudly; onChange fires only on a change', () => {
@@ -58,7 +58,7 @@ test('a faster design speed turns a tight curve amber (above the proven 90 g), a
   // clean and only the speed brings amber
   shell.adopt(['straight', 'tight'].reduce((d, w) => appendOld(D, d, w), D.createDoc('t'))); shell.beginDrag(); shell.dragTo('w2', { handles: { length: 50 } }); shell.endDrag();
   assert.ok(!anyLevel(ctl.state.map, LEVEL.AMBER), 'clean at 200 km/h');
-  ctl.setDesignSpeed(764);
+  ctl.setDesignSpeed(970);
   assert.ok(ctl.state.result.amber.some((a) => a.reason === 'load-above-proven'), 'amber at the cap');
   assert.ok(anyLevel(ctl.state.map, LEVEL.AMBER));
   ctl.setDesignSpeed(200);

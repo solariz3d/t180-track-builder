@@ -7,7 +7,7 @@
 //
 // THE DEFAULT is 460 km/h, the pooled median of seven clean Mach 6 laps (docs/FINDINGS.md:476, §3d), read through
 // src/validate/limits.js MACH6.designSpeedKmh. THE RANGE is 50 km/h (inferred: a floor below which loads are ~1 g and
-// say nothing) to the lap sim's cap, 764 km/h (FINDINGS.md:484). OFF gives no design speed: loads then come only from
+// say nothing) to the lap sim's cap, 970 km/h (FINDINGS.md §3e). OFF gives no design speed: loads then come only from
 // words with their own speed, or from the ghost lap once the loop is closed.
 //
 // WHERE IT SITS: app/validate-ui/index.js mounts it at the top of #validation, so it needs no seam. If A wants it in the

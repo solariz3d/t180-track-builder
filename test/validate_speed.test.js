@@ -75,10 +75,10 @@ test('on a CLOSED track with no speed anywhere, the lap proof now runs, on the g
   assert.ok(r.lines.length > 0);
 });
 
-test('the ghost lap speeds up by the measured table (FINDINGS.md:494) and holds the 764 km/h cap (FINDINGS.md:484)', () => {
+test('the ghost lap speeds up by the measured table (FINDINGS.md:494) and holds the 970 km/h cap (FINDINGS.md §3e)', () => {
   const r = validate(X.pathOf(X.straight(20000, { step: 20 }), true), [X.seg()], {});
   // a closed "loop" of one long straight: after three laps it is at the cap
-  close(Math.max(...r.speed.map((x) => x.v)), kmh(764), 1e-9);
+  close(Math.max(...r.speed.map((x) => x.v)), kmh(970), 1e-9);
   const v0 = validate(X.pathOf(X.straight(2000, { step: 1 })), [X.seg()], { car: { accel: MACH6.accel } });   // asked for, open
   close(v0.speed[10].v, Math.sqrt(2 * 24.71 * 10), 0.05, 'from standing: the table\'s first value holds below 100 km/h');
 });

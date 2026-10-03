@@ -122,6 +122,11 @@ through the same test first, and failed it badly.
     a real gap (a change of cross-section across part of the width) are kept. On the oval, the worst crossed crease is
     now 0.34° everywhere, measured along the driven line; whether the bump is gone in the car is still to be driven.
   - To adapt: re-export a track to get the fix. A track exported before this still falls through.
+- **The speed the builder checks a track at now goes to 970 km/h** (it stopped at 764). 764 was the 99th-percentile
+  speed of seven laps on tracks whose straights never let the Mach 6 reach top speed. The exported oval let it: p99 970,
+  max 971 km/h, with 57% of the lap above 764 (docs/FINDINGS.md §3e). The lap check and the speed slider both use the
+  new cap. Loads go with speed squared, so a fast track can now show amber or red in corners that read green before,
+  because the check finally counts the speed the car reaches.
   - Known, not changed here: the sealed fixture digests (D190 row 5) no longer match for the two closed-loop fixtures,
     because their kn5 bytes changed on purpose. They need re-sealing.
 - The first piece of a track is now what you typed along its whole length. Before, a width, bank, turn, climb or cup typed for the
