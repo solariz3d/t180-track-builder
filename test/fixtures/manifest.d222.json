@@ -1,0 +1,100 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196 (test/fixtures/manifest.d196.json)",
+ "made_at": "D222, b-d222-wt: the Third Place AC-export branch (527ed0e) merged with the D195+D196 combine (2f0883f), merge 50d0d65",
+ "reason": "The export now writes the kn5 the way Assetto Corsa loads it (5debee8: every mesh in world space under identity nodes with a unique name, and a solid txDiffuse on every material without one) and welds piece joins (8c4eca3: the later piece edge moved onto the earlier one within 2 mm, seam triangles thinner than 4 mm dropped). These change the kn5 bytes of the two CLOSED fixtures and nothing else: their segs, path and mesh digests are identical to the D196 baseline, and the seven open fixtures are identical in every digest. The change is intended; the sealed kit (fixtures.js, manifest.json) and the D196 record are untouched.",
+ "unchanged": [
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ],
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "before_d196": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "f3d6a3face7470effa1a57afbed02274e9fb80e6cf88d242759c4d5f4ff659dc"
+   },
+   "after_d222": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "0db7e3e795e38f0c2f14900428d6c0b937b30fab0da50aa9d3fc48c991ad2ffe"
+   },
+   "changed": [
+    "kn5"
+   ],
+   "measure": {
+    "tool": "kn5 read back with tools/kn5.cjs after buildFromSegments exactly as fixtures.js digests() calls it; before = b-d195-wt (2f0883f, the pre-Third-Place export), after = b-d222-wt",
+    "before": {
+     "meshes": 756,
+     "uniqueMeshNames": 14,
+     "roadMeshes": 749,
+     "roadMeshesUnderANestedNode": 749,
+     "txDiffuseWritten": false,
+     "seamTriangles": 124,
+     "seamSliversUnder4mm": 124,
+     "kn5Bytes": 4848414
+    },
+    "after": {
+     "meshes": 755,
+     "uniqueMeshNames": 755,
+     "roadMeshes": 748,
+     "roadMeshesUnderANestedNode": 0,
+     "txDiffuseWritten": true,
+     "seamTriangles": 0,
+     "seamSliversUnder4mm": 0,
+     "kn5Bytes": 4776861
+    }
+   }
+  },
+  "F2-halfpipe-default-lap-closed": {
+   "before_d196": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "9cef8b8bbb40272991884abc9980365a1c1335880db192656a5257ad4fe67f51"
+   },
+   "after_d222": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "3181be522d9588a9cad6ed27572e21b8182049e4fc521dd305bf35e8d74dc3c4"
+   },
+   "changed": [
+    "kn5"
+   ],
+   "measure": {
+    "tool": "kn5 read back with tools/kn5.cjs after buildFromSegments exactly as fixtures.js digests() calls it; before = b-d195-wt (2f0883f, the pre-Third-Place export), after = b-d222-wt",
+    "before": {
+     "meshes": 756,
+     "uniqueMeshNames": 14,
+     "roadMeshes": 749,
+     "roadMeshesUnderANestedNode": 749,
+     "txDiffuseWritten": false,
+     "seamTriangles": 186,
+     "seamSliversUnder4mm": 186,
+     "kn5Bytes": 7170314
+    },
+    "after": {
+     "meshes": 755,
+     "uniqueMeshNames": 755,
+     "roadMeshes": 748,
+     "roadMeshesUnderANestedNode": 0,
+     "txDiffuseWritten": true,
+     "seamTriangles": 0,
+     "seamSliversUnder4mm": 0,
+     "kn5Bytes": 7095661
+    }
+   }
+  }
+ }
+}
