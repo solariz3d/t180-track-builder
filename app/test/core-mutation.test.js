@@ -39,7 +39,7 @@ const MUTATIONS = [
   { id: 'U5 (K7-4) the cup cell wired to the bank values', file: 'core/panel.js', from: 'cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`', to: 'cup: `${fmtCup(r.bankFromDeg)} → ${fmtCup(r.bankToDeg)}`', caughtBy: 'the readout shows cup from → to' },
   { id: 'U6 (K7-3) the cup shown in radians', file: 'core/panel.js', from: 'const fmtCup = (x) => LB.fmtDeg(x)', to: 'const fmtCup = (x) => LB.fmtDeg(x * DEG)', caughtBy: 'the readout shows cup from → to' },
   { id: 'U7 the cup field does not redraw the readout', file: 'core/panel.js', from: 'for (const f of [len, turn, climb, bank, width, cup, ...Object.values(atStart)])', to: 'for (const f of [len, turn, climb, bank, width, ...Object.values(atStart)])', caughtBy: 'the cup cell follows the cup field' },
-  { id: 'U8 the brush has no cup channel', file: 'core/panel.js', from: "['kv', 'kh', 'phi', 'w', 'r', 'c']", to: "['kv', 'kh', 'phi', 'w', 'r']", caughtBy: 'the brush\'s channel list gains cup' },
+  { id: 'U8 the brush has no cup channel', file: 'core/panel.js', from: "['kv', 'kh', 'phi', 'w', 'r', 'c', 'e', 's', 't']", to: "['kv', 'kh', 'phi', 'w', 'r', 'e', 's', 't']", caughtBy: 'the brush\'s channel list gains cup' },
   { id: 'U9 the cup field is not on the panel', file: 'core/panel.js', from: "fieldAt('cup °', cup, 'cup'), ", to: '', caughtBy: 'the Extend panel has a "cup °" field' },
   // D194b, "at start": a ticked field with a target goes in transition as { channel: min(20 m, length) }; nothing else changes
   { id: 'V1 the at-start boxes are ignored', file: 'core/panel.js', from: 'if (Object.keys(transition).length) out.transition = transition;', to: '', caughtBy: 'extendOptions "at start"' },
