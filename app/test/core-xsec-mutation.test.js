@@ -35,6 +35,11 @@ const MUTATIONS = [
   { id: 'X22 the tube-too-narrow red has no words', file: 'validate-ui/labels.js', from: "    'tube-too-narrow': ", to: "    'tube-too-narrow-x': ", caughtBy: 'xsec validation words' },
   { id: 'X23 the roll-rate red has no words', file: 'validate-ui/labels.js', from: "    'roll-rate': ", to: "    'roll-rate-x': ", caughtBy: 'xsec validation words' },
   { id: 'X24 the readout swallows the refusal\'s name', file: 'core/panel.js', from: '    roBox.title = why;', to: "    roBox.title = why.replace(/^[A-Z][A-Z_]+: /, '');", caughtBy: 'xsec panel: a core refusal is shown by its name' },
+  { id: 'X25 a typed tube leaves the cup enabled', file: 'core/panel.js', from: 'other.value = shown[ko]; other.disabled = true;', to: 'other.value = shown[ko];', caughtBy: 'xsec panel: a piece is a cup OR a tube' },
+  // (X26, "the other field is not put back", is EQUIVALENT and is not run: the other field is disabled whenever this one holds a target, so
+  //  when this one is changed the other already shows its head value; putting it back is a defence with no reachable effect in a browser)
+  { id: 'X27 a new document leaves a field disabled', file: 'core/panel.js', from: "for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false;", to: "for (const [k, f] of [['cup', cup], ['tube', tube]]) {", caughtBy: 'xsec panel: a piece is a cup OR a tube' },
+  { id: 'X28 the cup-or-tube rule is never wired', file: 'core/panel.js', from: 'f.oninput = f.onchange = () => { exclusive(f); ghost(); };', to: 'f.oninput = f.onchange = ghost;', caughtBy: 'xsec panel: a piece is a cup OR a tube' },
 ];
 
 function runMutant(m) {
