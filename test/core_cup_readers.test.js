@@ -55,6 +55,9 @@ test('marker layout: a straight running into a cupped turn keeps the width of th
   assert.ok(marked.filter((g, i) => nearly(segments[i]) && g.id === 'p2').length >= 1, 'the turn\'s first segments are nearly straight: they join the straight\'s run');
   let lay; assert.doesNotThrow(() => { lay = Markers.defaultLayout(path, marked); });
   assert.ok(lay && typeof lay === 'object', 'a layout came out');
+  // D226: "not refused" is no longer enough. A floor read too narrow now falls back to ONE column instead of refusing, so the proof that the
+  // straight's own width was read is the TWO-column grid (a layout that read the turn's 150° cup would come out '1-column')
+  assert.deepEqual([lay.grid.pattern, lay.grid.colGapM], ['2-staggered', 6], 'the grid is the two-column one of the straight\'s width');
   assert.ok(d.pieces[1].cup);
 });
 test('validation: with csp off the first steep-without-raycast red is where the wall PASSES 50° (c(s) = 50, about 47 m into a 100 m ramp), not at the ramp\'s start (the run\'s widest, 90°)', () => {
