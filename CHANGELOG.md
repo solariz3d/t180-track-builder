@@ -97,6 +97,7 @@ through the same test first, and failed it badly.
 
 ### Added
 
+- **A piece can take its new width (or bank, or cup) in a short ramp at its start and hold it.** Extending after another piece blends a width toward its target over the whole piece; the keeper wanted the whole piece at the new width without a bottleneck at its start. Each field can now be set to ease in over the whole piece (as before) or to reach its target within about one knot span (at most 20 m) and hold it for the rest of the piece; the joint into the piece is still smooth (a later piece cannot jump), and the ramp cannot overshoot its target or ring. The first piece of a track already holds what was typed from its start.
 - The palette suggests what usually comes next, from how often each kind of word follows another on the real tracks.
   It only suggests: every word can still be placed after any other.
 - **Cup: the road's cross-section deepens toward a half-pipe, apart from bank.** A new channel sets the angle the walls have
@@ -139,6 +140,8 @@ through the same test first, and failed it badly.
   because the check finally counts the speed the car reaches.
   - Known, not changed here: the sealed fixture digests (D190 row 5) no longer match for the two closed-loop fixtures,
     because their kn5 bytes changed on purpose. They need re-sealing.
+- The preview on an empty track now draws and answers the wheel, keys and mouse at once, looking at where the first piece will start. Before, with nothing placed and no ghost, the view did not draw at all, and input given meanwhile was applied late, when the Extend ghost first appeared: the "lag until the first piece is put down" (D195).
+- A piece whose width (or rise rate) changes is drawn smoothly. Each 2 m slice of it used to be drawn at its own middle width, so a width change was a staircase of steps between slices, and at the start of a piece that eases into a new width the road stepped by up to a quarter of a metre; every slice now runs from its own start shape to its own end shape, so neighbouring slices meet. Roads whose width does not change are drawn exactly as before. This changes how three saved test tracks are drawn (a width change, a brushed rise rate, mixed families) and nothing else.
 - The first piece of a track is now what you typed along its whole length. Before, a width, bank, turn, climb or cup typed for the
   first piece started at the default and grew to your value by its far end, so every new track began with a bottleneck (31 m
   widening to what you asked). The fields you leave as shown keep their default start; pieces after the first still ease from

@@ -182,7 +182,7 @@ function core(path, segments, opts, from, carried, upto) {
   // so the loads, the folds and the steepness read the road as the mesh draws it, not the blend's target for the whole segment
   const segS0 = new Array(segments.length);
   for (let i = 0; i < n; i++) if (segS0[S[i].seg] === undefined) segS0[S[i].seg] = S[i].s;
-  const constAt = (p) => { const g = segments[p.seg]; return g.cup && g.blend ? constOf(P.atSegment(g, p.s - segS0[p.seg])) : segConst(p.seg); };   // only a cup's blend: a word's font transition is judged at its target, as before
+  const constAt = (p) => { const g = segments[p.seg]; return P.readsBlend(g) && g.blend ? constOf(P.atSegment(g, p.s - segS0[p.seg])) : segConst(p.seg); };   // only a cup's blend: a word's font transition is judged at its target, as before
   // the normal n(u) at a station: L·nl + U·nu (add(mul(L, nl), mul(U, nu)))
   const nx = (p, c) => p.L[0] * c.nl + p.U[0] * c.nu, ny = (p, c) => p.L[1] * c.nl + p.U[1] * c.nu, nz = (p, c) => p.L[2] * c.nl + p.U[2] * c.nu;
   for (let i = from; i < end; i++) {
