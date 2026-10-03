@@ -2,7 +2,7 @@
 // D190 seal, row 4: a closed lap whose turns carry a cup of 90° and of 150° (the start straight left uncupped, the last turn's first 40 m
 // returning the cup to the edge the start renders) goes through the app's export route (src/export/fromwords.js buildFromSegments, csp on, the
 // default) with no red for every family at w = 31 m; with csp off validation reds steep-without-raycast, which is the right refusal; and a
-// start straight that is itself cupped to 150° is refused by name at the grid, not by a crash. A cup of 150° on a bowl narrower than the
+// start straight that is itself cupped to 150° exports with a single-column grid (D226; it was refused at the grid before). A cup of 150° on a bowl narrower than the
 // downforce ray's 1 m gap is refused at the DOCUMENT (BAD_CUP), never reaching the export's incidental red (D190 seal, row 2).
 'use strict';
 const test = require('node:test');
@@ -39,9 +39,13 @@ for (const family of FAMILIES) {
     assert.throws(() => exportDoc(cupLap(family, 90), { csp: false }), (e) => e.name === 'ExportError' && e.code === 'RED' && /steep/i.test(e.message + JSON.stringify(e.red)), `${family}: csp false`);
   });
 }
-test('row 4 (iii): a start straight cupped to 150° is refused by NAME at the grid (too narrow for a two-column grid), not by a crash', () => {
-  const doc = cupLap('bowl', 150, { cupStart: true });
-  assert.throws(() => exportDoc(doc), (e) => e.code === 'NO_START_STRAIGHT' && /narrow/i.test(e.message), 'refused at the grid');
+// D226 (ruling b): this row used to expect a REFUSAL here. The 150° cup's floor is 4.45 m wide: too narrow for two columns, wide enough for one
+// slot, so the grid now falls back to a single column on the centreline (src/markers/layout.js) and says so; the refusal by name is kept for a
+// floor that fits no slot (test/export_tube_grid.test.js row 2, a tube 20 m wide at 1.67 m), and it is still never a crash.
+test('row 4 (iii): a start straight cupped to 150° (a 4.45 m floor: not two columns, one slot) exports with a single-column grid and says so, not a crash', () => {
+  const doc = cupLap('bowl', 150, { cupStart: true }), out = exportDoc(doc);
+  assert.equal(out.markers.layout.grid.pattern, '1-column'); assert.ok(out.markers.check.checks.every((c) => c.ok), JSON.stringify(out.markers.check.checks.filter((c) => !c.ok)));
+  assert.ok(out.warnings.some((w) => /single column on the centreline/.test(w)), 'the warning names it'); assert.ok(out.kn5.length > 1000);
 });
 test('row 4 / row 2: a bowl cup of 165° (walls crossed) is refused at the DOCUMENT by name, so the export\'s incidental raygap red is never what stops it', () => {
   assert.throws(() => cupLap('bowl', 165), (e) => e.code === 'BAD_CUP');

@@ -115,6 +115,8 @@
     openAutosave: () => (tauri ? call('open_autosave') : Promise.resolve(null)),
     clearAutosave: () => (tauri ? call('clear_autosave') : Promise.resolve()),
     writeExport: (dir, folder, files) => call('write_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }),
+    folderIsEmpty: (dir) => call('folder_is_empty', { dir }),   // D226: only an EMPTY folder directly in content\tracks, not t180b_*, reads true
+    removeEmptyFolder: (dir) => call('remove_empty_folder', { dir }),   // and only that one can be removed (rmdir: never its contents)
   };
 
   // THE WINDOW'S X (D192). ONE close handler, registered here BEFORE the mode branch so both builders have it (app/closer.js says why:

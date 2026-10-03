@@ -246,15 +246,16 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
      */
     async exportTo(dir, opts = {}) {
       if (!exporter) return set({ message: 'export is not available here' });
-      const g = exporter.checkTarget(dir);
-      if (!g.ok) return set({ message: g.reason, exportReds: null });
+      const t = await exporter.resolveTarget(dir, storage);   // D226: an EMPTY folder directly in content\tracks exports to content\tracks and is then removed
+      if (t.refused) return set({ message: t.refused.reason, exportReds: null });
+      dir = t.dir;
       let out;
       try { out = exporter.run(api.exportDoc(), opts); } catch (e) {
         if (e.name !== 'ExportError') throw e;
         return set({ message: e.message, exportReds: e.code === 'RED' ? e.red : null });
       }
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);
-      const warn = out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '';
+      const warn = (out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '') + await exporter.removeEmptyNote(storage, t);
       return set({ message: `exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${warn}`, messageKind: 'ok', exportReds: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
     },
     /** The track as the export and the install name it: under the name it was SAVED as (the t180b_<name> folder), since

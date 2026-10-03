@@ -26,8 +26,16 @@ const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-app-export-')); made.push(d); return d; };
 test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 
+/** The native side's two folder commands (src-tauri/src/lib.rs folder_is_empty, remove_empty_folder), as the real file system answers them: only an EMPTY real folder directly in content/tracks, not t180b_*, reads empty or is removed (rmdir never removes contents). */
+function folderOps(s) {
+  s.emptyChecks = []; s.removed = [];
+  const direct = (d) => { const p = String(d).replace(/\\/g, '/').split('/').filter(Boolean), i = p.findIndex((x, k) => x.toLowerCase() === 'content' && (p[k + 1] || '').toLowerCase() === 'tracks' && p.length === k + 3); return i >= 0 && !/^t180b_/i.test(p[i + 2]); };
+  s.folderIsEmpty = async (d) => { s.emptyChecks.push(d); return direct(d) && fs.existsSync(d) && fs.lstatSync(d).isDirectory() && fs.readdirSync(d).length === 0; };
+  s.removeEmptyFolder = async (d) => { if (!(await s.folderIsEmpty(d))) throw new Error(`${d} is not an empty folder directly in content\\tracks: nothing removed`); fs.rmdirSync(d); s.removed.push(d); };
+  return s;
+}
 function storage() {
-  const s = { writes: [] };
+  const s = folderOps({ writes: [] });
   return Object.assign(s, {
     saveDoc: async () => {}, openDoc: async () => null, listDocs: async () => [], saveLibrary: async () => {}, openLibrary: async () => null,
     writeExport: async (dir, folder, files) => {
@@ -167,4 +175,71 @@ test('a track saved under a name exports as t180b_<that name>, not as the name i
   await s.save('Monza');
   await s.exportTo(tmp());
   assert.deepEqual(st.writes.map((w) => w.folder), ['t180b_monza'], s.getState().message);
+});
+
+// ── D226: an EMPTY folder made directly in content\tracks is not another track: export to content\tracks and remove it ──
+// A temp folder tree stands in for the AC install (nothing real is touched): <tmp>/content/tracks/<picked>.
+const acTree = (...inside) => { const tracks = path.join(tmp(), 'content', 'tracks'); fs.mkdirSync(tracks, { recursive: true }); for (const n of inside) fs.mkdirSync(path.join(tracks, n), { recursive: true }); return tracks; };
+const listing = (d) => fs.readdirSync(d).sort();
+
+test('D226 resolveTarget: only an EMPTY folder directly in content\\tracks is redirected to content\\tracks (the user\'s own spelling of the path); everything else is refused as before', async () => {
+  const ex = await exporter(), AC = 'G:\\SteamLibrary\\steamapps\\common\\assettocorsa\\content\\tracks', yes = { folderIsEmpty: async () => true }, no = { folderIsEmpty: async () => false };
+  assert.deepEqual(await ex.resolveTarget(`${AC}\\T-180 TUBE OVAL`, yes), { dir: AC, cleanup: `${AC}\\T-180 TUBE OVAL`, cleanupName: 'T-180 TUBE OVAL' });
+  assert.deepEqual(await ex.resolveTarget('/mnt/ac/content/tracks/Some Oval', yes), { dir: '/mnt/ac/content/tracks', cleanup: '/mnt/ac/content/tracks/Some Oval', cleanupName: 'Some Oval' });
+  assert.equal((await ex.resolveTarget(`${AC}\\T-180 TUBE OVAL\\`, yes)).dir, AC, 'a trailing separator');
+  for (const [dir, st, why] of [[`${AC}\\T180 OVAL`, no, 'not empty'], [`${AC}\\T180 OVAL`, undefined, 'no storage'], [`${AC}\\T180 OVAL`, {}, 'storage cannot say'], [`${AC}\\T180 OVAL`, { folderIsEmpty: async () => 'yes' }, 'a truthy answer is not true'],
+    [`${AC}\\T180 OVAL\\sub`, yes, 'deeper than the direct child'], [`${AC}\\T180 OVAL\\sub\\deeper`, yes, 'deeper still'],
+    [`${AC}\\content\\tracks\\Foo`, yes, 'a direct child whose PARENT is itself inside another track: the parent must pass the guard too']]) {
+    const r = await ex.resolveTarget(dir, st); assert.equal(r.refused && r.refused.code, 'AC_INSTALL', why); assert.match(r.refused.reason, /another track's folder/, why); assert.equal(r.dir, undefined, why);
+  }
+  for (const dir of [AC, `${AC}\\t180b_mine`, 'C:\\Users\\someone\\Documents\\exports']) { const r = await ex.resolveTarget(dir, no); assert.deepEqual(r, { dir }, dir); }
+  assert.equal((await ex.resolveTarget('', yes)).refused.code, 'NO_FOLDER');
+});
+
+test('D226 the empty folder the keeper made exports to content\\tracks as the normal t180b_<name> folder and the empty folder is removed, so Content Manager never sees it', async () => {
+  const tracks = acTree('T-180 TUBE OVAL', 'somebody_elses'); fs.writeFileSync(path.join(tracks, 'somebody_elses', 'theirs.kn5'), 'theirs');
+  const st = storage(), { s } = await shellWith(SAMPLE, st), picked = path.join(tracks, 'T-180 TUBE OVAL');
+  await s.exportTo(picked);
+  assert.equal(s.getState().messageKind, 'ok', s.getState().message);
+  assert.deepEqual(st.writes.map((w) => [w.dir, w.folder]), [[tracks, 't180b_app_loop']], 'written to content\\tracks, named by the track');
+  assert.deepEqual(listing(tracks), ['somebody_elses', 't180b_app_loop'], 'the empty folder is gone, nothing else appeared');
+  assert.deepEqual(st.removed, [picked]); assert.ok(fs.existsSync(path.join(tracks, 't180b_app_loop', 'ai', 'fast_lane.ai')));
+  assert.match(s.getState().message, /exported t180b_app_loop to .*removed the empty folder "T-180 TUBE OVAL"/);
+  assert.deepEqual(listing(path.join(tracks, 'somebody_elses')), ['theirs.kn5']); assert.equal(fs.readFileSync(path.join(tracks, 'somebody_elses', 'theirs.kn5'), 'utf8'), 'theirs');
+  assert.deepEqual(s.getState().lastExport, { dir: tracks, folders: ['t180b_app_loop'] });
+});
+
+test('D226 a folder with ANYTHING in it is refused as before and never deleted: a file, a nested empty folder, a hidden file', async () => {
+  for (const put of [(d) => fs.writeFileSync(path.join(d, 'notes.txt'), 'mine'), (d) => fs.mkdirSync(path.join(d, 'sub')), (d) => fs.writeFileSync(path.join(d, '.hidden'), 'x')]) {
+    const tracks = acTree('T180 OVAL'), picked = path.join(tracks, 'T180 OVAL'); put(picked);
+    const before = listing(picked), st = storage(), { s } = await shellWith(SAMPLE, st);
+    await s.exportTo(picked);
+    assert.deepEqual(st.writes, [], 'nothing written'); assert.deepEqual(st.removed, [], 'nothing removed'); assert.match(s.getState().message, /another track's folder/);
+    assert.deepEqual(listing(picked), before); assert.deepEqual(listing(tracks), ['T180 OVAL']);
+  }
+});
+
+test('D226 if the empty folder cannot be removed the export still stands, and the message says to delete it by hand', async () => {
+  const tracks = acTree('T180 OVAL'), st = storage(), { s } = await shellWith(SAMPLE, st), picked = path.join(tracks, 'T180 OVAL');
+  st.removeEmptyFolder = async () => { throw new Error('access denied'); };
+  await s.exportTo(picked);
+  assert.equal(s.getState().messageKind, 'ok'); assert.deepEqual(st.writes.map((w) => w.folder), ['t180b_app_loop']);
+  assert.match(s.getState().message, /could not remove the empty folder "T180 OVAL" \(access denied\): delete it by hand/); assert.ok(fs.existsSync(picked));
+});
+
+test('D226 a refused or failed export leaves the picked empty folder where it was (nothing is removed unless the export was written)', async () => {
+  const tracks = acTree('T180 OVAL'), picked = path.join(tracks, 'T180 OVAL'), st = storage();
+  const open = D.appendWord(D.appendWord(D.createDoc('Open'), 'straight'), 'turn'), { s } = await shellWith(open, st);
+  await s.exportTo(picked);
+  assert.match(s.getState().message, /OPEN_TRACK/); assert.deepEqual(st.writes, []); assert.deepEqual(st.removed, []); assert.ok(fs.existsSync(picked));
+});
+
+test('D226 a t180b_ folder, content\\tracks itself and a folder elsewhere export exactly as before and never touch or ask about a folder', async () => {
+  const tracks = acTree('t180b_mine'), st = storage(), { s } = await shellWith(SAMPLE, st), out = tmp();
+  await s.exportTo(path.join(tracks, 't180b_mine'));
+  assert.equal(s.getState().messageKind, 'ok', s.getState().message); assert.deepEqual(st.writes.map((w) => [w.dir, w.folder]), [[path.join(tracks, 't180b_mine'), 't180b_app_loop']]);
+  await s.exportTo(tracks); assert.deepEqual(st.writes.map((w) => [w.dir, w.folder]).pop(), [tracks, 't180b_app_loop']);
+  await s.exportTo(out); assert.deepEqual(st.writes.map((w) => [w.dir, w.folder]).pop(), [out, 't180b_app_loop']);
+  assert.deepEqual(st.removed, []); assert.ok(!/removed the empty/.test(s.getState().message));
+  assert.deepEqual(st.emptyChecks, [], 'the folder check is asked only about a refused folder directly in content\\tracks');
 });

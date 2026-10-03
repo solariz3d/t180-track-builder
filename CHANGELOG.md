@@ -5,6 +5,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **A tube oval now reaches Assetto Corsa: the export folder and the start grid (D226).** Two causes. (1) The keeper makes a folder named after the
+  track directly in `content\tracks` and picks it; the guard refused (it must never write inside another track) and the EMPTY folder it left
+  made Content Manager say "main layout is damaged". Now a picked folder directly in `content\tracks` that is not `t180b_*` and is EMPTY exports
+  into `content\tracks` as the normal `t180b_<name>` and is removed afterwards; a folder with anything in it is refused and kept, as before.
+  The native side checks the same again and removes only an empty folder (rmdir). (2) A closed tube's start straight has a floor of a few metres
+  whatever its width (the surface angle grows from 0 at the bottom), so the grid was refused as "too narrow for a two-column grid". When the
+  floor fits one slot (a half width over 1.1 m) but not two columns, `src/markers/layout.js` now puts the cars nose to tail on the centreline
+  (the new `1-column` grid pattern, a slot every 8 m, the same length as the staggered pair) and the export warns that it did; it still refuses by
+  name when not even one slot fits (a tube about 26 m wide or narrower). The two-column layouts are unchanged.
+
 ### Added
 - **The cross-section lap, in the core: an edge curve, a tube, and a spiral inside it (D225).** Extend takes three more targets. **Edge angle** (`e`) and **edge start** (`s`) curve the outer part of the road more: from the edge start outward the road gains the extra angle by a smooth curve (3t² − 2t³), with no crease and no wall, and bank still rolls the whole section; 0 is today's road exactly, and every earlier track renders byte for byte as before. **Tube sweep** (`t`, 0 to 360°) makes the section a circular arc, a pipe at 360°. Inside a closed tube bank can wind a full turn (a spiral round the inside of a straight pipe); the road centre is a smooth helix, and the validator reads its centripetal load. Added so the keeper can drive a tube and spiral through it: the track file is now `t180b.core/4` (older files open unchanged; an older builder refuses a new one by name instead of dropping the edge). Limits, each refused by name: an edge angle that takes the total past 150° (180° on an open tube), an edge start outside 0.5 to 0.95, a tube held between 348.7° and 360° on a 31 m road (the two lips leave a slot under the car's 1 m downforce ray), a closed tube narrower than 9.74 m (the chase camera cannot fit), a lap seam that joins a tube to something else. The validator also reds a roll faster than 1.2144°/m over 20 m (amber above 0.9338): a full 360° of bank passes only over about 450 m, and 600 m clears amber, so 300 m reds; and a tube that closes along the road reds the slot as a downforce-ray gap, with no exemption. Water cannot pour over a tube's spiral and says so. Maths on the shelf: references/09 §10. The Extend fields for these (e, s, t) are the app's, not yet wired.
 

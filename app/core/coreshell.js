@@ -212,8 +212,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     async exportTo(dir, opts = {}) {
       if (!exporter) return set({ message: 'export is not available here' });
       if (!doc().closed) return set({ message: 'the loop is not closed: close it first (one click), then export', exportReds: null });
-      const g = exporter.checkTarget(dir);
-      if (!g.ok) return set({ message: g.reason, exportReds: null });
+      const t = await exporter.resolveTarget(dir, storage);   // D226: an EMPTY folder directly in content\tracks exports to content\tracks and is then removed
+      if (t.refused) return set({ message: t.refused.reason, exportReds: null });
+      dir = t.dir;
       let out;
       let markers;
       try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; return set({ message: `not exported: ${e.message}`, exportReds: null }); }
@@ -223,7 +224,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       }
       if (!storage || typeof storage.writeExport !== 'function') return set({ message: 'there is nowhere to write the export here' });
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);
-      const w = out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '';
+      const w = (out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '') + await exporter.removeEmptyNote(storage, t);
       return set({ ...ok(`exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${w}`), exportReds: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
     },
 

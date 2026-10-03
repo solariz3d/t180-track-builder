@@ -262,6 +262,40 @@ fn write_export(dir: String, folder: String, files: Vec<ExportFile>) -> Result<u
     write_export_to(Path::new(&dir), &folder, &decoded?)
 }
 
+/// `dir` is exactly `…/content/tracks/<name>` (nothing deeper) with a <name> that does not start with t180b_: the folder someone made by hand
+/// for a track (D226). Content Manager reads such a folder, when it is empty, as a broken track.
+pub fn direct_foreign_track(dir: &str) -> bool {
+    let parts: Vec<&str> = dir.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+    (0..parts.len().saturating_sub(2)).any(|i| {
+        parts[i].eq_ignore_ascii_case("content") && parts[i + 1].eq_ignore_ascii_case("tracks") && parts.len() == i + 3 && !parts[i + 2].to_ascii_lowercase().starts_with("t180b_")
+    })
+}
+
+/// True only for a real (not linked) EMPTY folder that `direct_foreign_track` names.
+pub fn is_empty_foreign_folder(dir: &Path) -> bool {
+    direct_foreign_track(&dir.to_string_lossy())
+        && fs::symlink_metadata(dir).map(|m| m.is_dir() && !m.file_type().is_symlink()).unwrap_or(false)
+        && fs::read_dir(dir).map(|mut r| r.next().is_none()).unwrap_or(false)
+}
+
+/// Remove that empty folder and nothing else: the checks again, then rmdir, which the OS refuses on a folder with anything in it.
+pub fn remove_empty_foreign_folder(dir: &Path) -> Result<(), String> {
+    if !is_empty_foreign_folder(dir) {
+        return Err(format!("{} is not an empty folder directly in content\\tracks: nothing removed", dir.display()));
+    }
+    fs::remove_dir(dir).map_err(|e| format!("could not remove {}: {e}", dir.display()))
+}
+
+#[tauri::command]
+fn folder_is_empty(dir: String) -> bool {
+    is_empty_foreign_folder(Path::new(&dir))
+}
+
+#[tauri::command]
+fn remove_empty_folder(dir: String) -> Result<(), String> {
+    remove_empty_foreign_folder(Path::new(&dir))
+}
+
 // ---- Assetto Corsa: install, and the launch that is off by default (ac.rs) ----
 fn decode_files(files: Vec<ExportFile>) -> Result<Vec<(String, Vec<u8>)>, String> {
     files.into_iter().map(|f| decode_base64(&f.data).map(|b| (f.path, b))).collect()
@@ -314,7 +348,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_tracks, save_track, open_track, save_library, open_library,
-            save_autosave, open_autosave, clear_autosave, write_export,
+            save_autosave, open_autosave, clear_autosave, write_export, folder_is_empty, remove_empty_folder,
             get_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
             test_export_folder
         ])
@@ -406,6 +440,43 @@ mod tests {
         assert!(write_export_to(&d, "t180b_two", &[("../escape".to_string(), vec![1])]).is_err());
         assert!(!d.join("escape").exists());
         fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn only_an_empty_folder_made_directly_in_content_tracks_is_removed() {
+        let root = scratch("emptyfolder");
+        let tracks = root.join("content").join("tracks");
+        let mine = tracks.join("T-180 TUBE OVAL");
+        fs::create_dir_all(&mine).unwrap();
+        assert!(direct_foreign_track(&mine.to_string_lossy()) && is_empty_foreign_folder(&mine));
+        // anything in it, even a nested empty folder: never removed
+        fs::create_dir_all(mine.join("sub")).unwrap();
+        assert!(!is_empty_foreign_folder(&mine));
+        assert!(remove_empty_foreign_folder(&mine).is_err() && mine.join("sub").is_dir());
+        fs::remove_dir(mine.join("sub")).unwrap();
+        fs::write(mine.join("keep.txt"), "mine").unwrap();
+        assert!(remove_empty_foreign_folder(&mine).is_err());
+        assert_eq!(fs::read_to_string(mine.join("keep.txt")).unwrap(), "mine");
+        fs::remove_file(mine.join("keep.txt")).unwrap();
+        // not direct (deeper), not content/tracks itself, not a t180b_ folder, not a file, not outside content/tracks
+        let deeper = mine.join("deeper");
+        fs::create_dir_all(&deeper).unwrap();
+        assert!(!is_empty_foreign_folder(&deeper) && remove_empty_foreign_folder(&deeper).is_err() && deeper.is_dir());
+        fs::remove_dir(&deeper).unwrap();
+        assert!(!direct_foreign_track(&tracks.to_string_lossy()) && !is_empty_foreign_folder(&tracks));
+        let ours = tracks.join("t180b_mine");
+        fs::create_dir_all(&ours).unwrap();
+        assert!(!is_empty_foreign_folder(&ours) && ours.is_dir());
+        let elsewhere = root.join("exports");
+        fs::create_dir_all(&elsewhere).unwrap();
+        assert!(!is_empty_foreign_folder(&elsewhere) && elsewhere.is_dir());
+        fs::write(tracks.join("a_file"), "x").unwrap();
+        assert!(!is_empty_foreign_folder(&tracks.join("a_file")));
+        // the empty one goes, and only it
+        assert!(remove_empty_foreign_folder(&mine).is_ok() && !mine.exists());
+        assert!(tracks.is_dir() && ours.is_dir() && tracks.join("a_file").is_file());
+        assert!(remove_empty_foreign_folder(&mine).is_err(), "already gone");
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

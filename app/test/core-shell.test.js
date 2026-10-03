@@ -20,7 +20,11 @@ const fromDisk = async (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 const made = [];
 test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 function memStorage() {
-  const docs = new Map(), s = { writes: [] };
+  const docs = new Map(), s = { writes: [], removed: [] };
+  // the native side's two folder commands (D226): only an EMPTY real folder directly in content/tracks, not t180b_*, reads empty or is removed
+  const direct = (d) => { const p = String(d).replace(/\\/g, '/').split('/').filter(Boolean), i = p.findIndex((x, k) => x.toLowerCase() === 'content' && (p[k + 1] || '').toLowerCase() === 'tracks' && p.length === k + 3); return i >= 0 && !/^t180b_/i.test(p[i + 2]); };
+  s.folderIsEmpty = async (d) => direct(d) && fs.existsSync(d) && fs.lstatSync(d).isDirectory() && fs.readdirSync(d).length === 0;
+  s.removeEmptyFolder = async (d) => { if (!(await s.folderIsEmpty(d))) throw new Error('not an empty folder directly in content\\tracks: nothing removed'); fs.rmdirSync(d); s.removed.push(d); };
   return Object.assign(s, {
     saveDoc: async (n, t) => { docs.set(n, t); }, openDoc: async (n) => { if (!docs.has(n)) throw new Error(`no track ${n}`); return docs.get(n); }, listDocs: async () => [...docs.keys()],
     writeExport: async (dir, folder, files) => { s.writes.push({ dir, folder, n: files.length }); for (const f of files) { const p = path.join(dir, folder, ...f.path.split('/')); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, f.bytes); } },
@@ -304,4 +308,17 @@ test('the pick: the station under a canvas point, as the renderer projects it; n
   const back = p.samples.find((x) => x.s === 40), cb = M.apply(VP, back.pos); assert.ok(cb[3] < 0, 'it is behind the eye');
   const bx = (cb[0] / cb[3] * 0.5 + 0.5) * W, by = (1 - (cb[1] / cb[3] * 0.5 + 0.5)) * H, h2 = pickAt(p, pose, bx, by, W, H, 1e9);
   assert.ok(!h2 || h2.s > 85, `a station behind the eye was picked (${h2 && h2.s})`);
+});
+
+test('D226 export (core): an EMPTY folder made directly in content\\tracks exports to content\\tracks and is removed; a folder with anything in it is refused and kept', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-empty-')); made.push(root);
+  const tracks = path.join(root, 'content', 'tracks'), empty = path.join(tracks, 'T-180 TUBE OVAL'), full = path.join(tracks, 'T180 OVAL');
+  fs.mkdirSync(empty, { recursive: true }); fs.mkdirSync(full, { recursive: true }); fs.writeFileSync(path.join(full, 'notes.txt'), 'mine');
+  const st = memStorage(), ex = await makeExporter(fromDisk), s = await lap({ storage: st, exporter: ex }); s.close();
+  await s.exportTo(full);
+  assert.match(s.getState().message, /another track's folder/); assert.equal(st.writes.length, 0); assert.deepEqual(st.removed, []); assert.equal(fs.readFileSync(path.join(full, 'notes.txt'), 'utf8'), 'mine');
+  await s.exportTo(empty);
+  assert.equal(s.getState().messageKind, 'ok', s.getState().message); assert.deepEqual(st.writes.map((w) => w.dir), [tracks]); assert.ok(st.writes[0].folder.startsWith('t180b_'));
+  assert.deepEqual(st.removed, [empty]); assert.ok(!fs.existsSync(empty)); assert.ok(fs.existsSync(path.join(tracks, st.writes[0].folder, 'ai', 'fast_lane.ai'))); assert.ok(fs.existsSync(full));
+  assert.match(s.getState().message, /removed the empty folder "T-180 TUBE OVAL"/);
 });
