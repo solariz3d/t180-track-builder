@@ -108,6 +108,11 @@ through the same test first, and failed it badly.
 
 ### Fixed
 
+- **Closing the window with unsaved changes now asks first:** Save, Don't save, or Cancel. Before, the X closed at once and
+  the unsaved track was gone (the pieces builder kept an autosave; the equation builder kept nothing). Save does what the
+  Save button does; if the track has no name yet the window stays open with the name box focused, so nothing is lost.
+  Cancel, or closing the prompt, keeps the window open. With nothing unsaved the X closes at once, as before. If the
+  prompt itself cannot be shown, the window still closes: the X never stops working (`app/closer.js`, D192's rule).
 - **Exported tracks now work in Assetto Corsa: the car stays on the road, and the road is lit.** Found in the first drive
   of an exported track in AC with CSP (2026-10-02, a 6 km oval). Two causes, both in the kn5 the export writes:
   - The car fell through the road. Every road cell sat under its own transformed node and reused its piece's mesh name
