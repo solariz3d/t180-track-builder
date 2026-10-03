@@ -67,7 +67,7 @@ const Prof = require('../geom/profile.js');
 const { validate } = require('../validate/index.js');
 const { validateScene } = require('./scene.js');
 const { writeKn5 } = require('./kn5write.js');
-const { flattenForAc, ensureDiffuse } = require('./acready.js');
+const { flattenForAc, ensureDiffuse, weldSeams } = require('./acready.js');
 const { checkMarkers, walkScene, isDrivable } = require('./markers.js');
 const Markers = require('../markers/index.js');
 const trackfiles = require('./trackfiles.js');
@@ -216,7 +216,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
 
   // the kn5, read back by our own reader (ARCHITECTURE §6 self-test) before any folder is touched. Flattened and given
   // diffuse textures first, as AC needs (src/export/acready.js: without these the car fell through and the road was black)
-  const kn5 = Buffer.from(writeKn5(ensureDiffuse(flattenForAc(scene))));
+  const kn5 = Buffer.from(writeKn5(ensureDiffuse(weldSeams(flattenForAc(scene)))));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-')), tf = path.join(tmp, 'readback.kn5');
   let back;
   try { fs.writeFileSync(tf, kn5); back = readKn5(tf); } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

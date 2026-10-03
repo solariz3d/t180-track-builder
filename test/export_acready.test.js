@@ -91,3 +91,51 @@ test('an exported track has no transformed road, unique names, and a diffuse on 
   const raw = fs.readFileSync(path.join(dir, `${r.folders[0].folder}.kn5`));
   assert.ok(raw.includes(Buffer.from('txDiffuse')), 'a txDiffuse sampler is written');
 });
+
+// ── weldSeams: a sub-2 mm zipper is a strip of slivers facing along the road; it is dropped and the edge shared ─────────
+const { weldSeams, SNAP, SLIVER } = require('../src/export/acready.js');
+const strip = (A, B) => {   // the zipper's own layout: row A then row B, each a line across the road at z = 0
+  const pts = [...A, ...B], idx = [];
+  for (let i = 0; i < A.length - 1; i++) idx.push(i, A.length + i, i + 1, i + 1, A.length + i, A.length + i + 1);
+  return { type: 'mesh', name: '1ROAD_seam_p1_body', material: 0, positions: Float32Array.from(pts.flat()), normals: new Float32Array(pts.length * 3),
+    uvs: new Float32Array(pts.length * 2), indices: Uint16Array.from(idx), castShadows: true, visible: true, transparent: false, renderable: true };
+};
+const rowA = [[0, 0, 0], [5, 0, 0], [10, 0, 0]], rowB = (dz) => [[0, 0, dz], [5, 0, dz], [10, 0, dz]];
+const nextPiece = (dz) => ({ ...tri('1ROAD_p1_body_0'), positions: Float32Array.from([...rowB(dz)[0], ...rowB(dz)[2], 0, 0, 2]) });
+const flat = (kids) => ({ textures: [], materials: [MAT], root: { type: 'dummy', name: 't180b_track', matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], children: kids } });
+
+test('a seam whose rows are within SNAP is dropped, and the next piece\'s edge is moved onto the earlier row', () => {
+  const r = weldSeams(flat([strip(rowA, rowB(0.0005)), nextPiece(0.0005)]));
+  assert.deepStrictEqual(r.root.children.map((n) => n.name), ['1ROAD_p1_body_0']);
+  const p = r.root.children[0].positions;
+  assert.deepStrictEqual([p[2], p[5]].map((z) => Math.abs(z) < 1e-6), [true, true], 'the two edge points now lie on row A (z = 0)');
+  assert.strictEqual(p[8], 2, 'a point not on the seam is not moved');
+});
+
+test('a seam wider than SNAP is a real bridge and is kept untouched', () => {
+  const s = flat([strip(rowA, rowB(SNAP * 5)), nextPiece(SNAP * 5)]), r = weldSeams(s);
+  assert.strictEqual(r, s);
+});
+
+test('a scene with no seam is returned as it was', () => {
+  const s = flat([nextPiece(0)]);
+  assert.strictEqual(weldSeams(s), s);
+});
+
+test('an exported closed track has no sliver seam left on its road', () => {
+  let d = D.createDoc('Weld Loop');
+  for (const w of ['straight', 'straight', 'tight', 'straight', 'tight']) d = appendOld(D, d, w, { speed: kmh(200) });
+  const c = closeLoop(d); assert.ok(c.candidates.length, c.reason);
+  const doc = c.candidates.slice().sort((a, b) => a.lengthM - b.lengthM)[0].doc;
+  const out = tmp(), r = exportTrack(doc.words.reduce((x, w) => D.editWord(x, w.id, { speed: kmh(200) }), doc), { outDir: out });
+  const k = readKn5(path.join(out, r.folders[0].folder, `${r.folders[0].folder}.kn5`));
+  for (const m of k.meshes.filter((x) => /^\d.*seam/i.test(x.name))) {
+    for (let i = 0; i < m.idx.length; i += 3) {
+      const v = [m.idx[i], m.idx[i + 1], m.idx[i + 2]].map((j) => [m.pos[3 * j], m.pos[3 * j + 1], m.pos[3 * j + 2]]);
+      const e1 = v[1].map((x, j) => x - v[0][j]), e2 = v[2].map((x, j) => x - v[0][j]);
+      const area = Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]) / 2;
+      const e3 = v[2].map((x, j) => x - v[1][j]), thick = (2 * area) / Math.max(Math.hypot(...e1), Math.hypot(...e2), Math.hypot(...e3));
+      assert.ok(thick >= SLIVER * 0.99, `${m.name} keeps a sliver ${(thick * 1000).toFixed(2)} mm thick`);
+    }
+  }
+});

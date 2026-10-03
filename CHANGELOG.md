@@ -114,6 +114,13 @@ through the same test first, and failed it badly.
   - The road rendered black under any light. Its `ksPerPixel` material had no `txDiffuse` texture, and that shader takes
     its colour from one. Every material without a diffuse now gets a small solid one (grey for the road, near-white for
     the paint), and the preview draws the same textures, so the preview and the kn5 still list the same materials.
+  - A bump at 900+ km/h where one piece meets the next, felt in the drive and seen in its replay. It is not a step: the two
+    edges meet within 0.5 mm. The builder bridged that half-millimetre with a strip of slivers (about 1e-4 m², thinner
+    than 4 mm) whose normals face along the road, so a tyre that landed on one met a wall. The worst crease the car
+    crossed on the lap was 167° there and 0.34° anywhere else. The export now moves the later piece's edge onto the
+    earlier one wherever they are within 2 mm, and drops every seam triangle thinner than 4 mm. Seam triangles that bridge
+    a real gap (a change of cross-section across part of the width) are kept. On the oval, the worst crossed crease is
+    now 0.34° everywhere, measured along the driven line; whether the bump is gone in the car is still to be driven.
   - To adapt: re-export a track to get the fix. A track exported before this still falls through.
   - Known, not changed here: the sealed fixture digests (D190 row 5) no longer match for the two closed-loop fixtures,
     because their kn5 bytes changed on purpose. They need re-sealing.
