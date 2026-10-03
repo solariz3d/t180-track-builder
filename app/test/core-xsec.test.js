@@ -12,7 +12,9 @@
 //      (0, 0.64, 0); a piece given a target reads the target PLUS a ring (edge +0.871°, start +0.013, tube −0.871°), as the Extend fit may
 //      ring past a target (D190 V5), so a panel that shows the typed value instead of the document's is caught;
 //   3. headState() adds the same document values for the head, so the fields read back what was placed;
-//   4. it refuses, by a CoreError name, a held sweep in the slot (348.732°, 360°) on a 31 m road (E's T1 iii), so the name can be seen.
+//   4. it refuses with A's CONTRACT names (p-xsec-A-contract_2026-10-03.md), as CoreErrors: BAD_TUBE for a held sweep in the slot
+//      (348.732°, 360°) on a 31 m road (E's T1 iii) or outside [0, 360]; BAD_EDGE for e < 0 or s outside [0.5, 0.95]; BAD_TARGET for c and t
+//      together. Only the names and these simple bounds are the stub's: the real guards (the cap on the total, t1m(w)) are A's.
 // The real shell's own headState (no stub) is tested separately: on a core without the channels it reads the seal's defaults.
 'use strict';
 const test = require('node:test');
@@ -82,7 +84,14 @@ function stubXsec(real) {
     if (o && o.first) { const f = { ...o.first }; for (const k of KEYS) delete f[k]; out.first = f; }
     return { o: out, got };
   };
-  const guard = (got, w) => { const t = got[T]; if (t !== undefined && t > 348.732 && t < 360 && Math.abs(w - 31) < 0.5) throw new D.CoreError('TUBE_SLOT', `a sweep of ${t}° on a ${w} m road leaves a slot narrower than the downforce ray (stub)`); };
+  const guard = (got, w, targets = {}) => {
+    const t = got[T], e = got[E], sl = got[S];
+    if (t !== undefined && 'c' in targets) throw new D.CoreError('BAD_TARGET', 'a piece is a cup or a tube, not both (stub)');
+    if (t !== undefined && (t < 0 || t > 360)) throw new D.CoreError('BAD_TUBE', `the sweep must be 0 to 360°, got ${t} (stub)`);
+    if (t !== undefined && t > 348.732 && t < 360 && Math.abs(w - 31) < 0.5) throw new D.CoreError('BAD_TUBE', `a sweep of ${t}° on a ${w} m road leaves a slot narrower than the downforce ray (stub)`);
+    if (e !== undefined && e < 0) throw new D.CoreError('BAD_EDGE', `the edge angle must be ≥ 0, got ${e} (stub)`);
+    if (sl !== undefined && !(sl >= 0.5 && sl <= 0.95)) throw new D.CoreError('BAD_EDGE', `the edge start must be 0.5 to 0.95, got ${sl} (stub)`);
+  };
   // (the real extend redraws the panel before it returns, so the piece's record is taken from `pending` the first time its id is seen)
   let pending = null;
   const lastEnd = () => { const P = real.getState().history.present.pieces; const id = P.length ? P[P.length - 1].id : null;
@@ -92,11 +101,11 @@ function stubXsec(real) {
   const withXs = (r, from, to) => { const o = { ...r }; for (const [f, k] of Object.entries(XS.CHANNEL)) { const [a, b] = XS.READOUT[f]; o[a] = from[k]; o[b] = to[k]; } return o; };
   return Object.assign(Object.create(real), {
     sent,
-    candidateReadout(o) { sent.push(o); const { o: bare, got } = strip(o); guard(got, real.headState().w); const from = lastEnd(); return withXs(real.candidateReadout(bare), from, endOf(from, got)); },
+    candidateReadout(o) { sent.push(o); const { o: bare, got } = strip(o); guard(got, real.headState().w, (o && o.targets) || {}); const from = lastEnd(); return withXs(real.candidateReadout(bare), from, endOf(from, got)); },
     candidate(o) { return real.candidate(strip(o).o); },
     extend(o) {
       sent.push(o); const { o: bare, got } = strip(o), from = lastEnd();
-      guard(got, real.headState().w);   // (the stub throws; A's core throws inside the shell's attempt, which shows it: the real-core test below)
+      guard(got, real.headState().w, (o && o.targets) || {});   // (the stub throws; A's core throws inside the shell's attempt, which shows it: the real-core test below)
       pending = endOf(from, got); real.extend(bare); lastEnd(); pending = null;
     },
     headState() { return { ...real.headState(), ...lastEnd() }; },
@@ -177,13 +186,43 @@ test('xsec panel: the cells say — when the core reports no such readout', asyn
   for (const k of ['edge', 'start', 'tube']) assert.equal(p.cell(k), '—');
   assert.match(p.cell('length'), /m/, 'the other cells still read');
 });
-test('xsec panel: a core refusal is shown by its name', async () => {
+test('xsec panel: a core refusal is shown by its name (BAD_TUBE, BAD_EDGE: A\'s contract)', async () => {
+  const cases = [
+    ['BAD_TUBE', (p) => { p.type('width m', 31); p.type('tube sweep °', 352); }],   // held in the slot (T1 iii)
+    ['BAD_TUBE', (p) => { p.type('tube sweep °', 400); }],                          // outside [0, 360]
+    ['BAD_EDGE', (p) => { p.type('edge angle °', -5); }],                           // e < 0
+    ['BAD_EDGE', (p) => { p.type('edge start', 0.3); }],                            // s below 0.5
+  ];
+  for (const [name, set] of cases) {
+    const p = await mountPanel(stubXsec);
+    p.type('length m', 100); set(p);
+    const ro = p.root.all().find((e) => e.attrs.class === 'readout');
+    assert.match(ro.title, new RegExp(`^${name}: `), `the readout box names the guard: "${ro.title}"`);
+    assert.equal(p.cell('length'), '—', 'and no number is shown for a refused piece');
+    assert.throws(() => p.shell.extend(p.opts()), new RegExp(name), 'Extend is refused with the guard\'s name');
+  }
+});
+test('xsec panel: a piece is a cup OR a tube — changing one puts the other back and disables it', async () => {
+  const p = await mountPanel(stubXsec), cup = p.field('cup °'), tube = p.field('tube sweep °');
+  const cup0 = cup.value;
+  p.type('length m', 100); p.type('tube sweep °', 180);
+  assert.equal(cup.disabled, true, 'a typed sweep disables the cup');
+  assert.equal(cup.value, cup0, 'and puts the cup back to what it shows');
+  assert.match(cup.getAttribute('title'), /cup or a tube/, 'the disabled field says why');
+  let t = p.opts().targets; assert.ok(T in t && !('c' in t), 'only the tube is a target, so BAD_TARGET is never sent');
+  p.type('tube sweep °', 0);   // back to the shown 0
+  assert.equal(cup.disabled, false, 'putting the sweep back frees the cup');
+  p.type('cup °', 45);
+  assert.equal(tube.disabled, true, 'a typed cup disables the tube'); assert.equal(tube.value, '0');
+  t = p.opts().targets; assert.ok('c' in t && !(T in t));
+  p.button('Extend').onclick();
+  assert.equal(tube.disabled, false, 'a new document frees both');
+  assert.equal(cup.disabled, false);
+  assert.ok(!/cup or a tube/.test(tube.getAttribute('title')), 'and gives back the field\'s own tooltip');
+});
+test('xsec panel: a cup and a tube sent together anyway are refused by name (BAD_TARGET)', async () => {
   const p = await mountPanel(stubXsec);
-  p.type('length m', 100); p.type('width m', 31); p.type('tube sweep °', 352);
-  const ro = p.root.all().find((e) => e.attrs.class === 'readout');
-  assert.match(ro.title, /TUBE_SLOT/, 'the readout box says which guard refused the piece');
-  assert.equal(p.cell('tube'), '—');
-  assert.throws(() => p.shell.extend(p.opts()), /TUBE_SLOT/, 'Extend is refused with the guard\'s name');
+  assert.throws(() => p.shell.extend({ length: 100, targets: { c: 45, [T]: 180 } }), /BAD_TARGET/);
 });
 test('xsec panel: a refusal the REAL core makes on Extend is shown in the panel with its name', async () => {
   const p = await mountPanel();   // the real core: a negative width is refused by name

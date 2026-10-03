@@ -113,7 +113,17 @@ function mount(root, shell) {
     edge: [edge, (h) => h[XS.CHANNEL.edge]], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
   const shown = {};
   const show = (x) => { const v = Math.round(x * 100) / 100; return String(Object.is(v, -0) ? 0 : v); };   // two decimals, no trailing zeros, no "-0"
-  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } };
+  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } };   // (baseTitle is set below, before the first draw)
+  // A PIECE IS A CUP OR A TUBE, never both (A's contract: `c` and `t` targets together are refused BAD_TARGET). CHOSEN: the field changed
+  // LAST wins. Changing one puts the other back to what it shows (so it sends no target) and DISABLES it, with a tooltip saying why; putting
+  // the changed one back to its shown value enables the other again, and so does every new document (showHead).
+  const ONE_OF = 'a piece is a cup or a tube, not both: put the other field back to its shown value to use this one';
+  const baseTitle = { cup: cup.getAttribute('title'), tube: tube.getAttribute('title') };
+  const exclusive = (changed) => {
+    const [mine, other, ko] = changed === cup ? ['cup', tube, 'tube'] : ['tube', cup, 'cup'];
+    if (HEAD[mine][0].value !== shown[mine]) { other.value = shown[ko]; other.disabled = true; other.setAttribute('title', ONE_OF); }
+    else { other.disabled = false; other.setAttribute('title', baseTitle[ko]); }
+  };
   const asTyped = (k) => (HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
   // "at start" (D194b): one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
@@ -151,6 +161,7 @@ function mount(root, shell) {
   // so the ghost showed the piece before the last edit, or none: found in the window proof, D186)
   for (const f of [len, turn, climb, bank, width, cup, ...Object.values(atStart)]) f.oninput = f.onchange = ghost;
   for (const f of [edge, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way (D225)
+  for (const f of [cup, tube]) f.oninput = f.onchange = () => { exclusive(f); ghost(); };   // cup OR tube: the rule first, then the ghost
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
     onclick: () => { send('t180-ghost-clear'); shell.extend(opts()); }, onmouseenter: ghost, onmouseleave: () => send('t180-ghost-clear') });
 
