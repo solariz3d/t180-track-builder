@@ -88,17 +88,23 @@ function gridLines(bounds) {
   return { positions: new Float32Array(p), spacing: sp };
 }
 /**
- * The build head's marker, world coordinates: a mast straight up and a cross in the road plane (along T and L), plus a
+ * The build head's marker, world coordinates: a mast along the ROAD's up and a cross in the road plane (along T and L), plus a
  * square ring around the head in that plane, so it reads from overhead too (a vertical mast seen from above is a point).
  * `size` is the cross's half-length; the preview scales it with the camera's distance so it stays readable at any zoom.
  * Default 3 m: a 10 m mast and a 6 m cross.
+ * THE MAST FOLLOWS THE ROAD'S U (D225, E's seal X2 ii and the librarian's ruling): it used to rise along WORLD y, so on an inverted road
+ * it pointed down through the floor and in a closed tube it left through the roof. `clear` (optional, preview.js clearanceAtHead) is
+ * the room inside a CLOSED tube at the head, { up, lat } in metres: the mast is held below `up` and the cross and ring's sideways arms
+ * inside `lat`, so the marker never leaves the tube. With no head.U (an old caller) the mast stands on world y as before.
  */
-function headMarker(head, size = 3) {
+function headMarker(head, size = 3, clear = null) {
   if (!head) return null;
-  const at = (v, k) => head.pos.map((x, i) => x + v[i] * k), up = [0, 1, 0], r = size * 1.6;
-  const c = (a, b) => head.pos.map((x, i) => x + head.T[i] * a + head.L[i] * b);
+  const U = Array.isArray(head.U) && head.U.length === 3 && head.U.every(Number.isFinite) ? head.U : [0, 1, 0];
+  const at = (v, k) => head.pos.map((x, i) => x + v[i] * k), r = size * 1.6;
+  const mast = clear ? Math.min(size * 10 / 3, clear.up) : size * 10 / 3, side = (k) => (clear ? Math.sign(k) * Math.min(Math.abs(k), clear.lat) : k);
+  const c = (a, b) => head.pos.map((x, i) => x + head.T[i] * a + head.L[i] * side(b));
   const ring = [[r, r], [r, -r], [-r, -r], [-r, r]].flatMap((p, i, q) => [...c(...p), ...c(...q[(i + 1) % 4])]);
-  return { positions: new Float32Array([...head.pos, ...at(up, size * 10 / 3), ...at(head.T, -size), ...at(head.T, size), ...at(head.L, -size), ...at(head.L, size), ...ring]) };
+  return { positions: new Float32Array([...head.pos, ...at(U, mast), ...at(head.T, -size), ...at(head.T, size), ...at(head.L, side(-size)), ...at(head.L, side(size)), ...ring]) };
 }
 
 /**

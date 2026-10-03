@@ -29,6 +29,10 @@ function reasonText(reason, car = MACH6) {
     'landing-misses-zone': 'a jump landing misses its ramp',
     'jump-gap-not-forward': 'a jump lands behind its own take-off',
     'joint-step': 'the road steps between two pieces here (the cup and the piece next to it do not meet)',
+    // THE CROSS-SECTION reds (D225): the ids are the seal's and the librarian's rulings (ruling 1 `tube-too-narrow`, S3 `roll-rate`; A's
+    // core may name them otherwise, and then these lines follow A). Plain words here, the id in the tooltip, as every reason above
+    'tube-too-narrow': 'this closed tube is narrower than 9.43 m across the road: the chase camera and a T-180 do not fit inside it',
+    'roll-rate': 'the road rolls about its own direction faster than any measured track (red over 1.21°/m, amber over 0.93°/m, read over 20 m): lengthen the roll',
   };
   return T[reason] || 'a problem with no description yet';
 }

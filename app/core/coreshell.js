@@ -36,6 +36,7 @@ const RD = require('../../src/core/readout.js');
 // THE HEAD'S STATE (D193): what the track is doing at its open end, for Extend's fields to SHOW instead of blanks. On an empty track it
 // is the state extend() starts the first piece from (src/core/extend.js: level, straight, the family's measured width and rate)
 const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
+const XS = require('./xsec.js');   // the cross-section channels' names (D225): the edge curve and the tube
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored beside the piece builder's under this prefix
@@ -97,13 +98,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     candidateReadout: (opts) => RD.candidateReadout(doc(), opts),
     /**
      * The head's END state in the core's units: kh, kv (rad/m), phi (rad), w (m), c (degrees; a legacy piece's is the edge it renders).
+     * And the cross-section channels (D225, app/core/xsec.js): the edge angle and the tube sweep in degrees, the edge start as a share,
+     * each the default (0, 0.64, 0) where the document has no such channel: a piece without an edge, a pre-/4 document, or a core without them.
      * An empty track gives the first piece's START (extend.js's own: bowl, level, straight, WIDTHS.bowl, the edge that renders). Read only.
      */
     headState() {
       const e = D.endState(doc());
-      if (e) return { kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v };
+      if (e) return { kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e) };
       const fam = 'bowl';   // extend.js: `family || (last ? last.family : 'bowl')`
-      return { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], c: D.legacyEdgeDeg(fam, WIDTHS[fam], RATES[fam]) };
+      return { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], c: D.legacyEdgeDeg(fam, WIDTHS[fam], RATES[fam]), ...XS.headOf(null) };
     },
     /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
     pieceReadouts() { const d = doc(); if (readsFor !== d) { reads = d.pieces.map((_, i) => RD.pieceReadout(d, i)); readsFor = d; } return reads; },
