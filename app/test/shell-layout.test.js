@@ -15,10 +15,20 @@ test('the page itself never scrolls: the body clips, and the grid rows and colum
   assert.match(rule('body'), /grid-template-rows:[^;]*minmax\(0,\s*1fr\)/);
 });
 
-test('the right panel never scrolls sideways: it clips, reserves its scrollbar, and holds media to its width', () => {
+test('the side sections never scroll sideways: they clip, the column reserves its scrollbar, and media hold to its width', () => {
   const side = page.match(/#side\s*\{[^}]*overflow-x:\s*hidden[^}]*\}/);
   assert.ok(side, 'no overflow-x: hidden on #side');
-  assert.match(side[0], /scrollbar-gutter:\s*stable/);
+  // the side sections no longer scroll on their own (2026-10-03): the left column they sit in does, so it reserves the gutter
+  assert.match(rule('#left'), /scrollbar-gutter:\s*stable/);
   assert.match(page, /#side canvas[^{]*\{[^}]*max-width:\s*100%/);
   assert.match(page, /#side > section\s*\{[^}]*overflow-wrap:\s*anywhere/);
+});
+
+test('two columns: the side sections live in the left column under the controls, and the preview takes the rest', () => {
+  assert.match(rule('body'), /grid-template-columns:\s*\d+px\s+minmax\(0,\s*1fr\)\s*;/, 'exactly two columns');
+  const left = page.match(/<div id="left">([\s\S]*?)<\/div>\s*<main id="stage">/);
+  assert.ok(left, 'a #left column comes before the stage');
+  assert.match(left[1], /<aside id="palette">[\s\S]*<aside id="side">/, 'the controls, then the side sections');
+  assert.match(rule('#left'), /overflow-y:\s*auto/);
+  assert.match(rule('#left'), /overflow-x:\s*hidden/);
 });

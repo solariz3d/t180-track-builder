@@ -57,6 +57,11 @@ through the same test first, and failed it badly.
 
 ### Changed
 
+- **The preview is wider: the right-hand column is gone.** In the equation builder it held only the validation panel
+  (design speed, CSP wall raycasting, the load graph) and an error list that is usually empty, in a fixed 300 px
+  column. Those now sit under the builder's controls in one left column (320 px) that scrolls as a whole, and the
+  preview takes the rest: about 1,080 px wide at the default 1400 px window, up from 820. The columns are also pinned to
+  the row that fills the window; when the banner was empty they could slide up into its row and stop short.
 - **Extend's fields show what the track is doing instead of being blank.** Turn, climb, bank, width and cup show the head's
   values in their own units (°/100 m, °, m): on an empty track, the first piece's start (level, straight, 31 m wide, the bowl's
   edge); after every Extend, Undo, Redo, brush or open, the head's end. A field left as shown keeps the track going exactly as a
