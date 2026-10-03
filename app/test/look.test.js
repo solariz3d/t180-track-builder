@@ -215,8 +215,10 @@ test('head marker: it grows with the camera distance (2%, never under 3 m), and 
   assert.equal(ring.length, 24, 'four sides');
   for (let i = 0; i < ring.length; i += 3) { const d = [0, 1, 2].map((k) => ring[i + k] - h.pos[k]); assert.ok(Math.abs(dot(d, h.U)) < 1e-3, 'in the road plane'); assert.ok(Math.hypot(...d) >= 64 - 1e-3, 'around the head, not on it'); }
 });
-test('head marker: a 10 m mast straight up from the head', () => {
+// D225 (E's seal X2 ii, the librarian's ruling): the mast points along the ROAD's up (head.U), not world y, so it stays inside a tube and
+// right side up when inverted. This test said "straight up" (world y) until that ruling; it now holds the mast to U with the same 10 m.
+test('head marker: a 10 m mast from the head along the road\'s up', () => {
   const p = G.buildPath(words(2)), mk = LK.headMarker(p.head).positions;
   assert.deepEqual(Array.from(mk.slice(0, 3)), Array.from(new Float32Array(p.head.pos)));
-  assert.ok(Math.abs(mk[4] - mk[1] - 10) < 1e-4 && Math.abs(mk[3] - mk[0]) < 1e-9 && Math.abs(mk[5] - mk[2]) < 1e-9);
+  for (let k = 0; k < 3; k++) assert.ok(Math.abs(mk[3 + k] - mk[k] - 10 * p.head.U[k]) < 1e-4, `the mast's ${'xyz'[k]} is 10 m along U`);
 });

@@ -34,7 +34,7 @@ const { createRenderer } = require('./renderer.js');
 const { gridLines, headMarker } = require('./look.js');
 const { resolveLook } = require('./aclook.js');
 const { previewTextures } = require('../../src/texture/set.js');
-const { normalize, spanOf, readAt } = require('../../src/geom/profile.js');
+const { normalize, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
 
 const FLY = { w: [1, 0, 0], s: [-1, 0, 0], d: [0, 1, 0], a: [0, -1, 0], e: [0, 0, 1], q: [0, 0, -1] };
@@ -174,7 +174,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       else if (tb !== gridFor) { grid = gridLines(tb); gridFor = tb; }       // the grid follows the track's box, rebuilt only when it changes
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(track && track.batches ? track.batches : [], shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head)), ghost: ghost ? ghost.batches : null, overlay,
+      renderer.draw(track && track.batches ? track.batches : [], shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null });
     }
     if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? 'AC look' : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}`;
@@ -237,6 +237,24 @@ function widthAtHead(segments) {
 }
 
 /**
+ * THE ROOM INSIDE A CLOSED TUBE at the head (D225, E's seal X2 ii), for the head marker: { up, lat } in metres, or null when the section
+ * at the head does not close (any open road, an open tube, a cup: the marker is drawn at its full size as before). A section CLOSES when
+ * both edges have turned to 180° (a tube of sweep 360: E's §1, ψ edge = t/2). `up` is 0.9 of the lower edge tip's height above the floor
+ * (the roof, 2R for a circle), `lat` 0.9 of the section's widest reach to either side (R for a circle), both read from the profile the
+ * mesh draws there (profile.js readAt, offsetAt), so they hold for whatever closed shape the core builds.
+ */
+function clearanceAtHead(segments) {
+  for (let i = (segments || []).length - 1; i >= 0; i--) {
+    const g = segments[i]; if (!g || !g.profile) continue;
+    const P = readAt(g, g.length), uL = Math.max(...P.u), uR = Math.min(...P.u);
+    if (!(psiAt(P, uL) >= Math.PI - 1e-6 && psiAt(P, uR) >= Math.PI - 1e-6)) return null;
+    let lat = 0; for (let k = 1; k <= 64; k++) for (const u of [uL * k / 64, uR * k / 64]) lat = Math.max(lat, Math.abs(offsetAt(P, u)[0]));
+    return { up: 0.9 * Math.min(offsetAt(P, uL)[1], offsetAt(P, uR)[1]), lat: 0.9 * lat };
+  }
+  return null;
+}
+
+/**
  * THE HEAD OF AN EMPTY TRACK (D195): where its first piece will start, `start` = { pos, theta, p } (the equation core's doc.start,
  * as src/geom buildPath takes it), or the origin, heading 0, level when there is none (buildPath's own default). The frame is the
  * geometry's gravity frame at zero roll (src/geom/path.js): T = (cos p sin θ, sin p, cos p cos θ), L = (cos θ, 0, −sin θ),
@@ -266,4 +284,4 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, pickAt, startHead };
+module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, startHead };
