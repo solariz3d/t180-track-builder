@@ -32,7 +32,9 @@ const { MACH6, accelAt } = require('../validate/limits.js');
 const { surfaceAt, segStarts } = require('./place.js');
 const Prof = require('../geom/profile.js');
 
-const PATTERNS = Object.freeze({ '2-staggered': { cols: 2, stagger: true }, '2-abreast': { cols: 2, stagger: false }, '3-abreast': { cols: 3, stagger: false } });
+//   '1-column'     one column on the centreline, nose to tail: defaultLayout's fallback when the floor fits one slot but not two columns (a closed
+//                  tube's floor is a few metres whatever its width); resolveLayout says so in an amber note
+const PATTERNS = Object.freeze({ '2-staggered': { cols: 2, stagger: true }, '2-abreast': { cols: 2, stagger: false }, '3-abreast': { cols: 3, stagger: false }, '1-column': { cols: 1, stagger: false } });
 // DEFAULTS, inferred (choices, not measurements), matching D167's generated placement: pole 10 m behind the line, slots
 // 8 m apart along (a staggered pair every 16 m), 3 m either side of the centre; 2 pit boxes 8 m apart; 1.5 m up.
 const DEFAULTS = Object.freeze({ height: 1.5, gateInsetM: 0.5, lineMarginM: 15, poleBackM: 10, rowGapM: 16, colGapM: 6, count: 4, pits: 2, pitSpacingM: 8, pattern: '2-staggered' });
@@ -42,7 +44,7 @@ function gridSlots(grid) {
   const p = PATTERNS[grid.pattern];
   if (!p) throw Object.assign(new Error(`markers: grid pattern "${grid.pattern}" is not one of ${Object.keys(PATTERNS).join(', ')}`), { code: 'BAD_LAYOUT' });
   if (!(Number.isInteger(grid.count) && grid.count >= 1)) throw Object.assign(new Error(`markers: a grid needs at least one slot, got ${grid.count}`), { code: 'BAD_LAYOUT' });
-  const across = p.cols === 2 ? [grid.colGapM / 2, -grid.colGapM / 2] : [grid.colGapM, 0, -grid.colGapM];
+  const across = p.cols === 1 ? [0] : p.cols === 2 ? [grid.colGapM / 2, -grid.colGapM / 2] : [grid.colGapM, 0, -grid.colGapM];
   const out = [];
   for (let n = 0; n < grid.count; n++) {
     const row = Math.floor(n / p.cols), col = n % p.cols;
@@ -87,6 +89,7 @@ function resolveLayout(layout, path, segments) {
   const span = surfaceAt(path, segments, sLine, 0, starts).span;
   markers.push({ name: 'AC_TIME_0_L', kind: 'gate', s: sLine, u: span[1] - layout.gateInsetM, h }, { name: 'AC_TIME_0_R', kind: 'gate', s: sLine, u: span[0] + layout.gateInsetM, h });
   for (const sl of gridSlots(layout.grid)) markers.push({ name: `AC_START_${sl.n}`, kind: 'grid', n: sl.n, s: back(sLine, sl.backM), u: sl.u, h, backM: sl.backM });
+  if (layout.grid.pattern === '1-column') notes.push({ id: 'grid-single-column', level: 'amber', text: 'the grid is a single column on the centreline, cars nose to tail: the start straight\'s floor is too narrow for two columns' });
   const sPit = anchorS(layout.pits.at, segments, starts);
   if (sPit == null) missing.push({ what: 'the pit boxes', word: layout.pits.at.word });
   else for (let k = 0; k < layout.pits.count; k++) markers.push({ name: `AC_PIT_${k}`, kind: 'pit', n: k, s: back(sPit, k * layout.pits.spacingM), u: layout.pits.u, h });
@@ -128,6 +131,9 @@ function floorHalf(P) {
   };
   return Math.min(reach(1), reach(-1));
 }
+// ONE SLOT (D226): the single-column fallback needs the floor's half width to clear a slot's half width by this much (a slot is 2 m across and
+// stands on the centreline, so nothing else is needed; the two-column grid's 0.5 m outer margin has no outer column to protect here).
+const ONE_SLOT_MARGIN_M = 0.1;
 const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1].every((x) => x === 0);
 
 /**
@@ -151,8 +157,13 @@ function defaultLayout(path, segments, o = {}) {
   const err = (m) => Object.assign(new Error(m), { code: 'NO_START_STRAIGHT' });
   if (!best) throw err('the track has no straight word to put the grid on');
   const colGapM = 2 * Math.min(c.colGapM / 2, best.half - SLOT_HALF_WIDTH - 0.5);
-  if (!(colGapM / 2 > SLOT_HALF_WIDTH)) throw err(`the start straight's floor is ${(2 * best.half).toFixed(2)} m wide, too narrow for a two-column grid`);
-  const grid = { pattern: c.pattern, count: c.count, poleBackM: c.poleBackM, rowGapM: c.rowGapM, colGapM, edits: {} };
+  let grid = { pattern: c.pattern, count: c.count, poleBackM: c.poleBackM, rowGapM: c.rowGapM, colGapM, edits: {} };
+  if (!(colGapM / 2 > SLOT_HALF_WIDTH)) {
+    // not two columns: ONE slot still fits when the floor clears a slot's half width by the same 0.5 m margin; then the cars stand nose to
+    // tail on the centreline, a slot every half a row (the same along-the-road spacing the staggered pair has), and resolveLayout says so
+    if (!(best.half > SLOT_HALF_WIDTH + ONE_SLOT_MARGIN_M)) throw err(`the start straight's floor is ${(2 * best.half).toFixed(2)} m wide, too narrow for even one grid slot (a slot needs more than ${(2 * (SLOT_HALF_WIDTH + ONE_SLOT_MARGIN_M)).toFixed(1)} m)`);
+    grid = { pattern: '1-column', count: c.count, poleBackM: c.poleBackM, rowGapM: c.rowGapM / 2, colGapM: 0, edits: {} };
+  }
   const lastBack = Math.max(...gridSlots(grid).map((x) => x.backM));
   const need = c.lineMarginM + lastBack + c.pits * c.pitSpacingM + SLOT_HALF_LENGTH;
   if (best.b - best.a < need) throw err(`the longest straight is ${(best.b - best.a).toFixed(1)} m; a grid of ${c.count} and ${c.pits} pit boxes need ${need.toFixed(1)} m`);
@@ -161,4 +172,4 @@ function defaultLayout(path, segments, o = {}) {
   return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: [] };
 }
 
-module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, FLOOR_MAX_DEG, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf };
+module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, FLOOR_MAX_DEG, ONE_SLOT_MARGIN_M, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf };

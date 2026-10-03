@@ -116,6 +116,10 @@ mesh itself.
   nothing unsaved. Closing with unsaved changes keeps it, so the next start offers the track back rather than losing
   it.
 - **An export** is a `t180b_<name>` folder in the folder the user picks. Inside an AC install's `content	racks`, only
-  `t180b_*` folders are written: another track's folder is refused, by the page and again by the native side.
+  `t180b_*` folders are written: another track's folder is refused, by the page and again by the native side. **One exception, an
+  empty folder:** a folder made directly in `content\tracks` ("T-180 TUBE OVAL") that is not `t180b_*` and is EMPTY is not another
+  track, so the export goes into `content\tracks` as the normal `t180b_<track name>` and that empty folder is removed afterwards
+  (Content Manager reads an empty track folder as "main layout is damaged"). A folder with anything in it is refused as before.
+  The native side checks it again (`folder_is_empty`, `remove_empty_folder`: rmdir, never contents); `exporter.resolveTarget`.
 - A name is 1–64 letters, digits, spaces, `_` or `-`, starting with a letter or digit. The shell checks it, and the
   native side checks it again: no path in a name ever reaches the disk.
