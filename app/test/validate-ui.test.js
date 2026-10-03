@@ -208,3 +208,14 @@ test('the lap, a stopped handle and a refusal read as plain words too', () => {
   assert.ok(st.title.includes('fold') && st.title.includes('ARCHITECTURE.md:57'));
   assert.strictEqual(L.refusalText('HANDLE_RANGE: w2: gap = 0 is outside [0.001, 10000]'), 'w2: gap = 0 is outside [0.001, 10000]');
 });
+test('the validator\'s three cross-section reds read in plain words, never the id (D225: A\'s ids)', () => {
+  const VL = require('../validate-ui/labels.js'), V = require('../../src/validate/index.js');
+  for (const id of ['tube-too-narrow', 'roll-rate', 'edge-past-cap']) {
+    const t = VL.reasonText(id);
+    assert.notEqual(t, 'a problem with no description yet', `${id} has plain words`);
+    assert.ok(!t.includes(id), `${id}: no id in the shown text`);
+  }
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'src', 'validate', 'index.js'), 'utf8');
+  for (const id of ['tube-too-narrow', 'roll-rate', 'edge-past-cap']) assert.ok(src.includes(`reason: '${id}'`), `${id} is a reason the validator emits`);
+  assert.ok(V);
+});
