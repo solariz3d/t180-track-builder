@@ -10,7 +10,10 @@
   /* The page never scrolls: the grid fills the window exactly, and each side panel scrolls inside itself. (At the
      default 1400×860 window the page used to scroll: grid rows sized to content push the body past the window.) */
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  body { display: grid; grid-template-columns: 280px minmax(0, 1fr) 300px; grid-template-rows: 44px auto minmax(0, 1fr); height: 100vh; }
+  /* Two columns: the controls on the left, the preview takes the rest. The validation panel (design speed, CSP wall
+     raycasting, the load graph) and the other side sections sit under the builder's controls in the left column (#left);
+     a third column for them took 300 px from the preview to hold one short panel (the keeper, 2026-10-03). */
+  body { display: grid; grid-template-columns: 320px minmax(0, 1fr); grid-template-rows: 44px auto minmax(0, 1fr); height: 100vh; }
   header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; }
   header h1 { font-size: 14px; margin: 0 12px 0 0; letter-spacing: .04em; white-space: nowrap; }
   header input, header select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
@@ -21,15 +24,20 @@
   button { background: #222834; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; cursor: pointer; }
   button:hover:not([disabled]) { border-color: var(--accent); }
   button[disabled] { opacity: .4; cursor: default; }
-  #palette, #side { min-height: 0; overflow: auto; background: var(--panel); }
-  #palette { padding: 10px; border-right: 1px solid var(--line); }
+  /* The left column scrolls as ONE (up and down only): #palette and #side take their natural height inside it */
+  /* Both columns sit in the window-filling third row by name. Auto-placed, they slid up into the banner's content-sized
+     row whenever the banner was empty (display: none takes it out of the grid). */
+  #left, #stage { grid-row: 3; }
+  #left { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; background: var(--panel); border-right: 1px solid var(--line); }
+  #palette, #side { flex: none; background: var(--panel); }
+  #palette { padding: 10px; }
   #stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
   #preview { position: relative; min-height: 0; overflow: hidden; }
   #camera { border-top: 1px solid var(--line); padding: 6px 10px; }
-  /* The right panel never scrolls sideways (seen at the default window size once E's 480 px load graph showed): what a
-     panel puts here is held to the panel's width. Canvases, images and tables shrink to fit, long words break, and the
+  /* The side sections never scroll sideways (seen at the default window size once E's 480 px load graph showed): what a
+     panel puts here is held to the column's width. Canvases, images and tables shrink to fit, long words break, and the
      vertical scrollbar's width is reserved up front so it cannot push content sideways when it appears. */
-  #side { border-left: 1px solid var(--line); overflow-x: hidden; scrollbar-gutter: stable; }
+  #side { border-top: 1px solid var(--line); overflow-x: hidden; }   /* the scrollbar gutter is #left's: only the column scrolls */
   #side > section { padding: 10px; border-bottom: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
   #side canvas, #side img, #side svg, #side video { display: block; max-width: 100%; height: auto; }
   #side table { display: block; max-width: 100%; overflow-x: auto; }
@@ -70,19 +78,21 @@
   <span id="status" style="color: var(--dim)"></span>
 </header>
 <div id="banner"></div>
-<aside id="palette"></aside>
+<div id="left">
+  <aside id="palette"></aside>
+  <aside id="side">
+    <section id="reds"></section>
+    <section id="validation"></section>
+    <section id="handles"></section>
+    <section id="textures"></section>
+    <section id="share"></section>
+  </aside>
+</div>
 <main id="stage">
   <div id="preview"><div class="placeholder">Loading the preview…</div></div>
   <div id="camera"></div>
   <div id="guide" style="position: absolute; inset: 0; pointer-events: none; z-index: 5;"></div>
 </main>
-<aside id="side">
-  <section id="reds"></section>
-  <section id="validation"></section>
-  <section id="handles"></section>
-  <section id="textures"></section>
-  <section id="share"></section>
-</aside>
 <script src="lib/cjs.js"></script>
 <script>
 'use strict';
