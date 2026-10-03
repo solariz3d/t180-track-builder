@@ -33,8 +33,8 @@ const { rayGaps } = require('./raygap.js');
 // AMBER above 0.9338°/m (the maximum over its inverted words alone, 175 windows). It is read at a 20 m chord because the 4 m chord of that read is facet noise (4.26°/m on plain road).
 // A full 360° of bank passes the bar only over about 450 m (amber until 600 m); over 300 m it is red (1.8°/m). See FINDINGS and ref 09 §10 for the command and the read's sha256.
 const ROLL_RED_DEG_M = 1.2144, ROLL_AMBER_DEG_M = 0.9338, ROLL_CHORD_M = 20;
-// a CLOSED tube narrower than this cannot hold the chase camera's eye (3 m up the road's U, a circle of circumference w has R = w/2π): REFUSED by name (the chair's ruling R1)
-const TUBE_MIN_W = 9.43;
+// a CLOSED tube narrower than this cannot hold the chase camera's eye: the eye is 3 m up the road's U, the ceiling of a circle of circumference w is 2R = w/π above the floor, and the seal's margin is 0.1 m (X2 i: the eye inside R − 0.1 of the axis), so w/π must exceed 3.1: w > 9.74 m (3π = 9.43 would put the eye ON the ceiling; the librarian's first ruling had that, corrected in the D225 fixes round). REFUSED by name.
+const TUBE_MIN_W = 9.74;
 // the cap on the total edge angle of a non-tube edge piece (CUP_MAX, document.js), and of an open tube with an edge (t/2 + e)
 const EDGE_CAP_DEG = 150, TUBE_EDGE_CAP_DEG = 180;
 /** The roll rate (°/m) at each road station that has a station 10 m each side on road; closed paths wrap at their length. [{ i, s, rate }] */
@@ -78,7 +78,7 @@ const SRC = Object.freeze({
   'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
   'joint-step': 'FINDINGS.md:110 (a step in the road mesh is a gap: the D190 round-3 ruling (c) reds a lap seam or a cup joint that steps more than 1 mm)',
   'roll-rate': 'D225 seal V7 / S3 (exo_memory/loop/cross_section_seal_registration_2026-10-03.md): the roll rate over a 20 m chord, the bar the Centrifuge lap measured (RED 1.2144°/m, AMBER 0.9338°/m)',
-  'tube-too-narrow': 'D225 ruling R1: a closed tube narrower than 9.43 m cannot hold the chase camera (3 m eye height, R = w/2π)',
+  'tube-too-narrow': 'D225 ruling R1 (corrected): a closed tube narrower than 9.74 m cannot hold the chase camera (the 3 m eye, plus the seal\'s 0.1 m margin, must fit under the ceiling 2R = w/π)',
   'edge-past-cap': 'D225 seal V2 / E2: the total edge angle of an edge piece is capped at CUP_MAX 150° (180° on an open tube): the walls of a bowl past it touch',
   'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check)',
 });
