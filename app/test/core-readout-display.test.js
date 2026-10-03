@@ -522,3 +522,62 @@ test('a lap whose first piece was typed (width 40, cup 30) closes, and exports t
   assert.ok(out.kn5 && out.kn5.length > 1000, 'a kn5 came out, so validation found no red');
   P.panel.unmount();
 });
+
+// ── D194b, "AT START" (the keeper: both "blend to the new value across the piece" and "the whole piece the same width"). A ticked field's
+// target goes to the core in `transition` as a per-channel map in metres: reach it within one knot span (20 m, or the piece if shorter),
+// then hold. A's core (transition as a number OR a map) is not in this tree, so the panel tests stub it: see stubTransition ──
+// THE STUB: stubTransition(shell) wraps the REAL shell and does exactly two things: it records every options object handed to extend,
+// candidate and candidateReadout (`seen`, and `extended` for extend alone), and it REMOVES `transition` before the real core sees it
+// (4ccdd58's core refuses a map: BAD_TRANSITION). So these tests show what the panel SENDS; what A's core does with it is not tested here.
+function stubTransition(real) {
+  const seen = [], extended = [], bare = (o) => { const { transition, ...rest } = o; return rest; };
+  return Object.assign(Object.create(real), {
+    seen, extended,
+    extend(o) { seen.push(o); extended.push(o); return real.extend(bare(o)); },
+    candidate(o) { seen.push(o); return real.candidate(bare(o)); },
+    candidateReadout(o) { seen.push(o); return real.candidateReadout(bare(o)); },
+  });
+}
+const NONE = { turn: false, climb: false, bank: false, width: false, cup: false };
+
+test('extendOptions "at start": a ticked field WITH a target goes in transition as { channel: 20 m }; unticked or untouched fields do not', () => {
+  const base = { length: 100, ...BLANK };
+  assert.deepEqual(extendOptions({ ...base, width: '45' }), { length: 100, targets: { w: 45 } }, 'nothing ticked: no transition, exactly as before');
+  assert.deepEqual(extendOptions({ ...base, width: '45', atStart: { ...NONE, width: true } }).transition, { w: 20 }, 'width at start: w reaches 45 within 20 m');
+  assert.equal(extendOptions({ ...base, atStart: { ...NONE, width: true } }).transition, undefined, 'ticked but untouched (no target): nothing');
+  assert.deepEqual(extendOptions({ ...base, turn: '', bank: '30', cup: '90', atStart: { ...NONE, turn: true, bank: true, cup: true } }).transition, { phi: 20, c: 20 },
+    'each ticked field with a target, by its own channel; turn has no target');
+  assert.deepEqual(extendOptions({ ...base, length: 12, width: '45', atStart: { ...NONE, width: true } }).transition, { w: 12 }, 'a piece shorter than 20 m: its own length');
+  const first = extendOptions({ ...base, width: '45', empty: true, atStart: { ...NONE, width: true } });
+  assert.deepEqual([first.first, first.transition], [{ w: 45 }, { w: 20 }], 'on an empty track the start (D194a) and the span both go in');
+});
+
+test('the panel: an "at start" box beside each field, OFF by default; ticking one redraws the ghost and readout inside its handler, and Extend sends it', async () => {
+  const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubTransition(s)));
+  P.shell.extend({ length: 200 }); P.type('length m', 100);
+  const boxes = Object.fromEntries(Object.keys(FIELDS).map((k) => [k, P.root.all().find((e) => e.attrs['aria-label'] === `${k} at the start`)]));
+  for (const [k, b] of Object.entries(boxes)) { assert.ok(b, `a box for ${k}`); assert.equal(b.checked, false, `${k}: off by default`); assert.equal(P.label(FIELDS[k]).children[1].attrs.type, 'number', `${k}: the number input is still the field's second child`); }
+  P.type('width m', 45);
+  assert.equal(S.stub.seen.at(-1).transition, undefined, 'typed, not ticked: the whole-piece blend (no transition)');
+  boxes.width.checked = true; const n = S.stub.seen.length; boxes.width.onchange();
+  assert.ok(S.stub.seen.length > n, 'ticking redrew the readout and ghost at once');
+  assert.deepEqual(S.stub.seen.at(-1).transition, { w: 20 }, 'and they asked the core for width at the start');
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
+  assert.deepEqual(S.stub.extended.at(-1).transition, { w: 20 }, 'Extend sends it');
+  assert.deepEqual(S.stub.extended.at(-1).targets, { w: 45 });
+  P.panel.unmount();
+});
+
+test('"at start" on a field left as shown sends nothing (no target, D193); the box stays ticked for the next piece', async () => {
+  const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubTransition(s)));
+  P.shell.extend({ length: 200 }); P.type('length m', 100);
+  const box = P.root.all().find((e) => e.attrs['aria-label'] === 'bank at the start');
+  box.checked = true; box.onchange();
+  assert.equal(S.stub.seen.at(-1).transition, undefined, 'bank untouched: nothing to reach, so nothing sent');
+  P.type('bank °', 20);
+  assert.deepEqual(S.stub.seen.at(-1).transition, { phi: 20 }, 'bank typed: now it goes');
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
+  assert.equal(box.checked, true, 'kept after Extend, like a preference');
+  assert.equal(S.stub.seen.at(-1).transition, undefined, 'after Extend the field shows the head again (untouched), so nothing is sent');
+  P.panel.unmount();
+});

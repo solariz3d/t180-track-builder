@@ -135,6 +135,12 @@ centreline, the bank nor the readout's turn and climb.
 - **The brush.** `brush({ mode: 'value', channel: 'c' })` works on cup pieces only; a window that reaches a legacy piece is refused (`NOT_CUP`). A cup piece's segments are re-expressed when its c range changes only under `cupRuns`; by default a brush re-expresses the segments under its window.
 - **The API for the UI:** the channel name is `c` (Extend `targets.c`, `first.c`), and the readout's `cupFromDeg` / `cupToDeg`.
 
+## Extend's `transition`: one ramp for every channel, or one per channel (`extend.js`, D194b, ref 09 §9)
+
+`extend(doc, { length, transition, targets, … })`. **`transition` is a number of metres** (one ramp for every channel; the default is the piece's length; unchanged from before, byte for byte) **or a map** `{ w: 20, phi: 'start', … }` of channel → metres. A channel missing from the map uses the piece's length. The value `'start'` is the short ramp at the start of the piece: the piece's first knot span, at most 20 m, or the whole piece if it is shorter (`startRampM(length, knotM)`). A channel with a target and a ramp shorter than the piece REACHES its target inside the ramp and HOLDS it for the rest of the piece: the whole piece at the new width, with no jump, so the joint into the piece is still C1 (a later piece cannot step; only a ramp is allowed). A bad map (unknown channel, zero, negative, longer than the piece, not a number) is refused by name, `BAD_TRANSITION`.
+
+A short-ramp channel is not least-squares fitted (it would ring: ref 09 §9 has the measurements); its control points are the ideal ramp at the knot averages, the joint's first two are kept, and the rest are clamped into [start, target], so the curve never leaves that range, is monotone for a monotone ramp, and is exactly the target after the ramp. The piece carries 4 extra knots inside the ramp (`rampKnots`, `RAMP_KNOTS`). A legacy piece whose width or r changes is drawn as CHORDS (D196, below), so a fast ramp has no staircase of width steps and no step at the joint into it.
+
 ## Knot insertion: finer knots under a narrow brush (`document.js`)
 
 Knots are every ≤ 20 m by default (`KNOT_M`), and a C2 brush moves whole control points, each spanning 4 knot spans. So a
@@ -222,6 +228,8 @@ candidateReadout(doc, opts)   // the piece extend(doc, opts) would place (the SA
   - Bank is never changed by h or l.
 
 ## What the adapter emits (`adapter.js`)
+
+**Legacy chords (D196).** A legacy segment whose two ends draw different cross-sections (a changing width, or an r that binds the rise cap) is a CHORD: `profile` is the cross-section at its END and `blend: { from, s0: 0, length }` runs from the one at its START (the mesh's smoothstep weight), and the segment carries `chord: true` so the readers evaluate the blend (`src/geom/profile.js` `readsBlend` / `readAt`, the cup's rule) and never a word document's font transition. The rows at a segment's two ends are its ends' own cross-sections, so neighbouring segments share their row: no staircase of width steps between 2 m slices (F4 had 0.29 m, F8 0.86 m, a 20 m ramp of 19 m had 4.8 m) and no step at a joint (the joint into D195's short ramp was 262 mm). A segment whose ends draw the same cross-section (a constant width and r, or an r that does not bind) is exactly what it was, byte for byte: the profile at its middle width, no blend, no new key. **Amends the D190 seal, row 5, by name:** "a legacy piece renders as before" now holds for constant segments only; the three fixtures whose render changed (F4, F6, F8) are re-baselined in `test/fixtures/manifest.d196.json` (before, after, and the measure), the other six are byte-identical to c964c2d, and the geometry (the path) is byte-identical in all nine. A family change between pieces (bowl to half-pipe, F8) is still a step: it is a different cross-section by design.
 
 `toPath(doc, { step = 0.5, segM = 2 })` → `{ segments, path }`:
 - `segments` are `src/geom` segments. A road piece becomes consecutive segments of ≤ `segM` metres, each a clothoid whose
