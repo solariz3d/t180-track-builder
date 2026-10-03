@@ -360,6 +360,34 @@ test('the brush\'s channel list gains cup (channel c), with a drag rate in degre
   P.panel.unmount();
 });
 
+test('the brush\'s channel list offers the cross-section channels e, s and t (D225), each with a drag rate', async () => {
+  const P = await mountPanel();
+  const sel = P.root.all().find((e) => e.attrs['aria-label'] === 'brush channel'), mode = P.root.all().find((e) => e.attrs['aria-label'] === 'brush mode');
+  mode.value = 'rate'; mode.onchange();
+  const { PER_PX } = require('../core/panel.js');
+  for (const [ch, name] of [['e', 'edge angle'], ['s', 'edge start'], ['t', 'tube sweep']]) {
+    const opt = sel.children.find((o) => o.value === ch);
+    assert.ok(opt, `channel ${ch} in the brush's list (got ${sel.children.map((o) => o.value).join(', ')})`);
+    assert.equal(opt.textContent, name);
+    assert.ok(PER_PX[ch] > 0, `a drag rate for ${ch}`);
+  }
+  mode.value = 'local'; mode.onchange();
+  assert.ok(!sel.children.some((o) => ['e', 's', 't'].includes(o.value)), 'not in the local brush (height / sideways only)');
+  P.panel.unmount();
+});
+
+test('the validator\'s three cross-section reds read in plain words, never the id (D225: A\'s ids)', () => {
+  const VL = require('../validate-ui/labels.js'), V = require('../../src/validate/index.js');
+  for (const id of ['tube-too-narrow', 'roll-rate', 'edge-past-cap']) {
+    const t = VL.reasonText(id);
+    assert.notEqual(t, 'a problem with no description yet', `${id} has plain words`);
+    assert.ok(!t.includes(id), `${id}: no id in the shown text`);
+  }
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'src', 'validate', 'index.js'), 'utf8');
+  for (const id of ['tube-too-narrow', 'roll-rate', 'edge-past-cap']) assert.ok(src.includes(`reason: '${id}'`), `${id} is a reason the validator emits`);
+  assert.ok(V);
+});
+
 // ── D193, THE FIELDS SHOW THE HEAD (the keeper, 02:25: "show the original value the first piece starts as instead of it being blank") ──
 const Dc = require('../../src/core/document.js'), { extend: extendDoc } = require('../../src/core/extend.js'), { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 const DEGt = Math.PI / 180, BLANK = { turn: '', climb: '', bank: '', width: '', cup: '' };

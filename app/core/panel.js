@@ -20,8 +20,8 @@ const XS = require('./xsec.js');   // the cross-section channels (D225): edge an
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
-const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, height: 0.03, lateral: 0.03 });
-const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', height: 'height', lateral: 'sideways' });
+const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, e: 0.2, s: 0.002, t: 0.5, height: 0.03, lateral: 0.03 });
+const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', e: 'edge angle', s: 'edge start', t: 'tube sweep', height: 'height', lateral: 'sideways' });
 const COLOURS = Object.freeze({ water: [0.35, 0.72, 1.0], red: [1.0, 0.25, 0.25] });
 const DEG = Math.PI / 180;
 
@@ -170,7 +170,7 @@ function mount(root, shell) {
   const armed = el('input', { type: 'checkbox', 'aria-label': 'brush on' });
   // SHARP (E's opt-in, the chair's ruling 2): its spill is declared right here, in the words of E's own SHARP_NOTE
   const sharp = el('input', { type: 'checkbox', 'aria-label': 'sharp brush', title: 'Sharp brush: acts at exactly the size you set by adding finer control points first. It can nudge the track just outside the brush by up to 0.1 mm. Leave it off for an exactly local edit.' });
-  const channelsFor = (m) => (m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r', 'c']);
+  const channelsFor = (m) => (m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r', 'c', 'e', 's', 't']);
   const fillChannels = () => { channel.replaceChildren(...channelsFor(mode.value).map((c) => new win.Option(CHANNEL_NAMES[c], c))); };
   mode.replaceChildren(...shell.brushModes().map((m) => new win.Option(m === 'local' ? 'height / sideways (local)' : 'rate (one channel)', m)));
   mode.onchange = fillChannels; fillChannels();
