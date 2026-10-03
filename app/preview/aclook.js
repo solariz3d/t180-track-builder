@@ -85,7 +85,7 @@ function shade(u, texRgb, n, toLight = LIGHT.toSun, toEye = [0, 1, 0]) {
  * `drawn` is [{ key, material }]. Returns { byMesh: { key: materialName }, materials: [material] (unique, first seen
  * order), textures: [name] (unique, sorted) }.
  */
-const { ensureDiffuse } = require('../../src/export/acready.js');
+const { ensureDiffusePlain } = require('../../src/export/acready.js');   // the pure one: no Buffer in the webview (D224)
 const { ddsLevel } = require('../../src/texture/dds.js');
 function lookList(drawn) {
   const byMesh = {}, mats = new Map();
@@ -108,7 +108,7 @@ function resolveLook(scene0, set = null, images0 = []) {
   if (!scene0 || !Array.isArray(scene0.materials)) throw new Error('aclook: resolveLook needs a scene with materials');
   // the export gives every material without a diffuse a solid one (src/export/acready.js, AC draws ksPerPixel black
   // without it); the preview draws the same materials and textures, read back from the same DDS bytes
-  const ready = ensureDiffuse({ textures: [], materials: scene0.materials }), scene = { ...scene0, materials: ready.materials };
+  const ready = ensureDiffusePlain({ textures: [], materials: scene0.materials }), scene = { ...scene0, materials: ready.materials };
   const images = [...images0, ...ready.textures.map((t) => ({ file: t.name, ...ddsLevel(t.data, 0) }))];
   const byName = new Map(set ? set.materials.map((x) => [x.material.name, x.material]) : []);
   const materialOf = (b) => {
