@@ -88,7 +88,7 @@ const MUTATIONS = [
   { id: "R7 an append does not drop the old open end from its block's count", file: 'path.js',
     from: 'const last = path.blocks[from - 1]; last.n--;', to: 'const last = path.blocks[from - 1];', caughtBy: 'rigid: an append, then a sculpt upstream' },
   { id: "R8 a segment's roll is not part of its path handles (a roll edit downstream is taken as unchanged tail)", file: 'path.js',
-    from: 'const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline]', to: 'const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.heartline]', caughtBy: 'rigid: a later segment whose ROLL changed' },
+    from: 'const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline, g.heartline1, g.rollRate0, g.rollRate1]', to: 'const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.heartline, g.heartline1, g.rollRate0, g.rollRate1]', caughtBy: 'rigid: a later segment whose ROLL changed' },
   { id: 'R9 a placed sample turns its y component too (the bank against gravity drifts)', file: 'path.js',
     from: 'const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1], c * v[2] - sn * v[0]];', to: 'const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1] * (1 + (1 - c) * 1e-3 + 1e-15), c * v[2] - sn * v[0]];', caughtBy: 'rigid: the displayed bank after the move' },
 ];

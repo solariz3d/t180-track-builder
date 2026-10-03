@@ -29,7 +29,9 @@ const GOLDEN_CASES = [
 ];
 const GOLDEN = ['6fe0da0b925df898', 'f9445c2f24202487', 'e3b479ab7eee115d', '0d4bc61fbd13d3d3', 'bd27d8e6adcffbbb', 'f4109c3835754b16'];   // sha256 (first 16) of D.serialize at 4ccdd58
 GOLDEN_CASES.forEach((steps, i) => test(`1 · a number (or no) transition is unchanged: case ${i} serialises exactly as it did at 4ccdd58`, () => {
-  assert.equal(sha(D.serialize(run(steps))), GOLDEN[i]);
+  // D225: the schema string is /4 now; the GOLDEN digests were taken of /3 text, so the only difference allowed is that one string (seal E3c: a /3 document saved as /4 differs ONLY in the schema)
+  const text = D.serialize(run(steps)); assert.ok(text.includes('"schema": "t180b.core/4"'));
+  assert.equal(sha(text.replace('"schema": "t180b.core/4"', '"schema": "t180b.core/3"')), GOLDEN[i]);
 }));
 
 // ── helpers ──

@@ -26,7 +26,9 @@ function normalize(profile) {
 }
 const psiAt = (P, u) => {
   if (u <= P.u[0]) return P.psi[0]; if (u >= P.u[P.u.length - 1]) return P.psi[P.psi.length - 1];
-  let i = 1; while (P.u[i] < u) i++; const t = (u - P.u[i - 1]) / (P.u[i] - P.u[i - 1]); return P.psi[i - 1] + (P.psi[i] - P.psi[i - 1]) * t;
+  // the first i >= 1 with P.u[i] >= u (the linear scan it replaces found the same i; a binary search keeps a 500-knot edge profile cheap, D225)
+  let lo = 1, hi = P.u.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (P.u[m] < u) lo = m + 1; else hi = m; }
+  const i = lo, t = (u - P.u[i - 1]) / (P.u[i] - P.u[i - 1]); return P.psi[i - 1] + (P.psi[i] - P.psi[i - 1]) * t;
 };
 /** ∫ from a to b of (cos ψ, sin ψ) with ψ linear from pa to pb. */
 function piece(a, b, pa, pb) {
@@ -113,6 +115,26 @@ function blendSamples(A, B, { maxAcross = 1, maxSeam = Math.PI / 180 } = {}) {
   out[0] = f0; out[K - 1] = f1;
   return out;
 }
+/**
+ * Fractions across for meshing a WHOLE PIECE of chord segments (D225): the same measure as blendSamples, but the turning term is the largest |Δψ| of ANY profile in
+ * `list`, so one fraction array serves every segment of the piece and the rows two neighbouring segments share are the same cross-section at the same fractions
+ * (the mesh then emits no seam zip between them). The list is subsampled to at most `cap` profiles, keeping the first and last.
+ */
+function commonFractions(list, { maxAcross = 1, maxSeam = Math.PI / 180, cap = 40 } = {}) {
+  const step = Math.max(1, Math.ceil(list.length / cap)), ps = list.filter((_, i) => i % step === 0 || i === list.length - 1).map((p) => normalize(p));
+  const Es = ps.map(edgesOf), R = Math.max(...Es.map((e) => -e[0])), Lw = Math.max(...Es.map((e) => e[1]));
+  const f0 = R > 0 ? -1 : 0, f1 = Lw > 0 ? 1 : 0, N = 4000, fine = []; for (let i = 0; i <= N; i++) fine.push(f0 + (f1 - f0) * i / N);
+  const m = [0];
+  for (let i = 1; i <= N; i++) {
+    const a = fine[i - 1], b = fine[i], side = (a + b) / 2 < 0 ? R : Lw;
+    let d = 0; for (let k = 0; k < ps.length; k++) d = Math.max(d, Math.abs(psiAt(ps[k], uAt(Es[k], b)) - psiAt(ps[k], uAt(Es[k], a))));
+    m.push(m[i - 1] + (b - a) * side / maxAcross + d / maxSeam);
+  }
+  const K = Math.max(2, Math.ceil(m[N]) + 1), out = []; let j = 0;
+  for (let k = 0; k < K; k++) { const target = m[N] * k / (K - 1); while (j < N - 1 && m[j + 1] < target) j++; const t = m[j + 1] > m[j] ? (target - m[j]) / (m[j + 1] - m[j]) : 0; out.push(fine[j] + (fine[j + 1] - fine[j]) * Math.min(1, Math.max(0, t))); }
+  out[0] = f0; out[K - 1] = f1;
+  return out;
+}
 /** The u of each fraction on a profile (its own edges). */
 const usOf = (P, fr) => { const E = edgesOf(P); return fr.map((f) => uAt(E, f)); };
 /** smoothstep, clamped: 0 below 0, 1 above 1, zero slope at both ends (no kink where a ramp starts or ends). */
@@ -168,4 +190,4 @@ function jointSteps(segments, closed) {
   return out;
 }
 
-module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, usOf, smoothstep, atSegment, readAt, readsBlend, stepBetween, jointSteps };
+module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, commonFractions, usOf, smoothstep, atSegment, readAt, readsBlend, stepBetween, jointSteps };

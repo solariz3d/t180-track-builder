@@ -64,7 +64,7 @@ function checkSegments(segments, from = 0) {
     const g = segments[i], at = `segment ${i}${g && g.id ? ` (${g.id})` : ''}`;
     if (!g || typeof g !== 'object') throw new Error(`${at}: not an object`);
     if (!Number.isFinite(g.length) || g.length <= 0) throw new Error(`${at}: length must be a positive finite number, got ${g.length}`);
-    for (const f of ['k0', 'k1', 'kp0', 'kp1', 'roll0', 'roll1', 'heartline']) if (g[f] !== undefined && !Number.isFinite(g[f])) throw new Error(`${at}: ${f} is not finite`);
+    for (const f of ['k0', 'k1', 'kp0', 'kp1', 'roll0', 'roll1', 'heartline', 'heartline1', 'rollRate0', 'rollRate1']) if (g[f] !== undefined && !Number.isFinite(g[f])) throw new Error(`${at}: ${f} is not finite`);
   }
 }
 const num = (v) => (v === undefined ? 0 : v);
@@ -100,9 +100,16 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
   // the curvature vector dT/ds = kY·∂T/∂θ + kP·∂T/∂p
   const dTdth = [Math.cos(p) * Math.cos(theta), 0, -Math.cos(p) * Math.sin(theta)], dTdp = [-Math.sin(p) * Math.sin(theta), Math.cos(p), -Math.sin(p) * Math.cos(theta)];
   const kvec = add(mul(dTdth, kY), mul(dTdp, kP));
-  const phi = num(g.roll0) + (num(g.roll1) - num(g.roll0)) * smooth(u / L);
+  // THE ROLL. By default the geometry's smoothstep from roll0 to roll1 (zero roll RATE at both ends of every segment). A segment that carries rollRate0 and rollRate1 (rad per metre,
+  // D225: the spiral of a closed tube) rolls by the cubic Hermite through both end values and both end rates, so the roll is C1 across segments: a road centre at a radius from the roll
+  // axis is not thrown sideways at every joint (ref 09 §10). A segment without them is bit for bit as before.
+  let phi;
+  if (g.rollRate0 === undefined || g.rollRate1 === undefined) phi = num(g.roll0) + (num(g.roll1) - num(g.roll0)) * smooth(u / L);
+  else { const t = u / L, t2 = t * t, t3 = t2 * t; phi = (2 * t3 - 3 * t2 + 1) * num(g.roll0) + (t3 - 2 * t2 + t) * L * g.rollRate0 + (-2 * t3 + 3 * t2) * num(g.roll1) + (t3 - t2) * L * g.rollRate1; }
   const U0 = cross(T, R), Lr = add(mul(R, Math.cos(phi)), mul(U0, Math.sin(phi))), Ur = cross(T, Lr);
-  const pos = sub(x, mul(Ur, num(g.heartline)));
+  // THE HEARTLINE: constant over the segment, or (heartline1 given, D225) linear from heartline at its start to heartline1 at its end, so it is continuous across segments
+  const hl = g.heartline1 === undefined ? num(g.heartline) : num(g.heartline) + (g.heartline1 - num(g.heartline)) * u / L;
+  const pos = sub(x, mul(Ur, hl));
   const run = Math.hypot(T[0], T[2]);
   return { s, seg: gi, pos, T, L: Lr, U: Ur, kvec, roll: phi, bankG: Math.asin(Math.max(-1, Math.min(1, Lr[1]))),
     grade: run > 1e-12 ? T[1] / run : (T[1] > 0 ? Infinity : -Infinity), _R: R, _x: x };
@@ -130,7 +137,7 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
 // and re-places the rest; with the gravity frame R0 is always (1, 0, 0), so that is the first block whose start pitch is
 // unchanged. (Under the rotation-minimising frame, D177's first build, R0 also carried the frame's twist, and a turn edit on
 // a slope regrew the whole tail.)
-const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline].map(num).join(',');
+const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline, g.heartline1, g.rollRate0, g.rollRate1].map((v) => (v === undefined ? '' : num(v))).join(',');   // an absent field is empty, a 0 is "0": the new fields change the key only where a segment sets them
 const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1], c * v[2] - sn * v[0]];
 const same3 = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 

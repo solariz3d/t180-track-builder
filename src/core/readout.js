@@ -6,7 +6,9 @@
 //   candidateReadout(doc, opts)   -> the readout of the piece extend(doc, opts) would place (the ghost), before it is placed
 //
 // A ROAD piece's readout:
-//   { type: 'road', id, lengthM, turnDeg, climbDeg, bankFromDeg, bankToDeg, cupFromDeg, cupToDeg, pitchFromDeg, pitchToDeg, offsets }
+//   { type: 'road', id, lengthM, turnDeg, climbDeg, bankFromDeg, bankToDeg, cupFromDeg, cupToDeg, edgeFromDeg, edgeToDeg, sliceFrom, sliceTo, tubeFromDeg, tubeToDeg, pitchFromDeg, pitchToDeg, offsets }
+//   D225: edgeFrom/To = the edge curve's e at the ends (degrees; 0 on a piece without one), sliceFrom/To = its start s (a share of the half-width; the default 0.64 where there is no edge),
+//   tubeFrom/To = the tube's sweep t at the ends (degrees; 0 on a piece that is not a tube). cupFrom/To of a TUBE piece is the edge it renders, t/2. All are read from the DOCUMENT.
 //   turnDeg = ∫κh ds (+ = left), climbDeg = ∫κv ds (+ = nosing up): EXACT, by 3-point Gauss–Legendre on each knot span, where
 //   the channel is one cubic (ref 09 §8). bankFrom/To = φ at the ends. pitchFrom = the start pitch plus every earlier road
 //   piece's climb, a flight setting it to its landing pitch; pitchTo = pitchFrom + climb. cupFrom/To = the cup c(0) and c(L), degrees, of a
@@ -83,16 +85,19 @@ function pieceReadout(doc, i) {
   if (!Number.isInteger(i) || i < 0 || i >= doc.pieces.length) throw new D.CoreError('BAD_INDEX', `piece ${i} does not exist: the track has ${doc.pieces.length} (0 to ${doc.pieces.length - 1})`);
   const P = doc.pieces[i], pose = poseBefore(doc, i);
   if (P.type === 'flight') {
-    let bank = 0, cupEnd = 0; for (let j = i - 1; j >= 0; j--) if (doc.pieces[j].type === 'road') { const e = D.pieceEnd(doc.pieces[j]); bank = e.phi.v; cupEnd = e.c.v; break; }
+    let bank = 0, cupEnd = 0, edgeEnd = 0, sliceEnd = D.S_DEFAULT, tubeEnd = 0; for (let j = i - 1; j >= 0; j--) if (doc.pieces[j].type === 'road') { const Pj = doc.pieces[j], e = D.pieceEnd(Pj); bank = e.phi.v; cupEnd = e.c.v; edgeEnd = e.e.v; sliceEnd = e.s.v; tubeEnd = Pj.tube ? e.t.v : 0; break; }
     const lengthM = toSegments(doc).filter((g) => g.id === P.id).reduce((a, g) => a + g.length, 0);
-    return { type: 'flight', id: P.id, lengthM, turnDeg: 0, climbDeg: (P.land - pose.p) * DEG, bankFromDeg: bank * DEG, bankToDeg: bank * DEG, cupFromDeg: cupEnd, cupToDeg: cupEnd,
+    return { type: 'flight', id: P.id, lengthM, turnDeg: 0, climbDeg: (P.land - pose.p) * DEG, bankFromDeg: bank * DEG, bankToDeg: bank * DEG, cupFromDeg: cupEnd, cupToDeg: cupEnd, edgeFromDeg: edgeEnd, edgeToDeg: edgeEnd, sliceFrom: sliceEnd, sliceTo: sliceEnd, tubeFromDeg: tubeEnd, tubeToDeg: tubeEnd,
       pitchFromDeg: pose.p * DEG, pitchToDeg: P.land * DEG, offsets: null };
   }
   const turn = channelIntegral(P, 'kh'), climb = channelIntegral(P, 'kv');
   const out = { type: 'road', id: P.id, lengthM: P.length, turnDeg: turn * DEG, climbDeg: climb * DEG,
     bankFromDeg: D.channelAt(P, 'phi', 0).v * DEG, bankToDeg: D.channelAt(P, 'phi', P.length).v * DEG,
-    cupFromDeg: P.cup ? D.channelAt(P, 'c', 0).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', 0).v, D.channelAt(P, 'r', 0).v),
-    cupToDeg: P.cup ? D.channelAt(P, 'c', P.length).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', P.length).v, D.channelAt(P, 'r', P.length).v),
+    cupFromDeg: P.tube ? D.channelAt(P, 't', 0).v / 2 : P.cup ? D.channelAt(P, 'c', 0).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', 0).v, D.channelAt(P, 'r', 0).v),
+    cupToDeg: P.tube ? D.channelAt(P, 't', P.length).v / 2 : P.cup ? D.channelAt(P, 'c', P.length).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', P.length).v, D.channelAt(P, 'r', P.length).v),
+    edgeFromDeg: P.edge ? D.channelAt(P, 'e', 0).v : 0, edgeToDeg: P.edge ? D.channelAt(P, 'e', P.length).v : 0,
+    sliceFrom: P.edge ? D.channelAt(P, 's', 0).v : D.S_DEFAULT, sliceTo: P.edge ? D.channelAt(P, 's', P.length).v : D.S_DEFAULT,
+    tubeFromDeg: P.tube ? D.channelAt(P, 't', 0).v : 0, tubeToDeg: P.tube ? D.channelAt(P, 't', P.length).v : 0,
     pitchFromDeg: pose.p * DEG, pitchToDeg: (pose.p + climb) * DEG, offsets: null };
   if (D.OFFSETS.some((ch) => P.channels[ch].some((v) => v !== 0))) {
     const a = liftedAngles(P, 0, pose.theta, pose.p), b = liftedAngles(P, P.length, pose.theta + turn, pose.p + climb);

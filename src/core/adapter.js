@@ -28,6 +28,7 @@
 
 const D = require('./document.js');
 const { buildPath } = require('../geom/path.js');
+const { normalize, psiAt, blend, commonFractions } = require('../geom/profile.js');
 const { FLOORS, AT } = require('../geom/fonts.js');
 const { solveJump } = require('../doc/resolve.js');
 const jumps = require('../validate/jumps.js');
@@ -64,7 +65,60 @@ function cupProfile(family, w, c) {
   };
 }
 
-const smooth = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));   // the mesh's weight (src/geom/profile.js smoothstep)
+const smooth = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));   // the mesh's weight (src/geom/profile.js smoothstep); also G, the edge curve's shape (ref 09 §10)
+
+// ── D225, THE CROSS-SECTION LAP: the tube, the edge curve, and the pieces that carry them (ref 09 §10) ──────────────────────────────
+const EDGE_MIN_N = 64;      // outer-zone intervals of an edge profile: at least this, and ceil(1.5·e_max) above 43° (the polyline's own sag is e·G″max/(8n²) ≤ 0.05° at n ≥ 47 for e = 150)
+const TUBE_N = 12;          // knots per side of a tube profile: ψ is linear in u, so the polyline is exact at any count; the validator and the stack check read these lines
+const HEARTLINE_FROM = 300; // a tube's roll axis leaves the road centre at this sweep and reaches the tube's own axis at 360 (smoothstep): the heartline is continuous, never a step (seal S2 ii). 300 = 2·CUP_MAX: the last sweep a cup can take over from (its edge is t/2 <= 150), so a tube handing over to a cup or a plain piece has heartline 0 at the joint
+
+/** The TUBE cross-section at width w (m) and sweep t (degrees): ψ = (t/2)·|u|/h on each side, a circular arc of radius w/t_rad (ref 09 §10). */
+function tubeProfile(w, t) {
+  if (!(w > 0)) throw new D.CoreError('BAD_WIDTH', `the road's width must be positive, got ${w} m`);
+  if (!Number.isFinite(t) || t < 0 || t > D.TUBE_MAX + 1e-9) throw new D.CoreError('BAD_TUBE', `the tube sweep must be from 0 to ${D.TUBE_MAX} degrees, got ${t}`);
+  const h = w / 2, side = Array.from({ length: TUBE_N }, (_, k) => [(h * (k + 1)) / TUBE_N, ((t / 2) * (k + 1) / TUBE_N) * DEG]);
+  return { font: 'tube', u: [...side.slice().reverse().map(([x]) => -x), 0, ...side.map(([x]) => x)], psi: [...side.slice().reverse().map(([, p]) => p), 0, ...side.map(([, p]) => p)], material: 'ROAD' };
+}
+/**
+ * The EDGE profile (ref 09 §10): the middle profile `base` plus e degrees of extra turning over the outer zone, ψ = ψ_mid + e·G(t), t = (|u|/h − s)/(1 − s), G = 3t² − 2t³, on both
+ * sides. Its knots are the base's plus nE + 1 equal steps of the outer zone each side (the slice itself and the edge included); ψ_mid at a new knot is the base's own linear
+ * interpolation, as the mesh reads it. A piece with no edge never calls this: its profile object is the base, untouched (e = 0 is the identity, seal E3).
+ */
+function edgeProfile(base, e, s, nE) {
+  const P = normalize(base), hr = -P.u[0], hl = P.u[P.u.length - 1], us = [...P.u];
+  for (let k = 0; k <= nE; k++) { const f = s + ((1 - s) * k) / nE; us.push(hl * f, -hr * f); }
+  us.sort((a, b) => a - b);
+  const u = us.filter((x, i) => i === 0 || x - us[i - 1] > 1e-12);
+  const psi = u.map((x) => { const h = x < 0 ? hr : hl, r = h > 0 ? Math.abs(x) / h : 0; return psiAt(P, x) + (r > s ? e * DEG * smooth((r - s) / (1 - s)) : 0); });
+  return { font: P.font === 'tube' ? 'tube-edge' : 'edge', u, psi, material: P.material };   // the font says which cap applies (validate: edge-past-cap)
+}
+/** The middle cross-section of piece P at the channel values x: the legacy profileAt, the cup, or the tube. */
+function baseProfileOf(P, x) { return P.tube ? tubeProfile(x.w, x.t) : P.cup ? cupProfile(P.family, x.w, x.c) : profileAt(P.family, x.w, x.r); }
+/** The heartline (m) a tube's roll turns about at channel values x: R = w/2π once the tube is closed, 0 while it is open, a smoothstep between (ref 09 §10). */
+const heartlineOf = (P, x) => (P.tube ? (x.w / (2 * Math.PI)) * smooth((x.t - HEARTLINE_FROM) / (D.TUBE_MAX - HEARTLINE_FROM)) : 0);
+
+/**
+ * The segments of a TUBE or EDGE piece, or of a piece entering from a different kind of cross-section (D225). Every segment is a CHORD: its profile is the one at its END, blended
+ * from the one at its START, so the rows at its two ends are the ends' own cross-sections (a moving edge slice is not linear in s, ref 09 §10, so no blend pair can be shared
+ * along a run as the cup's is). ONE fraction array serves the whole piece (profile.js commonFractions, mesh.js seg.fractions), so the row a segment ends on and the next one
+ * starts on are the same vertices: no seam zip inside the piece. Entering from another kind (legacy, cup or tube), the first MORPH_M metres blend from the previous piece's
+ * last profile into the piece's own (smoothstep in s), so the first row IS the previous last row and the joint steps nothing. A piece with a closed tube also carries the
+ * heartline fields (linear over the segment) and the roll rates (so the roll is C1 across segments): the spiral's floor is smooth.
+ */
+function xsecSegments(P, n, at, join) {
+  const s = (j) => (P.length * j) / n, E = Array.from({ length: n + 1 }, (_, j) => at(s(j))), edge = !!P.edge;
+  const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => x.e)))) : 0;
+  const own = (x) => { const b = baseProfileOf(P, x); return edge ? edgeProfile(b, x.e, x.s, nE) : b; };
+  const Lm = join ? Math.min(MORPH_M, P.length) : 0, J = join ? normalize(join.profile) : null;
+  const prof = E.map((x, j) => { const o = own(x); return J && s(j) < Lm - 1e-9 ? blend(J, normalize(o), smooth(s(j) / Lm)) : o; });
+  const fractions = commonFractions(prof), hl = E.map((x) => heartlineOf(P, x)), spiral = hl.some((x) => x > 0), out = new Array(n);
+  const rate = (j) => D.channelAt(P, 'phi', s(j)).d1;
+  for (let j = 0; j < n; j++) {
+    out[j] = { profile: prof[j + 1], blend: { from: prof[j], s0: 0, length: s(j + 1) - s(j) }, start: prof[j], end: prof[j + 1], chord: true, fractions,
+      ...(spiral ? { heartline: hl[j], heartline1: hl[j + 1], rollRate0: rate(j), rollRate1: rate(j + 1) } : {}) };
+  }
+  return out;
+}
 /** z in [0, 1] with smooth(z) = y (the mesh's weight inverted), by the closed form then two Newton steps. */
 function unsmooth(y) {
   if (y <= 0) return 0; if (y >= 1) return 1;
@@ -204,7 +258,7 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
   if (!(segM > 0)) throw new D.CoreError('BAD_STEP', `segM must be positive, got ${segM}`);
-  const segs = []; let pitch = doc.start.pitch, roll = 0, lastProfile = null, lastLegacy = false;
+  const segs = []; let pitch = doc.start.pitch, roll = 0, lastProfile = null, lastLegacy = false, lastKind = null, lastPlain = null;   // lastPlain: the last row without an edge (what a cup entering from a legacy piece fades from)
   // A CLOSED lap whose two ends are not the same kind (D190 R3): the cup end fades into the legacy end's rendered profile (tailZone; or, when the
   // cup is the START, the first metres fade out of the legacy END's last profile: morphZone), so the zip at s = 0 has no step
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), firstRoad = roadIdx[0], lastRoad = roadIdx[roadIdx.length - 1];
@@ -226,21 +280,23 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
     const n = Math.max(1, Math.ceil(P.length / segM - 1e-9)), at = (s) => Object.fromEntries(D.CHANNELS.map((ch) => [ch, D.channelAt(P, ch, s).v]));
     let a = at(0);
     if (pi === 0) roll = a.phi;
-    let join = P.cup && lastLegacy && lastProfile ? { profile: lastProfile } : null;   // a cup handed over from a legacy cross-section
+    const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // D225: a tube, an edge, or a cup entering from a tube is built by xsecSegments
+    let join = P.cup && !xs && lastLegacy && lastProfile ? { profile: lastPlain || lastProfile } : null;   // a cup handed over from a legacy cross-section
     if (seam && pi === firstRoad && P.cup) join = { profile: legacyLast(doc.pieces[lastRoad]) };   // the lap's start is a cup that follows the legacy END round the seam
     // a cup piece followed by a LEGACY road piece (a file can hold one; Extend never makes one) fades into that piece's first profile, and so does the
     // lap's last cup piece into the legacy START: the last metres of the cup are the reverse morph (tailZone)
     const nextP = doc.pieces[pi + 1];
     const tail = !P.cup || !cupRuns ? null : nextP && nextP.type === 'road' && !nextP.cup ? legacyFirst(nextP) : seam && pi === lastRoad ? legacyFirst(doc.pieces[firstRoad]) : null;
-    const cup = P.cup ? (cupRuns ? cupSegmentsRuns(P, n, at, join, tail) : cupSegmentsLocal(P, n, at)) : null;
-    lastLegacy = !P.cup;
+    const cup = xs ? xsecSegments(P, n, at, lastKind && lastKind !== kind && lastProfile ? { profile: lastProfile } : null) : P.cup ? (cupRuns ? cupSegmentsRuns(P, n, at, join, tail) : cupSegmentsLocal(P, n, at)) : null;
+    lastLegacy = kind === 'legacy'; lastKind = kind;
     for (let j = 0; j < n; j++) {
       const s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n, b = at(s1), mid = at((s0 + s1) / 2);
       const L = cup ? null : legacySeg(P.family, a, b, mid, s1 - s0), profile = cup ? cup[j].profile : L.profile;   // a legacy piece: today's profileAt, or a chord where the width or r changes
-      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup ? cup[j].blend : L.blend, speed: null, ...(cup ? { cup: true } : L.chord ? { chord: true } : {}) });
+      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup ? cup[j].blend : L.blend, speed: null, ...(cup ? (xs ? { chord: true, fractions: cup[j].fractions, ...(cup[j].heartline1 !== undefined ? { heartline: cup[j].heartline, heartline1: cup[j].heartline1, rollRate0: cup[j].rollRate0, rollRate1: cup[j].rollRate1 } : {}) } : { cup: true }) : L.chord ? { chord: true } : {}) });
       pitch += ((a.kv + b.kv) / 2) * (s1 - s0);   // the geometry's pitch: kp linear over the segment (src/geom/path.js)
       a = b; lastProfile = cup ? cup[j].end : L.end;
     }
+    lastPlain = xs ? baseProfileOf(P, a) : lastProfile;   // the piece's own last row without its edge
     roll = a.phi;
   });
   return segs;
@@ -249,7 +305,29 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
 function toPath(doc, { step = 0.5, segM = 2, designKmh, cupRuns } = {}) {
   const segments = toSegments(doc, { segM, designKmh, cupRuns });
   const path = buildPath(segments, { step, closed: doc.closed, start: { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch } });
-  return { segments, path: offsetPath(doc, segments, path) };
+  return { segments, path: heartlineLift(segments, offsetPath(doc, segments, path)) };
+}
+
+/**
+ * THE ROAD CENTRE'S CURVATURE where the roll axis is off the road (D225, seal S4). The path integrates the heartline curve, and its samples' kvec is that curve's curvature; the road
+ * centre of a closed tube is a HELIX round it, which the heartline curve (a straight line) does not show, so the validator would read the spiral's floor at 1 g (seal: 0 against the
+ * helix's 0.0012/m). Every sample of a segment that carries a heartline gets the curvature vector of the road-centre polyline instead (three-point, uneven spacing, exact for a
+ * quadratic): κ = (r″ − (r″·t)t)/|r′|². A path with no such segment is returned as it is.
+ */
+function heartlineLift(segments, path) {
+  if (!segments.some((g) => g.heartline || g.heartline1)) return path;
+  const S = path.samples, n = S.length;
+  const samples = S.map((x, i) => {
+    const g = segments[x.seg];
+    if (!(g.heartline || g.heartline1) || i === 0 || i === n - 1) return x;
+    const a = S[i - 1].pos, b = x.pos, c = S[i + 1].pos, h1 = x.s - S[i - 1].s, h2 = S[i + 1].s - x.s;
+    if (!(h1 > 1e-9 && h2 > 1e-9)) return x;
+    const d1 = [0, 1, 2].map((k) => ((c[k] - b[k]) * h1 / h2 + (b[k] - a[k]) * h2 / h1) / (h1 + h2)), d2 = [0, 1, 2].map((k) => (2 * ((c[k] - b[k]) / h2 - (b[k] - a[k]) / h1)) / (h1 + h2));
+    const sp2 = d1[0] * d1[0] + d1[1] * d1[1] + d1[2] * d1[2], along = (d2[0] * d1[0] + d2[1] * d1[1] + d2[2] * d1[2]) / sp2;
+    // a sample is a VIEW (src/geom/path.js SampleView: its fields are getters), so it is copied field by field, never spread
+    return { s: x.s, seg: x.seg, pos: x.pos, T: x.T, L: x.L, U: x.U, kvec: [0, 1, 2].map((k) => (d2[k] - along * d1[k]) / sp2), roll: x.roll, bankG: x.bankG, grade: x.grade, _R: x._R, _x: x._x };
+  });
+  return { ...path, samples };
 }
 
 // ── the offset channels h and l (a hill, a swerve), applied AFTER the base geometry (ref 09 §7) ────────────────────────
@@ -298,4 +376,4 @@ function offsetPath(doc, segments, path) {
   return { ...path, samples, segEnd, head };
 }
 
-module.exports = { toSegments, toPath, profileAt, cupProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath };
+module.exports = { toSegments, toPath, profileAt, cupProfile, tubeProfile, edgeProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath, heartlineLift, heartlineOf, EDGE_MIN_N, TUBE_N, HEARTLINE_FROM };

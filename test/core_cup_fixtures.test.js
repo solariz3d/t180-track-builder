@@ -64,13 +64,14 @@ test('row 5a (amended D196): against the D196 baseline every fixture renders ide
     assert.match(r.stdout, /\n0 of 9 differ\n?$/); assert.equal((r.stdout.match(/: identical/g) || []).length, 9, r.stdout);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
-test('row 5b: each fixture parsed, saved as /3 text and read again renders to the same digests (the /3 round trip), and its text is /3', () => {
+test('row 5b (D225, /4): each fixture parsed, saved as /4 text and read again renders to the same digests (the round trip), its text is /4 and carries no edge or tube channel (seal E3c)', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-cup-fx-'));
   try {
     const man = amendedManifest();
     for (const [name, m] of Object.entries(man.fixtures)) {
       const text = D.serialize(D.parse(fs.readFileSync(path.join(FX, m.file), 'utf8')));
-      assert.match(text, /"schema": "t180b\.core\/3"/, `${name} is saved as /3`);
+      assert.match(text, /"schema": "t180b\.core\/4"/, `${name} is saved as /4`);
+      assert.ok(!/"(e|s|t)":\[/.test(text), `${name}: a piece that uses no edge and no tube carries none of e, s, t in its text (E3c)`);
       fs.writeFileSync(path.join(dir, m.file), text); m.text_sha256 = sha(text);
     }
     fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(man, null, 1) + '\n');

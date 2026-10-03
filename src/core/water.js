@@ -98,7 +98,8 @@ function finishSurface(S, pos, T, K, L, U, prof, closed, Lm) {
   for (let i = 0; i + 1 < n; i++) {
     const h = S[i + 1] - S[i], chord = sub(pos[i + 1], pos[i]);
     const want = add(mul(add(T[i], T[i + 1]), h / 2), mul(sub(K[i], K[i + 1]), h * h / 12)), off = len(sub(chord, want)) / h;
-    if (!(off <= 1e-3)) throw new Error(`water: samples ${i}–${i + 1}: pos is not ∫T ds (off by ${off.toExponential(2)} per metre); is there a heartline offset?`);
+    // D225: a closed tube's road centre is off the integrated curve (a heartline offset, the spiral), so water cannot ride it: REFUSED BY NAME (WATER_HEARTLINE) for the UI to show, never an anonymous throw
+    if (!(off <= 1e-3)) { const e = new Error(`WATER_HEARTLINE: water: samples ${i}–${i + 1}: pos is not ∫T ds (off by ${off.toExponential(2)} per metre); a heartline offset (the roll axis of a closed tube, the spiral) is not supported by the water: pour over a track without a closed tube`); e.name = 'CoreError'; e.code = 'WATER_HEARTLINE'; throw e; }   // named like a CoreError (this file stands alone: the water mutation harness loads it by itself)
   }
   // frame slopes by the three-point difference for UNEVEN spacing, exact for a quadratic (wrapping on a closed loop, whose
   // last sample repeats the first at s = L). The spacing IS uneven: the builder adds a sample at every segment boundary,

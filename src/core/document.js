@@ -20,17 +20,28 @@ const { basis, bandChol } = require('../../tools/piecewise.cjs');
 // core/3 (D190) adds the CUP channel c (degrees). A /1 or /2 road piece loads as a LEGACY piece: its cross-section is the old
 // profileAt(family, w, r), unchanged, and nothing of c reaches its render. A piece is a CUP piece only when P.cup is true, which is
 // written as a `c` array in its canonical text; a legacy piece's c is zeros in memory and absent in the text (src/core/README.md "the cup").
-const SCHEMA = 't180b.core/3', OLD_SCHEMAS = Object.freeze(['t180b.core/1', 't180b.core/2']), GENERATOR = 't180-track-builder/core 0.3.0';
+// core/4 (D225, the cross-section lap) adds the EDGE channels e and s (an extra turning of the outer zone, ref 09 §10) and the TUBE channel t (a circular-arc
+// cross-section, sweep in degrees). Like the cup, each is carried only by the pieces that use it: a piece is an EDGE piece when P.edge is true (its text has e and s
+// arrays), a TUBE piece when P.tube is true (a t array); a /1, /2 or /3 piece loads with none of them and renders byte for byte as before. The version bump is
+// deliberate: a /3 reader would accept a file with e and s and drop them on its next save, a /4 file is refused by name by the older builder (seal V3).
+const SCHEMA = 't180b.core/4', OLD_SCHEMAS = Object.freeze(['t180b.core/1', 't180b.core/2', 't180b.core/3']), GENERATOR = 't180-track-builder/core 0.3.0';
 // kh, kv, phi, w, r shape the base geometry; h (height, m, along WORLD up) and l (lateral, m, along the gravity frame's
 // horizontal left) are VALUE channels the adapter applies AFTER it (src/core/README.md "the offset channels")
-const CHANNELS = Object.freeze(['kh', 'kv', 'phi', 'w', 'r', 'h', 'l', 'c']);
+const CHANNELS = Object.freeze(['kh', 'kv', 'phi', 'w', 'r', 'h', 'l', 'c', 'e', 's', 't']);
+// the channels a piece carries only when its flag is set (cup: c; edge: e and s; tube: t), and what an unflagged piece reads for each
+const OPTIONAL = Object.freeze({ c: 'cup', e: 'edge', s: 'edge', t: 'tube' });
+// e: the extra edge angle ψ added over the outer zone, degrees, >= 0 (e < 0, a lip, is not in this version). s: where the outer zone starts, a share of the half-width.
+// t: the tube's sweep, degrees; 360 closes the section into a cylinder. The tube's edge angle is t/2.
+const EDGE_EPS = 1e-9, S_MIN = 0.5, S_MAX = 0.95, S_DEFAULT = 0.64, TUBE_MAX = 360, TUBE_EDGE_MAX = 180;
+const OPT_DEFAULT = Object.freeze({ c: 0, e: 0, s: S_DEFAULT, t: 0 });
 // c is the cross-section's edge angle ψ at u = ±w/2, in DEGREES, in [0, CUP_MAX]. 150: the bowl's two walls touch at 159.681° (the D190 seal, V2)
 const CUP_MAX = 150, CUP_JOINT_DEG = 0.05, CUP_EPS = 1e-9;   // CUP_EPS: the float noise a solver leaves on a control point at a limit (close.js)
 const OFFSETS = Object.freeze(['h', 'l']);
 const FAMILIES = Object.freeze(['bowl', 'half-pipe', 'flat']);
 // decimals each number is quantised to when it enters (src/core/README.md "numbers are quantised")
-const DEC = Object.freeze({ m: 4, kh: 9, kv: 9, phi: 9, w: 4, r: 6, h: 4, l: 4, c: 6, rad: 9 });
+const DEC = Object.freeze({ m: 4, kh: 9, kv: 9, phi: 9, w: 4, r: 6, h: 4, l: 4, c: 6, e: 6, s: 6, t: 6, rad: 9 });
 const { FLOORS } = require('../geom/fonts.js');
+const { MACH6 } = require('../validate/limits.js');
 const KNOT_M = 20;   // default interior knot spacing, m
 
 class CoreError extends Error {
@@ -47,7 +58,7 @@ function evenKnots(L, knotM = KNOT_M) { const m = Math.max(1, Math.ceil(L / knot
 /** One channel of a road piece at s ∈ [0, length]: its value and first two derivatives (ref 03 §1, WIKI-BSPLINE). */
 function channelAt(P, ch, s) {
   const c = P.channels[ch];
-  if (c === undefined && ch === 'c' && !P.cup) return { v: 0, d1: 0, d2: 0 };   // a legacy piece may be built without a c array (its c is never rendered)
+  if (c === undefined && OPTIONAL[ch] && !P[OPTIONAL[ch]]) return { v: OPT_DEFAULT[ch], d1: 0, d2: 0 };   // a piece may be built without an optional channel's array (never rendered; an unflagged s reads its default)
   const b = basis(knotVector(P), Math.min(Math.max(s, 0), P.length));
   let v = 0, d1 = 0, d2 = 0;
   for (let a = 0; a < 4; a++) { const x = c[b.first + a]; v += x * b.N[a]; d1 += x * b.D1[a]; d2 += x * b.D2[a]; }
@@ -65,14 +76,34 @@ function legacyEdgeDeg(family, w, r) {
 /** The end value and slope of every channel (ref 09 §1: c(L) = P_last, c′(L) = 3(P_last − P_prev)/(L − last interior knot)). A LEGACY piece's cup is the edge it renders (held, slope 0). */
 function pieceEnd(P) {
   const h = P.length - (P.knots.length ? P.knots[P.knots.length - 1] : 0), out = {};
-  for (const ch of CHANNELS) { const c = P.channels[ch]; if (c === undefined && ch === 'c' && !P.cup) continue; const n = c.length; out[ch] = { v: c[n - 1], m: (3 * (c[n - 1] - c[n - 2])) / h }; }
-  if (!P.cup) out.c = { v: legacyEdgeDeg(P.family, out.w.v, out.r.v), m: 0 };
+  for (const ch of CHANNELS) { const c = P.channels[ch]; if (c === undefined && OPTIONAL[ch] && !P[OPTIONAL[ch]]) continue; const n = c.length; out[ch] = { v: c[n - 1], m: (3 * (c[n - 1] - c[n - 2])) / h }; }
+  // the RENDERED edge angle c: a cup's own channel, a legacy piece's profileAt edge, a tube's t/2 (held: the morph into a different kind carries the rest)
+  if (P.tube) out.c = { v: out.t.v / 2, m: 0 };
+  else if (!P.cup) out.c = { v: legacyEdgeDeg(P.family, out.w.v, out.r.v), m: 0 };
+  if (!P.tube) out.t = { v: 2 * out.c.v, m: 0 };   // a tube started after another kind starts at twice the edge that piece renders
+  if (!P.edge) { out.e = { v: 0, m: 0 }; out.s = { v: S_DEFAULT, m: 0 }; }
   return out;
+}
+/** 'tube', 'cup' or 'legacy': the cross-section family a road piece is drawn as (a tube wins over nothing: a piece is never both a cup and a tube). */
+const kindOf = (P) => (P.tube ? 'tube' : P.cup ? 'cup' : 'legacy');
+/** kindOf of the last road piece ('legacy' for an empty track): what a piece extended after it continues as. */
+function endKind(doc) { for (let i = doc.pieces.length - 1; i >= 0; i--) if (doc.pieces[i].type === 'road') return kindOf(doc.pieces[i]); return 'legacy'; }
+/**
+ * The sweep t (degrees) at which a tube of width w has its two tips this close (m), the root of 2·(w/t)·sin(t/2) = gap in (π, 2π) by bisection (ref 09 §10).
+ * An open tube HELD between this and 360 leaves a slot narrower than the downforce ray's reach (MACH6.downforceRay.aheadM): refused by name (BAD_TUBE).
+ */
+function tubeSlotMinDeg(w, gap = MACH6.downforceRay.aheadM) {
+  const g = (t) => (2 * w / t) * Math.sin(t / 2) - gap;
+  if (!(w > 0) || g(Math.PI) <= 0) return 180;   // so narrow that even a half-circle's slot is under the reach
+  let lo = Math.PI, hi = 2 * Math.PI;
+  for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (g(m) > 0) lo = m; else hi = m; }
+  return ((lo + hi) / 2) * 180 / Math.PI;
 }
 /** The document with every legacy road piece that was built without a c array given zeros for it (the same object when none was). */
 function fillCup(doc) {
-  if (!doc.pieces.some((P) => P.type === 'road' && P.channels && P.channels.c === undefined && !P.cup)) return doc;
-  return { ...doc, pieces: doc.pieces.map((P) => (P.type === 'road' && P.channels && P.channels.c === undefined && !P.cup ? { ...P, channels: { ...P.channels, c: new Array(P.knots.length + 4).fill(0) } } : P)) };
+  const missing = (P) => P.type === 'road' && P.channels && Object.keys(OPTIONAL).some((ch) => P.channels[ch] === undefined && !P[OPTIONAL[ch]]);
+  if (!doc.pieces.some(missing)) return doc;
+  return { ...doc, pieces: doc.pieces.map((P) => (missing(P) ? { ...P, channels: { ...P.channels, ...Object.fromEntries(Object.keys(OPTIONAL).filter((ch) => P.channels[ch] === undefined && !P[OPTIONAL[ch]]).map((ch) => [ch, new Array(P.knots.length + 4).fill(OPT_DEFAULT[ch])])) } } : P)) };
 }
 /** True when the last road piece is a cup piece (a piece extended after it is one too). */
 function endIsCup(doc) { for (let i = doc.pieces.length - 1; i >= 0; i--) if (doc.pieces[i].type === 'road') return !!doc.pieces[i].cup; return false; }
@@ -123,13 +154,15 @@ function qChannel(ch, arr) { return arr.map((x) => q(x, DEC[ch])); }
  * length). `from` is the state it must start from (endState), or null for a first piece. Each channel is fitted with its
  * start held (fitChannel), then quantised.
  */
-function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM = KNOT_M, knots, cup = false }) {
+function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM = KNOT_M, knots, cup = false, edge = false, tube = false }) {
   if (!(length > 0)) throw new CoreError('BAD_LENGTH', `a piece's length must be positive, got ${length}`);
   if (!FAMILIES.includes(family)) throw new CoreError('BAD_FAMILY', `family "${family}" (known: ${FAMILIES.join(', ')})`);
+  if (cup && tube) throw new CoreError('BAD_TUBE', 'a piece is a cup or a tube, not both');
+  const flags = { cup, edge, tube };
   const L = q(length, DEC.m), K = (knots || evenKnots(L, knotM)).map((t) => q(t, DEC.m)), out = {};
   for (const ch of CHANNELS) {
     const src = channels[ch];
-    if (ch === 'c' && !cup) { out.c = new Array(K.length + 4).fill(0); continue; }   // a legacy piece: zeros, never rendered
+    if (OPTIONAL[ch] && !flags[OPTIONAL[ch]]) { out[ch] = new Array(K.length + 4).fill(OPT_DEFAULT[ch]); continue; }   // a piece without the channel: its default, never rendered
     if (src === undefined && OFFSETS.includes(ch)) { const e = from ? from[ch] : { v: 0, m: 0 }; out[ch] = qChannel(ch, fitChannel((s) => e.v + e.m * s, L, K, from ? e : null)); continue; }
     if (src === undefined) throw new CoreError('NO_CHANNEL', `channel ${ch} is missing`);
     if (Array.isArray(src)) {
@@ -138,7 +171,7 @@ function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM =
     } else out[ch] = qChannel(ch, fitChannel(src, L, K, from ? from[ch] : null));
   }
   const P = { id: id || null, type: 'road', length: L, family, knots: K, channels: out };
-  return cup ? { ...P, cup: true } : P;
+  return { ...P, ...(cup ? { cup: true } : {}), ...(edge ? { edge: true } : {}), ...(tube ? { tube: true } : {}) };
 }
 function flightPiece({ id, gap, drop, land }) {
   return { id: id || null, type: 'flight', gap: q(gap, DEC.m), drop: q(drop, DEC.m), land: q(land, DEC.rad) };
@@ -157,23 +190,50 @@ function appendPiece(doc, piece) {
 
 // ── the checks ─────────────────────────────────────────────────────────────────────────────────────────────────────
 /** A joint is C1 when value and slope agree to within what quantisation can move them (ref 09 §1). */
-function jointProblem(prevEnd, P, prevCup = false) {
-  const h = P.knots.length ? P.knots[0] : P.length;
+function jointProblem(prevEnd, P, prevKind = 'legacy') {
+  const h = P.knots.length ? P.knots[0] : P.length, kind = kindOf(P);
   for (const ch of CHANNELS) {
-    if (ch === 'c') {   // cup ↔ cup: C1 like the others; legacy ↔ cup: the RENDERED edge must be continuous (0.05°); legacy ↔ legacy: nothing
-      if (prevCup && P.cup) { /* falls through to the general test */ }
-      else if (prevCup || P.cup) {
-        const here = P.cup ? P.channels.c[0] : legacyEdgeDeg(P.family, P.channels.w[0], P.channels.r[0]);
-        if (Math.abs(here - prevEnd.c.v) > CUP_JOINT_DEG) return `the cup starts at ${here}°, the previous piece ends at ${prevEnd.c.v}° (a legacy piece's cup is the edge it renders)`;
+    if (ch === 'c') {   // cup ↔ cup: C1 like the others; two different kinds (legacy, cup, tube): the RENDERED edge must be continuous (0.05°); two legacy or two tube pieces: nothing here (t is checked below)
+      if (prevKind === 'cup' && kind === 'cup') { /* falls through to the general test */ }
+      else if (prevKind !== kind) {
+        const here = kind === 'tube' ? P.channels.t[0] / 2 : kind === 'cup' ? P.channels.c[0] : legacyEdgeDeg(P.family, P.channels.w[0], P.channels.r[0]);
+        if (Math.abs(here - prevEnd.c.v) > CUP_JOINT_DEG) return `the ${kind === 'tube' ? 'tube' : 'cup'} starts at an edge of ${here}°, the previous piece ends at ${prevEnd.c.v}° (a piece of another kind hands over the edge it renders; a tube's is t/2)`;
         continue;
       } else continue;
     }
-    const c = P.channels[ch], v = c[0], m = (3 * (c[1] - c[0])) / h, qv = 10 ** -DEC[ch];
+    if (ch === 't' && !(prevKind === 'tube' && kind === 'tube')) continue;   // the sweep joins only tube to tube (a tube after another kind is matched by its rendered edge above)
+    if (ch === 's' && Math.abs(prevEnd.e.v) < EDGE_EPS && Math.abs((P.channels.e || [0])[0]) < EDGE_EPS) continue;   // the slice is invisible while e is 0 on both sides of the joint
+    const c = P.channels[ch] || [OPT_DEFAULT[ch], OPT_DEFAULT[ch]], v = c[0], m = (3 * (c[1] - c[0])) / h, qv = 10 ** -DEC[ch];   // a hand-built piece may lack an optional channel: its default
     if (Math.abs(v - prevEnd[ch].v) > 1.01 * qv) return `${ch} starts at ${v}, the previous piece ends at ${prevEnd[ch].v}`;
     const slopeTol = (6 * qv) / Math.min(h, 1) + 6 * qv * Math.abs(prevEnd[ch].m);
     if (Math.abs(m - prevEnd[ch].m) > slopeTol) return `${ch} starts with slope ${m}, the previous piece ends with ${prevEnd[ch].m}`;
   }
   return null;
+}
+/** The tube's own domain (D225): the sweep in [0, 360], and not HELD where the two tips are closer than the downforce ray reaches (every control point in the band). */
+function checkTube(P, at) {
+  const t = P.channels.t, w = P.channels.w;
+  if (t.some((v) => v < -EDGE_EPS || v > TUBE_MAX + EDGE_EPS)) throw new CoreError('BAD_TUBE', `${at}: the tube sweep must stay within 0 to ${TUBE_MAX}°, but a control point is ${Math.min(...t)} to ${Math.max(...t)}°`);
+  if (t.every((v, i) => v > tubeSlotMinDeg(w[i]) + 1e-6 && v < TUBE_MAX - 1e-6)) throw new CoreError('BAD_TUBE', `${at}: a tube held at ${Math.min(...t).toFixed(2)}° to ${Math.max(...t).toFixed(2)}° leaves a slot under ${MACH6.downforceRay.aheadM} m between its tips, which the car's downforce ray falls through (a sweep below ${tubeSlotMinDeg(Math.max(...w)).toFixed(1)}° is open, 360° is closed; pass through the band, do not stay in it)`);
+}
+/**
+ * The edge's own domain (D225, seal V4 and E2): e >= 0, s in [0.5, 0.95], and the total edge angle (the middle profile's edge angle plus e) within the cap: CUP_MAX = 150 on a legacy
+ * or cup piece, 180 on an open tube (t/2 + e), each bound on the CONTROL POINTS by the convex hull (ref 03 §1b). A closed tube takes no edge: the edge is moot there.
+ */
+function checkEdge(P, at) {
+  const e = P.channels.e, s = P.channels.s;
+  if (e.some((v) => v < -EDGE_EPS)) throw new CoreError('BAD_EDGE', `${at}: the edge angle e must be 0 or more, but a control point is ${Math.min(...e)}° (an outer zone that flattens, a lip, is not in this version)`);
+  if (s.some((v) => v < S_MIN - EDGE_EPS || v > S_MAX + EDGE_EPS)) throw new CoreError('BAD_EDGE', `${at}: the edge start s must stay within ${S_MIN} to ${S_MAX} of the half-width, but a control point is ${Math.min(...s)} to ${Math.max(...s)}`);
+  if (P.tube) {
+    const t = P.channels.t;
+    if (t.some((v) => v >= TUBE_MAX - 1e-9) && e.some((v) => v > EDGE_EPS)) throw new CoreError('BAD_TUBE', `${at}: a tube that closes (a sweep of ${TUBE_MAX}°) takes no edge: with the section closed the edge curve has no edge to act on`);
+    t.forEach((v, i) => { if (v / 2 + e[i] > TUBE_EDGE_MAX + EDGE_EPS) throw new CoreError('BAD_EDGE', `${at}: the tube's edge angle t/2 plus e is ${v / 2 + e[i]}° at a control point, past ${TUBE_EDGE_MAX}° (the walls of a tube with an edge would touch)`); });
+  } else if (P.cup) {
+    P.channels.c.forEach((v, i) => { if (v + e[i] > CUP_MAX + EDGE_EPS) throw new CoreError('BAD_EDGE', `${at}: the cup's edge angle c plus e is ${v + e[i]}° at a control point, past ${CUP_MAX}° (the walls of a ${CUP_MAX}°+ bowl touch)`); });
+  } else {
+    const mid = legacyEdgeDeg(P.family, Math.max(...P.channels.w), Math.max(...P.channels.r)) + Math.max(...e);
+    if (mid > CUP_MAX + EDGE_EPS) throw new CoreError('BAD_EDGE', `${at}: the road's edge angle plus e reaches ${mid.toFixed(3)}°, past ${CUP_MAX}° (the walls of a ${CUP_MAX}°+ bowl touch)`);
+  }
 }
 function checkDoc(doc) {
   const bad = (msg) => { throw new CoreError('BAD_DOC', msg); };
@@ -197,13 +257,18 @@ function checkDoc(doc) {
     if (!(P.length > 0)) bad(`${at}: length must be positive`);
     if (!FAMILIES.includes(P.family)) bad(`${at}: family "${P.family}"`);
     if (!Array.isArray(P.knots) || P.knots.some((t, k) => !(t > 0 && t < P.length) || (k && !(t > P.knots[k - 1])))) bad(`${at}: knots must be ascending, strictly inside (0, length)`);
-    for (const ch of CHANNELS) { const c = P.channels && P.channels[ch]; if (ch === 'c' && c === undefined && !P.cup) continue; if (!Array.isArray(c) || c.length !== P.knots.length + 4 || !c.every(Number.isFinite)) bad(`${at}: channel ${ch} needs ${P.knots.length + 4} finite control points`); }
+    for (const ch of CHANNELS) { const c = P.channels && P.channels[ch]; if (OPTIONAL[ch] && c === undefined && !P[OPTIONAL[ch]]) continue; if (!Array.isArray(c) || c.length !== P.knots.length + 4 || !c.every(Number.isFinite)) bad(`${at}: channel ${ch} needs ${P.knots.length + 4} finite control points`); }
     if (P.cup !== undefined && P.cup !== true) bad(`${at}: cup is true on a cup piece and absent on a legacy piece, got ${P.cup}`);
+    if (P.edge !== undefined && P.edge !== true) bad(`${at}: edge is true on an edge piece and absent otherwise, got ${P.edge}`);
+    if (P.tube !== undefined && P.tube !== true) bad(`${at}: tube is true on a tube piece and absent otherwise, got ${P.tube}`);
+    if (P.tube && P.cup) throw new CoreError('BAD_TUBE', `${at}: a piece is a cup or a tube, not both`);
+    if (P.tube) checkTube(P, at);
+    if (P.edge) checkEdge(P, at);
     // a cup piece's c stays in [0, CUP_MAX]: every control point is, so the curve is (its basis is non-negative and sums to 1: the convex hull, ref 03 §1b)
     if (P.cup && P.channels.c.some((v) => v < -CUP_EPS || v > CUP_MAX + CUP_EPS)) throw new CoreError('BAD_CUP', `${at}: the cup must stay within 0 to ${CUP_MAX}°, but a control point is ${Math.min(...P.channels.c)} to ${Math.max(...P.channels.c)}° (the walls of a ${CUP_MAX}°+ bowl touch)`);
     if (prev) {
       const e = pieceEnd(prev), want = afterFlight ? { ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h: { v: 0, m: 0 }, l: { v: 0, m: 0 } } : e;
-      const p = jointProblem(want, P, !!prev.cup); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint is C1 in every channel, ref 09 §1)`);
+      const p = jointProblem(want, P, kindOf(prev)); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint is C1 in every channel, ref 09 §1)`);
     }
     prev = P; afterFlight = false;
   });
@@ -214,7 +279,7 @@ function checkDoc(doc) {
 // ── canonical text ─────────────────────────────────────────────────────────────────────────────────────────────────
 const pieceText = (P) => (P.type === 'flight'
   ? JSON.stringify({ id: P.id, type: 'flight', gap: P.gap, drop: P.drop, land: P.land })
-  : JSON.stringify({ id: P.id, type: 'road', length: P.length, family: P.family, knots: P.knots, channels: Object.fromEntries(CHANNELS.filter((ch) => ch !== 'c' || P.cup).map((ch) => [ch, P.channels[ch]])) }));
+  : JSON.stringify({ id: P.id, type: 'road', length: P.length, family: P.family, knots: P.knots, channels: Object.fromEntries(CHANNELS.filter((ch) => !OPTIONAL[ch] || P[OPTIONAL[ch]]).map((ch) => [ch, P.channels[ch]])) }));
 function serialize(doc) {
   checkDoc(doc);
   const head = [`  "schema": ${JSON.stringify(doc.schema)}`, `  "generator": ${JSON.stringify(GENERATOR)}`, `  "name": ${JSON.stringify(doc.name)}`, `  "closed": ${doc.closed}`,
@@ -222,8 +287,18 @@ function serialize(doc) {
   const body = doc.pieces.length ? `  "pieces": [\n${doc.pieces.map((P) => `    ${pieceText(P)}`).join(',\n')}\n  ]` : '  "pieces": []';
   return `{\n${[...head, body].join(',\n')}\n}\n`;
 }
-/** A road piece read from text is a cup piece exactly when its text carries a `c` array (the only way the canonical text says so). */
-function cupOf(P, out) { return P && P.channels && Array.isArray(P.channels.c) ? { ...out, cup: true } : out; }
+/** A road piece read from text is a cup / edge / tube piece exactly when its text carries a `c` / `e` or `s` / `t` array (the only way the canonical text says so). */
+function cupOf(P, out) {
+  const has = (...ks) => !!(P && P.channels && ks.some((k) => Array.isArray(P.channels[k])));
+  return { ...out, ...(has('c') ? { cup: true } : {}), ...(has('e', 's') ? { edge: true } : {}), ...(has('t') ? { tube: true } : {}) };
+}
+/** One channel of a parsed road piece: the text's array, quantised; an optional channel the text lacks takes its default (an edge piece may carry e without s or s without e); a /1 file's offsets are zeros. */
+function parseChannel(P, ch, upgrade) {
+  const have = (k) => Array.isArray((P.channels || {})[k]), n = (P.knots || []).length + 4;
+  if (upgrade && OFFSETS.includes(ch)) return new Array(n).fill(0);
+  if (OPTIONAL[ch] && !have(ch)) return new Array(n).fill(OPT_DEFAULT[ch]);
+  return ((P.channels || {})[ch] || []).map((x) => q(x, DEC[ch]));
+}
 /** Parse a document; every number is quantised as it enters, so a hand-edited value finer than its quantum is snapped. */
 function parse(text) {
   let o; try { o = JSON.parse(text); } catch (e) { throw new CoreError('BAD_JSON', e.message); }
@@ -232,7 +307,7 @@ function parse(text) {
   const pieces = (o.pieces || []).map((P) => (P && P.type === 'flight'
     ? { id: P.id, type: 'flight', gap: q(P.gap, DEC.m), drop: q(P.drop, DEC.m), land: q(P.land, DEC.rad) }
     : cupOf(P, { id: P.id, type: P.type, length: q(P.length, DEC.m), family: P.family, knots: (P.knots || []).map((t) => q(t, DEC.m)),
-      channels: Object.fromEntries(CHANNELS.map((ch) => [ch, ((upgrade && OFFSETS.includes(ch)) || (ch === 'c' && !((P.channels || {}).c)) ? new Array(((P.knots || []).length) + 4).fill(0) : ((P.channels || {})[ch] || [])).map((x) => q(x, DEC[ch]))])) })));
+      channels: Object.fromEntries(CHANNELS.map((ch) => [ch, parseChannel(P, ch, upgrade)])) })));
   const s = o.start || {};
   return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start: { pos: (s.pos || []).map((x) => q(x, DEC.m)), heading: q(s.heading, DEC.rad), pitch: q(s.pitch, DEC.rad) }, nextId: o.nextId, pieces }));
 }
@@ -340,7 +415,7 @@ function insertKnot(P, t) {
   if (P.knots.includes(tq)) throw new CoreError('BAD_KNOT', `${tq} is a knot already`);
   const U = knotVector(P), channels = {};
   for (const ch of CHANNELS) {
-    if (ch === 'c' && P.channels.c === undefined && !P.cup) continue;
+    if (OPTIONAL[ch] && P.channels[ch] === undefined && !P[OPTIONAL[ch]]) continue;
     const Q = boehm(U, P.channels[ch], tq);
     // the untouched points are the SAME numbers (no requantising moves them); only the three new ones are quantised
     let k = 3; while (k + 1 < U.length - 4 && U[k + 1] <= tq) k++;
@@ -382,6 +457,7 @@ module.exports = {
   boehm, insertKnot, insertKnots, refineKnots,
   fromPositionFit,
   SCHEMA, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
+  OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
   createDoc, roadPiece, flightPiece, appendPiece, endState, pieceEnd, channelAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };

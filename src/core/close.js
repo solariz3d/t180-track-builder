@@ -21,6 +21,7 @@ const D = require('./document.js');
 const { toPath, toSegments } = require('./adapter.js');
 const { jointSteps } = require('../geom/profile.js');
 
+const EDGE_SEAM_TOL = 0.01;   // D225: an edge turned off by extend ends within a hair of 0 (the fit); under 0.01° (and 0.01°/m) it steps the lap seam by under a millimetre, so it is not an edge at the seam
 const SEAM_MAX_M = 1e-3;   // D190 round 3: a lap seam steps at most 1 mm on the curve
 
 const TAU = 2 * Math.PI;
@@ -37,16 +38,41 @@ const hStart = (P) => (P.knots.length ? P.knots[0] : P.length);                 
  * piece: c₀ = the previous piece's last, c₁ = c₀ + (h_b/h_a)(c_{n−1} − c_{n−2}) (README: the second is set by the end slope,
  * m = 3(c_{n−1} − c_{n−2})/h_a, c₁ = c₀ + m·h_b/3). `expand[ch][p][i]` lists (column, coefficient) pairs.
  */
+/**
+ * D225: the channels in play. Every channel but the edge and tube ones is always a column (as before); e and s are columns only when some road piece carries an edge, t only
+ * when one carries a tube, so a document without them solves exactly as it did. linkable(): the joint's first two coefficients follow the previous piece only where BOTH pieces carry
+ * the channel (the cup's rule, and the same for e, s and t).
+ */
+function activeChannels(doc) { return D.CHANNELS.filter((ch) => ch === 'c' || !D.OPTIONAL[ch] || doc.pieces.some((P) => P.type === 'road' && P[D.OPTIONAL[ch]])); }
+function linkable(ch, A, B) { const f = D.OPTIONAL[ch]; if (!f) return true; if (ch === 'c') return !!(A.cup && B.cup); return !!(A[f] && B[f]); }
+/** The seam's kinds (D225): which optional channels continue round the lap (both end pieces carry them). */
+function seamOf(doc) {
+  const road = doc.pieces.filter((P) => P.type === 'road'), F = road[0], L = road[road.length - 1];
+  return { F, L, cupBoth: !!(F.cup && L.cup), edgeBoth: !!(F.edge && L.edge), tubeBoth: !!(F.tube && L.tube) };
+}
+const seamJoined = (ch, sm) => !D.OPTIONAL[ch] || (ch === 'c' ? sm.cupBoth : ch === 't' ? sm.tubeBoth : sm.edgeBoth);
+/**
+ * A seam that joins an edge or a tube to something that cannot match it is REFUSED BY NAME, never solved around (seal E4 iii, T2): a tube against a different cross-section (TUBE_SEAM),
+ * or an edge that is still active at one end of the lap against a piece with none (EDGE_SEAM: the unflagged end has e = 0 with slope 0, so the flagged end must end there too).
+ */
+function checkSeamKinds(doc) {
+  const { F, L } = seamOf(doc);
+  if (!!F.tube !== !!L.tube) throw new D.CoreError('TUBE_SEAM', 'close: the lap would join a tube to a different cross-section at the seam; start and end the lap on the same kind of road (both tubes, or neither)');
+  if (!!F.edge !== !!L.edge) {
+    const Fh = F.knots.length ? F.knots[0] : F.length, E = F.edge ? [F.channels.e[0], (3 * (F.channels.e[1] - F.channels.e[0])) / Fh] : [D.pieceEnd(L).e.v, D.pieceEnd(L).e.m];   // the flagged end of the seam: its e and slope there
+    if (Math.abs(E[0]) > EDGE_SEAM_TOL || Math.abs(E[1]) > EDGE_SEAM_TOL) throw new D.CoreError('EDGE_SEAM', `close: the lap would join an edge (e ${E[0]}°, slope ${E[1]}) to a piece with none at the seam; bring the edge back to 0 before the end of the lap, or give both ends an edge`);
+  }
+}
 function parameters(doc, edited) {
   const cols = [], expand = {};
-  for (const ch of D.CHANNELS) {
+  for (const ch of activeChannels(doc)) {
     expand[ch] = doc.pieces.map(() => null);
     let prev = -1;
     doc.pieces.forEach((P, p) => {
       if (P.type !== 'road') return;
       const n = P.channels[ch].length, e = new Array(n);
       for (let i = 0; i < n; i++) {
-        if (prev >= 0 && i < 2 && (ch !== 'c' || (doc.pieces[prev].cup && P.cup))) {   // the cup joins only cup to cup (a legacy piece's c is a placeholder)
+        if (prev >= 0 && i < 2 && linkable(ch, doc.pieces[prev], P)) {   // the cup joins only cup to cup (a legacy piece's c is a placeholder); e, s and t the same
           const A = expand[ch][prev], na = A.length, rho = hStart(P) / hEnd(doc.pieces[prev]);
           e[i] = i === 0 ? A[na - 1] : [...A[na - 1].map(([c, k]) => [c, k * (1 + rho)]), ...A[na - 2].map(([c, k]) => [c, -k * rho])];
           if (edited.has(p)) for (const [c] of e[i]) cols[c].edited = true;
@@ -63,8 +89,8 @@ function parameters(doc, edited) {
 function apply(doc, expand, x, quantise) {
   return { ...doc, pieces: doc.pieces.map((P, p) => {
     if (P.type !== 'road') return P;
-    const channels = {};
-    for (const ch of D.CHANNELS) channels[ch] = expand[ch][p].map((terms) => { const v = terms.reduce((s, [c, k]) => s + k * x[c], 0); return quantise ? q(v, D.DEC[ch]) : v; });
+    const channels = { ...P.channels };
+    for (const ch of Object.keys(expand)) channels[ch] = expand[ch][p].map((terms) => { const v = terms.reduce((s, [c, k]) => s + k * x[c], 0); return quantise ? q(v, D.DEC[ch]) : v; });
     return { ...P, channels };
   }) };
 }
@@ -131,6 +157,8 @@ function heldCup(F, L) {
 }
 
 /** The residual, measured on the adapter's path and the document itself (ref 10 §3). */
+/** The channels whose VALUE must meet round the seam: heading, pitch, width and rise always; the cup, the edge pair and the tube sweep where both ends carry them. */
+const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's'] : []), ...(sm.tubeBoth ? ['t'] : [])];
 function residual(doc) {
   if (!doc.pieces.some((P) => P.type === 'road')) throw new D.CoreError('EMPTY', 'close: no road to close');
   const S = toPath({ ...doc, closed: false }).path.samples, a = S[0], z = S[S.length - 1];
@@ -140,12 +168,12 @@ function residual(doc) {
   const turns = Math.round(net.kh / TAU), bank = L.channels.phi.at(-1) - F.channels.phi[0], m = Math.round(bank / TAU);
   const r = [z.pos[0] - a.pos[0], z.pos[1] - a.pos[1], z.pos[2] - a.pos[2], net.kh - TAU * turns, net.kv, bank - TAU * m];
   const names = ['x', 'y', 'z', 'net heading − 2πk', 'net pitch', 'bank at the seam'];
-  const cupBoth = !!(F.cup && L.cup);   // the cup continues round the seam only when both ends are cup pieces (a mixed seam is reported, not solved)
-  for (const ch of cupBoth ? ['kh', 'kv', 'w', 'r', 'c'] : ['kh', 'kv', 'w', 'r']) { r.push(L.channels[ch].at(-1) - F.channels[ch][0]); names.push(`${ch} value at the seam`); }
+  const sm = seamOf(doc), cupBoth = sm.cupBoth;   // the cup continues round the seam only when both ends are cup pieces (a mixed seam is reported, not solved); e, s, t likewise (D225)
+  for (const ch of valueChannels(sm)) { r.push(L.channels[ch].at(-1) - F.channels[ch][0]); names.push(`${ch} value at the seam`); }
   const held = heldCup(F, L);   // a cup meeting a legacy piece round the seam is held at the legacy piece's RENDERED edge (D190 R3)
   if (held) { r.push(held.value); names.push('cup edge at the seam (held at the legacy end rendered edge)'); }
   for (const ch of D.CHANNELS) {
-    if (ch === 'c' && !cupBoth) continue;
+    if (!seamJoined(ch, sm)) continue;
     const cl = L.channels[ch], n = cl.length, cf = F.channels[ch];
     r.push((3 * (cl[n - 1] - cl[n - 2])) / hEnd(L) - (3 * (cf[1] - cf[0])) / hStart(F)); names.push(`${ch} slope at the seam`);
   }
@@ -160,6 +188,7 @@ function residual(doc) {
  */
 function close(doc, opts = {}) {
   D.checkDoc(doc); doc = D.fillCup(doc);
+  checkSeamKinds(doc);
   if (doc.pieces.some((P) => P.type === 'flight')) throw new D.CoreError('NOT_YET', 'close: a track with a jump is not closed by this version (the flight fixes a displacement the close would have to carry; not built)');
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0);
   const cupBoth = !!(doc.pieces[roadIdx[0]].cup && doc.pieces[roadIdx[roadIdx.length - 1]].cup);
@@ -184,9 +213,9 @@ function close(doc, opts = {}) {
     for (let k = 0; k < 3; k++) { const row = new Float64Array(N); toCols('kh', Jp.kh, row, k); toCols('kv', Jp.kv, row, k); J.push(row); }
     for (const ch of ['kh', 'kv']) { const row = new Float64Array(N); toCols(ch, nr[ch], row); J.push(row); }
     J.push(valueRow('phi', 'value'));
-    for (const ch of cupBoth ? ['kh', 'kv', 'w', 'r', 'c'] : ['kh', 'kv', 'w', 'r']) J.push(valueRow(ch, 'value'));
+    for (const ch of valueChannels(seamOf(doc))) J.push(valueRow(ch, 'value'));
     if (held) { const row = new Float64Array(N), Pi = held.end === 'last' ? roadIdx[roadIdx.length - 1] : roadIdx[0], ii = held.end === 'last' ? doc.pieces[Pi].channels.c.length - 1 : 0; for (const [c, coef] of expand.c[Pi][ii]) row[c] += coef; J.push(row); }
-    for (const ch of D.CHANNELS) { if (ch === 'c' && !cupBoth) continue; J.push(valueRow(ch, 'slope')); }
+    for (const ch of D.CHANNELS) { if (!seamJoined(ch, seamOf(doc))) continue; J.push(valueRow(ch, 'slope')); }
     // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹ r (ref 04 §3)
     const M = J.map((a) => J.map((b) => { let s = 0; for (let k = 0; k < N; k++) s += a[k] * winv[k] * b[k]; return s; }));
     const y = denseSolve(M, m.r.map((v) => -v)), delta = new Float64Array(N);
