@@ -288,9 +288,9 @@ test('R2: past the joint\'s morph the road is the pure cup shape (ψ at every qu
 // cross-section (constant width and r) has no blend and no new key, byte for byte as before; a changing one is a chord.
 test('row 5 (amended D196): a /2 file loads as LEGACY pieces (no cup flag, no c in the canonical text), a constant segment renders through profileAt with no blend and no new key, a changing one is a chord, and it saves as /3', () => {
   const d = extend(extend(D.createDoc('old'), { length: 120, family: 'half-pipe', first: { w: 24 } }), { length: 80, transition: 40, targets: { w: 12, phi: 0.3 } });
-  const text = D.serialize(d), old = text.replace('"t180b.core/3"', '"t180b.core/2"');
+  const text = D.serialize(d), old = text.replace('"t180b.core/4"', '"t180b.core/2"');
   assert.ok(!/"c"/.test(text), 'a legacy piece has no c in its text');
-  const back = D.parse(old); assert.equal(back.schema, 't180b.core/3'); assert.ok(back.pieces.every((P) => P.cup === undefined));
+  const back = D.parse(old); assert.equal(back.schema, 't180b.core/4');   // D225: the schema is /4 (the edge and tube channels); a /2 file still loads as legacy pieces assert.ok(back.pieces.every((P) => P.cup === undefined));
   assert.equal(D.serialize(back), text, 'a /2 file saves as the same /3 text');
   const KEYS = ['blend', 'heartline', 'id', 'k0', 'k1', 'kind', 'kp0', 'kp1', 'length', 'part', 'profile', 'roll0', 'roll1', 'speed', 'word'];
   let chords = 0, constants = 0, s0 = 0; const segs = A.toSegments(back);

@@ -127,7 +127,7 @@ function meshPiece(g, seg, S, o, work) {
     : seg.profileIn !== undefined && rampM > 0 ? { from: seg.profileIn, s0: 0, length: Math.min(rampM, S[S.length - 1].s - S[0].s) } : null;
   const A = ramp ? normalize(ramp.from) : null;
   // a ramp: one vertex count for the whole piece, at matched fractions of the width; otherwise the font's own samples
-  const fr = A ? blendSamples(A, P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross }) : null;
+  const fr = A ? (Array.isArray(seg.fractions) && seg.fractions.length >= 2 ? seg.fractions : blendSamples(A, P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross })) : null;   // seg.fractions (D225): the piece's shared row grid, so neighbouring chord segments make the same rows
   const Us = A ? usOf(P, fr) : samplesAcross(P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross }).u, K = Us.length;
   if (K > MAXV / 2) throw new Error(`buildMesh: piece ${g}: ${K} vertices across one row leaves no room for two rows`);
   const shapeAt = (sm) => {                   // the cross-section at a sample: the font, or the blend on the ramp

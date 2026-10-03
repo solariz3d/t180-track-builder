@@ -16,7 +16,7 @@ does not edit it; it imports one of its functions, `solveJump`, for a jump.
 
 Every formula is on the skill's shelf, `.claude/skills/track-equations/references/`, cited at its use as `ref NN §k`.
 
-## The document (schema `t180b.core/3`; a `core/1` or `core/2` file is read and upgraded)
+## The document (schema `t180b.core/4`; a `core/1`, `core/2` or `core/3` file is read and upgraded)
 
 ```js
 {
@@ -134,6 +134,17 @@ centreline, the bank nor the readout's turn and climb.
   0.95° off c inside a segment (the mesh's smoothstep runs 1.5x c's rate mid-segment, and a 150° ramp shows a 102 mm ripple in the tip).
 - **The brush.** `brush({ mode: 'value', channel: 'c' })` works on cup pieces only; a window that reaches a legacy piece is refused (`NOT_CUP`). A cup piece's segments are re-expressed when its c range changes only under `cupRuns`; by default a brush re-expresses the segments under its window.
 - **The API for the UI:** the channel name is `c` (Extend `targets.c`, `first.c`), and the readout's `cupFromDeg` / `cupToDeg`.
+
+## The edge curve, the tube and the spiral (schema core/4, D225, ref 09 §10)
+
+Three more channels, each carried only by the pieces that use it (a flag on the piece, like `cup`; the canonical text writes the array only then, so a document that uses none is the /3 text with a new schema string):
+- **e** (edge angle, degrees >= 0) and **s** (where the outer zone starts, 0.5 to 0.95 of the half-width, default 0.64) make an **edge piece** (`P.edge`): on top of whatever the middle profile gives, ψ gains e·G((|u|/h − s)/(1 − s)), G = 3t² − 2t³, on both sides. The total edge angle is capped at CUP_MAX = 150 (c + e on a cup, the legacy edge + e on a legacy piece), bound on control points by the convex hull. e = 0 is the identity: a piece with no edge returns its middle profile object untouched.
+- **t** (tube sweep, degrees 0 to 360) makes a **tube piece** (`P.tube`): a circular arc, ψ = (t/2)|u|/h, closing into a cylinder of circumference w at 360. A piece is a cup or a tube, never both. An open tube takes an edge up to t/2 + e <= 180; a closed one takes none. A tube HELD between t1m(w) (`tubeSlotMinDeg`, 348.7° at 31 m) and 360 leaves a slot under the downforce ray's 1 m and is refused (BAD_TUBE); passing through the band to 360 is the closing transition. A closed tube narrower than 9.43 m is a validator red (`tube-too-narrow`).
+- **Joints.** e and s join C1 like every channel (s only while e is visible). Between two different kinds (legacy, cup, tube) the RENDERED edge must be continuous to 0.05° (a tube's is t/2); `extend` starts a tube at twice the edge the piece before it renders, and a cup after a tube at t/2 (a cup cannot start where a closed tube ends: BAD_CUP, open the tube to t <= 300 first).
+- **Segments.** An edge or tube piece, and a piece entering from a different kind, is built by `xsecSegments` (adapter.js): every segment is a CHORD (its profile at the end, blended from the one at the start; a moving slice is not linear in s), all of a piece's segments share ONE row grid (`seg.fractions`, profile.js `commonFractions`, honoured by mesh.js), so the mesh emits no seam zip inside the piece; entering from another kind the first 10 m blend from the previous last profile. `e = 0` pieces never reach this path: the nine fixtures are byte for byte as before.
+- **The spiral.** Inside a closed tube the roll turns about the tube's AXIS: each segment of a tube piece carries a heartline that runs linearly over the segment (path.js `heartline1`), R(s) = (w/2π)·smoothstep((t − 300°)/60°), and a cubic Hermite roll through the channel's value and slope at both ends (`rollRate0`/`rollRate1`), so the road centre is a smooth helix. `heartlineLift` gives the validator the road centre's own curvature (the spiral's centripetal load). Bank already winds through ±180°; nothing wraps it. Water over a heartline offset is refused by name (`WATER_HEARTLINE`).
+- **Validation** (src/validate): `roll-rate` (20 m chord, RED above 1.2144°/m, AMBER above 0.9338°/m, the Centrifuge lap's measured bars; a full 360° of bank needs about 450 m to pass and 600 m to clear amber), `tube-too-narrow`, `edge-past-cap`. A tube that closes along the road still reds `downforce-ray-gap` over its slot zone: no exemption (the librarian's ruling 3).
+- **close()** joins e, s and t round the seam only when both ends carry them, and refuses a seam that joins a tube to another kind (`TUBE_SEAM`) or an edge still active at one end only (`EDGE_SEAM`).
 
 ## Extend's `transition`: one ramp for every channel, or one per channel (`extend.js`, D194b, ref 09 §9)
 

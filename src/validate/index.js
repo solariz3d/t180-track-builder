@@ -28,6 +28,40 @@ const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const DEG = Math.PI / 180;
 const { rayGaps } = require('./raygap.js');
 
+// THE ROLL RATE (D225, seal V7 and S3): the angle between the surface normal U at s − 10 m and at s + 10 m, both projected onto the plane normal to T(s), over the 20 m chord (°/m).
+// The bar is MEASURED, not derived: RED above 1.2144°/m (the maximum over the whole Centrifuge lap, 8,585 windows, a lap the keeper says "flows so smooth … at max speed"),
+// AMBER above 0.9338°/m (the maximum over its inverted words alone, 175 windows). It is read at a 20 m chord because the 4 m chord of that read is facet noise (4.26°/m on plain road).
+// A full 360° of bank passes the bar only over about 450 m (amber until 600 m); over 300 m it is red (1.8°/m). See FINDINGS and ref 09 §10 for the command and the read's sha256.
+const ROLL_RED_DEG_M = 1.2144, ROLL_AMBER_DEG_M = 0.9338, ROLL_CHORD_M = 20;
+// a CLOSED tube narrower than this cannot hold the chase camera's eye (3 m up the road's U, a circle of circumference w has R = w/2π): REFUSED by name (the chair's ruling R1)
+const TUBE_MIN_W = 9.43;
+// the cap on the total edge angle of a non-tube edge piece (CUP_MAX, document.js), and of an open tube with an edge (t/2 + e)
+const EDGE_CAP_DEG = 150, TUBE_EDGE_CAP_DEG = 180;
+/** The roll rate (°/m) at each road station that has a station 10 m each side on road; closed paths wrap at their length. [{ i, s, rate }] */
+function rollRates(S, isRoad, closed, L) {
+  const n = S.length, s0 = S[0].s, half = ROLL_CHORD_M / 2, out = [];
+  const find = (x) => {   // the station index j with S[j].s <= x <= S[j+1].s, or -1 outside an open path
+    if (closed) x = ((x - s0) % L + L) % L + s0;
+    if (x < s0 - 1e-9 || x > S[n - 1].s + 1e-9) return null;
+    let lo = 0, hi = n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m].s <= x) lo = m; else hi = m; }
+    return { j: lo, x };
+  };
+  const normalAt = (x) => {
+    const f = find(x); if (!f) return null;
+    const a = S[f.j], b = S[Math.min(n - 1, f.j + 1)];
+    if (!isRoad(f.j) || !isRoad(Math.min(n - 1, f.j + 1))) return null;
+    const t = b.s > a.s ? (f.x - a.s) / (b.s - a.s) : 0, U = [0, 1, 2].map((k) => a.U[k] + (b.U[k] - a.U[k]) * t), l = len(U);
+    return l > 0 ? mul(U, 1 / l) : null;
+  };
+  for (let i = 0; i < n; i++) {
+    if (!isRoad(i)) continue;
+    const p = S[i], ua = normalAt(p.s - half), ub = normalAt(p.s + half); if (!ua || !ub) continue;
+    const pa = sub(ua, mul(p.T, dot(ua, p.T))), pb = sub(ub, mul(p.T, dot(ub, p.T))), c = len([pa[1] * pb[2] - pa[2] * pb[1], pa[2] * pb[0] - pa[0] * pb[2], pa[0] * pb[1] - pa[1] * pb[0]]);
+    out.push({ i, s: p.s, rate: Math.atan2(c, dot(pa, pb)) / DEG / ROLL_CHORD_M });
+  }
+  return out;
+}
+
 const SRC = Object.freeze({
   'gap-in-road': 'ARCHITECTURE.md:82; FINDINGS.md:110',
   'missing-soft-collision': 'ARCHITECTURE.md:83; FINDINGS.md:89, :110',
@@ -43,6 +77,9 @@ const SRC = Object.freeze({
   'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp must catch both landings)',
   'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
   'joint-step': 'FINDINGS.md:110 (a step in the road mesh is a gap: the D190 round-3 ruling (c) reds a lap seam or a cup joint that steps more than 1 mm)',
+  'roll-rate': 'D225 seal V7 / S3 (exo_memory/loop/cross_section_seal_registration_2026-10-03.md): the roll rate over a 20 m chord, the bar the Centrifuge lap measured (RED 1.2144°/m, AMBER 0.9338°/m)',
+  'tube-too-narrow': 'D225 ruling R1: a closed tube narrower than 9.43 m cannot hold the chase camera (3 m eye height, R = w/2π)',
+  'edge-past-cap': 'D225 seal V2 / E2: the total edge angle of an edge piece is capped at CUP_MAX 150° (180° on an open tube): the walls of a bowl past it touch',
   'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check)',
 });
 
@@ -233,6 +270,12 @@ function core(path, segments, opts, from, carried, upto) {
     if (firstOf[j] < 0 || firstOf[j] >= end) return;   // a segment wholly in the pending stretch is not checked yet
     const s0 = S[firstOf[j]].s, s1 = S[lastOf[j]].s;
     if (jointStep.has(j)) raw.segReds.push({ j, s: s0, s1: s0, u: null, reason: 'joint-step', worst: jointStep.get(j).m });
+    if (g.kind !== 'gap' && g.profile) {
+      const pr = profiles[j], w = pr.u[pr.u.length - 1] - pr.u[0], edgeDeg = Math.max(pr.psi[0], pr.psi[pr.psi.length - 1]) / DEG;
+      if (pr.psi[0] >= Math.PI - 1e-6 && pr.psi[pr.psi.length - 1] >= Math.PI - 1e-6 && w < TUBE_MIN_W) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'tube-too-narrow', worst: w });   // a CLOSED tube (both edges at 180°) under the camera's width
+      const cap = pr.font === 'edge' ? EDGE_CAP_DEG : pr.font === 'tube-edge' ? TUBE_EDGE_CAP_DEG : null;
+      if (cap !== null && edgeDeg > cap + 1e-3) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'edge-past-cap', worst: edgeDeg });
+    }
     // a gap that is not a jump is a hole; the open head is exempt (INTERFACES §4: "no 'gap in road' red at the head")
     if (g.kind === 'gap' && g.word !== 'jump' && !(!path.closed && j === lastSeg)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'gap-in-road' });
     if (g.kind !== 'gap' && g.word === 'wall-ride' && /^WALL/i.test(profiles[j].material)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'wall-ride-from-wall-object' });
@@ -253,8 +296,17 @@ function core(path, segments, opts, from, carried, upto) {
   } else notChecked.push('downforce-ray-gap: needs the built physics road (src/validate/raygap.js); pass opts.roadMesh');
   for (const p of raw.pts) if (p.kind === 'red') red.push(p);
   for (const r of raw.segReds) red.push(r);
+  // the roll rate: a whole-track check read from the path (a station's chord reaches 10 m each side, so it is recomputed every call and revalidate equals validate)
+  const rollAmber = [];
+  // the core's own segments only (word 'core', src/core/adapter.js): the paused piece builder's word documents are not newly judged by a bar the Centrifuge lap measured for the equation core's roads (their lap seams step the roll)
+  const isCore = (i) => isRoad(i) && segments[S[i].seg].word === 'core';
+  for (const q of rollRates(S, isCore, path.closed, path.lengthM || (S[n - 1].s - S[0].s))) {
+    if (q.i >= end) continue;
+    if (q.rate > ROLL_RED_DEG_M) red.push({ s: q.s, u: null, reason: 'roll-rate', worst: q.rate });
+    else if (q.rate > ROLL_AMBER_DEG_M) rollAmber.push({ s: q.s, u: null, reason: 'roll-rate', worst: q.rate });
+  }
   for (const e of raw.stacked.values()) red.push({ s: e.s, u: e.u, reason: 'stacked-within-2m', worst: e.worst });
-  const amber = raw.pts.filter((p) => p.kind === 'amber'), info = raw.pts.filter((p) => p.kind === 'info');
+  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber], info = raw.pts.filter((p) => p.kind === 'info');
   const lines = raw.lines.slice().sort((a, b) => a.i - b.i).map((l) => l.line);   // station order, u order within
 
   // ── jumps (ARCHITECTURE.md:72-80) ──
@@ -501,4 +553,4 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   }
 }
 
-module.exports = { validate, revalidate, lapOf, speedProfile, SRC, _internal: { ranges } };
+module.exports = { validate, revalidate, lapOf, speedProfile, SRC, ROLL_RED_DEG_M, ROLL_AMBER_DEG_M, ROLL_CHORD_M, TUBE_MIN_W, _internal: { ranges, rollRates } };

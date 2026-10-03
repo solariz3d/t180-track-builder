@@ -85,6 +85,7 @@ function sculpt(doc, { channel, s0, r, delta }) {
   for (let k = 0; k <= doc.pieces.length; k++) { const w = Math.max(r, 3 * spanUnder(doc, off, s0 - rUsed, s0 + rUsed)); if (w === rUsed) break; rUsed = w; }
   const res = doc.pieces.map((P, p) => {
     if (P.type !== 'road' || off[p] + P.length < s0 - rUsed || off[p] > s0 + rUsed) return null;
+    if (D.OPTIONAL[channel] && channel !== 'c' && !P[D.OPTIONAL[channel]]) throw new D.CoreError('NOT_' + D.OPTIONAL[channel].toUpperCase(), 'a ' + channel + ' brush reaches piece ' + P.id + ', which has no ' + D.OPTIONAL[channel] + ': extend with a ' + (channel === 't' ? 't' : 'e or s') + ' target first, or brush only ' + D.OPTIONAL[channel] + ' pieces (D225)');
     if (channel === 'c' && !P.cup) throw new D.CoreError('NOT_CUP', 'a cup brush reaches piece ' + P.id + ', which has no cup (a legacy piece renders the old profile): extend with a cup target first, or brush only cup pieces');
     return brushControls(P.channels[channel], D.knotVector(P), { s0: s0 - off[p], r: rUsed, delta });
   });
@@ -93,7 +94,7 @@ function sculpt(doc, { channel, s0, r, delta }) {
   for (let b = 0; b < doc.pieces.length; b++) {
     if (doc.pieces[b].type !== 'road') continue;
     const Pb = doc.pieces[b], rb = res[b];
-    const linked = a >= 0 && !(doc.pieces.slice(a + 1, b).some((P) => P.type === 'flight') && (channel === 'kh' || channel === 'kv')) && (channel !== 'c' || (doc.pieces[a].cup && Pb.cup));
+    const linked = a >= 0 && !(doc.pieces.slice(a + 1, b).some((P) => P.type === 'flight') && (channel === 'kh' || channel === 'kv')) && (!D.OPTIONAL[channel] || (doc.pieces[a][D.OPTIONAL[channel]] && Pb[D.OPTIONAL[channel]]));
     if (!linked) {                                             // an unlinked start (the lap's first piece, or level after a flight)
       if (channel === 'c' && a >= 0 && doc.pieces[a].cup && res[a]) { const Pa0 = doc.pieces[a], n0 = Pa0.channels.c.length; res[a].ctrl[n0 - 1] = Pa0.channels.c[n0 - 1]; res[a].ctrl[n0 - 2] = Pa0.channels.c[n0 - 2]; res[a].changed = res[a].changed.filter((i) => i < n0 - 2); }   // a cup piece before a legacy one keeps the edge it hands over
       if (a >= 0 && rb) { rb.ctrl[0] = Pb.channels[channel][0]; rb.ctrl[1] = Pb.channels[channel][1]; rb.changed = rb.changed.filter((i) => i > 1); }
@@ -140,7 +141,7 @@ const SHARP_NOTE = 'Sharp brush: acts at exactly the size you set by adding fine
 const MODES = Object.freeze({
   hill: { channels: ['h'], what: 'height offset, m' },
   swerve: { channels: ['l'], what: 'lateral offset, m (+ = left)' },
-  value: { channels: ['phi', 'w', 'r', 'h', 'l', 'c'], what: 'a value channel: bank, width, rise, height, lateral offset or cup (cup pieces only)' },
+  value: { channels: ['phi', 'w', 'r', 'h', 'l', 'c', 'e', 's', 't'], what: 'a value channel: bank, width, rise, height, lateral offset, cup (cup pieces only), edge angle or edge start (edge pieces only), tube sweep (tube pieces only); a brush that takes one outside its range is refused by name' },
   rate: { channels: ['kh', 'kv'], what: 'turn or climb harder from here on: a heading- or pitch-rate brush, which re-closes a closed lap' },
 });
 

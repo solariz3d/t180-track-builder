@@ -25,7 +25,7 @@ const MUTANTS = [
   { id: 'M7 the fit\'s ringing is not clamped after the Extend fit', pattern: 'row 2', edits: [[C + 'extend.js', 'const c = piece.channels.c = piece.channels.c.map((x) => Math.min(D.CUP_MAX, Math.max(0, x))), n = c.length;', 'const c = piece.channels.c, n = c.length;']] },
   { id: 'M8 Extend does not refuse a typed cup past 150', pattern: 'row 2 \\(iii\\)', edits: [[C + 'extend.js', 'targets.c >= 0 && targets.c <= D.CUP_MAX)) throw', 'targets.c >= 0 && targets.c <= 1e9)) throw']] },
   { id: 'M9 Extend does not refuse a first-piece cup past 150', pattern: 'row 2 PLANTED', edits: [[C + 'extend.js', 'first.c >= 0 && first.c <= D.CUP_MAX)) throw', 'first.c >= 0 && first.c <= 1e9)) throw']] },
-  { id: 'M10 the brush has no cup channel', pattern: 'row 2 \\(iii\\)', edits: [[C + 'sculpt.js', "'l', 'c'], what:", "'l'], what:"]] },
+  { id: 'M10 the brush has no cup channel', pattern: 'row 2 \\(iii\\)', edits: [[C + 'sculpt.js', "'l', 'c', 'e', 's', 't'], what:", "'l', 'e', 's', 't'], what:"]] },
   { id: 'M10b a cup that ends at a limit is not made flat (the next piece would need a control point past it)', pattern: 'ends flat', edits: [[C + 'extend.js', 'if (c[n - 1] <= 1e-3 || c[n - 1] >= D.CUP_MAX - 1e-3) c[n - 2] = c[n - 1];', 'if (false) c[n - 2] = c[n - 1];']] },
   { id: 'M10c the document guard has no tolerance for a solver\'s float noise at the limit', pattern: 'ends flat', edits: [[C + 'document.js', 'CUP_EPS = 1e-9;', 'CUP_EPS = 0;']] },
   // R2: the morph out of a legacy cross-section
@@ -33,12 +33,12 @@ const MUTANTS = [
   { id: 'M30 (R2) the morph carries no difference (the legacy shape is dropped inside the road)', pattern: 'R2', edits: [[C + 'adapter.js', 'u: cw.u, psi: cw.psi.map((x, i) => x + m * dpsi[i])', 'u: cw.u, psi: cw.psi.map((x, i) => x)']] },
   { id: 'M31 (R2) the morph never fades (the legacy difference stays for the whole piece)', pattern: 'R2', edits: [[C + 'adapter.js', 'mu = (x) => 1 - smooth(x / Lm);', 'mu = (x) => 1;']] },
   // row 3: joints
-  { id: 'M11 (K3-1) c is left out of the joint test between two cup pieces', pattern: 'row 3', edits: [[C + 'document.js', 'if (prevCup && P.cup) { /* falls through to the general test */ }', 'if (prevCup && P.cup) { continue; }']] },
+  { id: 'M11 (K3-1) c is left out of the joint test between two cup pieces', pattern: 'row 3', edits: [[C + 'document.js', "if (prevKind === 'cup' && kind === 'cup') { /* falls through to the general test */ }", "if (prevKind === 'cup' && kind === 'cup') { continue; }"]] },
   { id: 'M12 (K3-2) c is reset after a flight, like the heading rate', pattern: 'row 3', edits: [[C + 'document.js', "h: { v: 0, m: 0 }, l: { v: 0, m: 0 } } : e;\n  }\n  return null;", "h: { v: 0, m: 0 }, l: { v: 0, m: 0 }, c: { v: 0, m: 0 } } : e;\n  }\n  return null;"]] },
-  { id: 'M13 (K3-3) c is left out of the closure rows', pattern: 'row 3 \\(iii\\)', edits: [[C + 'close.js', 'const cupBoth = !!(F.cup && L.cup);', 'const cupBoth = false;'], [C + 'close.js', 'const cupBoth = !!(doc.pieces[roadIdx[0]].cup && doc.pieces[roadIdx[roadIdx.length - 1]].cup);', 'const cupBoth = false;']] },
+  { id: 'M13 (K3-3) c is left out of the closure rows', pattern: 'row 3 \\(iii\\)', edits: [[C + 'close.js', 'cupBoth: !!(F.cup && L.cup), edgeBoth', 'cupBoth: false, edgeBoth'], [C + 'close.js', 'const cupBoth = !!(doc.pieces[roadIdx[0]].cup && doc.pieces[roadIdx[roadIdx.length - 1]].cup);', 'const cupBoth = false;']] },
   { id: 'M14 (K3-4) a legacy piece hands over the family\'s nominal edge, not the one it renders', pattern: 'row 3|row 7', edits: [[C + 'document.js', 'if (!P.cup) out.c = { v: legacyEdgeDeg(P.family, out.w.v, out.r.v), m: 0 };', 'if (!P.cup) out.c = { v: FLOORS[P.family][3], m: 0 };']] },
   { id: 'M15 the legacy ↔ cup joint is not checked', pattern: 'row 3 \\(iv\\)', edits: [[C + 'document.js', 'if (Math.abs(here - prevEnd.c.v) > CUP_JOINT_DEG) return', 'if (false) return']] },
-  { id: 'M16 a piece extended after a cup piece is a legacy piece', pattern: 'row 3', edits: [[C + 'document.js', "if (doc.pieces[i].type === 'road') return !!doc.pieces[i].cup; return false; }", "if (doc.pieces[i].type === 'road') return false; return false; }"]] },
+  { id: 'M16 a piece extended after a cup piece is a legacy piece', pattern: 'row 3', edits: [[C + 'document.js', "if (doc.pieces[i].type === 'road') return kindOf(doc.pieces[i]); return 'legacy'; }", "if (doc.pieces[i].type === 'road') return kindOf(doc.pieces[i]) === 'cup' ? 'legacy' : kindOf(doc.pieces[i]); return 'legacy'; }"]] },
   // row 1b: on the road
   { id: 'M17 (K1b-1) the blend is dropped: each segment steps to its own profile', pattern: 'row 1b', edits: [[C + 'adapter.js', 'blend: cup ? cup[j].blend : L.blend', 'blend: null']] },
   { id: 'M18 the weight inversion is wrong (z = y, no Newton polish)', pattern: 'row 1b', edits: [[C + 'adapter.js', 'let z = 0.5 - Math.sin(Math.asin(1 - 2 * y) / 3);', 'let z = y;'], [C + 'adapter.js', 'for (let k = 0; k < 2; k++) { const d = 6 * z', 'for (let k = 0; k < 0; k++) { const d = 6 * z']] },
@@ -52,7 +52,7 @@ const MUTANTS = [
   { id: 'M37 (R1) the water reads segment.profile', file: 'readers', pattern: 'water', app: 'core/coreshell.js', edits: [['app/core/coreshell.js', 'return (m) => { const g = segments[m.seg]; return Prof.readsBlend(g) && g.blend ? Prof.atSegment(g, m.s - starts[m.seg]) : g.profile; };', 'return (m) => segments[m.seg].profile;']] },
   { id: 'M38 (R1) the camera\'s span reads segment.profile', file: 'readers', pattern: 'camera', app: 'preview/preview.js', edits: [['app/preview/preview.js', 'return spanOf(readAt(segments[i], segments[i].length));', 'return spanOf(normalize(segments[i].profile));']] },
   { id: 'M39 (R1) the readers evaluate a word document font-transition blend too (its validation and layout change)', file: 'readers', pattern: 'font-transition', edits: [['geom/profile.js', 'return readsBlend(seg) ? atSegment(seg, d) : normalize(seg.profile);', 'return atSegment(seg, d);']] },
-  { id: 'M40 (R1) the adapter does not mark a cup segment (the readers then take its target for the whole segment)', file: 'readers', pattern: 'validation', edits: [['core/adapter.js', '...(cup ? { cup: true } : L.chord ? { chord: true } : {})', '...(cup ? {} : L.chord ? { chord: true } : {})']] },
+  { id: 'M40 (R1) the adapter does not mark a cup segment (the readers then take its target for the whole segment)', file: 'readers', pattern: 'validation', edits: [['core/adapter.js', ': { cup: true }) : L.chord ? { chord: true } : {})', ': {}) : L.chord ? { chord: true } : {})']] },
   // R3: the cup -> legacy lap seam (round 3)
   { id: 'M41 (R3) no reverse morph: a cup that closes onto a legacy start is drawn to its own shape', file: 'seam', pattern: 'R3', edits: [[C + 'adapter.js', 'const nr = tail ? tailZone(P, n, E, s, tail, out, j) : n;', 'const nr = n;']] },
   { id: 'M42 (R3) the reverse morph never fades in (the tail keeps the cup shape)', file: 'seam', pattern: 'R3', edits: [[C + 'adapter.js', 'mu = (x) => smooth((x - a0) / Lz);', 'mu = (x) => 0;']] },
@@ -65,14 +65,14 @@ const MUTANTS = [
   { id: 'M49 (R3) jointSteps ignores the lap seam', file: 'seam', pattern: 'R3', edits: [['geom/profile.js', 'if (closed && segments.length > 1 && road(a)', 'if (false && segments.length > 1 && road(a)']] },
   // row 5: legacy stays legacy
   { id: 'M21 a legacy piece is rendered as a cup piece at c = 0', pattern: 'row 5', edits: [[C + 'adapter.js', 'cup[j].profile : L.profile;   // a legacy piece', 'cup[j].profile : cupProfile(P.family, mid.w, mid.c);   // a legacy piece']] },
-  { id: 'M22 a /2 piece is read as a cup piece', pattern: 'row 5', edits: [[C + 'document.js', 'function cupOf(P, out) { return P && P.channels && Array.isArray(P.channels.c) ? { ...out, cup: true } : out; }', 'function cupOf(P, out) { return { ...out, cup: true }; }']] },
-  { id: 'M23 a legacy piece\'s text carries a c array', pattern: 'row 5', edits: [[C + 'document.js', "CHANNELS.filter((ch) => ch !== 'c' || P.cup).map(", 'CHANNELS.map(']] },
-  { id: 'M24 (K5-2) the schema is still core/2', pattern: 'row 5', edits: [[C + 'document.js', "const SCHEMA = 't180b.core/3',", "const SCHEMA = 't180b.core/2',"]] },
+  { id: 'M22 a /2 piece is read as a cup piece', pattern: 'row 5', edits: [[C + 'document.js', "...(has('c') ? { cup: true } : {}),", 'cup: true,']] },
+  { id: 'M23 a legacy piece\'s text carries a c array', pattern: 'row 5', edits: [[C + 'document.js', 'CHANNELS.filter((ch) => !OPTIONAL[ch] || P[OPTIONAL[ch]]).map(', 'CHANNELS.map(']] },
+  { id: 'M24 (K5-2) the schema is still core/2', pattern: 'row 5', edits: [[C + 'document.js', "const SCHEMA = 't180b.core/4',", "const SCHEMA = 't180b.core/2',"]] },
   { id: 'M25 a cup brush is allowed to reach a legacy piece', pattern: 'row 5e', edits: [[C + 'sculpt.js', "if (channel === 'c' && !P.cup) throw new D.CoreError('NOT_CUP'", "if (false) throw new D.CoreError('NOT_CUP'"]] },
   // row 6: cup then roll
   { id: 'M26 (K6-3) the cup feeds the roll', pattern: 'row 6', edits: [[C + 'adapter.js', 'roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup', 'roll0: a.phi + a.c * 1e-3, roll1: b.phi + b.c * 1e-3, heartline: 0, profile, blend: cup']] },
   // row 7: the readout
-  { id: 'M27 (K7-1) cupToDeg reads the wrong station of the document', pattern: 'row 7', edits: [[C + 'readout.js', "cupToDeg: P.cup ? D.channelAt(P, 'c', P.length).v", "cupToDeg: P.cup ? D.channelAt(P, 'c', P.length * 0.5).v"]] },
+  { id: 'M27 (K7-1) cupToDeg reads the wrong station of the document', pattern: 'row 7', edits: [[C + 'readout.js', "cupToDeg: P.tube ? D.channelAt(P, 't', P.length).v / 2 : P.cup ? D.channelAt(P, 'c', P.length).v", "cupToDeg: P.tube ? D.channelAt(P, 't', P.length).v / 2 : P.cup ? D.channelAt(P, 'c', P.length * 0.5).v"]] },
   { id: 'M28 (K7-2) a legacy piece reads the nominal edge (w and r ignored)', pattern: 'row 7', edits: [[C + 'readout.js', "D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', 0).v, D.channelAt(P, 'r', 0).v)", 'D.legacyEdgeDeg(P.family, 1e9, 1e9)']] },
 ];
 
