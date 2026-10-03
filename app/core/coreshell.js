@@ -104,7 +104,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      */
     headState() {
       const e = D.endState(doc());
-      if (e) return { kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e) };
+      // the head piece: the last ROAD piece (a flight carries the road's state), whose `tube` says whether the sweep is the head's (RULING 2)
+      const roads = doc().pieces.filter((p) => p.type === 'road'), headIsTube = !!(roads.length && roads[roads.length - 1].tube);
+      if (e) return { kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, headIsTube) };
       const fam = 'bowl';   // extend.js: `family || (last ? last.family : 'bowl')`
       return { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], c: D.legacyEdgeDeg(fam, WIDTHS[fam], RATES[fam]), ...XS.headOf(null) };
     },

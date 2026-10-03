@@ -159,7 +159,8 @@ function mount(root, shell) {
   };
   // the ghost follows the fields as they change, not only a fresh hover (a pointer resting on the button fires no new mouseenter,
   // so the ghost showed the piece before the last edit, or none: found in the window proof, D186)
-  for (const f of [len, turn, climb, bank, width, cup, ...Object.values(atStart)]) f.oninput = f.onchange = ghost;
+  // (the cup's handler is the cup-or-tube one below, D225: the cup is not in this list, where its handler would only be replaced)
+  for (const f of [len, turn, climb, bank, width, ...Object.values(atStart)]) f.oninput = f.onchange = ghost;
   for (const f of [edge, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way (D225)
   for (const f of [cup, tube]) f.oninput = f.onchange = () => { exclusive(f); ghost(); };   // cup OR tube: the rule first, then the ghost
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',

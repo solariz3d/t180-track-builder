@@ -31,7 +31,7 @@ function reasonText(reason, car = MACH6) {
     'joint-step': 'the road steps between two pieces here (the cup and the piece next to it do not meet)',
     // THE CROSS-SECTION reds (D225): the ids are the seal's and the librarian's rulings (ruling 1 `tube-too-narrow`, S3 `roll-rate`; A's
     // core may name them otherwise, and then these lines follow A). Plain words here, the id in the tooltip, as every reason above
-    'tube-too-narrow': 'this closed tube is narrower than 9.43 m across the road: the chase camera and a T-180 do not fit inside it',
+    'tube-too-narrow': 'this closed tube is narrower than 9.74 m across the road: the chase camera and a T-180 do not fit inside it',
     'roll-rate': 'the road rolls about its own direction faster than any measured track (red over 1.21°/m, amber over 0.93°/m, read over 20 m): lengthen the roll',
     // A's third red (D225, checked against src/validate/index.js SRC at the combine): the ids above are A's too, unchanged
     'edge-past-cap': 'the edge curves up past the most a road can hold (150° in all, 180° on an open tube): the walls would touch',
