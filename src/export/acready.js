@@ -61,6 +61,68 @@ function flattenForAc(scene) {
   return { ...scene, root: { type: 'dummy', name: scene.root.name, matrix: IDENTITY.slice(), children: out } };
 }
 
+/**
+ * weldSeams(scene): run AFTER flattenForAc (world space). A seam mesh (name contains "seam") is the zipper the builder puts
+ * between two pieces whose boundary rows are not identical (src/geom/mesh.js meshSeam). Where the two rows lie within
+ * SNAP of each other, that zipper is a strip of slivers (area ~1e-4 m²) whose normals face ALONG the road: AC's tyre rays
+ * that land on one see a wall, and at 900+ km/h that is a bump at every such join (the 2026-10-02 oval: the crossed creases
+ * peaked at 167° there and at 0.34° anywhere else on the lap). Per point: every second-row point within SNAP of the first
+ * row is moved onto it, in the strip and in the next piece alike, so the pieces share that edge; then every strip triangle
+ * thinner than SLIVER (its height over its longest edge) is dropped: thinness, not area, is what makes a wall. Triangles that bridge a real gap (a font change across part of the width) are kept, and
+ * a strip left with no triangle is removed.
+ */
+const SNAP = 2e-3, SLIVER = 2 * SNAP;
+function weldSeams(scene) {
+  const kids = scene.root.children, seams = new Map(), moves = new Map();
+  const key = (x, y, z) => `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}`;
+  const segDist = (p, a, b) => {
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+    const L = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2], t = L ? Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / L)) : 0;
+    const q = [a[0] + t * ab[0], a[1] + t * ab[1], a[2] + t * ab[2]];
+    return { d: Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]), q };
+  };
+  for (const n of kids) {
+    if (n.type !== 'mesh' || !/seam/i.test(n.name)) continue;
+    // the zipper is written as row A (the earlier piece's last row) then row B (the later piece's first row); the split is
+    // where consecutive points jump back across the road, the largest step in the list
+    const P = n.positions, nv = P.length / 3; let split = -1, big = -1;
+    for (let i = 1; i < nv; i++) { const d = Math.hypot(P[3 * i] - P[3 * i - 3], P[3 * i + 1] - P[3 * i - 2], P[3 * i + 2] - P[3 * i - 1]); if (d > big) { big = d; split = i; } }
+    if (split < 2 || nv - split < 2) continue;
+    const A = [], B = []; for (let i = 0; i < nv; i++) (i < split ? A : B).push([P[3 * i], P[3 * i + 1], P[3 * i + 2]]);
+    const onA = (p) => { let best = null; for (let i = 1; i < A.length; i++) { const r = segDist(p, A[i - 1], A[i]); if (!best || r.d < best.d) best = r; } return best; };
+    let welded = 0;
+    for (const p of B) { const s = onA(p); if (s.d <= SNAP) { moves.set(key(...p), s.q); welded++; } }
+    if (welded) seams.set(n, true);
+  }
+  if (!seams.size) return scene;
+  const moved = (n) => {   // the mesh with every welded point moved; the same object when nothing in it moves
+    let positions = null;
+    for (let v = 0; v < n.positions.length; v += 3) {
+      const q = moves.get(key(n.positions[v], n.positions[v + 1], n.positions[v + 2]));
+      if (!q) continue;
+      if (!positions) positions = Float32Array.from(n.positions);
+      positions[v] = q[0]; positions[v + 1] = q[1]; positions[v + 2] = q[2];
+    }
+    return positions ? { ...n, positions } : n;
+  };
+  const children = [];
+  for (const n0 of kids) {
+    if (n0.type !== 'mesh') { children.push(n0); continue; }
+    const n = moved(n0);
+    if (!seams.has(n0)) { children.push(n); continue; }
+    const P = n.positions, keep = [];
+    for (let i = 0; i < n.indices.length; i += 3) {
+      const [a, b, c] = [n.indices[i], n.indices[i + 1], n.indices[i + 2]].map((j) => 3 * j);
+      const e1 = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]], e2 = [P[c] - P[a], P[c + 1] - P[a + 1], P[c + 2] - P[a + 2]];
+      const area = Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]) / 2;
+      const e3 = [P[c] - P[b], P[c + 1] - P[b + 1], P[c + 2] - P[b + 2]], longest = Math.max(Math.hypot(...e1), Math.hypot(...e2), Math.hypot(...e3));
+      if (longest > 0 && (2 * area) / longest >= SLIVER) keep.push(n.indices[i], n.indices[i + 1], n.indices[i + 2]);
+    }
+    if (keep.length) children.push({ ...n, indices: Uint16Array.from(keep) });   // a strip with nothing left is removed
+  }
+  return { ...scene, root: { ...scene.root, children } };
+}
+
 /** A solid-colour diffuse for every material that has none. Paint is near-white; everything else mid-grey. */
 function ensureDiffuse(scene) {
   const textures = [...scene.textures], made = new Map();
@@ -79,4 +141,4 @@ function ensureDiffuse(scene) {
   return { ...scene, textures, materials };
 }
 
-module.exports = { flattenForAc, ensureDiffuse };
+module.exports = { flattenForAc, ensureDiffuse, weldSeams, SNAP, SLIVER };
