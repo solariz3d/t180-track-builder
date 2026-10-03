@@ -123,9 +123,26 @@
   // pieces). The handler cleans up through closeCleanup (the mode sets it), never lets an error or a hang stand in its way, and ends in
   // destroy(). If the module cannot load, a bare handler that only destroys is registered, so a stale listener can still not trap the window.
   let closeCleanup = null;
+  // UNSAVED WORK (the keeper, 2026-10-03): each mode sets closeDirty to "is there unsaved work?"; the X then asks Save / Don't
+  // save / Cancel. Save is the Save button's own path; if the work is still unsaved after it (no name yet), the window stays
+  // open with the name field focused. No dialog API (off Tauri) or a failing one: close as before (app/closer.js).
+  let closeDirty = null;
+  const closeAsk = async () => {
+    if (typeof closeDirty !== 'function' || !closeDirty()) return null;
+    if (!tauri) return null;
+    // the plugin command itself, as the Export folder picker calls it: the dialog plugin injects no JS dialog API into this window
+    // (tauri-plugin-dialog 2.8.0 src/lib.rs injects init-iife.js only). The answer is the clicked button's label.
+    const r = await call('plugin:dialog|message', { message: 'This track has changes that are not saved.', title: 'Save before closing?', kind: 'warning', buttons: { YesNoCancelCustom: ['Save', "Don't save", 'Cancel'] } });
+    return r === 'Save' ? 'save' : r === "Don't save" ? 'discard' : 'cancel';
+  };
+  const closeSave = async () => {
+    await $('save').onclick();
+    if (closeDirty()) { $('name').focus(); status.textContent = 'Type a name for the track, then save or close again.'; return false; }
+    return true;
+  };
   const win = window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow && window.__TAURI__.window.getCurrentWindow();
   try {
-    const registered = (await loadCjs('app/closer.js', get)).installCloseHandler(win, () => closeCleanup);
+    const registered = (await loadCjs('app/closer.js', get)).installCloseHandler(win, () => closeCleanup, { ask: closeAsk, save: closeSave });
     if (registered && registered.catch) registered.catch((e) => console.error(`close handler not registered: ${e && e.message}`));
   } catch (e) {
     if (win && win.onCloseRequested) win.onCloseRequested(async (ev) => { ev.preventDefault(); try { await win.destroy(); } catch (err) { /* nothing more to try */ } });
@@ -150,6 +167,7 @@
       panels = await loadCjs('app/palette/panels.js', get);
       exporter = await (await loadCjs('app/export/export.js', get)).makeExporter(get);
       shell = await C.createCoreShell({ storage, exporter, now: () => performance.now() });
+      closeDirty = () => !!shell.getState().dirty;   // the X asks to save unsaved work (closeAsk above)
     } catch (e) { $('palette').textContent = `The equation builder could not start: ${e.message}`; return; }
     const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
     const drawReds = (st) => {
@@ -201,6 +219,7 @@
     const ex = await loadCjs('app/export/export.js', get);
     exporter = await ex.makeExporter(get);
     shell = await S.createShell({ storage, exporter });
+    closeDirty = () => !!shell.getState().dirty;   // the X asks to save unsaved work (closeAsk above)
   } catch (e) { $('palette').textContent = `The app could not start: ${e.message}`; return; }
 
   // THE GHOST (the preview's seam, app/preview/index.js): pointing at a palette piece sends 't180-ghost' with the shell's

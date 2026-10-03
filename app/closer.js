@@ -20,9 +20,31 @@ const CLOSE_TIMEOUT_MS = 3000;   // a cleanup that hangs (a native call that nev
  * The handler to give `win.onCloseRequested`. `cleanup` is read at close time (a getter, so the mode can set it after registration): it
  * returns nothing or a promise. `win.destroy()` is the last thing the handler does, whatever happened before it.
  */
-function makeCloseHandler(win, { cleanup = () => null, timeoutMs = CLOSE_TIMEOUT_MS, log = (m) => { try { console.error(m); } catch (e) { /* nowhere to log */ } } } = {}) {
+/*
+ * UNSAVED WORK (2026-10-03, the keeper: "if you press X it should ask you to save it first"). Before the cleanup, `ask()` is
+ * awaited: it returns null when there is nothing unsaved (close as before), or the user's choice, 'save' | 'discard' | 'cancel'.
+ * 'cancel' leaves the window open: the one case the handler does not destroy, because the user chose it. 'save' awaits `save()`,
+ * which returns true once the work is saved; false (no name yet, a refused save) leaves the window open too, so the work is not
+ * lost. An `ask` that THROWS is logged and the close goes ahead as it always did: a broken prompt must not trap the window (this
+ * file's first rule). A `save` that throws keeps the window open, like a refused save: that is not a trap, since the next X asks
+ * again and 'discard' always closes. A second X while the prompt is open is ignored.
+ */
+function makeCloseHandler(win, { cleanup = () => null, ask = () => null, save = () => true, timeoutMs = CLOSE_TIMEOUT_MS, log = (m) => { try { console.error(m); } catch (e) { /* nowhere to log */ } } } = {}) {
+  let asking = false;
   return async (evt) => {
     try { if (evt && typeof evt.preventDefault === 'function') evt.preventDefault(); } catch (e) { log(`close: preventDefault failed: ${e && e.message}`); }
+    if (asking) return;
+    let choice = null;
+    asking = true;
+    try {
+      try { choice = await ask(); } catch (e) { log(`close: the save prompt failed, closing as before: ${e && e.message ? e.message : e}`); choice = null; }
+      if (choice === 'cancel') return;
+      if (choice === 'save') {
+        let saved = false;
+        try { saved = await save(); } catch (e) { log(`close: save failed, the window stays open: ${e && e.message ? e.message : e}`); saved = false; }
+        if (!saved) return;
+      }
+    } finally { asking = false; }
     let timer = null;
     try {
       const fn = cleanup();

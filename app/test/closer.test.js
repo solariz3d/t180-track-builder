@@ -111,3 +111,48 @@ test('app/index.html has ONE close registration path (the closer, and a bare des
   assert.match(HTML, /win\.onCloseRequested\(async \(ev\) => \{ ev\.preventDefault\(\); try \{ await win\.destroy\(\)/);
   assert.match(HTML, /closeCleanup = async \(\) => \{ if \(!shell\.getState\(\)\.dirty\) await shell\.cleanExit\(\); else await shell\.flushAutosave\(\); \};/);
 });
+
+// ── unsaved work: the X asks Save / Don't save / Cancel (the keeper, 2026-10-03) ──
+const withAsk = (choice, save) => { const t = tauri(), calls = { save: 0 }; installCloseHandler(t.page(), () => null, { log: () => {}, ask: async () => choice, save: async () => { calls.save++; return save(); } }); return { t, calls }; };
+test('nothing unsaved (ask returns null): the X closes at once, with no save', async () => {
+  const { t, calls } = withAsk(null, () => true); await t.x(); assert.deepEqual([t.destroyed, calls.save], [true, 0]);
+});
+test('Cancel: the window stays open and nothing is saved', async () => {
+  const { t, calls } = withAsk('cancel', () => true); await t.x(); assert.deepEqual([t.destroyed, calls.save], [false, 0]);
+});
+test('Don\'t save: the window closes without saving', async () => {
+  const { t, calls } = withAsk('discard', () => true); await t.x(); assert.deepEqual([t.destroyed, calls.save], [true, 0]);
+});
+test('Save: it saves, then the window closes', async () => {
+  const { t, calls } = withAsk('save', () => true); await t.x(); assert.deepEqual([t.destroyed, calls.save], [true, 1]);
+});
+test('Save that does not save (no name yet): the window stays open, so the work is not lost', async () => {
+  const { t, calls } = withAsk('save', () => false); await t.x(); assert.deepEqual([t.destroyed, calls.save], [false, 1]);
+});
+test('Save that THROWS: the window stays open; the next X asks again, and Don\'t save then closes', async () => {
+  const t = tauri(); let choice = 'save';
+  installCloseHandler(t.page(), () => null, { log: () => {}, ask: async () => choice, save: async () => { throw new Error('disk full'); } });
+  await t.x(); assert.equal(t.destroyed, false);
+  choice = 'discard'; await t.x(); assert.equal(t.destroyed, true);
+});
+test('a prompt that THROWS (no dialog, a refused permission): the window closes as before, it is never trapped', async () => {
+  const t = tauri(); installCloseHandler(t.page(), () => null, { log: () => {}, ask: async () => { throw new Error('dialog.message not allowed'); } });
+  await t.x(); assert.equal(t.destroyed, true);
+});
+test('a second X while the prompt is open is ignored: one prompt, one close', async () => {
+  const t = tauri(); let release, asks = 0; const answered = new Promise((r) => { release = r; });
+  installCloseHandler(t.page(), () => null, { log: () => {}, ask: async () => { asks++; await answered; return 'discard'; } });
+  const first = t.x(), second = t.x(); release(); await Promise.all([first, second]);
+  assert.deepEqual([asks, t.destroyCalls], [1, 1]);
+});
+test('app/index.html gives the closer the prompt, and both builders say whether there is unsaved work', () => {
+  assert.match(HTML, /installCloseHandler\(win, \(\) => closeCleanup, \{ ask: closeAsk, save: closeSave \}\)/);
+  assert.equal((HTML.match(/closeDirty = \(\) => !!shell\.getState\(\)\.dirty;/g) || []).length, 2, 'set in the core and the pieces branch');
+  // the plugin COMMAND, as the Export picker calls it: tauri-plugin-dialog 2.8.0 injects no window.__TAURI__.dialog
+  assert.match(HTML, /call\('plugin:dialog\|message', \{[^}]*buttons: \{ YesNoCancelCustom: \['Save', "Don't save", 'Cancel'\] \}/);
+  assert.doesNotMatch(HTML, /__TAURI__\.dialog/);
+});
+test('the window may show the prompt: dialog:allow-message is in its capability', () => {
+  const cap = fs.readdirSync(path.join(__dirname, '..', '..', 'src-tauri', 'capabilities')).map((f) => fs.readFileSync(path.join(__dirname, '..', '..', 'src-tauri', 'capabilities', f), 'utf8')).join('\n');
+  assert.match(cap, /"dialog:allow-message"/);
+});
