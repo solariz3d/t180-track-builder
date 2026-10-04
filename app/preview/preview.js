@@ -34,6 +34,7 @@ const { createRenderer } = require('./renderer.js');
 const { gridLines, headMarker } = require('./look.js');
 const { resolveLook } = require('./aclook.js');
 const { flowCell } = require('../../src/texture/flow.js');
+const { FACTOR: DRAG_DETAIL } = require('./coarse.js');
 const { previewTextures } = require('../../src/texture/set.js');
 const { normalize, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
@@ -102,8 +103,15 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   };
   // a change to the placed track retires the ghost: it was built on the old head (the palette shows it again on hover)
   const shared = () => (track && track.how !== 'kept' ? { path: track.path, segments: track.segments, closed: !!(track.path && track.path.closed), how: track.how, g: track.g, fromS: track.fromS } : null);
+  // D235 (the keeper: "make the changes render faster while you change it from one to the next"): while a brush drag is open (state.brush) the model meshes a COARSER
+  // preview (app/preview/coarse.js: a closed tube's brush step is about 3× cheaper), and full detail comes back FULL_AFTER_MS after the drag ends, once, unless another
+  // drag starts first. Nothing here touches what is exported: the model's detail changes the preview's mesh only, and the shell's resolved state is the export's.
+  const FULL_AFTER_MS = 250; let fullTimer = 0;
+  const clearFull = () => { if (fullTimer) { (win.clearTimeout || clearTimeout)(fullTimer); fullTimer = 0; } };
+  const scheduleFull = () => { clearFull(); fullTimer = (win.setTimeout || setTimeout)(() => { fullTimer = 0; model.setDetail(1); refresh(shell.getState()); }, FULL_AFTER_MS); if (fullTimer && fullTimer.unref) fullTimer.unref(); };
   const refresh = (st) => {
     start = st.resolved && st.resolved.start ? st.resolved.start : null;   // where the first piece starts (the equation core's doc.start)
+    if (st.brush) { clearFull(); model.setDetail(DRAG_DETAIL); } else if (model.detail > 1) scheduleFull();   // dragging: coarse now; not dragging but still coarse: full detail soon
     try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; } catch (e) { err = e.message; return; }
     if (onTrack && track.how !== 'same' && track.how !== 'kept') onTrack(shared());
   };
@@ -203,7 +211,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   return {
     rig, model, renderer,
     /** What is on screen now, for the window proof (app/testhook/probe.js): read-only. */
-    view: () => ({ track, pose: shownPose, mode: rig.mode, error: err, ghost: ghost ? ghost.batches.length : 0, grid: grid ? grid.positions.length / 6 : 0, look, textures: images.length }),
+    view: () => ({ track, detail: model.detail, pose: shownPose, mode: rig.mode, error: err, ghost: ghost ? ghost.batches.length : 0, grid: grid ? grid.positions.length / 6 : 0, look, textures: images.length }),
     track: () => shared(),
     /** What each placed batch is drawn with, in the 'ac' look: { materialOf, textures } (aclook.js resolveLook). */
     lookNow: () => (track && track.mesh ? lookFor(track.mesh.scene) : null),
@@ -223,7 +231,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     pick(x, y) { return shownPose && track && track.path ? pickAt(track.path, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
     dispose() {
-      win.cancelAnimationFrame(raf); unsub();
+      win.cancelAnimationFrame(raf); clearFull(); unsub();
       win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
       if (win.document) win.document.removeEventListener('visibilitychange', onVis);
       canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease);

@@ -17,10 +17,13 @@ function hsl(h, s, l) {
 }
 function colourOf(pieceIndex, id, seam) { return hsl(hue(id), 0.45, (pieceIndex % 2 ? 0.52 : 0.62) - (seam ? 0.18 : 0)); }
 
-function batchesOf(mesh) {
+/** The draw batches of a mesh. `fromPiece` > 0 builds only the nodes of pieces from there on (the ghost wants the new pieces and the seam onto them, not the whole track). */
+function batchesOf(mesh, fromPiece = 0) {
   if (!mesh || !mesh.scene || !Array.isArray(mesh.cells)) throw new Error('batchesOf: needs a mesh from src/geom buildMesh');
-  const byName = new Map(mesh.cells.map((c) => [c.name, c])), out = [];
-  for (const node of mesh.scene.root.children) {
+  const byName = new Map(mesh.cells.map((c) => [c.name, c])), out = [], kids = mesh.scene.root.children;
+  for (let k = 0; k < kids.length; k++) {
+    const node = kids[k];
+    if (fromPiece > 0 && mesh.cells[k] && mesh.cells[k].piece < fromPiece) continue;   // the cells and the root's children are in one order (set.js withTextureSet pairs them the same way)
     const m = node.children[0], cell = byName.get(m.name);
     if (!cell) throw new Error(`batchesOf: mesh ${m.name} has no cell record`);
     const id = m.name.replace(/^\d[A-Z]+_(seam_)?/, '').replace(/_\d+$/, '');

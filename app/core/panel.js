@@ -201,8 +201,12 @@ function mount(root, shell) {
     drag = { y, per: PER_PX[channel.value] }; e.preventDefault();
     if (stage.setPointerCapture && e.pointerId !== undefined) stage.setPointerCapture(e.pointerId);
   };
-  const move = (e) => { if (!drag) return; const [, y] = rel(e); shell.brushTo((drag.y - y) * drag.per); };
-  const up = () => { if (!drag) return; drag = null; shell.endBrush(); };
+  // D235 (nothing coalesced the pointer moves: each one ran a whole brush step, and a closed tube's takes seconds, so the moves queued behind it): at most ONE brushTo per
+  // animation frame, with the LATEST position; the release applies the last position that is still waiting, then ends the drag.
+  let waitingY = null, frame = 0;
+  const flush = () => { frame = 0; if (!drag || waitingY === null) return; const y = waitingY; waitingY = null; shell.brushTo((drag.y - y) * drag.per); };
+  const move = (e) => { if (!drag) return; const [, y] = rel(e); waitingY = y; if (!frame) frame = win.requestAnimationFrame(flush); };
+  const up = () => { if (!drag) return; if (frame) { win.cancelAnimationFrame(frame); frame = 0; } if (waitingY !== null) { const y = waitingY; waitingY = null; shell.brushTo((drag.y - y) * drag.per); } drag = null; shell.endBrush(); };
   if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); }
 
   // CLOSE, WATER, EXAMPLE
@@ -253,7 +257,7 @@ function mount(root, shell) {
   const labels = stage ? LB.mount(stage, shell, win) : null;
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, options: opts, unmount() { unsub(); if (labels) labels.unmount(); doc.removeEventListener('t180:track', onTrack); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, options: opts, unmount() { unsub(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); doc.removeEventListener('t180:track', onTrack); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, overlayOf, extendOptions, PER_PX };

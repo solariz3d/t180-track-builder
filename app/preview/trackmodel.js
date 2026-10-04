@@ -31,9 +31,10 @@
 
 const G = require('../../src/geom/index.js');
 const { batchesOf } = require('./batches.js');
+const { coarsen } = require('./coarse.js');
 const { worldBounds } = require('./look.js');
 
-const keyOf = (seg) => JSON.stringify(seg);
+const { keyOf } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
 /** m between path stations: the export's (src/export/fromwords.js buildExport `step: 2`) and validation's. */
 const STEP = 2;
 
@@ -43,6 +44,9 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // track): the base path LIFTED by resolved.lift when the document has offsets (D186: the equation core's hill and swerve, A's
   // src/core/adapter.js offsetPath, which recomputes the frame from the lifted centreline). With no lift they are the same object.
   let path = null, shown = null, mesh = null, keys = [], liftKeys = [], closed = false, last = null, startKey = null, startOpt = null;
+  // D235: `detail` > 1 meshes a COARSER preview (app/preview/coarse.js thins each segment's row grid) while the track is being dragged; 1 is full detail, the export's.
+  // A change of detail is a full rebuild. `lastResolved` is the state's document the last update was built from: the very same object builds nothing again.
+  let detail = 1, detailMoved = false, lastResolved = null;
   /**
    * The segments the MESH is given: a segment whose lifted samples differ from the base carries `_lift`, a key made from those
    * samples. So its handles (mesh.js handleKey) change exactly where the lift changed, and sculptMesh remeshes exactly those
@@ -62,17 +66,19 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   return {
     update(resolved) {
       if (!resolved) { if (!last) throw new Error('trackModel: no resolved document yet'); return { ...last, how: 'kept', stale: true }; }
-      const segs = resolved.segments, isClosed = !!resolved.closed, lift = typeof resolved.lift === 'function' ? resolved.lift : null;
+      // the very same document as the last build (a state change that is not an edit: a message, a brush ending): nothing to build, a closed loop included
+      if (last && resolved === lastResolved && !detailMoved) return { ...last, how: 'same' };
+      const segs = detail > 1 ? coarsen(resolved.segments, detail) : resolved.segments, isClosed = !!resolved.closed, lift = typeof resolved.lift === 'function' ? resolved.lift : null;
       // resolved.start (D186, the equation core): where the track starts, its heading and PITCH; a new start rebuilds in full
       const sk = resolved.start ? JSON.stringify(resolved.start) : null, startMoved = sk !== startKey; startKey = sk; startOpt = resolved.start || null;
       if (!Array.isArray(segs)) throw new Error('trackModel: resolved.segments is missing');
-      if (!segs.length) { path = null; shown = null; mesh = null; keys = []; liftKeys = []; closed = isClosed; last = { path: null, mesh, how: 'empty', batches: [], segments: segs, g: null, fromS: null }; return last; }
+      if (!segs.length) { path = null; shown = null; mesh = null; keys = []; liftKeys = []; closed = isClosed; lastResolved = resolved; detailMoved = false; last = { path: null, mesh, how: 'empty', batches: [], segments: resolved.segments, g: null, fromS: null }; return last; }
       const nk = segs.map(keyOf);
       let g = 0; while (g < keys.length && g < nk.length && keys[g] === nk[g]) g++;
       let how, from = null, fromS = null;
       // the lift, redone on the base path after any growth; the first segment whose lifted samples changed
       const relift = () => { shown = lift ? lift(path) : path; const lk = segs.map((_, j) => liftOf(path, shown, j)); let a = 0; while (a < lk.length && a < liftKeys.length && lk[a] === liftKeys[a]) a++; return { lk, a }; };
-      if (!path || isClosed || closed || startMoved) how = full(segs, isClosed, lift);
+      if (!path || isClosed || closed || startMoved || detailMoved) how = full(segs, isClosed, lift);
       else if (g === keys.length && g === nk.length) {
         const { lk, a } = relift();
         if (a === lk.length && a === liftKeys.length) how = 'same';
@@ -88,11 +94,15 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       } else how = full(segs, isClosed, lift);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
       keys = nk; closed = isClosed;
       const batches = how === 'same' && last ? last.batches : batchesOf(mesh);
-      last = { path: shown, mesh, how, batches, bounds: how === 'same' && last ? last.bounds : worldBounds(batches), segments: segs, g: from, fromS };
+      lastResolved = resolved; detailMoved = false;
+      last = { path: shown, mesh, how, batches, bounds: how === 'same' && last ? last.bounds : worldBounds(batches), segments: resolved.segments, g: from, fromS };   // the REAL segments, whatever the detail meshed
       return last;
     },
+    /** The preview's detail: 1 (full, the export's) or a factor from 2 up (coarse, while dragging). Returns the detail now in force. */
+    setDetail(k) { const d = Number.isFinite(k) && k >= 2 ? Math.floor(k) : 1; if (d !== detail) { detail = d; detailMoved = true; } return detail; },
+    get detail() { return detail; },
     ghostFor(candidate) {
-      const segs = candidate && candidate.segments;
+      const segs = candidate && detail > 1 ? coarsen(candidate.segments, detail) : candidate && candidate.segments;
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
       const nk = segs.map(keyOf);
       if (nk.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
@@ -105,7 +115,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const st = mesh._state, m = { ...mesh, _state: { ...st, pieces: st.pieces.slice(), seams: st.seams.slice() } };
       geom.extendPath(p, segs);
       const gm = geom.extendMesh(m, p, segs), from = keys.length;
-      return { batches: batchesOf(gm).filter((b) => b.piece >= from), path: p, head: p.head, segments: segs };
+      return { batches: batchesOf(gm, from), path: p, head: p.head, segments: segs };   // D235: only the NEW pieces' batches are built (it built every batch and kept the new ones)
     },
     /** The path everything reads: the base path lifted by the document's offsets (the same object when there are none). */
     get path() { return shown; },
