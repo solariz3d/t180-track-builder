@@ -288,3 +288,62 @@ test('row 19: the mirror ghost\'s line count is BOUNDED however long the track i
   const tiny = path_((i) => [i * 2, 0, 0], 20); assert.ok(shortDash(tiny) >= 1.9, `a 40 m ghost keeps the 2 m floor on its dashes (${shortDash(tiny).toFixed(2)} m a piece), though its box alone would ask for under 1 m`);
   assert.ok(Math.abs(sp - 50) <= 6 && Math.abs(shortDash(small) - 2) < 0.2, `a 200 m ghost keeps the old 2 m dashes (about 50 pieces of 2 m): the clamp only bites on long ghosts (${sp} pieces, ${shortDash(small).toFixed(2)} m each)`);
 });
+
+// ── D237b, B's regression: the track model edits an OPEN track's path IN PLACE (extendPath, rebuildPathFrom), so a tree memoised per path OBJECT went stale after an extend or a brush ─────────────
+const SC = require('../../src/core/sculpt.js');
+const truthOf = (t, c, kind) => brute(t.path.samples.map((s) => s.pos.slice()), !!t.path.closed, c, kind);
+/** One step: plan the way preview.js does (the model's bounds and path), and compare the gap with the brute force over the SAME samples and centre. */
+function stepCheck(tm, shell, kind, label, log) {
+  const t = tm.update(shell.getState().resolved), plan = G.guidePlan({ bounds: t.bounds, path: t.path, mode: 'auto', mirror: kind }), want = truthOf(t, plan.centre, kind);
+  // the tree must hold the path's CURRENT samples, wherever the nearest segments happen to lie (a stale tree can read right by luck when the nearest segments are in the part that did not change)
+  const ix = G.indexFor(t.path), sm = t.path.samples, at = [0, sm.length >> 1, sm.length - 1];
+  assert.equal(ix.pts.length, sm.length, `${label} (${t.how}): the tree has ${ix.pts.length} points, the path ${sm.length}`); for (const i of at) assert.deepEqual(ix.pts[i].map((v) => +v.toFixed(9)), sm[i].pos.map((v) => +v.toFixed(9)), `${label}: point ${i} of the tree is the path's`);
+  assert.ok(Math.abs(plan.gap.max - want.max) < 1e-9 && Math.abs(plan.gap.mean - want.mean) < 1e-9 && plan.gap.n === want.n, `${label} (${t.how}): the plan reads ${plan.gap.max.toFixed(3)} / ${plan.gap.mean.toFixed(3)}, the truth is ${want.max.toFixed(3)} / ${want.mean.toFixed(3)}`);
+  log.push({ label, how: t.how, path: t.path, mean: plan.gap.mean }); return t;
+}
+
+test('row 21 (B\'s regression): through the real shell and track model, an open track\'s gap is right after every extend and brush, though the path object is the same one edited in place', async () => {
+  for (const kind of ['x', 'both']) {
+    const s = await createCoreShell({ brushFn: null }), tm = createTrackModel(), log = [];
+    s.extend({ length: 150, family: 'bowl' }); stepCheck(tm, s, kind, 'the first piece', log);
+    s.extend({ length: 200, transition: 40, targets: { kh: 1 / 150 } }); stepCheck(tm, s, kind, 'extend: a turn', log);
+    s.extend({ length: 300, transition: 40, targets: { kh: 0 } }); stepCheck(tm, s, kind, 'extend: a straight', log);
+    s.beginBrush({ mode: 'rate', channel: 'kh', s0: 100, r: 60 }); s.brushTo(0.004); s.endBrush(); assert.equal(s.getState().message === null || s.getState().messageKind === 'ok', true, s.getState().message); stepCheck(tm, s, kind, 'a brush on the first piece', log);
+    s.extend({ length: 150, transition: 40, targets: { kh: -1 / 200 } }); stepCheck(tm, s, kind, 'extend after the brush', log);
+    s.beginBrush({ mode: 'rate', channel: 'phi', s0: 400, r: 60 }); s.brushTo(0.1); s.endBrush(); stepCheck(tm, s, kind, 'a bank brush mid track', log);
+    assert.deepEqual([...new Set(log.map((x) => x.how))].sort(), ['extend', 'full', 'sculpt'], 'control: the steps cover an extend and a sculpt');
+    assert.ok(log.slice(1).every((x) => x.path === log[0].path), 'control: it IS the same path object at every step (edited in place), the case the memo was wrong on');
+    assert.ok(log[log.length - 1].mean > 1, 'control: the gap is a real number');
+  }
+});
+
+test('row 22: an open track WITH a lift (a hill from the height brush) too: the gap is right after every extend and height brush', async () => {
+  const s = await createCoreShell({ brushFn: SC.brush }), tm = createTrackModel(), log = [];
+  s.extend({ length: 200, family: 'bowl' }); s.extend({ length: 200, transition: 40, targets: { kh: 1 / 200 } }); s.extend({ length: 250, transition: 40, targets: { kh: 0 } }); stepCheck(tm, s, 'x', 'before any hill', log);
+  s.beginBrush({ mode: 'local', channel: 'height', s0: 150, r: 60 }); s.brushTo(8); s.endBrush(); assert.equal(typeof s.getState().resolved.lift, 'function', 'control: the document carries a lift'); const a = stepCheck(tm, s, 'x', 'a hill', log);
+  s.extend({ length: 150, transition: 40, targets: { kh: 1 / 300 } }); stepCheck(tm, s, 'x', 'extend over the hill', log);
+  s.beginBrush({ mode: 'local', channel: 'height', s0: 520, r: 60 }); s.brushTo(-5); s.endBrush(); stepCheck(tm, s, 'x', 'a second hill, a dip', log);
+  s.beginBrush({ mode: 'local', channel: 'height', s0: 150, r: 60 }); s.brushTo(14); s.endBrush(); const z = stepCheck(tm, s, 'x', 'the first hill higher', log);
+  s.extend({ length: 120, transition: 40, targets: { kh: 0 } }); stepCheck(tm, s, 'x', 'extend again', log);
+  // the lift FUNCTION stays on the document after the offsets are undone, and then the shown path is the base path itself again, edited in place by the next extend: the memo's case with a lift
+  while (s.getState().history.past && s.getState().history.past.length && Object.values(s.getState().history.present.pieces.flatMap((p) => (p.channels ? [p.channels.h, p.channels.l] : []))).some((c) => c.some((v) => v !== 0))) s.undo();
+  assert.equal(typeof s.getState().resolved.lift, 'function', 'control: the lift function is still there'); const flatNow = stepCheck(tm, s, 'x', 'the hills undone', log);
+  s.extend({ length: 130, transition: 40, targets: { kh: 1 / 250 } }); const grown = stepCheck(tm, s, 'x', 'extend with no offsets left (the path edited in place)', log);
+  assert.equal(grown.path, flatNow.path, 'control: the same path object, edited in place, with a lift function on the document');
+  assert.ok(G.heightRange(a.path, a.bounds).range > 2, `control: the track has height (${G.heightRange(a.path, a.bounds).range.toFixed(1)} m)`); assert.ok(log.some((x) => x.path !== log[0].path), 'the shown path is a new object when there is a lift'); assert.ok(z);
+});
+
+test('row 23: what the memo keys on: every in-place change of a path gives it a NEW head (the geometry\'s own finish), so a tree for the old head is never used; and a changed path with no head still gets a new tree', async () => {
+  const s = await createCoreShell({ brushFn: null }), tm = createTrackModel(); s.extend({ length: 150, family: 'bowl' }); s.extend({ length: 200, transition: 40, targets: { kh: 1 / 150 } }); s.extend({ length: 300, transition: 40, targets: { kh: 0 } });
+  let t = tm.update(s.getState().resolved); const path = t.path; let head = path.head; assert.ok(head, 'control: a real path has a head');
+  s.extend({ length: 100, transition: 40, targets: { kh: 0 } }); t = tm.update(s.getState().resolved); assert.equal(t.path, path, 'control: edited in place'); assert.notEqual(t.path.head, head, 'an extend gives it a new head'); head = t.path.head;
+  const lastBefore = path.samples[path.samples.length - 1], posBefore = lastBefore.pos.slice(), countBefore = path.samples.length;
+  s.beginBrush({ mode: 'rate', channel: 'kh', s0: 80, r: 60 }); s.brushTo(0.004); s.endBrush(); t = tm.update(s.getState().resolved); assert.equal(t.how, 'sculpt'); assert.equal(t.path, path, 'control: edited in place'); assert.notEqual(t.path.head, head, 'a sculpt gives it a new head');
+  const lastAfter = path.samples[path.samples.length - 1], moved = Math.hypot(...lastAfter.pos.map((x, i) => x - posBefore[i]));
+  assert.ok(moved > 1, `control: the end of the track moved ${moved.toFixed(2)} m`); assert.equal(lastAfter, lastBefore, 'while its last sample is the SAME object (a sculpt keeps the unchanged tail\'s samples and only re-places them), and the count is the same: so neither is a version, and the head, which is replaced, is');
+  assert.equal(path.samples.length, countBefore, 'and the sample count is the same too');
+  // the index follows: a new head, a new tree; the same head, the same tree
+  const ix = G.indexFor(path); assert.equal(G.indexFor(path), ix, 'the same path and head: the same tree'); const g0 = path.head; path.head = { ...g0 }; assert.notEqual(G.indexFor(path), ix, 'a new head: a new tree'); path.head = g0;
+  const syn = { closed: false, samples: [[0, 0, 0], [1, 0, 0], [2, 0, 0]].map((pos) => ({ pos })) }, a = G.indexFor(syn); assert.equal(G.indexFor(syn), a); syn.samples.push({ pos: [3, 0, 0] }); assert.notEqual(G.indexFor(syn), a, 'a path with no head that grew: a new tree'); assert.equal(G.indexFor(syn).segs.length, 3);
+  const b = G.indexFor(syn); assert.equal(G.indexFor(syn), b); syn.samples[syn.samples.length - 1] = { pos: [9, 0, 0] }; assert.notEqual(G.indexFor(syn), b, 'a headless path whose last sample was replaced at the same length: a new tree'); assert.equal(G.indexFor(syn).pts[3][0], 9);
+});
