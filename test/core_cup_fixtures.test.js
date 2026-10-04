@@ -12,6 +12,11 @@
 // fixtures, F1 F2, and NOTHING ELSE: their segs, path and mesh are identical to the D196 baseline, and the open fixtures have no kn5.
 // test/fixtures/manifest.d222.json records F1 F2's digests before (the seal) and after (D222) with the measured kn5 change. The seal's two
 // files and the D196 record stay untouched.
+// AMENDED BY NAME A THIRD TIME (D230, at the keeper's word, 2026-10-04 02:22 and 02:25): every core export now carries an UNDERSIDE SKIN under every road cell
+// (src/export/underskin.js) so the closed tube is enclosed and the track's underside casts shadows. That changes the kn5 digest of the two CLOSED fixtures,
+// F1 F2, and NOTHING ELSE: their segs, path and mesh digests are identical to the D222 baseline, and the ROAD nodes of the exported scene are byte-identical
+// (roadNodesSha256 before = after, measured by one script in both trees). test/fixtures/manifest.d230.json records F1 F2's kn5 digests before (D222) and after,
+// the road-node digests, the skin count and the measured kn5 growth. The seal's two files and the D196 and D222 records stay untouched.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -27,11 +32,13 @@ const AMEND = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d196.json'), 'u
 const CHANGED = ['F4-halfpipe-width-31.5-to-12-along-s', 'F6-bowl-r-brushed', 'F8-mixed-families'];
 const AMEND2 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d222.json'), 'utf8'));
 const KN5_CHANGED = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-closed'];
+const AMEND3 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d230.json'), 'utf8'));
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
   const man = JSON.parse(JSON.stringify(MANIFEST));
   for (const [k, v] of Object.entries(AMEND.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_d196));
   for (const [k, v] of Object.entries(AMEND2.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_d222));
+  for (const [k, v] of Object.entries(AMEND3.fixtures)) { const { kn5Bytes, ...digests } = v.after_d230; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // kn5Bytes is the record's measure, not a digest the check computes
   return man;
 }
 
@@ -45,6 +52,9 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d222.json'))), '1d659a956ee31a6a25243da9d45401dd7cc243abdcee60de2ca1e75f04f88024');
   assert.deepEqual(Object.keys(AMEND2.fixtures), KN5_CHANGED);
   assert.deepEqual([...AMEND2.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !KN5_CHANGED.includes(k)).sort());
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d230.json'))), '8feef64205e1255eaa4ae4581a4c6392bb131e9a8f5568cd85d6ce03314cf16c');
+  assert.deepEqual(Object.keys(AMEND3.fixtures), KN5_CHANGED);
+  assert.deepEqual([...AMEND3.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !KN5_CHANGED.includes(k)).sort());
 });
 test('row 5a (amended D196, D222): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, the path is byte-identical in all, and the four others are identical', () => {
   const r = check(FX); assert.equal(r.status, 1, r.stdout + r.stderr);
@@ -88,6 +98,17 @@ test('row 5 CONTROL: the check has teeth: a manifest with one digest altered rea
     fs.appendFileSync(path.join(dir, man.fixtures['F5-flat-20m-bank-30'].file), ' ');
     r = check(dir); assert.match(r.stdout, /F5-flat-20m-bank-30: FIXTURE FILE CHANGED/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('D230 amendment record: F1 F2 keep their segs, path and mesh digests and their ROAD nodes byte for byte, only the kn5 moved (the skin nodes are added), and the measure says so', () => {
+  for (const k of KN5_CHANGED) {
+    const v = AMEND3.fixtures[k], prev = AMEND2.fixtures[k].after_d222;
+    for (const d of ['segs', 'path', 'mesh', 'meshParts']) assert.equal(v.after_d230[d], prev[d], `${k}: ${d} changed`);
+    assert.equal(v.before_d222.kn5, prev.kn5, `${k}: "before" is the D222 record's kn5`); assert.notEqual(v.after_d230.kn5, v.before_d222.kn5, `${k}: the kn5 did not change`);
+    const m = v.measure; assert.equal(m.roadNodesSha256.equal, true); assert.equal(m.roadNodesSha256.before, m.roadNodesSha256.after, `${k}: the road nodes moved`);
+    assert.equal(m.skinNodes.before, 0); assert.ok(m.skinNodes.after >= 700, `${k}: ${m.skinNodes.after} skin nodes (one under every cell)`);
+    assert.equal(v.after_d230.kn5Bytes - v.before_d222.kn5Bytes, m.kn5GrowthBytes); assert.ok(m.kn5GrowthBytes > 0 && m.kn5GrowthBytes < 4e6, `${k}: the kn5 grows ${m.kn5GrowthBytes} bytes`);
+    assert.equal(m.underskinOffsetM, 0.5);
+  }
 });
 test('D222 amendment record: F1 F2 keep their segs, path and mesh digests, only the kn5 moved, and the measure shows the AC-ready export (unique names, world space, a diffuse, no sliver seam)', () => {
   for (const k of KN5_CHANGED) {
