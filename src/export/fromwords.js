@@ -74,6 +74,7 @@ const trackfiles = require('./trackfiles.js');
 const ailine = require('./ailine.js');
 const PitLane = require('./pitlane.js');
 const { withTextureSet } = require('../texture/set.js');
+const { withUnderskin } = require('./underskin.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
 
 const MARKER_FILE = '.t180b-builder.json';   // the same ownership marker scripts/build_platform_test.js writes
@@ -201,7 +202,8 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const scene0 = { ...mesh.scene, materials: [...mesh.scene.materials, mk.paint.material],
     root: { ...mesh.scene.root, children: [...mesh.scene.root.children, ...mk.nodes, ...mk.paint.meshes] } };
   // opts.textures: the texture set the preview draws (src/texture/set.js); the export follows the preview's own rule
-  const scene = withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null);
+  // D230: every core road cell gets an underside skin that casts shadows, and a closed tube's inside is dark (src/export/underskin.js); a word document's scene comes back as it is
+  const scene = withUnderskin(withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null), mesh, segs);
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);
