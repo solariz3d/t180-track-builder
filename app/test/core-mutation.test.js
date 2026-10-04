@@ -65,7 +65,7 @@ const MUTATIONS = [
   { id: 'C6 an edit keeps the old water', file: 'core/coreshell.js',
     from: 'dirty: true, message: null, water: null, lastStep: { op, ms }', to: 'dirty: true, message: null, lastStep: { op, ms }', caughtBy: 'a successful edit retires the water' },
   { id: 'C7 export runs on an open track', file: 'core/coreshell.js',
-    from: "if (!doc().closed) return set({ message: 'the loop is not closed: close it first (one click), then export', exportReds: null });", to: '', caughtBy: 'export: an open track is refused' },
+    from: "if (!doc().closed) return stop({ message: 'the loop is not closed: close it first (one click), then export', exportReds: null });", to: '', caughtBy: 'export: an open track is refused' },   // D234: re-pointed, the refusal now leaves through stop() (it removes the picked empty folder)
   { id: 'C8 the list shows the piece builder\'s tracks too', file: 'core/coreshell.js',
     from: '.filter((n) => n.startsWith(PREFIX))', to: '', caughtBy: 'save and open use their own prefix' },
   { id: 'C9 the water runs on across a jump\'s flight', file: 'core/coreshell.js',

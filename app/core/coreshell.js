@@ -211,21 +211,29 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
     async exportTo(dir, opts = {}) {
       if (!exporter) return set({ message: 'export is not available here' });
-      if (!doc().closed) return set({ message: 'the loop is not closed: close it first (one click), then export', exportReds: null });
+      // D234 (the keeper: "when ever I export by myself, the track is errored in content manager before starting"): the target is resolved FIRST, then the track is refused or
+      // exported, and the EMPTY folder the user made in the picker is removed WHATEVER the outcome (an open loop, a red, a narrow grid, a failure, a success): it was made for an
+      // export, and Content Manager lists an empty track folder as damaged. A folder with anything in it is refused by resolveTarget and never touched. `stop` is every way out
+      // that is not a success: it removes the folder, says so in the message, and keeps the message as exportRefusal so the page can show it where it cannot be missed.
       const t = await exporter.resolveTarget(dir, storage);   // D226: an EMPTY folder directly in content\tracks exports to content\tracks and is then removed
-      if (t.refused) return set({ message: t.refused.reason, exportReds: null });
+      if (t.refused) return set({ message: t.refused.reason, exportReds: null, exportRefusal: t.refused.reason });
       dir = t.dir;
+      let tidied = null; const tidy = async () => (tidied === null ? (tidied = await exporter.removeEmptyNote(storage, t)) : tidied);
+      const stop = async (patch) => { const message = patch.message + await tidy(); return set({ ...patch, message, exportRefusal: message }); };
+      try {
+      if (!doc().closed) return stop({ message: 'the loop is not closed: close it first (one click), then export', exportReds: null });
       let out;
       let markers;
-      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; return set({ message: `not exported: ${e.message}`, exportReds: null }); }
+      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; return stop({ message: `not exported: ${e.message}`, exportReds: null }); }
       try { out = exporter.runSegments(st.resolved.segments, { name: st.name || doc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start }, { ...opts, markers }); } catch (e) {
         if (e.name !== 'ExportError') throw e;
-        return set({ message: e.message, exportReds: e.code === 'RED' ? e.red : null });
+        return stop({ message: e.message, exportReds: e.code === 'RED' ? e.red : null });
       }
-      if (!storage || typeof storage.writeExport !== 'function') return set({ message: 'there is nowhere to write the export here' });
+      if (!storage || typeof storage.writeExport !== 'function') return stop({ message: 'there is nowhere to write the export here' });
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);
-      const w = (out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '') + await exporter.removeEmptyNote(storage, t);
-      return set({ ...ok(`exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${w}`), exportReds: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
+      const w = (out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '') + await tidy();
+      return set({ ...ok(`exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${w}`), exportReds: null, exportRefusal: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
+      } catch (e) { await tidy(); throw e; }   // a failure nobody planned for (a write that throws): the empty folder still goes
     },
 
     async save(name) {

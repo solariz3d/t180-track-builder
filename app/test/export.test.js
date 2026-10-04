@@ -241,11 +241,13 @@ test('D226 if the empty folder cannot be removed the export still stands, and th
   assert.match(s.getState().message, /could not remove the empty folder "T180 OVAL" \(access denied\): delete it by hand/); assert.ok(fs.existsSync(picked));
 });
 
-test('D226 a refused or failed export leaves the picked empty folder where it was (nothing is removed unless the export was written)', async () => {
+// D234 REVERSED this D226 rule. D226 left the picked empty folder where it was after a refused or failed export ("nothing is removed unless the export was written"), and the
+// keeper's own exports then left an empty track folder that Content Manager listed as damaged. The folder was made for an export: it goes whatever the outcome.
+test('D226 (reversed by D234) a refused export into an EMPTY picked folder removes the folder too, and says so; nothing is written', async () => {
   const tracks = acTree('T180 OVAL'), picked = path.join(tracks, 'T180 OVAL'), st = storage();
   const open = D.appendWord(D.appendWord(D.createDoc('Open'), 'straight'), 'turn'), { s } = await shellWith(open, st);
   await s.exportTo(picked);
-  assert.match(s.getState().message, /OPEN_TRACK/); assert.deepEqual(st.writes, []); assert.deepEqual(st.removed, []); assert.ok(fs.existsSync(picked));
+  assert.match(s.getState().message, /OPEN_TRACK/); assert.match(s.getState().message, /removed the empty folder "T180 OVAL"/); assert.deepEqual(st.writes, []); assert.deepEqual(st.removed, [picked]); assert.ok(!fs.existsSync(picked));
 });
 
 test('D226 a t180b_ folder, content\\tracks itself and a folder elsewhere export exactly as before and never touch or ask about a folder', async () => {
@@ -256,4 +258,22 @@ test('D226 a t180b_ folder, content\\tracks itself and a folder elsewhere export
   await s.exportTo(out); assert.deepEqual(st.writes.map((w) => [w.dir, w.folder]).pop(), [out, 't180b_app_loop']);
   assert.deepEqual(st.removed, []); assert.ok(!/removed the empty/.test(s.getState().message));
   assert.deepEqual(st.emptyChecks, [], 'the folder check is asked only about a refused folder directly in content\\tracks');
+});
+
+// ── D234, the words page's shell: the same rule ──
+const GONE_W = /removed the empty folder "T180 TUBE V2" so Content Manager does not list it/;
+test('D234 (words) an OPEN track and a RED into an EMPTY picked folder: refused, shown, folder gone; a non-empty one untouched; a failed write still tidies; a success unchanged', async () => {
+  const open = D.appendWord(D.appendWord(D.createDoc('Open'), 'straight'), 'turn');
+  { const tracks = acTree('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = storage(), { s } = await shellWith(open, st);
+    await s.exportTo(picked);
+    const x = s.getState(); assert.match(x.message, /OPEN_TRACK/); assert.match(x.message, GONE_W); assert.equal(x.exportRefusal, x.message); assert.deepEqual(st.writes, []); assert.deepEqual(st.removed, [picked]); assert.ok(!fs.existsSync(picked)); }
+  { const tracks = acTree('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = storage(), real = await exporter(), red = { ...real, run() { throw new real.ExportError('RED', 'the track has a red', { red: [{ reason: 'x', s0: 1 }] }); } };
+    const s = await createShell({ storage: st, exporter: red }); s.adopt(SAMPLE); await s.exportTo(picked);
+    const x = s.getState(); assert.match(x.message, /RED: the track has a red/); assert.match(x.message, GONE_W); assert.equal(x.exportReds.length, 1); assert.deepEqual(st.removed, [picked]); assert.ok(!fs.existsSync(picked)); }
+  { const tracks = acTree('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'); fs.writeFileSync(path.join(picked, 'notes.txt'), 'mine'); const st = storage(), { s } = await shellWith(open, st);
+    await s.exportTo(picked); assert.match(s.getState().message, /another track's folder/); assert.deepEqual(st.removed, []); assert.equal(fs.readFileSync(path.join(picked, 'notes.txt'), 'utf8'), 'mine'); }
+  { const tracks = acTree('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = storage(); st.writeExport = async () => { throw new Error('disk full'); }; const { s } = await shellWith(SAMPLE, st);
+    await assert.rejects(() => s.exportTo(picked), /disk full/); assert.deepEqual(st.removed, [picked]); assert.ok(!fs.existsSync(picked)); }
+  { const tracks = acTree('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = storage(), { s } = await shellWith(SAMPLE, st);
+    await s.exportTo(picked); assert.equal(s.getState().messageKind, 'ok', s.getState().message); assert.match(s.getState().message, GONE_W); assert.equal(s.getState().exportRefusal, null); assert.deepEqual(st.writes.map((w) => w.dir), [tracks]); }
 });

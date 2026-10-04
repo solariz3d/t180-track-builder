@@ -137,6 +137,12 @@
     const r = await call('plugin:dialog|message', { message: 'This track has changes that are not saved.', title: 'Save before closing?', kind: 'warning', buttons: { YesNoCancelCustom: ['Save', "Don't save", 'Cancel'] } });
     return r === 'Save' ? 'save' : r === "Don't save" ? 'discard' : 'cancel';
   };
+  // D234 (the keeper read the outcome of a refused export from Content Manager, not from the app): a refused or failed export is also an ALERT, a native error dialog,
+  // besides the red box and the status line. Not when the page's test seam answered the folder (an automated drive must not wait on a dialog).
+  const notExportedAlert = async (st, seam) => {
+    if (seam || !tauri || !st.exportRefusal || st.exportRefusal !== st.message) return;
+    try { await call('plugin:dialog|message', { message: st.exportRefusal, title: 'Not exported', kind: 'error' }); } catch (e) { /* the red box shows it too */ }
+  };
   const closeSave = async () => {
     await $('save').onclick();
     if (closeDirty()) { $('name').focus(); status.textContent = 'Type a name for the track, then save or close again.'; return false; }
@@ -176,8 +182,9 @@
     let textureSet = null;
     document.addEventListener('t180:textures', (e) => { textureSet = e.detail ? e.detail.set : null; });
     const drawReds = (st) => {
-      const r = $('reds');
-      if (!st.exportReds) { r.replaceChildren(); return; }
+      const r = $('reds'), refusal = st.exportRefusal && st.exportRefusal === st.message ? st.exportRefusal : null;   // only while it is still THE message: any later action clears it
+      if (!st.exportReds && !refusal) { r.replaceChildren(); return; }
+      if (!st.exportReds) { r.replaceChildren(el('h3', 'Not exported'), el('p', refusal, 'message')); return; }
       const list = el('ul', null, 'reds');
       for (const x of st.exportReds) list.append(el('li', `${x.reason}${Number.isFinite(x.s0) ? ` at s ${Math.round(x.s0)} m` : ''} ${x.source ? `(${x.source})` : ''}`));
       r.replaceChildren(el('h3', 'Not exported: red on the track'), list);
@@ -190,10 +197,11 @@
     $('open').onchange = async (e) => { const n = e.target.value; if (!n) return; try { await shell.open(n); $('name').value = n; } catch (err) { status.textContent = err.message; } e.target.value = ''; };
     $('export').onclick = async () => {
       try {
-        const dir = (await call('test_export_folder')) || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
+        const seam = await call('test_export_folder'), dir = seam || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
         if (!dir) return;
         status.textContent = 'exporting…';
         await shell.exportTo(dir, { textures: textureSet });   // the self-intersection check is always on (app/export/export.js); the set is the road surface the preview draws (D228)
+        await notExportedAlert(shell.getState(), seam);
       } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
     };
     refreshList();
@@ -257,8 +265,9 @@
     b.replaceChildren(bar);
   };
   const drawReds = (st) => {
-    const r = $('reds');
-    if (!st.exportReds) { r.replaceChildren(); return; }
+    const r = $('reds'), refusal = st.exportRefusal && st.exportRefusal === st.message ? st.exportRefusal : null;   // D234: see the core page's
+    if (!st.exportReds && !refusal) { r.replaceChildren(); return; }
+    if (!st.exportReds) { r.replaceChildren(el('h3', 'Not exported'), el('p', refusal, 'message')); return; }
     const list = el('ul', null, 'reds');
     for (const x of st.exportReds) {
       const li = el('li');
@@ -286,10 +295,11 @@
     try {
       // D181 test seam (C): the app answers the dialog itself only when LAUNCHED with T180_TEST_EXPORT_FOLDER set (src-tauri
       // test_export_folder); in normal use that is null and the native dialog opens, as before. The export below is the same.
-      const dir = (await call('test_export_folder')) || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
+      const seam = await call('test_export_folder'), dir = seam || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
       if (!dir) return;
       status.textContent = 'exporting…';
       await shell.exportTo(dir, { textures: textureSet });   // the self-intersection check is always on; the set is the preview's
+      await notExportedAlert(shell.getState(), seam);
     } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
   };
   refreshList();

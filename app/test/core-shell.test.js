@@ -322,3 +322,55 @@ test('D226 export (core): an EMPTY folder made directly in content\\tracks expor
   assert.deepEqual(st.removed, [empty]); assert.ok(!fs.existsSync(empty)); assert.ok(fs.existsSync(path.join(tracks, st.writes[0].folder, 'ai', 'fast_lane.ai'))); assert.ok(fs.existsSync(full));
   assert.match(s.getState().message, /removed the empty folder "T-180 TUBE OVAL"/);
 });
+
+// ── D234: the EMPTY folder the user made in the picker goes whatever the outcome (the keeper: "when ever I export by myself, the track is errored in content manager") ──
+const acTreeCore = (...inside) => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-refused-')); made.push(root); const tracks = path.join(root, 'content', 'tracks'); fs.mkdirSync(tracks, { recursive: true }); for (const n of inside) fs.mkdirSync(path.join(tracks, n), { recursive: true }); return tracks; };
+/** A closed lap (the plain bowl lap) whose first piece may carry options, with the real exporter; `exporter` is swappable to stand in for a red. */
+async function closedLap(st, ex, first = undefined) {
+  const s = await createCoreShell({ brushFn: null, storage: st, exporter: ex });
+  s.extend({ length: 300, family: 'bowl', ...(first ? { first } : {}) });
+  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); assert.equal(s.getState().message, null); s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message); return s;
+}
+const GONE = /removed the empty folder "T180 TUBE V2" so Content Manager does not list it/;
+const refusedAndGone = (s, st, picked, why) => {
+  const x = s.getState();
+  assert.notEqual(x.messageKind, 'ok', why); assert.match(x.message, why); assert.match(x.message, GONE, 'the message says the empty folder was removed'); assert.equal(x.exportRefusal, x.message, 'the refusal is kept for the page to show where it cannot be missed');
+  assert.deepEqual(st.writes, [], 'nothing written'); assert.deepEqual(st.removed, [picked]); assert.ok(!fs.existsSync(picked), 'the folder the user made is GONE');
+};
+
+test('D234 an OPEN loop exported into an EMPTY picked folder is refused, the message and the refusal are shown, and the folder is GONE', async () => {
+  const tracks = acTreeCore('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = memStorage(), s = await lap({ storage: st, exporter: await makeExporter(fromDisk) });   // not closed
+  await s.exportTo(picked); refusedAndGone(s, st, picked, /the loop is not closed: close it first/); assert.deepEqual(fs.readdirSync(tracks), [], 'content\\tracks holds nothing the builder did not write');
+  // after another action the old refusal is no longer THE message, which is how the page stops showing it
+  s.newDoc(); assert.notEqual(s.getState().exportRefusal, s.getState().message);
+});
+
+test('D234 a REFUSED GRID (a tube too narrow for even one slot) and a RED lap into an empty picked folder: refused, shown, folder gone', async () => {
+  const ex = await makeExporter(fromDisk);
+  { const tracks = acTreeCore('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = memStorage(), s = await closedLap(st, ex, { w: 20, t: 360 });
+    await s.exportTo(picked); refusedAndGone(s, st, picked, /not exported: .*too narrow for even one grid slot/); }
+  { const tracks = acTreeCore('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = memStorage();
+    const red = { ...ex, runSegments() { throw new ex.ExportError('RED', 'the lap has a red', { red: [{ reason: 'steep-without-raycast', s0: 12, s1: 20, source: 'validation' }] }); } };   // a red lap, stood in for: the real reds are core_cup_export's
+    const s = await closedLap(st, red); await s.exportTo(picked); refusedAndGone(s, st, picked, /RED: the lap has a red/); assert.equal(s.getState().exportReds.length, 1, 'the red box has the red'); }
+});
+
+test('D234 a NON-EMPTY foreign folder is untouched in every case (open loop, refused grid, red): the target is refused first, nothing is removed or written', async () => {
+  const ex = await makeExporter(fromDisk), red = { ...ex, runSegments() { throw new ex.ExportError('RED', 'the lap has a red', { red: [{ reason: 'x', s0: 1 }] }); } };
+  const cases = [['an open loop', async (st) => lap({ storage: st, exporter: ex })], ['a refused grid', (st) => closedLap(st, ex, { w: 20, t: 360 })], ['a red', (st) => closedLap(st, red)]];
+  for (const [what, make] of cases) for (const put of [(d) => fs.writeFileSync(path.join(d, 'notes.txt'), 'mine'), (d) => fs.mkdirSync(path.join(d, 'sub'))]) {
+    const tracks = acTreeCore('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'); put(picked); const before = fs.readdirSync(picked).sort(), st = memStorage(), s = await make(st);
+    await s.exportTo(picked);
+    assert.match(s.getState().message, /another track's folder/, what); assert.deepEqual(st.writes, [], what); assert.deepEqual(st.removed, [], what); assert.deepEqual(fs.readdirSync(picked).sort(), before, what); assert.ok(fs.existsSync(picked), what);
+    assert.equal(s.getState().exportRefusal, s.getState().message, `${what}: the target's refusal is shown too`);
+  }
+});
+
+test('D234 a successful export is unchanged: written to content\\tracks, the empty folder removed once, no refusal left; and a failed WRITE still removes the empty folder', async () => {
+  const tracks = acTreeCore('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = memStorage(), s = await closedLap(st, await makeExporter(fromDisk));
+  await s.exportTo(picked);
+  assert.equal(s.getState().messageKind, 'ok', s.getState().message); assert.match(s.getState().message, GONE); assert.equal(s.getState().exportRefusal, null); assert.deepEqual(st.removed, [picked]); assert.deepEqual(st.writes.map((w) => w.dir), [tracks]); assert.ok(!fs.existsSync(picked));
+  const tracks2 = acTreeCore('T180 TUBE V2'), picked2 = path.join(tracks2, 'T180 TUBE V2'), st2 = memStorage(); st2.writeExport = async () => { throw new Error('disk full'); };
+  const s2 = await closedLap(st2, await makeExporter(fromDisk)); await assert.rejects(() => s2.exportTo(picked2), /disk full/);
+  assert.deepEqual(st2.removed, [picked2], 'the failure was unplanned and the empty folder still went'); assert.ok(!fs.existsSync(picked2));
+});
