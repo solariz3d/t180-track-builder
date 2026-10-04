@@ -233,3 +233,58 @@ test('row 15: the whole lap is the preview\'s: nothing in src/, the export or th
   assert.equal(changed, '', `touched: ${changed}`);
   assert.ok(fs.existsSync(path.join(root, 'app', 'preview', 'guides.js')));
 });
+
+// ── D237b (B's two findings on the mirror): the gap search is exact and cheap, the tree is built once per path, and the ghost's line count is bounded ──────────────────────────────────────────────
+const egg = (h, n = 3000) => path_((i) => { const t = i / n * 2 * Math.PI; return [300 * Math.cos(t), h * Math.sin(2 * t), 150 * Math.sin(t) * (1 + 0.3 * Math.cos(t))]; }, n, true);
+const ell = (n = 3000) => path_((i) => (i < n / 2 ? [i * 0.5, 0, 0] : [(n / 2) * 0.5, 0, (i - n / 2) * 0.5]), n, false);
+const brute = (pts, closed, c, kind) => {   // the reference: every mirrored point against every segment, written out again here
+  const segs = []; for (let i = 0; i + 1 < pts.length; i++) segs.push([pts[i], pts[i + 1]]); if (closed && pts.length > 2) segs.push([pts[pts.length - 1], pts[0]]);
+  const d = (p, [a, b]) => { const v = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [p[0] - a[0], p[1] - a[1], p[2] - a[2]], dd = v[0] ** 2 + v[1] ** 2 + v[2] ** 2, t = dd > 0 ? Math.max(0, Math.min(1, (w[0] * v[0] + w[1] * v[1] + w[2] * v[2]) / dd)) : 0; return Math.hypot(w[0] - v[0] * t, w[1] - v[1] * t, w[2] - v[2] * t); };
+  const stride = Math.max(1, Math.ceil(pts.length / 4000)); let max = 0, sum = 0, n = 0;
+  for (let i = 0; i < pts.length; i += stride) { const m = G.mirrorPoint(pts[i], c, kind); let best = Infinity; for (const s of segs) best = Math.min(best, d(m, s)); max = Math.max(max, best); sum += best; n++; }
+  return { max, mean: sum / n, n };
+};
+
+test('row 16: the gap search is EXACT: the same largest, mean and count as measuring every mirrored point against every segment, on asymmetric, open, closed, lifted, far-centre and long tracks', () => {
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  let x = 0, z = 0, y = 0; const walk = path_(() => { x += rnd() * 4 - 1.5; z += rnd() * 4 - 1.5; y += rnd() - 0.5; return [x, y, z]; }, 1500);
+  const cases = { 'an egg': egg(0), 'an egg with a hill': egg(60), 'an open L': ell(), 'a random walk': walk, 'a closed triangle': { closed: true, samples: [[0, 0, 0], [100, 0, 0], [100, 0, 100]].map((pos) => ({ pos })) }, 'a long loop (more points than are asked)': egg(20, 9000) };
+  let checked = 0;
+  for (const [name, p] of Object.entries(cases)) {
+    const pts = p.samples.map((s) => s.pos), b = boxOf(p), mid = { x: (b.min[0] + b.max[0]) / 2, z: (b.min[2] + b.max[2]) / 2 };
+    for (const c of [mid, { x: mid.x + 2000, z: mid.z - 300 }, { x: mid.x - 5, z: mid.z + 40 }]) for (const kind of ['x', 'z', 'both']) {
+      const want = brute(pts, !!p.closed, c, kind), got = G.guidePlan({ bounds: b, path: p, mode: 'off', mirror: kind, centre: c }).gap;
+      assert.ok(Math.abs(got.max - want.max) < 1e-9 && Math.abs(got.mean - want.mean) < 1e-9 && got.n === want.n, `${name}, ${kind}, centre (${c.x.toFixed(0)}, ${c.z.toFixed(0)}): ${JSON.stringify({ max: got.max, mean: got.mean, n: got.n })} against ${JSON.stringify(want)}`); checked++;
+    }
+  }
+  assert.equal(checked, 6 * 3 * 3);
+});
+
+test('row 17: the search is CHEAP and does not depend on how far the mirror lies: a few dozen segment tests per point, not every segment (B: 95 to 230 ms a rebuild)', () => {
+  for (const [name, p, c] of [['an egg', egg(0), null], ['an egg with a hill', egg(60), null], ['an open L', ell(), null], ['the egg, centre 2 km away', egg(0), { x: 2000, z: 0 }], ['a 20,000-point loop', egg(30, 20000), null]]) {
+    const b = boxOf(p), plan = G.guidePlan({ bounds: b, path: p, mode: 'off', mirror: 'x', centre: c }), segments = p.samples.length - 1 + (p.closed ? 1 : 0), each = plan.gap.tests / plan.gap.n;
+    assert.ok(plan.gap.tests > 0, 'control: it counts'); assert.ok(each <= 120, `${name}: ${each.toFixed(1)} segment tests a point against ${segments} segments`); assert.ok(each < segments / 20, `${name}: well under measuring every segment`);
+  }
+});
+
+test('row 18: the segment tree is built once per path: a centre drag or a change of mirror reuses it; a new path builds its own, and the answer is the same either way', () => {
+  const p = egg(40), b = boxOf(p), n0 = G.stats.indexBuilds, first = G.guidePlan({ bounds: b, path: p, mode: 'off', mirror: 'x' });
+  assert.equal(G.stats.indexBuilds, n0 + 1, 'built for the first plan');
+  for (const [m, c] of [['z', null], ['both', null], ['x', { x: 10, z: 10 }], ['x', { x: 20, z: 10 }], ['x', null]]) G.guidePlan({ bounds: b, path: p, mode: 'off', mirror: m, centre: c });
+  assert.equal(G.stats.indexBuilds, n0 + 1, 'five more plans on the same path build nothing');
+  const clone = { closed: p.closed, samples: p.samples }, again = G.guidePlan({ bounds: b, path: clone, mode: 'off', mirror: 'x' });
+  assert.equal(G.stats.indexBuilds, n0 + 2, 'a new path object builds its own'); assert.deepEqual([again.gap.max, again.gap.mean, again.gap.n], [first.gap.max, first.gap.mean, first.gap.n], 'and reads the same');
+  G.guidePlan({ bounds: b, path: path_((i) => [i, 0, 0], 20), mode: 'off', mirror: 'off' }); assert.equal(G.stats.indexBuilds, n0 + 2, 'with the mirror off nothing is built');
+});
+
+test('row 19: the mirror ghost\'s line count is BOUNDED however long the track is (B: 3,249 lines on 14 km coiled into a 300 m box, 8,316 on 40 km), and a short track keeps its short dashes', () => {
+  const coil = (km) => { const n = Math.round(km * 500); return path_((i) => [140 * Math.cos(i * 2 / 140), 0, 140 * Math.sin(i * 2 / 140)], n, false); };   // 2 m between samples, round and round a 140 m circle
+  const ghost = (p) => G.guidePlan({ bounds: boxOf(p), path: p, mode: 'off', mirror: 'x' }), lines = (p) => pairs(ghost(p).over);
+  const l14 = lines(coil(14)), l40 = lines(coil(40)), l100 = lines(coil(100));
+  assert.ok(l14 <= 1100 && l40 <= 1100 && l100 <= 1100, `${l14} / ${l40} / ${l100} ghost lines on 14 / 40 / 100 km`); assert.ok(l14 > 100, 'control: it is drawn');
+  assert.ok(ghost(coil(40)).lines <= 2500, `and the whole plan on 40 km is ${ghost(coil(40)).lines} line pairs`);
+  const shortDash = (p) => { const g = ghost(p).over[0].positions; let m = 0, k = 0; for (let i = 0; i < g.length; i += 6) { m += Math.hypot(g[i + 3] - g[i], g[i + 4] - g[i + 1], g[i + 5] - g[i + 2]); k++; } return m / k; };
+  const small = path_((i) => [i * 2, 0, 0], 100), box = boxOf(small); const sp = G.guidePlan({ bounds: box, path: small, mode: 'off', mirror: 'x', centre: { x: 0, z: 0 } }).over[0].positions.length / 6;
+  const tiny = path_((i) => [i * 2, 0, 0], 20); assert.ok(shortDash(tiny) >= 1.9, `a 40 m ghost keeps the 2 m floor on its dashes (${shortDash(tiny).toFixed(2)} m a piece), though its box alone would ask for under 1 m`);
+  assert.ok(Math.abs(sp - 50) <= 6 && Math.abs(shortDash(small) - 2) < 0.2, `a 200 m ghost keeps the old 2 m dashes (about 50 pieces of 2 m): the clamp only bites on long ghosts (${sp} pieces, ${shortDash(small).toFixed(2)} m each)`);
+});

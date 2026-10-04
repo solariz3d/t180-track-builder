@@ -22,8 +22,7 @@ const { gridExtent, gridLines } = require('./look.js');
 
 const MODES = Object.freeze(['auto', 'ground', '3d', 'off']);
 const MIRRORS = Object.freeze(['off', 'x', 'z', 'both']);
-const RINGS = 12;   // mirrorGap: how many rings of cells to search before it measures against every segment
-const FLAT_M = 0.5, MAX_CORNERS = 400, MAX_LEVELS = 12, MAX_LABELS = 6, MAX_DROPS = 150, MIRROR_DRAW = 900, GAP_QUERIES = 4000;
+const FLAT_M = 0.5, MAX_CORNERS = 400, MAX_LEVELS = 12, MAX_LABELS = 6, MAX_DROPS = 150, MIRROR_DRAW = 900, GAP_QUERIES = 4000, MAX_DASHES = 300;   // MAX_DASHES: on and off together, so at most 150 dashes, cut at the (at most MIRROR_DRAW) ghost vertices they cross
 const COLOURS = Object.freeze({ ground: [0.36, 0.44, 0.56], lattice: [0.36, 0.46, 0.62], level: [0.42, 0.52, 0.68], drop: [0.5, 0.6, 0.74], axis: [1.0, 0.82, 0.25], mirror: [0.92, 0.45, 0.95] });
 const ALPHAS = Object.freeze({ ground: 0.5, lattice: 0.22, level: 0.4, drop: 0.3, axis: 0.95, mirror: 0.9 });
 
@@ -76,41 +75,59 @@ function dashed(pts, dash) {
 }
 
 /**
- * The gap between a track and its mirror: for each point of the mirrored centreline, the distance (3D) to the nearest point of the real centreline (its segments, not only its
- * samples, so a symmetric track reads 0 to the chord error). A grid of segment buckets on the ground plane keeps it fast. { max, mean, n } over the points asked (every
- * k-th when there are more than GAP_QUERIES).
+ * THE REAL CENTRELINE IN A BOUNDING-BOX TREE, for the mirror gap's nearest-point search (D237b, B's finding: the grid of cells it replaces searched twelve rings and then measured
+ * against EVERY segment, 95 to 230 ms per rebuild on an ordinary asymmetric track and over half a second on 7,000 points, on every brush step). A median-split tree over the
+ * segments' 3D boxes: a query walks the nearer child first and drops any box farther than the best found, so it is exact (the same nearest distance as measuring against every
+ * segment) and costs a few dozen box tests whether the mirrored point is on the track or kilometres from it. It depends on the path alone, not on the centre or the mirror, so it is
+ * built once per path (a centre drag, or a change of mirror, reuses it). `stats` counts what was built and tested, for the tests.
  */
-function mirrorGap(pts, closed, centre, kind) {
-  if (pts.length < 2) return null;
+const LEAF = 6, indexMemo = new WeakMap(), stats = { indexBuilds: 0, segmentTests: 0 };
+const segDist2 = (p, a, b) => {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], wx = p[0] - a[0], wy = p[1] - a[1], wz = p[2] - a[2], dd = dx * dx + dy * dy + dz * dz;
+  const t = dd > 0 ? Math.max(0, Math.min(1, (wx * dx + wy * dy + wz * dz) / dd)) : 0, ex = wx - dx * t, ey = wy - dy * t, ez = wz - dz * t;
+  return ex * ex + ey * ey + ez * ez;
+};
+function buildTree(items, i0, i1) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = i0; i < i1; i++) for (let d = 0; d < 3; d++) { if (items[i].lo[d] < lo[d]) lo[d] = items[i].lo[d]; if (items[i].hi[d] > hi[d]) hi[d] = items[i].hi[d]; }
+  if (i1 - i0 <= LEAF) return { lo, hi, items: items.slice(i0, i1) };
+  let axis = 0, span = -1; for (let d = 0; d < 3; d++) { let cl = Infinity, ch = -Infinity; for (let i = i0; i < i1; i++) { cl = Math.min(cl, items[i].c[d]); ch = Math.max(ch, items[i].c[d]); } if (ch - cl > span) { span = ch - cl; axis = d; } }
+  const part = items.slice(i0, i1).sort((p, q) => p.c[axis] - q.c[axis]); for (let i = 0; i < part.length; i++) items[i0 + i] = part[i];
+  const mid = (i0 + i1) >> 1; return { lo, hi, l: buildTree(items, i0, mid), r: buildTree(items, mid, i1) };
+}
+/** The centreline's points and its segment tree, memoised per path object (a closed path's closing edge is a segment too). */
+function indexFor(path) {
+  let ix = indexMemo.get(path); if (ix) return ix;
+  const pts = pointsOf(path); ix = buildIndex(pts, !!(path && path.closed)); indexMemo.set(path, ix); return ix;
+}
+function buildIndex(pts, closed) {
+  stats.indexBuilds++;
   const segs = []; for (let i = 0; i + 1 < pts.length; i++) segs.push([pts[i], pts[i + 1]]); if (closed && pts.length > 2) segs.push([pts[pts.length - 1], pts[0]]);
-  let lo = [Infinity, Infinity], hi = [-Infinity, -Infinity], len = 0;
-  for (const [a, b] of segs) { for (const p of [a, b]) { lo = [Math.min(lo[0], p[0]), Math.min(lo[1], p[2])]; hi = [Math.max(hi[0], p[0]), Math.max(hi[1], p[2])]; } len += Math.hypot(b[0] - a[0], b[2] - a[2]); }
-  const cell = Math.max(2, 4 * len / segs.length, Math.max(hi[0] - lo[0], hi[1] - lo[1]) / 400), buckets = new Map(), key = (i, j) => i * 73856093 ^ j * 19349663;
-  const ci = (x) => Math.floor((x - lo[0]) / cell), cj = (z) => Math.floor((z - lo[1]) / cell);
-  segs.forEach((s, n) => {
-    const i0 = ci(Math.min(s[0][0], s[1][0])), i1 = ci(Math.max(s[0][0], s[1][0])), j0 = cj(Math.min(s[0][2], s[1][2])), j1 = cj(Math.max(s[0][2], s[1][2]));
-    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const k = key(i, j); let l = buckets.get(k); if (!l) buckets.set(k, (l = [])); l.push(n); }
-  });
-  const dist = (p, [a, b]) => {
-    const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [p[0] - a[0], p[1] - a[1], p[2] - a[2]], dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-    const t = dd > 0 ? Math.max(0, Math.min(1, (w[0] * d[0] + w[1] * d[1] + w[2] * d[2]) / dd)) : 0;
-    return Math.hypot(w[0] - d[0] * t, w[1] - d[1] * t, w[2] - d[2] * t);
+  const items = segs.map((s) => ({ s, lo: [0, 1, 2].map((d) => Math.min(s[0][d], s[1][d])), hi: [0, 1, 2].map((d) => Math.max(s[0][d], s[1][d])), c: [0, 1, 2].map((d) => (s[0][d] + s[1][d]) / 2) }));
+  return { pts, closed, segs, root: items.length ? buildTree(items, 0, items.length) : null };
+}
+/** The distance (m) from p to the nearest point of the indexed centreline: exact. */
+function nearestDist(ix, p) {
+  let best = Infinity;
+  const box2 = (n) => { const dx = Math.max(n.lo[0] - p[0], 0, p[0] - n.hi[0]), dy = Math.max(n.lo[1] - p[1], 0, p[1] - n.hi[1]), dz = Math.max(n.lo[2] - p[2], 0, p[2] - n.hi[2]); return dx * dx + dy * dy + dz * dz; };
+  const walk = (n) => {
+    if (box2(n) >= best) return;
+    if (n.items) { for (const it of n.items) { stats.segmentTests++; const d = segDist2(p, it.s[0], it.s[1]); if (d < best) best = d; } return; }
+    const dl = box2(n.l), dr = box2(n.r); if (dl <= dr) { walk(n.l); walk(n.r); } else { walk(n.r); walk(n.l); }
   };
-  const nearest = (p) => {
-    const i = ci(p[0]), j = cj(p[2]); let best = Infinity; const seen = new Set();
-    const visit = (a, b) => { const l = buckets.get(key(i + a, j + b)); if (l) for (const n of l) if (!seen.has(n)) { seen.add(n); best = Math.min(best, dist(p, segs[n])); } };
-    for (let r = 0; r <= RINGS; r++) {
-      if (best <= (r - 1) * cell) return best;   // every cell of ring r is at least (r - 1) cells away on the ground plane (the point can sit anywhere inside its own cell)
-      if (r === 0) { visit(0, 0); continue; }
-      for (let a = -r; a <= r; a++) { visit(a, -r); visit(a, r); }          // the ring's perimeter only
-      for (let b = -r + 1; b <= r - 1; b++) { visit(-r, b); visit(r, b); }
-    }
-    for (let n = 0; n < segs.length; n++) if (!seen.has(n)) best = Math.min(best, dist(p, segs[n]));   // far from every segment (a mirror well away from the track): all of them
-    return best;
-  };
-  const stride = Math.max(1, Math.ceil(pts.length / GAP_QUERIES)); let max = 0, sum = 0, n = 0;
-  for (let i = 0; i < pts.length; i += stride) { const g = nearest(mirrorPoint(pts[i], centre, kind)); if (g > max) max = g; sum += g; n++; }
-  return n ? { max, mean: sum / n, n } : null;
+  if (ix.root) walk(ix.root); return Math.sqrt(best);
+}
+
+/**
+ * The gap between a track and its mirror: for each point of the mirrored centreline, the distance (3D) to the nearest point of the real centreline (its segments, not only its
+ * samples, so a symmetric track reads 0 to the chord error). { max, mean, n, tests } over the points asked (every k-th when there are more than GAP_QUERIES); `tests` is how
+ * many segment distances it took. `index` (indexFor) may be passed so a caller that has it builds nothing.
+ */
+function mirrorGap(pts, closed, centre, kind, index = null) {
+  if (pts.length < 2) return null;
+  const ix = index || buildIndex(pts, closed), t0 = stats.segmentTests, stride = Math.max(1, Math.ceil(pts.length / GAP_QUERIES)); let max = 0, sum = 0, n = 0;
+  for (let i = 0; i < pts.length; i += stride) { const g = nearestDist(ix, mirrorPoint(pts[i], centre, kind)); if (g > max) max = g; sum += g; n++; }
+  return n ? { max, mean: sum / n, n, tests: stats.segmentTests - t0 } : null;
 }
 
 /**
@@ -166,8 +183,9 @@ function guidePlan({ bounds, path = null, mode = 'auto', mirror = 'off', centre 
     if (pts.length > 1) {
       const stride = Math.max(1, Math.ceil(pts.length / MIRROR_DRAW)), ghost = []; for (let i = 0; i < pts.length; i += stride) ghost.push(mirrorPoint(pts[i], c, mirror));
       if (stride > 1) ghost.push(mirrorPoint(pts[pts.length - 1], c, mirror)); if (closed) ghost.push(ghost[0]);
-      add(plan.over, dashed(ghost, Math.min(40, Math.max(2, Math.max(ext.x1 - ext.x0, ext.z1 - ext.z0) / 150))), 'mirror');
-      const g = mirrorGap(pts, closed, c, mirror); plan.gap = g ? { kind: mirror, ...g } : null;
+      let gl = 0; for (let i = 0; i + 1 < ghost.length; i++) gl += Math.hypot(ghost[i + 1][0] - ghost[i][0], ghost[i + 1][1] - ghost[i][1], ghost[i + 1][2] - ghost[i][2]);
+      add(plan.over, dashed(ghost, Math.max(Math.min(40, Math.max(2, Math.max(ext.x1 - ext.x0, ext.z1 - ext.z0) / 150)), gl / MAX_DASHES)), 'mirror');   // the dash grows with the ghost's length, so its pieces stay bounded (D237b)
+      const g = mirrorGap(pts, closed, c, mirror, indexFor(path)); plan.gap = g ? { kind: mirror, ...g } : null;
     }
   }
   return plan;
@@ -193,4 +211,4 @@ function planeHit(ray, y) {
   return [ray.o[0] + ray.d[0] * t, y, ray.o[2] + ray.d[2] * t];
 }
 
-module.exports = { guidePlan, heightRange, effectiveMode, mirrorGap, mirrorPoint, dashed, projectPoint, rayAt, planeHit, niceAtLeast, fmtLevel, MODES, MIRRORS, FLAT_M, MAX_CORNERS, MAX_LEVELS, MAX_LABELS, MAX_DROPS, COLOURS, ALPHAS };
+module.exports = { guidePlan, heightRange, effectiveMode, mirrorGap, indexFor, buildIndex, nearestDist, stats, mirrorPoint, dashed, projectPoint, rayAt, planeHit, niceAtLeast, fmtLevel, MODES, MIRRORS, FLAT_M, MAX_CORNERS, MAX_LEVELS, MAX_LABELS, MAX_DROPS, COLOURS, ALPHAS };
