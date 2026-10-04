@@ -20,6 +20,10 @@
 // And for the EQUATION CORE's panel (D186, app/core/panel.js):
 //   't180:overlay'        { detail: { lines } }          world line pairs drawn over the track (the water, its reds), or null
 //   't180-pick'           { detail: { x, y, reply(hit) } } the station under a canvas point (css px): { s, pos, px } or null
+// And for the 3D GRID and the SYMMETRY GUIDES (D237, app/preview/guides.js, drawn here; the buttons are the camera panel's, app/camera/index.js):
+//   't180:guides'          { detail: { grid?, mirror?, centre? } }   grid auto | ground | 3d | off; mirror off | x | z | both; centre { x, z } or null (the box's middle)
+//   't180:guides-state'    { detail: state }                          what is asked and what is drawn (preview.guides()), on mount and on every change
+//   't180:guides-request'  { detail: { reply(state) } }               the current one, at once, for a panel mounted after the preview
 // And for the READOUT labels (L130, app/core/labels.js), answered read-only from the preview's own view():
 //   't180:view'           { detail: { reply(v) } }        { pose, mode, head } (head: the placed track's build head, or null)
 //
@@ -28,6 +32,7 @@
 'use strict';
 
 const { createPreview } = require('./preview.js');
+const { createGuidesLayer } = require('./guideslayer.js');
 const { MODES } = require('../camera/cameras.js');
 const { probe } = require('../testhook/probe.js');
 const { candidateFor } = require('../testhook/ghostword.js');
@@ -43,9 +48,17 @@ function mount(root, shell) {
   hud.style.cssText = 'position:absolute;left:8px;bottom:6px;font:12px ui-monospace,Consolas,monospace;color:#c3cad4;background:rgba(10,12,16,0.6);padding:1px 5px;border-radius:3px;pointer-events:none';   // legible on the light AC road too (D177)
   root.append(canvas, hud);
   const announce = (mode) => doc.dispatchEvent(new win.CustomEvent('t180-camera-mode', { detail: { mode, modes: MODES.slice() } }));
-  let p;
+  let p, real = null;
+  // the layer is made AFTER the preview starts (a window with no WebGL fails with that reason, before any DOM is added), and the preview is handed a handle that forwards to it
+  const layer = { update: (f) => { if (real) real.update(f); }, dispose: () => { if (real) real.dispose(); } };
   const publish = (t) => doc.dispatchEvent(new win.CustomEvent('t180:track', { detail: t }));
-  try { p = createPreview({ canvas, shell, win, hud, onMode: announce, onTrack: publish }); } catch (e) {
+  const publishGuides = (s) => doc.dispatchEvent(new win.CustomEvent('t180:guides-state', { detail: s }));
+  try {
+    // gridMode 'auto' (D237): the ground grid while the track is flat, the 3D lattice once it has height; the buttons in the camera panel turn it off
+    p = createPreview({ canvas, shell, win, hud, onMode: announce, onTrack: publish, gridMode: 'auto', layer, onGuides: publishGuides });
+    real = createGuidesLayer({ root, win, onCentre: (c) => { p.setGuides({ centre: c }); } });
+  } catch (e) {
+    if (p) p.dispose();   // the preview came up and the layer did not: do not leave its frame loop running under the message
     const msg = `The preview could not start: ${e.message}`, note = doc.createElement('p');
     note.textContent = msg; note.setAttribute && note.setAttribute('role', 'alert');
     root.replaceChildren(note);
@@ -64,6 +77,10 @@ function mount(root, shell) {
   const viewNow = (e) => { if (!e.detail || typeof e.detail.reply !== 'function') return; const v = p.view(), h = v.track && v.track.path ? v.track.path.head : null; e.detail.reply({ pose: v.pose, mode: v.mode, head: h ? { pos: h.pos.slice(), T: h.T.slice() } : null }); };
   const pickNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.pick(e.detail.x, e.detail.y)); };
   const trackNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.track()); };
+  const setGuides = (e) => { if (!e.detail) return; try { p.setGuides(e.detail); } catch (err) { if (typeof e.detail.reply === 'function') e.detail.reply({ error: err.message }); } };
+  const guidesNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.guides()); };
+  doc.addEventListener('t180:guides', setGuides);
+  doc.addEventListener('t180:guides-request', guidesNow);
   doc.addEventListener('t180:textures', textures);
   doc.addEventListener('t180:track-request', trackNow);
   doc.addEventListener('t180-camera', ask);
@@ -73,7 +90,7 @@ function mount(root, shell) {
   doc.addEventListener('t180:overlay', overlayNow);
   doc.addEventListener('t180-pick', pickNow);
   doc.addEventListener('t180:view', viewNow);
-  return { preview: p, unmount() { doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180:overlay', overlayNow); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
+  return { preview: p, unmount() { doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180:overlay', overlayNow); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };

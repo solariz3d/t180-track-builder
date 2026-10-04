@@ -105,6 +105,12 @@ mesh itself.
 - `t180:overlay` `{ lines }`: world line pairs drawn over the track (the water and its reds), or null;
 - `t180-pick` `{ x, y, reply }`: the track station under a canvas point.
 
+**Events the 3D grid and the symmetry guides add** (D237, `app/preview/guides.js`; the preview answers them, `app/preview/index.js`; the buttons are in the camera panel, `app/camera/index.js`):
+- `t180:guides` `{ grid?, mirror?, centre? }`: grid `auto` | `ground` | `3d` | `off`; mirror `off` | `x` | `z` | `both`; centre `{ x, z }` or `null` (the box's middle);
+- `t180:guides-state` `{ grid, drawn, flat, range, mirror, centre, gap, lines, levels, spacing }`: what is asked and what is drawn, on mount and on every change;
+- `t180:guides-request` `{ reply }`: the current state at once, for a panel mounted after the preview.
+None of it reads or writes the document or the export: the mirror ghost is a picture of the centreline reflected, not an edit.
+
 **Export** goes through `src/export/fromwords.js exportSegments`, the same route as `exportTrack` after the words resolve, via
 `app/export/export.js runSegments`.
 

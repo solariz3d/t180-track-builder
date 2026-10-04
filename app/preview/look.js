@@ -75,16 +75,19 @@ function worldBounds(batches) {
  * Grid lines at y = 0 covering the track's box plus 50 m, on a 10 m spacing that widens (×5) until each axis has at
  * most 200 lines, so a 14 km track stays a few hundred lines. Returns { positions (world, GL LINES), spacing }.
  */
-function gridLines(bounds) {
-  if (!bounds) return null;
+function gridExtent(bounds) {
   let sp = 10; const pad = 50;
   const span = (d) => bounds.max[d] - bounds.min[d] + 2 * pad;
   while (Math.max(span(0), span(2)) / sp > 200) sp *= 5;
-  const x0 = Math.floor((bounds.min[0] - pad) / sp) * sp, x1 = Math.ceil((bounds.max[0] + pad) / sp) * sp;
-  const z0 = Math.floor((bounds.min[2] - pad) / sp) * sp, z1 = Math.ceil((bounds.max[2] + pad) / sp) * sp;
+  return { sp, x0: Math.floor((bounds.min[0] - pad) / sp) * sp, x1: Math.ceil((bounds.max[0] + pad) / sp) * sp, z0: Math.floor((bounds.min[2] - pad) / sp) * sp, z1: Math.ceil((bounds.max[2] + pad) / sp) * sp };
+}
+/** `y` is the height of the grid (default 0: the ground; D237's 3D grid puts it at the track's lowest point). `extent` (gridExtent) may be passed when the caller has it already. */
+function gridLines(bounds, y = 0, extent = null) {
+  if (!bounds) return null;
+  const { sp, x0, x1, z0, z1 } = extent || gridExtent(bounds);
   const p = [];
-  for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, 0, z0, x, 0, z1);
-  for (let z = z0; z <= z1 + 1e-9; z += sp) p.push(x0, 0, z, x1, 0, z);
+  for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y, z0, x, y, z1);
+  for (let z = z0; z <= z1 + 1e-9; z += sp) p.push(x0, y, z, x1, y, z);
   return { positions: new Float32Array(p), spacing: sp };
 }
 /**
@@ -135,4 +138,4 @@ function tangentsFor(b) {
   tanMemo.set(b.positions, T); return T;
 }
 
-module.exports = { LIGHT, shade, linesFor, tangentsFor, localBounds, worldBounds, gridLines, headMarker, TIE_M, LIFT };
+module.exports = { LIGHT, shade, linesFor, tangentsFor, localBounds, worldBounds, gridLines, gridExtent, headMarker, TIE_M, LIFT };
