@@ -95,10 +95,18 @@ function buildTree(items, i0, i1) {
   const part = items.slice(i0, i1).sort((p, q) => p.c[axis] - q.c[axis]); for (let i = 0; i < part.length; i++) items[i0 + i] = part[i];
   const mid = (i0 + i1) >> 1; return { lo, hi, l: buildTree(items, i0, mid), r: buildTree(items, mid, i1) };
 }
-/** The centreline's points and its segment tree, memoised per path object (a closed path's closing edge is a segment too). */
+/**
+ * The centreline's points and its segment tree, memoised per path AND its version (a closed path's closing edge is a segment too).
+ * THE VERSION (D237b, B's regression): the track model grows and rewrites an OPEN track's path IN PLACE (src/geom/path.js extendPath, rebuildPathFrom), so the path OBJECT stays the
+ * same while its samples change, and a tree kept per object went stale (the gap read 285 m where it was 118). What marks an in-place change is \`path.head\`: finish() makes a
+ * FRESH head object at the end of buildPath, extendPath and rebuildPathFrom, and nothing else changes the samples. (The last sample's identity is NOT a version: after a sculpt the
+ * unchanged tail keeps its sample objects and only re-places them, so the end of the track moves while its sample is the same object; app/test/guides.test.js row 23 shows it, and
+ * pins that every in-place change replaces the head.) A path with no head (a hand-made one) is keyed by its last sample, and everything is guarded by the sample count too.
+ */
 function indexFor(path) {
-  let ix = indexMemo.get(path); if (ix) return ix;
-  const pts = pointsOf(path); ix = buildIndex(pts, !!(path && path.closed)); indexMemo.set(path, ix); return ix;
+  const n = path.samples ? path.samples.length : 0, version = path.head || (n ? path.samples[n - 1] : null), m = indexMemo.get(path);
+  if (m && m.version === version && m.n === n) return m.ix;
+  const ix = buildIndex(pointsOf(path), !!(path && path.closed)); indexMemo.set(path, { version, n, ix }); return ix;
 }
 function buildIndex(pts, closed) {
   stats.indexBuilds++;
