@@ -33,6 +33,7 @@ const { createTrackModel } = require('./trackmodel.js');
 const { createRenderer } = require('./renderer.js');
 const { gridLines, headMarker } = require('./look.js');
 const { resolveLook } = require('./aclook.js');
+const { flowCell } = require('../../src/texture/flow.js');
 const { previewTextures } = require('../../src/texture/set.js');
 const { normalize, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
@@ -81,6 +82,24 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   let set = null, images = [], look = 'ac', resolved = null, resolvedFor = null;
   // the look is resolved again only when the scene's materials or the set change, never per frame
   const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
+  // D228: a textured EQUATION-CORE cell's coordinates run on the path's own arc length (src/texture/flow.js), the same coordinates the export writes.
+  // Batches whose uvs are unchanged keep the very same array (the renderer keeps a GPU buffer per array), so an edit re-uploads only the new pieces.
+  let flowMemo = new WeakMap(), flowSet = null, flowTrack = null, flowOut = null;
+  const batchesFor = (tr) => {
+    if (!tr || !tr.batches) return [];
+    if (!set || look !== 'ac' || !tr.mesh) return tr.batches;
+    if (flowTrack === tr.batches && flowSet === set) return flowOut;
+    if (flowSet !== set) flowMemo = new WeakMap();
+    const kids = tr.mesh.scene.root.children;   // batches, cells and the root's children are in one order; mesh names repeat, so position is the key
+    flowOut = tr.batches.map((b, k) => {
+      const cell = tr.mesh.cells[k]; if (!cell) return b;
+      let u = flowMemo.get(b.uvs);
+      if (u === undefined) { u = flowCell(tr.mesh, tr.segments, set, cell, kids[k].children[0]); flowMemo.set(b.uvs, u); }
+      return u ? { ...b, uvs: u } : b;
+    });
+    flowTrack = tr.batches; flowSet = set;
+    return flowOut;
+  };
   // a change to the placed track retires the ghost: it was built on the old head (the palette shows it again on hover)
   const shared = () => (track && track.how !== 'kept' ? { path: track.path, segments: track.segments, closed: !!(track.path && track.path.closed), how: track.how, g: track.g, fromS: track.fromS } : null);
   const refresh = (st) => {
@@ -174,7 +193,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       else if (tb !== gridFor) { grid = gridLines(tb); gridFor = tb; }       // the grid follows the track's box, rebuilt only when it changes
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(track && track.batches ? track.batches : [], shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay,
+      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null });
     }
     if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? 'AC look' : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}`;

@@ -172,6 +172,9 @@
       closeDirty = () => !!shell.getState().dirty;   // the X asks to save unsaved work (closeAsk above)
     } catch (e) { $('palette').textContent = `The equation builder could not start: ${e.message}`; return; }
     const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+    // D228: the road surface of the core's track (app/core/textures.js announces the set; the preview draws it, the Export below writes it)
+    let textureSet = null;
+    document.addEventListener('t180:textures', (e) => { textureSet = e.detail ? e.detail.set : null; });
     const drawReds = (st) => {
       const r = $('reds');
       if (!st.exportReds) { r.replaceChildren(); return; }
@@ -190,7 +193,7 @@
         const dir = (await call('test_export_folder')) || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
         if (!dir) return;
         status.textContent = 'exporting…';
-        await shell.exportTo(dir);   // the self-intersection check is always on (app/export/export.js)
+        await shell.exportTo(dir, { textures: textureSet });   // the self-intersection check is always on (app/export/export.js); the set is the road surface the preview draws (D228)
       } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
     };
     refreshList();
@@ -208,6 +211,8 @@
     for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation']]) {
       await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
     }
+    // last, so the preview is already listening when the road surface announces the asphalt default
+    await panels.mountPanel($('textures'), 'texture', () => loadCjs('app/core/textures.js', get), shell);
   }
 
   let S, pal, panels, shell, exporter;
