@@ -44,7 +44,11 @@
   #reds:empty { display: none; }
   h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 14px 0 6px; }
   .pickers { display: grid; gap: 6px; }
-  .picker { display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 6px; }
+  /* D235 (the keeper's screenshot: the Extend fields ran under the scroll bar, and the "width like…" select was cut off): the field column is minmax(0, 1fr), not 1fr,
+     so it can shrink below what an input or a select would like (a 1fr track will not go under its items' min-content, which is how the Extend rows grew to 65 px past the
+     column's content box at 1818 px); and every field in a row is held to its track, whatever its own intrinsic width. */
+  .picker { display: grid; grid-template-columns: 60px minmax(0, 1fr); align-items: center; gap: 6px; }
+  .picker input:not([type="checkbox"]):not([type="radio"]), .picker select { min-width: 0; max-width: 100%; box-sizing: border-box; }
   .picker select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px; }
   .pieces { display: flex; flex-wrap: wrap; gap: 6px; }
   .piece.mine { border-color: #5a4528; color: var(--mine); }

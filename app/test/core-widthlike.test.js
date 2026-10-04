@@ -71,7 +71,7 @@ test('CLOSED ONLY: a track whose read did not close is in the file but never off
 
 test('a TUBE (sweep 360): the figures are the distance ROUND, each entry says how wide that is across (w/π), and the note says w is round the tube', () => {
   assert.ok(WL.isTube('360') && WL.isTube(360) && WL.isTube('361') && !WL.isTube('359.9') && !WL.isTube('') && !WL.isTube('abc') && !WL.isTube(null));
-  const e = WL.entries(true); assert.match(e[0].label, /a tube: metres round/);
+  const e = WL.entries(true); assert.equal(e[0].label, 'width like… (m round)', 'short enough for the select\'s own box (D235: the longer wording clipped at 204 px against 190)');
   assert.equal(e.find((x) => x.label.startsWith('Thunderhead,')).label, 'Thunderhead, 24 m round (21–28), a tube 7.6 m across');
   assert.equal(e.find((x) => x.label.startsWith('Nordic,')).label, 'Nordic, 38 m round (29–53), a tube 12.1 m across');
   assert.equal(WL.across(31), '9.9'); assert.equal(WL.tubeNote(31), "A tube's width is the distance ROUND it, not across. 31 m round is a tube 9.9 m across (w/π).");
@@ -95,7 +95,7 @@ test('the PANEL: the drop-down sits beside the width field, lists the known trac
 test('the PANEL on a tube: the sweep at 360 turns the entries to round-and-across and shows the note; back below 360 they read plain again; the note follows the width', async () => {
   const P = await mountPanel();
   assert.equal(P.note().textContent, ''); P.field('tube sweep °').value = '360'; P.field('tube sweep °').oninput();
-  assert.match(P.labels()[0], /a tube: metres round/); assert.ok(P.labels().includes('Thunderhead, 24 m round (21–28), a tube 7.6 m across'));
+  assert.equal(P.labels()[0], 'width like… (m round)'); assert.ok(P.labels().includes('Thunderhead, 24 m round (21–28), a tube 7.6 m across'));
   assert.match(P.note().textContent, /^A tube's width is the distance ROUND it, not across\./);
   P.pick('Nordic'); assert.equal(P.field('width m').value, '38'); assert.match(P.note().textContent, /38 m round is a tube 12\.1 m across \(w\/π\)\./);
   P.field('width m').value = '31'; P.field('width m').oninput(); assert.match(P.note().textContent, /31 m round is a tube 9\.9 m across/);

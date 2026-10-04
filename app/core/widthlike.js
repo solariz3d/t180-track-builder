@@ -25,7 +25,7 @@ function label(t, tube) {
   return tube ? `${t.name}, ${fmt(t.median_m)} m round ${band}, a tube ${across(t.median_m)} m across` : `${t.name}, ${fmt(t.median_m)} m ${band}`;
 }
 function entries(tube = false, tracks = W.tracks) {
-  return [{ value: '', label: tube ? 'width like… (a tube: metres round)' : 'width like…' }, ...tracks.filter((t) => t.read_closes !== false).map((t) => ({ value: String(t.median_m), label: label(t, tube) }))];
+  return [{ value: '', label: tube ? 'width like… (m round)' : 'width like…' }, ...tracks.filter((t) => t.read_closes !== false).map((t) => ({ value: String(t.median_m), label: label(t, tube) }))];
 }
 function tubeNote(w) {
   const n = Number(w);
