@@ -196,6 +196,20 @@ test('D226 resolveTarget: only an EMPTY folder directly in content\\tracks is re
   assert.equal((await ex.resolveTarget('', yes)).refused.code, 'NO_FOLDER');
 });
 
+test('D227 "." and ".." as the picked folder name are refused BY NAME and never reach the removal: resolveTarget, and the shell on an EMPTY content\\tracks whose "tracks\\." would otherwise read as an empty folder in it', async () => {
+  const ex = await exporter(), AC = 'G:\\SteamLibrary\\steamapps\\common\\assettocorsa\\content\\tracks', yes = { folderIsEmpty: async () => true };
+  for (const name of ['.', '..']) {
+    const r = await ex.resolveTarget(`${AC}\\${name}`, yes); assert.equal(r.dir, undefined, name); assert.equal(r.refused.code, 'AC_INSTALL'); assert.ok(r.refused.reason.includes(`ends in "${name}"`) && /not a folder name/.test(r.refused.reason), r.refused.reason);
+    assert.equal((await ex.resolveTarget(`${AC.replace(/\\/g, '/')}/${name}`, yes)).refused.code, 'AC_INSTALL', `${name} with forward slashes`);
+  }
+  assert.equal((await ex.resolveTarget(`${AC}\\T180 OVAL`, yes)).dir, AC, 'control: a real folder name is still redirected');
+  const tracks = acTree(), st = storage(), { s } = await shellWith(SAMPLE, st);
+  for (const name of ['.', '..']) {
+    await s.exportTo(tracks + path.sep + name);
+    assert.deepEqual(st.writes, [], name); assert.deepEqual(st.removed, [], name); assert.deepEqual(st.emptyChecks, [], 'the emptiness is never even asked'); assert.ok(fs.existsSync(tracks), `content\\tracks survived ${name}`); assert.match(s.getState().message, /not a folder name/);
+  }
+});
+
 test('D226 the empty folder the keeper made exports to content\\tracks as the normal t180b_<name> folder and the empty folder is removed, so Content Manager never sees it', async () => {
   const tracks = acTree('T-180 TUBE OVAL', 'somebody_elses'); fs.writeFileSync(path.join(tracks, 'somebody_elses', 'theirs.kn5'), 'theirs');
   const st = storage(), { s } = await shellWith(SAMPLE, st), picked = path.join(tracks, 'T-180 TUBE OVAL');

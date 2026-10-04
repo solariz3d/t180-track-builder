@@ -271,15 +271,24 @@ pub fn direct_foreign_track(dir: &str) -> bool {
     })
 }
 
+/// The picked path ends in "." or "..": not a folder name (`…/content/tracks/.` is content/tracks itself).
+pub fn ends_in_dot_name(dir: &str) -> bool {
+    matches!(dir.split(['/', '\\']).filter(|p| !p.is_empty()).last(), Some(".") | Some(".."))
+}
+
 /// True only for a real (not linked) EMPTY folder that `direct_foreign_track` names.
 pub fn is_empty_foreign_folder(dir: &Path) -> bool {
-    direct_foreign_track(&dir.to_string_lossy())
+    !ends_in_dot_name(&dir.to_string_lossy())
+        && direct_foreign_track(&dir.to_string_lossy())
         && fs::symlink_metadata(dir).map(|m| m.is_dir() && !m.file_type().is_symlink()).unwrap_or(false)
         && fs::read_dir(dir).map(|mut r| r.next().is_none()).unwrap_or(false)
 }
 
 /// Remove that empty folder and nothing else: the checks again, then rmdir, which the OS refuses on a folder with anything in it.
 pub fn remove_empty_foreign_folder(dir: &Path) -> Result<(), String> {
+    if ends_in_dot_name(&dir.to_string_lossy()) {
+        return Err(format!("{} ends in \".\" or \"..\", which is not a folder name: nothing removed", dir.display()));
+    }
     if !is_empty_foreign_folder(dir) {
         return Err(format!("{} is not an empty folder directly in content\\tracks: nothing removed", dir.display()));
     }
@@ -476,6 +485,23 @@ mod tests {
         assert!(remove_empty_foreign_folder(&mine).is_ok() && !mine.exists());
         assert!(tracks.is_dir() && ours.is_dir() && tracks.join("a_file").is_file());
         assert!(remove_empty_foreign_folder(&mine).is_err(), "already gone");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_dot_or_dot_dot_name_is_never_a_folder_to_remove() {
+        let root = scratch("dotnames");
+        let tracks = root.join("content").join("tracks");
+        fs::create_dir_all(&tracks).unwrap(); // EMPTY content/tracks: `tracks/.` would otherwise read as an empty folder directly in it
+        for name in [".", ".."] {
+            let p = PathBuf::from(format!("{}{}{}", tracks.display(), std::path::MAIN_SEPARATOR, name));
+            assert!(ends_in_dot_name(&p.to_string_lossy()), "{name}");
+            assert!(!is_empty_foreign_folder(&p), "{name} reads as an empty foreign folder");
+            let err = remove_empty_foreign_folder(&p).unwrap_err();
+            assert!(err.contains("not a folder name"), "{name}: {err}");
+            assert!(tracks.is_dir(), "content/tracks survived {name}");
+        }
+        assert!(!ends_in_dot_name(&tracks.join("T-180 OVAL").to_string_lossy()));
         fs::remove_dir_all(&root).unwrap();
     }
 
