@@ -28,6 +28,7 @@ const { encodeDds, ddsLevel, mipCount } = require('./dds.js');
 const { checkTexture, budget } = require('./warnings.js');
 const { TextureError } = require('./errors.js');
 const { makeTexture } = require('../texmaker/make.js');
+const { flowUvs } = require('./flow.js');
 
 /** FNV-1a over the UTF-16 code units, twice (two offsets), as 16 hex digits. Names a made texture; not security. */
 function hash16(str) {
@@ -125,6 +126,7 @@ function withTextureSet(scene, mesh, segments, set) {
     if (slots && slots.floor && (slots.floor.settings.texture || slots.floor.settings.make)) wear.set(node.children[0], slots.floor.material);
   });
   if (!wear.size) return scene;
+  const flow = flowUvs(mesh, segments, set);                // D228: a textured core cell's coordinates run on the path's own arc length (flow.js); every other cell keeps mesh.js's
   const used = [...new Set(wear.values())], mats = scene.materials.slice(), index = new Map();
   for (const name of used) {
     const m = byMat.get(name); if (!m) throw new TextureError('BAD_TEXTURE_SET', `the set names material ${name} but does not carry it`);
@@ -134,7 +136,7 @@ function withTextureSet(scene, mesh, segments, set) {
   const toBuf = (u8) => (typeof Buffer !== 'undefined' ? Buffer.from(u8.buffer, u8.byteOffset, u8.byteLength) : u8);
   const taken = new Set(scene.textures.map((t) => t.name));
   const add = set.textures.filter((t) => files.has(t.file)).map((t) => { if (taken.has(t.file)) throw new TextureError('BAD_TEXTURE_NAME', `the scene already has a texture called ${t.file}`); return { name: t.file, data: toBuf(t.dds) }; });
-  const remap = (n) => (n.type === 'mesh' ? (wear.has(n) ? { ...n, material: index.get(wear.get(n)) } : n) : { ...n, children: (n.children || []).map(remap) });
+  const remap = (n) => (n.type === 'mesh' ? (wear.has(n) ? { ...n, material: index.get(wear.get(n)), ...(flow.has(n) ? { uvs: flow.get(n) } : {}) } : n) : { ...n, children: (n.children || []).map(remap) });
   return { ...scene, textures: [...scene.textures, ...add], materials: mats, root: remap(scene.root) };
 }
 
