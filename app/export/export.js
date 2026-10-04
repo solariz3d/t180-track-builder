@@ -65,6 +65,8 @@ async function resolveTarget(dir, storage) {
   const g = checkTarget(dir);
   if (g.ok) return { dir };
   const c = g.code === 'AC_INSTALL' ? directChild(dir) : null;
+  // "." and ".." are not folder names: `content\tracks\.` is content\tracks itself, so it must never be read as a folder someone made in it
+  if (c && (c.name === '.' || c.name === '..')) return { refused: { ok: false, code: 'AC_INSTALL', reason: `"${dir}" ends in "${c.name}", which is not a folder name: pick the folder itself (an Assetto Corsa tracks folder is never exported into by a "." or ".." path)` } };
   if (!c || !storage || typeof storage.folderIsEmpty !== 'function' || (await storage.folderIsEmpty(dir)) !== true) return { refused: g };
   if (!checkTarget(c.parent).ok) return { refused: g };   // the parent must pass the same guard, never a second door
   return { dir: c.parent, cleanup: dir, cleanupName: c.name };

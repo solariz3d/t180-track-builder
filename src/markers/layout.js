@@ -159,7 +159,7 @@ function defaultLayout(path, segments, o = {}) {
   const colGapM = 2 * Math.min(c.colGapM / 2, best.half - SLOT_HALF_WIDTH - 0.5);
   let grid = { pattern: c.pattern, count: c.count, poleBackM: c.poleBackM, rowGapM: c.rowGapM, colGapM, edits: {} };
   if (!(colGapM / 2 > SLOT_HALF_WIDTH)) {
-    // not two columns: ONE slot still fits when the floor clears a slot's half width by the same 0.5 m margin; then the cars stand nose to
+    // not two columns: ONE slot still fits when the floor clears a slot's half width by ONE_SLOT_MARGIN_M (0.1 m); then the cars stand nose to
     // tail on the centreline, a slot every half a row (the same along-the-road spacing the staggered pair has), and resolveLayout says so
     if (!(best.half > SLOT_HALF_WIDTH + ONE_SLOT_MARGIN_M)) throw err(`the start straight's floor is ${(2 * best.half).toFixed(2)} m wide, too narrow for even one grid slot (a slot needs more than ${(2 * (SLOT_HALF_WIDTH + ONE_SLOT_MARGIN_M)).toFixed(1)} m)`);
     grid = { pattern: '1-column', count: c.count, poleBackM: c.poleBackM, rowGapM: c.rowGapM / 2, colGapM: 0, edits: {} };
