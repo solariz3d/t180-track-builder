@@ -225,6 +225,12 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
         drawRoadLines(extras.ghost, vp, 0.8, true);
         gl.depthMask(true); gl.disable(gl.BLEND);
       }
+      // D237 (app/preview/guides.js): the 3D grid's lattice and the symmetry axes, faint blended lines that the track hides where it is nearer: depth-tested, no depth written
+      if (extras.depthLines && extras.depthLines.length) {
+        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); use(line, vp); gl.enableVertexAttribArray(line.pos);
+        for (const o of extras.depthLines) drawLines(o.positions, IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);
+        gl.depthMask(true); gl.disable(gl.BLEND);
+      }
       if (extras.marker) { gl.disable(gl.DEPTH_TEST); use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.marker.positions, IDENTITY, COLOURS.marker, 1); gl.enable(gl.DEPTH_TEST); }
       // the OVERLAY (D186: the water and its reds), world line pairs drawn over everything, each with its own colour
       if (extras.overlay && extras.overlay.length) {

@@ -80,7 +80,7 @@ const MUTATIONS = [
   { id: 'B12 the candidate ignores the font picker', file: 'testhook/ghostword.js',
     from: "font: font === 'auto' || word === 'jump' ? undefined : font", to: 'font: undefined', caughtBy: 'ghost through A' },
   { id: 'B13 the grid floats above y = 0', file: 'preview/look.js',
-    from: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, 0, z0, x, 0, z1);', to: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, 0.5, z0, x, 0.5, z1);', caughtBy: 'grid: every vertex at y = 0' },
+    from: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y, z0, x, y, z1);', to: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y + 0.5, z0, x, y + 0.5, z1);', caughtBy: 'grid: every vertex at y = 0' },   // D237: re-pointed, gridLines takes a height `y` (default 0); the mutant and the test that catches it are unchanged
   { id: 'B14 the ghost is never drawn', file: 'preview/renderer.js',
     from: 'drawSurfaces(extras.ghost, vp, GHOST_ALPHA, COLOURS.ghost);', to: '', caughtBy: 'preview: showGhost draws the ghost' },
   { id: 'B16 the head marker does not grow with distance (a speck from overhead)', file: 'preview/preview.js',

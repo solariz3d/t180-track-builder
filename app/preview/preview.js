@@ -24,6 +24,12 @@
 //   dollies); Ctrl + wheel is the LENS (the field of view, 10° to 100°, in every view) and a middle click resets it to 60°.
 //   A text field swallows the camera keys; a number field lets them through; Enter or Esc in a field, or a click on the canvas, lets go of it.
 //   No ground grid unless createPreview({ ground: true }): just the track (the keeper, 2026-09-29).
+//   D237 (the keeper: "a 3D grid ... a 2D grid if the track has no height, but as soon as the track turns up or downward the grid becomes 3D", and symmetry): createPreview({ gridMode })
+//   'auto' | 'ground' | '3d' | 'off' starts the grid in that mode (the app's mount asks for 'auto'; with neither gridMode nor ground the preview starts with NO grid, as before). At run time:
+//   p.setGuides({ grid, mirror, centre })   grid: auto | ground | 3d | off;  mirror: off | x | z | both;  centre: { x, z } | null (the box's middle)
+//   p.guides()                              what is asked and what is drawn: { grid, drawn, flat, range, mirror, centre, gap, lines, levels, spacing }
+//   onGuides(state) is called whenever that changes; `layer` ({ update({ plan, pose, aspect, cssWidth, cssHeight }), dispose() }) draws the labels and the centre handle (app/preview/guideslayer.js).
+//   app/preview/guides.js has the maths; none of it reads or writes the document or the export.
 // No mesh data crosses Tauri IPC here (ARCHITECTURE §9): the geometry runs in this process and hands the renderer its
 // own arrays.
 'use strict';
@@ -32,6 +38,7 @@ const { createRig, KEYS } = require('../camera/cameras.js');
 const { createTrackModel } = require('./trackmodel.js');
 const { createRenderer } = require('./renderer.js');
 const { gridLines, headMarker } = require('./look.js');
+const { guidePlan, MODES: GRID_MODES, MIRRORS } = require('./guides.js');
 const { resolveLook } = require('./aclook.js');
 const { flowCell } = require('../../src/texture/flow.js');
 const { FACTOR: DRAG_DETAIL } = require('./coarse.js');
@@ -71,7 +78,7 @@ function boostAt(t) { const u = Number.isFinite(t) ? Math.max(0, Math.min(1, t /
 /** A field that takes TEXT swallows the camera keys (typing a name never moves the camera); a NUMBER field does not, so the camera flies while a value is edited. */
 function swallowsKeys(t) { return !!t && typeof t.matches === 'function' && t.matches('input, select, textarea') && !t.matches('input[type="number"]'); }
 
-function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false }) {
+function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false, gridMode = null, layer = null, onGuides = null }) {
   if (!canvas || !shell || !win) throw new Error('preview: needs { canvas, shell, win }');
   const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
   if (!gl) throw new Error('preview: WebGL is not available in this window');
@@ -80,6 +87,15 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const held = new Map();   // the keys down, in the order pressed: physical key (e.code) → its action, fixed at key-down
   let takeover = false;     // a movement key went down in a follow view: the next frame takes the view over into free (once)
   let ghost = null, grid = null, gridFor = null, overlay = null, start = null;
+  // D237: the 3D grid and the symmetry guides. `gMode` 'legacy' is the old { ground: true } grid at y = 0; the plan is rebuilt only when its inputs change, never per frame.
+  if (gridMode !== null && !GRID_MODES.includes(gridMode)) throw new Error(`preview: unknown gridMode ${gridMode}`);
+  let gMode = gridMode || (ground ? 'legacy' : 'off'), gMirror = 'off', gCentre = null, plan = null, planDeps = null;
+  const guidesState = () => ({
+    grid: gMode === 'legacy' ? 'ground' : gMode, drawn: plan && plan.mode !== 'off' ? plan.mode : gMode === 'legacy' && grid ? 'ground' : 'off', flat: plan ? plan.flat : null, range: plan ? plan.range : null,
+    mirror: gMirror, centre: plan && plan.centre ? { x: plan.centre.x, z: plan.centre.z, set: plan.centre.set } : gCentre ? { x: gCentre.x, z: gCentre.z, set: true } : null,
+    gap: plan ? plan.gap : null, lines: plan ? plan.lines : 0, levels: plan ? plan.levels.length : 0, spacing: plan ? plan.spacing : null,
+  });
+  const sayGuides = () => { if (onGuides) onGuides(guidesState()); };
   let set = null, images = [], look = 'ac', resolved = null, resolvedFor = null;
   // the look is resolved again only when the scene's materials or the set change, never per frame
   const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
@@ -197,12 +213,20 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     const c = ctx(w > 0 && h > 0 ? w / h : 0);
     if (c && w > 0 && h > 0) {
       const tb = track && track.bounds ? track.bounds : null;
-      if (!ground) grid = null;   // no ground: just the track, so the camera goes anywhere with nothing to clip (the keeper, 2026-09-29)
+      if (gMode !== 'legacy') grid = null;   // no ground: just the track, so the camera goes anywhere with nothing to clip (the keeper, 2026-09-29): the legacy { ground: true } grid only
       else if (tb !== gridFor) { grid = gridLines(tb); gridFor = tb; }       // the grid follows the track's box, rebuilt only when it changes
+      // D237: the plan (the 3D grid, the axes, the mirror ghost) follows the track's box and centreline, the mode, the mirror and the centre, and is rebuilt only when one of them changes
+      const pathNow = track && track.path ? track.path : null, deps = planDeps;
+      if (!deps || deps.tb !== tb || deps.path !== pathNow || deps.mode !== gMode || deps.mirror !== gMirror || deps.cx !== (gCentre && gCentre.x) || deps.cz !== (gCentre && gCentre.z)) {
+        planDeps = { tb, path: pathNow, mode: gMode, mirror: gMirror, cx: gCentre && gCentre.x, cz: gCentre && gCentre.z };
+        plan = tb ? guidePlan({ bounds: tb, path: pathNow, mode: gMode === 'legacy' ? 'off' : gMode, mirror: gMirror, centre: gCentre }) : null;
+        sayGuides();
+      }
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay,
+      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: plan && plan.over.length ? (overlay ? [...overlay, ...plan.over] : plan.over) : overlay, depthLines: plan ? plan.depth : null,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null });
+      if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
     if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? 'AC look' : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}`;
   }
@@ -211,12 +235,21 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   return {
     rig, model, renderer,
     /** What is on screen now, for the window proof (app/testhook/probe.js): read-only. */
-    view: () => ({ track, detail: model.detail, pose: shownPose, mode: rig.mode, error: err, ghost: ghost ? ghost.batches.length : 0, grid: grid ? grid.positions.length / 6 : 0, look, textures: images.length }),
+    view: () => ({ track, detail: model.detail, pose: shownPose, mode: rig.mode, error: err, ghost: ghost ? ghost.batches.length : 0, grid: grid ? grid.positions.length / 6 : 0, guides: guidesState(), look, textures: images.length }),
     track: () => shared(),
     /** What each placed batch is drawn with, in the 'ac' look: { materialOf, textures } (aclook.js resolveLook). */
     lookNow: () => (track && track.mesh ? lookFor(track.mesh.scene) : null),
     setTextureSet(s) { set = s || null; images = set ? previewTextures(set) : []; resolvedFor = null; return images.length; },
     setLook(l) { if (l !== 'ac' && l !== 'words') throw new Error(`preview: unknown look ${l}`); look = l; return look; },
+    /** D237: the grid mode, the mirror and the centre of the symmetry guides (each optional): grid auto | ground | 3d | off, mirror off | x | z | both, centre { x, z } or null for the box's middle. */
+    setGuides({ grid: g, mirror: m, centre: c } = {}) {
+      if (g !== undefined && !GRID_MODES.includes(g)) throw new Error(`preview: unknown grid mode ${g}`);
+      if (m !== undefined && !MIRRORS.includes(m)) throw new Error(`preview: unknown mirror ${m}`);
+      if (c !== undefined && c !== null && !(Number.isFinite(c.x) && Number.isFinite(c.z))) throw new Error('preview: the centre needs { x, z } in metres, or null');
+      if (g !== undefined) gMode = g; if (m !== undefined) gMirror = m; if (c !== undefined) gCentre = c === null ? null : { x: c.x, z: c.z };
+      planDeps = null; sayGuides(); return guidesState();
+    },
+    guides: guidesState,
     /**
      * Show the GHOST of the next piece (the D170 review, item 6): `candidate` is the resolved document with the
      * word appended (A's shell: the same appendWord that place() uses, not committed). It is drawn see-through at the
@@ -231,7 +264,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     pick(x, y) { return shownPose && track && track.path ? pickAt(track.path, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
     dispose() {
-      win.cancelAnimationFrame(raf); clearFull(); unsub();
+      win.cancelAnimationFrame(raf); clearFull(); unsub(); if (layer) layer.dispose();
       win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
       if (win.document) win.document.removeEventListener('visibilitychange', onVis);
       canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease);
