@@ -263,7 +263,7 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
   // cup is the START, the first metres fade out of the legacy END's last profile: morphZone), so the zip at s = 0 has no step
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), firstRoad = roadIdx[0], lastRoad = roadIdx[roadIdx.length - 1];
   const seam = doc.closed && roadIdx.length > 1 && !!doc.pieces[firstRoad].cup !== !!doc.pieces[lastRoad].cup && cupRuns;
-  const chan = (P, s) => Object.fromEntries(D.CHANNELS.map((ch) => [ch, D.channelAt(P, ch, s).v]));
+  const chan = (P, s) => D.valuesAt(P, s);
   const nOf = (P) => Math.max(1, Math.ceil(P.length / segM - 1e-9));
   const legacyAt = (P, j) => { const n = nOf(P), s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n; return legacySeg(P.family, chan(P, s0), chan(P, s1), chan(P, (s0 + s1) / 2), s1 - s0); };
   const legacyFirst = (P) => legacyAt(P, 0).start;   // the first row of the piece's first segment
@@ -277,7 +277,7 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
       pitch = P.land;
       return;
     }
-    const n = Math.max(1, Math.ceil(P.length / segM - 1e-9)), at = (s) => Object.fromEntries(D.CHANNELS.map((ch) => [ch, D.channelAt(P, ch, s).v]));
+    const n = Math.max(1, Math.ceil(P.length / segM - 1e-9)), at = (s) => D.valuesAt(P, s);
     let a = at(0);
     if (pi === 0) roll = a.phi;
     const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // D225: a tube, an edge, or a cup entering from a tube is built by xsecSegments
