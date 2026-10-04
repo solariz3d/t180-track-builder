@@ -1,0 +1,158 @@
+{
+ "schema": "t180b.widths/1",
+ "method": "tools/widths.cjs: over each read's stations, the median and the 10th to 90th percentile of the reader's width (metres, whole metres, ray hits left to right). Numbers only.",
+ "tracks": [
+  {
+   "name": "Miandros",
+   "median_m": 21,
+   "p10_m": 18,
+   "p90_m": 25,
+   "stations": 2860,
+   "read_closes": false
+  },
+  {
+   "name": "T-180 Bowl Track",
+   "median_m": 22,
+   "p10_m": 21,
+   "p90_m": 25,
+   "stations": 515,
+   "read_closes": true
+  },
+  {
+   "name": "Thunderhead",
+   "median_m": 24,
+   "p10_m": 21,
+   "p90_m": 28,
+   "stations": 2250,
+   "read_closes": true
+  },
+  {
+   "name": "Hazen Loop",
+   "median_m": 29,
+   "p10_m": 28,
+   "p90_m": 32,
+   "stations": 7459,
+   "read_closes": true
+  },
+  {
+   "name": "T-180 Test Track",
+   "median_m": 29,
+   "p10_m": 28,
+   "p90_m": 31,
+   "stations": 1930,
+   "read_closes": true
+  },
+  {
+   "name": "Eagleton",
+   "median_m": 30,
+   "p10_m": 29,
+   "p90_m": 34,
+   "stations": 2082,
+   "read_closes": true
+  },
+  {
+   "name": "The Bowltrack",
+   "median_m": 30,
+   "p10_m": 30,
+   "p90_m": 33,
+   "stations": 615,
+   "read_closes": true
+  },
+  {
+   "name": "Centrifuge",
+   "median_m": 31,
+   "p10_m": 29,
+   "p90_m": 36,
+   "stations": 8590,
+   "read_closes": true
+  },
+  {
+   "name": "Eagleton (short)",
+   "median_m": 31,
+   "p10_m": 29,
+   "p90_m": 36,
+   "stations": 577,
+   "read_closes": true
+  },
+  {
+   "name": "Sakura Speedway",
+   "median_m": 32,
+   "p10_m": 31,
+   "p90_m": 35,
+   "stations": 5211,
+   "read_closes": true
+  },
+  {
+   "name": "Coast",
+   "median_m": 33,
+   "p10_m": 32,
+   "p90_m": 38,
+   "stations": 5123,
+   "read_closes": true
+  },
+  {
+   "name": "Aurora Long",
+   "median_m": 34,
+   "p10_m": 32,
+   "p90_m": 53,
+   "stations": 8224,
+   "read_closes": false
+  },
+  {
+   "name": "Aurora Medium",
+   "median_m": 34,
+   "p10_m": 32,
+   "p90_m": 56,
+   "stations": 4114,
+   "read_closes": true
+  },
+  {
+   "name": "Serpents Spiral",
+   "median_m": 34,
+   "p10_m": 32,
+   "p90_m": 38,
+   "stations": 502,
+   "read_closes": true
+  },
+  {
+   "name": "Nordic",
+   "median_m": 38,
+   "p10_m": 29,
+   "p90_m": 53,
+   "stations": 5075,
+   "read_closes": true
+  },
+  {
+   "name": "Onuris Long",
+   "median_m": 39,
+   "p10_m": 36,
+   "p90_m": 45,
+   "stations": 5798,
+   "read_closes": true
+  },
+  {
+   "name": "Onuris Medium",
+   "median_m": 39,
+   "p10_m": 36,
+   "p90_m": 46,
+   "stations": 4729,
+   "read_closes": true
+  },
+  {
+   "name": "Onuris Short",
+   "median_m": 41,
+   "p10_m": 36,
+   "p90_m": 48,
+   "stations": 1854,
+   "read_closes": true
+  },
+  {
+   "name": "Rainbow Road",
+   "median_m": 45,
+   "p10_m": 35,
+   "p90_m": 90,
+   "stations": 10772,
+   "read_closes": true
+  }
+ ]
+}

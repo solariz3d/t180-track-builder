@@ -90,6 +90,7 @@ live shell or a panel.
 |---|---|
 | `app/core/coreshell.js` | the core's state and actions, no DOM (tested headless): extend, the brush drag, close, water, export, a local example, save/open under the `eq-` prefix |
 | `app/core/panel.js` | the core's controls in the left column |
+| `app/core/widthlike.js` | the "width like…" drop-down's entries (D232): the known tracks' measured widths from `src/doc/widths.json`, in metres round-and-across for a tube |
 | `app/core/textures.js` | the core's road surface (D228): asphalt by default, solid colour, or your own picture; announces the set as `t180:textures`, which the preview draws and the core page's Export writes (`src/texture/flow.js` lays its coordinates on the path's arc length, a closed tube wraps a whole number of repeats) |
 | `app/core/index.js` | its `mount(root, shell)` |
 
