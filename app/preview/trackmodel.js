@@ -59,9 +59,18 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     return JSON.stringify([a.pos, a.T, b.pos, b.T]);
   };
   const meshSegs = (segs, lk) => segs.map((s, j) => (lk[j] === null ? s : { ...s, _lift: lk[j] }));
-  function full(segs, isClosed, lift) {
+  // D236: a CLOSED loop is rebuilt in full on every change (it has no open end to extend, and a later piece's placement depends on every earlier one), but its MESH need not be:
+  // the model keeps the last closed mesh made at each detail (`slots`: segment keys, lift keys, mesh), and a segment whose key is the one it was meshed from keeps its vertex arrays
+  // (geom.reuseMesh), so a brush that reaches 60 m of a 6 km loop meshes 60 m, both while dragging (coarse) and when full detail comes back (the pre-drag full mesh is still in its slot).
+  const slots = new Map();
+  function full(segs, isClosed, lift, nk) {
     path = geom.buildPath(segs, { ...pathOpts, closed: isClosed, ...(startOpt ? { start: startOpt } : {}) }); shown = lift ? lift(path) : path;
-    liftKeys = segs.map((_, j) => liftOf(path, shown, j)); mesh = geom.buildMesh(shown, meshSegs(segs, liftKeys), meshOpts); return 'full';
+    liftKeys = segs.map((_, j) => liftOf(path, shown, j));
+    const ms = meshSegs(segs, liftKeys), slot = isClosed ? slots.get(detail) : null;
+    if (slot && typeof geom.reuseMesh === 'function' && slot.mesh && slot.keys.length === segs.length) mesh = geom.reuseMesh(slot.mesh, shown, ms, segs.map((_, j) => nk[j] === slot.keys[j] && liftKeys[j] === slot.liftKeys[j]));
+    else mesh = geom.buildMesh(shown, ms, meshOpts);
+    if (isClosed) slots.set(detail, { keys: nk, liftKeys, mesh }); else slots.clear();
+    return 'full';
   }
   return {
     update(resolved) {
@@ -78,7 +87,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       let how, from = null, fromS = null;
       // the lift, redone on the base path after any growth; the first segment whose lifted samples changed
       const relift = () => { shown = lift ? lift(path) : path; const lk = segs.map((_, j) => liftOf(path, shown, j)); let a = 0; while (a < lk.length && a < liftKeys.length && lk[a] === liftKeys[a]) a++; return { lk, a }; };
-      if (!path || isClosed || closed || startMoved || detailMoved) how = full(segs, isClosed, lift);
+      if (!path || isClosed || closed || startMoved || detailMoved) how = full(segs, isClosed, lift, nk);
       else if (g === keys.length && g === nk.length) {
         const { lk, a } = relift();
         if (a === lk.length && a === liftKeys.length) how = 'same';
@@ -91,7 +100,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         geom.rebuildPathFrom(path, segs, g);
         const { lk, a } = relift(), s0 = Math.min(g, a);
         from = s0; fromS = path.starts[s0].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), s0); liftKeys = lk; how = 'sculpt';
-      } else how = full(segs, isClosed, lift);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
+      } else how = full(segs, isClosed, lift, nk);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
       keys = nk; closed = isClosed;
       const batches = how === 'same' && last ? last.batches : batchesOf(mesh);
       lastResolved = resolved; detailMoved = false;

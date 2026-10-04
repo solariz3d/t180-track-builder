@@ -143,6 +143,7 @@ test('row 6: the fast change key is the JSON key\'s equality, hashed: equal cont
   const next = (x) => { const b = new Float64Array([x]), u = new BigUint64Array(b.buffer); u[0] += 1n; return b[0]; };   // the next double up: one bit
   const diffs = [{ ...o, k0: next(o.k0) }, { ...o, length: 2.0000000000000004 }, { ...o, id: 'b' }, { ...o, name: 'xx' }, { ...o, flags: [true, true, null] }, { ...o, profile: { u: [-15.5, 0, 15.5, 16], psi: [3.14, 0, -3.14, 1] } },
     { ...o, profile: { u: [-15.5, 0, 15.5], psi: [3.14, 0, next(-3.14)] } }, { ...o, extra: 1 }, { kind: 'road', id: 'a', length: 2, k0: 0.001, profile: o.profile, flags: o.flags, name: 'x' }, { ...o, flags: [true, false] }];
+  assert.notEqual(keyOf({ a: 1 }), keyOf({ a: 2 }), 'numbers that differ only in the HIGH word of the double (their low words are all zero) have different keys'); assert.notEqual(keyOf({ a: 0.5 }), keyOf({ a: -0.5 }), 'a sign flip changes the key'); assert.notEqual(keyOf({ a: 1 }), keyOf({ a: 1.5 }), 'so does a change in the top of the mantissa'); assert.notEqual(keyOf({ a: 8 }), keyOf({ a: 4 }), 'and in the exponent');
   assert.notEqual(keyOf({ a: [[1], [2]] }), keyOf({ a: [[1, 2]] }), 'how the numbers are grouped into arrays matters (the length is part of the key)'); assert.notEqual(keyOf({ a: 1 }), keyOf({ b: 1 }), 'the names of the fields matter, not only their values');
   const base = keyOf(o), seen = new Set([base]); for (const d of diffs) { const k = keyOf(d); assert.ok(!seen.has(k), `a changed segment has its own key: ${JSON.stringify(d).slice(0, 60)}`); seen.add(k); }
   // on a REAL track: a brush changes some pieces; the segments whose JSON changed are exactly the ones whose fast key changed
@@ -152,4 +153,128 @@ test('row 6: the fast change key is the JSON key\'s equality, hashed: equal cont
   const same = tubeShell && await tubeShell(); const a = same.getState().resolved.segments, b = (await tubeShell()).getState().resolved.segments; assert.ok(a.every((g, i) => keyOf(g) === keyOf(b[i])), 'two builds of the same document key alike, segment for segment');
   const t0 = process.hrtime.bigint(); for (const g of before) JSON.stringify(g); const tj = Number(process.hrtime.bigint() - t0) / 1e6; const t1 = process.hrtime.bigint(); for (const g of before) keyOf(g); const tf = Number(process.hrtime.bigint() - t1) / 1e6;
   assert.ok(tf < tj, `control: the hash is faster than JSON.stringify (${tf.toFixed(1)} ms against ${tj.toFixed(1)} ms for ${before.length} segments)`);
+});
+
+// ── D236: the cup and plain segments coarse too, and a closed loop rebuilt from the pieces that changed ──────────────────────────────────────────────────────────────────────
+const G = require('../../src/geom/index.js');
+const SCULPT = require('../../src/core/sculpt.js');
+const gq = Math.PI * 180 / 2;
+/** A CLOSED lap of ~750 m: `first` is the first piece's own cross-section (a cup, a tube) or null for the legacy bowl; `brushFn` is the height brush (a hill, so the document carries a lift). */
+async function closedLap(first, opts = {}, len0 = 300) {
+  const s = await createCoreShell({ brushFn: null, ...opts });
+  s.extend({ length: len0, ...(first ? { first } : { family: 'bowl' }) });
+  for (let i = 0; i < 4; i++) s.extend({ length: gq, transition: 40, targets: { kh: 1 / 180 } });
+  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  assert.equal(s.getState().message, null, s.getState().message); s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message); return s;
+}
+const LAPS = { 'a closed CUP lap': { c: 60 }, 'a closed TUBE lap': { w: 31, t: 360 }, 'a closed PLAIN (legacy) lap': null };
+/** Equal to a full build, the standard of app/test/preview.test.js sameBatches: indices exact, matrices within 1e-9, positions and normals within 1e-5. Returns the worst position error. */
+function sameAsFull(a, b, what) {
+  assert.deepEqual(a.map((x) => x.key), b.map((x) => x.key), `${what}: the same nodes`); let worst = 0;
+  for (let i = 0; i < a.length; i++) {
+    assert.deepEqual(Array.from(a[i].indices), Array.from(b[i].indices), `${what}: ${a[i].key} indices`); assert.equal(a[i].positions.length, b[i].positions.length, `${what}: ${a[i].key} size`);
+    for (let k = 0; k < 16; k++) assert.ok(Math.abs(a[i].model[k] - b[i].model[k]) <= 1e-9, `${what}: ${a[i].key} matrix`);
+    for (let k = 0; k < a[i].positions.length; k++) { const dp = Math.abs(a[i].positions[k] - b[i].positions[k]); worst = Math.max(worst, dp); assert.ok(dp <= 1e-5 && Math.abs(a[i].normals[k] - b[i].normals[k]) <= 1e-5, `${what}: ${a[i].key} vertex ${k}`); }
+    for (let k = 0; k < a[i].uvs.length; k++) assert.ok(Math.abs(a[i].uvs[k] - b[i].uvs[k]) <= 1e-5, `${what}: ${a[i].key} uv`);
+  }
+  return worst;
+}
+const freshOf = (resolved, detail) => {
+  const segs = detail > 1 ? coarsen(resolved.segments, detail) : resolved.segments, p = G.buildPath(segs, { step: 2, closed: !!resolved.closed, start: resolved.start });
+  return batchesOf(G.buildMesh(typeof resolved.lift === 'function' ? resolved.lift(p) : p, segs, {}));
+};
+
+test('row 7: a cup or plain segment gets a coarse row grid too (shared across a held cross-section, the road\'s two edges kept) and the coarse mesh is a fraction of the vertices', async () => {
+  for (const [name, first] of [['a cup', { c: 60 }], ['a plain bowl', null]]) {
+    const s = await closedLap(first), r = s.getState().resolved, c = coarsen(r.segments, FACTOR);
+    const roads = r.segments.map((g, i) => i).filter((i) => r.segments[i].kind === 'road' && !r.segments[i].fractions);
+    assert.ok(roads.length > 100, `${name}: control: the segments carry no grid of their own (${roads.length})`);
+    assert.ok(roads.every((i) => Array.isArray(c[i].fractions) && c[i].fractions.length >= 2 && c[i].fractions[0] <= 0 && c[i].fractions[c[i].fractions.length - 1] >= 0), `${name}: every road segment has a coarse grid`);
+    const held = roads.filter((i, k) => k > 0 && roads[k - 1] === i - 1 && r.segments[i].profile === r.segments[i - 1].profile && !r.segments[i].blend && !r.segments[i - 1].blend);
+    if (name === 'a cup') assert.ok(held.length > 5, `${name}: control: some segments hold one cross-section (${held.length})`);   // (a legacy bowl's segments each carry their own profile object: nothing is shared there)
+    for (const i of held) assert.equal(c[i].fractions, c[i - 1].fractions, `${name}: segments sharing a profile share ONE grid (no seam zipper between them)`);
+    assert.equal(r.segments[roads[0]].fractions, undefined, 'the input is not edited'); assert.equal(coarsen(r.segments, FACTOR)[roads[0]], c[roads[0]], 'an unchanged segment is the same object next time');
+    const tm = createTrackModel(), full = tm.update(r), vFull = verts(full.batches); tm.setDetail(FACTOR);
+    const co = tm.update(r), vCoarse = verts(co.batches); assert.ok(vCoarse < 0.45 * vFull, `${name}: ${vCoarse} coarse vertices against ${vFull}`); assert.ok(vCoarse > 0.05 * vFull, 'control: not empty');
+    assert.equal(co.segments, r.segments, 'the real segments are returned');
+    // the two edges of every row are kept: the first and last vertex of each row of the coarse mesh are vertices of the full mesh
+    const edge = (b) => { const out = new Set(); const K = b.cols; for (let i = 0; i < b.positions.length / 3; i += K) for (const j of [i, i + K - 1]) out.add([0, 1, 2].map((k) => b.positions[j * 3 + k].toFixed(3)).join(',')); return out; };
+    const cell = full.batches.findIndex((b) => !b.seam && b.cols), fe = edge(full.batches[cell]), ce = edge(co.batches[cell]); assert.ok([...ce].every((p) => fe.has(p)), `${name}: the coarse mesh keeps the road's edges where the full mesh has them`);
+  }
+});
+
+test('row 8: a closed loop rebuilt from the pieces that changed EQUALS a full rebuild: every coarse drag step, the release, an undo; and it meshes only what the brush reached', async () => {
+  for (const [name, first] of Object.entries(LAPS)) for (const [channel, step] of [['phi', 0.01], ['w', 2]]) {
+    const s = await closedLap(first), tm = createTrackModel(); const n = s.getState().resolved.segments.length;
+    tm.update(s.getState().resolved); tm.setDetail(FACTOR); let worst = 0, last = null;
+    s.beginBrush({ mode: 'rate', channel, s0: 300, r: 40 });
+    for (let i = 1; i <= 3; i++) {
+      s.brushTo(step * i); assert.ok(s.getState().message === null || s.getState().messageKind === 'ok', s.getState().message);   // (a narrow brush is widened, and says so)
+      const got = tm.update(s.getState().resolved); assert.equal(got.how, 'full'); worst = Math.max(worst, sameAsFull(got.batches, freshOf(s.getState().resolved, FACTOR), `${name} ${channel} drag ${i}`)); last = got;
+    }
+    const need = name.includes('TUBE') && channel === 'w' ? 0.5 : 0.85;   // a wider tube changes the spiral's heartline downstream, so later pieces start at another pitch and bank and are meshed again (measured: 456 of 748 kept)
+    assert.ok(i0(last, n) > need, `${name} ${channel}: the second and later drag steps keep the pieces the brush did not reach (${last.mesh.stats.reused} of ${n})`);
+    s.endBrush(); tm.setDetail(1); const rel = tm.update(s.getState().resolved);
+    worst = Math.max(worst, sameAsFull(rel.batches, freshOf(s.getState().resolved, 1), `${name} ${channel} release`)); assert.ok(i0(rel, n) > need, `${name} ${channel}: the release keeps the pieces the brush did not reach (${rel.mesh.stats.reused} of ${n}): full detail comes back from the pre-drag mesh`);
+    s.undo(); const un = tm.update(s.getState().resolved); worst = Math.max(worst, sameAsFull(un.batches, freshOf(s.getState().resolved, 1), `${name} ${channel} undo`)); assert.ok(worst <= 1e-5, `worst position error ${worst}`);
+  }
+});
+const i0 = (r, n) => r.mesh.stats.reused / n;
+
+test('row 8b: a brush across the loop\'s own joint (the last piece to the first), a hill (a lifted path) and a heading brush that re-closes the whole loop: all equal a full rebuild', async () => {
+  const cases = [['across the start/end joint', { c: 60 }, { mode: 'rate', channel: 'phi', s0: 10, r: 60 }, 0.02, null], ['at the end of the lap', { c: 60 }, { mode: 'rate', channel: 'phi', s0: 745, r: 60 }, 0.02, null],
+    ['a hill (the lift)', { c: 60 }, { channel: 'height', s0: 300, r: 60 }, 3, SCULPT.brush], ['a heading rate brush that re-closes the loop', { c: 60 }, { mode: 'local', channel: 'kh', s0: 300, r: 60 }, 0.002, SCULPT.brush]];
+  for (const [name, first, brush, delta, brushFn] of cases) {
+    const s = await closedLap(first, brushFn ? { brushFn } : {}), tm = createTrackModel(); tm.update(s.getState().resolved); tm.setDetail(FACTOR);
+    s.beginBrush(brush); s.brushTo(delta * 0.5); assert.equal(s.getState().message === null || s.getState().messageKind === 'ok', true, s.getState().message);
+    sameAsFull(tm.update(s.getState().resolved).batches, freshOf(s.getState().resolved, FACTOR), name + ' (drag 1)'); s.brushTo(delta); sameAsFull(tm.update(s.getState().resolved).batches, freshOf(s.getState().resolved, FACTOR), name + ' (drag 2)');
+    s.endBrush(); tm.setDetail(1); sameAsFull(tm.update(s.getState().resolved).batches, freshOf(s.getState().resolved, 1), name + ' (release)');
+  }
+});
+
+test('row 9: reuseMesh does not change the mesh it was given, refuses a different number of segments, and an unflagged piece is remeshed', async () => {
+  const s = await closedLap({ c: 60 }), r = s.getState().resolved, path = G.buildPath(r.segments, { step: 2, closed: true, start: r.start });
+  const prev = G.buildMesh(path, r.segments, {}), before = prev.scene.root.children.map((c) => c.matrix.slice()), pc0 = prev._state.pieces[3];
+  const flags = r.segments.map(() => true); const moved = G.reuseMesh(prev, G.buildPath(r.segments, { step: 2, closed: true, start: { ...r.start, pos: [10, 5, -20], theta: r.start.theta + 0.3 } }), r.segments, flags);
+  assert.ok(prev.scene.root.children.every((c, i) => c.matrix.every((x, k) => x === before[i][k])), 'the given mesh\'s own placements are untouched'); assert.equal(prev._state.pieces[3], pc0);
+  assert.ok(moved.stats.reused > r.segments.length * 0.95, `a loop only MOVED reuses nearly every piece (${moved.stats.reused})`);
+  sameAsFull(batchesOf(moved), batchesOf(G.buildMesh(G.buildPath(r.segments, { step: 2, closed: true, start: { ...r.start, pos: [10, 5, -20], theta: r.start.theta + 0.3 } }), r.segments, {})), 'moved loop');
+  const some = flags.map((_, i) => i !== 7), part = G.reuseMesh(prev, path, r.segments, some); assert.equal(part.stats.reused, r.segments.length - 1, 'exactly the unflagged piece is remeshed (a core segment carries its own blend, so the piece after it does not depend on it)');
+  assert.throws(() => G.reuseMesh(prev, path, r.segments.slice(1), flags.slice(1)), /same number of segments/); assert.throws(() => G.reuseMesh(prev, path, r.segments, flags.slice(1)), /same number of segments|flag/);
+});
+
+test('row 9b: a piece that takes its font from the piece before it (a word segment, no blend of its own) is remeshed when that one changes', async () => {
+  const s = await closedLap({ c: 60 }), r = s.getState().resolved, bare = r.segments.map((g) => { const { blend, ...rest } = g; return rest; });   // no `blend` field: each piece ramps from the previous piece's font (mesh.js effective)
+  const path = G.buildPath(bare, { step: 2, closed: true, start: r.start }), prev = G.buildMesh(path, bare, {});
+  const other = { ...bare[50].profile, psi: bare[50].profile.psi.map((x) => x * 0.5) }; assert.notEqual(JSON.stringify(other), JSON.stringify(bare[50].profile), 'control: another font to change to (the same one, half as steep)');
+  const edited = bare.map((g, i) => (i === 50 ? { ...g, profile: other } : g)), flags = bare.map((_, i) => i !== 50);
+  const got = G.reuseMesh(prev, G.buildPath(edited, { step: 2, closed: true, start: r.start }), edited, flags), want = G.buildMesh(G.buildPath(edited, { step: 2, closed: true, start: r.start }), edited, {});
+  sameAsFull(batchesOf(got), batchesOf(want), 'a font changed under a blend-less neighbour'); assert.ok(got.stats.reused <= bare.length - 2, `piece 50 and the piece that ramps from it are both remeshed (${got.stats.reused} kept of ${bare.length})`);
+});
+
+test('row 9c: reuseMesh checks a piece\'s start pitch and bank itself: a flag that says "same" for a piece whose start changed does not keep a stale shape', async () => {
+  const s = await closedLap({ c: 60 }), r = s.getState().resolved, flags = r.segments.map(() => true);
+  const base = G.buildMesh(G.buildPath(r.segments, { step: 2, start: r.start }), r.segments, {});   // (an open path: a tilted or rolled loop would no longer close)
+  // (a) the start pitch changes: every piece starts at another pitch, and the same handles bend differently
+  const tilt = { ...r.start, p: r.start.p + 0.05 }, pt = G.buildPath(r.segments, { step: 2, start: tilt });
+  const a = G.reuseMesh(base, pt, r.segments, flags); sameAsFull(batchesOf(a), batchesOf(G.buildMesh(pt, r.segments, {})), 'start pitch changed'); assert.ok(a.stats.reused < r.segments.length * 0.1, `a changed start pitch keeps almost nothing (${a.stats.reused})`);
+  // (b) one segment's bank changes under an unchanged flag: that piece (and the ones whose own start bank moved) are remeshed
+  const rolled = r.segments.map((g, i) => (i === 120 ? { ...g, roll0: g.roll0 + 0.2, roll1: g.roll1 + 0.2 } : g)), pr = G.buildPath(rolled, { step: 2, start: r.start });
+  const b = G.reuseMesh(base, pr, rolled, flags); sameAsFull(batchesOf(b), batchesOf(G.buildMesh(pr, rolled, {})), 'a bank changed under an unchanged flag'); assert.ok(b.stats.reused < rolled.length, `the rolled piece is remeshed (${b.stats.reused} kept)`);
+});
+
+test('row 9d: a seam between two pieces that only MOVED moves with them (a step in the font with no ramp makes a real seam)', async () => {
+  const s = await closedLap({ c: 60 }), r = s.getState().resolved, other = { ...r.segments[50].profile, psi: r.segments[50].profile.psi.map((x) => x * 0.5) };
+  const bare = r.segments.map((g, i) => { const { blend, ...rest } = g; return { ...rest, rampM: 0, ...(i >= 50 && i < 120 ? { profile: other } : {}) }; });   // a hard step at 50 and back at 120: two seams
+  const p0 = G.buildPath(bare, { step: 2, closed: true, start: r.start }), prev = G.buildMesh(p0, bare, {});
+  const moveTo = { ...r.start, pos: [30, 4, -50], theta: r.start.theta + 0.4 }, p1 = G.buildPath(bare, { step: 2, closed: true, start: moveTo }), want = batchesOf(G.buildMesh(p1, bare, {}));
+  assert.ok(want.filter((b) => b.seam).length >= 2, `control: the steps make seams (${want.filter((b) => b.seam).length})`);
+  const got = G.reuseMesh(prev, p1, bare, bare.map(() => true)); sameAsFull(batchesOf(got), want, 'a moved loop with seams'); assert.ok(got.stats.reused > bare.length * 0.95, `only moved (${got.stats.reused} kept)`);
+});
+
+test('row 9e: a closed loop whose number of segments changed is built in full, not reused (the model checks the count before it trusts a slot)', async () => {
+  const a = (await closedLap({ c: 60 })).getState().resolved, b = (await closedLap({ c: 60 }, {}, 400)).getState().resolved, tm = createTrackModel();   // two real closed loops, 100 m apart in length
+  assert.ok(b.segments.length > a.segments.length, `control: different counts (${a.segments.length}, ${b.segments.length})`);
+  tm.update(a); const got = tm.update(b); assert.equal(got.how, 'full'); sameAsFull(got.batches, freshOf(b, 1), 'the longer loop');
+  const back = tm.update(a); sameAsFull(back.batches, freshOf(a, 1), 'and back');
 });

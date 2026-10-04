@@ -305,4 +305,36 @@ function sculptMesh(prev, path, segments, g) {
   st.nseg = segments.length; st.work = st.workC.n;
   return assemble(st);
 }
-module.exports = { buildMesh, extendMesh, sculptMesh, vertex, profiles, toLocal };
+
+/**
+ * reuseMesh(prev, path, segments, same): the mesh of `segments` on `path`, made from `prev` (a mesh of the SAME number of segments, open or closed) by remeshing only the pieces
+ * that changed. `same[j]` is the caller's word that segment j has exactly the handles piece j of `prev` was meshed from (the track model keeps a hash of each segment for this; the
+ * mesh itself never compares handles here, for a tube's segment is kilobytes of text). A piece that is the same, and starts at the same pitch and bank (its shape in its own
+ * frame, as sculptMesh's reuse test), keeps its local arrays and only its placement moves; every other piece is meshed again, and so is every seam that touches one. The closed
+ * loop's own joint (the last piece to the first) is always made again: the last piece's end is where the whole loop's drift shows. `prev` is not changed: moved pieces are copies.
+ * The result equals buildMesh(path, segments, prev's options) to round-off (D236; app/test/preview-speed.test.js proves it on a closed cup loop, a closed tube and an open track).
+ */
+function reuseMesh(prev, path, segments, same) {
+  const old = prev._state, n = segments.length;
+  if (old.nseg !== n || !Array.isArray(same) || same.length !== n) throw new Error('reuseMesh: needs a mesh of the same number of segments and a same[] flag for each');
+  const st = { o: old.o, pieces: new Array(n), seams: new Array(n).fill(null), workC: { n: 0 }, nseg: n, closed: !!path.closed, reused: 0 }, moved = new Array(n).fill(false);
+  const closed = !!path.closed;
+  for (let j = 0; j < n; j++) {
+    const seg = segments[j];
+    if (seg.kind === 'gap') { st.pieces[j] = null; continue; }
+    const eff = effective(segments, j, st.o, closed), prior = old.pieces[j], f0 = path.samples[path.segFirst[j]];
+    // a piece with no document ramp of its own takes its previous piece's font (effective): it is the same only if that one is too
+    const dependsOnPrev = seg.profileIn === undefined && seg.blend === undefined, before = j > 0 ? j - 1 : closed ? n - 1 : -1;
+    const keep = prior && same[j] && (!dependsOnPrev || before < 0 || same[before]) && Math.abs(prior.p0 - pitchOf(f0)) < 1e-12 && Math.abs(prior.b0 - f0.bankG) < 1e-12;
+    if (keep) { st.pieces[j] = { ...prior, F: frameOf(f0), firstS: f0, lastS: path.segEnd[j], stale: { first: true, last: true } }; moved[j] = true; st.reused++; } else st.pieces[j] = meshPiece(j, eff, pieceSamples(path, j), st.o, st.workC);
+  }
+  for (let g = 1; g < n; g++) {
+    const A = st.pieces[g - 1], B = st.pieces[g];
+    if (moved[g - 1] && moved[g] && old.pieces[g - 1] && old.pieces[g]) st.seams[g] = old.seams[g] ? { ...old.seams[g], F: B.F } : null;   // both pieces only moved: the seam between them moves with the later one
+    else st.seams[g] = A && B ? meshSeam(A, B, st.workC) : null;
+  }
+  if (closed && n > 1) { const A = st.pieces[n - 1], B = st.pieces[0]; st.seams[0] = A && B ? meshSeam(A, B, st.workC) : null; }
+  st.work = st.workC.n;
+  return assemble(st);
+}
+module.exports = { buildMesh, extendMesh, sculptMesh, reuseMesh, vertex, profiles, toLocal };

@@ -65,6 +65,21 @@ function channelAt(P, ch, s) {
   return { v, d1, d2 };
 }
 /**
+ * Every channel's VALUE at s, as { kh: v, kv: v, ... } over CHANNELS: exactly `channelAt(P, ch, s).v` for each, from ONE basis evaluation (the basis depends on the knots and
+ * s alone, so channelAt rebuilt the very same one for each of the eleven channels; D236: the adapter reads all of them at every segment end of every piece, on every brush step).
+ */
+function valuesAt(P, s) {
+  const out = {}; let b = null;
+  for (const ch of CHANNELS) {
+    const c = P.channels[ch];
+    if (c === undefined && OPTIONAL[ch] && !P[OPTIONAL[ch]]) { out[ch] = OPT_DEFAULT[ch]; continue; }
+    if (!b) b = basis(knotVector(P), Math.min(Math.max(s, 0), P.length));
+    let v = 0; for (let a = 0; a < 4; a++) v += c[b.first + a] * b.N[a];
+    out[ch] = v;
+  }
+  return out;
+}
+/**
  * The edge angle (degrees) the OLD profile renders at width w and rise rate r: the family's measured floor, each quarter's rise capped at
  * r·w/8 (ref 09 §3), the sum over the four quarters. Exactly adapter.js profileAt's arithmetic, for its last quarter (test: core_cup).
  */
@@ -461,6 +476,6 @@ module.exports = {
   fromPositionFit,
   SCHEMA, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
-  createDoc, roadPiece, flightPiece, appendPiece, endState, pieceEnd, channelAt, knotVector, evenKnots, fitChannel, checkDoc,
+  createDoc, roadPiece, flightPiece, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };
