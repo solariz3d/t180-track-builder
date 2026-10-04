@@ -91,7 +91,7 @@
    "read_closes": true
   },
   {
-   "name": "Aurora Long",
+   "name": "Aurora Cryopticon (long)",
    "median_m": 34,
    "p10_m": 32,
    "p90_m": 53,
@@ -99,7 +99,7 @@
    "read_closes": false
   },
   {
-   "name": "Aurora Medium",
+   "name": "Aurora Cryopticon (medium)",
    "median_m": 34,
    "p10_m": 32,
    "p90_m": 56,

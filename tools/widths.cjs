@@ -9,8 +9,9 @@
 // corpus's own `pct`). Jump stations carry no width and are not counted. On a track whose width swings (Rainbow Road, Nordic) the band is wide: say so
 // in the label, never hide it behind the median.
 // WHAT IS NOT HERE: a read that did not close is still a width read (Miandros: the walk stopped at its limit, FINDINGS §7f), and is listed with
-// `read_closes: false` (so is Aurora Long: the walk stopped at its limit). Aurora Cryopticon is outside the learning library (FINDINGS §7c), so it is here for its
-// width only: tools/corpus.cjs does not take it.
+// `read_closes: false` (so is Aurora Cryopticon (long): the walk stopped at its limit). THE FILE KEEPS THEM, honestly flagged; the DROP-DOWN never offers one
+// (app/core/widthlike.js: a read that does not close is not a lap, so its width is not offered as a reference). Aurora Cryopticon is outside the learning library
+// (FINDINGS §7c), so it is here for its width only: tools/corpus.cjs does not take it.
 'use strict';
 const fs = require('fs'), path = require('path');
 
@@ -21,7 +22,7 @@ const LAYOUTS = [
   ['sakura_speedway', 'Sakura Speedway'], ['coast', 'Coast'], ['ohyeah2389_nordic', 'Nordic'], ['thunderhead_raceway__normal', 'Thunderhead'],
   ['eagleton__eagleton', 'Eagleton'], ['eagleton__eagleton_short', 'Eagleton (short)'], ['ohyeah2389_t180testtrack', 'T-180 Test Track'],
   ['bowltrack_2', 'The Bowltrack'], ['t180_bowltrack', 'T-180 Bowl Track'], ['serpents_spiral', 'Serpents Spiral'], ['Miandros', 'Miandros'],
-  ['cash_auroracryopticon__aurora_medium', 'Aurora Medium'], ['cash_auroracryopticon__aurora_long', 'Aurora Long'],   // Cash's Aurora Cryopticon, read 2026-10-04 (outside the learning library, FINDINGS §7c)
+  ['cash_auroracryopticon__aurora_medium', 'Aurora Cryopticon (medium)'], ['cash_auroracryopticon__aurora_long', 'Aurora Cryopticon (long)'],   // Cash's Aurora Cryopticon, read 2026-10-04 (outside the learning library, FINDINGS §7c)
 ];
 
 function pct(xs, q) {

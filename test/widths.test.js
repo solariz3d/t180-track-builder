@@ -32,15 +32,15 @@ test('row 2: NUMBERS ONLY: a name, three widths, a station count and a flag per 
   assert.ok(!/[\\]|[A-Za-z]:\/|\bUsers\b|reads\/|\.read\.json|\[\s*-?\d/.test(text.replace(/"method":[^\n]*\n/, '')), 'no path, no read file name, no array of numbers (a station or a shape)');
   for (const t of W.tracks) assert.ok(/^[A-Za-z0-9][A-Za-z0-9 ()\-]*$/.test(t.name), `a plain name: ${t.name}`);
   const FINDINGS = fs.readFileSync(path.join(REPO, 'docs/FINDINGS.md'), 'utf8');
-  for (const t of W.tracks) assert.ok(FINDINGS.includes(t.name.replace(/ \(short\)$/, '').replace(/^(T-180 Test Track|The Bowltrack)$/, (m) => (m === 'The Bowltrack' ? 'Bowltrack' : 'Test Track'))), `${t.name}: FINDINGS uses the name`);
+  for (const t of W.tracks) assert.ok(FINDINGS.includes(t.name.replace(/ \((short|medium|long)\)$/, '').replace(/^(T-180 Test Track|The Bowltrack)$/, (m) => (m === 'The Bowltrack' ? 'Bowltrack' : 'Test Track'))), `${t.name}: FINDINGS uses the name`);
 });
 
 test('row 3: the measured table the plan gave, pinned: median and the 10th to 90th percentile in whole metres', () => {
   const want = { Thunderhead: [24, 21, 28], 'T-180 Bowl Track': [22, 21, 25], 'T-180 Test Track': [29, 28, 31], 'Hazen Loop': [29, 28, 32], Eagleton: [30, 29, 34], 'Eagleton (short)': [31, 29, 36], 'The Bowltrack': [30, 30, 33], Centrifuge: [31, 29, 36],
     'Sakura Speedway': [32, 31, 35], Coast: [33, 32, 38], 'Serpents Spiral': [34, 32, 38], Nordic: [38, 29, 53], 'Onuris Long': [39, 36, 45], 'Onuris Medium': [39, 36, 46], 'Onuris Short': [41, 36, 48], 'Rainbow Road': [45, 35, 90], Miandros: [21, 18, 25],
-    'Aurora Medium': [34, 32, 56], 'Aurora Long': [34, 32, 53] };
+    'Aurora Cryopticon (medium)': [34, 32, 56], 'Aurora Cryopticon (long)': [34, 32, 53] };
   for (const [name, [m, a, b]] of Object.entries(want)) { const t = W.tracks.find((x) => x.name === name); assert.ok(t, name); assert.deepEqual([t.median_m, t.p10_m, t.p90_m], [m, a, b], name); }
-  assert.deepEqual(W.tracks.filter((t) => !t.read_closes).map((t) => t.name).sort(), ['Aurora Long', 'Miandros'], 'the two reads that stopped at their limit are flagged');
+  assert.deepEqual(W.tracks.filter((t) => !t.read_closes).map((t) => t.name).sort(), ['Aurora Cryopticon (long)', 'Miandros'], 'the two reads that stopped at their limit are KEPT in the file, flagged read_closes: false (the drop-down is what filters them)');
 });
 
 test('row 4: the committed file is what tools/widths.cjs makes from the reads, byte for byte, when every read is here (skipped, never failed, when reads/ is absent or partial)', (t) => {
