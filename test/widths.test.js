@@ -32,7 +32,7 @@ test('row 2: NUMBERS ONLY: a name, three widths, a station count and a flag per 
   assert.ok(!/[\\]|[A-Za-z]:\/|\bUsers\b|reads\/|\.read\.json|\[\s*-?\d/.test(text.replace(/"method":[^\n]*\n/, '')), 'no path, no read file name, no array of numbers (a station or a shape)');
   for (const t of W.tracks) assert.ok(/^[A-Za-z0-9][A-Za-z0-9 ()\-]*$/.test(t.name), `a plain name: ${t.name}`);
   const FINDINGS = fs.readFileSync(path.join(REPO, 'docs/FINDINGS.md'), 'utf8');
-  for (const t of W.tracks) assert.ok(FINDINGS.includes(t.name.replace(/ \(short\)$/, '').replace(/^(track K|track L)$/, (m) => (m === 'track L' ? 'track L' : 'track K'))), `${t.name}: FINDINGS uses the name`);
+  for (const t of W.tracks) assert.ok(FINDINGS.includes(t.name.replace(/ \((short|medium|long)\)$/, '').replace(/^(track K|track L)$/, (m) => (m === 'track L' ? 'track L' : 'track K'))), `${t.name}: FINDINGS uses the name`);
 });
 
 test('row 3: the measured table the plan gave, pinned: median and the 10th to 90th percentile in whole metres', () => {
@@ -40,7 +40,7 @@ test('row 3: the measured table the plan gave, pinned: median and the 10th to 90
     'track E': [32, 31, 35], 'track F': [33, 32, 38], 'track J': [34, 32, 38], 'track G': [38, 29, 53], 'track D (long)': [39, 36, 45], 'track D (medium)': [39, 36, 46], 'track D (short)': [41, 36, 48], 'track A': [45, 35, 90], 'track M': [21, 18, 25],
     'track N (medium)': [34, 32, 56], 'track N (long)': [34, 32, 53] };
   for (const [name, [m, a, b]] of Object.entries(want)) { const t = W.tracks.find((x) => x.name === name); assert.ok(t, name); assert.deepEqual([t.median_m, t.p10_m, t.p90_m], [m, a, b], name); }
-  assert.deepEqual(W.tracks.filter((t) => !t.read_closes).map((t) => t.name).sort(), ['track N (long)', 'track M'], 'the two reads that stopped at their limit are flagged');
+  assert.deepEqual(W.tracks.filter((t) => !t.read_closes).map((t) => t.name).sort(), ['track N (long)', 'track M'], 'the two reads that stopped at their limit are KEPT in the file, flagged read_closes: false (the drop-down is what filters them)');
 });
 
 test('row 4: the committed file is what tools/widths.cjs makes from the reads, byte for byte, when every read is here (skipped, never failed, when reads/ is absent or partial)', (t) => {
