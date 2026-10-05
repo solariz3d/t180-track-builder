@@ -29,7 +29,7 @@ test('every file the page loads through the loader is inside a folder build.rs c
   // the page's own loads (app/index.html), each the way the page makes it: the app's modules plain, the exporter with
   // the node shim (app/export/export.js makeExporter)
   // D239: the page is the equation builder's alone (app/palette/palette.js went with the Pieces page); it loads the carried panels too
-  for (const entry of ['app/shell.js', 'app/closer.js', 'app/palette/panels.js', 'app/export/export.js', 'app/share/index.js', 'app/install/index.js', 'app/onboarding/index.js']) await loadCjs(entry, get);
+  for (const entry of ['app/core/keys.js', 'app/closer.js', 'app/palette/panels.js', 'app/export/export.js', 'app/share/index.js', 'app/install/index.js', 'app/onboarding/index.js']) await loadCjs(entry, get);
   await loadCjs('src/export/fromwords.js', get, opts);
   await loadCjs('app/core/coreshell.js', get, opts);
   const roots = new Set(copied());

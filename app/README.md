@@ -31,7 +31,7 @@ repository's layout, so a relative `require` means the same thing in the webview
 |---|---|---|
 | `src-tauri/` | A | the native shell: window, file commands (tracks, library, autosave), `write_export`, the folder dialog |
 | `app/index.html` | A | the page and its glue: loads the modules, wires storage to the Tauri commands, keyboard shortcuts |
-| `app/shell.js` | A | the old piece builder's state and actions (D239: no page mounts it; kept for `keyAction`, which the equation page uses, and as the driver of the shared preview and validation tests, see "One builder" below) |
+| `app/shell.js` | A | the old piece builder's state and actions (D239: no page mounts it; its keys MOVED to `app/core/keys.js` (D239 note); kept as the driver of the shared preview and validation tests, see "One builder" below) |
 | `app/lib/cjs.js` | A | runs the program's CommonJS files in the webview |
 | `app/palette/` | A | `panels.js` mounts the panels below (D239: the piece palette, `palette.js`, is removed) |
 | `app/export/` | A | the Export button's logic: the AC guard, and the exporter run in memory (`node-shim.js`) |
@@ -74,7 +74,7 @@ So a panel can report its own failure by returning it.
 - **The camera** reads the head from the path (`path.head` from `src/geom`), not from the shell. The shell holds no
   derived geometry, so the frame is never stored twice.
 
-**Keys (`app/shell.js` `keyAction`, bound in `index.html`):** Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo ·
+**Keys (`app/core/keys.js` `keyAction`, bound to the core shell by its `bindKeys` in `index.html`; moved from `app/shell.js`, D239):** Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo ·
 Ctrl+Backspace remove the head (a bare Backspace does nothing: it is too easy to hit by accident) · Ctrl+S save. A
 panel that wants a key asks for it in this file first, so two panels never bind the same one.
 
@@ -101,7 +101,7 @@ form pruned). `shell.backupNow(reason)` writes the track as it is now; the Close
 
 **Removed** (no page mounts them any more): `app/palette/palette.js` (the piece palette), `app/handles/` (word handles),
 `app/texture/index.js` (the per-word textures panel), `app/onboarding/defaults.js` (the piece palette's first-run pickers).
-**Kept, and why:** `app/shell.js`: the equation page binds its keys through `keyAction`, and 23 test files and three scripts (bench, prove_render, soak) drive the
+**Kept, and why:** `app/shell.js`: its keys moved to `app/core/keys.js` and the page no longer loads it, but 23 test files and three scripts (bench, prove_render, soak) drive the
 shared preview, validation and export code through it (porting them to the core shell is its own lap); `app/palette/panels.js` (mounts every panel);
 `app/texture/panel.js` (the core's road surface uses its `nameFromFile`); `app/texmaker/` (the texture maker: it was reachable only
 through the removed per-word panel, so it is mounted nowhere now; whether the equation page gets it is the keeper's call);

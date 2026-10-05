@@ -272,22 +272,7 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
   return api;
 }
 
-/**
- * The app's keys, from a key event to an action name (or null). Pure, so it is tested headless; app/index.html calls it.
- * REMOVING THE HEAD TAKES Ctrl+Backspace (or Cmd+Backspace). A bare Backspace does nothing: it is the key most often hit
- * by accident, and a confirm step would interrupt every deliberate removal, which is one undo step anyway. So the guard
- * is a modifier, not a dialog. While a field has focus, no key reaches the track. Letters without Ctrl belong to the
- * panels (the cameras use them).
- */
-function keyAction({ key, ctrlKey, metaKey, shiftKey, inField }) {
-  if (inField) return null;
-  const ctrl = ctrlKey || metaKey, k = String(key || '').toLowerCase();
-  if (!ctrl) return null;
-  if (k === 'z') return shiftKey ? 'redo' : 'undo';
-  if (k === 'y') return 'redo';
-  if (k === 's') return 'save';
-  if (k === 'backspace') return 'removeHead';
-  return null;
-}
+// The app's keys moved to app/core/keys.js (D239 note); re-exported here, unchanged, for this file's tests and drivers.
+const { keyAction } = require('./core/keys.js');
 
 module.exports = { createShell, PICKERS, NAME_RE, keyAction };
