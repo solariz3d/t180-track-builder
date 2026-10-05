@@ -186,7 +186,10 @@
       panels = await loadCjs('app/palette/panels.js', get);
       RG = await loadCjs('app/validate-ui/redgroups.js', get);   // D242: every red in plain words, grouped, with where
       exporter = await (await loadCjs('app/export/export.js', get)).makeExporter(get);
-      shell = await C.createCoreShell({ storage, exporter, now: () => performance.now() });
+      // D240 follow-up: a preview's overlap check runs in a Web Worker (app/core/overlapworker.js), so the page never freezes for it; a page with no worker checks on the spot, as before
+      let overlapRunner = null;
+      try { overlapRunner = (await loadCjs('app/core/overlaprunner.js', get)).createWorkerRunner({ win: window }); } catch (e) { overlapRunner = null; }
+      shell = await C.createCoreShell({ storage, exporter, now: () => performance.now(), overlapRunner });
       closeDirty = () => !!shell.getState().dirty;   // the X asks to save unsaved work (closeAsk above)
     } catch (e) { $('palette').textContent = `The equation builder could not start: ${e.message}`; return; }
     const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };

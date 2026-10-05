@@ -44,17 +44,27 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
   const proposalBox = el('div', { 'aria-label': 'delete preview', class: 'head' });
   const focus = (s) => fire('t180-camera-focus', { s });
   const placeButton = (it, text) => el('button', { text, title: `${it.what}${it.detail ? `: ${it.detail}` : ''}: show it`, class: 'linkish', onclick: () => focus(it.s) });
+  let tick = 0;   // D240 follow-up: while the overlap check runs off the thread the line counts the seconds, redrawn twice a second
   const drawProposal = (p) => {
+    if (tick) { win.clearTimeout(tick); tick = 0; }
     applyBtn.style.display = cancelBtn.style.display = p ? '' : 'none';
     if (!p) { proposalBox.replaceChildren(); return; }
+    const ck = shell.proposalCheck(p);
+    applyBtn.disabled = ck.status !== 'done';   // Apply waits for the overlap result
     const after = p.displacement.filter((x) => x.piece >= p.from), moved = after.filter((x) => x.maxM > 1e-3).sort((a, b) => b.maxM - a.maxM), still = after.length - moved.length;
     const first = moved.length ? moved.find((x) => x.piece === p.from) : null;
     const kids = [
       el('p', { text: `Preview: ${plural(p.removed.length, 'piece')} (${p.removed[0]}${p.removed.length > 1 ? ` to ${p.removed[p.removed.length - 1]}` : ''}) would be taken out of the middle of the track. The two sides are joined again at the gap${first ? `, which changes the start of ${first.id} (up to ${first.maxM.toFixed(first.maxM < 10 ? 2 : 1)} m)` : ''}, and everything after the gap moves along with it. The see-through track on the preview is the result.` }),
       el('p', { text: moved.length ? `Moves: ${moved.slice(0, 8).map((x) => `${x.id} up to ${x.maxM.toFixed(x.maxM < 10 ? 2 : 1)} m`).join(', ')}${moved.length > 8 ? `, and ${moved.length - 8} more` : ''}; ${plural(still, 'piece')} after the gap keep${still === 1 ? 's' : ''} ${still === 1 ? 'its' : 'their'} place; everything before the gap is exactly as it was.` : 'Nothing after the gap moves by more than a millimetre.' })];
-    const groups = RG.groupReds([...p.check.overlaps, ...p.check.others], p.resolved.segments);
-    if (!groups.length) kids.push(el('p', { text: 'No overlap and no red on the track after the delete.' }));
-    for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The track would OVERLAP ITSELF' : g.title} (${g.count}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.items.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));
+    if (ck.status !== 'done' && ck.status !== 'failed') {
+      kids.push(el('p', { 'aria-label': 'overlap check', text: `Checking the track for overlaps… ${Math.floor(ck.elapsedMs / 1000)} s. Apply is off until this finishes; Cancel stops it.` }));
+      tick = win.setTimeout(() => { tick = 0; const st = shell.getState(); drawProposal(st.deleteProposal && st.deleteProposal.base === st.history.present ? st.deleteProposal : null); }, 500);
+    } else if (ck.status === 'failed') kids.push(el('p', { 'aria-label': 'overlap check', text: `The overlap check could not run: ${ck.error}. Cancel and delete again.`, style: 'color: var(--bad)' }));
+    else {
+      const groups = RG.groupReds([...ck.result.overlaps, ...ck.result.others], p.resolved.segments);
+      if (!groups.length) kids.push(el('p', { 'aria-label': 'overlap check', text: 'No overlap and no red on the track after the delete.' }));
+      for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The track would OVERLAP ITSELF' : g.title} (${g.count}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.items.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));
+    }
     proposalBox.replaceChildren(...kids);
   };
 
@@ -129,7 +139,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
     selection: [el('h3', { text: 'Selected pieces' }), selInfo, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'name' }), nameIn)), el('div', { class: 'actions' }, saveBtn, delBtn, clearBtn), why, el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox],
     library: [el('h3', { text: 'Pieces library' }), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'mirror on insert' }), mirror)), listBox, listNote],
   };
-  return { nodes, layer, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };
+  return { nodes, layer, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); if (tick) win.clearTimeout(tick); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };
 }
 
 module.exports = { mount, describe, CLICK_PX };

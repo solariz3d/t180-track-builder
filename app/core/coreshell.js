@@ -40,10 +40,9 @@ const { extend } = require('../../src/core/extend.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
 const { close, closeWindow } = require('../../src/core/close.js');
-// D242: the close preview's overlap check builds the closed track's mesh and validates it as the export does (src/export/fromwords.js)
-const G = require('../../src/geom/index.js');
-const V = require('../../src/validate/index.js');
-const { walkScene, isDrivable } = require('../../src/export/markers.js');
+// D242: the close preview's overlap check builds the closed track's mesh and validates it as the export does (src/export/fromwords.js). D240 follow-up: it lives in
+// app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
+const { overlapCheck } = require('./overlapjob.js');
 const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
@@ -74,7 +73,7 @@ const BRUSH_MODES = Object.freeze(['local', 'rate']);
 const callTimers = { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (t) => clearTimeout(t) };
 const exportError = (code, message) => Object.assign(new Error(message), { name: 'ExportError', code });
 
-async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers } = {}) {
+async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers, overlapRunner = null } = {}) {
   const ok = (msg) => ({ message: msg, messageKind: 'ok' });
   // AUTOSAVE (D239): what the last session left behind, read once at the start (the header says what happens to each kind)
   const canAutosave = !!storage && typeof storage.saveAutosave === 'function';
@@ -112,11 +111,12 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
     message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
-    selection: null, deleteProposal: null, libraryStamp: 0,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
+    selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
   };
   // a Pieces autosave that could not be kept aside is never overwritten: this session simply does not autosave
   const mayAutosave = canAutosave && !(recovery && recovery.blocked);
   const subs = new Set();
+  let currentJob = null;   // D240 follow-up: the overlap check running for the preview on screen: { entry, job }
   let autoDue = false, autoTimer = null;
   const set = (patch) => {
     if ('message' in patch && !('messageKind' in patch)) patch = { ...patch, messageKind: patch.message ? 'error' : null };
@@ -127,6 +127,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (patch.history && st.deleteProposal && !('deleteProposal' in patch) && patch.history.present !== st.deleteProposal.base) patch = { ...patch, deleteProposal: null };
     const before = st.history.present;
     st = Object.freeze({ ...st, ...patch });
+    // D240 follow-up: the overlap check belongs to the preview it was started for; when that preview goes (Cancel, an edit, an Undo, another selection) the check is STOPPED (the worker terminated)
+    if (st.proposalCheck && st.proposalCheck.proposal !== st.closeProposal && st.proposalCheck.proposal !== st.deleteProposal) { abortCheck(); st = Object.freeze({ ...st, proposalCheck: null }); }
     if (mayAutosave && st.dirty && st.history.present !== before) {
       autoDue = true;
       if (autosaveMs > 0) { if (autoTimer) timers.clearTimeout(autoTimer); autoTimer = timers.setTimeout(() => { autoTimer = null; return writeAutosave(); }, autosaveMs); }
@@ -143,6 +145,30 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     autoDue = false;
     if (autoTimer) { timers.clearTimeout(autoTimer); autoTimer = null; }
     if (mayAutosave && typeof storage.clearAutosave === 'function') await storage.clearAutosave();
+  }
+  // ── D240 follow-up: THE OVERLAP CHECK OFF THE UI THREAD (the keeper reads a 10 s freeze as broken: Close's preview took 13.4 s on TEST 1, a middle delete's 8.5 to 10.3 s on 13 km) ──
+  // With an overlapRunner (the page's: a Web Worker) a preview is shown AT ONCE (the ghost and the per-piece displacement) and its overlap check runs off the thread: state.proposalCheck is
+  // { proposal, status 'checking' | 'done' | 'failed', result, error, startedAt, ms, via }, Apply is refused until it is 'done', and Cancel (or any change that drops the preview) terminates the worker.
+  // With no runner (the tests, and a page that cannot make a worker is handled below) the check is run on the spot, exactly as it always was, and the proposal carries it as .check.
+  function abortCheck() { const j = currentJob; currentJob = null; if (j && j.job) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
+  const checkOf = (p) => (p.check || (st.proposalCheck && st.proposalCheck.proposal === p && st.proposalCheck.status === 'done' ? st.proposalCheck.result : null));
+  /** Start the check of proposal `p` (whose document is `d`) and return its entry, for the caller to set as state.proposalCheck together with the proposal; `onDone(entry)` gives the state patch (the message) to set when it ends. A worker that cannot start falls back to the page, AFTER the preview has painted. */
+  function beginCheck(p, d, closed, onDone) {
+    abortCheck();
+    const speed = Number.isFinite(st.designSpeedKmh) && st.designSpeedKmh > 0 ? st.designSpeedKmh : null;
+    let job = null;
+    if (overlapRunner) { try { job = overlapRunner.start({ doc: d, designSpeedKmh: speed, closed }); } catch (e) { job = null; } }
+    const entry = Object.freeze({ proposal: p, status: 'checking', startedAt: now(), via: job ? 'worker' : 'page', result: null, error: null, ms: null });
+    currentJob = { entry, job };
+    const run = job ? job.promise : new Promise((res, rej) => timers.setTimeout(() => { try { res(overlapCheck(p.resolved, speed, { closed })); } catch (e) { rej(e); } }, 0));
+    const finish = (r) => {
+      if (!currentJob || currentJob.entry !== entry) return;   // cancelled, replaced or dropped meanwhile: this answer is stale
+      currentJob = null;
+      const done = Object.freeze({ ...entry, ...r, ms: now() - entry.startedAt });
+      set({ proposalCheck: done, ...onDone(done) });
+    };
+    run.then((result) => finish({ status: 'done', result: Object.freeze(result) }), (e) => { if (!(e && e.cancelled)) finish({ status: 'failed', error: String((e && e.message) || e) }); });
+    return entry;   // the caller puts it in the SAME state change as the preview (a panel drawn for the preview must already see its check)
   }
   const doc = () => st.history.present;
   let reads = [], readsFor = null;
@@ -280,15 +306,19 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         if (!res.converged) return set({ message: res.report, closeProposal: null });   // the whole-lap close hands back a best try; a local one has refused already
         const r = resolvedOf(res.doc), ms = now() - t0;
         const proposal = Object.freeze({ base, doc: res.doc, resolved: r.resolved, whole: !!whole, window: res.window, report: res.report, ms,
-          displacement: Object.freeze(displacementOf(base, res.doc)), check: Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh)) });
+          displacement: Object.freeze(displacementOf(base, res.doc)), check: overlapRunner ? null : Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh)) });
         const moved = proposal.displacement.filter((x) => x.maxM > 1e-3);
-        return set({ closeProposal: proposal, ...ok(`close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move${proposal.check.overlaps.length ? `; the closed track OVERLAPS ITSELF in ${proposal.check.overlaps.length} place${proposal.check.overlaps.length === 1 ? '' : 's'}` : ''}. Apply or cancel`) });
+        const words = (ck) => `close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move${ck.overlaps.length ? `; the closed track OVERLAPS ITSELF in ${ck.overlaps.length} place${ck.overlaps.length === 1 ? '' : 's'}` : ''}. Apply or cancel`;
+        if (!overlapRunner) return set({ closeProposal: proposal, ...ok(words(proposal.check)) });
+        const entry = beginCheck(proposal, res.doc, true, (e) => (e.status === 'done' ? ok(words(e.result)) : { message: `the overlap check could not run: ${e.error}. Cancel the preview and try Close again` }));
+        return set({ closeProposal: proposal, proposalCheck: entry, ...ok(`close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move. Checking for overlaps: Apply is off until that finishes (Cancel stops it)`) });
       });
     },
     async applyClose() {
       const p = st.closeProposal;
       if (!p) return set({ message: 'nothing to apply: press Close first' });
       if (p.base !== doc()) return set({ closeProposal: null, message: 'the track changed since the close preview: press Close again' });
+      if (!checkOf(p)) return set({ message: 'the overlap check of this preview has not finished: Apply when it has (Cancel drops the preview)' });
       // the document AS IT IS NOW goes to track-backups first (backupNow, D239 amendment: the keeper lost TEST 1 to one Close, with no copy from before
       // it), so a Close can be undone after the app is closed. A copy that fails (throws or rejects) refuses the close by name, and nothing changes
       try { await api.backupNow('pre-close'); } catch (e) { return set({ message: `not closed: the copy from before the close could not be written (${e && e.message || e}); nothing changed` }); }
@@ -297,6 +327,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return set({ history: D.commit(st.history, p.doc), resolved: p.resolved, resolveError: null, dirty: true, closeProposal: null, lastStep: { op: 'close', ms: p.ms }, ...ok(`loop closed: ${p.report}`) });
     },
     cancelClose: () => set({ closeProposal: null, message: null }),
+    /**
+     * The overlap check of a preview (a closeProposal or a deleteProposal), for the panels: { status: 'done' | 'checking' | 'failed' | 'none', result, error, via, elapsedMs }. A preview made with no runner
+     * carries its check, so it reads 'done' at once; with one it reads 'checking' until the worker answers. Apply is refused until 'done'.
+     */
+    proposalCheck(p) {
+      if (p && p.check) return { status: 'done', result: p.check, error: null, via: 'page', elapsedMs: 0 };
+      const e = st.proposalCheck;
+      if (!p || !e || e.proposal !== p) return { status: 'none', result: null, error: null, via: null, elapsedMs: 0 };
+      return { status: e.status, result: e.result, error: e.error, via: e.via, elapsedMs: e.status === 'checking' ? now() - e.startedAt : e.ms };
+    },
 
     /**
      * D240, SAVED PIECES, THE UI HALF (the core is src/core/piece.js; the keeper: "can we keep only the equation mode? And then we can save pieces from that we make", and
@@ -392,15 +432,19 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return attempt(() => {
         const t0 = now(), res = PC.deleteRun(d, s.from, s.to), r = resolvedOf(res), ms = now() - t0;
         const proposal = Object.freeze({ base: d, doc: res, resolved: r.resolved, from: s.from, to: s.to, removed: Object.freeze(s.ids.slice()), ms,
-          displacement: Object.freeze(displacementAfterDelete(d, res)), check: Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh, { closed: !!res.closed })) });
+          displacement: Object.freeze(displacementAfterDelete(d, res)), check: overlapRunner ? null : Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh, { closed: !!res.closed })) });
         const after = proposal.displacement.filter((x) => x.piece >= s.from), moved = after.filter((x) => x.maxM > 1e-3), n = s.to - s.from + 1;
-        return set({ deleteProposal: proposal, ...ok(`delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move${proposal.check.overlaps.length ? `; the track OVERLAPS ITSELF in ${proposal.check.overlaps.length} place${proposal.check.overlaps.length === 1 ? '' : 's'}` : ''}. Apply or cancel`) });
+        const words = (ck) => `delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move${ck.overlaps.length ? `; the track OVERLAPS ITSELF in ${ck.overlaps.length} place${ck.overlaps.length === 1 ? '' : 's'}` : ''}. Apply or cancel`;
+        if (!overlapRunner) return set({ deleteProposal: proposal, ...ok(words(proposal.check)) });
+        const entry = beginCheck(proposal, res, !!res.closed, (e) => (e.status === 'done' ? ok(words(e.result)) : { message: `the overlap check could not run: ${e.error}. Cancel the preview and delete again` }));
+        return set({ deleteProposal: proposal, proposalCheck: entry, ...ok(`delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move. Checking for overlaps: Apply is off until that finishes (Cancel stops it)`) });
       });
     },
     async applyDelete() {
       const p = st.deleteProposal;
       if (!p) return set({ message: 'nothing to apply: press Delete on the selected pieces first' });
       if (p.base !== doc()) return set({ deleteProposal: null, message: 'the track changed since the delete preview: select the pieces and delete again' });
+      if (!checkOf(p)) return set({ message: 'the overlap check of this preview has not finished: Apply when it has (Cancel drops the preview)' });
       // as Close: the track AS IT IS NOW goes to track-backups first, and a copy that fails refuses the delete by name, with nothing changed
       try { await api.backupNow('pre-delete'); } catch (e) { return set({ message: `not deleted: the copy from before the delete could not be written (${e && e.message || e}); nothing changed` }); }
       if (st.deleteProposal !== p || p.base !== doc()) return set({ deleteProposal: null, message: 'the track changed while its copy was being written: select the pieces and delete again' });
@@ -601,18 +645,6 @@ function thumbOf(piece) {
     const r1 = (v) => Math.round(v * 10) / 10;
     return { w: W, h: H, points: pick.map((p) => [r1(ox + k * (p[0] - x0)), r1(oz + k * (p[1] - z0))]) };
   } catch (e) { return null; }
-}
-const OVERLAP = new Set(['self-intersection', 'stacked-within-2m', 'downforce-ray-gap']);
-/**
- * D242: THE OVERLAP CHECK of a proposed (closed) track: its mesh with the self-check, then the validator with the built road for the downforce ray,
- * the same checks the export runs (src/export/fromwords.js buildFromSegments). Returns { overlaps (the road running into itself: self-intersection,
- * stacked, a downforce ray that meets another road), others (every other red), amber (count) }.
- */
-function overlapCheck(resolved, designSpeedKmh, { closed = true } = {}) {   // D240: `closed: false` for the open track a delete leaves
-  const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
-  const mesh = G.buildMesh(p, segs, { selfCheck: true }), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
-  const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, ...(Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : {}) });
-  return { overlaps: v.red.filter((x) => OVERLAP.has(x.reason)), others: v.red.filter((x) => !OVERLAP.has(x.reason)), amber: v.amber.length };
 }
 /** The road pieces the user built exactly straight and level (κh, κv and φ all exactly 0): close.js is told to go round them. */
 function straightPieces(doc) { return doc.pieces.map((P, i) => (P.type === 'road' && ['kh', 'kv', 'phi'].every((ch) => P.channels[ch].every((c) => c === 0)) ? i : -1)).filter((i) => i >= 0); }
