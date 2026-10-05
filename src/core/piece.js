@@ -138,9 +138,13 @@ function checkPiece(piece) {
   const want = D.CHANNELS.filter((ch) => STATE.includes(ch) && hasChannel(first, ch));
   for (const k of Object.keys(piece.start)) if (!want.includes(k)) bad('BAD_PIECE_START', `start has "${k}", which this ${sig} run does not carry (it needs ${want.join(', ')})`);
   for (const ch of want) { const v = piece.start[ch]; if (!isNum(v)) bad('BAD_PIECE_START', `start needs a finite ${ch} (the run carries it), got ${JSON.stringify(v)}`); out.start[ch] = q(v, D.DEC[ch]); }
-  // the run as the document would hold it: its own joints (C1 in every channel), cup, tube and edge limits, flights, all by the document's own checks
-  const i0 = out.pieces.indexOf(first); let scratch = D.createDoc('piece check');
-  for (const P of absolute(out).slice(i0)) scratch = D.appendPiece(scratch, P);
+  // the run as the document would hold it: its own joints (C1 in every channel), cup, tube and edge limits, flights, all by the document's own checks.
+  // ONE checkDoc of the assembled run (C's D240 F1): appending piece by piece re-checked the whole growing document each time, so the time grew with
+  // the square of the run (800 pieces took about 1 s). appendPiece adds nothing checkDoc lacks here: its CLOSED check cannot fire on this fresh scratch
+  // document, and the ids and nextId are the ones it would have given (p1..pN, N + 1). checkDoc walks the pieces in order and judges each one against
+  // the one before it only, so the first failure, its code and its message are the same.
+  const i0 = out.pieces.indexOf(first), run = absolute(out).slice(i0).map((P, k) => ({ ...P, id: `p${k + 1}` }));
+  D.checkDoc({ ...D.createDoc('piece check'), nextId: run.length + 1, pieces: run });
   return out;
 }
 
