@@ -229,7 +229,7 @@ test('row 14: the camera panel\'s buttons send the events the preview takes, fol
 
 test('row 15: the whole lap is the preview\'s: nothing in src/, the export or the document changed (the diff against the base), and the sealed fixtures are untouched', () => {
   const root = path.resolve(__dirname, '..', '..');
-  let changed; try { changed = execFileSync('git', ['diff', '--name-only', '510510e9', '--', 'src', 'app/export', 'test/fixtures', 'src-tauri'], { cwd: root, encoding: 'utf8' }).trim(); } catch (e) { return; }   // not a checkout with that base: nothing to compare
+  let changed; try { changed = execFileSync('git', ['diff', '--name-only', '510510e9', 'fa5fd93', '--', 'src', 'app/export', 'test/fixtures', 'src-tauri'], { cwd: root, encoding: 'utf8' }).trim(); } catch (e) { return; }   // not a checkout with those commits: nothing to compare. D242 (B): D237's lap is 510510e9..fa5fd93; diffing the working tree failed every later lap that edits src/ (D242's close.js)
   assert.equal(changed, '', `touched: ${changed}`);
   assert.ok(fs.existsSync(path.join(root, 'app', 'preview', 'guides.js')));
 });

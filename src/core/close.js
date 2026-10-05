@@ -75,8 +75,8 @@ function checkSeamKinds(doc) {
     if (Math.abs(E[0]) > EDGE_SEAM_TOL || Math.abs(E[1]) > EDGE_SEAM_TOL) throw new D.CoreError('EDGE_SEAM', `close: the lap would join an edge (e ${E[0]}°, slope ${E[1]}) to a piece with none at the seam; bring the edge back to 0 before the end of the lap, or give both ends an edge`);
   }
 }
-function parameters(doc, edited) {
-  const cols = [], expand = {};
+function parameters(doc, edited, free = null) {
+  const cols = [], expand = {}, fixedOf = (p) => !!free && !free.has(p);   // D242: a LOCAL close's columns outside its window are fixed (never moved)
   for (const ch of activeChannels(doc)) {
     expand[ch] = doc.pieces.map(() => null);
     let prev = -1;
@@ -90,17 +90,18 @@ function parameters(doc, edited) {
           if (edited.has(p)) for (const [c] of e[i]) cols[c].edited = true;
           continue;
         }
-        e[i] = [[cols.length, 1]]; cols.push({ ch, p, i, edited: edited.has(p) });
+        e[i] = [[cols.length, 1]]; cols.push({ ch, p, i, edited: edited.has(p), fixed: fixedOf(p) });
       }
       expand[ch][p] = e; prev = p;
     });
   }
   return { cols, expand };
 }
-/** The document with every channel rebuilt from the parameter vector x (joints follow; nothing quantised). */
-function apply(doc, expand, x, quantise) {
+/** The document with every channel rebuilt from the parameter vector x (joints follow; nothing quantised). `keep` (D242, a local close): pieces returned
+ *  AS THEY ARE, the very same objects, because no free column reaches them, so they stay bit-identical rather than recomputed from their own values. */
+function apply(doc, expand, x, quantise, keep = null) {
   return { ...doc, pieces: doc.pieces.map((P, p) => {
-    if (P.type !== 'road') return P;
+    if (P.type !== 'road' || (keep && keep.has(p))) return P;
     const channels = { ...P.channels };
     for (const ch of Object.keys(expand)) channels[ch] = expand[ch][p].map((terms) => { const v = terms.reduce((s, [c, k]) => s + k * x[c], 0); return quantise ? q(v, D.DEC[ch]) : v; });
     return { ...P, channels };
@@ -205,8 +206,13 @@ function close(doc, opts = {}) {
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0);
   const cupBoth = !!(doc.pieces[roadIdx[0]].cup && doc.pieces[roadIdx[roadIdx.length - 1]].cup);
   const held = heldCup(doc.pieces[roadIdx[0]], doc.pieces[roadIdx[roadIdx.length - 1]]);
-  const edited = new Set(opts.edited || [roadIdx[roadIdx.length - 1]]), wEdit = opts.wEdit || 1e6, tolM = opts.tolM || 1e-3, maxIter = opts.maxIter || 30;
-  const { cols, expand } = parameters(doc, edited), N = cols.length, winv = cols.map((c) => (c.edited ? 1 / wEdit : 1));
+  // D242: a LOCAL close (opts.window, the piece indices allowed to move): only their control points are variables, every other piece is kept as it is
+  const local = opts.window !== undefined && opts.window !== null, win = local ? windowOf(doc, opts.window) : null, free = win ? win.set : null;
+  const edited = local ? new Set() : new Set(opts.edited || [roadIdx[roadIdx.length - 1]]), wEdit = opts.wEdit || 1e6, tolM = opts.tolM || 1e-3, maxIter = opts.maxIter || 30;
+  const { cols, expand } = parameters(doc, edited, free), N = cols.length, winv = cols.map((c) => (c.fixed ? 0 : c.edited ? 1 / wEdit : 1));
+  const keep = local ? keptPieces(doc, expand, cols) : null;   // the pieces no free column reaches: returned as the very same objects
+  const refuse = (why) => new D.CoreError('CLOSE_WINDOW', `close: can't close using only ${win.text}: ${why}. Widen the window or reshape the end`);
+  const solve = (M, rhs) => { try { return solveOrRefuse(M, rhs); } catch (e) { if (local && e.code === 'CLOSE_SINGULAR') throw refuse('the closing equations cannot be met by moving only these pieces'); throw e; } };
   let x = Float64Array.from(cols, (c) => doc.pieces[c.p].channels[c.ch][c.i]);
   const angleTol = 1e-9, done = (m) => m.gapM < tolM && m.r.slice(3).every((v) => Math.abs(v) < angleTol);
   const merit = (m) => m.gapM + 100 * m.r.slice(3).reduce((s, v) => s + Math.abs(v), 0);   // for step halving only: 1 rad ~ 100 m
@@ -219,7 +225,7 @@ function close(doc, opts = {}) {
     else { const a = 3 / hEnd(doc.pieces[L]), b = 3 / hStart(doc.pieces[F]); put(L, nL - 1, a); put(L, nL - 2, -a); put(F, 1, -b); put(F, 0, b); }
     return row; };
 
-  let work = apply(doc, expand, x, false), m = residual(work), it = 0;
+  let work = apply(doc, expand, x, false, keep), m = residual(work), it = 0;
   for (; it < maxIter && !done(m); it++) {
     const Jp = positionJacobian(work), nr = netRows(work), J = [];
     for (let k = 0; k < 3; k++) { const row = new Float64Array(N); toCols('kh', Jp.kh, row, k); toCols('kv', Jp.kv, row, k); J.push(row); }
@@ -230,15 +236,27 @@ function close(doc, opts = {}) {
     for (const ch of D.CHANNELS) { if (!seamJoined(ch, seamOf(doc))) continue; J.push(valueRow(ch, 'slope')); }
     // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹ r (ref 04 §3)
     const M = J.map((a) => J.map((b) => { let s = 0; for (let k = 0; k < N; k++) s += a[k] * winv[k] * b[k]; return s; }));
-    const y = solveOrRefuse(M, m.r.map((v) => -v)), delta = new Float64Array(N);
+    const y = solve(M, m.r.map((v) => -v)), delta = new Float64Array(N);
     J.forEach((row, i) => { for (let k = 0; k < N; k++) delta[k] += winv[k] * row[k] * y[i]; });
     let alpha = 1, xn, wn, mn;                                  // halve the step while it makes things worse (E's rule, not a formula)
-    for (let hh = 0; hh < 12; hh++, alpha /= 2) { xn = x.map((v, k) => v + alpha * delta[k]); wn = apply(doc, expand, xn, false); mn = residual(wn); if (merit(mn) < merit(m)) break; }
+    for (let hh = 0; hh < 12; hh++, alpha /= 2) { xn = x.map((v, k) => v + alpha * delta[k]); wn = apply(doc, expand, xn, false, keep); mn = residual(wn); if (merit(mn) < merit(m)) break; }
     x = xn; work = wn; m = mn;
   }
   // what is STORED is quantised (README): measure the quantised document, and report that
-  const stored = apply(doc, expand, x, true), ms = residual(stored), converged = done(m) && ms.gapM < 0.01;
-  const out = freeze(D.checkDoc({ ...stored, closed: converged }));
+  const stored = apply(doc, expand, x, true, keep), ms = residual(stored), converged = done(m) && ms.gapM < 0.01;
+  // D242: a local close that does not close is a REFUSAL by name, never a best try handed back: the window could not do it, and nothing outside it may help
+  if (local && !converged) throw refuse(`it gets no closer than ${ms.gapM.toFixed(3)} m (tangent ${ms.tangentRad.toExponential(1)} rad) in ${it} step(s)`);
+  let out;
+  try { out = freeze(D.checkDoc({ ...stored, closed: converged })); } catch (e) {
+    if (local && e.name === 'CoreError') throw refuse(`the closed track would break a limit of the document (${e.code}: ${e.message})`);
+    throw e;
+  }
+  if (local) {   // the roll-rate bar (src/validate: 20 m chord), read in the window only: a close may not push the window past it (a red that was already there elsewhere is not the close's)
+    const V = require('../validate/index.js');
+    const rollIn = (d, closed) => { const { path } = toPath({ ...d, closed }); let mx = 0; for (const q of V._internal.rollRates(path.samples, () => true, closed, path.lengthM)) if (q.s >= win.fromS - 1e-9) mx = Math.max(mx, q.rate); return mx; };
+    const after = rollIn(out, true);
+    if (after > V.ROLL_RED_DEG_M) { const before = rollIn(doc, false); if (after > before + 1e-9) throw refuse(`the road would roll too fast there: ${after.toFixed(3)}°/m over 20 m, past the ${V.ROLL_RED_DEG_M}°/m bar (it was ${before.toFixed(3)}°/m)`); }
+  }
   if (held && converged) {   // never converged over a step: the seam's curve, measured on the segments the lap will be drawn from
     const lap = jointSteps(toSegments({ ...out, closed: true }), true).find((x) => x.lap);
     if (lap && lap.m > SEAM_MAX_M) throw new D.CoreError('CUP_SEAM', `close: the lap seam would step ${(lap.m * 1000).toFixed(2)} mm (more than ${SEAM_MAX_M * 1000} mm) between the cup and the legacy piece at the start: the closing piece is too short to fade one into the other; lengthen it`);
@@ -247,9 +265,52 @@ function close(doc, opts = {}) {
   const endE = D.pieceEnd(stored.pieces[roadIdx[roadIdx.length - 1]]).c.v, startP = stored.pieces[roadIdx[0]];
   const cupSeamStepDeg = cupBoth || !(startP.cup || stored.pieces[roadIdx[roadIdx.length - 1]].cup) ? 0 : Math.abs(endE - (startP.cup ? startP.channels.c[0] : D.legacyEdgeDeg(startP.family, startP.channels.w[0], startP.channels.r[0])));
   return { doc: out, converged, iterations: it, turns: ms.turns, gapM: ms.gapM, tangentRad: ms.tangentRad, cupSeamStepDeg,
+    window: win ? { pieces: [...win.set].sort((a, b) => a - b), ids: win.ids, fromS: win.fromS, lengthM: win.lengthM, text: win.text } : null,
     residual: Object.fromEntries(ms.names.map((n, i) => [n, ms.r[i]])),
     report: converged ? `closed in ${it} step(s): ${(ms.gapM * 1000).toFixed(3)} mm, tangent ${ms.tangentRad.toExponential(1)} rad${cupSeamStepDeg > D.CUP_JOINT_DEG ? `; the cup steps ${cupSeamStepDeg.toFixed(2)}° at the seam (a cup meets a legacy piece there)` : ''}`
       : `NOT CLOSED after ${it} step(s): ${ms.gapM.toFixed(4)} m, tangent ${ms.tangentRad.toExponential(1)} rad` };
 }
 
-module.exports = { close, residual, parameters, positionJacobian, netRows };
+/**
+ * D242, THE LOCAL CLOSE's window (the keeper, TEST 1: "completing the loop altered the rest of the track equation": the whole-lap close moved
+ * every control point, the 1,000 m opening straight's heading rate by 0.00204 rad/m, and the lap ran into itself). `spec` is the piece indices
+ * allowed to move. Only road pieces count; at least one must be given. Returns { set, ids, fromS (the window's start along the lap),
+ * lengthM, text } where text names it for a person ("the last 1,234 m (p44–p46)").
+ */
+function windowOf(doc, spec) {
+  if (!Array.isArray(spec)) throw new D.CoreError('CLOSE_WINDOW', 'close: a window is a list of the pieces allowed to move');
+  const set = new Set(spec.filter((i) => Number.isInteger(i) && doc.pieces[i] && doc.pieces[i].type === 'road'));
+  if (!set.size) throw new D.CoreError('CLOSE_WINDOW', 'close: the window holds no road piece: give it at least the last piece');
+  const starts = []; let s = 0; for (const P of doc.pieces) { starts.push(s); s += P.length; }
+  const idx = [...set].sort((a, b) => a - b), fromS = starts[idx[0]], lengthM = idx.reduce((a, i) => a + doc.pieces[i].length, 0);
+  const ids = idx.map((i) => doc.pieces[i].id), contiguousTail = idx.every((v, k) => k === 0 || v === idx[k - 1] + 1) && idx[idx.length - 1] === doc.pieces.length - 1;
+  const span = ids.length === 1 ? ids[0] : `${ids[0]}–${ids[ids.length - 1]}`;
+  const text = `${contiguousTail ? 'the last ' : ''}${Math.round(lengthM).toLocaleString('en-US')} m (${contiguousTail ? span : ids.join(', ')})`;
+  return { set, ids, fromS, lengthM, text };
+}
+/** The pieces no free column reaches (a local close): every term of every one of their control points names only fixed columns. */
+function keptPieces(doc, expand, cols) {
+  const keep = new Set();
+  doc.pieces.forEach((P, p) => {
+    if (P.type !== 'road') return;
+    let reached = false;
+    for (const ch of Object.keys(expand)) { const e = expand[ch][p]; if (e && e.some((terms) => terms.some(([c]) => !cols[c].fixed))) { reached = true; break; } }
+    if (!reached) keep.add(p);
+  });
+  return keep;
+}
+/**
+ * The DEFAULT window for the app's Close (D242): the trailing road pieces that cover at least `fraction` of the lap (default 0.2, the plan's
+ * "the last ~20%"), always at least the last road piece. `{ last: true }` is the last road piece alone; `{ fraction: 1 }` is every road piece
+ * (the whole lap, kept for when the keeper asks for it). Returns piece indices.
+ */
+function closeWindow(doc, { fraction = 0.2, last = false } = {}) {
+  const road = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0);
+  if (!road.length) return [];
+  if (last) return [road[road.length - 1]];
+  const total = road.reduce((a, i) => a + doc.pieces[i].length, 0), want = Math.max(0, Math.min(1, fraction)) * total, out = [];
+  let got = 0; for (let k = road.length - 1; k >= 0 && (got < want - 1e-9 || !out.length); k--) { out.unshift(road[k]); got += doc.pieces[road[k]].length; }
+  return out;
+}
+
+module.exports = { close, residual, parameters, positionJacobian, netRows, closeWindow, windowOf };

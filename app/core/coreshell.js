@@ -36,7 +36,12 @@ const D = require('../../src/core/document.js');
 const { extend } = require('../../src/core/extend.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
-const { close } = require('../../src/core/close.js');
+const { close, closeWindow } = require('../../src/core/close.js');
+// D242: the close preview's overlap check builds the closed track's mesh and validates it as the export does (src/export/fromwords.js)
+const G = require('../../src/geom/index.js');
+const V = require('../../src/validate/index.js');
+const { walkScene, isDrivable } = require('../../src/export/markers.js');
+const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 // A's offset channels h and l (the chair's ruling 1, D186): offsetPath(doc, segments, path) lifts a path and recomputes its frame.
@@ -110,6 +115,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   let autoDue = false, autoTimer = null;
   const set = (patch) => {
     if ('message' in patch && !('messageKind' in patch)) patch = { ...patch, messageKind: patch.message ? 'error' : null };
+    // D242: a close PREVIEW belongs to the document it was made from; any change of document drops it, so no stale ghost or Apply survives an edit, an undo or an open
+    if (patch.history && st.closeProposal && !('closeProposal' in patch) && patch.history.present !== st.closeProposal.base) patch = { ...patch, closeProposal: null };
     const before = st.history.present;
     st = Object.freeze({ ...st, ...patch });
     if (mayAutosave && st.dirty && st.history.present !== before) {
@@ -144,6 +151,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return set({ history: D.commit(st.history, d), ...r, dirty: true, message: null, lastStep: { op, ms }, ...extra });
   });
   const lastRoad = (d) => { for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return i; return -1; };
+  // the WHOLE-LAP close's protected stretch (the old one-click close, and proposeClose({ whole: true })): the stretch edited last AND the user's straights,
+  // since close.js spreads the correction over every piece it is not told to avoid, and left alone it bent a 300 m straight to a 370 m radius (D186 C)
+  const wholeLapEdited = (d) => { const last = lastRoad(d); return [...new Set([...(st.lastEdited || [last]), ...straightPieces(d)])]; };
   // the brush, as E's hand-back gives its API: height -> hill, sideways -> swerve; a rate channel (kh, kv) -> rate, which re-closes a
   // closed lap itself; bank, width, rise -> value. Without E's brush, the rate brush is D185's sculpt().
   const brushed = (b, delta) => {
@@ -237,13 +247,48 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         // the correction goes round the stretch edited last AND the user's straights: close.js spreads it over every piece it
         // is not told to avoid, and left alone it bent a 300 m straight to a 370 m radius (measured, D186 C). Guarded, the
         // straight keeps |κ| ≤ 1.2e-4 rad/m on that lap: nearly, not exactly, straight (the joints tie it to its neighbours)
-        const last = lastRoad(doc()), edited = [...new Set([...(st.lastEdited || [last]), ...straightPieces(doc())])];
+        const edited = wholeLapEdited(doc());
         const t0 = now(), res = close(doc(), { edited });
         if (!res.converged) return set({ message: res.report });
         const r = resolvedOf(res.doc);
         return set({ history: D.commit(st.history, res.doc), ...r, dirty: true, lastStep: { op: 'close', ms: now() - t0 }, ...ok(`loop closed: ${res.report}`) });
       });
     },
+
+    /**
+     * D242, THE CLOSE PREVIEW (the keeper, TEST 1: "the close the loop fucked up my track ... completing the loop altered the rest of the track
+     * equation"). Close no longer commits at once: it PROPOSES. By default only the last ~20% of the lap may move (src/core/close.js closeWindow;
+     * `last: true` is the last piece alone, `whole: true` the old whole-lap close, kept for when it is asked for); a window that cannot close the loop
+     * is refused BY NAME (CLOSE_WINDOW). The proposal carries how far each piece's centreline moved and an OVERLAP CHECK of the closed track (the mesh's
+     * self-intersection and the validator's checks, as the export runs them). Apply (async) first writes the open track to its backups (backupNow
+     * 'pre-close'), refuses by name if that copy fails, and then commits the close as ONE undo step; Cancel drops it.
+     */
+    proposeClose({ fraction = 0.2, last = false, whole = false } = {}) {
+      if (doc().closed) return set({ message: 'the loop is already closed: there is nothing to preview' });
+      if (lastRoad(doc()) < 0) return set({ message: 'there is no road to close yet: extend first' });
+      return attempt(() => {
+        const base = doc(), t0 = now();
+        const res = whole ? close(base, { edited: wholeLapEdited(base) }) : close(base, { window: closeWindow(base, { fraction, last }) });
+        if (!res.converged) return set({ message: res.report, closeProposal: null });   // the whole-lap close hands back a best try; a local one has refused already
+        const r = resolvedOf(res.doc), ms = now() - t0;
+        const proposal = Object.freeze({ base, doc: res.doc, resolved: r.resolved, whole: !!whole, window: res.window, report: res.report, ms,
+          displacement: Object.freeze(displacementOf(base, res.doc)), check: Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh)) });
+        const moved = proposal.displacement.filter((x) => x.maxM > 1e-3);
+        return set({ closeProposal: proposal, ...ok(`close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move${proposal.check.overlaps.length ? `; the closed track OVERLAPS ITSELF in ${proposal.check.overlaps.length} place${proposal.check.overlaps.length === 1 ? '' : 's'}` : ''}. Apply or cancel`) });
+      });
+    },
+    async applyClose() {
+      const p = st.closeProposal;
+      if (!p) return set({ message: 'nothing to apply: press Close first' });
+      if (p.base !== doc()) return set({ closeProposal: null, message: 'the track changed since the close preview: press Close again' });
+      // the document AS IT IS NOW goes to track-backups first (backupNow, D239 amendment: the keeper lost TEST 1 to one Close, with no copy from before
+      // it), so a Close can be undone after the app is closed. A copy that fails (throws or rejects) refuses the close by name, and nothing changes
+      try { await api.backupNow('pre-close'); } catch (e) { return set({ message: `not closed: the copy from before the close could not be written (${e && e.message || e}); nothing changed` }); }
+      // the copy was written while the page was live: an edit in that time drops the preview (set), so a stale one is never committed
+      if (st.closeProposal !== p || p.base !== doc()) return set({ closeProposal: null, message: 'the track changed while its copy was being written: press Close again' });
+      return set({ history: D.commit(st.history, p.doc), resolved: p.resolved, resolveError: null, dirty: true, closeProposal: null, lastStep: { op: 'close', ms: p.ms }, ...ok(`loop closed: ${p.report}`) });
+    },
+    cancelClose: () => set({ closeProposal: null, message: null }),
 
     undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: null }); }),
     redo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.redo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: null }); }),
@@ -295,7 +340,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       let out;
       try { out = api.buildExport(opts); } catch (e) {
         if (e.name !== 'ExportError') throw e;
-        return stop({ message: e.message, exportReds: e.code === 'RED' ? e.red : null });
+        // D242: a red refusal names EVERY red in plain words, grouped, with where (the message was the export's own, every reason by its id: the keeper read
+        // "downforce-ray-gap" first and nothing about 28 more that all said the road runs into itself)
+        return stop({ message: e.code === 'RED' && Array.isArray(e.red) ? `not exported: ${RG.groupsText(RG.groupReds(e.red, st.resolved.segments))}` : e.message, exportReds: e.code === 'RED' ? e.red : null });
       }
       if (!storage || typeof storage.writeExport !== 'function') return stop({ message: 'there is nowhere to write the export here' });
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);
@@ -332,7 +379,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      * to the track's backups (native backup_track: track-backups/<eq-name>.<local time>.t180track, newest 20 kept), under the saved
      * name or, unsaved, under "unsaved". `reason` is said in the result. Resolves { file, reason }, or null where there is no native
      * side to write to (headless, a browser); a write that FAILS rejects, so the caller can refuse the operation it was guarding.
-     * B's D242 Close calls it before applying; until then the Close button calls it before shell.close() (app/core/panel.js).
+     * applyClose (D242's Close, the panel's one close path) awaits it first and refuses the close if it rejects.
      */
     async backupNow(reason = '') {
       if (!storage || typeof storage.backupDoc !== 'function') return null;
@@ -387,6 +434,30 @@ function profilerOf(path, segments) {
   return (m) => { const g = segments[m.seg]; return Prof.readsBlend(g) && g.blend ? Prof.atSegment(g, m.s - starts[m.seg]) : g.profile; };
 }
 
+/**
+ * D242: how far each road piece's CENTRELINE moves between two documents of the same pieces (a close changes control points, never lengths):
+ * [{ piece, id, maxM }], the largest distance between the two paths' stations of that piece (the same stations: each segment samples on its own grid).
+ */
+function displacementOf(a, b) {
+  const pa = AD.toPath({ ...a, closed: false }).path.samples, pb = AD.toPath({ ...b, closed: false }).path.samples, segs = toSegments({ ...a, closed: false });
+  const idOf = (m) => (segs[m.seg] ? segs[m.seg].id : null), out = new Map();
+  a.pieces.forEach((P, i) => { if (P.type === 'road') out.set(P.id, { piece: i, id: P.id, maxM: 0 }); });
+  const n = Math.min(pa.length, pb.length);
+  for (let k = 0; k < n; k++) { const e = out.get(idOf(pa[k])); if (!e) continue; const d = Math.hypot(pa[k].pos[0] - pb[k].pos[0], pa[k].pos[1] - pb[k].pos[1], pa[k].pos[2] - pb[k].pos[2]); if (d > e.maxM) e.maxM = d; }
+  return [...out.values()];
+}
+const OVERLAP = new Set(['self-intersection', 'stacked-within-2m', 'downforce-ray-gap']);
+/**
+ * D242: THE OVERLAP CHECK of a proposed (closed) track: its mesh with the self-check, then the validator with the built road for the downforce ray,
+ * the same checks the export runs (src/export/fromwords.js buildFromSegments). Returns { overlaps (the road running into itself: self-intersection,
+ * stacked, a downforce ray that meets another road), others (every other red), amber (count) }.
+ */
+function overlapCheck(resolved, designSpeedKmh) {
+  const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed: true, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
+  const mesh = G.buildMesh(p, segs, { selfCheck: true }), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
+  const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, ...(Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : {}) });
+  return { overlaps: v.red.filter((x) => OVERLAP.has(x.reason)), others: v.red.filter((x) => !OVERLAP.has(x.reason)), amber: v.amber.length };
+}
 /** The road pieces the user built exactly straight and level (κh, κv and φ all exactly 0): close.js is told to go round them. */
 function straightPieces(doc) { return doc.pieces.map((P, i) => (P.type === 'road' && ['kh', 'kv', 'phi'].every((ch) => P.channels[ch].every((c) => c === 0)) ? i : -1)).filter((i) => i >= 0); }
 

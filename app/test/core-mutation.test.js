@@ -19,7 +19,7 @@ const MUTATIONS = [
   { id: 'R4 rounding without the binary guard', file: 'core/labels.js', from: 'Math.abs(x) * 10 + 1e-7', to: 'Math.abs(x) * 10', caughtBy: 'the strings' },
   { id: 'R5 the head keep-out ignored', file: 'core/labels.js', from: 'if (keep && hits(rect, keep)) continue;', to: '', caughtBy: 'the layout' },
   { id: 'R6 labels may overlap', file: 'core/labels.js', from: 'if (drawn.some((d) => hits(rect, d.rect))) continue;', to: '', caughtBy: 'the layout' },
-  { id: 'R7 anchors cached by the path object', file: 'core/labels.js', from: 'if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; }', to: 'if (anchorsFor !== track.path) { anchors = anchorsOf(track); anchorsFor = track.path; }', caughtBy: 'the labels follow a path the preview extends IN PLACE' },
+  { id: 'R7 anchors cached by the path object', file: 'core/labels.js', from: 'if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; pickedFor = undefined; }', to: 'if (anchorsFor !== track.path) { anchors = anchorsOf(track); anchorsFor = track.path; pickedFor = undefined; }', caughtBy: 'the labels follow a path the preview extends IN PLACE' },   // D242: re-anchored (the line gained the hover re-pick)
   { id: 'R8 the layer is not put back in the page', file: 'core/labels.js', from: 'if (!layer.isConnected) stage.append(layer);', to: '', caughtBy: 'the labels follow a path the preview extends IN PLACE' },
   { id: 'R11 a label never slides off its piece\'s middle', file: 'core/labels.js', from: 'for (const a of cands) {', to: 'for (const a of cands.slice(0, 1)) {', caughtBy: 'a piece whose middle is behind the camera' },
   // D187, B's M5 score: the head's own label is never culled, and the label box holds only an opaque background and its text
@@ -77,7 +77,7 @@ const MUTATIONS = [
   { id: 'C17 export goes to the word exporter', file: 'export/export.js',
     from: 'const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers });', to: 'const result = fromwords.exportTrack(segments, { outDir: OUT, variant, textures });', caughtBy: 'export: an open track is refused' },
   { id: 'C18 the close does not go round the user\'s straights', file: 'core/coreshell.js',
-    from: '...(st.lastEdited || [last]), ...straightPieces(doc())', to: '...(st.lastEdited || [last])', caughtBy: 'close: one click' },
+    from: '...(st.lastEdited || [last]), ...straightPieces(d)', to: '...(st.lastEdited || [last])', caughtBy: 'close: one click' },   // D242: re-anchored (the stretch is wholeLapEdited(d), shared with proposeClose({ whole }))
   { id: 'C19 the export is handed no start layout', file: 'core/coreshell.js',
     from: "{ ...opts, markers }", to: '{ ...opts }', caughtBy: 'export: an open track is refused' },
   { id: 'C22 the widened radius is not shown', file: 'core/coreshell.js',
@@ -105,7 +105,7 @@ const MUTATIONS = [
 function runMutant(m) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-mut-')), app = path.join(dir, 'app');
   try {
-    for (const d of ['core', 'preview', 'camera', 'export', 'lib', 'testhook']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });
+    for (const d of ['core', 'preview', 'camera', 'export', 'lib', 'testhook', 'validate-ui']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });
     fs.mkdirSync(path.join(app, 'test'));
     for (const t of TESTS) fs.copyFileSync(path.join(__dirname, t), path.join(app, 'test', t));
     fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });

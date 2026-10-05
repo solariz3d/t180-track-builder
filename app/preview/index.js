@@ -18,6 +18,7 @@
 //                          it starts, the old end for an append). The path is the preview's own: READ IT, never edit it.
 //   't180:track-request'  { detail: { reply(track) } }   the current one, at once, for a reader mounted after the preview
 // And for the EQUATION CORE's panel (D186, app/core/panel.js):
+//   't180-camera-focus'   { detail: { s } }                the camera goes to free mode above and behind the station at s, looking at it (D242)
 //   't180-pick'           { detail: { x, y, reply(hit) } } the station under a canvas point (css px): { s, pos, px } or null
 // And for the 3D GRID and the SYMMETRY GUIDES (D237, app/preview/guides.js, drawn here; the buttons are the camera panel's, app/camera/index.js):
 //   't180:guides'          { detail: { grid?, mirror?, centre? } }   grid auto | ground | 3d | off; mirror off | x | z | both; centre { x, z } or null (the box's middle)
@@ -87,7 +88,10 @@ function mount(root, shell) {
   doc.addEventListener('t180-ghost-clear', hideGhost);
   doc.addEventListener('t180-pick', pickNow);
   doc.addEventListener('t180:view', viewNow);
-  return { preview: p, unmount() { doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
+  // D242: a click on a red in a list moves the camera there ('t180-camera-focus', { s }: metres along the placed track)
+  const focusNow = (e) => { if (e.detail && Number.isFinite(e.detail.s)) p.focus(e.detail.s); };
+  doc.addEventListener('t180-camera-focus', focusNow);
+  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };

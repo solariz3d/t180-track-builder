@@ -96,8 +96,8 @@ mode?" The Pieces mode is removed: the header's switch, `?mode=pieces`, the reme
 
 **Save keeps the previous version (D239 amendment).** Every Save moves the file it overwrites into `track-backups` as
 `<name>.<yyyy-mm-dd_hhmmss>.t180track` (natively, `src-tauri/src/backups.rs`; the newest 20 per track kept, only files in that exact
-form pruned). `shell.backupNow(reason)` writes the track as it is now; the Close button calls it first and does not close if it fails
-(D242's Close takes the call over). "Previous versions…" beside Open… opens one as an unsaved copy.
+form pruned). `shell.backupNow(reason)` writes the track as it is now; Close's Apply (D242, the one close path) awaits it first and does not
+close if it fails. "Previous versions…" beside Open… opens one as an unsaved copy.
 
 **Removed** (no page mounts them any more): `app/palette/palette.js` (the piece palette), `app/handles/` (word handles),
 `app/texture/index.js` (the per-word textures panel), `app/onboarding/defaults.js` (the piece palette's first-run pickers).
@@ -114,8 +114,8 @@ longer show in Open…, but they stay on disk as they were.
 
 | path | what |
 |---|---|
-| `app/core/coreshell.js` | the core's state and actions, no DOM (tested headless): extend, the brush drag, close, export, a local example, save/open under the `eq-` prefix |
-| `app/core/panel.js` | the core's controls in the left column |
+| `app/core/coreshell.js` | the core's state and actions, no DOM (tested headless): extend, the brush drag, close, export, a local example, save/open under the `eq-` prefix. D242: the panel's Close PROPOSES (`proposeClose`: a local close of the last ~20% by default, how far each piece moves, and an overlap check of the closed track, shown as a ghost), then `applyClose` (one undo step; it first calls the shell's `backupNow('pre-close')` when there is one, C's D239) or `cancelClose`; `close()` is the old immediate whole-lap close. A refused export names every red in plain words, grouped (`app/validate-ui/redgroups.js`) |
+| `app/core/panel.js` | the core's controls in the left column. D242: Straight (turn and climb 0 at start, in one click), the Close preview's Apply/Cancel, and Undo puts the undone Extend's own field values back |
 | `app/core/widthlike.js` | the "width like…" drop-down's entries (D232): the known tracks' measured widths from `src/doc/widths.json`, in metres round-and-across for a tube |
 | `app/core/textures.js` | the core's road surface (D228): asphalt by default, solid colour, or your own picture; announces the set as `t180:textures`, which the preview draws and the core page's Export writes (`src/texture/flow.js` lays its coordinates on the path's arc length, a closed tube wraps a whole number of repeats) |
 | `app/core/index.js` | its `mount(root, shell)` |

@@ -126,6 +126,18 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const gm = geom.extendMesh(m, p, segs), from = keys.length;
       return { batches: batchesOf(gm, from), path: p, head: p.head, segments: segs };   // D235: only the NEW pieces' batches are built (it built every batch and kept the new ones)
     },
+    /**
+     * D242: the GHOST of a close PROPOSAL (the shell's closeProposal: a closed track that rewrites pieces, not one that extends the placed track, so
+     * ghostFor's copy-and-extend does not apply). The proposed track is built in full on its own (the placed track untouched), and the ghost is the
+     * batches of the pieces from the first segment that differs from the placed one: for a local close, its window. { batches, path, head, segments, from }.
+     */
+    proposalGhost(candidate) {
+      const segs = candidate && detail > 1 ? coarsen(candidate.segments, detail) : candidate && candidate.segments;
+      if (!Array.isArray(segs) || !segs.length) throw new Error('ghost: a close proposal needs a resolved { segments }');
+      const nk = segs.map(keyOf); let from = 0; while (from < keys.length && from < nk.length && keys[from] === nk[from]) from++;
+      const p0 = geom.buildPath(segs, { ...pathOpts, closed: !!candidate.closed, ...(candidate.start ? { start: candidate.start } : {}) }), p = typeof candidate.lift === 'function' ? candidate.lift(p0) : p0;
+      return { batches: batchesOf(geom.buildMesh(p, segs, meshOpts), from), path: p, head: p.head, segments: segs, from };
+    },
     /** The path everything reads: the base path lifted by the document's offsets (the same object when there are none). */
     get path() { return shown; },
     get mesh() { return mesh; },

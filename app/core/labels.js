@@ -3,6 +3,10 @@
 // keeper, 01:2x: "see the degrees of change when adjusting the banking, pitch, and roll and even turns"; "DISTANCE OF EACH PIECE
 // IN METERS SO YOU CAN SEE WITH THE DEGREE UI".
 //
+// ON HOVER ONLY (D242; the keeper, 23:46: "when there are lots of pieces, the tags take up a lot of space, it should be only when you hover over the pieces"): ONE
+// label for the piece under the pointer (the preview's 't180-pick', asked only when the pointer moves), plus the head's own piece, which is always labelled. No other
+// piece is labelled, so the layout's work is those one or two labels, not every piece every frame.
+//
 // A DOM layer over the preview (#preview), redrawn every animation frame: the camera eases, so the labels move with it. The
 // preview is not changed: its pose comes from the 't180:view' event (app/preview/index.js), the track from 't180:track-request'.
 // - FIXED PIXEL SIZE: a label is the same size at every zoom (0.05 to 50), so it is readable at all of them.
@@ -113,6 +117,14 @@ function anchorsOf(track) {
   return out;
 }
 
+/** The id of the piece the track is on at s (segments in the track's order; a closed lap's s past its end wraps). */
+function pieceAt(segments, s) {
+  if (!Array.isArray(segments) || !segments.length || !Number.isFinite(s)) return null;
+  const L = segments.reduce((a, g) => a + g.length, 0); const x = L > 0 ? ((s % L) + L) % L : s; let acc = 0;
+  for (const g of segments) { if (x < acc + g.length - 1e-9) return g.id; acc += g.length; }
+  return segments[segments.length - 1].id;
+}
+
 function mount(stage, shell, win) {
   const doc = stage.ownerDocument, layer = doc.createElement('div');
   layer.setAttribute('aria-label', 'piece readouts');
@@ -120,6 +132,11 @@ function mount(stage, shell, win) {
   stage.append(layer);
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
   let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true;
+  // D242: the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
+  let pointer = null, pickedFor = null, hoverId = null;
+  const onPointer = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; pointer = { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const onLeave = () => { pointer = null; };
+  stage.addEventListener('pointermove', onPointer); stage.addEventListener('pointerleave', onLeave);
   const pool = [];
   const box = (i) => {
     if (!pool[i]) {
@@ -150,7 +167,7 @@ function mount(stage, shell, win) {
     if (view && view.pose && track && track.path && W > 0 && H > 0) {
       // keyed by the SEGMENTS, which are a new array on every change: the preview extends its path object IN PLACE, so keyed by
       // the path the anchors stayed the first piece's forever (found in the real window, L130: 1 label for 5 pieces)
-      if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; }
+      if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; pickedFor = undefined; }   // D242: a new track: the piece under a still pointer is asked again
       const reads = shell.pieceReadouts ? shell.pieceReadouts() : [], VP = M.viewProj(view.pose, W / H);
       const toScreen = (p) => { const c = M.apply(VP, p); return c[3] > 0 ? { x: (c[0] / c[3] * 0.5 + 0.5) * W, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * H, z: c[2] / c[3] } : null; };
       // the head's keep-out: its marker (look.js headMarker: max(3 m, 2% of the camera's distance)) projected, and never under 24 px
@@ -166,9 +183,11 @@ function mount(stage, shell, win) {
         }
       }
       const headId = st.history.present.pieces.length ? st.history.present.pieces[st.history.present.pieces.length - 1].id : null;
+      if (pointer !== pickedFor) { pickedFor = pointer; hoverId = null; if (pointer) { let hit = null; doc.dispatchEvent(new win.CustomEvent('t180-pick', { detail: { x: pointer.x, y: pointer.y, reply: (h) => { hit = h; } } })); hoverId = hit && Number.isFinite(hit.s) ? pieceAt(track.segments, hit.s) : null; } }
       const items = [];
       reads.forEach((r) => {
         if (!r || r.type !== 'road') return;                      // a flight has no label
+        if (r.id !== headId && r.id !== hoverId) return;           // D242: on hover only (and the head's own piece)
         const cands = anchors.get(r.id); if (!cands) return;
         // the first candidate (the middle, then outward) that lands in view, in front of the camera and before the far plane
         let p = null;
@@ -193,8 +212,9 @@ function mount(stage, shell, win) {
   return {
     labels: () => drawn.slice(), culled: () => culled.slice(),
     setVisible(v) { on = !!v; layer.style.display = on ? '' : 'none'; },
-    unmount() { win.cancelAnimationFrame(raf); doc.removeEventListener('t180:labels', answer); layer.remove(); },
+    hovered: () => hoverId,
+    unmount() { win.cancelAnimationFrame(raf); doc.removeEventListener('t180:labels', answer); stage.removeEventListener('pointermove', onPointer); stage.removeEventListener('pointerleave', onLeave); layer.remove(); },
   };
 }
 
-module.exports = { formatReadout, labelText, fmtDeg, fmtM, layout, anchorsOf, mount };
+module.exports = { formatReadout, labelText, fmtDeg, fmtM, layout, anchorsOf, pieceAt, mount };

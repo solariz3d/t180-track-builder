@@ -33,7 +33,7 @@
 // own arrays.
 'use strict';
 
-const { createRig, KEYS } = require('../camera/cameras.js');
+const { createRig, KEYS, sampleAt } = require('../camera/cameras.js');
 const { createTrackModel } = require('./trackmodel.js');
 const { createRenderer } = require('./renderer.js');
 const { gridLines, headMarker } = require('./look.js');
@@ -85,7 +85,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   let track = null, err = null, raf = 0, prev = 0, shownPose = null;
   const held = new Map();   // the keys down, in the order pressed: physical key (e.code) → its action, fixed at key-down
   let takeover = false;     // a movement key went down in a follow view: the next frame takes the view over into free (once)
-  let ghost = null, grid = null, gridFor = null, start = null;
+  let ghost = null, grid = null, gridFor = null, start = null, proposalShown = null;
   // D237: the 3D grid and the symmetry guides. `gMode` 'legacy' is the old { ground: true } grid at y = 0; the plan is rebuilt only when its inputs change, never per frame.
   if (gridMode !== null && !GRID_MODES.includes(gridMode)) throw new Error(`preview: unknown gridMode ${gridMode}`);
   let gMode = gridMode || (ground ? 'legacy' : 'off'), gMirror = 'off', gCentre = null, plan = null, planDeps = null;
@@ -128,6 +128,13 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     start = st.resolved && st.resolved.start ? st.resolved.start : null;   // where the first piece starts (the equation core's doc.start)
     if (st.brush) { clearFull(); model.setDetail(DRAG_DETAIL); } else if (model.detail > 1) scheduleFull();   // dragging: coarse now; not dragging but still coarse: full detail soon
     try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; } catch (e) { err = e.message; return; }
+    // D242: a close PROPOSAL (the core shell's closeProposal, for the document on screen) is the ghost: the pieces it moves, see-through over the placed ones
+    const prop = st.closeProposal && st.history && st.closeProposal.base === st.history.present ? st.closeProposal : null;
+    if (prop !== proposalShown) {
+      if (ghost && ghost.proposal) ghost = null;
+      proposalShown = prop;
+      if (prop) { try { ghost = { ...model.proposalGhost(prop.resolved), proposal: true }; } catch (e) { ghost = null; } }
+    }
     if (onTrack && track.how !== 'same' && track.how !== 'kept') onTrack(shared());
   };
   const unsub = shell.subscribe(refresh);
@@ -257,6 +264,17 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
      */
     showGhost(candidate) { ghost = model.ghostFor(candidate); return ghost.batches.length; },
     clearGhost() { ghost = null; },
+    /**
+     * D242: show a place on the track: the camera goes to free mode above and behind the station at `s` (m along the placed track; a closed lap's s
+     * wraps), looking at it. A click on a red in a list calls this. Returns false when there is no track to look at.
+     */
+    focus(s) {
+      const p = track && track.path; if (!p || !Number.isFinite(s) || !p.samples.length) return false;
+      const L = p.lengthM || p.samples[p.samples.length - 1].s, x = p.closed && L > 0 ? ((s % L) + L) % L : Math.max(0, Math.min(L, s)), m = sampleAt(p, x);
+      const eye = [0, 1, 2].map((k) => m.pos[k] + m.U[k] * 35 - m.T[k] * 45);
+      const c = ctx(canvas.clientWidth > 0 && canvas.clientHeight > 0 ? canvas.clientWidth / canvas.clientHeight : 1.6); if (rig.mode !== 'free' && c) rig.setMode('free', c);
+      const ok = rig.free.lookFrom(eye, m.pos.slice()); said(); return ok;
+    },
     /** D186: the track station under a point of the canvas (css px from its top-left): { s, pos, px } or null (pickAt). */
     pick(x, y) { return shownPose && track && track.path ? pickAt(track.path, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
