@@ -28,8 +28,10 @@ test('every file the page loads through the loader is inside a folder build.rs c
   const opts = { builtins: shim.builtins, globals: { Buffer: shim.Buffer } };
   // the page's own loads (app/index.html), each the way the page makes it: the app's modules plain, the exporter with
   // the node shim (app/export/export.js makeExporter)
-  for (const entry of ['app/shell.js', 'app/closer.js', 'app/palette/palette.js', 'app/palette/panels.js', 'app/export/export.js']) await loadCjs(entry, get);
+  // D239: the page is the equation builder's alone (app/palette/palette.js went with the Pieces page); it loads the carried panels too
+  for (const entry of ['app/shell.js', 'app/closer.js', 'app/palette/panels.js', 'app/export/export.js', 'app/share/index.js', 'app/install/index.js', 'app/onboarding/index.js']) await loadCjs(entry, get);
   await loadCjs('src/export/fromwords.js', get, opts);
+  await loadCjs('app/core/coreshell.js', get, opts);
   const roots = new Set(copied());
   const outside = [...asked].filter((p) => !roots.has(p.split('/')[0]));
   assert.deepEqual(outside, [], `loaded but not copied into dist/: ${outside.join(', ')}`);

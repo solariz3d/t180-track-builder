@@ -102,9 +102,10 @@ test('the cleanup is read at CLOSE time: a mode that sets it after registration 
 
 // ── the page's wiring (the real window proves it end to end; this keeps the structure from regressing) ──
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-test('app/index.html registers the close handler BEFORE the mode branch, so both builders have it', () => {
-  const at = HTML.indexOf('installCloseHandler'), branch = HTML.indexOf("if (MODE === 'core') { await startCore(); return; }");
-  assert.ok(at > 0 && branch > 0 && at < branch, `installCloseHandler at ${at}, the mode branch at ${branch}`);
+// D239: the mode branch is gone (one builder); the invariant it guarded stays: the handler is registered before the builder starts
+test('app/index.html registers the close handler BEFORE the builder starts, so a builder that fails to start still has it', () => {
+  const at = HTML.indexOf('installCloseHandler'), start = HTML.indexOf('  await startCore();');
+  assert.ok(at > 0 && start > 0 && at < start, `installCloseHandler at ${at}, the builder's start at ${start}`);
 });
 test('app/index.html has ONE close registration path (the closer, and a bare destroy-only fallback): the old pieces-only listener is gone', () => {
   assert.equal((HTML.match(/onCloseRequested\(/g) || []).length, 1, 'onCloseRequested( appears once, in the fallback');
@@ -145,9 +146,10 @@ test('a second X while the prompt is open is ignored: one prompt, one close', as
   const first = t.x(), second = t.x(); release(); await Promise.all([first, second]);
   assert.deepEqual([asks, t.destroyCalls], [1, 1]);
 });
-test('app/index.html gives the closer the prompt, and both builders say whether there is unsaved work', () => {
+// D239: one builder, so closeDirty is set once (it was set in the core and the pieces branch, 2)
+test('app/index.html gives the closer the prompt, and the builder says whether there is unsaved work', () => {
   assert.match(HTML, /installCloseHandler\(win, \(\) => closeCleanup, \{ ask: closeAsk, save: closeSave \}\)/);
-  assert.equal((HTML.match(/closeDirty = \(\) => !!shell\.getState\(\)\.dirty;/g) || []).length, 2, 'set in the core and the pieces branch');
+  assert.equal((HTML.match(/closeDirty = \(\) => !!shell\.getState\(\)\.dirty;/g) || []).length, 1, 'set by the equation builder');
   // the plugin COMMAND, as the Export picker calls it: tauri-plugin-dialog 2.8.0 injects no window.__TAURI__.dialog
   assert.match(HTML, /call\('plugin:dialog\|message', \{[^}]*buttons: \{ YesNoCancelCustom: \['Save', "Don't save", 'Cancel'\] \}/);
   assert.doesNotMatch(HTML, /__TAURI__\.dialog/);

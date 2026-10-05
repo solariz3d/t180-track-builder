@@ -10,39 +10,46 @@
 // THE RULES:
 //   · every step is SHORT (one sentence of what to do, one of why) and SKIPPABLE, and the whole guide can be finished at
 //     any step: it never blocks the expert path. It holds no lock on the app, and the app works the same with it closed;
-//   · a step is DONE when the user has done the move, seen in the shell's own state (a word placed, a handle dragged,
-//     the loop closed, a folder exported). Doing it advances the guide; the guide itself never places, drags, closes or
+//   · a step is DONE when the user has done the move, seen in the shell's own state (pieces extended, a brush stroke, the
+//     loop closed, a folder exported). Doing it advances the guide; the guide itself never extends, brushes, closes or
 //     exports anything;
-//   · the colours step has no move to see (reading is not an action), so it is done by pressing Next.
+//   · the colours and the grid-and-mirror steps have no move to see (reading is not an action, and the grid lives in the
+//     preview, not in the track), so each is done by pressing Next.
+// D239 (the keeper: "can we keep only the equation mode?"): the steps are the EQUATION builder's (app/core): Extend, the brush,
+// Close the loop, the colours, Export, the grid and mirror. The piece builder's wording (words, starter phrases, handles, the
+// connector) went with the Pieces page.
 'use strict';
 
-const PLACE_AT_LEAST = 3;   // words on the track before "place a few pieces" is done (inferred: "a few")
+const EXTEND_AT_LEAST = 3;   // pieces on the track before "extend a few pieces" is done (inferred: "a few")
 
-/** Every word on the track, phrase words counted one by one. */
-const wordCount = (doc) => doc.words.reduce((a, e) => a + (e.phrase !== undefined ? e.words.length : 1), 0);
+/** The pieces on a core track (src/core/document.js: doc.pieces). */
+const pieceCount = (doc) => (doc && Array.isArray(doc.pieces) ? doc.pieces.length : 0);
 
 const STEPS = Object.freeze([
-  { id: 'place', title: 'Place a few pieces', target: '#palette',
-    text: `Pick a word or a starter phrase in the palette (try "sakura flow"). The track grows from its open end, and the build view follows it. Done at ${PLACE_AT_LEAST} words.`,
-    done: (st) => wordCount(st.history.present) >= PLACE_AT_LEAST },
-  { id: 'sculpt', title: 'Sculpt one handle', target: '#handles',
-    text: 'Click one placed word in the track list, then drag one of its handles. A starter phrase has no handles here yet, so place a single word (e.g. "turn") if you have only phrases. A drag stops where the track would break (red); amber is allowed.',
-    done: (st, seen) => seen.sculpted },
+  { id: 'extend', title: 'Extend a few pieces', target: '#palette',
+    text: `Under "Extend at the head", set a length and a turn (or leave them), then press Extend. Each piece grows the track from its open end. Done at ${EXTEND_AT_LEAST} pieces; give at least one a turn, or there is nothing to close.`,
+    done: (st) => pieceCount(st.history.present) >= EXTEND_AT_LEAST },
+  { id: 'brush', title: 'Brush the track', target: '#palette',
+    text: 'Tick "on" under "Brush", pick what to change (turn, bank, width, …), then drag on the track in the preview. The brush bends the track smoothly around where you drag; a stroke stops where the track would break (red).',
+    done: (st, seen) => seen.brushed },
   { id: 'close', title: 'Close the loop', target: '#palette',
-    text: 'Press "Close the loop". The connector adds the closing words, choosing the candidate with the most physics margin, not the shortest.',
+    text: 'Press "Close the loop". The solver bends the pieces you edited least so the end meets the start, smoothly. A track of straights cannot close: it needs a turn.',
     done: (st) => st.history.present.closed === true },
   { id: 'colours', title: 'Read the colours', target: '#validation',
     text: 'Red is known to break, and the track will not export until it is gone. Amber is past what any track has proven (a load over 90 g, or a seam sharper than measured), allowed but untested. Each one is listed with its reason and source.',
     done: null },
   { id: 'export', title: 'Export', target: '#export',
-    text: 'Press "Export…" and pick a folder. It writes an Assetto Corsa track folder there; nothing is installed and the game is not launched.',
+    text: 'Press "Export…" and pick a folder. It writes an Assetto Corsa track folder there; nothing is installed and the game is not launched. "Install to AC" writes the same folder into the game instead.',
     done: (st, seen) => seen.exported },
+  { id: 'grid', title: 'The grid and the mirror', target: '#camera',
+    text: 'Under the preview, Grid shows the ground or a 3D lattice once the track climbs; Mirror draws the symmetry axes and reads the mirror gap, the number "make it symmetrical" drives to zero. Drag the centre handle to move the axes.',
+    done: null },
 ].map((s) => Object.freeze(s)));
 
 function createGuide({ onChange = () => {} } = {}) {
   let index = 0, status = 'active';
-  const done = {}, skipped = {}, seen = { sculpted: false, exported: false };
-  let last = null;   // the previous shell state, to tell a sculpt from a placement
+  const done = {}, skipped = {}, seen = { brushed: false, exported: false };
+  let last = null;   // the previous shell state, to see an export that is new
   const state = () => ({ index, step: status === 'active' ? STEPS[index] : null, status, done: { ...done }, skipped: { ...skipped } });
   const emit = () => { onChange(state()); return state(); };
   const step1 = () => { if (index < STEPS.length - 1) index++; else status = 'finished'; };
@@ -63,9 +70,8 @@ function createGuide({ onChange = () => {} } = {}) {
     /** Look at the shell's state: the user's own moves mark steps done, and the current step's completion advances. */
     observe(st) {
       if (!st || !st.history) return state();
-      const cur = st.history.present, prev = last && last.history.present;
-      // a SCULPT: the same number of entries, and at least one existing entry replaced (placing adds an entry instead)
-      if (prev && cur !== prev && cur.words.length === prev.words.length && cur.words.some((e, i) => e !== prev.words[i])) seen.sculpted = true;
+      // a BRUSH STROKE: the core shell names the step it took (app/core/coreshell.js lastStep.op 'brush:<mode>')
+      if (st.lastStep && typeof st.lastStep.op === 'string' && st.lastStep.op.startsWith('brush:')) seen.brushed = true;
       if (st.lastExport && (!last || st.lastExport !== last.lastExport)) seen.exported = true;
       last = st;
       let moved = false;
@@ -76,4 +82,4 @@ function createGuide({ onChange = () => {} } = {}) {
   };
 }
 
-module.exports = { STEPS, createGuide, PLACE_AT_LEAST, wordCount };
+module.exports = { STEPS, createGuide, EXTEND_AT_LEAST, pieceCount };

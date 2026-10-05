@@ -72,7 +72,6 @@
 <body>
 <header>
   <h1>T-180 TRACK BUILDER</h1>
-  <select id="mode" aria-label="builder" title="Equation track: shape the track as equations (extend, brush, close). Pieces: the earlier piece builder, paused but kept."><option value="core">Equation track</option><option value="pieces">Pieces (paused)</option></select>
   <button id="new" title="New track">New</button>
   <input id="name" placeholder="track name" aria-label="track name" size="16">
   <button id="save" title="Ctrl+S">Save</button>
@@ -87,7 +86,6 @@
   <aside id="side">
     <section id="reds"></section>
     <section id="validation"></section>
-    <section id="handles"></section>
     <section id="textures"></section>
     <section id="share"></section>
   </aside>
@@ -100,8 +98,10 @@
 <script src="lib/cjs.js"></script>
 <script>
 'use strict';
-// The page's glue: storage and export through the native side, the palette, the keys, the recovery offer, and the
-// panels C and E own (app/README.md, "The seam"). Nothing here edits a document: every action is the shell's.
+// The page's glue: storage and export through the native side, the equation builder (app/core), the keys, the recovery offer, and
+// the panels (app/README.md, "The seam"). Nothing here edits a document: every action is the shell's. D239 (the keeper: "can we keep
+// only the equation mode?"): the Pieces builder and its switch are gone; its share codes, Install to AC / See it in Assetto, autosave
+// with crash restore and the getting-started guide are carried onto this page, each working on the equation track.
 (async () => {
   const $ = (id) => document.getElementById(id), status = $('status');
   // Served from src-tauri/dist, which mirrors the repository: this page is app/index.html, the program is ../src/.
@@ -123,13 +123,12 @@
     removeEmptyFolder: (dir) => call('remove_empty_folder', { dir }),   // and only that one can be removed (rmdir: never its contents)
   };
 
-  // THE WINDOW'S X (D192). ONE close handler, registered here BEFORE the mode branch so both builders have it (app/closer.js says why:
-  // a script close listener makes Tauri wait for destroy(); the listener registry outlives a page reload, so the pieces builder's handler
-  // used to be left behind, callback gone, by the mode switch, and the X did nothing in core; and a throwing autosave did the same in
-  // pieces). The handler cleans up through closeCleanup (the mode sets it), never lets an error or a hang stand in its way, and ends in
+  // THE WINDOW'S X (D192). ONE close handler, registered here before the builder starts (app/closer.js says why: a script close listener
+  // makes Tauri wait for destroy(), and the listener registry outlives a page reload, so a handler whose callback is gone would trap the
+  // window). The handler cleans up through closeCleanup (the builder sets it), never lets an error or a hang stand in its way, and ends in
   // destroy(). If the module cannot load, a bare handler that only destroys is registered, so a stale listener can still not trap the window.
   let closeCleanup = null;
-  // UNSAVED WORK (the keeper, 2026-10-03): each mode sets closeDirty to "is there unsaved work?"; the X then asks Save / Don't
+  // UNSAVED WORK (the keeper, 2026-10-03): the builder sets closeDirty to "is there unsaved work?"; the X then asks Save / Don't
   // save / Cancel. Save is the Save button's own path; if the work is still unsaved after it (no name yet), the window stays
   // open with the name field focused. No dialog API (off Tauri) or a failing one: close as before (app/closer.js).
   let closeDirty = null;
@@ -160,22 +159,18 @@
     if (win && win.onCloseRequested) win.onCloseRequested(async (ev) => { ev.preventDefault(); try { await win.destroy(); } catch (err) { /* nothing more to try */ } });
   }
 
-  // TWO BUILDERS, ONE PAGE (D186). The EQUATION TRACK (the core: app/core, src/core) is the default; the PIECE builder (app/shell.js,
-  // the palette) is paused, not deleted, and one switch away. The switch reloads the page into the other builder, so the two
-  // never share a live shell or a panel: ?mode=pieces or ?mode=core in the address picks one (the window proofs use it), and
-  // the last choice is remembered on this machine.
-  const MODE = (() => { const q = new URLSearchParams(location.search).get('mode'); if (q === 'core' || q === 'pieces') return q; try { return localStorage.getItem('t180.mode') === 'pieces' ? 'pieces' : 'core'; } catch (e) { return 'core'; } })();
-  $('mode').value = MODE;
-  $('mode').onchange = (e) => { try { localStorage.setItem('t180.mode', e.target.value); } catch (err) { /* a private window: the address still carries it */ } location.search = `?mode=${e.target.value}`; };
-  if (MODE === 'core') { await startCore(); return; }
+  // ONE BUILDER (D239): the EQUATION TRACK (app/core, src/core). The Pieces builder (D186's second mode, ?mode=pieces, the t180.mode
+  // setting) is removed; the word tracks it saved stay on disk in the app's tracks folder (app/README.md says where), never deleted.
+  await startCore();
 
   async function startCore() {
-    let C, panels, shell, exporter;
+    let C, panels, shell, exporter, coreOpts;
     try {
       // the core's modules reach tools/piecewise.cjs (its solver), whose command-line half requires fs and path: they are given
       // the exporter's in-memory node shim, so they load and nothing touches the disk (the core calls only the solver)
       const shim = (await loadCjs('app/export/node-shim.js', get)).createShim();
-      C = await loadCjs('app/core/coreshell.js', get, { builtins: shim.builtins, globals: { Buffer: shim.Buffer } });
+      coreOpts = { builtins: shim.builtins, globals: { Buffer: shim.Buffer } };   // also the share panel's: a pasted code is parsed by the core (D239)
+      C = await loadCjs('app/core/coreshell.js', get, coreOpts);
       panels = await loadCjs('app/palette/panels.js', get);
       exporter = await (await loadCjs('app/export/export.js', get)).makeExporter(get);
       shell = await C.createCoreShell({ storage, exporter, now: () => performance.now() });
@@ -193,7 +188,18 @@
       for (const x of st.exportReds) list.append(el('li', `${x.reason}${Number.isFinite(x.s0) ? ` at s ${Math.round(x.s0)} m` : ''} ${x.source ? `(${x.source})` : ''}`));
       r.replaceChildren(el('h3', 'Not exported: red on the track'), list);
     };
-    const draw = (st) => { drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
+    // THE RECOVERY OFFER (D239, carried from the piece builder): a track the last session left unsaved is offered, never applied
+    const drawBanner = (st) => {
+      const b = $('banner');
+      if (!st.recovery) { b.replaceChildren(); return; }
+      const n = st.recovery.doc.pieces.length, restore = el('button', 'Restore it'), discard = el('button', 'Discard it');
+      restore.onclick = () => { const name = st.recovery.name; shell.restore(); if (name) $('name').value = name; };
+      discard.onclick = () => shell.discardRecovery();
+      const bar = el('div', null, 'bar');
+      bar.append(el('span', `A track from your last session was not saved${st.recovery.name ? ` ("${st.recovery.name}")` : ''}: ${n} piece${n === 1 ? '' : 's'}${st.recovery.doc.closed ? ', a closed loop' : ''}.`), restore, discard);
+      b.replaceChildren(bar);
+    };
+    const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
     const refreshList = async () => { try { const names = await shell.list(); $('open').replaceChildren(new Option('Open…', ''), ...names.map((n) => new Option(n, n))); } catch (e) { status.textContent = e.message; } };
     $('new').onclick = () => shell.newDoc();
@@ -217,124 +223,32 @@
       e.preventDefault();
       if (act === 'save') $('save').click(); else shell[act]();
     });
-    // the panels that read only the shared path (preview, camera, validation) are the piece builder's, reused unchanged; the
-    // core's own controls take the left column. Handles, textures, share, install and the guide are the piece builder's.
+    // A clean exit clears the autosave; a crash leaves it for the next start to offer back. The one close handler (above) runs this
+    // inside its try: if it fails or hangs the window still closes, and the autosave is simply left for the next start (D239).
+    closeCleanup = async () => { if (!shell.getState().dirty) await shell.cleanExit(); else await shell.flushAutosave(); };
+    // the panels that read only the shared path (preview, camera, validation) are reused unchanged; the core's own controls take the
+    // left column. Share codes, Install to AC / See it in Assetto and the guide are carried from the piece builder (D239).
     await panels.mountPanel($('palette'), 'equation track', () => loadCjs('app/core/index.js', get), shell);
     for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation']]) {
       await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
     }
     // last, so the preview is already listening when the road surface announces the asphalt default
     await panels.mountPanel($('textures'), 'texture', () => loadCjs('app/core/textures.js', get), shell);
+    // Share codes (an equation track's code; an old Pieces code is refused by name), and Install to AC / See it in Assetto: the install
+    // is the Export button's own build with the same road surface (shell.buildExport), and the launch is off by default (src-tauri/src/ac.rs)
+    const b64files = (files) => files.map((f) => ({ path: f.path, data: b64(f.bytes) }));
+    const native = {
+      getAcRoot: () => call('get_ac_root'), setAcRoot: (path) => call('set_ac_root', { path }),
+      installTrack: (folder, files) => call('install_track', { folder, files: b64files(files) }),
+      getSeeItSetting: () => (tauri ? call('get_see_it_setting') : Promise.resolve(false)), setSeeItSetting: (on) => call('set_see_it_setting', { on }),
+      seeIt: (track, layout) => call('see_it_in_assetto', { track, layout }),
+    };
+    const pickFolder = (title) => call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
+    await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get, coreOpts), shell);
+    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet }) })), shell);
+    await panels.mountPanel($('guide'), 'onboarding', () => loadCjs('app/onboarding/index.js', get), shell);
   }
 
-  let S, pal, panels, shell, exporter;
-  // the texture set the textures panel announces (the one the preview draws); the export and the install write it
-  let textureSet = null;
-  document.addEventListener('t180:textures', (e) => { textureSet = e.detail ? e.detail.set : null; });
-  try {
-    S = await loadCjs('app/shell.js', get);
-    pal = await loadCjs('app/palette/palette.js', get);
-    panels = await loadCjs('app/palette/panels.js', get);
-    const ex = await loadCjs('app/export/export.js', get);
-    exporter = await ex.makeExporter(get);
-    shell = await S.createShell({ storage, exporter });
-    closeDirty = () => !!shell.getState().dirty;   // the X asks to save unsaved work (closeAsk above)
-  } catch (e) { $('palette').textContent = `The app could not start: ${e.message}`; return; }
-
-  // THE GHOST (the preview's seam, app/preview/index.js): pointing at a palette piece sends 't180-ghost' with the shell's
-  // CANDIDATE, the track as it would be with that piece placed, built by the same code as place(); leaving it, or placing,
-  // sends 't180-ghost-clear'. A piece that cannot be placed shows no ghost, and says why in the status line.
-  const ghost = (name) => {
-    if (!name) { document.dispatchEvent(new CustomEvent('t180-ghost-clear')); return; }
-    let candidate;
-    try { candidate = shell.candidate(name); } catch (e) { document.dispatchEvent(new CustomEvent('t180-ghost-clear')); status.textContent = e.message; return; }
-    document.dispatchEvent(new CustomEvent('t180-ghost', { detail: { candidate } }));
-  };
-  const on = {
-    place: (n) => { ghost(null); shell.place(n); }, ghost, setPicker: (k, v) => shell.setPicker(k, v), undo: () => shell.undo(), redo: () => shell.redo(),
-    removeHead: () => shell.removeHead(), select: (a, b) => shell.select(a, b),
-    saveSelection: (name) => shell.saveSelectionAsPiece(name).catch((e) => { status.textContent = e.message; }),
-    // closing solves and validates several candidate laps: say so first, then give the page a frame to show it
-    closeLoop: () => { status.textContent = 'closing the loop…'; setTimeout(() => shell.closeLoop(), 30); },
-  };
-  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
-  const drawBanner = (st) => {
-    const b = $('banner');
-    if (!st.recovery) { b.replaceChildren(); return; }
-    const words = st.recovery.doc.words.length, restore = el('button', 'Restore it'), discard = el('button', 'Discard it');
-    restore.onclick = () => { shell.restore(); if (st.recovery.name) $('name').value = st.recovery.name; };
-    discard.onclick = () => shell.discardRecovery();
-    const bar = el('div', null, 'bar');
-    bar.append(el('span', `A track from your last session was not saved${st.recovery.name ? ` ("${st.recovery.name}")` : ''}: ${words} word${words === 1 ? '' : 's'}.`), restore, discard);
-    b.replaceChildren(bar);
-  };
-  const drawReds = (st) => {
-    const r = $('reds'), refusal = st.exportRefusal && st.exportRefusal === st.message ? st.exportRefusal : null;   // D234: see the core page's
-    if (!st.exportReds && !refusal) { r.replaceChildren(); return; }
-    if (!st.exportReds) { r.replaceChildren(el('h3', 'Not exported'), el('p', refusal, 'message')); return; }
-    const list = el('ul', null, 'reds');
-    for (const x of st.exportReds) {
-      const li = el('li');
-      const where = Number.isFinite(x.s0) ? `s ${Math.round(x.s0)}${Number.isFinite(x.s1) && x.s1 !== x.s0 ? `–${Math.round(x.s1)}` : ''} m` : '';
-      li.append(el('span', `${x.reason}${where ? ` at ${where}` : ''} `), el('span', x.source ? `(${x.source})` : '', 'src'));
-      list.append(li);
-    }
-    r.replaceChildren(el('h3', 'Not exported: red on the track'), list);
-  };
-  const draw = (st) => {
-    pal.renderPalette($('palette'), pal.paletteModel(st, shell.pickers()), on);
-    drawBanner(st); drawReds(st);
-    status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`;
-  };
-  shell.subscribe(draw); draw(shell.getState());
-
-  const refreshList = async () => {
-    try { const names = await shell.list(); $('open').replaceChildren(new Option('Open…', ''), ...names.map((n) => new Option(n, n))); }
-    catch (e) { status.textContent = e.message; }
-  };
-  $('new').onclick = () => shell.newDoc();
-  $('save').onclick = async () => { try { await shell.save($('name').value.trim()); await refreshList(); } catch (e) { status.textContent = e.message; } };
-  $('open').onchange = async (e) => { const n = e.target.value; if (!n) return; try { await shell.open(n); $('name').value = n; } catch (err) { status.textContent = err.message; } e.target.value = ''; };
-  $('export').onclick = async () => {
-    try {
-      // D181 test seam (C): the app answers the dialog itself only when LAUNCHED with T180_TEST_EXPORT_FOLDER set (src-tauri
-      // test_export_folder); in normal use that is null and the native dialog opens, as before. The export below is the same.
-      const seam = await call('test_export_folder'), dir = seam || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
-      if (!dir) return;
-      status.textContent = 'exporting…';
-      await shell.exportTo(dir, { textures: textureSet });   // the self-intersection check is always on; the set is the preview's
-      await notExportedAlert(shell.getState(), seam);
-    } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
-  };
-  refreshList();
-
-  // Keys map through the shell's keyAction (tested there): a bare Backspace does nothing, Ctrl+Backspace removes the head.
-  document.addEventListener('keydown', (e) => {
-    const act = S.keyAction({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, inField: !!e.target.matches && e.target.matches('input, select, textarea') });
-    if (!act) return;
-    e.preventDefault();
-    if (act === 'save') $('save').click(); else shell[act]();
-  });
-
-  // A clean exit clears the autosave; a crash leaves it for the next start to offer back. The one close handler (above) runs this inside its try:
-  // if it fails or hangs the window still closes, and the autosave is simply left for the next start to offer back.
-  closeCleanup = async () => { if (!shell.getState().dirty) await shell.cleanExit(); else await shell.flushAutosave(); };
-
-  // C's and E's panels: each optional, each mount(root, shell); a failure is shown in its own area (app/palette/panels.js).
-  // Share codes, and Install to AC / See it in Assetto (the launch is off by default; src-tauri/src/ac.rs).
-  const b64files = (files) => files.map((f) => ({ path: f.path, data: b64(f.bytes) }));
-  const native = {
-    getAcRoot: () => call('get_ac_root'), setAcRoot: (path) => call('set_ac_root', { path }),
-    installTrack: (folder, files) => call('install_track', { folder, files: b64files(files) }),
-    getSeeItSetting: () => (tauri ? call('get_see_it_setting') : Promise.resolve(false)), setSeeItSetting: (on) => call('set_see_it_setting', { on }),
-    seeIt: (track, layout) => call('see_it_in_assetto', { track, layout }),
-  };
-  const pickFolder = (title) => call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
-  await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get), shell);
-  await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { exporter, native, pickFolder, getTextures: () => textureSet }) })), shell);
-  for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation'], ['handles', 'handles'], ['texture', 'textures'], ['onboarding', 'guide']]) {
-    await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
-  }
 })();
 </script>
 </body>

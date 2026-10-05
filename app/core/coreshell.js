@@ -1,12 +1,23 @@
 // coreshell.js: the app's state and actions for the EQUATION CORE (the core spec's build step (d), D186, pane C). No DOM and no
-// Tauri, so it runs headless under node --test and unchanged in the webview (app/lib/cjs.js), exactly like app/shell.js, which
-// stays the PIECE builder's (paused, not deleted; the page chooses one of the two, app/index.html).
+// Tauri, so it runs headless under node --test and unchanged in the webview (app/lib/cjs.js). Since D239 it is the app's ONLY builder
+// (the keeper: "can we keep only the equation mode?"): app/shell.js, the old piece builder's shell, is kept only as a test driver for
+// the shared preview and validation and for its keyAction (app/README.md says why).
 //
 //   const shell = await createCoreShell({ storage, exporter })
 //   shell.extend({ length, targets })   shell.candidate({ length, targets })   shell.undo()   shell.redo()
 //   shell.beginBrush({ mode, channel, s0, r })   shell.brushTo(delta)   shell.endBrush()      one undo step per drag
 //   shell.close()
 //   await shell.exportTo(dir)   shell.openExample(fitText, readText, name)   await shell.save(name)   await shell.open(name)
+//   shell.buildExport(opts)   shell.exportDoc()   shell.commitDoc(doc)                       (D239: install and share codes use them)
+//   shell.restore()   await shell.discardRecovery()   await shell.flushAutosave()   await shell.cleanExit()   (D239: autosave)
+//
+// AUTOSAVE AND CRASH RESTORE (D239, carried from the piece builder, app/shell.js, the same rules). While the track has unsaved changes it
+// is written (debounced by `autosaveMs`) through storage.saveAutosave as { schema: 1, kind: 'core', name, doc } with the document's
+// canonical text. Saving under a name, or cleanExit(), clears it. On the next start an autosave left behind is OFFERED as
+// state.recovery, never applied behind the user's back: restore() takes it, discardRecovery() clears it. A damaged autosave is left on
+// disk and the app starts anyway, saying so. THE OLD PIECES AUTOSAVE: the native side keeps ONE autosave file, and a piece-builder
+// autosave left from before D239 (it has no `kind`) cannot be opened here; rather than let the first core autosave overwrite it, it is
+// copied aside as an ordinary saved word track (storage.saveDoc, the name in the message), and only then is the file this builder's.
 //
 // THE SEAM IS THE PIECE BUILDER'S (app/README.md "The seam"), so the preview, the cameras and validation are reused unchanged:
 //   state.resolved = { segments, closed }: `segments` are src/core/adapter.js toSegments(doc), the same src/geom segments the
@@ -38,7 +49,7 @@ const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 const XS = require('./xsec.js');   // the cross-section channels' names (D225): the edge curve and the tube
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
-const PREFIX = 'eq-';                 // core documents are stored beside the piece builder's under this prefix
+const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted (D239)
 const BRUSH_MODES = Object.freeze(['local', 'rate']);
 // E's BRUSH (p-d186-brush-E): src/core/sculpt.js brush(doc, { mode: 'hill' | 'swerve' | 'value' | 'rate', channel, s0, r, delta })
 // -> { doc, note? }. It is used when sculpt.js exports it (not at 17c2301, where this was written; E's D186 adds it), and may be
@@ -46,18 +57,63 @@ const BRUSH_MODES = Object.freeze(['local', 'rate']);
 // offset channels h and l (A's, pending the chair's decision), and until then E's brush refuses them by name (NOT_YET), which the
 // shell shows as the message. With no E brush at all the local mode is not offered, and the rate brush is D185's sculpt().
 
-async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, now = () => Date.now() } = {}) {
+// The default timers CALL the globals rather than hold them as methods (a browser's setTimeout refuses to run as a method of another
+// object, "Illegal invocation", WebView2; app/test/timers-regression.test.js found it in the piece builder).
+const callTimers = { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (t) => clearTimeout(t) };
+const exportError = (code, message) => Object.assign(new Error(message), { name: 'ExportError', code });
+
+async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers } = {}) {
   const ok = (msg) => ({ message: msg, messageKind: 'ok' });
+  // AUTOSAVE (D239): what the last session left behind, read once at the start (the header says what happens to each kind)
+  const canAutosave = !!storage && typeof storage.saveAutosave === 'function';
+  let recovery = null, startMessage = null;
+  if (canAutosave && typeof storage.openAutosave === 'function') {
+    const left = await storage.openAutosave();
+    if (left) {
+      let o = null;
+      try { o = JSON.parse(left); } catch (e) { startMessage = `an autosave was found but could not be read, so it was left alone: ${e.message}`; }
+      if (o && o.kind === 'core') {
+        try { recovery = { name: o.name || null, doc: D.parse(o.doc) }; } catch (e) { startMessage = `an autosave was found but could not be read, so it was left alone: ${e.message}`; }
+      } else if (o) {
+        const aside = `pieces autosave ${new Date().toISOString().slice(0, 10)}`;
+        try {
+          if (typeof o.doc !== 'string' || typeof storage.saveDoc !== 'function') throw new Error('nowhere to keep it');
+          await storage.saveDoc(aside, o.doc);
+          startMessage = `an unsaved track from the old Pieces builder was found; this builder makes equation tracks and cannot open it, so it was kept as the saved word track "${aside}" in the app's tracks folder`;
+        } catch (e) { startMessage = `an unsaved track from the old Pieces builder was found and could not be kept aside (${e.message}); it is left as it was, and this session does not autosave over it`; recovery = { blocked: true }; }
+      }
+    }
+  }
   let st = {
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
-    message: null, messageKind: null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, exportReds: null,
-    localBrush: !!brushFn,
+    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, exportReds: null,
+    localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
   };
+  // a Pieces autosave that could not be kept aside is never overwritten: this session simply does not autosave
+  const mayAutosave = canAutosave && !(recovery && recovery.blocked);
   const subs = new Set();
+  let autoDue = false, autoTimer = null;
   const set = (patch) => {
     if ('message' in patch && !('messageKind' in patch)) patch = { ...patch, messageKind: patch.message ? 'error' : null };
-    st = Object.freeze({ ...st, ...patch }); for (const f of subs) f(st); return st;
+    const before = st.history.present;
+    st = Object.freeze({ ...st, ...patch });
+    if (mayAutosave && st.dirty && st.history.present !== before) {
+      autoDue = true;
+      if (autosaveMs > 0) { if (autoTimer) timers.clearTimeout(autoTimer); autoTimer = timers.setTimeout(() => { autoTimer = null; return writeAutosave(); }, autosaveMs); }
+    }
+    for (const f of subs) f(st); return st;
   };
+  async function writeAutosave() {
+    if (!autoDue) return;
+    autoDue = false;
+    const payload = JSON.stringify({ schema: 1, kind: 'core', name: st.name, doc: D.serialize(st.history.present) });
+    try { await storage.saveAutosave(payload); } catch (e) { set({ message: `autosave failed: ${e.message}` }); }
+  }
+  async function clearAutosave() {
+    autoDue = false;
+    if (autoTimer) { timers.clearTimeout(autoTimer); autoTimer = null; }
+    if (mayAutosave && typeof storage.clearAutosave === 'function') await storage.clearAutosave();
+  }
   const doc = () => st.history.present;
   let reads = [], readsFor = null;
   const segmentsOf = (d) => (d.pieces.length ? toSegments(d) : []);
@@ -182,6 +238,20 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       });
     },
 
+    /** The document as it exports and installs: its name is the one it was saved under (the Save field), else its own. */
+    exportDoc() { const d = doc(); return st.name && st.name !== d.name ? { ...d, name: st.name } : d; },
+    /**
+     * BUILD THE EXPORT, writing nothing (D239: the Export button and Install to AC both use it, so an installed track is the exported one,
+     * byte for byte): the start layout, then src/export/fromwords.js exportSegments through the exporter. A track that cannot export
+     * throws an ExportError with a code (OPEN_LOOP, NO_START_STRAIGHT, or the exporter's own, e.g. RED with .red).
+     */
+    buildExport(opts = {}) {
+      if (!exporter) throw exportError('NO_EXPORTER', 'export is not available here');
+      if (!doc().closed) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');
+      let markers;
+      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
+      return exporter.runSegments(st.resolved.segments, { name: api.exportDoc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start }, { ...opts, markers });
+    },
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
     async exportTo(dir, opts = {}) {
       if (!exporter) return set({ message: 'export is not available here' });
@@ -195,11 +265,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       let tidied = null; const tidy = async () => (tidied === null ? (tidied = await exporter.removeEmptyNote(storage, t)) : tidied);
       const stop = async (patch) => { const message = patch.message + await tidy(); return set({ ...patch, message, exportRefusal: message }); };
       try {
-      if (!doc().closed) return stop({ message: 'the loop is not closed: close it first (one click), then export', exportReds: null });
       let out;
-      let markers;
-      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; return stop({ message: `not exported: ${e.message}`, exportReds: null }); }
-      try { out = exporter.runSegments(st.resolved.segments, { name: st.name || doc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start }, { ...opts, markers }); } catch (e) {
+      try { out = api.buildExport(opts); } catch (e) {
         if (e.name !== 'ExportError') throw e;
         return stop({ message: e.message, exportReds: e.code === 'RED' ? e.red : null });
       }
@@ -214,8 +281,25 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!storage) return set({ message: 'saving is not available here' });
       if (!NAME_RE.test(name || '')) return set({ message: `a track name is 1 to 60 letters, digits, spaces, _ or -, starting with a letter or digit; got ${JSON.stringify(name)}` });
       await storage.saveDoc(PREFIX + name, D.serialize(doc()));
+      await clearAutosave();   // saved under a name: nothing is left to recover (D239, as the piece builder did)
       return set({ name, dirty: false, message: null });
     },
+    /**
+     * A PASTED TRACK (D239, a share code): it REPLACES the open one as one undo step, so the old track is one Ctrl+Z away. The document
+     * is checked first; a bad one is refused by name and nothing changes.
+     */
+    commitDoc: (d) => attempt(() => { D.checkDoc(d); return set({ history: D.commit(st.history, d), ...resolvedOf(d), dirty: true, lastEdited: null, message: null, exportReds: null, lastStep: { op: 'paste', ms: 0 } }); }),
+    /** Write the autosave now if one is due (the debounce would have written it after the pause). */
+    flushAutosave: () => writeAutosave(),
+    /** Take the track the last session left unsaved. It becomes the open track, with a fresh history, still unsaved. */
+    restore() {
+      if (!st.recovery) return set({ message: 'there is no unsaved track to restore' });
+      const { doc: d, name } = st.recovery;
+      return set({ history: D.createHistory(d), ...resolvedOf(d), name, dirty: true, recovery: null, lastEdited: null, exportReds: null, message: null });
+    },
+    async discardRecovery() { await clearAutosave(); return set({ recovery: null }); },
+    /** The window is closing on purpose: nothing is left to recover. */
+    async cleanExit() { await clearAutosave(); },
     async open(name) {
       if (!storage) return set({ message: 'opening is not available here' });
       const text = await storage.openDoc(PREFIX + name), d = attempt(() => D.parse(text));

@@ -69,10 +69,8 @@ test('a file name becomes a texture name the document accepts', () => {
   assert.deepStrictEqual(['C:\\pics\\Kerb Stripes.PNG', 'x/._.jpg', 'Ünï.jpeg'].map(nameFromFile), ['kerb-stripes', 'texture', 'n']);
 });
 
-test('the textures panel loads through the webview loader and exports mount(root, shell)', async () => {
-  const m = await loadCjs('app/texture/index.js', async (p) => fs.readFileSync(path.join(REPO, p), 'utf8'));
-  assert.strictEqual(typeof m.mount, 'function');
-});
+// RETIRED D239: 'the textures panel loads through the webview loader and exports mount(root, shell)' (app/texture/index.js, the Pieces
+// page's per-word textures panel, is removed; the equation page's road surface is app/core/textures.js, app/test/core-textures.test.js)
 
 // ── D175: made textures, packs, the budget ─────────────────────────────────────────────────────────────────────────
 const TM = require('../../src/texmaker/index.js');
