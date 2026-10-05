@@ -10,6 +10,8 @@
 //   await shell.exportTo(dir)   shell.openExample(fitText, readText, name)   await shell.save(name)   await shell.open(name)
 //   shell.buildExport(opts)   shell.exportDoc()   shell.commitDoc(doc)                       (D239: install and share codes use them)
 //   shell.restore()   await shell.discardRecovery()   await shell.flushAutosave()   await shell.cleanExit()   (D239: autosave)
+//   await shell.backupNow(reason)   await shell.listVersions()   await shell.openVersion(file)   (D239 amendment: previous versions;
+//   every Save also moves the file it overwrites into track-backups, natively: src-tauri/src/backups.rs)
 //
 // AUTOSAVE AND CRASH RESTORE (D239, carried from the piece builder, app/shell.js, the same rules). While the track has unsaved changes it
 // is written (debounced by `autosaveMs`) through storage.saveAutosave as { schema: 1, kind: 'core', name, doc } with the document's
@@ -300,6 +302,37 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     async discardRecovery() { await clearAutosave(); return set({ recovery: null }); },
     /** The window is closing on purpose: nothing is left to recover. */
     async cleanExit() { await clearAutosave(); },
+    /**
+     * BACKUP NOW (D239 amendment: the keeper lost TEST 1 to one Close, with no copy from before it). Writes the document AS IT IS NOW
+     * to the track's backups (native backup_track: track-backups/<eq-name>.<local time>.t180track, newest 20 kept), under the saved
+     * name or, unsaved, under "unsaved". `reason` is said in the result. Resolves { file, reason }, or null where there is no native
+     * side to write to (headless, a browser); a write that FAILS rejects, so the caller can refuse the operation it was guarding.
+     * B's D242 Close calls it before applying; until then the Close button calls it before shell.close() (app/core/panel.js).
+     */
+    async backupNow(reason = '') {
+      if (!storage || typeof storage.backupDoc !== 'function') return null;
+      const file = await storage.backupDoc(PREFIX + (st.name || 'unsaved'), D.serialize(doc()));
+      return { file, reason };
+    },
+    /** The open track's previous versions, newest first: [{ file, when, bytes, length, closed }] (when null for a hand-made one). */
+    async listVersions() {
+      if (!st.name || !storage || typeof storage.listBackups !== 'function') return [];
+      const out = [];
+      for (const b of await storage.listBackups(PREFIX + st.name)) {
+        const m = /\.(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(\d{2})(?:_\d+)?\.t180track$/.exec(b.file);
+        let length = null, closed = null;
+        try { const d = D.parse(await storage.openBackup(b.file)); length = d.pieces.reduce((a, p) => a + (p.length || 0), 0); closed = !!d.closed; } catch (e) { /* listed, unreadable: shown without its numbers */ }
+        out.push({ file: b.file, bytes: b.bytes, when: m ? `${m[1]} ${m[2]}:${m[3]}:${m[4]}` : null, length, closed });
+      }
+      return out;
+    },
+    /** Open a previous version AS A COPY: an unsaved track (no name), so a Save cannot overwrite the current file by accident. */
+    async openVersion(file) {
+      if (!storage || typeof storage.openBackup !== 'function') return set({ message: 'previous versions are not available here' });
+      let d;
+      try { d = D.parse(await storage.openBackup(file)); } catch (e) { return set({ message: `could not open that version: ${e.message}` }); }
+      return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: true, lastEdited: null, exportReds: null, ...ok(`opened the previous version ${file} as a copy: it is unsaved; save it under a name to keep it`) });
+    },
     async open(name) {
       if (!storage) return set({ message: 'opening is not available here' });
       const text = await storage.openDoc(PREFIX + name), d = attempt(() => D.parse(text));

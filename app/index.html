@@ -76,6 +76,7 @@
   <input id="name" placeholder="track name" aria-label="track name" size="16">
   <button id="save" title="Ctrl+S">Save</button>
   <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
+  <select id="versions" aria-label="previous versions of the open track" title="Every Save keeps the version it replaces (the newest 20), and Close the loop keeps the track from before it. One opens as an unsaved copy."><option value="">Previous versions…</option></select>
   <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
   <span id="install" title="Install to AC writes into Assetto Corsa's content\tracks, always as a t180b_ folder"></span>
   <span id="status" style="color: var(--dim)"></span>
@@ -109,8 +110,13 @@
   const tauri = window.__TAURI__ && window.__TAURI__.core;
   const call = (cmd, args) => (tauri ? tauri.invoke(cmd, args) : Promise.reject(new Error('not running inside the app: no native side')));
   const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+  // the page's LOCAL time as yyyy-mm-dd_hhmmss: a backup's name (src-tauri/src/backups.rs checks the form; the keeper reads it)
+  const localStamp = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
   const storage = {
-    saveDoc: (name, text) => call('save_track', { name, text }),
+    saveDoc: (name, text) => call('save_track', { name, text, stamp: localStamp() }),   // D239 amendment: the file it overwrites is moved to track-backups first
+    backupDoc: (name, text) => call('backup_track', { name, text, stamp: localStamp() }),
+    listBackups: (name) => (tauri ? call('list_track_backups', { name }) : Promise.resolve([])),
+    openBackup: (file) => call('open_track_backup', { file }),
     openDoc: (name) => call('open_track', { name }),
     listDocs: () => call('list_tracks'),
     saveLibrary: (text) => call('save_library', { text }),
@@ -199,11 +205,21 @@
       bar.append(el('span', `A track from your last session was not saved${st.recovery.name ? ` ("${st.recovery.name}")` : ''}: ${n} piece${n === 1 ? '' : 's'}${st.recovery.doc.closed ? ', a closed loop' : ''}.`), restore, discard);
       b.replaceChildren(bar);
     };
-    const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
+    const draw = (st) => { drawBanner(st); drawReds(st); $('versions').disabled = !st.name; status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
     const refreshList = async () => { try { const names = await shell.list(); $('open').replaceChildren(new Option('Open…', ''), ...names.map((n) => new Option(n, n))); } catch (e) { status.textContent = e.message; } };
     $('new').onclick = () => shell.newDoc();
     $('save').onclick = async () => { try { await shell.save($('name').value.trim()); await refreshList(); } catch (e) { status.textContent = e.message; } };
+    // PREVIOUS VERSIONS of the open track (D239 amendment): listed when the picker is opened, one opens as an unsaved copy
+    const refreshVersions = async () => {
+      const v = $('versions');
+      try {
+        const list = await shell.listVersions();
+        v.replaceChildren(new Option(list.length ? `Previous versions (${list.length})…` : 'Previous versions: none yet', ''), ...list.map((b) => new Option(`${b.when || b.file}${b.length != null ? ` · ${Math.round(b.length).toLocaleString('en-US')} m` : ''}${b.closed != null ? (b.closed ? ' · closed' : ' · open') : ' · unreadable'}`, b.file)));
+      } catch (e) { status.textContent = `previous versions: ${e.message || e}`; }
+    };
+    $('versions').onmousedown = $('versions').onfocus = () => { refreshVersions(); };
+    $('versions').onchange = async (e) => { const f = e.target.value; if (!f) return; await shell.openVersion(f); $('name').value = ''; e.target.value = ''; };
     $('open').onchange = async (e) => { const n = e.target.value; if (!n) return; try { await shell.open(n); $('name').value = n; } catch (err) { status.textContent = err.message; } e.target.value = ''; };
     $('export').onclick = async () => {
       try {

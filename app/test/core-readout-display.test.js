@@ -618,3 +618,26 @@ test('no water: the panel has no Water section, the shell no pour and no water s
   const app = path.resolve(__dirname, '..'), found = [], walk = (d) => { for (const n of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, n.name); if (n.isDirectory()) { if (n.name !== 'test' && n.name !== 'node_modules') walk(p); } else if (/\.(js|html|md|json)$/.test(n.name)) { const t = fs.readFileSync(p, 'utf8'); if (/water|\bpour\b|setOverlay|t180:overlay/i.test(t)) found.push(path.relative(app, p)); } } };
   walk(app); assert.deepEqual(found, [], `files of the app that still name the water: ${found.join(', ')}`);
 });
+
+// ── D239 amendment (the keeper lost TEST 1 to one Close, with no copy from before it): the Close button keeps a copy FIRST ──────────
+const closeLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
+test('Close the loop writes a copy of the track as it was BEFORE closing it (shell.backupNow), then closes', async () => {
+  const D = require('../../src/core/document.js'), order = [];
+  const storage = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], backupDoc: async (name, text) => { order.push(['backup', name, text]); return `${name}.x.t180track`; } };
+  const P = await mountPanel((s) => { const close = s.close; s.close = (...a) => { order.push(['close']); return close(...a); }; return s; }, { storage });
+  closeLap(P.shell); const before = D.serialize(P.shell.getState().history.present);
+  await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
+  assert.deepEqual(order.map((o) => o[0]), ['backup', 'close'], 'the copy first, then the close');
+  assert.deepEqual([order[0][1], order[0][2]], ['eq-unsaved', before], 'the copy is the open track as it was');
+  assert.equal(P.shell.getState().history.present.closed, true, P.shell.getState().message);
+  P.panel.unmount();
+});
+test('if that copy cannot be written, Close the loop changes nothing and says why', async () => {
+  const storage = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], backupDoc: async () => { throw new Error('disk full'); } };
+  const P = await mountPanel((s) => s, { storage });
+  closeLap(P.shell); const before = P.shell.getState().history.present;
+  await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
+  assert.equal(P.shell.getState().history.present, before, 'not closed, not changed');
+  assert.match(P.root.all().find((e) => e.attrs.role === 'status').textContent, /not closed: the copy from before Close could not be written \(disk full\)/);
+  P.panel.unmount();
+});

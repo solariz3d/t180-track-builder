@@ -158,6 +158,66 @@ test('Install to AC writes exactly the files Export writes, byte for byte, under
   for (const [i, [p, b]] of strip(installs[0].files).entries()) assert.ok(b.equals(strip(st.writes[0].files)[i][1]), `${p} differs`);
 });
 
+// ── D239 amendment: SAVE KEEPS THE PREVIOUS VERSION (the keeper lost TEST 1 to one Close). The move on Save, the 20 kept and the prune
+// are native and tested there (src-tauri/src/backups.rs, cargo test); these are the shell's and the page's halves. ──
+/** The native backups in memory: backup_track's copies, list_track_backups, open_track_backup. */
+function backupStore({ fail = false } = {}) {
+  const st = storage(), files = new Map();
+  let n = 0;
+  return Object.assign(st, {
+    files,
+    backupDoc: async (name, text) => { if (fail) throw new Error('disk full'); const f = `${name}.2026-10-05_10${String(n++).padStart(4, '0')}.t180track`; files.set(f, text); return f; },
+    // as the native list: the stamped ones newest first, then the hand-made ones
+    listBackups: async (name) => { const stamped = (f) => /\.\d{4}-\d{2}-\d{2}_\d{6}(_\d+)?\.t180track$/.test(f); return [...files.keys()].filter((f) => f.startsWith(`${name}.`)).sort((a, b) => (stamped(b) - stamped(a)) || (a < b ? 1 : a > b ? -1 : 0)).map((file) => ({ file, bytes: files.get(file).length })); },
+    openBackup: async (file) => { if (!files.has(file)) throw new Error(`no backup ${file}`); return files.get(file); },
+  });
+}
+test('backupNow writes the track AS IT IS NOW under its eq- name (or "unsaved"), and says why', async () => {
+  const st = backupStore(), s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 });
+  s.extend({ length: 200 });
+  const r1 = await s.backupNow('before Close the loop');
+  assert.match(r1.file, /^eq-unsaved\./); assert.equal(r1.reason, 'before Close the loop'); assert.equal(st.files.get(r1.file), text(s));
+  await s.save('Kept'); s.extend({ length: 100 });
+  const r2 = await s.backupNow('x');
+  assert.match(r2.file, /^eq-Kept\./); assert.equal(st.files.get(r2.file), text(s), 'the document as it is now, not as it was saved');
+  assert.equal(st.docs.get('eq-Kept'), D.serialize(D.parse(st.docs.get('eq-Kept'))), 'control: the saved file is untouched by a backup');
+});
+
+test('backupNow resolves null where there is nothing to write to, and REJECTS when the write fails (the caller then refuses its operation)', async () => {
+  const bare = await createCoreShell({ brushFn: null }); bare.extend({ length: 100 });
+  assert.equal(await bare.backupNow('x'), null);
+  const failing = await createCoreShell({ brushFn: null, storage: backupStore({ fail: true }), autosaveMs: 0 }); failing.extend({ length: 100 });
+  await assert.rejects(failing.backupNow('x'), /disk full/);
+});
+
+test('Previous versions lists the open track\'s backups newest first, with time, length and closed, and opens one as an unsaved COPY', async () => {
+  const st = backupStore(), s = await createCoreShell({ brushFn: null, storage: st, exporter: null, autosaveMs: 0 });
+  extendLap(s); await s.save('Lap'); const open = text(s);
+  await s.backupNow('a'); s.close(); await s.backupNow('b');
+  st.files.set('eq-Lap.2339-closed.t180track', open);   // a backup made by hand: listed too, without a time
+  st.files.set('eq-Lap.2026-10-05_090000.t180track', 'not a document');
+  const v = await s.listVersions();
+  assert.equal(v.length, 4);
+  assert.equal(v[0].when, '2026-10-05 10:00:01'); assert.equal(v[0].closed, true); assert.equal(v[1].closed, false);
+  assert.ok(Math.abs(v[1].length - (300 + 4 * Q + 60)) < 6e-4, `length ${v[1].length}`);   // a saved length is held to 0.1 mm (src/core/document.js DEC.m), per piece
+  assert.deepEqual(v.find((b) => b.file === 'eq-Lap.2339-closed.t180track').when, null);
+  assert.deepEqual([v.find((b) => b.file.endsWith('090000.t180track')).length, v.find((b) => b.file.endsWith('090000.t180track')).closed], [null, null], 'an unreadable one is listed without its numbers');
+  const savedBefore = st.docs.get('eq-Lap');
+  await s.openVersion(v[1].file);
+  assert.deepEqual([text(s), s.getState().name, s.getState().dirty], [open, null, true]);
+  assert.match(s.getState().message, /as a copy: it is unsaved/);
+  assert.equal(st.docs.get('eq-Lap'), savedBefore, 'opening a version changes no saved file');
+});
+
+test('the page: Save sends the local time for the backup\'s name, the three backup commands are wired and registered, and there is a Previous versions picker', () => {
+  const html = fs.readFileSync(path.join(REPO, 'app', 'index.html'), 'utf8');
+  assert.match(html, /saveDoc: \(name, text\) => call\('save_track', \{ name, text, stamp: localStamp\(\) \}\)/);
+  for (const c of ['backup_track', 'list_track_backups', 'open_track_backup']) assert.ok(html.includes(`call('${c}'`), c);
+  assert.match(html, /<select id="versions"/);
+  const rs = fs.readFileSync(path.join(REPO, 'src-tauri', 'src', 'lib.rs'), 'utf8');
+  for (const c of ['backup_track', 'list_track_backups', 'open_track_backup']) assert.match(rs, new RegExp(`generate_handler!\\[[^\\]]*\\b${c}\\b`), `${c} is registered`);
+});
+
 // ── the guide, on the equation builder ──
 test('the guide\'s steps are the equation builder\'s: extend, brush, close, colours, export, grid', () => {
   assert.deepEqual(STEPS.map((s) => s.id), ['extend', 'brush', 'close', 'colours', 'export', 'grid']);
