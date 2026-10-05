@@ -395,8 +395,21 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** Rename a saved piece: the new name must be free (a piece is never overwritten); the file's own name field changes with it. */
     async renamePiece(from, to) {
       if (!storage || typeof storage.openPiece !== 'function' || typeof storage.savePiece !== 'function' || typeof storage.deletePiece !== 'function') return set({ message: 'saved pieces are not available here' });
-      let text;
-      try { text = PC.serialize({ ...PC.parse(await storage.openPiece(from)), name: to }); } catch (e) { return set({ message: `could not rename the piece "${from}": ${e && e.message || e}` }); }
+      let text, orig;
+      try { orig = await storage.openPiece(from); text = PC.serialize({ ...PC.parse(orig), name: to }); } catch (e) { return set({ message: `could not rename the piece "${from}": ${e && e.message || e}` }); }
+      // A CASE-ONLY rename (Run to run; D240 follow-up, C's look F2): Windows names are case-blind, so "run" IS the file "Run" and saving under it is refused as a name in use. It is the same file: the new text goes
+      // to a temporary name first, the old file is removed, the new name is written, the temporary one removed; a failure on the way puts the old file back (or keeps the temporary copy and says so), so the piece is never lost
+      if (from !== to && from.toLowerCase() === to.toLowerCase()) {
+        const tmp = `${to}-r`;
+        try { await storage.savePiece(tmp, text); } catch (e) { return set({ message: `not renamed: ${e && e.message || e}` }); }
+        try { await storage.deletePiece(from); } catch (e) { try { await storage.deletePiece(tmp); } catch (e2) { /* the copy stays: said below */ } return set({ libraryStamp: st.libraryStamp + 1, message: `not renamed: the old file could not be replaced (${e && e.message || e})` }); }
+        try { await storage.savePiece(to, text); } catch (e) {
+          try { await storage.savePiece(from, orig); await storage.deletePiece(tmp); return set({ libraryStamp: st.libraryStamp + 1, message: `not renamed: ${e && e.message || e}; the piece is as it was` }); }
+          catch (e2) { return set({ libraryStamp: st.libraryStamp + 1, message: `the rename failed (${e && e.message || e}) and the piece is kept as "${tmp}"` }); }
+        }
+        try { await storage.deletePiece(tmp); } catch (e) { return set({ libraryStamp: st.libraryStamp + 1, message: `renamed the piece "${from}" to "${to}", but its temporary copy "${tmp}" could not be removed: ${e && e.message || e}` }); }
+        return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"`) });
+      }
       try { await storage.savePiece(to, text); } catch (e) { return set({ message: `not renamed: ${e && e.message || e}` }); }
       try { await storage.deletePiece(from); } catch (e) { return set({ libraryStamp: st.libraryStamp + 1, message: `the piece was copied to "${to}" but the old one "${from}" could not be removed: ${e && e.message || e}` }); }
       return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"`) });

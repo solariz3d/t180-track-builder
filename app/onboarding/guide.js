@@ -27,7 +27,7 @@ const pieceCount = (doc) => (doc && Array.isArray(doc.pieces) ? doc.pieces.lengt
 
 const STEPS = Object.freeze([
   { id: 'extend', title: 'Extend a few pieces', target: '#palette',
-    text: `Under "Extend at the head", set a length and a turn (or leave them), then press Extend. Each piece grows the track from its open end. Done at ${EXTEND_AT_LEAST} pieces; give at least one a turn, or there is nothing to close.`,
+    text: `Under "Extend at the head", set a length and a turn (or leave them), then press Extend. Each piece grows the track from its open end. Done at ${EXTEND_AT_LEAST} pieces; give at least one a turn, or there is nothing to close. To take pieces out, click them on the track (Shift-click for a run) and press "Delete selected": at the end of the track that makes no backup, so Ctrl+Z is the only way back; in the middle you see a preview first and the track is copied to its backups before it is applied.`,
     done: (st) => pieceCount(st.history.present) >= EXTEND_AT_LEAST },
   { id: 'brush', title: 'Brush the track', target: '#palette',
     text: 'Tick "on" under "Brush", pick what to change (turn, bank, width, …), then drag on the track in the preview. The brush bends the track smoothly around where you drag; a stroke stops where the track would break (red).',

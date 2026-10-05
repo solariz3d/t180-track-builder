@@ -33,13 +33,14 @@ const REPO = path.resolve(__dirname, '..', '..'), get = async (p) => fs.readFile
 const R = 180, Q = (Math.PI * R) / 2, TURN = 1 / R, DEG = Math.PI / 180;
 
 /** The native side's storage, in memory: the pieces folder (a name already used is refused, as the native save is), the backups, the tracks. */
-function store({ failBackup = false } = {}) {
-  const st = { pieces: new Map(), backups: [], log: [] };
+function store({ failBackup = false, caseBlind = false } = {}) {   // caseBlind: Windows names ("Run" and "run" are one file)
+  const st = { pieces: new Map(), backups: [], log: [], failSave: null };
+  const find = (n) => (caseBlind ? [...st.pieces.keys()].find((k) => k.toLowerCase() === n.toLowerCase()) : (st.pieces.has(n) ? n : undefined));
   return Object.assign(st, {
     listPieces: async () => [...st.pieces.keys()].sort(),
-    openPiece: async (n) => { if (!st.pieces.has(n)) throw new Error(`could not read the piece "${n}": not found`); return st.pieces.get(n); },
-    savePiece: async (n, t) => { if (st.pieces.has(n)) throw new Error(`a piece named "${n}" already exists; delete it first or use another name`); st.pieces.set(n, t); },
-    deletePiece: async (n) => { if (!st.pieces.delete(n)) throw new Error(`could not delete the piece "${n}": not found`); },
+    openPiece: async (n) => { const k = find(n); if (k === undefined) throw new Error(`could not read the piece "${n}": not found`); return st.pieces.get(k); },
+    savePiece: async (n, t) => { if (st.failSave && st.failSave(n)) throw new Error('disk full'); if (find(n) !== undefined) throw new Error(`a piece named "${n}" already exists; delete it first or use another name`); st.pieces.set(n, t); },
+    deletePiece: async (n) => { const k = find(n); if (k === undefined) throw new Error(`could not delete the piece "${n}": not found`); st.pieces.delete(k); },
     backupDoc: async (name, text) => { if (failBackup) throw new Error('disk full'); st.backups.push({ name, text }); st.log.push('backup'); return `${name}.2026-10-05_120000.t180track`; },
   });
 }
@@ -148,6 +149,22 @@ test('row 6: rename (the new name must be free; the file\'s own name changes) an
   await s.renamePiece('ghost', 'x'); assert.match(s.getState().message, /could not rename the piece "ghost"/);
   const stamp = s.getState().libraryStamp; await s.deletePieceFile('uno'); assert.deepEqual(await st.listPieces(), ['two']); assert.equal(s.getState().libraryStamp, stamp + 1); assert.equal(s.getState().history.present.pieces.length, 5, 'the track is untouched');
   await s.deletePieceFile('uno'); assert.match(s.getState().message, /the piece was not deleted/);
+});
+
+test('row 6b: a CASE-ONLY rename (Run to run) works where names are case-blind (C, look F2), on a case-sensitive store too, and a failure on the way never loses the piece', async () => {
+  for (const caseBlind of [true, false]) {
+    const st = store({ caseBlind }), s = await track(st); s.selectPiece(0); await s.savePiece('Run'); const was = st.pieces.get('Run');
+    await s.renamePiece('Run', 'run'); assert.equal(s.getState().messageKind, 'ok', s.getState().message); assert.match(s.getState().message, /renamed the piece "Run" to "run"/);
+    assert.deepEqual(await st.listPieces(), ['run'], `only the new name is left (case-blind ${caseBlind}), no temporary copy`); assert.equal(PC.parse(st.pieces.get('run')).name, 'run', 'the own name field of the file changed');
+    assert.deepEqual({ ...PC.parse(st.pieces.get('run')), name: 'Run' }, PC.parse(was), 'and nothing else changed');
+    s.selectPiece(1); await s.savePiece('Other'); await s.renamePiece('run', 'Other'); assert.match(s.getState().message, /not renamed: a piece named "Other" already exists/); assert.deepEqual(await st.listPieces(), ['Other', 'run'], 'a different name that is taken is still refused');
+    // the last write fails: the old piece is put back as it was, and no temporary copy is left
+    const text = st.pieces.get('run'); st.failSave = (n) => n === 'RUN'; await s.renamePiece('run', 'RUN');
+    assert.match(s.getState().message, /not renamed: disk full; the piece is as it was/); assert.deepEqual(await st.listPieces(), ['Other', 'run']); assert.equal(st.pieces.get('run'), text);
+    // the temporary copy cannot be written: nothing changed at all
+    st.failSave = (n) => n === 'Run-r'; await s.renamePiece('run', 'Run'); assert.match(s.getState().message, /not renamed: disk full/); assert.deepEqual(await st.listPieces(), ['Other', 'run']);
+    st.failSave = null;
+  }
 });
 
 test('row 7: delete at the open end is simple (one undo step, ids kept); a closed track refuses by name', async () => {
