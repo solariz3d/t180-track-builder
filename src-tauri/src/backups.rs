@@ -100,6 +100,33 @@ pub fn write_copy(backups: &Path, name: &str, stamp: &str, text: &str) -> Result
     Ok(to)
 }
 
+/// SAVE with the previous version kept: the file at `path` is moved aside, the new text written (if that fails, the old file is moved
+/// back and the error returned: a failed save never loses the track), then this track's backups are pruned. A prune that fails AFTER a
+/// good save is LOGGED and the save still succeeds (B's D239 look, F3b: the page must not report a save that worked as failed; an old
+/// backup left over is harmless). Returns the backup's path, or None on a first save.
+pub fn save(path: &Path, backups: &Path, name: &str, stamp: &str, text: &str) -> Result<Option<PathBuf>, String> {
+    let kept = move_aside(path, backups, name, stamp)?;
+    if let Err(e) = super::write_atomic(path, text) {
+        if let Some(k) = &kept {
+            let _ = fs::rename(k, path);
+        }
+        return Err(e);
+    }
+    if let Err(e) = prune(backups, name, KEEP) {
+        eprintln!("t180: saved {name}, but pruning its old backups failed (they are left as they are): {e}");
+    }
+    Ok(kept)
+}
+
+/// A copy of `text` as a new backup of `name`, then the prune, whose failure is logged as in `save`.
+pub fn copy(backups: &Path, name: &str, stamp: &str, text: &str) -> Result<PathBuf, String> {
+    let to = write_copy(backups, name, stamp, text)?;
+    if let Err(e) = prune(backups, name, KEEP) {
+        eprintln!("t180: backed up {name}, but pruning its old backups failed (they are left as they are): {e}");
+    }
+    Ok(to)
+}
+
 /// Keep the newest `keep` stamped backups of `name`; remove the older ones, oldest first. Returns what was removed.
 pub fn prune(backups: &Path, name: &str, keep: usize) -> Result<Vec<String>, String> {
     let mut mine: Vec<String> = match fs::read_dir(backups) {
@@ -214,6 +241,30 @@ mod tests {
         assert!(is_stamped(b.file_name().unwrap().to_str().unwrap(), "eq-T"));
         let l = list(&d, "eq-T").unwrap();
         assert_eq!(l[0].file, b.file_name().unwrap().to_str().unwrap(), "newest first: _2 sorts after the plain stamp");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_save_whose_prune_fails_afterwards_still_succeeds_and_the_new_text_is_written() {
+        // the OLDEST stamped name is a directory, which remove_file cannot remove on any platform, so the prune after the 21st fails.
+        // (A read-only file was tried first and is NOT enough: Rust's remove_file deleted it on Windows; this test's own control caught that.)
+        let d = scratch("prunefail");
+        let (tracks, bk) = (d.join("tracks"), d.join(DIR));
+        fs::create_dir_all(&tracks).unwrap();
+        let oldest = bk.join(format!("eq-T.{}.t180track", stamp(0)));
+        fs::create_dir_all(oldest.join("inside")).unwrap();
+        for i in 1..20 {
+            write_copy(&bk, "eq-T", &stamp(i), &format!("v{i}")).unwrap();
+        }
+        assert!(prune(&bk, "eq-T", 19).is_err(), "control: a prune that must remove the oldest (a directory) fails");
+        let file = tracks.join("eq-T.t180track");
+        fs::write(&file, "OLD").unwrap();
+        let r = save(&file, &bk, "eq-T", &stamp(30), "NEW");
+        assert!(r.is_ok(), "the save worked, so it reports success: {r:?}");
+        assert_eq!(fs::read_to_string(&file).unwrap(), "NEW");
+        assert_eq!(fs::read_to_string(r.unwrap().unwrap()).unwrap(), "OLD", "and the previous version was kept");
+        assert!(copy(&bk, "eq-T", &stamp(31), "COPY").is_ok(), "a backup copy whose prune fails also succeeds");
+        assert!(oldest.is_dir(), "and the prune removed nothing it could not");
         fs::remove_dir_all(&d).unwrap();
     }
 

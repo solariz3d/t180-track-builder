@@ -16,8 +16,9 @@
 // AUTOSAVE AND CRASH RESTORE (D239, carried from the piece builder, app/shell.js, the same rules). While the track has unsaved changes it
 // is written (debounced by `autosaveMs`) through storage.saveAutosave as { schema: 1, kind: 'core', name, doc } with the document's
 // canonical text. Saving under a name, or cleanExit(), clears it. On the next start an autosave left behind is OFFERED as
-// state.recovery, never applied behind the user's back: restore() takes it, discardRecovery() clears it. A damaged autosave is left on
-// disk and the app starts anyway, saying so. THE OLD PIECES AUTOSAVE: the native side keeps ONE autosave file, and a piece-builder
+// state.recovery, never applied behind the user's back: restore() takes it, discardRecovery() clears it. A damaged autosave's bytes are
+// kept as a "damaged autosave" backup before this session may autosave over it (or, if they cannot be kept, it is left as it was and this
+// session does not autosave), and the app starts anyway, saying so. THE OLD PIECES AUTOSAVE: the native side keeps ONE autosave file, and a piece-builder
 // autosave left from before D239 (it has no `kind`) cannot be opened here; rather than let the first core autosave overwrite it, it is
 // copied aside as an ordinary saved word track (storage.saveDoc, the name in the message), and only then is the file this builder's.
 //
@@ -72,11 +73,23 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   if (canAutosave && typeof storage.openAutosave === 'function') {
     const left = await storage.openAutosave();
     if (left) {
-      let o = null;
-      try { o = JSON.parse(left); } catch (e) { startMessage = `an autosave was found but could not be read, so it was left alone: ${e.message}`; }
-      if (o && o.kind === 'core') {
-        try { recovery = { name: o.name || null, doc: D.parse(o.doc) }; } catch (e) { startMessage = `an autosave was found but could not be read, so it was left alone: ${e.message}`; }
-      } else if (o) {
+      // A DAMAGED autosave (B's D239 look, F1: "left alone" held only until the session's first autosave overwrote it): its bytes are kept
+      // as a backup first ("damaged autosave", native backup_track), and only then may this session autosave; if they cannot be kept, the
+      // file is left as it is and this session does not autosave over it, exactly as for a Pieces autosave that cannot be kept aside.
+      const keepDamaged = async (why) => {
+        try {
+          if (typeof storage.backupDoc !== 'function') throw new Error('nowhere to keep it');
+          const file = await storage.backupDoc('damaged autosave', left);
+          startMessage = `an autosave was found but could not be read (${why}); its bytes were kept as ${file} in the app's track-backups folder`;
+        } catch (e) { startMessage = `an autosave was found but could not be read (${why}), and could not be kept aside (${e.message}); it is left as it was, and this session does not autosave over it`; recovery = { blocked: true }; }
+      };
+      let o = null, unreadable = null;
+      try { o = JSON.parse(left); } catch (e) { unreadable = e.message; }
+      if (!unreadable && (!o || typeof o !== 'object' || Array.isArray(o))) unreadable = 'it is not an autosave record';
+      if (unreadable) await keepDamaged(unreadable);
+      else if (o.kind === 'core') {
+        try { recovery = { name: o.name || null, doc: D.parse(o.doc) }; } catch (e) { await keepDamaged(e.message); }
+      } else {
         const aside = `pieces autosave ${new Date().toISOString().slice(0, 10)}`;
         try {
           if (typeof o.doc !== 'string' || typeof storage.saveDoc !== 'function') throw new Error('nowhere to keep it');
@@ -326,11 +339,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const file = await storage.backupDoc(PREFIX + (st.name || 'unsaved'), D.serialize(doc()));
       return { file, reason };
     },
-    /** The open track's previous versions, newest first: [{ file, when, bytes, length, closed }] (when null for a hand-made one). */
+    /**
+     * The open track's previous versions, newest first: [{ file, when, bytes, length, closed }] (when null for a hand-made one). An UNSAVED
+     * track lists the unsaved pool, "eq-unsaved" (B's D239 look, F3a: its copy from before Close was written there and could not be opened);
+     * that pool is shared by every unsaved track, which the times tell apart.
+     */
     async listVersions() {
-      if (!st.name || !storage || typeof storage.listBackups !== 'function') return [];
+      if (!storage || typeof storage.listBackups !== 'function') return [];
       const out = [];
-      for (const b of await storage.listBackups(PREFIX + st.name)) {
+      for (const b of await storage.listBackups(PREFIX + (st.name || 'unsaved'))) {
         const m = /\.(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(\d{2})(?:_\d+)?\.t180track$/.exec(b.file);
         let length = null, closed = null;
         try { const d = D.parse(await storage.openBackup(b.file)); length = d.pieces.reduce((a, p) => a + (p.length || 0), 0); closed = !!d.closed; } catch (e) { /* listed, unreadable: shown without its numbers */ }

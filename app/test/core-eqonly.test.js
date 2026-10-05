@@ -71,11 +71,35 @@ test('Discard clears the offer and the file; Save under a name clears the autosa
   await b.cleanExit(); assert.equal(st.auto, null, 'a clean exit leaves nothing to recover');
 });
 
-test('a damaged autosave is left on disk and the app starts anyway, saying so', async () => {
-  const st = storage({ autosave: '{"schema":1,"kind":"core","doc":"not a document"}' });
-  const s = await createCoreShell({ brushFn: null, storage: st });
-  assert.match(s.getState().message, /could not be read, so it was left alone/);
-  assert.deepEqual([s.getState().recovery, st.auto, st.cleared], [null, '{"schema":1,"kind":"core","doc":"not a document"}', 0]);
+// RESTATED (B's D239 look, F1): "left on disk" held only until the first autosave. With nowhere to keep it aside (this storage has no
+// backups), it now stays on disk for the WHOLE session: an edit and a flush write nothing over it.
+test('a damaged autosave that cannot be kept aside is left on disk for the whole session, and the app starts anyway, saying so', async () => {
+  const bad = '{"schema":1,"kind":"core","doc":"not a document"}', st = storage({ autosave: bad });
+  const s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 });
+  assert.match(s.getState().message, /could not be read .*could not be kept aside \(nowhere to keep it\).*does not autosave over it/);
+  s.extend({ length: 200 }); await s.flushAutosave(); await s.cleanExit();
+  assert.deepEqual([s.getState().recovery, st.auto, st.autoWrites, st.cleared], [null, bad, 0, 0]);
+});
+
+// ── B's D239 look, F1: a DAMAGED autosave's bytes survive the session's first autosave ──
+for (const [what, bad] of [['not JSON', '{"schema":1,"kind":"core","doc":'], ['a core autosave whose document does not parse', '{"schema":1,"kind":"core","doc":"not a document"}'], ['JSON that is not a record', 'null']]) {
+  test(`a damaged autosave (${what}) is kept as a "damaged autosave" backup BEFORE the session autosaves over it`, async () => {
+    const st = backupStore({}); st.auto = bad;
+    const s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 });
+    const kept = [...st.files.keys()].filter((f) => f.startsWith('damaged autosave.'));
+    assert.equal(kept.length, 1); assert.equal(st.files.get(kept[0]), bad, 'byte for byte');
+    assert.match(s.getState().message, new RegExp(`its bytes were kept as ${kept[0].replace(/[.]/g, '\\.')}`));
+    s.extend({ length: 200 }); await s.flushAutosave();
+    assert.equal(JSON.parse(st.auto).kind, 'core', 'then the session autosaves as usual');
+    assert.equal(st.files.get(kept[0]), bad, 'and the damaged bytes survive the edit');
+  });
+}
+test('a damaged autosave whose copy FAILS is never written over, an edit later', async () => {
+  const bad = 'not json at all', st = backupStore({ fail: true }); st.auto = bad;
+  const s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 });
+  assert.match(s.getState().message, /could not be kept aside \(disk full\)/);
+  s.extend({ length: 200 }); await s.flushAutosave(); await s.cleanExit();
+  assert.deepEqual([st.auto, st.autoWrites, st.cleared], [bad, 0, 0]);
 });
 
 test('an autosave from the OLD Pieces builder is kept aside as a saved word track, named in the message, never overwritten unread', async () => {
@@ -207,6 +231,18 @@ test('Previous versions lists the open track\'s backups newest first, with time,
   assert.deepEqual([text(s), s.getState().name, s.getState().dirty], [open, null, true]);
   assert.match(s.getState().message, /as a copy: it is unsaved/);
   assert.equal(st.docs.get('eq-Lap'), savedBefore, 'opening a version changes no saved file');
+});
+
+test('an UNSAVED track\'s copy from before Close is listed in Previous versions and opens as a copy (B\'s D239 look, F3a)', async () => {
+  const st = backupStore(), s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 });
+  extendLap(s); const before = text(s);
+  await s.backupNow('before Close the loop'); s.close();
+  const v = await s.listVersions();
+  assert.equal(v.length, 1); assert.match(v[0].file, /^eq-unsaved\./); assert.equal(v[0].closed, false);
+  await s.openVersion(v[0].file);
+  assert.deepEqual([text(s), s.getState().name], [before, null]);
+  const html = fs.readFileSync(path.join(REPO, 'app', 'index.html'), 'utf8');
+  assert.ok(!html.includes("$('versions').disabled = !st.name"), 'the picker is not disabled for an unsaved track');
 });
 
 test('the page: Save sends the local time for the backup\'s name, the three backup commands are wired and registered, and there is a Previous versions picker', () => {

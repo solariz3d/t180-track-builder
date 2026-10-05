@@ -205,7 +205,7 @@
       bar.append(el('span', `A track from your last session was not saved${st.recovery.name ? ` ("${st.recovery.name}")` : ''}: ${n} piece${n === 1 ? '' : 's'}${st.recovery.doc.closed ? ', a closed loop' : ''}.`), restore, discard);
       b.replaceChildren(bar);
     };
-    const draw = (st) => { drawBanner(st); drawReds(st); $('versions').disabled = !st.name; status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
+    const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
     const refreshList = async () => { try { const names = await shell.list(); $('open').replaceChildren(new Option('Open…', ''), ...names.map((n) => new Option(n, n))); } catch (e) { status.textContent = e.message; } };
     $('new').onclick = () => shell.newDoc();
