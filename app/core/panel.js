@@ -230,15 +230,27 @@ function mount(root, shell) {
   const proposalBox = el('div', { 'aria-label': 'close preview', class: 'head' });
   const focus = (s) => send('t180-camera-focus', { s });   // a click on a place moves the camera there (app/preview/index.js)
   const placeButton = (it, text) => el('button', { text, title: `${it.what}${it.detail ? `: ${it.detail}` : ''}: show it`, class: 'linkish', onclick: () => focus(it.s) });
+  // D240 follow-up: the preview shows AT ONCE and its overlap check runs off the thread (shell.proposalCheck(p): 'checking' | 'done' | 'failed'); Apply is off until it is done, and the line says how
+  // long it has been going (redrawn twice a second while it runs); Cancel stops it
+  let tick = 0;
   const drawProposal = (p) => {
+    if (tick) { win.clearTimeout(tick); tick = 0; }
     applyBtn.style.display = cancelBtn.style.display = p ? '' : 'none';
     if (!p) { proposalBox.replaceChildren(); return; }
+    const ck = shell.proposalCheck(p);
+    applyBtn.disabled = ck.status !== 'done';
     const moved = p.displacement.filter((x) => x.maxM > 1e-3).sort((a, b) => b.maxM - a.maxM), still = p.displacement.length - moved.length;
     const kids = [el('p', { text: p.whole ? 'Preview: the WHOLE lap may move.' : `Preview: only ${p.window.text} may move; everything before it is kept exactly.` }),
       el('p', { text: moved.length ? `Moves: ${moved.slice(0, 8).map((x) => `${x.id} up to ${x.maxM.toFixed(x.maxM < 10 ? 2 : 1)} m`).join(', ')}${moved.length > 8 ? `, and ${moved.length - 8} more` : ''}; ${still} piece${still === 1 ? '' : 's'} stay where they were.` : 'Nothing moves by more than a millimetre.' })];
-    const groups = RG.groupReds([...p.check.overlaps, ...p.check.others], p.resolved.segments);
-    if (!groups.length) kids.push(el('p', { text: 'No overlap and no red on the closed track.' }));
-    for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The closed track OVERLAPS ITSELF' : g.title} (${g.count}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.items.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));
+    if (ck.status !== 'done' && ck.status !== 'failed') {
+      kids.push(el('p', { 'aria-label': 'overlap check', text: `Checking the closed track for overlaps… ${Math.floor(ck.elapsedMs / 1000)} s. Apply is off until this finishes; Cancel stops it.` }));
+      tick = win.setTimeout(() => { tick = 0; const st = shell.getState(); drawProposal(st.closeProposal && st.closeProposal.base === st.history.present ? st.closeProposal : null); }, 500);
+    } else if (ck.status === 'failed') kids.push(el('p', { 'aria-label': 'overlap check', text: `The overlap check could not run: ${ck.error}. Cancel and press Close again.`, style: 'color: var(--bad)' }));
+    else {
+      const groups = RG.groupReds([...ck.result.overlaps, ...ck.result.others], p.resolved.segments);
+      if (!groups.length) kids.push(el('p', { 'aria-label': 'overlap check', text: 'No overlap and no red on the closed track.' }));
+      for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The closed track OVERLAPS ITSELF' : g.title} (${g.count}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.items.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));
+    }
     proposalBox.replaceChildren(...kids);
   };
   // held to the column's width (a file input is wider than the 280 px column by default, and the column scrolled sideways)
@@ -281,7 +293,7 @@ function mount(root, shell) {
   const labels = stage ? LB.mount(stage, shell, win) : null;
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, pieces, options: opts, unmount() { unsub(); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, pieces, options: opts, unmount() { unsub(); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
