@@ -25,6 +25,18 @@ const EDGE_SEAM_TOL = 0.01;   // D225: an edge turned off by extend ends within 
 const SEAM_MAX_M = 1e-3;   // D190 round 3: a lap seam steps at most 1 mm on the curve
 
 const TAU = 2 * Math.PI;
+/**
+ * D239 (pane C): the step's linear solve, with the one way it can fail named. A SINGULAR closure system (a lap of straights: no channel
+ * can bend the track round to meet its start) used to escape as the solver's plain Error, which the app's shell does not catch, so the
+ * user saw nothing. It is a CoreError now, which the shell shows as its message. Any other error from the solver is not this case and
+ * is thrown as it was.
+ */
+function solveOrRefuse(M, rhs) {
+  try { return denseSolve(M, rhs); } catch (e) {
+    if (!/^denseSolve: singular/.test(e && e.message)) throw e;
+    throw new D.CoreError('CLOSE_SINGULAR', 'nothing to close yet: this track cannot be bent round to meet its start (the closing equations are singular). A loop needs a turn: extend with a turn, then close');
+  }
+}
 const q = (x, dec) => { const v = Number(x.toFixed(dec)); return Object.is(v, -0) ? 0 : v; };   // document.js's quantisation
 /** ref 02 §2: the unit tangent from heading θ (about world up, +y) and pitch p, and its derivatives. */
 const dTdTh = (th, p) => [Math.cos(p) * Math.cos(th), 0, -Math.cos(p) * Math.sin(th)];
@@ -218,7 +230,7 @@ function close(doc, opts = {}) {
     for (const ch of D.CHANNELS) { if (!seamJoined(ch, seamOf(doc))) continue; J.push(valueRow(ch, 'slope')); }
     // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹ r (ref 04 §3)
     const M = J.map((a) => J.map((b) => { let s = 0; for (let k = 0; k < N; k++) s += a[k] * winv[k] * b[k]; return s; }));
-    const y = denseSolve(M, m.r.map((v) => -v)), delta = new Float64Array(N);
+    const y = solveOrRefuse(M, m.r.map((v) => -v)), delta = new Float64Array(N);
     J.forEach((row, i) => { for (let k = 0; k < N; k++) delta[k] += winv[k] * row[k] * y[i]; });
     let alpha = 1, xn, wn, mn;                                  // halve the step while it makes things worse (E's rule, not a formula)
     for (let hh = 0; hh < 12; hh++, alpha /= 2) { xn = x.map((v, k) => v + alpha * delta[k]); wn = apply(doc, expand, xn, false); mn = residual(wn); if (merit(mn) < merit(m)) break; }
