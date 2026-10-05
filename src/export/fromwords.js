@@ -76,6 +76,22 @@ const PitLane = require('./pitlane.js');
 const { withTextureSet } = require('../texture/set.js');
 const { withUnderskin } = require('./underskin.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
+const { placeMarker, surfaceAt } = require('../markers/place.js');
+// THE TEST EXPORT OF AN UNFINISHED TRACK (D243a, the keeper: "it should allow to export even without it being completed"). opts.test, never the default:
+// the path is OPEN, every red is a WARNING (listed in the folder's TEST_FILE and the message), the AI line is open, the ui name and folder say "test, unfinished",
+// point-to-point gates AC_AB_START/FINISH are added, and the road ends in a NAMED end block: TEST_RUNOFF_M of road after the finish gate, then a wall
+// (1WALL_T180_END, both faces). Why a run-off then a wall: every point-to-point layout in the local AC install runs its AI line 58–226 m past its finish
+// gate on road, and the readable ones carry WALL meshes at that end (one ships end_barriers.kn5).
+const TEST_FILE = 't180b_TEST_UNFINISHED.txt', TEST_RUNOFF_M = 150, TEST_WALL_H = 4, TEST_WALL_NAME = '1WALL_T180_END';
+/** The end block: a wall across the road's last cross-section, TEST_WALL_H along the surface normal, both faces, at the path's end. */
+function endWall(path, segs, material) {
+  const S = path.samples, last = S[S.length - 1], g = segs[last.seg], P = Prof.normalize(Prof.readAt(g, g.length)), sEnd = last.s - 0.25;
+  const us = []; for (let k = 0; k <= 24; k++) us.push(P.u[0] + (P.u[P.u.length - 1] - P.u[0]) * k / 24);
+  const pos = [], nrm = [], uv = [], idx = [], n = us.length;
+  for (const [r, h] of [[0, -0.3], [1, TEST_WALL_H]]) us.forEach((u, j) => { const sf = surfaceAt(path, segs, sEnd, u); pos.push(...sf.pos.map((x, i) => x + sf.n[i] * h)); nrm.push(-last.T[0], -last.T[1], -last.T[2]); uv.push(j / (n - 1), r); });
+  for (let j = 0; j < n - 1; j++) { const A = j, B = j + 1, C = n + j, Dd = C + 1; idx.push(A, C, B, B, C, Dd, A, B, C, B, Dd, C); }   // both windings: the car meets it from either side
+  return { type: 'mesh', name: TEST_WALL_NAME, material, positions: Float32Array.from(pos), normals: Float32Array.from(nrm), uvs: Float32Array.from(uv), indices: Uint16Array.from(idx), castShadows: true, visible: true, transparent: false, renderable: true };
+}
 
 const MARKER_FILE = '.t180b-builder.json';   // the same ownership marker scripts/build_platform_test.js writes
 const LAYOUT = { height: 1.5, grid: 4, pits: 2 };   // the default layout's count, pits and height (src/markers/layout.js DEFAULTS)
@@ -160,7 +176,8 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   let p;
   // meta.start (D186): where the lap starts and its heading and PITCH ({ pos, theta, p }, src/geom buildPath's start); a word
   // document resolves from the origin, level, so it has none. The geometry's shape depends on the start pitch.
-  try { p = buildPath(segs, { step: o.step, closed: true, ...(meta.start ? { start: meta.start } : {}) }); } catch (e) { throw new ExportError('NOT_CLOSED', e.message); }
+  const test = o.test === true;   // D243a: the TEST export of an unfinished track (above), only when asked for
+  try { p = buildPath(segs, { step: o.step, closed: !test, ...(meta.start ? { start: meta.start } : {}) }); } catch (e) { throw new ExportError('NOT_CLOSED', e.message); }
   // meta.liftPath (D186): a source whose segments do not carry the whole road (the equation core's offsets, A's adapter offsetPath)
   // lifts the path here, before the mesh, validation, markers and the AI line read it
   if (typeof meta.liftPath === 'function') p = meta.liftPath(p);
@@ -184,7 +201,9 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
     const w = v.lap.where, ss = w.map((x) => x.s);
     red.push({ reason: 'lap-proof', s0: Math.min(...ss), s1: Math.max(...ss), source: 'ARCHITECTURE.md:88-89', where: w, detail: w.map((x) => `${x.reason} at s ${x.s.toFixed(1)} m`).join(', ') });
   }
-  if (red.length) throw new ExportError('RED', `validation is red, nothing written: ${red.map(rangeText).join('; ')}`, { red });
+  const testReds = test ? red.map(rangeText) : [];   // TEST: every red is listed, none blocks
+  if (red.length && !test) throw new ExportError('RED', `validation is red, nothing written: ${red.map(rangeText).join('; ')}`, { red });
+  if (test) warnings.push(`TEST EXPORT (unfinished): ${red.length} red finding(s) NOT blocking, listed in ${TEST_FILE}`);
   for (const a of v.amber) warnings.push(`amber: ${rangeText(a)}`);
   if (v.lap && v.lap.ok === null) warnings.push(`lap proof not run: ${v.lap.reason}`);
   for (const n of v.notChecked || []) warnings.push(`not checked by validation: ${n}`);
@@ -197,10 +216,19 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
     throw e;
   }
   const mk = Markers.placeAll(layout, p, segs, { paintMaterial: mesh.scene.materials.length, lane: pit ? { path: pit.lane.path, segments: pit.lane.segments } : null });
-  if (!mk.check.ok) throw new ExportError('MARKERS', mk.check.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.problems.join('; ')}`).join(' | '), { markerChecks: mk.check });
+  if (!mk.check.ok) { const t = mk.check.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.problems.join('; ')}`).join(' | '); if (!test) throw new ExportError('MARKERS', t, { markerChecks: mk.check }); testReds.push(`markers: ${t}`); }
+  // TEST: the point-to-point gates and the end block. AB_START at the start gate (AC_TIME_0), AB_FINISH TEST_RUNOFF_M before the road's end (or a quarter of a short road)
+  const testNodes = [];
+  if (test) {
+    const gate = (nm) => mk.placed.find((m) => m.name === nm && !m.error), gL = gate('AC_TIME_0_L'), gR = gate('AC_TIME_0_R'), L = p.samples[p.samples.length - 1].s, sFin = Math.max(L * 0.75, L - TEST_RUNOFF_M);
+    if (gL && gR) for (const [nm, from, s] of [['AC_AB_START_L', gL, gL.s], ['AC_AB_START_R', gR, gR.s], ['AC_AB_FINISH_L', gL, sFin], ['AC_AB_FINISH_R', gR, sFin]]) {
+      const m = placeMarker(p, segs, { name: nm, s, u: from.u, h: from.h }); testNodes.push({ type: 'dummy', name: nm, matrix: m.matrix, children: [] });
+    } else testReds.push('markers: no AC_TIME_0 start gate, so no point-to-point gates were placed');
+    testNodes.push(endWall(p, segs, 0));
+  }
   for (const a of mk.check.amber) warnings.push(`markers: ${a.text}`);
   const scene0 = { ...mesh.scene, materials: [...mesh.scene.materials, mk.paint.material],
-    root: { ...mesh.scene.root, children: [...mesh.scene.root.children, ...mk.nodes, ...mk.paint.meshes] } };
+    root: { ...mesh.scene.root, children: [...mesh.scene.root.children, ...mk.nodes, ...mk.paint.meshes, ...testNodes] } };
   // opts.textures: the texture set the preview draws (src/texture/set.js); the export follows the preview's own rule
   // D230: every core road cell gets an underside skin that casts shadows, and a closed tube's inside is dark (src/export/underskin.js); a word document's scene comes back as it is
   const scene = withUnderskin(withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null), mesh, segs);
@@ -214,7 +242,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // the race-direction heading test only where the grid's direction applies: the grid and the start gate (the hotlap and
   // sectors sit wherever the run-up and the words put them, and are checked along their own road by src/markers)
   const mc = checkMarkers(scene, { expectedPits: layout.pits.count, raceHeading: /^AC_START_|^AC_TIME_0_/ });
-  if (!mc.ok) throw new ExportError('MARKERS', mc.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.problems.join('; ')}`).join(' | '), { markerChecks: mc });
+  if (!mc.ok) { const t = mc.checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.problems.join('; ')}`).join(' | '); if (!test) throw new ExportError('MARKERS', t, { markerChecks: mc }); testReds.push(`markers: ${t}`); }
 
   // the kn5, read back by our own reader (ARCHITECTURE §6 self-test) before any folder is touched. Flattened and given
   // diffuse textures first, as AC needs (src/export/acready.js: without these the car fell through and the road was black)
@@ -227,16 +255,16 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const speeds = segs.filter((g) => g.kind === 'road').map((g) => g.speed);
   const speedKmh = o.aiSpeedKmh !== undefined ? o.aiSpeedKmh : speeds.every((x) => Number.isFinite(x) && x > 0) ? Math.min(...speeds) * 3.6 : undefined;
   const { dsn, secs } = aiInput(segs, p);
-  const line = ailine.generateAiLine(dsn, secs, { mode: 'floor', speedKmh, DS: o.step });
+  const line = ailine.generateAiLine(dsn, secs, { mode: 'floor', speedKmh, DS: o.step, open: test });
   const ai = ailine.encodeAiLine(line);
   ailine.readAiLine(ai);
 
   const turn = segs.reduce((a, g) => a + ((g.k0 + g.k1) / 2) * g.length, 0);
   return {
-    folder: o.folder || folderName(doc), scene, kn5, ai, path: p, segments: segs, resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
+    folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh },
-    desc: { name: doc.name || 'Untitled', description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original'], author: 't180-track-builder', version: '0.1' },
+    desc: { name: (doc.name || 'Untitled') + (test ? ' (test, unfinished)' : ''), description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original'], author: 't180-track-builder', version: '0.1' },
     warnings,
   };
 }
@@ -273,6 +301,8 @@ function writeFolder(b, outDir, v) {
   fs.mkdirSync(path.join(dir, 'ai'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'ai', 'fast_lane.ai'), b.ai);
   files.push('ai/fast_lane.ai');
+  // D243a: a TEST export says so in the folder, with every red it did not block on
+  if (b.test) { fs.writeFileSync(path.join(dir, TEST_FILE), ['TEST EXPORT OF AN UNFINISHED TRACK (t180-track-builder). Not a finished track: the loop is open, the AI line is open, and the reds below did NOT block it.', `Point-to-point gates AC_AB_START/FINISH; the finish is ${b.test.runoffM} m before the road's end (a run-off), and the road ends in a wall (${b.test.wall}).`, '', `${b.test.reds.length} red finding(s):`, ...b.test.reds.map((r) => `- ${r}`), ''].join(String.fromCharCode(13, 10))); files.push(TEST_FILE); }
   fs.writeFileSync(path.join(dir, MARKER_FILE), JSON.stringify({ tool: 't180-track-builder', module: 'src/export/fromwords.js', written: new Date().toISOString(), files }, null, 2) + '\n');
   return { variant: v.variant, folder, dir, files };
 }

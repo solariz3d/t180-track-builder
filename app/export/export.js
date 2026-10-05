@@ -97,9 +97,9 @@ async function makeExporter(get) {
     // the equation core's track (D186): src/geom segments from src/core/adapter.js, through the SAME exporter
     // (fromwords.js exportSegments: the same validation, self-check, markers, read-back and AI line); the check stays on
     // markers: the grid layout (app/core/coreshell.js startLayout), or undefined for the export's default
-    runSegments(segments, meta, { variant = 'block', textures = null, markers } = {}) {
+    runSegments(segments, meta, { variant = 'block', textures = null, markers, test = false } = {}) {   // test (D243a): the TEST export of an unfinished track
       shim.reset();
-      const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers });
+      const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, ...(test ? { test: true } : {}) });
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
   };
