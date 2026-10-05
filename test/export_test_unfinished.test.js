@@ -2,7 +2,8 @@
 // D243a, the TEST export of an UNFINISHED track (the keeper: "it should allow to export even without it being completed"), src/export/fromwords.js opts.test:
 // an OPEN track exports into a t180b_*_test folder named "(test, unfinished)", its reds are listed and do not block, the AI line is open, point-to-point
 // gates AC_AB_START/FINISH are placed, and the road ends in a named wall (1WALL_T180_END). A NORMAL export of an open track still refuses, unchanged.
-// The track used is fixture F7 (a hill, a core jump, the landing road; OPEN), whose jump the validator reds today (gap-in-road), so a red is on hand.
+// The track used is fixture F7 (a hill, a core jump, the landing road; OPEN). Since D243 its jump is not red (a core flight's gap is intended), so
+// the row that needs a red plants a real hole in its landing road.
 // Every folder is written under the OS temp directory and removed.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -48,10 +49,17 @@ test('the TEST export of the same open track writes a folder marked unfinished, 
   assert.ok(b.f.files.includes('t180b_TEST_UNFINISHED.txt'), b.f.files.join(', '));
 });
 
-test('in TEST mode a red is LISTED and does not block: the jump\'s gap-in-road red is in the TEST file and the warnings', () => {
-  const b = testExport(), text = fs.readFileSync(path.join(b.f.dir, 't180b_TEST_UNFINISHED.txt'), 'utf8');
-  assert.match(text, /gap-in-road/);
-  assert.ok(b.r.warnings.some((w) => /TEST EXPORT \(unfinished\): \d+ red finding\(s\) NOT blocking/.test(w)), b.r.warnings.join(' | '));
+// D243 changed this row's red: F7's jump was red gap-in-road until D243 made a core flight's gap intended, so the red is now a real HOLE planted in
+// F7's landing road (a road segment made a gap), which must stay red; the rule the row tests, a red listed and not blocking, is unchanged
+test('in TEST mode a red is LISTED and does not block: a hole\'s gap-in-road red is in the TEST file and the warnings', () => {
+  const holed = segs.map((g) => ({ ...g })), i = holed.findIndex((g, k) => k > 0 && holed[k - 1].part === 'land' && g.part === 'body');
+  assert.ok(i > 0, 'control: F7 has road after its landing ramp to hole'); holed.splice(i, 1, { ...holed[i], kind: 'gap', part: 'gap', profile: null });
+  const dir = tmp();
+  try {
+    const r = FW.exportSegments(holed, meta, { outDir: dir, variant: 'block', markers: startLayout(holed, lift, start, { open: true }), test: true });
+    assert.match(fs.readFileSync(path.join(r.folders[0].dir, 't180b_TEST_UNFINISHED.txt'), 'utf8'), /gap-in-road/);
+    assert.ok(r.warnings.some((w) => /TEST EXPORT \(unfinished\): \d+ red finding\(s\) NOT blocking/.test(w)), r.warnings.join(' | '));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('the TEST folder carries point-to-point gates and the named end wall in its kn5', () => {

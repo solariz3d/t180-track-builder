@@ -81,9 +81,11 @@ test('with no stretch protected (every weight 1) close still closes, seam includ
   assert.ok(res.converged, res.report);
   const P = res.doc.pieces; D.checkDoc({ ...res.doc, closed: false, nextId: res.doc.nextId + 1, pieces: [...P, { ...P[0], id: `p${res.doc.nextId}` }] });
 });
-test('a track with a jump is refused, by name (not built in this version)', () => {
+// D243 changed this row: a track with a jump was refused as not built (NOT_YET). Jumps now close (test/core_jump.test.js row 4), so this track,
+// two straights and a jump with no turn, meets the refusal every turnless track meets, by its own name, and never NOT_YET
+test('a track with a jump and no turn is refused as any turnless track is (CLOSE_SINGULAR), not as an unbuilt jump (D243)', () => {
   let d = extend(D.createDoc('j'), { length: 300 });
   d = D.appendPiece(d, D.flightPiece({ gap: 40, drop: 0, land: 0 }));
   d = extend(d, { length: 300 });
-  assert.throws(() => C.close(d), /NOT_YET/);
+  assert.throws(() => C.close(d), (e) => e.code === 'CLOSE_SINGULAR' && !/NOT_YET/.test(e.message));
 });
