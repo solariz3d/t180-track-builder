@@ -94,6 +94,11 @@ mode?" The Pieces mode is removed: the header's switch, `?mode=pieces`, the reme
   (`src/doc/code.js` kind `e`); a code from the old Pieces builder (`t180d…`, `t180p…`) is refused by name, `CODE_PIECES`.
 - **The getting-started guide** (`app/onboarding`): six steps, Extend, the brush, Close the loop, the colours, Export, the grid and mirror.
 
+**Save keeps the previous version (D239 amendment).** Every Save moves the file it overwrites into `track-backups` as
+`<name>.<yyyy-mm-dd_hhmmss>.t180track` (natively, `src-tauri/src/backups.rs`; the newest 20 per track kept, only files in that exact
+form pruned). `shell.backupNow(reason)` writes the track as it is now; the Close button calls it first and does not close if it fails
+(D242's Close takes the call over). "Previous versions…" beside Open… opens one as an unsaved copy.
+
 **Removed** (no page mounts them any more): `app/palette/palette.js` (the piece palette), `app/handles/` (word handles),
 `app/texture/index.js` (the per-word textures panel), `app/onboarding/defaults.js` (the piece palette's first-run pickers).
 **Kept, and why:** `app/shell.js`: the equation page binds its keys through `keyAction`, and 23 test files and three scripts (bench, prove_render, soak) drive the

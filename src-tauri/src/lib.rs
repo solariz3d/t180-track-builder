@@ -1,7 +1,8 @@
 // T-180 Track Builder, native side (Tauri 2). The whole program — document model, geometry, validation, preview —
 // runs in the webview (ARCHITECTURE §9: no mesh data over IPC). What only native code can do is keep the user's files,
 // so this side is a handful of commands and nothing else:
-//   list_tracks · save_track(name, text) · open_track(name) · save_library(text) · open_library
+//   list_tracks · save_track(name, text, stamp) · open_track(name) · save_library(text) · open_library
+//   backup_track(name, text, stamp) · list_track_backups(name) · open_track_backup(file): SAVE KEEPS THE PREVIOUS VERSION (backups.rs)
 //   save_autosave(text) · open_autosave · clear_autosave: the unsaved track, for crash recovery
 //   write_export(dir, folder, files): an exported track into the folder the user picked (never an AC install's other tracks)
 //   get_ac_root · set_ac_root(path) · install_track(folder, files): INSTALL TO AC, into the remembered AC folder's
@@ -18,6 +19,7 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 mod ac;
+mod backups;
 
 const TRACK_EXT: &str = "t180track";
 const LIBRARY_FILE: &str = "library.t180lib";
@@ -81,9 +83,54 @@ fn list_tracks(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     track_names(&tracks_dir(&app)?)
 }
 
+fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(data_dir(app)?.join(backups::DIR))
+}
+
+/// SAVE KEEPS THE PREVIOUS VERSION (D239 amendment, backups.rs): the file this save overwrites is first MOVED to track-backups as
+/// <name>.<stamp>.t180track; if the new text then cannot be written, it is moved back, so a failed save never loses the track. Then
+/// this track's stamped backups are pruned to the newest 20. Returns the backup's file name, or null on a first save.
 #[tauri::command]
-fn save_track(app: tauri::AppHandle, name: String, text: String) -> Result<(), String> {
-    write_atomic(&track_path(&app, &name)?, &text)
+fn save_track(app: tauri::AppHandle, name: String, text: String, stamp: Option<String>) -> Result<Option<String>, String> {
+    let path = track_path(&app, &name)?;
+    let bk = backups_dir(&app)?;
+    let kept = backups::move_aside(&path, &bk, &name, &backups::stamp_or_now(stamp.as_deref()))?;
+    if let Err(e) = write_atomic(&path, &text) {
+        if let Some(k) = &kept {
+            let _ = fs::rename(k, &path);
+        }
+        return Err(e);
+    }
+    backups::prune(&bk, &name, backups::KEEP)?;
+    Ok(kept.and_then(|k| k.file_name().and_then(|f| f.to_str()).map(String::from)))
+}
+
+/// A copy of the track AS IT IS NOW in track-backups (the shell's backupNow: before a Close, so a Close can be undone after the app
+/// is closed). Pruned like a save's. Returns the backup's file name.
+#[tauri::command]
+fn backup_track(app: tauri::AppHandle, name: String, text: String, stamp: Option<String>) -> Result<String, String> {
+    if !valid_name(&name) {
+        return Err(format!("{name:?} is not a track name: 1 to 64 letters, digits, spaces, _ or -"));
+    }
+    let bk = backups_dir(&app)?;
+    let to = backups::write_copy(&bk, &name, &backups::stamp_or_now(stamp.as_deref()), &text)?;
+    backups::prune(&bk, &name, backups::KEEP)?;
+    Ok(to.file_name().and_then(|f| f.to_str()).unwrap_or_default().to_string())
+}
+
+/// The previous versions of one track, newest first.
+#[tauri::command]
+fn list_track_backups(app: tauri::AppHandle, name: String) -> Result<Vec<backups::Backup>, String> {
+    if !valid_name(&name) {
+        return Err(format!("{name:?} is not a track name"));
+    }
+    backups::list(&backups_dir(&app)?, &name)
+}
+
+/// One previous version's text, by its bare file name.
+#[tauri::command]
+fn open_track_backup(app: tauri::AppHandle, file: String) -> Result<String, String> {
+    backups::read(&backups_dir(&app)?, &file)
 }
 
 #[tauri::command]
@@ -356,7 +403,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            list_tracks, save_track, open_track, save_library, open_library,
+            list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export, folder_is_empty, remove_empty_folder,
             get_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
             test_export_folder

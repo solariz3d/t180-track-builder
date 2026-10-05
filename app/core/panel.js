@@ -196,7 +196,13 @@ function mount(root, shell) {
   if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); }
 
   // CLOSE, EXAMPLE
-  const closeBtn = el('button', { text: 'Close the loop', title: 'one click: the track closes exactly, the fix spread over what you did not just touch', onclick: () => shell.close() });
+  // D239 amendment (the keeper lost TEST 1 to one Close): a copy of the track as it is is written to its backups FIRST
+  // (shell.backupNow); if that copy cannot be written, the track is NOT closed. B's D242 Close takes this call over.
+  async function closeKept() {
+    try { await shell.backupNow('before Close the loop'); } catch (e) { msg.textContent = `not closed: the copy from before Close could not be written (${e.message || e}), so nothing was changed`; msg.className = 'message'; return; }
+    shell.close();
+  }
+  const closeBtn = el('button', { text: 'Close the loop', title: 'one click: the track closes exactly, the fix spread over what you did not just touch', onclick: () => closeKept() });
   // held to the column's width (a file input is wider than the 280 px column by default, and the column scrolled sideways)
   const fitIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the fit, *.pieces.json', style: 'max-width: 100%; min-width: 0' }), readIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the read, *.read.json', style: 'max-width: 100%; min-width: 0' });
   const readText = (inp) => (inp.files && inp.files[0] ? inp.files[0].text() : Promise.reject(new Error('pick both files')));
