@@ -144,6 +144,10 @@ None of it reads or writes the document or the export: the mirror ghost is a pic
 - **A track** is `<name>.t180track`: the document's canonical text (`src/doc/serial.js`), in
   `<app data>/tracks/`.
 - **The user's pieces** are `library.t180lib` (`src/doc/library.js` `serializeLibrary`), in `<app data>/`.
+- **A saved piece (D240)** is `<name>.t180piece`: the text of `src/core/piece.js` (schema `t180b.piece/1`), in `<app data>/pieces/`. The panel (`app/core/piecesui.js`) selects pieces on the track
+  (`app/core/selectionlayer.js` draws the selection), saves, lists, adds, renames and deletes them through the shell's `selectPiece`, `savePiece`, `listPieces`, `insertPiece`, `renamePiece`,
+  `deletePieceFile`; deleting pieces of the track is `deleteSelection` (the open end at once, the middle through `proposeDelete` / `applyDelete` / `cancelDelete`, previewed like Close).
+  The native side never overwrites a piece (`save_piece` refuses a name in use) and a name never carries a path.
 - **The autosave** is `autosave.t180auto` in `<app data>/`: `{ schema, name, doc }` with the canonical text, written
   about 1.5 s after the last edit while the track is unsaved. It is cleared by saving under a name, or by closing with
   nothing unsaved. Closing with unsaved changes keeps it, so the next start offers the track back rather than losing

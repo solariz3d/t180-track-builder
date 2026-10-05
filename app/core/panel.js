@@ -17,6 +17,7 @@
 const LB = require('./labels.js');
 const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
 const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
+const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
@@ -248,6 +249,7 @@ function mount(root, shell) {
   } });
 
   const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' });
+  const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send });   // D240 (the selection's clicks are the brush's while the brush is armed)
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', onclick: () => shell.undo() }), el('button', { text: 'Redo', onclick: () => shell.redo() })),
@@ -257,6 +259,7 @@ function mount(root, shell) {
     el('div', { class: 'actions' }, extendBtn, straightBtn), straightHint,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
+    ...pieces.nodes.selection, ...pieces.nodes.library,
     el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
     msg,
   );
@@ -278,7 +281,7 @@ function mount(root, shell) {
   const labels = stage ? LB.mount(stage, shell, win) : null;
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, options: opts, unmount() { unsub(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, pieces, options: opts, unmount() { unsub(); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
