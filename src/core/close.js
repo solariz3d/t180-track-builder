@@ -20,6 +20,11 @@ const { basis, denseSolve } = require('../../tools/piecewise.cjs');
 const D = require('./document.js');
 const { toPath, toSegments } = require('./adapter.js');
 const { jointSteps } = require('../geom/profile.js');
+const jumps = require('../validate/jumps.js');
+const { MACH6 } = require('../validate/limits.js');
+
+// D243: the channels the road after a jump starts LEVEL in (checkDoc's afterFlight joint, document.js endState): 0 in value and slope
+const AFTER_FLIGHT_LEVEL = Object.freeze(['kh', 'kv', 'h', 'l']);
 
 const EDGE_SEAM_TOL = 0.01;   // D225: an edge turned off by extend ends within a hair of 0 (the fit); under 0.01° (and 0.01°/m) it steps the lap seam by under a millimetre, so it is not an edge at the seam
 const SEAM_MAX_M = 1e-3;   // D190 round 3: a lap seam steps at most 1 mm on the curve
@@ -79,11 +84,20 @@ function parameters(doc, edited, free = null) {
   const cols = [], expand = {}, fixedOf = (p) => !!free && !free.has(p);   // D242: a LOCAL close's columns outside its window are fixed (never moved)
   for (const ch of activeChannels(doc)) {
     expand[ch] = doc.pieces.map(() => null);
-    let prev = -1;
+    let prev = -1, flightSince = false;
     doc.pieces.forEach((P, p) => {
-      if (P.type !== 'road') return;
+      if (P.type !== 'road') {
+        // D243: A JUMP. (The road before it must end with h and l at 0, value and slope: checkDoc FLIGHT_OFFSET. No closing row reaches those control
+        // points, since the seam rows touch only the lap's first and last road pieces and a lap ending in a jump is refused, so they never move; and
+        // if one ever did, the closed document's checkDoc would refuse it by name.)
+        if (P.type === 'flight') flightSince = true;
+        return;
+      }
       const n = P.channels[ch].length, e = new Array(n);
       for (let i = 0; i < n; i++) {
+        // D243: the road AFTER a jump starts level (κh = κv = 0, h = l = 0, value and slope: checkDoc's afterFlight joint), so its first two control points
+        // in those channels are held, not linked to the road before the jump; every other channel is carried across the flight and joins C1 as ever
+        if (prev >= 0 && i < 2 && flightSince && AFTER_FLIGHT_LEVEL.includes(ch)) { e[i] = [[cols.length, 1]]; cols.push({ ch, p, i, edited: edited.has(p), fixed: true }); continue; }
         if (prev >= 0 && i < 2 && linkable(ch, doc.pieces[prev], P)) {   // the cup joins only cup to cup (a legacy piece's c is a placeholder); e, s and t the same
           const A = expand[ch][prev], na = A.length, rho = hStart(P) / hEnd(doc.pieces[prev]);
           e[i] = i === 0 ? A[na - 1] : [...A[na - 1].map(([c, k]) => [c, k * (1 + rho)]), ...A[na - 2].map(([c, k]) => [c, -k * rho])];
@@ -92,7 +106,7 @@ function parameters(doc, edited, free = null) {
         }
         e[i] = [[cols.length, 1]]; cols.push({ ch, p, i, edited: edited.has(p), fixed: fixedOf(p) });
       }
-      expand[ch][p] = e; prev = p;
+      expand[ch][p] = e; prev = p; flightSince = false;
     });
   }
   return { cols, expand };
@@ -116,6 +130,18 @@ function apply(doc, expand, x, quantise, keep = null) {
 function positionJacobian(doc, step = 1) {
   let th = doc.start.heading, p = doc.start.pitch; const G = [];
   doc.pieces.forEach((P, pi) => {
+    // D243: A JUMP (src/core/adapter.js toSegments): the flight covers `gap` along the heading and `drop` down whatever its take-off pitch, and its
+    // landing ramp runs a horizontal r.length more at the landing pitch, neither turning; then the pitch IS the landing pitch. So in heading the jump
+    // is one step (H·∂T/∂θ at pitch 0, H = gap + r.length). In pitch it CUTS the chain, except through the ramp: r.length depends on the take-off
+    // pitch, strongly (measured on a 40 m, 2 m-down jump: ~16.5 m along per mrad), so the take-off pitch moves the end by (∂r.length/∂p)·(the
+    // ramp's direction per horizontal metre). ∂r.length/∂p is taken by a central difference of landingRamp itself, the function the adapter sizes it with.
+    if (P.type === 'flight') {
+      const ramp = (pp) => jumps.landingRamp({ D: P.gap, dh: -P.drop, thetaRad: pp, landRad: P.land, v: MACH6.designSpeedKmh / 3.6 }).length, dp = 1e-6;
+      const H = P.gap + ramp(p), dL = (ramp(p + dp) - ramp(p - dp)) / (2 * dp);
+      G.push({ flight: true, Tt: dTdTh(th, 0).map((v) => v * H), Tp: [Math.sin(th), Math.tan(P.land), Math.cos(th)].map((v) => v * dL) });
+      p = P.land;
+      return;
+    }
     if (P.type !== 'road') return;
     const U = D.knotVector(P), n = Math.max(1, Math.ceil(P.length / step)), h = P.length / n;
     const at = (ch, s) => { const b = basis(U, s); let v = 0; for (let a = 0; a < 4; a++) v += P.channels[ch][b.first + a] * b.N[a]; return { v, b }; };
@@ -132,6 +158,7 @@ function positionJacobian(doc, step = 1) {
   let sT = [0, 0, 0], sP = [0, 0, 0];
   for (let i = G.length - 1; i >= 0; i--) {
     const g = G[i];
+    if (g.flight) { sT = sT.map((v, k) => v + g.Tt[k]); sP = g.Tp.slice(); continue; }   // D243: the jump turns nothing; before it, pitch reaches the end only through the ramp
     add('kh', g.pi, g.kh0, g.Tt.map((v) => 0.5 * g.h * v)); add('kv', g.pi, g.kv0, g.Tp.map((v) => 0.5 * g.h * v));
     add('kh', g.pi, g.khm, sT.map((v) => g.h * v)); add('kv', g.pi, g.kvm, sP.map((v) => g.h * v));
     sT = sT.map((v, k) => v + g.Tt[k]); sP = sP.map((v, k) => v + g.Tp[k]);
@@ -144,10 +171,13 @@ function positionJacobian(doc, step = 1) {
  * the net heading is Σ ½(a + b)·Δs). Returns the gradient of the net heading and net pitch with respect to each control point.
  */
 function netRows(doc) {
-  const out = { kh: new Map(), kv: new Map() };
+  const out = { kh: new Map(), kv: new Map(), kvBase: 0 };
   const segs = toSegments(doc), byId = new Map(doc.pieces.map((P, p) => [P.id, p]));
   let s = new Map();
   for (const g of segs) {
+    // D243: A JUMP sets the pitch to its landing pitch (adapter.js), so the net pitch is counted again from there: the lap's end pitch is the last
+    // jump's landing pitch plus the road after it, and no kv before that jump reaches it. A flight turns nothing, so the net heading is unchanged
+    if (g.part === 'gap') { out.kv = new Map(); out.kvBase = doc.pieces[byId.get(g.id)].land - doc.start.pitch; continue; }
     if (g.part !== 'body') continue;
     const p = byId.get(g.id), P = doc.pieces[p], U = D.knotVector(P), s0 = s.get(p) || 0, s1 = s0 + g.length; s.set(p, s1);
     for (const x of [s0, s1]) {
@@ -176,7 +206,7 @@ function residual(doc) {
   if (!doc.pieces.some((P) => P.type === 'road')) throw new D.CoreError('EMPTY', 'close: no road to close');
   const S = toPath({ ...doc, closed: false }).path.samples, a = S[0], z = S[S.length - 1];
   const road = doc.pieces.filter((P) => P.type === 'road'), F = road[0], L = road[road.length - 1];
-  const net = { kh: 0, kv: 0 }; const rows = netRows(doc);
+  const rows = netRows(doc), net = { kh: 0, kv: rows.kvBase };   // kvBase: a jump's landing pitch, when the lap has one (D243)
   for (const ch of ['kh', 'kv']) for (const [key, w] of rows[ch]) { const [p, i] = key.split(':').map(Number); net[ch] += w * doc.pieces[p].channels[ch][i]; }
   const turns = Math.round(net.kh / TAU), bank = L.channels.phi.at(-1) - F.channels.phi[0], m = Math.round(bank / TAU);
   const r = [z.pos[0] - a.pos[0], z.pos[1] - a.pos[1], z.pos[2] - a.pos[2], net.kh - TAU * turns, net.kv, bank - TAU * m];
@@ -202,7 +232,9 @@ function residual(doc) {
 function close(doc, opts = {}) {
   D.checkDoc(doc); doc = D.fillCup(doc);
   checkSeamKinds(doc);
-  if (doc.pieces.some((P) => P.type === 'flight')) throw new D.CoreError('NOT_YET', 'close: a track with a jump is not closed by this version (the flight fixes a displacement the close would have to carry; not built)');
+  // D243: a track WITH JUMPS closes like any other (the flight carries the road's state; see parameters, positionJacobian and netRows). The one
+  // shape refused is a lap that ENDS in a jump: its seam would join the landing ramp, which no channel describes, to the lap's start
+  if (doc.pieces.length && doc.pieces[doc.pieces.length - 1].type === 'flight') throw new D.CoreError('FLIGHT_AT_END', 'close: the track ends in a jump, so the lap would join its landing ramp to the start; extend road after the landing, then close');
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0);
   const cupBoth = !!(doc.pieces[roadIdx[0]].cup && doc.pieces[roadIdx[roadIdx.length - 1]].cup);
   const held = heldCup(doc.pieces[roadIdx[0]], doc.pieces[roadIdx[roadIdx.length - 1]]);

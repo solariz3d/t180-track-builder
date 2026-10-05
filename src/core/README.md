@@ -67,6 +67,14 @@ share ONE clamped knot vector:
 - A flight takes off at the road's end pitch. Its landing ramp is sized by validation (`src/validate/jumps.js`
   `landingRamp`), as today.
 - The next road piece starts on the ramp, level with it: κh = κv = 0 there, and φ carried.
+- **Adding one** (D243): `src/core/jump.js` `jump(doc, { gap, drop, land })` appends a flight at the open end. It refuses by name a jump the adapter
+  cannot fly, and a jump straight after a jump.
+- **Validation** treats a core flight's gap as intended (no `gap-in-road`). Its landing is long enough when both measured falls land on road
+  at the lap's speed (`landing-misses-zone` otherwise).
+- **Close** works across flights (`src/core/close.js`):
+  - the road after a jump keeps its level start;
+  - the model carries the jump's distance and its pitch reset;
+  - a lap that ends in a jump is refused (`FLIGHT_AT_END`).
 
 **Numbers are quantised when they enter,** so load then save is byte-exact:
 - lengths, knots and widths 0.1 mm;

@@ -88,6 +88,8 @@ const SRC = Object.freeze({
 // The landing should expect that step, not only the fall. Its size is not given: the research's figure (about 2.4 g at
 // 100 m/s) rests on UNVERIFIED arithmetic (the script's speed unit), so only the fact and its source are carried.
 const DOWNFORCE_STEP = (car) => ({ aheadM: car.downforceRay.aheadM, note: `the downforce drops to zero as the car's downforce ray, ${car.downforceRay.aheadM} m ahead, passes the lip, and returns in one step when it finds the landing (docs/research/04_ac_physics_drivability.md §4)` });
+/** D243: segment j is the equation core's FLIGHT (src/core/adapter.js): word 'core', part 'gap', followed by its own landing ramp (part 'land', the same id). */
+const isCoreFlight = (segments, j) => { const g = segments[j], n = segments[j + 1]; return g.word === 'core' && g.part === 'gap' && !!n && n.part === 'land' && n.id === g.id && n.kind === 'road'; };
 
 function segProfiles(segments) {
   return segments.map((g) => (g.kind === 'gap' ? null : P.normalize(g.profile)));
@@ -276,8 +278,10 @@ function core(path, segments, opts, from, carried, upto) {
       const cap = pr.font === 'edge' ? EDGE_CAP_DEG : pr.font === 'tube-edge' ? TUBE_EDGE_CAP_DEG : null;
       if (cap !== null && edgeDeg > cap + 1e-3) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'edge-past-cap', worst: edgeDeg });
     }
-    // a gap that is not a jump is a hole; the open head is exempt (INTERFACES §4: "no 'gap in road' red at the head")
-    if (g.kind === 'gap' && g.word !== 'jump' && !(!path.closed && j === lastSeg)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'gap-in-road' });
+    // a gap that is not a jump is a hole; the open head is exempt (INTERFACES §4: "no 'gap in road' red at the head"). A jump is the word 'jump',
+    // or (D243) the equation core's FLIGHT: a gap the adapter writes as part 'gap' of word 'core' with its own landing ramp next (src/core/adapter.js
+    // toSegments). Its gap is intended; any other gap, the core's included, is still a hole
+    if (g.kind === 'gap' && g.word !== 'jump' && !isCoreFlight(segments, j) && !(!path.closed && j === lastSeg)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'gap-in-road' });
     if (g.kind !== 'gap' && g.word === 'wall-ride' && /^WALL/i.test(profiles[j].material)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'wall-ride-from-wall-object' });
   });
 
