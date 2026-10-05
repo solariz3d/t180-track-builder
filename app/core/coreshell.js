@@ -315,13 +315,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /**
      * BUILD THE EXPORT, writing nothing (D239: the Export button and Install to AC both use it, so an installed track is the exported one,
      * byte for byte): the start layout, then src/export/fromwords.js exportSegments through the exporter. A track that cannot export
-     * throws an ExportError with a code (OPEN_LOOP, NO_START_STRAIGHT, or the exporter's own, e.g. RED with .red).
+     * throws an ExportError with a code (OPEN_LOOP, NO_START_STRAIGHT, or the exporter's own, e.g. RED with .red). `opts.test` (D243a) is the
+     * test export of an unfinished track: an open loop is not refused.
      */
     buildExport(opts = {}) {
       if (!exporter) throw exportError('NO_EXPORTER', 'export is not available here');
-      if (!doc().closed) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');
+      // D243a: opts.test is the TEST export of an unfinished track (the page's own button, never the default): an open loop is written, its reds are warnings
+      if (!doc().closed && !opts.test) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');
       let markers;
-      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
+      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test && !doc().closed }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
       return exporter.runSegments(st.resolved.segments, { name: api.exportDoc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start }, { ...opts, markers });
     },
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
@@ -470,11 +472,11 @@ function straightPieces(doc) { return doc.pieces.map((P, i) => (P.type === 'road
  * along it) and the grid's size; the export then places every marker on the real road and runs its own checks on them, unchanged.
  */
 const STRAIGHT_K = 1 / 5000, STRAIGHT_ROLL = 0.5 * Math.PI / 180;
-function startLayout(segments, lift, start) {
+function startLayout(segments, lift, start, { open = false } = {}) {   // open (D243a): the test export of an unfinished track lays its grid on an OPEN path
   const { buildPath } = require('../../src/geom/index.js'), Markers = require('../../src/markers/layout.js');
   const nearly = (g) => g.kind === 'road' && [g.k0, g.k1, g.kp0, g.kp1].every((x) => Math.abs(x) <= STRAIGHT_K) && [g.roll0, g.roll1].every((x) => Math.abs(x) <= STRAIGHT_ROLL);
   const marked = segments.map((g) => (nearly(g) ? { ...g, word: 'straight', k0: 0, k1: 0, kp0: 0, kp1: 0, roll0: 0, roll1: 0 } : g));
-  const p = buildPath(segments, { step: 2, closed: true, ...(start ? { start } : {}) });
+  const p = buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) });
   return Markers.defaultLayout(lift ? lift(p) : p, marked);
 }
 

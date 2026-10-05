@@ -113,7 +113,7 @@ function generateAiLine(dsn, secs, opts = {}) {
   let tt = Float64Array.from(raw);
   for (let pass = 0; pass < 3; pass++) {
     const nxt = new Float64Array(n);
-    for (let i = 0; i < n; i++) { let a = 0; for (let d = -half; d <= half; d++) a += tt[(i + d + n) % n]; nxt[i] = a / (2 * half + 1); }
+    for (let i = 0; i < n; i++) { let a = 0; for (let d = -half; d <= half; d++) a += tt[opts.open ? Math.min(n - 1, Math.max(0, i + d)) : (i + d + n) % n]; nxt[i] = a / (2 * half + 1); }   // an OPEN line (D243a test export) does not wrap: its ends average their own side only
     tt = nxt;
   }
 
@@ -125,10 +125,10 @@ function generateAiLine(dsn, secs, opts = {}) {
   const m = pts.length, points = [], extra = [];
   let len = 0;
   for (let k = 0; k < m; k++) {
-    const p = pts[k], nx = pts[(k + 1) % m], pv = pts[(k - 1 + m) % m];
+    const p = pts[k], last = opts.open && k === m - 1, nx = last ? p : pts[(k + 1) % m], pv = opts.open && k === 0 ? p : pts[(k - 1 + m) % m];   // OPEN: the last point has no next (length 0, forward kept from the previous), the first no previous
     if (k > 0) len += dist(p.pos, pts[k - 1].pos);
     points.push({ pos: p.pos, length: len, id: k });
-    const seg = dist(nx.pos, p.pos), fwd = unit(sub(nx.pos, p.pos));
+    const seg = dist(nx.pos, p.pos), fwd = last ? unit(sub(p.pos, pts[k - 1].pos)) : unit(sub(nx.pos, p.pos));
     // horizontal circumradius of (previous, this, next)
     const ax = pv.pos[0], az = pv.pos[2], bx = p.pos[0], bz = p.pos[2], cx = nx.pos[0], cz = nx.pos[2];
     const area2 = Math.abs((bx - ax) * (cz - az) - (cx - ax) * (bz - az));
@@ -138,7 +138,7 @@ function generateAiLine(dsn, secs, opts = {}) {
     extra.push({ speed: v, gas: 1, brake: 0, latG: 0, radius, sideLeft: p.sideLeft, sideRight: p.sideRight, camber: lean, direction: 1,
       nx: p.nrm[0], ny: p.nrm[1], nz: p.nrm[2], length: seg, fx: fwd[0], fy: fwd[1], fz: fwd[2], tag: 0, grade: fwd[1] });
   }
-  return { version: 7, lapTime: 0, sampleCount: 0, hasGrid: 0, points, extra, mode, speedKmh: kmh };
+  return { version: 7, lapTime: 0, sampleCount: 0, hasGrid: 0, points, extra, mode, speedKmh: kmh, ...(opts.open ? { open: true } : {}) };
 }
 
 /** Bytes for a line. Refuses fewer than 3 points, non-finite values, lengths that are not cumulative, and an open line. */
@@ -155,7 +155,9 @@ function encodeAiLine(line) {
   }
   const spacing = P.slice(1).map((p, k) => dist(p.pos, P[k].pos)).sort((a, b) => a - b), med = spacing[spacing.length >> 1];
   const close = dist(P[n - 1].pos, P[0].pos);
-  if (!(close > 0) || close > 3 * med) throw new AiLineError('NOT_CLOSED', `the last point is ${close} m from the first (median spacing ${med} m); a lap line closes one spacing short of its start`);
+  // an OPEN line (line.open, the D243a test export of an unfinished track) is written as it is: point-to-point layouts ship open lines (Kunos' ks_drag and
+  // five hillclimb/touge layouts in the local install, measured: their last point is 517–5,363 m from the first)
+  if (!line.open && (!(close > 0) || close > 3 * med)) throw new AiLineError('NOT_CLOSED', `the last point is ${close} m from the first (median spacing ${med} m); a lap line closes one spacing short of its start`);
   const b = Buffer.alloc(HEADER_BYTES + n * POINT_BYTES + 4 + n * EXTRA_BYTES + 4);
   let o = 0;
   const i32 = (v) => { b.writeInt32LE(v, o); o += 4; }, f32 = (v) => { b.writeFloatLE(v, o); o += 4; };

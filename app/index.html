@@ -78,6 +78,7 @@
   <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
   <select id="versions" aria-label="previous versions of the open track" title="Every Save keeps the version it replaces (the newest 20), and Close the loop keeps the track from before it. One opens as an unsaved copy."><option value="">Previous versions…</option></select>
   <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
+  <button id="testexport" title="TEST export of an UNFINISHED track, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export.">Test export (unfinished)…</button>
   <span id="install" title="Install to AC writes into Assetto Corsa's content\tracks, always as a t180b_ folder"></span>
   <span id="status" style="color: var(--dim)"></span>
 </header>
@@ -236,6 +237,16 @@
         await shell.exportTo(dir, { textures: textureSet });   // the self-intersection check is always on (app/export/export.js); the set is the road surface the preview draws (D228)
         await notExportedAlert(shell.getState(), seam);
       } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
+    };
+    // D243a: the TEST export of an unfinished track, its own button (never the default Export)
+    if ($('testexport')) $('testexport').onclick = async () => {
+      try {
+        const seam = await call('test_export_folder'), dir = seam || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Test export (unfinished) into…' } });
+        if (!dir) return;
+        status.textContent = 'test export (unfinished)…';
+        await shell.exportTo(dir, { textures: textureSet, test: true });
+        await notExportedAlert(shell.getState(), seam);
+      } catch (e) { status.textContent = `test export failed: ${e.message || e}`; }
     };
     refreshList();
     // THE KEYS (D239 note: moved from app/shell.js, as they were): Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo, Ctrl+S save, Ctrl+Backspace
