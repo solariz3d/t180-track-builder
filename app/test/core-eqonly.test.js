@@ -218,6 +218,55 @@ test('the page: Save sends the local time for the backup\'s name, the three back
   for (const c of ['backup_track', 'list_track_backups', 'open_track_backup']) assert.match(rs, new RegExp(`generate_handler!\\[[^\\]]*\\b${c}\\b`), `${c} is registered`);
 });
 
+// ── D239 note (the keeper's undo request): the keys MOVED from app/shell.js to the equation page, Ctrl+Backspace included ──
+/** A page document for bindKeys: keydown listeners, and key events that record preventDefault. */
+function keyPage() {
+  const ls = new Set(), doc = { addEventListener: (t, f) => { if (t === 'keydown') ls.add(f); }, removeEventListener: (t, f) => { if (t === 'keydown') ls.delete(f); } };
+  const press = (key, mods = {}, target = { matches: () => false }) => { const e = { key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...mods, target, prevented: false, preventDefault() { this.prevented = true; } }; for (const f of [...ls]) f(e); return e; };
+  return { doc, press, listeners: ls };
+}
+test('each shortcut fires on the equation page: Ctrl+Z undo, Ctrl+Shift+Z and Ctrl+Y redo, Ctrl+S save, Ctrl+Backspace removes the head', async () => {
+  const { bindKeys } = require('../core/keys.js'), s = await createCoreShell({ brushFn: null }), P = keyPage();
+  let saves = 0; const unbind = bindKeys(P.doc, s, { save: () => { saves++; } });
+  s.extend({ length: 200 }); s.extend({ length: 300 });
+  const two = text(s);
+  assert.equal(P.press('z', { ctrlKey: true }).prevented, true); assert.equal(s.getState().history.present.pieces.length, 1, 'Ctrl+Z undid the last extend');
+  P.press('Z', { ctrlKey: true, shiftKey: true }); assert.equal(text(s), two, 'Ctrl+Shift+Z redid it');
+  P.press('z', { ctrlKey: true }); P.press('y', { ctrlKey: true }); assert.equal(text(s), two, 'Ctrl+Y redid it');
+  P.press('s', { metaKey: true }); assert.equal(saves, 1, 'Cmd/Ctrl+S is the Save button\'s path');
+  P.press('Backspace', { ctrlKey: true }); assert.equal(s.getState().history.present.pieces.length, 1, 'Ctrl+Backspace removed the head');
+  P.press('z', { ctrlKey: true }); assert.equal(text(s), two, 'and that removal is one undo step');
+  unbind(); assert.equal(P.listeners.size, 0, 'the unbind removes the listener');
+});
+
+test('as before the move, no shortcut fires while a field has focus, and a bare Backspace does nothing', async () => {
+  const { bindKeys } = require('../core/keys.js'), s = await createCoreShell({ brushFn: null }), P = keyPage();
+  let saves = 0; bindKeys(P.doc, s, { save: () => { saves++; } });
+  s.extend({ length: 200 }); s.extend({ length: 300 }); const two = text(s);
+  const field = { matches: (sel) => /input/.test(sel) };
+  for (const [k, m] of [['z', { ctrlKey: true }], ['y', { ctrlKey: true }], ['s', { ctrlKey: true }], ['Backspace', { ctrlKey: true }]]) assert.equal(P.press(k, m, field).prevented, false, `${k} in a field`);
+  assert.equal(P.press('Backspace').prevented, false);
+  assert.deepEqual([text(s), saves], [two, 0]);
+});
+
+test('keyAction is MOVED, not copied: app/shell.js re-exports the very function, and the page binds app/core/keys.js to the core shell', () => {
+  assert.equal(require('../shell.js').keyAction, require('../core/keys.js').keyAction);
+  const html = fs.readFileSync(path.join(REPO, 'app', 'index.html'), 'utf8');
+  assert.match(html, /loadCjs\('app\/core\/keys\.js', get\)\)\.bindKeys\(document, shell, \{ save: \(\) => \$\('save'\)\.click\(\) \}\)/);
+  assert.ok(!html.includes("loadCjs('app/shell.js'"), 'the page no longer loads the piece builder\'s shell');
+});
+
+test('removeHead: one undo step; an empty track is refused by name; a closed loop opens again and says Ctrl+Z puts it back', async () => {
+  const empty = await createCoreShell({ brushFn: null });
+  empty.removeHead(); assert.match(empty.getState().message, /^NOTHING_TO_REMOVE/);
+  const s = await createCoreShell({ brushFn: null }); extendLap(s); s.close();
+  const closed = text(s), n = s.getState().history.present.pieces.length;
+  s.removeHead();
+  assert.deepEqual([s.getState().history.present.pieces.length, s.getState().history.present.closed], [n - 1, false]);
+  assert.match(s.getState().message, /the loop is open again \(Ctrl\+Z puts the closed lap back\)/);
+  s.undo(); assert.equal(text(s), closed, 'undo puts the closed lap back whole');
+});
+
 // ── the guide, on the equation builder ──
 test('the guide\'s steps are the equation builder\'s: extend, brush, close, colours, export, grid', () => {
   assert.deepEqual(STEPS.map((s) => s.id), ['extend', 'brush', 'close', 'colours', 'export', 'grid']);

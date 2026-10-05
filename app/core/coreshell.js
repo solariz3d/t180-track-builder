@@ -1,7 +1,7 @@
 // coreshell.js: the app's state and actions for the EQUATION CORE (the core spec's build step (d), D186, pane C). No DOM and no
 // Tauri, so it runs headless under node --test and unchanged in the webview (app/lib/cjs.js). Since D239 it is the app's ONLY builder
 // (the keeper: "can we keep only the equation mode?"): app/shell.js, the old piece builder's shell, is kept only as a test driver for
-// the shared preview and validation and for its keyAction (app/README.md says why).
+// the shared preview and validation (its keys moved to app/core/keys.js; app/README.md says why).
 //
 //   const shell = await createCoreShell({ storage, exporter })
 //   shell.extend({ length, targets })   shell.candidate({ length, targets })   shell.undo()   shell.redo()
@@ -147,6 +147,18 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
 
     /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute). */
     extend: (opts) => commit('extend', () => extend(doc(), opts), { lastEdited: [doc().pieces.length] }),
+    /**
+     * REMOVE THE HEAD (Ctrl+Backspace, the piece builder's key moved to this page, D239 note): the last piece goes, as ONE undo step. An
+     * empty track is refused by name. On a closed loop the loop is OPEN again (what Close changed in the other pieces stays; Ctrl+Z puts
+     * the closed lap back whole), and the message says so.
+     */
+    removeHead() {
+      const d = doc();
+      if (!d.pieces.length) return set({ message: 'NOTHING_TO_REMOVE: the track has no pieces' });
+      const wasClosed = !!d.closed;
+      const r = commit('removeHead', () => Object.freeze(D.checkDoc({ ...d, closed: false, pieces: Object.freeze(d.pieces.slice(0, -1)) })), { lastEdited: null });
+      return wasClosed && st.history.present !== d ? set(ok('removed the last piece: the loop is open again (Ctrl+Z puts the closed lap back)')) : r;
+    },
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
     candidate: (opts) => { const d = extend(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) }; },
     /** The ghost's readout: what extend(opts) would place, before it is placed (A: the same numbers as after). Throws on bad fields. */
