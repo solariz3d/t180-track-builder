@@ -13,6 +13,7 @@ does not edit it; it imports one of its functions, `solveJump`, for a jump.
 | `close.js` | the least-norm closure: the WHOLE lap (`close(doc, { edited })`, the stretch edited last held), or LOCAL (D242: `close(doc, { window })`, only the window's pieces may move, every other piece kept bit-identical, and a window that cannot close the loop within the document's limits and the roll-rate bar is refused by name, `CLOSE_WINDOW`; `closeWindow(doc)` is the app's default, the last ~20% of the lap) |
 | `water.js` | particles on the surface the adapter emits |
 | `readout.js` | a piece's length (m) and its change in turn, climb and bank (°), for placed pieces and the extend ghost |
+| `piece.js` | SAVED PIECES (D240): a run of pieces kept relative to its own start (`t180b.piece/1`), put back at the head, mirrored on insert |
 
 Every formula is on the skill's shelf, `.claude/skills/track-equations/references/`, cited at its use as `ref NN §k`.
 
@@ -237,6 +238,33 @@ candidateReadout(doc, opts)   // the piece extend(doc, opts) would place (the SA
   - One still rising at an end tilts that end: on level road, by atan(h′).
   - `roadLengthM` is the length over the lifted road, a little more than `lengthM`.
   - Bank is never changed by h or l.
+
+## Saved pieces (`piece.js`, schema `t180b.piece/1`, D240)
+
+The keeper: "can we keep only the equation mode? And then we can save pieces from that we make." This is the CORE half: no UI and no files on disk (the library list, "Save as piece...", rename and delete are the app's).
+
+```js
+const PC = require('./piece.js');
+const piece = PC.saveRun(doc, from, to, { name });      // doc.pieces[from..to], inclusive; one piece is a run of one
+const text  = PC.serialize(piece);                      // the canonical text; PC.parse(text) reads it back, refused BY NAME when malformed
+const next  = PC.insert(doc, piece, { mirror, keepStart });   // a NEW document with the run added at the open end
+const less  = PC.deleteRun(doc, from, to);              // pieces from..to taken out (the amendment of 2026-10-05, 08:55); see below
+PC.mirrored(piece); PC.summary(piece);                  // the left/right mirror image; { pieces, roads, flights, kind, lengthM, turnDeg, climbDeg }
+```
+
+**The text** is `{ schema: 't180b.piece/1', generator, name, start, pieces: [ ... ] }`: each road piece is `{ type, length, family, knots, channels }` (the cup, edge and tube are carried by their channel arrays, as in a document's text) and each flight `{ type, gap, drop, land }`. No ids (a piece is given the next id where it goes in). The name is a file name: 1 to 60 letters, digits, spaces, `_` or `-`, starting with a letter or digit.
+
+**The relative form** (the rule of the D240 plan): a piece is stored relative to its own start. **Rates** (`kh` turn, `kv` climb) and the **offsets** (`h` a hill, `l` a swerve: both are off the base line, so a hill is that hill wherever it is put) are stored as the document holds them. **States** (`phi` bank, `w` width, `r` the wall's rise, `c` cup, `e` and `s` edge, `t` tube) are stored as their CHANGE from the run's first start value (so each channel's first control point is 0) plus the start values in `start`. Putting them back is exact: every number is on its channel's decimal grid, and `q(change + start)` is the number that was saved.
+
+**Insert at a head** continues from it: every state is shifted so the run starts at the head's end value and keeps its change (a cup that went 15° to 60° added where the cup is 30° goes 30° to 75°), and every channel's first two control points are the head's value and slope carried on (`v + m·span/3`, ref 09 §1), the way Extend makes its joint, so the joint is C1. The control points after them are the saved ones (shifted, for a state). A tube added after another kind starts from `tNext` (twice the edge the piece before it renders), a cup after a tube from `t/2`, and the road after a jump from a level head with the rest carried, as `endState` says. **When the run already joins the head** (the same start: its values and slopes meet the head's within the document's own joint tolerance) it is added EXACTLY AS SAVED, found by trying that first and letting `appendPiece`'s own `checkDoc` decide, so a track built from a saved and re-inserted run is the same document as the one built by hand and exports the same bytes (`test/core_piece.test.js`, row 2). `keepStart` adds the run as saved and nothing else (refused by name, `PIECE_START`, if it does not meet the head). On an empty track the run goes in as saved. Everything goes through `appendPiece`, so a piece can never make a document the document would refuse: it goes in valid or is refused by a `CoreError`.
+
+**Mirror** (left/right): `kh`, `phi` and `l` are negated (the raw arrays, or for the bank its change and its start); everything else is symmetric. The mirror of the mirror is the piece itself, exactly, and a mirrored run's path is the mirror image of the original's (x flips, nothing else moves; row 5).
+
+**Delete** (`deleteRun(doc, from, to = from)`: a NEW document; the others keep their ids and `nextId` is not wound back, so an id is never reused). At the open end the pieces simply go. In the MIDDLE the two sides must meet C1 again: first the far side is tried exactly as it is (it already joins when the deleted run began and ended in the same state: nothing is changed anywhere); otherwise the far side's FIRST road piece is re-joined the way Extend makes a joint (D190, ref 09 §1): every channel's first two control points become the near side's end value and slope carried on, and NOTHING else changes (that piece's own end, so its joint with the next, and every piece after it are bit for bit as they were; the far side keeps its shape and moves along as one). When that does not make a valid document (a limit, a jump with no road before it, a tube that would be held in its slot band, ...) it is REFUSED BY NAME, `DELETE_REJOIN`, with the document's own reason in the message, and nothing is deleted or reshaped. A closed track has no open end (`CLOSED`); a range not in the track is `BAD_RANGE`. Tested over every range of a legacy, a cup, a tube, a jump, a mixed-kind and a varied track (row 10g).
+
+**A run is one cross-section kind** (legacy, cup or tube, with or without an edge): a state shifted to meet a head cannot keep a legacy piece's drawn edge (a function of `w` and `r`) equal to a neighbouring cup's `c` at their joint, so a mixed run is refused at save (`MIXED_RUN`). A legacy run cannot follow a cup or a tube (`PIECE_KIND`; Extend cannot make that either).
+
+**Refused by name** (all `CoreError`s): `BAD_PIECE_JSON`, `BAD_PIECE_SIZE` (8 million characters), `BAD_PIECE_SCHEMA` (a whole track, or a newer piece, says so), `BAD_PIECE_FIELD` (an unknown field is refused, not dropped), `BAD_PIECE_NAME`, `BAD_PIECE_RUN` (1 to 2,000 pieces), `BAD_PIECE_START`, `BAD_PIECE_NUMBER`, `BAD_PIECE_KNOTS` (at most 4,000 a piece), `BAD_PIECE_CHANNEL`, `NO_ROAD`, `MIXED_RUN`, `BAD_RANGE`; and the document's own codes for what the run does inside itself or at the head (`JOINT`, `BAD_CUP`, `BAD_TUBE`, `BAD_EDGE`, `FLIGHT_OFFSET`, `CLOSED`).
 
 ## What the adapter emits (`adapter.js`)
 
