@@ -431,6 +431,28 @@ test('row 10d: jumps: deleting the road before a jump, a jump itself, and the ro
   const c = PC.deleteRun(d, 3); assert.deepEqual(c.pieces, d.pieces.slice(0, 3), 'the last road: the track now ends at the jump');
 });
 
+// D243 follow-up (C's look at 47820c4): LAND ON ROAD FIRST through the saved pieces. Before 47820c4, deleting the road between two jumps and adding a run that
+// starts with a jump at a head that is a jump both BUILT a track with two jumps in a row; a hand-made file that starts with two jumps was listed as good.
+const twoJumps = () => { let d = openDocs.jump(); d = D.appendPiece(d, D.flightPiece({ gap: 20, drop: 0.5, land: 0 })); return extend(d, { length: 120 }); };   // road, road, flight, road, flight, road
+test('row 10i: deleting the road between two jumps is REFUSED BY NAME (DELETE_REJOIN, naming land on road first), and nothing is touched', () => {
+  const d = twoJumps(), before = D.serialize(d);
+  assert.deepEqual(d.pieces.map((P) => P.type), ['road', 'road', 'flight', 'road', 'flight', 'road']);
+  assert.throws(() => PC.deleteRun(d, 3), (e) => e instanceof D.CoreError && e.code === 'DELETE_REJOIN' && /JUMP_AFTER_JUMP/.test(e.message) && /land on road/.test(e.message));
+  assert.equal(D.serialize(d), before);
+});
+test('row 10j: a run that starts with a jump, added at a head that IS a jump, is refused by name (JUMP_AFTER_JUMP); at a road head it goes in (control)', () => {
+  const d = twoJumps(), lead = PC.saveRun(d, 2, 3, { name: 'jump then road' }), atJump = d.pieces.slice(0, 3);
+  assert.throws(() => PC.insert({ ...d, pieces: atJump }, lead), (e) => e instanceof D.CoreError && e.code === 'JUMP_AFTER_JUMP');
+  assert.deepEqual(PC.insert({ ...d, pieces: d.pieces.slice(0, 2) }, lead).pieces.map((P) => P.type), ['road', 'road', 'flight', 'road'], 'control: at a road head');
+});
+test('row 10k: a piece FILE that starts with two jumps is refused when it is READ (JUMP_AFTER_JUMP), so the library lists why; one leading jump reads (control)', () => {
+  const lead = PC.saveRun(twoJumps(), 2, 3, { name: 'jump then road' }), o = JSON.parse(PC.serialize(lead));
+  assert.equal(PC.parse(JSON.stringify(o)).pieces[0].type, 'flight', 'control: one leading jump');
+  o.pieces.unshift({ ...o.pieces[0] });   // a second jump before the first, as a hand edit would write it
+  assert.throws(() => PC.parse(JSON.stringify(o)), (e) => e instanceof D.CoreError && e.code === 'JUMP_AFTER_JUMP' && /land on road/.test(e.message));
+  assert.throws(() => PC.insert(openDocs.jump(), o), (e) => e.code === 'JUMP_AFTER_JUMP', 'and an object handed to insert is checked the same way');
+});
+
 test('row 10e: REFUSED BY NAME (DELETE_REJOIN), nothing deleted and nothing reshaped: a jump left with no road before it, and a re-join a limit of the document refuses (a tube held in the slot band)', () => {
   const d = openDocs.jump(), before = D.serialize(d);
   assert.throws(() => PC.deleteRun(d, 0, 1), (e) => e instanceof D.CoreError && e.code === 'DELETE_REJOIN' && /flight must follow a road/.test(e.message), 'the jump would be first');

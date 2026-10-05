@@ -144,6 +144,8 @@ function checkPiece(piece) {
   // document, and the ids and nextId are the ones it would have given (p1..pN, N + 1). checkDoc walks the pieces in order and judges each one against
   // the one before it only, so the first failure, its code and its message are the same.
   const i0 = out.pieces.indexOf(first), run = absolute(out).slice(i0).map((P, k) => ({ ...P, id: `p${k + 1}` }));
+  // LAND ON ROAD FIRST (D243) for the flights BEFORE the first road too, which the check below never sees: refused when the file is read, so the library lists why
+  if (i0 > 1) bad('JUMP_AFTER_JUMP', `piece 1: the run starts with ${i0} jumps in a row: a jump must land on road before the next one takes off; put a road piece between them`);
   D.checkDoc({ ...D.createDoc('piece check'), nextId: run.length + 1, pieces: run });
   return out;
 }
