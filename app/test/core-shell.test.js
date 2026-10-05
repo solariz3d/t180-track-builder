@@ -338,3 +338,25 @@ test('D234 a successful export is unchanged: written to content\\tracks, the emp
   const s2 = await closedLap(st2, await makeExporter(fromDisk)); await assert.rejects(() => s2.exportTo(picked2), /disk full/);
   assert.deepEqual(st2.removed, [picked2], 'the failure was unplanned and the empty folder still went'); assert.ok(!fs.existsSync(picked2));
 });
+
+// ── D243a: the Test export (unfinished) through the SHELL, which is what the page's button calls (exportTo(dir, { test: true })), with the real exporter ──
+test('D243a the TEST export of an OPEN lap goes through the shell and the exporter: written open as a test folder, its reds listed, the loop not refused', async () => {
+  const st = memStorage(), s = await lap({ storage: st, exporter: await makeExporter(fromDisk) });   // not closed
+  assert.equal(s.getState().history.present.closed, false, 'control: the lap is open');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-testexport-')); made.push(dir);
+  await s.exportTo(dir, { test: true });
+  assert.equal(s.getState().messageKind, 'ok', s.getState().message);
+  assert.equal(st.writes.length, 1, 'one folder'); assert.match(st.writes[0].folder, /^t180b_.+_test$/, 'named as a test, never a real export\'s folder');
+  const folder = path.join(dir, st.writes[0].folder);
+  assert.ok(fs.existsSync(path.join(folder, 't180b_TEST_UNFINISHED.txt')), 'the folder says it is unfinished');
+  assert.ok(fs.existsSync(path.join(folder, 'ai', 'fast_lane.ai')));
+  await s.exportTo(dir); assert.match(s.getState().message, /the loop is not closed: close it first/, 'control: a normal export of the same lap still refuses');
+});
+
+test('D243a the TEST export of a CLOSED lap is refused by name, and nothing is written (the lap would be built open with its end wall at the seam)', async () => {
+  const st = memStorage(), s = await closedLap(st, await makeExporter(fromDisk));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-testexport-')); made.push(dir);
+  await s.exportTo(dir, { test: true });
+  assert.match(s.getState().message, /this track is closed: use Export/); assert.deepEqual(st.writes, [], 'nothing written');
+  await s.exportTo(dir); assert.equal(s.getState().messageKind, 'ok', `control: a normal export of the closed lap goes through: ${s.getState().message}`);
+});
