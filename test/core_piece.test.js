@@ -462,3 +462,16 @@ test('row 10g: EVERY range of every kind of track either goes through as a valid
   }
   assert.ok(ok > 30 && refused >= 1 && rejoined >= 6, `ok ${ok}, refused ${refused}, rejoined ${rejoined}`);
 });
+
+// D240 F1 (C's non-author look): a run is checked by ONE checkDoc of the assembled run, not piece by piece through appendPiece, which re-checked the
+// whole growing document each time (measured on the same machine: 2,000 pieces 5.9 s before, 20 ms after). The bound below is generous (100x the new
+// time) so it does not flake; the old code fails it. And a fault at the LAST piece of the longest run is still refused by name, naming that piece.
+test('row 9b: a run at the limit (2,000 pieces) parses in well under 2 s, and a broken joint at its last piece is still refused BY NAME', () => {
+  let d = extend(D.createDoc('s'), { length: 20, family: 'bowl' }); d = extend(d, { length: 20 });
+  const one = JSON.parse(PC.serialize(PC.saveRun(d, 1, 1, { name: 'one' })));
+  const long = (mutate) => { const o = { ...one, name: 'long', pieces: Array.from({ length: 2000 }, () => JSON.parse(JSON.stringify(one.pieces[0]))) }; if (mutate) mutate(o.pieces); return JSON.stringify(o); };
+  const t0 = process.hrtime.bigint(), p = PC.parse(long()), ms = Number(process.hrtime.bigint() - t0) / 1e6;
+  assert.equal(p.pieces.length, 2000);
+  assert.ok(ms < 2000, `parse of 2,000 pieces took ${Math.round(ms)} ms`);
+  assert.throws(() => PC.parse(long((ps) => { ps[1999].channels.kh = ps[1999].channels.kh.map(() => 0.01); })), (e) => e.name === 'CoreError' && e.code === 'JOINT' && /piece 1999/.test(e.message));
+});
