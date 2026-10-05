@@ -1,4 +1,4 @@
-// index.js: the Install and See-it buttons, mounted as mount(root, shell, { exporter, native, pickFolder }).
+// index.js: the Install and See-it buttons, mounted as mount(root, shell, { native, pickFolder, getTextures }) on the core shell (D239).
 //   "Install to AC": the first time, asks for the Assetto Corsa folder (remembered); then installs as t180b_<name>.
 //   "See it in Assetto": DISABLED while the setting "See it in Assetto (launches the game)" is off, which is the default.
 'use strict';
@@ -6,8 +6,8 @@ const { createInstaller, createLauncher, PREFIX_NOTE } = require('./install.js')
 
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-function mount(root, shell, { exporter, native, pickFolder, getTextures }) {
-  const inst = createInstaller({ exporter, native, getDoc: () => shell.exportDoc(), getTextures });
+function mount(root, shell, { native, pickFolder, getTextures }) {
+  const inst = createInstaller({ build: (opts) => shell.buildExport(opts), native, getDoc: () => shell.exportDoc(), getTextures });
   const see = createLauncher({ native });
   const install = el('button', { textContent: 'Install to AC', title: `export straight into Assetto Corsa's content\\tracks (${PREFIX_NOTE})` });
   const change = el('button', { textContent: 'AC folder…' });

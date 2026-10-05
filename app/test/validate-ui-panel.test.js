@@ -112,5 +112,6 @@ test('changes arriving before the scheduled update are coalesced into one update
 
 test('E\'s panels load through A\'s webview loader (app/lib/cjs.js), and each exports mount(root, shell)', async () => {
   const fromDisk = async (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
-  for (const p of ['app/validate-ui/index.js', 'app/handles/index.js']) assert.strictEqual(typeof (await loadCjs(p, fromDisk)).mount, 'function', p);
+  for (const p of ['app/validate-ui/index.js'])   // D239: app/handles/index.js went with the Pieces page
+    assert.strictEqual(typeof (await loadCjs(p, fromDisk)).mount, 'function', p);
 });

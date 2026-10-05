@@ -3,15 +3,14 @@
 // none; z-index: 5;"></div>` in <main id="stage">, and ['onboarding', 'guide'] in the page's list of panels (the D177
 // hand-back has the exact diff).
 //
-// A small card over the stage, never a modal: the step's title, what to do and why, "2 of 5", and Back / Skip (or Next,
+// A small card over the stage, never a modal: the step's title, what to do and why, "2 of 6", and Back / Skip (or Next,
 // on the reading step) / ✕. The part of the window a step is about is outlined. Doing the move advances the guide by
 // itself (guide.js observe); the user can close it at any step, and the app is the same with it closed. On FIRST RUN
-// (firstrun.js) it opens, sets the defaults (defaults.js) and scrolls the starter phrases into view; after that it
-// stays closed behind a "Show the guide" button.
+// (firstrun.js) it opens; after that it stays closed behind a "Show the guide" button. D239: the steps are the equation
+// builder's, and the piece builder's first-run defaults (its font and tempo pickers, the starter phrase) went with it.
 'use strict';
 const { STEPS, createGuide } = require('./guide.js');
 const { firstRun, webStore } = require('./firstrun.js');
-const { apply: applyDefaults } = require('./defaults.js');
 
 // THE PLACE ON SCREEN (fixed after the D177 window pass: the first card was a 75 px column over the camera bar). The
 // mount point is a layer over the stage that lets clicks through (A's page: `inset: 0; pointer-events: none`); the card
@@ -49,7 +48,7 @@ function mount(root, shell, { store = webStore(typeof window !== 'undefined' ? w
   };
   function render() {
     holder.replaceChildren();
-    if (!guide) { holder.append(el('button', { className: 'guide-open', textContent: 'Show the guide', title: 'A five-step first track: place, sculpt, close, read the colours, export', onclick: start })); return; }
+    if (!guide) { holder.append(el('button', { className: 'guide-open', textContent: 'Show the guide', title: 'A six-step first track: extend, brush, close, read the colours, export, the grid and mirror', onclick: start })); return; }
     const g = guide.state;
     if (g.status === 'finished') { close(Object.keys(g.skipped).length ? 'skipped' : 'finished'); return; }
     const s = g.step, reading = !s.done;
@@ -72,13 +71,7 @@ function mount(root, shell, { store = webStore(typeof window !== 'undefined' ? w
     render();
   }
 
-  if (fr.isFirst()) {
-    applyDefaults(shell);
-    start();
-    // the starter phrasebook up front: scroll its palette group into view (the palette is A's; this only scrolls)
-    const heading = doc && [...doc.querySelectorAll('#palette h2, #palette h3, #palette .group-title')].find((h) => /starter phrases/i.test(h.textContent));
-    if (heading && heading.scrollIntoView) heading.scrollIntoView({ block: 'start' });
-  } else render();
+  if (fr.isFirst()) start(); else render();
   return { dispose: () => { if (unsubscribe) unsubscribe(); outline(null); } };
 }
 

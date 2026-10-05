@@ -63,7 +63,7 @@ const MUTATIONS = [
   { id: 'C5 the heading brush may open a closed loop', file: 'core/coreshell.js',
     from: "if (!brushFn && doc().closed && mode === 'rate' && (channel === 'kh' || channel === 'kv'))", to: 'if (false)', caughtBy: 'close: one click' },
   { id: 'C7 export runs on an open track', file: 'core/coreshell.js',
-    from: "if (!doc().closed) return stop({ message: 'the loop is not closed: close it first (one click), then export', exportReds: null });", to: '', caughtBy: 'export: an open track is refused' },   // D234: re-pointed, the refusal now leaves through stop() (it removes the picked empty folder)
+    from: "if (!doc().closed) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');", to: '', caughtBy: 'export: an open track is refused' },   // D234: re-pointed, the refusal now leaves through stop() (it removes the picked empty folder); D239: re-pointed again, the check now lives in buildExport, which Export and Install to AC share
   { id: 'C8 the list shows the piece builder\'s tracks too', file: 'core/coreshell.js',
     from: '.filter((n) => n.startsWith(PREFIX))', to: '', caughtBy: 'save and open use their own prefix' },
   { id: 'C12 turn is degrees per metre, not per 100 m', file: 'core/panel.js',

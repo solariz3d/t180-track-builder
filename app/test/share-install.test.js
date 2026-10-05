@@ -1,89 +1,93 @@
-// Headless tests for app/share and app/install (D176): codes through the real shell; install and the launch button
-// through a fake native side (the native guards themselves are src-tauri/src/ac.rs's tests, on a temp fake AC tree).
-// The launch is NEVER run: the native seeIt here is a recorder, and the test asserts it is not called while the
-// setting is off. Run: node --test "app/test/*.test.js"
+// Headless tests for app/share and app/install (D176; D239: on the EQUATION track, the core shell app/core/coreshell.js, since the
+// Pieces page is removed): codes through the real core shell; install and the launch button through a fake native side (the native
+// guards themselves are src-tauri/src/ac.rs's tests, on a temp fake AC tree). The launch is NEVER run: the native seeIt here is a
+// recorder, and the test asserts it is not called while the setting is off. Run: node --test "app/test/*.test.js"
+// RETIRED D239, by name (each was the piece builder's): 'a piece code joins the palette; a pack code goes to the textures panel' (a piece
+// code is now refused by name, app/test/core-eqonly.test.js; the pack half is kept below as its own test).
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const { createShell } = require('../shell.js');
+const { createCoreShell } = require('../core/coreshell.js');
 const { loadCjs } = require('../lib/cjs.js');
 const { createShare } = require('../share/share.js');
 const { createInstaller, createLauncher } = require('../install/install.js');
 const { makeExporter } = require('../export/export.js');
-const D = require('../../src/doc/index.js');
+const D = require('../../src/core/document.js');
 const C = require('../../src/doc/code.js');
 const P = require('../../src/doc/packs.js');
 const T = require('../../src/texture/index.js');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const get = async (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
-const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
+const mem = () => { const docs = new Map(); return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()] }; };
 const clip = () => { let v = ''; return { writeText: async (t) => { v = t; }, read: () => v }; };
+const R = 180, Q = Math.PI * R / 2;
+/** The plain bowl lap of app/test/core-shell.test.js: a 300 m straight, four quarter turns, a straightening; closed when asked. */
+async function lap({ closed = false, ...opts } = {}) {
+  const s = await createCoreShell({ brushFn: null, storage: mem(), ...opts });
+  s.extend({ length: 300, family: 'bowl' });
+  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  if (closed) { s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message); }
+  return s;
+}
+const text = (s) => D.serialize(s.getState().history.present);
 
 test('Copy code puts the track on the clipboard; Paste code opens it in another session byte-exact, as one undo step', async () => {
-  const a = await createShell({ storage: mem() }); a.place('straight'); a.place('tight');
+  const a = await lap();
   const cb = clip(), code = await createShare(a, { clipboard: cb }).copyTrack();
   assert.strictEqual(cb.read(), code);
-  const b = await createShell({ storage: mem() }); b.place('straight');
-  const before = D.serialize(b.getState().history.present);
+  const b = await createCoreShell({ brushFn: null }); b.extend({ length: 120 });
+  const before = text(b);
   const r = await createShare(b).paste(`  ${code}\n`);
-  assert.strictEqual(r.kind, 'd');
-  assert.strictEqual(D.serialize(b.getState().history.present), D.serialize(a.getState().history.present));
-  b.undo(); assert.strictEqual(D.serialize(b.getState().history.present), before);
+  assert.strictEqual(r.kind, 'e', r.message);
+  assert.strictEqual(text(b), text(a));
+  b.undo(); assert.strictEqual(text(b), before);
 });
 
 test('a corrupted code changes nothing and says why', async () => {
-  const a = await createShell({ storage: mem() }); a.place('straight');
+  const a = await lap();
   const code = await createShare(a).copyTrack(), broken = code.slice(0, code.length - 20) + code.slice(-12);
-  const b = await createShell({ storage: mem() }); b.place('tight');
-  const before = D.serialize(b.getState().history.present), pastBefore = b.getState().history.past.length;
+  const b = await createCoreShell({ brushFn: null }); b.extend({ length: 120 });
+  const before = text(b), pastBefore = b.getState().history.past.length;
   const r = await createShare(b).paste(broken);
   assert.match(r.message, /CODE_(CORRUPT|MALFORMED)/);
-  assert.deepStrictEqual([D.serialize(b.getState().history.present), b.getState().history.past.length], [before, pastBefore]);
+  assert.deepStrictEqual([text(b), b.getState().history.past.length], [before, pastBefore]);
 });
 
-test('a piece code joins the palette; a pack code goes to the textures panel', async () => {
-  const a = await createShell({ storage: mem() }); a.place('straight'); a.place('tight'); a.select('w2');
-  await a.saveSelectionAsPiece('hook');
-  const pc = await createShare(a).copyPiece('hook');
-  const b = await createShell({ storage: mem() });
-  assert.match((await createShare(b).paste(pc)).message, /added "hook"/);
-  assert.ok(b.palette().some((p) => p.name === 'hook'));
+test('a pack code goes to the textures panel\'s onPack; without one it changes nothing and says so', async () => {
+  const b = await createCoreShell({ brushFn: null });
   const png = T.png.encodePng({ width: 4, height: 4, rgba: new Uint8Array(64).fill(200) }, zlib.deflateSync);
   const kc = C.packToCode(P.makePack({ name: 'K', font: 'flat', slots: { floor: { texture: 'g' } }, images: { g: { bytes: png } } }));
   let got = null;
   const r = await createShare(b, { onPack: (t) => { got = t; return {}; } }).paste(kc);
   assert.deepStrictEqual([r.kind, P.parsePack(got).name], ['k', 'K']);
+  const before = text(b), r2 = await createShare(b).paste(kc);
+  assert.deepStrictEqual([r2.kind, text(b)], ['k', before]);
+  assert.match(r2.message, /does not import texture packs/);
 });
 
-/** A fake native side: remembers a root, records every install and every launch request. */
+/** A fake native side: remembers a root, records every install (paths and bytes) and every launch request. */
 function fakeNative({ seeIt = false } = {}) {
   const n = { root: null, installs: [], launches: [], setting: seeIt };
   Object.assign(n, {
     getAcRoot: async () => n.root,
     setAcRoot: async (p) => { if (!/assettocorsa$/.test(p)) throw new Error(`${p} has no content\\tracks`); n.root = p; return p; },
-    installTrack: async (folder, files) => { n.installs.push({ folder, files: files.map((f) => f.path) }); return files.length; },
+    installTrack: async (folder, files) => { n.installs.push({ folder, files: files.map((f) => f.path), bytes: files.map((f) => Buffer.from(f.bytes)) }); return files.length; },
     getSeeItSetting: async () => n.setting,
     setSeeItSetting: async (on) => { n.setting = on; },
     seeIt: async (folder, layout) => { n.launches.push({ folder, layout }); return 0; },
   });
   return n;
 }
-function stadium(name) {
-  let d = D.createDoc(name);
-  // the stadium closes by symmetry only with four 90° tights, level: NAMED, since from D182 the default tight is the
-  // library's median corner (88.3°) and banks into the turn
-  const tight90 = { font: 'flat', handles: { turn: Math.PI / 2, roll1: 0 } };
-  for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', tight90], ['tight', tight90], ['straight', { handles: { length: 600 } }], ['tight', tight90], ['tight', tight90]]) d = D.appendWord(d, w, { ...o, speed: 200 / 3.6 });
-  return D.checkDoc({ ...d, closed: true });
-}
+const installerFor = (s, native, getTextures) => createInstaller({ build: (o) => s.buildExport(o), native, getDoc: () => s.exportDoc(), getTextures });
 
 test('Install to AC asks for the AC folder once, remembers it, and installs as t180b_<name>, saying so', async () => {
-  const native = fakeNative(), exporter = await makeExporter(get), doc = stadium('Monza');
-  const inst = createInstaller({ exporter, native, getDoc: () => doc });
+  const native = fakeNative(), s = await lap({ closed: true, exporter: await makeExporter(get) }); await s.save('Monza');
+  const inst = installerFor(s, native);
   const first = await inst.install();
   assert.deepStrictEqual([first.ok, first.needsRoot, native.installs.length], [false, true, 0]);
   assert.match((await inst.chooseRoot('C:/somewhere/else')).message, /no content/);
@@ -109,11 +113,11 @@ test('the share and install panels load through the webview loader and export mo
   for (const p of ['app/share/index.js', 'app/install/index.js']) assert.strictEqual(typeof (await loadCjs(p, get)).mount, 'function', p);
 });
 
-test('Install to AC hands the exporter the texture set the page holds, as Export does', async () => {
+test('Install to AC hands the build the texture set the page holds, as Export does', async () => {
   const native = fakeNative(); native.root = 'G:/games/assettocorsa';
   let seen = null;
-  const exporter = { run: (doc, opts) => { seen = opts; return { result: {}, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }; } };
-  const inst = createInstaller({ exporter, native, getDoc: () => D.createDoc('x'), getTextures: () => 'THE-SET' });
+  const build = (opts) => { seen = opts; return { result: {}, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }; };
+  const inst = createInstaller({ build, native, getDoc: () => D.createDoc('x'), getTextures: () => 'THE-SET' });
   assert.strictEqual((await inst.install()).ok, true);
   assert.deepStrictEqual(seen, { textures: 'THE-SET' });
 });
@@ -122,7 +126,8 @@ test('an unnamed track is not installed: the user is asked to name it, and nothi
   const native = fakeNative(); native.root = 'G:/games/assettocorsa';
   const exporter = await makeExporter(get);
   for (const name of ['', 'untitled', ' Untitled ']) {
-    const r = await createInstaller({ exporter, native, getDoc: () => stadium(name) }).install();
+    const s = await lap({ closed: true, exporter });
+    const r = await createInstaller({ build: (o) => s.buildExport(o), native, getDoc: () => ({ ...s.exportDoc(), name }) }).install();
     assert.deepStrictEqual([r.ok, native.installs.length], [false, 0], name);
     assert.match(r.message, /name the track/, name);
   }
@@ -130,8 +135,8 @@ test('an unnamed track is not installed: the user is asked to name it, and nothi
 
 test('a track saved as "Monza" installs as t180b_monza, so a second unsaved track cannot replace it', async () => {
   const native = fakeNative(); native.root = 'G:/games/assettocorsa';
-  const s = await createShell({ storage: mem() }); s.adopt(stadium('untitled')); await s.save('Monza');
-  const r = await createInstaller({ exporter: await makeExporter(get), native, getDoc: () => s.exportDoc() }).install();
+  const s = await lap({ closed: true, exporter: await makeExporter(get) }); await s.save('Monza');
+  const r = await installerFor(s, native).install();
   assert.strictEqual(r.ok, true, r.message);
   assert.strictEqual(native.installs[0].folder, 't180b_monza');
 });
@@ -146,11 +151,19 @@ test('the Install to AC button installs the track under the name it was saved as
   const restore = fake.install();
   try {
     const native = fakeNative(); native.root = 'G:/games/assettocorsa';
-    const s = await createShell({ storage: mem() }); s.adopt(stadium('untitled')); await s.save('Monza');
+    const s = await lap({ closed: true, exporter: await makeExporter(get) }); await s.save('Monza');
     const root = new fake.Element('div');
-    mount(root, s, { exporter: await makeExporter(get), native, pickFolder: async () => null, getTextures: () => null });
+    mount(root, s, { native, pickFolder: async () => null, getTextures: () => null });
     const button = [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Install to AC');
     await button.onclick();
     assert.deepStrictEqual(native.installs.map((i) => i.folder), ['t180b_monza']);
   } finally { restore(); }
+});
+
+test('an open loop is not installed: the refusal is the Export button\'s own, and nothing is written', async () => {
+  const native = fakeNative(); native.root = 'G:/games/assettocorsa';
+  const s = await lap({ exporter: await makeExporter(get) }); await s.save('Monza');
+  const r = await installerFor(s, native).install();
+  assert.deepStrictEqual([r.ok, native.installs.length], [false, 0]);
+  assert.match(r.message, /the loop is not closed: close it first/);
 });

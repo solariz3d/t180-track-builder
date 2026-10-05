@@ -1,11 +1,13 @@
 // install.js: INSTALL TO AC and SEE IT IN ASSETTO, the app's logic with no DOM (tested headless). index.js mounts it.
 //
-//   const inst = createInstaller({ exporter, native, getDoc })
+//   const inst = createInstaller({ build, native, getDoc, getTextures })
 //   await inst.root()             -> the remembered Assetto Corsa folder, or null (native get_ac_root)
 //   await inst.chooseRoot(path)   -> remember it (native set_ac_root refuses a folder without content\tracks)
-//   await inst.install()          -> { ok, message, folder }: export with every check ON (app/export/export.js), then
+//   await inst.install()          -> { ok, message, folder }: build the export with every check ON, then
 //                                    write into <AC>\content\tracks\<folder> (native install_track: t180b_ only, and never
 //                                    over a folder the builder did not make)
+// THE BUILD (D239): `build(opts)` is the open track's own export, the core shell's buildExport (app/core/coreshell.js), the SAME call
+// the Export button makes, so what is installed is what Export writes, byte for byte; getDoc() gives the name it installs under.
 // THE NAME. Every folder the builder writes is t180b_<track name> (src/export/fromwords.js folderName): the prefix is
 // added automatically, and the message says so, so a user who names a track "monza" is told it installs as t180b_monza
 // and can never overwrite ks_monza.
@@ -18,7 +20,7 @@
 
 const PREFIX_NOTE = 'the builder names every track t180b_…, so it can never overwrite a track it did not make';
 
-function createInstaller({ exporter, native, getDoc, getTextures = () => null }) {
+function createInstaller({ build, native, getDoc, getTextures = () => null }) {
   return {
     root: () => native.getAcRoot(),
     async chooseRoot(path) {
@@ -30,7 +32,7 @@ function createInstaller({ exporter, native, getDoc, getTextures = () => null })
       const name = String(getDoc().name || '').trim();
       if (!name || /^untitled$/i.test(name)) return { ok: false, message: 'name the track first (Save, with a name): it installs as t180b_<name>, and an unnamed track would replace the last unnamed one' };
       let out;
-      try { out = exporter.run(getDoc(), { textures: getTextures() }); } catch (e) {
+      try { out = build({ textures: getTextures() }); } catch (e) {
         if (e.name !== 'ExportError') throw e;
         return { ok: false, message: e.message, reds: e.code === 'RED' ? e.red : null };
       }
