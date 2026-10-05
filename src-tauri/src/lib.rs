@@ -3,6 +3,7 @@
 // so this side is a handful of commands and nothing else:
 //   list_tracks · save_track(name, text, stamp) · open_track(name) · save_library(text) · open_library
 //   backup_track(name, text, stamp) · list_track_backups(name) · open_track_backup(file): SAVE KEEPS THE PREVIOUS VERSION (backups.rs)
+// A launch-time T180_TEST_APP_DATA (an existing absolute folder) moves every kept file there, for test runs (test_app_data).
 //   save_autosave(text) · open_autosave · clear_autosave: the unsaved track, for crash recovery
 //   write_export(dir, folder, files): an exported track into the folder the user picked (never an AC install's other tracks)
 //   get_ac_root · set_ac_root(path) · install_track(folder, files): INSTALL TO AC, into the remembered AC folder's
@@ -61,7 +62,19 @@ pub fn track_names(dir: &Path) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
+/// THE TEST APP-DATA SEAM (B's D239 look, F2; the real fix for C's 09:06 incident, when a window test run shared the keeper's folder while his
+/// app started): when and ONLY when the app was LAUNCHED with T180_TEST_APP_DATA set to an existing absolute folder, every file the app keeps
+/// (tracks, backups, the autosave, the AC folder and the launch setting) lives there instead. Like T180_TEST_EXPORT_FOLDER, a page cannot set a
+/// process's environment and nothing in normal use sets this one, so normal use always gets the real app data folder.
+pub fn test_app_data(var: Option<String>) -> Option<PathBuf> {
+    let p = PathBuf::from(var?);
+    if p.is_absolute() && p.is_dir() { Some(p) } else { None }
+}
+
 fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Some(dir) = test_app_data(std::env::var("T180_TEST_APP_DATA").ok()) {
+        return Ok(dir);
+    }
     let dir = app.path().app_data_dir().map_err(|e| format!("no app data folder: {e}"))?;
     fs::create_dir_all(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
     Ok(dir)
@@ -93,15 +106,7 @@ fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 #[tauri::command]
 fn save_track(app: tauri::AppHandle, name: String, text: String, stamp: Option<String>) -> Result<Option<String>, String> {
     let path = track_path(&app, &name)?;
-    let bk = backups_dir(&app)?;
-    let kept = backups::move_aside(&path, &bk, &name, &backups::stamp_or_now(stamp.as_deref()))?;
-    if let Err(e) = write_atomic(&path, &text) {
-        if let Some(k) = &kept {
-            let _ = fs::rename(k, &path);
-        }
-        return Err(e);
-    }
-    backups::prune(&bk, &name, backups::KEEP)?;
+    let kept = backups::save(&path, &backups_dir(&app)?, &name, &backups::stamp_or_now(stamp.as_deref()), &text)?;   // F3b: a failed prune is logged, not a failed save
     Ok(kept.and_then(|k| k.file_name().and_then(|f| f.to_str()).map(String::from)))
 }
 
@@ -112,9 +117,7 @@ fn backup_track(app: tauri::AppHandle, name: String, text: String, stamp: Option
     if !valid_name(&name) {
         return Err(format!("{name:?} is not a track name: 1 to 64 letters, digits, spaces, _ or -"));
     }
-    let bk = backups_dir(&app)?;
-    let to = backups::write_copy(&bk, &name, &backups::stamp_or_now(stamp.as_deref()), &text)?;
-    backups::prune(&bk, &name, backups::KEEP)?;
+    let to = backups::copy(&backups_dir(&app)?, &name, &backups::stamp_or_now(stamp.as_deref()), &text)?;   // as save: a failed prune is logged
     Ok(to.file_name().and_then(|f| f.to_str()).unwrap_or_default().to_string())
 }
 
@@ -431,6 +434,17 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn the_test_app_data_seam_is_used_only_for_an_existing_absolute_folder() {
+        let d = scratch("appdata");
+        assert_eq!(test_app_data(Some(d.to_string_lossy().into_owned())), Some(d.clone()));
+        assert_eq!(test_app_data(None), None, "unset: the real app data folder");
+        assert_eq!(test_app_data(Some("relative\\dir".into())), None, "a relative path is ignored");
+        assert_eq!(test_app_data(Some(d.join("missing").to_string_lossy().into_owned())), None, "a folder that does not exist is ignored");
+        assert_eq!(test_app_data(Some(String::new())), None);
+        fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]
