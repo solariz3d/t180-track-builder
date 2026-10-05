@@ -28,6 +28,9 @@
 //   state.history.present is the CORE document (src/core/document.js), with its own undo history.
 // Every edit goes through the core (src/core: extend, sculpt, close); the shell never edits a document itself.
 // A FAILED ACTION changes nothing and says why (state.message), as app/shell.js does.
+// SAVED PIECES, THE UI HALF (D240; the core is src/core/piece.js):
+//   shell.selectPiece(i, { extend })   shell.clearSelection()   shell.selectionInfo()   await shell.savePiece(name)   await shell.listPieces()   await shell.insertPiece(name, { mirror })
+//   await shell.renamePiece(from, to)   await shell.deletePieceFile(name)   shell.deleteSelection()   shell.proposeDelete()   await shell.applyDelete()   shell.cancelDelete()
 // TIMING: state.lastStep = { op, ms } for the last edit, the document operation plus the adapter's segments (spec test 6's
 // "per step" is measured by the bench on the same calls, not on this field).
 'use strict';
@@ -44,6 +47,7 @@ const { walkScene, isDrivable } = require('../../src/export/markers.js');
 const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
+const PC = require('../../src/core/piece.js');   // D240: saved pieces (save a run, put one at the head, mirror it, delete pieces)
 // A's offset channels h and l (the chair's ruling 1, D186): offsetPath(doc, segments, path) lifts a path and recomputes its frame.
 // Not at 17c2301; when the adapter exports it, the shell hands it on as `resolved.lift`, so the preview and the export
 // read the road AS BRUSHED (the segments alone do not carry the offsets).
@@ -108,6 +112,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
     message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
+    selection: null, deleteProposal: null, libraryStamp: 0,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
   };
   // a Pieces autosave that could not be kept aside is never overwritten: this session simply does not autosave
   const mayAutosave = canAutosave && !(recovery && recovery.blocked);
@@ -117,6 +122,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if ('message' in patch && !('messageKind' in patch)) patch = { ...patch, messageKind: patch.message ? 'error' : null };
     // D242: a close PREVIEW belongs to the document it was made from; any change of document drops it, so no stale ghost or Apply survives an edit, an undo or an open
     if (patch.history && st.closeProposal && !('closeProposal' in patch) && patch.history.present !== st.closeProposal.base) patch = { ...patch, closeProposal: null };
+    // D240: a SELECTION of pieces and a delete PREVIEW likewise belong to the document they were made on (piece numbers mean nothing on another)
+    if (patch.history && st.selection && !('selection' in patch) && patch.history.present !== st.selection.base) patch = { ...patch, selection: null };
+    if (patch.history && st.deleteProposal && !('deleteProposal' in patch) && patch.history.present !== st.deleteProposal.base) patch = { ...patch, deleteProposal: null };
     const before = st.history.present;
     st = Object.freeze({ ...st, ...patch });
     if (mayAutosave && st.dirty && st.history.present !== before) {
@@ -290,6 +298,117 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     cancelClose: () => set({ closeProposal: null, message: null }),
 
+    /**
+     * D240, SAVED PIECES, THE UI HALF (the core is src/core/piece.js; the keeper: "can we keep only the equation mode? And then we can save pieces from that we make", and
+     * 10:xx: "highlight/select pieces on the track; the selection offers Save as piece or Delete").
+     *
+     * SELECT: piece i (a click on the track), or with `extend` the run from the piece selected first to i (a shift-click). A selection belongs to the document it was made on:
+     * any change of the document drops it. SAVE AS PIECE: the selected run is kept relative to its own start (src/core/piece.js saveRun) in the pieces folder, under a name;
+     * a name already used is REFUSED (delete the old piece first), and a run the core cannot keep (a mixed cross-section, say) says why.
+     */
+    selectPiece(i, { extend = false } = {}) {
+      const d = doc();
+      if (!Number.isInteger(i) || i < 0 || i >= d.pieces.length) return set({ message: `there is no piece ${i}: the track has pieces 0 to ${d.pieces.length - 1}` });
+      const anchor = extend && st.selection && st.selection.base === d ? st.selection.anchor : i, from = Math.min(anchor, i), to = Math.max(anchor, i);
+      return set({ selection: Object.freeze({ base: d, anchor, from, to, ids: Object.freeze(d.pieces.slice(from, to + 1).map((P) => P.id)) }), deleteProposal: null, message: null });
+    },
+    clearSelection: () => set({ selection: null, deleteProposal: null, message: null }),
+    /** What the selection is, for the panel: { from, to, count, lengthM, atEnd, saveProblem }; saveProblem is why it cannot be kept as a piece (null when it can). null when nothing is selected. */
+    selectionInfo() {
+      const s = st.selection, d = doc();
+      if (!s || s.base !== d) return null;
+      let saveProblem = null;
+      try { PC.saveRun(d, s.from, s.to, { name: 'selection' }); } catch (e) { if (e.name !== 'CoreError') throw e; saveProblem = e.message; }
+      return { from: s.from, to: s.to, count: s.to - s.from + 1, ids: s.ids, lengthM: d.pieces.slice(s.from, s.to + 1).reduce((a, P) => a + (P.type === 'road' ? P.length : 0), 0), atEnd: s.to === d.pieces.length - 1, closed: !!d.closed, saveProblem };
+    },
+    async savePiece(name) {
+      if (!storage || typeof storage.savePiece !== 'function') return set({ message: 'saving a piece is not available here' });
+      const s = st.selection, d = doc();
+      if (!s || s.base !== d) return set({ message: 'select the pieces to keep first: click a piece on the track (shift-click for a run)' });
+      let text;
+      try { const piece = PC.saveRun(d, s.from, s.to, { name }); text = PC.serialize(piece); } catch (e) { if (e.name !== 'CoreError') throw e; return set({ message: e.message }); }
+      try { await storage.savePiece(name, text); } catch (e) { return set({ message: `the piece was not saved: ${e && e.message || e}` }); }   // a name already used is refused by the native side, and says so
+      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`saved the piece "${name}": ${s.to - s.from + 1} piece${s.to === s.from ? '' : 's'} from the track (it is in the library below)`) });
+    },
+    /**
+     * THE LIBRARY: every saved piece, [{ name, summary, thumb, error }] sorted by name. summary is src/core/piece.js summary (pieces, roads, flights, kind, lengthM,
+     * turnDeg, climbDeg); thumb a plan-view outline for a thumbnail ({ w, h, points }). A file that cannot be read is LISTED with the reason (a named refusal), never hidden.
+     */
+    async listPieces() {
+      if (!storage || typeof storage.listPieces !== 'function') return [];
+      const out = [];
+      for (const name of await storage.listPieces()) {
+        try { const piece = PC.parse(await storage.openPiece(name)); out.push({ name, summary: PC.summary(piece), thumb: thumbOf(piece), error: null }); }
+        catch (e) { out.push({ name, summary: null, thumb: null, error: String(e && e.message || e) }); }
+      }
+      return out;
+    },
+    /** ADD AT THE HEAD: the saved piece, put where the track ends, as ONE undo step; `mirror` adds its left/right mirror image. Refused by name (CLOSED, PIECE_KIND, a joint the document refuses...) with nothing changed. */
+    async insertPiece(name, { mirror = false } = {}) {
+      if (!storage || typeof storage.openPiece !== 'function') return set({ message: 'saved pieces are not available here' });
+      let piece;
+      try { piece = PC.parse(await storage.openPiece(name)); } catch (e) { return set({ message: `could not open the piece "${name}": ${e && e.message || e}` }); }
+      const before = doc(), r = commit('insertPiece', () => PC.insert(before, piece, { mirror }), { lastEdited: null });
+      if (!r) return st;
+      return set(ok(`added the piece "${name}"${mirror ? ' mirrored' : ''} at the head: ${st.history.present.pieces.length - before.pieces.length} piece${st.history.present.pieces.length - before.pieces.length === 1 ? '' : 's'} (Ctrl+Z takes it back)`));
+    },
+    /** Rename a saved piece: the new name must be free (a piece is never overwritten); the file's own name field changes with it. */
+    async renamePiece(from, to) {
+      if (!storage || typeof storage.openPiece !== 'function' || typeof storage.savePiece !== 'function' || typeof storage.deletePiece !== 'function') return set({ message: 'saved pieces are not available here' });
+      let text;
+      try { text = PC.serialize({ ...PC.parse(await storage.openPiece(from)), name: to }); } catch (e) { return set({ message: `could not rename the piece "${from}": ${e && e.message || e}` }); }
+      try { await storage.savePiece(to, text); } catch (e) { return set({ message: `not renamed: ${e && e.message || e}` }); }
+      try { await storage.deletePiece(from); } catch (e) { return set({ libraryStamp: st.libraryStamp + 1, message: `the piece was copied to "${to}" but the old one "${from}" could not be removed: ${e && e.message || e}` }); }
+      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`renamed the piece "${from}" to "${to}"`) });
+    },
+    /** Delete a saved piece FILE (the library entry), not pieces of the track. */
+    async deletePieceFile(name) {
+      if (!storage || typeof storage.deletePiece !== 'function') return set({ message: 'saved pieces are not available here' });
+      try { await storage.deletePiece(name); } catch (e) { return set({ message: `the piece was not deleted: ${e && e.message || e}` }); }
+      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`deleted the saved piece "${name}"`) });
+    },
+
+    /**
+     * DELETE THE SELECTED PIECES OF THE TRACK. At the open end (the selection includes the last piece) the pieces simply go, as ONE undo step. In the MIDDLE the two sides
+     * must meet again, and src/core/piece.js deleteRun does that by changing the first piece after the gap and moving everything after it along as one (C measured 357 of
+     * 357 middle deletes doing so), so nothing is deleted until it is PREVIEWED: proposeDelete shows the track as it would be (a ghost), how far each piece after the gap
+     * moves, and an OVERLAP CHECK of the result, as Close's preview does; applyDelete writes the track to its backups first ('pre-delete'), refuses by name if that copy
+     * fails, and commits ONE undo step; cancelDelete drops it. A closed track has no open end to delete from (CLOSED), and a join the document refuses is DELETE_REJOIN.
+     */
+    deleteSelection() {
+      const s = st.selection, d = doc();
+      if (!s || s.base !== d) return set({ message: 'select the pieces to delete first: click a piece on the track (shift-click for a run)' });
+      if (d.closed) return set({ message: 'CLOSED: a closed track has no open end to delete from; Ctrl+Backspace removes the last piece and opens the loop (Ctrl+Z puts it back)' });
+      if (s.to === d.pieces.length - 1) {
+        const n = s.to - s.from + 1;
+        const r = commit('deletePieces', () => PC.deleteRun(d, s.from, s.to), { lastEdited: null, selection: null });
+        return r ? set(ok(`deleted ${n} piece${n === 1 ? '' : 's'} at the end of the track (Ctrl+Z puts ${n === 1 ? 'it' : 'them'} back)`)) : st;
+      }
+      return api.proposeDelete();
+    },
+    proposeDelete() {
+      const s = st.selection, d = doc();
+      if (!s || s.base !== d) return set({ message: 'select the pieces to delete first: click a piece on the track (shift-click for a run)' });
+      return attempt(() => {
+        const t0 = now(), res = PC.deleteRun(d, s.from, s.to), r = resolvedOf(res), ms = now() - t0;
+        const proposal = Object.freeze({ base: d, doc: res, resolved: r.resolved, from: s.from, to: s.to, removed: Object.freeze(s.ids.slice()), ms,
+          displacement: Object.freeze(displacementAfterDelete(d, res)), check: Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh, { closed: !!res.closed })) });
+        const after = proposal.displacement.filter((x) => x.piece >= s.from), moved = after.filter((x) => x.maxM > 1e-3), n = s.to - s.from + 1;
+        return set({ deleteProposal: proposal, ...ok(`delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move${proposal.check.overlaps.length ? `; the track OVERLAPS ITSELF in ${proposal.check.overlaps.length} place${proposal.check.overlaps.length === 1 ? '' : 's'}` : ''}. Apply or cancel`) });
+      });
+    },
+    async applyDelete() {
+      const p = st.deleteProposal;
+      if (!p) return set({ message: 'nothing to apply: press Delete on the selected pieces first' });
+      if (p.base !== doc()) return set({ deleteProposal: null, message: 'the track changed since the delete preview: select the pieces and delete again' });
+      // as Close: the track AS IT IS NOW goes to track-backups first, and a copy that fails refuses the delete by name, with nothing changed
+      try { await api.backupNow('pre-delete'); } catch (e) { return set({ message: `not deleted: the copy from before the delete could not be written (${e && e.message || e}); nothing changed` }); }
+      if (st.deleteProposal !== p || p.base !== doc()) return set({ deleteProposal: null, message: 'the track changed while its copy was being written: select the pieces and delete again' });
+      const n = p.to - p.from + 1;
+      return set({ history: D.commit(st.history, p.doc), resolved: p.resolved, resolveError: null, dirty: true, deleteProposal: null, selection: null, lastEdited: null, lastStep: { op: 'deletePieces', ms: p.ms }, ...ok(`deleted ${n} piece${n === 1 ? '' : 's'} from the middle of the track (Ctrl+Z puts ${n === 1 ? 'it' : 'them'} back)`) });
+    },
+    cancelDelete: () => set({ deleteProposal: null, message: null }),
+
     undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: null }); }),
     redo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.redo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: null }); }),
     /** Put a prepared core document in front of the user, as opening one does: fresh history, nothing to undo. */
@@ -450,14 +569,47 @@ function displacementOf(a, b) {
   for (let k = 0; k < n; k++) { const e = out.get(idOf(pa[k])); if (!e) continue; const d = Math.hypot(pa[k].pos[0] - pb[k].pos[0], pa[k].pos[1] - pb[k].pos[1], pa[k].pos[2] - pb[k].pos[2]); if (d > e.maxM) e.maxM = d; }
   return [...out.values()];
 }
+/**
+ * D240: how far each road or jump piece AFTER a deleted run moves: [{ piece (its number in `b`), id, maxM }], the largest distance between its centreline in `a` and in `b`,
+ * station for station (a piece keeps its length, so it keeps its stations). The pieces before the gap are the same in both and read 0.
+ */
+function displacementAfterDelete(a, b) {
+  const stations = (d) => {
+    const segs = toSegments({ ...d, closed: false }), samples = AD.toPath({ ...d, closed: false }).path.samples, by = new Map();
+    for (const m of samples) { const g = segs[m.seg]; if (!g) continue; if (!by.has(g.id)) by.set(g.id, []); by.get(g.id).push(m.pos); }
+    return by;
+  };
+  const pa = stations(a), pb = stations(b), out = [];
+  b.pieces.forEach((P, i) => {
+    const x = pa.get(P.id), y = pb.get(P.id); if (!x || !y) return;
+    let maxM = 0; for (let k = 0; k < Math.min(x.length, y.length); k++) maxM = Math.max(maxM, Math.hypot(x[k][0] - y[k][0], x[k][1] - y[k][1], x[k][2] - y[k][2]));
+    out.push({ piece: i, id: P.id, maxM });
+  });
+  return out;
+}
+/**
+ * D240: a saved piece's PLAN VIEW for its thumbnail: the piece laid on an empty track, its centreline's ground plan (x, z) scaled to fit 100 x 60 with a margin, at most 48 points.
+ * null when it cannot be laid out (the library still lists it).
+ */
+function thumbOf(piece) {
+  try {
+    const d = PC.insert(D.createDoc('thumb'), piece), pts = AD.toPath({ ...d, closed: false }).path.samples.map((m) => [m.pos[0], m.pos[2]]);
+    if (pts.length < 2) return null;
+    const stride = Math.max(1, Math.ceil(pts.length / 48)), pick = pts.filter((_, i) => i % stride === 0 || i === pts.length - 1);
+    const xs = pick.map((p) => p[0]), zs = pick.map((p) => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+    const W = 100, H = 60, M = 6, k = Math.min((W - 2 * M) / Math.max(x1 - x0, 1e-6), (H - 2 * M) / Math.max(z1 - z0, 1e-6)), ox = (W - k * (x1 - x0)) / 2, oz = (H - k * (z1 - z0)) / 2;
+    const r1 = (v) => Math.round(v * 10) / 10;
+    return { w: W, h: H, points: pick.map((p) => [r1(ox + k * (p[0] - x0)), r1(oz + k * (p[1] - z0))]) };
+  } catch (e) { return null; }
+}
 const OVERLAP = new Set(['self-intersection', 'stacked-within-2m', 'downforce-ray-gap']);
 /**
  * D242: THE OVERLAP CHECK of a proposed (closed) track: its mesh with the self-check, then the validator with the built road for the downforce ray,
  * the same checks the export runs (src/export/fromwords.js buildFromSegments). Returns { overlaps (the road running into itself: self-intersection,
  * stacked, a downforce ray that meets another road), others (every other red), amber (count) }.
  */
-function overlapCheck(resolved, designSpeedKmh) {
-  const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed: true, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
+function overlapCheck(resolved, designSpeedKmh, { closed = true } = {}) {   // D240: `closed: false` for the open track a delete leaves
+  const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
   const mesh = G.buildMesh(p, segs, { selfCheck: true }), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
   const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, ...(Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : {}) });
   return { overlaps: v.red.filter((x) => OVERLAP.has(x.reason)), others: v.red.filter((x) => !OVERLAP.has(x.reason)), amber: v.amber.length };
@@ -490,4 +642,4 @@ function piecesIn(doc, a, b) {
   return out.length ? out : null;
 }
 
-module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, STRAIGHT_K, piecesIn, straightPieces, startLayout, profilerOf };
+module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, STRAIGHT_K, piecesIn, straightPieces, startLayout, profilerOf, thumbOf, displacementAfterDelete };

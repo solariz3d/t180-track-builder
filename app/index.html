@@ -120,6 +120,11 @@
     openBackup: (file) => call('open_track_backup', { file }),
     openDoc: (name) => call('open_track', { name }),
     listDocs: () => call('list_tracks'),
+    // D240, saved pieces: one <name>.t180piece each in the app's pieces folder (src-tauri/src/lib.rs); a name already used is refused natively, never overwritten
+    listPieces: () => (tauri ? call('list_pieces') : Promise.resolve([])),
+    openPiece: (name) => call('open_piece', { name }),
+    savePiece: (name, text) => call('save_piece', { name, text }),
+    deletePiece: (name) => call('delete_piece', { name }),
     saveLibrary: (text) => call('save_library', { text }),
     openLibrary: () => (tauri ? call('open_library') : Promise.resolve(null)),
     saveAutosave: (text) => (tauri ? call('save_autosave', { text }) : Promise.resolve()),

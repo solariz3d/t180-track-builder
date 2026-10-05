@@ -24,6 +24,7 @@ mod backups;
 
 const TRACK_EXT: &str = "t180track";
 const LIBRARY_FILE: &str = "library.t180lib";
+const PIECE_EXT: &str = "t180piece";
 
 /// 1 to 64 characters: ASCII letters, digits, space, '_' or '-', starting with a letter or digit.
 pub fn valid_name(name: &str) -> bool {
@@ -46,10 +47,15 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
 
 /// The names of the tracks in `dir`: every `<name>.t180track` whose name is valid, sorted.
 pub fn track_names(dir: &Path) -> Result<Vec<String>, String> {
+    names_with_ext(dir, TRACK_EXT)
+}
+
+/// The names of the files in `dir` that end `.<ext>` and have a valid name, sorted (a track list and a piece list are read the same way).
+pub fn names_with_ext(dir: &Path, ext: &str) -> Result<Vec<String>, String> {
     let mut names = Vec::new();
     for entry in fs::read_dir(dir).map_err(|e| format!("could not list {}: {e}", dir.display()))? {
         let path = entry.map_err(|e| e.to_string())?.path();
-        if path.extension().and_then(|x| x.to_str()) != Some(TRACK_EXT) {
+        if path.extension().and_then(|x| x.to_str()) != Some(ext) {
             continue;
         }
         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
@@ -94,6 +100,52 @@ fn track_path(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
 #[tauri::command]
 fn list_tracks(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     track_names(&tracks_dir(&app)?)
+}
+
+// D240, SAVED PIECES: runs of pieces the user kept from their tracks, one `<name>.t180piece` each in the app's `pieces` folder (the text is the page's, schema
+// t180b.piece/1, checked there by src/core/piece.js; this side only keeps and returns it). A name is a track's name (no path can ride in it). Saving never
+// overwrites unless `replace` is set (the page never sets it: a piece is deleted first, on purpose), so two pieces can never be lost to one name.
+pub fn piece_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
+    if !valid_name(name) {
+        return Err(format!("{name:?} is not a piece name: 1 to 64 letters, digits, spaces, _ or -"));
+    }
+    Ok(dir.join(format!("{name}.{PIECE_EXT}")))
+}
+pub fn save_piece_file(dir: &Path, name: &str, text: &str, replace: bool) -> Result<(), String> {
+    let path = piece_file(dir, name)?;
+    if path.exists() && !replace {
+        return Err(format!("a piece named {name:?} already exists; delete it first or use another name"));
+    }
+    write_atomic(&path, text)
+}
+pub fn open_piece_file(dir: &Path, name: &str) -> Result<String, String> {
+    let path = piece_file(dir, name)?;
+    fs::read_to_string(&path).map_err(|e| format!("could not read the piece {name:?}: {e}"))
+}
+pub fn delete_piece_file(dir: &Path, name: &str) -> Result<(), String> {
+    let path = piece_file(dir, name)?;
+    fs::remove_file(&path).map_err(|e| format!("could not delete the piece {name:?}: {e}"))
+}
+fn pieces_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = data_dir(app)?.join("pieces");
+    fs::create_dir_all(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    Ok(dir)
+}
+#[tauri::command]
+fn list_pieces(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    names_with_ext(&pieces_dir(&app)?, PIECE_EXT)
+}
+#[tauri::command]
+fn open_piece(app: tauri::AppHandle, name: String) -> Result<String, String> {
+    open_piece_file(&pieces_dir(&app)?, &name)
+}
+#[tauri::command]
+fn save_piece(app: tauri::AppHandle, name: String, text: String, replace: Option<bool>) -> Result<(), String> {
+    save_piece_file(&pieces_dir(&app)?, &name, &text, replace.unwrap_or(false))
+}
+#[tauri::command]
+fn delete_piece(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    delete_piece_file(&pieces_dir(&app)?, &name)
 }
 
 fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -409,7 +461,7 @@ pub fn run() {
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export, folder_is_empty, remove_empty_folder,
             get_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
-            test_export_folder
+            test_export_folder, list_pieces, open_piece, save_piece, delete_piece
         ])
         .run(tauri::generate_context!())
         .expect("error while running the T-180 Track Builder");
@@ -564,6 +616,28 @@ mod tests {
         }
         assert!(!ends_in_dot_name(&tracks.join("T-180 OVAL").to_string_lossy()));
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_piece_is_kept_listed_read_and_deleted_by_name_and_never_overwritten() {
+        let d = scratch("pieces");
+        for f in ["b.t180piece", "a piece.t180piece", "a track.t180track", "notes.txt", "..odd.t180piece"] {
+            fs::write(d.join(f), "x").unwrap();
+        }
+        assert_eq!(names_with_ext(&d, PIECE_EXT).unwrap(), vec!["a piece".to_string(), "b".to_string()], "only valid piece names, sorted, no track files");
+        save_piece_file(&d, "new one", "{\"schema\":\"t180b.piece/1\"}", false).unwrap();
+        assert_eq!(open_piece_file(&d, "new one").unwrap(), "{\"schema\":\"t180b.piece/1\"}");
+        assert!(save_piece_file(&d, "new one", "other", false).unwrap_err().contains("already exists"), "a second save of a name is refused");
+        assert_eq!(open_piece_file(&d, "new one").unwrap(), "{\"schema\":\"t180b.piece/1\"}", "and the first is untouched");
+        save_piece_file(&d, "new one", "replaced", true).unwrap();
+        assert_eq!(open_piece_file(&d, "new one").unwrap(), "replaced");
+        delete_piece_file(&d, "new one").unwrap();
+        assert!(open_piece_file(&d, "new one").is_err() && delete_piece_file(&d, "new one").is_err(), "gone, and deleting it again says so");
+        for bad in ["", "../x", "a/b", "a\\b", "..", ".", "x.y", "é"] {
+            assert!(piece_file(&d, bad).is_err() && save_piece_file(&d, bad, "x", true).is_err(), "{bad:?} is not a piece name");
+        }
+        assert!(!d.join("tmp-write").exists() && fs::read_dir(&d).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".tmp-write")), "no temporary file is left");
+        fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

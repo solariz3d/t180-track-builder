@@ -129,7 +129,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (st.brush) { clearFull(); model.setDetail(DRAG_DETAIL); } else if (model.detail > 1) scheduleFull();   // dragging: coarse now; not dragging but still coarse: full detail soon
     try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; } catch (e) { err = e.message; return; }
     // D242: a close PROPOSAL (the core shell's closeProposal, for the document on screen) is the ghost: the pieces it moves, see-through over the placed ones
-    const prop = st.closeProposal && st.history && st.closeProposal.base === st.history.present ? st.closeProposal : null;
+    // D240: a middle DELETE's preview (the core shell's deleteProposal) is shown the same way: the track as it would be, see-through over the placed one
+    const propOf = (p) => (p && st.history && p.base === st.history.present ? p : null), prop = propOf(st.closeProposal) || propOf(st.deleteProposal);
     if (prop !== proposalShown) {
       if (ghost && ghost.proposal) ghost = null;
       proposalShown = prop;

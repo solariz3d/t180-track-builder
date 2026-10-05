@@ -621,7 +621,7 @@ test('"at start" on a field left as shown sends nothing (no target, D193); the b
 test('no water: the panel has no Water section, the shell no pour and no water state, an edit pours and draws nothing, and no file of the app names the water', async () => {
   const fs = require('fs'), path = require('path');
   const P = await mountPanel(), els = P.root.all();
-  assert.deepEqual(els.filter((e) => e.tagName === 'H3').map((e) => e.textContent), ['Equation track', 'Extend at the head', 'Brush (drag on the track)', 'Close', 'Local example'], 'the panel\'s sections: no Water between Close and Local example');
+  assert.deepEqual(els.filter((e) => e.tagName === 'H3').map((e) => e.textContent), ['Equation track', 'Extend at the head', 'Brush (drag on the track)', 'Close', 'Selected pieces', 'Pieces library', 'Local example'], 'the panel\'s sections (D240 added the two for saved pieces): no Water between Close and Local example');
   const words = els.flatMap((e) => [e.textContent, e.attrs['aria-label'], e.attrs.title]).filter(Boolean).join(' ');
   assert.doesNotMatch(words, /water|stream|pour|design speed/i, 'no control, label or tooltip names the water, its speed or its streams');
   assert.ok(els.some((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop'), 'control: the Close section is still there');
