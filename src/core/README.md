@@ -10,7 +10,7 @@ does not edit it; it imports one of its functions, `solveJump`, for a jump.
 | `extend.js` | extend: a continuation from the open end, blended to the handle targets by Bloss |
 | `adapter.js` | the document → the path samples `src/geom` builds, so preview, cameras, mesh, validation and export are reused |
 | `sculpt.js` | a C2 brush on one channel over a window |
-| `close.js` | the least-norm closure |
+| `close.js` | the least-norm closure: the WHOLE lap (`close(doc, { edited })`, the stretch edited last held), or LOCAL (D242: `close(doc, { window })`, only the window's pieces may move, every other piece kept bit-identical, and a window that cannot close the loop within the document's limits and the roll-rate bar is refused by name, `CLOSE_WINDOW`; `closeWindow(doc)` is the app's default, the last ~20% of the lap) |
 | `water.js` | particles on the surface the adapter emits |
 | `readout.js` | a piece's length (m) and its change in turn, climb and bank (°), for placed pieces and the extend ghost |
 

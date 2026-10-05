@@ -170,7 +170,7 @@
   await startCore();
 
   async function startCore() {
-    let C, panels, shell, exporter, coreOpts;
+    let C, panels, shell, exporter, coreOpts, RG;
     try {
       // the core's modules reach tools/piecewise.cjs (its solver), whose command-line half requires fs and path: they are given
       // the exporter's in-memory node shim, so they load and nothing touches the disk (the core calls only the solver)
@@ -178,6 +178,7 @@
       coreOpts = { builtins: shim.builtins, globals: { Buffer: shim.Buffer } };   // also the share panel's: a pasted code is parsed by the core (D239)
       C = await loadCjs('app/core/coreshell.js', get, coreOpts);
       panels = await loadCjs('app/palette/panels.js', get);
+      RG = await loadCjs('app/validate-ui/redgroups.js', get);   // D242: every red in plain words, grouped, with where
       exporter = await (await loadCjs('app/export/export.js', get)).makeExporter(get);
       shell = await C.createCoreShell({ storage, exporter, now: () => performance.now() });
       closeDirty = () => !!shell.getState().dirty;   // the X asks to save unsaved work (closeAsk above)
@@ -190,9 +191,15 @@
       const r = $('reds'), refusal = st.exportRefusal && st.exportRefusal === st.message ? st.exportRefusal : null;   // only while it is still THE message: any later action clears it
       if (!st.exportReds && !refusal) { r.replaceChildren(); return; }
       if (!st.exportReds) { r.replaceChildren(el('h3', 'Not exported'), el('p', refusal, 'message')); return; }
-      const list = el('ul', null, 'reds');
-      for (const x of st.exportReds) list.append(el('li', `${x.reason}${Number.isFinite(x.s0) ? ` at s ${Math.round(x.s0)} m` : ''} ${x.source ? `(${x.source})` : ''}`));
-      r.replaceChildren(el('h3', 'Not exported: red on the track'), list);
+      // D242: EVERY red, in plain words, grouped (the overlap first), with where: s in km and the piece; a click on a place moves the camera there
+      const kids = [el('h3', 'Not exported: red on the track')];
+      for (const g of RG.groupReds(st.exportReds, st.resolved.segments)) {
+        kids.push(el('p', `${g.title} (${g.count})`, 'message'));
+        const list = el('ul', null, 'reds');
+        for (const it of g.items) { const li = el('li'), b = el('button', RG.placeText(it)); b.title = `${it.what}: show it`; b.onclick = () => document.dispatchEvent(new CustomEvent('t180-camera-focus', { detail: { s: it.s } })); li.append(b, ` ${it.what}${it.detail ? ` (${it.detail})` : ''}`); list.append(li); }
+        kids.push(list);
+      }
+      r.replaceChildren(...kids);
     };
     // THE RECOVERY OFFER (D239, carried from the piece builder): a track the last session left unsaved is offered, never applied
     const drawBanner = (st) => {

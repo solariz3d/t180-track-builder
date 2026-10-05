@@ -316,7 +316,7 @@ test('D234 a REFUSED GRID (a tube too narrow for even one slot) and a RED lap in
     await s.exportTo(picked); refusedAndGone(s, st, picked, /not exported: .*too narrow for even one grid slot/); }
   { const tracks = acTreeCore('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = memStorage();
     const red = { ...ex, runSegments() { throw new ex.ExportError('RED', 'the lap has a red', { red: [{ reason: 'steep-without-raycast', s0: 12, s1: 20, source: 'validation' }] }); } };   // a red lap, stood in for: the real reds are core_cup_export's
-    const s = await closedLap(st, red); await s.exportTo(picked); refusedAndGone(s, st, picked, /RED: the lap has a red/); assert.equal(s.getState().exportReds.length, 1, 'the red box has the red'); }
+    const s = await closedLap(st, red); await s.exportTo(picked); refusedAndGone(s, st, picked, /^not exported: a surface is steeper than 50°.* \(1\): at 0\.01–0\.02 km \(p1\)/); assert.equal(s.getState().exportReds.length, 1, 'the red box has the red'); }   // D242: the red refusal is in plain words, every red with where (was: the export's own "RED: the lap has a red")
 });
 
 test('D234 a NON-EMPTY foreign folder is untouched in every case (open loop, refused grid, red): the target is refused first, nothing is removed or written', async () => {

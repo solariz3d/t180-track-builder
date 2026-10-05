@@ -42,6 +42,9 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs = frames.splice(0); for (const f of fs) f(0); } };
 }
+/** D242: the pointer over the preview, as the browser sends it: a pointermove (css px of the stage) or a pointerleave on #preview. */
+const hover = (P, x, y) => { for (const f of (P.stage.listeners.pointermove || []).slice()) f({ clientX: x, clientY: y, button: 0, preventDefault() {} }); };
+const leave = (P) => { for (const f of (P.stage.listeners.pointerleave || []).slice()) f({}); };
 async function mountPanel(wrap = (s) => s, shellOpts = {}) {
   const { doc, win, tick } = fakeWindow();
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
@@ -131,11 +134,14 @@ test('the layout: the head\'s own label is never culled, even where no ring arou
 
 // R11's own test since D187: the head's piece now gets a label however little of it is in view, so only a piece that is NOT the
 // head's shows whether a label slides along its piece to the part that is on screen
-test('a piece whose middle is behind the camera is labelled on the part of it that is in view', async () => {
+// D242 (amended by name): piece labels are on HOVER only, so this piece is hovered (the preview's pick answers a station in it) to be labelled at all
+test('a piece whose middle is behind the camera is labelled, when hovered, on the part of it that is in view', async () => {
   const P = await mountPanel(), { toPath } = require('../../src/core/adapter.js');
   let track = null, view = null;
   P.doc.addEventListener('t180:track-request', (e) => e.detail.reply(track));
   P.doc.addEventListener('t180:view', (e) => e.detail.reply(view));
+  P.doc.addEventListener('t180-pick', (e) => e.detail.reply({ s: 520 }));   // the pointer is over piece 2 (250–650)
+  hover(P, 400, 300);
   for (const o of [{ length: 250 }, { length: 400 }, { length: 100 }]) P.shell.extend(o);
   const d = P.shell.getState().history.present, tp = toPath(d, { step: 2 }), h = tp.path.head;
   track = { path: tp.path, segments: tp.segments };
@@ -225,12 +231,15 @@ test('the panel: a field set extend refuses shows — (and says why in the title
   P.panel.unmount();
 });
 
-test('the labels on the track: one per road piece, the text A\'s numbers, clear of the head; a flight and an empty track draw none and throw nothing', async () => {
+// D242 (amended by name; the keeper, 23:46: "it should be only when you hover over the pieces"): this test used to assert ONE LABEL PER ROAD PIECE. Now the
+// head's own piece is always labelled and any other only while the pointer is over it; the text, the head's keep-out, the flight and the empty track are as before
+test('the labels on the track: the head\'s own piece always, any other only when hovered; the text A\'s numbers, clear of the head; a flight and an empty track draw none and throw nothing', async () => {
   const P = await mountPanel();
   const { buildPath } = require('../../src/geom/index.js'), { toPath } = require('../../src/core/adapter.js');
-  let track = null, view = null;
+  let track = null, view = null, pickS = null;
   P.doc.addEventListener('t180:track-request', (e) => e.detail.reply(track));
   P.doc.addEventListener('t180:view', (e) => e.detail.reply(view));
+  P.doc.addEventListener('t180-pick', (e) => e.detail.reply(pickS === null ? null : { s: pickS }));
   P.tick(); assert.deepEqual(P.panel.labels.labels(), [], 'nothing placed: no label');
   for (const o of [{ length: 200 }, { length: 150, targets: { kh: 0.01 } }, { length: 180, targets: { kh: 0 } }]) P.shell.extend(o);
   const d = P.shell.getState().history.present, tp = toPath(d, { step: 2 });
@@ -238,8 +247,14 @@ test('the labels on the track: one per road piece, the text A\'s numbers, clear 
   const h = tp.path.head, eye = [h.pos[0], h.pos[1] + 900, h.pos[2] - 1], pose = { eye, target: h.pos, up: [0, 0, 1], fov: Math.PI / 3 };
   view = { pose, mode: 'overhead', head: { pos: h.pos, T: h.T } };
   P.tick();
+  assert.deepEqual(P.panel.labels.labels().map((x) => x.piece), [d.pieces[2].id], 'no hover: the head\'s own piece only');
+  for (const [s, i] of [[100, 0], [270, 1]]) {   // hover piece 1 (0–200), then piece 2 (200–350)
+    pickS = s; hover(P, 300 + i, 200); P.tick();
+    assert.deepEqual(P.panel.labels.labels().map((x) => x.piece).sort(), [d.pieces[i].id, d.pieces[2].id].sort(), `hovering ${d.pieces[i].id}: it and the head's piece`);
+  }
+  leave(P); P.tick(); assert.deepEqual(P.panel.labels.labels().map((x) => x.piece), [d.pieces[2].id], 'the pointer leaves: the head\'s piece only');
+  pickS = 100; hover(P, 302, 200); P.tick();
   const L = P.panel.labels.labels();
-  assert.equal(L.length + P.panel.labels.culled().length, 3, 'every road piece is labelled or culled');
   assert.ok(L.some((x) => x.piece === d.pieces[2].id), 'the head\'s own piece is drawn');
   for (const x of L) {
     const i = d.pieces.findIndex((p) => p.id === x.piece), want = LB.labelText(RD.pieceReadout(d, i)).join('\n');
@@ -278,11 +293,15 @@ test('the head\'s own piece is labelled in the build view, where its middle is b
 // FOUND IN THE REAL WINDOW (L130): (1) the preview extends its path IN PLACE, so labels cached by the path object kept the first
 // piece's anchors forever (1 label for 5 pieces); (2) the preview's mount clears #preview after the panel mounted, which detached
 // the label layer (every label measured 0 x 0 and none was painted). Both reproduced here with the preview's own track model.
-test('the labels follow a path the preview extends IN PLACE, and survive the preview clearing #preview after they mounted', async () => {
+// D242 (amended by name): this test asserted every one of the 5 pieces labelled or culled; labels are on HOVER now, so it hovers a piece that exists only after
+// the path was extended in place (the 4th, 690–910 m) and asserts that it and the head's piece are drawn, which is what "follows the path" needs
+test('the labels follow a path the preview extends IN PLACE (a hovered later piece is labelled), and survive the preview clearing #preview after they mounted', async () => {
   const P = await mountPanel(), { createTrackModel } = require('../preview/trackmodel.js'), tm = createTrackModel();
   let track = null, view = null;
   P.doc.addEventListener('t180:track-request', (e) => e.detail.reply(track));
   P.doc.addEventListener('t180:view', (e) => e.detail.reply(view));
+  P.doc.addEventListener('t180-pick', (e) => e.detail.reply({ s: 800 }));   // over the 4th piece (250 + 220 + 220 = 690 to 990 m)
+  hover(P, 450, 300);
   P.stage.replaceChildren();   // what the preview's mount does to #preview after the panel has mounted the layer
   const place = (o) => { P.shell.extend(o); const r = tm.update(P.shell.getState().resolved); track = { path: r.path, segments: r.segments }; };
   place({ length: 250 });
@@ -292,9 +311,8 @@ test('the labels follow a path the preview extends IN PLACE, and survive the pre
   for (const o of [{ length: 220, targets: { kh: 0.005 } }, { length: 220 }, { length: 300, targets: { kh: -0.004 } }, { length: 180, targets: { kh: 0 } }]) place(o);
   assert.equal(track.path, pathObj, 'the same path object, extended in place (the preview\'s own behaviour)');
   look(); P.tick();
-  const L = P.panel.labels.labels(), C = P.panel.labels.culled();
-  assert.equal(L.length + C.length, 5, `every piece is labelled or culled (drawn ${L.length}, culled ${C.length})`);
-  assert.ok(L.length >= 2, 'more than the first piece is drawn');
+  const L = P.panel.labels.labels(), C = P.panel.labels.culled(), d = P.shell.getState().history.present;
+  assert.deepEqual(L.map((x) => x.piece).sort(), [d.pieces[3].id, d.pieces[4].id].sort(), `the hovered 4th piece and the head's own (drawn ${L.map((x) => x.piece).join(', ')}, culled ${C.length})`);
   for (const x of L) assert.ok(x.rect.w > 0 && x.rect.h > 0, `${x.piece} has a size: the layer is in the page`);
   P.panel.unmount();
 });
@@ -394,10 +412,11 @@ test('on an EMPTY track the fields show the first piece\'s start (level, straigh
   P.panel.unmount();
 });
 
-test('after Extend, Undo and Redo the fields show the head\'s END state in their own units (°/100m, °, m)', async () => {
+test('after Extend and Redo the fields show the head\'s END state in their own units (°/100m, °, m); after Undo, the undone piece\'s own values (D242 item 7)', async () => {
   const P = await mountPanel();
   const start = shownAll(P);
   P.type('length m', 120); P.type('turn °/100m', 20); P.type('bank °', 10); P.type('width m', 25); P.type('cup °', 60);
+  const typed = shownAll(P);   // D242 item 7: what Undo gives back
   P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
   assert.equal(P.shell.getState().history.present.pieces.length, 1, P.shell.getState().message || 'extended');
   const after = shownAll(P);
@@ -405,7 +424,7 @@ test('after Extend, Undo and Redo the fields show the head\'s END state in their
   // the units round-trip: what was typed is what the head now does, to the display's 0.01
   for (const [k, typed] of [['turn', 20], ['bank', 10], ['width', 25], ['cup', 60]]) assert.ok(Math.abs(Number(after[k]) - typed) <= 0.01, `${k}: typed ${typed}, shown ${after[k]}`);
   assert.equal(after.climb, '0');
-  P.shell.undo(); assert.deepEqual(shownAll(P), start, 'undo: back to the empty track\'s start');
+  P.shell.undo(); assert.deepEqual(shownAll(P), typed, 'undo (D242 item 7, was: back to the empty track\'s start): the undone piece\'s own values'); assert.notDeepEqual(typed, start, 'control: they are not the start');
   P.shell.redo(); assert.deepEqual(shownAll(P), after, 'redo: the head again');
   P.panel.unmount();
 });
@@ -619,25 +638,74 @@ test('no water: the panel has no Water section, the shell no pour and no water s
   walk(app); assert.deepEqual(found, [], `files of the app that still name the water: ${found.join(', ')}`);
 });
 
-// ── D239 amendment (the keeper lost TEST 1 to one Close, with no copy from before it): the Close button keeps a copy FIRST ──────────
+// ── D239 amendment (the keeper lost TEST 1 to one Close, with no copy from before it): Close keeps a copy FIRST ──────────
+// D242 took the call over: the button PREVIEWS, and Apply (the one close path) writes the copy before it commits the close
 const closeLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
-test('Close the loop writes a copy of the track as it was BEFORE closing it (shell.backupNow), then closes', async () => {
+const previewThenApply = async (P) => {
+  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'whole';
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
+  assert.ok(P.shell.getState().closeProposal, P.shell.getState().message);
+  await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Apply').onclick();
+};
+test('Close the loop, then Apply, writes a copy of the track as it was BEFORE closing it (shell.backupNow), then closes', async () => {
   const D = require('../../src/core/document.js'), order = [];
-  const storage = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], backupDoc: async (name, text) => { order.push(['backup', name, text]); return `${name}.x.t180track`; } };
-  const P = await mountPanel((s) => { const close = s.close; s.close = (...a) => { order.push(['close']); return close(...a); }; return s; }, { storage });
+  const storage = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], backupDoc: async (name, text) => { order.push(['backup', name, text, P.shell.getState().history.present.closed]); return `${name}.x.t180track`; } };
+  const P = await mountPanel((s) => s, { storage });
   closeLap(P.shell); const before = D.serialize(P.shell.getState().history.present);
-  await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
-  assert.deepEqual(order.map((o) => o[0]), ['backup', 'close'], 'the copy first, then the close');
-  assert.deepEqual([order[0][1], order[0][2]], ['eq-unsaved', before], 'the copy is the open track as it was');
+  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'whole';
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
+  assert.equal(order.length, 0, 'the preview writes no copy');
+  await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Apply').onclick();
+  assert.equal(order.length, 1, 'one copy');
+  assert.deepEqual([order[0][1], order[0][2], order[0][3]], ['eq-unsaved', before, false], 'the copy is the open track as it was, written while it was still open');
   assert.equal(P.shell.getState().history.present.closed, true, P.shell.getState().message);
   P.panel.unmount();
 });
-test('if that copy cannot be written, Close the loop changes nothing and says why', async () => {
+test('if that copy cannot be written, Apply changes nothing and says why', async () => {
   const storage = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], backupDoc: async () => { throw new Error('disk full'); } };
   const P = await mountPanel((s) => s, { storage });
   closeLap(P.shell); const before = P.shell.getState().history.present;
-  await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
+  await previewThenApply(P);
   assert.equal(P.shell.getState().history.present, before, 'not closed, not changed');
-  assert.match(P.root.all().find((e) => e.attrs.role === 'status').textContent, /not closed: the copy from before Close could not be written \(disk full\)/);
+  assert.match(P.root.all().find((e) => e.attrs.role === 'status').textContent, /not closed: the copy from before the close could not be written \(disk full\)/);
+  P.panel.unmount();
+});
+
+// ── D242 item 6, STRAIGHTS AFTER A TURN (the keeper: "impossible to create a perfect straight") ──
+test('D242: after a 30°/100m turn, Straight extends a piece whose turn and climb are 0 from 20 m on, and puts the "at start" boxes back; turn 0 without "at start" shows the hint', async () => {
+  const P = await mountPanel(), Dm = require('../../src/core/document.js');
+  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), hint = () => P.root.all().find((e) => e.attrs['aria-label'] === 'straight hint').textContent;
+  P.type('length m', 200); P.type('turn °/100m', 30); button('Extend').onclick();
+  assert.equal(P.shell.getState().history.present.pieces.length, 1, P.shell.getState().message);
+  P.type('turn °/100m', 0); assert.match(hint(), /turn 0 eases over the whole piece: tick "at start" \(or press Straight\) to be straight from 20 m on/);
+  P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').checked = true; P.field('turn °/100m').oninput(); assert.equal(hint(), '', 'with "at start" ticked there is nothing to hint');
+  P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').checked = false;
+  P.type('length m', 150); button('Straight').onclick();
+  const d = P.shell.getState().history.present, S = d.pieces[d.pieces.length - 1];
+  assert.equal(d.pieces.length, 2, P.shell.getState().message); assert.equal(S.length, 150);
+  for (let s = 20; s <= S.length; s += 1) for (const ch of ['kh', 'kv']) assert.ok(Math.abs(Dm.channelAt(S, ch, s).v) < 1e-12, `${ch} at ${s} m is ${Dm.channelAt(S, ch, s).v}: straight from 20 m on`);
+  assert.ok(Math.abs(Dm.channelAt(S, 'kh', 0).v - 30 * Math.PI / 180 / 100) < 1e-6, 'control: it starts where the turn ended (C1), so the first 20 m are the ease');
+  for (const k of ['turn', 'climb']) assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === `${k} at the start`).checked, false, `the ${k} box is put back as it was`);
+  P.panel.unmount();
+});
+
+test('D242 item 7: Undo gives back the undone piece\'s values: the fields read what it was extended with, and Extend again rebuilds it byte-identical; Redo shows the head as before', async () => {
+  const P = await mountPanel();
+  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), box = (k) => P.root.all().find((e) => e.attrs['aria-label'] === `${k} at the start`);
+  P.type('length m', 300); button('Extend').onclick();   // the straight it leaves from
+  P.type('length m', 120); P.type('turn °/100m', 30); P.type('bank °', 20); box('bank').checked = true; P.field('bank °').oninput();
+  const typed = { length: P.field('length m').value, turn: P.field('turn °/100m').value, bank: P.field('bank °').value, climb: P.field('climb °/100m').value };
+  button('Extend').onclick();
+  const made = P.shell.getState().history.present, X = made.pieces[made.pieces.length - 1];
+  assert.equal(made.pieces.length, 2, P.shell.getState().message);
+  P.type('turn °/100m', 7); box('bank').checked = false;   // the fields move on, as they do after an Extend
+  P.shell.undo();
+  assert.deepEqual({ length: P.field('length m').value, turn: P.field('turn °/100m').value, bank: P.field('bank °').value, climb: P.field('climb °/100m').value }, typed, 'the fields read what the undone piece was extended with (climb left as shown)');
+  assert.equal(box('bank').checked, true, 'and its at-start tick');
+  button('Extend').onclick();
+  const again = P.shell.getState().history.present, Y = again.pieces[again.pieces.length - 1];
+  assert.equal(JSON.stringify(Y), JSON.stringify(X), 'Extend again rebuilds the undone piece byte for byte');
+  P.shell.undo(); P.type('turn °/100m', 5); P.shell.redo();
+  assert.equal(P.field('turn °/100m').value, '30', 'Redo: the fields show the head (its end turn), as before, not the typed 5');
   P.panel.unmount();
 });

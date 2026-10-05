@@ -15,6 +15,7 @@
 'use strict';
 
 const LB = require('./labels.js');
+const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
 const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
@@ -129,6 +130,13 @@ function mount(root, shell) {
   const opts = () => extendOptions({ length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: asTyped('bank'), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length });
+  // D242 item 7 (the keeper, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
+  // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
+  // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
+  const madeWith = new WeakMap();
+  const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])) });
+  const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
+  const putBack = (m) => { len.value = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
   // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
@@ -149,6 +157,7 @@ function mount(root, shell) {
     roBox.title = why;
   };
   const ghost = () => {
+    hintNow();   // D242: the straight hint follows the turn field and its box
     readout();   // first, and synchronously: the numbers follow the fields with no timer and no frame wait
     let why = null;
     try { send('t180-ghost', { candidate: shell.candidate(opts()), reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }
@@ -164,7 +173,19 @@ function mount(root, shell) {
   width.oninput = width.onchange = () => { ghost(); wnote.textContent = WL.isTube(tube.value) ? WL.tubeNote(width.value) : ''; };
   wlike.onchange = () => { if (!wlike.value) return; width.value = wlike.value; wlike.value = ''; width.oninput(); };   // a pick is a typed width: the ghost and the readout follow
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
-    onclick: () => { send('t180-ghost-clear'); shell.extend(opts()); }, onmouseenter: ghost, onmouseleave: () => send('t180-ghost-clear') });
+    onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: ghost, onmouseleave: () => send('t180-ghost-clear') });
+  // D242 item 6, STRAIGHT IN ONE CLICK (the keeper: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
+  // "at start" box is ticked. This button extends with turn 0 and climb 0, both reached within the first AT_START_M metres and held there, then puts the boxes back
+  // as they were (they are a kept preference, not this button's to change)
+  const straightBtn = el('button', { text: 'Straight', title: `a straight piece of the length above: turn 0 and climb 0, reached within its first ${AT_START_M} m and held exactly`, onclick: () => {
+    const was = { turn: atStart.turn.checked, climb: atStart.climb.checked };
+    turn.value = '0'; climb.value = '0'; atStart.turn.checked = true; atStart.climb.checked = true;
+    send('t180-ghost-clear'); extendHere();
+    atStart.turn.checked = was.turn; atStart.climb.checked = was.climb;
+  } });
+  // and the hint when the turn field asks for 0 after a turn without "at start": that eases over the whole piece, so it is not straight until its end
+  const straightHint = el('p', { class: 'message', 'aria-label': 'straight hint', style: 'font-size:12px;margin:2px 0' });
+  const hintNow = () => { const typed = asTyped('turn'); straightHint.textContent = typed !== '' && Number(typed) === 0 && Number(shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; };
 
   // BRUSH
   const mode = el('select', { 'aria-label': 'brush mode' }), channel = el('select', { 'aria-label': 'brush channel' }), radius = num(60, 10, 'brush radius, m');
@@ -196,13 +217,29 @@ function mount(root, shell) {
   if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); }
 
   // CLOSE, EXAMPLE
-  // D239 amendment (the keeper lost TEST 1 to one Close): a copy of the track as it is is written to its backups FIRST
-  // (shell.backupNow); if that copy cannot be written, the track is NOT closed. B's D242 Close takes this call over.
-  async function closeKept() {
-    try { await shell.backupNow('before Close the loop'); } catch (e) { msg.textContent = `not closed: the copy from before Close could not be written (${e.message || e}), so nothing was changed`; msg.className = 'message'; return; }
-    shell.close();
-  }
-  const closeBtn = el('button', { text: 'Close the loop', title: 'one click: the track closes exactly, the fix spread over what you did not just touch', onclick: () => closeKept() });
+  // D242: Close PROPOSES first (the keeper, TEST 1: the one-click close moved every piece, and the lap ran into itself). Only the stretch chosen here moves;
+  // the closed track is shown as a ghost with how far each piece moved and an overlap check; Apply commits it (one undo step), Cancel drops it
+  const closeHow = el('select', { 'aria-label': 'close using', title: 'which part of the lap the close may move: everything before it stays exactly as it is' });
+  for (const [v, t] of [['0.2', 'the last ~20% of the lap'], ['last', 'the last piece only'], ['0.4', 'the last ~40% of the lap'], ['whole', 'the whole lap (moves every piece)']]) closeHow.append(new win.Option(t, v));
+  const closeBtn = el('button', { text: 'Close the loop', title: 'shows the closed track first (a ghost, how far each piece moves, any overlap): then Apply or Cancel', onclick: () => {
+    const v = closeHow.value; shell.proposeClose(v === 'last' ? { last: true } : v === 'whole' ? { whole: true } : { fraction: Number(v) });
+  } });
+  const applyBtn = el('button', { text: 'Apply', title: 'close the loop as previewed (one undo step)', onclick: () => shell.applyClose() });
+  const cancelBtn = el('button', { text: 'Cancel', title: 'drop the preview: nothing changes', onclick: () => shell.cancelClose() });
+  const proposalBox = el('div', { 'aria-label': 'close preview', class: 'head' });
+  const focus = (s) => send('t180-camera-focus', { s });   // a click on a place moves the camera there (app/preview/index.js)
+  const placeButton = (it, text) => el('button', { text, title: `${it.what}${it.detail ? `: ${it.detail}` : ''}: show it`, class: 'linkish', onclick: () => focus(it.s) });
+  const drawProposal = (p) => {
+    applyBtn.style.display = cancelBtn.style.display = p ? '' : 'none';
+    if (!p) { proposalBox.replaceChildren(); return; }
+    const moved = p.displacement.filter((x) => x.maxM > 1e-3).sort((a, b) => b.maxM - a.maxM), still = p.displacement.length - moved.length;
+    const kids = [el('p', { text: p.whole ? 'Preview: the WHOLE lap may move.' : `Preview: only ${p.window.text} may move; everything before it is kept exactly.` }),
+      el('p', { text: moved.length ? `Moves: ${moved.slice(0, 8).map((x) => `${x.id} up to ${x.maxM.toFixed(x.maxM < 10 ? 2 : 1)} m`).join(', ')}${moved.length > 8 ? `, and ${moved.length - 8} more` : ''}; ${still} piece${still === 1 ? '' : 's'} stay where they were.` : 'Nothing moves by more than a millimetre.' })];
+    const groups = RG.groupReds([...p.check.overlaps, ...p.check.others], p.resolved.segments);
+    if (!groups.length) kids.push(el('p', { text: 'No overlap and no red on the closed track.' }));
+    for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The closed track OVERLAPS ITSELF' : g.title} (${g.count}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.items.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));
+    proposalBox.replaceChildren(...kids);
+  };
   // held to the column's width (a file input is wider than the 280 px column by default, and the column scrolled sideways)
   const fitIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the fit, *.pieces.json', style: 'max-width: 100%; min-width: 0' }), readIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the read, *.read.json', style: 'max-width: 100%; min-width: 0' });
   const readText = (inp) => (inp.files && inp.files[0] ? inp.files[0].text() : Promise.reject(new Error('pick both files')));
@@ -217,20 +254,25 @@ function mount(root, shell) {
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike),
       fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube')),
     wnote, roBox,
-    el('div', { class: 'actions' }, extendBtn),
+    el('div', { class: 'actions' }, extendBtn, straightBtn), straightHint,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
-    el('h3', { text: 'Close' }), el('div', { class: 'actions' }, closeBtn),
+    el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
     el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
     msg,
   );
   let shownFor = null;
   const draw = (st) => {
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
-    if (d !== shownFor) { showHead(); shownFor = d; }   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head
+    if (d !== shownFor) {   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head, and an UNDONE Extend's own values (item 7)
+      const m = shownFor ? madeWith.get(shownFor) : null, undone = !!m && m.before === d;   // only an Undo steps from a document back to the one it was made from
+      showHead(); if (undone) putBack(m.made); shownFor = d;
+    }
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
-    extendBtn.disabled = !!d.closed; closeBtn.disabled = !!d.closed || !d.pieces.length;
+    extendBtn.disabled = !!d.closed; closeBtn.disabled = closeHow.disabled = !!d.closed || !d.pieces.length;
+    drawProposal(st.closeProposal && st.closeProposal.base === d ? st.closeProposal : null);
     msg.textContent = st.message || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
     readout();   // the track changed, so the piece the fields would add changed
+    hintNow();
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;

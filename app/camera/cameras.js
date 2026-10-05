@@ -220,6 +220,8 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
         const lim = 89 * Math.PI / 180; free.yaw -= dYaw; free.pitch = Math.max(-lim, Math.min(lim, free.pitch + dPitch)); return true;
       },
       state: () => ({ eye: free.eye.slice(), yaw: free.yaw, pitch: free.pitch }),
+      /** D242: put the free camera at `eye`, looking at `target` (a click on a red in a list: the camera goes there). Free mode only. */
+      lookFrom(eye, target) { if (mode !== 'free') return false; enterFree({ eye, target }); return true; },
     },
   };
   return rig;
