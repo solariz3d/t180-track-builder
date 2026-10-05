@@ -6,8 +6,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), os = require('os'), path = require('path');
-const { createCoreShell, redText, waterRun, PREFIX, STRAIGHT_K, startLayout } = require('../core/coreshell.js');
-const { overlayOf, extendOptions } = require('../core/panel.js');
+const { createCoreShell, PREFIX, STRAIGHT_K, startLayout } = require('../core/coreshell.js');
+const { extendOptions } = require('../core/panel.js');
 const { pickAt } = require('../preview/preview.js');
 const { makeExporter } = require('../export/export.js');
 const { toPath } = require('../../src/core/adapter.js');
@@ -149,40 +149,6 @@ test('close: one click closes the lap; extending a closed loop is refused; the r
   s.undo(); assert.equal(s.getState().history.present.closed, false, 'undo takes the close back');
 });
 
-test('water: poured over a window of the preview\'s path, every stream drawn and every red in plain words', async () => {
-  const s = await lap(); s.close();
-  const t = toPath(s.getState().history.present);
-  s.pour(t, { speedKmh: 200, count: 5, fromS: 0, lengthM: 600 });
-  const w = s.getState().water;
-  assert.ok(w, s.getState().message); assert.equal(w.streams.length, 5); assert.equal(w.fromS, 0); assert.equal(w.toS, 600);
-  for (const pts of w.streams) for (const p of pts) assert.ok(p.every(Number.isFinite));
-  for (const x of w.reds) { assert.ok(x.text && x.pos.every(Number.isFinite)); }
-  const ov = overlayOf(w), pairs = w.streams.reduce((a, pts) => a + pts.length - 1, 0);
-  assert.equal(ov[0].positions.length, pairs * 6, 'one line pair per step of every stream');
-  if (w.reds.length) assert.equal(ov[1].positions.length, w.reds.length * 18, 'a cross (3 line pairs) per red');
-  s.extend({ length: 10 });   // refused (closed), so the water stays
-  assert.ok(s.getState().water); s.undo(); assert.equal(s.getState().water, null, 'any change to the track retires the old water');
-});
-
-test('a successful edit retires the water (it was poured on the old track)', async () => {
-  const s = await createCoreShell({ brushFn: null }); s.extend({ length: 300 });
-  s.pour(toPath(s.getState().history.present), { speedKmh: 150, count: 3 }); assert.ok(s.getState().water, s.getState().message);
-  s.extend({ length: 50 }); assert.equal(s.getState().message, null); assert.equal(s.getState().water, null);
-});
-
-test('water stops at a jump\'s flight and says so (the flight is not modelled)', () => {
-  const segs = [{ kind: 'road', profile: { u: [-10, 0, 10], psi: [0, 0, 0] } }, { kind: 'gap', profile: null }, { kind: 'road', profile: { u: [-10, 0, 10], psi: [0, 0, 0] } }];
-  const samples = [0, 1, 2, 3, 4, 5].map((s) => ({ s, seg: s < 2 ? 0 : s < 4 ? 1 : 2 }));
-  const r = waterRun({ samples }, segs, 0, 5);
-  assert.deepEqual(r.samples.map((m) => m.s), [0, 1]); assert.equal(r.gap, true);
-});
-
-test('redText: each red in plain words, with where it is', () => {
-  assert.match(redText({ type: 'spill', s: 1234.4, u: -15 }, 250), /spills over the right edge at 1,234 m/);
-  assert.match(redText({ type: 'liftoff', s: 88, u: 0 }, 300), /lifts off the road at 88 m.*300 km\/h/);
-  assert.match(redText({ type: 'shock', s: 42, u: 1 }, 250), /cross at 42 m/);
-});
-
 test('export: an open track is refused before anything runs; a closed lap goes through the SAME exporter and its files are written', async () => {
   const st = memStorage(), ex = await makeExporter(fromDisk);
   const s = await lap({ storage: st, exporter: ex });
@@ -251,7 +217,7 @@ test('the export lifts the path before it meshes it (meta.liftPath), so an expor
 // a tree without them.
 const SC = require('../../src/core/sculpt.js'), AD = require('../../src/core/adapter.js');
 const LANDED = typeof SC.brush === 'function' && typeof AD.offsetPath === 'function' && D.CHANNELS.includes('h');
-test('landed core: a 1 m hill brushed in the app is in the preview\'s path and the export\'s; the water answers in words, never throws', { skip: LANDED ? false : 'E\'s brush / A\'s offsets are not in this tree' }, async () => {
+test('landed core: a 1 m hill brushed in the app is in the preview\'s path and the export\'s', { skip: LANDED ? false : 'E\'s brush / A\'s offsets are not in this tree' }, async () => {
   const { createTrackModel } = require('../preview/trackmodel.js');
   const s = await lap({ brushFn: SC.brush }); s.close(); const tm = createTrackModel(); tm.update(s.getState().resolved);   // lap() defaults to no E brush
   // 1 m over r 140 inside the 300 m straight: a crest the car holds (a 5 m / 100 m hill makes the export's lap proof refuse it,
@@ -266,8 +232,6 @@ test('landed core: a 1 m hill brushed in the app is in the preview\'s path and t
   // hill (the export's own lap proof may refuse a crest the car cannot hold: that is validation's call, tested by it)
   const st = s.getState(), { buildPath } = require('../../src/geom/index.js'), ep = st.resolved.lift(buildPath(st.resolved.segments, { step: 2, closed: true, start: st.resolved.start }));
   assert.ok(Math.abs(Math.max(...ep.samples.map((m) => m.pos[1])) - 1) < 0.02, 'the export path carries the hill');
-  s.pour({ path: shown.path, segments: shown.segments }, { speedKmh: 200, count: 3, fromS: 0, lengthM: 400 });
-  assert.ok(s.getState().water || /^water: /.test(s.getState().message), `a pour on a hill gives water or a refusal in words: ${s.getState().message}`);
 });
 test('landed core: a narrow brush that E widened says so, with the radius it used (E reports radiusUsed)', { skip: LANDED ? false : 'E\'s brush is not in this tree' }, async () => {
   const s = await createCoreShell(); s.extend({ length: 600 });

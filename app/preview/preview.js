@@ -9,7 +9,6 @@
 //       t = { path, segments, closed, how, g, fromS }   how: 'extend' | 'sculpt' | 'full' | 'empty'
 //   p.track()   the same object for the current track, or null (for a reader that arrives later)
 //   p.setTextureSet(set)    A's texture set (src/texture/set.js; the textures panel sends it as 't180:textures'), or null
-//   p.setOverlay([{ positions, colour }])   world line pairs over the track (D186: the water and its reds), or null
 //   p.pick(x, y)            the track station under a canvas point (css px): { s, pos, px } or null (D186: the brush)
 //   p.setLook('ac' | 'words')   'ac' (the default): the AC shaders with the exported materials and textures
 //                               (app/preview/aclook.js, acshaders.js); 'words': the D170 colour per placed word
@@ -86,7 +85,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   let track = null, err = null, raf = 0, prev = 0, shownPose = null;
   const held = new Map();   // the keys down, in the order pressed: physical key (e.code) → its action, fixed at key-down
   let takeover = false;     // a movement key went down in a follow view: the next frame takes the view over into free (once)
-  let ghost = null, grid = null, gridFor = null, overlay = null, start = null;
+  let ghost = null, grid = null, gridFor = null, start = null;
   // D237: the 3D grid and the symmetry guides. `gMode` 'legacy' is the old { ground: true } grid at y = 0; the plan is rebuilt only when its inputs change, never per frame.
   if (gridMode !== null && !GRID_MODES.includes(gridMode)) throw new Error(`preview: unknown gridMode ${gridMode}`);
   let gMode = gridMode || (ground ? 'legacy' : 'off'), gMirror = 'off', gCentre = null, plan = null, planDeps = null;
@@ -224,7 +223,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       }
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: plan && plan.over.length ? (overlay ? [...overlay, ...plan.over] : plan.over) : overlay, depthLines: plan ? plan.depth : null,
+      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: plan && plan.over.length ? plan.over : null, depthLines: plan ? plan.depth : null,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
@@ -258,8 +257,6 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
      */
     showGhost(candidate) { ghost = model.ghostFor(candidate); return ghost.batches.length; },
     clearGhost() { ghost = null; },
-    /** D186: world line pairs drawn over the track (the water and its reds): [{ positions, colour, alpha? }], or null. */
-    setOverlay(list) { overlay = list && list.length ? list : null; return overlay ? overlay.length : 0; },
     /** D186: the track station under a point of the canvas (css px from its top-left): { s, pos, px } or null (pickAt). */
     pick(x, y) { return shownPose && track && track.path ? pickAt(track.path, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },

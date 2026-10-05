@@ -170,13 +170,13 @@ test('row 11: through the real shell and the preview: a flat track draws the gro
   assert.throws(() => P.createPreview({ canvas: a.canvas, shell: flat, win: a.win, gridMode: 'weird' }), /unknown gridMode/);
 });
 
-test('row 11b: the plan follows the track: a flat track replaced by a hilly one is drawn as the lattice, with no setGuides call; the layer is given every frame\'s plan and is disposed with the preview; the water overlay and the mirror ghost both draw', async () => {
+test('row 11b: the plan follows the track: a flat track replaced by a hilly one is drawn as the lattice, with no setGuides call; the layer is given every frame\'s plan and is disposed with the preview', async () => {
   const flat = await trackShell(false), hilly = await trackShell(true); let sub = null, cur = flat.getState().resolved;
   const shell = { getState: () => ({ resolved: cur, resolveError: null }), subscribe: (f) => { sub = f; return () => {}; } }, updates = []; let disposed = false;
   const a = fake(), p = P.createPreview({ canvas: a.canvas, shell, win: a.win, gridMode: 'auto', layer: { update: (f) => updates.push(f), dispose() { disposed = true; } } }); a.win.step();
   assert.equal(p.guides().drawn, 'ground'); cur = hilly.getState().resolved; sub(shell.getState()); a.win.step(); assert.equal(p.guides().drawn, '3d', 'the track changed under the grid'); assert.equal(p.guides().flat, false);
   assert.ok(updates.length >= 2 && updates[updates.length - 1].plan && updates[updates.length - 1].plan.mode === '3d' && updates[updates.length - 1].pose && updates[updates.length - 1].aspect > 0, 'the layer gets the plan, the pose and the size every frame');
-  p.setGuides({ mirror: 'x' }); a.win.step(); const l1 = p.renderer.stats().lines; p.setOverlay([{ positions: new Float32Array([0, 0, 0, 1, 1, 1]), colour: [1, 0, 0] }]); a.win.step(); assert.equal(p.renderer.stats().lines, l1 + 1, 'an overlay already set (the water) still draws beside the mirror ghost');
+  p.setGuides({ mirror: 'x' }); a.win.step();
   p.dispose(); assert.equal(disposed, true, 'the layer goes with the preview');
 });
 

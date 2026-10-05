@@ -597,3 +597,24 @@ test('"at start" on a field left as shown sends nothing (no target, D193); the b
   assert.equal(S.stub.seen.at(-1).transition, undefined, 'after Extend the field shows the head again (untouched), so nothing is sent');
   P.panel.unmount();
 });
+
+// ── D238 (the keeper, 22:01: "can you remove the water sim feature?"): nothing about the water in the builder ───────────────────────────────────────────────────────────────────────────────────────────
+test('no water: the panel has no Water section, the shell no pour and no water state, an edit pours and draws nothing, and no file of the app names the water', async () => {
+  const fs = require('fs'), path = require('path');
+  const P = await mountPanel(), els = P.root.all();
+  assert.deepEqual(els.filter((e) => e.tagName === 'H3').map((e) => e.textContent), ['Equation track', 'Extend at the head', 'Brush (drag on the track)', 'Close', 'Local example'], 'the panel\'s sections: no Water between Close and Local example');
+  const words = els.flatMap((e) => [e.textContent, e.attrs['aria-label'], e.attrs.title]).filter(Boolean).join(' ');
+  assert.doesNotMatch(words, /water|stream|pour|design speed/i, 'no control, label or tooltip names the water, its speed or its streams');
+  assert.ok(els.some((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop'), 'control: the Close section is still there');
+  assert.equal('water' in P.shell.getState(), false, 'no water in the state'); assert.equal(typeof P.shell.pour, 'undefined', 'no shell.pour'); assert.equal(typeof P.shell.clearWater, 'undefined', 'no shell.clearWater');
+  const sent = [], real = P.doc.dispatchEvent; P.doc.dispatchEvent = (ev) => { sent.push(ev.type); return real(ev); };
+  P.doc.dispatchEvent({ type: 'control' }); assert.deepEqual(sent, ['control'], 'control: the spy sees the events sent through the document'); sent.length = 0;
+  P.shell.extend({ length: 100 }); P.tick();
+  assert.equal(sent.includes('t180:overlay'), false, 'an edit draws no overlay'); assert.equal((P.doc.listeners['t180:track'] || []).length, 0, 'the panel does not listen for the track to pour on it');
+  assert.equal('water' in P.shell.getState(), false, 'and an edit leaves no water in the state');
+  assert.equal(typeof require('../core/panel.js').overlayOf, 'undefined', 'no overlayOf'); const CS = require('../core/coreshell.js'); assert.equal(typeof CS.waterRun, 'undefined', 'no waterRun'); assert.equal(typeof CS.redText, 'undefined', 'no redText');
+  P.panel.unmount();
+  // the whole app: not one file (the tests aside) names the water, its pour, or the overlay it was drawn on
+  const app = path.resolve(__dirname, '..'), found = [], walk = (d) => { for (const n of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, n.name); if (n.isDirectory()) { if (n.name !== 'test' && n.name !== 'node_modules') walk(p); } else if (/\.(js|html|md|json)$/.test(n.name)) { const t = fs.readFileSync(p, 'utf8'); if (/water|\bpour\b|setOverlay|t180:overlay/i.test(t)) found.push(path.relative(app, p)); } } };
+  walk(app); assert.deepEqual(found, [], `files of the app that still name the water: ${found.join(', ')}`);
+});

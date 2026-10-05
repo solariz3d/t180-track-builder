@@ -11,7 +11,7 @@
 //       extras = { grid, marker, ghost, lines = true, overlay }   grid / marker from look.js (world lines); ghost = batches drawn
 //                                                         see-through, with their own lines, after the placed track;
 //                                                         overlay = [{ positions (world line pairs), colour, alpha? }] drawn last,
-//                                                         over everything (D186: the water and its reds)
+//                                                         over everything (D237: the mirror ghost)
 //       extras.look = 'ac' (the default) with extras.materialOf(batch) -> the EXPORTED material ({ name, shader, props,
 //                   samplers, alphaTested }) and extras.textures (a Map, texture file -> { width, height, rgba }): each
 //                   batch is drawn with its AC shader (acshaders.js, the Ms-PL port) and the uniforms aclook.js
@@ -232,7 +232,7 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
         gl.depthMask(true); gl.disable(gl.BLEND);
       }
       if (extras.marker) { gl.disable(gl.DEPTH_TEST); use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.marker.positions, IDENTITY, COLOURS.marker, 1); gl.enable(gl.DEPTH_TEST); }
-      // the OVERLAY (D186: the water and its reds), world line pairs drawn over everything, each with its own colour
+      // the OVERLAY (D237: the mirror ghost), world line pairs drawn over everything, each with its own colour
       if (extras.overlay && extras.overlay.length) {
         gl.disable(gl.DEPTH_TEST); use(line, vp); gl.enableVertexAttribArray(line.pos);
         for (const o of extras.overlay) drawLines(o.positions, IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);
