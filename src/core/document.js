@@ -269,6 +269,9 @@ function checkDoc(doc) {
       if (prev) { const e = pieceEnd(prev); for (const ch of OFFSETS) if (Math.abs(e[ch].v) > 10 ** -DEC[ch] || Math.abs(e[ch].m) > 1e-6) throw new CoreError('FLIGHT_OFFSET', `${at}: ${ch} must fade to 0 (value and slope) before a jump, got ${e[ch].v} m, slope ${e[ch].m}: the adapter cannot lift a jump's gap or its landing ramp`); }
       if (!(P.gap > 0) || !Number.isFinite(P.drop) || !Number.isFinite(P.land)) bad(`${at}: a flight needs gap > 0, drop and land`);
       if (!prev) bad(`${at}: a flight must follow a road piece`);
+      // D243 (B's look): LAND ON ROAD FIRST. Two flights in a row would take the second off from the first one's landing ramp, which no road piece
+      // describes; jump() never makes one, and an opened or hand-edited file may not hold one either
+      if (afterFlight) throw new CoreError('JUMP_AFTER_JUMP', `${at}: two jumps in a row (${doc.pieces[i - 1].id}, then ${P.id}): a jump must land on road before the next one takes off; put a road piece between them`);
       afterFlight = true; return;
     }
     if (P.type !== 'road') bad(`${at}: type must be road or flight, got ${P.type}`);

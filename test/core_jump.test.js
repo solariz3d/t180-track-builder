@@ -61,6 +61,14 @@ test('row 1: jump() refuses by name: no road to take off from, a closed track, a
   assert.throws(() => jump(road, { gap: 1, drop: -100 }), (e) => e.code === 'JUMP_PAST_VERTICAL' || e.code === 'JUMP_UNSOLVABLE', 'rising 100 m in 1 m');
   assert.equal(jump(road, { gap: 20 }).pieces[1].type, 'flight', 'control: a plain jump is accepted');
 });
+test('row 1: LAND ON ROAD FIRST is a rule of the document: an opened or hand-edited file with two flights in a row is refused by name; road between them is accepted', () => {
+  const one = jump(extend(D.createDoc('two'), { length: 300 }), { gap: 20 }), o = JSON.parse(D.serialize(one));
+  o.pieces.push({ ...o.pieces[1], id: `p${o.nextId}` }); o.nextId += 1;   // a second flight straight after the first, as a hand edit would write it
+  assert.throws(() => D.parse(JSON.stringify(o)), (e) => e.code === 'JUMP_AFTER_JUMP' && /land on road/.test(e.message));
+  assert.throws(() => D.checkDoc({ ...one, nextId: one.nextId + 1, pieces: [...one.pieces, { ...one.pieces[1], id: `p${one.nextId}` }] }), (e) => e.code === 'JUMP_AFTER_JUMP');
+  const ok = jump(extend(one, { length: 100 }), { gap: 20 });
+  assert.deepEqual(D.parse(D.serialize(ok)).pieces.map((P) => P.type), ['road', 'flight', 'road', 'flight'], 'control: two jumps with road between them open as written');
+});
 
 // ── row 2 ──
 test('row 2: a core flight\'s gap is INTENDED: the open jump lap has no gap-in-road red, and no red at all inside the flight\'s span', () => {

@@ -28,7 +28,8 @@ const MUTANTS = [
   // (J10, "the road before a jump may move its h and l", was EQUIVALENT: no closing row reaches those control points, so the hold it removed was dead
   // code and is gone from close.js; see the D243 hand-back)
   // src/core/jump.js: the helper's refusals by name
-  { id: 'J11 a jump straight after a jump is accepted', pattern: 'row 1', file: 'src/core/jump.js', from: "type === 'flight') throw new D.CoreError('JUMP_AFTER_JUMP'", to: "type === 'never') throw new D.CoreError('JUMP_AFTER_JUMP'" },
+  // (J11 moved: "land on road first" is a rule of the document since B's look, checkDoc, and jump() refuses through it)
+  { id: 'J11 two jumps in a row are accepted by the document (land on road first not enforced)', pattern: 'row 1', file: 'src/core/document.js', from: "if (afterFlight) throw new CoreError('JUMP_AFTER_JUMP'", to: "if (false) throw new CoreError('JUMP_AFTER_JUMP'" },
   { id: 'J12 a flight the adapter cannot fly is accepted at the click', pattern: 'row 1', file: 'src/core/jump.js', from: 'try { toSegments(out); } catch (e) {', to: 'try { } catch (e) {' },
   { id: 'J13 a landing pitch past vertical is accepted', pattern: 'row 1', file: 'src/core/jump.js', from: '&& Math.abs(land) < V))', to: '))' },
   { id: 'J14 an empty track is not refused by name', pattern: 'row 1', file: 'src/core/jump.js', from: "if (!doc.pieces.length) throw new D.CoreError('NO_TAKEOFF'", to: "if (false) throw new D.CoreError('NO_TAKEOFF'" },
