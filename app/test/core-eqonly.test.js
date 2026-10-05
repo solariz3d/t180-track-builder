@@ -275,7 +275,9 @@ test('each shortcut fires on the equation page: Ctrl+Z undo, Ctrl+Shift+Z and Ct
   unbind(); assert.equal(P.listeners.size, 0, 'the unbind removes the listener');
 });
 
-test('as before the move, no shortcut fires while a field has focus, and a bare Backspace does nothing', async () => {
+// RESTATED (D242 item 8a): "a field" became "a TEXT field". Undo and redo now act on the track from a number field, a checkbox or a
+// select (app/test/keys-anywhere.test.js); this fake field matches every selector with "input" in it, so it is a text field.
+test('no shortcut fires while a TEXT field has focus, and a bare Backspace does nothing', async () => {
   const { bindKeys } = require('../core/keys.js'), s = await createCoreShell({ brushFn: null }), P = keyPage();
   let saves = 0; bindKeys(P.doc, s, { save: () => { saves++; } });
   s.extend({ length: 200 }); s.extend({ length: 300 }); const two = text(s);
