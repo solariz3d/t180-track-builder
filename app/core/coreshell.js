@@ -316,14 +316,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      * BUILD THE EXPORT, writing nothing (D239: the Export button and Install to AC both use it, so an installed track is the exported one,
      * byte for byte): the start layout, then src/export/fromwords.js exportSegments through the exporter. A track that cannot export
      * throws an ExportError with a code (OPEN_LOOP, NO_START_STRAIGHT, or the exporter's own, e.g. RED with .red). `opts.test` (D243a) is the
-     * test export of an unfinished track: an open loop is not refused.
+     * test export of an OPEN track (TEST_CLOSED on a closed one).
      */
     buildExport(opts = {}) {
       if (!exporter) throw exportError('NO_EXPORTER', 'export is not available here');
-      // D243a: opts.test is the TEST export of an unfinished track (the page's own button, never the default): an open loop is written, its reds are warnings
+      // D243a: opts.test is the TEST export of an unfinished OPEN track (the page's own button, never the default): it is written open, its grid laid on
+      // the open path, its reds listed as warnings. A CLOSED track is refused it by name: the lap would be built open, with the end wall at its seam
+      if (opts.test && doc().closed) throw exportError('TEST_CLOSED', 'this track is closed: use Export (the test export is for an unfinished, open track)');
       if (!doc().closed && !opts.test) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');
       let markers;
-      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test && !doc().closed }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
+      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
       return exporter.runSegments(st.resolved.segments, { name: api.exportDoc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start }, { ...opts, markers });
     },
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
