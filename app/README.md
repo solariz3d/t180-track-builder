@@ -88,7 +88,7 @@ live shell or a panel.
 
 | path | what |
 |---|---|
-| `app/core/coreshell.js` | the core's state and actions, no DOM (tested headless): extend, the brush drag, close, water, export, a local example, save/open under the `eq-` prefix |
+| `app/core/coreshell.js` | the core's state and actions, no DOM (tested headless): extend, the brush drag, close, export, a local example, save/open under the `eq-` prefix |
 | `app/core/panel.js` | the core's controls in the left column |
 | `app/core/widthlike.js` | the "width like…" drop-down's entries (D232): the known tracks' measured widths from `src/doc/widths.json`, in metres round-and-across for a tube |
 | `app/core/textures.js` | the core's road surface (D228): asphalt by default, solid colour, or your own picture; announces the set as `t180:textures`, which the preview draws and the core page's Export writes (`src/texture/flow.js` lays its coordinates on the path's arc length, a closed tube wraps a whole number of repeats) |
@@ -102,7 +102,6 @@ mesh itself.
 `tools/piecewise.cjs`, whose command-line half requires `fs` and `path`. Nothing touches the disk.
 
 **Events the core's panel adds** (the preview answers them, `app/preview/index.js`):
-- `t180:overlay` `{ lines }`: world line pairs drawn over the track (the water and its reds), or null;
 - `t180-pick` `{ x, y, reply }`: the track station under a canvas point.
 
 **Events the 3D grid and the symmetry guides add** (D237, `app/preview/guides.js`; the preview answers them, `app/preview/index.js`; the buttons are in the camera panel, `app/camera/index.js`):

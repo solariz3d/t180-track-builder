@@ -5,7 +5,7 @@
 //   const shell = await createCoreShell({ storage, exporter })
 //   shell.extend({ length, targets })   shell.candidate({ length, targets })   shell.undo()   shell.redo()
 //   shell.beginBrush({ mode, channel, s0, r })   shell.brushTo(delta)   shell.endBrush()      one undo step per drag
-//   shell.close()   shell.pour(track, { speedKmh, count, fromS, lengthM })   shell.clearWater()
+//   shell.close()
 //   await shell.exportTo(dir)   shell.openExample(fitText, readText, name)   await shell.save(name)   await shell.open(name)
 //
 // THE SEAM IS THE PIECE BUILDER'S (app/README.md "The seam"), so the preview, the cameras and validation are reused unchanged:
@@ -26,10 +26,9 @@ const { close } = require('../../src/core/close.js');
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 // A's offset channels h and l (the chair's ruling 1, D186): offsetPath(doc, segments, path) lifts a path and recomputes its frame.
-// Not at 17c2301; when the adapter exports it, the shell hands it on as `resolved.lift`, so the preview, the water and the export
+// Not at 17c2301; when the adapter exports it, the shell hands it on as `resolved.lift`, so the preview and the export
 // read the road AS BRUSHED (the segments alone do not carry the offsets).
 const offsetPath = typeof AD.offsetPath === 'function' ? AD.offsetPath : null;
-const W = require('../../src/core/water.js');
 // THE READOUT (L130, A's src/core/readout.js): a piece's length and the change it makes in turn, climb and bank, for the panel
 // (the ghost, candidateReadout) and the labels on the track (every placed piece, pieceReadout)
 const RD = require('../../src/core/readout.js');
@@ -51,7 +50,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const ok = (msg) => ({ message: msg, messageKind: 'ok' });
   let st = {
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
-    message: null, messageKind: null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, water: null, exportReds: null,
+    message: null, messageKind: null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, exportReds: null,
     localBrush: !!brushFn,
   };
   const subs = new Set();
@@ -67,13 +66,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
   const resolvedOf = (d) => { const segments = segmentsOf(d); return { resolved: Object.freeze({ segments, closed: !!d.closed, start: startOf(d), lift: offsetPath && segments.length ? (p) => offsetPath(d, segments, p) : undefined }), resolveError: null }; };
   /** Run an edit; a core error becomes the message, and nothing else changes. */
-  // src/core/water.js refuses with plain Errors whose message starts "water:" (e.g. a lifted track whose samples do not carry
-  // d1/d2): a refusal the user reads, never a crash of the panel
-  const attempt = (fn) => { try { return fn(); } catch (e) { if (e.name === 'CoreError' || e.name === 'WaterError' || /^water: /.test(e.message || '')) { set({ message: e.message }); return null; } throw e; } };
+  const attempt = (fn) => { try { return fn(); } catch (e) { if (e.name === 'CoreError') { set({ message: e.message }); return null; } throw e; } };
   /** Commit a new document as one undo step, timing the operation plus the adapter. */
   const commit = (op, make, extra = {}) => attempt(() => {
     const t0 = now(), d = make(), r = resolvedOf(d), ms = now() - t0;
-    return set({ history: D.commit(st.history, d), ...r, dirty: true, message: null, water: null, lastStep: { op, ms }, ...extra });
+    return set({ history: D.commit(st.history, d), ...r, dirty: true, message: null, lastStep: { op, ms }, ...extra });
   });
   const lastRoad = (d) => { for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return i; return -1; };
   // the brush, as E's hand-back gives its API: height -> hill, sideways -> swerve; a rate channel (kh, kv) -> rate, which re-closes a
@@ -138,7 +135,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         // a rate brush on a closed lap re-closes (E): a re-close that failed left the track OPEN, and says so
         const reclose = res.close && !res.close.converged ? `the loop could not re-close after this brush, so it is open now: ${res.close.report}` : null;
         const note = [widened, res.note, reclose].filter(Boolean).join(' · ') || null;
-        return set({ history: D.dragTo(st.history, d), ...r, brush: { ...b, delta, rUsed: used }, dirty: true, water: null, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
+        return set({ history: D.dragTo(st.history, d), ...r, brush: { ...b, delta, rUsed: used }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
       });
     },
     endBrush() {
@@ -161,38 +158,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const t0 = now(), res = close(doc(), { edited });
         if (!res.converged) return set({ message: res.report });
         const r = resolvedOf(res.doc);
-        return set({ history: D.commit(st.history, res.doc), ...r, dirty: true, water: null, lastStep: { op: 'close', ms: now() - t0 }, ...ok(`loop closed: ${res.report}`) });
+        return set({ history: D.commit(st.history, res.doc), ...r, dirty: true, lastStep: { op: 'close', ms: now() - t0 }, ...ok(`loop closed: ${res.report}`) });
       });
     },
 
-    /**
-     * POUR WATER on the track the preview draws (`track` = its shared { path, segments }: the 't180:track' event), over a window
-     * of the road: [fromS, fromS + lengthM], default the last `lengthM` metres before the head on an open track and the lap's
-     * start on a closed one. Streams start across the width at the design speed (src/core/water.js). The result, in
-     * state.water: each stream as world points for the overlay, and every red in plain words.
-     */
-    pour(track, { speedKmh = 250, count = 7, fromS, lengthM = 1500, h = 0.02 } = {}) {
-      if (!track || !track.path || !Array.isArray(track.segments)) return set({ message: 'there is no track to pour water on yet' });
-      return attempt(() => {
-        const p = track.path, L = p.lengthM, closed = !!p.closed;
-        const a = fromS !== undefined ? fromS : closed ? 0 : Math.max(0, L - lengthM), b = Math.min(L, a + lengthM);
-        const run = waterRun(p, track.segments, a, b);
-        if (run.samples.length < 2) return set({ message: `no road to pour on between ${Math.round(a)} and ${Math.round(b)} m${run.gap ? ' (a jump\'s flight)' : ''}` });
-        const t0 = now(), F = W.surfaceFrom({ samples: run.samples, profileAt: profilerOf(p, track.segments) });
-        const res = W.pour(F, { speed: speedKmh / 3.6, count, h, distance: run.samples[run.samples.length - 1].s - run.samples[0].s });
-        const streams = res.streams.map((sm) => sm.track.s.map((s, i) => W._at(F, s, sm.track.u[i]).p));
-        // a shock carries no position (water.js): it is placed on the surface at its (s, u), for the overlay
-        const reds = res.reds.map((x) => ({ ...x, pos: x.pos || W._at(F, x.s, x.u).p, text: redText(x, speedKmh) }));
-        return set({ water: Object.freeze({ fromS: a, toS: b, speedKmh, streams, reds, energy: res.energy, cutAt: run.gap ? run.samples[run.samples.length - 1].s : null, ms: now() - t0 }) });   // a message it did not write stays (a refused close must stay readable)
-      });
-    },
-    clearWater: () => set({ water: null }),
-
-    undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, water: null, message: null }); }),
-    redo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.redo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, water: null, message: null }); }),
+    undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: null }); }),
+    redo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.redo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: null }); }),
     /** Put a prepared core document in front of the user, as opening one does: fresh history, nothing to undo. */
-    adopt: (d) => attempt(() => { D.checkDoc(d); return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: false, lastEdited: null, water: null, message: null, exportReds: null }); }),
-    newDoc(name = 'untitled') { const d = D.createDoc(name); return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: false, lastEdited: null, water: null, message: null, exportReds: null }); },
+    adopt: (d) => attempt(() => { D.checkDoc(d); return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: false, lastEdited: null, message: null, exportReds: null }); }),
+    newDoc(name = 'untitled') { const d = D.createDoc(name); return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: false, lastEdited: null, message: null, exportReds: null }); },
 
     /**
      * A REAL TRACK AS A LOCAL EXAMPLE: D184's position fit (`tools/piecewise.cjs --write`, t180b.pieces/1) and the read it was
@@ -204,7 +178,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         let fit, read;
         try { fit = JSON.parse(fitText); read = JSON.parse(readText); } catch (e) { throw new D.CoreError('BAD_EXAMPLE', `the example files are not JSON: ${e.message}`); }
         const d = D.fromPositionFit(fit, read, { name });
-        return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: true, lastEdited: null, water: null, exportReds: null, ...ok(`opened ${name}: ${d.pieces.length} pieces, open; close it to export`) });
+        return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: true, lastEdited: null, exportReds: null, ...ok(`opened ${name}: ${d.pieces.length} pieces, open; close it to export`) });
       });
     },
 
@@ -246,12 +220,12 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!storage) return set({ message: 'opening is not available here' });
       const text = await storage.openDoc(PREFIX + name), d = attempt(() => D.parse(text));
       if (!d) return st;
-      return set({ history: D.createHistory(d), ...resolvedOf(d), name, dirty: false, lastEdited: null, water: null, message: null, exportReds: null });
+      return set({ history: D.createHistory(d), ...resolvedOf(d), name, dirty: false, lastEdited: null, message: null, exportReds: null });
     },
     /** The saved equation tracks (the piece builder's are not listed here). */
     async list() { if (!storage) return []; return (await storage.listDocs()).filter((n) => n.startsWith(PREFIX)).map((n) => n.slice(PREFIX.length)); },
     text: () => D.serialize(doc()),
-    /** The design speed from the validation panel's slider: kept for the water's default, not part of the document. */
+    /** The design speed from the validation panel's slider: kept in the state, not part of the document. */
     setDesignSpeed(kmh) { if (!(kmh === null || (Number.isFinite(kmh) && kmh > 0))) return set({ message: `the design speed must be a positive km/h, or null, got ${kmh}` }); return set({ designSpeedKmh: kmh }); },
   };
   return api;
@@ -259,7 +233,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
 
 /**
  * The cross-section under a path sample, as the mesh draws it: the segment's profile, or, where the segment carries a blend (a cup's do,
- * D190), the blend evaluated at the sample. A segment without a blend gives its own profile object, so the water reads it as before.
+ * D190), the blend evaluated at the sample. A segment without a blend gives its own profile object. (A reader of the cross-section under a path sample: the tests of the cup and chord readers take it from here.)
  */
 function profilerOf(path, segments) {
   const Prof = require('../../src/geom/profile.js'), starts = []; let a = path.samples[0].s;
@@ -295,29 +269,4 @@ function piecesIn(doc, a, b) {
   return out.length ? out : null;
 }
 
-/**
- * The samples the water rides between s = a and b: the path's own stations, cut at the first sample with no road under it (a
- * jump's flight, which the water does not model; src/core/water.js refuses a gap by name). Returns { samples, gap }.
- */
-function waterRun(path, segments, a, b) {
-  const out = []; let gap = false;
-  for (const m of path.samples) {
-    if (m.s < a - 1e-9) continue; if (m.s > b + 1e-9) break;
-    const g = segments[m.seg];
-    if (!g || g.kind === 'gap' || !g.profile) { if (out.length) { gap = true; break; } continue; }
-    if (out.length && !(m.s > out[out.length - 1].s)) continue;
-    out.push(m);
-  }
-  return { samples: out, gap };
-}
-
-/** A red, in plain words (the spec: "in RED, where it spills over the lip, lifts off, or crosses itself"). */
-function redText(x, speedKmh) {
-  const at = `${Math.round(x.s).toLocaleString('en-US')} m`;
-  if (x.type === 'spill') return `Water spills over the ${x.u > 0 ? 'left' : 'right'} edge at ${at}: at ${speedKmh} km/h this corner needs more bank or a higher wall.`;
-  if (x.type === 'liftoff') return `Water lifts off the road at ${at}: the crest is too sharp for ${speedKmh} km/h.`;
-  if (x.type === 'shock') return `Two streams cross at ${at}: the flow piles into one line there.`;
-  return `${x.type} at ${at}`;
-}
-
-module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, STRAIGHT_K, waterRun, redText, piecesIn, straightPieces, startLayout, profilerOf };
+module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, STRAIGHT_K, piecesIn, straightPieces, startLayout, profilerOf };

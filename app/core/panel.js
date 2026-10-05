@@ -6,8 +6,7 @@
 //   BRUSH on the preview: arm it, then drag on the track. The pick is the preview's ('t180-pick'); the drag's vertical distance is
 //          the change at the brush's centre; one drag is one undo step. The local height/lateral brush (E) is the default when
 //          it is in the build; the rate brush (one channel) is the explicit second mode.
-//   CLOSE as one click. WATER, drawn LIVE: while it is on, every change to the track pours again (the preview's 't180:track'
-//          event), and the streams and reds are drawn over the track ('t180:overlay'). Every red is listed in plain words.
+//   CLOSE as one click.
 //   THE READOUT (L130): beside Extend's fields, the piece they describe, BEFORE it is placed: its length and the change it makes
 //          in turn, climb and bank (A's src/core/readout.js, candidateReadout), redrawn inside every field's input handler; and on
 //          the track, a label at every placed piece with the same numbers (app/core/labels.js). The strings are the same function's
@@ -22,20 +21,7 @@ const XS = require('./xsec.js');   // the cross-section channels (D225): edge an
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
 const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, e: 0.2, s: 0.002, t: 0.5, height: 0.03, lateral: 0.03 });
 const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', e: 'edge angle', s: 'edge start', t: 'tube sweep', height: 'height', lateral: 'sideways' });
-const COLOURS = Object.freeze({ water: [0.35, 0.72, 1.0], red: [1.0, 0.25, 0.25] });
 const DEG = Math.PI / 180;
-
-/** The overlay for a pour: each stream as line pairs, and each red as a 6 m cross (pure: tested headless). */
-function overlayOf(water) {
-  if (!water) return null;
-  const blue = [], red = [];
-  for (const pts of water.streams) for (let i = 1; i < pts.length; i++) blue.push(...pts[i - 1], ...pts[i]);
-  for (const x of water.reds) { const [a, b, c] = x.pos, k = 3; red.push(a - k, b, c, a + k, b, c, a, b - k, c, a, b + k, c, a, b, c - k, a, b, c + k); }
-  const out = [];
-  if (blue.length) out.push({ positions: new Float32Array(blue), colour: COLOURS.water, alpha: 0.9 });
-  if (red.length) out.push({ positions: new Float32Array(red), colour: COLOURS.red, alpha: 1 });
-  return out;
-}
 
 /**
  * The extend options the controls describe (pure: tested headless). Empty fields continue the channel. On an EMPTY track (`empty`) the
@@ -209,15 +195,8 @@ function mount(root, shell) {
   const up = () => { if (!drag) return; if (frame) { win.cancelAnimationFrame(frame); frame = 0; } if (waitingY !== null) { const y = waitingY; waitingY = null; shell.brushTo((drag.y - y) * drag.per); } drag = null; shell.endBrush(); };
   if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); }
 
-  // CLOSE, WATER, EXAMPLE
+  // CLOSE, EXAMPLE
   const closeBtn = el('button', { text: 'Close the loop', title: 'one click: the track closes exactly, the fix spread over what you did not just touch', onclick: () => shell.close() });
-  const speed = num(250, 10, 'design speed, km/h'), streams = num(7, 1, 'streams across the width'), waterOn = el('input', { type: 'checkbox', 'aria-label': 'water on' });
-  let latest = null, pending = 0;
-  const pour = () => { if (!latest) { send('t180:track-request', { reply: (t) => { latest = t; } }); } if (latest) shell.pour(latest, { speedKmh: Number(speed.value), count: Number(streams.value) }); };
-  const onTrack = (e) => { latest = e.detail; if (waterOn.checked) { win.clearTimeout(pending); pending = win.setTimeout(pour, 120); } };
-  doc.addEventListener('t180:track', onTrack);
-  waterOn.onchange = () => { if (waterOn.checked) pour(); else shell.clearWater(); };
-  speed.onchange = streams.onchange = () => { if (waterOn.checked) pour(); };
   // held to the column's width (a file input is wider than the 280 px column by default, and the column scrolled sideways)
   const fitIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the fit, *.pieces.json', style: 'max-width: 100%; min-width: 0' }), readIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the read, *.read.json', style: 'max-width: 100%; min-width: 0' });
   const readText = (inp) => (inp.files && inp.files[0] ? inp.files[0].text() : Promise.reject(new Error('pick both files')));
@@ -225,7 +204,7 @@ function mount(root, shell) {
     try { const [f, r] = await Promise.all([readText(fitIn), readText(readIn)]); shell.openExample(f, r, fitIn.files[0].name.replace(/\.pieces\.json$/i, '') + ' (local)'); } catch (e) { msg.textContent = e.message; msg.className = 'message'; }
   } });
 
-  const msg = el('p', { class: 'message', role: 'status' }), reds = el('ul', { class: 'reds' }), info = el('p', { class: 'head' });
+  const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' });
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', onclick: () => shell.undo() }), el('button', { text: 'Redo', onclick: () => shell.redo() })),
@@ -235,7 +214,6 @@ function mount(root, shell) {
     el('div', { class: 'actions' }, extendBtn),
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'actions' }, closeBtn),
-    el('h3', { text: 'Water' }), el('div', { class: 'pickers' }, field('on', waterOn), field('km/h', speed), field('streams', streams)), reds,
     el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
     msg,
   );
@@ -246,18 +224,13 @@ function mount(root, shell) {
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
     extendBtn.disabled = !!d.closed; closeBtn.disabled = !!d.closed || !d.pieces.length;
     msg.textContent = st.message || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
-    const w = st.water;
-    if (!w) reds.replaceChildren(); else if (!w.reds.length) reds.replaceChildren(el('li', { text: `The water rides clean from ${Math.round(w.fromS)} to ${Math.round(w.toS)} m at ${w.speedKmh} km/h.` }));
-    else reds.replaceChildren(...w.reds.map((x) => el('li', { text: x.text, style: 'color: var(--bad)' })));
-    if (w && w.cutAt !== null) reds.append(el('li', { text: `The water stops at ${Math.round(w.cutAt)} m: a jump's flight is not modelled.`, class: 'src' }));
-    send('t180:overlay', { lines: overlayOf(w) });
     readout();   // the track changed, so the piece the fields would add changed
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, options: opts, unmount() { unsub(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); doc.removeEventListener('t180:track', onTrack); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, options: opts, unmount() { unsub(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
-module.exports = { mount, overlayOf, extendOptions, PER_PX };
+module.exports = { mount, extendOptions, PER_PX };
