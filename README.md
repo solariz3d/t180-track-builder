@@ -54,8 +54,8 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | Identical where it can be: the preview draws the export's geometry | tested | `app/preview/trackmodel.js` from `src/geom` · `app/test/preview.test.js` |
 | … lighting matched to AC+CSP, the gap measured | not yet | the look-match instrument is built (`src/lookmatch/`, `scripts/lookmatch.js` · `test/lookmatch.test.js`), but no reference shots from AC exist yet, so the gap is not measured |
 | Guardrails, not gates: physics as colour while building | tested | `app/validate-ui/` · `app/test/validate-ui*.test.js` |
-| One tool: place words, restyle them, sculpt | tested | `app/palette/`, `app/handles/` · `app/test/palette.test.js`, `app/test/handles*.test.js` |
-| A guided first track for new users (five skippable steps; the user makes every move) | tested | `app/onboarding/` · `app/test/onboarding.test.js` |
+| One tool: place words, restyle them, sculpt | removed from the app (D239: the app is the equation builder only; its palette and handles panels are deleted, the word documents and the exporter remain) | was `app/palette/palette.js`, `app/handles/`; the app now: `app/core/` · `app/test/core-*.test.js` |
+| A guided first track for new users (six skippable steps for the equation builder since D239; the user makes every move) | tested | `app/onboarding/` · `app/test/onboarding.test.js`, `app/test/core-eqonly.test.js` |
 | The app works in its real window, not only headless (timers as strict as a browser's) | tested | `app/shell.js` · `app/test/timers-regression.test.js` |
 | Stability and export reliability | tested | export self-test (kn5 read back) · `test/export_words.test.js`; the soak and bench scripts (`scripts/soak.js`, `scripts/bench.js`) · `test/perf.test.js`, `test/perf_soak.test.js` |
 
@@ -68,16 +68,16 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
 | A word placed with no font chosen continues the previous word's font; the first takes the bowl; the width follows the font | tested, unreleased (after 0.2.2): new vocab and new fonts (the width is each measured font's) | `src/doc/document.js`, `src/doc/vocab.js` · `test/vocab-corpus.test.js` |
 | No wall by default: a wall is only ever sculpted | tested, unreleased (after 0.2.2): new vocab and new fonts (the measured fonts have no wall) | `src/doc/vocab.js` · `test/vocab-corpus.test.js` |
 | The bank ramps no faster than real tracks bank (0.849°/m, the measured p90) | tested, unreleased (after 0.2.2): new vocab (the rate measured from the library's tracks) | `src/doc/document.js`, `tools/bankrate.cjs` · `test/vocab-corpus.test.js` |
-| The grammar suggests the next word, from the library's transitions, and forces nothing | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/grammar.js`, `app/palette/palette.js` · `test/grammar.test.js`, `app/test/palette-grammar.test.js` |
+| The grammar suggests the next word, from the library's transitions, and forces nothing | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/grammar.js` (the app's palette that showed it is removed, D239) · `test/grammar.test.js` |
 | A jump carries its landing ramp | tested | `src/doc/resolve.js` · `test/doc-jump.test.js` |
 | Phrases: a saved word sequence | tested | `src/doc/document.js` `appendPhrase`, `src/doc/library.js` · `test/doc-library.test.js` |
-| Starter phrasebook: spiral climb, bowl hairpin, S, Sakura's grammar | tested | `src/doc/phrasebook.js` · `test/phrasebook.test.js`; listed in the palette under "Starter phrases" (`src/doc/library.js`, `app/palette/palette.js`) |
+| Starter phrasebook: spiral climb, bowl hairpin, S, Sakura's grammar | tested | `src/doc/phrasebook.js` · `test/phrasebook.test.js`; listed in the library under "Starter phrases" (`src/doc/library.js`; the app's palette is removed, D239) |
 | A phrase's "parameters exposed" | not yet | no phrase-level handles. The document can sculpt a phrase's words one by one (`editPhraseWord` in `src/doc/document.js`), but the app cannot yet: a placed starter phrase has no handles in the handles panel, which says so |
 | Fonts: half-pipe, bowl, flat banked ribbon, wall-ride, tube (ψ(u) past vertical) | tested; changed after 0.2.2, unreleased: new fonts (half-pipe, bowl and flat are measured from the library, `src/geom/fonts.js`) | `src/doc/vocab.js`, `src/geom/profile.js` · `test/geom_path.test.js`, `test/geom_mesh.test.js` |
 | Tempos: standard, compact, grand (the size of the library's corners, p50, p10, p90), and the older aurora, serpents | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/vocab.js` · `test/vocab-corpus.test.js`, `test/doc.test.js` |
-| Handles, bounded live by physics | tested | `src/validate/bounds.js`, `app/handles/` · `test/validate_bounds.test.js`, `app/test/handles*.test.js` |
+| Handles, bounded live by physics | tested in `src/`; the app's handles panel is removed (D239) | `src/validate/bounds.js` · `test/validate_bounds.test.js` |
 | Document: stable ids, canonical serialisation, schema and generator versions | tested | `src/doc/serial.js` · `test/doc.test.js` |
-| Undo as history; a whole drag is one entry | tested | `src/doc/history.js` · `test/doc.test.js`, `app/test/handles-panel.test.js` |
+| Undo as history; a whole drag is one entry | tested | `src/doc/history.js` · `test/doc.test.js`; the equation builder: `src/core/document.js` · `app/test/core-shell.test.js` |
 | Constraints: pins, free parameters | built | `src/doc/document.js` (`constraints` is carried, nothing uses it yet) |
 | Closing the loop: a connector ranked by physics margin | tested | `src/doc/connector.js` · `test/doc-connector.test.js` |
 
@@ -180,8 +180,8 @@ Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/
   - `texture/`: §5b: slots, mapping, PNG/JPG to DDS, packs, the texture set the preview and the export share.
   - `texmaker/`: §5b, the procedural texture maker (a texture as text).
   - `export/`: kn5, the track files, the AI line.
-- **`app/`:** the Tauri v2 desktop app around the build head: palette, preview, cameras, validation, handles, markers,
-  textures. See `app/README.md`.
+- **`app/`:** the Tauri v2 desktop app, the equation builder (since D239 the only one): its controls, preview, cameras, validation,
+  road surface, share codes, install, autosave and the guide. See `app/README.md`.
 - **`docs/FINDINGS.md`:** everything measured so far, with the command that reproduces each number.
   - the shape language of 11 T-180 tracks
   - the mesh envelope proven tracks drive on

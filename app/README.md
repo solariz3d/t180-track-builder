@@ -31,20 +31,19 @@ repository's layout, so a relative `require` means the same thing in the webview
 |---|---|---|
 | `src-tauri/` | A | the native shell: window, file commands (tracks, library, autosave), `write_export`, the folder dialog |
 | `app/index.html` | A | the page and its glue: loads the modules, wires storage to the Tauri commands, keyboard shortcuts |
-| `app/shell.js` | A | the app's state and actions, with no DOM (tested headless) |
+| `app/shell.js` | A | the old piece builder's state and actions (D239: no page mounts it; kept for `keyAction`, which the equation page uses, and as the driver of the shared preview and validation tests, see "One builder" below) |
 | `app/lib/cjs.js` | A | runs the program's CommonJS files in the webview |
-| `app/palette/` | A | the build palette at the open end, the pickers, the track list, saving pieces; `panels.js` mounts the panels below |
+| `app/palette/` | A | `panels.js` mounts the panels below (D239: the piece palette, `palette.js`, is removed) |
 | `app/export/` | A | the Export button's logic: the AC guard, and the exporter run in memory (`node-shim.js`) |
 | `app/preview/` | C | the WebGL preview of the track |
 | `app/camera/` | C | the camera modes: build view, the fixed angles, free |
 | `app/validate-ui/` | E | live colour along the track, jump arcs |
-| `app/handles/` | E | sculpt handles with their physics bounds |
 | `app/test/` | each owner, by prefix | `shell*`, `palette*`, `export*` are A's; others as named |
 
 ## The seam: what C and E plug into
 
 **Each panel is a directory with an `index.js` that exports `mount(root, shell)`.** `app/index.html` loads
-`app/preview/index.js`, `app/camera/index.js`, `app/validate-ui/index.js` and `app/handles/index.js` through the loader.
+`app/preview/index.js`, `app/camera/index.js`, `app/validate-ui/index.js`, the core's road surface, share, install and the guide through the loader.
 Each one is optional: if it is not there yet, the page shows a quiet "not plugged in yet" note, and everything else
 works. **If it is there and FAILS** (it does not load, exports no `mount`, or `mount` throws, rejects, or returns an
 `Error` or `{ error }`), its area shows "The <panel> could not start: <why>" as an alert (`app/palette/panels.js`).
@@ -54,7 +53,7 @@ So a panel can report its own failure by returning it.
   - `#preview` for `preview` (a `<canvas>` is theirs to create);
   - `#camera` (a small control strip) for `camera`;
   - `#validation` for `validate-ui`;
-  - `#handles` for `handles`.
+  - `#share`, `#install` and `#guide` for the carried features (D239).
 - **`shell`** is the whole contract. Nothing else is shared:
   - `shell.getState()` returns the state:
     - `history.present`, the document;
@@ -79,12 +78,34 @@ So a panel can report its own failure by returning it.
 Ctrl+Backspace remove the head (a bare Backspace does nothing: it is too easy to hit by accident) · Ctrl+S save. A
 panel that wants a key asks for it in this file first, so two panels never bind the same one.
 
-## Two builders, one page (D186)
+## One builder (D239; until then two, D186)
 
-The page opens the **equation builder** (the core: `src/core`, `app/core`). The **piece builder** (`app/shell.js`, the palette,
-the handles, textures, share, install, the guide) is paused, not deleted: the header's switch reloads the page into it, and
-`?mode=pieces` or `?mode=core` in the address picks one. The last choice is remembered on this machine. The two never share a
-live shell or a panel.
+The page is the **equation builder** (the core: `src/core`, `app/core`) and nothing else. The keeper: "can we keep only the equation
+mode?" The Pieces mode is removed: the header's switch, `?mode=pieces`, the remembered `t180.mode` setting and the pieces branch of
+`app/index.html`. Four of its features were **carried onto the equation page**, each working on the equation track:
+
+- **Install to AC / See it in Assetto** (`app/install`): the install is the Export button's own build (`shell.buildExport`, the same
+  road surface), written as `t180b_<saved name>` into `content\tracks` by the native side, with D234's rules; See it is off by default.
+- **Autosave and crash restore** (`app/core/coreshell.js`): the open track is autosaved (`{ schema: 1, kind: 'core', … }`) while it has
+  unsaved changes; a named save or a clean exit clears it; the next start offers it back in the banner (Restore it / Discard it).
+  An autosave left by the old Pieces builder is copied aside as a saved word track (named in the start message) before anything can
+  overwrite it.
+- **Share codes** (`app/share`): an equation track's code is its `t180b.core/4` text with the compression and checksum every code has
+  (`src/doc/code.js` kind `e`); a code from the old Pieces builder (`t180d…`, `t180p…`) is refused by name, `CODE_PIECES`.
+- **The getting-started guide** (`app/onboarding`): six steps, Extend, the brush, Close the loop, the colours, Export, the grid and mirror.
+
+**Removed** (no page mounts them any more): `app/palette/palette.js` (the piece palette), `app/handles/` (word handles),
+`app/texture/index.js` (the per-word textures panel), `app/onboarding/defaults.js` (the piece palette's first-run pickers).
+**Kept, and why:** `app/shell.js`: the equation page binds its keys through `keyAction`, and 23 test files and three scripts (bench, prove_render, soak) drive the
+shared preview, validation and export code through it (porting them to the core shell is its own lap); `app/palette/panels.js` (mounts every panel);
+`app/texture/panel.js` (the core's road surface uses its `nameFromFile`); `app/texmaker/` (the texture maker: it was reachable only
+through the removed per-word panel, so it is mounted nowhere now; whether the equation page gets it is the keeper's call);
+`app/markers/` (already mounted nowhere before D239, out of this lap's scope); and every `src/` word module the exporter uses
+(`src/export/fromwords.js exportSegments`, `src/doc/*`).
+
+**The keeper's saved word tracks are never deleted.** They are the files WITHOUT the `eq-` prefix in the app's tracks folder,
+`%APPDATA%\com.solariz3d.t180-track-builder\tracks` (a `.t180track` file each); the equation builder lists only `eq-` files, so they no
+longer show in Open…, but they stay on disk as they were.
 
 | path | what |
 |---|---|
