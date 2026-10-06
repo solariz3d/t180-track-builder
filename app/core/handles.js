@@ -11,7 +11,7 @@
 //   placeHandles(model)            -> [{ id, kind, side, pos, axis }]   the world position of every handle and the unit world vector a positive drag moves along
 //   screenOf(VP, W, H, p)          -> { x, y } | null                   css px of the preview; null behind the camera
 //   screenAxis(VP, W, H, pos, ax)  -> { x, y, dx, dy, len }             where the handle is on screen and what one metre along its axis is, in px
-//   dragMetres(axis, dx, dy)       -> metres moved along the handle's axis by a pointer drag of (dx, dy) px
+//   dragPixels(axis, dx, dy)       -> px moved along the handle's axis by a pointer drag of (dx, dy) px
 //   targetFor(kind, base, d, ctx, mods) -> the new absolute value, in the Extend field's own unit (m, or degrees), clamped, rounded, with Shift (fine) and Ctrl (snap)
 //   hitTest(list, x, y, r)         -> the nearest handle within r px, or null
 //   mount(stage, win, host)        the overlay canvas: draws the handles every animation frame, hover shows the name and value, a drag calls host.apply
@@ -24,23 +24,24 @@ const DEG = Math.PI / 180;
  * One row per kind. `at` is where along the piece (0 its start, 1 its far end), `lat` how far out sideways in halves of the road's width (0 the centreline, 1 the edge), `axis` which of the
  * road's own directions a drag runs along (T along the road, L sideways, U up), and `sides` the signs of the sideways positions (+1 the LEFT side). `sign`: how a side's drag counts:
  * 'out' = away from the centre is positive (width, cup), 'left' = toward the left is positive on both sides (turn), 'up' = the left edge going up and the right edge going down are positive (bank).
- * `rate` is the value change per metre of drag; the Extend fields' units (the core's channels are the same, degrees and metres).
+ * `perPx` is the value change per PIXEL of the pointer's travel along the handle's on-screen axis (D251: the same at any zoom; it was per metre of the world, so zoomed out one pixel jumped a lot); the Extend fields'
+ * units (the core's channels are the same, degrees and metres). `zero`: a kind whose natural rest is 0 (bank, turn, climb): the drag holds there, and a double-click resets to it.
  */
 const KINDS = Object.freeze({
   // D250 item 3 (the keeper chose "Near end, like my picture"): LENGTH and WIDTH are at the piece's NEAR end, as in his marked-up screenshot. The near end stays where it is when the value changes, so
   // length is dragged AWAY from the piece (back toward the camera, `sign: 'back'`: stretching the near edge toward you is longer), and the width marks sit at the TARGET half-width (`target: true`: the
   // field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. Turn and climb stay at the far side, bank and cup mid-piece.
-  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 0, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'back', rate: 1, min: 1, max: 5000, step: 0.1, snap: 10 }),
-  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, rate: 2, min: 0.5, max: 400, step: 0.1, snap: 5 }),
-  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', rate: null, min: -720, max: 720, step: 0.1, snap: 5 }),
-  cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', rate: 2, min: 0, max: 150, step: 0.1, snap: 5 }),
-  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.75, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', rate: 0.5, min: -90, max: 90, step: 0.1, snap: 5 }),
-  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', rate: 0.5, min: -45, max: 45, step: 0.1, snap: 5 }),
+  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 0, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'back', perPx: 0.5, min: 1, max: 5000, step: 0.1, snap: 10 }),
+  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.1, min: 0.5, max: 400, step: 0.1, snap: 5 }),
+  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.2, zero: true, min: -720, max: 720, step: 0.1, snap: 5 }),
+  cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.2, min: 0, max: 150, step: 0.1, snap: 5 }),
+  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.75, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', perPx: 0.05, zero: true, min: -90, max: 90, step: 0.1, snap: 5 }),
+  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.05, zero: true, min: -45, max: 45, step: 0.1, snap: 5 }),
 });
 const ORDER = Object.freeze(['length', 'width', 'bank', 'cup', 'turn', 'climb']);
 const FINE = 0.1;            // Shift: a tenth of the speed
+const DETENT_PX = 6;         // D251: the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
 const EDGE_ON_PX_PER_M = 0.05;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead. A FAR handle's axis is short too (the far end of a ghost seen from behind: 0.3 px/m, found in the window) but has a direction, so it is not edge-on
-const EDGE_ON_M_PER_PX = 0.05;
 const HIT_PX = 12;
 
 const round = (x, step) => { const v = Math.round(x / step + 1e-9) * step; return Number(v.toFixed(Math.max(0, Math.ceil(-Math.log10(step) - 1e-9)))) || 0; };
@@ -87,26 +88,33 @@ function screenAxis(VP, W, H, pos, ax) {
   return { x: a.x, y: a.y, dx, dy, len: Math.hypot(dx, dy) };
 }
 
-/** Metres along the handle's axis for a pointer drag of (dx, dy) px, measured on the axis as it was when the drag began. Edge-on (a view along the axis), the pointer's own motion stands in. */
-function dragMetres(axis, dx, dy, kind) {
-  if (axis && axis.len >= EDGE_ON_PX_PER_M) return (dx * axis.dx + dy * axis.dy) / (axis.len * axis.len);
+/** Pixels along the handle's axis for a pointer drag of (dx, dy) px: the pointer's travel projected on the axis as it was when the drag began, + when it runs the way a positive drag moves. Edge-on (a view along the axis) the pointer's own motion stands in. */
+function dragPixels(axis, dx, dy, kind) {
+  if (axis && axis.len >= EDGE_ON_PX_PER_M) return (dx * axis.dx + dy * axis.dy) / axis.len;
   const K = KINDS[kind];
-  return (K && K.axis === 'U' ? -dy : dx) * EDGE_ON_M_PER_PX;
+  return K && K.axis === 'U' ? -dy : dx;
 }
 
 /**
- * The new absolute value of a field for a drag of `d` metres along the handle's axis from `base`. `ctx.half` is the road's half-width in m (the bank handle's lever). Shift is fine
- * (a tenth of the speed), Ctrl snaps to round numbers (5 degrees, 10 m of length, 5 m of width). Always clamped to the kind's range and rounded to its step.
+ * The new absolute value of a field for a drag of `px` pixels along the handle's on-screen axis from `base` (D251: pixels, so the speed is the same at any zoom). Shift is fine (a tenth of the speed),
+ * Ctrl snaps to round numbers (5 degrees, 10 m of length, 5 m of width). Without Ctrl the drag HOLDS for DETENT_PX of travel at the value it started from and, for bank, turn and climb, at 0: it reads exactly that
+ * value while the pointer is inside the hold. Rounded to the kind's step (0.1) with or without Shift, so a fine drag lands on 0.0 and not 0.03; always clamped to the kind's range.
  */
-function targetFor(kind, base, d, ctx = {}, mods = {}) {
+function targetFor(kind, base, px, ctx = {}, mods = {}) {
   const K = KINDS[kind]; if (!K) throw new Error(`handles: no kind "${kind}"`);
-  const f = mods.shift ? FINE : 1;
-  let v;
-  if (kind === 'bank') v = base + (d * f / Math.max(0.5, Number.isFinite(ctx.half) ? ctx.half : 1)) / DEG;   // an edge raised by d at half a road's width: that many degrees of roll
-  else v = base + d * f * K.rate;
-  if (mods.ctrl) v = round(v, K.snap); else v = round(v, mods.shift ? K.step / 10 : K.step);
+  const r = K.perPx * (mods.shift ? FINE : 1);
+  let v = base + px * r;
+  if (mods.ctrl) v = round(v, K.snap);
+  else {
+    let best = null;
+    for (const t of K.zero ? [0, base] : [base]) { const e = Math.abs(v - t); if (e < DETENT_PX * r && (best === null || e < best.e)) best = { t, e }; }
+    v = round(best ? best.t : v, K.step);
+  }
   return clamp(v, K.min, K.max);
 }
+
+/** What a double-click on a handle sets: 0 for bank, turn and climb, else `pre` (the value before the drag), or null when there is none. */
+function resetValue(kind, pre) { const K = KINDS[kind]; if (!K) throw new Error(`handles: no kind "${kind}"`); return K.zero ? 0 : (Number.isFinite(pre) ? pre : null); }
 
 function hitTest(list, x, y, r = HIT_PX) {
   let best = null, bd = Infinity;
@@ -137,7 +145,7 @@ function mount(stage, win, host) {
   canvas.setAttribute('aria-label', 'drag handles');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
   stage.append(canvas);
-  let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0;
+  let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0, pre = null;   // pre: { kind, from, to } the last drag that moved a value (the double-click's "before the drag")
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const layout = () => {
     model = host.model(); const pose = host.pose(), W = stage.clientWidth, H = stage.clientHeight;
@@ -163,7 +171,7 @@ function mount(stage, win, host) {
       }
       ctx.fillStyle = K.colour; ctx.strokeStyle = '#0b0d11'; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
       if (on) {
-        const text = format(h.kind, drag ? drag.value : model.base(h.kind)); ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
+        const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(1)}` : ''); ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
         const w = ctx.measureText(text).width + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 34, 4, H - 24);
         ctx.fillStyle = 'rgba(11,13,17,0.92)'; ctx.fillRect(bx, by, w, 22); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, 22);
         ctx.fillStyle = '#eef1f6'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 6, by + 11);
@@ -177,7 +185,7 @@ function mount(stage, win, host) {
   };
   const apply = (final) => {
     if (!drag || !waiting) return; const w = waiting; waiting = null;
-    const d = dragMetres(drag.axis, w.x - drag.x0, w.y - drag.y0, drag.h.kind), mods = { shift: w.shift, ctrl: w.ctrl };
+    const d = dragPixels(drag.axis, w.x - drag.x0, w.y - drag.y0, drag.h.kind), mods = { shift: w.shift, ctrl: w.ctrl };
     drag.value = targetFor(drag.h.kind, drag.base, d, drag.ctx, mods);
     host.apply(drag.h, drag.value, mods, final);
   };
@@ -200,14 +208,25 @@ function mount(stage, win, host) {
     if (!drag) return;
     if (frameReq) { win.cancelAnimationFrame(frameReq); frameReq = 0; }
     if (e && e.clientX !== undefined) { const [x, y] = rel(e); waiting = { x, y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; }
-    apply(true); const h = drag.h; drag = null; host.end(h); stage.style.cursor = '';
+    apply(true); const h = drag.h; if (drag.value !== drag.base) pre = { kind: h.kind, from: drag.base, to: drag.value };
+    drag = null; host.end(h); stage.style.cursor = '';
   };
-  stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
+  // D251: a double-click ON a handle resets it: 0 for bank, turn and climb; the value before the last drag for length, width and cup (kept only while the field still reads what that drag set, so a value typed
+  // since, or another piece, is not "put back" to a stale one). Taken in the capture phase like the press, so the camera's own double-click does not also fire.
+  const onDouble = (e) => {
+    if (drag) return;
+    const [x, y] = rel(e), h = hitTest(drawn, x, y), m = model; if (!h || !m) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const now = m.base(h.kind), v = resetValue(h.kind, pre && pre.kind === h.kind && pre.to === now ? pre.from : null);
+    if (v === null || v === now) return;
+    host.begin(h); host.apply(h, v, {}, true); host.end(h); pre = null;
+  };
+  stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('dblclick', onDouble, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
   raf = win.requestAnimationFrame(frame);
   return {
     handles: () => drawn.slice(), hovered: () => hover, dragging: () => !!drag,
-    unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
+    unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('dblclick', onDouble, true); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
   };
 }
 
-module.exports = { KINDS, ORDER, DEG, placeHandles, sampleNear, screenOf, screenAxis, dragMetres, targetFor, hitTest, format, cursorFor, mount };
+module.exports = { KINDS, ORDER, DEG, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
