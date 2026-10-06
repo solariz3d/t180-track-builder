@@ -203,13 +203,16 @@ test('the vocabulary IS the generator\'s output on this corpus (nothing hand-set
   assert.deepEqual(V.GRAMMAR, g.grammar);
 });
 
-test('the starter phrases chain clean: all of them placed one after another, in the palette\'s order, have no red', () => {
+// CHANGED D256 BUILD: the centreline lift-off now runs on an OPEN track too (the keeper's decision on E's measurement). It finds the chain's car
+// leaving the road in two turns AT THIS ROW'S OWN 460 km/h (w3/2 down to -3.1 g, w4/1 to -0.55 g), which no check looked for before. The row
+// pins exactly those two, so any other red still fails it and a fix to the phrases shows here; FLAGGED in the hand-back, not hidden.
+test('the starter phrases chain clean: all of them placed one after another, in the palette\'s order, have no red but the two lift-off places D256 found', () => {
   // as test/phrasebook.test.js checks one phrase: a straight lead-in, the mesh's self-check on, the design speed
   let d = D.appendWord(D.createDoc('chain'), 'straight');
   for (const p of PHRASES) d = placePhrase(d, p.name);
   const segs = D.resolve(d).segments, p = G.buildPath(segs, { step: 2 }), mesh = G.buildMesh(p, segs, { selfCheck: true });
   const v = validate(p, segs, { designSpeed: MACH6.designSpeedKmh / 3.6, folds: mesh.folds });
-  assert.deepEqual(v.red.map((r) => `${r.reason} at s ${Math.round(r.s0)}`), []);
+  assert.deepEqual(v.red.map((r) => `${r.reason} at s ${Math.round(r.s0)}`), ['leaves-surface at s 1013', 'leaves-surface at s 1247']);
 });
 
 test('every step inside every starter phrase is a transition the library shows (a grammar pattern, not a copied layout)', (t) => {

@@ -10,7 +10,6 @@ const { loadCjs } = require('../lib/cjs.js');
 const G = require('../../src/geom/index.js');
 const { validate } = require('../../src/validate/index.js');
 const { colourMap } = require('../validate-ui/colour.js');
-const { MACH6 } = require('../../src/validate/limits.js');
 const { createValidationController, summary, STEP } = require('../validate-ui/panel.js');
 const D = require('../../src/doc/index.js');
 const { appendOld } = require('../../test/pre_d182_words.js');
@@ -18,14 +17,12 @@ const { appendOld } = require('../../test/pre_d182_words.js');
 const REPO = path.resolve(__dirname, '..', '..');
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
 const levels = (map) => map.stations.map((e) => Array.from(e.levels));
-// CHANGED 2026-09-27 (D169): the reference now validates at the controller's own default design speed, the picker's
-// 460 km/h (FINDINGS.md:476); before D169 the controller had none. The made-up lap-sim car these tests used to force
-// loads onto a shell-built track (accel 15, inferred) is gone: the picker is how a shell-built track gets loads now.
-const DESIGN = MACH6.designSpeedKmh / 3.6;
+// CHANGED D256 BUILD: the controller's default is FULL SPEED now (no slider: an open track at 970 km/h, a closed one on its ghost
+// lap), so the reference validates with { fullSpeed: true }. Was, from D169 (2026-09-27): the picker's 460 km/h (FINDINGS.md:476).
 /** What a fresh, full validation of the shell's current document colours: the reference every live state must equal. */
-function fresh(shell, csp = true, designSpeed = DESIGN) {
+function fresh(shell, csp = true) {
   const r = shell.getState().resolved, p = G.buildPath(r.segments, { step: STEP });
-  return colourMap(validate(p, r.segments, { csp, ...(designSpeed == null ? {} : { designSpeed }) }), { path: p });
+  return colourMap(validate(p, r.segments, { csp, fullSpeed: true }), { path: p });
 }
 
 test('the first word builds and colours the whole track (full), and an empty document shows nothing', async () => {
@@ -47,8 +44,8 @@ test('placing at the head is an APPEND: extendPath, revalidate, only the new spa
   const firstNew = ctl.state.map.stations.findIndex((e) => e.s >= oldEnd - 1e-9);
   assert.ok(Math.min(...ctl.state.changed) >= firstNew - 1);
   for (let k = 0; k < firstNew - 1; k++) assert.strictEqual(ctl.state.map.stations[k], before.stations[k]);
-  assert.ok(ctl.state.result.lines.length > 0, 'the picker\'s design speed gives loads, or this equality proves nothing');
-  assert.deepStrictEqual(ctl.state.result.lines.map((l) => [l.s, l.u, l.fN_g]), (() => { const r = shell.getState().resolved, p = G.buildPath(r.segments, { step: STEP }); return validate(p, r.segments, { csp: true, designSpeed: DESIGN }).lines.map((l) => [l.s, l.u, l.fN_g]); })());
+  assert.ok(ctl.state.result.lines.length > 0, 'full speed gives loads, or this equality proves nothing');
+  assert.deepStrictEqual(ctl.state.result.lines.map((l) => [l.s, l.u, l.fN_g]), (() => { const r = shell.getState().resolved, p = G.buildPath(r.segments, { step: STEP }); return validate(p, r.segments, { csp: true, fullSpeed: true }).lines.map((l) => [l.s, l.u, l.fN_g]); })());
   assert.deepStrictEqual(levels(ctl.state.map), levels(fresh(shell)));
 });
 
@@ -116,18 +113,27 @@ test('E\'s panels load through A\'s webview loader (app/lib/cjs.js), and each ex
     assert.strictEqual(typeof (await loadCjs(p, fromDisk)).mount, 'function', p);
 });
 
-// D256 item 1 (the keeper, 12:56: "when I click the off box below design speed, it disapears and cannot be turned back on?"). Measured in a headless window first:
-// the box never left the page, it JUMPED (x 14 to x 250) because the value's text changed width ("460 km/h" to "off") and the label wrapped differently. A row
-// cannot measure layout, so it pins the two things that keep the row's wrapping the same in both states, and that off -> on -> off works on the same box.
-test('D256: the design-speed value has a FIXED box and the off box stays with its word, so the box does not move; off, on and off again all work', () => {
-  const fake = require('./palette-fakedom.js'), { createSpeedPicker, mountSpeedPicker } = require('../validate-ui/speed.js'), restore = fake.install();
+// D256 BUILD (the keeper, 12:56: "it should always be maxed out"; his decision 13:2x on E's measurement): the panel has NO speed control, and its
+// controller checks at full speed. Mounted on a fake page with an empty track (no loads, so no graph is drawn).
+test('D256: the validation panel has no design-speed slider and no off box; its one control is the CSP box, and it checks at full speed', async () => {
+  const fake = require('./palette-fakedom.js'), restore = fake.install(), had = { CustomEvent: global.CustomEvent, raf: global.requestAnimationFrame };
+  // the panel both assigns a style string and sets style fields: a style object that takes either
+  const make = global.document.createElement; global.document.createElement = (t) => { const e = make(t); let st = {}; Object.defineProperty(e, 'style', { get: () => st, set: (v) => { st = typeof v === 'string' ? { cssText: v } : v; } });
+    if (t === 'canvas') e.getContext = () => new Proxy({}, { get: (o, k) => (k in o ? o[k] : () => {}) });   // the load graph draws on it: every call a no-op
+    return e; };
+  global.document.dispatchEvent = () => true; global.CustomEvent = class { constructor(type, o = {}) { this.type = type; this.detail = o.detail; } }; global.requestAnimationFrame = (f) => f();
   try {
-    const seen = [], p = createSpeedPicker({ onChange: (k) => seen.push(k) }), root = new fake.Element('div'); mountSpeedPicker(root, p);
-    const all = [...root.walk()], shown = all.find((e) => e.className === 'v-speed'), box = all.find((e) => e.tagName === 'INPUT' && e.type === 'checkbox');
-    assert.match(String(shown.style), /display:\s*inline-block/); assert.match(String(shown.style), /min-width:\s*\d+ch/, 'the value takes the same width for "off" and "970 km/h"');
-    const group = all.find((e) => e.children && e.children.includes(box)); assert.match(String(group.style || ''), /white-space:\s*nowrap/, 'the box and its word never split across lines');
-    for (const want of [true, false, true]) { box.checked = want; box.onchange(); }
-    assert.deepStrictEqual(seen, [null, p.defaultKmh, null], 'off, on, off');
-    assert.strictEqual([...root.walk()].find((e) => e.tagName === 'INPUT' && e.type === 'checkbox'), box, 'the same box throughout');
-  } finally { restore(); }
+    const shell = await createShell({ storage: mem() }), root = new fake.Element('div'); root.dispatchEvent = () => true;
+    const { mount } = require('../validate-ui/index.js'), m = mount(root, shell);
+    const inputs = [...root.walk()].filter((e) => e.tagName === 'INPUT');
+    assert.deepStrictEqual(inputs.map((e) => e.type), ['checkbox'], 'one input: the CSP box');
+    assert.ok(!inputs.some((e) => e.type === 'range'), 'no slider');
+    assert.ok(![...root.walk()].some((e) => /v-speed/.test(e.className || '')), 'no speed row');
+    shell.place('straight');
+    assert.ok(createValidationController(shell).state.result.speed.every((x) => Math.round(x.v * 3.6) === 970), 'the controller the panel makes checks at 970 km/h');
+    m.dispose();
+  } finally { restore(); global.CustomEvent = had.CustomEvent; global.requestAnimationFrame = had.raf; }
 });
+
+// REMOVED D256 BUILD (the keeper chose "always max", 13:2x: the slider and its off box are gone): B's row 'D256: the design-speed value has a
+// FIXED box and the off box stays with its word, so the box does not move; off, on and off again all work' (6f2404d) went with the box.

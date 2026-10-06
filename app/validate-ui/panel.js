@@ -1,8 +1,9 @@
 // panel.js: the validation panel's logic, with no DOM (tested headless against A's real shell). index.js mounts it.
 //
 //   const ctl = createValidationController(shell, { csp: true, designSpeedKmh, validate, onUpdate, schedule })
-//     designSpeedKmh: the picker's speed for words without their own (default MACH6.designSpeedKmh, FINDINGS.md:476;
-//     null = none). ctl.setDesignSpeed(kmh | null) re-validates the whole track at it.
+//     designSpeedKmh: left out (the app, D256: "it should always be maxed out"), FULL SPEED: an open track at the lap sim's cap,
+//     970 km/h, a closed one on its ghost lap, as the export judges it. A number pins a speed for words without their own,
+//     null gives none (tests and other hosts). ctl.setDesignSpeed(kmh | null) re-validates the whole track at it.
 //     validate: further src/validate options (e.g. a `car` with an acceleration, so the lap sim gives loads).
 //     schedule(fn): when to run a pending update. Default: at once (headless). The app passes one animation frame, and
 //     changes arriving before it runs are coalesced into one update (several appends are still one append).
@@ -39,7 +40,6 @@ const { createLive, fromSOf } = require('./live.js');
 const { jumpArcs } = require('./jumparcs.js');
 const { viewOf } = require('./pathview.js');
 const { lapOf } = require('../../src/validate/index.js');
-const { MACH6 } = require('../../src/validate/limits.js');
 
 /** A result with its lap replaced, keeping the non-enumerable raw findings the next revalidate carries. */
 const withLap = (res, lap) => { const o = { ...res, lap }; Object.defineProperty(o, '_raw', { value: res._raw, enumerable: false }); return o; };
@@ -60,9 +60,9 @@ function windowEnd(path, segments, g) {
   return fromSOf(path, m);
 }   // m between stations: the step the export and the D167 tests use (inferred: not tuned for the preview)
 
-function createValidationController(shell, { csp = true, designSpeedKmh = MACH6.designSpeedKmh, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn(), sharedPath = null } = {}) {
+function createValidationController(shell, { csp = true, designSpeedKmh, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn(), sharedPath = null } = {}) {
   let design = designSpeedKmh;
-  const vo = () => ({ ...extra, csp, ...(design == null ? {} : { designSpeed: design / 3.6 }) });
+  const vo = () => ({ ...extra, csp, ...(design === undefined ? { fullSpeed: true } : design == null ? {} : { designSpeed: design / 3.6 }) });
   let live = createLive({ validate: vo() });
   let segs = null, path = null, resolvedSeen = null, source = null;   // source: 'shared' (a view of the preview's path) | 'own'
   const out = { state: { path: null, result: null, map: null, arcs: [], changed: null, full: true, how: null, error: null, pathFrom: null } };

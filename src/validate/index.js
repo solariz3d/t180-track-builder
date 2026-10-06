@@ -80,6 +80,9 @@ const SRC = Object.freeze({
   'roll-rate': 'D225 seal V7 / S3 (exo_memory/loop/cross_section_seal_registration_2026-10-03.md): the roll rate over a 20 m chord, the bar the Centrifuge lap measured (RED 1.2144°/m, AMBER 0.9338°/m)',
   'tube-too-narrow': 'D225 ruling R1 (corrected): a closed tube narrower than 9.74 m cannot hold the chase camera (the 3 m eye, plus the seal\'s 0.1 m margin, must fit under the ceiling 2R = w/π)',
   'edge-past-cap': 'D225 seal V2 / E2: the total edge angle of an edge piece is capped at CUP_MAX 150° (180° on an open tube): the walls of a bowl past it touch',
+  'leaves-surface': 'ARCHITECTURE.md:68-69 (the load on the centreline is below zero: the car leaves the road); on an OPEN track since D256, where a closed one has it in the lap proof',
+  'holds-above': 'D256 (exo_memory/loop/design_speed_measure_2026-10-06.md): the centreline faces the ground here and holds the car only above this speed (km/h), from fN(v) = (κ⃗·n)v²/(1 − κ⃗·o) + g(n·ŷ)',
+  'no-speed-holds': 'D256: the centreline faces the ground and nothing curves it toward the car, so no speed holds the car on it',
   'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check)',
 });
 
@@ -108,7 +111,9 @@ function segProfiles(segments) {
 function speedProfile(path, segments, car, opts) {
   const S = path.samples, n = S.length;
   const road = segments.filter((g) => g.kind !== 'gap');
-  const fill = Number.isFinite(opts.designSpeed) && opts.designSpeed > 0 ? opts.designSpeed : null;
+  // D256 (the keeper, "it should always be maxed out"): opts.fullSpeed fills an OPEN track at the lap sim's cap; a closed one falls through
+  // to its ghost lap below, the speed the export judges it at. An explicit opts.designSpeed still wins
+  const fill = Number.isFinite(opts.designSpeed) && opts.designSpeed > 0 ? opts.designSpeed : opts.fullSpeed === true && !path.closed ? kmh(car.vmaxKmh) : null;
   const own = (g) => (Number.isFinite(g.speed) && g.speed > 0 ? g.speed : fill);
   if (road.length && road.every((g) => own(g) != null)) {
     const v = S.map((p) => { const g = segments[p.seg]; return g.kind === 'gap' ? null : own(g); });
@@ -237,12 +242,24 @@ function core(path, segments, opts, from, carried, upto) {
       const o0 = Lv[0] * c.X + Uv[0] * c.Y, o1 = Lv[1] * c.X + Uv[1] * c.Y, o2 = Lv[2] * c.X + Uv[2] * c.Y;
       const margin = 1 - (K[0] * o0 + K[1] * o1 + K[2] * o2);
       if (margin <= 0) { raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'fold', worst: -margin }); continue; }
+      // D256 holds-above: on the CENTRELINE, a surface facing the ground (n·ŷ < 0) holds the car only while v²(κ⃗·n)/margin outweighs
+      // gravity's pull off it, i.e. above v = sqrt(−g(n·ŷ) / ((κ⃗·n)/margin)) at a steady speed. Information in km/h; red where no speed holds
+      if (u === 0) {
+        const nyc = ny(p, c);
+        if (nyc < -1e-9) {
+          const kn = (K[0] * nx(p, c) + K[1] * nyc + K[2] * nz(p, c)) / margin;
+          if (kn > 0) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'holds-above', worst: Math.sqrt(-G * nyc / kn) * 3.6 });
+          else raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'no-speed-holds', worst: null });
+        }
+      }
       if (!sp.v) continue;
       const v = sp.v[i], n0 = nx(p, c), n1 = ny(p, c), n2 = nz(p, c);
       const l0 = c.sg === 0 ? Lv[0] : Lv[0] * c.cos + Uv[0] * c.sgsin, l1 = c.sg === 0 ? Lv[1] : Lv[1] * c.cos + Uv[1] * c.sgsin, l2 = c.sg === 0 ? Lv[2] : Lv[2] * c.cos + Uv[2] * c.sgsin;
       const w = v * v / margin, f0 = (K[0] * w + Tv[0] * aT) + 0, f1 = (K[1] * w + Tv[1] * aT) + G, f2 = (K[2] * w + Tv[2] * aT) + 0;
       const line = { s: p.s, u, fN_g: (f0 * n0 + f1 * n1 + f2 * n2) / G, fLat_g: (f0 * l0 + f1 * l1 + f2 * l2) / G, fAlong_g: (f0 * Tv[0] + f1 * Tv[1] + f2 * Tv[2]) / G, f_g: Math.hypot(f0, f1, f2) / G };
       raw.lines.push({ i, line });
+      // D256: the centreline lift-off on an OPEN track (a closed one has it in the lap proof below, so it is not counted twice)
+      if (!path.closed && u === 0 && line.fN_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fN_g });
       if (line.fN_g > car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-above-proven', worst: line.fN_g });
       else if (line.fN_g >= car.suspensionStopG) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'on-the-stops', worst: line.fN_g });
     }

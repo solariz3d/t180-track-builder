@@ -18,7 +18,8 @@ const { viewOf } = require('../validate-ui/pathview.js');
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
 /** mulberry32: the same seed, the same edits. */
 const prng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
-const OPTS = { csp: true, designSpeed: MACH6.designSpeedKmh / 3.6 };
+// CHANGED D256 BUILD: the reference is the controller's own default, FULL SPEED now (no slider), where it was the picker's 460 km/h
+const OPTS = { csp: true, fullSpeed: true };
 const WORDS = ['straight', 'sweep', 'turn', 'tight', 'tight', 'wall-ride', 'jump'];
 
 /**

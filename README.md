@@ -95,6 +95,10 @@ road*, *this closed tube is narrower than 9.74 m across the road: the chase came
 - A **red** blocks export. Export refuses while any red remains and names every one.
 - A **warning** does not block. **Jumps are tuned by driving:** a jump whose car may fly past its landing at the lap's
   speed is a warning ("tune it by driving it in AC"); a jump with no landing at all is red.
+- **Always at full speed:** loads are checked at the car's top speed, 970 km/h, on an unfinished track, and on the lap
+  the car would drive on a closed one, the same as the export; there is no speed to set. Where the road leaves the car at
+  that speed it is red; where the road faces the ground the list says the slowest speed that still holds the car there
+  ("holds the car only above N km/h"), and it is red only where no speed would.
 
 The limits come from measurements of real T-180 tracks and replays, not guesses ([`docs/FINDINGS.md`](docs/FINDINGS.md)).
 

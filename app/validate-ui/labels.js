@@ -35,6 +35,10 @@ function reasonText(reason, car = MACH6) {
     'roll-rate': 'the road rolls about its own direction faster than any measured track (red over 1.21°/m, amber over 0.93°/m, read over 20 m): lengthen the roll',
     // A's third red (D225, checked against src/validate/index.js SRC at the combine): the ids above are A's too, unchanged
     'edge-past-cap': 'the edge curves up past the most a road can hold (150° in all, 180° on an open tube): the walls would touch',
+    // D256 (the keeper chose all three of E's proposals): the centreline lift-off on an open track, and the road facing the ground
+    'leaves-surface': 'the car leaves the road surface here at full speed',
+    'no-speed-holds': 'the road faces the ground here and nothing curves it toward the car: no speed holds the car on it',
+    'holds-above': 'the road faces the ground here and holds the car only above a speed',
   };
   return T[reason] || 'a problem with no description yet';
 }
@@ -58,6 +62,8 @@ function lapWhereText(w) {
 
 const at = (x) => (x.s1 != null && x.s1 !== x.s0 ? `at ${x.s0.toFixed(0)}–${x.s1.toFixed(0)} m` : `at ${x.s0.toFixed(0)} m`);
 function findingLine(kind, x) {
+  // D256: "holds above N km/h" carries its number, the slowest speed that keeps the car on the road there
+  if (x.reason === 'holds-above' && Number.isFinite(x.worst)) return { text: `${kind}: the road faces the ground here and holds the car only above ${Math.round(x.worst)} km/h, ${at(x)}`, title: `${x.reason}${x.source ? ` · ${x.source}` : ''}` };
   return { text: `${kind}: ${reasonText(x.reason)}, ${at(x)}`, title: `${x.reason}${x.source ? ` · ${x.source}` : ''}` };
 }
 

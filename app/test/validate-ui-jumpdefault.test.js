@@ -25,16 +25,25 @@ async function firstJump() {
 const slide = ({ shell, ctl }, kmh) => { shell.setDesignSpeed(kmh); ctl.setDesignSpeed(kmh); };
 const reds = (ctl) => ctl.state.result.red;
 const rampOf = (shell) => shell.getState().resolved.segments.find((g) => g.part === 'land');
-// the slider's range and step (app/validate-ui/speed.js: 50 km/h to MACH6.vmaxKmh, step 5)
+// the range and step the design-speed slider had (app/validate-ui/speed.js, removed in D256: 50 km/h to MACH6.vmaxKmh, step 5); a host can still pin any of them
 const MIN = 50, MAX = MACH6.vmaxKmh, STEP = 5;
 
+// CHANGED D256 BUILD (the keeper chose "always max"): the app's controller has no design speed of its own now (full speed), so this row PINS the
+// ramp's default, 460 km/h, the speed it is about; the next row is the app's own default
 test('the default jump at the default design speed (460 km/h, FINDINGS.md:476) is clean: no red, both landings caught', async () => {
-  const { ctl, shell } = await firstJump();
+  const { shell } = await firstJump(), ctl = createValidationController(shell, { designSpeedKmh: MACH6.designSpeedKmh });
   assert.strictEqual(ctl.designSpeedKmh, MACH6.designSpeedKmh);
   assert.deepStrictEqual(reds(ctl), [], JSON.stringify(reds(ctl)));
   const jp = ctl.state.result.jumps[0];
   assert.deepStrictEqual(jp.landings.map((L) => [L.g, L.caught]), [[3.2, true], [6.3, true]]);
   assert.strictEqual(Math.round(rampOf(shell).landing.speed * 3.6), MACH6.designSpeedKmh, 'the ramp was sized for the default design speed');
+});
+
+test('D256: at the app\'s own default, FULL speed (970 km/h on this open track), the first jump is still not red: a landing the car flies past only warns', async () => {
+  const { ctl } = await firstJump();
+  assert.strictEqual(ctl.designSpeedKmh, undefined, 'no design speed: full speed');
+  assert.ok(ctl.state.result.speed.every((x) => Math.round(x.v * 3.6) === MACH6.vmaxKmh), 'checked at 970 km/h');
+  assert.deepStrictEqual(reds(ctl), [], JSON.stringify(reds(ctl)));
 });
 
 test('resolve with no speed given sizes the ramp for the same default, so every caller agrees (the export, the connector)', () => {

@@ -15,6 +15,7 @@
 let J = null, L = null;
 try { J = require('../../src/validate/jumps.js'); L = require('../../src/validate/limits.js'); } catch (e) { J = null; L = null; }   // no flight model: a straight dashed line, and it says so
 const DESIGN_KMH = L && L.MACH6 ? L.MACH6.designSpeedKmh : 460;
+const FULL_KMH = L && L.MACH6 ? L.MACH6.vmaxKmh : 970;   // D256: validation checks at full speed (the lap sim's cap) on an open track
 const FALLS = Object.freeze(L && L.MACH6 ? [...L.MACH6.jumpG] : [3.2, 6.3]);
 const ARC_POINTS = 48;
 
@@ -110,4 +111,4 @@ function jumpWords(e, o = {}) {
   }
 }
 
-module.exports = { flightsOfPath, arcWorld, describe, jumpWords, DESIGN_KMH, FALLS };
+module.exports = { flightsOfPath, arcWorld, describe, jumpWords, DESIGN_KMH, FULL_KMH, FALLS };
