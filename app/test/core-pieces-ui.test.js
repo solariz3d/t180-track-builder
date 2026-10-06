@@ -545,7 +545,7 @@ test('row 14: the Jump block: the hint and the ramp speed from the start; a ghos
   for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'no Extend handles on a jump\'s ghost');
   assert.equal(P1.panel.flights.flights().length, 1, 'the flight overlay reads the ghost\'s flight'); assert.equal(P1.panel.flights.lines().length, 2, 'two dashed arcs');
   // typing changes the ghost and the words
-  const g0 = S.ghosts; gap.value = '120'; drop.value = '3'; land.value = '-3'; gap.oninput(); assert.ok(S.ghosts > g0, 'the ghost followed the field'); assert.match(P1.text('jump flight'), /6\.3 g: does NOT reach the landing at 460 km\/h \(it needs \d+ km\/h\): the jump is red\./);
+  const g0 = S.ghosts; gap.value = '120'; drop.value = '3'; land.value = '-3'; gap.oninput(); assert.ok(S.ghosts > g0, 'the ghost followed the field'); assert.match(P1.text('jump flight'), /6\.3 g: does NOT reach the landing at 460 km\/h \(it needs \d+ km\/h\): a warning, not a red/);   // D257 (amended): a missed fall is a WARNING since D250, not "the jump is red"
   // a validation speed other than the ramp's is said
   // CHANGED D256 BUILD: there is no design speed box; with none pinned the note says validation is at FULL speed, and a host's pinned speed is still said
   assert.match(P1.text('jump flight'), /Validation checks at full speed \(970 km\/h on an open track, the ghost lap on a closed one\), so this jump may be listed as a warning even though its ramp is sized for 460 km\/h\./);

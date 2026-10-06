@@ -539,10 +539,16 @@ test('D252: Ctrl+Z never moves the camera: the descent before Z is undone, in fr
   const b = livePreview(); assert.equal(b.p.rig.mode, 'build'); b.key('keydown', LCTRL()); b.win.step(); b.key('keydown', CTRL_Z); b.win.step();
   assert.equal(b.p.rig.mode, 'build', 'from the build view, Ctrl+Z leaves it the build view');
 });
-test('D252: a key held BEFORE Ctrl (Shift for Ctrl+Shift+Z, or W) means Ctrl never flies on that press', () => {
+// D257 AMENDED THIS ROW BY NAME (the keeper, 14:51: "Down left control only works when no other inputs are being pushed"): it was D252's "a key held BEFORE
+// Ctrl (Shift for Ctrl+Shift+Z, or W) means Ctrl never flies on that press". Now only a SHORTCUT key held first (one keys.js acts on with Ctrl) does; Shift
+// or W held first does not stop it, and Ctrl+Shift+Z still leaves the camera where it was, because its Z undoes the press's descent
+test('D257: a SHORTCUT key held BEFORE Ctrl (Z) means Ctrl never flies on that press; Shift or W held first does not stop it, and Ctrl+Shift+Z still leaves the camera put', () => {
   const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); const e0 = eyeOf(x);
-  x.key('keydown', SHIFT_DOWN); x.key('keydown', LCTRL({ shiftKey: true })); x.win.step(); x.win.step();
-  assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Shift then Ctrl: still');
+  x.key('keydown', { key: 'z', code: 'KeyZ', target: {} }); x.key('keydown', LCTRL()); x.win.step(); x.win.step();
+  assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Z then Ctrl: still');
+  const y = pressed(['w']); y.key('keyup', UPK('w')); y.win.step(); const f0 = eyeOf(y);
+  y.key('keydown', SHIFT_DOWN); y.key('keydown', LCTRL({ shiftKey: true })); y.win.step(); assert.ok(eyeOf(y)[1] < f0[1] - 1, 'Shift then Ctrl: it flies down');
+  y.key('keydown', { key: 'Z', code: 'KeyZ', ctrlKey: true, shiftKey: true, target: {} }); assert.ok(Math.abs(eyeOf(y)[1] - f0[1]) < 1e-9, 'Ctrl+Shift+Z: back where Ctrl found it');
 });
 test('D252: Ctrl+wheel is still the LENS and the camera does not move; a mouse button down (a handle drag, Ctrl to snap) means no descent', () => {
   const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); const e0 = eyeOf(x), fov0 = x.p.rig.fov;
@@ -610,4 +616,32 @@ test('a handle drag (pointerdown only, its mousedown suppressed) with Ctrl held 
   const y = pressed(['w']); y.key('keyup', UPK('w')); y.win.step(); const f0 = eyeOf(y);
   y.key('keydown', LCTRL()); for (let i = 0; i < 4; i++) y.win.step(100); assert.ok(eyeOf(y)[1] < f0[1] - 1, 'control: Ctrl alone was descending');
   y.key('pointerdown', { button: 0, pointerType: 'mouse', clientX: 5, clientY: 5 }); assert.ok(len(sub(eyeOf(y), f0)) < 1e-9, 'a press joined: back where Ctrl found it');
+});
+
+// D257, the keeper (14:51): "Down left control only works when no other inputs are being pushed. cant even click drag look around and go down." Left Ctrl now
+// flies down TOGETHER with the movement keys (W A S D, Q E, Space, Shift, the arrows) and a RIGHT-button look drag; only a SHORTCUT key (one keys.js acts on with
+// Ctrl: Z, Y, S, Backspace), the wheel (the lens) or a LEFT-button press (a handle drag, Ctrl to snap) stops it and undoes that press's descent.
+const fresh = () => { const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); return x; };
+const W_CTRL = { key: 'w', code: 'KeyW', ctrlKey: true, target: {} };
+test('D257: Left Ctrl with W flies down AND forward, whichever went down first (the same move as W with Q)', () => {
+  const want = oneFrame([W_DOWN, K('q')]);
+  const a = fresh(); a.key('keydown', W_DOWN); a.key('keydown', LCTRL()); a.win.step(); assert.ok(close3(nextMove(a), want), `W then Ctrl: ${nextMove(a)} vs ${want}`);
+  const b = fresh(); b.key('keydown', LCTRL()); b.key('keydown', W_CTRL); b.win.step(); assert.ok(close3(nextMove(b), want), `Ctrl then W: ${nextMove(b)} vs ${want}`);
+});
+test('D257: Left Ctrl with a RIGHT-button look drag flies down and looks', () => {
+  const x = fresh(), y0 = eyeOf(x)[1], yaw0 = x.p.rig.free.state().yaw;
+  x.key('keydown', LCTRL()); x.key('pointerdown', { button: 2, pointerType: 'mouse', clientX: 100, clientY: 100 }); x.key('mousedown', { button: 2, clientX: 100, clientY: 100 }); x.mouse('mousedown', { button: 2, clientX: 100, clientY: 100 });
+  x.mouse('mousemove', { clientX: 220, clientY: 100 }); x.win.step(); x.win.step();
+  assert.notEqual(x.p.rig.free.state().yaw, yaw0, 'it looked'); assert.ok(eyeOf(x)[1] < y0 - 2.9, `and it went down: ${eyeOf(x)[1] - y0}`);
+});
+test('D257: Left Ctrl with Space nets ZERO on the up axis, whichever went down first', () => {
+  const a = fresh(); a.key('keydown', LCTRL()); a.key('keydown', SPACE({ ctrlKey: true })); a.win.step(); assert.ok(close3(nextMove(a), [0, 0, 0]), `Ctrl then Space: ${nextMove(a)}`);
+  const b = fresh(); b.key('keydown', SPACE()); b.key('keydown', LCTRL()); b.win.step(); assert.ok(close3(nextMove(b), [0, 0, 0]), `Space then Ctrl: ${nextMove(b)}`);
+});
+test('D257: Ctrl+Z still leaves the camera where it started (and still undoes): flying with W, the descent is undone and the forward travel kept', () => {
+  const K2 = require(path.join(ADIR, 'core', 'keys.js')); assert.equal(K2.keyAction({ key: 'z', ctrlKey: true }), 'undo', 'Ctrl+Z is still the undo');
+  const x = fresh(); x.p.rig.free.look(0, -x.p.rig.free.state().pitch); const e0 = eyeOf(x);   // a LEVEL view: W alone keeps the height, so "where it started" is exact
+  x.key('keydown', W_DOWN); x.key('keydown', LCTRL()); x.win.step(); x.win.step();
+  const e1 = eyeOf(x); assert.ok(e1[1] < e0[1] - 1, 'control: it was descending');
+  x.key('keydown', CTRL_Z); const e2 = eyeOf(x); assert.ok(Math.abs(e2[1] - e0[1]) < 1e-9, `the descent undone: ${e2[1] - e0[1]}`); assert.ok(Math.hypot(e2[0] - e0[0], e2[2] - e0[2]) > 1, 'the forward travel kept');
 });

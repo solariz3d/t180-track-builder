@@ -218,6 +218,13 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
         const v = add(add(mul(d, fwd), mul(r, right)), mul(WORLD_UP, up)), L = Math.hypot(fwd, right, up), n = len(v);
         free.eye = add(free.eye, n > 0 && n > 1e-12 * L ? mul(v, L / n) : v); return true;   // a sum that is nothing at all stays nothing
       },
+      /** The factor move(fwd, right, up) scales the axes' sum by, without moving (1 for a single axis, or nothing). D257: so the preview knows how far the UP
+       *  axis really went inside a combined move (Left Ctrl's descent, undone when a shortcut joins it, while W's travel stays). */
+      scaleOf(fwd = 0, right = 0, up = 0) {
+        const d = freeDir(), r = unit(cross(d, WORLD_UP)) || [1, 0, 0];
+        const v = add(add(mul(d, fwd), mul(r, right)), mul(WORLD_UP, up)), L = Math.hypot(fwd, right, up), n = len(v);
+        return n > 0 && n > 1e-12 * L ? L / n : 1;
+      },
       /** Turn the view (radians): dYaw + turns RIGHT on screen, dPitch + looks up; the pitch stays within ±89° so up never
        *  flips. (yaw + swings the view toward +x, which is screen LEFT here (math.js lookAt), hence the minus.) */
       look(dYaw = 0, dPitch = 0) {
