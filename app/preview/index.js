@@ -26,6 +26,7 @@
 //   't180:guides-request'  { detail: { reply(state) } }               the current one, at once, for a panel mounted after the preview
 // And for the READOUT labels (L130, app/core/labels.js), answered read-only from the preview's own view():
 //   't180:view'           { detail: { reply(v) } }        { pose, mode, head } (head: the placed track's build head, or null)
+//   't180:ghost-request'  { detail: { reply(g) } }        D244, for the drag handles: the ghost of the next piece as { samples, s0 }, or null when none shows (preview.ghostInfo)
 //
 // A MOUNT THAT FAILS says why, twice: the reason is left visible in the panel ("The preview could not start: …"), and
 // mount throws a PreviewMountError with the same message, for the page to show where it likes (A's display half).
@@ -76,12 +77,14 @@ function mount(root, shell) {
   const viewNow = (e) => { if (!e.detail || typeof e.detail.reply !== 'function') return; const v = p.view(), h = v.track && v.track.path ? v.track.path.head : null; e.detail.reply({ pose: v.pose, mode: v.mode, head: h ? { pos: h.pos.slice(), T: h.T.slice() } : null }); };
   const pickNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.pick(e.detail.x, e.detail.y)); };
   const trackNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.track()); };
+  const ghostNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.ghostInfo()); };
   const setGuides = (e) => { if (!e.detail) return; try { p.setGuides(e.detail); } catch (err) { if (typeof e.detail.reply === 'function') e.detail.reply({ error: err.message }); } };
   const guidesNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.guides()); };
   doc.addEventListener('t180:guides', setGuides);
   doc.addEventListener('t180:guides-request', guidesNow);
   doc.addEventListener('t180:textures', textures);
   doc.addEventListener('t180:track-request', trackNow);
+  doc.addEventListener('t180:ghost-request', ghostNow);
   doc.addEventListener('t180-camera', ask);
   doc.addEventListener('t180-probe', answer);
   doc.addEventListener('t180-ghost', showGhost);
@@ -91,7 +94,7 @@ function mount(root, shell) {
   // D242: a click on a red in a list moves the camera there ('t180-camera-focus', { s }: metres along the placed track)
   const focusNow = (e) => { if (e.detail && Number.isFinite(e.detail.s)) p.focus(e.detail.s); };
   doc.addEventListener('t180-camera-focus', focusNow);
-  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
+  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };

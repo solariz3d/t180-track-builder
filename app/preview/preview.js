@@ -265,6 +265,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
      */
     showGhost(candidate) { ghost = model.ghostFor(candidate); return ghost.batches.length; },
     clearGhost() { ghost = null; },
+    /** D244, the drag handles: the ghost of the next piece as { samples, s0 }: the path's samples (the placed track's, then the new piece's) and the s where the new piece starts (the placed track's end). Null when there is no ghost, or it is a close or delete PREVIEW (those are not Extend's). */
+    ghostInfo() { if (!ghost || ghost.proposal || !ghost.path) return null; const tp = track && track.path; return { samples: ghost.path.samples, s0: tp && tp.samples.length ? tp.samples[tp.samples.length - 1].s : 0 }; },
     /**
      * D242: show a place on the track: the camera goes to free mode above and behind the station at `s` (m along the placed track; a closed lap's s
      * wraps), looking at it. A click on a red in a list calls this. Returns false when there is no track to look at.

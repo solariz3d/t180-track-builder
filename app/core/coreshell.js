@@ -59,10 +59,14 @@ const RD = require('../../src/core/readout.js');
 // is the state extend() starts the first piece from (src/core/extend.js: level, straight, the family's measured width and rate)
 const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 const XS = require('./xsec.js');   // the cross-section channels' names (D225): the edge curve and the tube
+const CL = require('./centreline.js');   // D244b: the Sculpt guard (the centreline must not move)
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted (D239)
 const BRUSH_MODES = Object.freeze(['local', 'rate']);
+// D244b, SCULPT: the channels that shape a placed piece without steering the track (bank, width, wall rise, cup, edge angle, edge start, tube sweep). Turn (kh), climb (kv) and the height and sideways offsets
+// are NOT in it: they carry everything after them. In Sculpt the brush takes these only, and every step is checked against the centreline (app/core/centreline.js)
+const SCULPT_CHANNELS = Object.freeze(['phi', 'c', 'w', 'e', 's', 'r', 't']);
 // E's BRUSH (p-d186-brush-E): src/core/sculpt.js brush(doc, { mode: 'hill' | 'swerve' | 'value' | 'rate', channel, s0, r, delta })
 // -> { doc, note? }. It is used when sculpt.js exports it (not at 17c2301, where this was written; E's D186 adds it), and may be
 // injected (`brushFn`, tests). The LOCAL brush is its hill (channel 'height') and swerve ('lateral'); they need the document's
@@ -113,6 +117,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
     selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
+    sculpt: false,   // D244b: the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
   };
   // a Pieces autosave that could not be kept aside is never overwritten: this session simply does not autosave
   const mayAutosave = canAutosave && !(recovery && recovery.blocked);
@@ -202,6 +207,31 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     getState: () => st,
     subscribe(f) { subs.add(f); return () => subs.delete(f); },
     brushModes: () => BRUSH_MODES.filter((m) => m !== 'local' || !!brushFn),
+    /**
+     * D244b, SCULPT (the keeper, 09:17: "a separate mode to sculpt pieces once they are already put down, so they don't change the structure of the rest of the track, it's mostly
+     * just banking and cupping tweaks"). On: the brush offers only sculptChannels() and every step is checked against the centreline; beginSculpt reshapes the ONE selected road piece
+     * (or `piece`) in place, with the brush centred on it and as wide as it is, so the joints are untouched and stay C1; one drag is one undo step.
+     */
+    sculptChannels: () => SCULPT_CHANNELS.slice(),
+    setSculpt(on) { if (st.brush) return set({ message: 'finish the brush drag first' }); return set({ sculpt: !!on, message: null }); },
+    beginSculpt({ channel, piece, sharp = false } = {}) {
+      if (!st.sculpt) return set({ message: 'SCULPT_OFF: turn Sculpt on first' });
+      const d = doc(); let i = piece;
+      if (i === undefined) { const s = st.selection; if (!s || s.base !== d || s.from !== s.to) return set({ message: 'select ONE piece first: click it on the track' }); i = s.from; }
+      const P = d.pieces[i];
+      if (!P || P.type !== 'road') return set({ message: `SCULPT_PIECE: piece ${i} is not a road piece` });
+      return api.beginBrush({ mode: 'rate', channel, s0: pieceOffsets(d)[i] + P.length / 2, r: P.length / 2, sharp });
+    },
+    /** The piece the Sculpt handles are on, for the panel: { index, id, length, hasCup, values: { phi (degrees), w (m), c (degrees) } at its middle, halfAt(f) the half-width (m) at a share of its length }, or null (Sculpt off, or not ONE road piece selected). */
+    sculptInfo() {
+      const s = st.selection, d = doc();
+      if (!st.sculpt || !s || s.base !== d || s.from !== s.to) return null;
+      const P = d.pieces[s.from]; if (!P || P.type !== 'road') return null;
+      const at = (ch, u) => D.channelAt(P, ch, u).v, mid = P.length / 2;
+      return { index: s.from, id: P.id, length: P.length, hasCup: !!P.cup, values: { phi: at('phi', mid) * 180 / Math.PI, w: at('w', mid), c: P.cup ? at('c', mid) : null }, halfAt: (f) => at('w', Math.max(0, Math.min(1, f)) * P.length) / 2 };
+    },
+    sculptTo: (delta) => api.brushTo(delta),
+    endSculpt: () => api.endBrush(),
 
     /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute). */
     extend: (opts) => commit('extend', () => extend(doc(), opts), { lastEdited: [doc().pieces.length] }),
@@ -250,12 +280,17 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (st.brush) return set({ message: 'a brush drag is already open' });
       // D185's sculpt cannot re-close; E's rate brush does, so this guard is only for the fallback
       if (!brushFn && doc().closed && mode === 'rate' && (channel === 'kh' || channel === 'kv')) return set({ message: 'the loop is closed: a heading or pitch rate brush would open it. Undo the close, or brush height, bank or width' });
-      return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode, channel, s0, r, sharp: !!(sharp && brushFn), base: doc(), delta: 0 }, message: null }));
+      // D244b: in Sculpt only the shape channels, as a value brush; anything that would steer the track is refused by name before the drag opens
+      if (st.sculpt && (mode !== 'rate' || !SCULPT_CHANNELS.includes(channel))) return set({ message: `SCULPT_CHANNEL: Sculpt offers only the shape channels (${SCULPT_CHANNELS.join(', ')}); ${mode === 'local' ? `the ${channel} brush` : `"${channel}"`} would move the track after it. Turn Sculpt off to use it` });
+      const sculpting = st.sculpt ? { sculpt: true, baseHistory: st.history, baseResolved: st.resolved } : {};
+      return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode, channel, s0, r, sharp: !!(sharp && brushFn), base: doc(), delta: 0, ...sculpting }, message: null }));
     },
     brushTo(delta) {
       const b = st.brush; if (!b) return set({ message: 'no brush drag is open' });
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
+        // D244b: the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
+        if (b.sculpt) { const moved = CL.routeMoved(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `this change would move the track's centreline (${moved}), so Sculpt refused it`); }
         // the radius the brush really used (E's brush widens a narrow one; the chair's RULING 2: always shown), and any note of its
         // the radius really used: E's brush reports it as radiusUsed (sculpt.js), shown whenever it widened (ruling 2)
         const used = Number.isFinite(res.radiusUsed) ? res.radiusUsed : Number.isFinite(res.rUsed) ? res.rUsed : null;
@@ -263,13 +298,18 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         // a rate brush on a closed lap re-closes (E): a re-close that failed left the track OPEN, and says so
         const reclose = res.close && !res.close.converged ? `the loop could not re-close after this brush, so it is open now: ${res.close.report}` : null;
         const note = [widened, res.note, reclose].filter(Boolean).join(' · ') || null;
-        return set({ history: D.dragTo(st.history, d), ...r, brush: { ...b, delta, rUsed: used }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
+        const h = D.dragTo(st.history, d);
+        // D244b: a Sculpt step keeps the same pieces in the same places, so the piece the handles are on stays selected (a selection otherwise belongs to the document it was made on)
+        const keep = b.sculpt && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {};
+        return set({ history: h, ...r, ...keep, brush: { ...b, delta, rUsed: used }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
       });
     },
     endBrush() {
       const b = st.brush; if (!b) return st;
+      // D244b: the direct check when a Sculpt drag ends: both centrelines built and compared bit for bit; a drag that moved it is dropped whole
+      if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: `SCULPT_MOVES_CENTRELINE: the centreline moved (${moved}); the whole drag was dropped` }); }
       // the brushed pieces are what close() goes round (the brush's window)
-      return attempt(() => set({ history: D.endDrag(st.history), brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }));
+      return attempt(() => { const h = D.endDrag(st.history); return set({ history: h, brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r), ...(b.sculpt && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {}) }); });
     },
     /** One brush stroke with no drag (keys, tests): one undo step. */
     sculptOnce: (b) => commit(`brush:${b.mode || 'rate'}`, () => brushed({ mode: 'rate', ...b, base: doc() }, b.delta).doc, { lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }),
@@ -688,4 +728,4 @@ function piecesIn(doc, a, b) {
   return out.length ? out : null;
 }
 
-module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, STRAIGHT_K, piecesIn, straightPieces, startLayout, profilerOf, thumbOf, displacementAfterDelete };
+module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, SCULPT_CHANNELS, STRAIGHT_K, piecesIn, straightPieces, startLayout, profilerOf, thumbOf, displacementAfterDelete };
