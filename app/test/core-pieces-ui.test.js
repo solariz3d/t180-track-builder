@@ -355,7 +355,7 @@ function stubPreview(P1) {
   const { doc, shell } = P1, S = { ghost: null, ghosts: 0, clears: 0, hide: false, ghostFor: null };
   const build = (segments, start) => G.buildPath(segments, { step: 2, closed: false, ...(start ? { start } : {}) });
   const placed = () => { const r = shell.getState().resolved; return r.segments.length ? build(r.segments, r.start) : { samples: [] }; };
-  doc.addEventListener('t180-ghost', (ev) => { const c = ev.detail.candidate; S.ghosts++; S.ghost = build(c.segments, c.start); S.ghostFor = shell.getState().history.present; if (typeof ev.detail.reply === 'function') ev.detail.reply({ ok: true }); });
+  doc.addEventListener('t180-ghost', (ev) => { if (S.deaf) return; const c = ev.detail.candidate; S.ghosts++; S.ghost = build(c.segments, c.start); S.ghostFor = shell.getState().history.present; if (typeof ev.detail.reply === 'function') ev.detail.reply({ ok: true }); });
   doc.addEventListener('t180-ghost-clear', () => { S.clears++; S.ghost = null; });
   shell.subscribe((st) => { if (S.ghost && S.ghostFor !== st.history.present) S.ghost = null; });   // a change to the placed track retires the ghost (preview.js refresh)
   doc.addEventListener('t180:ghost-request', (ev) => { const p = placed(), last = p.samples.length ? p.samples[p.samples.length - 1].s : 0; ev.detail.reply(S.ghost && !S.hide ? { samples: S.ghost.samples, s0: last } : null); });
@@ -376,8 +376,8 @@ function fire(P1, type, x, y, extra = {}) {
   return ev;
 }
 const fieldOf = (P1, text) => P1.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text).children[1];
-async function handlePanel() {
-  const P1 = await mountPanel(), S = stubPreview(P1);
+async function handlePanel({ deaf = false } = {}) {
+  const P1 = await mountPanel(); P1.deaf = deaf; const S = stubPreview(P1); S.deaf = deaf;
   const l = P1.stage.listeners.pointerdown; l.unshift(l.pop());   // the handles' listener is the capture-phase one: first
   fieldOf(P1, 'length m').value = '100';   // (the fake DOM does not turn the value attribute into the value, a real input shows 100)
   P1.frame(); P1.frame(); return Object.assign(P1, { S });
@@ -426,6 +426,7 @@ test('row 11b: no ghost, no handles; a press ON a handle is the handle\'s and th
   const armed = P1.input('brush on'); armed.checked = true; const h = handleOf(P1, 'length:0'); P1.T.s = 100;
   for (const [aria, v] of [['brush mode', 'rate'], ['brush channel', 'phi']]) P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === aria).value = v;   // (the fake select has no value of its own)
   const on = fire(P1, 'pointerdown', h.screen.x, h.screen.y); assert.equal(on.stopped, true); assert.equal(shell.getState().brush, null, 'on a handle: not the brush\'s'); fire(P1, 'pointerup', h.screen.x, h.screen.y);
+  const lenField = fieldOf(P1, 'length m'); dragBy(P1, 'length:0', 20); assert.equal(lenField.value, '120', 'a whole drag on a handle with the brush armed edits the field'); assert.equal(shell.getState().brush, null); assert.ok(!shell.getState().lastStep || !/brush/.test(shell.getState().lastStep.op), 'and no brush stroke ran');
   const off = fire(P1, 'pointerdown', 5, 5); assert.equal(off.stopped, false); assert.ok(shell.getState().brush, 'elsewhere: the brush opens'); fire(P1, 'pointerup', 5, 5); armed.checked = false;
   // cup or tube: a tube in use takes the cup's handles away (its field is disabled)
   const tube = fieldOf(P1, 'tube sweep °'); tube.value = '200'; tube.oninput(); P1.frame(); assert.equal(fieldOf(P1, 'cup °').disabled, true); assert.ok(!P1.panel.handles.handles().some((x) => x.kind === 'cup'), 'no cup handles while a tube is being made'); assert.equal(P1.panel.handles.handles().length, 8);
@@ -433,6 +434,13 @@ test('row 11b: no ghost, no handles; a press ON a handle is the handle\'s and th
   const sw = P1.input('drag handles'); assert.equal(sw.checked, true); sw.checked = false; sw.onchange(); P1.frame(); assert.deepEqual(P1.panel.handles.handles(), []); const c0 = S.clears; P1.button('Extend').onmouseleave(); assert.equal(S.clears, c0 + 1);
   sw.checked = true; sw.onchange(); P1.frame(); P1.button('Extend').onmouseleave(); assert.equal(S.clears, c0 + 1, 'with the handles on, leaving the button keeps the ghost'); P1.frame(); P1.frame();
   assert.ok(P1.panel.handles.handles().length > 0, 'and the handles are back'); P1.panel.unmount();
+});
+
+test('row 11c: the preview mounts AFTER the panel, so the first ask for the ghost can go to nobody: the handles ask again about every half second and appear once it listens (found in the real window)', async () => {
+  const P1 = await handlePanel({ deaf: true }), { S } = P1; assert.deepEqual(P1.panel.handles.handles(), [], 'nobody listens: no ghost, no handles');
+  S.deaf = false; for (let i = 0; i < 20; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'not asked again on every frame');
+  const asked = S.ghosts; for (let i = 0; i < 12; i++) P1.frame(); assert.ok(S.ghosts > asked, 'asked again'); assert.equal(P1.panel.handles.handles().length, 10, 'and the handles are there');
+  P1.panel.unmount();
 });
 
 test('row 12: Sculpt through the panel: only the shape channels; ONE selected piece gets its handles; a drag reshapes that piece, is ONE undo step and the centreline does not move; Undo gives it back', async () => {
@@ -457,4 +465,17 @@ test('row 12: Sculpt through the panel: only the shape channels; ONE selected pi
   // turn off: the shell and the brush go back
   sw.checked = false; sw.onchange(); P1.frame(); assert.equal(shell.getState().sculpt, false); assert.ok(options().includes('kh'), 'the turn brush is offered again'); assert.deepEqual(P1.panel.handles.handles().length > 0, true, 'the Extend handles are back');
   P1.panel.unmount();
+});
+
+test('row 13: the preview\'s ghostInfo (what the handles read): none without a ghost, the path\'s samples and where the new piece starts with one, none for a delete preview\'s ghost, none after clearGhost', async () => {
+  const s = await track(), pv = headlessPreview(s);
+  assert.equal(pv.ghostInfo(), null, 'no ghost, no info');
+  const placedEnd = pv.track().path.samples[pv.track().path.samples.length - 1].s;
+  pv.showGhost(s.candidate({ length: 120, targets: { kh: TURN } })); const g = pv.ghostInfo();
+  assert.ok(g && g.samples.length > pv.track().path.samples.length, 'the ghost\'s samples are the placed track\'s and then the new piece\'s'); assert.equal(g.s0, placedEnd, 'the new piece starts where the placed track ends');
+  assert.ok(Math.abs(g.samples[g.samples.length - 1].s - (placedEnd + 120)) < 2.5, 'and it is 120 m long (to the sample step)'); assert.ok(g.samples.every((m) => m.pos && m.T && m.L && m.U), 'each sample has the frame the handles sit in');
+  pv.clearGhost(); assert.equal(pv.ghostInfo(), null);
+  s.selectPiece(1); s.deleteSelection(); assert.ok(pv.view().ghost > 0); assert.equal(pv.ghostInfo(), null, 'a delete preview\'s ghost is not Extend\'s: no handles on it');
+  s.cancelDelete(); pv.dispose();
+  const e = await createCoreShell({ brushFn: null, autosaveMs: 0 }), pe = headlessPreview(e); pe.showGhost(e.candidate({ length: 100 })); const first = pe.ghostInfo(); assert.equal(first.s0, 0, 'on an empty track the new piece starts at 0'); assert.ok(first.samples.length > 10); pe.dispose();
 });

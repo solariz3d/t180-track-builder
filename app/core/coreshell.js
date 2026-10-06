@@ -220,7 +220,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (i === undefined) { const s = st.selection; if (!s || s.base !== d || s.from !== s.to) return set({ message: 'select ONE piece first: click it on the track' }); i = s.from; }
       const P = d.pieces[i];
       if (!P || P.type !== 'road') return set({ message: `SCULPT_PIECE: piece ${i} is not a road piece` });
-      return api.beginBrush({ mode: 'rate', channel, s0: pieceOffsets(d)[i] + P.length / 2, r: P.length / 2, sharp });
+      return api.beginBrush({ mode: 'rate', channel, s0: pieceOffsets(d)[i] + P.length / 2, r: P.length / 2, sharp, piece: i });
     },
     /** The piece the Sculpt handles are on, for the panel: { index, id, length, hasCup, values: { phi (degrees), w (m), c (degrees) } at its middle, halfAt(f) the half-width (m) at a share of its length }, or null (Sculpt off, or not ONE road piece selected). */
     sculptInfo() {
@@ -274,7 +274,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      * accumulates rounding; endBrush commits. mode 'local' is E's height/lateral brush (channel 'height' | 'lateral');
      * 'rate' is src/core/sculpt.js on one channel (kh, kv, phi, w, r).
      */
-    beginBrush({ mode = brushFn ? 'local' : 'rate', channel, s0, r, sharp = false }) {
+    beginBrush({ mode = brushFn ? 'local' : 'rate', channel, s0, r, sharp = false, piece }) {
       if (!BRUSH_MODES.includes(mode)) return set({ message: `brush mode "${mode}" is not one of ${BRUSH_MODES.join(', ')}` });
       if (mode === 'local' && !brushFn) return set({ message: 'the height/lateral brush is not in this build yet (E, p-d186-brush-E): use the rate brush' });
       if (st.brush) return set({ message: 'a brush drag is already open' });
@@ -282,7 +282,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!brushFn && doc().closed && mode === 'rate' && (channel === 'kh' || channel === 'kv')) return set({ message: 'the loop is closed: a heading or pitch rate brush would open it. Undo the close, or brush height, bank or width' });
       // D244b: in Sculpt only the shape channels, as a value brush; anything that would steer the track is refused by name before the drag opens
       if (st.sculpt && (mode !== 'rate' || !SCULPT_CHANNELS.includes(channel))) return set({ message: `SCULPT_CHANNEL: Sculpt offers only the shape channels (${SCULPT_CHANNELS.join(', ')}); ${mode === 'local' ? `the ${channel} brush` : `"${channel}"`} would move the track after it. Turn Sculpt off to use it` });
-      const sculpting = st.sculpt ? { sculpt: true, baseHistory: st.history, baseResolved: st.resolved } : {};
+      const sculpting = st.sculpt ? { sculpt: true, baseHistory: st.history, baseResolved: st.resolved, sculptPiece: piece } : {};
       return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode, channel, s0, r, sharp: !!(sharp && brushFn), base: doc(), delta: 0, ...sculpting }, message: null }));
     },
     brushTo(delta) {
@@ -297,7 +297,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const widened = used !== null && used > b.r + 1e-9 ? `brush widened to ${used.toFixed(0)} m (asked ${b.r.toFixed(0)} m), so the track outside it stays exactly as it was` : null;
         // a rate brush on a closed lap re-closes (E): a re-close that failed left the track OPEN, and says so
         const reclose = res.close && !res.close.converged ? `the loop could not re-close after this brush, so it is open now: ${res.close.report}` : null;
-        const note = [widened, res.note, reclose].filter(Boolean).join(' · ') || null;
+        // D244b: a Sculpt drag on a piece shorter than the brush's smallest window (120 m) is "widened" by E's rule, but the change stays inside the piece (measured: the neighbours are the very same objects),
+        // so that note is only worth saying when a piece other than the sculpted one really changed
+        const spilled = b.sculpt && Number.isInteger(b.sculptPiece) ? (res.changed || []).filter((c) => c.piece !== b.sculptPiece).map((c) => c.piece) : [];
+        const note = b.sculpt && Number.isInteger(b.sculptPiece) && !spilled.length ? null : [widened, res.note, reclose, spilled.length ? `Sculpt also changed ${spilled.map((i) => d.pieces[i].id).join(', ')} at the joint` : null].filter(Boolean).join(' · ') || null;
         const h = D.dragTo(st.history, d);
         // D244b: a Sculpt step keeps the same pieces in the same places, so the piece the handles are on stays selected (a selection otherwise belongs to the document it was made on)
         const keep = b.sculpt && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {};

@@ -144,6 +144,9 @@ None of it reads or writes the document or the export: the mirror ghost is a pic
 - **A track** is `<name>.t180track`: the document's canonical text (`src/doc/serial.js`), in
   `<app data>/tracks/`.
 - **The user's pieces** are `library.t180lib` (`src/doc/library.js` `serializeLibrary`), in `<app data>/`.
+- **Drag handles and Sculpt (D244, D244b).** `app/core/handles.js` draws the handles on the Extend ghost (and, in Sculpt, on the one selected placed piece) as an overlay canvas, and holds the numbers (placement, a drag in px to a
+  value, Shift and Ctrl) as pure functions. The panel is the host: an Extend drag types into the field and fires the field's own handler; a Sculpt drag is the shell's `beginSculpt` / `sculptTo` / `endSculpt`. The ghost's path comes from the
+  preview (`ghostInfo()`, the `t180:ghost-request` event). Sculpt changes the shape channels only, and `app/core/centreline.js` refuses by name any step that would move the centreline (see `CHANGELOG.md`).
 - **A saved piece (D240)** is `<name>.t180piece`: the text of `src/core/piece.js` (schema `t180b.piece/1`), in `<app data>/pieces/`. The panel (`app/core/piecesui.js`) selects pieces on the track
   (`app/core/selectionlayer.js` draws the selection), saves, lists, adds, renames and deletes them through the shell's `selectPiece`, `savePiece`, `listPieces`, `insertPiece`, `renamePiece`,
   `deletePieceFile`; deleting pieces of the track is `deleteSelection` (the open end at once, the middle through `proposeDelete` / `applyDelete` / `cancelDelete`, previewed like Close).

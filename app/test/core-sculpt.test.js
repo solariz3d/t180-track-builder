@@ -146,4 +146,19 @@ test('row 7: the selection survives a Sculpt drag (the handles stay on the piece
   s.beginSculpt({ channel: 'phi' }); s.setSculpt(false); assert.match(s.getState().message, /finish the brush drag first/, 'the switch waits for the drag'); s.endSculpt(); s.setSculpt(false); assert.equal(s.getState().sculpt, false);
   const cl = await mk('legacy'); cl.setSculpt(true); assert.equal(cl.sculptInfo(), null, 'nothing selected: no info');
 });
+test('row 8: a SHORT piece (under the brush\'s smallest window, 120 m) is sculpted inside itself: the neighbours are the very same objects, the centreline is bit-identical, and the "widened" note is not said; a change that DID reach a neighbour is said', async () => {
+  const D2 = require('../../src/core/document.js'), SCm = require('../../src/core/sculpt.js');
+  for (const L of [60, 100, 119, 120, 200]) {
+    const s = await createCoreShell({ autosaveMs: 0 }); for (let i = 0; i < 5; i++) s.extend({ length: L, transition: 20, targets: { kh: (i % 2 ? -1 : 1) * 0.002 } });
+    s.setSculpt(true); s.selectPiece(2); const d0 = s.getState().history.present, snap = CL.snapshot(s.getState().resolved);
+    s.beginSculpt({ channel: 'phi' }); s.sculptTo(0.2); assert.equal(s.getState().message, null, `${L} m: no widened note: ${s.getState().message}`); s.endSculpt();
+    const d1 = s.getState().history.present; d1.pieces.forEach((p, i) => { if (i !== 2) assert.equal(p, d0.pieces[i], `${L} m: piece ${i} is the very same object`); });
+    assert.equal(CL.pathMoved(snap, s.getState().resolved), null, `${L} m: the centreline`); const peak = D2.channelAt(d1.pieces[2], 'phi', L / 2).v - D2.channelAt(d0.pieces[2], 'phi', L / 2).v;
+    assert.ok(peak > 0.15 && peak <= 0.2 + 1e-9, `${L} m: the middle rose by ${peak} of the asked 0.2 rad`);
+  }
+  // the note when a neighbour really changed: a brush function that reports a second piece as changed
+  const spill = (doc, o) => { const r = SCm.brush(doc, o); return { ...r, changed: [...r.changed, { piece: 1, indices: [0] }] }; };
+  const t = await mk('legacy', { brushFn: spill }); t.setSculpt(true); t.selectPiece(2); t.beginSculpt({ channel: 'phi' }); t.sculptTo(0.1);
+  assert.match(t.getState().message, /Sculpt also changed p2 at the joint/, t.getState().message); t.endSculpt();
+});
 function close(a, b, eps) { assert.ok(Math.abs(a - b) <= eps, `${a} is not within ${eps} of ${b}`); return true; }
