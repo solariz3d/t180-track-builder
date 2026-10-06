@@ -24,22 +24,23 @@ const DEG = Math.PI / 180;
  * One row per kind. `at` is where along the piece (0 its start, 1 its far end), `lat` how far out sideways in halves of the road's width (0 the centreline, 1 the edge), `axis` which of the
  * road's own directions a drag runs along (T along the road, L sideways, U up), and `sides` the signs of the sideways positions (+1 the LEFT side). `sign`: how a side's drag counts:
  * 'out' = away from the centre is positive (width, cup), 'left' = toward the left is positive on both sides (turn), 'up' = the left edge going up and the right edge going down are positive (bank).
- * `perPx` is the value change per PIXEL of the pointer's travel along the handle's on-screen axis (D251: the same at any zoom; it was per metre of the world, so zoomed out one pixel jumped a lot); the Extend fields'
+ * `perPx` is the value change per PIXEL of the pointer's travel along the handle's on-screen axis (D251: the same at any zoom; it was per metre of the world, so zoomed out one pixel jumped a lot). The numbers are TODAY's per-metre speeds divided by the px a metre takes at the default Build camera (measured in the window), so the feel is the same there; LENGTH is 5x that (the keeper, 11:29/11:30); the Extend fields'
  * units (the core's channels are the same, degrees and metres). `zero`: a kind whose natural rest is 0 (bank, turn, climb): the drag holds there, and a double-click resets to it.
  */
 const KINDS = Object.freeze({
   // D250 item 3 (the keeper chose "Near end, like my picture"): LENGTH and WIDTH are at the piece's NEAR end, as in his marked-up screenshot. The near end stays where it is when the value changes, so
   // length is dragged AWAY from the piece (back toward the camera, `sign: 'back'`: stretching the near edge toward you is longer), and the width marks sit at the TARGET half-width (`target: true`: the
   // field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. Turn and climb stay at the far side, bank and cup mid-piece.
-  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 0, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'back', perPx: 0.5, min: 1, max: 5000, step: 0.1, snap: 10 }),
-  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.1, min: 0.5, max: 400, step: 0.1, snap: 5 }),
-  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.2, zero: true, min: -720, max: 720, step: 0.1, snap: 5 }),
-  cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.2, min: 0, max: 150, step: 0.1, snap: 5 }),
-  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.75, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', perPx: 0.05, zero: true, min: -90, max: 90, step: 0.1, snap: 5 }),
-  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.05, zero: true, min: -45, max: 45, step: 0.1, snap: 5 }),
+  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 0, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'back', perPx: 0.42, min: 1, max: 5000, step: 0.1, snap: 10 }),
+  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.1, snap: 5 }),
+  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.1, snap: 5 }),
+  cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.24, min: 0, max: 150, step: 0.1, snap: 5 }),
+  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.75, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', perPx: 0.083, zero: true, min: -90, max: 90, step: 0.1, snap: 5 }),
+  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.1, snap: 5 }),
 });
 const ORDER = Object.freeze(['length', 'width', 'bank', 'cup', 'turn', 'climb']);
 const FINE = 0.1;            // Shift: a tenth of the speed
+const DOUBLE_MS = 400;       // two presses on one handle this close are a double-click
 const DETENT_PX = 6;         // D251: the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
 const EDGE_ON_PX_PER_M = 0.05;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead. A FAR handle's axis is short too (the far end of a ghost seen from behind: 0.3 px/m, found in the window) but has a direction, so it is not edge-on
 const HIT_PX = 12;
@@ -145,7 +146,7 @@ function mount(stage, win, host) {
   canvas.setAttribute('aria-label', 'drag handles');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
   stage.append(canvas);
-  let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0, pre = null;   // pre: { kind, from, to } the last drag that moved a value (the double-click's "before the drag")
+  let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0, pre = null, lockChanged = null, lockFailed = null, lastClick = null;   // lastClick: { id, t } the last press-and-release on a handle that changed nothing (the first half of a double-click)   // pre: { kind, from, to } the last drag that moved a value (the double-click's "before the drag")
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const layout = () => {
     model = host.model(); const pose = host.pose(), W = stage.clientWidth, H = stage.clientHeight;
@@ -195,37 +196,61 @@ function mount(stage, win, host) {
     const [x, y] = rel(e), h = hitTest(drawn, x, y); if (!h) return;
     e.preventDefault(); e.stopImmediatePropagation();   // a handle wins over the brush and the camera, only where the pointer is ON one
     const m = model; if (!m) return;
-    drag = { h, x0: x, y0: y, axis: h.screen, base: m.base(h.kind), ctx: m.ctx(h.kind), value: m.base(h.kind) };
-    host.begin(h);
+    const now = typeof e.timeStamp === 'number' ? e.timeStamp : Date.now();
+    if (lastClick && lastClick.id === h.id && now - lastClick.t < DOUBLE_MS) { lastClick = null; resetHandle(h); return; }
+    drag = { h, x0: x, y0: y, v: { x, y }, lock: 'none', axis: h.screen, base: m.base(h.kind), ctx: m.ctx(h.kind), value: m.base(h.kind) };
+    host.begin(h); wantLock();
     if (stage.setPointerCapture && e.pointerId !== undefined) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* the pointer is gone */ } }
   };
+  // D251 item 5 (the keeper, 11:29): POINTER LOCK. Pressing a handle locks the pointer where it clicked, so the cursor does not travel and a drag never stops at the screen edge; the drag then runs on movementX/Y
+  // (the virtual position `drag.v` is the click point plus the movement so far). If the lock is refused, or the WebView has none, the drag is today's (the pointer's own position). Release unlocks; Esc (the
+  // browser's own unlock) ends the drag where it is, as a release does.
+  const wantLock = () => {
+    if (typeof stage.requestPointerLock !== 'function') { drag.lock = 'none'; return; }
+    drag.lock = 'pending';
+    try { const p = stage.requestPointerLock(); if (p && typeof p.catch === 'function') p.catch(() => { if (drag && drag.lock === 'pending') drag.lock = 'refused'; }); } catch (err) { drag.lock = 'refused'; }
+  };
+  const onLockChange = () => {
+    if (!drag) return;
+    if (doc.pointerLockElement === stage) { drag.lock = 'on'; drag.skip = true; }
+    else if (drag.lock === 'on') { drag.lock = 'lost'; onUp(null); }   // Esc, or the window lost focus: the drag ends here
+  };
+  const onLockError = () => { if (drag && drag.lock === 'pending') drag.lock = 'refused'; };
+  const unlock = () => { if (doc.exitPointerLock && doc.pointerLockElement === stage) { try { doc.exitPointerLock(); } catch (err) { /* already unlocked */ } } };
+  lockChanged = onLockChange; lockFailed = onLockError;
+  if (doc.addEventListener) { doc.addEventListener('pointerlockchange', lockChanged); doc.addEventListener('pointerlockerror', lockFailed); }
   const onMove = (e) => {
     const [x, y] = rel(e);
-    if (drag) { waiting = { x, y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; if (!frameReq) frameReq = win.requestAnimationFrame(flush); return; }
+    if (drag) {
+      if (drag.lock === 'on') { const mx = e.movementX || 0, my = e.movementY || 0; if (drag.skip && (mx || my)) { drag.skip = false; return; } drag.v.x += mx; drag.v.y += my; } else drag.v = { x, y };
+      waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; if (!frameReq) frameReq = win.requestAnimationFrame(flush); return; }
     const h = hitTest(drawn, x, y); hover = h; stage.style.cursor = h ? cursorFor(h.screen) : '';
   };
   const onUp = (e) => {
     if (!drag) return;
     if (frameReq) { win.cancelAnimationFrame(frameReq); frameReq = 0; }
-    if (e && e.clientX !== undefined) { const [x, y] = rel(e); waiting = { x, y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; }
-    apply(true); const h = drag.h; if (drag.value !== drag.base) pre = { kind: h.kind, from: drag.base, to: drag.value };
-    drag = null; host.end(h); stage.style.cursor = '';
+    if (e && e.clientX !== undefined) { if (drag.lock !== 'on') { const [x, y] = rel(e); drag.v = { x, y }; } waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; }
+    const wasLocked = drag.lock === 'on'; apply(true); const h = drag.h; if (drag.value !== drag.base) { pre = { kind: h.kind, from: drag.base, to: drag.value }; lastClick = null; } else lastClick = { id: h.id, t: e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now() };
+    drag = null; if (wasLocked) unlock(); host.end(h); stage.style.cursor = '';
   };
   // D251: a double-click ON a handle resets it: 0 for bank, turn and climb; the value before the last drag for length, width and cup (kept only while the field still reads what that drag set, so a value typed
   // since, or another piece, is not "put back" to a stale one). Taken in the capture phase like the press, so the camera's own double-click does not also fire.
-  const onDouble = (e) => {
-    if (drag) return;
-    const [x, y] = rel(e), h = hitTest(drawn, x, y), m = model; if (!h || !m) return;
-    e.preventDefault(); e.stopImmediatePropagation();
+  const resetHandle = (h) => {
+    const m = model; if (!m) return;
     const now = m.base(h.kind), v = resetValue(h.kind, pre && pre.kind === h.kind && pre.to === now ? pre.from : null);
     if (v === null || v === now) return;
     host.begin(h); host.apply(h, v, {}, true); host.end(h); pre = null;
+  };
+  const onDouble = (e) => {
+    if (drag) return;
+    const [x, y] = rel(e), h = hitTest(drawn, x, y); if (!h) return;
+    e.preventDefault(); e.stopImmediatePropagation(); resetHandle(h);   // (the same reset again after the press has done it is a no-op)
   };
   stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('dblclick', onDouble, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
   raf = win.requestAnimationFrame(frame);
   return {
     handles: () => drawn.slice(), hovered: () => hover, dragging: () => !!drag,
-    unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('dblclick', onDouble, true); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
+    unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) { doc.removeEventListener('pointerlockchange', lockChanged); doc.removeEventListener('pointerlockerror', lockFailed); } if (drag && drag.lock === 'on') unlock(); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
   };
 }
 
