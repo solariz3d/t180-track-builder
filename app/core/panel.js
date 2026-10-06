@@ -293,7 +293,7 @@ function mount(root, shell) {
   // JUMP AT THE HEAD (D243 item 1; the core is src/core/jump.js). GAP, DROP (+ down) and LANDING angle go to the shell's addJump, which refuses by name in plain words; the next Extend lays the road the car lands on.
   // While the fields are used (or the button is hovered) the preview shows the jump as a ghost with the flight as a dashed arc (app/core/flightlayer.js), and the words below say WHICH arc it is (the car's
   // ballistic flight at the design speed, or a straight line where the core has no flight model) and the speed the landing ramp is sized for (fixed at 460 km/h today).
-  const jgap = num(30, 5, 'metres the car flies along the ground, measured from the take-off lip (more than 0)'), jdrop = num(1, 1, 'metres the landing lip is BELOW the take-off lip (+ = down)'),
+  const jgap = num(20, 5, 'metres the car flies along the ground, measured from the take-off lip (more than 0). 20 m: both measured falls clear it at 460 km/h even off a flat take-off'), jdrop = num(1, 1, 'metres the landing lip is BELOW the take-off lip (+ = down)'),
     jland = num(-2, 1, 'pitch of the landing ramp in degrees (negative slopes down: the usual landing)');
   const jumpNote = el('div', { 'aria-label': 'jump flight', style: 'font-size:12px;margin:2px 0;color:#aab2c0' });
   const jumpOpts = () => ({ gap: jgap.value, drop: jdrop.value, landDeg: jland.value });
