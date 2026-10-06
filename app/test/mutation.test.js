@@ -45,7 +45,7 @@ const MUTATIONS = [
   { id: 'A17 Ctrl/Alt/Meta ignored by keyAction', file: 'preview/preview.js',
     from: 'if (mods && (mods.ctrlKey || mods.altKey || mods.metaKey)) return null;', to: '', caughtBy: 'keys: Ctrl, Alt or Meta' },
   { id: 'A18 the frame loop passes no modifiers (Ctrl+C cycles the camera)', file: 'preview/preview.js',
-    from: 'const a = keyAction(e.key, e);', to: 'const a = keyAction(e.key);', caughtBy: 'keys in the frame loop' },
+    from: 'a = keyAction(e.key, viaCtrl ? { ctrlKey: false, altKey: false, metaKey: false } : e);', to: 'a = keyAction(e.key);', caughtBy: 'keys in the frame loop' },   // D257: re-anchored (the call reads Left Ctrl's movement keys too)
   { id: 'A19 a failed mount is swallowed', file: 'preview/index.js',
     from: 'throw new PreviewMountError(msg, e);', to: 'return null;', caughtBy: 'mount failure' },
   { id: 'A20 the probe skips the perspective divide', file: 'testhook/probe.js',
@@ -116,10 +116,10 @@ const MUTATIONS = [
   { id: 'L18 the canvas is cleared to the fog colour again', file: 'preview/renderer.js', from: 'gl.clearColor(clear[0], clear[1], clear[2], 1);', to: 'gl.clearColor(fog[0], fog[1], fog[2], 1);', caughtBy: 'renderer: the canvas is cleared to CLEAR' },
   // L130-R: the newest movement key, the takeover once, the wheel's deltaX, the key's action at key-down, the overhead sliding to the head
   { id: 'N3 a repeated key-down makes the key the newest again', file: 'preview/preview.js', from: 'if (!held.has(id)) held.set(id, a);', to: 'held.delete(id); held.set(id, a);', caughtBy: 'a held key that repeats' },
-  { id: 'N4 a key-up lets go of every key', file: 'preview/preview.js', from: 'const onUp = (e) => { held.delete(heldKey(e));', to: 'const onUp = (e) => { held.clear();', caughtBy: 'releasing the OLDER' },
+  { id: 'N4 a key-up lets go of every key', file: 'preview/preview.js', from: '    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code);', to: '    held.clear(); boost = !!e.shiftKey; down.delete(e.code);', caughtBy: 'releasing the OLDER' },   // D257: re-anchored (onUp is several lines since D252)
   { id: 'N5 the takeover re-fires every frame a key is held (C and B are undone)', file: 'preview/preview.js', from: 'if (takeover) { if (rig.mode ===', to: 'if (held.size) { if (rig.mode ===', caughtBy: 'P3: C or B pressed while a movement key is held' },
   // D187 (E's W1 and W2): the two lines of E's fix, each undone; the reproducers in preview.test.js must catch each
-  { id: 'E1 an OS key-repeat re-arms the takeover (W1: after C or B, a held W snaps back to free)', file: 'preview/preview.js', from: 'if (!e.repeat) takeover = true;', to: 'takeover = true;', caughtBy: 'W1: W held and REPEATING' },
+  { id: 'E1 an OS key-repeat re-arms the takeover (W1: after C or B, a held W snaps back to free)', file: 'preview/preview.js', from: 'if (!e.repeat) takeover = true;   // an OS key-REPEAT', to: 'takeover = true;   // an OS key-REPEAT', caughtBy: 'W1: W held and REPEATING' },   // D257: re-anchored on the MOVE keys' line (D252's Space branch has the same words, and replace() mutated that one)
   { id: 'E2 deltaX counts without Shift (W2: a sideways trackpad swipe zooms, or moves the lens)', file: 'preview/preview.js', from: 'e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0', to: 'e.deltaY || e.deltaX || 0', caughtBy: 'W2: a trackpad swipe SIDEWAYS' },
   { id: 'N6 the wheel ignores deltaX (Shift+wheel is dead on a device that reports it there)', file: 'preview/preview.js', from: 'e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0', to: 'e.deltaY || 0', caughtBy: 'P5: Shift+wheel is ×4' },
   { id: 'N7 the key action is looked up by the physical key name, not fixed at key-down', file: 'preview/preview.js', from: 'if (!held.has(id)) held.set(id, a);', to: 'if (!held.has(id)) held.set(id, keyAction(id) || {});', caughtBy: 'P2: a key that flies by its label' },
@@ -129,7 +129,7 @@ const MUTATIONS = [
   // L132: the sprint ramp, focus, and the lens
   { id: "N11 the sprint never ramps (×4 for as long as Shift is held)", file: "preview/preview.js", from: "const sprint = boost ? boostAt(boostT) : 1;", to: "const sprint = boost ? 4 : 1;", caughtBy: "keys: Shift held ramps the speed" },
   { id: "N12 the ramp never resets on release (a second press starts at ×20)", file: "preview/preview.js", from: "boostT = boost ? boostT + dt : 0;", to: "boostT = boostT + dt;", caughtBy: "releasing Shift returns to ×1" },
-  { id: "N13 a blur does not reset the ramp", file: "preview/preview.js", from: "boost = false; boostT = 0; drag = null; };", to: "boost = false; drag = null; };", caughtBy: "a blur resets the ramp" },
+  { id: "N13 a blur does not reset the ramp", file: "preview/preview.js", from: "boost = false; boostT = 0; drag = null; down.clear();", to: "boost = false; drag = null; down.clear();", caughtBy: "a blur resets the ramp" },   // D257: re-anchored (letGo resets more since D252)
   { id: "N14 the ramp is twice too slow (5 s to full)", file: "preview/preview.js", from: "secs: 2.5 }", to: "secs: 5 }", caughtBy: "the sprint curve" },
   { id: "N15 the ramp stops at ×10", file: "preview/preview.js", from: "to: 20,", to: "to: 10,", caughtBy: "the sprint curve" },
   { id: "N16 Enter blurs a text area too (it is a new line there)", file: "preview/preview.js", from: "e.target.matches(e.key === 'Enter' ? 'input, select' : 'input, select, textarea')", to: "e.target.matches('input, select, textarea')", caughtBy: "Enter in a text AREA" },
@@ -150,9 +150,9 @@ const MUTATIONS = [
   { id: "D2 on one axis the OLDER key wins", file: 'preview/preview.js', from: "if (a.fly[i]) dir[i] = a.fly[i];", to: "if (a.fly[i] && !dir[i]) dir[i] = a.fly[i];", caughtBy: "on one axis the NEWER key wins" },
   { id: "D3 both keys of an axis cancel (W and S held: stand still)", file: 'preview/preview.js', from: "if (a.fly[i]) dir[i] = a.fly[i];", to: "if (a.fly[i]) dir[i] += a.fly[i];", caughtBy: "on one axis the NEWER key wins" },
   { id: "D4 a diagonal is not normalised (√2 times a straight line)", file: 'preview/preview.js', from: "if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);", to: "rig.free.move(dir[0] * k, dir[1] * k, dir[2] * k);", caughtBy: "keys: W then D goes diagonally" },
-  { id: "D5 a diagonal is normalised to the wrong length (÷ n², not ÷ n)", file: 'preview/preview.js', from: "dir[0] / n * k, dir[1] / n * k, dir[2] / n * k", to: "dir[0] / (n * n) * k, dir[1] / (n * n) * k, dir[2] / (n * n) * k", caughtBy: "three axes at once" },
+  { id: "D5 a diagonal is normalised to the wrong length (÷ n², not ÷ n)", file: 'preview/preview.js', from: "if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);", to: "if (n) rig.free.move(dir[0] / (n * n) * k, dir[1] / (n * n) * k, dir[2] / (n * n) * k);", caughtBy: "three axes at once" },   // D257: anchored on the move call (the descent count repeats these words)
   { id: "D6 a newer key on an axis drops the older for good (no handover on release)", file: 'preview/preview.js', from: "if (!held.has(id)) held.set(id, a);", to: "if (!held.has(id)) { for (const [k2, v2] of held) if (v2.fly && a.fly && v2.fly.some((c, i) => c && a.fly[i])) held.delete(k2); held.set(id, a); }", caughtBy: "on its release the" },
-  { id: "D7 a key-up lets go of every key (the other axis stops too)", file: 'preview/preview.js', from: "const onUp = (e) => { held.delete(heldKey(e));", to: "const onUp = (e) => { held.clear();", caughtBy: "releasing one key of a diagonal" },
+  { id: "D7 a key-up lets go of every key (the other axis stops too)", file: 'preview/preview.js', from: "    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code);", to: "    held.clear(); boost = !!e.shiftKey; down.delete(e.code);", caughtBy: "releasing one key of a diagonal" },   // D257: re-anchored (onUp is several lines since D252)
   { id: "D8 a repeated key-down makes the key the newer again", file: 'preview/preview.js', from: "if (!held.has(id)) held.set(id, a);", to: "held.delete(id); held.set(id, a);", caughtBy: "a held key that repeats" },
   { id: "D9 the arrow keys stop turning while a movement key is held", file: 'preview/preview.js', from: "if (a.turn) rig.free.look(", to: "if (a.turn && ![...held.values()].some((b) => b.fly)) rig.free.look(", caughtBy: "the arrow (look) keys are not movement keys" },
 ];
@@ -161,6 +161,7 @@ function runMutant(m) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-app-mut-')), app = path.join(dir, 'app');
   try {
     for (const d of ['camera', 'preview', 'testhook', 'texmaker']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });
+    fs.mkdirSync(path.join(app, 'core')); fs.copyFileSync(path.join(ROOT, 'app', 'core', 'keys.js'), path.join(app, 'core', 'keys.js'));   // D257: preview.js asks app/core/keys.js which Ctrl+keys are shortcuts (keys.js requires nothing)
     fs.mkdirSync(path.join(dir, 'scripts')); fs.copyFileSync(path.join(ROOT, 'scripts', 'prove_render.js'), path.join(dir, 'scripts', 'prove_render.js'));
     fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });   // all of src/: the modules reach across it (src/doc now requires src/validate)
     fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });   // src/export/fromwords.js reads its kn5 back with tools/kn5.cjs (D177: the export is in the look's list test)
