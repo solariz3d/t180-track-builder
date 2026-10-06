@@ -511,3 +511,56 @@ test('D195: once a ghost shows on the empty track, the camera follows the ghost\
   const v = x.p.view(), h = G.buildPath(segs, { step: 2 }).head;
   assert.ok(len(sub(v.pose.target, h.pos)) < len(sub(v.pose.target, [0, 0, 0])), 'framed on the ghost\'s head, not the start');
 });
+
+// ── D252, the keeper (11:36): "space bar to go up, lft control to go down?" SPACE flies up and LEFT CTRL flies down, held like E and Q (which stay),
+//    by the physical key; Right Ctrl does not fly. Ctrl is the app's too (Ctrl+Z/Y/S/Backspace, Ctrl+wheel the lens, Ctrl snaps a handle drag), so
+//    Left Ctrl flies only while it is the ONLY key down and no mouse button is: when another key, the wheel or a button joins it, that press's
+//    descent is undone and the camera is where Ctrl found it. Space never reaches a focused button (taken) but types in a text field. ──
+const SPACE = (extra = {}) => ({ key: ' ', code: 'Space', target: {}, ...extra }), LCTRL = (extra = {}) => ({ key: 'Control', code: 'ControlLeft', ctrlKey: true, target: {}, ...extra });
+const RCTRL = { key: 'Control', code: 'ControlRight', ctrlKey: true, target: {} }, CTRL_Z = { key: 'z', code: 'KeyZ', ctrlKey: true, target: {} };
+const eyeOf = (x) => x.p.rig.free.state().eye;
+test('D252: Space held flies UP like E (3 m a frame, world up), and its release stops it', () => {
+  const x = pressed(['w']); x.key('keyup', UPK('w')); x.key('keydown', SPACE()); x.win.step(); const m = nextMove(x);
+  assert.ok(close3(m, unit('e')), `Space moves as E does: ${m} vs ${unit('e')}`); assert.ok(m[1] > 2.9, 'up');
+  x.key('keyup', { key: ' ', code: 'Space' }); x.win.step(); assert.ok(close3(nextMove(x), [0, 0, 0]), 'released: still');
+});
+test('D252: Left Ctrl ALONE flies DOWN like Q; Right Ctrl does not fly', () => {
+  const x = pressed(['w']); x.key('keyup', UPK('w')); x.key('keydown', LCTRL()); x.win.step(); const m = nextMove(x);
+  assert.ok(close3(m, unit('q')), `Left Ctrl moves as Q does: ${m} vs ${unit('q')}`); assert.ok(m[1] < -2.9, 'down');
+  x.key('keyup', { key: 'Control', code: 'ControlLeft' }); x.win.step(); assert.ok(close3(nextMove(x), [0, 0, 0]), 'released: still');
+  const y = pressed(['w']); y.key('keyup', UPK('w')); y.key('keydown', RCTRL); y.win.step(); assert.ok(close3(nextMove(y), [0, 0, 0]), 'Right Ctrl: still');
+});
+test('D252: Ctrl+Z never moves the camera: the descent before Z is undone, in free mode and from the build view (the view is kept too)', () => {
+  const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); const e0 = eyeOf(x);
+  x.key('keydown', LCTRL()); x.win.step(); x.win.step(); assert.ok(eyeOf(x)[1] < e0[1] - 1, 'control: Ctrl alone was descending');
+  x.key('keydown', CTRL_Z); assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Z joined: back where Ctrl found it'); x.win.step(); x.win.step();
+  assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'and it stays there while both are held'); x.key('keyup', { key: 'z', code: 'KeyZ' }); x.win.step();
+  assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Z let go, Ctrl still down: no descent for this press');
+  const b = livePreview(); assert.equal(b.p.rig.mode, 'build'); b.key('keydown', LCTRL()); b.win.step(); b.key('keydown', CTRL_Z); b.win.step();
+  assert.equal(b.p.rig.mode, 'build', 'from the build view, Ctrl+Z leaves it the build view');
+});
+test('D252: a key held BEFORE Ctrl (Shift for Ctrl+Shift+Z, or W) means Ctrl never flies on that press', () => {
+  const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); const e0 = eyeOf(x);
+  x.key('keydown', SHIFT_DOWN); x.key('keydown', LCTRL({ shiftKey: true })); x.win.step(); x.win.step();
+  assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Shift then Ctrl: still');
+});
+test('D252: Ctrl+wheel is still the LENS and the camera does not move; a mouse button down (a handle drag, Ctrl to snap) means no descent', () => {
+  const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); const e0 = eyeOf(x), fov0 = x.p.rig.fov;
+  x.key('keydown', LCTRL()); x.win.step(); x.mouse('wheel', { deltaY: -100, ctrlKey: true }); x.win.step();
+  assert.ok(x.p.rig.fov < fov0, 'the lens narrowed'); assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'and the camera is where Ctrl found it');
+  const y = pressed(['w']); y.key('keyup', UPK('w')); y.win.step(); const f0 = eyeOf(y);
+  y.key('mousedown', { button: 0, clientX: 5, clientY: 5 }); y.key('keydown', LCTRL()); y.win.step(); y.win.step();
+  assert.ok(len(sub(eyeOf(y), f0)) < 1e-9, 'a button was down when Ctrl went down: still');
+  y.key('mouseup', { button: 0 }); y.key('keyup', { key: 'Control', code: 'ControlLeft' });
+  y.key('keydown', LCTRL()); y.win.step(); y.key('mousedown', { button: 0, clientX: 5, clientY: 5 }); y.win.step();
+  assert.ok(len(sub(eyeOf(y), f0)) < 1e-9, 'a button went down while Ctrl flew: undone');
+});
+test('D252: Space is TAKEN (preventDefault, down and up) so a focused button is never clicked; in a text field it types and the camera stays', () => {
+  let pd = 0; const spy = () => { pd++; };
+  const x = livePreview(), btn = { matches: () => false };
+  x.key('keydown', SPACE({ target: btn, preventDefault: spy })); x.key('keyup', { key: ' ', code: 'Space', target: btn, preventDefault: spy });
+  assert.equal(pd, 2, 'taken on the way down and on the way up');
+  const y = livePreview(), f = field('input', 'text'); let pf = 0;
+  y.key('keydown', SPACE({ target: f, preventDefault: () => { pf++; } })); y.key('keyup', { key: ' ', code: 'Space', target: f, preventDefault: () => { pf++; } }); y.win.step(); y.win.step();
+  assert.equal(pf, 0, 'a text field types its space'); assert.equal(y.p.rig.mode, 'build', 'and the camera did not take over');
+});

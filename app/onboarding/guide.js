@@ -42,7 +42,7 @@ const STEPS = Object.freeze([
     text: 'Press "Export…" and pick a folder. It writes an Assetto Corsa track folder there; nothing is installed and the game is not launched. "Export to Assetto Corsa" writes the same folder straight into the game, found through Steam (exporting the same track again updates it).',
     done: (st, seen) => seen.exported },
   { id: 'grid', title: 'The grid and the mirror', target: '#camera',
-    text: 'Under the preview, Grid shows the ground or a 3D lattice once the track climbs; Mirror draws the symmetry axes and reads the mirror gap, the number "make it symmetrical" drives to zero. Drag the centre handle to move the axes.',
+    text: 'Under the preview, Grid shows the ground or a 3D lattice once the track climbs; Mirror draws the symmetry axes and reads the mirror gap, the number "make it symmetrical" drives to zero. Drag the centre handle to move the axes. To fly the camera: W A S D, Space up and Left Ctrl down (Q and E too), Shift to go faster, the right button to look.',
     done: null },
 ].map((s) => Object.freeze(s)));
 

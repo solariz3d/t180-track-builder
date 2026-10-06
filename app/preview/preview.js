@@ -15,13 +15,17 @@
 //
 // KEYS (keyAction below, tested headless):  C  next camera      B  the build view, from anywhere
 //   L  the look: the AC shaders (default) or the colour per placed word (ARCHITECTURE §4's feedback layer)
-//   flying:  W / S forward and back,  A / D left and right,  Q / E down and up,  Shift sprints (×4, rising to ×20 over 2.5 s held). Movement is PER AXIS
+//   flying:  W / S forward and back,  A / D left and right,  Q / E or Left Ctrl / Space down and up,  Shift sprints (×4, rising to ×20 over 2.5 s held). Movement is PER AXIS
 //   (the keeper, D188): W/S, A/D and Q/E each resolve on their own, the NEWER key of an axis winning and the other taking over on its
 //   release, and the axes combine, so W+D goes diagonally at the same speed as a straight line. From any view the first move takes the view over
 //   into free mode, once (C and B after it are not undone by a key still held). Looking: the right-button drag (any view) or the left in free mode, or
 //   the arrow keys; drag right turns right. Moving and looking work at the same time. The scroll wheel zooms every view (free mode
 //   dollies); Ctrl + wheel is the LENS (the field of view, 10° to 100°, in every view) and a middle click resets it to 60°.
 //   A text field swallows the camera keys; a number field lets them through; Enter or Esc in a field, or a click on the canvas, lets go of it.
+//   D252 (the keeper: "space bar to go up, lft control to go down?"): Space and LEFT Ctrl, by the physical key (Right Ctrl does not fly). Left Ctrl
+//   flies only while it is the ONLY key down and no mouse button is: when another key (Ctrl+Z/Y/S/Backspace), the wheel (Ctrl+wheel, the lens) or
+//   a button (a handle drag, Ctrl to snap) joins it, that press's descent is undone, so a Ctrl shortcut never moves the camera. Space is taken
+//   (it never clicks a focused button) except in a text field, where it types.
 //   No ground grid unless createPreview({ ground: true }): just the track (the keeper, 2026-09-29).
 //   D237 (the keeper: "a 3D grid ... a 2D grid if the track has no height, but as soon as the track turns up or downward the grid becomes 3D", and symmetry): createPreview({ gridMode })
 //   'auto' | 'ground' | '3d' | 'off' starts the grid in that mode (the app's mount asks for 'auto'; with neither gridMode nor ground the preview starts with NO grid, as before). At run time:
@@ -65,6 +69,7 @@ function keyAction(key, mods = {}) {
 
 /** The held-key name of a key event: the physical key (e.code 'KeyW' → 'w'; arrows as they are), else e.key. */
 function heldKey(e) {
+  if (e && (e.code === 'Space' || e.code === 'ControlLeft')) return e.code;   // D252: the up and down keys, by the physical key
   if (e && typeof e.code === 'string' && /^Key[A-Z]$/.test(e.code)) return e.code.slice(3).toLowerCase();
   if (e && typeof e.code === 'string' && /^Arrow/.test(e.code)) return e.code;
   const k = String(e && e.key); return k.length === 1 ? k.toLowerCase() : k;
@@ -153,12 +158,32 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   };
 
   const said = () => { if (onMode) onMode(rig.mode); };
+  // D252: SPACE up, LEFT CTRL down (see KEYS at the top). `down` is every physical key down, camera key or not; `ctrlFly` is Left Ctrl's press while it
+  // flies ({ mode: the view it found, moved: metres descended }), 'spoiled' once something joined it (no descent for the rest of that press).
+  const down = new Set(), UP = Object.freeze({ fly: [0, 0, 1] }), DOWN = Object.freeze({ fly: [0, 0, -1] });
+  let buttons = 0, ctrlFly = null;
+  /** Something joined Left Ctrl: stop its descent and UNDO it, so a Ctrl shortcut (or the lens, or a snapped handle drag) leaves the camera where it was. */
+  const spoilCtrl = () => {
+    if (!ctrlFly || ctrlFly === 'spoiled') return;
+    const f = ctrlFly; ctrlFly = 'spoiled'; held.delete('ControlLeft');
+    if (rig.mode === 'free' && f.moved) rig.free.move(0, 0, f.moved);
+    if (f.mode !== 'free') { takeover = false; if (rig.mode === 'free') { rig.setMode(f.mode, ctx()); said(); } }
+  };
   const onKey = (e) => {
+    if (typeof e.code === 'string' && e.code) { if (e.code !== 'ControlLeft') spoilCtrl(); down.add(e.code); }
     boost = !!e.shiftKey;   // Shift is the sprint: read on every key-down, typing included
     // ENTER or ESC in a field lets go of it, so the camera keys work again (Enter in a text area is a new line: left alone)
     if ((e.key === 'Enter' || e.key === 'Escape') && e.target && typeof e.target.blur === 'function' && typeof e.target.matches === 'function'
       && e.target.matches(e.key === 'Enter' ? 'input, select' : 'input, select, textarea')) { e.target.blur(); return; }
     if (swallowsKeys(e.target)) return;   // typing, not flying
+    if (e.code === 'Space') {   // D252: up, and TAKEN, so a focused button is not clicked (a Ctrl/Alt/Meta+Space is not a move)
+      if (!(e.ctrlKey || e.altKey || e.metaKey)) { if (!held.has('Space')) held.set('Space', UP); if (!e.repeat) takeover = true; }
+      e.preventDefault(); return;
+    }
+    if (e.code === 'ControlLeft') {   // D252: down, only as the ONLY key down with no mouse button
+      if (!e.repeat) { if (down.size === 1 && !buttons && !e.altKey && !e.metaKey) { ctrlFly = { mode: rig.mode, moved: 0 }; held.set('ControlLeft', DOWN); takeover = true; } else ctrlFly = 'spoiled'; }
+      return;
+    }
     const a = keyAction(e.key, e); if (!a) return;
     if (a.camera) { takeover = false; rig.key(a.camera, ctx()); said(); e.preventDefault(); return; }
     if (a.look) { look = look === 'ac' ? 'words' : 'ac'; e.preventDefault(); return; }
@@ -169,8 +194,12 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // HELD KEYS are keyed by the PHYSICAL key (e.code), so a key pressed as 'w' and released as 'W' (Shift in between) still
   // lets go; and every held key is dropped when the window loses focus or is hidden, since the key-up then never arrives.
   // That lost key-up was the camera that kept flying forward by itself (the keeper, 2026-09-29).
-  const onUp = (e) => { held.delete(heldKey(e)); boost = !!e.shiftKey; };
-  const letGo = () => { held.clear(); takeover = false; boost = false; boostT = 0; drag = null; };
+  const onUp = (e) => {
+    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code);
+    if (e.code === 'ControlLeft') ctrlFly = null;   // a descent that ran alone is kept
+    if (e.code === 'Space' && !swallowsKeys(e.target)) e.preventDefault();   // D252: a button clicks on the key-UP of Space too
+  };
+  const letGo = () => { held.clear(); takeover = false; boost = false; boostT = 0; drag = null; down.clear(); buttons = 0; ctrlFly = null; };
   const onVis = () => { if (win.document && win.document.hidden) letGo(); };
   let boost = false, boostT = 0;   // Shift is down; and for how long (s)
   // MOUSE LOOK: the right button drags the look from any view (it takes the view over into free); the left button does in
@@ -186,15 +215,16 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     }
   };
   const onMove = (e) => { if (!drag) return; rig.free.look((e.clientX - drag[0]) * 0.004, -(e.clientY - drag[1]) * 0.004); drag = [e.clientX, e.clientY]; };
-  const onRelease = () => { drag = null; };
+  const onRelease = () => { drag = null; buttons = 0; };
+  const onAnyDown = () => { buttons = 1; spoilCtrl(); };   // D252: any button anywhere (a handle drag included) joins Left Ctrl
   const noMenu = (e) => e.preventDefault();
   // THE SCROLL WHEEL zooms every view: a follow view comes nearer or backs off, free mode flies along its view. CTRL + WHEEL is the
   // LENS instead (rig.lens: the field of view; the camera does not move).
   // deltaX counts only when Shift turned the wheel sideways: a trackpad's sideways swipe (deltaX, no Shift) is not a zoom, nor a lens
-  const onWheel = (e) => { const steps = -Math.sign(e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0) * (e.shiftKey ? 4 : 1); if (steps) { if (e.ctrlKey) rig.lens(steps); else rig.zoom(steps); } e.preventDefault(); };
+  const onWheel = (e) => { spoilCtrl(); const steps = -Math.sign(e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0) * (e.shiftKey ? 4 : 1); if (steps) { if (e.ctrlKey) rig.lens(steps); else rig.zoom(steps); } e.preventDefault(); };
   win.addEventListener('keydown', onKey); win.addEventListener('keyup', onUp); win.addEventListener('blur', letGo);
   if (win.document) win.document.addEventListener('visibilitychange', onVis);
-  canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease);
+  canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease); win.addEventListener('mousedown', onAnyDown, true);
   canvas.addEventListener('contextmenu', noMenu); canvas.addEventListener('wheel', onWheel, { passive: false });
 
   function frame(t) {
@@ -214,6 +244,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       }
       const n = Math.hypot(dir[0], dir[1], dir[2]);
       if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);
+      if (n && ctrlFly && ctrlFly !== 'spoiled' && held.has('ControlLeft')) ctrlFly.moved -= dir[2] / n * k;   // D252: what Left Ctrl descended, to undo if something joins it
     }
     const { width: w, height: h } = backingSize(canvas.clientWidth, canvas.clientHeight, win.devicePixelRatio);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // follows DPR and resizes
@@ -285,7 +316,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       win.cancelAnimationFrame(raf); clearFull(); unsub(); if (layer) layer.dispose();
       win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
       if (win.document) win.document.removeEventListener('visibilitychange', onVis);
-      canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease);
+      canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease); win.removeEventListener('mousedown', onAnyDown, true);
       canvas.removeEventListener('contextmenu', noMenu); canvas.removeEventListener('wheel', onWheel);
       renderer.dispose();
     },
