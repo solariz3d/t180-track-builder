@@ -410,11 +410,25 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!Number.isInteger(i) || i < 0 || i >= d.pieces.length) return set({ message: `there is no piece ${i}: the track has pieces 0 to ${d.pieces.length - 1}` });
       const anchor = extend && st.selection && st.selection.base === d ? st.selection.anchor : i;
       // D250 item 4 (the keeper: "Short way across start"): on a CLOSED lap a shift-click takes the SHORTER way round, by road length; across the start line it is from > to
-      // (from..last, then 0..to), which src/core/piece.js saveRun keeps; a tie stays the run that does not cross the line
-      let from = Math.min(anchor, i), to = Math.max(anchor, i);
-      if (d.closed && from !== to) { const len = (a, b) => d.pieces.slice(a, b + 1).reduce((x, P) => x + (P.type === 'road' ? P.length : 0), 0), total = len(0, d.pieces.length - 1); if (total - len(from + 1, to - 1) < len(from, to)) [from, to] = [to, from]; }
+      // (from..last, then 0..to), which src/core/piece.js saveRun keeps; a tie (within 1e-6 m: the lengths are decimal sums) stays the run that does not cross the line.
+      // A's look: the short way only where it CAN be kept. When the run across the line is refused (MIXED_RUN: a cup at one side and a plain piece at the other, as on
+      // TEST 1; SEAM_RUN) and the run inside the lap can be saved, the inside run is selected, and the line says why (longWay)
+      let from = Math.min(anchor, i), to = Math.max(anchor, i), longWay = null;
+      if (d.closed && from !== to) {
+        const len = (a, b) => d.pieces.slice(a, b + 1).reduce((x, P) => x + (P.type === 'road' ? P.length : 0), 0), total = len(0, d.pieces.length - 1);
+        if (total - len(from + 1, to - 1) < len(from, to) - 1e-6) {
+          const refusal = (a, b) => { try { PC.saveRun(d, a, b, { name: 'selection' }); return null; } catch (e) { if (e.name !== 'CoreError') throw e; return e; } };
+          const across = refusal(to, from);
+          if (across && (across.code === 'MIXED_RUN' || across.code === 'SEAM_RUN') && !refusal(from, to)) {
+            const kind = (P) => ({ cup: 'a cup', tube: 'a tube' })[D.kindOf(P)] || 'a plain piece', end = d.pieces[d.pieces.length - 1], start = d.pieces[0];
+            longWay = across.code === 'SEAM_RUN' ? 'the long way round: the short way crosses the start line, where the road is not smooth'
+              : D.kindOf(end) !== D.kindOf(start) ? `the long way round: the short way crosses the start line between ${kind(end)} and ${kind(start)}`
+                : 'the long way round: the short way crosses the start line and mixes cross-sections';
+          } else [from, to] = [to, from];
+        }
+      }
       const ids = from <= to ? d.pieces.slice(from, to + 1) : [...d.pieces.slice(from), ...d.pieces.slice(0, to + 1)];
-      return set({ selection: Object.freeze({ base: d, anchor, from, to, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, message: null });
+      return set({ selection: Object.freeze({ base: d, anchor, from, to, longWay, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, message: null });
     },
     clearSelection: () => set({ selection: null, deleteProposal: null, message: null }),
     /** What the selection is, for the panel: { from, to, count, lengthM, atEnd, saveProblem }; saveProblem is why it cannot be kept as a piece (null when it can). null when nothing is selected. */
@@ -424,7 +438,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       let saveProblem = null;
       try { PC.saveRun(d, s.from, s.to, { name: 'selection' }); } catch (e) { if (e.name !== 'CoreError') throw e; saveProblem = e.message; }
       const byId = new Map(d.pieces.map((P) => [P.id, P]));   // the selection's own pieces in lap order (D250: a run across a closed lap's start line is from > to)
-      return { from: s.from, to: s.to, count: s.ids.length, ids: s.ids, lengthM: s.ids.reduce((a, id) => a + (byId.get(id).type === 'road' ? byId.get(id).length : 0), 0), atEnd: s.to === d.pieces.length - 1, closed: !!d.closed, saveProblem };
+      return { from: s.from, to: s.to, count: s.ids.length, ids: s.ids, lengthM: s.ids.reduce((a, id) => a + (byId.get(id).type === 'road' ? byId.get(id).length : 0), 0), atEnd: s.to === d.pieces.length - 1, closed: !!d.closed, longWay: s.longWay || null, saveProblem };
     },
     async savePiece(name) {
       if (!storage || typeof storage.savePiece !== 'function') return set({ message: 'saving a piece is not available here' });
