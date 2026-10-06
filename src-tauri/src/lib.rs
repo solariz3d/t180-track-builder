@@ -7,7 +7,7 @@
 //   save_autosave(text) · open_autosave · clear_autosave: the unsaved track, for crash recovery
 //   write_export(dir, folder, files): an exported track into the folder the user picked (never an AC install's other tracks)
 //   get_ac_root · set_ac_root(path) · install_track(folder, files): INSTALL TO AC, into the remembered AC folder's
-//   content/tracks (ac.rs); get_see_it_setting · set_see_it_setting(on) · see_it_in_assetto(track, layout): the launch,
+//   content/tracks (ac.rs); with none remembered, get_ac_root finds AC through Steam and remembers it (D250, ac.rs root_or_find); get_see_it_setting · set_see_it_setting(on) · see_it_in_assetto(track, layout): the launch,
 //   OFF by default and never run by the builder's own tests (ac.rs header)
 // plus the dialog plugin for picking that folder.
 // Tracks live in <app data>/tracks/<name>.t180track and the user's pieces in <app data>/library.t180lib, as the
@@ -414,7 +414,8 @@ fn decode_files(files: Vec<ExportFile>) -> Result<Vec<(String, Vec<u8>)>, String
 
 #[tauri::command]
 fn get_ac_root(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    Ok(ac::recall_ac_root(&data_dir(&app)?)?.map(|p| p.to_string_lossy().into_owned()))
+    // D250: none remembered -> found through Steam (and remembered), so the first export into AC asks for nothing
+    Ok(ac::root_or_find(&data_dir(&app)?, &ac::steam_path_from_registry)?.map(|p| p.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]

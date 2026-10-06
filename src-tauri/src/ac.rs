@@ -5,6 +5,13 @@
 // write_export_to, so every guard of the export applies: the folder must be t180b_… (the builder names every track so,
 // and says so in the UI), and an existing folder the builder did not write is refused untouched (the marker file).
 //
+// FOUND THROUGH STEAM (D250; the keeper: "when the track is saved and exported, it should automatically create the folder in the
+// assetto track folder in steam"). With no folder remembered, root_or_find looks AC up before anyone is asked: Steam's folder from
+// the registry (HKCU\Software\Valve\Steam, SteamPath, read with Windows' own reg.exe, no new crate), then every library in
+// <Steam>\steamapps\libraryfolders.vdf, then <library>\steamapps\common\assettocorsa holding content\tracks. Found, it is
+// remembered exactly as a picked folder is (remember_ac_root), so every install guard below applies unchanged; not found, the app
+// asks with the picker as before. A picked or remembered folder always wins. Tests pass a fake registry and a fake Steam tree.
+//
 // SEE IT IN ASSETTO. BUILT, NEVER RUN. The overnight plan's rules: a cfg file AC reads (Documents\Assetto Corsa\cfg\
 // race.ini) is copied to race.ini.bak-t180b-<stamp> BEFORE anything is written, and put back byte-exact in a
 // `finally`, whatever happens; a run has a hard 10-minute timeout, after which the acs.exe it started, and only that one,
@@ -64,6 +71,91 @@ pub fn recall_ac_root(data: &Path) -> Result<Option<PathBuf>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(format!("could not read {}: {e}", f.display())),
     }
+}
+
+// ---- found through Steam (D250: see the header) ----
+pub const AC_STEAM_DIR: &str = "assettocorsa";
+
+/// Steam's folder from the output of `reg query HKCU\Software\Valve\Steam /v SteamPath`, or None (no such value, or empty).
+pub fn steam_path_from_reg_output(out: &str) -> Option<PathBuf> {
+    for line in out.lines() {
+        let t = line.trim_start();
+        if t.split_whitespace().next() != Some("SteamPath") { continue; }
+        for ty in ["REG_EXPAND_SZ", "REG_SZ"] {
+            if let Some(i) = t.find(ty) {
+                let v = t[i + ty.len()..].trim();
+                return if v.is_empty() { None } else { Some(PathBuf::from(v)) };
+            }
+        }
+    }
+    None
+}
+
+/// The quoted tokens of one vdf line, with its backslash escapes undone: `"path"  "C:\\Steam"` -> ["path", "C:\Steam"].
+fn vdf_tokens(line: &str) -> Vec<String> {
+    let (mut toks, mut cur, mut esc) = (Vec::new(), None::<String>, false);
+    for c in line.chars() {
+        match cur.as_mut() {
+            Some(s) if esc => { s.push(c); esc = false; }
+            Some(_) if c == '\\' => esc = true,
+            Some(_) if c == '"' => toks.push(cur.take().unwrap_or_default()),
+            Some(s) => s.push(c),
+            None if c == '"' => cur = Some(String::new()),
+            None => {}
+        }
+    }
+    toks
+}
+
+/// Every library folder in a libraryfolders.vdf: the "path" values (the current format) and the numbered values that are
+/// paths (the old one, `"1"  "D:\\SteamLibrary"`). An app id and its size (`"244210"  "38123"`) is not a library.
+pub fn library_paths_from_vdf(text: &str) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for line in text.lines() {
+        let t = vdf_tokens(line);
+        if t.len() != 2 { continue; }
+        let looks_like_path = t[1].contains(":\\") || t[1].contains(":/") || t[1].starts_with("\\\\");
+        if t[0].eq_ignore_ascii_case("path") || (t[0].bytes().all(|b| b.is_ascii_digit()) && looks_like_path) {
+            let p = PathBuf::from(&t[1]);
+            if !out.contains(&p) { out.push(p); }
+        }
+    }
+    out
+}
+
+/// AC in a Steam install: Steam's own folder first, then every library libraryfolders.vdf names; the first
+/// <library>/steamapps/common/assettocorsa that holds content/tracks.
+pub fn find_ac_in_steam(steam: &Path) -> Option<PathBuf> {
+    let mut libs = vec![steam.to_path_buf()];
+    if let Ok(t) = fs::read_to_string(steam.join("steamapps").join("libraryfolders.vdf")) {
+        for p in library_paths_from_vdf(&t) { if !libs.contains(&p) { libs.push(p); } }
+    }
+    libs.into_iter().map(|l| l.join("steamapps").join("common").join(AC_STEAM_DIR)).find(|ac| tracks_of(ac).is_ok())
+}
+
+/// The AC folder to install into: the remembered one; else the one found through Steam (`steam_path` reads the registry),
+/// which is then remembered as a picked folder is; else None, and the app asks with the picker.
+pub fn root_or_find(data: &Path, steam_path: &dyn Fn() -> Option<PathBuf>) -> Result<Option<PathBuf>, String> {
+    if let Some(p) = recall_ac_root(data)? { return Ok(Some(p)); }
+    match steam_path().and_then(|s| find_ac_in_steam(&s)) {
+        Some(ac) => Ok(Some(remember_ac_root(data, &ac)?)),
+        None => Ok(None),
+    }
+}
+
+/// Steam's folder from the registry, read with Windows' own reg.exe (no window); None when Steam is not installed or the
+/// query fails, and then the app asks with the picker. Only the registry is read. Never called by a test.
+pub fn steam_path_from_registry() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let out = std::process::Command::new("reg").args(["query", r"HKCU\Software\Valve\Steam", "/v", "SteamPath"]).creation_flags(CREATE_NO_WINDOW).output().ok()?;
+        if !out.status.success() { return None; }
+        steam_path_from_reg_output(&String::from_utf8_lossy(&out.stdout))
+    }
+    #[cfg(not(windows))]
+    { None }
 }
 
 /// Install an exported folder into `<root>/content/tracks`: the export's own writer, so its guards all hold.
@@ -325,6 +417,93 @@ mod tests {
         // a foreign folder carrying a copied marker file is still not ours: the name alone refuses it
         fs::write(ac.join("content").join("tracks").join("somebody_elses").join(MARKER_FILE_FOR_TESTS), b"{}").unwrap();
         assert!(launch_plan(&ac, &docs, "somebody_elses", "").unwrap_err().contains("only t180b_ tracks"));
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    // ---- find AC through Steam (D250). A FAKE Steam tree and a FAKE registry (a closure); the real registry and the real
+    // AC install are never read by a test.
+    /// <d>/steam (Steam itself, no AC) and <d>/lib2 (a second library holding AC with content/tracks), linked by
+    /// steam/steamapps/libraryfolders.vdf in the current format.
+    fn fake_steam(tag: &str) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+        let d = scratch(tag);
+        let (steam, lib2) = (d.join("steam"), d.join("lib2"));
+        fs::create_dir_all(steam.join("steamapps").join("common")).unwrap();
+        let ac = lib2.join("steamapps").join("common").join("assettocorsa");
+        fs::create_dir_all(ac.join("content").join("tracks").join("somebody_elses")).unwrap();
+        let esc = |p: &Path| p.to_string_lossy().replace('\\', "\\\\");
+        let vdf = format!("\"libraryfolders\"\r\n{{\r\n\t\"0\"\r\n\t{{\r\n\t\t\"path\"\t\t\"{}\"\r\n\t\t\"label\"\t\t\"\"\r\n\t\t\"apps\"\r\n\t\t{{\r\n\t\t\t\"228980\"\t\t\"123\"\r\n\t\t}}\r\n\t}}\r\n\t\"1\"\r\n\t{{\r\n\t\t\"path\"\t\t\"{}\"\r\n\t\t\"apps\"\r\n\t\t{{\r\n\t\t\t\"244210\"\t\t\"456\"\r\n\t\t}}\r\n\t}}\r\n}}\r\n", esc(&steam), esc(&lib2));
+        fs::write(steam.join("steamapps").join("libraryfolders.vdf"), vdf).unwrap();
+        let data = d.join("data");
+        fs::create_dir_all(&data).unwrap();
+        (d, steam, ac, data)
+    }
+
+    #[test]
+    fn steam_path_is_read_from_reg_query_output_and_anything_else_is_none() {
+        let out = "\r\nHKEY_CURRENT_USER\\Software\\Valve\\Steam\r\n    SteamPath    REG_SZ    c:/program files (x86)/steam\r\n\r\n";
+        assert_eq!(steam_path_from_reg_output(out), Some(PathBuf::from("c:/program files (x86)/steam")));
+        assert_eq!(steam_path_from_reg_output("    SteamPath    REG_EXPAND_SZ    D:/Steam\r\n"), Some(PathBuf::from("D:/Steam")));
+        assert_eq!(steam_path_from_reg_output("ERROR: The system was unable to find the specified registry key or value.\r\n"), None);
+        assert_eq!(steam_path_from_reg_output("    SteamPathX    REG_SZ    D:/nope\r\n    SteamPath    REG_SZ    \r\n"), None, "another value, or an empty one");
+    }
+
+    #[test]
+    fn libraryfolders_vdf_gives_every_library_in_both_formats_and_nothing_else() {
+        let new = "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"C:\\\\Program Files (x86)\\\\Steam\"\n\t\t\"apps\"\n\t\t{\n\t\t\t\"244210\"\t\t\"38123\"\n\t\t}\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"E:\\\\SteamLibrary\"\n\t\t\"label\"\t\t\"games\"\n\t}\n}\n";
+        assert_eq!(library_paths_from_vdf(new), vec![PathBuf::from(r"C:\Program Files (x86)\Steam"), PathBuf::from(r"E:\SteamLibrary")]);
+        let old = "\"LibraryFolders\"\n{\n\t\"TimeNextStatsReport\"\t\t\"1600000000\"\n\t\"ContentStatsID\"\t\t\"-123\"\n\t\"1\"\t\t\"D:\\\\SteamLibrary\"\n}\n";
+        assert_eq!(library_paths_from_vdf(old), vec![PathBuf::from(r"D:\SteamLibrary")]);
+        assert!(library_paths_from_vdf("").is_empty() && library_paths_from_vdf("not a vdf at all").is_empty());
+    }
+
+    #[test]
+    fn ac_is_found_in_any_steam_library_and_only_where_it_holds_content_tracks() {
+        let (d, steam, ac, _) = fake_steam("find");
+        assert_eq!(find_ac_in_steam(&steam), Some(steam.parent().unwrap().join("lib2").join("steamapps").join("common").join("assettocorsa")));
+        assert!(ac.join("content").join("tracks").is_dir());
+        // an assettocorsa folder with no content/tracks (a broken install) is not AC
+        fs::remove_dir_all(ac.join("content")).unwrap();
+        assert_eq!(find_ac_in_steam(&steam), None);
+        // AC in Steam's own folder, with no libraryfolders.vdf at all
+        fs::remove_file(steam.join("steamapps").join("libraryfolders.vdf")).unwrap();
+        fs::create_dir_all(steam.join("steamapps").join("common").join("assettocorsa").join("content").join("tracks")).unwrap();
+        assert_eq!(find_ac_in_steam(&steam), Some(steam.join("steamapps").join("common").join("assettocorsa")));
+        assert_eq!(find_ac_in_steam(&d.join("no-steam-here")), None);
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn with_no_folder_remembered_ac_is_found_through_steam_and_remembered_and_with_none_found_nothing_is_written() {
+        let (d, steam, ac, data) = fake_steam("rootfind");
+        // Steam not installed (the registry has no SteamPath): None, the app asks with the picker, nothing remembered
+        assert_eq!(root_or_find(&data, &|| None).unwrap(), None);
+        assert!(!data.join(ROOT_FILE).exists());
+        // Steam there but AC in no library: the same
+        assert_eq!(root_or_find(&data, &|| Some(d.join("elsewhere"))).unwrap(), None);
+        assert!(!data.join(ROOT_FILE).exists());
+        // found: remembered, so the next call reads it back without the registry
+        let found = root_or_find(&data, &|| Some(steam.clone())).unwrap().unwrap();
+        assert_eq!(fs::canonicalize(&found).unwrap(), fs::canonicalize(&ac).unwrap());
+        assert_eq!(recall_ac_root(&data).unwrap(), Some(found.clone()));
+        let asked = std::cell::Cell::new(false);
+        assert_eq!(root_or_find(&data, &|| { asked.set(true); None }).unwrap(), Some(found.clone()));
+        assert!(!asked.get(), "a remembered folder wins: the registry is not read");
+        // and the install guards hold in the found folder: ours lands, another author's name never does
+        assert_eq!(install_to(&found, "t180b_mine", &files()).unwrap(), 3);
+        assert!(install_to(&found, "somebody_elses", &files()).unwrap_err().contains("not a folder the builder makes"));
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_picked_folder_still_wins_over_steam_and_a_remembered_folder_that_is_gone_is_looked_up_again() {
+        let (d, steam, ac, data) = fake_steam("rootpick");
+        let picked = d.join("picked");
+        fs::create_dir_all(picked.join("content").join("tracks")).unwrap();
+        let p = remember_ac_root(&data, &picked).unwrap();
+        assert_eq!(root_or_find(&data, &|| Some(steam.clone())).unwrap(), Some(p));
+        fs::remove_dir_all(&picked).unwrap();
+        let again = root_or_find(&data, &|| Some(steam.clone())).unwrap().unwrap();
+        assert_eq!(fs::canonicalize(&again).unwrap(), fs::canonicalize(&ac).unwrap());
         fs::remove_dir_all(&d).unwrap();
     }
 

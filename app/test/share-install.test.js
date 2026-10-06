@@ -146,7 +146,8 @@ test('no tooltip on the page carries a tab or a line break (the install one said
   assert.deepStrictEqual(titles.filter((t) => /[\t\r\n]/.test(t)), []);
 });
 
-test('the Install to AC button installs the track under the name it was saved as', async () => {
+// D250 amended this row BY NAME: the keeper asked for an obvious "export into AC" beside Export, so the button is "Export to Assetto Corsa" (was "Install to AC")
+test('the Export to Assetto Corsa button installs the track under the name it was saved as', async () => {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js');
   const restore = fake.install();
   try {
@@ -154,10 +155,34 @@ test('the Install to AC button installs the track under the name it was saved as
     const s = await lap({ closed: true, exporter: await makeExporter(get) }); await s.save('Monza');
     const root = new fake.Element('div');
     mount(root, s, { native, pickFolder: async () => null, getTextures: () => null });
-    const button = [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Install to AC');
+    const button = [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa');
     await button.onclick();
     assert.deepStrictEqual(native.installs.map((i) => i.folder), ['t180b_monza']);
   } finally { restore(); }
+});
+
+// D250 (the keeper: "it should automatically create the folder in the assetto track folder in steam"): the native side finds AC through Steam
+// when none is remembered (src-tauri/src/ac.rs root_or_find), so get_ac_root answers with a folder and the picker is never opened
+test('D250: with AC found through Steam the button exports with NO folder dialog, and the line says where it went and that exporting again updates it', async () => {
+  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js');
+  const restore = fake.install();
+  try {
+    const native = fakeNative(); native.root = 'G:/SteamLibrary/steamapps/common/assettocorsa';   // what root_or_find returns once found
+    const s = await lap({ closed: true, exporter: await makeExporter(get) }); await s.save('Monza');
+    const root = new fake.Element('div'), asked = [];
+    mount(root, s, { native, pickFolder: async (why) => { asked.push(why); return null; }, getTextures: () => null });
+    await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
+    assert.deepStrictEqual([asked.length, native.installs.map((i) => i.folder)], [0, ['t180b_monza']]);
+    const said = [...root.walk()].find((e) => e.className === 't-install-note').textContent;
+    assert.ok(said.includes('G:/SteamLibrary/steamapps/common/assettocorsa\\content\\tracks\\t180b_monza'), said);
+    assert.match(said, /exporting this track again updates that folder/);
+  } finally { restore(); }
+});
+
+test('D250: when AC is NOT found through Steam, the line says so and asks for the folder (the picker, as before)', async () => {
+  const native = fakeNative(), s = await lap({ closed: true, exporter: await makeExporter(get) }); await s.save('Monza');
+  const r = await installerFor(s, native).install();
+  assert.deepStrictEqual([r.ok, r.needsRoot], [false, true]); assert.match(r.message, /not found through Steam/);
 });
 
 test('an open loop is not installed: the refusal is the Export button\'s own, and nothing is written', async () => {
