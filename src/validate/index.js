@@ -232,6 +232,10 @@ function core(path, segments, opts, from, carried, upto) {
   for (let i = from; i < end; i++) {
     if (!isRoad(i)) continue;
     const p = S[i], cs = constAt(p), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
+    // D256 (suite reds): the two checks the keeper's decision added judge the EQUATION CORE's own roads only (word 'core', src/core/adapter.js), as the
+    // roll-rate bar does below: the paused piece builder's word documents are not newly judged by them (its S phrase and its starter chain lift off at their
+    // own tempo on the centreline, measured and flagged in the hand-back, never judged before)
+    const coreRoad = segments[p.seg].word === 'core';
     let aT = 0;
     if (sp.v) { const a = S[Math.max(0, i - 1)], b = S[Math.min(n - 1, i + 1)]; const va = sp.v[Math.max(0, i - 1)], vb = sp.v[Math.min(n - 1, i + 1)]; if (b.s > a.s) aT = (vb * vb - va * va) / (2 * (b.s - a.s)); }
     for (const c of cs) {
@@ -244,7 +248,7 @@ function core(path, segments, opts, from, carried, upto) {
       if (margin <= 0) { raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'fold', worst: -margin }); continue; }
       // D256 holds-above: on the CENTRELINE, a surface facing the ground (n·ŷ < 0) holds the car only while v²(κ⃗·n)/margin outweighs
       // gravity's pull off it, i.e. above v = sqrt(−g(n·ŷ) / ((κ⃗·n)/margin)) at a steady speed. Information in km/h; red where no speed holds
-      if (u === 0) {
+      if (u === 0 && coreRoad) {
         const nyc = ny(p, c);
         if (nyc < -1e-9) {
           const kn = (K[0] * nx(p, c) + K[1] * nyc + K[2] * nz(p, c)) / margin;
@@ -259,7 +263,7 @@ function core(path, segments, opts, from, carried, upto) {
       const line = { s: p.s, u, fN_g: (f0 * n0 + f1 * n1 + f2 * n2) / G, fLat_g: (f0 * l0 + f1 * l1 + f2 * l2) / G, fAlong_g: (f0 * Tv[0] + f1 * Tv[1] + f2 * Tv[2]) / G, f_g: Math.hypot(f0, f1, f2) / G };
       raw.lines.push({ i, line });
       // D256: the centreline lift-off on an OPEN track (a closed one has it in the lap proof below, so it is not counted twice)
-      if (!path.closed && u === 0 && line.fN_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fN_g });
+      if (!path.closed && coreRoad && u === 0 && line.fN_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fN_g });
       if (line.fN_g > car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-above-proven', worst: line.fN_g });
       else if (line.fN_g >= car.suspensionStopG) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'on-the-stops', worst: line.fN_g });
     }
