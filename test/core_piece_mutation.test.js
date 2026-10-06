@@ -13,8 +13,9 @@ const X = 'core/piece.js';
 const MUTANTS = [
   // save
   { id: 'P1 a run of one piece is a run of two (to defaults to from + 1)', pattern: 'row 9|row 1b', edits: [[X, 'function saveRun(doc, from, to = from, { name } = {}) {', 'function saveRun(doc, from, to = from + 1, { name } = {}) {']] },
-  { id: 'P2 a run that ends before it starts is accepted', pattern: 'row 9', edits: [[X, 'from < 0 || to >= doc.pieces.length || to < from)', 'from < 0 || to >= doc.pieces.length)']] },
-  { id: 'P3 a run past the end of the track is accepted', pattern: 'row 9', edits: [[X, 'from < 0 || to >= doc.pieces.length || to < from)', 'from < 0 || to < from)']] },
+  // P2, P3 re-anchored on D250 item 4's range check (C, f13cded): from > to is now valid across a CLOSED lap's start line, so P2 is "accepted on an OPEN track" (row 9's 3..2 there)
+  { id: 'P2 a run that ends before it starts is accepted (on an open track)', pattern: 'row 9', edits: [[X, 'from >= n || to >= n || (to < from && !wrap))', 'from >= n || to >= n)']] },
+  { id: 'P3 a run past the end of the track is accepted', pattern: 'row 9', edits: [[X, 'from >= n || to >= n || (to < from && !wrap))', 'from >= n || (to < from && !wrap))']] },
   { id: 'P4 a run of flights alone is saved', pattern: 'row 6', edits: [[X, "if (!roads.length) throw err('NO_ROAD', 'a run of flights alone", "if (false) throw err('NO_ROAD', 'a run of flights alone"]] },
   { id: 'P5 a mixed run is saved', pattern: 'row 8b', edits: [[X, 'if (roads.some((P) => signature(P) !== sig)) throw err(\'MIXED_RUN\', `the run mixes', 'if (false) throw err(\'MIXED_RUN\', `the run mixes']] },
   { id: 'P6 the start is taken from the last road, not the first', pattern: 'row 1', edits: [[X, 'const first = roads[0], start = {};', 'const first = roads[roads.length - 1], start = {};']] },
