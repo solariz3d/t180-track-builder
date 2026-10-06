@@ -158,7 +158,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const speed = Number.isFinite(st.designSpeedKmh) && st.designSpeedKmh > 0 ? st.designSpeedKmh : null;
     let job = null;
     if (overlapRunner) { try { job = overlapRunner.start({ doc: d, designSpeedKmh: speed, closed }); } catch (e) { job = null; } }
-    const entry = Object.freeze({ proposal: p, status: 'checking', startedAt: now(), via: job ? 'worker' : 'page', result: null, error: null, ms: null });
+    const entry = Object.freeze({ proposal: p, status: 'checking', startedAt: now(), via: job ? 'worker' : 'page', result: null, error: null, ms: null, timing: null });
     currentJob = { entry, job };
     const run = job ? job.promise : new Promise((res, rej) => timers.setTimeout(() => { try { res(overlapCheck(p.resolved, speed, { closed })); } catch (e) { rej(e); } }, 0));
     const finish = (r) => {
@@ -167,7 +167,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const done = Object.freeze({ ...entry, ...r, ms: now() - entry.startedAt });
       set({ proposalCheck: done, ...onDone(done) });
     };
-    run.then((result) => finish({ status: 'done', result: Object.freeze(result) }), (e) => { if (!(e && e.cancelled)) finish({ status: 'failed', error: String((e && e.message) || e) }); });
+    run.then((result) => finish({ status: 'done', result: Object.freeze(result), timing: (job && job.timing) || null }), (e) => { if (!(e && e.cancelled)) finish({ status: 'failed', error: String((e && e.message) || e) }); });
     return entry;   // the caller puts it in the SAME state change as the preview (a panel drawn for the preview must already see its check)
   }
   const doc = () => st.history.present;
@@ -335,7 +335,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (p && p.check) return { status: 'done', result: p.check, error: null, via: 'page', elapsedMs: 0 };
       const e = st.proposalCheck;
       if (!p || !e || e.proposal !== p) return { status: 'none', result: null, error: null, via: null, elapsedMs: 0 };
-      return { status: e.status, result: e.result, error: e.error, via: e.via, elapsedMs: e.status === 'checking' ? now() - e.startedAt : e.ms };
+      return { status: e.status, result: e.result, error: e.error, via: e.via, elapsedMs: e.status === 'checking' ? now() - e.startedAt : e.ms, timing: e.timing };
     },
 
     /**
