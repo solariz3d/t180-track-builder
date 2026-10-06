@@ -161,9 +161,15 @@ pub fn test_steam_path(var: Option<String>) -> Option<PathBuf> {
 /// Steam's folder: the test seam when the app was launched with one (and, set but not a folder, NOTHING: a test run never falls through to the
 /// real registry), else the registry.
 pub fn steam_path() -> Option<PathBuf> {
-    match std::env::var("T180_TEST_STEAM_PATH") {
-        Ok(v) => test_steam_path(Some(v)),
-        Err(_) => steam_path_from_registry(),
+    steam_path_from(std::env::var_os("T180_TEST_STEAM_PATH"), &steam_path_from_registry)
+}
+
+/// steam_path with its inputs given (tested): `var` is the raw T180_TEST_STEAM_PATH. SET, it is the seam whatever it holds: a usable folder, or
+/// nothing (a value that is not Unicode included: C's finding 3, env::var's Err used to fall through to the registry). Only UNSET reads `registry`.
+pub fn steam_path_from(var: Option<std::ffi::OsString>, registry: &dyn Fn() -> Option<PathBuf>) -> Option<PathBuf> {
+    match var {
+        Some(v) => test_steam_path(v.into_string().ok()),
+        None => registry(),
     }
 }
 
@@ -572,6 +578,25 @@ mod tests {
         assert_eq!(test_steam_path(None), None);
         assert_eq!(test_steam_path(Some("relative\\steam".into())), None, "relative: refused");
         assert_eq!(test_steam_path(Some(d.join("nope").to_string_lossy().into_owned())), None, "missing: refused");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    // C's finding 3 (p-spacefly-C_2026-10-06.md): env::var gave Err for a value that is not Unicode, and that fell through to the REAL registry. ANY set value
+    // is the seam: a usable folder, or nothing; only an UNSET variable reads the registry
+    #[cfg(windows)]
+    #[test]
+    fn a_set_but_unusable_test_steam_path_gives_nothing_even_when_it_is_not_unicode_and_only_unset_reads_the_registry() {
+        use std::os::windows::ffi::OsStringExt;
+        let asked = std::cell::Cell::new(0);
+        let reg = || { asked.set(asked.get() + 1); Some(PathBuf::from(r"C:\would-be-the-real-steam")) };
+        let bad = std::ffi::OsString::from_wide(&[0x0043, 0x003A, 0xD800]);   // "C:" then an unpaired surrogate: not valid Unicode
+        assert_eq!(steam_path_from(Some(bad), &reg), None, "not Unicode: nothing");
+        assert_eq!(steam_path_from(Some("relative".into()), &reg), None, "relative: nothing");
+        assert_eq!(asked.get(), 0, "a set variable never reads the registry");
+        let d = scratch("seamos");
+        assert_eq!(steam_path_from(Some(d.clone().into_os_string()), &reg), Some(d.clone()), "an existing absolute folder: used");
+        assert_eq!(steam_path_from(None, &reg), Some(PathBuf::from(r"C:\would-be-the-real-steam")), "unset: the registry");
+        assert_eq!(asked.get(), 1);
         fs::remove_dir_all(&d).unwrap();
     }
 

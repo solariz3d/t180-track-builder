@@ -220,6 +220,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const onMove = (e) => { if (!drag) return; rig.free.look((e.clientX - drag[0]) * 0.004, -(e.clientY - drag[1]) * 0.004); drag = [e.clientX, e.clientY]; };
   const onRelease = () => { drag = null; buttons = 0; };
   const onAnyDown = () => { buttons = 1; spoilCtrl(); };   // D252: any button anywhere (a handle drag included) joins Left Ctrl
+  const onAnyUp = () => { buttons = 0; };   // D252 follow-up (C's finding 5): a handle's preventDefault on pointerdown suppresses the compatibility mousedown, so a press is read from pointerdown too
   const noMenu = (e) => e.preventDefault();
   // THE SCROLL WHEEL zooms every view: a follow view comes nearer or backs off, free mode flies along its view. CTRL + WHEEL is the
   // LENS instead (rig.lens: the field of view; the camera does not move).
@@ -227,7 +228,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const onWheel = (e) => { spoilCtrl(); const steps = -Math.sign(e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0) * (e.shiftKey ? 4 : 1); if (steps) { if (e.ctrlKey) rig.lens(steps); else rig.zoom(steps); } e.preventDefault(); };
   win.addEventListener('keydown', onKey); win.addEventListener('keyup', onUp); win.addEventListener('blur', letGo);
   if (win.document) win.document.addEventListener('visibilitychange', onVis);
-  canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease); win.addEventListener('mousedown', onAnyDown, true);
+  canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease); win.addEventListener('mousedown', onAnyDown, true); win.addEventListener('pointerdown', onAnyDown, true); win.addEventListener('pointerup', onAnyUp, true);
   canvas.addEventListener('contextmenu', noMenu); canvas.addEventListener('wheel', onWheel, { passive: false });
 
   function frame(t) {
@@ -321,7 +322,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       win.cancelAnimationFrame(raf); clearFull(); unsub(); if (layer) layer.dispose();
       win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
       if (win.document) win.document.removeEventListener('visibilitychange', onVis);
-      canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease); win.removeEventListener('mousedown', onAnyDown, true);
+      canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease); win.removeEventListener('mousedown', onAnyDown, true); win.removeEventListener('pointerdown', onAnyDown, true); win.removeEventListener('pointerup', onAnyUp, true);
       canvas.removeEventListener('contextmenu', noMenu); canvas.removeEventListener('wheel', onWheel);
       renderer.dispose();
     },
