@@ -27,8 +27,11 @@ const DEG = Math.PI / 180;
  * `rate` is the value change per metre of drag; the Extend fields' units (the core's channels are the same, degrees and metres).
  */
 const KINDS = Object.freeze({
-  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 1, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'fwd', rate: 1, min: 1, max: 5000, step: 0.1, snap: 10 }),
-  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', rate: 2, min: 0.5, max: 400, step: 0.1, snap: 5 }),
+  // D250 item 3 (the keeper chose "Near end, like my picture"): LENGTH and WIDTH are at the piece's NEAR end, as in his marked-up screenshot. The near end stays where it is when the value changes, so
+  // length is dragged AWAY from the piece (back toward the camera, `sign: 'back'`: stretching the near edge toward you is longer), and the width marks sit at the TARGET half-width (`target: true`: the
+  // field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. Turn and climb stay at the far side, bank and cup mid-piece.
+  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 0, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'back', rate: 1, min: 1, max: 5000, step: 0.1, snap: 10 }),
+  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, rate: 2, min: 0.5, max: 400, step: 0.1, snap: 5 }),
   bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', rate: null, min: -720, max: 720, step: 0.1, snap: 5 }),
   cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', rate: 2, min: 0, max: 150, step: 0.1, snap: 5 }),
   turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.75, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', rate: 0.5, min: -90, max: 90, step: 0.1, snap: 5 }),
@@ -54,18 +57,20 @@ function sampleNear(samples, s) {
 }
 
 /**
- * Where the handles are. `model`: { samples, s0, s1, half(f), kinds } with the path samples of the piece (from s0 to s1), `half(f)` the road's half-width in metres at the fraction f of the
- * piece, and `kinds` which kinds to place. Each handle: { id: 'width:1', kind, side, pos: [x, y, z], axis: [x, y, z] (the unit vector a POSITIVE drag moves along) }.
+ * Where the handles are. `model`: { samples, s0, s1, half(f), kinds, halfTarget?, at? } with the path samples of the piece (from s0 to s1), `half(f)` the road's half-width in metres at the fraction f of the
+ * piece, and `kinds` which kinds to place. `halfTarget`, when given, is the half-width a `target` kind (width) sits at (the field's value); `at` overrides a kind's place along the piece (Sculpt keeps the
+ * width mark where it was). Each handle: { id: 'width:1', kind, side, pos: [x, y, z], axis: [x, y, z] (the unit vector a POSITIVE drag moves along) }.
  */
 function placeHandles(model) {
   const out = [];
   for (const kind of model.kinds) {
     const K = KINDS[kind]; if (!K) continue;
-    const m = sampleNear(model.samples, model.s0 + K.at * (model.s1 - model.s0)); if (!m) continue;
-    const half = model.half(K.at);
+    const at = model.at && model.at[kind] !== undefined ? model.at[kind] : K.at;
+    const m = sampleNear(model.samples, model.s0 + at * (model.s1 - model.s0)); if (!m) continue;
+    const half = K.target && Number.isFinite(model.halfTarget) ? model.halfTarget : model.half(at);
     for (const side of K.sides) {
       const lat = K.lat * half * side, pos = add(m.pos, m.L, lat);
-      const dir = K.axis === 'T' ? m.T : K.axis === 'L' ? m.L : m.U, sgn = K.sign === 'out' || K.sign === 'up' ? side : 1;
+      const dir = K.axis === 'T' ? m.T : K.axis === 'L' ? m.L : m.U, sgn = K.sign === 'out' || K.sign === 'up' ? side : K.sign === 'back' ? -1 : 1;
       out.push({ id: `${kind}:${side}`, kind, side, pos, axis: [dir[0] * sgn || 0, dir[1] * sgn || 0, dir[2] * sgn || 0] });   // (|| 0: no negative zeros)
     }
   }
