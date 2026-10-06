@@ -24,8 +24,8 @@ const byId = (list) => Object.fromEntries(list.map((h) => [h.id, h]));
 test('row 1: every kind is placed where the keeper marked it, and every kind with a side is on BOTH sides, mirrored about the centreline', () => {
   const list = HD.placeHandles(MODEL), h = byId(list);
   assert.deepEqual(list.map((x) => x.kind), ['length', 'width', 'width', 'bank', 'bank', 'cup', 'cup', 'turn', 'turn', 'climb'], 'ten handles: the one-sided kinds once, the others twice');
-  assert.deepEqual(h['length:0'].pos, [0, 0, 200], 'length: the centreline at the far end');
-  assert.deepEqual([h['width:1'].pos, h['width:-1'].pos], [[10, 0, 200], [-10, 0, 200]], 'width: both edges at the far end');
+  assert.deepEqual(h['length:0'].pos, [0, 0, 40], 'length: the centreline at the NEAR end (the keeper\'s picture, D250 item 3)');
+  assert.deepEqual([h['width:1'].pos, h['width:-1'].pos], [[10, 0, 40], [-10, 0, 40]], 'width: both edges at the NEAR end');
   assert.deepEqual([h['bank:1'].pos, h['bank:-1'].pos], [[10, 0, 120], [-10, 0, 120]], 'bank: both edges, mid piece');
   assert.deepEqual([h['cup:1'].pos, h['cup:-1'].pos], [[3, 0, 120], [-3, 0, 120]], 'cup: just inside the centre, both sides, mid piece');
   assert.deepEqual([h['turn:1'].pos, h['turn:-1'].pos], [[10, 0, 160], [-10, 0, 160]], 'turn: both edges three quarters along');
@@ -34,17 +34,22 @@ test('row 1: every kind is placed where the keeper marked it, and every kind wit
 });
 test('row 1b: the road\'s width at the handle sets how far out an edge handle sits, and an unknown or absent kind places nothing', () => {
   const narrow = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, kinds: ['width'] }));
-  assert.deepEqual(narrow['width:1'].pos, [12, 0, 200], 'the far end (share 1) is 12 m from the centre');
+  assert.deepEqual(narrow['width:1'].pos, [4, 0, 40], 'with no target given, the near end (share 0) is where the road is: 4 m from the centre');
+  // the width mark sits at the TARGET half-width (the field's value) when one is given, so it follows the drag from the near end; Sculpt moves it back along the piece
+  const target = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, halfTarget: 9, kinds: ['width', 'bank'] }));
+  assert.deepEqual([target['width:1'].pos, target['width:-1'].pos], [[9, 0, 40], [-9, 0, 40]], 'the near end, at the target width'); assert.deepEqual(target['bank:1'].pos, [8, 0, 120], 'only a target kind uses it: bank still sits at the road\'s own edge, mid piece');
+  const placed = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, halfTarget: 9, at: { width: 1 }, kinds: ['width'] })); assert.deepEqual(placed['width:1'].pos, [9, 0, 200], 'an `at` override moves it (Sculpt keeps the width mark at the far end of the piece)');
+  assert.deepEqual(byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, at: { width: 1 }, kinds: ['width'] }))['width:1'].pos, [12, 0, 200], 'with no target, the road\'s own half-width at that share');
   assert.deepEqual(HD.placeHandles({ ...MODEL, kinds: ['nope'] }), []); assert.deepEqual(HD.placeHandles({ ...MODEL, samples: [] }), []);
 });
 
-test('row 2: a positive drag runs outward (width, cup), left on both sides (turn), up on the left edge and down on the right (bank), along the road (length), up (climb)', () => {
+test('row 2: a positive drag runs outward (width, cup), left on both sides (turn), up on the left edge and down on the right (bank), away from the piece (length: its near end stays put), up (climb)', () => {
   const h = byId(HD.placeHandles(MODEL));
   assert.deepEqual([h['width:1'].axis, h['width:-1'].axis], [[1, 0, 0], [-1, 0, 0]], 'width: outward');
   assert.deepEqual([h['cup:1'].axis, h['cup:-1'].axis], [[1, 0, 0], [-1, 0, 0]], 'cup: outward');
   assert.deepEqual([h['turn:1'].axis, h['turn:-1'].axis], [[1, 0, 0], [1, 0, 0]], 'turn: left on both sides');
   assert.deepEqual([h['bank:1'].axis, h['bank:-1'].axis], [[0, 1, 0], [0, -1, 0]], 'bank: the left edge up, the right edge down');
-  assert.deepEqual([h['length:0'].axis, h['climb:0'].axis], [[0, 0, 1], [0, 1, 0]]);
+  assert.deepEqual([h['length:0'].axis, h['climb:0'].axis], [[0, 0, -1], [0, 1, 0]], 'length: AWAY from the piece (back toward the camera) is longer, since the near end stays put; climb: up');
   for (const x of Object.values(h)) close(Math.hypot(...x.axis), 1);
 });
 

@@ -260,7 +260,8 @@ function mount(root, shell) {
     // the road's half-width at a share of the piece: from the head's width to the field's, read when asked (a press must not see the width of the frame before)
     const half = (f) => { const w1 = fieldNum(width), w0 = d.pieces.length ? (fieldNum({ value: shown.width }) ?? w1) : w1; return ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2; };
     const kinds = HD.ORDER.filter((k) => !HANDLE_FIELD[k].disabled && fieldNum(HANDLE_FIELD[k]) !== null);
-    return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, kinds, base: (k) => fieldNum(HANDLE_FIELD[k]), ctx: (k) => ({ half: half(HD.KINDS[k].at) }) };
+    const wt = fieldNum(width);   // the width mark sits at the TARGET width (the field), so it follows the drag from the near end
+    return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, halfTarget: wt === null ? undefined : wt / 2, kinds, base: (k) => fieldNum(HANDLE_FIELD[k]), ctx: (k) => ({ half: half(HD.KINDS[k].at) }) };
   };
   let sculptSamples = null;   // the selected piece's samples, kept for the track they came from
   const sculptModel = () => {
@@ -269,7 +270,7 @@ function mount(root, shell) {
     if (!sculptSamples || sculptSamples.tr !== tr.path || sculptSamples.id !== si.id) sculptSamples = { tr: tr.path, id: si.id, list: tr.path.samples.filter((m) => tr.segments[m.seg] && tr.segments[m.seg].id === si.id) };
     const list = sculptSamples.list; if (list.length < 2) return null;
     const kinds = ['bank', 'width'].concat(si.hasCup ? ['cup'] : []), valueOf = { bank: si.values.phi, width: si.values.w, cup: si.values.c };
-    return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }) };
+    return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), at: { width: 1 }, kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }) };
   };
   let sculptDrag = null;
   const handlesHost = {

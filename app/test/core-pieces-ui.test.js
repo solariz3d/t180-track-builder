@@ -404,6 +404,15 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   // width: either side's handle, 1 m OUTWARD, is the same change of the one field
   const w0 = Number(width.value); dragBy(P1, 'width:1', 1); const wl = Number(width.value); width.value = String(w0); width.oninput(); P1.frame(); dragBy(P1, 'width:-1', 1); const wr = Number(width.value);
   assert.equal(wl, w0 + 2); assert.equal(wr, wl, 'the right edge, 1 m outward, is the same two metres of width');
+  // D250 item 3, the keeper's picture: LENGTH and WIDTH are at the piece's NEAR end (the head, where the ghost starts); the width marks sit at the TARGET half-width, so they follow the drag
+  const nearOf = () => { const r = shell.getState().resolved, placed = G.buildPath(r.segments, { step: 2, closed: false, start: r.start }).samples, end = placed[placed.length - 1].s; return S.ghost.samples.find((m) => m.s >= end - 1e-9); };
+  const lat = (h, near) => (h.pos[0] - near.pos[0]) * near.L[0] + (h.pos[1] - near.pos[1]) * near.L[1] + (h.pos[2] - near.pos[2]) * near.L[2];
+  width.value = String(w0); width.oninput(); P1.frame(); let near = nearOf(), now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
+  for (const k of ['length:0', 'width:1', 'width:-1']) assert.ok(Math.hypot(now[k].pos[0] - near.pos[0] - (k === 'length:0' ? 0 : lat(now[k], near) * near.L[0]), now[k].pos[2] - near.pos[2] - (k === 'length:0' ? 0 : lat(now[k], near) * near.L[2])) < 1e-6, `${k} is on the ghost's first station`);
+  const nearly = (x, y, eps) => assert.ok(Math.abs(x - y) <= eps, `${x} is not within ${eps} of ${y}`);
+  near = nearOf(); nearly(lat(now['width:1'], near), w0 / 2, 1e-6); nearly(lat(now['width:-1'], near), -w0 / 2, 1e-6); width.value = String(w0 + 4); width.oninput(); P1.frame(); now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
+  nearly(lat(now['width:1'], nearOf()), (w0 + 4) / 2, 1e-6); const turnNow = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]))['turn:1']; assert.ok(Math.abs(lat(turnNow, nearOf())) > 0, 'control: the turn mark is a different handle, three quarters along');
+  width.value = String(w0); width.oninput(); P1.frame();
   // bank: the left edge up, the right edge down are both positive; a drag is typed (Shift: a tenth)
   dragBy(P1, 'bank:1', 2); const b1 = Number(bank.value); assert.ok(b1 > 0, `bank rose: ${b1}`); bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:-1', 2); assert.equal(Number(bank.value), b1, 'the right edge dragged DOWN 2 m is the same bank');
   bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:1', 2, { shiftKey: true }); assert.ok(Math.abs(Number(bank.value) - b1 / 10) < 0.06, `Shift is a tenth: ${bank.value} against ${b1 / 10}`);
