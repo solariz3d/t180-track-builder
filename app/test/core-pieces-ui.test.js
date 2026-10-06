@@ -74,10 +74,34 @@ test('row 1c: on a CLOSED lap a shift-click across the start line takes the SHOR
   s.selectPiece(1); s.selectPiece(3, { extend: true }); i = s.selectionInfo(); assert.deepEqual([i.from, i.to], [1, 3], 'a run shorter inside the lap stays inside it');
   const o = await track(); o.selectPiece(4); o.selectPiece(0, { extend: true }); i = o.selectionInfo(); assert.deepEqual([i.from, i.to, i.count], [0, 4, 5], 'control: an OPEN track never wraps');
 });
+// A's look at f13cded, finding A: on TEST 1 (a cup at the end of the lap, a plain piece at its start) EVERY run across the line is MIXED_RUN, so the short way cost him
+// 191 shift-click pairs he could save before. The short way is taken only where it can be kept; otherwise the inside run, and the line says why
+test('row 1d: where the run across the start line CANNOT be saved (a cup at one side of it, a plain piece at the other) and the inside run can, the inside run is selected and the line says why', async () => {
+  const H = lap(), o = JSON.parse(D.serialize(H)), n = o.pieces.length, last = o.pieces[n - 1], prevEnd = D.pieceEnd(H.pieces[n - 2]).c.v;
+  o.pieces[n - 1] = { ...last, cup: true, channels: { ...last.channels, c: last.channels.w.map(() => prevEnd) } };   // the lap's last piece a cup, as TEST 1's p46
+  const P = await mountPanel(), s = P.shell; s.adopt(D.parse(JSON.stringify(o)));   // the panel mounted, so the selection LINE is read too
+  const d = s.getState().history.present; assert.equal(d.closed, true); assert.equal(D.kindOf(d.pieces[n - 1]), 'cup'); assert.equal(D.kindOf(d.pieces[0]), 'legacy');
+  assert.throws(() => PC.saveRun(d, n - 2, 0, { name: 'x' }), (e) => e.code === 'MIXED_RUN', 'control: the run across the line cannot be kept');
+  s.selectPiece(0); s.selectPiece(n - 2, { extend: true }); let i = s.selectionInfo();
+  assert.deepEqual([i.from, i.to, i.saveProblem], [0, n - 2, null], 'p1 then the last but one: the INSIDE run, which saves');
+  assert.equal(i.longWay, 'the long way round: the short way crosses the start line between a cup and a plain piece');
+  assert.match(P.text('selection'), /^Selected: p1 to p\d+ \(\d+ pieces\) · .* · the long way round: the short way crosses the start line between a cup and a plain piece/);
+  s.selectPiece(n - 1); s.selectPiece(1, { extend: true }); i = s.selectionInfo();
+  assert.deepEqual([i.from > i.to, i.longWay], [true, null], 'control: the inside run (the cup and plain pieces) cannot be saved either, so the short way is kept');
+  s.selectPiece(1); s.selectPiece(3, { extend: true }); assert.equal(s.selectionInfo().longWay, null, 'control: inside is the short way already');
+});
+// A's look, finding B: the tie compared float sums; lengths 327.7, 170.3, 327.7, 257.4 make an EXACT tie read as 755.3999999999999 < 755.4
+test('row 1e: a tie stays inside the lap even when the lengths are decimals whose sums differ in the last bit (A\'s tiefloat case)', async () => {
+  let d = D.createDoc('tie'); for (const L of [327.7, 170.3, 327.7, 257.4]) d = extend(d, { length: L, family: 'bowl' });
+  const s = await createCoreShell({ brushFn: null, storage: store(), autosaveMs: 0 }); s.adopt({ ...d, closed: true });
+  assert.ok(s.getState().history.present.closed);
+  s.selectPiece(1); s.selectPiece(3, { extend: true }); const i = s.selectionInfo();
+  assert.deepEqual([i.from, i.to, i.count], [1, 3, 3], '170.3 + 327.7 + 257.4 against 257.4 + 327.7 + 170.3 is a tie: it stays inside');
+});
 test('row 1: select a piece, shift-click a run (the first piece selected stays the anchor), an out-of-range piece is refused, and any change of the document drops the selection', async () => {
   const s = await track();
   assert.equal(s.selectionInfo(), null);
-  s.selectPiece(1); assert.deepEqual({ ...s.selectionInfo(), ids: [...s.selectionInfo().ids] }, { from: 1, to: 1, count: 1, ids: ['p2'], lengthM: 150, atEnd: false, closed: false, saveProblem: null });
+  s.selectPiece(1); assert.deepEqual({ ...s.selectionInfo(), ids: [...s.selectionInfo().ids] }, { from: 1, to: 1, count: 1, ids: ['p2'], lengthM: 150, atEnd: false, closed: false, longWay: null, saveProblem: null });
   s.selectPiece(3, { extend: true }); let i = s.selectionInfo(); assert.deepEqual([i.from, i.to, i.count, i.lengthM], [1, 3, 3, 400]);
   s.selectPiece(0, { extend: true }); i = s.selectionInfo(); assert.deepEqual([i.from, i.to], [0, 1], 'the anchor is still piece 1, so the run goes up to piece 0');
   s.selectPiece(2, { extend: true }); i = s.selectionInfo(); assert.deepEqual([i.from, i.to], [1, 2]);
