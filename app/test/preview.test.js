@@ -564,16 +564,27 @@ test('D252: Space is TAKEN (preventDefault, down and up) so a focused button is 
   y.key('keydown', SPACE({ target: f, preventDefault: () => { pf++; } })); y.key('keyup', { key: ' ', code: 'Space', target: f, preventDefault: () => { pf++; } }); y.win.step(); y.win.step();
   assert.equal(pf, 0, 'a text field types its space'); assert.equal(y.p.rig.mode, 'build', 'and the camera did not take over');
 });
-// D252 (the chair's ruling on the dip B named: Ctrl then Z dipped 9.3 m and snapped back): Left Ctrl descends only after it has been held ALONE for
-// ~200 ms, so a Ctrl shortcut pressed inside that window never moves the camera at all; the undo stays as the backstop for a slower one
-test('D252: Ctrl then Z WITHIN 200 ms leaves the camera untouched from the very start (no dip, and the build view never becomes free)', () => {
+// D255 AMENDED THIS ROW BY NAME (the keeper, 12:53: "space works instantly to go up, but control lags before going down"): it was D252's
+// "Ctrl then Z WITHIN 200 ms leaves the camera untouched from the very start" (the 200 ms hold, now removed). Left Ctrl descends on the FIRST frame,
+// like Space; the undo of that press's descent when a key joins it stays, so Ctrl+Z still leaves the camera where it was (the brief dip is accepted)
+test('D255: Left Ctrl descends on the FIRST frame, like Space; Ctrl+Z still puts the camera back where Ctrl found it, and the view it found', () => {
   const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); const e0 = eyeOf(x);
-  x.key('keydown', LCTRL()); x.win.step(100); assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, '100 ms of Ctrl alone: not one millimetre yet');
-  x.key('keydown', CTRL_Z); x.win.step(); x.win.step(); assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Z joined: still untouched');
-  const b = livePreview(); b.key('keydown', LCTRL()); b.win.step(100); assert.equal(b.p.rig.mode, 'build', 'from the build view: no takeover inside the window');
-  b.key('keydown', CTRL_Z); b.win.step(); assert.equal(b.p.rig.mode, 'build');
-  const h = pressed(['w']); h.key('keyup', UPK('w')); h.win.step(); const h0 = eyeOf(h); h.key('keydown', LCTRL()); for (let i = 0; i < 5; i++) h.win.step(100);
-  assert.ok(eyeOf(h)[1] < h0[1] - 5, 'a deliberate hold (500 ms) still flies down');
+  x.key('keydown', LCTRL()); x.win.step(100); assert.ok(eyeOf(x)[1] < e0[1] - 2.9, `the first 100 ms frame descends 3 m: ${eyeOf(x)[1] - e0[1]}`);
+  x.key('keydown', CTRL_Z); assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Z joined: back where Ctrl found it'); x.win.step(); x.win.step();
+  assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'and it stays there');
+  const b = livePreview(); b.key('keydown', LCTRL()); b.win.step(100); assert.equal(b.p.rig.mode, 'free', 'from the build view: taken over at once, like Space');
+  b.key('keydown', CTRL_Z); b.win.step(); assert.equal(b.p.rig.mode, 'build', 'Ctrl+Z gives the build view back');
+});
+
+// D255 (the keeper, 12:53: "right click turn only, left click will be used for clicking things"): the camera turns with the RIGHT button only, in every mode;
+// a LEFT drag never turns it (it looked in free mode before), so the left button is free for the pieces, the handles and the brush
+test('D255: a LEFT drag never turns the camera, in free mode either; a RIGHT drag still looks', () => {
+  const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); assert.equal(x.p.rig.mode, 'free'); const s0 = x.p.rig.free.state();
+  x.mouse('mousedown', { button: 0, clientX: 100, clientY: 100 }); x.mouse('mousemove', { clientX: 220, clientY: 160 }); x.mouse('mouseup', { button: 0 });
+  const s1 = x.p.rig.free.state(); assert.deepEqual([s1.yaw, s1.pitch], [s0.yaw, s0.pitch], 'the left drag left the view as it was');
+  x.mouse('mousedown', { button: 2, clientX: 100, clientY: 100 }); x.mouse('mousemove', { clientX: 220, clientY: 100 }); x.mouse('mouseup', { button: 2 });
+  assert.notEqual(x.p.rig.free.state().yaw, s0.yaw, 'the right drag turns it');
+  const b = livePreview(); b.mouse('mousedown', { button: 0, clientX: 100, clientY: 100 }); b.mouse('mousemove', { clientX: 220, clientY: 160 }); assert.equal(b.p.rig.mode, 'build', 'a left drag in a follow view takes nothing over');
 });
 
 // C's finding 4 (p-spacefly-C_2026-10-06.md), reproduced in rows: a move key in the OVERHEAD view (W, E, Space or Left Ctrl) took the view over into free

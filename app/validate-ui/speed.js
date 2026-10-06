@@ -40,12 +40,14 @@ function createSpeedPicker({ kmh = MACH6.designSpeedKmh, onChange = () => {} } =
 function mountSpeedPicker(root, p) {
   const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const slider = el('input', { type: 'range', min: MIN_KMH, max: MAX_KMH, step: 5, value: p.kmh == null ? p.defaultKmh : p.kmh });
-  const shown = el('span', { className: 'v-speed' });
+  // D256 (the keeper: "when I click the off box ... it disapears and cannot be turned back on?"): the value's text changed width ("460 km/h" to "off"), the row
+  // wrapped differently and the box JUMPED away from the pointer (x 14 to x 250, measured). The value has a FIXED box, and the box and its word stay together.
+  const shown = el('span', { className: 'v-speed', style: 'display: inline-block; min-width: 7ch; text-align: right' });
   const off = el('input', { type: 'checkbox', checked: p.kmh == null });
   const show = () => { shown.textContent = p.kmh == null ? 'off' : `${Math.round(p.kmh)} km/h`; slider.disabled = p.kmh == null; };
   slider.oninput = () => { p.set(Number(slider.value)); show(); };
   off.onchange = () => { p.set(off.checked ? null : Number(slider.value)); show(); };
-  root.append(el('label', { title: 'Loads are computed at this speed for every word without its own (docs/FINDINGS.md §3d: the median of seven clean Mach 6 laps is 460 km/h).' }, ['design speed ', slider, ' ', shown, ' ', off, ' off']));
+  root.append(el('label', { title: 'Loads are computed at this speed for every word without its own (docs/FINDINGS.md §3d: the median of seven clean Mach 6 laps is 460 km/h).' }, ['design speed ', slider, ' ', shown, ' ', el('span', { className: 'v-speed-off', style: 'white-space: nowrap' }, [off, ' off'])]));
   show();
 }
 
