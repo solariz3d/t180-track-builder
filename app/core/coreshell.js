@@ -408,8 +408,13 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     selectPiece(i, { extend = false } = {}) {
       const d = doc();
       if (!Number.isInteger(i) || i < 0 || i >= d.pieces.length) return set({ message: `there is no piece ${i}: the track has pieces 0 to ${d.pieces.length - 1}` });
-      const anchor = extend && st.selection && st.selection.base === d ? st.selection.anchor : i, from = Math.min(anchor, i), to = Math.max(anchor, i);
-      return set({ selection: Object.freeze({ base: d, anchor, from, to, ids: Object.freeze(d.pieces.slice(from, to + 1).map((P) => P.id)) }), deleteProposal: null, message: null });
+      const anchor = extend && st.selection && st.selection.base === d ? st.selection.anchor : i;
+      // D250 item 4 (the keeper: "Short way across start"): on a CLOSED lap a shift-click takes the SHORTER way round, by road length; across the start line it is from > to
+      // (from..last, then 0..to), which src/core/piece.js saveRun keeps; a tie stays the run that does not cross the line
+      let from = Math.min(anchor, i), to = Math.max(anchor, i);
+      if (d.closed && from !== to) { const len = (a, b) => d.pieces.slice(a, b + 1).reduce((x, P) => x + (P.type === 'road' ? P.length : 0), 0), total = len(0, d.pieces.length - 1); if (total - len(from + 1, to - 1) < len(from, to)) [from, to] = [to, from]; }
+      const ids = from <= to ? d.pieces.slice(from, to + 1) : [...d.pieces.slice(from), ...d.pieces.slice(0, to + 1)];
+      return set({ selection: Object.freeze({ base: d, anchor, from, to, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, message: null });
     },
     clearSelection: () => set({ selection: null, deleteProposal: null, message: null }),
     /** What the selection is, for the panel: { from, to, count, lengthM, atEnd, saveProblem }; saveProblem is why it cannot be kept as a piece (null when it can). null when nothing is selected. */
@@ -418,7 +423,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!s || s.base !== d) return null;
       let saveProblem = null;
       try { PC.saveRun(d, s.from, s.to, { name: 'selection' }); } catch (e) { if (e.name !== 'CoreError') throw e; saveProblem = e.message; }
-      return { from: s.from, to: s.to, count: s.to - s.from + 1, ids: s.ids, lengthM: d.pieces.slice(s.from, s.to + 1).reduce((a, P) => a + (P.type === 'road' ? P.length : 0), 0), atEnd: s.to === d.pieces.length - 1, closed: !!d.closed, saveProblem };
+      const byId = new Map(d.pieces.map((P) => [P.id, P]));   // the selection's own pieces in lap order (D250: a run across a closed lap's start line is from > to)
+      return { from: s.from, to: s.to, count: s.ids.length, ids: s.ids, lengthM: s.ids.reduce((a, id) => a + (byId.get(id).type === 'road' ? byId.get(id).length : 0), 0), atEnd: s.to === d.pieces.length - 1, closed: !!d.closed, saveProblem };
     },
     async savePiece(name) {
       if (!storage || typeof storage.savePiece !== 'function') return set({ message: 'saving a piece is not available here' });
@@ -427,7 +433,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       let text;
       try { const piece = PC.saveRun(d, s.from, s.to, { name }); text = PC.serialize(piece); } catch (e) { if (e.name !== 'CoreError') throw e; return set({ message: e.message }); }
       try { await storage.savePiece(name, text); } catch (e) { return set({ message: `the piece was not saved: ${e && e.message || e}` }); }   // a name already used is refused by the native side, and says so
-      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`saved the piece "${name}": ${s.to - s.from + 1} piece${s.to === s.from ? '' : 's'} from the track (it is in the library below)`) });
+      return set({ libraryStamp: st.libraryStamp + 1, ...ok(`saved the piece "${name}": ${s.ids.length} piece${s.ids.length === 1 ? '' : 's'} from the track (it is in the library below)`) });
     },
     /**
      * THE LIBRARY: every saved piece, [{ name, summary, thumb, error }] sorted by name. summary is src/core/piece.js summary (pieces, roads, flights, kind, lengthM,

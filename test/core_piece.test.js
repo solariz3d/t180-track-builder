@@ -284,7 +284,9 @@ test('row 8b: a mixed run is refused at SAVE too (MIXED_RUN), and a run of one k
 
 test('row 9: ranges, names, limits and the summary a library list shows', () => {
   const H = legacyLap(), n = H.pieces.length;
-  for (const [a, b] of [[-1, 2], [0, n], [3, 2], [1.5, 2], [0, NaN], [undefined, 1]]) assert.throws(() => PC.saveRun(H, a, b, { name: 'x' }), (e) => e.code === 'BAD_RANGE', `${a}..${b}`);
+  for (const [a, b] of [[-1, 2], [0, n], [1.5, 2], [0, NaN], [undefined, 1]]) assert.throws(() => PC.saveRun(H, a, b, { name: 'x' }), (e) => e.code === 'BAD_RANGE', `${a}..${b}`);
+  // 3..2 left this list with D250 item 4: on a CLOSED lap it is the run across the start line (row 11a); on an OPEN track it is still BAD_RANGE (row 11d)
+  assert.throws(() => PC.saveRun({ ...H, closed: false }, 3, 2, { name: 'x' }), (e) => e.code === 'BAD_RANGE', '3..2 on the open track');
   assert.throws(() => PC.saveRun(H, 0, 1, { name: '../x' }), (e) => e.code === 'BAD_PIECE_NAME'); assert.throws(() => PC.saveRun(H, 0, 1, {}), (e) => e.code === 'BAD_PIECE_NAME'); assert.throws(() => PC.saveRun(null, 0, 1, { name: 'x' }), (e) => e.code === 'BAD_DOC');
   for (const name of ['a', 'A b_c-d', 'x'.repeat(60), '9 lives']) assert.equal(PC.saveRun(H, 0, 0, { name }).name, name);
   const one = PC.saveRun(H, 0, 0, { name: 'single' }); assert.equal(PC.saveRun(H, 0, undefined, { name: 'single' }).pieces.length, 1, 'to defaults to from'); assert.ok(one.pieces[0].channels.kh.length === H.pieces[0].channels.kh.length);
@@ -445,6 +447,44 @@ test('row 10j: a run that starts with a jump, added at a head that IS a jump, is
   assert.throws(() => PC.insert({ ...d, pieces: atJump }, lead), (e) => e instanceof D.CoreError && e.code === 'JUMP_AFTER_JUMP');
   assert.deepEqual(PC.insert({ ...d, pieces: d.pieces.slice(0, 2) }, lead).pieces.map((P) => P.type), ['road', 'road', 'flight', 'road'], 'control: at a road head');
 });
+// D250 item 4 (the keeper: "Short way across start"): on a CLOSED lap, saveRun(d, from, to) with from > to is the run ACROSS THE START LINE (from..last, then 0..to)
+test('row 11a: across a closed lap\'s start line the run is the pieces either side of it, in lap order, and putting it back gives those very pieces (legacy, cup, tube)', () => {
+  for (const [kind, mk] of Object.entries(LAPS)) {
+    const H = mk(), n = H.pieces.length;
+    for (const [from, to] of [[n - 1, 0], [n - 2, 1]]) {
+      const p = PC.saveRun(H, from, to, { name: `seam ${kind}` }), want = [...H.pieces.slice(from), ...H.pieces.slice(0, to + 1)];
+      assert.equal(p.pieces.length, want.length, `${kind} ${from}..${to}: ${want.length} pieces`);
+      const back = PC.absolute(p);
+      want.forEach((P, k) => { for (const ch of D.CHANNELS) if (P.channels[ch]) assert.deepEqual(back[k].channels[ch], P.channels[ch], `${kind} ${from}..${to}: piece ${k} (${P.id}) channel ${ch} comes back as it was`); });
+      assert.equal(PC.parse(PC.serialize(p)).pieces.length, want.length, `${kind}: the text round-trips`);
+    }
+  }
+});
+test('row 11b: a lap whose bank turns WHOLE times round (TEST 1 ends at -4π): across the line the bank is carried on by those turns, so the run is kept, C1, leaning as the lap leans', () => {
+  let d = extend(D.createDoc('rolling lap'), { length: 300, family: 'bowl' });
+  d = extend(d, { length: Q, transition: Q, targets: { kh: 1 / Rr, phi: -2 * Math.PI } });   // the bank rolls a whole turn through the first bend
+  for (let i = 0; i < 3; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / Rr } });
+  d = extend(d, { length: 60, transition: 40, targets: { kh: 0 } });
+  const H = closedOk(close(d, { edited: [0] })), n = H.pieces.length, wind = D.pieceEnd(H.pieces[n - 1]).phi.v - H.pieces[0].channels.phi[0];
+  assert.ok(Math.abs(wind + 2 * Math.PI) < 1e-6, `control: the lap's bank ends one whole turn round (${wind})`);
+  const p = PC.saveRun(H, n - 1, 0, { name: 'rolling seam' }), back = PC.absolute(p);
+  assert.deepEqual(back[0].channels.phi, H.pieces[n - 1].channels.phi, 'the piece before the line is as it was');
+  back[1].channels.phi.forEach((v, k) => assert.ok(Math.abs(v - (H.pieces[0].channels.phi[k] + wind)) < 1e-9, `the piece after the line leans the same way, a whole turn on (control point ${k})`));
+});
+test('row 11c: a closed lap whose road is NOT smooth across its start line (a hand-edited width step there) is refused BY NAME across it (SEAM_RUN); either side alone is kept', () => {
+  const H = legacyLap(), n = H.pieces.length, o = JSON.parse(D.serialize(H));
+  o.pieces[0].channels.w[0] += 3; o.pieces[0].channels.w[1] += 3;   // the lap's first piece starts 3 m wider than the last one ends (checkDoc does not read a closed lap's seam)
+  const E = D.parse(JSON.stringify(o));
+  assert.throws(() => PC.saveRun(E, n - 1, 0, { name: 'step' }), (e) => e instanceof D.CoreError && e.code === 'SEAM_RUN' && /start line/.test(e.message) && /w starts at/.test(e.message));
+  assert.equal(PC.saveRun(E, n - 1, n - 1, { name: 'before' }).pieces.length, 1, 'control: the piece before the line alone');
+  assert.equal(PC.saveRun(E, 0, 0, { name: 'after' }).pieces.length, 1, 'control: the piece after it alone');
+});
+test('row 11d: on an OPEN track from > to is still BAD_RANGE, and a closed lap\'s out-of-range ends are too', () => {
+  const H = legacyLap(), n = H.pieces.length, open = { ...H, closed: false };
+  assert.throws(() => PC.saveRun(open, n - 1, 0, { name: 'x' }), (e) => e.code === 'BAD_RANGE');
+  assert.throws(() => PC.saveRun(H, n, 0, { name: 'x' }), (e) => e.code === 'BAD_RANGE'); assert.throws(() => PC.saveRun(H, n - 1, -1, { name: 'x' }), (e) => e.code === 'BAD_RANGE');
+});
+
 test('row 10k: a piece FILE that starts with two jumps is refused when it is READ (JUMP_AFTER_JUMP), so the library lists why; one leading jump reads (control)', () => {
   const lead = PC.saveRun(twoJumps(), 2, 3, { name: 'jump then road' }), o = JSON.parse(PC.serialize(lead));
   assert.equal(PC.parse(JSON.stringify(o)).pieces[0].type, 'flight', 'control: one leading jump');
