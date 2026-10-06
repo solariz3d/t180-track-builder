@@ -28,8 +28,8 @@ test('row 1: every kind is placed where the keeper marked it, and every kind wit
   assert.deepEqual([h['width:1'].pos, h['width:-1'].pos], [[10, 0, 200], [-10, 0, 200]], 'width: both edges at the far end');
   assert.deepEqual([h['bank:1'].pos, h['bank:-1'].pos], [[10, 0, 120], [-10, 0, 120]], 'bank: both edges, mid piece');
   assert.deepEqual([h['cup:1'].pos, h['cup:-1'].pos], [[3, 0, 120], [-3, 0, 120]], 'cup: just inside the centre, both sides, mid piece');
-  assert.deepEqual([h['turn:1'].pos, h['turn:-1'].pos], [[10, 0, 176], [-10, 0, 176]], 'turn: both edges near the far end');
-  assert.deepEqual(h['climb:0'].pos, [0, 0, 176], 'climb: the centreline near the far end');
+  assert.deepEqual([h['turn:1'].pos, h['turn:-1'].pos], [[10, 0, 160], [-10, 0, 160]], 'turn: both edges three quarters along');
+  assert.deepEqual(h['climb:0'].pos, [0, 0, 160], 'climb: the centreline three quarters along');
   for (const k of ['width', 'bank', 'cup', 'turn']) assert.equal(h[`${k}:1`].pos[0], -h[`${k}:-1`].pos[0], `${k}: mirrored`);
 });
 test('row 1b: the road\'s width at the handle sets how far out an edge handle sits, and an unknown or absent kind places nothing', () => {
@@ -90,7 +90,9 @@ test('row 5: the screen: where a handle is, one metre along its axis in px, behi
   assert.equal(HD.screenAxis(VP, W, Hh, [0, 0, -100], [1, 0, 0]), null, 'behind the camera: none');
   // a vertical axis seen from straight above is end-on: the pointer's own motion stands in
   const top = M.viewProj({ eye: [0, 100, 0], target: [0, 0, 0.001], up: [0, 0, 1], fov: 1 }, 1.5), e = HD.screenAxis(top, 600, 400, [0, 0, 0], [0, 1, 0]);
-  assert.ok(e.len < 0.8, `end-on: ${e.len} px per m`);
+  assert.ok(e.len < 0.05, `end-on: ${e.len} px per m`);
+  // a FAR handle's axis is short too (the far end of a ghost seen from behind, found in the window: 0.3 px per m) but it has a direction, so a drag along it is measured on it, not read as end-on
+  close(HD.dragMetres({ x: 0, y: 0, dx: 0, dy: -0.3, len: 0.3 }, 0, -6, 'length'), 20, 1e-9); close(HD.dragMetres({ x: 0, y: 0, dx: 0, dy: -0.3, len: 0.3 }, 5, 0, 'length'), 0, 1e-9);
   close(HD.dragMetres(e, 0, -40, 'climb'), 2, 1e-9); close(HD.dragMetres(e, 40, 0, 'width'), 2, 1e-9);
   close(HD.dragMetres({ x: 0, y: 0, dx: 10, dy: 0, len: 10 }, 25, 7, 'width'), 2.5, 1e-9);
   assert.equal(HD.cursorFor({ dx: 10, dy: 1, len: 10 }), 'ew-resize'); assert.equal(HD.cursorFor({ dx: 1, dy: 10, len: 10 }), 'ns-resize'); assert.equal(HD.cursorFor({ len: 0 }), 'move');

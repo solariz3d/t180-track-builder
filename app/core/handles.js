@@ -31,12 +31,12 @@ const KINDS = Object.freeze({
   width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', rate: 2, min: 0.5, max: 400, step: 0.1, snap: 5 }),
   bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', rate: null, min: -720, max: 720, step: 0.1, snap: 5 }),
   cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', rate: 2, min: 0, max: 150, step: 0.1, snap: 5 }),
-  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.85, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', rate: 0.5, min: -90, max: 90, step: 0.1, snap: 5 }),
-  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.85, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', rate: 0.5, min: -45, max: 45, step: 0.1, snap: 5 }),
+  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.75, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', rate: 0.5, min: -90, max: 90, step: 0.1, snap: 5 }),
+  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', rate: 0.5, min: -45, max: 45, step: 0.1, snap: 5 }),
 });
 const ORDER = Object.freeze(['length', 'width', 'bank', 'cup', 'turn', 'climb']);
 const FINE = 0.1;            // Shift: a tenth of the speed
-const EDGE_ON_PX_PER_M = 0.8;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead
+const EDGE_ON_PX_PER_M = 0.05;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead. A FAR handle's axis is short too (the far end of a ghost seen from behind: 0.3 px/m, found in the window) but has a direction, so it is not edge-on
 const EDGE_ON_M_PER_PX = 0.05;
 const HIT_PX = 12;
 

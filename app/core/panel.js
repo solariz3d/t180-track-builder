@@ -244,13 +244,14 @@ function mount(root, shell) {
   // the ONE selected placed piece, and a drag is the shell's sculpt (one undo step, the shape channels only, the centreline guarded).
   const askOf = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
   const HANDLE_FIELD = { length: len, width, bank, cup, turn, climb }, SCULPT_CH = { bank: 'phi', width: 'w', cup: 'c' };
-  let triedDoc = null;   // the document the ghost was last asked for on behalf of the handles: one try per document, so a ghost that cannot be built is not rebuilt every frame
+  let triedDoc = null, sinceTry = 0; const RETRY_FRAMES = 30;   // the document the ghost was last asked for on behalf of the handles, and the frames since
   const fieldNum = (f) => { const v = Number(f.value); return f.value !== '' && Number.isFinite(v) ? v : null; };
   const ghostModel = () => {
     const st = shell.getState(), d = st.history.present;
     if (!handlesOn.checked || st.sculpt || d.closed) return null;
     let info = askOf('t180:ghost-request');
-    if (!info && triedDoc !== d) { triedDoc = d; ghost(); info = askOf('t180:ghost-request'); }
+    // no ghost: ask for it once per document, and again about every half second (the preview mounts AFTER this panel, so the first ask can go to nobody; a ghost that cannot be built is not rebuilt every frame)
+    if (!info) { sinceTry++; if (triedDoc !== d || sinceTry >= RETRY_FRAMES) { triedDoc = d; sinceTry = 0; ghost(); info = askOf('t180:ghost-request'); } }
     if (!info || !info.samples.length) return null;
     const s1 = info.samples[info.samples.length - 1].s; if (!(s1 - info.s0 > 0.5)) return null;
     // the road's half-width at a share of the piece: from the head's width to the field's, read when asked (a press must not see the width of the frame before)
