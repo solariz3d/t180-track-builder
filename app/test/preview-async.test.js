@@ -8,6 +8,8 @@
 //   2  the worker script itself, run in a sandbox with a fake `self` (importScripts, fetch of the real files, postMessage): it loads its modules through the app's loader and answers with the same result
 //   3  the runner (TWO WARM WORKERS, D240 warm-worker follow-up): made when the runner is, one part each, reused by the next job, cancel terminates both and makes two fresh ones, a failed part,
 //      a worker that errors, a Worker that cannot be made
+//   3c THE POOL FIX (B's look at 485c5b6, p-warm-B section 2): one part FAILS while the other is still computing, then the next job starts: the old job's late answer must never be taken for the
+//      new job's (job 2 resolves with job 2's parts only); every message carries a job serial, any failure replaces the workers
 //   3b the check's TWO PARTS put together are EXACTLY the one-piece check, on a coil, a jump, a cup, a tube, a 13 km delete and a 14 km Close
 //   4  the shell, Close and delete both: the preview is there at once with its check 'checking'; Apply is refused until the result lands and then works (backup first); Cancel, an edit, an Undo,
 //      another selection and a newer preview each cancel the running check; a stale answer changes nothing; a failed check refuses Apply by name; a worker that cannot start falls back to the page
@@ -109,32 +111,62 @@ test('row 2: the worker SCRIPT, run in a sandbox with a fake self, loads its mod
   assert.equal(posted[3].ok, false); assert.equal(typeof posted[3].error, 'string', 'a bad job is an error message, never a hang');
 });
 
-test('row 3: the runner: two warm workers made with it, one part each, reused by the next job; cancel terminates both and makes two fresh; a failed part keeps them; a worker that errors is replaced', async () => {
+test('row 3: the runner: two warm workers made with it, one part each, reused by the next job; cancel and ANY failure terminate both and make two fresh; replies carry the job serial', async () => {
   const made = [];
   class FakeWorker { constructor(url) { this.url = url; this.terminated = 0; this.sent = []; made.push(this); } postMessage(m) { this.sent.push(m); } terminate() { this.terminated++; } }
   const runner = createWorkerRunner({ win: {}, WorkerCtor: FakeWorker, url: 'core/overlapworker.js' });
   assert.equal(made.length, 2, 'two workers exist before any job: they are warm'); assert.ok(made.every((w) => w.url === 'core/overlapworker.js' && w.sent.length === 0));
-  const answer = (w, part, result, timing) => w.onmessage({ data: { id: 1, ok: true, result, timing } });
+  const answer = (w, result, timing, ok = true, error) => w.onmessage({ data: ok ? { id: w.sent[w.sent.length - 1].id, ok: true, result, timing } : { id: w.sent[w.sent.length - 1].id, ok: false, error } });   // the worker echoes the id of the message it answers
   const a = runner.start({ doc: { x: 1 }, designSpeedKmh: 90, closed: false }); assert.equal(made.length, 2, 'the job made no new worker');
-  assert.deepEqual(made[0].sent[0], { id: 1, part: 'rest', doc: { x: 1 }, designSpeedKmh: 90, closed: false }); assert.deepEqual(made[1].sent[0], { id: 2, part: 'rays', doc: { x: 1 }, designSpeedKmh: 90, closed: false });
+  assert.deepEqual(made[0].sent[0], { id: '1:rest', part: 'rest', doc: { x: 1 }, designSpeedKmh: 90, closed: false }); assert.deepEqual(made[1].sent[0], { id: '1:rays', part: 'rays', doc: { x: 1 }, designSpeedKmh: 90, closed: false });
   const ray = { s: 5, u: null, reason: 'downforce-ray-gap', worst: 0.1, s0: 5, s1: 6 }, fold = { s0: 1, s1: 2, u: null, reason: 'fold', worst: null };
-  answer(made[1], 'rays', { red: [ray] }, { loadMs: 40, waitedMs: 0, jobMs: 5000 }); answer(made[0], 'rest', { red: [fold], amber: 2 }, { loadMs: 30, waitedMs: 3, jobMs: 2000 });
+  answer(made[1], { red: [ray] }, { loadMs: 40, waitedMs: 0, jobMs: 5000 }); answer(made[0], { red: [fold], amber: 2 }, { loadMs: 30, waitedMs: 3, jobMs: 2000 });
   assert.deepEqual(await a.promise, { overlaps: [ray], others: [fold], amber: 2 }, 'the two answers put together'); assert.deepEqual(a.timing, { loadMs: 40, waitedMs: 3, jobMs: 5000, restMs: 2000, raysMs: 5000 });
-  assert.deepEqual(made.map((w) => w.terminated), [0, 0], 'the workers are KEPT after a job');
-  const b = runner.start({ doc: { y: 2 } }); assert.equal(made.length, 2, 'the next job reuses them'); assert.equal(made[0].sent.length, 2); assert.equal(made[0].sent[1].doc.y, 2);
-  answer(made[0], 'rest', { red: [], amber: 0 }); answer(made[1], 'rays', { red: [] }); assert.deepEqual(await b.promise, { overlaps: [], others: [], amber: 0 }); assert.equal(b.timing, null, 'an answer with no timing leaves none');
-  // a failed part: the job fails, the workers stay warm (the job was bad, not the worker)
-  const c = runner.start({ doc: {} }); made[1].onmessage({ data: { id: 2, ok: false, error: 'boom' } }); await assert.rejects(c.promise, /boom/); assert.deepEqual(made.map((w) => w.terminated), [0, 0]); assert.equal(made.length, 2);
-  assert.equal(made[0].onmessage, null, 'a late answer from the other part to a failed job has nowhere to go: its handler is gone');
-  // a worker that errors (its script failed): both are replaced
-  const d = runner.start({ doc: {} }); made[0].onerror({ message: 'script failed' }); await assert.rejects(d.promise, /script failed/); assert.deepEqual(made.slice(0, 2).map((w) => w.terminated), [1, 1]); assert.equal(made.length, 4, 'two fresh warm workers');
-  // Cancel: terminates both at once, rejects as cancelled, makes two fresh warm ones; a late answer from a cancelled worker is ignored
-  const e = runner.start({ doc: {} }); const [w0, w1] = made.slice(2, 4); assert.equal(w0.sent.length, 1); e.cancel(); assert.deepEqual([w0.terminated, w1.terminated], [1, 1]); assert.equal(made.length, 6); await assert.rejects(e.promise, (x) => x.cancelled === true);
-  w0.onmessage && w0.onmessage({ data: { id: 1, ok: true, result: { red: [], amber: 0 } } }); e.cancel(); assert.equal(made.length, 6, 'cancel after the end does nothing');
+  assert.deepEqual(made.map((w) => w.terminated), [0, 0], 'the workers are KEPT after a job that succeeded');
+  const b = runner.start({ doc: { y: 2 } }); assert.equal(made.length, 2, 'the next job reuses them'); assert.equal(made[0].sent.length, 2); assert.equal(made[0].sent[1].doc.y, 2); assert.equal(made[0].sent[1].id, '2:rest', 'a new serial for the new job');
+  // a reply that is not the current job's is ignored, whatever worker it comes from (the exact guard)
+  made[0].onmessage({ data: { id: '1:rest', ok: true, result: { red: [fold], amber: 9 } } }); made[1].onmessage({ data: { id: '2:rest', ok: true, result: { red: [fold], amber: 9 } } });   // job 1's answer; and job 2's REST answer arriving on the RAYS worker
+  answer(made[0], { red: [], amber: 0 }); answer(made[1], { red: [] }); assert.deepEqual(await b.promise, { overlaps: [], others: [], amber: 0 }, 'only job 2\'s own two parts counted'); assert.equal(b.timing, null, 'an answer with no timing leaves none');
+  // ANY failure of a part replaces both workers (one may still be busy with the failed job's other part)
+  const c = runner.start({ doc: {} }); answer(made[1], null, null, false, 'boom'); await assert.rejects(c.promise, /boom/); assert.deepEqual(made.slice(0, 2).map((w) => w.terminated), [1, 1]); assert.equal(made.length, 4, 'two fresh warm workers');
+  // a worker that errors (its script failed): both are replaced too
+  const d = runner.start({ doc: {} }); made[2].onerror({ message: 'script failed' }); await assert.rejects(d.promise, /script failed/); assert.deepEqual(made.slice(2, 4).map((w) => w.terminated), [1, 1]); assert.equal(made.length, 6);
+  // Cancel: terminates both at once, rejects as cancelled, makes two fresh warm ones; a late answer from a cancelled worker has no handler
+  const e = runner.start({ doc: {} }); const [w0, w1] = made.slice(4, 6); assert.equal(w0.sent.length, 1); e.cancel(); assert.deepEqual([w0.terminated, w1.terminated], [1, 1]); assert.equal(made.length, 8); await assert.rejects(e.promise, (x) => x.cancelled === true);
+  assert.equal(w0.onmessage, null, 'no handler left on a cancelled worker'); e.cancel(); assert.equal(made.length, 8, 'cancel after the end does nothing');
   // a newer job while one runs cancels the older (the shell does it first; this is the guard)
-  const f1 = runner.start({ doc: {} }), f2 = runner.start({ doc: {} }); await assert.rejects(f1.promise, (x) => x.cancelled === true); assert.equal(made.length, 8); f2.cancel(); await assert.rejects(f2.promise, (x) => x.cancelled === true);
+  const f1 = runner.start({ doc: {} }), f2 = runner.start({ doc: {} }); await assert.rejects(f1.promise, (x) => x.cancelled === true); assert.equal(made.length, 10); f2.cancel(); await assert.rejects(f2.promise, (x) => x.cancelled === true);
   assert.throws(() => createWorkerRunner({ win: {} }), /no Web Worker/);
   class Blocked { constructor() { throw new Error('blocked'); } } assert.throws(() => createWorkerRunner({ win: {}, WorkerCtor: Blocked }), /blocked/);
+});
+
+test('row 3c: THE POOL FIX: one part FAILS while the other is still computing, then the next job starts at once: job 2 resolves with job 2\'s parts ONLY (B\'s pool.js case 4)', async () => {
+  const made = [];
+  // workers that behave like real ones: each takes its messages IN ORDER and answers the OLDEST, only when the test says so; terminate drops everything
+  class InOrderWorker {
+    constructor() { this.queue = []; this.terminated = false; this.onmessage = null; this.onerror = null; made.push(this); }
+    postMessage(m) { if (!this.terminated) this.queue.push(m); }
+    terminate() { this.terminated = true; this.queue = []; }
+    answer({ ok = true } = {}) {
+      if (this.terminated || !this.queue.length) return false; const m = this.queue.shift();
+      const reply = ok ? { id: m.id, ok: true, result: m.part === 'rest' ? { red: [{ reason: 'fold', s0: 1, s1: 2, u: null, worst: null, from: m.doc.name }], amber: 0 } : { red: [{ reason: 'downforce-ray-gap', s0: 5, s1: 6, u: 0, worst: 0.1, from: m.doc.name }] }, timing: null } : { id: m.id, ok: false, error: 'boom' };
+      if (this.onmessage) this.onmessage({ data: reply }); return true;
+    }
+  }
+  const tag = (res) => (res ? [...res.overlaps, ...res.others].map((x) => `${x.reason}<-${x.from}`).join(', ') : null), flush = () => new Promise((r) => setImmediate(r));
+  const R = createWorkerRunner({ win: {}, WorkerCtor: InOrderWorker }), rest = () => R.workers()[0], rays = () => R.workers()[1];
+  const j1 = R.start({ doc: { name: 'job1' } }); let e1 = null; j1.promise.catch((e) => { e1 = e; });
+  const busyRays = rays(); rest().answer({ ok: false }); await flush();   // 'rest' fails fast; 'rays' is still computing job 1's part
+  assert.ok(e1 && !e1.cancelled, 'job 1 failed'); assert.ok(busyRays.terminated, 'the workers are REPLACED on a failure: the one still busy with job 1 is gone');
+  const j2 = R.start({ doc: { name: 'job2' } }); let r2 = null, e2 = null; j2.promise.then((r) => { r2 = r; }, (e) => { e2 = e; });
+  busyRays.answer();   // job 1's late answer, from the worker that was busy: it is terminated and has nothing to deliver
+  rest().answer(); rays().answer(); await flush();   // job 2's own two answers
+  assert.equal(e2, null, e2 && e2.message); assert.equal(tag(r2), 'downforce-ray-gap<-job2, fold<-job2', 'job 2 resolved with job 2\'s parts only');
+  // the guard on its own, without the replacement: a reply tagged with another job's serial, arriving at the current job's handler, is not taken
+  const j3 = R.start({ doc: { name: 'job3' } }); let r3 = null; j3.promise.then((r) => { r3 = r; });
+  rays().onmessage({ data: { id: '1:rays', ok: true, result: { red: [{ reason: 'downforce-ray-gap', s0: 7, s1: 8, u: 0, worst: 0.1, from: 'STALE' }] } } }); await flush();
+  assert.equal(r3, null, 'a stale reply did not complete job 3'); rest().answer(); rays().answer(); await flush();
+  assert.equal(tag(r3), 'downforce-ray-gap<-job3, fold<-job3', 'job 3 resolved with job 3\'s parts only, the stale one ignored');
 });
 
 test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece check (a coil with overlaps, a jump, a cup, a tube, a 13 km delete, a 14 km Close)', async () => {
