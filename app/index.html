@@ -202,7 +202,7 @@
       if (!st.exportReds) { r.replaceChildren(el('h3', 'Not exported'), el('p', refusal, 'message')); return; }
       // D242: EVERY red, in plain words, grouped (the overlap first), with where: s in km and the piece; a click on a place moves the camera there
       const kids = [el('h3', 'Not exported: red on the track')];
-      for (const g of RG.groupReds(st.exportReds, st.resolved.segments)) {
+      for (const g of RG.groupReds(st.exportReds, st.resolved.segments, { closed: st.resolved.closed })) {
         kids.push(el('p', `${g.title} (${RG.placesText(g)})`, 'message'));   // D248: one line per PLACE (overlapping or touching reds on one piece merged)
         const list = el('ul', null, 'reds');
         for (const it of g.places) { const li = el('li'), b = el('button', RG.placeText(it)); b.title = `${it.what}: show it`; b.onclick = () => document.dispatchEvent(new CustomEvent('t180-camera-focus', { detail: { s: it.s } })); li.append(b, ` ${it.what}${it.detail ? ` (${it.detail})` : ''}`); list.append(li); }

@@ -44,7 +44,7 @@ const { close, closeWindow } = require('../../src/core/close.js');
 // app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
 const { overlapCheck } = require('./overlapjob.js');
 const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
-const overlapPlacesText = (ck, segs) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs).flatMap((g) => g.places) });   // D248: "N places", merged as the red list shows them
+const overlapPlacesText = (ck, segs, o) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs, o).flatMap((g) => g.places) });   // D248: "N places", merged as the red list shows them
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 const PC = require('../../src/core/piece.js');   // D240: saved pieces (save a run, put one at the head, mirror it, delete pieces)
@@ -492,7 +492,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const proposal = Object.freeze({ base: d, doc: res, resolved: r.resolved, from: s.from, to: s.to, removed: Object.freeze(s.ids.slice()), ms,
           displacement: Object.freeze(displacementAfterDelete(d, res)), check: overlapRunner ? null : Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh, { closed: !!res.closed })) });
         const after = proposal.displacement.filter((x) => x.piece >= s.from), moved = after.filter((x) => x.maxM > 1e-3), n = s.to - s.from + 1;
-        const words = (ck) => `delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move${ck.overlaps.length ? `; the track OVERLAPS ITSELF in ${overlapPlacesText(ck, r.resolved.segments)}` : ''}. Apply or cancel`;
+        const words = (ck) => `delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move${ck.overlaps.length ? `; the track OVERLAPS ITSELF in ${overlapPlacesText(ck, r.resolved.segments, { closed: r.resolved.closed })}` : ''}. Apply or cancel`;
         if (!overlapRunner) return set({ deleteProposal: proposal, ...ok(words(proposal.check)) });
         const entry = beginCheck(proposal, res, !!res.closed, (e) => (e.status === 'done' ? ok(words(e.result)) : { message: `the overlap check could not run: ${e.error}. Cancel the preview and delete again` }));
         return set({ deleteProposal: proposal, proposalCheck: entry, ...ok(`delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move. Checking for overlaps: Apply is off until that finishes (Cancel stops it)`) });
@@ -567,7 +567,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         if (e.name !== 'ExportError') throw e;
         // D242: a red refusal names EVERY red in plain words, grouped, with where (the message was the export's own, every reason by its id: the keeper read
         // "downforce-ray-gap" first and nothing about 28 more that all said the road runs into itself)
-        return stop({ message: e.code === 'RED' && Array.isArray(e.red) ? `not exported: ${RG.groupsText(RG.groupReds(e.red, st.resolved.segments))}` : e.message, exportReds: e.code === 'RED' ? e.red : null });
+        return stop({ message: e.code === 'RED' && Array.isArray(e.red) ? `not exported: ${RG.groupsText(RG.groupReds(e.red, st.resolved.segments, { closed: st.resolved.closed }))}` : e.message, exportReds: e.code === 'RED' ? e.red : null });
       }
       if (!storage || typeof storage.writeExport !== 'function') return stop({ message: 'there is nowhere to write the export here' });
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);

@@ -91,6 +91,18 @@ test('F1: reds that meet AT a boundary, or touch across it, stay two places (980
   assert.deepEqual(two([960, 980], [980, 1000]), ['at 0.96–1.00 km (p1)'], 'meeting on one piece is one place');
 });
 
+// F2 (C's look at A's handles, handback/p-handles-C_2026-10-06.md:85): pieceAt wrapped s = L to the FIRST piece even on an OPEN track, so a red at
+// the very end read "(p1)" and, after F1, stood as its own place beside the range that ends there
+test('F2: on an OPEN track, s at or past the end is the LAST piece (8.00 km is p8); a closed lap still wraps it to p1', () => {
+  assert.equal(RG.pieceAt(SEGS, 8000, { closed: false }), 'p8'); assert.equal(RG.pieceAt(SEGS, 8500, { closed: false }), 'p8');
+  assert.equal(RG.pieceAt(SEGS, 8000, { closed: true }), 'p1'); assert.equal(RG.pieceAt(SEGS, 8000), 'p1', 'no flag keeps the wrap');
+});
+
+test('F2: an open track\'s end red is ONE place with the range that ends there (7.98–8.00 km on p8), not a "(p1)" place of its own', () => {
+  const g = RG.groupReds([{ reason: 'self-intersection', s0: 7980, s1: 8000 }, { reason: 'stacked-within-2m', s0: 8000, s1: 8000 }], SEGS, { closed: false })[0];
+  assert.deepEqual(g.places.map(RG.placeText), ['at 7.98–8.00 km (p8)']);
+});
+
 test('pieceAt wraps a closed lap\'s s and is null for no segments', () => {
   assert.equal(RG.pieceAt(SEGS, 8500), 'p1'); assert.equal(RG.pieceAt(SEGS, 0), 'p1'); assert.equal(RG.pieceAt(SEGS, 7999.9), 'p8'); assert.equal(RG.pieceAt([], 10), null);
 });
