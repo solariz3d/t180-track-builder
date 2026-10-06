@@ -2,7 +2,8 @@
 // A saved piece is one road piece, or a RUN of consecutive pieces (roads, and the flights between them), taken out of a core document and kept in a file that can be put back at
 // the head of any open track. This file is the CORE only: no UI, no files on disk (the library list, "Save as piece...", rename and delete are the app's, after D239).
 //
-//   saveRun(doc, from, to, { name })        the run doc.pieces[from..to] (inclusive) as a piece: schema t180b.piece/1
+//   saveRun(doc, from, to, { name })        the run doc.pieces[from..to] (inclusive) as a piece: schema t180b.piece/1; on a closed lap from > to is the run across
+//                                           the start line (D250 item 4), or SEAM_RUN when the road is not smooth across the line
 //   serialize(piece) / parse(text)          the canonical text, and the checked piece read back from it (refused BY NAME when malformed)
 //   checkPiece(piece)                       every rule the text must meet, on an object
 //   insert(doc, piece, { mirror, keepStart }) the run added at the head: a new document (the old one is untouched)
@@ -49,12 +50,26 @@ const signature = (P) => D.kindOf(P) + (P.edge ? '+edge' : '');
 const checkName = (name) => { if (typeof name !== 'string' || !NAME_RE.test(name)) throw err('BAD_PIECE_NAME', `a piece name is 1 to 60 letters, digits, spaces, _ or -, starting with a letter or digit; got ${JSON.stringify(name)}`); };
 
 // ── save ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
-/** The run doc.pieces[from..to] (inclusive; `to` defaults to `from`: one piece) as a saved piece called `name`. The document is not changed. */
+/**
+ * The pieces of a run in lap order. ACROSS THE START LINE of a CLOSED lap (D250 item 4, the keeper: "Short way across start"; from > to) it is pieces from..last, then
+ * 0..to. The bank may have turned whole times round the lap (TEST 1 ends at -4π: two rolls), so the pieces after the line get the lap's bank winding added, the same
+ * whole turns close.js forgives at the seam (`bank - TAU * m`, close.js residual): the road leans the same way either side, and the joint is C1 as written.
+ */
+function runOf(doc, from, to) {
+  if (from <= to) return doc.pieces.slice(from, to + 1);
+  const n = doc.pieces.length, last = doc.pieces[n - 1], first = doc.pieces[0];
+  let wind = 0;
+  if (isRoad(last) && isRoad(first)) { const d = D.pieceEnd(last).phi.v - first.channels.phi[0], k = Math.round(d / (2 * Math.PI)); if (k !== 0 && Math.abs(d - 2 * Math.PI * k) < 1e-6) wind = d; }
+  const after = doc.pieces.slice(0, to + 1).map((P) => (isRoad(P) && wind ? { ...P, channels: { ...P.channels, phi: P.channels.phi.map((v) => q(v + wind, D.DEC.phi)) } } : P));
+  return [...doc.pieces.slice(from), ...after];
+}
+/** The run doc.pieces[from..to] (inclusive; `to` defaults to `from`: one piece) as a saved piece called `name`; on a CLOSED lap, from > to is the run across the start line. The document is not changed. */
 function saveRun(doc, from, to = from, { name } = {}) {
   checkName(name);
   if (!doc || !Array.isArray(doc.pieces)) throw err('BAD_DOC', 'saveRun needs a core document');
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to >= doc.pieces.length || to < from) throw err('BAD_RANGE', `the run must be pieces from..to of this track (0..${doc.pieces.length - 1}, from <= to), got ${from}..${to}`);
-  const run = doc.pieces.slice(from, to + 1), roads = run.filter(isRoad);
+  const n = Array.isArray(doc.pieces) ? doc.pieces.length : 0, wrap = !!doc.closed && Number.isInteger(from) && Number.isInteger(to) && to < from;
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= n || to >= n || (to < from && !wrap)) throw err('BAD_RANGE', `the run must be pieces from..to of this track (0..${n - 1}, from <= to; from > to only across the start line of a closed lap), got ${from}..${to}`);
+  const run = runOf(doc, from, to), roads = run.filter(isRoad);
   if (!roads.length) throw err('NO_ROAD', 'a run of flights alone has no road to save: a jump is saved with the road around it');
   const sig = signature(roads[0]);
   if (roads.some((P) => signature(P) !== sig)) throw err('MIXED_RUN', `the run mixes cross-sections (${[...new Set(roads.map(signature))].join(', ')}): a saved run is one kind, legacy, cup or tube (with or without an edge); save each kind's run on its own`);
@@ -66,7 +81,11 @@ function saveRun(doc, from, to = from, { name } = {}) {
     for (const ch of D.CHANNELS) { if (!hasChannel(P, ch)) continue; channels[ch] = STATE.includes(ch) ? P.channels[ch].map((v) => q(v - start[ch], D.DEC[ch])) : P.channels[ch].slice(); }
     return { type: 'road', length: P.length, family: P.family, knots: P.knots.slice(), channels, ...(P.cup ? { cup: true } : {}), ...(P.edge ? { edge: true } : {}), ...(P.tube ? { tube: true } : {}) };
   });
-  return freeze(checkPiece({ schema: SCHEMA, generator: GENERATOR, name, start, pieces }));
+  try { return freeze(checkPiece({ schema: SCHEMA, generator: GENERATOR, name, start, pieces })); } catch (e) {
+    // every joint inside the lap was already C1, so across the start line a JOINT can only be the line itself (a step the close does not solve, as a cup against a legacy start)
+    if (wrap && e.code === 'JOINT') throw err('SEAM_RUN', `this run crosses the lap's start line, and the road is not smooth across it (${e.message}), so it cannot be kept as one piece; save the pieces on each side of the line on their own`);
+    throw e;
+  }
 }
 
 // ── the absolute pieces a saved piece stands for ───────────────────────────────────────────────────────────────────────

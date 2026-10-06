@@ -61,6 +61,19 @@ function lap() {
 }
 const tick = () => new Promise((r) => setImmediate(r));
 
+// D250 item 4 (the keeper: "Short way across start"; C's look F1 on 62f5d39: the last piece then p1 selected the whole lap)
+test('row 1c: on a CLOSED lap a shift-click across the start line takes the SHORT way: the pieces either side of the line; Save keeps them, Delete says CLOSED', async () => {
+  const st = store(), s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 }); s.adopt(lap());
+  const d = s.getState().history.present, n = d.pieces.length; assert.equal(d.closed, true);
+  s.selectPiece(n - 1); s.selectPiece(0, { extend: true }); let i = s.selectionInfo();
+  assert.deepEqual([i.from, i.to, i.count, [...i.ids]], [n - 1, 0, 2, [d.pieces[n - 1].id, d.pieces[0].id]], 'last piece then p1: the two pieces either side of the line');
+  assert.equal(i.lengthM, d.pieces[n - 1].length + d.pieces[0].length); assert.equal(i.saveProblem, null);
+  await s.savePiece('across'); assert.match(s.getState().message, /saved the piece "across": 2 pieces/); assert.equal(PC.parse(st.pieces.get('across')).pieces.length, 2);
+  s.selectPiece(n - 1); s.selectPiece(0, { extend: true }); s.deleteSelection(); assert.match(s.getState().message, /^CLOSED/); assert.equal(s.getState().history.present, d, 'nothing deleted');
+  s.selectPiece(1); s.selectPiece(n - 2, { extend: true }); i = s.selectionInfo(); assert.equal(i.from > i.to, true, 'p2 then the last but one: across the line is shorter');
+  s.selectPiece(1); s.selectPiece(3, { extend: true }); i = s.selectionInfo(); assert.deepEqual([i.from, i.to], [1, 3], 'a run shorter inside the lap stays inside it');
+  const o = await track(); o.selectPiece(4); o.selectPiece(0, { extend: true }); i = o.selectionInfo(); assert.deepEqual([i.from, i.to, i.count], [0, 4, 5], 'control: an OPEN track never wraps');
+});
 test('row 1: select a piece, shift-click a run (the first piece selected stays the anchor), an out-of-range piece is refused, and any change of the document drops the selection', async () => {
   const s = await track();
   assert.equal(s.selectionInfo(), null);
@@ -131,9 +144,12 @@ test('row 5 (REQUIRED, through the app): a track built by saving a run and addin
   const H = lap(), st = store(), ex = await makeExporter(get);
   const a = await createCoreShell({ brushFn: null, storage: st, exporter: ex, autosaveMs: 0 }); a.adopt(H);
   const want = a.buildExport({}).folders;
-  a.selectPiece(1); a.selectPiece(H.pieces.length - 1, { extend: true }); await a.savePiece('rest of the lap'); assert.equal(a.getState().messageKind, 'ok', a.getState().message);
+  // D250 item 4: on a closed lap a shift-click takes the SHORT way round, so "the rest of the lap" (more than half of it) is saved as two runs that each stay inside it
+  const n = H.pieces.length;
+  a.selectPiece(1); a.selectPiece(3, { extend: true }); assert.deepEqual([a.selectionInfo().from, a.selectionInfo().to], [1, 3]); await a.savePiece('middle of the lap'); assert.equal(a.getState().messageKind, 'ok', a.getState().message);
+  a.selectPiece(4); a.selectPiece(n - 1, { extend: true }); assert.deepEqual([a.selectionInfo().from, a.selectionInfo().to], [4, n - 1]); await a.savePiece('end of the lap'); assert.equal(a.getState().messageKind, 'ok', a.getState().message);
   const b = await createCoreShell({ brushFn: null, storage: st, exporter: ex, autosaveMs: 0 }); b.adopt({ ...H, pieces: H.pieces.slice(0, 1), nextId: 2, closed: false });
-  await b.insertPiece('rest of the lap'); assert.equal(b.getState().messageKind, 'ok', b.getState().message);
+  for (const name of ['middle of the lap', 'end of the lap']) { await b.insertPiece(name); assert.equal(b.getState().messageKind, 'ok', b.getState().message); }
   b.commitDoc({ ...b.getState().history.present, closed: true, name: H.name }); assert.equal(b.getState().message, null, b.getState().message);
   assert.equal(D.serialize(b.getState().history.present), D.serialize(H), 'the same document text');
   const got = b.buildExport({}).folders, strip = (fl) => fl.flatMap((f) => f.files).filter((f) => f.path !== '.t180b-builder.json');   // that stamp carries the time it was made

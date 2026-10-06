@@ -128,7 +128,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
   const draw = (st) => {
     const info = shell.selectionInfo(), d = st.history.present;
     selInfo.textContent = info
-      ? `Selected: ${info.count === 1 ? info.ids[0] : `${info.ids[0]} to ${info.ids[info.ids.length - 1]} (${info.count} pieces)`} · ${fmtLen(info.lengthM)}${info.atEnd && !info.closed ? ' · at the end of the track' : ''}`
+      ? `Selected: ${info.count === 1 ? info.ids[0] : `${info.ids[0]} to ${info.ids[info.ids.length - 1]} (${info.count} pieces)`} · ${fmtLen(info.lengthM)}${info.from > info.to ? ' · across the start line' : ''}${info.atEnd && !info.closed ? ' · at the end of the track' : ''}`
       : (d.pieces.length ? 'Nothing selected: click a piece on the track to select it; Shift-click another to select the run between.' : 'The track has no pieces yet.');
     saveBtn.disabled = !info || !!info.saveProblem; delBtn.disabled = !info; clearBtn.disabled = !info; nameIn.disabled = !info;
     why.textContent = info && info.saveProblem ? `Cannot be saved as a piece: ${info.saveProblem}` : '';
