@@ -18,6 +18,7 @@ const LB = require('./labels.js');
 const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
 const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
 const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
+const HD = require('./handles.js');   // D244: the drag handles on the Extend ghost, and (Sculpt, D244b) on a placed piece
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
@@ -191,7 +192,7 @@ function mount(root, shell) {
   };
   doc.addEventListener('t180-undo-guard', onUndoGuard);
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
-    onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: ghost, onmouseleave: () => send('t180-ghost-clear') });
+    onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: ghost, onmouseleave: () => { if (!handlesOn.checked || sculptOn.checked) send('t180-ghost-clear'); } });   // with the drag handles on, the ghost stays up: its handles are what you drag
   // D242 item 6, STRAIGHT IN ONE CLICK (the keeper: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
   // "at start" box is ticked. This button extends with turn 0 and climb 0, both reached within the first AT_START_M metres and held there, then puts the boxes back
   // as they were (they are a kept preference, not this button's to change)
@@ -210,7 +211,11 @@ function mount(root, shell) {
   const armed = el('input', { type: 'checkbox', 'aria-label': 'brush on' });
   // SHARP (E's opt-in, the chair's ruling 2): its spill is declared right here, in the words of E's own SHARP_NOTE
   const sharp = el('input', { type: 'checkbox', 'aria-label': 'sharp brush', title: 'Sharp brush: acts at exactly the size you set by adding finer control points first. It can nudge the track just outside the brush by up to 0.1 mm. Leave it off for an exactly local edit.' });
-  const channelsFor = (m) => (m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r', 'c', 'e', 's', 't']);
+  // D244b SCULPT: while it is on, the brush is the value brush on the SHAPE channels only (turn and climb are not offered); the shell refuses anything else by name
+  const sculptOn = el('input', { type: 'checkbox', 'aria-label': 'sculpt on', title: 'Sculpt: reshape a piece that is already placed (bank, cup, width, edge, wall rise, tube sweep) without moving the rest of the track. Select ONE piece, then drag its handles or use the brush. Turn and climb are not offered; the centreline is checked on every step' });
+  const handlesOn = el('input', { type: 'checkbox', 'aria-label': 'drag handles', title: 'drag handles: marks on the ghost of the piece Extend would add (and on the piece you are sculpting); drag one to change its value, Shift for fine steps, Ctrl to snap to round numbers. Off: the ghost shows only while the pointer is on Extend' });
+  handlesOn.checked = true;
+  const channelsFor = (m) => (sculptOn.checked ? shell.sculptChannels() : m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r', 'c', 'e', 's', 't']);
   const fillChannels = () => { channel.replaceChildren(...channelsFor(mode.value).map((c) => new win.Option(CHANNEL_NAMES[c], c))); };
   mode.replaceChildren(...shell.brushModes().map((m) => new win.Option(m === 'local' ? 'height / sideways (local)' : 'rate (one channel)', m)));
   mode.onchange = fillChannels; fillChannels();
@@ -233,6 +238,53 @@ function mount(root, shell) {
   const move = (e) => { if (!drag) return; const [, y] = rel(e); waitingY = y; if (!frame) frame = win.requestAnimationFrame(flush); };
   const up = () => { if (!drag) return; if (frame) { win.cancelAnimationFrame(frame); frame = 0; } if (waitingY !== null) { const y = waitingY; waitingY = null; shell.brushTo((drag.y - y) * drag.per); } drag = null; shell.endBrush(); };
   if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); }
+
+  // DRAG HANDLES (D244) and SCULPT (D244b). The overlay (app/core/handles.js) asks this host what to draw and what a drag means. EXTEND: the handles are on the ghost of the piece the fields describe, and a
+  // drag types its value into the matching field (the field's own handler runs, so the ghost, the readout and the cup-or-tube rule follow; nothing is a document edit until Extend). SCULPT: the handles are on
+  // the ONE selected placed piece, and a drag is the shell's sculpt (one undo step, the shape channels only, the centreline guarded).
+  const askOf = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
+  const HANDLE_FIELD = { length: len, width, bank, cup, turn, climb }, SCULPT_CH = { bank: 'phi', width: 'w', cup: 'c' };
+  let triedDoc = null;   // the document the ghost was last asked for on behalf of the handles: one try per document, so a ghost that cannot be built is not rebuilt every frame
+  const fieldNum = (f) => { const v = Number(f.value); return f.value !== '' && Number.isFinite(v) ? v : null; };
+  const ghostModel = () => {
+    const st = shell.getState(), d = st.history.present;
+    if (!handlesOn.checked || st.sculpt || d.closed) return null;
+    let info = askOf('t180:ghost-request');
+    if (!info && triedDoc !== d) { triedDoc = d; ghost(); info = askOf('t180:ghost-request'); }
+    if (!info || !info.samples.length) return null;
+    const s1 = info.samples[info.samples.length - 1].s; if (!(s1 - info.s0 > 0.5)) return null;
+    // the road's half-width at a share of the piece: from the head's width to the field's, read when asked (a press must not see the width of the frame before)
+    const half = (f) => { const w1 = fieldNum(width), w0 = d.pieces.length ? (fieldNum({ value: shown.width }) ?? w1) : w1; return ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2; };
+    const kinds = HD.ORDER.filter((k) => !HANDLE_FIELD[k].disabled && fieldNum(HANDLE_FIELD[k]) !== null);
+    return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, kinds, base: (k) => fieldNum(HANDLE_FIELD[k]), ctx: (k) => ({ half: half(HD.KINDS[k].at) }) };
+  };
+  let sculptSamples = null;   // the selected piece's samples, kept for the track they came from
+  const sculptModel = () => {
+    const st = shell.getState(); if (!st.sculpt) return null;
+    const si = shell.sculptInfo(), tr = si ? askOf('t180:track-request') : null; if (!si || !tr || !tr.path || !Array.isArray(tr.segments)) return null;
+    if (!sculptSamples || sculptSamples.tr !== tr.path || sculptSamples.id !== si.id) sculptSamples = { tr: tr.path, id: si.id, list: tr.path.samples.filter((m) => tr.segments[m.seg] && tr.segments[m.seg].id === si.id) };
+    const list = sculptSamples.list; if (list.length < 2) return null;
+    const kinds = ['bank', 'width'].concat(si.hasCup ? ['cup'] : []), valueOf = { bank: si.values.phi, width: si.values.w, cup: si.values.c };
+    return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }) };
+  };
+  let sculptDrag = null;
+  const handlesHost = {
+    model: () => sculptModel() || ghostModel(),
+    pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; },
+    begin: (h) => { const m = sculptModel(); if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
+    apply: (h, value) => {
+      if (sculptDrag) { const delta = value - sculptDrag.base; shell.sculptTo(h.kind === 'bank' ? delta * HD.DEG : delta); return; }
+      if (shell.getState().sculpt) return;
+      const f = HANDLE_FIELD[h.kind]; f.value = String(value); if (f.oninput) f.oninput();   // typed: the field's own handler follows it
+    },
+    end: () => { if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } },
+  };
+  sculptOn.onchange = () => {
+    shell.setSculpt(sculptOn.checked);
+    if (sculptOn.checked) { send('t180-ghost-clear'); mode.value = 'rate'; mode.disabled = true; } else { mode.disabled = false; triedDoc = null; }
+    fillChannels();
+  };
+  handlesOn.onchange = () => { triedDoc = null; if (!handlesOn.checked && !sculptOn.checked) send('t180-ghost-clear'); };
 
   // CLOSE, EXAMPLE
   // D242: Close PROPOSES first (the keeper, TEST 1: the one-click close moved every piece, and the lap ran into itself). Only the stretch chosen here moves;
@@ -278,16 +330,16 @@ function mount(root, shell) {
     try { const [f, r] = await Promise.all([readText(fitIn), readText(readIn)]); shell.openExample(f, r, fitIn.files[0].name.replace(/\.pieces\.json$/i, '') + ' (local)'); } catch (e) { msg.textContent = e.message; msg.className = 'message'; }
   } });
 
-  const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' });
+  const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
   const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send });   // D240 (the selection's clicks are the brush's while the brush is armed)
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike),
-      fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube')),
+      fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn)),
     wnote, roBox,
     el('div', { class: 'actions' }, extendBtn, straightBtn), straightHint,
-    el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
+    el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
     ...pieces.nodes.selection, ...pieces.nodes.library,
     el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
@@ -306,12 +358,20 @@ function mount(root, shell) {
     msg.textContent = st.message || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
     readout();   // the track changed, so the piece the fields would add changed
     hintNow();
+    // D244b: the Sculpt switch follows the shell, and says what to do next
+    sculptOn.checked = !!st.sculpt;
+    const si = st.sculpt ? shell.sculptInfo() : null;
+    sculptHint.textContent = !st.sculpt ? '' : si ? `Sculpting ${si.id}: drag its handles (bank, width${si.hasCup ? ', cup' : ''}) or use the brush; one drag is one undo step. The route never moves.` : 'Select ONE piece: click it on the track. Only its shape (bank, cup, width, edge, wall rise, tube sweep) can change; turn and climb are not offered, and the centreline is checked on every step.';
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
+  const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // D244: the drag handles' overlay
+  // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
+  const onHandlesRequest = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(handles ? handles.handles().filter((h) => h.screen).map((h) => ({ id: h.id, kind: h.kind, side: h.side, x: h.screen.x, y: h.screen.y, dx: h.screen.dx, dy: h.screen.dy })) : []); };
+  doc.addEventListener('t180:handles-request', onHandlesRequest);
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, pieces, options: opts, unmount() { unsub(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, pieces, options: opts, unmount() { unsub(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
