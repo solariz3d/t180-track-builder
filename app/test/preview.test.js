@@ -564,3 +564,14 @@ test('D252: Space is TAKEN (preventDefault, down and up) so a focused button is 
   y.key('keydown', SPACE({ target: f, preventDefault: () => { pf++; } })); y.key('keyup', { key: ' ', code: 'Space', target: f, preventDefault: () => { pf++; } }); y.win.step(); y.win.step();
   assert.equal(pf, 0, 'a text field types its space'); assert.equal(y.p.rig.mode, 'build', 'and the camera did not take over');
 });
+// D252 (the chair's ruling on the dip B named: Ctrl then Z dipped 9.3 m and snapped back): Left Ctrl descends only after it has been held ALONE for
+// ~200 ms, so a Ctrl shortcut pressed inside that window never moves the camera at all; the undo stays as the backstop for a slower one
+test('D252: Ctrl then Z WITHIN 200 ms leaves the camera untouched from the very start (no dip, and the build view never becomes free)', () => {
+  const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); const e0 = eyeOf(x);
+  x.key('keydown', LCTRL()); x.win.step(100); assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, '100 ms of Ctrl alone: not one millimetre yet');
+  x.key('keydown', CTRL_Z); x.win.step(); x.win.step(); assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Z joined: still untouched');
+  const b = livePreview(); b.key('keydown', LCTRL()); b.win.step(100); assert.equal(b.p.rig.mode, 'build', 'from the build view: no takeover inside the window');
+  b.key('keydown', CTRL_Z); b.win.step(); assert.equal(b.p.rig.mode, 'build');
+  const h = pressed(['w']); h.key('keyup', UPK('w')); h.win.step(); const h0 = eyeOf(h); h.key('keydown', LCTRL()); for (let i = 0; i < 5; i++) h.win.step(100);
+  assert.ok(eyeOf(h)[1] < h0[1] - 5, 'a deliberate hold (500 ms) still flies down');
+});

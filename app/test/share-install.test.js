@@ -204,3 +204,54 @@ test('an open loop is not installed: the refusal is the Export button\'s own, an
   assert.deepStrictEqual([r.ok, native.installs.length], [false, 0]);
   assert.match(r.message, /the loop is not closed: close it first/);
 });
+
+// D252 second item (the keeper, 11:38: "why two export buttons"; 11:39: "it shouldnt be there, creates too much clutter, the AC folder, instead, in the EXE
+// startup, the user can choose where the track folder is in the beginning"). ONE main button, Export to Assetto Corsa; the AC folder and See it in Assetto
+// go into the "more" (⋯) container; at startup, with no folder remembered, a one-time card offers the folder Steam found (Use it / Choose another…).
+function mountIn(native, pickFolder = async () => null) {
+  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
+  const root = new fake.Element('div'), more = new fake.Element('div');
+  const m = mount(root, { buildExport: () => { throw new Error('not built here'); }, exportDoc: () => D.createDoc('x') }, { native, pickFolder, getTextures: () => null, more });
+  return { root, more, m, restore, buttons: (el) => [...el.walk()].filter((e) => e.tagName === 'BUTTON').map((e) => e.textContent), button: (el, t) => [...el.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === t), note: () => [...root.walk()].find((e) => e.className === 't-install-note').textContent };
+}
+test('D252: ONE button on the main row, Export to Assetto Corsa; the AC folder and See it in Assetto are in the more menu; there is no "AC folder…" button', async () => {
+  const native = fakeNative(); native.findAcRoot = async () => ({ remembered: 'G:/games/assettocorsa', found: null });
+  const x = mountIn(native);
+  try {
+    assert.deepStrictEqual(x.buttons(x.root), ['Export to Assetto Corsa']);
+    assert.deepStrictEqual(x.buttons(x.more), ['Assetto Corsa folder…', 'See it in Assetto']);
+    assert.ok(![...x.root.walk(), ...x.more.walk()].some((e) => /AC folder…/.test(e.textContent || '')), 'the old button is gone');
+    assert.ok([...x.more.walk()].some((e) => e.tagName === 'INPUT' && e.type === 'checkbox'), 'the launch setting moved with it');
+  } finally { x.restore(); }
+});
+test('D252: at startup with NO folder remembered, a card offers the folder Steam found; Use it remembers exactly that one', async () => {
+  const native = fakeNative(); native.findAcRoot = async () => ({ remembered: null, found: 'G:/SteamLibrary/steamapps/common/assettocorsa' });
+  const x = mountIn(native);
+  try {
+    await x.m.card;
+    assert.match(x.note(), /Assetto Corsa found at G:\/SteamLibrary\/steamapps\/common\/assettocorsa \(through Steam\)/);
+    assert.deepStrictEqual(x.buttons(x.root), ['Export to Assetto Corsa', 'Use it', 'Choose another…']);
+    await x.button(x.root, 'Use it').onclick();
+    assert.strictEqual(native.root, 'G:/SteamLibrary/steamapps/common/assettocorsa', 'remembered');
+    assert.deepStrictEqual(x.buttons(x.root), ['Export to Assetto Corsa'], 'the card is gone');
+  } finally { x.restore(); }
+});
+test('D252: the card\'s Choose another… opens the picker and remembers the folder picked; with Steam finding nothing the card asks to pick', async () => {
+  const native = fakeNative(), asked = []; native.findAcRoot = async () => ({ remembered: null, found: 'G:/SteamLibrary/steamapps/common/assettocorsa' });
+  const x = mountIn(native, async (why) => { asked.push(why); return 'D:/Games/assettocorsa'; });
+  try {
+    await x.m.card; await x.button(x.root, 'Choose another…').onclick();
+    assert.deepStrictEqual([asked.length, native.root], [1, 'D:/Games/assettocorsa']);
+  } finally { x.restore(); }
+  const n2 = fakeNative(); n2.findAcRoot = async () => ({ remembered: null, found: null });
+  const y = mountIn(n2);
+  try {
+    await y.m.card;
+    assert.match(y.note(), /not found through Steam/); assert.deepStrictEqual(y.buttons(y.root), ['Export to Assetto Corsa', 'Choose…']);
+  } finally { y.restore(); }
+});
+test('D252: with a folder remembered the startup says nothing (no card)', async () => {
+  const native = fakeNative(); native.findAcRoot = async () => ({ remembered: 'G:/games/assettocorsa', found: null });
+  const x = mountIn(native);
+  try { await x.m.card; assert.strictEqual(x.note(), ''); assert.deepStrictEqual(x.buttons(x.root), ['Export to Assetto Corsa']); } finally { x.restore(); }
+});

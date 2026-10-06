@@ -20,6 +20,13 @@
   header label { color: var(--dim); white-space: nowrap; }
   #banner { grid-column: 1 / -1; }
   #banner:empty { display: none; }
+  /* D252: the ⋯ menu beside Export to Assetto Corsa (Export… into any folder, the TEST export, the Assetto Corsa folder, See it in Assetto): it drops down over the page */
+  .more { position: relative; }
+  .more > summary { list-style: none; cursor: pointer; background: #222834; border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; }
+  .more > summary::-webkit-details-marker { display: none; }
+  .more[open] > summary { border-color: var(--accent); }
+  .more-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; min-width: 260px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .more-menu > span { display: flex; flex-direction: column; gap: 6px; }
   .bar { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: #2a2412; border-bottom: 1px solid #5a4a1c; }
   button { background: #222834; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; cursor: pointer; }
   button:hover:not([disabled]) { border-color: var(--accent); }
@@ -77,9 +84,12 @@
   <button id="save" title="Ctrl+S">Save</button>
   <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
   <select id="versions" aria-label="previous versions of the open track" title="Every Save keeps the version it replaces (the newest 20), and Close the loop keeps the track from before it. One opens as an unsaved copy."><option value="">Previous versions…</option></select>
-  <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
   <span id="install" title="Export to Assetto Corsa writes into Assetto Corsa's content\tracks (found through Steam), always as a t180b_ folder"></span>
-  <button id="testexport" title="TEST export of an UNFINISHED track, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export.">Test export (unfinished)…</button>
+  <details id="more" class="more"><summary title="more: export into a folder you pick, the test export, the Assetto Corsa folder, See it in Assetto">⋯</summary><div class="more-menu">
+    <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
+    <button id="testexport" title="TEST export of an UNFINISHED track, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export.">Test export (unfinished)…</button>
+    <span id="more-install"></span>
+  </div></details>
   <span id="status" style="color: var(--dim)"></span>
 </header>
 <div id="banner"></div>
@@ -211,15 +221,17 @@
       r.replaceChildren(...kids);
     };
     // THE RECOVERY OFFER (D239, carried from the piece builder): a track the last session left unsaved is offered, never applied
+    // D252: the banner row also carries the Assetto Corsa setup card's slot (app/install/index.js), kept across every redraw; empty, it takes no height
+    const setupSlot = document.createElement('div'); setupSlot.id = 'setup';
     const drawBanner = (st) => {
       const b = $('banner');
-      if (!st.recovery) { b.replaceChildren(); return; }
+      if (!st.recovery) { b.replaceChildren(setupSlot); return; }
       const n = st.recovery.doc.pieces.length, restore = el('button', 'Restore it'), discard = el('button', 'Discard it');
       restore.onclick = () => { const name = st.recovery.name; shell.restore(); if (name) $('name').value = name; };
       discard.onclick = () => shell.discardRecovery();
       const bar = el('div', null, 'bar');
       bar.append(el('span', `A track from your last session was not saved${st.recovery.name ? ` ("${st.recovery.name}")` : ''}: ${n} piece${n === 1 ? '' : 's'}${st.recovery.doc.closed ? ', a closed loop' : ''}.`), restore, discard);
-      b.replaceChildren(bar);
+      b.replaceChildren(bar, setupSlot);
     };
     const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
@@ -276,14 +288,14 @@
     // is the Export button's own build with the same road surface (shell.buildExport), and the launch is off by default (src-tauri/src/ac.rs)
     const b64files = (files) => files.map((f) => ({ path: f.path, data: b64(f.bytes) }));
     const native = {
-      getAcRoot: () => call('get_ac_root'), setAcRoot: (path) => call('set_ac_root', { path }),
+      getAcRoot: () => call('get_ac_root'), setAcRoot: (path) => call('set_ac_root', { path }), findAcRoot: () => call('find_ac_root'),
       installTrack: (folder, files) => call('install_track', { folder, files: b64files(files) }),
       getSeeItSetting: () => (tauri ? call('get_see_it_setting') : Promise.resolve(false)), setSeeItSetting: (on) => call('set_see_it_setting', { on }),
       seeIt: (track, layout) => call('see_it_in_assetto', { track, layout }),
     };
     const pickFolder = (title) => call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
     await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get, coreOpts), shell);
-    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet }) })), shell);
+    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet, more: $('more-install'), card: setupSlot }) })), shell);
     await panels.mountPanel($('guide'), 'onboarding', () => loadCjs('app/onboarding/index.js', get), shell);
   }
 
