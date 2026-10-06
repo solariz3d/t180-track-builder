@@ -1,7 +1,8 @@
 // install.js: INSTALL TO AC and SEE IT IN ASSETTO, the app's logic with no DOM (tested headless). index.js mounts it.
 //
 //   const inst = createInstaller({ build, native, getDoc, getTextures })
-//   await inst.root()             -> the remembered Assetto Corsa folder, or null (native get_ac_root)
+//   await inst.root()             -> the Assetto Corsa folder, or null (native get_ac_root: the remembered one, else the one found
+//                                    through Steam and then remembered, D250)
 //   await inst.chooseRoot(path)   -> remember it (native set_ac_root refuses a folder without content\tracks)
 //   await inst.install()          -> { ok, message, folder }: build the export with every check ON, then
 //                                    write into <AC>\content\tracks\<folder> (native install_track: t180b_ only, and never
@@ -28,7 +29,7 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
     },
     async install() {
       const root = await native.getAcRoot();
-      if (!root) return { ok: false, needsRoot: true, message: 'pick your Assetto Corsa folder first (the one that holds content\\tracks); it is remembered' };
+      if (!root) return { ok: false, needsRoot: true, message: 'Assetto Corsa was not found through Steam: pick your Assetto Corsa folder (the one that holds content\\tracks); it is remembered' };
       const name = String(getDoc().name || '').trim();
       if (!name || /^untitled$/i.test(name)) return { ok: false, message: 'name the track first (Save, with a name): it installs as t180b_<name>, and an unnamed track would replace the last unnamed one' };
       let out;
@@ -42,7 +43,9 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
         names.push(f.folder);
       }
       const doc = getDoc();
-      return { ok: true, folder: names[0], message: `installed "${doc.name || 'untitled'}" as ${names.join(', ')} in ${root}\\content\\tracks (${PREFIX_NOTE})` };
+      // D250: the line says where it went (the whole folder) and that exporting again updates that same folder
+      const where = names.map((n) => `${root}\\content\\tracks\\${n}`).join(', ');
+      return { ok: true, folder: names[0], message: `exported "${doc.name || 'untitled'}" into Assetto Corsa as ${names.join(', ')} in ${where}; exporting this track again updates that folder (${PREFIX_NOTE})` };
     },
   };
 }

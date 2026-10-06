@@ -1,5 +1,6 @@
 // index.js: the Install and See-it buttons, mounted as mount(root, shell, { native, pickFolder, getTextures }) on the core shell (D239).
-//   "Install to AC": the first time, asks for the Assetto Corsa folder (remembered); then installs as t180b_<name>.
+//   "Export to Assetto Corsa" (D250; was "Install to AC"): installs as t180b_<name> into the AC folder found through Steam; only
+//   when Steam has no AC does it ask for the folder (remembered). "AC folder…" picks another one.
 //   "See it in Assetto": DISABLED while the setting "See it in Assetto (launches the game)" is off, which is the default.
 'use strict';
 const { createInstaller, createLauncher, PREFIX_NOTE } = require('./install.js');
@@ -9,7 +10,7 @@ const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.cr
 function mount(root, shell, { native, pickFolder, getTextures }) {
   const inst = createInstaller({ build: (opts) => shell.buildExport(opts), native, getDoc: () => shell.exportDoc(), getTextures });
   const see = createLauncher({ native });
-  const install = el('button', { textContent: 'Install to AC', title: `export straight into Assetto Corsa's content\\tracks (${PREFIX_NOTE})` });
+  const install = el('button', { textContent: 'Export to Assetto Corsa', title: `export straight into Assetto Corsa's content\\tracks, found through Steam; exporting the same track again updates its folder (${PREFIX_NOTE})` });
   const change = el('button', { textContent: 'AC folder…' });
   const seeIt = el('button', { textContent: 'See it in Assetto', disabled: true, title: 'off: turn on "See it in Assetto (launches the game)" to use it' });
   const allow = el('input', { type: 'checkbox' });

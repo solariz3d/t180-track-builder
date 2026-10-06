@@ -84,7 +84,9 @@ The page is the **equation builder** (the core: `src/core`, `app/core`) and noth
 mode?" The Pieces mode is removed: the header's switch, `?mode=pieces`, the remembered `t180.mode` setting and the pieces branch of
 `app/index.html`. Four of its features were **carried onto the equation page**, each working on the equation track:
 
-- **Install to AC / See it in Assetto** (`app/install`): the install is the Export button's own build (`shell.buildExport`, the same
+- **Export to Assetto Corsa (was Install to AC) / See it in Assetto** (`app/install`): with no AC folder remembered, the native side finds
+  it through Steam (registry SteamPath, then every library in `steamapps\libraryfolders.vdf`; `src-tauri/src/ac.rs` root_or_find, D250) and
+  remembers it, so no folder is picked; only when Steam has no AC does it ask. The install is the Export button's own build (`shell.buildExport`, the same
   road surface), written as `t180b_<saved name>` into `content\tracks` by the native side, with D234's rules; See it is off by default.
 - **Autosave and crash restore** (`app/core/coreshell.js`): the open track is autosaved (`{ schema: 1, kind: 'core', … }`) while it has
   unsaved changes; a named save or a clean exit clears it; the next start offers it back in the banner (Restore it / Discard it).
