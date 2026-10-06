@@ -103,7 +103,8 @@ test('row 6: a refused export names EVERY red in plain words, grouped, with wher
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
   await s.exportTo(require('os').tmpdir());
   const msg = s.getState().message;
-  assert.match(msg, /^not exported: the road overlaps itself \(3\): /); assert.match(msg, /the road rolls too fast \(1\): at 0\.60–0\.61 km \(p\d+\)/);
+  // D248 amended BY NAME: the three overlap reds (200–230, 205–228, 210–212, one piece) are ONE place now, and the count is of places (was "(3)", "(1)")
+  assert.match(msg, /^not exported: the road overlaps itself \(1 place\): at 0\.20–0\.23 km \(p\d+\); /); assert.match(msg, /the road rolls too fast \(1 place\): at 0\.60–0\.61 km \(p\d+\)/);
   assert.ok(!/downforce-ray-gap/.test(msg), 'no validator id in the words'); assert.equal(s.getState().exportReds.length, 4, 'every red is kept for the red box');
 });
 

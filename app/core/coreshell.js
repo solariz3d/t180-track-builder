@@ -44,6 +44,7 @@ const { close, closeWindow } = require('../../src/core/close.js');
 // app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
 const { overlapCheck } = require('./overlapjob.js');
 const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
+const overlapPlacesText = (ck, segs) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs).flatMap((g) => g.places) });   // D248: "N places", merged as the red list shows them
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 const PC = require('../../src/core/piece.js');   // D240: saved pieces (save a run, put one at the head, mirror it, delete pieces)
@@ -308,7 +309,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const proposal = Object.freeze({ base, doc: res.doc, resolved: r.resolved, whole: !!whole, window: res.window, report: res.report, ms,
           displacement: Object.freeze(displacementOf(base, res.doc)), check: overlapRunner ? null : Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh)) });
         const moved = proposal.displacement.filter((x) => x.maxM > 1e-3);
-        const words = (ck) => `close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move${ck.overlaps.length ? `; the closed track OVERLAPS ITSELF in ${ck.overlaps.length} place${ck.overlaps.length === 1 ? '' : 's'}` : ''}. Apply or cancel`;
+        const words = (ck) => `close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move${ck.overlaps.length ? `; the closed track OVERLAPS ITSELF in ${overlapPlacesText(ck, r.resolved.segments)}` : ''}. Apply or cancel`;
         if (!overlapRunner) return set({ closeProposal: proposal, ...ok(words(proposal.check)) });
         const entry = beginCheck(proposal, res.doc, true, (e) => (e.status === 'done' ? ok(words(e.result)) : { message: `the overlap check could not run: ${e.error}. Cancel the preview and try Close again` }));
         return set({ closeProposal: proposal, proposalCheck: entry, ...ok(`close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move. Checking for overlaps: Apply is off until that finishes (Cancel stops it)`) });
@@ -447,7 +448,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const proposal = Object.freeze({ base: d, doc: res, resolved: r.resolved, from: s.from, to: s.to, removed: Object.freeze(s.ids.slice()), ms,
           displacement: Object.freeze(displacementAfterDelete(d, res)), check: overlapRunner ? null : Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh, { closed: !!res.closed })) });
         const after = proposal.displacement.filter((x) => x.piece >= s.from), moved = after.filter((x) => x.maxM > 1e-3), n = s.to - s.from + 1;
-        const words = (ck) => `delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move${ck.overlaps.length ? `; the track OVERLAPS ITSELF in ${ck.overlaps.length} place${ck.overlaps.length === 1 ? '' : 's'}` : ''}. Apply or cancel`;
+        const words = (ck) => `delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move${ck.overlaps.length ? `; the track OVERLAPS ITSELF in ${overlapPlacesText(ck, r.resolved.segments)}` : ''}. Apply or cancel`;
         if (!overlapRunner) return set({ deleteProposal: proposal, ...ok(words(proposal.check)) });
         const entry = beginCheck(proposal, res, !!res.closed, (e) => (e.status === 'done' ? ok(words(e.result)) : { message: `the overlap check could not run: ${e.error}. Cancel the preview and delete again` }));
         return set({ deleteProposal: proposal, proposalCheck: entry, ...ok(`delete preview: ${n} piece${n === 1 ? ' goes' : 's go'}; ${moved.length} of the ${after.length} piece${after.length === 1 ? '' : 's'} after the gap move. Checking for overlaps: Apply is off until that finishes (Cancel stops it)`) });
