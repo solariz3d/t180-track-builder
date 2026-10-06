@@ -115,3 +115,19 @@ test('E\'s panels load through A\'s webview loader (app/lib/cjs.js), and each ex
   for (const p of ['app/validate-ui/index.js'])   // D239: app/handles/index.js went with the Pieces page
     assert.strictEqual(typeof (await loadCjs(p, fromDisk)).mount, 'function', p);
 });
+
+// D256 item 1 (the keeper, 12:56: "when I click the off box below design speed, it disapears and cannot be turned back on?"). Measured in a headless window first:
+// the box never left the page, it JUMPED (x 14 to x 250) because the value's text changed width ("460 km/h" to "off") and the label wrapped differently. A row
+// cannot measure layout, so it pins the two things that keep the row's wrapping the same in both states, and that off -> on -> off works on the same box.
+test('D256: the design-speed value has a FIXED box and the off box stays with its word, so the box does not move; off, on and off again all work', () => {
+  const fake = require('./palette-fakedom.js'), { createSpeedPicker, mountSpeedPicker } = require('../validate-ui/speed.js'), restore = fake.install();
+  try {
+    const seen = [], p = createSpeedPicker({ onChange: (k) => seen.push(k) }), root = new fake.Element('div'); mountSpeedPicker(root, p);
+    const all = [...root.walk()], shown = all.find((e) => e.className === 'v-speed'), box = all.find((e) => e.tagName === 'INPUT' && e.type === 'checkbox');
+    assert.match(String(shown.style), /display:\s*inline-block/); assert.match(String(shown.style), /min-width:\s*\d+ch/, 'the value takes the same width for "off" and "970 km/h"');
+    const group = all.find((e) => e.children && e.children.includes(box)); assert.match(String(group.style || ''), /white-space:\s*nowrap/, 'the box and its word never split across lines');
+    for (const want of [true, false, true]) { box.checked = want; box.onchange(); }
+    assert.deepStrictEqual(seen, [null, p.defaultKmh, null], 'off, on, off');
+    assert.strictEqual([...root.walk()].find((e) => e.tagName === 'INPUT' && e.type === 'checkbox'), box, 'the same box throughout');
+  } finally { restore(); }
+});

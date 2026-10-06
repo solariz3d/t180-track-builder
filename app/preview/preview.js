@@ -18,15 +18,16 @@
 //   flying:  W / S forward and back,  A / D left and right,  Q / E or Left Ctrl / Space down and up,  Shift sprints (×4, rising to ×20 over 2.5 s held). Movement is PER AXIS
 //   (the keeper, D188): W/S, A/D and Q/E each resolve on their own, the NEWER key of an axis winning and the other taking over on its
 //   release, and the axes combine, so W+D goes diagonally at the same speed as a straight line. From any view the first move takes the view over
-//   into free mode, once (C and B after it are not undone by a key still held). Looking: the right-button drag (any view) or the left in free mode, or
+//   into free mode, once (C and B after it are not undone by a key still held). Looking: the RIGHT-button drag, in every view (D255, the keeper: "right click
+//   turn only, left click will be used for clicking things": the left button never turns the camera; it is the pieces', the handles' and the brush's), or
 //   the arrow keys; drag right turns right. Moving and looking work at the same time. The scroll wheel zooms every view (free mode
 //   dollies); Ctrl + wheel is the LENS (the field of view, 10° to 100°, in every view) and a middle click resets it to 60°.
 //   A text field swallows the camera keys; a number field lets them through; Enter or Esc in a field, or a click on the canvas, lets go of it.
 //   D252 (the keeper: "space bar to go up, lft control to go down?"): Space and LEFT Ctrl, by the physical key (Right Ctrl does not fly). Left Ctrl
 //   flies only while it is the ONLY key down and no mouse button is: when another key (Ctrl+Z/Y/S/Backspace), the wheel (Ctrl+wheel, the lens) or
-//   a button (a handle drag, Ctrl to snap) joins it, that press's descent is undone, so a Ctrl shortcut never moves the camera. And it starts only
-//   after Ctrl has been held ALONE for CTRL_HOLD_S (~200 ms, the chair's ruling): a shortcut pressed inside that window never dips the camera at
-//   all, a deliberate hold still flies, and the undo is the backstop for a slower shortcut. Space is taken
+//   a button (a handle drag, Ctrl to snap) joins it, that press's descent is undone, so a Ctrl shortcut leaves the camera where it was. It descends
+//   INSTANTLY, like Space (D255, the keeper: "space works instantly to go up, but control lags before going down": D252's 200 ms hold is removed;
+//   a shortcut's brief dip is accepted, and undone when its key joins). Space is taken
 //   (it never clicks a focused button) except in a text field, where it types.
 //   No ground grid unless createPreview({ ground: true }): just the track (the keeper, 2026-09-29).
 //   D237 (the keeper: "a 3D grid ... a 2D grid if the track has no height, but as soon as the track turns up or downward the grid becomes 3D", and symmetry): createPreview({ gridMode })
@@ -161,9 +162,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
 
   const said = () => { if (onMode) onMode(rig.mode); };
   // D252: SPACE up, LEFT CTRL down (see KEYS at the top). `down` is every physical key down, camera key or not; `ctrlFly` is Left Ctrl's press while it
-  // flies ({ mode: the view it found, moved: metres descended, wait: seconds still to hold alone before it descends }), 'spoiled' once something
-  // joined it (no descent for the rest of that press).
-  const down = new Set(), UP = Object.freeze({ fly: [0, 0, 1] }), DOWN = Object.freeze({ fly: [0, 0, -1] }), CTRL_HOLD_S = 0.2;
+  // flies ({ mode: the view it found, moved: metres descended }), 'spoiled' once something joined it (no descent for the rest of that press).
+  const down = new Set(), UP = Object.freeze({ fly: [0, 0, 1] }), DOWN = Object.freeze({ fly: [0, 0, -1] });
   let buttons = 0, ctrlFly = null;
   /** Something joined Left Ctrl: stop its descent and UNDO it, so a Ctrl shortcut (or the lens, or a snapped handle drag) leaves the camera where it was. */
   const spoilCtrl = () => {
@@ -184,7 +184,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       e.preventDefault(); return;
     }
     if (e.code === 'ControlLeft') {   // D252: down, only as the ONLY key down with no mouse button
-      if (!e.repeat) { if (down.size === 1 && !buttons && !e.altKey && !e.metaKey) { ctrlFly = { mode: rig.mode, moved: 0, wait: CTRL_HOLD_S }; } else ctrlFly = 'spoiled'; }   // it descends once held alone for CTRL_HOLD_S (the frame loop)
+      if (!e.repeat) { if (down.size === 1 && !buttons && !e.altKey && !e.metaKey) { ctrlFly = { mode: rig.mode, moved: 0 }; held.set('ControlLeft', DOWN); takeover = true; } else ctrlFly = 'spoiled'; }   // D255: at once, like Space
       return;
     }
     const a = keyAction(e.key, e); if (!a) return;
@@ -212,7 +212,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     const ae = win.document && win.document.activeElement;   // a click on the canvas takes focus off a field (a preventDefault below would keep it)
     if (ae && ae !== win.document.body && typeof ae.blur === 'function') ae.blur();
     if (e.button === 1) { rig.resetLens(); e.preventDefault(); return; }   // the middle click: the lens back to 60°
-    if (e.button === 2 || (e.button === 0 && rig.mode === 'free')) {
+    if (e.button === 2) {   // D255: the RIGHT button only, in every view; the left is for clicking things (it looked in free mode before)
       if (rig.mode !== 'free') { const c = ctx(); if (!c) return; rig.setMode('free', c); said(); }
       drag = [e.clientX, e.clientY]; e.preventDefault();
     }
@@ -235,8 +235,6 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     raf = win.requestAnimationFrame(frame);
     const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0; prev = t;
     const sprint = boost ? boostAt(boostT) : 1; boostT = boost ? boostT + dt : 0;   // the speed THIS frame, then one more frame of Shift held
-    // D252: Left Ctrl held ALONE for CTRL_HOLD_S starts descending now (and takes the view over, as any move key does); a shortcut inside the window never gets here
-    if (ctrlFly && ctrlFly !== 'spoiled' && ctrlFly.wait > 0) { ctrlFly.wait -= dt; if (ctrlFly.wait <= 1e-9) { ctrlFly.wait = 0; held.set('ControlLeft', DOWN); takeover = true; } }
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {
       const k = sprint * flySpeed * dt;

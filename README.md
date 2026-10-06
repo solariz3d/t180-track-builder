@@ -121,9 +121,9 @@ The limits come from measurements of real T-180 tracks and replays, not guesses 
 | key or mouse | does |
 |---|---|
 | W / S, A / D | fly forward and back, left and right |
-| E or Space / Q or Left Ctrl | fly up / down (Left Ctrl only when held alone, after about 0.2 s) |
+| E or Space / Q or Left Ctrl | fly up / down (Left Ctrl flies down instantly, like Space; a Ctrl shortcut such as Ctrl+Z puts the camera back) |
 | Shift | fly faster, rising the longer it is held |
-| right-button drag, or the arrow keys | look around (left-button drag also looks, in Free view) |
+| right-button drag, or the arrow keys | look around (the right button only, in every view: the left button is for clicking pieces, handles and the brush) |
 | scroll wheel / Ctrl + wheel | zoom / the lens (field of view); a middle click resets the lens |
 | C / B | next camera view (Build, Overhead, Side, Chase, Free) / back to the Build view |
 | L | the AC look or a colour per piece |
