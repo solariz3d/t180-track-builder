@@ -143,6 +143,30 @@ pub fn root_or_find(data: &Path, steam_path: &dyn Fn() -> Option<PathBuf>) -> Re
     }
 }
 
+/// What the STARTUP CARD needs (D252 second item; the keeper: "in the EXE startup, the user can choose where the track folder is"): the remembered
+/// AC folder, or, only when none is, the one found through Steam. NOTHING is remembered here: the user answers the card (Use it / Choose another…).
+pub fn root_status(data: &Path, steam_path: &dyn Fn() -> Option<PathBuf>) -> Result<(Option<PathBuf>, Option<PathBuf>), String> {
+    if let Some(p) = recall_ac_root(data)? { return Ok((Some(p), None)); }
+    Ok((None, steam_path().and_then(|s| find_ac_in_steam(&s)).map(|p| plain_path(fs::canonicalize(&p).unwrap_or(p)))))
+}
+
+/// The Steam folder a TEST run looks in (D252: the startup card is tested on a FAKE Steam tree): when and ONLY when the app was LAUNCHED with
+/// T180_TEST_STEAM_PATH set to an existing absolute folder, that folder stands in for the registry's SteamPath (like T180_TEST_APP_DATA in lib.rs:
+/// a page cannot set a process's environment, and nothing in normal use sets this one).
+pub fn test_steam_path(var: Option<String>) -> Option<PathBuf> {
+    let p = PathBuf::from(var?);
+    if p.is_absolute() && p.is_dir() { Some(p) } else { None }
+}
+
+/// Steam's folder: the test seam when the app was launched with one (and, set but not a folder, NOTHING: a test run never falls through to the
+/// real registry), else the registry.
+pub fn steam_path() -> Option<PathBuf> {
+    match std::env::var("T180_TEST_STEAM_PATH") {
+        Ok(v) => test_steam_path(Some(v)),
+        Err(_) => steam_path_from_registry(),
+    }
+}
+
 /// Steam's folder from the registry, read with Windows' own reg.exe (no window); None when Steam is not installed or the
 /// query fails, and then the app asks with the picker. Only the registry is read. Never called by a test.
 pub fn steam_path_from_registry() -> Option<PathBuf> {
@@ -504,6 +528,50 @@ mod tests {
         fs::remove_dir_all(&picked).unwrap();
         let again = root_or_find(&data, &|| Some(steam.clone())).unwrap().unwrap();
         assert_eq!(fs::canonicalize(&again).unwrap(), fs::canonicalize(&ac).unwrap());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    // D252 second item (the keeper, 11:39: "in the EXE startup, the user can choose where the track folder is in the beginning"): the startup card
+    // asks root_status, which says what is remembered and, only when nothing is, what Steam finds, and REMEMBERS NOTHING (the user answers the card)
+    #[test]
+    fn root_status_says_what_is_remembered_or_what_steam_finds_and_writes_nothing() {
+        let (d, steam, ac, data) = fake_steam("status");
+        let (r, f) = root_status(&data, &|| Some(steam.clone())).unwrap();
+        assert_eq!(r, None);
+        assert_eq!(fs::canonicalize(f.unwrap()).unwrap(), fs::canonicalize(&ac).unwrap());
+        assert!(!data.join(ROOT_FILE).exists(), "found, not remembered: the card asks first");
+        assert_eq!(root_status(&data, &|| None).unwrap(), (None, None), "no Steam: nothing found, nothing written");
+        assert!(!data.join(ROOT_FILE).exists());
+        let picked = remember_ac_root(&data, &ac).unwrap();
+        let asked = std::cell::Cell::new(false);
+        assert_eq!(root_status(&data, &|| { asked.set(true); None }).unwrap(), (Some(picked), None), "remembered: said, Steam not asked");
+        assert!(!asked.get());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    // D252 (the chair: "empty -> the card shows; remembered -> silent; gone -> the card again", on a FAKE Steam tree): the three startup states
+    #[test]
+    fn the_startup_card_shows_on_an_empty_folder_is_silent_once_remembered_and_shows_again_when_the_remembered_folder_is_gone() {
+        let (d, steam, ac, data) = fake_steam("states");
+        let steam_of = || Some(steam.clone());
+        assert!(matches!(root_status(&data, &steam_of).unwrap(), (None, Some(_))), "empty: the card (Steam's find, nothing remembered)");
+        let picked = d.join("picked"); fs::create_dir_all(picked.join("content").join("tracks")).unwrap();
+        let r = remember_ac_root(&data, &picked).unwrap();
+        assert_eq!(root_status(&data, &steam_of).unwrap(), (Some(r), None), "remembered: silent");
+        fs::remove_dir_all(&picked).unwrap();
+        let (gone, found) = root_status(&data, &steam_of).unwrap();
+        assert_eq!(gone, None, "the remembered folder is gone: not remembered any more");
+        assert_eq!(fs::canonicalize(found.unwrap()).unwrap(), fs::canonicalize(&ac).unwrap(), "and the card offers Steam's find again");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn the_test_steam_seam_takes_only_an_existing_absolute_folder() {
+        let d = scratch("seam");
+        assert_eq!(test_steam_path(Some(d.to_string_lossy().into_owned())), Some(d.clone()));
+        assert_eq!(test_steam_path(None), None);
+        assert_eq!(test_steam_path(Some("relative\\steam".into())), None, "relative: refused");
+        assert_eq!(test_steam_path(Some(d.join("nope").to_string_lossy().into_owned())), None, "missing: refused");
         fs::remove_dir_all(&d).unwrap();
     }
 
