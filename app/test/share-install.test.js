@@ -255,3 +255,35 @@ test('D252: with a folder remembered the startup says nothing (no card)', async 
   const x = mountIn(native);
   try { await x.m.card; assert.strictEqual(x.note(), ''); assert.deepStrictEqual(x.buttons(x.root), ['Export to Assetto Corsa']); } finally { x.restore(); }
 });
+
+// C's findings 1 and 2 (p-spacefly-C_2026-10-06.md): the card stayed up after Export had found and remembered AC; a long install note pushed the open ⋯ menu
+// off the window's right edge
+test('D252 follow-up: once Export to Assetto Corsa has found and remembered AC, the startup card goes', async () => {
+  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
+  try {
+    const native = fakeNative(), found = 'G:/SteamLibrary/steamapps/common/assettocorsa';
+    native.findAcRoot = async () => ({ remembered: native.root, found: native.root ? null : found });
+    native.getAcRoot = async () => { if (!native.root) native.root = found; return native.root; };   // get_ac_root finds and remembers (ac.rs root_or_find)
+    const shell = { buildExport: () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
+    const root = new fake.Element('div'), more = new fake.Element('div'), card = new fake.Element('div');
+    const m = mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more, card });
+    await m.card; assert.match(card.textContent, /Assetto Corsa found at/, 'control: the card is up');
+    await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
+    assert.strictEqual(native.root, found, 'Export found and remembered it'); assert.strictEqual(card.textContent, '', 'and the card is gone');
+  } finally { restore(); }
+});
+test('D252 follow-up: a long install note is cut to its box with the whole text in its tooltip, and the ⋯ menu opens toward the window (right-aligned)', async () => {
+  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
+  try {
+    const native = fakeNative(); native.root = 'G:/' + 'a-very-long-folder-name/'.repeat(6) + 'assettocorsa';
+    const shell = { buildExport: () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
+    const root = new fake.Element('div'); mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more: new fake.Element('div') });
+    await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
+    const note = [...root.walk()].find((e) => e.className === 't-install-note');
+    assert.ok(note.textContent.length > 150, 'control: a long note'); assert.strictEqual(note.title, note.textContent, 'its whole text is the tooltip');
+  } finally { restore(); }
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const rule = (sel) => { const m = new RegExp(sel.replace(/[.]/g, '\\.') + '\\s*\\{([^}]*)\\}').exec(html); return m ? m[1] : ''; };
+  assert.match(rule('.more-menu'), /right:\s*0/, 'the menu hangs from its button\'s RIGHT edge, so it opens toward the window'); assert.doesNotMatch(rule('.more-menu'), /left:\s*0/);
+  assert.match(rule('.t-install-note'), /max-width/); assert.match(rule('.t-install-note'), /text-overflow:\s*ellipsis/);
+});

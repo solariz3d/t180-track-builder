@@ -575,3 +575,28 @@ test('D252: Ctrl then Z WITHIN 200 ms leaves the camera untouched from the very 
   const h = pressed(['w']); h.key('keyup', UPK('w')); h.win.step(); const h0 = eyeOf(h); h.key('keydown', LCTRL()); for (let i = 0; i < 5; i++) h.win.step(100);
   assert.ok(eyeOf(h)[1] < h0[1] - 5, 'a deliberate hold (500 ms) still flies down');
 });
+
+// C's finding 4 (p-spacefly-C_2026-10-06.md), reproduced in rows: a move key in the OVERHEAD view (W, E, Space or Left Ctrl) took the view over into free
+// at pitch exactly -90 degrees, looking straight down along the world up the free view keeps, so EVERY frame threw "lookAt: up is parallel to the view
+// direction" (the same on an empty track, reached through chase). The free view now enters within the 89 degrees look() keeps, facing the overhead's up.
+test('a move key from the OVERHEAD view enters free with no frame throwing: pitch held at -89 degrees, facing where the overhead view had up the screen', () => {
+  for (const k of [K('w'), SPACE(), K('e'), LCTRL()]) {
+    const x = livePreview(); x.key('keydown', { key: 'c', code: 'KeyC', target: {} }); x.key('keyup', { key: 'c', code: 'KeyC' }); for (let i = 0; i < 30; i++) x.win.step(); assert.equal(x.p.rig.mode, 'overhead');
+    const up = x.p.view().pose.up; x.key('keydown', k); for (let i = 0; i < 6; i++) assert.doesNotThrow(() => x.win.step(), k.code);
+    const s = x.p.rig.free.state(); assert.equal(x.p.rig.mode, 'free'); assert.ok(Math.abs(s.pitch * 180 / Math.PI + 89) < 1e-9, `${k.code} pitch ${s.pitch * 180 / Math.PI}`);
+    const fwd = [Math.sin(s.yaw), 0, Math.cos(s.yaw)], uh = Math.hypot(up[0], up[2]);
+    assert.ok(Math.abs((fwd[0] * up[0] + fwd[2] * up[2]) / uh - 1) < 1e-6, `${k.code}: faces the overhead view's up`);
+  }
+});
+
+// C's finding 5 (p-spacefly-C_2026-10-06.md): app/core/handles.js calls preventDefault() on pointerdown, which in a browser SUPPRESSES the compatibility mousedown
+// the preview watched, so Ctrl held to SNAP a handle drag could fly the camera down once past the 200 ms hold. A press is now read from pointerdown too.
+test('a handle drag (pointerdown only, its mousedown suppressed) with Ctrl held past 200 ms to snap: the camera does not move; a press joining Ctrl undoes it', () => {
+  const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); const e0 = eyeOf(x);
+  x.key('pointerdown', { button: 0, pointerType: 'mouse', clientX: 5, clientY: 5 }); x.key('keydown', LCTRL()); for (let i = 0; i < 5; i++) x.win.step(100);
+  assert.ok(len(sub(eyeOf(x), e0)) < 1e-9, 'Ctrl held 500 ms during the drag: unmoved');
+  x.key('keyup', { key: 'Control', code: 'ControlLeft' }); x.key('pointerup', { button: 0, pointerType: 'mouse' });
+  const y = pressed(['w']); y.key('keyup', UPK('w')); y.win.step(); const f0 = eyeOf(y);
+  y.key('keydown', LCTRL()); for (let i = 0; i < 4; i++) y.win.step(100); assert.ok(eyeOf(y)[1] < f0[1] - 1, 'control: Ctrl alone was descending');
+  y.key('pointerdown', { button: 0, pointerType: 'mouse', clientX: 5, clientY: 5 }); assert.ok(len(sub(eyeOf(y), f0)) < 1e-9, 'a press joined: back where Ctrl found it');
+});

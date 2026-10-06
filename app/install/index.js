@@ -19,24 +19,29 @@ function mount(root, shell, { native, pickFolder, getTextures, more = null, card
   const seeIt = el('button', { textContent: 'See it in Assetto', disabled: true, title: 'off: turn on "See it in Assetto (launches the game)" to use it' });
   const allow = el('input', { type: 'checkbox' });
   const note = el('div', { className: 't-install-note' });
+  // D252 follow-up (C's finding 2): the note is cut to its box in the header (index.html), so its whole text is its tooltip
+  const say = (t) => { note.textContent = t; note.title = t; };
+  let dropCard = () => {};
   const allowLabel = el('label', { title: 'This button starts Assetto Corsa. It is off unless you turn it on.' }, [allow, ' See it in Assetto (launches the game)']);
   if (more) { root.append(install, note); more.append(change, seeIt, allowLabel); } else root.append(install, change, seeIt, allowLabel, note);
   let last = null;
-  const pick = async () => { const p = await pickFolder('Your Assetto Corsa folder (the one with content\\tracks)'); if (!p) return null; const r = await inst.chooseRoot(p); note.textContent = r.ok ? `Assetto Corsa folder: ${r.root}` : r.message; return r.ok ? r.root : null; };
+  const pick = async () => { const p = await pickFolder('Your Assetto Corsa folder (the one with content\\tracks)'); if (!p) return null; const r = await inst.chooseRoot(p); say(r.ok ? `Assetto Corsa folder: ${r.root}` : r.message); if (r.ok) dropCard(); return r.ok ? r.root : null; };
   change.onclick = pick;
   install.onclick = async () => {
     let r = await inst.install();
     if (r.needsRoot && (await pick())) r = await inst.install();
-    note.textContent = r.message; if (r.ok) last = r.folder;
+    say(r.message); if (r.ok) last = r.folder;
+    if (!r.needsRoot) dropCard();   // D252 follow-up (C's finding 1): Export found and remembered AC (get_ac_root), so the startup card has nothing left to ask
   };
   const refresh = async () => { const on = await see.enabled(); allow.checked = on; seeIt.disabled = !on || !last; };
   allow.onchange = async () => { await native.setSeeItSetting(allow.checked); await refresh(); };
-  seeIt.onclick = async () => { const r = await see.run(last); note.textContent = r.ok ? `Assetto Corsa closed (exit ${r.code})` : r.message; };
+  seeIt.onclick = async () => { const r = await see.run(last); say(r.ok ? `Assetto Corsa closed (exit ${r.code})` : r.message); };
   refresh();
   // THE STARTUP CARD (D252): only when no folder is remembered; the native side looks Steam up without remembering (find_ac_root)
   // the card sits in `card` (the page's banner row) as a bar, or in the note when there is none; an answer clears it and the note says where exports go
   const show = (...kids) => { if (cardEl) cardEl.replaceChildren(el('div', { className: 'bar' }, kids)); else note.replaceChildren(...kids); };
-  const remember = async (p) => { if (!p) return; const r = await inst.chooseRoot(p); if (r.ok && cardEl) cardEl.replaceChildren(); note.textContent = r.ok ? `Exports go into Assetto Corsa at ${r.root}` : r.message; };
+  const remember = async (p) => { if (!p) return; const r = await inst.chooseRoot(p); if (r.ok) dropCard(); say(r.ok ? `Exports go into Assetto Corsa at ${r.root}` : r.message); };
+  dropCard = () => { if (cardEl) cardEl.replaceChildren(); };
   const card = (async () => {
     if (!native.findAcRoot) return;
     let s; try { s = await native.findAcRoot(); } catch (e) { return; }   // no answer: Export still finds AC itself, or asks

@@ -157,8 +157,13 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
   const freePose = () => ({ eye: free.eye.slice(), target: add(free.eye, freeDir()), up: WORLD_UP.slice(), fov: opts.fov || DEFAULTS.fov });
   /** Entering free mode: take over the pose on screen (or the last exact one), so the view does not jump. */
   function enterFree(from) {
-    const d = unit(sub(from.target, from.eye)) || [0, 0, 1];
-    free.eye = from.eye.slice(); free.pitch = Math.asin(Math.max(-1, Math.min(1, d[1]))); free.yaw = Math.atan2(d[0], d[2]);
+    const d = unit(sub(from.target, from.eye)) || [0, 0, 1], lim = 89 * Math.PI / 180;
+    // D252 follow-up (C's finding 4): a view looking STRAIGHT DOWN (overhead) entered free at pitch -90 degrees, along the world up the free view keeps, and every
+    // frame threw "lookAt: up is parallel to the view direction". The pitch is held within the 89 degrees look() keeps, and a view looking straight down or up
+    // gives its heading by its own up (overhead: the growth direction up the screen), so the free view faces where that view had up.
+    free.eye = from.eye.slice(); free.pitch = Math.max(-lim, Math.min(lim, Math.asin(Math.max(-1, Math.min(1, d[1])))));
+    const sgn = d[1] < 0 ? 1 : -1;
+    free.yaw = Math.hypot(d[0], d[2]) < 1e-3 && from.up && Math.hypot(from.up[0], from.up[2]) > 1e-6 ? Math.atan2(sgn * from.up[0], sgn * from.up[2]) : Math.atan2(d[0], d[2]);
   }
   let lastExact = null;
   const rig = {
