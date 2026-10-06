@@ -299,6 +299,14 @@ test('the lens changes the pose\'s fov and nothing else, in every view (the eye,
     assert.ok(Math.abs(len(m) - 3) < 1e-9, len(m) + ' m, not ~0.04 m');
     assert.ok(dot(unit(m), [Math.sin(0.7), 0, Math.cos(0.7)]) > 0.999, 'along the horizontal heading, the non-cancelled part');
   });
+  // D257: Left Ctrl's descent is undone when a shortcut joins it, while W's travel stays, so the preview must know how far the UP axis really went
+  // inside a combined move; on a pitched view forward and up are not perpendicular and move() scales the sum, so that is up · scaleOf(...), not up
+  test('scaleOf(fwd, right, up) is the factor move() applies: on a pitched view the eye moves exactly (d·fwd + up·UP)·scaleOf', () => {
+    const rig = enterFree(); setView(rig, 0.4, -35 * Math.PI / 180); const e0 = rig.free.state().eye, B = basis(rig), s = rig.free.scaleOf(2, 0, -2);
+    assert.ok(Math.abs(s - 1) > 0.01, 'control: pitched, so the factor is not 1'); rig.free.move(2, 0, -2);
+    assert.ok(near(rig.free.state().eye, [0, 1, 2].map((i) => e0[i] + (B.d[i] * 2 + [0, 1, 0][i] * -2) * s), 1e-9));
+    assert.equal(rig.free.scaleOf(0, 0, -3), 1, 'a single axis is unscaled');
+  });
   test('a single-axis move is unchanged (backward is along −d), and a zero move is a no-op (no NaN)', () => {
     const rig = enterFree(); setView(rig, 0, -60 * Math.PI / 180); const e0 = rig.free.state().eye, B = basis(rig);
     assert.ok(rig.free.move(0, 0, 0)); assert.deepEqual(rig.free.state().eye, e0);

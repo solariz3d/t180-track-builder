@@ -24,8 +24,9 @@
 //   dollies); Ctrl + wheel is the LENS (the field of view, 10° to 100°, in every view) and a middle click resets it to 60°.
 //   A text field swallows the camera keys; a number field lets them through; Enter or Esc in a field, or a click on the canvas, lets go of it.
 //   D252 (the keeper: "space bar to go up, lft control to go down?"): Space and LEFT Ctrl, by the physical key (Right Ctrl does not fly). Left Ctrl
-//   flies only while it is the ONLY key down and no mouse button is: when another key (Ctrl+Z/Y/S/Backspace), the wheel (Ctrl+wheel, the lens) or
-//   a button (a handle drag, Ctrl to snap) joins it, that press's descent is undone, so a Ctrl shortcut leaves the camera where it was. It descends
+//   flies down TOGETHER with the movement keys (W A S D, Q E, Space, Shift, the arrows) and a RIGHT-button look drag (D257, the keeper: "cant even click drag
+//   look around and go down"); Ctrl+Space nets zero. Only a SHORTCUT key (one app/core/keys.js acts on with Ctrl: Z, Y, S, Backspace), the wheel (Ctrl+wheel,
+//   the lens) or a LEFT-button press (a handle drag, Ctrl to snap) stops it, and that press's descent is undone, so a Ctrl shortcut leaves the camera where it was. It descends
 //   INSTANTLY, like Space (D255, the keeper: "space works instantly to go up, but control lags before going down": D252's 200 ms hold is removed;
 //   a shortcut's brief dip is accepted, and undone when its key joins). Space is taken
 //   (it never clicks a focused button) except in a text field, where it types.
@@ -51,6 +52,7 @@ const { FACTOR: DRAG_DETAIL } = require('./coarse.js');
 const { previewTextures } = require('../../src/texture/set.js');
 const { normalize, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
+const { keyAction: shortcutOf } = require('../core/keys.js');   // D257: what Ctrl+key does in the app (undo, redo, save, remove the head): the keys that stop Left Ctrl
 
 const FLY = { w: [1, 0, 0], s: [-1, 0, 0], d: [0, 1, 0], a: [0, -1, 0], e: [0, 0, 1], q: [0, 0, -1] };
 const TURN = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
@@ -164,30 +166,36 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // D252: SPACE up, LEFT CTRL down (see KEYS at the top). `down` is every physical key down, camera key or not; `ctrlFly` is Left Ctrl's press while it
   // flies ({ mode: the view it found, moved: metres descended }), 'spoiled' once something joined it (no descent for the rest of that press).
   const down = new Set(), UP = Object.freeze({ fly: [0, 0, 1] }), DOWN = Object.freeze({ fly: [0, 0, -1] });
-  let buttons = 0, ctrlFly = null;
+  let buttons = 0, ctrlFly = null;   // buttons: the LEFT button is down (D257: a right-button look drag flies with Left Ctrl)
+  const shortcutDown = new Set();   // D257: shortcut keys down (Z, Y, S, Backspace): Left Ctrl does not start while one is
+  const isShortcut = (e) => !!shortcutOf({ key: e.key, ctrlKey: true, shiftKey: !!e.shiftKey });
+  const onlyLeftCtrl = (e) => !!e.ctrlKey && down.has('ControlLeft') && !down.has('ControlRight') && !e.altKey && !e.metaKey;
   /** Something joined Left Ctrl: stop its descent and UNDO it, so a Ctrl shortcut (or the lens, or a snapped handle drag) leaves the camera where it was. */
   const spoilCtrl = () => {
     if (!ctrlFly || ctrlFly === 'spoiled') return;
     const f = ctrlFly; ctrlFly = 'spoiled'; held.delete('ControlLeft');
     if (rig.mode === 'free' && f.moved) rig.free.move(0, 0, f.moved);
-    if (f.mode !== 'free') { takeover = false; if (rig.mode === 'free') { rig.setMode(f.mode, ctx()); said(); } }
+    // the view back only when Ctrl ALONE took it over (D257: a W held with it is a flight of its own)
+    if (f.mode !== 'free' && ![...held.keys()].some((k) => k !== 'ControlLeft')) { takeover = false; if (rig.mode === 'free') { rig.setMode(f.mode, ctx()); said(); } }
   };
   const onKey = (e) => {
-    if (typeof e.code === 'string' && e.code) { if (e.code !== 'ControlLeft') spoilCtrl(); down.add(e.code); }
+    if (typeof e.code === 'string' && e.code) { if (isShortcut(e)) { shortcutDown.add(e.code); spoilCtrl(); } down.add(e.code); }   // D257: only a SHORTCUT stops Left Ctrl
     boost = !!e.shiftKey;   // Shift is the sprint: read on every key-down, typing included
     // ENTER or ESC in a field lets go of it, so the camera keys work again (Enter in a text area is a new line: left alone)
     if ((e.key === 'Enter' || e.key === 'Escape') && e.target && typeof e.target.blur === 'function' && typeof e.target.matches === 'function'
       && e.target.matches(e.key === 'Enter' ? 'input, select' : 'input, select, textarea')) { e.target.blur(); return; }
     if (swallowsKeys(e.target)) return;   // typing, not flying
-    if (e.code === 'Space') {   // D252: up, and TAKEN, so a focused button is not clicked (a Ctrl/Alt/Meta+Space is not a move)
-      if (!(e.ctrlKey || e.altKey || e.metaKey)) { if (!held.has('Space')) held.set('Space', UP); if (!e.repeat) takeover = true; }
+    if (e.code === 'Space') {   // D252: up, and TAKEN, so a focused button is not clicked (a Ctrl/Alt/Meta+Space is not a move, except with LEFT Ctrl flying: D257)
+      if (!(e.ctrlKey || e.altKey || e.metaKey) || onlyLeftCtrl(e)) { if (!held.has('Space')) held.set('Space', UP); if (!e.repeat) takeover = true; }
       e.preventDefault(); return;
     }
-    if (e.code === 'ControlLeft') {   // D252: down, only as the ONLY key down with no mouse button
-      if (!e.repeat) { if (down.size === 1 && !buttons && !e.altKey && !e.metaKey) { ctrlFly = { mode: rig.mode, moved: 0 }; held.set('ControlLeft', DOWN); takeover = true; } else ctrlFly = 'spoiled'; }   // D255: at once, like Space
+    if (e.code === 'ControlLeft') {   // D252: down; D257: with the movement keys and a right-button look too, but not with a shortcut key or the LEFT button down
+      if (!e.repeat) { if (!shortcutDown.size && !buttons && !e.altKey && !e.metaKey) { ctrlFly = { mode: rig.mode, moved: 0 }; held.set('ControlLeft', DOWN); takeover = true; } else ctrlFly = 'spoiled'; }   // D255: at once, like Space
       return;
     }
-    const a = keyAction(e.key, e); if (!a) return;
+    // D257: with LEFT Ctrl held, a movement key still flies or turns (its Ctrl-free action), never a shortcut, a camera switch or the look
+    const viaCtrl = onlyLeftCtrl(e) && !isShortcut(e), a = keyAction(e.key, viaCtrl ? { ctrlKey: false, altKey: false, metaKey: false } : e); if (!a) return;
+    if (viaCtrl && !a.fly && !a.turn) return;
     if (a.camera) { takeover = false; rig.key(a.camera, ctx()); said(); e.preventDefault(); return; }
     if (a.look) { look = look === 'ac' ? 'words' : 'ac'; e.preventDefault(); return; }
     const id = heldKey(e); if (!held.has(id)) held.set(id, a);   // a repeat of a held key keeps its place in the order
@@ -198,15 +206,15 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // lets go; and every held key is dropped when the window loses focus or is hidden, since the key-up then never arrives.
   // That lost key-up was the camera that kept flying forward by itself (the keeper, 2026-09-29).
   const onUp = (e) => {
-    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code);
+    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code); shortcutDown.delete(e.code);
     if (e.code === 'ControlLeft') ctrlFly = null;   // a descent that ran alone is kept
     if (e.code === 'Space' && !swallowsKeys(e.target)) e.preventDefault();   // D252: a button clicks on the key-UP of Space too
   };
-  const letGo = () => { held.clear(); takeover = false; boost = false; boostT = 0; drag = null; down.clear(); buttons = 0; ctrlFly = null; };
+  const letGo = () => { held.clear(); takeover = false; boost = false; boostT = 0; drag = null; down.clear(); shortcutDown.clear(); buttons = 0; ctrlFly = null; };
   const onVis = () => { if (win.document && win.document.hidden) letGo(); };
   let boost = false, boostT = 0;   // Shift is down; and for how long (s)
-  // MOUSE LOOK: the right button drags the look from any view (it takes the view over into free); the left button does in
-  // free mode (outside it, the left button is the brush's). Keys and the mouse work at the same time.
+  // MOUSE LOOK: the right button drags the look from any view (it takes the view over into free); the left button never looks (D255: it is the
+  // pieces', the handles' and the brush's). Keys and the mouse work at the same time.
   let drag = null;
   const onDown = (e) => {
     const ae = win.document && win.document.activeElement;   // a click on the canvas takes focus off a field (a preventDefault below would keep it)
@@ -218,9 +226,10 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     }
   };
   const onMove = (e) => { if (!drag) return; rig.free.look((e.clientX - drag[0]) * 0.004, -(e.clientY - drag[1]) * 0.004); drag = [e.clientX, e.clientY]; };
-  const onRelease = () => { drag = null; buttons = 0; };
-  const onAnyDown = () => { buttons = 1; spoilCtrl(); };   // D252: any button anywhere (a handle drag included) joins Left Ctrl
-  const onAnyUp = () => { buttons = 0; };   // D252 follow-up (C's finding 5): a handle's preventDefault on pointerdown suppresses the compatibility mousedown, so a press is read from pointerdown too
+  const onRelease = (e) => { drag = null; if (!e || e.button === undefined || e.button === 0) buttons = 0; };
+  // D252: a press anywhere (a handle drag included) stops Left Ctrl; D257: the LEFT button only, the right button's look drag flies with it
+  const onAnyDown = (e) => { if (e && e.button !== undefined && e.button !== 0) return; buttons = 1; spoilCtrl(); };
+  const onAnyUp = (e) => { if (!e || e.button === undefined || e.button === 0) buttons = 0; };   // D252 follow-up (C's finding 5): a handle's preventDefault on pointerdown suppresses the compatibility mousedown, so a press is read from pointerdown too
   const noMenu = (e) => e.preventDefault();
   // THE SCROLL WHEEL zooms every view: a follow view comes nearer or backs off, free mode flies along its view. CTRL + WHEEL is the
   // LENS instead (rig.lens: the field of view; the camera does not move).
@@ -246,9 +255,10 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
         if (a.fly) for (let i = 0; i < 3; i++) if (a.fly[i]) dir[i] = a.fly[i];
         if (a.turn) rig.free.look(a.turn[0] * turnSpeed * dt, a.turn[1] * turnSpeed * dt);
       }
+      if (held.has('Space') && held.has('ControlLeft')) dir[2] = 0;   // D257: Space up and Left Ctrl down together net zero
       const n = Math.hypot(dir[0], dir[1], dir[2]);
       if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);
-      if (n && ctrlFly && ctrlFly !== 'spoiled' && held.has('ControlLeft')) ctrlFly.moved -= dir[2] / n * k;   // D252: what Left Ctrl descended, to undo if something joins it
+      if (n && dir[2] < 0 && ctrlFly && ctrlFly !== 'spoiled' && held.has('ControlLeft')) ctrlFly.moved -= dir[2] / n * k * rig.free.scaleOf(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);   // only the DESCENT is undone, as far as move() really took it (D257: W's travel stays)   // D252: what Left Ctrl descended, to undo if something joins it
     }
     const { width: w, height: h } = backingSize(canvas.clientWidth, canvas.clientHeight, win.devicePixelRatio);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // follows DPR and resizes

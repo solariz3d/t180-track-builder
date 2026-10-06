@@ -53,7 +53,7 @@ test('row 1b: no flight model: a STRAIGHT dashed line, and it says so; a fall th
   // a long gap: the heavier fall does not reach it at 460 km/h
   const l = await base(); l.addJump({ gap: 120, drop: 3, landDeg: -3 }); const lf = flightsOf(l)[0]; assert.equal(lf.falls[0].clear, true); assert.equal(lf.falls[1].clear, false, '6.3 g falls short');
   const short = lf.falls[1], [xs, ys] = short.arc[short.arc.length - 1]; assert.ok(xs < lf.D, `it comes down short of the landing lip (${xs} of ${lf.D})`); near(ys, lf.dh, 1, 'at the level of the landing lip'); assert.equal(short.x, null);
-  const lw = JP.describe(lf); assert.match(lw.lines[1], /^6\.3 g: does NOT reach the landing at 460 km\/h \(it needs 62\d km\/h\): the jump is red\.$/, lw.lines[1]);
+  const lw = JP.describe(lf); assert.match(lw.lines[1], /^6\.3 g: does NOT reach the landing at 460 km\/h \(it needs 62\d km\/h\): a warning, not a red \(tune it by driving it in AC\)\.$/, lw.lines[1]);   // D257 (amended): a missed fall is a WARNING since D250, not "the jump is red"
   // two flights on one track; each its own lip
   const t = await base(); t.addJump({ gap: 30, drop: 1, landDeg: -2 }); t.extend({ length: 200 }); t.addJump({ gap: 25, drop: 0, landDeg: -1 }); const two = flightsOf(t); assert.equal(two.length, 2); assert.notDeepEqual(two[0].lip.pos, two[1].lip.pos); assert.deepEqual(two.map((x) => x.id), ['p3', 'p5']);
   // none, an empty path, and a flight with no landing yet (the path cut after the gap)

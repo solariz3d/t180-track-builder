@@ -82,7 +82,7 @@ function describe(f) {
   if (f.model === 'straight') return { drew: 'straight', speed: null, lines: ['The dashed line is straight from the take-off lip to the landing lip: this build has no flight model to draw the car\'s arc.'] };
   const drew = `The dashed arcs are the car's flight, ballistic, at ${Math.round(f.speedKmh)} km/h, falling at ${f.falls.map((x) => `${x.g} g`).join(' and ')} (the lighter fall carries farther).`;
   const speed = `The landing ramp is sized for ${Math.round(f.speedKmh)} km/h, fixed today; jumps are tuned by driving them in AC, so a landing the car may fly past at the lap's speed is a warning, not a red.`;   // D250, the keeper's ruling
-  const lines = f.falls.map((x) => (x.clear ? `${x.g} g: comes down ${m1(x.x)} m after the lip, ${m1(Math.max(0, x.x - f.D))} m onto the ramp.` : `${x.g} g: does NOT reach the landing at ${Math.round(f.speedKmh)} km/h (it needs ${Number.isFinite(x.minKmh) ? `${Math.ceil(x.minKmh)} km/h` : 'a higher ramp: no speed makes it'}): the jump is red.`));
+  const lines = f.falls.map((x) => (x.clear ? `${x.g} g: comes down ${m1(x.x)} m after the lip, ${m1(Math.max(0, x.x - f.D))} m onto the ramp.` : `${x.g} g: does NOT reach the landing at ${Math.round(f.speedKmh)} km/h (it needs ${Number.isFinite(x.minKmh) ? `${Math.ceil(x.minKmh)} km/h` : 'a higher ramp: no speed makes it'}): a warning, not a red (tune it by driving it in AC).`));
   lines.push(`The ramp is ${m1(f.rampM)} m long.`);
   return { drew, speed, lines };
 }
