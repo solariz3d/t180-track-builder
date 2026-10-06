@@ -77,6 +77,20 @@ test('D248: a red inside a place that spans two pieces is the same place (a red 
   assert.deepEqual(g.places.map(RG.placeText), ['at 1.99–2.07 km (p2–p3)']); assert.equal(g.places[0].s, 1990, 'the click target is the merged start');
 });
 
+// F1 (C's look at 05f0c2c, handback/p-redmerge-C_2026-10-06.md:33-36): pieceAt puts a boundary s on the NEXT piece, and that was read as a
+// place's END piece, so a red ending exactly on a boundary was labelled as spanning both pieces and the touch rule merged across the boundary
+test('F1: a red that ENDS exactly on a piece boundary is on its own piece only (0.98–1.00 km is p1, not p1–p2)', () => {
+  const g = RG.groupReds([{ reason: 'self-intersection', s0: 980, s1: 1000 }], SEGS)[0];
+  assert.deepEqual(g.places.map(RG.placeText), ['at 0.98–1.00 km (p1)']); assert.equal(RG.placeText(g.items[0]), 'at 0.98–1.00 km (p1)');
+});
+
+test('F1: reds that meet AT a boundary, or touch across it, stay two places (980–1000 + 1000–1020; 980–1000 + 1001–1020); on one piece they merge', () => {
+  const two = (a, b) => RG.groupReds([{ reason: 'self-intersection', s0: a[0], s1: a[1] }, { reason: 'self-intersection', s0: b[0], s1: b[1] }], SEGS)[0].places.map(RG.placeText);
+  assert.deepEqual(two([980, 1000], [1000, 1020]), ['at 0.98–1.00 km (p1)', 'at 1.00–1.02 km (p2)'], 'meeting at the boundary');
+  assert.deepEqual(two([980, 1000], [1001, 1020]), ['at 0.98–1.00 km (p1)', 'at 1.00–1.02 km (p2)'], 'touching across it');
+  assert.deepEqual(two([960, 980], [980, 1000]), ['at 0.96–1.00 km (p1)'], 'meeting on one piece is one place');
+});
+
 test('pieceAt wraps a closed lap\'s s and is null for no segments', () => {
   assert.equal(RG.pieceAt(SEGS, 8500), 'p1'); assert.equal(RG.pieceAt(SEGS, 0), 'p1'); assert.equal(RG.pieceAt(SEGS, 7999.9), 'p8'); assert.equal(RG.pieceAt([], 10), null);
 });

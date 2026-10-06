@@ -34,6 +34,9 @@ function pieceAt(segments, s) {
   for (const g of segments) { if (x < acc + g.length - 1e-9) return g.id; acc += g.length; }
   return segments[segments.length - 1].id;
 }
+/** The piece a range ENDS on: read just inside s1, so a range ending exactly on a boundary is on its own piece, not the next one (F1, C's look
+ *  at 05f0c2c: pieceAt puts a boundary s on the NEXT piece). A point (or sub-0.5 m) range is on the piece it starts on. */
+const endPiece = (segments, s0, s1) => pieceAt(segments, s1 > s0 + 0.5 ? s1 - 1e-6 : s0);
 const WHAT = {
   'self-intersection': 'passes through itself',
   'stacked-within-2m': 'one road less than 2 m over another',
@@ -54,7 +57,7 @@ function groupReds(reds, segments) {
     const reason = r.x.reason, overlap = reason === 'self-intersection' || reason === 'stacked-within-2m' || (reason === 'downforce-ray-gap' && nearOverlap(r));
     const key = overlap ? 'overlap' : reason;
     if (!byKey.has(key)) { const g = GROUPS.find((q) => q.key === key); byKey.set(key, { key, title: g ? g.title : reasonText(reason), count: 0, items: [] }); }
-    const g = byKey.get(key), piece = pieceAt(segments, r.s0), end = r.s1 > r.s0 + 0.5 ? pieceAt(segments, r.s1) : piece;
+    const g = byKey.get(key), piece = pieceAt(segments, r.s0), end = endPiece(segments, r.s0, r.s1);
     g.items.push({ s: r.s0, s0: r.s0, s1: r.s1, piece, pieceEnd: end, km: kmRange(r.s0, r.s1), what: overlap ? WHAT[reason] : reasonText(reason), reason, detail: r.x.detail || null, worst: r.x.worst });
     g.count++;
   }
@@ -62,14 +65,14 @@ function groupReds(reds, segments) {
   for (const g of byKey.values()) { g.items.sort((a, b) => a.s - b.s || a.s1 - b.s1); g.places = mergePlaces(g.items, segments); }
   return [...byKey.values()].sort((a, b) => order(a.key) - order(b.key) || a.key.localeCompare(b.key));
 }
-/** A group's items (sorted by s) merged into PLACES: overlapping (so on a piece the place spans), or touching (a gap of at most TOUCH_M) on the
- *  piece the place ends on. A red inside a place that spans two pieces is that place (the D248 real-window check: "at 1.08–1.16 km (p4–p5),
+/** A group's items (sorted by s) merged into PLACES: overlapping by more than a point (so on a piece the place spans), or touching (a gap of at
+ *  most TOUCH_M, meeting included) on the piece the place ends on. F1: two reds that only MEET at a piece boundary are on different pieces. A red inside a place that spans two pieces is that place (the D248 real-window check: "at 1.08–1.16 km (p4–p5),
  *  at 1.15 km (p5)"); reds on different pieces that only touch stay two places. */
 function mergePlaces(items, segments) {
   const out = [];
   for (const it of items) {
     const last = out[out.length - 1];
-    if (last && (it.s0 <= last.s1 || (it.s0 <= last.s1 + TOUCH_M && it.piece === pieceAt(segments, last.s1)))) {
+    if (last && (it.s0 < last.s1 || (it.s0 <= last.s1 + TOUCH_M && it.piece === endPiece(segments, last.s0, last.s1)))) {
       if (it.s1 > last.s1) last.s1 = it.s1;
       for (const [k, v] of [['reasons', it.reason], ['whats', it.what], ['details', it.detail]]) if (v != null && !last[k].includes(v)) last[k].push(v);
       if (it.worst != null && (last.worst == null || it.worst > last.worst)) last.worst = it.worst;
@@ -77,7 +80,7 @@ function mergePlaces(items, segments) {
     } else out.push({ s: it.s0, s0: it.s0, s1: it.s1, piece: it.piece, reasons: [it.reason], whats: [it.what], details: it.detail != null ? [it.detail] : [], worst: it.worst, reds: 1 });
   }
   for (const p of out) {
-    p.km = kmRange(p.s0, p.s1); p.pieceEnd = p.s1 > p.s0 + 0.5 ? pieceAt(segments, p.s1) : p.piece;
+    p.km = kmRange(p.s0, p.s1); p.pieceEnd = endPiece(segments, p.s0, p.s1);
     p.what = p.whats.join('; '); p.reason = p.reasons.join(', '); p.detail = p.details.length ? p.details.join('; ') : null;
   }
   return out;
