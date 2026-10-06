@@ -64,7 +64,9 @@ test('the default jump is the p10 gap because the median one misses: at 460 km/h
   assert.deepEqual(def.red, [], 'the default jump is clean at the default design speed');
   assert.deepEqual(def.jumps[0].landings.map((l) => [l.g, l.caught]), [[3.2, true], [6.3, true]]);
   const median = firstJump({ gap: C.jump.gap_m.p50 });
-  assert.ok(median.red.some((r) => r.reason === 'landing-misses-zone'), `the median ${C.jump.gap_m.p50} m jump: ${JSON.stringify(median.red.map((r) => r.reason))}`);
+  // CHANGED D250: the median jump's miss is a WARNING (amber), not a red: the keeper tunes jumps by driving them. The row's claim (the median one misses) stands
+  assert.ok(median.amber.some((r) => r.reason === 'landing-misses-zone'), `the median ${C.jump.gap_m.p50} m jump: ${JSON.stringify(median.amber.map((r) => r.reason))}`);
+  assert.ok(!median.red.some((r) => r.reason === 'landing-misses-zone'), 'and it is not a red');
 });
 
 test('the default is the MEDIAN: each curved word\'s built peak radius is its class p50, within 0.5%', () => {

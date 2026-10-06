@@ -105,12 +105,14 @@ test('validate: a flat 40 m jump reports both landings, the gap and the climb, f
   assert.strictEqual(j.reachable, true);
 });
 
-test('validate: a jump taken too slowly is not caught, and a closed lap over it fails with the reason', () => {
+// CHANGED D250 (the keeper: jumps are tuned by driving them): a jump the car is not caught on WARNS in the lap proof (lap.warn) and no longer fails the
+// lap (lap.where). The row's subject, the uncaught jump named with its fall, stands.
+test('validate: a jump taken too slowly is not caught, and a closed lap over it WARNS with the reason (D250), without failing on it', () => {
   const { path, segs } = jumpPath(20, { drop: 1 });   // 20 m/s over 40 m falling 1 m: short at either fall
   const r = validate({ ...path, closed: true }, segs);
   assert.ok(r.jumps[0].landings.every((l) => !l.clear));
-  assert.strictEqual(r.lap.ok, false);
-  assert.ok(r.lap.where.some((w) => w.reason === 'jump-not-caught-6.3g'));
+  assert.ok(r.lap.warn.some((w) => w.reason === 'jump-not-caught-6.3g'), JSON.stringify(r.lap));
+  assert.ok(!r.lap.where.some((w) => /^jump-not-caught/.test(w.reason)), 'not a reason the lap fails');
 });
 
 // CHANGED 2026-09-27 (D170): "not a failure" was the rule until the librarian's item 3 ("an open end must sit on

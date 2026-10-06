@@ -70,7 +70,7 @@ share ONE clamped knot vector:
 - **Adding one** (D243): `src/core/jump.js` `jump(doc, { gap, drop, land })` appends a flight at the open end. It refuses by name a jump the adapter
   cannot fly, and a jump straight after a jump.
 - **Validation** treats a core flight's gap as intended (no `gap-in-road`). Its landing is long enough when both measured falls land on road
-  at the lap's speed (`landing-misses-zone` otherwise).
+  at the lap's speed; otherwise `landing-misses-zone`, a WARNING since D250 (the keeper tunes jumps by driving them): it never blocks an export.
 - **Close** works across flights (`src/core/close.js`):
   - the road after a jump keeps its level start;
   - the model carries the jump's distance and its pitch reset;

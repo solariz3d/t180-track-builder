@@ -540,7 +540,7 @@ test('row 14: the Jump block: the hint and the ramp speed from the start; a ghos
   gap.value = '15'; drop.value = '1'; land.value = '-2';   // (a flat take-off: at 460 km/h both measured falls clear 15 m)
   assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are up'); P1.button('Add jump').onmouseenter();
   assert.equal(S.ghostJump, true, 'the ghost is a jump\'s'); assert.equal(S.lastCandidate.jump, true); assert.ok(S.lastCandidate.segments.some((g) => g.kind === 'gap'));
-  const note = P1.text('jump flight'); assert.match(note, /ballistic, at 460 km\/h, falling at 3\.2 g and 6\.3 g/); assert.match(note, /3\.2 g: comes down \d+\.\d m after the lip/); assert.match(note, /6\.3 g: comes down \d+\.\d m after the lip/); assert.match(note, /The ramp is \d+\.\d m long\./); assert.match(note, /sized for 460 km\/h, fixed today; the keeper has not decided/);
+  const note = P1.text('jump flight'); assert.match(note, /ballistic, at 460 km\/h, falling at 3\.2 g and 6\.3 g/); assert.match(note, /3\.2 g: comes down \d+\.\d m after the lip/); assert.match(note, /6\.3 g: comes down \d+\.\d m after the lip/); assert.match(note, /The ramp is \d+\.\d m long\./); assert.match(note, /sized for 460 km\/h, fixed today; jumps are tuned by driving them in AC, so a landing the car may fly past at the lap's speed is a warning, not a red\./) /* CHANGED D250: the keeper has decided */;
   for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'no Extend handles on a jump\'s ghost');
   assert.equal(P1.panel.flights.flights().length, 1, 'the flight overlay reads the ghost\'s flight'); assert.equal(P1.panel.flights.lines().length, 2, 'two dashed arcs');
   // typing changes the ghost and the words

@@ -45,7 +45,9 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
       const doc = getDoc();
       // D250: the line says where it went (the whole folder) and that exporting again updates that same folder
       const where = names.map((n) => `${root}\\content\\tracks\\${n}`).join(', ');
-      return { ok: true, folder: names[0], message: `exported "${doc.name || 'untitled'}" into Assetto Corsa as ${names.join(', ')} in ${where}; exporting this track again updates that folder (${PREFIX_NOTE})` };
+      // D250 item 2: a jump the car may fly past is installed, and said (the keeper tunes jumps by driving them); the export's other warnings stay where they were
+      const jumps = ((out.result && out.result.warnings) || []).filter((w) => /^jump: /.test(w));
+      return { ok: true, folder: names[0], message: `exported "${doc.name || 'untitled'}" into Assetto Corsa as ${names.join(', ')} in ${where}; exporting this track again updates that folder (${PREFIX_NOTE})${jumps.length ? `. ${jumps.join('. ')}` : ''}` };
     },
   };
 }

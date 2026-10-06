@@ -152,6 +152,8 @@ function aiInput(segs, p, K = 16) {
 }
 
 const rangeText = (x) => `${x.reason}${x.detail ? ` [${x.detail}]` : ''} at s ${x.s0.toFixed(1)}–${x.s1.toFixed(1)} m${x.source ? ` (${x.source})` : ''}`;
+/** D250: the plain warning for a landing the car may fly past at the lap's speed (validation's landing-misses-zone, amber). */
+const jumpWarning = (a) => `jump: this jump may fly past its landing at the lap's speed, at s ${a.s0.toFixed(0)}–${a.s1.toFixed(0)} m${a.worst != null ? ` (the ${a.worst} g fall misses)` : ''}; tune it by driving it in AC`;
 
 /** Everything up to the bytes, and nothing written. Throws ExportError on every refusal. */
 function buildExport(doc, opts = {}) {
@@ -204,7 +206,11 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const testReds = test ? red.map(rangeText) : [];   // TEST: every red is listed, none blocks
   if (red.length && !test) throw new ExportError('RED', `validation is red, nothing written: ${red.map(rangeText).join('; ')}`, { red });
   if (test) warnings.push(`TEST EXPORT (unfinished): ${red.length} red finding(s) NOT blocking, listed in ${TEST_FILE}`);
-  for (const a of v.amber) warnings.push(`amber: ${rangeText(a)}`);
+  // D250: a jump's reach is the user's to tune by driving it in AC (the keeper), so it WARNS, in plain words, and never blocks. Each line starts
+  // "jump: " so the install message can carry the jump warnings alone (app/install/install.js). A missed landing is said once, from its amber range;
+  // the lap proof adds only what no amber says (a landing too deep below the take-off to reach)
+  for (const a of v.amber) warnings.push(a.reason === 'landing-misses-zone' ? jumpWarning(a) : `amber: ${rangeText(a)}`);
+  for (const w of (v.lap && v.lap.warn) || []) if (w.reason === 'landing-unreachable') warnings.push(`jump: this jump may land too deep below its take-off to be reached, at s ${w.s.toFixed(0)} m; tune it by driving it in AC`);
   if (v.lap && v.lap.ok === null) warnings.push(`lap proof not run: ${v.lap.reason}`);
   for (const n of v.notChecked || []) warnings.push(`not checked by validation: ${n}`);
 

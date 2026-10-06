@@ -91,7 +91,10 @@ test('a red track is refused, nothing is written, and the reds are shown with th
   // 150 km/h: far below any take-off speed the 12 m jump's 6.3 g landing needs, so this track is red whatever the
   // details of the jump check. At D169 it was 300 km/h, 13 km/h either side of the line depending on the jump check's
   // version, and it flipped when validation changed (D170).
-  const jl = closed('Jump Loop', ['straight', 'straight', 'jump', 'straight', 'tight', 'straight', 'tight'], 150);
+  // CHANGED D250 (the keeper: jumps are tuned by driving them): the jump this row used is a WARNING now and the same lap EXPORTS (checked: 1 jump
+  // warning, nothing red), so the red track is an INVERSION taken at 150 km/h instead, which the lap proof fails on (leaves-surface): the row's subject,
+  // a red track refused with every red's source shown, is unchanged
+  const jl = closed('Inversion Loop', ['straight', 'straight', 'inversion', 'straight', 'tight', 'straight', 'tight'], 150);
   const { s, st } = await shellWith(jl), out = tmp();
   await s.exportTo(out);
   assert.deepEqual(st.writes, []);

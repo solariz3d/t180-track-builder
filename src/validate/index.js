@@ -74,7 +74,7 @@ const SRC = Object.freeze({
   'seam-past-envelope': 'FINDINGS.md:24, :110-111',
   'on-the-stops': 'FINDINGS.md:103-104',
   'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
-  'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp must catch both landings)',
+  'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp should catch both landings); a WARNING since D250: the keeper tunes jumps by driving them',
   'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
   'joint-step': 'FINDINGS.md:110 (a step in the road mesh is a gap: the D190 round-3 ruling (c) reds a lap seam or a cup joint that steps more than 1 mm)',
   'roll-rate': 'D225 seal V7 / S3 (exo_memory/loop/cross_section_seal_registration_2026-10-03.md): the roll rate over a 20 m chord, the bar the Centrifuge lap measured (RED 1.2144°/m, AMBER 0.9338°/m)',
@@ -362,12 +362,13 @@ function core(path, segments, opts, from, carried, upto) {
     const first = firstOf[lastSeg];
     red.push({ s: S[first].s, s1: S[n - 1].s, u: null, reason: 'head-in-the-air' });
   }
-  // With a known take-off speed, the landing road must catch BOTH landings (ARCHITECTURE.md:75-78; jumps.js). A missed
-  // one is red on an open track too, not only in the closed lap's proof; `worst` is the heaviest fall that misses.
+  // With a known take-off speed, the landing road should catch BOTH landings (ARCHITECTURE.md:75-78; jumps.js). A missed one is AMBER, a WARNING
+  // (D250, the keeper: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): it never
+  // blocks an export or an install. `worst` is the heaviest fall that misses. A gap with NO landing ramp is still red above (gap-in-road, a hole).
   for (const jp of jumps) {
     if (jp.pending || !Number.isFinite(jp.speed)) continue;
     const missed = jp.landings.filter((L) => !L.caught);
-    if (missed.length) red.push({ s: jp.s, s1: jp.s + jp.gap, u: null, reason: 'landing-misses-zone', worst: Math.max(...missed.map((L) => L.g)) });
+    if (missed.length) amber.push({ s: jp.s, s1: jp.s + jp.gap, u: null, reason: 'landing-misses-zone', worst: Math.max(...missed.map((L) => L.g)) });
   }
 
   // ── the lap (ARCHITECTURE.md:88-89) ──
@@ -392,8 +393,10 @@ function core(path, segments, opts, from, carried, upto) {
 }
 
 /** The ghost lap's proof on a closed loop: its time, its slowest speed, and every place the lap would fail. */
+// D250: a jump's REACH (a landing the car flies past, or one too deep below the take-off to reach) is a WARNING, `warn`, not a reason the lap fails:
+// the keeper tunes jumps by driving them. The lap still fails (`where`) on a stall, a leave of the surface, or a jump whose landing lip is not ahead.
 function proveLap(S, isRoad, v, lines, jumps) {
-  const n = S.length, where = [];
+  const n = S.length, where = [], warn = [];
   let t = 0, minV = Infinity;
   for (let i = 0; i < n; i++) {
     minV = Math.min(minV, v[i]);
@@ -404,10 +407,10 @@ function proveLap(S, isRoad, v, lines, jumps) {
   for (const jp of jumps) {
     if (jp.pending) continue;
     if (jp.badGap) { where.push({ s: jp.s, reason: 'jump-gap-not-forward', gap: jp.gap }); continue; }
-    for (const L of jp.landings) if (!L.caught) where.push({ s: jp.s, reason: `jump-not-caught-${L.g}g`, speed: jp.speed, minSpeed: L.minSpeed });
-    if (!jp.reachable) where.push({ s: jp.s, reason: 'landing-unreachable' });
+    for (const L of jp.landings) if (!L.caught) warn.push({ s: jp.s, reason: `jump-not-caught-${L.g}g`, speed: jp.speed, minSpeed: L.minSpeed });
+    if (!jp.reachable) warn.push({ s: jp.s, reason: 'landing-unreachable' });
   }
-  return { ok: where.length === 0, timeS: t, minV, where };
+  return { ok: where.length === 0, timeS: t, minV, where, warn };
 }
 
 /**
