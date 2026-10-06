@@ -20,12 +20,14 @@ const MUTANTS = [
   { id: 'P6 the start is taken from the last road, not the first', pattern: 'row 1', edits: [[X, 'const first = roads[0], start = {};', 'const first = roads[roads.length - 1], start = {};']] },
   { id: 'P7 a state is stored absolute, not as its change', pattern: 'row 1|row 2 ', edits: [[X, 'channels[ch] = STATE.includes(ch) ? P.channels[ch].map((v) => q(v - start[ch], D.DEC[ch])) : P.channels[ch].slice(); }', 'channels[ch] = P.channels[ch].slice(); }']] },
   { id: 'P8 a rate is stored as a change too (relative to its first point)', pattern: 'row 1', edits: [[X, 'channels[ch] = STATE.includes(ch) ? P.channels[ch].map((v) => q(v - start[ch], D.DEC[ch])) : P.channels[ch].slice(); }', 'channels[ch] = P.channels[ch].map((v) => q(v - P.channels[ch][0], D.DEC[ch])); }']] },
-  { id: 'P9 the saved change is not rounded to its channel step', pattern: 'row 1|row 2 ', edits: [[X, 'P.channels[ch].map((v) => q(v - start[ch], D.DEC[ch]))', 'P.channels[ch].map((v) => v - start[ch])']] },
+  // (P9, "the saved change is not rounded to its channel step", is EQUIVALENT and is not run: saveRun returns checkPiece's OUTPUT, which quantises every
+  //  channel by D.DEC as it enters, so the dropped q is applied there anyway; q of a value already on its grid is that value. A and C, D240 core.)
   // absolute
   { id: 'P10 a state is put back without rounding (float noise comes back)', pattern: 'row 1|row 2 ', edits: [[X, 'c.map((v) => q(v + base, D.DEC[ch])) : c.slice();', 'c.map((v) => v + base) : c.slice();']] },
   { id: 'P11 a shifted run still uses its own start (the shift is ignored)', pattern: 'row 3', edits: [[X, 'const base = STATE.includes(ch) ? (shifts ? shifts[ch] : piece.start[ch]) : 0;', 'const base = STATE.includes(ch) ? piece.start[ch] : 0;']] },
   { id: 'P12 the unused optional channels are not given their defaults', pattern: 'row 1|row 2 ', edits: [[X, 'for (const ch of Object.keys(D.OPTIONAL)) if (!P[D.OPTIONAL[ch]]) channels[ch] = new Array(P.knots.length + 4).fill(D.OPT_DEFAULT[ch]);', '']] },
-  { id: 'P13 a state is also shifted for a rate (h and l ride on the head)', pattern: 'row 3', edits: [[X, "const base = STATE.includes(ch) ? (shifts ? shifts[ch] : piece.start[ch]) : 0;\n      channels[ch] = STATE.includes(ch) ? c.map((v) => q(v + base, D.DEC[ch])) : c.slice();", "const base = shifts ? (shifts[ch] === undefined ? (STATE.includes(ch) ? piece.start[ch] : 0) : shifts[ch]) : (STATE.includes(ch) ? piece.start[ch] : 0);\n      channels[ch] = c.map((v) => q(v + base, D.DEC[ch]));"]] },
+  // (P13, "a state is also shifted for a rate", is EQUIVALENT and is not run: continued() builds `shifts` from STATE channels only, so a rate's base is
+  //  always 0, and q(v + 0) of a checked, already-quantised rate is v; mirrored() writes 0, never -0, so even Object.is cannot tell. A and C, D240 core.)
   // checkPiece
   { id: 'P14 any schema is accepted', pattern: 'row 8', edits: [[X, 'if (piece.schema !== SCHEMA) bad(', 'if (false) bad(']] },
   { id: 'P15 an unknown top-level field is dropped, not refused', pattern: 'row 8', edits: [[X, 'for (const k of Object.keys(piece)) if (!TOP_KEYS.includes(k)) bad(', 'for (const k of []) if (!TOP_KEYS.includes(k)) bad(']] },
@@ -41,7 +43,7 @@ const MUTANTS = [
   { id: 'P25 an edge piece may carry e without s', pattern: 'row 8', edits: [[X, 'if ((P.channels.e === undefined) !== (P.channels.s === undefined)) bad(', 'if (false) bad(']] },
   { id: 'P26 a mixed run in a file is accepted', pattern: 'row 8', edits: [[X, "if (out.pieces.filter(isRoad).some((P) => signature(P) !== sig)) bad('MIXED_RUN'", "if (false) bad('MIXED_RUN'"]] },
   { id: 'P27 a start key the run does not carry is accepted', pattern: 'row 8', edits: [[X, 'for (const k of Object.keys(piece.start)) if (!want.includes(k)) bad(', 'for (const k of []) if (!want.includes(k)) bad(']] },
-  { id: 'P28 the document\'s own check of the run is skipped (a broken joint, a cup past its limit)', pattern: 'row 8', edits: [[X, 'for (const P of absolute(out).slice(i0)) scratch = D.appendPiece(scratch, P);', '']] },
+  { id: 'P28 the document\'s own check of the run is skipped (a broken joint, a cup past its limit)', pattern: 'row 8', edits: [[X, "D.checkDoc({ ...D.createDoc('piece check'), nextId: run.length + 1, pieces: run });", '']] },   // re-anchored: C's D240 F1 (c775694) made the per-piece appendPiece loop one checkDoc
   { id: 'P29 a flight with no gap is accepted', pattern: 'row 8', edits: [[X, 'if (!(P.gap > 0)) bad(', 'if (false) bad(']] },
   { id: 'P30 a run with no road is accepted', pattern: 'row 8', edits: [[X, "if (!roads.length) bad('NO_ROAD', 'a run needs at least one road piece');", '']] },
   { id: 'P31 numbers are not quantised as they enter', pattern: 'row 8c', edits: [[X, 'channels[ch] = c.map((v) => q(v, D.DEC[ch]));', 'channels[ch] = c.slice();']] },

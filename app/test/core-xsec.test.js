@@ -182,6 +182,15 @@ test('xsec panel: a changed field is a target, and its cell shows the DOCUMENT, 
   p.box('edge angle °').checked = true; p.box('edge angle °').oninput();
   assert.deepEqual(p.opts().transition, { [E]: 20 }, 'the edge\'s at-start box');
 });
+// Each field redraws on its OWN (X11): the row above types the tube last, and the tube's handler redraws every cell, so it could not see an edge or
+// edge-start field that redraws nothing. Since the undo guard (8926789) wraps every field's handler, such a field no longer throws either.
+test('xsec panel: the edge angle and the edge start each redraw the readout on their own, with no other field typed after them', async () => {
+  const p = await mountPanel(stubXsec);
+  p.type('length m', 100); p.type('edge angle °', 15);
+  assert.equal(p.cell('edge'), '0.0° → 15.9°', 'the edge angle alone redraws its cell');
+  p.type('edge start', 0.7);
+  assert.equal(p.cell('start'), '0.64 → 0.71', 'the edge start alone redraws its cell');
+});
 test('xsec panel: after Extend the fields read back what the document holds', async () => {
   const p = await mountPanel(stubXsec);
   p.type('length m', 100); p.type('edge angle °', 15); p.type('tube sweep °', 90);
