@@ -264,6 +264,7 @@ function mount(root, shell) {
       tick = win.setTimeout(() => { tick = 0; const st = shell.getState(); drawProposal(st.closeProposal && st.closeProposal.base === st.history.present ? st.closeProposal : null); }, 500);
     } else if (ck.status === 'failed') kids.push(el('p', { 'aria-label': 'overlap check', text: `The overlap check could not run: ${ck.error}. Cancel and press Close again.`, style: 'color: var(--bad)' }));
     else {
+      kids.push(el('p', { 'aria-label': 'overlap check time', style: 'font-size:12px;color:#aab2c0;margin:2px 0', text: `Checked in ${(ck.elapsedMs / 1000).toFixed(1)} s${ck.timing ? ` (the worker's start ${(ck.timing.loadMs / 1000).toFixed(1)} s, the check itself ${(ck.timing.jobMs / 1000).toFixed(1)} s)` : ''}.` }));
       const groups = RG.groupReds([...ck.result.overlaps, ...ck.result.others], p.resolved.segments);
       if (!groups.length) kids.push(el('p', { 'aria-label': 'overlap check', text: 'No overlap and no red on the closed track.' }));
       for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The closed track OVERLAPS ITSELF' : g.title} (${g.count}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.items.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));

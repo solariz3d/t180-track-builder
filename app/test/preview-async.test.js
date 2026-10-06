@@ -6,7 +6,9 @@
 //   1  THE RESULT IS IDENTICAL: the job (what the worker runs, after a structured clone, as a postMessage does) equals the synchronous overlapCheck, on a coil and on TEST-1-sized tracks
 //      (a 14 km near-closed lap's Close, a 46-piece 13 km track's middle delete)
 //   2  the worker script itself, run in a sandbox with a fake `self` (importScripts, fetch of the real files, postMessage): it loads its modules through the app's loader and answers with the same result
-//   3  the runner: a result, a failure, a cancel that terminates the worker and rejects with cancelled, a Worker that cannot be made
+//   3  the runner (TWO WARM WORKERS, D240 warm-worker follow-up): made when the runner is, one part each, reused by the next job, cancel terminates both and makes two fresh ones, a failed part,
+//      a worker that errors, a Worker that cannot be made
+//   3b the check's TWO PARTS put together are EXACTLY the one-piece check, on a coil, a jump, a cup, a tube, a 13 km delete and a 14 km Close
 //   4  the shell, Close and delete both: the preview is there at once with its check 'checking'; Apply is refused until the result lands and then works (backup first); Cancel, an edit, an Undo,
 //      another selection and a newer preview each cancel the running check; a stale answer changes nothing; a failed check refuses Apply by name; a worker that cannot start falls back to the page
 //   5  the panels on a fake DOM (Close's and the delete's): the "Checking for overlaps… N s" line, Apply disabled until the result, then the groups; Cancel stops the job
@@ -19,6 +21,7 @@ const path = require('path');
 const vm = require('vm');
 const { createCoreShell } = require('../core/coreshell.js');
 const OJ = require('../core/overlapjob.js');
+const { mergeParts } = require('../core/overlapmerge.js');
 const { createWorkerRunner } = require('../core/overlaprunner.js');
 const D = require('../../src/core/document.js');
 const { extend } = require('../../src/core/extend.js');
@@ -88,7 +91,7 @@ test('row 1: the job a worker runs gives EXACTLY the synchronous overlapCheck, o
 
 test('row 2: the worker SCRIPT, run in a sandbox with a fake self, loads its modules through the app\'s own loader and answers with the same result', async () => {
   const dir = path.join(__dirname, '..', 'core'), ROOT = path.resolve(__dirname, '..', '..'), posted = [];
-  const ctx = { URL, console, Buffer, structuredClone, setTimeout, clearTimeout, TextEncoder, TextDecoder, location: { href: 'http://localhost/app/core/overlapworker.js' } };
+  const ctx = { URL, console, Buffer, structuredClone, setTimeout, clearTimeout, TextEncoder, TextDecoder, performance, location: { href: 'http://localhost/app/core/overlapworker.js' } };
   ctx.self = ctx; ctx.postMessage = (m) => posted.push(m);
   ctx.importScripts = (u) => vm.runInContext(fs.readFileSync(path.resolve(dir, u), 'utf8'), ctx, { filename: u });
   ctx.fetch = async (url) => { const rel = decodeURIComponent(new URL(String(url)).pathname).replace(/^\//, ''), f = path.join(ROOT, rel); return fs.existsSync(f) ? { ok: true, status: 200, text: async () => fs.readFileSync(f, 'utf8') } : { ok: false, status: 404, text: async () => '' }; };
@@ -99,23 +102,59 @@ test('row 2: the worker SCRIPT, run in a sandbox with a fake self, loads its mod
   await ctx.onmessage({ data: { id: 7, doc: clone(cp.doc), designSpeedKmh: null, closed: true } });
   assert.equal(posted.length, 1, JSON.stringify(posted).slice(0, 300)); assert.equal(posted[0].id, 7); assert.equal(posted[0].ok, true, posted[0].error);
   assert.deepEqual(structuredClone(posted[0].result), cp.check, 'the worker answers with the synchronous result');
+  await ctx.onmessage({ data: { id: 9, part: 'rest', doc: clone(cp.doc), designSpeedKmh: null, closed: true } }); await ctx.onmessage({ data: { id: 10, part: 'rays', doc: clone(cp.doc), designSpeedKmh: null, closed: true } });
+  assert.deepEqual([posted[1].ok, posted[2].ok], [true, true], posted[1].error || posted[2].error); assert.ok(posted[1].timing && Number.isFinite(posted[1].timing.loadMs) && Number.isFinite(posted[1].timing.jobMs), 'the worker reports how long it took');
+  assert.deepEqual(mergeParts(structuredClone(posted[1].result), structuredClone(posted[2].result)), cp.check, 'the two parts the worker answers put together are the whole check');
   await ctx.onmessage({ data: { id: 8, doc: { not: 'a document' }, closed: true } });
-  assert.equal(posted[1].ok, false); assert.equal(typeof posted[1].error, 'string', 'a bad job is an error message, never a hang');
+  assert.equal(posted[3].ok, false); assert.equal(typeof posted[3].error, 'string', 'a bad job is an error message, never a hang');
 });
 
-test('row 3: the runner: a result, a failure, a cancel that terminates the worker and rejects with cancelled, a Worker that cannot be made', async () => {
+test('row 3: the runner: two warm workers made with it, one part each, reused by the next job; cancel terminates both and makes two fresh; a failed part keeps them; a worker that errors is replaced', async () => {
   const made = [];
   class FakeWorker { constructor(url) { this.url = url; this.terminated = 0; this.sent = []; made.push(this); } postMessage(m) { this.sent.push(m); } terminate() { this.terminated++; } }
   const runner = createWorkerRunner({ win: {}, WorkerCtor: FakeWorker, url: 'core/overlapworker.js' });
-  const a = runner.start({ doc: { x: 1 }, designSpeedKmh: 90, closed: false }); const w = made[0];
-  assert.equal(w.url, 'core/overlapworker.js'); assert.deepEqual(w.sent[0], { id: 1, doc: { x: 1 }, designSpeedKmh: 90, closed: false });
-  w.onmessage({ data: { id: 1, ok: true, result: CLEAR } }); assert.deepEqual(await a.promise, CLEAR); assert.equal(w.terminated, 1, 'the worker is dropped after it answers'); a.cancel(); assert.equal(w.terminated, 1, 'cancel after the answer does nothing');
-  const b = runner.start({ doc: {} }); made[1].onmessage({ data: { id: 1, ok: false, error: 'boom' } }); await assert.rejects(b.promise, /boom/); assert.equal(made[1].terminated, 1);
-  const c = runner.start({ doc: {} }); made[2].onerror({ message: 'script failed' }); await assert.rejects(c.promise, /script failed/);
-  const d = runner.start({ doc: {} }); const dw = made[3]; d.cancel(); assert.equal(dw.terminated, 1, 'cancel terminates the worker at once'); await assert.rejects(d.promise, (e) => e.cancelled === true); dw.onmessage({ data: { id: 1, ok: true, result: RED } });
-  assert.equal(dw.terminated, 1, 'a late answer from a cancelled worker is ignored');
+  assert.equal(made.length, 2, 'two workers exist before any job: they are warm'); assert.ok(made.every((w) => w.url === 'core/overlapworker.js' && w.sent.length === 0));
+  const answer = (w, part, result, timing) => w.onmessage({ data: { id: 1, ok: true, result, timing } });
+  const a = runner.start({ doc: { x: 1 }, designSpeedKmh: 90, closed: false }); assert.equal(made.length, 2, 'the job made no new worker');
+  assert.deepEqual(made[0].sent[0], { id: 1, part: 'rest', doc: { x: 1 }, designSpeedKmh: 90, closed: false }); assert.deepEqual(made[1].sent[0], { id: 2, part: 'rays', doc: { x: 1 }, designSpeedKmh: 90, closed: false });
+  const ray = { s: 5, u: null, reason: 'downforce-ray-gap', worst: 0.1, s0: 5, s1: 6 }, fold = { s0: 1, s1: 2, u: null, reason: 'fold', worst: null };
+  answer(made[1], 'rays', { red: [ray] }, { loadMs: 40, waitedMs: 0, jobMs: 5000 }); answer(made[0], 'rest', { red: [fold], amber: 2 }, { loadMs: 30, waitedMs: 3, jobMs: 2000 });
+  assert.deepEqual(await a.promise, { overlaps: [ray], others: [fold], amber: 2 }, 'the two answers put together'); assert.deepEqual(a.timing, { loadMs: 40, waitedMs: 3, jobMs: 5000, restMs: 2000, raysMs: 5000 });
+  assert.deepEqual(made.map((w) => w.terminated), [0, 0], 'the workers are KEPT after a job');
+  const b = runner.start({ doc: { y: 2 } }); assert.equal(made.length, 2, 'the next job reuses them'); assert.equal(made[0].sent.length, 2); assert.equal(made[0].sent[1].doc.y, 2);
+  answer(made[0], 'rest', { red: [], amber: 0 }); answer(made[1], 'rays', { red: [] }); assert.deepEqual(await b.promise, { overlaps: [], others: [], amber: 0 }); assert.equal(b.timing, null, 'an answer with no timing leaves none');
+  // a failed part: the job fails, the workers stay warm (the job was bad, not the worker)
+  const c = runner.start({ doc: {} }); made[1].onmessage({ data: { id: 2, ok: false, error: 'boom' } }); await assert.rejects(c.promise, /boom/); assert.deepEqual(made.map((w) => w.terminated), [0, 0]); assert.equal(made.length, 2);
+  assert.equal(made[0].onmessage, null, 'a late answer from the other part to a failed job has nowhere to go: its handler is gone');
+  // a worker that errors (its script failed): both are replaced
+  const d = runner.start({ doc: {} }); made[0].onerror({ message: 'script failed' }); await assert.rejects(d.promise, /script failed/); assert.deepEqual(made.slice(0, 2).map((w) => w.terminated), [1, 1]); assert.equal(made.length, 4, 'two fresh warm workers');
+  // Cancel: terminates both at once, rejects as cancelled, makes two fresh warm ones; a late answer from a cancelled worker is ignored
+  const e = runner.start({ doc: {} }); const [w0, w1] = made.slice(2, 4); assert.equal(w0.sent.length, 1); e.cancel(); assert.deepEqual([w0.terminated, w1.terminated], [1, 1]); assert.equal(made.length, 6); await assert.rejects(e.promise, (x) => x.cancelled === true);
+  w0.onmessage && w0.onmessage({ data: { id: 1, ok: true, result: { red: [], amber: 0 } } }); e.cancel(); assert.equal(made.length, 6, 'cancel after the end does nothing');
+  // a newer job while one runs cancels the older (the shell does it first; this is the guard)
+  const f1 = runner.start({ doc: {} }), f2 = runner.start({ doc: {} }); await assert.rejects(f1.promise, (x) => x.cancelled === true); assert.equal(made.length, 8); f2.cancel(); await assert.rejects(f2.promise, (x) => x.cancelled === true);
   assert.throws(() => createWorkerRunner({ win: {} }), /no Web Worker/);
-  class Blocked { constructor() { throw new Error('blocked'); } } assert.throws(() => createWorkerRunner({ win: {}, WorkerCtor: Blocked }).start({ doc: {} }), /blocked/);
+  class Blocked { constructor() { throw new Error('blocked'); } } assert.throws(() => createWorkerRunner({ win: {}, WorkerCtor: Blocked }), /blocked/);
+});
+
+test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece check (a coil with overlaps, a jump, a cup, a tube, a 13 km delete, a 14 km Close)', async () => {
+  const parts = (doc, closed, speed = null) => mergeParts(clone(OJ.runJob({ doc, designSpeedKmh: speed, closed, part: 'rest' })), clone(OJ.runJob({ doc, designSpeedKmh: speed, closed, part: 'rays' })));
+  const mk = () => createCoreShell({ brushFn: null, autosaveMs: 0 });
+  const coil = await openLap({ turns: 8, lastLen: 60 }); coil.proposeClose(); const cp = coil.getState().closeProposal; assert.ok(cp.check.overlaps.length > 0);
+  assert.deepEqual(parts(cp.doc, true), clone(cp.check), 'a coil\'s Close (overlaps of three kinds)'); assert.deepEqual(parts(cp.doc, true, 120), clone(OJ.overlapCheck(OJ.resolveDoc(cp.doc), 120, { closed: true })), 'with a design speed');
+  coil.cancelClose(); coil.selectPiece(0); coil.deleteSelection(); const dp = coil.getState().deleteProposal; assert.deepEqual(parts(dp.doc, false), clone(dp.check), 'a coil\'s delete');
+  const DEG = Math.PI / 180, j = await mk(); j.extend({ length: 200, family: 'bowl' }); j.extend({ length: 100, transition: 40, targets: { kh: 1 / 300 } }); j.commitDoc(D.appendPiece(j.getState().history.present, D.flightPiece({ gap: 25, drop: 1, land: -2 * DEG }))); j.extend({ length: 150 }); j.extend({ length: 150, transition: 40, targets: { kh: 1 / 200 } }); j.extend({ length: 100 });
+  j.selectPiece(1); j.deleteSelection(); const jp = j.getState().deleteProposal; assert.ok(jp.check.others.length > 0, 'control: the jump track has a red that is not an overlap'); assert.deepEqual(parts(jp.doc, false), clone(jp.check), 'a track with a jump');
+  const cup = await mk(); cup.extend({ length: 300, family: 'bowl', first: { c: 45 } }); for (let i = 0; i < 4; i++) cup.extend({ length: Q, transition: 40, targets: { kh: 1 / R, c: 45 } }); cup.extend({ length: 100, transition: 40, targets: { kh: 0, c: 45 } });
+  cup.selectPiece(2); cup.deleteSelection(); assert.deepEqual(parts(cup.getState().deleteProposal.doc, false), clone(cup.getState().deleteProposal.check), 'a cup track');
+  const tube = await mk(); tube.extend({ length: 300, first: { w: 40, t: 360 } }); for (let i = 0; i < 3; i++) tube.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); tube.extend({ length: 100, transition: 40, targets: { kh: 0 } });
+  tube.selectPiece(1); tube.deleteSelection(); assert.deepEqual(parts(tube.getState().deleteProposal.doc, false), clone(tube.getState().deleteProposal.check), 'a tube track');
+  const big = await mk(); big.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 45; i++) big.extend({ length: i % 3 === 2 ? 250 : 300, transition: 60, targets: { kh: (i % 2 ? -1 : 1) / 300 } });
+  big.selectPiece(20); big.deleteSelection(); const bp = big.getState().deleteProposal; assert.deepEqual(parts(bp.doc, false), clone(bp.check), '13 km, 46 pieces');
+  let d = extend(D.createDoc('big lap'), { length: 3000, family: 'bowl' }); for (let i = 0; i < 4; i++) { d = extend(d, { length: (Math.PI * 1000) / 2, transition: 60, targets: { kh: 1 / 1000 } }); d = extend(d, { length: i % 2 ? 3000 : 1000, transition: 60, targets: { kh: 0 } }); }
+  const lap = await nearLap(null, D.checkDoc({ ...d, pieces: d.pieces.slice(0, -1), nextId: d.nextId })); lap.proposeClose({ last: true }); const lp = lap.getState().closeProposal; assert.ok(lp, lap.getState().message);
+  assert.deepEqual(parts(lp.doc, true), clone(lp.check), '14 km lap\'s Close');
+  assert.throws(() => OJ.runJob({ doc: cp.doc, part: 'nope' }), /no such part/);
 });
 
 test('row 4a: Close, with a runner: the preview is there at once, Apply is refused until the result lands (then works, the backup first); Cancel stops the check; a stale answer changes nothing', async () => {

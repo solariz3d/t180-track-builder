@@ -1,28 +1,60 @@
-// overlaprunner.js: runs the overlap check OFF the page's thread (D240 follow-up: "the previews must not freeze"). The core shell is given a runner and asks it for a job:
+// overlaprunner.js: runs the overlap check OFF the page's thread (D240 follow-up: "the previews must not freeze"), on TWO WARM WORKERS (D240 warm-worker follow-up). The core shell is given a
+// runner and asks it for a job:
 //
-//   runner.start({ doc, designSpeedKmh, closed }) -> { promise, cancel() }
-//     promise  resolves with the check's result ({ overlaps, others, amber }, app/core/overlapjob.js), or rejects (the worker failed; or { cancelled: true } after cancel)
-//     cancel() terminates the worker at once: whatever it was computing is dropped
+//   runner.start({ doc, designSpeedKmh, closed }) -> { promise, cancel(), timing }
+//     promise  resolves with the check's result ({ overlaps, others, amber }), or rejects (a worker failed; or { cancelled: true } after cancel)
+//     cancel() terminates the workers at once (whatever they were computing is dropped) and puts two fresh warm ones in their place
+//     timing   { loadMs, waitedMs, jobMs, restMs, raysMs } in ms, set before the promise resolves (the slower of the two workers' numbers, and each part's own check time)
 //
-// createWorkerRunner is the page's: one Web Worker (app/core/overlapworker.js) per job, terminated when it answers or is cancelled. start THROWS if the worker cannot be made (a
-// blocked or missing Worker); the shell then runs the check on the page after the preview has been painted, so the answer is never lost, only slower.
+// createWorkerRunner is the page's. THE WORKERS ARE MADE WHEN THE RUNNER IS (at page start), and load their modules while they sit idle; a job reuses them (their modules and their compiled code
+// stay warm) and they are kept after it. The check is two independent parts (app/core/overlapjob.js: 'rest' = the mesh's self-check and the validator, 'rays' = the downforce-ray gap search),
+// one per worker, run at once; app/core/overlapmerge.js puts the answers together, EXACTLY as the one-piece check gives them (the tests compare them on coils, jumps, cups, tubes and 13 to 14 km
+// tracks). The constructor THROWS if a worker cannot be made (a blocked or missing Worker); the shell then runs the check on the page after the preview has been painted, so the answer is
+// never lost, only slower.
 'use strict';
+
+const { mergeParts } = require('./overlapmerge.js');
+
+const PARTS = Object.freeze(['rest', 'rays']);
 
 function createWorkerRunner({ win, url = 'core/overlapworker.js', WorkerCtor = win && win.Worker } = {}) {
   if (typeof WorkerCtor !== 'function') throw new Error('this page has no Web Worker');
+  const make = () => new WorkerCtor(url);
+  let pool = PARTS.map(make);   // warm: made now, loading their modules in the background
+  const replace = () => { for (const w of pool) { try { w.terminate(); } catch (e) { /* gone already */ } } pool = PARTS.map(make); };
+  let running = null;
   return {
+    /** The workers now in the pool (for the tests and the window proof). */
+    workers: () => pool.slice(),
     start({ doc, designSpeedKmh = null, closed = true }) {
-      const w = new WorkerCtor(url);
-      let done = false, reject;
-      const promise = new Promise((res, rej) => {
+      if (running) running.cancel();   // one job at a time: the shell cancels the old one first, this is only a guard
+      const job = { timing: null, promise: null, cancel: null }, mine = pool.slice(), got = {};
+      let settled = false, pending = PARTS.length, reject;
+      const fail = (err, replaceWorkers) => { if (settled) return; settled = true; running = null; for (const w of mine) { w.onmessage = w.onerror = null; } if (replaceWorkers) replace(); reject(err); };
+      job.promise = new Promise((res, rej) => {
         reject = rej;
-        w.onmessage = (e) => { if (done) return; done = true; w.terminate(); const m = e.data || {}; if (m.ok) res(m.result); else rej(new Error(m.error || 'the overlap check failed')); };
-        w.onerror = (e) => { if (done) return; done = true; w.terminate(); rej(new Error((e && e.message) || 'the overlap worker failed')); };
-        w.postMessage({ id: 1, doc, designSpeedKmh, closed });
+        PARTS.forEach((part, i) => {
+          const w = mine[i];
+          w.onmessage = (e) => {
+            if (settled) return;
+            const m = e.data || {};
+            if (!m.ok) return fail(new Error(m.error || 'the overlap check failed'), false);   // the worker is fine, the job was not: it stays warm
+            got[part] = m;
+            if (--pending > 0) return;
+            settled = true; running = null; for (const x of mine) x.onmessage = x.onerror = null;
+            const t = PARTS.map((p) => got[p].timing).filter(Boolean);
+            job.timing = t.length ? { loadMs: Math.max(...t.map((x) => x.loadMs)), waitedMs: Math.max(...t.map((x) => x.waitedMs)), jobMs: Math.max(...t.map((x) => x.jobMs)), restMs: got.rest.timing && got.rest.timing.jobMs, raysMs: got.rays.timing && got.rays.timing.jobMs } : null;
+            try { res(mergeParts(got.rest.result, got.rays.result)); } catch (err) { rej(err); }
+          };
+          w.onerror = (e) => fail(new Error((e && e.message) || 'the overlap worker failed'), true);
+          w.postMessage({ id: i + 1, part, doc, designSpeedKmh, closed });
+        });
       });
-      return { promise, cancel() { if (done) return; done = true; w.terminate(); reject(Object.assign(new Error('cancelled'), { cancelled: true })); } };
+      job.cancel = () => fail(Object.assign(new Error('cancelled'), { cancelled: true }), true);
+      running = job;
+      return job;
     },
   };
 }
 
-module.exports = { createWorkerRunner };
+module.exports = { createWorkerRunner, PARTS };
