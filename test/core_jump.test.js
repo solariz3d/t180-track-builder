@@ -3,7 +3,7 @@
 // its landing ramp (src/core/adapter.js toSegments). Rows:
 //   1  jump(): one flight at the head, the next Extend starts level, and it ROUND-TRIPS (append, serialize, reopen); refusals by name
 //   2  validation: a core flight's gap is INTENDED (no gap-in-road red in its span); a real hole outside a flight is red, and so is a gap with no landing
-//   3  validation: a landing road too short for the car at the lap's speed is red (landing-misses-zone), with the both-landings-caught control
+//   3  validation: a landing road too short for the car at the lap's speed WARNS (landing-misses-zone, amber since D250), with the both-landings-caught control
 //   4  close(): a lap with a jump closes, whole lap and through a local window; the flight and the level start after it are kept; a lap that
 //      ENDS in a jump is refused by name
 //   5  export: a closed jump lap exports (kn5, AI line, no red) through the app's route; an open one is still refused
@@ -97,13 +97,16 @@ test('row 2: a flight with NO landing is red: the core\'s gap without its landin
 // ── row 3 ──
 // "too short" is not a length: the landing road is long enough when BOTH measured falls (MACH6.jumpG, 3.2 g and 6.3 g) touch down on road within
 // the landing search, at the take-off speed validation computes for the lap. The adapter sizes the ramp at the DESIGN speed (460 km/h), so a jump
-// taken faster can fly past it: that is red.
-test('row 3: a landing road too short for the lap\'s speed is red (landing-misses-zone); a jump both falls land on is not', () => {
+// taken faster can fly past it: that WARNS (amber; it was red before D250).
+// CHANGED D250 (the keeper: jumps are tuned by driving them in AC): a landing too short for the lap's speed is a WARNING (amber), not a red.
+test('row 3: a landing road too short for the lap\'s speed WARNS (landing-misses-zone, amber since D250) and is not red; a jump both falls land on does not warn', () => {
   const long = validateDoc(close(jumpLap(LONG_JUMP), { edited: [0] }).doc), jl = long.jumps[0];
   assert.ok(jl.speed * 3.6 > 600, `control: the lap takes the jump fast, at ${(jl.speed * 3.6).toFixed(0)} km/h, past the ramp's 460`);
-  assert.ok(jl.landings.some((L) => !L.caught), JSON.stringify(jl.landings)); assert.ok(reasons(long).includes('landing-misses-zone'), JSON.stringify(long.red));
+  assert.ok(jl.landings.some((L) => !L.caught), JSON.stringify(jl.landings));
+  assert.ok(long.amber.some((x) => x.reason === 'landing-misses-zone'), JSON.stringify(long.amber)); assert.ok(!reasons(long).includes('landing-misses-zone'), 'not a red');
   const ok = validateDoc(close(jumpLap(OK_JUMP), { edited: [0] }).doc);
   assert.ok(ok.jumps[0].landings.every((L) => L.caught), JSON.stringify(ok.jumps[0].landings)); assert.deepEqual(ok.red, []);
+  assert.ok(!ok.amber.some((x) => x.reason === 'landing-misses-zone'), 'and no landing warning');
 });
 
 // ── row 4 ──
@@ -155,4 +158,18 @@ test('row 5: a CLOSED jump lap exports through the app\'s route (kn5, AI line, n
   const segs = A.toSegments(shut.doc), lift = (q) => A.offsetPath(shut.doc, segs, q), start = { pos: shut.doc.start.pos.slice(), theta: shut.doc.start.heading, p: shut.doc.start.pitch };
   const fw = FW.buildFromSegments(segs, { name: 'jump', via: 'test', liftPath: lift, start }, { markers: startLayout(segs, lift, start) });
   assert.ok(fw.kn5.length > 1000 && fw.ai, 'buildFromSegments: a kn5 and an AI line');
+});
+// D250 (the keeper: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves")
+// (a gap with NO landing ramp staying red is row 2's "a flight with NO landing is red", unchanged by D250)
+// The lap: a 60 m jump, 1 m down, landing level: at the lap's speed its 6.3 g fall misses and NOTHING else is found (checked; LONG_JUMP's lap also fails the
+// lap proof on leaves-surface after its sloped landing, a red D250 does not change, so it cannot show the ruling alone)
+const MISS_JUMP = { gap: 60, drop: 1, land: 0 };
+test('row 5b (D250): a closed lap whose jump the car flies past at the lap\'s speed EXPORTS, with one plain warning naming it', () => {
+  const shut = close(jumpLap(MISS_JUMP), { edited: [0] }); assert.equal(shut.converged, true, shut.report);
+  const segs = A.toSegments(shut.doc), lift = (q) => A.offsetPath(shut.doc, segs, q), start = { pos: shut.doc.start.pos.slice(), theta: shut.doc.start.heading, p: shut.doc.start.pitch };
+  const fw = FW.buildFromSegments(segs, { name: 'jump', via: 'test', liftPath: lift, start }, { markers: startLayout(segs, lift, start) });   // before D250: RED, landing-misses-zone and lap-proof
+  assert.ok(fw.kn5.length > 1000 && fw.ai, 'exported');
+  const jw = fw.warnings.filter((w) => /^jump: /.test(w));
+  assert.equal(jw.length, 1, `said once, not twice (the amber range, not again from the lap proof): ${fw.warnings.join(' | ')}`);
+  assert.match(jw[0], /^jump: this jump may fly past its landing at the lap's speed, at s \d+–\d+ m \(the 6\.3 g fall misses\); tune it by driving it in AC$/);
 });

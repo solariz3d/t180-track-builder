@@ -122,6 +122,18 @@ test('Install to AC hands the build the texture set the page holds, as Export do
   assert.deepStrictEqual(seen, { textures: 'THE-SET' });
 });
 
+test('D250: a jump the car may fly past is INSTALLED, and the message says so in plain words; the export\'s other warnings stay out of it', async () => {
+  const native = fakeNative(); native.root = 'G:/games/assettocorsa';
+  const jumpLine = "jump: this jump may fly past its landing at the lap's speed, at s 300–340 m (the 3.2 g fall misses); tune it by driving it in AC";
+  const build = () => ({ result: { warnings: ['amber: roll-rate at s 1.0–2.0 m', jumpLine] }, folders: [{ folder: 't180b_jumps', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] });
+  const r = await createInstaller({ build, native, getDoc: () => ({ ...D.createDoc('x'), name: 'Jumps' }), getTextures: () => null }).install();
+  assert.strictEqual(r.ok, true, r.message); assert.strictEqual(native.installs.length, 1, 'it is installed');
+  assert.ok(r.message.includes(jumpLine), r.message); assert.ok(!r.message.includes('roll-rate'), 'only the jump warnings ride in the install message');
+  assert.ok(r.message.includes('exporting this track again updates that folder'), 'the jump line rides AFTER the export line, which is kept whole');
+  const plain = await createInstaller({ build: () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), native, getDoc: () => ({ ...D.createDoc('x'), name: 'X' }), getTextures: () => null }).install();
+  assert.ok(!/jump:/.test(plain.message), 'control: no jump, no jump line');
+});
+
 test('an unnamed track is not installed: the user is asked to name it, and nothing is written', async () => {
   const native = fakeNative(); native.root = 'G:/games/assettocorsa';
   const exporter = await makeExporter(get);

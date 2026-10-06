@@ -105,17 +105,19 @@ test('a red document is refused, the reason named, and nothing written (the 60°
 // CHANGED 2026-09-27 (D170): was 300 km/h. Validation then measured a jump one station long (a 12 m gap as 13 m), and
 // the 6.3 g landing needed about 311 km/h. Measured from the lip, it needs 287 km/h (D170 hand-back §2), so 300 now
 // lands it, and the jump is taken at 250 km/h instead: still below what the 6.3 g landing needs.
-test('a lap the proof fails is refused: a jump taken below the speed its 6.3 g landing needs, each failing point named', () => {
+// CHANGED D250 (the keeper: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): a jump the
+// car is not caught on no longer fails the lap proof or refuses the export. This row was "a lap the proof fails is refused"; the same lap now EXPORTS, and
+// the jump is named in a plain warning. A lap that fails for any other reason is still refused (the steep-without-raycast row above, and the lap proof's
+// own stall / leaves-surface reasons, which are unchanged).
+test('a jump taken below the speed its 6.3 g landing needs EXPORTS (D250), with a plain warning naming it; nothing about it is red', () => {
   let d = D.createDoc('Jump Loop');
   for (const w of ['straight', 'straight', 'jump', 'straight', 'tight', 'straight', 'tight']) d = appendOld(D, d, w, { speed: kmh(250) });
   const c = closeLoop(d);
   assert.ok(c.candidates.length, c.reason);
   const jl = withSpeed(c.candidates.slice().sort((a, b) => a.lengthM - b.lengthM)[0].doc, kmh(250));
-  const out = tmp();
-  assert.throws(() => exportTrack(jl, { outDir: out }), (e) => e.code === 'RED'
-    && e.red.some((r) => r.reason === 'lap-proof' && r.where.some((x) => x.reason === 'jump-not-caught-6.3g'))
-    && /lap-proof \[jump-not-caught-6\.3g at s \d/.test(e.message));
-  assert.deepStrictEqual(fs.readdirSync(out), []);
+  const out = tmp(), r = exportTrack(jl, { outDir: out });
+  assert.ok(r.folders.length && fs.readdirSync(out).length, 'written');
+  assert.ok(r.warnings.some((w) => /^jump: this jump may fly past its landing at the lap's speed, at s \d+–\d+ m \(the 6\.3 g fall misses\)/.test(w)), r.warnings.join(' | '));
 });
 
 test('an empty document is refused and nothing written', () => {

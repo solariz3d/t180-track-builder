@@ -59,7 +59,8 @@ test(`the slider swept over its whole range (${MIN}–${MAX} km/h, its own step 
     slide(t, k);
     const r = reds(t.ctl);
     if (clears(k)) { if (r.length) dirty.push(`${k} km/h: ${r.map((x) => x.reason).join(', ')}`); else clean.push(k); }
-    else assert.ok(r.length && r.every((x) => x.reason === 'landing-misses-zone'), `${k} km/h: the car does not clear the gap, so the jump must be red for that, and only that: ${JSON.stringify(r.map((x) => x.reason))}`);
+    // CHANGED D250 (the keeper: jumps are tuned by driving them): where the car does not clear the gap the jump WARNS (amber), and nothing is red
+    else { assert.deepStrictEqual(r, [], `${k} km/h: not red (a warning since D250)`); assert.ok(t.ctl.state.result.amber.some((x) => x.reason === 'landing-misses-zone'), `${k} km/h: the car does not clear the gap, so the jump warns`); }
     assert.deepStrictEqual([Math.round(rampOf(t.shell).landing.speed * 3.6), rampOf(t.shell).landing.speedFrom], [k, 'design'], `${k} km/h: the ramp follows the slider, and says so`);
   }
   assert.deepStrictEqual(dirty, [], 'red at a speed where the car clears the gap');
@@ -69,7 +70,9 @@ test(`the slider swept over its whole range (${MIN}–${MAX} km/h, its own step 
   assert.strictEqual(clean[clean.length - 1], MAX);
 });
 
-test('a jump sculpted past what the car can clear is red, and says so: the landings that miss, the heaviest fall', async () => {
+// CHANGED D250: the row's subject stands (a jump sculpted past what the car can clear is named, with the heaviest fall); it is read from the AMBER
+// ranges now, a warning, and asserted not red
+test('a jump sculpted past what the car can clear WARNS (amber, D250), and says so: the landings that miss, the heaviest fall', async () => {
   // the ramp cannot be sculpted (it is the jump's own, sized by resolve); what a user CAN make too much for the speed is
   // the flight: a gap sculpted far longer than 460 km/h carries the car
   const { shell, ctl } = await firstJump();
@@ -78,8 +81,9 @@ test('a jump sculpted past what the car can clear is red, and says so: the landi
   // The measured default jump is itself 81 m with a 14 m drop, so "sculpted past" has to say what it was sculpted to
   shell.sculpt(jump.id, { handles: { gap: 80, drop: 0.7, land: -2 * DEG } });
   assert.strictEqual(shell.getState().message, null, shell.getState().message);
-  const r = reds(ctl).filter((x) => x.reason === 'landing-misses-zone');
-  assert.strictEqual(r.length, 1, JSON.stringify(reds(ctl)));
+  const r = ctl.state.result.amber.filter((x) => x.reason === 'landing-misses-zone');
+  assert.strictEqual(r.length, 1, JSON.stringify(ctl.state.result.amber));
+  assert.ok(!reds(ctl).some((x) => x.reason === 'landing-misses-zone'), 'not red');
   assert.ok(r[0].source && /ARCHITECTURE/.test(r[0].source), 'it carries its source');
   assert.strictEqual(r[0].worst, 6.3, 'the heaviest fall that misses is named');
   assert.ok(ctl.state.result.jumps[0].landings.some((L) => !L.caught));

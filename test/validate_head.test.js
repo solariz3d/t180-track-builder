@@ -61,27 +61,33 @@ test('the ramp\'s size puts BOTH landings in the zone: each touchdown lies on th
   assert.ok(R.touchdowns[0].x > R.touchdowns[1].x);
 });
 
-test('a ramp too short for the clean-flight landing is RED: landing-misses-zone, the heaviest missed fall named', () => {
+// CHANGED D250 (the keeper: jumps are tuned by driving them in AC): a landing the car may miss is AMBER, a warning, never a red. The two rows below
+// keep their subject (the ramp too short, the fall too slow, the heaviest missed fall named) and now read it from r.amber, and assert it is NOT red.
+const ambers = (r) => r.amber.map((x) => x.reason);
+test('a ramp too short for the clean-flight landing is a WARNING (amber, D250): landing-misses-zone, the heaviest missed fall named; not red', () => {
   const { segs, path } = jumpTrack({ rampScale: 0.4 });
   const r = validate(path, segs, { designSpeed: DESIGN, landingSearchM: 1000 });
-  assert.ok(reasons(r).includes('landing-misses-zone'), JSON.stringify(reasons(r)));
-  const red = r.red.find((x) => x.reason === 'landing-misses-zone');
-  assert.strictEqual(red.worst, 3.2);
-  assert.match(red.source, /ARCHITECTURE\.md:75-78/);
+  assert.ok(ambers(r).includes('landing-misses-zone'), JSON.stringify(ambers(r)));
+  assert.ok(!reasons(r).includes('landing-misses-zone'), 'it is not a red');
+  const warn = r.amber.find((x) => x.reason === 'landing-misses-zone');
+  assert.strictEqual(warn.worst, 3.2);
+  assert.match(warn.source, /ARCHITECTURE\.md:75-78/);
 });
 
-test('too slow for the override-dive landing (6.3 g needs more speed than it has): red, 6.3 g named', () => {
+test('too slow for the override-dive landing (6.3 g needs more speed than it has): a warning (amber, D250), 6.3 g named; not red', () => {
   const { segs, path, R } = jumpTrack({ speed: kmh(200) });
   const r = validate(path, segs, {});
   assert.strictEqual(R.touchdowns[1].x, null, '6.3 g cannot clear at 200 km/h');
-  const red = r.red.find((x) => x.reason === 'landing-misses-zone');
-  assert.ok(red, JSON.stringify(reasons(r)));
-  assert.strictEqual(red.worst, 6.3);
+  const warn = r.amber.find((x) => x.reason === 'landing-misses-zone');
+  assert.ok(warn, JSON.stringify(ambers(r)));
+  assert.strictEqual(warn.worst, 6.3);
+  assert.ok(!reasons(r).includes('landing-misses-zone'));
 });
 
 test('with no speed at all nothing about a landing is claimed (no landing red), while the floating head is still red', () => {
   const clean = jumpTrack();
   assert.ok(!reasons(validate(clean.path, clean.segs, {})).includes('landing-misses-zone'));
+  assert.ok(!ambers(validate(clean.path, clean.segs, {})).includes('landing-misses-zone'), 'and no landing warning either');
   const floating = jumpTrack({ ramp: false });
   assert.deepStrictEqual(reasons(validate(floating.path, floating.segs, {})), ['head-in-the-air']);
 });

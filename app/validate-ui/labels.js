@@ -26,7 +26,7 @@ function reasonText(reason, car = MACH6) {
     'seam-past-envelope': `a seam is sharper than measured on real tracks (over ${car.seamP90Deg}°)`,
     'on-the-stops': `the car is on its suspension stops (${car.suspensionStopG} g or more)`,
     'head-in-the-air': 'the open end is in the air: place the landing',
-    'landing-misses-zone': 'a jump landing misses its ramp',
+    'landing-misses-zone': 'this jump may fly past its landing at the lap\'s speed (a warning: tune it by driving it in AC)',   // D250: amber since the keeper's ruling
     'jump-gap-not-forward': 'a jump lands behind its own take-off',
     'joint-step': 'the road steps between two pieces here (the cup and the piece next to it do not meet)',
     // THE CROSS-SECTION reds (D225): the ids are the seal's and the librarian's rulings (ruling 1 `tube-too-narrow`, S3 `roll-rate`; A's
