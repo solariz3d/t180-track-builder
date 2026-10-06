@@ -98,7 +98,8 @@ test('row 5: the guard refuses BY NAME when a change would move the centreline: 
   for (const ch of ['w', 'phi', 't']) {
     const s = await mk('tube'), before = s.getState().history.present, snap = CL.snapshot(s.getState().resolved);
     s.setSculpt(true); s.selectPiece(2); s.beginSculpt({ channel: ch }); assert.ok(s.getState().brush, `${ch}: the drag opens`); s.sculptTo(ch === 'w' ? 5 : ch === 't' ? -30 : 0.2);
-    assert.match(s.getState().message, /^SCULPT_MOVES_CENTRELINE: this change would move the track's centreline \(p3 \(segment \d+\): (heartline1?|roll1?) moved/, `${ch}: ${s.getState().message}`);
+    assert.match(s.getState().message, /^SCULPT_MOVES_CENTRELINE: Sculpt can't do that: p3 is a tube past 300° of sweep, where it turns about its own centre, so changing its sweep, width or bank would move the road after it\./, `${ch}: ${s.getState().message}`);   // (D243 F3: the reason in plain words)
+    assert.doesNotMatch(s.getState().message, /heartline|roll[01]|segment \d|undefined/, `${ch}: no internal field names`);
     s.endSculpt(); assert.equal(CL.pathMoved(snap, s.getState().resolved), null, `${ch}: the centreline is where it was`);
     assert.equal(s.getState().history.present.pieces[2].channels[ch], before.pieces[2].channels[ch], `${ch}: the piece is as it was (the refused step was never applied)`);
   }
@@ -106,7 +107,7 @@ test('row 5: the guard refuses BY NAME when a change would move the centreline: 
   // (one interior control point of the turn rate: the joints stay C1, so the core accepts the document and only the guard can refuse it)
   const steer = (doc, o) => { const P = doc.pieces[2], kh = P.channels.kh.map((x, i, a) => (i === Math.floor(a.length / 2) ? x + 1e-4 : x)); return { doc: Object.freeze(D.checkDoc({ ...doc, pieces: Object.freeze(doc.pieces.map((p, i) => (i === 2 ? Object.freeze({ ...P, channels: Object.freeze({ ...P.channels, kh: Object.freeze(kh) }) }) : p))) })), changed: [], note: null }; };
   const s = await mk('legacy', { brushFn: steer }); const before = s.getState().history.present, snap = CL.snapshot(s.getState().resolved);
-  s.setSculpt(true); s.selectPiece(2); s.beginSculpt({ channel: 'phi' }); s.sculptTo(0.1); assert.match(s.getState().message, /^SCULPT_MOVES_CENTRELINE: .*kh|^SCULPT_MOVES_CENTRELINE: .*k0|^SCULPT_MOVES_CENTRELINE: .*k1/, s.getState().message);
+  s.setSculpt(true); s.selectPiece(2); s.beginSculpt({ channel: 'phi' }); s.sculptTo(0.1); assert.match(s.getState().message, /^SCULPT_MOVES_CENTRELINE: Sculpt can't do that: it would change the turn or climb of p3, and that steers everything after it./, s.getState().message);
   s.endSculpt(); assert.equal(CL.pathMoved(snap, s.getState().resolved), null, 'the steering step was never applied'); assert.equal(s.getState().history.present, before);
   // a good step, then a bad one: the drag stays at the good one
   let calls = 0; const half = (doc, o) => (++calls === 1 ? require('../../src/core/sculpt.js').brush(doc, { mode: 'value', channel: o.channel, s0: o.s0, r: o.r, delta: o.delta }) : steer(doc, o));
@@ -161,4 +162,21 @@ test('row 8: a SHORT piece (under the brush\'s smallest window, 120 m) is sculpt
   const t = await mk('legacy', { brushFn: spill }); t.setSculpt(true); t.selectPiece(2); t.beginSculpt({ channel: 'phi' }); t.sculptTo(0.1);
   assert.match(t.getState().message, /Sculpt also changed p2 at the joint/, t.getState().message); t.endSculpt();
 });
+test('row 9 (D243 F3): the refusal says the REAL reason in plain words, never an internal field: an OPEN tube whose sweep would cross 300°, a closed tube, a steering change, and every other kind', async () => {
+  // C's case: an OPEN tube at 290° and a sweep drag of +20: the segments gain a heartline field, the sweep passes 300°
+  const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 300, first: { w: 40, t: 290 } }); for (let i = 0; i < 3; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 100, transition: 40, targets: { kh: 0 } });
+  s.setSculpt(true); s.selectPiece(2); s.beginSculpt({ channel: 't' }); s.sculptTo(20); const m = s.getState().message;
+  assert.match(m, /^SCULPT_MOVES_CENTRELINE: Sculpt can't do that: the sweep of p3 would pass 300°, where a tube starts to turn about its own centre, and that would move the road after it\./, m);
+  assert.doesNotMatch(m, /heartline|roll[01]|segment \d|undefined|moved from/, 'no internal field name, no "undefined"'); s.endSculpt();
+  // the technical sentence is still there for whoever reads the log (routeMoved), and the structure behind the words
+  const T = (kind, extra = {}) => CL.plainWhy({ kind, ...extra });
+  assert.match(T('field', { id: 'p3', field: 'heartline1', from: undefined, to: 0 }), /would pass 300°/); assert.match(T('field', { id: 'p3', field: 'heartline', from: 6.37, to: 6.5 }), /p3 is a tube past 300° of sweep/); assert.match(T('field', { id: 'p3', field: 'roll1', from: 0, to: 0.1 }), /past 300° of sweep/);
+  assert.match(T('field', { id: 'p2', field: 'k0', from: 0, to: 1 }), /turn or climb of p2/); assert.match(T('field', { id: 'p2', field: 'kp1', from: 0, to: 1 }), /turn or climb of p2/); assert.match(T('field', { id: 'p2', field: 'length', from: 1, to: 2 }), /length of p2/);
+  assert.match(T('start'), /where the track starts/); assert.match(T('offsets'), /height or sideways offset/); assert.match(T('segments'), /how the track is built/); assert.match(T('piece', { id: 'p4' }), /how the track is built/); assert.equal(CL.plainWhy(null), '');
+  for (const k of ['field', 'start', 'offsets', 'segments', 'piece']) assert.doesNotMatch(T(k, { id: 'p1', field: 'k1', from: undefined, to: 0 }), /undefined|\b(?:k0|k1|kp0|kp1|heartline|roll)\w*\b/, `${k}: plain`);
+  // routeMovedDetail agrees with routeMoved on what moved
+  const st = (await mk('cup')).getState(), segs = st.resolved.segments, mut = segs.map((g, i) => (i === 40 ? { ...g, k1: g.k1 + 1e-9 } : g)), det = CL.routeMovedDetail(st.history.present, segs, st.history.present, mut, st.resolved.start, st.resolved.start);
+  assert.equal(det.text, CL.routeMoved(st.history.present, segs, st.history.present, mut, st.resolved.start, st.resolved.start)); assert.deepEqual([det.kind, det.field, det.seg], ['field', 'k1', 40]);
+});
+
 function close(a, b, eps) { assert.ok(Math.abs(a - b) <= eps, `${a} is not within ${eps} of ${b}`); return true; }

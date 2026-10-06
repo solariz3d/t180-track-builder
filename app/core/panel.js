@@ -19,6 +19,8 @@ const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain
 const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
 const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
 const HD = require('./handles.js');   // D244: the drag handles on the Extend ghost, and (Sculpt, D244b) on a placed piece
+const JW = require('./jumpplan.js');   // D243: the flight as the car flies it, and the core's jump refusals in plain words
+const FL = require('./flightlayer.js');   // D243: the flights drawn as dashed arcs over the preview
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
@@ -250,6 +252,7 @@ function mount(root, shell) {
     const st = shell.getState(), d = st.history.present;
     if (!handlesOn.checked || st.sculpt || d.closed) return null;
     let info = askOf('t180:ghost-request');
+    if (info && info.jump) return null;   // the ghost on screen is a JUMP's (the Add-jump control): not Extend's, so no Extend handles on it
     // no ghost: ask for it once per document, and again about every half second (the preview mounts AFTER this panel, so the first ask can go to nobody; a ghost that cannot be built is not rebuilt every frame)
     if (!info) { sinceTry++; if (triedDoc !== d || sinceTry >= RETRY_FRAMES) { triedDoc = d; sinceTry = 0; ghost(); info = askOf('t180:ghost-request'); } }
     if (!info || !info.samples.length) return null;
@@ -286,6 +289,27 @@ function mount(root, shell) {
     fillChannels();
   };
   handlesOn.onchange = () => { triedDoc = null; if (!handlesOn.checked && !sculptOn.checked) send('t180-ghost-clear'); };
+
+  // JUMP AT THE HEAD (D243 item 1; the core is src/core/jump.js). GAP, DROP (+ down) and LANDING angle go to the shell's addJump, which refuses by name in plain words; the next Extend lays the road the car lands on.
+  // While the fields are used (or the button is hovered) the preview shows the jump as a ghost with the flight as a dashed arc (app/core/flightlayer.js), and the words below say WHICH arc it is (the car's
+  // ballistic flight at the design speed, or a straight line where the core has no flight model) and the speed the landing ramp is sized for (fixed at 460 km/h today).
+  const jgap = num(30, 5, 'metres the car flies along the ground, measured from the take-off lip (more than 0)'), jdrop = num(1, 1, 'metres the landing lip is BELOW the take-off lip (+ = down)'),
+    jland = num(-2, 1, 'pitch of the landing ramp in degrees (negative slopes down: the usual landing)');
+  const jumpNote = el('div', { 'aria-label': 'jump flight', style: 'font-size:12px;margin:2px 0;color:#aab2c0' });
+  const jumpOpts = () => ({ gap: jgap.value, drop: jdrop.value, landDeg: jland.value });
+  const sayJump = (...lines) => jumpNote.replaceChildren(...lines.filter(Boolean).map((t) => el('p', { text: t, style: 'margin:2px 0' })));
+  const jumpHint = () => sayJump('Add jump takes off from the end of the road (set its climb with the fields above first); then press Extend to lay the road the car lands on.', `The landing ramp is sized for ${Math.round(JW.DESIGN_KMH)} km/h, fixed today.`);
+  const jumpGhost = () => {
+    let why = null;
+    try { send('t180-ghost', { candidate: shell.candidateJump(jumpOpts()), reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e && e.name === 'CoreError' ? JW.jumpWords(e, jumpOpts()) : String(e && e.message || e); }
+    if (why) { send('t180-ghost-clear'); sayJump(`No preview of this jump: ${why}`); return; }
+    const g = askOf('t180:ghost-request'), fl = g && g.jump ? JW.flightsOfPath({ samples: g.samples }, g.segments) : [], f = fl[fl.length - 1], w = f ? JW.describe(f) : null, sp = shell.getState().designSpeedKmh;
+    sayJump(...(w ? [w.drew, ...w.lines, w.speed] : [`The landing ramp is sized for ${Math.round(JW.DESIGN_KMH)} km/h, fixed today.`]), Number.isFinite(sp) && sp > 0 && Math.round(sp) !== Math.round(JW.DESIGN_KMH) ? `Validation is using ${Math.round(sp)} km/h (the design speed box), so the jump can be red there even though the ramp is sized for ${Math.round(JW.DESIGN_KMH)}.` : null);
+  };
+  for (const f of [jgap, jdrop, jland]) f.oninput = f.onchange = jumpGhost;
+  const jumpBtn = el('button', { text: 'Add jump', title: 'add a jump at the end of the road: the gap, the drop and the landing angle above. Then Extend lays the road it lands on', onclick: () => { send('t180-ghost-clear'); shell.addJump(jumpOpts()); },
+    onmouseenter: jumpGhost, onmouseleave: () => send('t180-ghost-clear') });
+  let jumpNoteFor = shell.getState().history.present; jumpHint(); const unsubJump = shell.subscribe((st) => { if (st.history.present !== jumpNoteFor) { jumpNoteFor = st.history.present; jumpHint(); } });   // the hint shows from the start, and again on a new document
 
   // CLOSE, EXAMPLE
   // D242: Close PROPOSES first (the keeper, TEST 1: the one-click close moved every piece, and the lap ran into itself). Only the stretch chosen here moves;
@@ -340,6 +364,7 @@ function mount(root, shell) {
       fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn)),
     wnote, roBox,
     el('div', { class: 'actions' }, extendBtn, straightBtn), straightHint,
+    el('div', { class: 'pickers' }, field('jump gap m', jgap), field('drop m (+ down)', jdrop), field('landing °', jland)), el('div', { class: 'actions' }, jumpBtn), jumpNote,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
     ...pieces.nodes.selection, ...pieces.nodes.library,
@@ -367,12 +392,13 @@ function mount(root, shell) {
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
   const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // D244: the drag handles' overlay
+  const flights = stage ? FL.mount(stage, win) : null;   // D243: the flights as dashed arcs
   // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
   const onHandlesRequest = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(handles ? handles.handles().filter((h) => h.screen).map((h) => ({ id: h.id, kind: h.kind, side: h.side, x: h.screen.x, y: h.screen.y, dx: h.screen.dx, dy: h.screen.dy })) : []); };
   doc.addEventListener('t180:handles-request', onHandlesRequest);
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, pieces, options: opts, unmount() { unsub(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, options: opts, unmount() { unsub(); unsubJump(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
