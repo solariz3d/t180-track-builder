@@ -312,7 +312,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       // D244b: the direct check when a Sculpt drag ends: both centrelines built and compared bit for bit; a drag that moved it is dropped whole
       if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: `SCULPT_MOVES_CENTRELINE: the centreline moved (${moved}); the whole drag was dropped` }); }
       // the brushed pieces are what close() goes round (the brush's window)
-      return attempt(() => { const h = D.endDrag(st.history); return set({ history: h, brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r), ...(b.sculpt && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {}) }); });
+      // (endDrag keeps the same present, so a Sculpt selection, re-based at each step, still belongs to it)
+      return attempt(() => set({ history: D.endDrag(st.history), brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }));
     },
     /** One brush stroke with no drag (keys, tests): one undo step. */
     sculptOnce: (b) => commit(`brush:${b.mode || 'rate'}`, () => brushed({ mode: 'rate', ...b, base: doc() }, b.delta).doc, { lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }),

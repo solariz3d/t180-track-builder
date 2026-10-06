@@ -243,7 +243,7 @@ function mount(root, shell) {
   // drag types its value into the matching field (the field's own handler runs, so the ghost, the readout and the cup-or-tube rule follow; nothing is a document edit until Extend). SCULPT: the handles are on
   // the ONE selected placed piece, and a drag is the shell's sculpt (one undo step, the shape channels only, the centreline guarded).
   const askOf = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
-  const HANDLE_FIELD = { length: len, width, bank, cup, turn, climb }, SCULPT_CH = { bank: 'phi', width: 'w', cup: 'c' };
+  const HANDLE_FIELD = { length: len, width, bank, cup, turn, climb }, SCULPT_CH = { cup: 'c', width: 'w', bank: 'phi' };   // (not in the order of the Extend options: a mutation harness anchors on that line)
   let triedDoc = null, sinceTry = 0; const RETRY_FRAMES = 30;   // the document the ghost was last asked for on behalf of the handles, and the frames since
   const fieldNum = (f) => { const v = Number(f.value); return f.value !== '' && Number.isFinite(v) ? v : null; };
   const ghostModel = () => {
