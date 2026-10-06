@@ -3,7 +3,9 @@
 //
 //   runner.start({ doc, designSpeedKmh, closed }) -> { promise, cancel(), timing }
 //     promise  resolves with the check's result ({ overlaps, others, amber }), or rejects (a worker failed; or { cancelled: true } after cancel)
-//     cancel() terminates the workers at once (whatever they were computing is dropped) and puts two fresh warm ones in their place
+//     cancel() terminates the workers at once (whatever they were computing is dropped) and puts two fresh warm ones in their place; so does ANY failure of a part (the other
+//              worker may still be computing the failed job's other part: it must not answer the next job). Every message also carries the job's serial and a reply that is not the
+//              current job's is ignored: the exact guard, with the replacement as the belt (B's look at 485c5b6, p-warm-B_2026-10-05.md section 2)
 //     timing   { loadMs, waitedMs, jobMs, restMs, raysMs } in ms, set before the promise resolves (the slower of the two workers' numbers, and each part's own check time)
 //
 // createWorkerRunner is the page's. THE WORKERS ARE MADE WHEN THE RUNNER IS (at page start), and load their modules while they sit idle; a job reuses them (their modules and their compiled code
@@ -22,13 +24,13 @@ function createWorkerRunner({ win, url = 'core/overlapworker.js', WorkerCtor = w
   const make = () => new WorkerCtor(url);
   let pool = PARTS.map(make);   // warm: made now, loading their modules in the background
   const replace = () => { for (const w of pool) { try { w.terminate(); } catch (e) { /* gone already */ } } pool = PARTS.map(make); };
-  let running = null;
+  let running = null, serial = 0;   // serial: one number per job; every message carries it ("<serial>:<part>") and a reply that is not the CURRENT job's is ignored
   return {
     /** The workers now in the pool (for the tests and the window proof). */
     workers: () => pool.slice(),
     start({ doc, designSpeedKmh = null, closed = true }) {
       if (running) running.cancel();   // one job at a time: the shell cancels the old one first, this is only a guard
-      const job = { timing: null, promise: null, cancel: null }, mine = pool.slice(), got = {};
+      const job = { timing: null, promise: null, cancel: null }, mine = pool.slice(), got = {}, mySerial = ++serial;
       let settled = false, pending = PARTS.length, reject;
       const fail = (err, replaceWorkers) => { if (settled) return; settled = true; running = null; for (const w of mine) { w.onmessage = w.onerror = null; } if (replaceWorkers) replace(); reject(err); };
       job.promise = new Promise((res, rej) => {
@@ -38,7 +40,8 @@ function createWorkerRunner({ win, url = 'core/overlapworker.js', WorkerCtor = w
           w.onmessage = (e) => {
             if (settled) return;
             const m = e.data || {};
-            if (!m.ok) return fail(new Error(m.error || 'the overlap check failed'), false);   // the worker is fine, the job was not: it stays warm
+            if (m.id !== `${mySerial}:${part}`) return;   // not this job's answer (B's look at 485c5b6: a failed job's other part finishing late): never taken for this one
+            if (!m.ok) return fail(new Error(m.error || 'the overlap check failed'), true);   // and the workers are replaced on ANY failure: one may still be busy with this job's other part
             got[part] = m;
             if (--pending > 0) return;
             settled = true; running = null; for (const x of mine) x.onmessage = x.onerror = null;
@@ -47,7 +50,7 @@ function createWorkerRunner({ win, url = 'core/overlapworker.js', WorkerCtor = w
             try { res(mergeParts(got.rest.result, got.rays.result)); } catch (err) { rej(err); }
           };
           w.onerror = (e) => fail(new Error((e && e.message) || 'the overlap worker failed'), true);
-          w.postMessage({ id: i + 1, part, doc, designSpeedKmh, closed });
+          w.postMessage({ id: `${mySerial}:${part}`, part, doc, designSpeedKmh, closed });
         });
       });
       job.cancel = () => fail(Object.assign(new Error('cancelled'), { cancelled: true }), true);
