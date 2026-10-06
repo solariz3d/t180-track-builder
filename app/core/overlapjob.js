@@ -20,10 +20,12 @@ const { OVERLAP, mergeParts } = require('./overlapmerge.js');
  * the same checks the export runs (src/export/fromwords.js buildFromSegments). Returns { overlaps (the road running into itself: self-intersection,
  * stacked, a downforce ray that meets another road), others (every other red), amber (count) }.
  */
+/** D256: a set design speed pins it; none (the app: there is no slider) checks at FULL speed, as the panel and the export do. */
+const speedOpts = (designSpeedKmh) => (Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : { fullSpeed: true });
 function overlapCheck(resolved, designSpeedKmh, { closed = true } = {}) {   // D240: `closed: false` for the open track a delete leaves
   const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
   const mesh = G.buildMesh(p, segs, { selfCheck: true }), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
-  const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, ...(Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : {}) });
+  const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, ...speedOpts(designSpeedKmh) });
   return { overlaps: v.red.filter((x) => OVERLAP.has(x.reason)), others: v.red.filter((x) => !OVERLAP.has(x.reason)), amber: v.amber.length };
 }
 
@@ -40,7 +42,7 @@ function resolveDoc(d) {
  */
 function overlapPart(part, resolved, designSpeedKmh, { closed = true } = {}) {
   const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
-  const speed = Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : {};
+  const speed = speedOpts(designSpeedKmh);
   if (part === 'rest') { const mesh = G.buildMesh(p, segs, { selfCheck: true }), v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, ...speed }); return { red: v.red, amber: v.amber.length }; }
   if (part === 'rays') {
     const mesh = G.buildMesh(p, segs, {}), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);

@@ -51,6 +51,12 @@ test('the TEST export of the same open track writes a folder marked unfinished, 
 
 // D243 changed this row's red: F7's jump was red gap-in-road until D243 made a core flight's gap intended, so the red is now a real HOLE planted in
 // F7's landing road (a road segment made a gap), which must stay red; the rule the row tests, a red listed and not blocking, is unchanged
+test('D256: the TEST export checks the open track at FULL speed, so where F7\'s hill lets the car leave the road is LISTED (and does not block)', () => {
+  const { f, r } = testExport();
+  assert.match(fs.readFileSync(path.join(f.dir, 't180b_TEST_UNFINISHED.txt'), 'utf8'), /leaves-surface/);
+  assert.ok(r.warnings.some((w) => /TEST EXPORT \(unfinished\)/.test(w)), r.warnings.join(' | '));
+});
+
 test('in TEST mode a red is LISTED and does not block: a hole\'s gap-in-road red is in the TEST file and the warnings', () => {
   const holed = segs.map((g) => ({ ...g })), i = holed.findIndex((g, k) => k > 0 && holed[k - 1].part === 'land' && g.part === 'body');
   assert.ok(i > 0, 'control: F7 has road after its landing ramp to hole'); holed.splice(i, 1, { ...holed[i], kind: 'gap', part: 'gap', profile: null });

@@ -2,7 +2,8 @@
 //
 // What it shows, in #validation:
 //   · a summary: red and amber counts, the lap (open while building), the jumps;
-//   · the design-speed picker (speed.js): loads for every word without its own speed, default 460 km/h (FINDINGS.md:476);
+//   · NO speed control (D256, the keeper: "it should always be maxed out"): an open track's loads at the lap sim's cap, 970 km/h
+//     (MACH6.vmaxKmh), a closed one on its ghost lap, the speed the export judges it at, so the two never disagree;
 //   · a CSP toggle: off validates for vanilla AC, where surfaces above 50° are red (ARCHITECTURE.md:87);
 //   · the load graph (graph.js): the hardest line's load along the track, the 20 g and 90 g limits, red and amber
 //     stretches shaded. HIDDEN while there is no load (no speed model). It replaced, in D170, a colour ribbon that
@@ -24,7 +25,6 @@
 'use strict';
 const { createValidationController, summary } = require('./panel.js');
 const { levelAt, rgbaAt, PALETTE, LEVEL } = require('./colour.js');
-const { createSpeedPicker, mountSpeedPicker } = require('./speed.js');
 const { graphModel, drawGraph } = require('./graph.js');
 const { lapText, lapWhereText, findingLine } = require('./labels.js');
 
@@ -36,8 +36,7 @@ function mount(root, shell) {
   const csp = el('input', { type: 'checkbox', checked: true });
   const graph = el('canvas', { width: 480, height: 96, className: 'v-graph', style: 'width: 100%; height: 96px;' });
   const list = el('ul', { className: 'v-list' });
-  const speedRow = el('div', { className: 'v-speed-row' });
-  root.append(speedRow, el('label', {}, [csp, ' CSP (wall raycasting)']), head, graph, list);
+  root.append(el('label', {}, [csp, ' CSP (wall raycasting)']), head, graph, list);
 
   const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (f) => setTimeout(f, 16);
   function render(state) {
@@ -58,6 +57,8 @@ function mount(root, shell) {
       for (const [kind, items, lvl] of [['red', r.red, LEVEL.RED], ['amber', r.amber, LEVEL.AMBER]]) {
         for (const x of items) { const f = findingLine(kind, x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${css(PALETTE[lvl])}` })); }   // the rule and its source in the tooltip
       }
+      // D256: "holds above N km/h" (information): where the centreline faces the ground, the slowest speed that keeps the car on it
+      for (const x of r.info) if (x.reason === 'holds-above') { const f = findingLine('info', x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${css(PALETTE[LEVEL.INFO])}` })); }
       if (r.lap && r.lap.ok === false) for (const w of r.lap.where) list.append(el('li', { textContent: `lap: ${lapWhereText(w)}, at ${w.s.toFixed(0)} m`, title: w.reason, style: `color: ${css(PALETTE[LEVEL.RED])}` }));
     }
     for (const j of state.arcs) {
@@ -66,23 +67,18 @@ function mount(root, shell) {
     }
     const map = state.map;
     root.dispatchEvent(new CustomEvent('t180:validation', { bubbles: true, detail: {
-      path: state.path, result: state.result, map, arcs: state.arcs, speedPicker: picker,
+      path: state.path, result: state.result, map, arcs: state.arcs,
       levelAt: (s, u) => (map ? levelAt(map, s, u) : LEVEL.CLEAR), rgbaAt: (s, u) => (map ? rgbaAt(map, s, u) : PALETTE[LEVEL.CLEAR]),
     } }));
   }
   let ctl = null;
-  // D179: the slider's speed also sizes the open track's jump ramps (A's shell setDesignSpeed re-resolves; derived, no
-  // undo step), so a jump is never checked at a speed its ramp was not built for. The shell first, then validation at it
-  const picker = createSpeedPicker({ onChange: (kmh) => {
-    if (typeof shell.setDesignSpeed === 'function') shell.setDesignSpeed(kmh);
-    if (ctl) ctl.setDesignSpeed(kmh);
-  } });
+  // D256: there is no design-speed slider any more; the controller checks at full speed (panel.js). The slider it replaced never sized the
+  // equation core's jump ramps either, whatever D179 said here: src/core/adapter.js toSegments sizes them at MACH6.designSpeedKmh, 460 km/h
   // ONE PATH (D177): the preview's path, asked for through C's seam ('t180:track-request', { reply(track) }, answered
   // with { path, segments, closed, how, g, fromS }: app/preview/index.js); with no answer, or a path for another
   // document, the controller grows its own
   const sharedPath = () => { let got = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { got = x; } } })); return got; };
-  ctl = createValidationController(shell, { designSpeedKmh: picker.kmh, onUpdate: render, schedule: raf, sharedPath });
-  mountSpeedPicker(speedRow, picker);
+  ctl = createValidationController(shell, { onUpdate: render, schedule: raf, sharedPath });
   csp.onchange = () => ctl.setCsp(csp.checked);
   return { dispose: () => ctl.dispose() };
 }

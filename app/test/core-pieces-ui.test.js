@@ -547,7 +547,9 @@ test('row 14: the Jump block: the hint and the ramp speed from the start; a ghos
   // typing changes the ghost and the words
   const g0 = S.ghosts; gap.value = '120'; drop.value = '3'; land.value = '-3'; gap.oninput(); assert.ok(S.ghosts > g0, 'the ghost followed the field'); assert.match(P1.text('jump flight'), /6\.3 g: does NOT reach the landing at 460 km\/h \(it needs \d+ km\/h\): the jump is red\./);
   // a validation speed other than the ramp's is said
-  shell.setDesignSpeed(300); gap.oninput(); assert.match(P1.text('jump flight'), /Validation is using 300 km\/h \(the design speed box\), so the jump can be red there even though the ramp is sized for 460\./); shell.setDesignSpeed(null);
+  // CHANGED D256 BUILD: there is no design speed box; with none pinned the note says validation is at FULL speed, and a host's pinned speed is still said
+  assert.match(P1.text('jump flight'), /Validation checks at full speed \(970 km\/h on an open track, the ghost lap on a closed one\), so this jump may be listed as a warning even though its ramp is sized for 460 km\/h\./);
+  shell.setDesignSpeed(300); gap.oninput(); assert.match(P1.text('jump flight'), /Validation is using 300 km\/h, so the jump can be listed there even though the ramp is sized for 460\./); shell.setDesignSpeed(null);
   // a refused jump: the reason in plain words, no ghost
   gap.value = '0'; gap.oninput(); assert.match(P1.text('jump flight'), /^No preview of this jump: The gap must be more than 0 m: it is how far the car flies along the ground\./); assert.equal(S.ghost, null, 'no ghost for a refused jump');
   // leaving the button clears the ghost, and the Extend handles come back

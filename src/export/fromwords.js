@@ -191,7 +191,8 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // validation first: a red refuses, amber warns
   // the built physics road, in world space, for the downforce-ray gap check (src/validate/raygap.js; R1)
   const roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
-  const v = validate(p, segs, { csp: o.csp, softCollision: true, folds: mesh.folds, roadMesh });
+  // D256 fullSpeed: a closed lap on its ghost lap (as before); the TEST export's OPEN path at the lap sim's cap, so its lift-off is listed
+  const v = validate(p, segs, { csp: o.csp, softCollision: true, folds: mesh.folds, roadMesh, fullSpeed: true });
   const red = [...v.red];
   // the pit lane (D174): built beside the road, self-checked against it with the same tests; its findings are red
   let pit = null;
