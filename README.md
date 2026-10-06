@@ -1,215 +1,174 @@
 # T-180 Track Builder
 
-A standalone, intuitive track builder for **Assetto Corsa**, for regular tracks and for **T-180** tracks (the
-Speed Racer cars recreated at [ohyeah2389/Assetto-T-180](https://github.com/ohyeah2389/Assetto-T-180)). It is meant to
-replace Blender for track making.
+A desktop app that builds **Assetto Corsa** tracks, for normal cars and for **T-180** tracks (the Speed Racer cars
+recreated at [ohyeah2389/Assetto-T-180](https://github.com/ohyeah2389/Assetto-T-180)): banked bowls, half-pipes, tubes,
+corkscrews and jumps. You shape the road piece by piece and export a track folder AC can load, with no Blender and no
+ksEditor. To drive a T-180 on them you need the T-180 cars from that repository. They are ordinary AC track folders, so any car
+can be put on them, but the walls, tubes and jumps are built for a T-180.
 
-- **Write a track in a language.** Place pieces ("words": straights, sweeps, turns, climbs, wall-rides, jumps), restyle
-  them in a *font* (half-pipe, bowl, flat banked ribbon) and a *tempo*, or sculpt freely.
-- **See it turn red where a T-180 can't survive it,** measured against real replays and real working tracks, not
-  guesses.
-- **Preview how it will look in AC with CSP** before exporting. Geometry and materials are the export's own (the painted
-  start and grid boxes are not drawn yet), and fixed reference views are ready for measuring the lighting gap against
-  real screenshots.
-- **Export a working track directly:** no Blender, no ksEditor. Markers, grid, pits, timing, the T-180 soft-collision
-  road, and an AI line.
-- **It keeps learning** the language from good tracks on your PC.
+<!-- SCREENSHOT PLACEHOLDER: one screenshot of the builder with a track and the drag handles on the Extend ghost goes here. -->
 
 ## Install
 
-**0.2.2** is the current release (0.2.0 was the first): a Windows installer,
-`T-180 Track Builder_0.2.2_x64-setup.exe`. It installs for the current user, with no administrator rights. It is not
-code-signed, so Windows SmartScreen warns about an unknown publisher the first time. To build the installer yourself: `node src-tauri/release.cjs` (it needs Rust and `tauri-cli`
-2; see `docs/RELEASE.md`). What changed, release by release, is in `CHANGELOG.md`.
+Windows only. The installer installs for the current user, needs no administrator rights, and is not code-signed, so
+Windows SmartScreen warns about an unknown publisher the first time.
 
-Your tracks, pieces, autosave and settings live in your own app-data folder
-(`%APPDATA%\com.solariz3d.t180-track-builder`), never in the program's folder, and uninstalling leaves them in place.
+**The last released installer is 0.2.2** (2026-09-28), `T-180 Track Builder_0.2.2_x64-setup.exe`. **Most of what this
+page describes came after it:** the equation-only builder, drag handles, Sculpt, saved pieces, jumps and Export to
+Assetto Corsa are listed under `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md). Until the next release, build it from
+source (below).
 
-## Status: 0.2.2, and it is the track only
+Uninstalling leaves your tracks and settings in place (see *Where your files live*).
 
-**v1 scope, in the author's words:** *"the first thing I want it to be is simply the track, no environmental
-elements."* So v1 has no terrain, scenery or props, only the road the user builds. The user builds it: the track grows
-from its open end, like a coaster builder, one word or phrase at a time.
+## Your first track in five minutes
 
-**No in-game testing has been done.** Every row below was judged from the code and its tests, with no Assetto Corsa
-launch at any point. Whether AC loads, drives, times and renders these tracks as intended is unverified until someone
-drives one.
+1. **Extend.** The track grows from its **open end**, the place it currently stops. The left column holds the piece
+   the next **Extend** will add there: its length, turn, climb, bank, width and cross-section (the road's shape seen
+   end-on). A see-through preview of it, the **ghost**, sits at the open end. Press **Extend** and the piece is placed.
+   **Straight** adds a level straight in one click.
+2. **Drag the handles.** The ghost carries handles: length and width at its near end, bank, cup, turn and climb along
+   it. Drag one and the matching field changes; nothing is placed until you press Extend. Build a lap this way, one
+   piece at a time.
+3. **Close the loop.** Press **Close the loop**. The builder bends the end of the track until it meets the start. By
+   default only the last ~20% of the lap's length may move; the choice beside the button also offers the last piece
+   only, the last ~40%, or the whole lap. You see the closed track as a ghost first, with how far each piece moves and
+   an overlap check, then **Apply** or **Cancel**.
+4. **Save, then Export to Assetto Corsa.** Type a name and press **Save**. Then press **Export to Assetto Corsa**: the
+   builder finds AC through Steam and writes the track into AC's `content\tracks` as `t180b_<name>`. (If AC is not
+   in Steam, pick its folder, the one that holds `content\tracks`, when asked.) Start AC, or Content Manager (the
+   common AC launcher), and pick the track.
 
-**How to read the table.** It judges every item of ARCHITECTURE §1–§6, §5b and §5c against the code of the 0.2.2
-release (2026-09-28), including the installed app: the release installer was installed into a throwaway folder,
-started, and used for a first track, following the guide (a starter phrase, one word with a handle dragged, closing
-the loop, saving under a name) before it was uninstalled. The Export button's folder dialog was opened there but not
-answered, so the export was checked headless (app/test/export.test.js), not in the installed window.
-- **tested:** built, and a test file exercises it (named).
-- **built:** the code exists (file named), with no test that exercises this item.
-- **not yet:** what is missing.
+The first time the app starts, a six-step guide walks through Extend, the brush, Close the loop, the colours, Export,
+and the grid and mirror.
 
-Run the tests with `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"` (dependency-free).
+## What you can build
 
-### §1 Principles
+A piece is a set of smooth curves, one for each property below (its turn along its length, its bank along its length,
+and so on), and two pieces always meet without a kink or a step in any of them. What you set:
 
-| item | status | where |
-|---|---|---|
-| The track is text; the mesh is derived | tested | `src/doc/serial.js` canonical text · `test/doc.test.js` |
-| Identical where it can be: the preview draws the export's geometry | tested | `app/preview/trackmodel.js` from `src/geom` · `app/test/preview.test.js` |
-| … lighting matched to AC+CSP, the gap measured | not yet | the look-match instrument is built (`src/lookmatch/`, `scripts/lookmatch.js` · `test/lookmatch.test.js`), but no reference shots from AC exist yet, so the gap is not measured |
-| Guardrails, not gates: physics as colour while building | tested | `app/validate-ui/` · `app/test/validate-ui*.test.js` |
-| One tool: place words, restyle them, sculpt | removed from the app (D239: the app is the equation builder only; its palette and handles panels are deleted, the word documents and the exporter remain) | was `app/palette/palette.js`, `app/handles/`; the app now: `app/core/` · `app/test/core-*.test.js` |
-| A guided first track for new users (six skippable steps for the equation builder since D239; the user makes every move) | tested | `app/onboarding/` · `app/test/onboarding.test.js`, `app/test/core-eqonly.test.js` |
-| The app works in its real window, not only headless (timers as strict as a browser's) | tested | `app/shell.js` · `app/test/timers-regression.test.js` |
-| Stability and export reliability | tested | export self-test (kn5 read back) · `test/export_words.test.js`; the soak and bench scripts (`scripts/soak.js`, `scripts/bench.js`) · `test/perf.test.js`, `test/perf_soak.test.js` |
+- **Turn and climb** (°/100 m), to curve the road left and right, up and down.
+- **Bank** (°), the road's roll, which can go past vertical and round again (a corkscrew).
+- **Width** (m). **Width like…** offers the measured widths of known T-180 tracks.
+- **Cup** (°, up to 150): the road's cross-section curls up from a flat road through a bowl to a half-pipe.
+- **Edge angle** (°) **and edge start** (a share of the half-width, 0.5 to 0.95): how far the outer part of the road
+  curls up, and where across the road it begins.
+- **Tube sweep** (°, up to 360): the road wraps round into a tube. A closed tube is a pipe the car drives inside.
+- **Jumps.** **Add jump** places a flight at the open end: its gap, its drop and its landing angle. The take-off and the
+  landing ramp are built from them, and the car's arc is drawn over the preview.
 
-### §2 The language
+Each field has an **at start** tick: reach the value at the start of the piece instead of easing to it along the piece.
 
-| item | status | where |
-|---|---|---|
-| Words: straight, sweep, turn, tight, wall-ride, inversion, jump | tested | `src/doc/vocab.js`, `src/doc/document.js` · `test/doc.test.js` |
-| Every word's defaults measured from the library: its size the median corner of its kind (the median run for a straight and a wall-ride), its radius and bank the median word | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/vocabgen.js` from `src/doc/corpus.json` · `test/vocab-corpus.test.js` (each word inside its class's p10–p90), `test/vocabgen.test.js`. Not a median: the jump's gap (the p10, 81 m, because the median 125 m cannot be cleared off a level road at 460 km/h) and the inversion's length and roll |
-| A word placed with no font chosen continues the previous word's font; the first takes the bowl; the width follows the font | tested, unreleased (after 0.2.2): new vocab and new fonts (the width is each measured font's) | `src/doc/document.js`, `src/doc/vocab.js` · `test/vocab-corpus.test.js` |
-| No wall by default: a wall is only ever sculpted | tested, unreleased (after 0.2.2): new vocab and new fonts (the measured fonts have no wall) | `src/doc/vocab.js` · `test/vocab-corpus.test.js` |
-| The bank ramps no faster than real tracks bank (0.849°/m, the measured p90) | tested, unreleased (after 0.2.2): new vocab (the rate measured from the library's tracks) | `src/doc/document.js`, `tools/bankrate.cjs` · `test/vocab-corpus.test.js` |
-| The grammar suggests the next word, from the library's transitions, and forces nothing | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/grammar.js` (the app's palette that showed it is removed, D239) · `test/grammar.test.js` |
-| A jump carries its landing ramp | tested | `src/doc/resolve.js` · `test/doc-jump.test.js` |
-| Phrases: a saved word sequence | tested | `src/doc/document.js` `appendPhrase`, `src/doc/library.js` · `test/doc-library.test.js` |
-| Starter phrasebook: spiral climb, bowl hairpin, S, Sakura's grammar | tested | `src/doc/phrasebook.js` · `test/phrasebook.test.js`; listed in the library under "Starter phrases" (`src/doc/library.js`; the app's palette is removed, D239) |
-| A phrase's "parameters exposed" | not yet | no phrase-level handles. The document can sculpt a phrase's words one by one (`editPhraseWord` in `src/doc/document.js`), but the app cannot yet: a placed starter phrase has no handles in the handles panel, which says so |
-| Fonts: half-pipe, bowl, flat banked ribbon, wall-ride, tube (ψ(u) past vertical) | tested; changed after 0.2.2, unreleased: new fonts (half-pipe, bowl and flat are measured from the library, `src/geom/fonts.js`) | `src/doc/vocab.js`, `src/geom/profile.js` · `test/geom_path.test.js`, `test/geom_mesh.test.js` |
-| Tempos: standard, compact, grand (the size of the library's corners, p50, p10, p90), and the older aurora, serpents | tested, unreleased (after 0.2.2): new vocab, from the corpus | `src/doc/vocab.js` · `test/vocab-corpus.test.js`, `test/doc.test.js` |
-| Handles, bounded live by physics | tested in `src/`; the app's handles panel is removed (D239) | `src/validate/bounds.js` · `test/validate_bounds.test.js` |
-| Document: stable ids, canonical serialisation, schema and generator versions | tested | `src/doc/serial.js` · `test/doc.test.js` |
-| Undo as history; a whole drag is one entry | tested | `src/doc/history.js` · `test/doc.test.js`; the equation builder: `src/core/document.js` · `app/test/core-shell.test.js` |
-| Constraints: pins, free parameters | built | `src/doc/document.js` (`constraints` is carried, nothing uses it yet) |
-| Closing the loop: a connector ranked by physics margin | tested | `src/doc/connector.js` · `test/doc-connector.test.js` |
+**Version 1 is the track only:** no terrain, scenery or props.
 
-### §3 Geometry
+## Editing
 
-| item | status | where |
-|---|---|---|
-| Frames: the curve model's yaw-and-pitch (gravity) frame plus the explicit roll. A DEVIATION from §3's "rotation-minimising frames", made on 2026-09-27; the reason and what changes are recorded in `docs/INTERFACES.md` §2 | tested | `src/geom/path.js` · `test/geom_path.test.js`, `test/geom_loop.test.js` |
-| Bank relative to gravity shown to the user | not yet | computed (`bankG` in `src/geom/path.js`), not shown in the app |
-| Fold check, 1 − κ·(q·N) ≤ 0, on every profile vertex | tested | `src/geom/mesh.js` · `test/geom_mesh.test.js`, `test/validate.test.js` |
-| Self-intersection between non-adjacent cells (BVH) | tested | `src/geom/bvh.js` · `test/geom_bvh.test.js` |
-| Adaptive mesh by chord error and max seam angle (1° default) | tested | `src/geom/mesh.js` · `test/geom_mesh.test.js` |
-| Cells under 65,536 vertices, relative to the cell origin | tested | `src/geom/mesh.js` · `test/geom_mesh.test.js` |
-| Editing a word rebuilds only its cells | tested | `src/geom/mesh.js` `sculptMesh`, `extendMesh` · `test/geom_sculpt.test.js`, `test/geom_grow.test.js`, `test/join.test.js` |
-| Font transitions ramp, never jump | tested | `src/geom/mesh.js`, `src/doc/resolve.js` · `test/geom_ramp.test.js` |
+- **Undo and Redo** cover every action (also Ctrl+Z, Ctrl+Y). Ctrl+Backspace removes the last piece.
+- **The brush.** Turn on the brush and drag on the placed track to change one channel there (turn, climb, bank, width,
+  wall rise, cup, edge, tube sweep, or a height or sideways offset), over a radius you set.
+- **Sculpt.** Turn on **sculpt (shape only)**, click one placed piece, and drag its handles to change its shape: bank,
+  width, cup, edge, wall rise or tube sweep. Sculpt never moves the road's line: a change that would move it is refused, and says so.
+- **Select pieces.** Click a piece on the track; Shift-click another to select the run between them. On a closed lap a
+  Shift-click goes the short way round, across the start line, when that run can be saved; otherwise it selects the run
+  inside the lap and says why.
+- **Saved pieces.** **Save as piece** keeps the selection in your pieces library. **Add at head** puts it back at the
+  open end, mirrored if you tick **mirror on insert**. Pieces can be renamed and deleted; a saved piece is never
+  overwritten.
+- **Delete selected.** Pieces at the open end simply go. In the middle of the track, the two sides are joined again,
+  which moves everything after the gap, so the delete is shown as a preview first (what moves, an overlap check). Apply
+  makes a backup, then deletes, as one undo step. A closed lap has no open end and refuses deletes;
+  Ctrl+Backspace removes its last piece and opens the loop (Ctrl+Z puts it back).
+- **Backups.** Every Save keeps the version it replaces (the newest 20 per track). Close the loop's Apply and a middle
+  delete save a copy first, and refuse if that copy cannot be written. **Previous versions…** opens a backup as an
+  unsaved copy.
+- **Autosave.** An unsaved track is autosaved. After a crash, the next start offers it back.
+- **Share codes.** A track can be copied as a text code and pasted back in.
+- **Road surface.** Asphalt by default, a solid colour, or your own picture.
+- **Grid and symmetry.** The camera panel turns the grid on or off (a 3D lattice once the track leaves the ground) and
+  shows a mirror guide.
 
-### §4 Validation
+## The checker
 
-| item | status | where |
-|---|---|---|
-| The specific force per lateral line, from a design speed or the lap sim | tested | `src/validate/index.js` · `test/validate.test.js`, `test/validate_speed.test.js` |
-| Design speed and acceleration measured from replays | tested | `docs/FINDINGS.md` §3d, `tools/speed.cjs`, `src/validate/limits.js` · `test/validate_speed.test.js` |
-| The 20 g suspension stop and the proven 90 g | tested | `src/validate/limits.js` · `test/validate.test.js` |
-| … per car, from its open config | not yet | one car (the Mach 6) in `src/validate/limits.js` |
-| Jump check: two landings (3.2 g, 6.3 g), minimum speed, reachable | tested | `src/validate/jumps.js` · `test/validate_jumps.test.js`, `test/validate_head.test.js` |
-| Red: holes or gaps in the road; a head in the air | tested | `src/validate/index.js` · `test/validate.test.js`, `test/validate_head.test.js` |
-| Red: a missing soft-collision block | tested | `src/validate/index.js` · `test/validate.test.js` |
-| Red: folds and self-intersection | tested | `src/validate/index.js`, `src/geom/bvh.js` · `test/validate.test.js`, `test/geom_bvh.test.js` |
-| Red: drivable surfaces stacked within about 2 m | tested | `src/validate/index.js` · `test/validate.test.js`, `test/validate_incremental.test.js` |
-| Red: wall-rides built from WALL objects | tested | `src/validate/index.js` · `test/validate.test.js` |
-| Red: surfaces above ~50° without CSP's raycasting | tested | `src/validate/index.js` · `test/validate.test.js`, `test/validate_bounds.test.js` |
-| Full-lap proof before export | tested | `src/validate/index.js`, `src/export/fromwords.js` · `test/validate_speed.test.js`, `test/export_words.test.js` |
-| Feedback: colour per word | tested | `app/preview/batches.js` · `app/test/preview.test.js` |
-| Feedback: red and amber on the track in the preview | not yet | shown in the validation panel (list and load graph); the preview does not paint it on the road |
-| Feedback: a force graph, a lap summary | tested | `app/validate-ui/graph.js`, `app/validate-ui/panel.js` · `app/test/validate-ui-jumps.test.js` |
+The track is checked as you build. Everything it finds is listed in the checker panel in plain words, grouped by place,
+and a click on a place takes the camera there. For example: *the road passes through itself here*, *a hole in the
+road*, *this closed tube is narrower than 9.74 m across the road: the chase camera and a T-180 do not fit inside it*.
 
-### §5 The look
+- A **red** blocks export. Export refuses while any red remains and names every one.
+- A **warning** does not block. **Jumps are tuned by driving:** a jump whose car may fly past its landing at the lap's
+  speed is a warning ("tune it by driving it in AC"); a jump with no landing at all is red.
 
-| item | status | where |
-|---|---|---|
-| 1. Geometry and materials exactly what is exported | tested, with two gaps | `app/preview/trackmodel.js` builds the export's scene · `app/test/aclook.test.js`: every mesh the preview draws has the export's name and material, but the painted start line, grid and pit boxes and the closing seam are not drawn yet (a visible todo) |
-| 2. The preview uses AC's shader set (`ksPerPixel`, `ksMultilayer` …) | tested | `app/preview/acshaders.js`, `app/preview/aclook.js`: `ksPerPixel` and `ksPerPixelNM` ported from Content Manager's Custom Showroom (Ms-PL, licence in `app/preview/`), under one stated reference light; the `ksMultilayer` layer blend is inferred, not verified against AC · `app/test/aclook.test.js`. **L** switches back to a colour per placed word |
-| 3. The look-match instrument (screenshots vs renders, the difference tracked) | built, number not yet measured | `src/lookmatch/` (fixed reference views, a render in the preview's look, the difference as mean CIEDE2000), `scripts/lookmatch.js` · `test/lookmatch.test.js`. No reference shots from AC yet, so no difference is tracked |
-| 4. One-click "see it in Assetto" | tested, with the game launch mocked | `src-tauri/src/ac.rs` (its tests use a mock launcher), `app/install/` · `app/test/share-install.test.js`: built, OFF by default, and never run (the author, for v1: "No in game testing needed") |
+The limits come from measurements of real T-180 tracks and replays, not guesses ([`docs/FINDINGS.md`](docs/FINDINGS.md)).
 
-### §5b Textures
+## Exporting
 
-| item | status | where |
-|---|---|---|
-| Texture slots per surface strip; fonts give defaults, words override | tested | `src/texture/slots.js`, `src/doc/textures.js`, the textures panel in the side panel (`app/texture/`) · `test/texture-set.test.js`, `test/doc-textures.test.js` |
-| … drawn by the preview and written by the export alike (a textured floor) | tested | `src/texture/set.js` `withTextureSet`, `app/preview/aclook.js` · `test/export-textures.test.js`, `app/test/export.test.js`. Only the FLOOR slot reaches the road mesh yet: walls, lines, kerbs and edge glow are stored in the document but not yet split onto their own strips of the mesh, so neither the preview nor the export draws them |
-| Automatic mapping (along by distance, across by width), with tiling handles | built, not yet used | `src/texture/mapping.js` · `test/texture-mapping.test.js` tests the mapping itself, but the road mesh still maps textures along its centreline (`src/geom/mesh.js`), so the tiling handles are stored and not yet applied |
-| Bring your own PNG or JPG, converted to DDS with mipmaps | tested | `src/texture/png.js`, `jpeg.js`, `dds.js` · `test/texture-image.test.js` |
-| Warnings about what AC can't do (e.g. compressed normal maps) | tested | `src/texture/warnings.js` · `test/texture-set.test.js` |
-| A texture maker: procedural layers, decals, every layer a parameter set | tested | `src/texmaker/`, `app/texmaker/` · `test/texmaker.test.js` |
-| Materials mapped onto AC's shaders (`ksPerPixel`, `ksPerPixelNM`, `ksMultilayer`) | not yet | the preview draws all three (§5 row 2); the export writes `ksPerPixel` materials only |
-| Texture packs: save, share and import | tested | `src/doc/packs.js` · `test/doc-packs.test.js` |
-| Budget: texture memory and resolution per track | tested | `src/texture/set.js`, `app/texture/` · `app/test/texture-panel.test.js` |
+- **Export to Assetto Corsa** (the main button) writes the track straight into AC's `content\tracks`. The track must be
+  closed, saved under a name, and free of reds. It finds AC by itself: Steam's own folder, then every Steam library.
+  - The first time the app starts, a card asks to confirm the AC folder Steam found (**Use it** / **Choose another…**),
+    or to pick one if Steam has none. Exporting without answering the card still finds AC, or asks.
+  - **It only ever writes folders named `t180b_…`.** It never overwrites a track it did not make. Exporting the same
+    track again updates its folder.
+- **The ⋯ menu** next to it:
+  - **Export…**: the same track folder, into any folder you pick.
+  - **Test export (unfinished)…**: an open, unfinished track, to drive it by hand. Reds are listed as warnings, the
+    road ends in a run-off and a wall, and the folder is `t180b_<name>_test`. A closed track uses the normal Export.
+  - **Assetto Corsa folder…**: change the AC folder.
+  - **See it in Assetto**: starts AC on the exported track. It is off until you tick its box, and it has not been
+    tried yet (see *Status and limits*).
+- **What the folder holds:** the track model (`.kn5`), an AI line, `models.ini`, the `data` and `ui` files, a map, and
+  a start with a grid on the longest straight. The road carries the T-180 soft-collision setup.
 
-### §5c Spawns, pits and timing
+## Controls
 
-| item | status | where |
-|---|---|---|
-| Markers in track coordinates (stay on the road through edits, on banks and walls) | tested | `src/markers/place.js`, `layout.js` · `test/markers_track.test.js` |
-| Race grid: patterns, spacing, count, slot by slot, numbered from pole | tested | `src/markers/layout.js`, `app/markers/` · `test/markers_track.test.js`, `app/test/markers-panel.test.js` |
-| Pit boxes; `pitboxes` from the real count | tested | `src/markers/`, `src/export/trackfiles.js` · `test/markers_export.test.js`, `test/export_words.test.js` |
-| The pit lane: a side road leaving and rejoining | tested | `src/geom/pitlane.js`, `src/doc/pitlane.js`, `src/export/pitlane.js` · `test/geom-pitlane.test.js`, `test/doc-pitlane.test.js`, boxes along a lane `test/markers_lane.test.js` |
-| Hotlap start: a run-up to the design speed | tested | `src/markers/layout.js` `runUpM` · `test/markers_track.test.js` |
-| Timing gates `AC_TIME_0_L/R`, sectors 1 and 2 | tested | `src/markers/layout.js` · `test/markers_track.test.js`, `test/markers_export.test.js` |
-| The red checks before export (start ahead of grid, L/R, height and heading, slots, pit count) | tested | `src/markers/checks.js`, `src/export/markers.js` · `test/markers_track.test.js`, `test/markers.test.js` |
-| "Spawn here": launch AC at a marker | not yet | "See it in Assetto" (off by default, never run) sets only the track, so AC starts wherever its session puts the car; choosing a marker is not built |
-| Paint: start/finish line (wall to wall), grid boxes, pit boxes | tested | `src/markers/paint.js` (surface meshes) · `test/markers_track.test.js`, `test/markers_export.test.js` |
-| … as texture layers (§5b), with grid numbers and the pit lane's entry and exit lines | not yet | paint is geometry; texture layers exist now (§5b) but do not carry the marks yet |
-| Race furniture: gantry, lights, sector boards | not yet | nothing built; working start lights are a parked idea |
+| key or mouse | does |
+|---|---|
+| W / S, A / D | fly forward and back, left and right |
+| E or Space / Q or Left Ctrl | fly up / down (Left Ctrl only when held alone, after about 0.2 s) |
+| Shift | fly faster, rising the longer it is held |
+| right-button drag, or the arrow keys | look around (left-button drag also looks, in Free view) |
+| scroll wheel / Ctrl + wheel | zoom / the lens (field of view); a middle click resets the lens |
+| C / B | next camera view (Build, Overhead, Side, Chase, Free) / back to the Build view |
+| L | the AC look or a colour per piece |
+| Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z) | undo, redo |
+| Ctrl+S | save |
+| Ctrl+Backspace | remove the last piece |
+| a drag on a handle | change that value; Shift for a tenth of the speed, Ctrl to snap to round steps |
+| a double-click on a handle | put the value back (0 for bank, turn and climb) |
 
-### §6 Export
+The camera keys are ignored while you type in a text field.
 
-| item | status | where |
-|---|---|---|
-| kn5 version 5 written directly (Y-up, flipped V, winding) | tested | `src/export/kn5write.js`, `scene.js` · `test/kn5write.test.js` |
-| Physics meshes named `<digit><KEY>`; visual meshes non-physics | tested | `src/geom/mesh.js`, `src/markers/paint.js` · `test/kn5write.test.js`, `test/markers_export.test.js` |
-| Markers as nodes, L/R order validated | tested | `src/markers/`, `src/export/markers.js` · `test/markers.test.js`, `test/export_words.test.js` |
-| `models.ini` | tested | `src/export/trackfiles.js` · `test/trackfiles.test.js` |
-| `models_<layout>.ini` (layouts) | tested | `src/export/layouts.js` · `test/export-layouts.test.js` |
-| `data/surfaces.ini` with the T-180 soft-collision block as a toggle | tested | `src/export/trackfiles.js` · `test/trackfiles.test.js`, `test/export_words.test.js` |
-| CSP's `WAV_PITCH=extended-0` opt-in | not yet | not written |
-| `ui/ui_track.json`, `preview.png`, `outline.png`, `map.png`, `data/map.ini` | tested | `src/export/trackfiles.js` · `test/trackfiles.test.js` |
-| AI line `ai/fast_lane.ai` v7 | tested | `src/export/ailine.js` · `test/ailine.test.js` (that AC accepts generated speed fields is unverified) |
-| Self-test: read every kn5 back with our own reader | tested | `src/export/fromwords.js` · `test/export_words.test.js` |
-| … and with AcTools' reader | not yet | own reader only |
-| Size: keep the track near the origin; measure the ~20 km limit | not yet | not measured |
-| Export from words, one folder per variant, refusing any red | tested | `src/export/fromwords.js`, `scripts/export_words.js`, `app/export/` · `test/export_words.test.js`, `app/test/export.test.js` |
+## Where your files live
 
-## What's here
-- **`src/`:** the program.
-  - `doc/`: the document, the words, phrases and library.
-  - `geom/`: paths, profiles, meshes, the BVH.
-  - `validate/`: loads, jumps, the reds and ambers, handle bounds.
-  - `markers/`: §5c.
-  - `texture/`: §5b: slots, mapping, PNG/JPG to DDS, packs, the texture set the preview and the export share.
-  - `texmaker/`: §5b, the procedural texture maker (a texture as text).
-  - `export/`: kn5, the track files, the AI line.
-- **`app/`:** the Tauri v2 desktop app, the equation builder (since D239 the only one): its controls, preview, cameras, validation,
-  road surface, share codes, install, autosave and the guide. See `app/README.md`.
-- **`docs/FINDINGS.md`:** everything measured so far, with the command that reproduces each number.
-  - the shape language of 11 T-180 tracks
-  - the mesh envelope proven tracks drive on
-  - real loads from replays, and where a T-180's suspension runs out
-  - visual versus physics clipping, and the soft-collision block every working T-180 track shares
-  - the whole library read as text: 12 layouts, ~241 km, laps verified against 5 replays
-  - jump flights; how fast and how hard the car accelerates
-  - Wrong turns are kept and marked, not deleted.
-- **`src-tauri/`:** the native side of the app (file access, Install to AC, the launch that is off by default) and
-  `release.cjs`, which builds the installer.
-- **`docs/RELEASE.md`:** how the installer is built, what is in it, and what it does not do.
-- **`docs/ARCHITECTURE.md`:** the plan.
-  - the language as data model; geometry; validation
-  - the AC+CSP look-match; textures; spawns, pits and timing
-  - export; learning; environment; stack
-  - first milestones and open gaps
-- **`docs/research/`:** three source-cited research reports: the AC export pipeline, how track and coaster builders
-  are designed, and the editor's engineering.
-- **`tools/`:** the dependency-free Node tools that produced the findings. Run them from `tools/`. They read your
-  installed AC tracks, and the replay tools use [blackbox](https://github.com/solariz3d)'s parser at
-  `%USERPROFILE%\blackbox`.
-  - `kn5.cjs`: reads AC models
-  - `read_track.cjs`: reads any track into words, e.g. `node read_track.cjs "<AC>\content\tracks\sakura_speedway"
-    21768 28.7 > sakura.read.json`
-  - `study.cjs`, `envelope.cjs`: shape language and mesh envelope
-  - `loads.cjs`, `bottoming.cjs`, `boxdepth.cjs`, `jump_flight.cjs`, `speed.cjs`: from replays
-  - `topdown.cjs`: draws a reading over the track
-- **`results/`:** small result files and two full-lap maps.
+Everything you make lives in `%APPDATA%\com.solariz3d.t180-track-builder`, never in the program's folder:
+
+- `tracks\`: your saved tracks, one `.t180track` file each.
+- `track-backups\`: the versions each Save replaced, and the copies made before a close or a delete.
+- `pieces\`: your saved pieces, one `.t180piece` file each.
+- `autosave.t180auto`: the unsaved track, until you save it.
+- `ac_root.txt`: the AC folder exports go into. `see_it_in_assetto.enabled`: whether See it in Assetto may start AC.
+
+Exported tracks go into AC's own `content\tracks` folder (or the folder you pick for Export…).
+
+## Status and limits
+
+- **Driven in AC:** exported tracks load and drive in Assetto Corsa. The author has driven them, a closed tube oval
+  among them.
+- **Not yet checked in AC:** "See it in Assetto", which has never been run. That AC accepts the AI line's speeds. A jump's
+  real reach: that is what the warning above is for.
+- **One car's limits:** the checker judges every track against the Mach 6, the T-180 car whose limits were measured
+  from replays. Other cars, T-180 or not, are not modelled; their own setups are not read.
+- **Not built:** scenery, terrain, props, race furniture (gantries, lights), a pit lane in this builder.
+- **Windows only.**
+
+The plan is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The detailed item-by-item status of the 0.2.2 release is
+kept in [`docs/STATUS_0.2.2.md`](docs/STATUS_0.2.2.md).
+
+## Building from source
+
+Clone `https://github.com/solariz3d/t180-track-builder.git`. You need [Rust](https://rustup.rs) with `tauri-cli` 2
+(`cargo install tauri-cli`), and Node for the build script and the tests; the app itself has no frontend build step.
+From the repository's folder: `cd src-tauri`, then `cargo tauri dev`, runs the app; `node src-tauri/release.cjs`
+builds the Windows installer (see [`docs/RELEASE.md`](docs/RELEASE.md)). The tests need no dependencies:
+`node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`. The developer's guide to the app is
+[`app/README.md`](app/README.md), and the measurements behind the checker are in [`docs/FINDINGS.md`](docs/FINDINGS.md).
 
 ## Credits
 Built on the work of the T-180 community: the car and test-track author ohyeah2389, and the authors of every track

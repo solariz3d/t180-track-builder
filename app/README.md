@@ -2,7 +2,8 @@
 
 A Tauri v2 desktop app built the way blackbox is built: a static web UI, plus a small Rust side for the disk. v1 is
 **the track only**: no terrain, scenery or props. **The user builds it.** Like a coaster builder, the track grows from
-its open end, and the user picks the next piece, font, tempo and direction there.
+its open end, and the user shapes the next piece there (its channels, in the Extend fields or by its handles) and
+presses Extend. Since D239 this is the equation builder only; the word builder (pieces, fonts, tempos) is retired.
 
 ## Run it
 
@@ -41,6 +42,9 @@ repository's layout, so a relative `require` means the same thing in the webview
 | `app/test/` | each owner, by prefix | `shell*`, `palette*`, `export*` are A's; others as named |
 
 ## The seam: what C and E plug into
+
+*This section describes the seam as it was built for the retired word builder (`app/shell.js`: words, `sculpt(id, patch)`). The page now mounts the same
+panels on the core shell (`app/core/coreshell.js`), which keeps the same state shape; see "One builder" below.*
 
 **Each panel is a directory with an `index.js` that exports `mount(root, shell)`.** `app/index.html` loads
 `app/preview/index.js`, `app/camera/index.js`, `app/validate-ui/index.js`, the core's road surface, share, install and the guide through the loader.
@@ -143,9 +147,11 @@ None of it reads or writes the document or the export: the mirror ghost is a pic
 
 ## Files on disk
 
-- **A track** is `<name>.t180track`: the document's canonical text (`src/doc/serial.js`), in
-  `<app data>/tracks/`.
-- **The user's pieces** are `library.t180lib` (`src/doc/library.js` `serializeLibrary`), in `<app data>/`.
+- **A track** is `eq-<name>.t180track`: the core document's canonical text (`src/core/document.js`, schema
+  `t180b.core/4`), in `<app data>/tracks/`. A file there WITHOUT the `eq-` prefix is a track of the retired word builder
+  (`src/doc/serial.js`): it is not listed in Open…, and it is never deleted.
+- **The retired word builder's library** (`library.t180lib`, `src/doc/library.js`) is no longer read by the page; saved
+  pieces are the `.t180piece` files below.
 - **Add jump (D243).** The Jump fields and button sit in the Extend section (`app/core/panel.js`); the shell's `addJump` calls `src/core/jump.js` and says its refusals in plain words (`app/core/jumpplan.js jumpWords`). `app/core/jumpplan.js` reads
   each flight off the built path (lip, gap, drop, landing pitch) and computes the car's ballistic arc with the core's `flightY` at the design speed the ramp is sized for (`MACH6.designSpeedKmh`, 460 km/h); `app/core/flightlayer.js` draws it as dashed arcs
   over the preview for the placed track and for the candidate (the ghost, flagged `jump`).
@@ -161,7 +167,7 @@ None of it reads or writes the document or the export: the mirror ghost is a pic
   about 1.5 s after the last edit while the track is unsaved. It is cleared by saving under a name, or by closing with
   nothing unsaved. Closing with unsaved changes keeps it, so the next start offers the track back rather than losing
   it.
-- **An export** is a `t180b_<name>` folder in the folder the user picks. Inside an AC install's `content	racks`, only
+- **An export** is a `t180b_<name>` folder in the folder the user picks. Inside an AC install's `content\tracks`, only
   `t180b_*` folders are written: another track's folder is refused, by the page and again by the native side. **One exception, an
   empty folder:** a folder made directly in `content\tracks` ("T-180 TUBE OVAL") that is not `t180b_*` and is EMPTY is not another
   track, so the export goes into `content\tracks` as the normal `t180b_<track name>` and that empty folder is removed afterwards
