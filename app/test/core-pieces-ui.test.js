@@ -355,10 +355,10 @@ function stubPreview(P1) {
   const { doc, shell } = P1, S = { ghost: null, ghosts: 0, clears: 0, hide: false, ghostFor: null };
   const build = (segments, start) => G.buildPath(segments, { step: 2, closed: false, ...(start ? { start } : {}) });
   const placed = () => { const r = shell.getState().resolved; return r.segments.length ? build(r.segments, r.start) : { samples: [] }; };
-  doc.addEventListener('t180-ghost', (ev) => { if (S.deaf) return; const c = ev.detail.candidate; S.ghosts++; S.ghost = build(c.segments, c.start); S.ghostFor = shell.getState().history.present; if (typeof ev.detail.reply === 'function') ev.detail.reply({ ok: true }); });
+  doc.addEventListener('t180-ghost', (ev) => { if (S.deaf) return; const c = ev.detail.candidate; S.ghosts++; S.ghost = build(c.segments, c.start); S.ghostSegs = c.segments; S.ghostJump = !!c.jump; S.lastCandidate = c; S.ghostFor = shell.getState().history.present; if (typeof ev.detail.reply === 'function') ev.detail.reply({ ok: true }); });
   doc.addEventListener('t180-ghost-clear', () => { S.clears++; S.ghost = null; });
   shell.subscribe((st) => { if (S.ghost && S.ghostFor !== st.history.present) S.ghost = null; });   // a change to the placed track retires the ghost (preview.js refresh)
-  doc.addEventListener('t180:ghost-request', (ev) => { const p = placed(), last = p.samples.length ? p.samples[p.samples.length - 1].s : 0; ev.detail.reply(S.ghost && !S.hide ? { samples: S.ghost.samples, s0: last } : null); });
+  doc.addEventListener('t180:ghost-request', (ev) => { const p = placed(), last = p.samples.length ? p.samples[p.samples.length - 1].s : 0; ev.detail.reply(S.ghost && !S.hide ? { samples: S.ghost.samples, segments: S.ghostSegs, jump: S.ghostJump, s0: last } : null); });
   doc.addEventListener('t180:track-request', (ev) => ev.detail.reply({ segments: shell.getState().resolved.segments, path: placed() }));   // after the panel's own (empty) one: the last reply wins
   doc.addEventListener('t180:view', (ev) => {
     const si = shell.getState().sculpt ? shell.sculptInfo() : null;   // Sculpt: the camera looks at the selected piece, from behind and above
@@ -478,4 +478,43 @@ test('row 13: the preview\'s ghostInfo (what the handles read): none without a g
   s.selectPiece(1); s.deleteSelection(); assert.ok(pv.view().ghost > 0); assert.equal(pv.ghostInfo(), null, 'a delete preview\'s ghost is not Extend\'s: no handles on it');
   s.cancelDelete(); pv.dispose();
   const e = await createCoreShell({ brushFn: null, autosaveMs: 0 }), pe = headlessPreview(e); pe.showGhost(e.candidate({ length: 100 })); const first = pe.ghostInfo(); assert.equal(first.s0, 0, 'on an empty track the new piece starts at 0'); assert.ok(first.samples.length > 10); pe.dispose();
+});
+
+// ── D243 item 1: the Add-jump control through the panel (the pure and shell rows are app/test/jump-ui.test.js) ──
+//   14  the Jump block: its hint and the speed the ramp is sized for from the start; hover or typing shows the jump as a ghost (flagged, with the flight in words: which arc, the speed, where it comes down); a refused
+//       jump says why and shows none; the drag handles stay off a jump's ghost and come back; Add jump adds it (one step), the next Extend lays the road; a refusal in plain words in the status line
+//   15  the preview's ghostInfo carries the jump flag and the segments
+const statusOf = (P1) => P1.all().find((e) => e.attrs.role === 'status').textContent;
+test('row 14: the Jump block: the hint and the ramp speed from the start; a ghost with the flight in words; a refused jump says why; the handles stay off the jump ghost; Add jump is one step and the next Extend lays the landing road', async () => {
+  const P1 = await handlePanel(), { shell, S } = P1, gap = fieldOf(P1, 'jump gap m'), drop = fieldOf(P1, 'drop m (+ down)'), land = fieldOf(P1, 'landing °');
+  assert.match(P1.text('jump flight'), /^Add jump takes off from the end of the road/); assert.match(P1.text('jump flight'), /The landing ramp is sized for 460 km\/h, fixed today\.$/, 'the speed it is sized for, before any hover');
+  gap.value = '15'; drop.value = '1'; land.value = '-2';   // (a flat take-off: at 460 km/h both measured falls clear 15 m)
+  assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are up'); P1.button('Add jump').onmouseenter();
+  assert.equal(S.ghostJump, true, 'the ghost is a jump\'s'); assert.equal(S.lastCandidate.jump, true); assert.ok(S.lastCandidate.segments.some((g) => g.kind === 'gap'));
+  const note = P1.text('jump flight'); assert.match(note, /ballistic, at 460 km\/h, falling at 3\.2 g and 6\.3 g/); assert.match(note, /3\.2 g: comes down \d+\.\d m after the lip/); assert.match(note, /6\.3 g: comes down \d+\.\d m after the lip/); assert.match(note, /The ramp is \d+\.\d m long\./); assert.match(note, /sized for 460 km\/h, fixed today; the keeper has not decided/);
+  for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'no Extend handles on a jump\'s ghost');
+  assert.equal(P1.panel.flights.flights().length, 1, 'the flight overlay reads the ghost\'s flight'); assert.equal(P1.panel.flights.lines().length, 2, 'two dashed arcs');
+  // typing changes the ghost and the words
+  const g0 = S.ghosts; gap.value = '120'; drop.value = '3'; land.value = '-3'; gap.oninput(); assert.ok(S.ghosts > g0, 'the ghost followed the field'); assert.match(P1.text('jump flight'), /6\.3 g: does NOT reach the landing at 460 km\/h \(it needs \d+ km\/h\): the jump is red\./);
+  // a validation speed other than the ramp's is said
+  shell.setDesignSpeed(300); gap.oninput(); assert.match(P1.text('jump flight'), /Validation is using 300 km\/h \(the design speed box\), so the jump can be red there even though the ramp is sized for 460\./); shell.setDesignSpeed(null);
+  // a refused jump: the reason in plain words, no ghost
+  gap.value = '0'; gap.oninput(); assert.match(P1.text('jump flight'), /^No preview of this jump: The gap must be more than 0 m: it is how far the car flies along the ground\./); assert.equal(S.ghost, null, 'no ghost for a refused jump');
+  // leaving the button clears the ghost, and the Extend handles come back
+  gap.value = '40'; gap.oninput(); P1.button('Add jump').onmouseleave(); assert.equal(S.ghost, null); for (let i = 0; i < 40; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are back');
+  // Add jump: one undo step, the flight is the last piece, the message says what next
+  const d0 = shell.getState().history.present, past0 = shell.getState().history.past.length; P1.button('Add jump').onclick();
+  const d1 = shell.getState().history.present; assert.equal(d1.pieces.length, d0.pieces.length + 1); assert.equal(d1.pieces[d1.pieces.length - 1].type, 'flight'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(statusOf(P1), /^Jump added\. Press Extend to lay the road it lands on\.$/);
+  // the same again is refused in plain words, in the status line, with nothing added
+  P1.button('Add jump').onclick(); assert.match(statusOf(P1), /^The track already ends in a jump\. Press Extend first, so the car has road to land on, then add the next one\.$/); assert.equal(shell.getState().history.present, d1);
+  // the next Extend lays the landing road
+  P1.button('Extend').onclick(); const d2 = shell.getState().history.present; assert.deepEqual(d2.pieces.slice(-2).map((p) => p.type), ['flight', 'road']); assert.equal(shell.getState().message, null, shell.getState().message);
+  P1.panel.unmount();
+});
+
+test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and carries its segments (what the handles and the flight overlay read)', async () => {
+  const s = await track(), pv = headlessPreview(s);
+  pv.showGhost(s.candidate({ length: 100 })); let g = pv.ghostInfo(); assert.equal(g.jump, false, 'an Extend ghost is not a jump'); assert.ok(Array.isArray(g.segments) && g.segments.length > 0);
+  pv.showGhost(s.candidateJump({ gap: 30, drop: 1, landDeg: -2 })); g = pv.ghostInfo(); assert.equal(g.jump, true); assert.ok(g.segments.some((x) => x.kind === 'gap'), 'the flight is among the ghost\'s segments'); assert.ok(g.samples.length > pv.track().path.samples.length);
+  pv.clearGhost(); assert.equal(pv.ghostInfo(), null); pv.dispose();
 });

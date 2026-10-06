@@ -26,7 +26,7 @@
 //   't180:guides-request'  { detail: { reply(state) } }               the current one, at once, for a panel mounted after the preview
 // And for the READOUT labels (L130, app/core/labels.js), answered read-only from the preview's own view():
 //   't180:view'           { detail: { reply(v) } }        { pose, mode, head } (head: the placed track's build head, or null)
-//   't180:ghost-request'  { detail: { reply(g) } }        D244, for the drag handles: the ghost of the next piece as { samples, s0 }, or null when none shows (preview.ghostInfo)
+//   't180:ghost-request'  { detail: { reply(g) } }        D244, for the drag handles (and D243, the flights): the ghost of the next piece as { samples, segments, jump, s0 } (jump: it is an Add-jump candidate), or null when none shows (preview.ghostInfo)
 //
 // A MOUNT THAT FAILS says why, twice: the reason is left visible in the panel ("The preview could not start: …"), and
 // mount throws a PreviewMountError with the same message, for the page to show where it likes (A's display half).

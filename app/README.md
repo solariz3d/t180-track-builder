@@ -144,6 +144,9 @@ None of it reads or writes the document or the export: the mirror ghost is a pic
 - **A track** is `<name>.t180track`: the document's canonical text (`src/doc/serial.js`), in
   `<app data>/tracks/`.
 - **The user's pieces** are `library.t180lib` (`src/doc/library.js` `serializeLibrary`), in `<app data>/`.
+- **Add jump (D243).** The Jump fields and button sit in the Extend section (`app/core/panel.js`); the shell's `addJump` calls `src/core/jump.js` and says its refusals in plain words (`app/core/jumpplan.js jumpWords`). `app/core/jumpplan.js` reads
+  each flight off the built path (lip, gap, drop, landing pitch) and computes the car's ballistic arc with the core's `flightY` at the design speed the ramp is sized for (`MACH6.designSpeedKmh`, 460 km/h); `app/core/flightlayer.js` draws it as dashed arcs
+  over the preview for the placed track and for the candidate (the ghost, flagged `jump`).
 - **Drag handles and Sculpt (D244, D244b).** `app/core/handles.js` draws the handles on the Extend ghost (and, in Sculpt, on the one selected placed piece) as an overlay canvas, and holds the numbers (placement, a drag in px to a
   value, Shift and Ctrl) as pure functions. The panel is the host: an Extend drag types into the field and fires the field's own handler; a Sculpt drag is the shell's `beginSculpt` / `sculptTo` / `endSculpt`. The ghost's path comes from the
   preview (`ghostInfo()`, the `t180:ghost-request` event). Sculpt changes the shape channels only, and `app/core/centreline.js` refuses by name any step that would move the centreline (see `CHANGELOG.md`).

@@ -60,6 +60,8 @@ const RD = require('../../src/core/readout.js');
 const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 const XS = require('./xsec.js');   // the cross-section channels' names (D225): the edge curve and the tube
 const CL = require('./centreline.js');   // D244b: the Sculpt guard (the centreline must not move)
+const JU = require('../../src/core/jump.js');   // D243: add a jump at the head
+const JW = require('./jumpplan.js');   // D243: the flight as the car flies it, and the core's jump refusals in plain words
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted (D239)
@@ -177,6 +179,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return entry;   // the caller puts it in the SAME state change as the preview (a panel drawn for the preview must already see its check)
   }
   const doc = () => st.history.present;
+  const jumpFor = (o = {}) => JU.jump(doc(), { gap: Number(o.gap), drop: Number(o.drop === undefined || o.drop === '' ? 0 : o.drop), land: Number(o.landDeg === undefined || o.landDeg === '' ? 0 : o.landDeg) * Math.PI / 180 });
   let reads = [], readsFor = null;
   const segmentsOf = (d) => (d.pieces.length ? toSegments(d) : []);
   // THE START POSE travels with the segments (found by test 1, D186): the geometry's shape depends on the start PITCH, so a path
@@ -232,6 +235,17 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     sculptTo: (delta) => api.brushTo(delta),
     endSculpt: () => api.endBrush(),
+    /**
+     * D243 item 1, ADD A JUMP at the head (the core is src/core/jump.js, E's). `gap` m along the ground from the take-off lip, `drop` m (+ down), `landDeg` the landing ramp's pitch in degrees
+     * (negative slopes down). The take-off is the last road piece's end, its pitch set with the existing fields beforehand; the NEXT Extend lays the road the car lands on. One undo step. The core
+     * refuses by name (NO_TAKEOFF, CLOSED, BAD_JUMP, JUMP_AFTER_JUMP, FLIGHT_OFFSET, JUMP_PAST_VERTICAL, JUMP_UNSOLVABLE) and the message is that refusal in plain words (app/core/jumpplan.js jumpWords).
+     * candidateJump is the ghost of it, for the preview (flagged `jump`, so the drag handles stay off it); it throws the core's CoreError, which the panel puts through the same words.
+     */
+    candidateJump(o) { const d = jumpFor(o); return { segments: segmentsOf(d), closed: false, start: startOf(d), jump: true }; },
+    addJump(o) {
+      let d; try { d = jumpFor(o); } catch (e) { if (e && e.name === 'CoreError') return set({ message: JW.jumpWords(e, o) }); throw e; }
+      return commit('jump', () => d, { lastEdited: null, ...ok('Jump added. Press Extend to lay the road it lands on.') });
+    },
 
     /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute). */
     extend: (opts) => commit('extend', () => extend(doc(), opts), { lastEdited: [doc().pieces.length] }),
@@ -290,7 +304,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
         // D244b: the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
-        if (b.sculpt) { const moved = CL.routeMoved(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `this change would move the track's centreline (${moved}), so Sculpt refused it`); }
+        if (b.sculpt) { const moved = CL.routeMovedDetail(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `Sculpt can't do that: ${CL.plainWhy(moved)}. The drag stays at its last good step.`); }   // (D243 F3: the reason in plain words, not the internal field)
         // the radius the brush really used (E's brush widens a narrow one; the chair's RULING 2: always shown), and any note of its
         // the radius really used: E's brush reports it as radiusUsed (sculpt.js), shown whenever it widened (ruling 2)
         const used = Number.isFinite(res.radiusUsed) ? res.radiusUsed : Number.isFinite(res.rUsed) ? res.rUsed : null;
@@ -310,7 +324,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     endBrush() {
       const b = st.brush; if (!b) return st;
       // D244b: the direct check when a Sculpt drag ends: both centrelines built and compared bit for bit; a drag that moved it is dropped whole
-      if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: `SCULPT_MOVES_CENTRELINE: the centreline moved (${moved}); the whole drag was dropped` }); }
+      if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: 'SCULPT_MOVES_CENTRELINE: Sculpt dropped this drag: when it ended, the track\'s centreline had moved (checked point by point), so the track is as it was.' }); }
       // the brushed pieces are what close() goes round (the brush's window)
       // (endDrag keeps the same present, so a Sculpt selection, re-based at each step, still belongs to it)
       return attempt(() => set({ history: D.endDrag(st.history), brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }));

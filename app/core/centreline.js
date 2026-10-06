@@ -18,18 +18,39 @@ const ROLL = Object.freeze(['roll0', 'roll1', 'rollRate0', 'rollRate1']);   // t
 const same = (a, b) => (a === undefined || b === undefined ? a === b : Object.is(a, b));
 const offsets = (doc) => JSON.stringify(doc.pieces.map((P) => [P.id, P.channels ? P.channels.h : null, P.channels ? P.channels.l : null]));
 
-function routeMoved(baseDoc, baseSegments, newDoc, newSegments, baseStart, newStart) {
-  if (baseSegments.length !== newSegments.length) return `the number of segments changed (${baseSegments.length} to ${newSegments.length})`;
+/** What moved, structured: { kind, text, id, seg, field, from, to } (kind: 'segments', 'piece', 'field', 'start', 'offsets'); null when nothing the path is made of moved. `text` is the technical sentence routeMoved returns. */
+function routeMovedDetail(baseDoc, baseSegments, newDoc, newSegments, baseStart, newStart) {
+  if (baseSegments.length !== newSegments.length) return { kind: 'segments', text: `the number of segments changed (${baseSegments.length} to ${newSegments.length})` };
   for (let i = 0; i < baseSegments.length; i++) {
     const a = baseSegments[i], b = newSegments[i];
-    if (a.id !== b.id || a.kind !== b.kind) return `segment ${i} is not the same piece any more`;
+    if (a.id !== b.id || a.kind !== b.kind) return { kind: 'piece', seg: i, id: a.id, text: `segment ${i} is not the same piece any more` };
     const fields = a.heartline || a.heartline1 || b.heartline || b.heartline1 ? [...ROUTE, ...ROLL] : ROUTE;
-    for (const f of fields) if (!same(a[f], b[f])) return `${a.id} (segment ${i}): ${f} moved from ${a[f]} to ${b[f]}`;
+    for (const f of fields) if (!same(a[f], b[f])) return { kind: 'field', seg: i, id: a.id, field: f, from: a[f], to: b[f], text: `${a.id} (segment ${i}): ${f} moved from ${a[f]} to ${b[f]}` };
   }
-  if (baseStart && newStart) for (const k of ['theta', 'p']) if (!same(baseStart[k], newStart[k])) return `the start ${k} moved`;
-  if (baseStart && newStart) for (let k = 0; k < 3; k++) if (!same(baseStart.pos[k], newStart.pos[k])) return 'the start position moved';
-  if (offsets(baseDoc) !== offsets(newDoc)) return 'a height or sideways offset changed';
+  if (baseStart && newStart) for (const k of ['theta', 'p']) if (!same(baseStart[k], newStart[k])) return { kind: 'start', text: `the start ${k} moved` };
+  if (baseStart && newStart) for (let k = 0; k < 3; k++) if (!same(baseStart.pos[k], newStart.pos[k])) return { kind: 'start', text: 'the start position moved' };
+  if (offsets(baseDoc) !== offsets(newDoc)) return { kind: 'offsets', text: 'a height or sideways offset changed' };
   return null;
+}
+/** The same check as one technical sentence, or null (what the unit tests and the log read). */
+function routeMoved(...a) { const d = routeMovedDetail(...a); return d ? d.text : null; }
+
+/**
+ * THE REASON IN THE KEEPER'S WORDS (D243's F3: C's look found the refusal naming an internal field, "heartline1 moved from undefined to 0"). `d` is what routeMovedDetail returns. A tube's roll axis is its own
+ * centre once its sweep passes 300° (src/core/adapter.js heartlineOf), so its width, bank and sweep feed the route there; a sweep that CROSSES 300° makes that field appear.
+ */
+function plainWhy(d) {
+  if (!d) return '';
+  if (d.kind === 'field') {
+    if (/^heartline|^roll/.test(d.field)) return d.from === undefined || d.to === undefined
+      ? `the sweep of ${d.id} would pass 300°, where a tube starts to turn about its own centre, and that would move the road after it`
+      : `${d.id} is a tube past 300° of sweep, where it turns about its own centre, so changing its sweep, width or bank would move the road after it`;
+    if (d.field === 'length') return `it would change the length of ${d.id}, and that moves everything after it`;
+    return `it would change the turn or climb of ${d.id}, and that steers everything after it`;
+  }
+  if (d.kind === 'start') return 'it would move where the track starts';
+  if (d.kind === 'offsets') return 'it would change a height or sideways offset of the road';
+  return 'it would change how the track is built, and that moves the road after it';
 }
 
 /** The centreline as numbers: x, y, z and the tangent at every sample, from the resolved track (segments, start, closed, lift), the way the preview builds it. */
@@ -49,4 +70,4 @@ function pathMoved(base, newResolved, step = 2) {
   return null;
 }
 
-module.exports = { routeMoved, pathMoved, snapshot, ROUTE, ROLL };
+module.exports = { routeMoved, routeMovedDetail, plainWhy, pathMoved, snapshot, ROUTE, ROLL };
