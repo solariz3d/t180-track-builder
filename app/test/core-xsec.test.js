@@ -264,14 +264,17 @@ test('xsec panel: a refusal the REAL core makes on Extend is shown in the panel 
   assert.match(p.message(), /^[A-Z][A-Z_]+: /, `the message carries the core's refusal name: "${p.message()}"`);
   assert.equal(p.shell.getState().history.present.pieces.length, 0, 'and nothing was placed');
 });
-test('xsec panel: the bank field takes 360 and −540 and reads them back (S1 iv)', async () => {
-  const p = await mountPanel();   // the real core: it winds the bank already (E's V5)
-  const bank = p.field('bank °');
+// D259 AMENDED THIS ROW BY NAME (the keeper, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360"): it was "xsec panel:
+// the bank field takes 360 and −540 and reads them back (S1 iv)". The field still takes any number (no min or max), but the bank keeps within ONE turn and keeps its sign,
+// shown and applied: 360 is 0 (no roll), -540 is -180. The core still winds whatever it is given (E's V5, unchanged).
+test('xsec panel: the bank field takes any number and keeps it within one turn, its sign kept: 360 is 0 and -540 is -180 (D259)', async () => {
+  const p = await mountPanel();
+  const bank = p.field('bank °'), head = () => p.shell.headState().phi * 180 / Math.PI;
   assert.ok(!('max' in bank.attrs) && !('min' in bank.attrs), 'the bank input has no min or max');
   p.type('length m', 300); p.type('bank °', 360); p.button('Extend').onclick();
-  assert.equal(p.field('bank °').value, '360');
+  assert.equal(p.field('bank °').value, '0'); assert.ok(Math.abs(head()) < 1e-6, `360 is no roll: ${head()}`);
   p.type('length m', 300); p.type('bank °', -540); p.button('Extend').onclick();
-  assert.equal(p.field('bank °').value, '-540');
+  assert.equal(p.field('bank °').value, '-180'); assert.ok(Math.abs(head() + 180) < 1e-6, `-540 is -180: ${head()}`);
 });
 
 // ── the head marker ──

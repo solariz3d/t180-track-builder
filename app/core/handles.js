@@ -145,8 +145,12 @@ function hitTest(list, x, y, r = HIT_PX) {
 /** "bank 12.0°", "width 31.0 m", "turn 0.0°/100 m": the name and the value, as the field would show it. */
 function format(kind, value) {
   const K = KINDS[kind];
-  return `${K.label} ${Number(value).toFixed(kind === 'length' || kind === 'width' ? 1 : 1)}${K.unit === 'm' ? ' m' : K.unit}`;
+  // D259 (the keeper: "it continues after 360 forever instead of resetting back to 0"; "same for -360"): the bank label keeps within one turn, sign kept (370 reads 10)
+  const v = kind === 'bank' ? wrapTurn(Number(value)) : Number(value);
+  return `${K.label} ${v.toFixed(kind === 'length' || kind === 'width' ? 1 : 1)}${K.unit === 'm' ? ' m' : K.unit}`;
 }
+/** D259: a bank in degrees kept within ONE turn, its sign kept (the keeper, 18:24): 370 -> 10, -370 -> -10, 300 stays 300, 360 -> 0; no "-0". */
+function wrapTurn(x) { const w = x % 360; return Object.is(w, -0) ? 0 : w; }
 
 /** The pointer cursor for a handle: the way a drag runs on screen. */
 function cursorFor(axis) { return !axis || axis.len < EDGE_ON_PX_PER_M ? 'move' : Math.abs(axis.dx) >= Math.abs(axis.dy) ? 'ew-resize' : 'ns-resize'; }
@@ -273,4 +277,4 @@ function mount(stage, win, host) {
   };
 }
 
-module.exports = { KINDS, ORDER, LANDING_ORDER, DEG, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { wrapTurn, KINDS, ORDER, LANDING_ORDER, DEG, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };

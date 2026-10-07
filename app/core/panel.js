@@ -101,7 +101,7 @@ function mount(root, shell) {
   const edge = el('input', { type: 'number', value: '', step: '1', min: '0', title: 'edge angle: how many degrees MORE the very edge tilts than the plain profile would, rising smoothly from the edge start out; 0 = off. Bank still rolls the whole section. Shows the edge at the head; left as shown, it keeps it' }),
     start = el('input', { type: 'number', value: '', step: '0.01', min: '0.5', max: '0.95', title: 'edge start: where the edge curve begins, as a share of the half-width from the centre (0.64 = the outer 36% each side curves more; 0.5 to 0.95). Shows it at the head; left as shown, it keeps it' }),
     tube = el('input', { type: 'number', value: '', step: '1', min: '0', max: '360', title: 'tube sweep: the cross-section as an arc of this many degrees, 0 (none) to 360 (a closed pipe). Shows the sweep at the head; left as shown, it keeps it' });
-  const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => h.phi / DEG], width: [width, (h) => h.w], cup: [cup, (h) => h.c],
+  const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => HD.wrapTurn(h.phi / DEG)], width: [width, (h) => h.w], cup: [cup, (h) => h.c],
     edge: [edge, (h) => h[XS.CHANNEL.edge]], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
   // THE WIDTH REFERENCE (D232, the keeper: "a drop down that tells you the width of different known t-180 tracks, such as thunderhead, aurora, nordic"):
   // picking a known track puts its measured median into the width field, like typing it (so on an empty track it is the first piece's start, which is the
@@ -128,11 +128,15 @@ function mount(root, shell) {
     else { other.disabled = false; other.setAttribute('title', baseTitle[ko]); }
   };
   const asTyped = (k) => (HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
+  // D259 (the keeper, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank keeps
+  // within ONE turn and keeps its sign, shown AND applied (HD.wrapTurn: 370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40): the field shows it (HEAD above), a drag
+  // writes it, and a typed value is sent wrapped and otherwise as typed (absolute, as the core keeps its winding; extendOptions unchanged). No nearest-equivalent rewrite.
+  const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return Number.isFinite(T) ? String(HD.wrapTurn(T)) : t; };
   // "at start" (D194b): one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
   const atStart = Object.fromEntries(Object.keys(HEAD).map((k) => [k, el('input', { type: 'checkbox', 'aria-label': `${k} at the start`,
     title: `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
-  const opts = () => extendOptions({ length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: asTyped('bank'), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), start: asTyped('start'), tube: asTyped('tube'),
+  const opts = () => extendOptions({ length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length });
   // D242 item 7 (the keeper, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
@@ -292,7 +296,7 @@ function mount(root, shell) {
       if (LAND_FIELD[h.kind]) { if (landDrag) shell.landingTo({ [LAND_FIELD[h.kind]]: value }); return; }
       if (sculptDrag) { const delta = value - sculptDrag.base; shell.sculptTo(h.kind === 'bank' ? delta * HD.DEG : delta); return; }
       if (shell.getState().sculpt) return;
-      const f = HANDLE_FIELD[h.kind]; f.value = String(value); if (f.oninput) f.oninput();   // typed: the field's own handler follows it
+      const f = HANDLE_FIELD[h.kind]; f.value = h.kind === 'bank' ? show(HD.wrapTurn(value)) : String(value); if (f.oninput) f.oninput();   // typed: the field's own handler follows it (D259: the bank within one turn)
     },
     end: () => { if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } },
   };

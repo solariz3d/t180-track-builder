@@ -603,3 +603,23 @@ test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and c
   pv.showGhost(s.candidateJump({ length: 50 })); g = pv.ghostInfo(); assert.equal(g.jump, true); assert.ok(g.segments.some((x) => x.kind === 'gap'), 'the flight is among the ghost\'s segments'); assert.ok(g.samples.length > pv.track().path.samples.length);
   pv.clearGhost(); assert.equal(pv.ghostInfo(), null); pv.dispose();
 });
+
+// D259, the keeper (18:21-18:24): the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way". The bank keeps within
+// ONE turn and keeps its SIGN, shown and applied (370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40), in the Extend field and ghost handle, Sculpt's bank handle and the bank
+// brush; no nearest-equivalent rewrite; the stored winding of existing tracks and the core are untouched.
+const headBank = (shell) => shell.headState().phi * 180 / Math.PI;
+const extendWithBank = (P1, v) => { const b = fieldOf(P1, 'bank °'); b.value = String(v); b.oninput(); P1.frame(); P1.button('Extend').onclick(); P1.frame(); };
+test('D259: a typed 300 stays 300 (one full turn either way is allowed), and a typed 400 becomes 40; the field shows them so', async () => {
+  const P1 = await handlePanel(), { shell } = P1, bank = fieldOf(P1, 'bank °'); assert.ok(Math.abs(headBank(shell)) < 1e-6, 'control: the track starts upright');
+  extendWithBank(P1, 300); assert.ok(Math.abs(headBank(shell) - 300) < 1e-6, `300 rolls 300: ${headBank(shell)}`); assert.equal(bank.value, '300');
+  extendWithBank(P1, 400); assert.ok(Math.abs(headBank(shell) - 40) < 1e-6, `400 becomes 40: ${headBank(shell)}`); assert.equal(bank.value, '40');
+});
+test('D259: dragging the bank handle from 350 by about +20 gives about 10 (not 370), and from -350 by about -20 gives about -10; Extend applies what the field shows', async () => {
+  for (const [from, dir] of [[350, 1], [-350, -1]]) {
+    const P1 = await handlePanel(), { shell } = P1, bank = fieldOf(P1, 'bank °');
+    bank.value = String(from); bank.oninput(); P1.frame();
+    let steps = 0; while (Math.abs(Number(bank.value)) > 300) { if (++steps > 400) break; dragBy(P1, 'bank:1', 10 * dir); P1.frame(); }
+    const shown = Number(bank.value); assert.ok(Math.sign(shown) === dir && Math.abs(shown) < 30, `from ${from} the drag wrapped back from 0, its sign kept: ${bank.value} after ${steps} drags`);
+    P1.button('Extend').onclick(); P1.frame(); assert.ok(Math.abs(headBank(shell) - shown) < 0.11, `applied as shown: ${headBank(shell)} for ${shown}`);
+  }
+});
