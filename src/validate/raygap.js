@@ -42,45 +42,115 @@ const FACING = Math.cos(45 * Math.PI / 180);
  * stations = the path's samples ({ s, pos, L, T }); ray = MACH6.downforceRay. Returns [{ s, u, widthM, at }], one per gap
  * edge, in s order.
  */
+// D266 (the keeper's 6 × 1000 m tube crashed the page on Close): the same check in TYPED ARRAYS. The first form kept a JS array per vertex, per triangle and
+// per normal, an object per edge and string keys for every bucket ("x,y,z", "a,b"): 1.47 GB of JavaScript heap on a 2.4-million-triangle tube, where a
+// browser renderer holds every heap of the page and its workers in 4 GB (V8's shared pointer-compression cage). The vertices, triangles, normals, edges and
+// both grids are now flat typed arrays (outside the V8 heap), the buckets hashed by their integer coordinates. NOTHING ELSE CHANGED: the same weld (the first
+// vertex within WELD, searched in the same bucket order), the same edges in the order they were first met, the same triangles in each grid cell in the same
+// order and the same arithmetic, so the answer is the first form's, gap for gap (test/validate_raygap_lean.test.js compares the two).
+
+/** A hash of integer triples to dense indices 0, 1, 2, … in the order they are first added (open addressing, grows by doubling). */
+function tripleIndex(cap) {
+  let size = 1; while (size < cap * 2) size <<= 1;
+  let slot = new Int32Array(size).fill(-1), kx = new Int32Array(cap), ky = new Int32Array(cap), kz = new Int32Array(cap), n = 0;
+  const h = (x, y, z, mask) => ((Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) >>> 0) & mask;
+  const grow = () => {
+    const nk = (a) => { const b = new Int32Array(a.length * 2); b.set(a); return b; };
+    kx = nk(kx); ky = nk(ky); kz = nk(kz); size <<= 1; slot = new Int32Array(size).fill(-1);
+    for (let i = 0; i < n; i++) { let s = h(kx[i], ky[i], kz[i], size - 1); while (slot[s] >= 0) s = (s + 1) & (size - 1); slot[s] = i; }
+  };
+  return {
+    /** The index of (x, y, z), or -1 when it was never added. */
+    get(x, y, z) { let s = h(x, y, z, size - 1); for (;;) { const i = slot[s]; if (i < 0) return -1; if (kx[i] === x && ky[i] === y && kz[i] === z) return i; s = (s + 1) & (size - 1); } },
+    /** The index of (x, y, z), added when new. */
+    add(x, y, z) {
+      let s = h(x, y, z, size - 1);
+      for (;;) { const i = slot[s]; if (i < 0) break; if (kx[i] === x && ky[i] === y && kz[i] === z) return i; s = (s + 1) & (size - 1); }
+      if (n >= kx.length || (n + 1) * 2 > size) { grow(); return this.add(x, y, z); }
+      kx[n] = x; ky[n] = y; kz[n] = z; slot[s] = n; return n++;
+    },
+    get count() { return n; },
+  };
+}
+
 function rayGaps(meshes, stations, ray) {
-  const V = new Map(), P = [], T = [];
-  const WELD = 0.005, vk = (a, b, c) => `${a},${b},${c}`;
+  const WELD = 0.005;
+  let nIdx = 0, nPos = 0; for (const m of meshes) { nIdx += m.indices.length; nPos += m.positions.length / 3; }
+  // the weld: a vertex is the FIRST earlier vertex within WELD, searched bucket by bucket (i, j, k from −1 to 1) and in each bucket in the order added
+  const P = new Float64Array(nPos * 3), buckets = tripleIndex(Math.max(16, nPos)), next = new Int32Array(nPos).fill(-1);
+  let head = new Int32Array(Math.max(16, nPos)).fill(-1), tail = new Int32Array(head.length).fill(-1), nV = 0;
   const vid = (x, y, z) => {
     const bx = Math.floor(x / WELD), by = Math.floor(y / WELD), bz = Math.floor(z / WELD);
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) {
-      for (const id of V.get(vk(bx + i, by + j, bz + k)) || []) { const q = P[id]; if (Math.hypot(q[0] - x, q[1] - y, q[2] - z) <= WELD) return id; }
+      const b = buckets.get(bx + i, by + j, bz + k); if (b < 0) continue;
+      for (let id = head[b]; id >= 0; id = next[id]) { if (Math.hypot(P[id * 3] - x, P[id * 3 + 1] - y, P[id * 3 + 2] - z) <= WELD) return id; }
     }
-    const id = P.length; P.push([x, y, z]); const key = vk(bx, by, bz); let c = V.get(key); if (!c) V.set(key, c = []); c.push(id); return id;
+    const id = nV++; P[id * 3] = x; P[id * 3 + 1] = y; P[id * 3 + 2] = z;
+    const b = buckets.add(bx, by, bz);
+    if (b >= head.length) { const g = (a) => { const c = new Int32Array(a.length * 2).fill(-1); c.set(a); return c; }; head = g(head); tail = g(tail); }
+    if (head[b] < 0) head[b] = id; else next[tail[b]] = id; tail[b] = id;
+    return id;
   };
+  const T = new Int32Array(nIdx - (nIdx % 3)); let nT = 0;
   for (const m of meshes) {
     const p = m.positions, idx = m.indices;
     for (let t = 0; t + 2 < idx.length; t += 3) {
       const a = vid(p[idx[t] * 3], p[idx[t] * 3 + 1], p[idx[t] * 3 + 2]), b = vid(p[idx[t + 1] * 3], p[idx[t + 1] * 3 + 1], p[idx[t + 1] * 3 + 2]), c = vid(p[idx[t + 2] * 3], p[idx[t + 2] * 3 + 1], p[idx[t + 2] * 3 + 2]);
       if (a === b || b === c || a === c) continue;   // degenerate after the weld
-      T.push([a, b, c]);
+      T[nT * 3] = a; T[nT * 3 + 1] = b; T[nT * 3 + 2] = c; nT++;
     }
   }
-  const E = new Map(), ek = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
-  T.forEach((t, i) => { for (const [a, b] of [[t[0], t[1]], [t[1], t[2]], [t[2], t[0]]]) { const k = ek(a, b), e = E.get(k); if (e) e.n++; else E.set(k, { a, b, tri: i, n: 1 }); } });
-  // a grid of triangles, for the probes
-  const CS = 2, grid = new Map(), gk = (x, y, z) => `${x},${y},${z}`;
-  const N = T.map((t) => unit(cross(sub(P[t[1]], P[t[0]]), sub(P[t[2]], P[t[0]]))));
-  T.forEach((t, i) => {
-    const lo = [0, 1, 2].map((k) => Math.floor(Math.min(P[t[0]][k], P[t[1]][k], P[t[2]][k]) / CS)), hi = [0, 1, 2].map((k) => Math.floor(Math.max(P[t[0]][k], P[t[1]][k], P[t[2]][k]) / CS));
-    for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) { const k = gk(x, y, z); let c = grid.get(k); if (!c) grid.set(k, c = []); c.push(i); }
-  });
+  const pt = (id) => [P[id * 3], P[id * 3 + 1], P[id * 3 + 2]];
+  // the edges, in the order they are first met (each triangle's (0,1), (1,2), (2,0)), keyed by their lower vertex: { a, b } as first met, its triangle, its use count
+  const deg = new Int32Array(nV + 1);
+  for (let i = 0; i < nT * 3; i++) { const a = T[i], b = T[i % 3 === 2 ? i - 2 : i + 1]; deg[Math.min(a, b) + 1]++; }
+  for (let v = 0; v < nV; v++) deg[v + 1] += deg[v];
+  const fill = new Int32Array(nV), slotHi = new Int32Array(nT * 3), slotE = new Int32Array(nT * 3);
+  const EA = new Int32Array(nT * 3), EB = new Int32Array(nT * 3), ET = new Int32Array(nT * 3), EN = new Int32Array(nT * 3); let nE = 0;
+  for (let i = 0; i < nT; i++) for (let k = 0; k < 3; k++) {
+    const a = T[i * 3 + k], b = T[i * 3 + (k + 1) % 3], lo = a < b ? a : b, hi = a < b ? b : a, s0 = deg[lo];
+    let e = -1; for (let s = s0; s < s0 + fill[lo]; s++) if (slotHi[s] === hi) { e = slotE[s]; break; }
+    if (e >= 0) { EN[e]++; continue; }
+    e = nE++; EA[e] = a; EB[e] = b; ET[e] = i; EN[e] = 1; slotHi[s0 + fill[lo]] = hi; slotE[s0 + fill[lo]] = e; fill[lo]++;
+  }
+  // a grid of triangles, for the probes: each 2 m cell's triangles in triangle order
+  const CS = 2, N = new Float64Array(nT * 3);
+  for (let i = 0; i < nT; i++) {
+    const n = unit(cross(sub(pt(T[i * 3 + 1]), pt(T[i * 3])), sub(pt(T[i * 3 + 2]), pt(T[i * 3]))));
+    N[i * 3] = n[0]; N[i * 3 + 1] = n[1]; N[i * 3 + 2] = n[2];
+  }
+  const cellIx = tripleIndex(Math.max(16, nT)), lohi = new Int32Array(nT * 6);
+  let cnt = new Int32Array(Math.max(16, nT)), pairs = 0;
+  for (let i = 0; i < nT; i++) {
+    for (let k = 0; k < 3; k++) {
+      const c0 = P[T[i * 3] * 3 + k], c1 = P[T[i * 3 + 1] * 3 + k], c2 = P[T[i * 3 + 2] * 3 + k];
+      lohi[i * 6 + k] = Math.floor(Math.min(c0, c1, c2) / CS); lohi[i * 6 + 3 + k] = Math.floor(Math.max(c0, c1, c2) / CS);
+    }
+    for (let x = lohi[i * 6]; x <= lohi[i * 6 + 3]; x++) for (let y = lohi[i * 6 + 1]; y <= lohi[i * 6 + 4]; y++) for (let z = lohi[i * 6 + 2]; z <= lohi[i * 6 + 5]; z++) {
+      const c = cellIx.add(x, y, z); if (c >= cnt.length) { const b = new Int32Array(cnt.length * 2); b.set(cnt); cnt = b; } cnt[c]++; pairs++;
+    }
+  }
+  const nC = cellIx.count, start = new Int32Array(nC + 1); for (let c = 0; c < nC; c++) start[c + 1] = start[c] + cnt[c];
+  const at = new Int32Array(nC), cellTri = new Int32Array(pairs);
+  for (let i = 0; i < nT; i++) {
+    for (let x = lohi[i * 6]; x <= lohi[i * 6 + 3]; x++) for (let y = lohi[i * 6 + 1]; y <= lohi[i * 6 + 4]; y++) for (let z = lohi[i * 6 + 2]; z <= lohi[i * 6 + 5]; z++) {
+      const c = cellIx.get(x, y, z); cellTri[start[c] + at[c]++] = i;
+    }
+  }
   /** Does the car's ray at q (cast from upM above q along up, lengthM downward) hit a road triangle other than skip? */
   const overRoad = (q, up, skip, along) => {
     const o = add(q, up, ray.upM), d = up.map((x) => -x), L = ray.lengthM, seen = new Set();
     for (let k = 0; k <= Math.ceil(L / CS) + 1; k++) {
       const c0 = add(o, d, Math.min(L, k * CS)).map((v) => Math.floor(v / CS));
       for (let x = c0[0] - 1; x <= c0[0] + 1; x++) for (let y = c0[1] - 1; y <= c0[1] + 1; y++) for (let z = c0[2] - 1; z <= c0[2] + 1; z++) {
-        for (const i of grid.get(gk(x, y, z)) || []) {
+        const c = cellIx.get(x, y, z); if (c < 0) continue;
+        for (let r = start[c]; r < start[c + 1]; r++) {
+          const i = cellTri[r];
           if (i === skip || seen.has(i)) continue; seen.add(i);
-          if (Math.abs(dot(N[i], along)) > FACING) continue;   // faces along the road: not a surface the ray reads
-          const t = T[i], e1 = sub(P[t[1]], P[t[0]]), e2 = sub(P[t[2]], P[t[0]]), pv = cross(d, e2), det = dot(e1, pv);
+          if (Math.abs(dot([N[i * 3], N[i * 3 + 1], N[i * 3 + 2]], along)) > FACING) continue;   // faces along the road: not a surface the ray reads
+          const P0 = pt(T[i * 3]), e1 = sub(pt(T[i * 3 + 1]), P0), e2 = sub(pt(T[i * 3 + 2]), P0), pv = cross(d, e2), det = dot(e1, pv);
           if (Math.abs(det) < 1e-12) continue;   // the ray runs along the triangle: no hit
-          const inv = 1 / det, tv = sub(o, P[t[0]]), u = dot(tv, pv) * inv; if (u < 0 || u > 1) continue;
+          const inv = 1 / det, tv = sub(o, P0), u = dot(tv, pv) * inv; if (u < 0 || u > 1) continue;
           const qv = cross(tv, e1), v = dot(d, qv) * inv; if (v < 0 || u + v > 1) continue;
           const h = dot(e2, qv) * inv; if (h > 0 && h <= L) return true;
         }
@@ -95,13 +165,15 @@ function rayGaps(meshes, stations, ray) {
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (const i of sg.get(`${cx + dx},${cz + dz}`) || []) { const d = len(sub(stations[i].pos, q)); if (d < bd) { bd = d; best = i; } }
     return best; };
   const out = [];
-  for (const e of E.values()) {
-    if (e.n !== 1) continue;
-    const t = T[e.tri], A = P[e.a], B = P[e.b], C = P[t.find((v) => v !== e.a && v !== e.b)], mid = add(A, sub(B, A), 0.5);
+  for (let e = 0; e < nE; e++) {
+    if (EN[e] !== 1) continue;
+    const ti = ET[e], ea = EA[e], eb = EB[e], A = pt(ea), B = pt(eb), mid = add(A, sub(B, A), 0.5);
+    let cv = T[ti * 3]; if (cv === ea || cv === eb) { cv = T[ti * 3 + 1]; if (cv === ea || cv === eb) cv = T[ti * 3 + 2]; }
+    const C = pt(cv), Ne = [N[ti * 3], N[ti * 3 + 1], N[ti * 3 + 2]];
     const i = nearest(mid), st = i >= 0 ? stations[i] : null;
-    if (!st || Math.abs(dot(N[e.tri], st.T)) > FACING) continue;   // not a surface the car rides (see above)
-    let across = unit(cross(N[e.tri], sub(B, A))); if (dot(sub(C, mid), across) > 0) across = across.map((x) => -x);   // away from its own triangle
-    const w = reach.find((d) => overRoad(add(mid, across, d), N[e.tri], e.tri, st.T));
+    if (!st || Math.abs(dot(Ne, st.T)) > FACING) continue;   // not a surface the car rides (see above)
+    let across = unit(cross(Ne, sub(B, A))); if (dot(sub(C, mid), across) > 0) across = across.map((x) => -x);   // away from its own triangle
+    const w = reach.find((d) => overRoad(add(mid, across, d), Ne, ti, st.T));
     if (w === undefined) continue;
     out.push({ s: st.s, u: dot(sub(mid, st.pos), st.L), widthM: w, at: mid });
   }
