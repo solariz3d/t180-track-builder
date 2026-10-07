@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **No "to show your cursor press ESC" window when a handle is grabbed (D270; the keeper, 14:32: "i DONT want that").** That notice is Chromium's own and it appears whenever a page locks the pointer; the D251 lock (`requestPointerLock` on a press) was the cause, and neither WebView2 nor Tauri has a setting that suppresses it (Chromium's mouse-lock design document names none). `app/core/handles.js` no longer locks: a press captures the pointer (`setPointerCapture`), hides the cursor for the drag (`cursor: none`) and reads the pointer's own position, so every D251 speed (turn 0.083, climb 0.082, bank 0.45, cup 0.24, width 0.068, length 0.42 m a pixel, the 6 px holds, Shift, Ctrl, the double-click reset) is unchanged. On release the cursor shows again and the app moves it back to the handle that was grabbed (Tauri's `setCursorPosition`; permission `core:window:allow-set-cursor-position` added to `src-tauri/capabilities/default.json`). Esc, now a `keydown` on the document, still ends a drag where it is. **What it costs:** a very long scrub now stops at the screen edge, as it did before D251's lock. Rows: `app/test/handles.test.js` 13, 13b, 13c restated for no lock; 11b without the lock rig.
+
 ## [0.3.2] - 2026-10-07
 
 ### Changed
