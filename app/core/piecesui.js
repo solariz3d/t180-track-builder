@@ -91,6 +91,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
     }
     return c;
   };
+  const addAtHead = (name, mirrored) => { void shell.insertPiece(name, { mirror: !!mirrored }); };
   const row = (it) => {
     const body = [el('div', { style: 'font-weight:700', text: it.name }), el('div', { style: 'font-size:12px;color:#aab2c0', 'aria-label': `${it.name} details`, text: describe(it) })];
     const buttons = [];
@@ -100,10 +101,13 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
     } else if (confirming === it.name) {
       buttons.push(el('span', { text: 'Delete this saved piece for good?' }), el('button', { text: 'Yes, delete', onclick: () => { confirming = null; void shell.deletePieceFile(it.name); } }), el('button', { text: 'No', onclick: () => { confirming = null; redrawList(); } }));
     } else {
-      if (!it.error) buttons.push(el('button', { text: 'Add at head', title: `put ${it.name} where the track ends${mirror.checked ? ', mirrored' : ''} (one undo step)`, 'aria-label': `add ${it.name} at the head`, onclick: () => { void shell.insertPiece(it.name, { mirror: mirror.checked }); } }));
+      if (!it.error) buttons.push(el('button', { text: 'Add at head', title: `put ${it.name} where the track ends${mirror.checked ? ', mirrored' : ''} (one undo step)`, 'aria-label': `add ${it.name} at the head`, onclick: () => addAtHead(it.name, mirror.checked) }),
+        el('button', { text: 'Add mirrored', title: `put ${it.name} where the track ends as its left/right mirror image (one undo step)`, 'aria-label': `add ${it.name} at the head, mirrored`, onclick: () => addAtHead(it.name, true) }));
       buttons.push(el('button', { text: 'Rename', 'aria-label': `rename ${it.name}`, onclick: () => { renaming = it.name; confirming = null; redrawList(); } }), el('button', { text: 'Delete', 'aria-label': `delete the saved piece ${it.name}`, onclick: () => { confirming = it.name; renaming = null; redrawList(); } }));
     }
-    return el('div', { class: 'piece-row', 'data-piece': it.name, style: 'display:flex;gap:8px;align-items:center;margin:6px 0' }, thumb(it), el('div', { style: 'min-width:0' }, ...body, el('div', { class: 'actions' }, ...buttons)));
+    // D269: a click on the row (not on one of its buttons or boxes) adds the piece at the head, as Add at head does (the Pieces menu is a bin: click what you want)
+    const rowClick = (e) => { if (it.error || renaming === it.name || confirming === it.name) return; if (e && e.target && /^(BUTTON|INPUT|SELECT|TEXTAREA|A)$/.test(e.target.tagName)) return; addAtHead(it.name, mirror.checked); };
+    return el('div', { class: 'piece-row', 'data-piece': it.name, title: it.error ? '' : `click to add ${it.name} at the head`, onclick: rowClick, style: `display:flex;gap:8px;align-items:center;margin:6px 0;${it.error ? '' : 'cursor:pointer;'}` }, thumb(it), el('div', { style: 'min-width:0' }, ...body, el('div', { class: 'actions' }, ...buttons)));
   };
   const redrawList = () => {
     listBox.replaceChildren(...items.map(row));
@@ -113,6 +117,16 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
     const seq = ++listSeq;
     return Promise.resolve(shell.listPieces()).then((r) => { if (seq !== listSeq) return; items = r; redrawList(); }, (e) => { if (seq !== listSeq) return; items = []; listBox.replaceChildren(); listNote.textContent = `the library could not be read: ${e && e.message || e}`; });
   };
+
+  // ── the menu (D269) ──
+  // The library is a drop-down bin in the TOP BAR (app/index.html: <details id="pieces"><summary>Pieces ▾</summary><div id="pieces-bin">; the panel puts these nodes there). Opening it lists the saved pieces fresh; Esc, or a press
+  // anywhere outside it, closes it (a press on the Pieces button is the browser's own toggle). Without that element (a headless host) the library stays where it was, in the panel.
+  const menu = doc.getElementById ? doc.getElementById('pieces') : null;
+  const inside = (el, t) => { for (let e = t; e; e = e.parentNode || e.parent) if (e === el) return true; return false; };
+  const onKey = (e) => { if (menu && menu.open && e && e.key === 'Escape') menu.open = false; };
+  const onOutside = (e) => { if (menu && menu.open && e && e.target && !inside(menu, e.target)) menu.open = false; };
+  const onToggle = () => { if (menu && menu.open) refreshList(); };
+  if (menu) { doc.addEventListener('keydown', onKey, true); doc.addEventListener('pointerdown', onOutside, true); menu.addEventListener('toggle', onToggle); }
 
   // ── a click on the track ──
   let down = null;
@@ -154,7 +168,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
     selection: [el('h3', { text: 'Selected pieces' }), selInfo, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'name' }), nameIn)), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'grip %' }), gripIn), el('label', { class: 'picker' }, el('span', { text: 'grip like…' }), gripLike)), el('div', { class: 'actions' }, gripBtn, saveBtn, delBtn, clearBtn), why, el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox],
     library: [el('h3', { text: 'Pieces library' }), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'mirror on insert' }), mirror)), listBox, listNote],
   };
-  return { nodes, layer, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); if (tick) win.clearTimeout(tick); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };
+  return { nodes, layer, menu, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); if (menu) { doc.removeEventListener('keydown', onKey, true); doc.removeEventListener('pointerdown', onOutside, true); menu.removeEventListener('toggle', onToggle); } if (tick) win.clearTimeout(tick); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };
 }
 
 module.exports = { mount, describe, CLICK_PX };
