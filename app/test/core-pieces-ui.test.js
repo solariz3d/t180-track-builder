@@ -539,7 +539,7 @@ test('row 14: the Jump button (D258, the free jump): beside Extend; the old Add-
   const P1 = await handlePanel(), { shell, S } = P1, labels = P1.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
   for (const gone of ['jump gap m', 'drop m (+ down)', 'landing °']) assert.ok(!labels.includes(gone), `${gone} is gone`);
   assert.equal(P1.button('Add jump'), undefined, 'no Add jump button'); const ext = P1.button('Extend'), jmp = P1.button('Jump'); assert.ok(jmp); assert.equal(P1.all().indexOf(jmp), P1.all().indexOf(ext) + 1, 'the Jump button is beside Extend');
-  assert.match(P1.text('jump note'), /^Jump places the piece above, then a free landing 40 m ahead at the same height\. Set the piece's climb first: it is the take-off\. This is a jump: drive it in AC and move the landing until it works\.$/);
+  assert.equal(P1.text('jump note'), '', 'D267: no help paragraph under the button'); assert.match(jmp.attrs.title, /free landing.*drive it in AC and move the landing until it works/, 'its sense is the button\'s tooltip');
   assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are up'); jmp.onmouseenter();
   assert.equal(S.ghostJump, true, 'the ghost is a jump\'s'); assert.equal(S.lastCandidate.jump, true); assert.ok(S.lastCandidate.segments.some((g) => g.kind === 'gap'));
   for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'no Extend handles on a jump\'s ghost'); assert.equal(P1.panel.flights.flights().length, 1, 'the flight layer reads the ghost\'s flight'); assert.equal(P1.panel.flights.lines().length, 1, 'one dashed line');
@@ -547,7 +547,7 @@ test('row 14: the Jump button (D258, the free jump): beside Extend; the old Add-
   // a click: the piece the fields describe, the flight and the landing, one undo step, the note
   const len = fieldOf(P1, 'length m'); len.value = '120'; len.oninput(); const d0 = shell.getState().history.present, past0 = shell.getState().history.past.length; jmp.onclick();
   const d1 = shell.getState().history.present; assert.deepEqual(d1.pieces.slice(d0.pieces.length).map((p) => p.type), ['road', 'flight', 'road']); assert.equal(d1.pieces[d0.pieces.length].length, 120, 'the take-off is what Extend would place');
-  assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(statusOf(P1), /^Jump placed\. This is a jump: drive it in AC and move the landing until it works\.$/); assert.match(P1.text('jump note'), /^This is a jump: drive it in AC and move the landing until it works\.$/);
+  assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(statusOf(P1), /^Jump placed: move its landing by hand\.$/); assert.equal(P1.text('jump note'), '', 'D267: still no paragraph once the jump is placed');
   // Undo gives the fields back (as after an Extend)
   len.value = '77'; shell.undo(); assert.equal(shell.getState().history.present, d0); assert.equal(len.value, '120', 'the length the jump was made with');
   // after a flight the Jump button's own Extend lays the landing road, so Jump again is allowed; a closed loop has no open end: the button is off (the core's words for it are in jump-ui row 1b)
@@ -561,7 +561,7 @@ test('row 14b: the landing boxes appear while a landing is the head, show the po
   const P1 = await handlePanel(), { shell } = P1, box = landingBoxOf(P1); assert.equal(box.style.display, 'none', 'no landing, no boxes');
   P1.button('Jump').onclick(); assert.equal(box.style.display, '', 'the boxes are up'); const LB = (n) => P1.input(`landing ${n}`), V = () => ['forward', 'left', 'up', 'heading', 'pitch', 'bank'].map((n) => LB(n).value);   // (by aria-label: the landing's bank box has the Extend bank field's label)
   assert.deepEqual(V(), ['40', '0', '0', '0', '0', '0'], 'lined up, 40 m ahead, the same height'); assert.deepEqual(['landing forward', 'landing left', 'landing up', 'landing heading', 'landing pitch', 'landing bank'].map((n) => !!P1.input(n)), [true, true, true, true, true, true]);
-  assert.match(P1.text('landing hint'), /^Move the landing: drag its arrows on the track \(white forward, orange sideways, yellow height, purple heading\) or type below\. Shift is fine, Ctrl snaps\./);
+  assert.equal(P1.text('landing hint'), null, 'D267: the landing hint is not a paragraph any more'); assert.match(box.attrs.title, /^Move the landing: drag its arrows on the track \(white forward, orange sideways, yellow height, purple heading\) or type below\. Shift is fine, Ctrl snaps\./, 'it is the block\'s tooltip');
   const past0 = shell.getState().history.past.length; LB('forward').value = '55'; LB('forward').onchange(); assert.equal(shell.landing().pose.forward, 55); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step for a typed value'); assert.equal(LB('forward').value, '55');
   LB('heading').value = '20'; LB('heading').onchange(); const fl = shell.getState().history.present.pieces.find((p) => p.type === 'flight'); assert.ok(Math.abs(fl.heading - 20 * Math.PI / 180) < 1e-9, 'degrees typed, radians in the document');
   LB('left').value = '-8'; LB('left').onchange(); LB('up').value = '3.5'; LB('up').onchange(); LB('pitch').value = '-2'; LB('pitch').onchange(); LB('bank').value = '6'; LB('bank').onchange();
@@ -602,11 +602,11 @@ test('row 16: the Grip field in Extend (D261): it shows the head\'s grip, "grip 
   const P1 = await handlePanel(), { shell } = P1, grip = P1.input('grip'), like = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'grip like known track'), note = () => P1.text('what the grip means');
   assert.equal(grip.value, '100', 'a track with no grip set: AC\'s own road'); assert.ok(like, 'a "grip like…" drop-down beside it'); assert.deepEqual(P1.all().filter((e) => e.tagName === 'LABEL' && e.children[0] && /^grip/.test(e.children[0].textContent)).map((e) => e.children[0].textContent).slice(0, 2), ['grip %', 'grip like…'], 'the grip box and its drop-down side by side in Extend (the selection has its own pair further down)');
   const opts = like.children.map((o) => [o.value, o.textContent]); assert.deepEqual(opts[0], ['', 'grip like…'], 'the placeholder first'); assert.ok(opts.some(([v, t]) => v === '82' && t === 'Thunderhead, 82%'), 'a known track with its measured grip'); assert.ok(opts.every(([v]) => v === '' || (Number.isInteger(Number(v)) && Number(v) >= 50 && Number(v) <= 150)), 'every entry is a grip the field takes');
-  assert.match(note(), /^Grip 100%: 100% is AC's own road\. The checker does not model grip/); assert.doesNotMatch(note(), /untested/, '100% is tested');
+  assert.equal(note(), 'Grip 100%', 'D267: just the grip'); assert.match(grip.attrs.title, /100% is AC's own road/, 'the explanation is the field\'s tooltip');
   // a pick fills the field, and its words follow
-  like.value = '82'; like.onchange(); assert.equal(grip.value, '82', 'the pick filled the field'); assert.equal(like.value, '', 'the drop-down goes back to its placeholder'); assert.match(note(), /^Grip 82%: /); assert.doesNotMatch(note(), /untested/);
+  like.value = '82'; like.onchange(); assert.equal(grip.value, '82', 'the pick filled the field'); assert.equal(like.value, '', 'the drop-down goes back to its placeholder'); assert.equal(note(), 'Grip 82%');
   // outside 60 to 110: untested, in words; and the checker is always said not to model it
-  for (const [v, untested] of [['59', true], ['60', false], ['110', false], ['111', true], ['50', true], ['150', true]]) { grip.value = v; grip.oninput(); assert.equal(/untested/.test(note()), untested, `${v}%`); assert.match(note(), /does not model grip/); }
+  for (const [v, untested] of [['59', true], ['60', false], ['110', false], ['111', true], ['50', true], ['150', true]]) { grip.value = v; grip.oninput(); assert.equal(/untested/.test(note()), untested, `${v}%`); assert.doesNotMatch(note(), /checker|drive it in AC/, 'D267: the sentence about the checker is cut, not moved'); }
   // refused in words: 49, 151, 100.5, a word
   for (const [v, re] of [['49', /from 50 to 150 percent \(49 is outside it\)/], ['151', /from 50 to 150 percent \(151 is outside it\)/], ['100.5', /WHOLE percent \(100\.5 is not\): try 101/], ['abc', /whole percent from 50 to 150: type a number/]]) { grip.value = v; grip.oninput(); assert.match(note(), re, v); }
   // a refused value is not an Extend: nothing placed, the core's refusal said
@@ -629,13 +629,13 @@ test('row 16b: the selected pieces\' grip (D261): the box shows the pieces\' gri
   shell.selectPiece(1); shell.selectPiece(3, { extend: true }); assert.equal(setBtn.disabled, false); assert.equal(box.value, '100', 'the selected pieces\' grip');
   const past0 = shell.getState().history.past.length, d0 = shell.getState().history.present;
   box.value = '85'; setBtn.onclick(); assert.deepEqual(gripsOf(shell), [100, 85, 85, 85, 100], 'the three selected road pieces'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.equal(shell.selectionInfo().count, 3, 'the selection is kept');
-  assert.match(shell.getState().message, /^grip 85% on 3 pieces; the checker does not model grip$/); assert.equal(shell.getState().messageKind, 'ok'); assert.equal(box.value, '85', 'the box shows the new grip');
+  assert.match(shell.getState().message, /^grip 85% on 3 pieces$/); assert.equal(shell.getState().messageKind, 'ok'); assert.equal(box.value, '85', 'the box shows the new grip');
   // Undo restores the very same document
   shell.undo(); assert.equal(shell.getState().history.present, d0, 'Undo gives the same document back'); assert.deepEqual(gripsOf(shell), [100, 100, 100, 100, 100]);
   // a mixed selection: blank
   shell.selectPiece(1); box.value = '90'; setBtn.onclick(); shell.selectPiece(0); shell.selectPiece(2, { extend: true }); assert.equal(box.value, '', 'the pieces differ: blank'); assert.deepEqual(gripsOf(shell), [100, 90, 100, 100, 100]);
   // untested outside 60 to 110, said in the message
-  box.value = '55'; setBtn.onclick(); assert.match(shell.getState().message, /^grip 55% on 3 pieces \(untested: drive it\); the checker does not model grip$/); box.value = '120'; setBtn.onclick(); assert.match(shell.getState().message, /untested: drive it/);
+  box.value = '55'; setBtn.onclick(); assert.match(shell.getState().message, /^grip 55% on 3 pieces \(untested: drive it\)$/); box.value = '120'; setBtn.onclick(); assert.match(shell.getState().message, /untested: drive it/);
   // 100 writes no grip at all
   box.value = '100'; setBtn.onclick(); assert.ok(shell.getState().history.present.pieces.slice(0, 3).every((p) => !('grip' in p)), '100 is the plain piece'); const same = shell.getState().history.present; box.value = '100'; setBtn.onclick(); assert.equal(shell.getState().history.present, same); assert.match(shell.getState().message, /already have grip 100%/);
   // refused in words, nothing changed, no undo step
@@ -699,6 +699,52 @@ test('row 18: the CHEAP ghost while a handle is dragged (D266 item 2): every ste
   // a second drag is cheap again, and Extend after it places the track and clears the ghost
   const b = handleOf(P1, 'length:0').screen; fire(P1, 'pointerdown', b.x, b.y); fire(P1, 'pointermove', b.x + b.dx * 5, b.y + b.dy * 5); P1.frame(); assert.equal(cheaps()[cheaps().length - 1], true, 'the second drag is cheap too'); fire(P1, 'pointerup', b.x + b.dx * 5, b.y + b.dy * 5); assert.equal(cheaps()[cheaps().length - 1], false);
   P1.panel.unmount();
+});
+
+// D267 (the keeper, relaying a tester: "too much damn text on the left side that overwhelmed chase ... what tf is the copy code paste code t180 code here??? the values or degrees for the track needs to be in a better spot to be seen")
+const leafText = (P1) => P1.all().filter((e) => !(e.children && e.children.length) && e.textContent).map((e) => e.textContent).join('\n');
+test('row 19: no help paragraph stays in the left column (D267): the tube width, the grip, the turn-0 hint, the jump and the landing show only a few words or nothing, and the words are tooltips', async () => {
+  const P1 = await handlePanel(), { shell } = P1, field = (t) => fieldOf(P1, t), tube = field('tube sweep °'), width = field('width m'), grip = P1.input('grip');
+  const GONE = [/does not model grip/, /drive it in AC/, /eases over the whole piece/, /distance ROUND it/, /Move the landing: drag/, /Jump places the piece above/, /paste a t180 code here/, /Set the piece's climb first/];
+  const check = (what) => { const t = leafText(P1); for (const re of GONE) assert.doesNotMatch(t, re, `${what}: no paragraph says ${re}`); };
+  check('at the start');
+  // the tube width: a few words under the field, the explanation a tooltip
+  tube.value = '360'; tube.oninput(); width.value = '45'; width.oninput(); const wn = () => P1.text('what the width means for a tube'); assert.equal(wn(), '≈ 14.3 m across'); check('a tube');
+  assert.match(width.attrs.title, /distance ROUND it, not across\. 45 m round is a tube 14\.3 m across \(w\/π\)\./, 'the width field\'s tooltip carries the explanation'); tube.value = '0'; tube.oninput(); assert.equal(wn(), '', 'not a tube: nothing'); assert.doesNotMatch(width.attrs.title, /distance ROUND/, 'and the tooltip is the plain one again');
+  // grip: just the grip; the tooltip has what 100% is
+  grip.value = '130'; grip.oninput(); assert.equal(P1.text('what the grip means'), 'Grip 130% · untested'); check('grip 130'); assert.match(grip.attrs.title, /100% is AC's own road.*untested: drive it/);
+  // the turn-0 hint: the "at start" box's tooltip, no paragraph
+  P1.shell.extend({ length: 100, targets: { kh: 30 * Math.PI / 180 / 100 } }); P1.frame(); field('turn °/100m').value = '0'; field('turn °/100m').oninput(); check('turn 0'); assert.match(P1.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title, /turn 0 eases over the whole piece: tick "at start"/);
+  // the jump and the landing: no text; their words are the button's and the block's tooltips
+  P1.button('Jump').onclick(); P1.frame(); check('a landing'); assert.equal(P1.text('jump note'), ''); assert.match(P1.button('Jump').attrs.title, /drive it in AC/);
+  P1.panel.unmount();
+});
+
+test('row 19b: the values of the piece being edited are drawn LARGE over the 3D view (D267): length, turn, climb, bank and width, updated as a handle is dragged or a field is typed, hidden on a closed loop', async () => {
+  const VO = require('../core/valuesoverlay.js'), P1 = await handlePanel(), { shell } = P1, layer = P1.panel.values;
+  assert.ok(layer, 'the panel mounts the overlay on the preview stage'); const shown = () => layer.entries() && Object.fromEntries(layer.entries().map((e) => [e.key, e.value]));
+  P1.frame(); const first = shown(); assert.ok(first && ['length', 'turn', 'climb', 'bank', 'width'].every((k) => typeof first[k] === 'string' && first[k] !== ''), JSON.stringify(first)); assert.equal(first.length, '100.0 m'); assert.equal(first.width, '31 m');
+  // typing: it follows at once
+  fieldOf(P1, 'length m').value = '250'; fieldOf(P1, 'length m').oninput(); assert.equal(shown().length, '250.0 m'); fieldOf(P1, 'turn °/100m').value = '12'; fieldOf(P1, 'turn °/100m').oninput(); assert.equal(shown().turn, P1.all().find((e) => e.attrs['data-readout'] === 'turn').textContent, 'the overlay says what the panel\'s own readout says'); assert.notEqual(shown().turn, '0.0°', 'a typed turn shows');
+  fieldOf(P1, 'bank °').value = '20'; fieldOf(P1, 'bank °').oninput(); assert.match(shown().bank, /^\+/); fieldOf(P1, 'width m').value = '40'; fieldOf(P1, 'width m').oninput(); assert.equal(shown().width, '40 m');
+  // a handle drag: the numbers move with each step
+  fieldOf(P1, 'turn °/100m').value = '0'; fieldOf(P1, 'turn °/100m').oninput(); const before = shown().turn, a = handleOf(P1, 'turn:1').screen; fire(P1, 'pointerdown', a.x, a.y); fire(P1, 'pointermove', a.x - 40, a.y); P1.frame(); const mid = shown().turn; fire(P1, 'pointermove', a.x - 80, a.y); P1.frame(); const later = shown().turn; fire(P1, 'pointerup', a.x - 80, a.y);
+  assert.notEqual(mid, before, 'the first step changed the turn on screen'); assert.notEqual(later, mid, 'the next step changed it again');
+  // the layer: a big font, over the view, not in the way of a click, at the one spot
+  assert.match(layer.layer.style.cssText, /font:bold 2[0-9]px/, 'large type'); assert.ok(layer.layer.style.cssText.includes(VO.SPOT_CSS), 'at the spot the constant names'); assert.match(layer.layer.style.cssText, /pointer-events:none/);
+  // the pure part, and nothing to show: hidden
+  assert.deepEqual(VO.entries({ length: '10.0 m', turn: '0.0°', climb: '0.0°', bank: '0.0°' }, '31 m').map((e) => e.key), ['length', 'turn', 'climb', 'bank', 'width']); assert.equal(VO.entries(null, '31 m'), null); assert.deepEqual(VO.entries({ length: '10.0 m' }, '').map((e) => e.key), ['length']);
+  const lap = await handlePanel(); lap.shell.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) lap.shell.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); lap.shell.extend({ length: 60, transition: 40, targets: { kh: 0 } }); lap.shell.close(); assert.ok(lap.shell.getState().history.present.closed); lap.frame();
+  assert.equal(lap.panel.values.visible(), false, 'a closed loop has no piece being edited: hidden'); lap.panel.unmount(); P1.panel.unmount();
+});
+
+test('row 19c: the share codes are in the ⋯ menu as "Copy track code" and "Paste track code…" (D267), not a section of the left column; the code itself is unchanged', async () => {
+  const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), menu = html.slice(html.indexOf('<div class="more-menu">'), html.indexOf('</div></details>'));
+  assert.ok(menu.includes('id="share"'), 'the share block is inside the ⋯ menu'); assert.ok(!/<aside id="side">[\s\S]*id="share"[\s\S]*<\/aside>/.test(html), 'and not in the left column');
+  const src = fs.readFileSync(path.join(REPO, 'app/share/index.js'), 'utf8'); assert.ok(src.includes("textContent: 'Copy track code'") && src.includes("textContent: 'Paste track code…'"), 'the buttons are named for what they are'); assert.ok(!/paste a t180 code here/.test(src), 'the box does not say "t180 code"');
+  // unchanged: a code made and read exactly as before (share-install.test.js has the full set)
+  const { createShare } = require('../share/share.js'), a = await track(), code = await createShare(a).copyTrack(), b = await createCoreShell({ brushFn: null }); b.extend({ length: 50 });
+  const r = await createShare(b).paste(code); assert.equal(r.kind, 'e', r.message); assert.equal(D.serialize(b.getState().history.present), D.serialize(a.getState().history.present));
 });
 
 test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and carries its segments (what the handles and the flight overlay read)', async () => {

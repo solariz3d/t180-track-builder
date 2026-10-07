@@ -74,8 +74,8 @@ test('a TUBE (sweep 360): the figures are the distance ROUND, each entry says ho
   const e = WL.entries(true); assert.equal(e[0].label, 'width like… (m round)', 'short enough for the select\'s own box (D235: the longer wording clipped at 204 px against 190)');
   assert.equal(e.find((x) => x.label.startsWith('Thunderhead,')).label, 'Thunderhead, 24 m round (21–28), a tube 7.6 m across');
   assert.equal(e.find((x) => x.label.startsWith('Nordic,')).label, 'Nordic, 38 m round (29–53), a tube 12.1 m across');
-  assert.equal(WL.across(31), '9.9'); assert.equal(WL.tubeNote(31), "A tube's width is the distance ROUND it, not across. 31 m round is a tube 9.9 m across (w/π).");
-  assert.equal(WL.tubeNote(''), "A tube's width is the distance ROUND it, not across."); assert.equal(WL.tubeNote('abc').includes('across ('), false);
+  assert.equal(WL.across(31), '9.9'); assert.equal(WL.tubeNote(31), '≈ 9.9 m across', 'D267: a few words under the field'); assert.equal(WL.tubeTip(31), "A tube's width is the distance ROUND it, not across. 31 m round is a tube 9.9 m across (w/π).", 'and the explanation is the tooltip');
+  assert.equal(WL.tubeNote(''), ''); assert.equal(WL.tubeNote('abc'), ''); assert.equal(WL.tubeTip(''), "A tube's width is the distance ROUND it, not across."); assert.equal(WL.tubeTip('abc').includes('across ('), false);
 });
 
 test('the PANEL: the drop-down sits beside the width field, lists the known tracks, and a pick types the median into the width (the ghost and the readout follow)', async () => {
@@ -96,13 +96,13 @@ test('the PANEL on a tube: the sweep at 360 turns the entries to round-and-acros
   const P = await mountPanel();
   assert.equal(P.note().textContent, ''); P.field('tube sweep °').value = '360'; P.field('tube sweep °').oninput();
   assert.equal(P.labels()[0], 'width like… (m round)'); assert.ok(P.labels().includes('Thunderhead, 24 m round (21–28), a tube 7.6 m across'));
-  assert.match(P.note().textContent, /^A tube's width is the distance ROUND it, not across\./);
-  P.pick('Nordic'); assert.equal(P.field('width m').value, '38'); assert.match(P.note().textContent, /38 m round is a tube 12\.1 m across \(w\/π\)\./);
-  P.field('width m').value = '31'; P.field('width m').oninput(); assert.match(P.note().textContent, /31 m round is a tube 9\.9 m across/);
+  assert.match(P.note().textContent, /^≈ \d+\.\d m across$/, 'D267: a few words'); assert.match(P.note().attrs.title, /^A tube's width is the distance ROUND it, not across\./, 'the explanation is its tooltip');
+  P.pick('Nordic'); assert.equal(P.field('width m').value, '38'); assert.equal(P.note().textContent, '≈ 12.1 m across'); assert.match(P.note().attrs.title, /38 m round is a tube 12\.1 m across \(w\/π\)\./, 'the tooltip follows the width');
+  P.field('width m').value = '31'; P.field('width m').oninput(); assert.equal(P.note().textContent, '≈ 9.9 m across'); assert.match(P.note().attrs.title, /31 m round is a tube 9\.9 m across/);
   P.field('tube sweep °').value = '200'; P.field('tube sweep °').oninput(); assert.equal(P.labels()[0], 'width like…'); assert.equal(P.note().textContent, '');
 });
 
 test('the PANEL at a tube head: the sweep field SHOWS the head\'s 360, so the entries read round and across with nothing typed', async () => {
   const P = await mountPanel((shell) => { shell.extend({ length: 100, first: { t: 360 } }); });
-  assert.equal(P.field('tube sweep °').value, '360'); assert.ok(P.labels().includes('Thunderhead, 24 m round (21–28), a tube 7.6 m across')); assert.match(P.note().textContent, /ROUND/);
+  assert.equal(P.field('tube sweep °').value, '360'); assert.ok(P.labels().includes('Thunderhead, 24 m round (21–28), a tube 7.6 m across')); assert.match(P.note().textContent, /^≈ \d+\.\d m across$/); assert.match(P.note().attrs.title, /ROUND/);
 });

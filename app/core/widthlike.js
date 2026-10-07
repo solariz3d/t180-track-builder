@@ -7,7 +7,7 @@
 //                                          label "Thunderhead, 24 m (21–28)": the median, then the 10th to 90th percentile of what that track's reads measure.
 //                                          For a TUBE piece (the tube sweep t = 360) the figures are the distance ROUND the tube, and the entry adds how wide that
 //                                          is across: "Thunderhead, 24 m round (21–28), a tube 7.6 m across".
-//   tubeNote(w)   -> string                the line under the drop-down for a tube: w is the distance ROUND it (the circumference, u runs −w/2 to +w/2 round the
+//   tubeNote(w)   -> string                (D267) the few words under the field of a tube, "≈ 14.3 m across"; tubeTip(w) is the explanation, the field's tooltip. Before D267 this was the line under the drop-down for a tube: w is the distance ROUND it (the circumference, u runs −w/2 to +w/2 round the
 //                                          ring, src/texture/flow.js), so a tube's width across is w/π.
 //   isTube(sweep) -> bool                  the sweep field's value (degrees) says a closed pipe: 360.
 //
@@ -27,9 +27,11 @@ function label(t, tube) {
 function entries(tube = false, tracks = W.tracks) {
   return [{ value: '', label: tube ? 'width like… (m round)' : 'width like…' }, ...tracks.filter((t) => t.read_closes !== false).map((t) => ({ value: String(t.median_m), label: label(t, tube) }))];
 }
-function tubeNote(w) {
+/** D267: the few words under the width field of a tube ("≈ 14.3 m across"); nothing for a width that is not a number above 0. The explanation is tubeTip, the field's tooltip. */
+function tubeNote(w) { const n = Number(w); return Number.isFinite(n) && n > 0 ? `≈ ${across(n)} m across` : ''; }
+function tubeTip(w) {
   const n = Number(w);
   return `A tube's width is the distance ROUND it, not across.${Number.isFinite(n) && n > 0 ? ` ${fmt(n)} m round is a tube ${across(n)} m across (w/π).` : ''}`;
 }
 
-module.exports = { entries, tubeNote, isTube, label, across };
+module.exports = { entries, tubeNote, tubeTip, isTube, label, across };

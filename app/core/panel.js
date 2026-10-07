@@ -22,7 +22,8 @@ const HD = require('./handles.js');   // D244: the drag handles on the Extend gh
 const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
 const LD = require('./landing.js');
 const GL = require('./griplike.js');   // D261: the grip field's checks and words, the "grip like…" entries
-const GR = require('./griplayer.js');   // D261: the track coloured by grip   // D258: the free jump's landing: where its handles are, and its number boxes
+const GR = require('./griplayer.js');   // D261: the track coloured by grip
+const VO = require('./valuesoverlay.js');   // D267: the values of the piece being edited, large over the 3D view   // D258: the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
@@ -112,10 +113,12 @@ function mount(root, shell) {
   const WL = require('./widthlike.js');
   const wlike = el('select', { 'aria-label': 'width like a known T-180 track', title: 'width like a known T-180 track: the median of what its reads measure (the 10th to 90th percentile in brackets). Picking one sets the width field' });
   const wnote = el('p', { class: 'message', 'aria-label': 'what the width means for a tube', style: 'font-size:12px;margin:2px 0' });
+  const widthTitle = width.getAttribute('title');
+  const showTubeNote = () => { const t = WL.isTube(tube.value); wnote.textContent = t ? WL.tubeNote(width.value) : ''; const tip = t ? `${widthTitle} ${WL.tubeTip(width.value)}` : widthTitle; width.setAttribute('title', tip); wnote.setAttribute('title', t ? WL.tubeTip(width.value) : ''); };   // D267: the explanation is the tooltip
   const fillWidthLike = () => {
     const tubeNow = WL.isTube(tube.value);
     wlike.replaceChildren(...WL.entries(tubeNow).map((e) => new win.Option(e.label, e.value))); wlike.value = '';
-    wnote.textContent = tubeNow ? WL.tubeNote(width.value) : '';
+    showTubeNote();
   };
   const shown = {};
   const show = (x) => { const v = Math.round(x * 100) / 100; return String(Object.is(v, -0) ? 0 : v); };   // two decimals, no trailing zeros, no "-0"
@@ -141,7 +144,7 @@ function mount(root, shell) {
     title: `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
   // GRIP (D261, the keeper: a different grip per piece; the core is src/core/document.js, E's). A whole percent 50 to 150 (100 is AC's own road), shown as the head's; left as shown the new piece keeps it, a changed
   // value is the new piece's grip. "grip like…" fills it from a known track (src/doc/grips.json). The words say what the number is, "untested: drive it" outside 60 to 110, and that the checker does not model grip.
-  const gripF = el('input', { type: 'number', value: '100', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'grip', title: 'grip of the new piece, a whole percent from 50 to 150; 100 is AC\'s own road. Shows the road at the head; left as shown, the new piece keeps it' });
+  const gripF = el('input', { type: 'number', value: '100', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'grip', title: GL.tip() });
   const gripLike = el('select', { 'aria-label': 'grip like known track', title: 'grip like a known track: the measured road friction of installed tracks; picking one fills the grip box' });
   gripLike.replaceChildren(...GL.entries().map((e) => new win.Option(e.label, e.value)));
   const gripNote = el('p', { class: 'message', 'aria-label': 'what the grip means', style: 'font-size:12px;margin:2px 0' });
@@ -163,6 +166,7 @@ function mount(root, shell) {
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
   // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
   // the typed target, which the core's fit may ring past and its guard may refuse (E's seal row 7)
+  let values = null;   // D267: the values of the piece being edited, large over the 3D view (app/core/valuesoverlay.js); mounted where the stage is found, below
   const RO = ['length', 'turn', 'climb', 'bank', 'cup', 'edge', 'start', 'tube'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
   const roName = (k) => (k === 'length' ? 'length' : k === 'cup' ? 'cup from → to' : k === 'edge' ? 'edge from → to' : k === 'start' ? 'edge start from → to' : k === 'tube' ? 'tube from → to' : `${k} change`);
   const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:#eef1f6' },
@@ -176,6 +180,7 @@ function mount(root, shell) {
         edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup) }; }
     } catch (e) { why = e.message; }
     for (const k of RO) roCells[k].textContent = f ? f[k] : '—';
+    if (values) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${show(Number(width.value))} m` : '') : null);   // D267: the same numbers, large over the 3D view
     roBox.title = why;
   };
   let scrubbing = false;   // D266 item 2: an Extend handle is being dragged: the ghost is built CHEAP until the release (handlesHost.end builds the full one)
@@ -193,7 +198,7 @@ function mount(root, shell) {
   for (const f of [edge, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way (D225)
   for (const f of [cup, tube]) f.oninput = f.onchange = () => { exclusive(f); ghost(); };   // cup OR tube: the rule first, then the ghost
   tube.oninput = tube.onchange = () => { exclusive(tube); ghost(); fillWidthLike(); };   // a tube's entries read round and across (D232)
-  width.oninput = width.onchange = () => { ghost(); wnote.textContent = WL.isTube(tube.value) ? WL.tubeNote(width.value) : ''; };
+  width.oninput = width.onchange = () => { ghost(); showTubeNote(); };
   wlike.onchange = () => { if (!wlike.value) return; width.value = wlike.value; wlike.value = ''; width.oninput(); };
   gripF.oninput = gripF.onchange = () => { gripNote.textContent = GL.note(gripF.value); ghost(); };
   gripLike.onchange = () => { if (!gripLike.value) return; gripF.value = gripLike.value; gripLike.value = ''; gripF.oninput(); };   // a pick is a typed grip: the words, the ghost and the readout follow   // a pick is a typed width: the ghost and the readout follow
@@ -226,8 +231,9 @@ function mount(root, shell) {
     atStart.turn.checked = was.turn; atStart.climb.checked = was.climb;
   } });
   // and the hint when the turn field asks for 0 after a turn without "at start": that eases over the whole piece, so it is not straight until its end
-  const straightHint = el('p', { class: 'message', 'aria-label': 'straight hint', style: 'font-size:12px;margin:2px 0' });
-  const hintNow = () => { const typed = asTyped('turn'); straightHint.textContent = typed !== '' && Number(typed) === 0 && Number(shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; };
+  // D267: no paragraph under the buttons; the sense is the "at start" box's tooltip
+  const turnStartTitle = atStart.turn.getAttribute('title');
+  const hintNow = () => { const typed = asTyped('turn'); const hint = typed !== '' && Number(typed) === 0 && Number(shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; atStart.turn.setAttribute('title', hint ? `${turnStartTitle} ${hint}` : turnStartTitle); };
 
   // BRUSH
   const mode = el('select', { 'aria-label': 'brush mode' }), channel = el('select', { 'aria-label': 'brush channel' }), radius = num(60, 10, 'brush radius, m');
@@ -243,6 +249,7 @@ function mount(root, shell) {
   mode.replaceChildren(...shell.brushModes().map((m) => new win.Option(m === 'local' ? 'height / sideways (local)' : 'rate (one channel)', m)));
   mode.onchange = fillChannels; fillChannels();
   const stage = doc.getElementById('preview');
+  values = stage ? VO.mount(stage, win) : null;
   let drag = null;
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const down = (e) => {
@@ -329,7 +336,6 @@ function mount(root, shell) {
   // back to it makes it the head again. A move the core refuses (LANDING_NOT_HEAD, a landing under 1 m from the take-off) says why in plain words. Nothing is solved or drawn for the air: drive it in AC.
   const jumpNote = el('div', { 'aria-label': 'jump note', style: 'font-size:12px;margin:2px 0;color:#aab2c0' });
   const sayJump = (...lines) => jumpNote.replaceChildren(...lines.filter(Boolean).map((t) => el('p', { text: t, style: 'margin:2px 0' })));
-  const JUMP_HINT = 'Jump places the piece above, then a free landing 40 m ahead at the same height. Set the piece\'s climb first: it is the take-off. This is a jump: drive it in AC and move the landing until it works.';
   const LANDING_HINT = 'Move the landing: drag its arrows on the track (white forward, orange sideways, yellow height, purple heading) or type below. Shift is fine, Ctrl snaps. Extend from it when it is right: that fixes it (delete back to it to move it again).';
   const jumpGhost = () => {
     let why = null;
@@ -342,7 +348,7 @@ function mount(root, shell) {
   // the landing's number boxes: shown only while a landing is the head; a typed value (change) is one undo step; a box being typed in is not rewritten from the track
   const landBoxes = Object.fromEntries(LD.BOXES.map((b) => [b.field, el('input', { type: 'number', step: String(b.step), 'aria-label': `landing ${b.field}`, title: b.title })]));
   for (const b of LD.BOXES) { const box = landBoxes[b.field]; box.onchange = () => { if (box.value === '' || !Number.isFinite(Number(box.value))) { fillLanding(); return; } shell.moveLanding({ [b.field]: Number(box.value) }); }; }
-  const landingBox = el('div', { 'aria-label': 'landing', style: 'display:none' }, el('div', { class: 'pickers' }, ...LD.BOXES.map((b) => field(b.label, landBoxes[b.field]))), el('p', { text: LANDING_HINT, style: 'font-size:12px;margin:2px 0;color:#aab2c0', 'aria-label': 'landing hint' }));
+  const landingBox = el('div', { 'aria-label': 'landing', style: 'display:none', title: LANDING_HINT }, el('div', { class: 'pickers' }, ...LD.BOXES.map((b) => field(b.label, landBoxes[b.field]))));   // D267: the hint is the block's tooltip (title), not a paragraph
   const fillLanding = () => {
     const L = shell.landing(); landingBox.style.display = L ? '' : 'none';
     if (!L) return;
@@ -402,7 +408,7 @@ function mount(root, shell) {
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
       fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn), field('colour by grip', colourOn)),
     wnote, gripNote, roBox,
-    el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn), straightHint, jumpNote, landingBox,
+    el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn), jumpNote, landingBox,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
     ...pieces.nodes.selection, ...pieces.nodes.library,
@@ -422,7 +428,7 @@ function mount(root, shell) {
     msg.textContent = st.message || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
     readout();   // the track changed, so the piece the fields would add changed
     hintNow(); fillLanding();
-    if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(shell.landing() ? 'This is a jump: drive it in AC and move the landing until it works.' : JUMP_HINT); }   // a new document: the note is the standing one again (a refusal's words are gone)
+    if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // D267: a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)
     // D244b: the Sculpt switch follows the shell, and says what to do next
     sculptOn.checked = !!st.sculpt;
     const si = st.sculpt ? shell.sculptInfo() : null;
@@ -439,7 +445,7 @@ function mount(root, shell) {
   doc.addEventListener('t180:handles-request', onHandlesRequest);
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, options: opts, unmount() { unsub(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, values, options: opts, unmount() { unsub(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

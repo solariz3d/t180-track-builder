@@ -33,7 +33,7 @@ test('row 1: shell.jump: the take-off as Extend would place it, a free flight, a
   s.jump({ length: 80 }); const d1 = s.getState().history.present;
   assert.deepEqual(types(s), [...d0.pieces.map((p) => p.type), 'road', 'flight', 'road'], 'the piece the fields describe, then the flight and the landing');
   assert.equal(d1.pieces[d1.pieces.length - 3].length, 80, 'the take-off is what Extend would place'); assert.equal(d1.pieces[d1.pieces.length - 1].length, 60, 'a 60 m landing');
-  assert.equal(s.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(s.getState().message, /^Jump placed\. This is a jump: drive it in AC and move the landing until it works\.$/); assert.equal(s.getState().messageKind, 'ok'); assert.ok(s.getState().dirty);
+  assert.equal(s.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(s.getState().message, /^Jump placed: move its landing by hand\.$/); assert.equal(s.getState().messageKind, 'ok'); assert.ok(s.getState().dirty);
   assert.deepEqual(s.landing().pose, { forward: 40, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 }, 'lined up, 40 m ahead, the same height'); assert.equal(s.landing().index, d1.pieces.length - 2);
   s.undo(); assert.equal(s.getState().history.present, d0, 'Undo gives the very same document back'); s.redo(); assert.equal(s.getState().history.present, d1);
   // null: take off from the track's end as it is

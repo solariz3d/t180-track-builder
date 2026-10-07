@@ -262,7 +262,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     candidateJump(extendOpts) { const d = jumpFor(extendOpts); return { segments: segmentsOf(d), closed: false, start: startOf(d), jump: true }; },
     jump(extendOpts) {
       let d; try { d = jumpFor(extendOpts); } catch (e) { if (e && e.name === 'CoreError') return set({ message: JW.jumpWords(e) }); throw e; }
-      return commit('jump', () => d, { lastEdited: null, ...ok('Jump placed. This is a jump: drive it in AC and move the landing until it works.') });
+      return commit('jump', () => d, { lastEdited: null, ...ok('Jump placed: move its landing by hand.') });
     },
     /**
      * THE LANDING, while it is the head (the last piece, or the flight still waiting for its landing): null otherwise. { flightId, index, pose } with pose = the number boxes' values in their units
@@ -493,7 +493,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!idx.length) return set({ message: 'the selection has no road piece: only road has grip' });
       if (idx.every((i) => D.gripOf(d.pieces[i]) === c.grip)) return set({ ...ok(`the selected piece${idx.length === 1 ? '' : 's'} already ${idx.length === 1 ? 'has' : 'have'} grip ${c.grip}%`) });
       let nd; try { nd = D.setGrip(d, idx, c.grip); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }
-      return commit('grip', () => nd, { lastEdited: null, selection: Object.freeze({ ...s, base: nd }), ...ok(`grip ${c.grip}% on ${idx.length} piece${idx.length === 1 ? '' : 's'}${c.grip < GL.TESTED_MIN || c.grip > GL.TESTED_MAX ? ' (untested: drive it)' : ''}; the checker does not model grip`) });
+      return commit('grip', () => nd, { lastEdited: null, selection: Object.freeze({ ...s, base: nd }), ...ok(`grip ${c.grip}% on ${idx.length} piece${idx.length === 1 ? '' : 's'}${c.grip < GL.TESTED_MIN || c.grip > GL.TESTED_MAX ? ' (untested: drive it)' : ''}`) });
     },
     /** The grip of the road at the head (100 on an empty track or one with no grip set): what the Extend field shows, and what the next piece takes unless it is changed. */
     headGrip() { const d = doc(); for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return D.gripOf(d.pieces[i]); return D.GRIP_DEFAULT; },

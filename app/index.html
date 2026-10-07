@@ -27,6 +27,8 @@
   .more[open] > summary { border-color: var(--accent); }
   .more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; min-width: 260px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
   .more-menu > span { display: flex; flex-direction: column; gap: 6px; }
+  .more-menu #share { display: flex; flex-direction: column; gap: 6px; }   /* D267: the share codes live in the menu (they were a section of the left column) */
+  .more-menu #share textarea { width: 100%; box-sizing: border-box; }
   /* D252 follow-up (C's finding 2): a long install note (the full Assetto Corsa path) pushed ⋯ right and its menu off the window; it is cut to a box, the whole text in its tooltip */
   .t-install-note { display: inline-block; vertical-align: middle; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: #2a2412; border-bottom: 1px solid #5a4a1c; }
@@ -91,6 +93,7 @@
     <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
     <button id="testexport" title="TEST export of an UNFINISHED track into Assetto Corsa, as t180b_&lt;name&gt;_test, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export. Export to Assetto Corsa does the same on an open track.">Test export (unfinished)…</button>
     <span id="more-install"></span>
+    <div id="share" title="the whole track as one line of text to share (Copy track code), or open a track from such a line (Paste track code…). The open track is one Ctrl+Z away"></div>
   </div></details>
   <span id="status" style="color: var(--dim)"></span>
 </header>
@@ -101,7 +104,6 @@
     <section id="reds"></section>
     <section id="validation"></section>
     <section id="textures"></section>
-    <section id="share"></section>
   </aside>
 </div>
 <main id="stage">
