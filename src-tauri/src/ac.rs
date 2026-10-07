@@ -437,6 +437,19 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
+    // D264: Export to Assetto Corsa on an open track installs the TEST export as t180b_<name>_test: the same guards hold for that name
+    #[test]
+    fn a_test_export_folder_installs_under_the_same_guards() {
+        let (d, ac, _) = fake("d264");
+        assert_eq!(install_to(&ac, "t180b_mine_test", &files()).unwrap(), 3);
+        assert_eq!(install_to(&ac, "t180b_mine_test", &files()).unwrap(), 3, "exporting again updates its own folder");
+        let theirs = ac.join("content").join("tracks").join("t180b_theirs_test");
+        fs::create_dir_all(&theirs).unwrap(); fs::write(theirs.join("x"), b"x").unwrap();
+        assert!(install_to(&ac, "t180b_theirs_test", &files()).unwrap_err().contains("was not written by the builder"));
+        assert_eq!(fs::read_dir(&theirs).unwrap().count(), 1);
+        assert!(install_to(&ac, "mine_test", &files()).unwrap_err().contains("not a folder the builder makes"));
+        fs::remove_dir_all(&d).unwrap();
+    }
     #[test]
     fn only_an_installed_t180b_track_is_ever_planned_and_the_setting_is_off_by_default() {
         let (d, ac, docs) = installed("plan");

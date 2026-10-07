@@ -106,15 +106,18 @@ The limits come from measurements of real T-180 tracks and replays, not guesses 
 ## Exporting
 
 - **Export to Assetto Corsa** (the main button) writes the track straight into AC's `content\tracks`. The track must be
-  closed, saved under a name, and free of reds. It finds AC by itself: Steam's own folder, then every Steam library.
+  saved under a name. A closed track must be free of reds and goes in as `t180b_<name>`. A track that is not closed yet
+  goes in as the unfinished test export, `t180b_<name>_test` (see below), and the result line says so. It finds AC by
+  itself: Steam's own folder, then every Steam library.
   - The first time the app starts, a card asks to confirm the AC folder Steam found (**Use it** / **Choose another…**),
     or to pick one if Steam has none. Exporting without answering the card still finds AC, or asks.
   - **It only ever writes folders named `t180b_…`.** It never overwrites a track it did not make. Exporting the same
     track again updates its folder.
 - **The ⋯ menu** next to it:
   - **Export…**: the same track folder, into any folder you pick.
-  - **Test export (unfinished)…**: an open, unfinished track, to drive it by hand. Reds are listed as warnings, the
-    road ends in a run-off and a wall, and the folder is `t180b_<name>_test`. A closed track uses the normal Export.
+  - **Test export (unfinished)…**: an open, unfinished track, to drive it by hand, written into AC like the main button
+    (it asks for the AC folder only if AC is not known). Reds are listed as warnings, the road ends in a run-off and a
+    wall, and the folder is `t180b_<name>_test`. A closed track uses the normal export.
   - **Assetto Corsa folder…**: change the AC folder.
   - **See it in Assetto**: starts AC on the exported track. It is off until you tick its box, and it has not been
     tried yet (see *Status and limits*).

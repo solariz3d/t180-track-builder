@@ -39,7 +39,7 @@ const STEPS = Object.freeze([
     text: 'Red is known to break, and the track will not export until it is gone. Amber is past what any track has proven (a load over 90 g, or a seam sharper than measured), allowed but untested. Each one is listed with its reason and source.',
     done: null },
   { id: 'export', title: 'Export', target: '#install',
-    text: 'Press "Export to Assetto Corsa". It writes the track straight into the game, in the Assetto Corsa folder chosen at the first start (found through Steam); exporting the same track again updates it. The ⋯ menu beside it has Export… (into any folder you pick, nothing installed), the test export of an unfinished track, the Assetto Corsa folder, and See it in Assetto.',
+    text: 'Press "Export to Assetto Corsa". It writes the track straight into the game, in the Assetto Corsa folder chosen at the first start (found through Steam); exporting the same track again updates it. A track that is not closed yet goes in as an unfinished TEST, t180b_<name>_test, to drive it by hand. The ⋯ menu beside it has Export… (into any folder you pick, nothing installed), the test export of an unfinished track, the Assetto Corsa folder, and See it in Assetto.',
     done: (st, seen) => seen.exported },
   { id: 'grid', title: 'The grid and the mirror', target: '#camera',
     text: 'Under the preview, Grid shows the ground or a 3D lattice once the track climbs; Mirror draws the symmetry axes and reads the mirror gap, the number "make it symmetrical" drives to zero. Drag the centre handle to move the axes. To fly the camera: W A S D, Space up and Left Ctrl down (Q and E too), Shift to go faster; turn it with the right button (the left button is for clicking pieces, handles and the brush).',

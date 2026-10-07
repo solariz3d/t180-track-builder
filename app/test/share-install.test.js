@@ -197,12 +197,18 @@ test('D250: when AC is NOT found through Steam, the line says so and asks for th
   assert.deepStrictEqual([r.ok, r.needsRoot], [false, true]); assert.match(r.message, /not found through Steam/);
 });
 
-test('an open loop is not installed: the refusal is the Export button\'s own, and nothing is written', async () => {
+// D264 AMENDED THIS ROW BY NAME (the keeper, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the
+// test that isnt finished"). It was "an open loop is not installed: the refusal is the Export button's own, and nothing is written". Export to Assetto Corsa on an
+// OPEN track now installs the TEST export (D243a's own build, t180b_<name>_test) and says so; Export… (any folder) still refuses the open loop (app/test/core-shell.test.js).
+test('D264: an open loop is installed as the unfinished TEST export, t180b_<name>_test, and the line says so; never as t180b_<name>', async () => {
   const native = fakeNative(); native.root = 'G:/games/assettocorsa';
   const s = await lap({ exporter: await makeExporter(get) }); await s.save('Monza');
   const r = await installerFor(s, native).install();
-  assert.deepStrictEqual([r.ok, native.installs.length], [false, 0]);
-  assert.match(r.message, /the loop is not closed: close it first/);
+  assert.strictEqual(r.ok, true, r.message);
+  assert.deepStrictEqual(native.installs.map((i) => i.folder), ['t180b_monza_test']);
+  assert.ok(native.installs[0].files.includes('t180b_TEST_UNFINISHED.txt'), 'the folder says it is unfinished');
+  assert.match(r.message, /this track is not closed, so it was exported as an unfinished TEST: the road ends in a run-off and a wall; reds are listed as warnings/);
+  assert.ok(r.message.includes('G:/games/assettocorsa\\content\\tracks\\t180b_monza_test'), r.message);
 });
 
 // D252 second item (the keeper, 11:38: "why two export buttons"; 11:39: "it shouldnt be there, creates too much clutter, the AC folder, instead, in the EXE
@@ -286,4 +292,73 @@ test('D252 follow-up: a long install note is cut to its box with the whole text 
   const rule = (sel) => { const m = new RegExp(sel.replace(/[.]/g, '\\.') + '\\s*\\{([^}]*)\\}').exec(html); return m ? m[1] : ''; };
   assert.match(rule('.more-menu'), /right:\s*0/, 'the menu hangs from its button\'s RIGHT edge, so it opens toward the window'); assert.doesNotMatch(rule('.more-menu'), /left:\s*0/);
   assert.match(rule('.t-install-note'), /max-width/); assert.match(rule('.t-install-note'), /text-overflow:\s*ellipsis/);
+});
+
+// D264 (the keeper, 01:34; plan_t180_open_export_ac_2026-10-07.md): Export to Assetto Corsa on an OPEN track writes the TEST export into AC instead of refusing,
+// and ⋯ → Test export (unfinished)… goes into AC by the same path (the folder picker only if AC is not known). A closed track exports as before.
+// The native install here WRITES into a temp AC tree, so what lands on disk is read back; the native guards themselves are ac.rs's (cargo test, D264 row).
+const os = require('os');
+function diskNative() {
+  const ac = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-d264-')), tracks = path.join(ac, 'assettocorsa', 'content', 'tracks'); fs.mkdirSync(tracks, { recursive: true });
+  const n = fakeNative(); n.root = path.join(ac, 'assettocorsa');
+  n.installTrack = async (folder, files) => {
+    if (!/^t180b_/.test(folder)) throw new Error(`${folder} is not a folder the builder makes`);
+    for (const f of files) { const p = path.join(tracks, folder, f.path); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, Buffer.from(f.bytes)); }
+    n.installs.push({ folder, files: files.map((x) => x.path) }); return files.length;
+  };
+  return { n, tracks, done: () => fs.rmSync(ac, { recursive: true, force: true }) };
+}
+function mountReal(s, native, pickFolder = async () => null) {
+  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
+  const root = new fake.Element('div'), more = new fake.Element('div'), testButton = new fake.Element('button'); testButton.textContent = 'Test export (unfinished)…'; more.append(testButton);
+  mount(root, s, { native, pickFolder, getTextures: () => null, more, testButton });
+  return { restore, testButton, main: [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa'), note: () => [...root.walk()].find((e) => e.className === 't-install-note').textContent };
+}
+test('D264: Export to Assetto Corsa on an OPEN track writes t180b_<name>_test into the AC tree and says it is an unfinished TEST; a closed track still writes t180b_<name>', async () => {
+  const d = diskNative();
+  try {
+    const open = await lap({ exporter: await makeExporter(get) }); await open.save('Monza');
+    assert.equal(open.getState().history.present.closed, false, 'control: the lap is open');
+    const x = mountReal(open, d.n);
+    try { await x.main.onclick(); } finally { x.restore(); }
+    assert.deepStrictEqual(fs.readdirSync(d.tracks), ['t180b_monza_test'], x.note());
+    assert.ok(fs.existsSync(path.join(d.tracks, 't180b_monza_test', 't180b_TEST_UNFINISHED.txt')), 'the folder says it is unfinished');
+    assert.ok(fs.existsSync(path.join(d.tracks, 't180b_monza_test', 'ai', 'fast_lane.ai')));
+    assert.match(x.note(), /this track is not closed, so it was exported as an unfinished TEST: the road ends in a run-off and a wall; reds are listed as warnings/);
+    const closed = await lap({ closed: true, exporter: await makeExporter(get) }); await closed.save('Monza');
+    const y = mountReal(closed, d.n);
+    try { await y.main.onclick(); } finally { y.restore(); }
+    assert.deepStrictEqual(fs.readdirSync(d.tracks).sort(), ['t180b_monza', 't180b_monza_test']);
+    assert.ok(!fs.existsSync(path.join(d.tracks, 't180b_monza', 't180b_TEST_UNFINISHED.txt')), 'a closed track is the real export');
+    assert.ok(!/TEST/.test(y.note()), y.note());
+  } finally { d.done(); }
+});
+test('D264: ⋯ Test export (unfinished)… goes into AC by the same path, with no folder dialog when AC is known; only when it is not does it ask for the AC folder', async () => {
+  const d = diskNative();
+  try {
+    const s = await lap({ exporter: await makeExporter(get) }); await s.save('Monza');
+    const asked = [], x = mountReal(s, d.n, async (why) => { asked.push(why); return null; });
+    try { await x.testButton.onclick(); } finally { x.restore(); }
+    assert.deepStrictEqual([asked.length, fs.readdirSync(d.tracks)], [0, ['t180b_monza_test']], x.note());
+    assert.match(x.note(), /unfinished TEST/);
+    const root = d.n.root; d.n.root = null;
+    const y = mountReal(s, d.n, async (why) => { asked.push(why); return root; });
+    try { await y.testButton.onclick(); } finally { y.restore(); }
+    assert.strictEqual(asked.length, 1, 'AC not known: the AC folder picker, once'); assert.match(asked[0], /Assetto Corsa folder/);
+    assert.strictEqual(d.n.root, root, 'remembered'); assert.deepStrictEqual(d.n.installs.map((i) => i.folder), ['t180b_monza_test', 't180b_monza_test']);
+  } finally { d.done(); }
+});
+test('D264: the guards hold: ⋯ Test export on a CLOSED track is refused by name and nothing is written; an unnamed open track is not installed', async () => {
+  const d = diskNative();
+  try {
+    const closed = await lap({ closed: true, exporter: await makeExporter(get) }); await closed.save('Monza');
+    const x = mountReal(closed, d.n);
+    try { await x.testButton.onclick(); } finally { x.restore(); }
+    assert.match(x.note(), /this track is closed/); assert.deepStrictEqual(fs.readdirSync(d.tracks), []);
+    for (const name of ['', 'untitled']) {
+      const open = await lap({ exporter: await makeExporter(get) });
+      const r = await createInstaller({ build: (o) => open.buildExport(o), native: d.n, getDoc: () => ({ ...open.exportDoc(), name }) }).install();
+      assert.deepStrictEqual([r.ok, fs.readdirSync(d.tracks)], [false, []], name); assert.match(r.message, /name the track/);
+    }
+  } finally { d.done(); }
 });
