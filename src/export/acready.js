@@ -10,8 +10,13 @@
 //   ensureDiffuse(scene) every material without a txDiffuse sampler gets a small solid-colour DDS bound as txDiffuse.
 //                        ksPerPixel takes its colour from txDiffuse; with none bound the road rendered black under any
 //                        light. A copy with a grey diffuse bound rendered lit.
+//   mergeForAc(scene)    after weldSeams: consecutive road meshes (`1ROAD_…`, not the pit lane) and underside-skin meshes
+//                        (`UNDERSKIN_…`) of the same material and flags are joined into chunks, so AC draws a few dozen
+//                        meshes instead of one per cell (D260: an equation track's cells are its 2 m segments, so TEST 1
+//                        recovered exported 15,271 meshes of ~95 triangles each, and the keeper's frame rate dropped).
 //
-// Neither changes geometry: the flattened positions equal the nested scene's world positions (tested).
+// None changes geometry: the flattened positions equal the nested scene's world positions (tested), and a merge only concatenates
+// the same world-space vertices and triangles (tested: the triangle set is the same, vertex for vertex).
 'use strict';
 const { encodeDds } = require('../texture/dds.js');
 
@@ -151,4 +156,53 @@ function ensureDiffuse(scene) {
   return { ...r, textures: r.textures.map((t) => (Buffer.isBuffer(t.data) ? t : { ...t, data: Buffer.from(t.data) })) };
 }
 
-module.exports = { flattenForAc, ensureDiffuse, ensureDiffusePlain, weldSeams, SNAP, SLIVER };
+/**
+ * mergeForAc(scene, { maxVerts, chunkM }): run AFTER flattenForAc and weldSeams (world space, seams already welded: weldSeams finds a zipper by its
+ * name, which a merge would lose). WHY (D260): each kn5 mesh is at least one draw call (inferred: AC on DirectX 11), and an equation track's
+ * cells are its 2 m adapter segments (src/core/adapter.js toSegments, segM 2; src/geom/mesh.js assemble makes one mesh per piece cell), so a
+ * 13 km lap came out as ~7,600 road meshes plus as many underside skins. Here consecutive meshes of one CLASS (road `1ROAD_…` except the pit lane
+ * `1ROAD_PIT_…`, which keeps its own meshes; the skin `UNDERSKIN_…`) with the same material and flags (castShadows, visible, transparent, renderable:
+ * every per-mesh field writeKn5 writes besides the geometry) are joined: positions, normals and uvs concatenated as they are (the same Float32
+ * values, so every vertex is byte-identical in world space), the indices offset. A chunk closes before it would pass `maxVerts` (65,536: writeKn5
+ * stores 16-bit indices) or when its bounding box's diagonal would pass `chunkM` (400 m, so AC can still leave off what is out of view).
+ * The merged meshes are named `1ROAD_chunk_<n>` and `UNDERSKIN_chunk_<n>`: a road chunk keeps the `1ROAD` physics prefix (surfaces.ini's ROAD, and
+ * the soft-collision block's `MESHES=1ROAD?`), and a skin chunk stays a non-physics name. A chunk of ONE mesh is that mesh, unchanged (its name too).
+ * Everything else (markers, walls, paint, the pit lane, a test export's end wall) is kept as it is, in place: a chunk sits where its first mesh sat.
+ * Tangents are writeKn5's, from each vertex's own triangles; a merge shares no vertex between meshes, so they are the same.
+ */
+const MERGE_CLASSES = Object.freeze([{ re: /^1ROAD_(?!PIT)/, prefix: '1ROAD_chunk_' }, { re: /^UNDERSKIN_/, prefix: 'UNDERSKIN_chunk_' }]);
+const MERGE_MAX_VERTS = 65536, MERGE_CHUNK_M = 400;
+function mergeForAc(scene, { maxVerts = MERGE_MAX_VERTS, chunkM = MERGE_CHUNK_M } = {}) {
+  const kids = scene.root.children, out = [], open = new Map(), taken = new Set(kids.map((n) => n.name));
+  const box = (P) => { const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { if (P[i + k] < b[k]) b[k] = P[i + k]; if (P[i + k] > b[k + 3]) b[k + 3] = P[i + k]; } return b; };
+  const join = (a, b) => [0, 1, 2].map((k) => Math.min(a[k], b[k])).concat([3, 4, 5].map((k) => Math.max(a[k], b[k])));
+  const diag = (b) => Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+  for (const n of kids) {
+    const c = n.type === 'mesh' ? MERGE_CLASSES.findIndex((x) => x.re.test(n.name)) : -1;
+    if (c < 0) { out.push(n); continue; }
+    const key = [c, n.material, !!n.castShadows, n.visible !== false, !!n.transparent, n.renderable !== false].join('|'), nv = n.positions.length / 3, bb = box(n.positions);
+    let ch = open.get(key);
+    if (ch) { const u = join(ch.bb, bb); if (ch.nv + nv > maxVerts || diag(u) > chunkM) ch = null; else ch.bb = u; }
+    if (!ch) { ch = { c, parts: [], nv: 0, bb }; open.set(key, ch); out.push(ch); }
+    ch.parts.push(n); ch.nv += nv;
+  }
+  const count = MERGE_CLASSES.map(() => 0);
+  const children = out.map((x) => {
+    if (!x.parts) return x;
+    if (x.parts.length === 1) return x.parts[0];
+    let name; do { name = `${MERGE_CLASSES[x.c].prefix}${count[x.c]++}`; } while (taken.has(name)); taken.add(name);
+    const positions = new Float32Array(x.nv * 3), normals = new Float32Array(x.nv * 3), uvs = new Float32Array(x.nv * 2);
+    const indices = new Uint16Array(x.parts.reduce((a, p) => a + p.indices.length, 0));
+    let v = 0, t = 0;
+    for (const p of x.parts) {
+      const pv = p.positions.length / 3;
+      positions.set(p.positions, v * 3); normals.set(p.normals, v * 3); uvs.set(p.uvs, v * 2);
+      for (let i = 0; i < p.indices.length; i++) indices[t++] = p.indices[i] + v;
+      v += pv;
+    }
+    return { ...x.parts[0], name, positions, normals, uvs, indices };
+  });
+  return { ...scene, root: { ...scene.root, children } };
+}
+
+module.exports = { flattenForAc, ensureDiffuse, ensureDiffusePlain, weldSeams, mergeForAc, MERGE_MAX_VERTS, MERGE_CHUNK_M, SNAP, SLIVER };
