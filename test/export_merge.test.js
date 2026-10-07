@@ -47,7 +47,7 @@ test('row 1: the merge keeps every vertex and every triangle (position, normal, 
   const kids = []; for (let i = 0; i < 20; i++) kids.push(strip(`1ROAD_p1_body_${i}`, { x0: 4 * i }), strip(`UNDERSKIN_p1_${i}`, { x0: 4 * i, material: 1 }));
   const before = scene(kids), after = mergeForAc(before);
   assert.deepEqual([...triangles(after)].sort(), [...triangles(before)].sort(), 'the same triangles, each as often');
-  assert.deepEqual(meshes(after).map((n) => n.name), ['1ROAD_chunk_0', 'UNDERSKIN_chunk_0'], 'twenty road cells and twenty skins became one chunk each');
+  assert.deepEqual(meshes(after).map((n) => n.name), ['1ROAD_p1_chunk_0', 'UNDERSKIN_p1_chunk_0'], 'twenty road cells and twenty skins became one chunk each, named after the piece of its first mesh');
   const v = (sc) => meshes(sc).reduce((a, n) => a + n.positions.length / 3, 0); assert.equal(v(after), v(before), 'no vertex added or lost');
   assert.equal(meshes(before).length, 40, 'control: the scene it was given is untouched');
 });
@@ -62,16 +62,16 @@ test('row 2: a chunk never passes the 16-bit index budget or its length; a lone 
   for (const n of f) { const xs = []; for (let k = 0; k < n.positions.length; k += 3) xs.push(n.positions[k]); assert.ok(Math.max(...xs) - Math.min(...xs) <= 400, n.name); }
   const lone = strip('1ROAD_only_0'), l = meshes(mergeForAc(scene([lone]))); assert.equal(l[0], lone, 'a chunk of one mesh is that mesh, name and all');
   const mixed = meshes(mergeForAc(scene([strip('1ROAD_a_0'), strip('1ROAD_a_1', { material: 1 }), strip('1ROAD_a_2', { x0: 2 }), strip('1ROAD_a_3', { x0: 4, castShadows: false })])));
-  assert.deepEqual(mixed.map((n) => [n.name, n.material, n.castShadows]), [['1ROAD_chunk_0', 0, true], ['1ROAD_a_1', 1, true], ['1ROAD_a_3', 0, false]], 'only the two with one material and one set of flags joined');
+  assert.deepEqual(mixed.map((n) => [n.name, n.material, n.castShadows]), [['1ROAD_a_chunk_0', 0, true], ['1ROAD_a_1', 1, true], ['1ROAD_a_3', 0, false]], 'only the two with one material and one set of flags joined');
 });
 
 test('row 3: markers, walls, paint and the pit lane stay where they were, unchanged; a chunk sits where its first mesh sat', () => {
   const marker = { type: 'dummy', name: 'AC_START_0', matrix: ID.slice(), children: [] }, wall = strip('1WALL_T180_END'), paint = strip('t180b_paint_0', { material: 1 }), pit = strip('1ROAD_PIT_lane_0');
   const kids = [strip('1ROAD_p_0'), marker, strip('1ROAD_p_1', { x0: 4 }), wall, pit, paint, strip('1ROAD_p_2', { x0: 8 })];
   const out = mergeForAc(scene(kids)).root.children;
-  assert.deepEqual(out.map((n) => n.name), ['1ROAD_chunk_0', 'AC_START_0', '1WALL_T180_END', '1ROAD_PIT_lane_0', 't180b_paint_0']);
+  assert.deepEqual(out.map((n) => n.name), ['1ROAD_p_chunk_0', 'AC_START_0', '1WALL_T180_END', '1ROAD_PIT_lane_0', 't180b_paint_0']);
   for (const n of [marker, wall, pit, paint]) assert.equal(out.find((x) => x.name === n.name), n, `${n.name} is the very same node`);
-  const taken = mergeForAc(scene([strip('1ROAD_chunk_0', { material: 1 }), strip('1ROAD_x_0'), strip('1ROAD_x_1', { x0: 4 })])).root.children.map((n) => n.name);
+  const taken = mergeForAc(scene([strip('1ROAD_x_chunk_0', { material: 1 }), strip('1ROAD_x_0'), strip('1ROAD_x_1', { x0: 4 })])).root.children.map((n) => n.name);
   assert.equal(new Set(taken).size, taken.length, `names stay unique: ${taken.join(', ')}`);
 });
 
@@ -92,7 +92,7 @@ test('row 4: an exported closed lap has a few meshes instead of hundreds, the SA
     assert.deepEqual([...tris(k1)].sort(), [...tris(k0)].sort(), 'the same triangles in the same places');
     const road0 = k0.meshes.filter((m) => /^1ROAD_/.test(m.name)).reduce((a, m) => a + m.idx.length, 0), road1 = k1.meshes.filter((m) => /^1ROAD_/.test(m.name));
     assert.equal(road1.reduce((a, m) => a + m.idx.length, 0), road0, 'every road triangle is still in a 1ROAD_ (physics) mesh');
-    assert.ok(road1.some((m) => /^1ROAD_chunk_\d+$/.test(m.name)), 'the road is in chunks');
+    assert.ok(road1.some((m) => /^1ROAD_[^_]+_chunk_\d+$/.test(m.name)), 'the road is in chunks');
     assert.ok(k1.meshes.filter((m) => /^UNDERSKIN_/.test(m.name)).every((m) => !/^\d/.test(m.name)), 'the skin is still not a physics surface');
     assert.deepEqual(k1.dummies.map((x) => x.name).sort(), k0.dummies.map((x) => x.name).sort(), 'the markers are the same');
     assert.equal(Buffer.compare(Buffer.from(on.ai), Buffer.from(off.ai)), 0, 'the AI line is byte for byte the same');

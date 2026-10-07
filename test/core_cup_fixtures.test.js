@@ -17,6 +17,10 @@
 // F1 F2, and NOTHING ELSE: their segs, path and mesh digests are identical to the D222 baseline, and the ROAD nodes of the exported scene are byte-identical
 // (roadNodesSha256 before = after, measured by one script in both trees). test/fixtures/manifest.d230.json records F1 F2's kn5 digests before (D222) and after,
 // the road-node digests, the skin count and the measured kn5 growth. The seal's two files and the D196 and D222 records stay untouched.
+// AMENDED BY NAME FOR D260 (the keeper, 2026-10-06 18:31: "is the track geometry like too complex"): the export joins the road cells and the skins into chunks
+// (src/export/acready.js mergeForAc), so the kn5 holds a few dozen meshes instead of one per 2 m. That changes the kn5 digest of the two CLOSED fixtures, F1 F2,
+// and NOTHING ELSE: their segs, path and mesh digests are the D230 record's, and the kn5's TRIANGLE SET (every triangle's world-space vertices as float32 bits,
+// winding kept, with its material) is equal before and after. test/fixtures/manifest.d260.json records F1 F2's kn5 digests before (D230) and after with the measure.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -36,6 +40,8 @@ const AMEND3 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d230.json'), '
 // D258 (the free jump): F7's old jump opens as a free flight to the end of its old ramp (the ramp becomes air), so F7 renders differently; manifest.d258.json records it
 const AMEND4 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d258.json'), 'utf8'));
 const JUMP_CHANGED = ['F7-hill-then-jump'];
+// D260 (the draw calls): the road cells and the skins are exported in chunks, so F1 F2's kn5 changes and nothing else; manifest.d260.json records it
+const AMEND5 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d260.json'), 'utf8'));
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
   const man = JSON.parse(JSON.stringify(MANIFEST));
@@ -43,6 +49,7 @@ function amendedManifest() {
   for (const [k, v] of Object.entries(AMEND2.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_d222));
   for (const [k, v] of Object.entries(AMEND3.fixtures)) { const { kn5Bytes, ...digests } = v.after_d230; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // kn5Bytes is the record's measure, not a digest the check computes
   for (const [k, v] of Object.entries(AMEND4.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_d258));   // D258
+  for (const [k, v] of Object.entries(AMEND5.fixtures)) { const { kn5Bytes, ...digests } = v.after_d260; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D260
   return man;
 }
 
@@ -63,6 +70,9 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.deepEqual(Object.keys(AMEND4.fixtures), JUMP_CHANGED);
   assert.deepEqual([...AMEND4.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !JUMP_CHANGED.includes(k)).sort());
   assert.deepEqual(AMEND4.fixtures['F7-hill-then-jump'].before, MANIFEST.fixtures['F7-hill-then-jump'].render, 'D258: "before" is the seal\'s F7 (F7 was in no earlier amendment)');
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d260.json'))), '58ce2577d0fcf5c30e7094e5e1238b2219f0108035a666fabbf0511b1715ae1f');   // D260
+  assert.deepEqual(Object.keys(AMEND5.fixtures), KN5_CHANGED);
+  assert.deepEqual([...AMEND5.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !KN5_CHANGED.includes(k)).sort());
 });
 // CHANGED D258: F7 (the old jump, now a free flight to the end of its old ramp) differs in segs, path and mesh; the path is byte-identical in every OTHER fixture
 test('row 5a (amended D196, D222, D258): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, F7 in segs, path and mesh, and the three others are identical', () => {
@@ -108,6 +118,19 @@ test('row 5 CONTROL: the check has teeth: a manifest with one digest altered rea
     fs.appendFileSync(path.join(dir, man.fixtures['F5-flat-20m-bank-30'].file), ' ');
     r = check(dir); assert.match(r.stdout, /F5-flat-20m-bank-30: FIXTURE FILE CHANGED/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('D260 amendment record: F1 F2 keep their segs, path and mesh digests, only the kn5 moved, and its triangle set and markers are the same in far fewer meshes', () => {
+  for (const k of KN5_CHANGED) {
+    const v = AMEND5.fixtures[k], prev = AMEND3.fixtures[k].after_d230;
+    for (const d of ['segs', 'path', 'mesh', 'meshParts', 'kn5', 'kn5Bytes']) assert.equal(v.before_d230[d], prev[d], `${k}: "before" is the D230 record's ${d}`);
+    for (const d of ['segs', 'path', 'mesh', 'meshParts']) assert.equal(v.after_d260[d], prev[d], `${k}: ${d} changed`);
+    assert.notEqual(v.after_d260.kn5, v.before_d230.kn5, `${k}: the kn5 did not change`);
+    const m = v.measure, ts = m.triangleSet;
+    assert.equal(ts.equal, true); assert.equal(ts.missingFromAfter, 0); assert.equal(ts.extraInAfter, 0); assert.equal(m.meshesAfter.triangles, m.meshesBefore.triangles); assert.equal(ts.triangles, m.meshesBefore.triangles);
+    assert.equal(m.markersEqual, true); assert.equal(m.meshesAfter.other, m.meshesBefore.other, `${k}: a mesh that is not a road cell or a skin was joined`);
+    assert.ok(m.meshesAfter.meshes * 10 < m.meshesBefore.meshes, `${k}: ${m.meshesBefore.meshes} -> ${m.meshesAfter.meshes} meshes`);
+    assert.equal(v.after_d260.kn5Bytes - v.before_d230.kn5Bytes, m.kn5ChangeBytes);
+  }
 });
 test('D230 amendment record: F1 F2 keep their segs, path and mesh digests and their ROAD nodes byte for byte, only the kn5 moved (the skin nodes are added), and the measure says so', () => {
   for (const k of KN5_CHANGED) {

@@ -1,0 +1,102 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196 (manifest.d196.json), D222 (manifest.d222.json), D230 (manifest.d230.json) and D258 (manifest.d258.json); F1 F2 only, their kn5 only",
+ "made_at": "D260, pane C, c-drawcalls-wt: t180 cc177c5 (before, a git archive) and the D260 export (after), both rendered from the same fixture files by a script that digests as test/fixtures/fixtures.js digests() does (scratch dc/fxmeasure.js)",
+ "reason": "The keeper, 2026-10-06 18:31: \"i should be getting 400-500 frames in a map with no complex lighting, is the track geometry like too complex\" (exo_memory/loop/plan_t180_export_drawcalls_2026-10-06.md). An equation track exported one mesh per 2 m adapter segment and one underside skin under each, so AC drew thousands of meshes; the export now joins the road cells and the skins into chunks (src/export/acready.js mergeForAc, at most 65,536 vertices or a 400 m extent). Every triangle keeps its vertices, its winding and its material, so only the kn5 of the two closed fixtures changes.",
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "before_d230": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "59bfd9d9fd51ccf6277bbd670eecea25f61a86d58ab105e6c36440b439495d90",
+    "kn5Bytes": 7227513
+   },
+   "after_d260": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "339c952e5a96ee6762cfc6bd9851691519d1053103d30763d2018ba3b521df26",
+    "kn5Bytes": 7112528
+   },
+   "measure": {
+    "meshesBefore": {
+     "meshes": 1504,
+     "road": 748,
+     "underskin": 749,
+     "other": 7,
+     "triangles": 139498
+    },
+    "meshesAfter": {
+     "meshes": 15,
+     "road": 4,
+     "underskin": 4,
+     "other": 7,
+     "triangles": 139498
+    },
+    "triangleSet": {
+     "triangles": 139498,
+     "missingFromAfter": 0,
+     "extraInAfter": 0,
+     "equal": true
+    },
+    "markersEqual": true,
+    "kn5ChangeBytes": -114985,
+    "lengthM": 1491
+   }
+  },
+  "F2-halfpipe-default-lap-closed": {
+   "before_d230": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "16a4a1bec74ed85952ef0b837452a33d3057c4c2a0ecb21fd5b8eafb2749809d",
+    "kn5Bytes": 9549413
+   },
+   "after_d260": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "986c29aec9e805ae216a079ffd8e9cf151afaf9df125f3fa34807dc538045ae0",
+    "kn5Bytes": 9434428
+   },
+   "measure": {
+    "meshesBefore": {
+     "meshes": 1504,
+     "road": 748,
+     "underskin": 749,
+     "other": 7,
+     "triangles": 185936
+    },
+    "meshesAfter": {
+     "meshes": 15,
+     "road": 4,
+     "underskin": 4,
+     "other": 7,
+     "triangles": 185936
+    },
+    "triangleSet": {
+     "triangles": 185936,
+     "missingFromAfter": 0,
+     "extraInAfter": 0,
+     "equal": true
+    },
+    "markersEqual": true,
+    "kn5ChangeBytes": -114985,
+    "lengthM": 1491
+   }
+  }
+ },
+ "unchanged": [
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}
