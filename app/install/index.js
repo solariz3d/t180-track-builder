@@ -6,12 +6,14 @@
 //   "Export to Assetto Corsa" (D250; was "Install to AC"): installs as t180b_<name> into the AC folder found through Steam; only
 //   when Steam has no AC does it ask for the folder (remembered). "AC folder…" picks another one.
 //   "See it in Assetto": DISABLED while the setting "See it in Assetto (launches the game)" is off, which is the default.
+//   D264: on an OPEN track Export to Assetto Corsa installs the TEST export (t180b_<name>_test, install.js); `testButton` (the page's ⋯ "Test export
+//   (unfinished)…") goes into AC by the same path, asking for the AC folder only when it is not known.
 'use strict';
 const { createInstaller, createLauncher, PREFIX_NOTE } = require('./install.js');
 
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-function mount(root, shell, { native, pickFolder, getTextures, more = null, card: cardEl = null }) {
+function mount(root, shell, { native, pickFolder, getTextures, more = null, card: cardEl = null, testButton = null }) {
   const inst = createInstaller({ build: (opts) => shell.buildExport(opts), native, getDoc: () => shell.exportDoc(), getTextures });
   const see = createLauncher({ native });
   const install = el('button', { textContent: 'Export to Assetto Corsa', title: `export straight into Assetto Corsa's content\\tracks, found through Steam; exporting the same track again updates its folder (${PREFIX_NOTE})` });
@@ -27,12 +29,14 @@ function mount(root, shell, { native, pickFolder, getTextures, more = null, card
   let last = null;
   const pick = async () => { const p = await pickFolder('Your Assetto Corsa folder (the one with content\\tracks)'); if (!p) return null; const r = await inst.chooseRoot(p); say(r.ok ? `Assetto Corsa folder: ${r.root}` : r.message); if (r.ok) dropCard(); return r.ok ? r.root : null; };
   change.onclick = pick;
-  install.onclick = async () => {
-    let r = await inst.install();
-    if (r.needsRoot && (await pick())) r = await inst.install();
+  const run = async (opts) => {
+    let r = await inst.install(opts);
+    if (r.needsRoot && (await pick())) r = await inst.install(opts);
     say(r.message); if (r.ok) last = r.folder;
     if (!r.needsRoot) dropCard();   // D252 follow-up (C's finding 1): Export found and remembered AC (get_ac_root), so the startup card has nothing left to ask
   };
+  install.onclick = () => run();
+  if (testButton) testButton.onclick = () => run({ test: true });   // D264: the ⋯ menu's Test export, into AC by the same path
   const refresh = async () => { const on = await see.enabled(); allow.checked = on; seeIt.disabled = !on || !last; };
   allow.onchange = async () => { await native.setSeeItSetting(allow.checked); await refresh(); };
   seeIt.onclick = async () => { const r = await see.run(last); say(r.ok ? `Assetto Corsa closed (exit ${r.code})` : r.message); };

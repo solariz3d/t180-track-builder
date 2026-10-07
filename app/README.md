@@ -92,6 +92,8 @@ mode?" The Pieces mode is removed: the header's switch, `?mode=pieces`, the reme
   it through Steam (registry SteamPath, then every library in `steamapps\libraryfolders.vdf`; `src-tauri/src/ac.rs` root_or_find, D250) and
   remembers it, so no folder is picked; only when Steam has no AC does it ask. The install is the Export button's own build (`shell.buildExport`, the same
   road surface), written as `t180b_<saved name>` into `content\tracks` by the native side, with D234's rules; See it is off by default.
+  D264: on an OPEN track it installs the TEST export instead (`t180b_<saved name>_test`, D243a's build) and says so; the ⋯ menu's Test export
+  goes into AC by the same path (the AC folder picker only when AC is not known).
 - **Autosave and crash restore** (`app/core/coreshell.js`): the open track is autosaved (`{ schema: 1, kind: 'core', … }`) while it has
   unsaved changes; a named save or a clean exit clears it; the next start offers it back in the banner (Restore it / Discard it).
   An autosave left by the old Pieces builder is copied aside as a saved word track (named in the start message) before anything can

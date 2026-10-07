@@ -89,7 +89,7 @@
   <span id="install" title="Export to Assetto Corsa writes into Assetto Corsa's content\tracks (found through Steam), always as a t180b_ folder"></span>
   <details id="more" class="more"><summary title="more: export into a folder you pick, the test export, the Assetto Corsa folder, See it in Assetto">⋯</summary><div class="more-menu">
     <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
-    <button id="testexport" title="TEST export of an UNFINISHED track, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export.">Test export (unfinished)…</button>
+    <button id="testexport" title="TEST export of an UNFINISHED track into Assetto Corsa, as t180b_&lt;name&gt;_test, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export. Export to Assetto Corsa does the same on an open track.">Test export (unfinished)…</button>
     <span id="more-install"></span>
   </div></details>
   <span id="status" style="color: var(--dim)"></span>
@@ -260,16 +260,8 @@
         await notExportedAlert(shell.getState(), seam);
       } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
     };
-    // D243a: the TEST export of an unfinished track, its own button (never the default Export)
-    if ($('testexport')) $('testexport').onclick = async () => {
-      try {
-        const seam = await call('test_export_folder'), dir = seam || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Test export (unfinished) into…' } });
-        if (!dir) return;
-        status.textContent = 'test export (unfinished)…';
-        await shell.exportTo(dir, { textures: textureSet, test: true });
-        await notExportedAlert(shell.getState(), seam);
-      } catch (e) { status.textContent = `test export failed: ${e.message || e}`; }
-    };
+    // D243a: the TEST export of an unfinished track, its own button (never the default Export). D264: it goes into Assetto Corsa by the install's path
+    // (app/install/index.js, mounted below with testButton), asking for the AC folder only when it is not known; Export… (any folder) is unchanged
     refreshList();
     // THE KEYS (D239 note: moved from app/shell.js, as they were): Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo, Ctrl+S save, Ctrl+Backspace
     // removes the head (shell.removeHead, one undo step). If the module cannot load, the page says so instead of silently having no keys.
@@ -297,7 +289,7 @@
     };
     const pickFolder = (title) => call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
     await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get, coreOpts), shell);
-    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet, more: $('more-install'), card: setupSlot }) })), shell);
+    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet, more: $('more-install'), card: setupSlot, testButton: $('testexport') }) })), shell);
     await panels.mountPanel($('guide'), 'onboarding', () => loadCjs('app/onboarding/index.js', get), shell);
   }
 
