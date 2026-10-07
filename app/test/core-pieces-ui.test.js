@@ -597,6 +597,83 @@ test('row 14c: the landing\'s four handles replace the Extend ghost\'s; a drag m
   P1.panel.unmount();
 });
 
+const gripsOf = (shell) => shell.getState().history.present.pieces.map((p) => D.gripOf(p));
+test('row 16: the Grip field in Extend (D261): it shows the head\'s grip, "grip like…" fills it from a known track, a changed value is the new piece\'s grip and the next piece keeps it, the words say untested outside 60 to 110 and that the checker does not model grip; 49, 151 and 100.5 are refused; Undo gives the head\'s back', async () => {
+  const P1 = await handlePanel(), { shell } = P1, grip = P1.input('grip'), like = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'grip like known track'), note = () => P1.text('what the grip means');
+  assert.equal(grip.value, '100', 'a track with no grip set: AC\'s own road'); assert.ok(like, 'a "grip like…" drop-down beside it'); assert.deepEqual(P1.all().filter((e) => e.tagName === 'LABEL' && e.children[0] && /^grip/.test(e.children[0].textContent)).map((e) => e.children[0].textContent).slice(0, 2), ['grip %', 'grip like…'], 'the grip box and its drop-down side by side in Extend (the selection has its own pair further down)');
+  const opts = like.children.map((o) => [o.value, o.textContent]); assert.deepEqual(opts[0], ['', 'grip like…'], 'the placeholder first'); assert.ok(opts.some(([v, t]) => v === '82' && t === 'Thunderhead, 82%'), 'a known track with its measured grip'); assert.ok(opts.every(([v]) => v === '' || (Number.isInteger(Number(v)) && Number(v) >= 50 && Number(v) <= 150)), 'every entry is a grip the field takes');
+  assert.match(note(), /^Grip 100%: 100% is AC's own road\. The checker does not model grip/); assert.doesNotMatch(note(), /untested/, '100% is tested');
+  // a pick fills the field, and its words follow
+  like.value = '82'; like.onchange(); assert.equal(grip.value, '82', 'the pick filled the field'); assert.equal(like.value, '', 'the drop-down goes back to its placeholder'); assert.match(note(), /^Grip 82%: /); assert.doesNotMatch(note(), /untested/);
+  // outside 60 to 110: untested, in words; and the checker is always said not to model it
+  for (const [v, untested] of [['59', true], ['60', false], ['110', false], ['111', true], ['50', true], ['150', true]]) { grip.value = v; grip.oninput(); assert.equal(/untested/.test(note()), untested, `${v}%`); assert.match(note(), /does not model grip/); }
+  // refused in words: 49, 151, 100.5, a word
+  for (const [v, re] of [['49', /from 50 to 150 percent \(49 is outside it\)/], ['151', /from 50 to 150 percent \(151 is outside it\)/], ['100.5', /WHOLE percent \(100\.5 is not\): try 101/], ['abc', /whole percent from 50 to 150: type a number/]]) { grip.value = v; grip.oninput(); assert.match(note(), re, v); }
+  // a refused value is not an Extend: nothing placed, the core's refusal said
+  const n0 = shell.getState().history.present.pieces.length; for (const v of ['49', '151', '100.5']) { grip.value = v; grip.oninput(); P1.button('Extend').onclick(); assert.equal(shell.getState().history.present.pieces.length, n0, `${v}: nothing placed`); assert.match(shell.getState().message, /grip/i, v); }
+  // 85: the new piece's grip; the field then shows it, and the next Extend keeps it with no typing
+  grip.value = '85'; grip.oninput(); P1.button('Extend').onclick(); assert.deepEqual(gripsOf(shell).slice(5), [85]); assert.equal(grip.value, '85', 'the head\'s grip is shown'); assert.equal(shell.pieceReadouts()[5].gripPct, 85, 'the readout carries it');
+  P1.button('Extend').onclick(); assert.deepEqual(gripsOf(shell).slice(5), [85, 85], 'left as shown, the next piece keeps the head\'s grip');
+  grip.value = '100'; grip.oninput(); P1.button('Extend').onclick(); assert.deepEqual(gripsOf(shell).slice(5), [85, 85, 100]); assert.ok(!('grip' in shell.getState().history.present.pieces[7]), '100 writes no grip at all');
+  // Undo gives the head's grip back
+  shell.undo(); assert.equal(grip.value, '85', 'after Undo the field shows the head\'s grip again'); shell.undo(); shell.undo(); assert.equal(grip.value, '100', 'back to the track as it was');
+  // blank: the new piece keeps the head's
+  grip.value = ''; grip.oninput(); P1.button('Extend').onclick(); assert.deepEqual(gripsOf(shell).slice(5), [100]);
+  P1.panel.unmount();
+});
+
+test('row 16b: the selected pieces\' grip (D261): the box shows the pieces\' grip (blank where they differ), Set grip is ONE undo step on the road pieces and keeps the selection, "grip like…" fills the box, 49/151/100.5 are refused in words, 100 writes no grip, a flight alone is refused, Undo restores', async () => {
+  const P1 = await mountPanel(), { shell } = P1;   // (a five-piece track)
+  const box = P1.input('selection grip'), setBtn = P1.button('Set grip'), like = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'selection grip like');
+  assert.equal(setBtn.disabled, true, 'nothing selected: no grip to set'); assert.equal(box.disabled, true);
+  shell.selectPiece(1); shell.selectPiece(3, { extend: true }); assert.equal(setBtn.disabled, false); assert.equal(box.value, '100', 'the selected pieces\' grip');
+  const past0 = shell.getState().history.past.length, d0 = shell.getState().history.present;
+  box.value = '85'; setBtn.onclick(); assert.deepEqual(gripsOf(shell), [100, 85, 85, 85, 100], 'the three selected road pieces'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.equal(shell.selectionInfo().count, 3, 'the selection is kept');
+  assert.match(shell.getState().message, /^grip 85% on 3 pieces; the checker does not model grip$/); assert.equal(shell.getState().messageKind, 'ok'); assert.equal(box.value, '85', 'the box shows the new grip');
+  // Undo restores the very same document
+  shell.undo(); assert.equal(shell.getState().history.present, d0, 'Undo gives the same document back'); assert.deepEqual(gripsOf(shell), [100, 100, 100, 100, 100]);
+  // a mixed selection: blank
+  shell.selectPiece(1); box.value = '90'; setBtn.onclick(); shell.selectPiece(0); shell.selectPiece(2, { extend: true }); assert.equal(box.value, '', 'the pieces differ: blank'); assert.deepEqual(gripsOf(shell), [100, 90, 100, 100, 100]);
+  // untested outside 60 to 110, said in the message
+  box.value = '55'; setBtn.onclick(); assert.match(shell.getState().message, /^grip 55% on 3 pieces \(untested: drive it\); the checker does not model grip$/); box.value = '120'; setBtn.onclick(); assert.match(shell.getState().message, /untested: drive it/);
+  // 100 writes no grip at all
+  box.value = '100'; setBtn.onclick(); assert.ok(shell.getState().history.present.pieces.slice(0, 3).every((p) => !('grip' in p)), '100 is the plain piece'); const same = shell.getState().history.present; box.value = '100'; setBtn.onclick(); assert.equal(shell.getState().history.present, same); assert.match(shell.getState().message, /already have grip 100%/);
+  // refused in words, nothing changed, no undo step
+  const keep = shell.getState().history.present, n = shell.getState().history.past.length;
+  for (const [v, re] of [['49', /from 50 to 150 percent \(49 is outside it\)/], ['151', /from 50 to 150 percent \(151 is outside it\)/], ['100.5', /WHOLE percent/], ['', /type a number/]]) { box.value = v; setBtn.onclick(); assert.match(shell.getState().message, re, v); assert.equal(shell.getState().history.present, keep, `${v}: nothing changed`); assert.equal(shell.getState().history.past.length, n); }
+  // a pick from "grip like…" fills the box (it is not a Set grip)
+  like.value = '82'; like.onchange(); assert.equal(box.value, '82'); assert.equal(like.value, ''); assert.equal(shell.getState().history.present, keep, 'a pick changes nothing until Set grip'); setBtn.onclick(); assert.deepEqual(gripsOf(shell).slice(0, 3), [82, 82, 82]);
+  assert.ok(like.children.length > 5 && like.children[0].textContent === 'grip like…');
+  // a flight: the road next to it is set, the flight alone is refused
+  const j = await mountPanel(); j.shell.jump(null); const jd = j.shell.getState().history.present; assert.deepEqual(jd.pieces.map((p) => p.type).slice(-2), ['flight', 'road']);
+  j.shell.selectPiece(5); j.input('selection grip').value = '90'; j.button('Set grip').onclick(); assert.match(j.shell.getState().message, /^the selection has no road piece: only road has grip$/); assert.equal(j.shell.getState().history.present, jd);
+  j.shell.selectPiece(5); j.shell.selectPiece(6, { extend: true }); j.input('selection grip').value = '90'; j.button('Set grip').onclick(); assert.deepEqual(j.shell.getState().history.present.pieces.map((p) => D.gripOf(p)), [100, 100, 100, 100, 100, 100, 90], 'the landing road is set; the flight has no grip to set');
+  // no selection: said in words
+  const e = await mountPanel(); e.shell.extend({ length: 100 }); e.shell.setGrip(90); assert.match(e.shell.getState().message, /^select the pieces first/);
+  P1.panel.unmount(); j.panel.unmount(); e.panel.unmount();
+});
+
+test('row 16c: the track coloured by grip (D261): blue below 100, white at 100, orange above; the layer draws each road piece in its colour only while "colour by grip" is ticked; the hover label says "grip 85%" for a piece off 100 (always while the view is on) and nothing for a plain piece', async () => {
+  const GR = require('../core/griplayer.js'), LB = require('../core/labels.js');
+  assert.equal(GR.gripColour(100), '#ffffff', 'AC\'s own road is white'); assert.equal(GR.gripColour(50), '#2678ff', 'the least grip: full blue'); assert.equal(GR.gripColour(150), '#ff8c14', 'the most: full orange'); assert.equal(GR.gripColour(1000), GR.gripColour(150)); assert.equal(GR.gripColour(0), GR.gripColour(50), 'clamped');
+  const ch = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const b75 = ch(GR.gripColour(75)), w = ch('#ffffff'), lo = ch('#2678ff'); assert.ok(b75.every((v, i) => v >= Math.min(w[i], lo[i]) && v <= Math.max(w[i], lo[i])), '75% is between blue and white');
+  assert.ok(ch(GR.gripColour(125))[2] < ch(GR.gripColour(100))[2] && ch(GR.gripColour(125))[0] === 255, '125% is orange-ward');
+  const P1 = await handlePanel(), { shell } = P1; shell.selectPiece(1); shell.selectPiece(2, { extend: true }); P1.input('selection grip').value = '70'; P1.button('Set grip').onclick(); shell.selectPiece(3); P1.input('selection grip').value = '130'; P1.button('Set grip').onclick();
+  assert.deepEqual(gripsOf(shell), [100, 70, 70, 130, 100]); for (let i = 0; i < 3; i++) P1.frame();
+  // the pure lines: one per road piece, with its grip and colour
+  const tr = { segments: shell.getState().resolved.segments, path: G.buildPath(shell.getState().resolved.segments, { step: 2, closed: false, start: shell.getState().resolved.start }) }, pose = { eye: [0, 400, -300], target: [0, 0, 100], up: [0, 1, 0], fov: 1 };
+  const lines = GR.gripLines(tr, shell.getState().history.present, pose, 900, 600); assert.ok(lines.length >= 5, 'every road piece is drawn'); for (const l of lines) { assert.equal(l.grip, gripsOf(shell)[Number(l.id.slice(1)) - 1]); assert.equal(l.colour, GR.gripColour(l.grip)); }
+  assert.deepEqual(GR.gripLines(tr, null, pose, 900, 600), []); assert.deepEqual(GR.gripLines(null, shell.getState().history.present, pose, 900, 600), []);
+  // the layer: off until ticked
+  const layer = P1.panel.gripLayer, box = P1.input('colour by grip'); assert.equal(layer.visible(), false); P1.frame(); assert.deepEqual(layer.lines(), [], 'off: nothing drawn');
+  box.checked = true; box.onchange(); assert.equal(layer.visible(), true); P1.frame(); P1.frame(); assert.ok(layer.lines().length >= 1, 'on: the pieces in view are drawn (the stub preview looks at the end of the track)'); assert.ok(layer.lines().every((l) => l.colour === GR.gripColour(l.grip) && [70, 100, 130].includes(l.grip)), 'each in the colour of its grip');
+  box.checked = false; box.onchange(); P1.frame(); assert.deepEqual(layer.lines(), [], 'off again');
+  // the hover label's words: a piece off 100 says its grip; a plain one does not, unless the view is on
+  const reads = shell.pieceReadouts(); assert.deepEqual(LB.labelText(reads[0]), ['300.0 m', 'turn 0.0° · climb 0.0° · bank 0.0°'], 'a plain piece: the label is as it was'); assert.match(LB.labelText(reads[1])[1], /· grip 70%$/); assert.match(LB.labelText(reads[3])[1], /· grip 130%$/);
+  assert.match(LB.labelText(reads[0], true)[1], /· grip 100%$/, 'the view on: every piece says it'); assert.deepEqual(LB.labelText({ ...reads[0], gripPct: undefined }, true), LB.labelText(reads[0]), 'a readout without a grip adds nothing');
+  P1.panel.unmount();
+});
+
 test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and carries its segments (what the handles and the flight overlay read)', async () => {
   const s = await track(), pv = headlessPreview(s);
   pv.showGhost(s.candidate({ length: 100 })); let g = pv.ghostInfo(); assert.equal(g.jump, false, 'an Extend ghost is not a jump'); assert.ok(Array.isArray(g.segments) && g.segments.length > 0);

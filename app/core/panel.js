@@ -20,7 +20,9 @@ const XS = require('./xsec.js');   // the cross-section channels (D225): edge an
 const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
 const HD = require('./handles.js');   // D244: the drag handles on the Extend ghost, and (Sculpt, D244b) on a placed piece
 const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
-const LD = require('./landing.js');   // D258: the free jump's landing: where its handles are, and its number boxes
+const LD = require('./landing.js');
+const GL = require('./griplike.js');   // D261: the grip field's checks and words, the "grip like…" entries
+const GR = require('./griplayer.js');   // D261: the track coloured by grip   // D258: the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
@@ -40,7 +42,7 @@ const DEG = Math.PI / 180;
 // the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres (A's D194b contract).
 const AT_START_M = 20;
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
-function extendOptions({ length, turn, climb, bank, width, cup, edge, start, tube, empty = false, atStart = {} }) {
+function extendOptions({ length, turn, climb, bank, width, cup, edge, start, tube, grip, empty = false, atStart = {} }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup);
   if (t !== null) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
@@ -60,6 +62,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, start, tub
   if (sl !== null) targets[XS.CHANNEL.start] = sl;
   if (tb !== null) targets[XS.CHANNEL.tube] = tb;
   const out = { length: Number(length), targets };
+  if (num(grip) !== null) out.grip = num(grip);   // D261: a grip typed in the field (blank: the new piece keeps the last road's); the core refuses a value that is not a whole percent 50 to 150
   // only a field WITH a target can be "at the start" (an untouched field has none, D193); none ticked: no `transition`, exactly as before
   const transition = {};
   for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) transition[ch] = Math.min(AT_START_M, out.length);
@@ -136,7 +139,17 @@ function mount(root, shell) {
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
   const atStart = Object.fromEntries(Object.keys(HEAD).map((k) => [k, el('input', { type: 'checkbox', 'aria-label': `${k} at the start`,
     title: `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
-  const opts = () => extendOptions({ length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), start: asTyped('start'), tube: asTyped('tube'),
+  // GRIP (D261, the keeper: a different grip per piece; the core is src/core/document.js, E's). A whole percent 50 to 150 (100 is AC's own road), shown as the head's; left as shown the new piece keeps it, a changed
+  // value is the new piece's grip. "grip like…" fills it from a known track (src/doc/grips.json). The words say what the number is, "untested: drive it" outside 60 to 110, and that the checker does not model grip.
+  const gripF = el('input', { type: 'number', value: '100', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'grip', title: 'grip of the new piece, a whole percent from 50 to 150; 100 is AC\'s own road. Shows the road at the head; left as shown, the new piece keeps it' });
+  const gripLike = el('select', { 'aria-label': 'grip like known track', title: 'grip like a known track: the measured road friction of installed tracks; picking one fills the grip box' });
+  gripLike.replaceChildren(...GL.entries().map((e) => new win.Option(e.label, e.value)));
+  const gripNote = el('p', { class: 'message', 'aria-label': 'what the grip means', style: 'font-size:12px;margin:2px 0' });
+  let shownGrip = '100';
+  const showGrip = () => { shownGrip = String(shell.headGrip()); gripF.value = shownGrip; gripNote.textContent = GL.note(shownGrip); };
+  const gripOpt = () => (gripF.value === '' || gripF.value === shownGrip ? '' : gripF.value);   // untouched = blank = the new piece keeps the head's grip
+  const colourOn = el('input', { type: 'checkbox', 'aria-label': 'colour by grip', title: 'colour the track by grip: blue below 100%, white at 100%, orange above; the hover label says each piece\'s grip' });
+  const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length });
   // D242 item 7 (the keeper, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
@@ -180,7 +193,9 @@ function mount(root, shell) {
   for (const f of [cup, tube]) f.oninput = f.onchange = () => { exclusive(f); ghost(); };   // cup OR tube: the rule first, then the ghost
   tube.oninput = tube.onchange = () => { exclusive(tube); ghost(); fillWidthLike(); };   // a tube's entries read round and across (D232)
   width.oninput = width.onchange = () => { ghost(); wnote.textContent = WL.isTube(tube.value) ? WL.tubeNote(width.value) : ''; };
-  wlike.onchange = () => { if (!wlike.value) return; width.value = wlike.value; wlike.value = ''; width.oninput(); };   // a pick is a typed width: the ghost and the readout follow
+  wlike.onchange = () => { if (!wlike.value) return; width.value = wlike.value; wlike.value = ''; width.oninput(); };
+  gripF.oninput = gripF.onchange = () => { gripNote.textContent = GL.note(gripF.value); ghost(); };
+  gripLike.onchange = () => { if (!gripLike.value) return; gripF.value = gripLike.value; gripLike.value = ''; gripF.oninput(); };   // a pick is a typed grip: the words, the ghost and the readout follow   // a pick is a typed width: the ghost and the readout follow
   // THE UNDO GUARD (D240 follow-up; B's look at ab748e5, C's open question): a number typed into an Extend field and not Extended is UN-APPLIED. The first Ctrl+Z puts THAT field back to what the
   // panel put there (the head's value as shown; for the length, what the last Extend left) and says it handled the key, so the track is not stepped and the typing is not lost to a refill;
   // the next Ctrl+Z, with nothing un-applied, undoes the track. The field is the focused one, or else the one touched last (the focus may have moved off it).
@@ -383,9 +398,9 @@ function mount(root, shell) {
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike),
-      fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn)),
-    wnote, roBox,
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
+      fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn), field('colour by grip', colourOn)),
+    wnote, gripNote, roBox,
     el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn), straightHint, jumpNote, landingBox,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
@@ -398,7 +413,7 @@ function mount(root, shell) {
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
     if (d !== shownFor) {   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head, and an UNDONE Extend's own values (item 7)
       const m = shownFor ? madeWith.get(shownFor) : null, undone = !!m && m.before === d;   // only an Undo steps from a document back to the one it was made from
-      showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value; shownFor = d;
+      showGrip(); showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value; shownFor = d;
     }
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
     extendBtn.disabled = jumpBtn.disabled = !!d.closed; closeBtn.disabled = closeHow.disabled = !!d.closed || !d.pieces.length;
@@ -414,6 +429,8 @@ function mount(root, shell) {
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
+  const gripLayer = stage ? GR.mount(stage, shell, win) : null;   // D261: the track coloured by grip, off until "colour by grip" is ticked
+  colourOn.onchange = () => { if (gripLayer) gripLayer.setVisible(colourOn.checked); if (labels) labels.setGripView(colourOn.checked); };
   const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // D244: the drag handles' overlay
   const flights = stage ? FL.mount(stage, win) : null;   // D243: the flights as dashed arcs
   // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
@@ -421,7 +438,7 @@ function mount(root, shell) {
   doc.addEventListener('t180:handles-request', onHandlesRequest);
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, options: opts, unmount() { unsub(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, options: opts, unmount() { unsub(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

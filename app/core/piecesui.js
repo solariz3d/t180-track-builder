@@ -11,6 +11,8 @@
 'use strict';
 
 const SL = require('./selectionlayer.js');
+const D = require('../../src/core/document.js');   // D261: gripOf
+const GL = require('./griplike.js');   // D261: the grip words and the "grip like…" entries
 const LB = require('./labels.js');
 const RG = require('../validate-ui/redgroups.js');
 
@@ -38,6 +40,12 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
   const saveBtn = el('button', { text: 'Save as piece', title: 'keep the selected pieces in the library, relative to where they start', onclick: () => { void shell.savePiece(nameIn.value.trim()); } });
   const delBtn = el('button', { text: 'Delete selected', title: 'at the end of the track the pieces simply go; in the middle you see what it does first', onclick: () => shell.deleteSelection() });
   const clearBtn = el('button', { text: 'Clear selection', onclick: () => shell.clearSelection() });
+  // D261 (the keeper: "change which piece has different grip"): the selected pieces' grip, a whole percent 50 to 150 (100 is AC's own road); "grip like…" fills the field from a known track
+  const gripIn = el('input', { type: 'number', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'selection grip', title: 'grip of the selected road pieces, a whole percent from 50 to 150; 100 is AC\'s own road. Blank: the pieces differ' });
+  const gripLike = el('select', { 'aria-label': 'selection grip like', title: 'grip like a known track: the measured road friction of installed tracks; picking one fills the grip box' });
+  gripLike.replaceChildren(...GL.entries().map((e) => new win.Option(e.label, e.value)));
+  gripLike.onchange = () => { if (!gripLike.value) return; gripIn.value = gripLike.value; gripLike.value = ''; };
+  const gripBtn = el('button', { text: 'Set grip', title: 'set the grip of the selected pieces (one undo step). The checker does not model grip: drive it in AC', onclick: () => shell.setGrip(gripIn.value) });
   const why = el('p', { class: 'message', 'aria-label': 'why the selection cannot be saved', style: 'font-size:12px;margin:2px 0' });
   const applyBtn = el('button', { text: 'Apply delete', title: 'delete as previewed (the track is copied to its backups first; one undo step)', onclick: () => { void shell.applyDelete(); } });
   const cancelBtn = el('button', { text: 'Cancel delete', title: 'drop the preview: nothing changes', onclick: () => shell.cancelDelete() });
@@ -125,19 +133,25 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
   if (stage) { stage.addEventListener('pointerdown', onDown); stage.addEventListener('pointerup', onUp); }
   const layer = stage ? SL.mount(stage, shell, win) : null;
 
+  let gripFor = null;
   const draw = (st) => {
     const info = shell.selectionInfo(), d = st.history.present;
     selInfo.textContent = info
       ? `Selected: ${info.count === 1 ? info.ids[0] : `${info.ids[0]} to ${info.ids[info.ids.length - 1]} (${info.count} pieces)`} · ${fmtLen(info.lengthM)}${info.from > info.to ? ' · across the start line' : ''}${info.longWay ? ` · ${info.longWay}` : ''}${info.atEnd && !info.closed ? ' · at the end of the track' : ''}`
       : (d.pieces.length ? 'Nothing selected: click a piece on the track to select it; Shift-click another to select the run between.' : 'The track has no pieces yet.');
     saveBtn.disabled = !info || !!info.saveProblem; delBtn.disabled = !info; clearBtn.disabled = !info; nameIn.disabled = !info;
+    gripIn.disabled = gripLike.disabled = gripBtn.disabled = !info;
+    if (st.selection !== gripFor) {   // a new selection (or the same one after a grip change): the box shows the pieces' grip, blank where they differ
+      gripFor = st.selection; const gs = info ? [...new Set(info.ids.map((id) => d.pieces.find((P) => P.id === id)).filter((P) => P && P.type === 'road').map((P) => D.gripOf(P)))] : [];
+      gripIn.value = gs.length === 1 ? String(gs[0]) : '';
+    }
     why.textContent = info && info.saveProblem ? `Cannot be saved as a piece: ${info.saveProblem}` : '';
     drawProposal(st.deleteProposal && st.deleteProposal.base === d ? st.deleteProposal : null);
     if (st.libraryStamp !== libStamp) { const first = libStamp === null; libStamp = st.libraryStamp; if (!first && st.message && /^saved the piece/.test(st.message)) nameIn.value = ''; refreshList(); }
   };
   const unsub = shell.subscribe(draw); draw(shell.getState());
   const nodes = {
-    selection: [el('h3', { text: 'Selected pieces' }), selInfo, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'name' }), nameIn)), el('div', { class: 'actions' }, saveBtn, delBtn, clearBtn), why, el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox],
+    selection: [el('h3', { text: 'Selected pieces' }), selInfo, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'name' }), nameIn)), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'grip %' }), gripIn), el('label', { class: 'picker' }, el('span', { text: 'grip like…' }), gripLike)), el('div', { class: 'actions' }, gripBtn, saveBtn, delBtn, clearBtn), why, el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox],
     library: [el('h3', { text: 'Pieces library' }), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'mirror on insert' }), mirror)), listBox, listNote],
   };
   return { nodes, layer, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); if (tick) win.clearTimeout(tick); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };

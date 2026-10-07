@@ -39,7 +39,8 @@ const fmtM = (x) => (Number.isFinite(x) ? `${round1(x).toFixed(1)} m` : '—');
 function formatReadout(r) {
   return { length: fmtM(r.lengthM), turn: fmtDeg(r.turnDeg), climb: fmtDeg(r.climbDeg), bank: fmtDeg(r.bankToDeg - r.bankFromDeg) };
 }
-const labelText = (r) => { const f = formatReadout(r); return [f.length, `turn ${f.turn} · climb ${f.climb} · bank ${f.bank}`]; };
+// D261: a piece whose grip is not 100% says so ("· grip 85%"), and while the grip view is on every piece does
+const labelText = (r, gripView = false) => { const f = formatReadout(r), g = Number.isFinite(r.gripPct) && (r.gripPct !== 100 || gripView) ? ` · grip ${r.gripPct}%` : ''; return [f.length, `turn ${f.turn} · climb ${f.climb} · bank ${f.bank}${g}`]; };
 
 const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 /**
@@ -131,7 +132,7 @@ function mount(stage, shell, win) {
   layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden';
   stage.append(layer);
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
-  let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true;
+  let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true, gripView = false;
   // D242: the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
   let pointer = null, pickedFor = null, hoverId = null;
   const onPointer = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; pointer = { x: e.clientX - r.left, y: e.clientY - r.top }; };
@@ -197,7 +198,7 @@ function mount(stage, shell, win) {
         // in the top-left corner when the head is behind the camera
         if (!p && isHead) p = hp ? { x: Math.max(0, Math.min(W, hp.x)), y: Math.max(0, Math.min(H, hp.y)) } : { x: 0, y: 0 };
         if (!p) return;
-        const text = labelText(r).join('\n'), size = sizeOf(text);
+        const text = labelText(r, gripView).join('\n'), size = sizeOf(text);
         items.push({ piece: r.id, text, x: p.x, y: p.y, w: size.w, h: size.h, head: isHead, priority: isHead ? -1 : head ? Math.hypot(p.x - head.x, p.y - head.y) : 0 });
       });
       placed = layout(items, { width: W, height: H, head });
@@ -212,6 +213,7 @@ function mount(stage, shell, win) {
   return {
     labels: () => drawn.slice(), culled: () => culled.slice(),
     setVisible(v) { on = !!v; layer.style.display = on ? '' : 'none'; },
+    setGripView(v) { gripView = !!v; },
     hovered: () => hoverId,
     unmount() { win.cancelAnimationFrame(raf); doc.removeEventListener('t180:labels', answer); stage.removeEventListener('pointermove', onPointer); stage.removeEventListener('pointerleave', onLeave); layer.remove(); },
   };
