@@ -58,7 +58,7 @@ share ONE clamped knot vector:
   `document.js` `checkDoc` refuses a document whose joints are not.
 - **The heading and pitch themselves** are integrated from κh and κv by `src/geom` (ref 02 §2). They are not stored.
 
-**Grip (D261):** a road piece may carry `grip`, a whole percent of AC's road grip, 50 to 150, default 100 (`D.gripOf(P)`). It is ON the piece, not a channel (it changes at piece boundaries), and it is absent at 100 in memory and in the text, so an all-100 track is the document it always was. `extend(doc, { grip })` (default: the last road's), `D.setGrip(doc, indices, grip)`; `BAD_GRIP` out of range or not an integer, `NOT_ROAD` on a flight. Carried by saved pieces and mirror; Close, Sculpt, delete and the free jump keep it.
+**Grip (D261):** a road piece may carry `grip`, a whole percent of AC's road grip, 50 to 150, default 100 (`D.gripOf(P)`). It is ON the piece, not a channel (it changes at piece boundaries), and it is absent at 100 in memory and in the text, so an all-100 track is the document it always was. `extend(doc, { grip })` (default: the last road's), `D.setGrip(doc, indices, grip)`; `BAD_GRIP` out of range or not an integer, `NOT_ROAD` on a flight. Carried by saved pieces and mirror; Close, Sculpt, delete and the free jump keep it. The export writes a piece at grip g on its own AC surface `GRIPnnn` (FRICTION g/100), its road meshes `1GRIPnnn_…` (`src/export/gripkeys.js`).
 
 **A FLIGHT piece** (a jump):
 

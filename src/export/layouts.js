@@ -23,6 +23,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { buildExport, ExportError, folderName, MARKER_FILE } = require('./fromwords.js');
 const tf = require('./trackfiles.js');
+const { gripsOf } = require('./gripkeys.js');
 
 function exportProject(project, { outDir, softCollision = true, t180 = true, ...opts } = {}) {
   if (!outDir) throw new ExportError('NO_OUT_DIR', 'exportProject needs an outDir');
@@ -40,7 +41,7 @@ function exportProject(project, { outDir, softCollision = true, t180 = true, ...
     Object.assign(files, {
       [kn5]: b.kn5,
       [tf.modelsIniName(L)]: tf.modelsIni([kn5]),
-      [`${L}/data/surfaces.ini`]: tf.surfacesIni({ softCollision: !!t180 && softCollision, extendedPhysics: !!t180 }),
+      [`${L}/data/surfaces.ini`]: tf.surfacesIni({ softCollision: !!t180 && softCollision, extendedPhysics: !!t180, grips: gripsOf(b.scene) }),
       [`${L}/data/map.ini`]: tf.mapIni(mp),
       [`${L}/map.png`]: tf.mapPng(b.scene, mp),
       [`${L}/ai/fast_lane.ai`]: b.ai,

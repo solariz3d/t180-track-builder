@@ -75,6 +75,7 @@ const ailine = require('./ailine.js');
 const PitLane = require('./pitlane.js');
 const { withTextureSet } = require('../texture/set.js');
 const { withUnderskin } = require('./underskin.js');
+const { withGripKeys } = require('./gripkeys.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
 const { placeMarker, surfaceAt } = require('../markers/place.js');
 // THE TEST EXPORT OF AN UNFINISHED TRACK (D243a, the keeper: "it should allow to export even without it being completed"). opts.test, never the default:
@@ -238,7 +239,8 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
     root: { ...mesh.scene.root, children: [...mesh.scene.root.children, ...mk.nodes, ...mk.paint.meshes, ...testNodes] } };
   // opts.textures: the texture set the preview draws (src/texture/set.js); the export follows the preview's own rule
   // D230: every core road cell gets an underside skin that casts shadows, and a closed tube's inside is dark (src/export/underskin.js); a word document's scene comes back as it is
-  const scene = withUnderskin(withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null), mesh, segs);
+  // D261: a piece whose grip is not 100 drives on its own surface: its road cells are named 1GRIPnnn_… (src/export/gripkeys.js), after the skins take their names from 1ROAD_
+  const scene = withGripKeys(withUnderskin(withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null), mesh, segs), mesh, segs);
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);
