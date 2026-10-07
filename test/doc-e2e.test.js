@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 const D = require('../src/doc/index.js');
 const { closeLoop } = require('../src/doc/connector.js');
-const { exportTrack } = require('../src/export/fromwords.js');
+const { exportTrack, buildExport } = require('../src/export/fromwords.js');
 const { readKn5 } = require('../tools/kn5.cjs');
 
 const DEG = Math.PI / 180, kmh = (v) => v / 3.6;
@@ -38,6 +38,22 @@ function exportOrTodo(t, doc) {
     }
     throw e;
   }
+}
+
+/** kn5 bytes read back through tools/kn5.cjs (via a temp file, removed). */
+function readBack(bytes) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-e2e-cells-')), f = path.join(dir, 'cells.kn5');
+  try { fs.writeFileSync(f, bytes); return readKn5(f); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+/** Every triangle of these meshes as its three vertex positions, rotated to start at the smallest, with its material: a multiset. */
+function cellTris(meshes) {
+  const m = new Map();
+  for (const me of meshes) for (let t = 0; t < me.idx.length; t += 3) {
+    const v = [0, 1, 2].map((j) => Array.from(me.pos.slice(3 * me.idx[t + j], 3 * me.idx[t + j] + 3)).join(','));
+    let r = 0; if (v[1] < v[r]) r = 1; if (v[2] < v[r]) r = 2;
+    const key = `${me.material}|${v[r]}|${v[(r + 1) % 3]}|${v[(r + 2) % 3]}`; m.set(key, (m.get(key) || 0) + 1);
+  }
+  return m;
 }
 
 function checkEveryMarker(out, r) {
@@ -68,5 +84,9 @@ test('the same with a jump in the loop: the jump carries its landing ramp, and t
   const e = exportOrTodo(t, doc); if (!e) return;
   const k = checkEveryMarker(e.out, e.r);
   assert.ok(D.resolve({ ...doc, closed: false }).segments.some((g) => g.part === 'land'), 'the jump has its ramp');
-  assert.ok(k.meshes.some((m) => /w3/.test(m.name)), 'the ramp (the jump word\'s road) is meshed into the kn5');
+  // CHANGED D260: the export joins the road cells into chunks (src/export/acready.js mergeForAc), so the ramp's cells are no longer under w3's NAME in
+  // the kn5. They are found by name in the same export written unmerged, and every one of their triangles must be in the kn5, with its material.
+  const ramp = cellTris(readBack(buildExport(doc, { mergeMeshes: false }).kn5).meshes.filter((m) => /w3/.test(m.name))), shipped = cellTris(k.meshes);
+  assert.ok(ramp.size > 0, 'the jump word\'s road has cells in the unmerged export');
+  assert.ok([...ramp].every(([key, n]) => (shipped.get(key) || 0) >= n), 'the ramp (the jump word\'s road) is meshed into the kn5: every triangle, with its material');
 });

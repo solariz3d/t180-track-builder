@@ -169,19 +169,41 @@ const resolveAsApp = (d) => { try { return D.resolve(d); } catch (e) { if (e.cod
 let LOOP = null;
 const loop = () => {
   if (!LOOP) {
-    const doc = closedSample(), b = buildExport(doc), f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 't180b-aclook-')), 'track.kn5');
-    fs.writeFileSync(f, b.kn5); const k = readKn5(f); fs.rmSync(path.dirname(f), { recursive: true, force: true });
+    const doc = closedSample(), b = buildExport(doc), dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-aclook-'));
+    // CHANGED D260: the export joins the road cells into chunks (src/export/acready.js mergeForAc), so a cell's NAME is no longer in the kn5 AC loads.
+    // The cells are compared name for name against the same export written unmerged (`mergeMeshes: false`), and the kn5 AC loads must carry every
+    // one of those cells' triangles with the same material (cellTris below).
+    const back = (bytes, n) => { const f = path.join(dir, n); fs.writeFileSync(f, bytes); return readKn5(f); };
+    let k, cells; try { k = back(b.kn5, 'track.kn5'); cells = back(buildExport(doc, { mergeMeshes: false }).kn5, 'cells.kn5'); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
     const t = createTrackModel().update(resolveAsApp(doc)), look = A.resolveLook(t.mesh.scene);
-    LOOP = { doc, kn5: readLook(b.kn5), meshes: new Map(k.meshes.map((m) => [m.name, m.material])), t, look, list: A.lookList(t.batches.map((x) => ({ key: x.key, material: look.materialOf(x) }))) };
+    LOOP = { doc, kn5: readLook(b.kn5), k, cells, meshes: new Map(cells.meshes.map((m) => [m.name, m.material])), t, look, list: A.lookList(t.batches.map((x) => ({ key: x.key, material: look.materialOf(x) }))) };
   }
   return LOOP;
 };
 const asKn5 = (m) => ({ name: m.name, shader: m.shader, alphaBlend: m.alphaBlend, alphaTested: !!m.alphaTested, depthMode: m.depthMode, props: m.props.map(propSlots), samplers: m.samplers });
 const fromKn5 = (m) => ({ name: m.name, shader: m.shader, alphaBlend: m.alphaBlend, alphaTested: m.alphaTested, depthMode: m.depthMode, props: m.props, samplers: m.samplers });
 
+/** Every triangle of the named meshes (all, when no names) as its three vertex positions, rotated to start at the smallest, with its material: a multiset. */
+function cellTris(k, names) {
+  const m = new Map();
+  for (const me of k.meshes) {
+    if (names && !names.has(me.name)) continue;
+    for (let t = 0; t < me.idx.length; t += 3) {
+      const v = [0, 1, 2].map((j) => Array.from(me.pos.slice(3 * me.idx[t + j], 3 * me.idx[t + j] + 3)).join(','));
+      let r = 0; if (v[1] < v[r]) r = 1; if (v[2] < v[r]) r = 2;
+      const key = `${me.material}|${v[r]}|${v[(r + 1) % 3]}|${v[(r + 2) % 3]}`; m.set(key, (m.get(key) || 0) + 1);
+    }
+  }
+  return m;
+}
+// CHANGED D260: "in the kn5" is checked by geometry (the cells are joined into chunks, see loop())
 test('list: every mesh the preview draws is in the kn5, under the same name, with the same material', () => {
   const L = loop();
-  assert.deepStrictEqual(L.t.batches.filter((b) => L.meshes.get(b.key) !== L.list.byMesh[b.key]).map((b) => `${b.key}: ${L.list.byMesh[b.key]} vs ${L.meshes.get(b.key)}`), []);
+  assert.deepStrictEqual(L.t.batches.filter((b) => L.meshes.get(b.key) !== L.list.byMesh[b.key]).map((b) => `${b.key}: ${L.list.byMesh[b.key]} vs ${L.meshes.get(b.key)}`), [], 'the export\'s cells, name for name');
+  const drawn = cellTris(L.cells, new Set(L.t.batches.map((b) => b.key))), shipped = cellTris(L.k);
+  assert.ok(drawn.size > 0, 'the drawn cells have triangles');
+  const missing = [...drawn].filter(([key, n]) => (shipped.get(key) || 0) < n).map(([key]) => key.split('|')[0]);
+  assert.deepStrictEqual(missing, [], 'every triangle of every drawn cell is in the kn5 AC loads, with the same material');
 });
 test('list: each material the preview draws equals the kn5\'s, property for property at float32, sampler for sampler', () => {
   const L = loop(), inKn5 = new Map(L.kn5.materials.map((m) => [m.name, fromKn5(m)]));
