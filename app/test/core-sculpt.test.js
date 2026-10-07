@@ -180,3 +180,32 @@ test('row 9 (D243 F3): the refusal says the REAL reason in plain words, never an
 });
 
 function close(a, b, eps) { assert.ok(Math.abs(a - b) <= eps, `${a} is not within ${eps} of ${b}`); return true; }
+
+// D259, the keeper (18:21-18:24): the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way". The bank keeps within
+// ONE turn and keeps its SIGN, shown and applied (370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40), in the Extend field and ghost handle, Sculpt's bank handle and the bank
+// brush; no nearest-equivalent rewrite; the stored winding of existing tracks and the core are untouched.
+const DEGR = Math.PI / 180;
+const midBank = (s) => s.sculptInfo().values.phi;
+const sculptBank = (s, deg) => { s.beginSculpt({ channel: 'phi' }); s.sculptTo(deg * DEGR); s.endSculpt(); };
+// the brush fits its change into the piece's control points, so its centre does not land EXACTLY on the asked value: its gain there is measured 0.985 (brush,
+// piece 0) to 0.995 (Sculpt, piece 2), with or without D259. So each check is the RULE, within 3% of the change sent: within one turn, its sign kept, at
+// wrapTurn(b0 + delta), where b0 is the bank as it really is under the drag
+const turn = (x) => x % 360;
+const near = (got, want, b0, what) => assert.ok(Math.abs(got) < 360 && Math.abs(got - want) <= 0.03 * Math.abs(want - b0) + 1e-6, `${what}: got ${got}, want ${want} (from ${b0})`);
+test('D259: a Sculpt bank drag from 350 by +20 gives about 10, from -350 by -20 about -10, and 300 stays about 300; the handle\'s label agrees', async () => {
+  const HD = require('../core/handles.js');
+  for (const [first, then] of [[350, 20], [-350, -20], [300, 0]]) {
+    const s = await mk('legacy'); s.setSculpt(true); s.selectPiece(2); assert.ok(Math.abs(midBank(s)) < 1e-6, 'control: the piece starts upright');
+    sculptBank(s, first); const b0 = midBank(s); near(b0, first, 0, `first to ${first}`);
+    if (then) { sculptBank(s, then); near(midBank(s), turn(b0 + then), b0, `${b0.toFixed(2)} by ${then}`); assert.equal(Math.sign(midBank(s)), Math.sign(first), 'its sign kept'); }
+  }
+  assert.equal(HD.format('bank', 370), 'bank 10.0°'); assert.equal(HD.format('bank', -370), 'bank -10.0°'); assert.equal(HD.format('bank', 300), 'bank 300.0°'); assert.equal(HD.format('bank', 360), 'bank 0.0°');
+});
+test('D259: a value brush on bank that would take the bank past one turn wraps it back from 0 (by +370 gives about 10), and within a turn it is applied as given (+300)', async () => {
+  const at = (s) => D.channelAt(s.getState().history.present.pieces[0], 'phi', 150).v / DEGR;
+  for (const by of [370, 300, -370]) {
+    const s = await mk('legacy'); const b0 = at(s); assert.ok(Math.abs(b0) < 1e-6, 'control: upright under the brush');
+    s.beginBrush({ mode: 'rate', channel: 'phi', s0: 150, r: 100 }); s.brushTo(by * DEGR); s.endBrush();
+    near(at(s), turn(b0 + by), b0, `a brush by ${by} at its centre`);
+  }
+});

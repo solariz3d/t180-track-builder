@@ -39,6 +39,18 @@ const D = require('../../src/core/document.js');
 const { extend } = require('../../src/core/extend.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
+/**
+ * D259 (the keeper, 18:24: "same for -360 if it banks the other way, instead of continuing another revolution past 360 it should reset back to 0"): a bank brush or a
+ * Sculpt bank drag that would take the bank at its centre past one full turn wraps it back from 0, its sign kept (350 + 20 -> 10, -350 - 20 -> -10, 300 stays 300).
+ * The bank there is read on the drag's BASE document (b.s0 is the piece's middle for Sculpt), and the delta sent on is the one that lands on the wrapped value.
+ * The stored winding is not rewritten otherwise: a drag that stays inside one turn is applied exactly as given.
+ */
+function bankWithinTurn(b, delta) {
+  const offs = pieceOffsets(b.base), i = offs.findIndex((o, k) => b.s0 >= o && (k === offs.length - 1 || b.s0 < offs[k + 1])), P = i >= 0 ? b.base.pieces[i] : null;
+  if (!P || P.type !== 'road' || !Number.isFinite(delta)) return delta;
+  const b0 = D.channelAt(P, 'phi', Math.min(P.length, Math.max(0, b.s0 - offs[i]))).v, TURN = 2 * Math.PI, w = (b0 + delta) % TURN;
+  return Math.abs(b0 + delta) < TURN ? delta : w - b0;
+}
 const { close, closeWindow } = require('../../src/core/close.js');
 // D242: the close preview's overlap check builds the closed track's mesh and validates it as the export does (src/export/fromwords.js). D240 follow-up: it lives in
 // app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
@@ -334,8 +346,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const sculpting = st.sculpt ? { sculpt: true, baseHistory: st.history, baseResolved: st.resolved, sculptPiece: piece } : {};
       return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode, channel, s0, r, sharp: !!(sharp && brushFn), base: doc(), delta: 0, ...sculpting }, message: null }));
     },
-    brushTo(delta) {
+    brushTo(delta0) {
       const b = st.brush; if (!b) return set({ message: 'no brush drag is open' });
+      const delta = b.channel === 'phi' ? bankWithinTurn(b, delta0) : delta0;   // D259: the bank at the drag's centre keeps within one turn, its sign kept
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
         // D244b: the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
