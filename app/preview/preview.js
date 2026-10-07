@@ -308,7 +308,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
      * head until clearGhost(), a new showGhost(), or any change to the placed track. Throws if the candidate does not
      * extend the placed track. Returns the number of batches shown.
      */
-    showGhost(candidate) { ghost = model.ghostFor(candidate); if (candidate && candidate.jump) ghost.jump = true; return ghost.batches.length; },   // D243: a candidate JUMP says so, so the drag handles stay off it
+    showGhost(candidate, opts) { ghost = model.ghostFor(candidate, opts); if (candidate && candidate.jump) ghost.jump = true; return ghost.batches.length; },   // D243: a candidate JUMP says so, so the drag handles stay off it
     clearGhost() { ghost = null; },
     /** D244, the drag handles: the ghost of the next piece as { samples, s0 }: the path's samples (the placed track's, then the new piece's) and the s where the new piece starts (the placed track's end). Null when there is no ghost, or it is a close or delete PREVIEW (those are not Extend's). */
     ghostInfo() { if (!ghost || ghost.proposal || !ghost.path) return null; const tp = track && track.path; return { samples: ghost.path.samples, segments: ghost.segments, jump: !!ghost.jump, s0: tp && tp.samples.length ? tp.samples[tp.samples.length - 1].s : 0 }; },

@@ -31,7 +31,7 @@
 
 const G = require('../../src/geom/index.js');
 const { batchesOf } = require('./batches.js');
-const { coarsen } = require('./coarse.js');
+const { coarsen, CHEAP_FACTOR } = require('./coarse.js');
 const { worldBounds } = require('./look.js');
 
 const { keyOf } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
@@ -110,8 +110,13 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     /** The preview's detail: 1 (full, the export's) or a factor from 2 up (coarse, while dragging). Returns the detail now in force. */
     setDetail(k) { const d = Number.isFinite(k) && k >= 2 ? Math.floor(k) : 1; if (d !== detail) { detail = d; detailMoved = true; } return detail; },
     get detail() { return detail; },
-    ghostFor(candidate) {
-      const segs = candidate && detail > 1 ? coarsen(candidate.segments, detail) : candidate && candidate.segments;
+    /**
+     * D266 item 2: `cheap` builds the ghost while a handle is being DRAGGED: the NEW pieces' row grid thinned (coarse.js CHEAP_FACTOR: a 1000 m tube is about a twelfth of the vertices), the placed segments exactly as they are
+     * (the candidate must still extend them), the same path (the handles read it). The full ghost is built when the drag stops. Nothing placed is touched either way.
+     */
+    ghostFor(candidate, { cheap = false } = {}) {
+      const all = candidate && candidate.segments;
+      const segs = candidate && detail > 1 ? coarsen(all, detail) : cheap && Array.isArray(all) ? [...all.slice(0, keys.length), ...coarsen(all.slice(keys.length), CHEAP_FACTOR)] : all;
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
       const nk = segs.map(keyOf);
       if (nk.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');

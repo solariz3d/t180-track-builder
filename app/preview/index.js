@@ -69,7 +69,7 @@ function mount(root, shell) {
   const answer = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(probe(p, canvas, win)); };
   const showGhost = (e) => {
     const d = e.detail || {};
-    try { p.showGhost(d.candidate || candidateFor(shell.getState(), d.word)); } catch (err) { p.clearGhost(); if (typeof d.reply === 'function') d.reply({ error: err.message }); return; }
+    try { p.showGhost(d.candidate || candidateFor(shell.getState(), d.word), { cheap: !!d.cheap }); } catch (err) { p.clearGhost(); if (typeof d.reply === 'function') d.reply({ error: err.message }); return; }
     if (typeof d.reply === 'function') d.reply({ ok: true });
   };
   const hideGhost = () => p.clearGhost();
