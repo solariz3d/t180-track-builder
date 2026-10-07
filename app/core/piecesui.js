@@ -11,7 +11,7 @@
 'use strict';
 
 const SL = require('./selectionlayer.js');
-const D = require('../../src/core/document.js');   // D261: gripOf
+const GV = require('./gripvals.js');   // D261/D263: gripOf (src/core/document.js needs node's fs; this has no requires)
 const GL = require('./griplike.js');   // D261: the grip words and the "grip like…" entries
 const LB = require('./labels.js');
 const RG = require('../validate-ui/redgroups.js');
@@ -142,7 +142,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
     saveBtn.disabled = !info || !!info.saveProblem; delBtn.disabled = !info; clearBtn.disabled = !info; nameIn.disabled = !info;
     gripIn.disabled = gripLike.disabled = gripBtn.disabled = !info;
     if (st.selection !== gripFor) {   // a new selection (or the same one after a grip change): the box shows the pieces' grip, blank where they differ
-      gripFor = st.selection; const gs = info ? [...new Set(info.ids.map((id) => d.pieces.find((P) => P.id === id)).filter((P) => P && P.type === 'road').map((P) => D.gripOf(P)))] : [];
+      gripFor = st.selection; const gs = info ? [...new Set(info.ids.map((id) => d.pieces.find((P) => P.id === id)).filter((P) => P && P.type === 'road').map((P) => GV.gripOf(P)))] : [];
       gripIn.value = gs.length === 1 ? String(gs[0]) : '';
     }
     why.textContent = info && info.saveProblem ? `Cannot be saved as a piece: ${info.saveProblem}` : '';

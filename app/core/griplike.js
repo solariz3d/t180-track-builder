@@ -11,8 +11,9 @@
 //   GRIP_MIN, GRIP_MAX, TESTED_MIN, TESTED_MAX
 'use strict';
 const G = require('../../src/doc/grips.json');
+const { GRIP_MIN, GRIP_MAX } = require('./gripvals.js');
 
-const GRIP_MIN = 50, GRIP_MAX = 150, TESTED_MIN = 60, TESTED_MAX = 110;
+const TESTED_MIN = 60, TESTED_MAX = 110;
 const fmt = (x) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 10) / 10));
 
 function label(t) { return Number(t.percent) === Number(t.value) ? `${t.name}, ${fmt(t.percent)}%` : `${t.name}, ${fmt(t.percent)}% (${t.value})`; }

@@ -674,6 +674,19 @@ test('row 16c: the track coloured by grip (D261): blue below 100, white at 100, 
   P1.panel.unmount();
 });
 
+test('row 17: the grip UI modules load in the webview loader with NO node built-in (D263: piecesui and griplayer required src/core/document.js, which pulls tools/piecewise.cjs and node\'s fs, and the panel failed to load), and their copy of the grip numbers is the core\'s', async () => {
+  const { loadCjs } = require('../lib/cjs.js');
+  for (const f of ['app/core/gripvals.js', 'app/core/griplike.js', 'app/core/griplayer.js', 'app/core/piecesui.js', 'app/core/labels.js', 'app/core/panel.js']) {
+    const M = await loadCjs(f, async (p) => fs.readFileSync(path.join(REPO, p), 'utf8'));   // no builtins: any `fs` require anywhere below it is a refusal
+    assert.ok(M && typeof M === 'object', f);
+  }
+  const GV = require('../core/gripvals.js'), GL = require('../core/griplike.js');
+  assert.deepEqual([GV.GRIP_MIN, GV.GRIP_MAX, GV.GRIP_DEFAULT], [D.GRIP_MIN, D.GRIP_MAX, D.GRIP_DEFAULT], 'the numbers are the core\'s');
+  assert.deepEqual([GL.GRIP_MIN, GL.GRIP_MAX], [D.GRIP_MIN, D.GRIP_MAX]);
+  const plain = D.createDoc('g'), withG = D.setGrip(extend(plain, { length: 100, family: 'bowl' }), [0], 85);
+  for (const P of [...extend(plain, { length: 100, family: 'bowl' }).pieces, ...withG.pieces, { type: 'flight' }, null]) assert.equal(GV.gripOf(P), P ? D.gripOf(P) : 100, 'gripOf agrees with the core\'s on a plain piece, a piece with grip, a flight and nothing');
+});
+
 test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and carries its segments (what the handles and the flight overlay read)', async () => {
   const s = await track(), pv = headlessPreview(s);
   pv.showGhost(s.candidate({ length: 100 })); let g = pv.ghostInfo(); assert.equal(g.jump, false, 'an Extend ghost is not a jump'); assert.ok(Array.isArray(g.segments) && g.segments.length > 0);
