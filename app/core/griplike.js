@@ -27,10 +27,12 @@ function check(text) {
   if (n < GRIP_MIN || n > GRIP_MAX) return { ok: false, grip: null, why: `A grip is from ${GRIP_MIN} to ${GRIP_MAX} percent (${n} is outside it).` };
   return { ok: true, grip: n, why: null };
 }
+/** D267 ("too much damn text"): the few words under the field: "Grip 85%", "Grip 130% · untested", or why the value is refused. What 100% is, and what "untested" means, are the field's tooltip (tip). The sentence about the checker is CUT. */
 function note(text) {
   const c = check(text);
   if (!c.ok) return c.why;
-  return `Grip ${c.grip}%: 100% is AC's own road.${c.grip < TESTED_MIN || c.grip > TESTED_MAX ? ` ${c.grip}% is untested (the tracks measured run ${TESTED_MIN} to ${TESTED_MAX}): drive it.` : ''} The checker does not model grip: a grip other than 100% can drive differently than it assumes, so drive it in AC.`;
+  return `Grip ${c.grip}%${c.grip < TESTED_MIN || c.grip > TESTED_MAX ? ' · untested' : ''}`;
 }
+const tip = () => `grip of the new piece, a whole percent from ${GRIP_MIN} to ${GRIP_MAX}. 100% is AC's own road. The installed tracks measured run ${TESTED_MIN} to ${TESTED_MAX}%; outside that it is untested: drive it. Shows the road at the head; left as shown, the new piece keeps it`;
 
-module.exports = { entries, check, note, label, GRIP_MIN, GRIP_MAX, TESTED_MIN, TESTED_MAX };
+module.exports = { entries, check, note, tip, label, GRIP_MIN, GRIP_MAX, TESTED_MIN, TESTED_MAX };

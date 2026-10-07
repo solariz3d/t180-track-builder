@@ -674,11 +674,11 @@ test('if that copy cannot be written, Apply changes nothing and says why', async
 // ── D242 item 6, STRAIGHTS AFTER A TURN (the keeper: "impossible to create a perfect straight") ──
 test('D242: after a 30°/100m turn, Straight extends a piece whose turn and climb are 0 from 20 m on, and puts the "at start" boxes back; turn 0 without "at start" shows the hint', async () => {
   const P = await mountPanel(), Dm = require('../../src/core/document.js');
-  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), hint = () => P.root.all().find((e) => e.attrs['aria-label'] === 'straight hint').textContent;
+  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), hint = () => P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title, base = P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title;   // D267: the hint is the "at start" box's tooltip, not a paragraph
   P.type('length m', 200); P.type('turn °/100m', 30); button('Extend').onclick();
   assert.equal(P.shell.getState().history.present.pieces.length, 1, P.shell.getState().message);
-  P.type('turn °/100m', 0); assert.match(hint(), /turn 0 eases over the whole piece: tick "at start" \(or press Straight\) to be straight from 20 m on/);
-  P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').checked = true; P.field('turn °/100m').oninput(); assert.equal(hint(), '', 'with "at start" ticked there is nothing to hint');
+  assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'straight hint'), undefined, 'D267: no paragraph under the buttons'); P.type('turn °/100m', 0); assert.match(hint(), /turn 0 eases over the whole piece: tick "at start" \(or press Straight\) to be straight from 20 m on/); assert.match(hint(), /^at start: reach this turn/, 'the box\'s own words come first');
+  P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').checked = true; P.field('turn °/100m').oninput(); assert.doesNotMatch(hint(), /eases over the whole piece/, 'with "at start" ticked there is nothing to hint');
   P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').checked = false;
   P.type('length m', 150); button('Straight').onclick();
   const d = P.shell.getState().history.present, S = d.pieces[d.pieces.length - 1];
