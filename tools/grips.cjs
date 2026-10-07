@@ -29,6 +29,7 @@ const ROWS = [
   ['centrifuge', 'Centrifuge', 'ROAD'],
   ['serpents_spiral', 'Serpents Spiral', 'ROAD'],
   ['rainbow_rd', 'Rainbow Road', 'ROAD'],
+  ['Chases_Onuris/layout_long', 'Onuris', 'ROAD'],
   ['ThunderHead(Wii Version)', 'ThunderHead (Wii)', 'ROAD'],
   ['ks_barcelona/layout_gp', 'Barcelona', 'TRM-BRC'],
   ['ks_brands_hatch/gp', 'Brands Hatch', 'ASPH_BRANDS'],

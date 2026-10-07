@@ -84,6 +84,15 @@
    "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
   },
   {
+   "name": "Onuris",
+   "key": "ROAD",
+   "friction": 0.99,
+   "percent": 99,
+   "value": 99,
+   "source": "content/tracks/Chases_Onuris/layout_long/data/surfaces.ini (KEY=ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
    "name": "ThunderHead (Wii)",
    "key": "ROAD",
    "friction": 0.99,

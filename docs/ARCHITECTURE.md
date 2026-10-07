@@ -171,7 +171,7 @@ half-pipes.
 - **Files:**
   - `models.ini` / `models_<layout>.ini`
   - `data/surfaces.ini`, including the T-180 soft-collision block from `FINDINGS.md` §4c, as a "T-180 track" toggle,
-    plus CSP's `WAV_PITCH=extended-0` opt-in with a CSP-only warning
+    plus CSP's `WAV_PITCH=extended-0` opt-in with a CSP-only warning, and one `GRIPnnn` surface per piece grip other than 100 (D261: AC's ROAD with FRICTION nnn/100, meshes `1GRIPnnn_…`, soft-collision `MESHES=1ROAD?, 1GRIP?`)
   - `ui/ui_track.json`, `preview.png`, `outline.png`
   - `map.png` + `data/map.ini` (Content Manager's formula)
 - **AI line:** `ai/fast_lane.ai` version 7, generated from the centreline and a speed profile, with `hasGrid=0`.

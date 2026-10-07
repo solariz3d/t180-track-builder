@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { walkScene, isDrivable, countPits } = require('./markers.js');
+const { gripsOf, gripSurface } = require('./gripkeys.js');
 
 // ── data/surfaces.ini ──────────────────────────────────────────────────────────────────────────────────────────────
 // THE T-180 SOFT-COLLISION BLOCK. Its numbers are docs/FINDINGS.md §4c, lines 80-81: `MESHES = 1ROAD?`, `SOFT_ERP=0.8`,
@@ -72,9 +73,13 @@ const CSP_ONLY_WARNING = 'csp-only: surfaces.ini sets WAV_PITCH=extended-0, CSP\
  * to on (a T-180 track). They are separate so the soft-road CONTROL (the noblock variant) differs from the block variant
  * by the block ALONE (FINDINGS §4c's registered prediction must not test two things at once); the app's "T-180 track"
  * toggle turns both on or both off.
+ * `grips` (D261): the distinct piece grips other than 100 (gripkeys.js gripsOf). Each gets a GRIPnnn surface after the PIT one, and the soft-collision
+ * block covers their meshes too (`MESHES=1ROAD?, 1GRIP?`). With none, the file is exactly what it was before grip existed.
  */
-function surfacesIni({ softCollision = true, extendedPhysics = true } = {}) {
-  return SURFACES_HEADER + (extendedPhysics ? '\n' + EXTENDED_PHYSICS_SURFACE : '') + (softCollision ? '\n' + SOFT_COLLISION_BLOCK : '');
+function surfacesIni({ softCollision = true, extendedPhysics = true, grips = [] } = {}) {
+  const first = extendedPhysics ? 1 : 0, surfaces = grips.map((g, i) => '\n' + gripSurface(g, first + i)).join('');
+  const block = grips.length ? SOFT_COLLISION_BLOCK.replace(/^MESHES=1ROAD\?$/m, 'MESHES=1ROAD?, 1GRIP?') : SOFT_COLLISION_BLOCK;
+  return SURFACES_HEADER + (extendedPhysics ? '\n' + EXTENDED_PHYSICS_SURFACE : '') + surfaces + (softCollision ? '\n' + block : '');
 }
 
 // ── models.ini / models_<layout>.ini ───────────────────────────────────────────────────────────────────────────────
@@ -202,7 +207,7 @@ function encodePng(width, height, rgba) {
  */
 function writeTrackFiles(dir, scene, { softCollision = true, extendedPhysics = true, kn5Files, desc } = {}) {
   const files = {
-    'data/surfaces.ini': surfacesIni({ softCollision, extendedPhysics }),
+    'data/surfaces.ini': surfacesIni({ softCollision, extendedPhysics, grips: gripsOf(scene) }),
     [modelsIniName(null)]: modelsIni(kn5Files),
     'ui/ui_track.json': JSON.stringify(uiTrack(scene, desc), null, 2) + '\n',
     'ui/preview.png': previewPng(scene),

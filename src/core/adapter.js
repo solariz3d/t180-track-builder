@@ -291,7 +291,7 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
     for (let j = 0; j < n; j++) {
       const s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n, b = at(s1), mid = at((s0 + s1) / 2);
       const L = cup ? null : legacySeg(P.family, a, b, mid, s1 - s0), profile = cup ? cup[j].profile : L.profile;   // a legacy piece: today's profileAt, or a chord where the width or r changes
-      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup ? cup[j].blend : L.blend, speed: null, ...(cup ? (xs ? { chord: true, fractions: cup[j].fractions, ...(cup[j].heartline1 !== undefined ? { heartline: cup[j].heartline, heartline1: cup[j].heartline1, rollRate0: cup[j].rollRate0, rollRate1: cup[j].rollRate1 } : {}) } : { cup: true }) : L.chord ? { chord: true } : {}) });
+      segs.push({ id: P.id, word: 'core', part: 'body', kind: 'road', ...(D.gripOf(P) !== D.GRIP_DEFAULT ? { grip: D.gripOf(P) } : {}), length: s1 - s0, k0: a.kh, k1: b.kh, kp0: a.kv, kp1: b.kv, roll0: a.phi, roll1: b.phi, heartline: 0, profile, blend: cup ? cup[j].blend : L.blend, speed: null, ...(cup ? (xs ? { chord: true, fractions: cup[j].fractions, ...(cup[j].heartline1 !== undefined ? { heartline: cup[j].heartline, heartline1: cup[j].heartline1, rollRate0: cup[j].rollRate0, rollRate1: cup[j].rollRate1 } : {}) } : { cup: true }) : L.chord ? { chord: true } : {}) });
       pitch += ((a.kv + b.kv) / 2) * (s1 - s0);   // the geometry's pitch: kp linear over the segment (src/geom/path.js)
       a = b; lastProfile = cup ? cup[j].end : L.end;
     }
