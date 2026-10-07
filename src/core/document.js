@@ -175,7 +175,35 @@ function qChannel(ch, arr) { return arr.map((x) => q(x, DEC[ch])); }
  * length). `from` is the state it must start from (endState), or null for a first piece. Each channel is fitted with its
  * start held (fitChannel), then quantised.
  */
-function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM = KNOT_M, knots, cup = false, edge = false, tube = false }) {
+// ── D261, GRIP PER PIECE ─────────────────────────────────────────────────────────────────────────────────────────────────
+// A road piece's grip: an integer percent of AC's road friction (ROAD, FRICTION 1: AC's system/data/surfaces.ini), from GRIP_MIN to GRIP_MAX, default 100.
+// It lives ON THE PIECE, not in a channel: grip changes at piece boundaries, never smoothly. A piece at 100 carries NO grip field, in memory and in the file,
+// so every track made before it, and every all-100 track, is the same document and the same text as before (the keeper's range, 2026-10-06: 50–150%).
+const GRIP_MIN = 50, GRIP_MAX = 150, GRIP_DEFAULT = 100;
+/** A road piece's grip, percent (100 when it carries none). */
+const gripOf = (P) => (P && P.grip !== undefined ? P.grip : GRIP_DEFAULT);
+/** A grip value checked: an integer percent within GRIP_MIN..GRIP_MAX, or a CoreError BAD_GRIP naming what was wrong. */
+function checkGrip(g, at = 'grip') {
+  if (typeof g !== 'number' || !Number.isInteger(g) || g < GRIP_MIN || g > GRIP_MAX) throw new CoreError('BAD_GRIP', `${at}: a grip is a whole percent of AC's road grip, from ${GRIP_MIN} to ${GRIP_MAX}, got ${JSON.stringify(g)}`);
+  return g;
+}
+/** The piece with grip g: no field at all at the default, so a 100% piece is exactly the piece it was before grip existed. */
+const withGrip = (P, g) => { const { grip, ...rest } = P; return checkGrip(g) === GRIP_DEFAULT ? rest : { ...rest, grip: g }; };
+/** The document with the road pieces at the given indices set to grip g (any track, open or closed: grip moves no geometry). */
+function setGrip(doc, indices, g) {
+  checkGrip(g);
+  if (!Array.isArray(indices) || !indices.length) throw new CoreError('BAD_INDEX', 'setGrip needs a list of piece indices');
+  const pieces = doc.pieces.slice();
+  for (const i of indices) {
+    if (!Number.isInteger(i) || i < 0 || i >= pieces.length) throw new CoreError('BAD_INDEX', `piece ${i} does not exist: the track has ${pieces.length} (0 to ${pieces.length - 1})`);
+    if (pieces[i].type !== 'road') throw new CoreError('NOT_ROAD', `piece ${pieces[i].id} is a ${pieces[i].type}: only road has grip`);
+    pieces[i] = withGrip(pieces[i], g);
+  }
+  return deepFreeze(checkDoc({ ...doc, pieces }));
+}
+
+function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM = KNOT_M, knots, cup = false, edge = false, tube = false, grip = GRIP_DEFAULT }) {
+  checkGrip(grip);
   if (!(length > 0)) throw new CoreError('BAD_LENGTH', `a piece's length must be positive, got ${length}`);
   if (!FAMILIES.includes(family)) throw new CoreError('BAD_FAMILY', `family "${family}" (known: ${FAMILIES.join(', ')})`);
   if (cup && tube) throw new CoreError('BAD_TUBE', 'a piece is a cup or a tube, not both');
@@ -192,7 +220,7 @@ function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM =
     } else out[ch] = qChannel(ch, fitChannel(src, L, K, from ? from[ch] : null));
   }
   const P = { id: id || null, type: 'road', length: L, family, knots: K, channels: out };
-  return { ...P, ...(cup ? { cup: true } : {}), ...(edge ? { edge: true } : {}), ...(tube ? { tube: true } : {}) };
+  return { ...P, ...(grip !== GRIP_DEFAULT ? { grip } : {}), ...(cup ? { cup: true } : {}), ...(edge ? { edge: true } : {}), ...(tube ? { tube: true } : {}) };
 }
 // ── D258, THE FREE FLIGHT ──────────────────────────────────────────────────────────────────────────────────────────────
 // The landing's start POSE relative to the take-off end: forward, left and up (m) in the take-off's HEADING frame (forward along its heading on the
@@ -306,6 +334,7 @@ function checkDoc(doc) {
       flight = P; return;
     }
     if (P.type !== 'road') bad(`${at}: type must be road or flight, got ${P.type}`);
+    if (P.grip !== undefined) checkGrip(P.grip, `${at}: grip`);   // D261
     if (!(P.length > 0)) bad(`${at}: length must be positive`);
     if (!FAMILIES.includes(P.family)) bad(`${at}: family "${P.family}"`);
     if (!Array.isArray(P.knots) || P.knots.some((t, k) => !(t > 0 && t < P.length) || (k && !(t > P.knots[k - 1])))) bad(`${at}: knots must be ascending, strictly inside (0, length)`);
@@ -332,7 +361,7 @@ function checkDoc(doc) {
 // ── canonical text ─────────────────────────────────────────────────────────────────────────────────────────────────
 const pieceText = (P) => (P.type === 'flight'
   ? JSON.stringify({ id: P.id, type: 'flight', forward: P.forward, left: P.left, up: P.up, heading: P.heading, pitch: P.pitch, bank: P.bank })
-  : JSON.stringify({ id: P.id, type: 'road', length: P.length, family: P.family, knots: P.knots, channels: Object.fromEntries(CHANNELS.filter((ch) => !OPTIONAL[ch] || P[OPTIONAL[ch]]).map((ch) => [ch, P.channels[ch]])) }));
+  : JSON.stringify({ id: P.id, type: 'road', length: P.length, family: P.family, ...(P.grip !== undefined && P.grip !== GRIP_DEFAULT ? { grip: P.grip } : {}), knots: P.knots, channels: Object.fromEntries(CHANNELS.filter((ch) => !OPTIONAL[ch] || P[OPTIONAL[ch]]).map((ch) => [ch, P.channels[ch]])) }));
 function serialize(doc) {
   checkDoc(doc);
   const head = [`  "schema": ${JSON.stringify(doc.schema)}`, `  "generator": ${JSON.stringify(GENERATOR)}`, `  "name": ${JSON.stringify(doc.name)}`, `  "closed": ${doc.closed}`,
@@ -359,7 +388,7 @@ function parse(text) {
   const upgrade = o.schema === 't180b.core/1';   // a core/1 file has no offsets: they are zero, one per control point; core/1 and /2 have no cup: legacy pieces
   const read = (o.pieces || []).map((P) => (P && P.type === 'flight'
     ? (P.gap !== undefined || P.drop !== undefined || P.land !== undefined ? { id: P.id, type: 'flight', old: { gap: q(P.gap, DEC.m), drop: q(P.drop, DEC.m), land: q(P.land, DEC.rad) } } : { ...flightPiece(P), id: P.id })
-    : cupOf(P, { id: P.id, type: P.type, length: q(P.length, DEC.m), family: P.family, knots: (P.knots || []).map((t) => q(t, DEC.m)),
+    : cupOf(P, { id: P.id, type: P.type, length: q(P.length, DEC.m), family: P.family, ...(P && P.grip !== undefined && P.grip !== GRIP_DEFAULT ? { grip: checkGrip(P.grip, `piece ${P.id}: grip`) } : {}), knots: (P.knots || []).map((t) => q(t, DEC.m)),
       channels: Object.fromEntries(CHANNELS.map((ch) => [ch, parseChannel(P, ch, upgrade)])) })));
   const s = o.start || {}, start = { pos: (s.pos || []).map((x) => q(x, DEC.m)), heading: q(s.heading, DEC.rad), pitch: q(s.pitch, DEC.rad) };
   return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start, nextId: o.nextId, pieces: convertOldFlights(read, start) }));
@@ -541,6 +570,6 @@ module.exports = {
   fromPositionFit,
   SCHEMA, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
-  createDoc, roadPiece, flightPiece, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
+  createDoc, roadPiece, flightPiece, GRIP_MIN, GRIP_MAX, GRIP_DEFAULT, gripOf, checkGrip, withGrip, setGrip, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };

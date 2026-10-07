@@ -48,9 +48,9 @@ function jump(doc, pose = {}) {
 }
 
 /** The Jump button's landing after flight F: a straight of `length` m, level, at F's bank, the family's own width and rate ("just like the first piece"). */
-function landingPiece(F, family, length) {
+function landingPiece(F, family, length, grip = 100) {
   const fam = D.FAMILIES.includes(family) ? family : 'bowl', c = (v) => () => v;
-  return D.roadPiece({ length, family: fam, channels: { kh: c(0), kv: c(0), phi: c(F.bank), w: c(WIDTHS[fam]), r: c(RATES[fam]), h: c(0), l: c(0) } });
+  return D.roadPiece({ length, family: fam, grip, channels: { kh: c(0), kv: c(0), phi: c(F.bank), w: c(WIDTHS[fam]), r: c(RATES[fam]), h: c(0), l: c(0) } });
 }
 
 function jumpHere(doc, extendOpts = null, { landing = {}, landingM = LANDING_M } = {}) {
@@ -58,8 +58,8 @@ function jumpHere(doc, extendOpts = null, { landing = {}, landingM = LANDING_M }
   if (!(Number.isFinite(landingM) && landingM > 0)) throw new D.CoreError('BAD_LENGTH', `the landing's length must be a positive number of metres, got ${landingM}`);
   const takeoff = extendOpts ? extend(doc, extendOpts) : doc;
   const withFlight = jump(takeoff, landing), F = withFlight.pieces[withFlight.pieces.length - 1];
-  const fam = (takeoff.pieces.filter((P) => P.type === 'road').pop() || {}).family;
-  return D.appendPiece(withFlight, landingPiece(F, fam, landingM));
+  const lastRoad = takeoff.pieces.filter((P) => P.type === 'road').pop() || {};
+  return D.appendPiece(withFlight, landingPiece(F, lastRoad.family, landingM, D.gripOf(lastRoad)));   // D261: the landing keeps the take-off's grip
 }
 
 function landingOf(doc) {

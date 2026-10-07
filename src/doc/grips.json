@@ -1,0 +1,204 @@
+{
+ "made_by": "tools/grips.cjs",
+ "note": "FRICTION of each track's road surface as a percent of AC's road grip (FRICTION 1 = 100). Numbers only.",
+ "tracks": [
+  {
+   "name": "Thunderhead",
+   "key": "ROAD",
+   "friction": 0.82,
+   "percent": 82,
+   "value": 82,
+   "source": "content/tracks/thunderhead_raceway/normal/data/surfaces.ini (KEY=ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Aurora Cryopticon",
+   "key": "ROAD",
+   "friction": 1,
+   "percent": 100,
+   "value": 100,
+   "source": "system/data/surfaces.ini (KEY=ROAD: cash_auroracryopticon/aurora_medium does not redefine ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Nordic",
+   "key": "ROAD",
+   "friction": 1,
+   "percent": 100,
+   "value": 100,
+   "source": "system/data/surfaces.ini (KEY=ROAD: ohyeah2389_nordic does not redefine ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Nordic (its SLOW surface)",
+   "key": "SLOW",
+   "friction": 1.1,
+   "percent": 110,
+   "value": 110,
+   "source": "content/tracks/ohyeah2389_nordic/data/surfaces.ini (KEY=SLOW)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Sakura Speedway",
+   "key": "ROAD",
+   "friction": 1,
+   "percent": 100,
+   "value": 100,
+   "source": "system/data/surfaces.ini (KEY=ROAD: sakura_speedway does not redefine ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Hazen Loop",
+   "key": "ROAD",
+   "friction": 1,
+   "percent": 100,
+   "value": 100,
+   "source": "system/data/surfaces.ini (KEY=ROAD: hazenloop does not redefine ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Centrifuge",
+   "key": "ROAD",
+   "friction": 1,
+   "percent": 100,
+   "value": 100,
+   "source": "system/data/surfaces.ini (KEY=ROAD: centrifuge does not redefine ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Serpents Spiral",
+   "key": "ROAD",
+   "friction": 1,
+   "percent": 100,
+   "value": 100,
+   "source": "system/data/surfaces.ini (KEY=ROAD: serpents_spiral does not redefine ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Rainbow Road",
+   "key": "ROAD",
+   "friction": 1,
+   "percent": 100,
+   "value": 100,
+   "source": "content/tracks/rainbow_rd/data/surfaces.ini (KEY=ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "ThunderHead (Wii)",
+   "key": "ROAD",
+   "friction": 0.99,
+   "percent": 99,
+   "value": 99,
+   "source": "content/tracks/ThunderHead(Wii Version)/data/surfaces.ini (KEY=ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Barcelona",
+   "key": "TRM-BRC",
+   "friction": 0.97,
+   "percent": 97,
+   "value": 97,
+   "source": "content/tracks/ks_barcelona/layout_gp/data/surfaces.ini (KEY=TRM-BRC)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Brands Hatch",
+   "key": "ASPH_BRANDS",
+   "friction": 0.98,
+   "percent": 98,
+   "value": 98,
+   "source": "content/tracks/ks_brands_hatch/gp/data/surfaces.ini (KEY=ASPH_BRANDS)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Drag strip (start)",
+   "key": "START",
+   "friction": 1.01,
+   "percent": 101,
+   "value": 101,
+   "source": "content/tracks/ks_drag/drag1000/data/surfaces.ini (KEY=START)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Highlands",
+   "key": "PAVE",
+   "friction": 0.95,
+   "percent": 95,
+   "value": 95,
+   "source": "content/tracks/ks_highlands/layout_long/data/surfaces.ini (KEY=PAVE)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Laguna Seca",
+   "key": "ROAD",
+   "friction": 0.97,
+   "percent": 97,
+   "value": 97,
+   "source": "content/tracks/ks_laguna_seca/data/surfaces.ini (KEY=ROAD)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Monza 1966",
+   "key": "TARMHIST",
+   "friction": 0.97,
+   "percent": 97,
+   "value": 97,
+   "source": "content/tracks/ks_monza66/road/data/surfaces.ini (KEY=TARMHIST)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Nordschleife",
+   "key": "TRM-NRM",
+   "friction": 0.98,
+   "percent": 98,
+   "value": 98,
+   "source": "content/tracks/ks_nordschleife/nordschleife/data/surfaces.ini (KEY=TRM-NRM)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Nürburgring GP",
+   "key": "ASPH-NURB",
+   "friction": 0.99,
+   "percent": 99,
+   "value": 99,
+   "source": "content/tracks/ks_nurburgring/layout_gp_a/data/surfaces.ini (KEY=ASPH-NURB)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Red Bull Ring",
+   "key": "ASPRBRING",
+   "friction": 0.995,
+   "percent": 99.5,
+   "value": 100,
+   "source": "content/tracks/ks_red_bull_ring/layout_gp/data/surfaces.ini (KEY=ASPRBRING)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Silverstone",
+   "key": "TARMSIL_A_",
+   "friction": 0.98,
+   "percent": 98,
+   "value": 98,
+   "source": "content/tracks/ks_silverstone/gp/data/surfaces.ini (KEY=TARMSIL_A_)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Silverstone 1967",
+   "key": "ASPH_SILV",
+   "friction": 0.994,
+   "percent": 99.4,
+   "value": 99,
+   "source": "content/tracks/ks_silverstone1967/data/surfaces.ini (KEY=ASPH_SILV)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  },
+  {
+   "name": "Zandvoort",
+   "key": "TRM-ZNDV",
+   "friction": 0.98,
+   "percent": 98,
+   "value": 98,
+   "source": "content/tracks/ks_zandvoort/data/surfaces.ini (KEY=TRM-ZNDV)",
+   "basis": "the road key chosen by name from the track's surfaces.ini (the mesh names were not read)"
+  }
+ ]
+}

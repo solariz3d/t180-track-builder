@@ -3,7 +3,8 @@
 // clothoid stays a clothoid. A handle sets a TARGET for one channel, reached over a transition by the Bloss blend
 // (1 − S(u))·cont(s) + S(u)·T with S(u) = 3u² − 2u³ (ref 02 §4, ref 09 §2): zero slope change at both ends, no jerk step.
 //
-//   extend(doc, { length, transition, targets: { kh, kv, phi, w, r, c, e, s, t }, family, knotM })  -> a new document, one piece longer
+//   extend(doc, { length, transition, targets: { kh, kv, phi, w, r, c, e, s, t }, family, knotM, grip })  -> a new document, one piece longer
+// grip (D261): the new piece's grip, a whole percent 50..150; left out, it is the last road piece's (the road keeps its surface until it is changed), 100 on an empty track.
 //
 // D225 (ref 09 §10): e (the EDGE angle, degrees >= 0) and s (where the outer zone starts, 0.5 to 0.95 of the half-width) give a piece an edge; t (the TUBE sweep, degrees 0 to 360)
 // makes it a tube. A piece is a cup OR a tube (c and t together are refused, BAD_TARGET); a target c after a tube, or t after a cup, switches the kind, starting at the edge the
@@ -76,7 +77,7 @@ function rampControl(piece, ch, from, target, R, held) {
   }
 }
 
-function extend(doc, { length, transition, targets = {}, family, knotM, first } = {}) {
+function extend(doc, { length, transition, targets = {}, family, knotM, first, grip } = {}) {
   if (!(length > 0)) throw new D.CoreError('BAD_LENGTH', `extend needs a positive length, got ${length}`);
   for (const k of Object.keys(targets)) if (!D.CHANNELS.includes(k)) throw new D.CoreError('BAD_TARGET', `no channel "${k}" (known: ${D.CHANNELS.join(', ')})`);
   if (targets.c !== undefined && targets.c !== null && !(Number.isFinite(targets.c) && targets.c >= 0 && targets.c <= D.CUP_MAX)) throw new D.CoreError('BAD_CUP', 'the cup target must be from 0 to ' + D.CUP_MAX + ' degrees, got ' + targets.c);
@@ -121,7 +122,7 @@ function extend(doc, { length, transition, targets = {}, family, knotM, first } 
   if (from.tNext) from = { ...from, t: from.tNext };   // the tube this piece may start continues from tNext (endState reports t only at a tube head)
   const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch))]));
   const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM) : undefined;   // extra knots only where a ramp is short
-  const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube });
+  const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube, grip: grip === undefined ? D.gripOf(last) : grip });
   for (const ch of shortRamps) rampControl(piece, ch, from[ch], targets[ch], ramp[ch], held);   // not fitted: see rampControl
   if (cup) {
     const c = piece.channels.c = piece.channels.c.map((x) => Math.min(D.CUP_MAX, Math.max(0, x))), n = c.length;   // the fit's ringing never leaves [0, 150]
