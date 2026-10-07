@@ -13,6 +13,7 @@
 const G = require('../../src/geom/index.js');
 const V = require('../../src/validate/index.js');
 const { walkScene, isDrivable } = require('../../src/export/markers.js');
+const { asFolds } = require('../../src/geom/bvh.js');
 const AD = require('../../src/core/adapter.js');
 const { OVERLAP, mergeParts } = require('./overlapmerge.js');
 /**
@@ -21,10 +22,25 @@ const { OVERLAP, mergeParts } = require('./overlapmerge.js');
  * stacked, a downforce ray that meets another road), others (every other red), amber (count) }.
  */
 /** D256: a set design speed pins it; none (the app: there is no slider) checks at FULL speed, as the panel and the export do. */
+/**
+ * D266 (the keeper's 6 × 1000 m tube: the page died on Close): THE CHECK'S MESH, LEAN. buildMesh keeps, for each 2 m piece, its first and last rows as
+ * objects (sculpt and the seams re-use them) and its handles: 660 MB of JavaScript heap on that track, of 750, and the check reads none of it. So the check
+ * builds the mesh WITHOUT the self-check, deletes those four fields from its own pieces, and runs the self-check itself, with exactly the options and the folds
+ * buildMesh's `selfCheck: true` gives (src/geom/mesh.js buildMesh: selfCheck(out, { closed, lengthM, minSeparationM, stackedM }), then folds += asFolds):
+ * the self-check reads only each piece's K, Us and cells and each seam's s (src/geom/bvh.js soup), so its answer is the same. The mesh is the check's own,
+ * never the page's or the export's.
+ */
+const SPARE = Object.freeze(['first', 'last', 'ends', 'handles']);
+function checkMesh(p, segs, selfCheck) {
+  const mesh = G.buildMesh(p, segs, {});
+  for (const pc of mesh._state.pieces) if (pc) for (const k of SPARE) delete pc[k];
+  if (selfCheck) { mesh.selfCheck = G.selfCheck(mesh, { closed: !!p.closed, lengthM: p.lengthM }); mesh.folds.push(...asFolds(mesh.selfCheck)); }
+  return mesh;
+}
 const speedOpts = (designSpeedKmh) => (Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : { fullSpeed: true });
 function overlapCheck(resolved, designSpeedKmh, { closed = true } = {}) {   // D240: `closed: false` for the open track a delete leaves
   const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
-  const mesh = G.buildMesh(p, segs, { selfCheck: true }), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
+  const mesh = checkMesh(p, segs, true), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
   const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, ...speedOpts(designSpeedKmh) });
   return { overlaps: v.red.filter((x) => OVERLAP.has(x.reason)), others: v.red.filter((x) => !OVERLAP.has(x.reason)), amber: v.amber.length };
 }
@@ -43,9 +59,9 @@ function resolveDoc(d) {
 function overlapPart(part, resolved, designSpeedKmh, { closed = true } = {}) {
   const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
   const speed = speedOpts(designSpeedKmh);
-  if (part === 'rest') { const mesh = G.buildMesh(p, segs, { selfCheck: true }), v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, ...speed }); return { red: v.red, amber: v.amber.length }; }
+  if (part === 'rest') { const mesh = checkMesh(p, segs, true), v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, ...speed }); return { red: v.red, amber: v.amber.length }; }
   if (part === 'rays') {
-    const mesh = G.buildMesh(p, segs, {}), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
+    const roadMesh = walkScene(checkMesh(p, segs, false).scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);   // only the scene's road is kept: the rest of the mesh goes before the search
     return { red: V.validate(p, segs, { csp: true, softCollision: true, roadMesh, ...speed }).red.filter((x) => x.reason === 'downforce-ray-gap') };
   }
   throw new Error(`no such part of the overlap check: ${part}`);
