@@ -60,8 +60,9 @@ const RD = require('../../src/core/readout.js');
 const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 const XS = require('./xsec.js');   // the cross-section channels' names (D225): the edge curve and the tube
 const CL = require('./centreline.js');   // D244b: the Sculpt guard (the centreline must not move)
-const JU = require('../../src/core/jump.js');   // D243: add a jump at the head
-const JW = require('./jumpplan.js');   // D243: the flight as the car flies it, and the core's jump refusals in plain words
+const JU = require('../../src/core/jump.js');   // D258: the free jump (E): a free flight and the landing you place by hand
+const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
+const LD = require('./landing.js');   // the landing's number boxes: values and units
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted (D239)
@@ -116,7 +117,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   }
   let st = {
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
-    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, exportReds: null,
+    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, landingDrag: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
     selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
     sculpt: false,   // D244b: the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
@@ -179,7 +180,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return entry;   // the caller puts it in the SAME state change as the preview (a panel drawn for the preview must already see its check)
   }
   const doc = () => st.history.present;
-  const jumpFor = (o = {}) => JU.jump(doc(), { gap: Number(o.gap), drop: Number(o.drop === undefined || o.drop === '' ? 0 : o.drop), land: Number(o.landDeg === undefined || o.landDeg === '' ? 0 : o.landDeg) * Math.PI / 180 });
+  /** The boxes' values ({ forward, left, up, heading, pitch, bank }, in m and degrees) as the pose the core takes (radians). */
+  const landingPose = (ui) => Object.assign({}, ...Object.entries(ui || {}).map(([k, v]) => LD.poseOf(k, v)));
+  // D258: the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
+  const jumpFor = (extendOpts) => JU.jumpHere(doc(), extendOpts || null);
   let reads = [], readsFor = null;
   const segmentsOf = (d) => (d.pieces.length ? toSegments(d) : []);
   // THE START POSE travels with the segments (found by test 1, D186): the geometry's shape depends on the start PITCH, so a path
@@ -236,15 +240,46 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     sculptTo: (delta) => api.brushTo(delta),
     endSculpt: () => api.endBrush(),
     /**
-     * D243 item 1, ADD A JUMP at the head (the core is src/core/jump.js, E's). `gap` m along the ground from the take-off lip, `drop` m (+ down), `landDeg` the landing ramp's pitch in degrees
-     * (negative slopes down). The take-off is the last road piece's end, its pitch set with the existing fields beforehand; the NEXT Extend lays the road the car lands on. One undo step. The core
-     * refuses by name (NO_TAKEOFF, CLOSED, BAD_JUMP, JUMP_AFTER_JUMP, FLIGHT_OFFSET, JUMP_PAST_VERTICAL, JUMP_UNSOLVABLE) and the message is that refusal in plain words (app/core/jumpplan.js jumpWords).
-     * candidateJump is the ghost of it, for the preview (flagged `jump`, so the drag handles stay off it); it throws the core's CoreError, which the panel puts through the same words.
+     * D258, THE FREE JUMP (the keeper: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error driving it
+     * themselves"; the core is src/core/jump.js, E's). jump(extendOpts) is the Jump button: the current piece placed as Extend would place it (extendOpts: what Extend takes, or null to take off from the
+     * track's end as it is), then a free flight to a default landing (40 m ahead, the same height, lined up) and a 60 m straight landing: ONE undo step. The core refuses by name (NO_TAKEOFF, CLOSED,
+     * JUMP_AFTER_JUMP, FLIGHT_OFFSET, BAD_FLIGHT, ...) and the message is that refusal in plain words (app/core/jumpwords.js). candidateJump is the ghost of it for the preview (flagged `jump`, so the
+     * Extend handles stay off it); it throws the core's CoreError, which the panel puts through the same words.
      */
-    candidateJump(o) { const d = jumpFor(o); return { segments: segmentsOf(d), closed: false, start: startOf(d), jump: true }; },
-    addJump(o) {
-      let d; try { d = jumpFor(o); } catch (e) { if (e && e.name === 'CoreError') return set({ message: JW.jumpWords(e, o) }); throw e; }
-      return commit('jump', () => d, { lastEdited: null, ...ok('Jump added. Press Extend to lay the road it lands on.') });
+    candidateJump(extendOpts) { const d = jumpFor(extendOpts); return { segments: segmentsOf(d), closed: false, start: startOf(d), jump: true }; },
+    jump(extendOpts) {
+      let d; try { d = jumpFor(extendOpts); } catch (e) { if (e && e.name === 'CoreError') return set({ message: JW.jumpWords(e) }); throw e; }
+      return commit('jump', () => d, { lastEdited: null, ...ok('Jump placed. This is a jump: drive it in AC and move the landing until it works.') });
+    },
+    /**
+     * THE LANDING, while it is the head (the last piece, or the flight still waiting for its landing): null otherwise. { flightId, index, pose } with pose = the number boxes' values in their units
+     * (forward, left, up in m; heading, pitch, bank in degrees: app/core/landing.js BOXES), read from the document's readout.
+     */
+    landing() {
+      const d = doc(), L = JU.landingOf(d); if (!L) return null;
+      const r = api.pieceReadouts()[L.index];
+      return r && r.landing ? { flightId: L.flight.id, index: L.index, pose: LD.boxValues(r.landing) } : null;
+    },
+    /** Move the landing to the typed values ({ forward, left, up, heading, pitch, bank }, any of them, in the boxes' units): ONE undo step. A refusal says why in plain words and changes nothing. */
+    moveLanding(ui) {
+      let d; try { d = JU.setLanding(doc(), landingPose(ui)); } catch (e) { if (e && e.name === 'CoreError') return set({ message: JW.jumpWords(e) }); throw e; }
+      const was = JU.landingOf(doc()), now2 = JU.landingOf(d);   // the same pose is no step
+      return was && now2 && D.FLIGHT_POSE.every((k) => was.flight[k] === now2.flight[k]) ? st : commit('landing', () => d, { lastEdited: null });
+    },
+    /** A DRAG of the landing (the handles): beginLanding opens it, landingTo(ui) moves the landing to the values from the document as it was when the drag began, endLanding is ONE undo step for the whole drag. */
+    beginLanding() {
+      if (st.landingDrag) return set({ message: 'a landing drag is already open' });
+      const L = JU.landingOf(doc()); if (!L) return set({ message: JW.jumpWords({ code: 'LANDING_NOT_HEAD' }) });
+      return attempt(() => set({ history: D.beginDrag(st.history), landingDrag: { base: doc(), flightId: L.flight.id }, message: null }));
+    },
+    landingTo(ui) {
+      const b = st.landingDrag; if (!b) return set({ message: 'no landing drag is open' });
+      let d; try { d = JU.setLanding(b.base, landingPose(ui)); } catch (e) { if (e && e.name === 'CoreError') return set({ message: JW.jumpWords(e) }); throw e; }   // a step the core refuses (too close to the take-off) leaves the drag at its last good step
+      return attempt(() => { const t0 = now(), h = D.dragTo(st.history, d), r = resolvedOf(d); return set({ history: h, ...r, dirty: true, lastStep: { op: 'landing', ms: now() - t0 }, message: null }); });
+    },
+    endLanding() {
+      if (!st.landingDrag) return st;
+      return attempt(() => set({ history: D.endDrag(st.history), landingDrag: null, lastEdited: null }));
     },
 
     /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute). */

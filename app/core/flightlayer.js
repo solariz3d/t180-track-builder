@@ -1,23 +1,38 @@
-// flightlayer.js: THE FLIGHTS ON THE TRACK AS DASHED ARCS (D243 item 1, the UI half: "the preview draws the flight as a dashed arc"). A canvas over the preview (#preview), redrawn every animation frame
-// like the labels and the selection (the camera eases, so the arcs move with it). It draws every flight of the track on screen, and of the ghost while one shows (the Add-jump control's candidate): the
-// car's BALLISTIC flight at the design speed, one dashed line per measured fall (app/core/jumpplan.js says what that is, and draws a straight dashed line, and says so, where there is no flight model).
-// The preview itself is not changed: its pose comes from 't180:view', the placed track from 't180:track-request' and the ghost from 't180:ghost-request' (app/preview/index.js).
+// flightlayer.js: THE FLIGHTS ON THE TRACK AS A DASHED LINE (D243's layer, simplified by D258, the free jump). A canvas over the preview (#preview), redrawn every animation frame like the labels and the
+// selection (the camera eases, so the line moves with it). It draws the centreline of every flight on screen, and of the ghost while one shows (the Jump button's candidate): the curve the free
+// flight takes from the take-off to the landing. NOTHING is computed about the air (no arc, no fall, no ramp: the keeper drives the jump in AC and moves the landing), so the line is only there to show
+// that the two pieces are joined. The preview itself is not changed: its pose comes from 't180:view', the placed track from 't180:track-request' and the ghost from 't180:ghost-request'.
 //
-//   flightLines(flights, pose, W, H) -> [{ id, g, clear, model, points: [{ x, y }] }]   pure: the dashed lines in css px of the preview, broken where they pass behind the camera
-//   mount(stage, win)                -> { lines(), flights(), unmount() }               lines() is what was drawn last (for the tests and the window proof)
+//   flightsOfPath(path, segments) -> [{ id, points: [[x, y, z]] }]            the centreline of each flight, from the take-off station to the landing's start
+//   flightLines(flights, pose, W, H) -> [{ id, points: [{ x, y }] }]          pure: the dashed lines in css px of the preview, broken where they pass behind the camera
+//   mount(stage, win)                -> { lines(), flights(), unmount() }     lines() is what was drawn last (for the tests)
 'use strict';
 
 const M = require('../camera/math.js');
-const JP = require('./jumpplan.js');
+
+/** The flights on a path: a 'gap' segment's own samples, with the station before and the one after so the line reaches both pieces. */
+function flightsOfPath(path, segments) {
+  const S = path && path.samples, out = [];
+  if (!S || !S.length || !Array.isArray(segments)) return out;
+  segments.forEach((g, j) => {
+    if (!g || g.kind !== 'gap') return;
+    let first = -1, last = -1;
+    for (let i = 0; i < S.length; i++) if (S[i].seg === j) { if (first < 0) first = i; last = i; }
+    if (first < 0) return;
+    const a = Math.max(0, first - 1), b = Math.min(S.length - 1, last + 1);
+    out.push({ id: g.id, points: S.slice(a, b + 1).map((m) => m.pos.slice()) });
+  });
+  return out;
+}
 
 function flightLines(flights, pose, W, H) {
   if (!flights || !flights.length || !pose || !(W > 0 && H > 0)) return [];
   const VP = M.viewProj(pose, W / H), out = [];
   const toScreen = (p) => { const c = M.apply(VP, p); return c[3] > 0 ? { x: (c[0] / c[3] * 0.5 + 0.5) * W, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * H } : null; };
-  for (const f of flights) for (const fall of f.falls) {
+  for (const f of flights) {
     let cur = [];
-    for (const p of JP.arcWorld(f, fall)) { const q = toScreen(p); if (q) cur.push(q); else if (cur.length) { out.push({ id: f.id, g: fall.g, clear: fall.clear, model: f.model, points: cur }); cur = []; } }
-    if (cur.length) out.push({ id: f.id, g: fall.g, clear: fall.clear, model: f.model, points: cur });
+    for (const p of f.points) { const q = toScreen(p); if (q) cur.push(q); else if (cur.length) { out.push({ id: f.id, points: cur }); cur = []; } }
+    if (cur.length) out.push({ id: f.id, points: cur });
   }
   return out;
 }
@@ -34,7 +49,7 @@ function mount(stage, win) {
     const g = ask('t180:ghost-request'), t = g ? null : ask('t180:track-request');
     const samples = g ? g.samples : t && t.path ? t.path.samples : null, segments = g ? g.segments : t ? t.segments : null;
     if (!samples || !segments) return [];
-    if (memo.samples !== samples || memo.segments !== segments) memo = { samples, segments, flights: JP.flightsOfPath({ samples }, segments) };
+    if (memo.samples !== samples || memo.segments !== segments) memo = { samples, segments, flights: flightsOfPath({ samples }, segments) };
     return memo.flights;
   };
   const frame = () => {
@@ -48,18 +63,14 @@ function mount(stage, win) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     if (!drawn.length) return;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    for (const [w, dash, pick] of [[5, [10, 7], () => '#0b0d11'], [2.5, [10, 7], (l) => (l.clear === false ? '#ff6b6b' : '#7fd8ff')]]) {
-      ctx.lineWidth = w; ctx.setLineDash(dash);
-      for (const l of drawn) { ctx.strokeStyle = pick(l); ctx.beginPath(); l.points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); }
+    for (const [w, dash, colour] of [[5, [10, 7], '#0b0d11'], [2.5, [10, 7], '#7fd8ff']]) {
+      ctx.lineWidth = w; ctx.setLineDash(dash); ctx.strokeStyle = colour;
+      for (const l of drawn) { ctx.beginPath(); l.points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); }
     }
     ctx.setLineDash([]);
-    // a caption at the lighter fall's middle: what the line is
-    const lead = drawn.filter((l) => l.g === null || l.g === JP.FALLS[0]);
-    ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif'; ctx.textBaseline = 'bottom';
-    for (const l of lead) { const m = l.points[Math.floor(l.points.length / 2)], text = l.model === 'straight' ? 'flight (straight line)' : `flight · ${Math.round(JP.DESIGN_KMH)} km/h`; ctx.fillStyle = 'rgba(11,13,17,0.85)'; ctx.fillRect(m.x - 4, m.y - 22, ctx.measureText(text).width + 8, 17); ctx.fillStyle = '#7fd8ff'; ctx.fillText(text, m.x, m.y - 7); }
   };
   raf = win.requestAnimationFrame(frame);
   return { lines: () => drawn.slice(), flights: () => shown.slice(), unmount() { win.cancelAnimationFrame(raf); canvas.remove(); } };
 }
 
-module.exports = { flightLines, mount };
+module.exports = { flightsOfPath, flightLines, mount };

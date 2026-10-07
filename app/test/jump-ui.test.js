@@ -1,121 +1,129 @@
 // jump-ui.test.js: node --test app/test/jump-ui.test.js   (under the heavy-run lock)
-// D243 item 1, THE ADD-JUMP CONTROL (the core is src/core/jump.js, E's; the UI half is app/core/jumpplan.js, flightlayer.js, the shell's addJump / candidateJump, and the panel's Jump block, whose rows are
-// 14 to 16 of app/test/core-pieces-ui.test.js). FEEL tier: targeted rows, no mutation harness (the librarian runs them once at install). Rows:
-//   1  the flight model: the lip, the gap, the drop and the landing pitch read off a real path; the dashed arc IS the core's ballistic model (flightY) at the design speed, one per measured fall; it ends ON the landing
-//      ramp; where there is no model it is a straight line and says so; a fall that does not reach the landing is marked and says what speed it needs
-//   2  addJump: one undo step; the next Extend lays the landing road; every refusal of the core in plain words, with nothing changed
-//   3  the overlay: the arcs on screen, broken behind the camera; the ghost's flights while one shows, the placed track's otherwise
+// D258, THE FREE JUMP, UI HALF (the keeper's way: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error
+// driving it themselves"; the core is src/core/jump.js, E's; this half is app/core/landing.js, jumpwords.js, flightlayer.js, the shell's jump / landing API and the panel's Jump button, landing boxes and
+// handles, whose rows are 14 to 14c of app/test/core-pieces-ui.test.js). It REPLACES D243's Add-jump control (gap, drop, landing angle, ballistic arcs: jumpplan.js is gone). FEEL tier: rows on the shell and
+// pure modules, fake hosts for the panel; NO real window (no pointer lock or focus while the keeper is at the PC: the rule of 2026-10-06). Rows:
+//   1  shell.jump: the take-off as Extend would place it, a free flight, a 60 m landing, ONE undo step, the default landing 40 m ahead, lined up; the null take-off; the ghost is flagged a jump's
+//   1b every refusal in plain words (no code name), nothing changed, no undo step
+//   2  the landing while it is the head: its values in the boxes' units; moveLanding is one undo step; a drag (begin / to / end) is ONE undo step from the document it began on, a step the core refuses
+//      leaves it at the last good one; LANDING_NOT_HEAD after an Extend, in words, and deleting back to it moves it again
+//   3  the handles' frames: the arrows ARE the pose's axes (forward moves the landing along the take-off's heading, sideways along its left, height straight up), on a turning and on a climbing take-off
+//   4  the flight layer: the centreline of each flight from the take-off station to the landing, broken behind the camera; the ghost's flights while one shows
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createCoreShell } = require('../core/coreshell.js');
-const JP = require('../core/jumpplan.js');
+const LD = require('../core/landing.js');
+const JW = require('../core/jumpwords.js');
 const FLY = require('../core/flightlayer.js');
 const G = require('../../src/geom/index.js');
 const D = require('../../src/core/document.js');
 const { extend } = require('../../src/core/extend.js');
 const { close } = require('../../src/core/close.js');
-const { flightY, minSpeed } = require('../../src/validate/jumps.js');
-const { MACH6 } = require('../../src/validate/limits.js');
 
 const DEG = Math.PI / 180, R = 180, Q = (Math.PI * R) / 2;
 const near = (a, b, eps, what) => assert.ok(Math.abs(a - b) <= eps, `${what || ''}: ${a} is not within ${eps} of ${b}`);
-/** An open track: a 300 m bowl straight, then 100 m climbing a little (so the take-off has a ramp angle). */
-async function base() { const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 300, family: 'bowl' }); s.extend({ length: 100, targets: { kv: 0.002 } }); return s; }
-const pathOf = (s) => { const r = s.getState().resolved; return { path: G.buildPath(r.segments, { step: 2, closed: false, start: r.start }), segments: r.segments }; };
-const flightsOf = (s, opts) => { const { path, segments } = pathOf(s); return JP.flightsOfPath(path, segments, opts); };
+/** An open track: a 300 m bowl straight, then 100 m climbing a little (so the take-off has a pitch). */
+async function base() { const s = await createCoreShell({ brushFn: null, autosaveMs: 0 }); s.extend({ length: 300, family: 'bowl' }); s.extend({ length: 100, targets: { kv: 0.002 } }); return s; }
+const trackOf = (s) => { const r = s.getState().resolved; return { path: G.buildPath(r.segments, { step: 2, closed: false, start: r.start }), segments: r.segments }; };
+const types = (s) => s.getState().history.present.pieces.map((p) => p.type);
 
-test('row 1: the flight model: the lip, gap, drop and landing pitch read off a path; the dashed arc is the core\'s ballistic flight at the design speed, one per fall, and it ends ON the landing ramp', async () => {
-  const s = await base(); s.addJump({ gap: 30, drop: 1, landDeg: -2 }); assert.match(s.getState().message, /^Jump added/, s.getState().message);
-  const fl = flightsOf(s), f = fl[0]; assert.equal(fl.length, 1); assert.equal(f.model, 'ballistic'); assert.equal(f.speedKmh, MACH6.designSpeedKmh, 'drawn at the design speed the ramp is sized for'); assert.equal(JP.DESIGN_KMH, MACH6.designSpeedKmh); assert.deepEqual([...JP.FALLS], [...MACH6.jumpG]);
-  near(f.D, 30, 1e-6, 'the gap'); near(f.dh, -1, 1e-6, 'the drop (+ down) as a change of height'); near(f.landRad, -2 * DEG, 1e-3, 'the landing pitch'); assert.ok(f.lip.theta > 0.001, `the take-off is the climbing road's pitch: ${f.lip.theta}`);
-  const { path } = pathOf(s), segs = s.getState().resolved.segments, gi = segs.findIndex((g) => g.kind === 'gap'), first = path.samples.findIndex((m) => m.seg === gi);
-  assert.deepEqual(f.lip.pos, path.samples[first].pos, 'the lip is the road\'s last station, where the gap starts');
-  const v = MACH6.designSpeedKmh / 3.6, ramp = Math.tan(f.landRad);
-  assert.equal(f.falls.length, 2); f.falls.forEach((fall, k) => {
-    assert.equal(fall.g, MACH6.jumpG[k]); assert.deepEqual(fall.arc[0], [0, 0], 'the arc starts at the lip'); assert.equal(fall.clear, true, `${fall.g} g clears at 460 km/h`);
-    for (const [x, y] of fall.arc) near(y, flightY(x, v, f.lip.theta, fall.g), 1e-9, `the arc is flightY at x ${x}`);
-    const [xe, ye] = fall.arc[fall.arc.length - 1]; near(xe, fall.x, 1e-9, 'the arc ends at the touchdown'); near(ye, f.dh + (xe - f.D) * ramp, 1e-6, `${fall.g} g: the arc ends ON the landing ramp`); assert.ok(xe > f.D, 'past the landing lip');
-    near(fall.minKmh, minSpeed(f.D, f.dh, f.lip.theta, fall.g) * 3.6, 1e-9, 'the speed it needs');
-  });
-  assert.ok(f.falls[0].x > f.falls[1].x, 'the lighter fall (3.2 g) carries farther'); assert.ok(f.rampM >= f.falls[0].x - f.D, 'the ramp is long enough for the farthest touchdown');
-  // the arc in the world: from the lip, along the ground heading, up by y
-  const w = JP.arcWorld(f, f.falls[0]); assert.deepEqual(w[0], f.lip.pos);
-  w.forEach((p, i) => { const [x, y] = f.falls[0].arc[i]; near((p[0] - f.lip.pos[0]) * f.lip.h[0] + (p[2] - f.lip.pos[2]) * f.lip.h[2], x, 1e-9, 'distance along the heading'); near(p[1] - f.lip.pos[1], y, 1e-9, 'height above the lip'); });
-  // the words say which line it is, the speed and the ramp
-  const w2 = JP.describe(f); assert.match(w2.drew, /ballistic, at 460 km\/h, falling at 3\.2 g and 6\.3 g/); assert.match(w2.speed, /ramp is sized for 460 km\/h, fixed today/); assert.equal(w2.lines.length, 3); assert.match(w2.lines[0], /^3\.2 g: comes down \d+\.\d m after the lip, \d+\.\d m onto the ramp\.$/); assert.match(w2.lines[2], /^The ramp is \d+\.\d m long\.$/);
-});
-
-test('row 1b: no flight model: a STRAIGHT dashed line, and it says so; a fall that does not reach the landing is marked and says the speed it needs; two flights; none; no landing yet', async () => {
-  const s = await base(); s.addJump({ gap: 40, drop: 1, landDeg: -2 });
-  const st = flightsOf(s, { model: null })[0]; assert.equal(st.model, 'straight'); assert.equal(st.falls.length, 1); assert.deepEqual(st.falls[0].arc[0], [0, 0]); near(st.falls[0].arc[1][0], st.D, 1e-9); near(st.falls[0].arc[1][1], st.dh, 1e-9); assert.equal(st.rampM, null);
-  const w = JP.describe(st); assert.equal(w.drew, 'straight'); assert.match(w.lines[0], /straight from the take-off lip to the landing lip: this build has no flight model/);
-  // a long gap: the heavier fall does not reach it at 460 km/h
-  const l = await base(); l.addJump({ gap: 120, drop: 3, landDeg: -3 }); const lf = flightsOf(l)[0]; assert.equal(lf.falls[0].clear, true); assert.equal(lf.falls[1].clear, false, '6.3 g falls short');
-  const short = lf.falls[1], [xs, ys] = short.arc[short.arc.length - 1]; assert.ok(xs < lf.D, `it comes down short of the landing lip (${xs} of ${lf.D})`); near(ys, lf.dh, 1, 'at the level of the landing lip'); assert.equal(short.x, null);
-  const lw = JP.describe(lf); assert.match(lw.lines[1], /^6\.3 g: does NOT reach the landing at 460 km\/h \(it needs 62\d km\/h\): a warning, not a red \(tune it by driving it in AC\)\.$/, lw.lines[1]);   // D257 (amended): a missed fall is a WARNING since D250, not "the jump is red"
-  // two flights on one track; each its own lip
-  const t = await base(); t.addJump({ gap: 30, drop: 1, landDeg: -2 }); t.extend({ length: 200 }); t.addJump({ gap: 25, drop: 0, landDeg: -1 }); const two = flightsOf(t); assert.equal(two.length, 2); assert.notDeepEqual(two[0].lip.pos, two[1].lip.pos); assert.deepEqual(two.map((x) => x.id), ['p3', 'p5']);
-  // none, an empty path, and a flight with no landing yet (the path cut after the gap)
-  assert.deepEqual(flightsOf(await base()), []); assert.deepEqual(JP.flightsOfPath({ samples: [] }, []), []); assert.deepEqual(JP.flightsOfPath(null, null), []);
-  const { path, segments } = pathOf(s), gi = segments.findIndex((g) => g.kind === 'gap'), cut = segments.slice(0, gi + 1), keep = path.samples.filter((m) => m.seg <= gi); assert.deepEqual(JP.flightsOfPath({ samples: keep }, cut), [], 'a gap with nothing after it is left out');
+test('row 1: shell.jump: the take-off as Extend would place it, a free flight, a 60 m straight landing, ONE undo step; the landing 40 m ahead at the same height, lined up; the ghost is a jump\'s', async () => {
+  const s = await base(), d0 = s.getState().history.present, past0 = s.getState().history.past.length;
+  s.jump({ length: 80 }); const d1 = s.getState().history.present;
+  assert.deepEqual(types(s), [...d0.pieces.map((p) => p.type), 'road', 'flight', 'road'], 'the piece the fields describe, then the flight and the landing');
+  assert.equal(d1.pieces[d1.pieces.length - 3].length, 80, 'the take-off is what Extend would place'); assert.equal(d1.pieces[d1.pieces.length - 1].length, 60, 'a 60 m landing');
+  assert.equal(s.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(s.getState().message, /^Jump placed\. This is a jump: drive it in AC and move the landing until it works\.$/); assert.equal(s.getState().messageKind, 'ok'); assert.ok(s.getState().dirty);
+  assert.deepEqual(s.landing().pose, { forward: 40, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 }, 'lined up, 40 m ahead, the same height'); assert.equal(s.landing().index, d1.pieces.length - 2);
+  s.undo(); assert.equal(s.getState().history.present, d0, 'Undo gives the very same document back'); s.redo(); assert.equal(s.getState().history.present, d1);
+  // null: take off from the track's end as it is
+  const t = await base(); t.jump(null); assert.deepEqual(types(t).slice(-2), ['flight', 'road']); assert.equal(types(t).length, 4);
+  // the ghost: flagged a jump's, built from the same core call, and it throws the core's refusal
+  const c = (await base()).candidateJump({ length: 80 }); assert.equal(c.jump, true); assert.equal(c.closed, false); assert.ok(c.segments.some((g) => g.kind === 'gap')); assert.ok(c.start);
+  // no landing on a track without a jump, and none once it is closed
+  assert.equal((await base()).landing(), null);
 });
 
 const REFUSALS = [
-  ['NO_TAKEOFF', async () => createCoreShell({ autosaveMs: 0 }), { gap: 30, drop: 1, landDeg: -2 }, /^A jump needs road to take off from: press Extend first, then Add jump\.$/],
-  ['CLOSED', async () => { const c = await createCoreShell({ brushFn: null, autosaveMs: 0 }); let d = extend(D.createDoc('lap'), { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); d = extend(d, { length: 60, transition: 40, targets: { kh: 0 } }); const r = close(d, { edited: [0] }); assert.equal(r.converged, true, r.report); c.adopt(r.doc); return c; }, { gap: 30, drop: 1, landDeg: -2 }, /^The loop is closed, so there is no open end to add a jump to\. Undo the close first\.$/],
-  ['BAD_JUMP gap', base, { gap: 0, drop: 1, landDeg: 0 }, /^The gap must be more than 0 m: it is how far the car flies along the ground\.$/], ['BAD_JUMP gap blank', base, { gap: '', drop: 1, landDeg: 0 }, /^The gap must be more than 0 m/],
-  ['BAD_JUMP drop', base, { gap: 30, drop: 'abc', landDeg: 0 }, /^The drop must be a number of metres \(\+ is down/], ['BAD_JUMP landing', base, { gap: 30, drop: 1, landDeg: 95 }, /^The landing angle must be between −90° and \+90°/],
-  ['JUMP_AFTER_JUMP', async () => { const s = await base(); s.addJump({ gap: 30, drop: 1, landDeg: -2 }); return s; }, { gap: 30, drop: 1, landDeg: -2 }, /^The track already ends in a jump\. Press Extend first, so the car has road to land on, then add the next one\.$/],
-  ['FLIGHT_OFFSET', async () => { const s = await base(); s.beginBrush({ mode: 'local', channel: 'height', s0: 380, r: 60 }); s.brushTo(3); s.endBrush(); assert.equal(s.getState().message, null); return s; }, { gap: 30, drop: 1, landDeg: -2 }, /^The road at the end still carries a height or sideways offset \(from the local brush\)/],
-  ['JUMP_UNSOLVABLE', base, { gap: 20, drop: 500, landDeg: 80 }, /^No flight covers a gap of 20 m, dropping 500 m and arriving at 80°\. Try a shorter gap, a smaller drop or a gentler landing angle\.$/],
-  ['JUMP_PAST_VERTICAL (the flight)', base, { gap: 1, drop: 300, landDeg: -80 }, /^To land there the flight would have to turn through vertical \(the car would fly backwards\)\./],
-  ['JUMP_PAST_VERTICAL (the take-off)', async () => { const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 300, family: 'bowl' }); s.extend({ length: 200, targets: { kv: 0.05 } }); s.extend({ length: 200, targets: { kv: 0.05 } }); return s; }, { gap: 30, drop: 1, landDeg: -2 }, /^The road at the end points almost straight up or down, so a jump cannot take off from it\./],
+  ['NO_TAKEOFF', async () => createCoreShell({ brushFn: null, autosaveMs: 0 }), null, /^A jump needs road to take off from: press Extend first, then Jump\.$/],
+  ['CLOSED', async () => { const c = await createCoreShell({ brushFn: null, autosaveMs: 0 }); let d = extend(D.createDoc('lap'), { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); d = extend(d, { length: 60, transition: 40, targets: { kh: 0 } }); const r = close(d, { edited: [0] }); assert.ok(r.converged); c.commitDoc(r.doc); return c; }, { length: 50 }, /^The loop is closed, so there is no open end to add a jump to\. Undo the close first\.$/],
+  ['JUMP_AFTER_JUMP', async () => { const s = await base(); s.commitDoc(D.appendPiece(s.getState().history.present, D.flightPiece({ forward: 30, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 }))); return s; }, null, /^The track already ends in a jump\. Extend from its landing first/],
+  ['FLIGHT_OFFSET', async () => { const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 300, family: 'bowl' }); s.extend({ length: 100, targets: { kv: 0.002 } }); s.beginBrush({ mode: 'local', channel: 'height', s0: 380, r: 60 }); s.brushTo(3); s.endBrush(); assert.equal(s.getState().message, null); return s; }, null, /^The road at the end still carries a height or sideways offset \(from the local brush/],
 ];
-test('row 2: addJump is ONE undo step, the NEXT Extend lays the landing road, and every refusal of the core is said in plain words with nothing changed', async () => {
-  const s = await base(), d0 = s.getState().history.present, past0 = s.getState().history.past.length;
-  s.addJump({ gap: 30, drop: 1, landDeg: -2 }); const d1 = s.getState().history.present; assert.equal(d1.pieces.length, 3); assert.deepEqual(d1.pieces.map((p) => p.type), ['road', 'road', 'flight']); assert.deepEqual([d1.pieces[2].gap, d1.pieces[2].drop], [30, 1]); near(d1.pieces[2].land, -2 * DEG, 1e-6);
-  assert.equal(s.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(s.getState().message, /^Jump added\. Press Extend to lay the road it lands on\.$/); assert.equal(s.getState().messageKind, 'ok'); assert.ok(s.getState().dirty);
-  s.undo(); assert.equal(s.getState().history.present, d0, 'Undo gives the very same document back'); s.redo(); assert.equal(s.getState().history.present, d1);
-  // the next Extend starts the landing road: after the flight, at the landing pitch, joined
-  s.extend({ length: 100 }); const d2 = s.getState().history.present; assert.deepEqual(d2.pieces.map((p) => p.type), ['road', 'road', 'flight', 'road']); assert.equal(s.getState().message, null, s.getState().message); D.checkDoc(d2);
-  const { path, segments } = pathOf(s), gi = segments.findIndex((g) => g.kind === 'gap'); assert.ok(gi > 0 && segments[gi].id === 'p3' && segments[gi + 1].part === 'land' && segments[segments.length - 1].id === 'p4', 'a flight, its landing ramp, then the new road');
-  const lipI = path.samples.findIndex((m) => m.seg === gi), landI = path.samples.findIndex((m) => m.seg === gi + 1), nextI = path.samples.findIndex((m) => segments[m.seg] && segments[m.seg].id === 'p4');
-  near(Math.asin(path.samples[nextI].T[1]), -2 * DEG, 5e-3, 'the road after the flight starts at the landing pitch'); assert.ok(landI > lipI);
-  // the candidate (the ghost): flagged as a jump, built from the same core call
-  const c = (await base()).candidateJump({ gap: 30, drop: 1, landDeg: -2 }); assert.equal(c.jump, true); assert.equal(c.closed, false); assert.ok(c.segments.some((g) => g.kind === 'gap')); assert.ok(c.start);
-  // every refusal: plain words, no code name, nothing changed, no undo step
+test('row 1b: every refusal of the core is said in plain words, with nothing changed and no undo step', async () => {
   for (const [name, make, o, re] of REFUSALS) {
-    const t = await make(), before = t.getState().history.present, n = t.getState().history.past.length; t.addJump(o);
-    assert.match(t.getState().message, re, `${name}: ${t.getState().message}`); assert.equal(t.getState().messageKind, 'error', name); assert.doesNotMatch(t.getState().message, /\b(?:NO_TAKEOFF|CLOSED|BAD_JUMP|JUMP_AFTER_JUMP|FLIGHT_OFFSET|JUMP_PAST_VERTICAL|JUMP_UNSOLVABLE)\b/, `${name}: no code name`);
+    const t = await make(), before = t.getState().history.present, n = t.getState().history.past.length; t.jump(o);
+    assert.match(t.getState().message, re, `${name}: ${t.getState().message}`); assert.equal(t.getState().messageKind, 'error', name);
+    assert.doesNotMatch(t.getState().message, /\b(?:NO_TAKEOFF|CLOSED|JUMP_AFTER_JUMP|FLIGHT_OFFSET|BAD_FLIGHT|LANDING_NOT_HEAD)\b/, `${name}: no code name`);
     assert.equal(t.getState().history.present, before, `${name}: nothing changed`); assert.equal(t.getState().history.past.length, n, `${name}: no undo step`);
     assert.throws(() => t.candidateJump(o), (e) => e.name === 'CoreError', `${name}: the ghost throws the core's refusal`);
   }
-  // blanks are 0 for the drop and the landing; gap is needed
-  const b = await base(); b.addJump({ gap: '40', drop: '', landDeg: '' }); assert.match(b.getState().message, /^Jump added/); assert.deepEqual([b.getState().history.present.pieces[2].drop, b.getState().history.present.pieces[2].land], [0, 0]);
+  // the words alone: the ones the shell reaches only through a move
+  assert.match(JW.jumpWords({ code: 'LANDING_NOT_HEAD' }), /^The landing can only be moved while it is the last piece of the track\./); assert.match(JW.jumpWords({ code: 'FLIGHT_TOO_SHORT', message: 'FLIGHT_TOO_SHORT: p2: the landing starts 0.5 m from the take-off' }), /^The landing is too close to the take-off: put it at least 1 m away\.$/);
+  assert.equal(JW.jumpWords({ code: 'SOMETHING', message: 'SOMETHING: the core\'s own sentence' }), 'the core\'s own sentence', 'an unknown refusal keeps the core\'s sentence minus its code'); assert.equal(JW.jumpWords(null), '');
 });
 
-test('row 3: the overlay: the arcs on screen with the dashed fall marked, broken behind the camera; the ghost\'s flights while one shows, the placed track\'s otherwise', async () => {
-  const s = await base(); s.addJump({ gap: 30, drop: 1, landDeg: -2 }); const { path, segments } = pathOf(s), fl = JP.flightsOfPath(path, segments), f = fl[0], lip = f.lip.pos;
-  const pose = { eye: [lip[0] - f.lip.h[0] * 60, lip[1] + 25, lip[2] - f.lip.h[2] * 60], target: [lip[0] + f.lip.h[0] * 30, lip[1], lip[2] + f.lip.h[2] * 30], up: [0, 1, 0], fov: 60 * DEG };
-  const lines = FLY.flightLines(fl, pose, 900, 600); assert.equal(lines.length, 2, 'one dashed line per fall'); assert.deepEqual(lines.map((l) => l.g), [3.2, 6.3]); assert.ok(lines.every((l) => l.points.length === 49 && l.clear === true && l.model === 'ballistic'));
-  for (const l of lines) for (const p of l.points) assert.ok(p.x >= -50 && p.x <= 950 && p.y >= -50 && p.y <= 650, `on screen: ${p.x},${p.y}`);
-  assert.ok(lines[0].points[48].x !== lines[1].points[48].x || lines[0].points[48].y !== lines[1].points[48].y, 'the two falls come down in different places');
-  // from the other side of the camera: the arc is behind it and is broken off
-  const back = FLY.flightLines(fl, { ...pose, eye: [lip[0] + f.lip.h[0] * 400, lip[1] + 25, lip[2] + f.lip.h[2] * 400], target: [lip[0] + f.lip.h[0] * 500, lip[1], lip[2] + f.lip.h[2] * 500] }, 900, 600); assert.deepEqual(back, [], 'a camera looking away draws nothing');
+test('row 2: the landing while it is the head: values in the boxes\' units; moveLanding is ONE undo step; a drag is ONE step from where it began; a refused step leaves the last good one; fixed after an Extend, movable again after deleting back', async () => {
+  const s = await base(); s.jump(null); const d1 = s.getState().history.present, past0 = s.getState().history.past.length;
+  s.moveLanding({ forward: 60, left: 5, up: -3, heading: 10, pitch: -2, bank: 4 }); assert.equal(s.getState().history.past.length, past0 + 1, 'ONE undo step for a typed move');
+  assert.deepEqual(s.landing().pose, { forward: 60, left: 5, up: -3, heading: 10, pitch: -2, bank: 4 }, 'metres stay metres, degrees come back as degrees');
+  const f = s.getState().history.present.pieces.find((p) => p.type === 'flight'); near(f.heading, 10 * DEG, 1e-9, 'heading in radians in the document'); near(f.pitch, -2 * DEG, 1e-9); near(f.bank, 4 * DEG, 1e-9); assert.deepEqual([f.forward, f.left, f.up], [60, 5, -3]);
+  s.moveLanding({ forward: 60 }); assert.equal(s.getState().history.past.length, past0 + 1, 'the same value is no step'); s.undo(); assert.equal(s.getState().history.present, d1, 'Undo gives the jump as placed');
+  // a drag: many steps, one undo
+  s.beginLanding(); assert.ok(s.getState().landingDrag); const n0 = s.getState().history.past.length;
+  for (const v of [41, 42, 45, 50]) s.landingTo({ forward: v }); assert.equal(s.landing().pose.forward, 50); assert.equal(s.getState().history.past.length, n0, 'nothing in Undo until the drag ends');
+  s.landingTo({ forward: 0.5 }); assert.match(s.getState().message, /^The landing is too close to the take-off: put it at least 1 m away\.$/); assert.equal(s.landing().pose.forward, 50, 'a step the core refuses leaves the drag at its last good step');
+  s.landingTo({ left: 7 }); assert.deepEqual([s.landing().pose.forward, s.landing().pose.left], [40, 7], 'each step is the values given ON THE DOCUMENT THE DRAG BEGAN ON (a handle drags one value: the forward of the earlier steps is not kept)');
+  s.endLanding(); assert.equal(s.getState().landingDrag, null); assert.equal(s.getState().history.past.length, n0 + 1, 'ONE undo step for the whole drag'); s.undo(); assert.equal(s.getState().history.present, d1);
+  // fixed after an Extend, in words
+  s.extend({ length: 50 }); assert.equal(s.landing(), null, 'the landing is not the head any more'); const d2 = s.getState().history.present; s.moveLanding({ forward: 70 });
+  assert.match(s.getState().message, /^The landing can only be moved while it is the last piece of the track\. Once road is extended from it, it is fixed: delete back to it \(Ctrl\+Backspace\) to move it again\.$/); assert.equal(s.getState().history.present, d2);
+  s.beginLanding(); assert.match(s.getState().message, /^The landing can only be moved/); assert.equal(s.getState().landingDrag, null, 'no drag opens');
+  // deleting back to it makes it the head again
+  s.removeHead(); assert.ok(s.landing(), 'the landing is the head again'); s.moveLanding({ forward: 70 }); assert.equal(s.landing().pose.forward, 70);
+  // no drag open: the drag verbs say so and change nothing
+  const t = await base(); t.jump(null); const h = t.getState().history.present; t.landingTo({ forward: 50 }); assert.equal(t.getState().history.present, h); assert.match(t.getState().message, /no landing drag is open/); assert.equal(t.endLanding(), t.getState());
+});
+
+test('row 3: the handles\' frames: the arrows ARE the pose\'s axes: forward moves the landing along the take-off\'s heading, sideways along its left, height straight up (a turning, climbing take-off too)', async () => {
+  const s = await createCoreShell({ brushFn: null, autosaveMs: 0 }); s.extend({ length: 200, family: 'bowl' }); s.extend({ length: 150, transition: 40, targets: { kh: 1 / 400, kv: 0.002 } }); s.jump(null);
+  const flight = s.landing().flightId, at = (pose) => { s.moveLanding(pose); const F = LD.framesOf(trackOf(s), flight); assert.ok(F, 'the landing is on the path'); return F; };
+  const F0 = at({ forward: 40, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 });
+  near(Math.hypot(...F0.T0), 1, 1e-9, 'unit'); assert.equal(F0.T0[1], 0, 'the take-off\'s heading is HORIZONTAL (it climbs, its frame does not)'); assert.deepEqual(F0.U0, [0, 1, 0]); near(F0.L0[0] * F0.T0[0] + F0.L0[2] * F0.T0[2], 0, 1e-12, 'left is across the heading');
+  near(F0.T0[2] * F0.L0[0] - F0.T0[0] * F0.L0[2], 1, 1e-12, 'left is U x T (with forward +z, left is +x)');
+  const d = (a, b) => [b.pos[0] - a.pos[0], b.pos[1] - a.pos[1], b.pos[2] - a.pos[2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const Ff = at({ forward: 50, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 }), df = d(F0, Ff); near(dot(df, F0.T0), 10, 1e-3, '+10 forward is 10 m along the heading'); near(dot(df, F0.L0), 0, 1e-3, 'and no sideways'); near(df[1], 0, 1e-3, 'and no height');
+  const Fl = at({ forward: 50, left: 6, up: 0, heading: 0, pitch: 0, bank: 0 }), dl = d(Ff, Fl); near(dot(dl, F0.L0), 6, 1e-3, '+6 sideways is 6 m to the left'); near(dot(dl, F0.T0), 0, 1e-3); near(dl[1], 0, 1e-3);
+  const Fu = at({ forward: 50, left: 6, up: 4, heading: 0, pitch: 0, bank: 0 }), du = d(Fl, Fu); near(du[1], 4, 1e-3, '+4 height is 4 m up, whatever the take-off\'s climb'); near(dot(du, F0.T0), 0, 1e-3); near(dot(du, F0.L0), 0, 1e-3);
+  // heading: the landing turns left by that many degrees from the take-off's heading (its own direction T1)
+  const Fh = at({ forward: 50, left: 6, up: 4, heading: 30, pitch: 0, bank: 0 }), h1 = Math.hypot(Fh.T1[0], Fh.T1[2]), ang = Math.atan2(dot(Fh.T1, F0.L0), dot(Fh.T1, F0.T0));
+  near(ang, 30 * DEG, 1e-3, 'a heading of +30 is 30 degrees to the LEFT of the take-off'); assert.ok(h1 > 0.99, 'level landing'); near(Fh.T1[1], 0, 1e-6, 'pitch 0 is level');
+  const Fp = at({ forward: 50, left: 6, up: 4, heading: 30, pitch: 5, bank: 0 }); near(Math.asin(Fp.T1[1]), 5 * DEG, 1e-3, 'a pitch of 5 is nose up 5 degrees');
+  assert.equal(LD.framesOf(trackOf(s), 'nope'), null, 'a piece that is not on the path'); assert.equal(LD.framesOf(null, 'p1'), null); assert.equal(LD.framesOf({ path: { samples: [] }, segments: [] }, 'p1'), null);
+  // the number boxes' units
+  assert.deepEqual(LD.BOXES.map((b) => b.field), ['forward', 'left', 'up', 'heading', 'pitch', 'bank']); assert.deepEqual(LD.poseOf('heading', 90), { heading: Math.PI / 2 }); assert.deepEqual(LD.poseOf('forward', 12.5), { forward: 12.5 });
+  assert.deepEqual(LD.boxValues({ forwardM: 40.004, leftM: -0.001, upM: 1.234, headingDeg: -0, pitchDeg: 2.5, bankDeg: 0 }), { forward: 40, left: 0, up: 1.23, heading: 0, pitch: 2.5, bank: 0 }, 'two decimals, no "-0"'); assert.equal(LD.boxValues(null), null);
+});
+
+test('row 4: the flight layer: each flight\'s centreline from the take-off station to the landing, broken behind the camera; the ghost\'s flights while one shows, the placed track\'s otherwise', async () => {
+  const s = await base(); s.jump({ length: 60 }); const { path, segments } = trackOf(s), fl = FLY.flightsOfPath(path, segments), f = fl[0];
+  assert.equal(fl.length, 1); assert.equal(f.id, s.landing().flightId); assert.ok(f.points.length >= 3, 'a curve across the air, with the stations either side');
+  const F = LD.framesOf({ path, segments }, f.id); assert.deepEqual(f.points[f.points.length - 1], F.pos, 'it ends at the landing\'s start'); assert.ok(Math.hypot(f.points[0][0] - F.pos[0], f.points[0][2] - F.pos[2]) > 30, 'and starts back at the take-off');
+  const lip = f.points[0], pose = { eye: [lip[0] - 60, lip[1] + 25, lip[2] - 60], target: F.pos, up: [0, 1, 0], fov: 60 * DEG };
+  const lines = FLY.flightLines(fl, pose, 900, 600); assert.equal(lines.length, 1, 'one dashed line'); assert.equal(lines[0].points.length, f.points.length); for (const p of lines[0].points) assert.ok(p.x > -200 && p.x < 1100, `on screen: ${p.x}`);
+  const away = { ...pose, eye: [F.pos[0] + 400, F.pos[1] + 25, F.pos[2] + 400], target: [F.pos[0] + 500, F.pos[1], F.pos[2] + 500] }; assert.deepEqual(FLY.flightLines(fl, away, 900, 600), [], 'a camera looking away draws nothing');
   assert.deepEqual(FLY.flightLines([], pose, 900, 600), []); assert.deepEqual(FLY.flightLines(fl, null, 900, 600), []); assert.deepEqual(FLY.flightLines(fl, pose, 0, 0), []);
-  // a straight line is drawn as one line, marked straight
-  const sl = FLY.flightLines(JP.flightsOfPath(path, segments, { model: null }), pose, 900, 600); assert.equal(sl.length, 1); assert.equal(sl[0].model, 'straight'); assert.equal(sl[0].g, null);
+  assert.deepEqual(FLY.flightsOfPath(trackOf(await base()).path, trackOf(await base()).segments), [], 'none on a track without a jump'); assert.deepEqual(FLY.flightsOfPath({ samples: [] }, []), []); assert.deepEqual(FLY.flightsOfPath(null, null), []);
   // the mounted layer, on a stage that answers the preview's three requests
   const listeners = {}, frames = [], canvas = { style: {}, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getContext: () => null, remove() { this.gone = true; }, isConnected: true };
-  const docu = { createElement: () => canvas, addEventListener: (n, f) => { (listeners[n] = listeners[n] || []).push(f); }, dispatchEvent: (ev) => { for (const f of listeners[ev.type] || []) f(ev); return true; } };
+  const docu = { createElement: () => canvas, addEventListener: (n, fn) => { (listeners[n] = listeners[n] || []).push(fn); }, dispatchEvent: (ev) => { for (const fn of listeners[ev.type] || []) fn(ev); return true; } };
   const stage = { clientWidth: 900, clientHeight: 600, ownerDocument: docu, isConnected: true, append() {} };
   const win = { CustomEvent: class { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } }, devicePixelRatio: 1, requestAnimationFrame: (cb) => { frames.push(cb); return frames.length; }, cancelAnimationFrame() {} };
   let ghost = null; docu.addEventListener('t180:view', (ev) => ev.detail.reply({ pose })); docu.addEventListener('t180:track-request', (ev) => ev.detail.reply({ path, segments })); docu.addEventListener('t180:ghost-request', (ev) => ev.detail.reply(ghost));
   const layer = FLY.mount(stage, win), tick = () => frames.splice(0).forEach((cb) => cb(0)); tick();
-  assert.equal(layer.flights().length, 1, 'the placed track\'s flight'); assert.equal(layer.lines().length, 2);
+  assert.equal(layer.flights().length, 1, 'the placed track\'s flight'); assert.equal(layer.lines().length, 1);
   // a ghost with a second (candidate) flight: the ghost's path holds the placed flights AND the candidate's, so it is the one read
-  const t = await base(); t.addJump({ gap: 30, drop: 1, landDeg: -2 }); t.extend({ length: 200 }); const gp = (() => { const c = t.candidateJump({ gap: 25, drop: 0, landDeg: -1 }); return { path: G.buildPath(c.segments, { step: 2, closed: false, start: c.start }), segments: c.segments }; })();
-  ghost = { samples: gp.path.samples, segments: gp.segments, jump: true, s0: 0 }; tick(); assert.equal(layer.flights().length, 2, 'the ghost\'s path: the placed flight and the candidate'); assert.equal(layer.lines().length, 4);
+  const t = await base(); t.jump({ length: 60 }); t.extend({ length: 200 }); const c = t.candidateJump({ length: 50 }), gp = { path: G.buildPath(c.segments, { step: 2, closed: false, start: c.start }), segments: c.segments };
+  ghost = { samples: gp.path.samples, segments: gp.segments, jump: true, s0: 0 }; tick(); assert.equal(layer.flights().length, 2, 'the ghost\'s path: the placed flight and the candidate'); assert.equal(layer.lines().length, 2);
   ghost = null; tick(); assert.equal(layer.flights().length, 1, 'no ghost: the placed track again'); layer.unmount(); assert.equal(canvas.gone, true);
 });

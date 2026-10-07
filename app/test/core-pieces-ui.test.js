@@ -535,38 +535,71 @@ test('row 13: the preview\'s ghostInfo (what the handles read): none without a g
 //       jump says why and shows none; the drag handles stay off a jump's ghost and come back; Add jump adds it (one step), the next Extend lays the road; a refusal in plain words in the status line
 //   15  the preview's ghostInfo carries the jump flag and the segments
 const statusOf = (P1) => P1.all().find((e) => e.attrs.role === 'status').textContent;
-test('row 14: the Jump block: the hint and the ramp speed from the start; a ghost with the flight in words; a refused jump says why; the handles stay off the jump ghost; Add jump is one step and the next Extend lays the landing road', async () => {
-  const P1 = await handlePanel(), { shell, S } = P1, gap = fieldOf(P1, 'jump gap m'), drop = fieldOf(P1, 'drop m (+ down)'), land = fieldOf(P1, 'landing °');
-  assert.match(P1.text('jump flight'), /^Add jump takes off from the end of the road/); assert.match(P1.text('jump flight'), /The landing ramp is sized for 460 km\/h, fixed today\.$/, 'the speed it is sized for, before any hover');
-  gap.value = '15'; drop.value = '1'; land.value = '-2';   // (a flat take-off: at 460 km/h both measured falls clear 15 m)
-  assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are up'); P1.button('Add jump').onmouseenter();
+test('row 14: the Jump button (D258, the free jump): beside Extend; the old Add-jump fields are gone; hover shows a jump ghost with no Extend handles on it; a click is ONE undo step with the note; a refusal says why; Undo gives the fields back', async () => {
+  const P1 = await handlePanel(), { shell, S } = P1, labels = P1.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
+  for (const gone of ['jump gap m', 'drop m (+ down)', 'landing °']) assert.ok(!labels.includes(gone), `${gone} is gone`);
+  assert.equal(P1.button('Add jump'), undefined, 'no Add jump button'); const ext = P1.button('Extend'), jmp = P1.button('Jump'); assert.ok(jmp); assert.equal(P1.all().indexOf(jmp), P1.all().indexOf(ext) + 1, 'the Jump button is beside Extend');
+  assert.match(P1.text('jump note'), /^Jump places the piece above, then a free landing 40 m ahead at the same height\. Set the piece's climb first: it is the take-off\. This is a jump: drive it in AC and move the landing until it works\.$/);
+  assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are up'); jmp.onmouseenter();
   assert.equal(S.ghostJump, true, 'the ghost is a jump\'s'); assert.equal(S.lastCandidate.jump, true); assert.ok(S.lastCandidate.segments.some((g) => g.kind === 'gap'));
-  const note = P1.text('jump flight'); assert.match(note, /ballistic, at 460 km\/h, falling at 3\.2 g and 6\.3 g/); assert.match(note, /3\.2 g: comes down \d+\.\d m after the lip/); assert.match(note, /6\.3 g: comes down \d+\.\d m after the lip/); assert.match(note, /The ramp is \d+\.\d m long\./); assert.match(note, /sized for 460 km\/h, fixed today; jumps are tuned by driving them in AC, so a landing the car may fly past at the lap's speed is a warning, not a red\./) /* CHANGED D250: the keeper has decided */;
-  for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'no Extend handles on a jump\'s ghost');
-  assert.equal(P1.panel.flights.flights().length, 1, 'the flight overlay reads the ghost\'s flight'); assert.equal(P1.panel.flights.lines().length, 2, 'two dashed arcs');
-  // typing changes the ghost and the words
-  const g0 = S.ghosts; gap.value = '120'; drop.value = '3'; land.value = '-3'; gap.oninput(); assert.ok(S.ghosts > g0, 'the ghost followed the field'); assert.match(P1.text('jump flight'), /6\.3 g: does NOT reach the landing at 460 km\/h \(it needs \d+ km\/h\): a warning, not a red/);   // D257 (amended): a missed fall is a WARNING since D250, not "the jump is red"
-  // a validation speed other than the ramp's is said
-  // CHANGED D256 BUILD: there is no design speed box; with none pinned the note says validation is at FULL speed, and a host's pinned speed is still said
-  assert.match(P1.text('jump flight'), /Validation checks at full speed \(970 km\/h on an open track, the ghost lap on a closed one\), so this jump may be listed as a warning even though its ramp is sized for 460 km\/h\./);
-  shell.setDesignSpeed(300); gap.oninput(); assert.match(P1.text('jump flight'), /Validation is using 300 km\/h, so the jump can be listed there even though the ramp is sized for 460\./); shell.setDesignSpeed(null);
-  // a refused jump: the reason in plain words, no ghost
-  gap.value = '0'; gap.oninput(); assert.match(P1.text('jump flight'), /^No preview of this jump: The gap must be more than 0 m: it is how far the car flies along the ground\./); assert.equal(S.ghost, null, 'no ghost for a refused jump');
-  // leaving the button clears the ghost, and the Extend handles come back
-  gap.value = '40'; gap.oninput(); P1.button('Add jump').onmouseleave(); assert.equal(S.ghost, null); for (let i = 0; i < 40; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are back');
-  // Add jump: one undo step, the flight is the last piece, the message says what next
-  const d0 = shell.getState().history.present, past0 = shell.getState().history.past.length; P1.button('Add jump').onclick();
-  const d1 = shell.getState().history.present; assert.equal(d1.pieces.length, d0.pieces.length + 1); assert.equal(d1.pieces[d1.pieces.length - 1].type, 'flight'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(statusOf(P1), /^Jump added\. Press Extend to lay the road it lands on\.$/);
-  // the same again is refused in plain words, in the status line, with nothing added
-  P1.button('Add jump').onclick(); assert.match(statusOf(P1), /^The track already ends in a jump\. Press Extend first, so the car has road to land on, then add the next one\.$/); assert.equal(shell.getState().history.present, d1);
-  // the next Extend lays the landing road
-  P1.button('Extend').onclick(); const d2 = shell.getState().history.present; assert.deepEqual(d2.pieces.slice(-2).map((p) => p.type), ['flight', 'road']); assert.equal(shell.getState().message, null, shell.getState().message);
+  for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'no Extend handles on a jump\'s ghost'); assert.equal(P1.panel.flights.flights().length, 1, 'the flight layer reads the ghost\'s flight'); assert.equal(P1.panel.flights.lines().length, 1, 'one dashed line');
+  jmp.onmouseleave(); assert.equal(S.ghost, null); for (let i = 0; i < 40; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are back');
+  // a click: the piece the fields describe, the flight and the landing, one undo step, the note
+  const len = fieldOf(P1, 'length m'); len.value = '120'; len.oninput(); const d0 = shell.getState().history.present, past0 = shell.getState().history.past.length; jmp.onclick();
+  const d1 = shell.getState().history.present; assert.deepEqual(d1.pieces.slice(d0.pieces.length).map((p) => p.type), ['road', 'flight', 'road']); assert.equal(d1.pieces[d0.pieces.length].length, 120, 'the take-off is what Extend would place');
+  assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step'); assert.match(statusOf(P1), /^Jump placed\. This is a jump: drive it in AC and move the landing until it works\.$/); assert.match(P1.text('jump note'), /^This is a jump: drive it in AC and move the landing until it works\.$/);
+  // Undo gives the fields back (as after an Extend)
+  len.value = '77'; shell.undo(); assert.equal(shell.getState().history.present, d0); assert.equal(len.value, '120', 'the length the jump was made with');
+  // after a flight the Jump button's own Extend lays the landing road, so Jump again is allowed; a closed loop has no open end: the button is off (the core's words for it are in jump-ui row 1b)
+  shell.extend({ length: 100 }); shell.commitDoc(D.appendPiece(shell.getState().history.present, D.flightPiece({ forward: 30, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 }))); jmp.onclick(); assert.deepEqual(shell.getState().history.present.pieces.slice(-4).map((p) => p.type), ['flight', 'road', 'flight', 'road'], 'the old landing road, then a new flight and landing');
+  const lap = await handlePanel(); lap.shell.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) lap.shell.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); lap.shell.extend({ length: 60, transition: 40, targets: { kh: 0 } }); lap.shell.close(); assert.ok(lap.shell.getState().history.present.closed, 'a closed lap'); assert.equal(lap.button('Jump').disabled, true, 'a closed loop has no open end to jump from'); lap.panel.unmount();
+  P1.panel.unmount();
+});
+
+const landingBoxOf = (P1) => P1.all().find((e) => e.attrs['aria-label'] === 'landing');
+test('row 14b: the landing boxes appear while a landing is the head, show the pose in metres and degrees, a typed value is ONE undo step, a refusal says why in words, and an Extend fixes the landing', async () => {
+  const P1 = await handlePanel(), { shell } = P1, box = landingBoxOf(P1); assert.equal(box.style.display, 'none', 'no landing, no boxes');
+  P1.button('Jump').onclick(); assert.equal(box.style.display, '', 'the boxes are up'); const LB = (n) => P1.input(`landing ${n}`), V = () => ['forward', 'left', 'up', 'heading', 'pitch', 'bank'].map((n) => LB(n).value);   // (by aria-label: the landing's bank box has the Extend bank field's label)
+  assert.deepEqual(V(), ['40', '0', '0', '0', '0', '0'], 'lined up, 40 m ahead, the same height'); assert.deepEqual(['landing forward', 'landing left', 'landing up', 'landing heading', 'landing pitch', 'landing bank'].map((n) => !!P1.input(n)), [true, true, true, true, true, true]);
+  assert.match(P1.text('landing hint'), /^Move the landing: drag its arrows on the track \(white forward, orange sideways, yellow height, purple heading\) or type below\. Shift is fine, Ctrl snaps\./);
+  const past0 = shell.getState().history.past.length; LB('forward').value = '55'; LB('forward').onchange(); assert.equal(shell.landing().pose.forward, 55); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step for a typed value'); assert.equal(LB('forward').value, '55');
+  LB('heading').value = '20'; LB('heading').onchange(); const fl = shell.getState().history.present.pieces.find((p) => p.type === 'flight'); assert.ok(Math.abs(fl.heading - 20 * Math.PI / 180) < 1e-9, 'degrees typed, radians in the document');
+  LB('left').value = '-8'; LB('left').onchange(); LB('up').value = '3.5'; LB('up').onchange(); LB('pitch').value = '-2'; LB('pitch').onchange(); LB('bank').value = '6'; LB('bank').onchange();
+  assert.deepEqual(V(), ['55', '-8', '3.5', '20', '-2', '6']); assert.deepEqual(shell.landing().pose, { forward: 55, left: -8, up: 3.5, heading: 20, pitch: -2, bank: 6 });
+  // a blank or a word changes nothing and the box goes back to what the track says; a landing too close is refused in words
+  const n1 = shell.getState().history.past.length; LB('forward').value = ''; LB('forward').onchange(); assert.equal(LB('forward').value, '55'); assert.equal(shell.getState().history.past.length, n1);
+  LB('left').value = '0'; LB('left').onchange(); LB('up').value = '0'; LB('up').onchange(); LB('forward').value = '0.2'; LB('forward').onchange(); assert.match(statusOf(P1), /^The landing is too close to the take-off: put it at least 1 m away\.$|^The landing/); assert.equal(shell.landing().pose.forward, 55, 'nothing moved'); assert.equal(LB('forward').value, '55', 'the box shows the track again');
+  // an Extend fixes the landing: the boxes go, and a late typed value is refused in words
+  P1.button('Extend').onclick(); assert.equal(box.style.display, 'none'); LB('forward').value = '70'; const d = shell.getState().history.present; LB('forward').onchange(); assert.match(statusOf(P1), /^The landing can only be moved while it is the last piece of the track\./); assert.equal(shell.getState().history.present, d);
+  // deleting back to it brings them back
+  shell.removeHead(); assert.equal(box.style.display, '', 'the boxes are back'); assert.equal(LB('forward').value, '55');
+  P1.panel.unmount();
+});
+
+test('row 14c: the landing\'s four handles replace the Extend ghost\'s; a drag moves the number of its box in ONE undo step; Shift is fine, Ctrl snaps; two quick presses reset one; an Extend takes them away', async () => {
+  const P1 = await handlePanel(), { shell } = P1; P1.button('Jump').onclick(); for (let i = 0; i < 3; i++) P1.frame();
+  assert.deepEqual(P1.panel.handles.handles().map((h) => h.id), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'the four landing handles, none of the Extend ghost\'s'); assert.ok(P1.panel.handles.handles().every((h) => h.screen), 'all on screen');
+  let seen = null; P1.doc.dispatchEvent(new P1.win.CustomEvent('t180:handles-request', { detail: { reply: (l) => { seen = l; } } })); assert.deepEqual(seen.map((h) => h.kind), ['landfwd', 'landleft', 'landup', 'landturn'], 'the read-only request lists them too');
+  const pose = () => shell.landing().pose, past = () => shell.getState().history.past.length, n0 = past();
+  dragBy(P1, 'landfwd:0', 100); assert.equal(pose().forward, 55, '100 px along the arrow at 0.15 m a pixel'); assert.equal(past(), n0 + 1, 'ONE undo step for the whole drag'); assert.equal(P1.input('landing forward').value, '55', 'the box shows it');
+  assert.deepEqual([pose().left, pose().up, pose().heading], [0, 0, 0], 'only forward moved');
+  dragBy(P1, 'landup:0', 200, { shiftKey: true }); assert.equal(pose().up, 1, 'Shift: a tenth: 200 px at 0.05 m is 10 m, a tenth of it 1 m'); dragBy(P1, 'landfwd:0', 33, { ctrlKey: true }); assert.equal(pose().forward, 60, 'Ctrl snaps forward to 5 m: 55 + 4.95 is 60');
+  dragBy(P1, 'landturn:0', 100); assert.equal(pose().heading, 10, 'the heading handle: 0.1 degree a pixel'); dragBy(P1, 'landleft:0', 100); assert.equal(pose().left, 10, 'sideways: 0.1 m a pixel');
+  const dl = shell.getState().history.present; assert.equal(shell.getState().history.past.length, n0 + 5);
+  // two quick presses reset: sideways to 0 (and heading and height too: the zero kinds); forward is not reset to 0 but to what it was before its last drag (60 was its snap's, 55 before)
+  const quick = (id, t0) => { const a = handleOf(P1, id).screen; fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t0 }); fire(P1, 'pointerup', a.x, a.y, { timeStamp: t0 + 40 }); fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t0 + 200 }); fire(P1, 'pointerup', a.x, a.y, { timeStamp: t0 + 240 }); P1.frame(); };
+  quick('landleft:0', STAMP + 1e5); assert.equal(pose().left, 0, 'sideways reset to 0'); quick('landturn:0', STAMP + 3e5); assert.equal(pose().heading, 0); quick('landup:0', STAMP + 6e5); assert.equal(pose().up, 0);
+  assert.ok(past() > n0 + 5, 'each reset is an undo step'); P1.shell.undo(); assert.equal(pose().up, 1, 'Undo gives the reset back');
+  // an Extend fixes the landing: its handles go, the Extend ghost's come back
+  P1.button('Extend').onclick(); for (let i = 0; i < 40; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are back, the landing\'s are gone'); assert.ok(!P1.panel.handles.handles().some((h) => h.kind.startsWith('land')));
+  // the switch turns them off
+  shell.removeHead(); for (let i = 0; i < 3; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 4, 'back on the landing'); P1.input('drag handles').checked = false; P1.input('drag handles').onchange(); for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'the switch is off');
   P1.panel.unmount();
 });
 
 test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and carries its segments (what the handles and the flight overlay read)', async () => {
   const s = await track(), pv = headlessPreview(s);
   pv.showGhost(s.candidate({ length: 100 })); let g = pv.ghostInfo(); assert.equal(g.jump, false, 'an Extend ghost is not a jump'); assert.ok(Array.isArray(g.segments) && g.segments.length > 0);
-  pv.showGhost(s.candidateJump({ gap: 30, drop: 1, landDeg: -2 })); g = pv.ghostInfo(); assert.equal(g.jump, true); assert.ok(g.segments.some((x) => x.kind === 'gap'), 'the flight is among the ghost\'s segments'); assert.ok(g.samples.length > pv.track().path.samples.length);
+  pv.showGhost(s.candidateJump({ length: 50 })); g = pv.ghostInfo(); assert.equal(g.jump, true); assert.ok(g.segments.some((x) => x.kind === 'gap'), 'the flight is among the ghost\'s segments'); assert.ok(g.samples.length > pv.track().path.samples.length);
   pv.clearGhost(); assert.equal(pv.ghostInfo(), null); pv.dispose();
 });

@@ -27,7 +27,7 @@ const DEG = Math.PI / 180;
  * `perPx` is the value change per PIXEL of the pointer's travel along the handle's on-screen axis (D251: the same at any zoom; it was per metre of the world, so zoomed out one pixel jumped a lot). The numbers are TODAY's per-metre speeds divided by the px a metre takes at the default Build camera (measured in the window), so the feel is the same there; LENGTH is 5x that (the keeper, 11:29/11:30); the Extend fields'
  * units (the core's channels are the same, degrees and metres). `zero`: a kind whose natural rest is 0 (bank, turn, climb): the drag holds there, and a double-click resets to it.
  */
-const KINDS = Object.freeze({
+const EXTEND_KINDS = Object.freeze({
   // D250 item 3 (the keeper chose "Near end, like my picture"): LENGTH and WIDTH are at the piece's NEAR end, as in his marked-up screenshot. The near end stays where it is when the value changes, so
   // length is dragged AWAY from the piece (back toward the camera, `sign: 'back'`: stretching the near edge toward you is longer), and the width marks sit at the TARGET half-width (`target: true`: the
   // field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. Turn and climb stay at the far side, bank and cup mid-piece.
@@ -38,7 +38,20 @@ const KINDS = Object.freeze({
   turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.75, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', perPx: 0.083, zero: true, min: -90, max: 90, step: 0.1, snap: 5 }),
   climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.1, snap: 5 }),
 });
+// D258, THE FREE JUMP'S LANDING (the keeper: drag it in the 3D view AND type it in number boxes). `free: true` kinds sit at the LANDING's start (model.free.pos), not along a piece, and their axes are the
+// TAKE-OFF's heading frame (T0 forward, L0 left, U0 up), because that is the frame the landing's pose is given in (src/core/document.js flightPiece), so the arrow moves the number of its box. Each mark sits `leadM` m out along its own
+// arrow from the landing's start, so the four are not on one point and can be picked apart (forward 10 m ahead, sideways 8 m to the left, height 6 m up); the HEADING mark sits 15 m ahead along the landing's own
+// direction (T1) and drags sideways along its own left (L1): turning the landing about its start.
+// The speeds are per pixel like the Extend handles' (D251), first guesses to be tuned by hand: forward 0.15 m, sideways 0.1 m, height 0.05 m, heading 0.1 degree a pixel.
+const LANDING = Object.freeze({
+  landfwd: Object.freeze({ label: 'forward', unit: 'm', colour: '#ffffff', free: true, axis: 'T', frame: 'T0', lead: 'T0', leadM: 10, perPx: 0.15, min: -2000, max: 2000, step: 0.1, snap: 5 }),
+  landleft: Object.freeze({ label: 'sideways', unit: 'm', colour: '#ff9f43', free: true, axis: 'L', frame: 'L0', lead: 'L0', leadM: 8, zero: true, perPx: 0.1, min: -1000, max: 1000, step: 0.1, snap: 1 }),
+  landup: Object.freeze({ label: 'height', unit: 'm', colour: '#ffd23d', free: true, axis: 'U', frame: 'U0', lead: 'U0', leadM: 6, zero: true, perPx: 0.05, min: -500, max: 500, step: 0.1, snap: 0.5 }),
+  landturn: Object.freeze({ label: 'heading', unit: '°', colour: '#b968ff', free: true, axis: 'L', frame: 'L1', lead: 'T1', leadM: 15, zero: true, perPx: 0.1, min: -180, max: 180, step: 0.1, snap: 5 }),
+});
 const ORDER = Object.freeze(['length', 'width', 'bank', 'cup', 'turn', 'climb']);
+const KINDS = Object.freeze({ ...EXTEND_KINDS, ...LANDING });
+const LANDING_ORDER = Object.freeze(['landfwd', 'landleft', 'landup', 'landturn']);
 const FINE = 0.1;            // Shift: a tenth of the speed
 const DOUBLE_MS = 400;       // two presses on one handle this close are a double-click
 const DETENT_PX = 6;         // D251: the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
@@ -67,6 +80,12 @@ function placeHandles(model) {
   const out = [];
   for (const kind of model.kinds) {
     const K = KINDS[kind]; if (!K) continue;
+    if (K.free) {   // D258: at the landing's start, in the take-off's heading frame (model.free = { pos, T0, L0, U0, T1, L1 })
+      const F = model.free; if (!F || !F.pos || !F[K.frame]) continue;
+      const pos = K.lead && F[K.lead] ? add(F.pos, F[K.lead], K.leadM) : F.pos.slice(), dir = F[K.frame];
+      out.push({ id: `${kind}:0`, kind, side: 0, pos, axis: [dir[0] || 0, dir[1] || 0, dir[2] || 0] });
+      continue;
+    }
     const at = model.at && model.at[kind] !== undefined ? model.at[kind] : K.at;
     const m = sampleNear(model.samples, model.s0 + at * (model.s1 - model.s0)); if (!m) continue;
     const half = K.target && Number.isFinite(model.halfTarget) ? model.halfTarget : model.half(at);
@@ -254,4 +273,4 @@ function mount(stage, win, host) {
   };
 }
 
-module.exports = { KINDS, ORDER, DEG, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { KINDS, ORDER, LANDING_ORDER, DEG, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };

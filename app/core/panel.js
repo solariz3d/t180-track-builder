@@ -19,8 +19,9 @@ const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain
 const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
 const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
 const HD = require('./handles.js');   // D244: the drag handles on the Extend ghost, and (Sculpt, D244b) on a placed piece
-const JW = require('./jumpplan.js');   // D243: the flight as the car flies it, and the core's jump refusals in plain words
-const FL = require('./flightlayer.js');   // D243: the flights drawn as dashed arcs over the preview
+const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
+const LD = require('./landing.js');   // D258: the free jump's landing: where its handles are, and its number boxes
+const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
@@ -273,16 +274,27 @@ function mount(root, shell) {
     return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), at: { width: 1 }, kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }) };
   };
   let sculptDrag = null;
+  // D258: THE LANDING (the free jump): while it is the head, its four handles (forward, sideways, height, heading) are the ones on the track, and a drag is the shell's landing drag (one undo step; the same
+  // numbers as the boxes below the Jump button). They take the place of the Extend ghost's handles, which would be on the piece Extend adds from the landing.
+  const LAND_FIELD = { landfwd: 'forward', landleft: 'left', landup: 'up', landturn: 'heading' };
+  const landingModel = () => {
+    const st = shell.getState(); if (!handlesOn.checked || st.sculpt) return null;
+    const L = shell.landing(); if (!L) return null;
+    const tr = askOf('t180:track-request'), free = tr ? LD.framesOf(tr, L.flightId) : null; if (!free) return null;
+    return { mode: 'landing', samples: [], s0: 0, s1: 1, half: () => 0, kinds: HD.LANDING_ORDER, free, base: (k) => L.pose[LAND_FIELD[k]], ctx: () => ({}) };
+  };
+  let landDrag = false;
   const handlesHost = {
-    model: () => sculptModel() || ghostModel(),
+    model: () => landingModel() || sculptModel() || ghostModel(),
     pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; },
-    begin: (h) => { const m = sculptModel(); if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
+    begin: (h) => { if (LAND_FIELD[h.kind]) { shell.beginLanding(); landDrag = !!shell.getState().landingDrag; return; } const m = sculptModel(); if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
     apply: (h, value) => {
+      if (LAND_FIELD[h.kind]) { if (landDrag) shell.landingTo({ [LAND_FIELD[h.kind]]: value }); return; }
       if (sculptDrag) { const delta = value - sculptDrag.base; shell.sculptTo(h.kind === 'bank' ? delta * HD.DEG : delta); return; }
       if (shell.getState().sculpt) return;
       const f = HANDLE_FIELD[h.kind]; f.value = String(value); if (f.oninput) f.oninput();   // typed: the field's own handler follows it
     },
-    end: () => { if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } },
+    end: () => { if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } },
   };
   sculptOn.onchange = () => {
     shell.setSculpt(sculptOn.checked);
@@ -291,27 +303,32 @@ function mount(root, shell) {
   };
   handlesOn.onchange = () => { triedDoc = null; if (!handlesOn.checked && !sculptOn.checked) send('t180-ghost-clear'); };
 
-  // JUMP AT THE HEAD (D243 item 1; the core is src/core/jump.js). GAP, DROP (+ down) and LANDING angle go to the shell's addJump, which refuses by name in plain words; the next Extend lays the road the car lands on.
-  // While the fields are used (or the button is hovered) the preview shows the jump as a ghost with the flight as a dashed arc (app/core/flightlayer.js), and the words below say WHICH arc it is (the car's
-  // ballistic flight at the design speed, or a straight line where the core has no flight model) and the speed the landing ramp is sized for (fixed at 460 km/h today).
-  const jgap = num(20, 5, 'metres the car flies along the ground, measured from the take-off lip (more than 0). 20 m: both measured falls clear it at 460 km/h even off a flat take-off'), jdrop = num(1, 1, 'metres the landing lip is BELOW the take-off lip (+ = down)'),
-    jland = num(-2, 1, 'pitch of the landing ramp in degrees (negative slopes down: the usual landing)');
-  const jumpNote = el('div', { 'aria-label': 'jump flight', style: 'font-size:12px;margin:2px 0;color:#aab2c0' });
-  const jumpOpts = () => ({ gap: jgap.value, drop: jdrop.value, landDeg: jland.value });
+  // JUMP, THE KEEPER'S WAY (D258; the core is src/core/jump.js, E's). The Jump button sits beside Extend: it places the piece the fields describe exactly as Extend would (the take-off: the climb is the
+  // fields' own), then a free flight to a default landing (a 60 m straight, 40 m ahead, the same height, lined up). While the landing is the head it is moved by the four handles on it (forward, sideways,
+  // height, heading) and by these boxes: forward, sideways (+ left), height (+ up) in m, heading, pitch, bank in degrees (shell.moveLanding: one undo step each). Extend from the landing fixes it; deleting
+  // back to it makes it the head again. A move the core refuses (LANDING_NOT_HEAD, a landing under 1 m from the take-off) says why in plain words. Nothing is solved or drawn for the air: drive it in AC.
+  const jumpNote = el('div', { 'aria-label': 'jump note', style: 'font-size:12px;margin:2px 0;color:#aab2c0' });
   const sayJump = (...lines) => jumpNote.replaceChildren(...lines.filter(Boolean).map((t) => el('p', { text: t, style: 'margin:2px 0' })));
-  const jumpHint = () => sayJump('Add jump takes off from the end of the road (set its climb with the fields above first); then press Extend to lay the road the car lands on.', `The landing ramp is sized for ${Math.round(JW.DESIGN_KMH)} km/h, fixed today.`);
+  const JUMP_HINT = 'Jump places the piece above, then a free landing 40 m ahead at the same height. Set the piece\'s climb first: it is the take-off. This is a jump: drive it in AC and move the landing until it works.';
+  const LANDING_HINT = 'Move the landing: drag its arrows on the track (white forward, orange sideways, yellow height, purple heading) or type below. Shift is fine, Ctrl snaps. Extend from it when it is right: that fixes it (delete back to it to move it again).';
   const jumpGhost = () => {
     let why = null;
-    try { send('t180-ghost', { candidate: shell.candidateJump(jumpOpts()), reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e && e.name === 'CoreError' ? JW.jumpWords(e, jumpOpts()) : String(e && e.message || e); }
-    if (why) { send('t180-ghost-clear'); sayJump(`No preview of this jump: ${why}`); return; }
-    const g = askOf('t180:ghost-request'), fl = g && g.jump ? JW.flightsOfPath({ samples: g.samples }, g.segments) : [], f = fl[fl.length - 1], w = f ? JW.describe(f) : null, sp = shell.getState().designSpeedKmh;
-    sayJump(...(w ? [w.drew, ...w.lines, w.speed] : [`The landing ramp is sized for ${Math.round(JW.DESIGN_KMH)} km/h, fixed today.`]), Number.isFinite(sp) && sp > 0 ? (Math.round(sp) !== Math.round(JW.DESIGN_KMH) ? `Validation is using ${Math.round(sp)} km/h, so the jump can be listed there even though the ramp is sized for ${Math.round(JW.DESIGN_KMH)}.` : null)
-      : `Validation checks at full speed (${Math.round(JW.FULL_KMH)} km/h on an open track, the ghost lap on a closed one), so this jump may be listed as a warning even though its ramp is sized for ${Math.round(JW.DESIGN_KMH)} km/h.`);   // D256: no speed box; a host may still pin one (shell.setDesignSpeed)
+    try { send('t180-ghost', { candidate: shell.candidateJump(opts()), reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e && e.name === 'CoreError' ? JW.jumpWords(e) : String(e && e.message || e); }
+    if (why) { send('t180-ghost-clear'); sayJump(`No preview of this jump: ${why}`); }
   };
-  for (const f of [jgap, jdrop, jland]) f.oninput = f.onchange = jumpGhost;
-  const jumpBtn = el('button', { text: 'Add jump', title: 'add a jump at the end of the road: the gap, the drop and the landing angle above. Then Extend lays the road it lands on', onclick: () => { send('t180-ghost-clear'); shell.addJump(jumpOpts()); },
-    onmouseenter: jumpGhost, onmouseleave: () => send('t180-ghost-clear') });
-  let jumpNoteFor = shell.getState().history.present; jumpHint(); const unsubJump = shell.subscribe((st) => { if (st.history.present !== jumpNoteFor) { jumpNoteFor = st.history.present; jumpHint(); } });   // the hint shows from the start, and again on a new document
+  const jumpHere = () => { send('t180-ghost-clear'); const before = shell.getState().history.present, made = fieldsNow(); shell.jump(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };   // as Extend: Undo gives the fields back
+  const jumpBtn = el('button', { text: 'Jump', title: 'place the piece above, then a free landing you move by hand: this is a jump, drive it in AC and move the landing until it works', onclick: jumpHere,
+    onmouseenter: jumpGhost, onmouseleave: () => send('t180-ghost-clear') });   // (not Extend's: the jump's ghost has no handles to keep up, so it always goes)
+  // the landing's number boxes: shown only while a landing is the head; a typed value (change) is one undo step; a box being typed in is not rewritten from the track
+  const landBoxes = Object.fromEntries(LD.BOXES.map((b) => [b.field, el('input', { type: 'number', step: String(b.step), 'aria-label': `landing ${b.field}`, title: b.title })]));
+  for (const b of LD.BOXES) { const box = landBoxes[b.field]; box.onchange = () => { if (box.value === '' || !Number.isFinite(Number(box.value))) { fillLanding(); return; } shell.moveLanding({ [b.field]: Number(box.value) }); }; }
+  const landingBox = el('div', { 'aria-label': 'landing', style: 'display:none' }, el('div', { class: 'pickers' }, ...LD.BOXES.map((b) => field(b.label, landBoxes[b.field]))), el('p', { text: LANDING_HINT, style: 'font-size:12px;margin:2px 0;color:#aab2c0', 'aria-label': 'landing hint' }));
+  const fillLanding = () => {
+    const L = shell.landing(); landingBox.style.display = L ? '' : 'none';
+    if (!L) return;
+    for (const b of LD.BOXES) { const box = landBoxes[b.field]; if (doc.activeElement !== box) box.value = String(L.pose[b.field]); }
+  };
+  let jumpNoteFor = null;
 
   // CLOSE, EXAMPLE
   // D242: Close PROPOSES first (the keeper, TEST 1: the one-click close moved every piece, and the lap ran into itself). Only the stretch chosen here moves;
@@ -365,8 +382,7 @@ function mount(root, shell) {
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike),
       fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn)),
     wnote, roBox,
-    el('div', { class: 'actions' }, extendBtn, straightBtn), straightHint,
-    el('div', { class: 'pickers' }, field('jump gap m', jgap), field('drop m (+ down)', jdrop), field('landing °', jland)), el('div', { class: 'actions' }, jumpBtn), jumpNote,
+    el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn), straightHint, jumpNote, landingBox,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
     ...pieces.nodes.selection, ...pieces.nodes.library,
@@ -381,11 +397,12 @@ function mount(root, shell) {
       showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value; shownFor = d;
     }
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
-    extendBtn.disabled = !!d.closed; closeBtn.disabled = closeHow.disabled = !!d.closed || !d.pieces.length;
+    extendBtn.disabled = jumpBtn.disabled = !!d.closed; closeBtn.disabled = closeHow.disabled = !!d.closed || !d.pieces.length;
     drawProposal(st.closeProposal && st.closeProposal.base === d ? st.closeProposal : null);
     msg.textContent = st.message || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
     readout();   // the track changed, so the piece the fields would add changed
-    hintNow();
+    hintNow(); fillLanding();
+    if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(shell.landing() ? 'This is a jump: drive it in AC and move the landing until it works.' : JUMP_HINT); }   // a new document: the note is the standing one again (a refusal's words are gone)
     // D244b: the Sculpt switch follows the shell, and says what to do next
     sculptOn.checked = !!st.sculpt;
     const si = st.sculpt ? shell.sculptInfo() : null;
@@ -400,7 +417,7 @@ function mount(root, shell) {
   doc.addEventListener('t180:handles-request', onHandlesRequest);
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, options: opts, unmount() { unsub(); unsubJump(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, options: opts, unmount() { unsub(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
