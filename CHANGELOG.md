@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **Dragging a handle on a very long piece is cheap: the ghost is drawn coarse until the release (D266 item 2; the keeper, 01:49: "when making very long turn like 1000m tube turn it lags when scrubbing cant precise move, i think the preview could be cheaper until extend is pressed").** While an Extend handle is being dragged the panel asks the preview for a CHEAP ghost: the new piece's row grid is thinned (`app/preview/coarse.js` `CHEAP_FACTOR` 12, for the new pieces only, so the placed segments and the path, which the handles read, are exactly as before), and the full ghost is built when the drag stops. Typing in a field, hovering Extend, Extend itself, the placed track and the export are unchanged. Measured headless, one drag step on a 1000 m tube piece (`node measure2.js`, the core's candidate and readout plus the track model's ghost): **about 510 ms and 392,455 vertices (17 MB to upload) before, about 95 ms and 34,097 vertices (1.5 MB) after**; the full ghost is as slow as before. The remaining cost is per 2 m segment (500 of them), not per vertex.
+
 ## [0.3.0] - 2026-10-07
 
 The first release published on GitHub, with its installer: the equation-only builder and everything listed below, down to 0.2.2.

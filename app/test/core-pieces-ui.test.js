@@ -395,7 +395,7 @@ function stubPreview(P1) {
   const { doc, shell } = P1, S = { ghost: null, ghosts: 0, clears: 0, hide: false, ghostFor: null };
   const build = (segments, start) => G.buildPath(segments, { step: 2, closed: false, ...(start ? { start } : {}) });
   const placed = () => { const r = shell.getState().resolved; return r.segments.length ? build(r.segments, r.start) : { samples: [] }; };
-  doc.addEventListener('t180-ghost', (ev) => { if (S.deaf) return; const c = ev.detail.candidate; S.ghosts++; S.ghost = build(c.segments, c.start); S.ghostSegs = c.segments; S.ghostJump = !!c.jump; S.lastCandidate = c; S.ghostFor = shell.getState().history.present; if (typeof ev.detail.reply === 'function') ev.detail.reply({ ok: true }); });
+  doc.addEventListener('t180-ghost', (ev) => { if (S.deaf) return; const c = ev.detail.candidate; S.ghosts++; S.ghost = build(c.segments, c.start); S.ghostSegs = c.segments; S.ghostJump = !!c.jump; S.lastCandidate = c; (S.cheaps = S.cheaps || []).push(!!ev.detail.cheap); S.ghostFor = shell.getState().history.present; if (typeof ev.detail.reply === 'function') ev.detail.reply({ ok: true }); });
   doc.addEventListener('t180-ghost-clear', () => { S.clears++; S.ghost = null; });
   shell.subscribe((st) => { if (S.ghost && S.ghostFor !== st.history.present) S.ghost = null; });   // a change to the placed track retires the ghost (preview.js refresh)
   doc.addEventListener('t180:ghost-request', (ev) => { const p = placed(), last = p.samples.length ? p.samples[p.samples.length - 1].s : 0; ev.detail.reply(S.ghost && !S.hide ? { samples: S.ghost.samples, segments: S.ghostSegs, jump: S.ghostJump, s0: last } : null); });
@@ -685,6 +685,20 @@ test('row 17: the grip UI modules load in the webview loader with NO node built-
   assert.deepEqual([GL.GRIP_MIN, GL.GRIP_MAX], [D.GRIP_MIN, D.GRIP_MAX]);
   const plain = D.createDoc('g'), withG = D.setGrip(extend(plain, { length: 100, family: 'bowl' }), [0], 85);
   for (const P of [...extend(plain, { length: 100, family: 'bowl' }).pieces, ...withG.pieces, { type: 'flight' }, null]) assert.equal(GV.gripOf(P), P ? D.gripOf(P) : 100, 'gripOf agrees with the core\'s on a plain piece, a piece with grip, a flight and nothing');
+});
+
+test('row 18: the CHEAP ghost while a handle is dragged (D266 item 2): every step of a drag asks the preview for a cheap ghost, the release asks for the full one, typing in a field and hovering Extend ask for the full one', async () => {
+  const P1 = await handlePanel(), { S } = P1, cheaps = () => (S.cheaps || []).slice();
+  P1.input('grip').oninput(); const typed = cheaps(); assert.ok(typed.length >= 1 && typed.every((c) => c === false), 'typing in a field: the full ghost');
+  const n0 = cheaps().length, a = handleOf(P1, 'turn:1').screen; fire(P1, 'pointerdown', a.x, a.y); assert.equal(cheaps().length, n0, 'a press alone asks for nothing');
+  for (const k of [10, 20, 30]) { fire(P1, 'pointermove', a.x - k, a.y); P1.frame(); }
+  const during = cheaps().slice(n0); assert.ok(during.length >= 3, 'a ghost per step: ' + during.length); assert.ok(during.every((c) => c === true), 'every step of the drag is cheap: ' + JSON.stringify(during));
+  const m = cheaps().length; fire(P1, 'pointerup', a.x - 30, a.y); const after = cheaps().slice(m); assert.ok(after.length >= 1, 'the release builds a ghost'); assert.equal(after[after.length - 1], false, 'the LAST one is the full ghost');
+  // the next hover/typing is full again
+  const k = cheaps().length; P1.input('grip').oninput(); assert.equal(cheaps()[k], false); P1.button('Extend').onmouseenter(); assert.equal(cheaps()[cheaps().length - 1], false, 'hovering Extend: the full ghost');
+  // a second drag is cheap again, and Extend after it places the track and clears the ghost
+  const b = handleOf(P1, 'length:0').screen; fire(P1, 'pointerdown', b.x, b.y); fire(P1, 'pointermove', b.x + b.dx * 5, b.y + b.dy * 5); P1.frame(); assert.equal(cheaps()[cheaps().length - 1], true, 'the second drag is cheap too'); fire(P1, 'pointerup', b.x + b.dx * 5, b.y + b.dy * 5); assert.equal(cheaps()[cheaps().length - 1], false);
+  P1.panel.unmount();
 });
 
 test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and carries its segments (what the handles and the flight overlay read)', async () => {

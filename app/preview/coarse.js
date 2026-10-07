@@ -19,6 +19,7 @@ const { normalize, blendSamples } = require('../../src/geom/profile.js');
 
 const DEG = Math.PI / 180;
 const FACTOR = 6;
+const CHEAP_FACTOR = 12;   // D266 item 2: the ghost while a handle is dragged: a section step of about 12 degrees where the full ghost has 1
 const planMemo = new Map();   // factor -> WeakMap(from profile -> WeakMap(profile -> fractions))
 const gridMemo = new Map();   // factor -> WeakMap(fractions array -> thinned array)
 const segMemo = new Map();    // factor -> WeakMap(segment -> coarse segment)
@@ -64,4 +65,4 @@ function coarsen(segments, factor = FACTOR) {
   });
 }
 
-module.exports = { coarsen, FACTOR };
+module.exports = { coarsen, FACTOR, CHEAP_FACTOR };
