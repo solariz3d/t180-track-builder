@@ -37,7 +37,7 @@ const NEGATED = Object.freeze(['kh', 'phi', 'l']);        // what a left/right m
 const MAX_CHARS = 8e6, MAX_PIECES = 2000, MAX_KNOTS = 4000;   // a text, a run and a piece's knots: far above any real track (a 1 km piece has 49 knots), far below a denial of service
 const TOP_KEYS = Object.freeze(['schema', 'generator', 'name', 'start', 'pieces']);
 // the cup, edge and tube flags are IMPLIED by the channel arrays in the text (as in a document's); a piece object may carry them (checkPiece's own output does), if they agree with the arrays
-const ROAD_KEYS = Object.freeze(['type', 'length', 'family', 'knots', 'channels', 'cup', 'edge', 'tube']), FLIGHT_KEYS = Object.freeze(['type', 'gap', 'drop', 'land']);
+const ROAD_KEYS = Object.freeze(['type', 'length', 'family', 'knots', 'channels', 'cup', 'edge', 'tube']), FLIGHT_KEYS = Object.freeze(['type', ...D.FLIGHT_POSE]);   // D258: a free flight; its bank is kept as its change from the run's start bank, like phi
 
 const err = (code, msg) => new D.CoreError(code, msg);
 const q = (x, dec) => { const v = Number(x.toFixed(dec)); return Object.is(v, -0) ? 0 : v; };
@@ -76,7 +76,7 @@ function saveRun(doc, from, to = from, { name } = {}) {
   const first = roads[0], start = {};
   for (const ch of STATE) if (hasChannel(first, ch)) start[ch] = q(first.channels[ch][0], D.DEC[ch]);
   const pieces = run.map((P) => {
-    if (!isRoad(P)) return { type: 'flight', gap: P.gap, drop: P.drop, land: P.land };
+    if (!isRoad(P)) return flightOut(P, -(start.phi || 0));
     const channels = {};
     for (const ch of D.CHANNELS) { if (!hasChannel(P, ch)) continue; channels[ch] = STATE.includes(ch) ? P.channels[ch].map((v) => q(v - start[ch], D.DEC[ch])) : P.channels[ch].slice(); }
     return { type: 'road', length: P.length, family: P.family, knots: P.knots.slice(), channels, ...(P.cup ? { cup: true } : {}), ...(P.edge ? { edge: true } : {}), ...(P.tube ? { tube: true } : {}) };
@@ -92,7 +92,7 @@ function saveRun(doc, from, to = from, { name } = {}) {
 /** The run as document pieces (no ids), a state channel put back on its start: q(change + start). Exactly what was saved when nothing is shifted. */
 function absolute(piece, shifts = null) {
   return piece.pieces.map((P) => {
-    if (!isRoad(P)) return { type: 'flight', gap: P.gap, drop: P.drop, land: P.land };
+    if (!isRoad(P)) return flightOut(P, shifts ? (shifts.phi || 0) : (piece.start.phi || 0));
     const channels = {};
     for (const ch of D.CHANNELS) {
       const c = P.channels[ch]; if (c === undefined) continue;
@@ -103,6 +103,9 @@ function absolute(piece, shifts = null) {
     return { type: 'road', length: P.length, family: P.family, knots: P.knots.slice(), channels, ...(P.cup ? { cup: true } : {}), ...(P.edge ? { edge: true } : {}), ...(P.tube ? { tube: true } : {}) };
   });
 }
+
+/** A flight in a saved piece (or back in a document): the pose, quantised, its bank moved by `dBank` (to its change from the run's start, or back). */
+const flightOut = (P, dBank) => ({ type: 'flight', forward: q(P.forward, D.DEC.m), left: q(P.left, D.DEC.m), up: q(P.up, D.DEC.m), heading: q(P.heading, D.DEC.rad), pitch: q(P.pitch, D.DEC.rad), bank: q(P.bank + dBank, D.DEC.phi) });
 
 // ── checks ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 /** A piece object, checked (and quantised: every number as it enters, like a document). Returns it; throws a CoreError with a code that names the fault. */
@@ -123,10 +126,12 @@ function checkPiece(piece) {
     const at = `piece ${i}`;
     if (!P || typeof P !== 'object' || Array.isArray(P)) bad('BAD_PIECE_FIELD', `${at}: must be an object`);
     if (P.type === 'flight') {
+      // D258: a saved jump made before the free jump (gap, drop, land: a solved flight and a generated ramp) cannot be placed again, since how far its
+      // ramp reached depended on the pitch it took off at; none was saved (checked: no flight in the keeper's pieces), so it is refused by name, not guessed
+      if (P.gap !== undefined || P.drop !== undefined || P.land !== undefined) bad('OLD_FLIGHT', `${at}: this piece holds a jump from before jumps were placed by hand (gap, drop, landing angle); add the road around it and place the jump again with Jump`);
       for (const k of Object.keys(P)) if (!FLIGHT_KEYS.includes(k)) bad('BAD_PIECE_FIELD', `${at}: unknown field "${k}" in a flight`);
-      for (const k of ['gap', 'drop', 'land']) if (!isNum(P[k])) bad('BAD_PIECE_NUMBER', `${at}: a flight's ${k} must be a finite number, got ${JSON.stringify(P[k])}`);
-      if (!(P.gap > 0)) bad('BAD_PIECE_NUMBER', `${at}: a flight needs gap > 0, got ${P.gap}`);
-      out.pieces.push({ type: 'flight', gap: q(P.gap, D.DEC.m), drop: q(P.drop, D.DEC.m), land: q(P.land, D.DEC.rad) }); return;
+      for (const k of D.FLIGHT_POSE) if (!isNum(P[k])) bad('BAD_PIECE_NUMBER', `${at}: a flight's ${k} must be a finite number, got ${JSON.stringify(P[k])}`);
+      out.pieces.push(flightOut(P, 0)); return;
     }
     if (P.type !== 'road') bad('BAD_PIECE_FIELD', `${at}: type must be road or flight, got ${JSON.stringify(P.type)}`);
     for (const k of Object.keys(P)) if (!ROAD_KEYS.includes(k)) bad('BAD_PIECE_FIELD', `${at}: unknown field "${k}" in a road piece (a cup, edge or tube is carried by its channel arrays)`);
@@ -171,7 +176,7 @@ function checkPiece(piece) {
 
 // ── text ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const roadText = (P) => JSON.stringify({ type: 'road', length: P.length, family: P.family, knots: P.knots, channels: Object.fromEntries(D.CHANNELS.filter((ch) => P.channels[ch] !== undefined).map((ch) => [ch, P.channels[ch]])) });
-const pieceText = (P) => (isRoad(P) ? roadText(P) : JSON.stringify({ type: 'flight', gap: P.gap, drop: P.drop, land: P.land }));
+const pieceText = (P) => (isRoad(P) ? roadText(P) : JSON.stringify(flightOut(P, 0)));
 /** The canonical text of a piece (checked first): stable key order, one piece to a line, a final newline. */
 function serialize(piece) {
   const p = checkPiece(piece), start = Object.fromEntries(D.CHANNELS.filter((ch) => p.start[ch] !== undefined).map((ch) => [ch, p.start[ch]]));
@@ -187,12 +192,12 @@ function parse(text) {
 }
 
 // ── mirror ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-/** The left/right mirror image of a piece: kh (turn), phi (bank) and l (a swerve) negated, in their raw arrays or, for the bank, in its change and its start. Mirror of mirror is the piece itself. */
+/** The left/right mirror image of a piece: kh (turn), phi (bank) and l (a swerve) negated, in their raw arrays or, for the bank, in its change and its start; a flight's left, heading and bank (D258). Mirror of mirror is the piece itself. */
 function mirrored(piece) {
   const neg = (a) => a.map((v) => (v === 0 ? 0 : -v));
   const start = { ...piece.start }; if (start.phi !== undefined) start.phi = start.phi === 0 ? 0 : -start.phi;
   const pieces = piece.pieces.map((P) => {
-    if (!isRoad(P)) return P;
+    if (!isRoad(P)) return { ...P, left: P.left === 0 ? 0 : -P.left, heading: P.heading === 0 ? 0 : -P.heading, bank: P.bank === 0 ? 0 : -P.bank };   // D258: the landing on the other side, turned and banked the other way
     const channels = { ...P.channels }; for (const ch of NEGATED) if (channels[ch] !== undefined) channels[ch] = neg(channels[ch]);
     return { ...P, channels };
   });
@@ -207,6 +212,7 @@ function continued(p, head) {
   const at = (ch) => (ch === 't' ? want.tNext : want[ch]);   // a tube started after any piece continues from tNext (endState reports t only at a tube head)
   const shifts = Object.fromEntries(STATE.filter((ch) => p.start[ch] !== undefined).map((ch) => [ch, at(ch).v]));
   const out = absolute(p, shifts), first = out[i0], h1 = first.knots.length ? first.knots[0] : first.length;
+  if (after) return out;   // D258: the run starts with a jump: its landing starts at the jump's pose, not C1 with the head
   for (const ch of D.CHANNELS) {
     if (!hasChannel(first, ch)) continue;   // an unflagged piece's default array is not the head's to continue
     const { v, m } = at(ch), c = first.channels[ch]; c[0] = q(v, D.DEC[ch]); c[1] = q(v + (m * h1) / 3, D.DEC[ch]);

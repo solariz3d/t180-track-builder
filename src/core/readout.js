@@ -17,9 +17,10 @@
 //   roadLengthM } with the lift of ref 09 §7 applied at the ends (a hill that fades inside the piece changes none of them) and
 //   the road length over the lifted curve (∫|r̃′| ds by composite Gauss–Legendre, not exact). Bank is not changed by h or l.
 // A FLIGHT piece's readout:
-//   { type: 'flight', id, lengthM, turnDeg: 0, climbDeg, bankFromDeg, bankToDeg, cupFromDeg, cupToDeg, pitchFromDeg, pitchToDeg, offsets: null }
-//   lengthM = the flight plus its landing ramp, as the adapter builds them (src/core/adapter.js toSegments), and climbDeg =
-//   landing pitch − take-off pitch. The bank and the cup are carried through a jump.
+//   { type: 'flight', id, lengthM, turnDeg, climbDeg, bankFromDeg, bankToDeg, cupFromDeg, cupToDeg, pitchFromDeg, pitchToDeg, offsets: null, landing }
+//   lengthM = the flight's curve across the air, as the adapter builds it (src/core/adapter.js toSegments); turnDeg = the landing's heading turn;
+//   climbDeg = landing pitch − take-off pitch; bankTo = the landing's bank. landing (D258) = the pose { forwardM, leftM, upM, headingDeg, pitchDeg,
+//   bankDeg } the UI's number boxes show. The cup is the take-off's (the landing's own cross-section is its own piece's).
 'use strict';
 
 const D = require('./document.js');
@@ -48,7 +49,7 @@ function poseBefore(doc, i) {
   let theta = doc.start.heading, p = doc.start.pitch;
   for (let j = 0; j < i; j++) {
     const P = doc.pieces[j];
-    if (P.type === 'flight') { p = P.land; continue; }
+    if (P.type === 'flight') { theta += P.heading; p = P.pitch; continue; }   // D258: the landing's pose
     theta += channelIntegral(P, 'kh'); p += channelIntegral(P, 'kv');
   }
   return { theta, p };
@@ -87,8 +88,9 @@ function pieceReadout(doc, i) {
   if (P.type === 'flight') {
     let bank = 0, cupEnd = 0, edgeEnd = 0, sliceEnd = D.S_DEFAULT, tubeEnd = 0; for (let j = i - 1; j >= 0; j--) if (doc.pieces[j].type === 'road') { const Pj = doc.pieces[j], e = D.pieceEnd(Pj); bank = e.phi.v; cupEnd = e.c.v; edgeEnd = e.e.v; sliceEnd = e.s.v; tubeEnd = Pj.tube ? e.t.v : 0; break; }
     const lengthM = toSegments(doc).filter((g) => g.id === P.id).reduce((a, g) => a + g.length, 0);
-    return { type: 'flight', id: P.id, lengthM, turnDeg: 0, climbDeg: (P.land - pose.p) * DEG, bankFromDeg: bank * DEG, bankToDeg: bank * DEG, cupFromDeg: cupEnd, cupToDeg: cupEnd, edgeFromDeg: edgeEnd, edgeToDeg: edgeEnd, sliceFrom: sliceEnd, sliceTo: sliceEnd, tubeFromDeg: tubeEnd, tubeToDeg: tubeEnd,
-      pitchFromDeg: pose.p * DEG, pitchToDeg: P.land * DEG, offsets: null };
+    return { type: 'flight', id: P.id, lengthM, turnDeg: P.heading * DEG, climbDeg: (P.pitch - pose.p) * DEG, bankFromDeg: bank * DEG, bankToDeg: P.bank * DEG, cupFromDeg: cupEnd, cupToDeg: cupEnd, edgeFromDeg: edgeEnd, edgeToDeg: edgeEnd, sliceFrom: sliceEnd, sliceTo: sliceEnd, tubeFromDeg: tubeEnd, tubeToDeg: tubeEnd,
+      pitchFromDeg: pose.p * DEG, pitchToDeg: P.pitch * DEG, offsets: null,
+      landing: { forwardM: P.forward, leftM: P.left, upM: P.up, headingDeg: P.heading * DEG, pitchDeg: P.pitch * DEG, bankDeg: P.bank * DEG } };   // D258: the pose the UI's number boxes show
   }
   const turn = channelIntegral(P, 'kh'), climb = channelIntegral(P, 'kv');
   const out = { type: 'road', id: P.id, lengthM: P.length, turnDeg: turn * DEG, climbDeg: climb * DEG,

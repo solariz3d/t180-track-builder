@@ -264,7 +264,7 @@ test('the labels on the track: the head\'s own piece always, any other only when
   for (const x of L) assert.ok(!(hx + 6 > x.rect.x && hx - 6 < x.rect.x + x.rect.w && hy + 6 > x.rect.y && hy - 6 < x.rect.y + x.rect.h), `${x.piece} covers the head`);
   // a flight: no label on it, and nothing throws
   const Dm = require('../../src/core/document.js'), { extend } = require('../../src/core/extend.js');
-  const withJump = extend(Dm.appendPiece(d, Dm.flightPiece({ gap: 30, drop: 2, land: 0 })), { length: 120 });
+  const withJump = extend(Dm.appendPiece(d, Dm.flightPiece({ forward: 30, up: -2, pitch: 0 })), { length: 120 });
   P.shell.adopt(withJump); const tj = toPath(withJump, { step: 2 }); track = { path: tj.path, segments: tj.segments };
   assert.doesNotThrow(() => P.tick());
   const flightId = withJump.pieces.find((p) => p.type === 'flight').id;

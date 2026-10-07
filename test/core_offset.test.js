@@ -116,11 +116,11 @@ test('checkDoc: an offset channel of the wrong length is refused; offsets must f
   // support reaches the end; this is the state a sculpt that ran off the end would leave)
   const hEnd = P.channels.h.slice(); hEnd[hEnd.length - 1] = 2; hEnd[hEnd.length - 2] = 2;
   const doc = D.checkDoc({ ...d, pieces: [{ ...P, channels: { ...P.channels, h: hEnd } }] });
-  assert.throws(() => D.appendPiece(doc, D.flightPiece({ gap: 20, drop: 1, land: -2 * DEG })), (e) => e.code === 'FLIGHT_OFFSET');
+  assert.throws(() => D.appendPiece(doc, D.flightPiece({ forward: 20, up: -1, pitch: -2 * DEG })), (e) => e.code === 'FLIGHT_OFFSET');
   // a take-off 0.1 mm up (one quantum: inside the fade rule's tolerance) still lands the next road at exactly 0
   const hTiny = P.channels.h.slice(); hTiny[hTiny.length - 1] = 1e-4; hTiny[hTiny.length - 2] = 1e-4;
   const tiny = D.checkDoc({ ...d, pieces: [{ ...P, channels: { ...P.channels, h: hTiny } }] });
-  const j = D.appendPiece(tiny, D.flightPiece({ gap: 20, drop: 1, land: -2 * DEG })), e = D.endState(j);
+  const j = D.appendPiece(tiny, D.flightPiece({ forward: 20, up: -1, pitch: -2 * DEG })), e = D.endState(j);
   assert.deepEqual([e.h.v, e.h.m, e.l.v, e.l.m], [0, 0, 0, 0]);
 });
 

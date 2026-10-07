@@ -89,13 +89,13 @@ function sculpt(doc, { channel, s0, r, delta }) {
     if (channel === 'c' && !P.cup) throw new D.CoreError('NOT_CUP', 'a cup brush reaches piece ' + P.id + ', which has no cup (a legacy piece renders the old profile): extend with a cup target first, or brush only cup pieces');
     return brushControls(P.channels[channel], D.knotVector(P), { s0: s0 - off[p], r: rUsed, delta });
   });
-  // the joints: road piece a, then road piece b (a flight between them breaks the C1 link for kh and kv only: README)
+  // the joints: road piece a, then road piece b (a flight between them breaks the C1 link in EVERY channel since D258: the landing starts at the user's pose)
   let a = -1;
   for (let b = 0; b < doc.pieces.length; b++) {
     if (doc.pieces[b].type !== 'road') continue;
     const Pb = doc.pieces[b], rb = res[b];
-    const linked = a >= 0 && !(doc.pieces.slice(a + 1, b).some((P) => P.type === 'flight') && (channel === 'kh' || channel === 'kv')) && (!D.OPTIONAL[channel] || (doc.pieces[a][D.OPTIONAL[channel]] && Pb[D.OPTIONAL[channel]]));
-    if (!linked) {                                             // an unlinked start (the lap's first piece, or level after a flight)
+    const linked = a >= 0 && !doc.pieces.slice(a + 1, b).some((P) => P.type === 'flight') && (!D.OPTIONAL[channel] || (doc.pieces[a][D.OPTIONAL[channel]] && Pb[D.OPTIONAL[channel]]));
+    if (!linked) {                                             // an unlinked start (the lap's first piece, or a landing after a flight)
       if (channel === 'c' && a >= 0 && doc.pieces[a].cup && res[a]) { const Pa0 = doc.pieces[a], n0 = Pa0.channels.c.length; res[a].ctrl[n0 - 1] = Pa0.channels.c[n0 - 1]; res[a].ctrl[n0 - 2] = Pa0.channels.c[n0 - 2]; res[a].changed = res[a].changed.filter((i) => i < n0 - 2); }   // a cup piece before a legacy one keeps the edge it hands over
       if (a >= 0 && rb) { rb.ctrl[0] = Pb.channels[channel][0]; rb.ctrl[1] = Pb.channels[channel][1]; rb.changed = rb.changed.filter((i) => i > 1); }
       a = b; continue;

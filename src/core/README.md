@@ -61,19 +61,26 @@ share ONE clamped knot vector:
 **A FLIGHT piece** (a jump):
 
 ```js
-{ id: 'p4', type: 'flight', gap: D, drop: h, land: λ }   // m, m, rad: as the old jump word, solved by src/doc/resolve.js solveJump
+{ id: 'p4', type: 'flight', forward, left, up, heading, pitch, bank }   // D258, a FREE flight: the landing's start pose (m, m, m, rad, rad, rad)
 ```
 
-- A flight takes off at the road's end pitch. Its landing ramp is sized by validation (`src/validate/jumps.js`
-  `landingRamp`), as today.
-- The next road piece starts on the ramp, level with it: κh = κv = 0 there, and φ carried.
-- **Adding one** (D243): `src/core/jump.js` `jump(doc, { gap, drop, land })` appends a flight at the open end. It refuses by name a jump the adapter
-  cannot fly, and a jump straight after a jump.
-- **Validation** treats a core flight's gap as intended (no `gap-in-road`). Its landing is long enough when both measured falls land on road
-  at the lap's speed; otherwise `landing-misses-zone`, a WARNING since D250 (the keeper tunes jumps by driving them): it never blocks an export.
+- **The keeper's jump (D258):** the user places the landing by hand and tunes it by driving. The flight carries the LANDING's start pose relative to the
+  take-off end: `forward`, `left` and `up` in the take-off's HEADING frame (horizontal forward, horizontal left, world up: "the same height" is `up` 0
+  whatever the climb), `heading` a turn from the take-off's (+ = left, within ±180°), `pitch` and `bank` the landing's own. Nothing is solved or generated
+  across the air: the adapter emits ONE gap segment carrying the pose (`to`), and `src/geom/path.js` draws it as a curve that ends exactly there.
+- **The landing** is the next road piece, ordinary road that starts at the pose and is NOT C1 with the take-off: it must start level (κh = κv = h = l = 0,
+  value and slope) at the flight's bank (`LANDING` otherwise); its width and cross-section are its own.
+- **The ops** (`src/core/jump.js`): `jumpHere(doc, extendOpts, { landing, landingM })` (the Jump button: the current piece as Extend places it, then a
+  60 m straight landing 40 m ahead, lined up, level), `jump(doc, pose)`, `landingOf(doc)`, `setLanding(doc, pose)` (only while the landing is the head:
+  `LANDING_NOT_HEAD` once road is extended from it). Refused by name: `NO_TAKEOFF`, `CLOSED`, `JUMP_AFTER_JUMP`, `FLIGHT_OFFSET`, `BAD_FLIGHT`,
+  `FLIGHT_TOO_SHORT` (under 1 m), `OLD_FLIGHT` (gap, drop, land given).
+- **Old files:** a `{ gap, drop, land }` flight (D243) opens as the free flight that lands at the END of its old generated ramp, so every road keeps its
+  place; a saved piece holding one is refused (`OLD_FLIGHT`).
+- **Validation** treats the free jump's gap as intended; nothing about where the car lands is computed (no arcs, zone or reach); a landing placed behind
+  its take-off is a WARNING (`jump-gap-not-forward`, amber).
 - **Close** works across flights (`src/core/close.js`):
-  - the road after a jump keeps its level start;
-  - the model carries the jump's distance and its pitch reset;
+  - the flight is never changed, and the landing's first two control points are held in every channel;
+  - the model carries the jump's offset in the take-off's heading frame, adds its heading turn and restarts the pitch at the landing's;
   - a lap that ends in a jump is refused (`FLIGHT_AT_END`).
 
 **Numbers are quantised when they enter,** so load then save is byte-exact:
@@ -202,7 +209,7 @@ channels: { kh, kv, phi, w, r,
 - **A brush sculpts them like any channel:** refine the knots under the window (above), then brush the `h` or `l` control
   points. Outside the window they stay exactly 0.
 - **Before a jump they must fade to 0,** value and slope (`checkDoc` refuses otherwise: `FLIGHT_OFFSET`). After a jump they
-  start at 0: the adapter cannot lift a jump's gap or its landing ramp.
+  start at 0: the adapter cannot lift a jump's gap, and the landing starts at the flight's pose (D258).
 - **A `t180b.core/1` file** opens with both at zero, and saves as `core/2`.
 
 **The adapter applies them AFTER the base geometry** (`offsetPath`, ref 09 §7):
@@ -228,13 +235,14 @@ For the display beside Extend's fields (the ghost) and the label at each placed 
 pieceReadout(doc, i)          // i = 0-based piece index; throws EMPTY on an empty track, BAD_INDEX out of range
 candidateReadout(doc, opts)   // the piece extend(doc, opts) would place (the SAME opts as extend): the ghost's numbers
 // → { type: 'road' | 'flight', id,
-//     lengthM,                     // the piece's length along s, m (a flight: its flight plus its landing ramp, as built)
+//     lengthM,                     // the piece's length along s, m (a flight: its curve across the air, as built; D258: no ramp)
 //     turnDeg,                     // ∫κh ds, degrees, + = left
 //     climbDeg,                    // ∫κv ds, degrees, + = nosing up (a flight: landing pitch − take-off pitch)
 //     bankFromDeg, bankToDeg,      // φ at the two ends, degrees, + = left side up
 //     cupFromDeg, cupToDeg,        // the cup c at the two ends, degrees (a legacy piece: the edge its road renders; a flight: carried)
 //     pitchFromDeg, pitchToDeg,    // the pitch entering and leaving the piece, degrees
-//     offsets }                    // null, or the EFFECTIVE numbers with h/l applied (below)
+//     offsets,                     // null, or the EFFECTIVE numbers with h/l applied (below)
+//     landing }                    // a flight only (D258): { forwardM, leftM, upM, headingDeg, pitchDeg, bankDeg }, the pose the Jump UI's number boxes show
 ```
 
 - **Exact:** turn and climb are the channels' own integrals (3-point Gauss–Legendre per knot span, exact for a cubic). The

@@ -58,8 +58,9 @@ test('D256: the TEST export checks the open track at FULL speed, so where F7\'s 
 });
 
 test('in TEST mode a red is LISTED and does not block: a hole\'s gap-in-road red is in the TEST file and the warnings', () => {
-  const holed = segs.map((g) => ({ ...g })), i = holed.findIndex((g, k) => k > 0 && holed[k - 1].part === 'land' && g.part === 'body');
-  assert.ok(i > 0, 'control: F7 has road after its landing ramp to hole'); holed.splice(i, 1, { ...holed[i], kind: 'gap', part: 'gap', profile: null });
+  // CHANGED D258: the free jump has no generated ramp; the hole goes in the LANDING road, its second segment (the first one after the flight's gap is the landing's start)
+  const holed = segs.map((g) => ({ ...g })), i = holed.findIndex((g, k) => k > 1 && holed[k - 2].part === 'gap' && holed[k - 1].part === 'body' && g.part === 'body');
+  assert.ok(i > 0, 'control: F7 has road in its landing to hole'); holed.splice(i, 1, { ...holed[i], kind: 'gap', part: 'gap', profile: null });
   const dir = tmp();
   try {
     const r = FW.exportSegments(holed, meta, { outDir: dir, variant: 'block', markers: startLayout(holed, lift, start, { open: true }), test: true });
