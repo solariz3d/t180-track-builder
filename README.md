@@ -13,10 +13,9 @@ can be put on them, but the walls, tubes and jumps are built for a T-180.
 Windows only. The installer installs for the current user, needs no administrator rights, and is not code-signed, so
 Windows SmartScreen warns about an unknown publisher the first time.
 
-**The last released installer is 0.2.2** (2026-09-28), `T-180 Track Builder_0.2.2_x64-setup.exe`. **Most of what this
-page describes came after it:** the equation-only builder, drag handles, Sculpt, saved pieces, jumps and Export to
-Assetto Corsa are listed under `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md). Until the next release, build it from
-source (below).
+**The current installer is 0.3.0** (2026-10-07), `T-180 Track Builder_0.3.0_x64-setup.exe`, from the
+[v0.3.0 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.3.0). What changed since 0.2.2 is listed under
+`[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
 
 Uninstalling leaves your tracks and settings in place (see *Where your files live*).
 
@@ -166,8 +165,8 @@ Exported tracks go into AC's own `content\tracks` folder (or the folder you pick
 - **Not built:** scenery, terrain, props, race furniture (gantries, lights), a pit lane in this builder.
 - **Windows only.**
 
-The plan is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The detailed item-by-item status of the 0.2.2 release is
-kept in [`docs/STATUS_0.2.2.md`](docs/STATUS_0.2.2.md).
+The plan is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The detailed item-by-item status of the older 0.2.2 release
+is kept as a record in [`docs/STATUS_0.2.2.md`](docs/STATUS_0.2.2.md).
 
 ## Building from source
 

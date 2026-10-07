@@ -1,6 +1,6 @@
 [package]
 name = "t180-track-builder"
-version = "0.2.2"
+version = "0.3.0"
 description = "T-180 Track Builder: write an Assetto Corsa track in words, fonts and tempo"
 authors = ["solariz3d"]
 edition = "2021"

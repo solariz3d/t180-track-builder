@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-07
+
+The first release published on GitHub, with its installer: the equation-only builder and everything listed below, down to 0.2.2.
+
 ### Added
 - **Grip per piece reaches Assetto Corsa (D261 step 2b, the export half).** A road piece whose grip is not 100 is now written to AC as its own surface (not yet driven in AC: the keeper's low- and high-grip drive is the test). Each distinct grip g writes one surface `GRIPnnn` (three digits, GRIP050 to GRIP150, so no key starts another) to `data/surfaces.ini`: AC's own ROAD line for line, with FRICTION = g/100. The piece's road meshes are named `1GRIPnnn_…` (`src/export/gripkeys.js`, after the underside skins take their names), the D260 chunks split at grip boundaries (the surface key is part of a chunk's key, so a chunk never mixes two grips; the skins, not physics, merge as before), and CSP's soft-collision line becomes `MESHES=1ROAD?, 1GRIP?` so the soft road covers the gripped pieces too. **An all-100 track exports byte for byte as before**: no new surface, no renamed mesh, the same MESHES line. Not changed: validation still assumes the Mach 6's measured grip, so a low-grip piece is only proven by driving it. Tests: `test/export_grip.test.js`.
 - **"Grip like…" lists Onuris (99%)**: its `surfaces.ini` ROAD is FRICTION 0.99. It is a public community track (the keeper's ruling, 2026-10-06), so it is listed like the others.
@@ -142,8 +146,8 @@ piles into one line. The piece builder is still there, paused: pick "Pieces (pau
     height brush takes minutes per stroke on a track that long.
   - **So editing a 40 km track is slow for now.** Tracks of a few kilometres respond at interactive speed.
 
-The built-in pieces are now measured from real T-180 tracks instead of being set by hand. No installer is built from
-this yet: 0.2.2 below is still the one to install.
+The built-in pieces are now measured from real T-180 tracks instead of being set by hand. No installer was built from
+this then (0.2.2 below was still the one to install); 0.3.0 is the first that is.
 
 **How alike the new pieces are to real tracks: the stretch-rebuild test (a result, not a gate).** Before the pieces were
 changed, a test was written down and fixed: rebuild the first 3 km of two real tracks, Sakura Speedway and Centrifuge,

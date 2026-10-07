@@ -1,6 +1,6 @@
-# Release: T-180 Track Builder 0.2.2
+# Release: T-180 Track Builder 0.3.0
 
-The first installer: a Windows NSIS setup built with Tauri 2, as ARCHITECTURE §9 says ("A Tauri v2 desktop app
+The installer: a Windows NSIS setup built with Tauri 2, as ARCHITECTURE §9 says ("A Tauri v2 desktop app
 (standalone, installed with NSIS, no browser)"), the way blackbox ships (its `src-tauri/tauri.conf.json`:
 `"targets": ["nsis"]`, `installMode: "currentUser"`).
 
@@ -12,7 +12,7 @@ node src-tauri/release.cjs
 
 It runs `cargo tauri build --ci` with the machine's own paths remapped out of the binary, then scans the exe and the
 installer for the user's name and home folder, and refuses (exit 2) if either is left. The installer lands at
-`src-tauri/target/release/bundle/nsis/T-180 Track Builder_0.2.2_x64-setup.exe`, or under `$CARGO_TARGET_DIR` if that is
+`src-tauri/target/release/bundle/nsis/T-180 Track Builder_0.3.0_x64-setup.exe`, or under `$CARGO_TARGET_DIR` if that is
 set. Needs Rust with `tauri-cli` 2 (`cargo install tauri-cli`); Node is only for the build script and the tests, since
 the app has no frontend build step (`src-tauri/build.rs` copies `app/`, `src/` and `tools/` into `dist/`).
 
@@ -35,6 +35,6 @@ the installer.
 ## What it does not do
 
 - It does not launch Assetto Corsa unless the user turns on "See it in Assetto (launches the game)", which is off by
-  default. "Install to AC" writes only `content\tracks\t180b_*` folders, and never one it did not make.
+  default. "Export to Assetto Corsa" writes only `content\tracks\t180b_*` folders, and never one it did not make.
 - It is not code-signed, so Windows SmartScreen will warn about an unknown publisher on first run.
 - It does not update itself.
