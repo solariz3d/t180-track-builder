@@ -402,6 +402,8 @@ function mount(root, shell) {
 
   const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
   const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send });   // D240 (the selection's clicks are the brush's while the brush is armed)
+  // D269: the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
+  const bin = doc.getElementById ? doc.getElementById('pieces-bin') : null; if (bin) bin.replaceChildren(...pieces.nodes.library.slice(1));
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
@@ -411,7 +413,7 @@ function mount(root, shell) {
     el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn), jumpNote, landingBox,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
-    ...pieces.nodes.selection, ...pieces.nodes.library,
+    ...pieces.nodes.selection, ...(bin ? [] : pieces.nodes.library),
     el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
     msg,
   );

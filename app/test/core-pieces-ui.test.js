@@ -322,8 +322,10 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs2 = frames.splice(0); for (const f of fs2) f(0); } };
 }
-async function mountPanel(st = store()) {
+async function mountPanel(st = store(), { bin = false } = {}) {
   const { doc, win, tick: frame } = fakeWindow();
+  let menuEl = null, binEl = null;   // D269: the top bar's Pieces menu (index.html: <details id="pieces"><div id="pieces-bin">), found by the panel by id as #preview is
+  if (bin) { menuEl = doc.createElement('details'); menuEl.setAttribute('id', 'pieces'); menuEl.open = false; binEl = doc.createElement('div'); binEl.setAttribute('id', 'pieces-bin'); menuEl.append(binEl); }
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
   const root = doc.createElement('div'), shell = await track(st);
   // the preview's side of the events the panel asks: a pick answers the station the test sets; the track is the shell's
@@ -338,7 +340,8 @@ async function mountPanel(st = store()) {
   const input = (label) => all().find((e) => e.tagName === 'INPUT' && e.attrs['aria-label'] === label);
   const rows = () => all().filter((e) => e.attrs['data-piece']);
   const text = (aria) => (all().find((e) => e.attrs['aria-label'] === aria) || { textContent: null }).textContent;
-  return { doc, win, frame, stage, root, shell, panel, st, T, button, buttons, pointer, click, input, rows, text, all };
+  const binAll = () => (binEl ? binEl.all() : []), binRows = () => binAll().filter((e) => e.attrs['data-piece']), binButton = (t) => binAll().find((e) => e.tagName === 'BUTTON' && e.textContent === t), binButtons = (t) => binAll().filter((e) => e.tagName === 'BUTTON' && e.textContent === t);
+  return { doc, win, frame, stage, root, shell, panel, st, T, button, buttons, pointer, click, input, rows, text, all, menuEl, binEl, binAll, binRows, binButton, binButtons };
 }
 
 test('row 10: the panel: a click selects the piece under it and a shift-click the run; a drag, an armed brush and a click on nothing do not select; Save as piece, the list, Add at head with Mirror, Rename, Delete with its confirm', async () => {
@@ -739,12 +742,53 @@ test('row 19b: the values of the piece being edited are drawn LARGE over the 3D 
 });
 
 test('row 19c: the share codes are in the ⋯ menu as "Copy track code" and "Paste track code…" (D267), not a section of the left column; the code itself is unchanged', async () => {
-  const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), menu = html.slice(html.indexOf('<div class="more-menu">'), html.indexOf('</div></details>'));
+  const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), menu = html.slice(html.indexOf('<details id="more"'), html.indexOf('</details>', html.indexOf('<details id="more"')));   // (D269 added the Pieces menu before it: the ⋯ menu is found by its own id)
   assert.ok(menu.includes('id="share"'), 'the share block is inside the ⋯ menu'); assert.ok(!/<aside id="side">[\s\S]*id="share"[\s\S]*<\/aside>/.test(html), 'and not in the left column');
   const src = fs.readFileSync(path.join(REPO, 'app/share/index.js'), 'utf8'); assert.ok(src.includes("textContent: 'Copy track code'") && src.includes("textContent: 'Paste track code…'"), 'the buttons are named for what they are'); assert.ok(!/paste a t180 code here/.test(src), 'the box does not say "t180 code"');
   // unchanged: a code made and read exactly as before (share-install.test.js has the full set)
   const { createShare } = require('../share/share.js'), a = await track(), code = await createShare(a).copyTrack(), b = await createCoreShell({ brushFn: null }); b.extend({ length: 50 });
   const r = await createShare(b).paste(code); assert.equal(r.kind, 'e', r.message); assert.equal(D.serialize(b.getState().history.present), D.serialize(a.getState().history.present));
+});
+
+// D269 (the keeper, 10:26: "take the saved pieces off the side, and add it somewhere to the top bar, and it will have like a drop down menu where all the saved pieces will be, think of like a sony vegas or something")
+test('row 20: the saved pieces are a drop-down bin in the top bar, not a section of the left column (D269): a row per piece with its thumbnail, name and summary; Add at head, Add mirrored, Rename and Delete; a click on the row adds it; the empty words are in the menu; Save as piece stays with the selection', async () => {
+  const st = store(), P1 = await mountPanel(st, { bin: true }), { shell } = P1, tick = () => new Promise((r) => setImmediate(r));
+  // the library is not in the left column
+  assert.deepEqual(P1.all().filter((e) => e.attrs['aria-label'] === 'saved pieces' || e.attrs['data-piece'] || e.attrs['aria-label'] === 'mirror on insert'), [], 'nothing of the library is under the panel root'); assert.ok(!P1.all().some((e) => e.tagName === 'H3' && /Pieces library/.test(e.textContent)), 'no "Pieces library" heading in the left column');
+  assert.ok(P1.binAll().some((e) => e.attrs['aria-label'] === 'saved pieces'), 'the list is in the menu'); await tick(); assert.match(P1.binAll().map((e) => e.textContent).join('|'), /No saved pieces yet: select pieces on the track and press Save as piece\./, 'the empty words are in the menu');
+  // Save as piece stays with the selection; after a save the piece is in the menu
+  P1.click(400); P1.click(550, { shiftKey: true }); assert.equal(P1.button('Save as piece').disabled, false, 'Save as piece is in the left column, with the selection'); assert.equal(P1.binButton('Save as piece'), undefined);
+  P1.input('piece name').value = 'two turns'; P1.button('Save as piece').onclick(); await tick(); await tick(); await tick();
+  const row = () => P1.binRows()[0]; assert.equal(P1.binRows().length, 1); assert.equal(row().attrs['data-piece'], 'two turns');
+  assert.ok(row().all().some((e) => e.tagName === 'CANVAS' && e.attrs['aria-label'] === 'plan view of two turns'), 'its thumbnail'); assert.match(P1.binAll().find((e) => e.attrs['aria-label'] === 'two turns details').textContent, /^2 pieces · 300 m · turn \+\d+\.\d° · climb 0\.0° · plain$/, 'its one-line summary'); assert.ok(row().textContent.includes('two turns'), 'its name');
+  // Add at head: one undo step
+  const n0 = shell.getState().history.present.pieces.length, past0 = shell.getState().history.past.length;
+  P1.binButton('Add at head').onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n0 + 2); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step');
+  // Add mirrored: its own button on the row, the mirror image
+  const n1 = shell.getState().history.present.pieces.length; P1.binButton('Add mirrored').onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n1 + 2); assert.match(shell.getState().message, /mirrored/);
+  // a click on the row (not on a button) adds it at the head; a click on one of its buttons is that button's only
+  const n2 = shell.getState().history.present.pieces.length; row().onclick({ target: row() }); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n2 + 2, 'a click on the row adds it at the head');
+  const n3 = shell.getState().history.present.pieces.length, b = P1.binButton('Rename'); row().onclick({ target: b }); await tick(); assert.equal(shell.getState().history.present.pieces.length, n3, 'a click that began on a button is not a row click');
+  // Rename and Delete from the menu, as before
+  P1.binButton('Rename').onclick(); const nin = P1.binAll().find((e) => e.attrs['aria-label'] === 'new name'); assert.ok(nin); nin.value = 'bends'; P1.binButton('OK').onclick(); await tick(); await tick(); await tick(); assert.deepEqual(await st.listPieces(), ['bends'], 'renamed'); assert.equal(P1.binRows()[0].attrs['data-piece'], 'bends');
+  P1.binButtons('Delete').find((x) => x.attrs['aria-label'] === 'delete the saved piece bends').onclick(); assert.ok(P1.binButton('Yes, delete') && P1.binButton('No'), 'it asks first'); P1.binButton('No').onclick(); assert.deepEqual(await st.listPieces(), ['bends']);
+  P1.binButtons('Delete').find((x) => x.attrs['aria-label'] === 'delete the saved piece bends').onclick(); P1.binButton('Yes, delete').onclick(); await tick(); await tick(); await tick(); assert.deepEqual(await st.listPieces(), []); assert.match(P1.binAll().map((e) => e.textContent).join('|'), /No saved pieces yet/);
+  P1.panel.unmount();
+});
+
+test('row 20b: the Pieces menu opens and closes: it lists the pieces when opened, Esc closes it, a press outside closes it, a press inside does not; Esc with it closed does nothing; the top bar has the button beside Open… and Previous versions…', async () => {
+  const st = store(), base = await track(); await st.savePiece('one', PC.serialize(PC.saveRun(base.getState().history.present, 0, 1, { name: 'one' })));
+  const P1 = await mountPanel(st, { bin: true }), menu = P1.menuEl, tick = () => new Promise((r) => setImmediate(r));
+  assert.equal(menu.open, false); menu.open = true; for (const f of (menu.listeners.toggle || []).slice()) f({}); await tick(); await tick(); assert.equal(P1.binRows().length, 1, 'opening it lists the saved pieces');
+  P1.doc.dispatchEvent({ type: 'keydown', key: 'a' }); assert.equal(menu.open, true, 'another key leaves it'); P1.doc.dispatchEvent({ type: 'keydown', key: 'Escape' }); assert.equal(menu.open, false, 'Esc closes it');
+  P1.doc.dispatchEvent({ type: 'keydown', key: 'Escape' }); assert.equal(menu.open, false, 'Esc with it closed does nothing');
+  menu.open = true; P1.doc.dispatchEvent({ type: 'pointerdown', target: P1.binRows()[0] }); assert.equal(menu.open, true, 'a press inside the menu keeps it open'); P1.doc.dispatchEvent({ type: 'pointerdown', target: P1.stage }); assert.equal(menu.open, false, 'a press outside (on the 3D view) closes it');
+  menu.open = true; P1.doc.dispatchEvent({ type: 'pointerdown', target: menu }); assert.equal(menu.open, true, 'a press on the Pieces button itself is the browser\'s own toggle'); menu.open = false;
+  P1.panel.unmount(); P1.doc.dispatchEvent({ type: 'keydown', key: 'Escape' });   // after unmount the listeners are gone: nothing throws
+  // the top bar: <details id="pieces"> beside Open and Previous versions, before the ⋯ menu; the bin inside it
+  const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), bar = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
+  assert.ok(/id="open"[\s\S]*id="versions"[\s\S]*<details id="pieces"[^>]*><summary[^>]*>Pieces ▾<\/summary><div class="more-menu" id="pieces-bin"><\/div><\/details>[\s\S]*id="more"/.test(bar), 'Pieces ▾ is in the top bar between Previous versions and ⋯');
+  assert.ok(!/<aside id="palette">[\s\S]*pieces-bin/.test(html.replace(bar, '')), 'and not in the left column');
 });
 
 test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and carries its segments (what the handles and the flight overlay read)', async () => {
