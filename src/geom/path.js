@@ -115,7 +115,11 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
   const U0 = cross(T, R), Lr = add(mul(R, Math.cos(phi)), mul(U0, Math.sin(phi))), Ur = cross(T, Lr);
   // THE HEARTLINE: constant over the segment, or (heartline1 given, D225) linear from heartline at its start to heartline1 at its end, so it is continuous across segments
   const hl = g.heartline1 === undefined ? num(g.heartline) : num(g.heartline) + (g.heartline1 - num(g.heartline)) * u / L;
-  const pos = sub(x, mul(Ur, hl));
+  // D268: a core segment (heartline1 given: adapter.js xsecSegments, a closed tube's roll axis) keeps the road's centre ON THE CURVE the user drew while it is not rolled:
+  // the axis is hl ABOVE the curve (along the unrolled up U0) and a roll turns the road about it, so the centre is x + hl·(U0 − U). Before, it was x − hl·U, which put the
+  // floor of every closed tube hl = w/2π below the curve, so opening a tube back to a road lifted the floor that far inside the piece (the keeper's "hump", 7 m at 44 m wide).
+  // A word's heartline (constant, no heartline1: INTERFACES §1, the rider's heart above the track) is as before.
+  const pos = g.heartline1 === undefined ? sub(x, mul(Ur, hl)) : add(x, mul(sub(U0, Ur), hl));
   const run = Math.hypot(T[0], T[2]);
   return { s, seg: gi, pos, T, L: Lr, U: Ur, kvec, roll: phi, bankG: Math.asin(Math.max(-1, Math.min(1, Lr[1]))),
     grade: run > 1e-12 ? T[1] / run : (T[1] > 0 ? Infinity : -Infinity), _R: R, _x: x };
