@@ -22,16 +22,16 @@
 // Where a cup follows a LEGACY piece the first MORPH_M metres also fade out the legacy shape's difference from the cup shape (morphZone), so the
 // joint has no step inside the road either. cupRuns: false is the other scheme (each segment's profile the local end profile, a seam zip wherever
 // c changes, the edge up to 0.95° off c inside a segment): kept for comparison; see README "the cup".
-// A FLIGHT piece becomes the old jump's two segments, by the same two functions the paused resolver used: the gap solved by
-// src/doc/resolve.js solveJump, and the landing ramp sized by src/validate/jumps.js landingRamp at the design speed.
+// A FLIGHT piece (D258, the free flight) becomes ONE gap segment that ends at the landing's pose (src/geom/path.js `to`: the take-off's heading frame,
+// forward, left, up; the landing's heading turn and pitch); its roll goes from the take-off's bank to the landing's. No ramp is generated: the road
+// after it is the user's landing, which starts there. The cross-section starts afresh after the air (nothing morphs across a flight).
 'use strict';
 
 const D = require('./document.js');
 const { buildPath } = require('../geom/path.js');
 const { normalize, psiAt, blend, commonFractions } = require('../geom/profile.js');
 const { FLOORS, AT } = require('../geom/fonts.js');
-const { solveJump } = require('../doc/resolve.js');
-const jumps = require('../validate/jumps.js');
+const { flightLength } = require('../geom/path.js');
 const { MACH6 } = require('../validate/limits.js');
 
 const DEG = Math.PI / 180;
@@ -270,16 +270,15 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
   const legacyLast = (P) => legacyAt(P, nOf(P) - 1).end;   // and the last row of its last
   doc.pieces.forEach((P, pi) => {
     if (P.type === 'flight') {
-      const J = solveJump(pitch, P.gap, P.drop, P.land, P.id);
-      segs.push({ id: P.id, word: 'core', part: 'gap', kind: 'gap', length: J.L, k0: 0, k1: 0, kp0: J.kp0, kp1: J.kp1, roll0: roll, roll1: roll, heartline: 0, profile: null, blend: null, speed: null });
-      const r = jumps.landingRamp({ D: P.gap, dh: -P.drop, thetaRad: pitch, landRad: P.land, v: designKmh / 3.6 });
-      segs.push({ id: P.id, word: 'core', part: 'land', kind: 'road', length: r.length / Math.cos(P.land), k0: 0, k1: 0, kp0: 0, kp1: 0, roll0: roll, roll1: roll, heartline: 0, profile: lastProfile, blend: null, speed: null });
-      pitch = P.land;
+      const to = { x: [P.left, P.up, P.forward], theta: P.heading, p: P.pitch };
+      segs.push({ id: P.id, word: 'core', part: 'gap', kind: 'gap', length: flightLength(pitch, to), k0: 0, k1: 0, kp0: 0, kp1: 0, roll0: roll, roll1: P.bank, heartline: 0, profile: null, blend: null, speed: null, to });
+      pitch = P.pitch; roll = P.bank;
+      lastProfile = null; lastLegacy = false; lastKind = null; lastPlain = null;   // the landing's cross-section starts afresh: nothing morphs across the air
       return;
     }
     const n = Math.max(1, Math.ceil(P.length / segM - 1e-9)), at = (s) => D.valuesAt(P, s);
     let a = at(0);
-    if (pi === 0) roll = a.phi;
+    if (pi === 0 || doc.pieces[pi - 1].type === 'flight') roll = a.phi;
     const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // D225: a tube, an edge, or a cup entering from a tube is built by xsecSegments
     let join = P.cup && !xs && lastLegacy && lastProfile ? { profile: lastPlain || lastProfile } : null;   // a cup handed over from a legacy cross-section
     if (seam && pi === firstRoad && P.cup) join = { profile: legacyLast(doc.pieces[lastRoad]) };   // the lap's start is a cup that follows the legacy END round the seam

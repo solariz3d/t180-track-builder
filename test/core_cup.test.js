@@ -230,7 +230,7 @@ test('row 3 (i): c is a joint channel: a cup step of 5° (or a kink of the slope
 });
 test('row 3 (ii): c is CARRIED through a flight, like bank, width and rise (planted K3-2: reset like the heading rate)', () => {
   let d = extend(D.createDoc('f'), { length: 100, first: { c: 70 } });
-  d = D.appendPiece(d, D.flightPiece({ gap: 30, drop: 2, land: -0.03 }));
+  d = D.appendPiece(d, D.flightPiece({ forward: 30, up: -2, pitch: -0.03 }));
   const e = D.endState(d); assert.ok(Math.abs(e.c.v - 70) < 1e-6, `end state after the flight: c ${e.c.v}`);
   d = extend(d, { length: 60 }); assert.equal(d.pieces[2].cup, true); assert.ok(Math.abs(d.pieces[2].channels.c[0] - 70) < 1e-6);
   const r = R.pieceReadout(d, 1); assert.ok(Math.abs(r.cupFromDeg - 70) < 1e-6 && r.cupToDeg === r.cupFromDeg, 'the readout of the flight carries the cup');

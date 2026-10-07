@@ -1,11 +1,12 @@
 // document.js: the equation core's document (src/core/README.md is the shape). A track is a list of PIECES; a road piece
 // holds one clamped cubic B-spline per CHANNEL in its own arc length (ref 03 §1): heading rate κh, pitch rate κv, bank φ,
 // width w, the cross-section's rise rate r and (D190) the CUP c, the cross-section's edge angle. Every road joint is C1 in every channel (ref 09 §1), so the line is G2 by
-// construction. A flight piece is a jump, solved as the old jump word is (src/doc/resolve.js solveJump).
+// construction. A flight piece is a jump (D258, the keeper's way): it carries the LANDING's start pose relative to the take-off end, and the road
+// after it starts at that pose; the user places it by hand and tunes it by driving. Nothing is solved or generated between (no ramp, no arc).
 //
 //   createDoc(name, { start })                 an empty open track
 //   roadPiece({ length, family, from, channels, knotM })   a piece whose channels START at `from` (the previous end state)
-//   flightPiece({ gap, drop, land })
+//   flightPiece({ forward, left, up, heading, pitch, bank })   a free flight (D258); LANDING_DEFAULT is the Jump button's
 //   appendPiece(doc, piece) / endState(doc)    grow at the open end; the end value and slope of every channel
 //   channelAt(piece, ch, s)                    { v, d1, d2 } of one channel
 //   serialize(doc) / parse(text) / checkDoc(doc)
@@ -125,17 +126,19 @@ function fillCup(doc) {
 }
 /** True when the last road piece is a cup piece (a piece extended after it is one too). */
 function endIsCup(doc) { for (let i = doc.pieces.length - 1; i >= 0; i--) if (doc.pieces[i].type === 'road') return !!doc.pieces[i].cup; return false; }
-/** The state a new road piece must start from: the last road piece's end; after a flight, level (κh = κv = 0) with the rest carried. */
+/** The state a new road piece must start from: the last road piece's end; after a flight (D258), level (κh = κv = 0, no offset) at the flight's bank, the rest carried as a default. */
 function endState(doc) {
-  let flightAfter = false;
+  let flight = null;
   for (let i = doc.pieces.length - 1; i >= 0; i--) {
     const P = doc.pieces[i];
-    if (P.type === 'flight') { flightAfter = true; continue; }
+    if (P.type === 'flight') { flight = P; continue; }
     const e = pieceEnd(P);
-    return flightAfter ? { ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h: { v: 0, m: 0 }, l: { v: 0, m: 0 } } : e;
+    return flight ? afterFlight(e, flight) : e;
   }
   return null;   // an empty track: the first piece starts where its channels say
 }
+/** The start a landing takes after flight F, from the take-off's end state e: level (κh = κv = 0, h = l = 0, value and slope), at the flight's bank. */
+const afterFlight = (e, F) => ({ ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h: { v: 0, m: 0 }, l: { v: 0, m: 0 }, phi: { v: F.bank, m: 0 } });
 
 /**
  * Fit one channel's control points to a function f(s) on [0, L] by least squares (ref 03 §2), with P0 and P1 HELD so the
@@ -191,8 +194,36 @@ function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM =
   const P = { id: id || null, type: 'road', length: L, family, knots: K, channels: out };
   return { ...P, ...(cup ? { cup: true } : {}), ...(edge ? { edge: true } : {}), ...(tube ? { tube: true } : {}) };
 }
-function flightPiece({ id, gap, drop, land }) {
-  return { id: id || null, type: 'flight', gap: q(gap, DEC.m), drop: q(drop, DEC.m), land: q(land, DEC.rad) };
+// ── D258, THE FREE FLIGHT ──────────────────────────────────────────────────────────────────────────────────────────────
+// The landing's start POSE relative to the take-off end: forward, left and up (m) in the take-off's HEADING frame (forward along its heading on the
+// ground, left across it on the ground, up along world up, so "the same height" is up 0 whatever the take-off's climb), heading (rad, a TURN from the
+// take-off's heading, + = left), pitch (rad, the landing's own pitch, + = nose up) and bank (rad, the landing's own bank: its φ at its start).
+const FLIGHT_POSE = Object.freeze(['forward', 'left', 'up', 'heading', 'pitch', 'bank']);
+const FLIGHT_MIN_M = 1;   // a landing at least a metre from its take-off (a curve across the air needs a direction)
+const FLIGHT_PITCH_MAX = Math.PI / 2 - 1e-3;   // a landing pitched short of vertical: the heading frame needs a horizontal direction
+// the Jump button's landing (the keeper: "a blank straight piece just like the first piece"): lined up with the take-off, 40 m ahead, at the same height, level
+const LANDING_DEFAULT = Object.freeze({ forward: 40, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 });
+function flightPiece({ id, forward, left = 0, up = 0, heading = 0, pitch = 0, bank = 0 } = {}) {
+  return { id: id || null, type: 'flight', forward: q(forward, DEC.m), left: q(left, DEC.m), up: q(up, DEC.m), heading: q(heading, DEC.rad), pitch: q(pitch, DEC.rad), bank: q(bank, DEC.phi) };
+}
+/** A flight's own domain: every number finite, the landing at least FLIGHT_MIN_M away, its pitch short of vertical, its heading a turn within ±180°. */
+function checkFlight(P, at) {
+  for (const k of FLIGHT_POSE) if (!Number.isFinite(P[k])) throw new CoreError('BAD_FLIGHT', `${at}: a flight needs a finite ${k}, got ${P[k]} (a flight is forward, left, up, heading, pitch and bank)`);
+  const d = Math.hypot(P.forward, P.left, P.up);
+  if (!(d >= FLIGHT_MIN_M)) throw new CoreError('FLIGHT_TOO_SHORT', `${at}: the landing starts ${d.toFixed(3)} m from the take-off; put it at least ${FLIGHT_MIN_M} m away`);
+  if (!(Math.abs(P.pitch) <= FLIGHT_PITCH_MAX)) throw new CoreError('BAD_FLIGHT', `${at}: the landing's pitch must be short of vertical (inside ±${(FLIGHT_PITCH_MAX * 180 / Math.PI).toFixed(2)}°), got ${(P.pitch * 180 / Math.PI).toFixed(2)}°`);
+  if (!(Math.abs(P.heading) <= Math.PI + 1e-9)) throw new CoreError('BAD_FLIGHT', `${at}: the landing's heading is a turn from the take-off within ±180°, got ${(P.heading * 180 / Math.PI).toFixed(2)}°`);
+}
+/** Why a landing P does not start as flight F says (null when it does): level (κh, κv, h, l: 0 in value and slope) and at F's bank. Its other channels are its own (D258: not C1 with the take-off). */
+function landingProblem(F, P) {
+  const h = P.knots.length ? P.knots[0] : P.length;
+  for (const ch of ['kh', 'kv', 'h', 'l']) {
+    const c = P.channels[ch], qv = 10 ** -DEC[ch], m = (3 * (c[1] - c[0])) / h;
+    if (Math.abs(c[0]) > 1.01 * qv) return `${ch} starts at ${c[0]}: a landing starts level (no turn, no climb, no hill or swerve offset)`;
+    if (Math.abs(m) > (6 * qv) / Math.min(h, 1)) return `${ch} starts with slope ${m}: a landing starts level`;
+  }
+  if (Math.abs(P.channels.phi[0] - F.bank) > 1.01 * 10 ** -DEC.phi) return `the landing's bank starts at ${P.channels.phi[0]} rad, its flight says ${F.bank}`;
+  return null;
 }
 
 function createDoc(name = 'Untitled', { start = {} } = {}) {
@@ -261,18 +292,18 @@ function checkDoc(doc) {
   if (!doc.start || !Array.isArray(doc.start.pos) || doc.start.pos.length !== 3 || !doc.start.pos.every(Number.isFinite) || !Number.isFinite(doc.start.heading) || !Number.isFinite(doc.start.pitch)) bad('start needs pos [x, y, z], heading and pitch');
   if (!Number.isInteger(doc.nextId) || doc.nextId < 1) bad('nextId must be a positive integer');
   if (!Array.isArray(doc.pieces)) bad('pieces must be an array');
-  const ids = new Set(); let prev = null, afterFlight = false;
+  const ids = new Set(); let prev = null, flight = null;
   doc.pieces.forEach((P, i) => {
     const at = `piece ${i} (${P && P.id})`;
     if (!P || typeof P.id !== 'string' || ids.has(P.id)) bad(`${at}: needs a unique string id`); ids.add(P.id);
     if (P.type === 'flight') {
       if (prev) { const e = pieceEnd(prev); for (const ch of OFFSETS) if (Math.abs(e[ch].v) > 10 ** -DEC[ch] || Math.abs(e[ch].m) > 1e-6) throw new CoreError('FLIGHT_OFFSET', `${at}: ${ch} must fade to 0 (value and slope) before a jump, got ${e[ch].v} m, slope ${e[ch].m}: the adapter cannot lift a jump's gap or its landing ramp`); }
-      if (!(P.gap > 0) || !Number.isFinite(P.drop) || !Number.isFinite(P.land)) bad(`${at}: a flight needs gap > 0, drop and land`);
+      checkFlight(P, at);
       if (!prev) bad(`${at}: a flight must follow a road piece`);
       // D243 (B's look): LAND ON ROAD FIRST. Two flights in a row would take the second off from the first one's landing ramp, which no road piece
       // describes; jump() never makes one, and an opened or hand-edited file may not hold one either
-      if (afterFlight) throw new CoreError('JUMP_AFTER_JUMP', `${at}: two jumps in a row (${doc.pieces[i - 1].id}, then ${P.id}): a jump must land on road before the next one takes off; put a road piece between them`);
-      afterFlight = true; return;
+      if (flight) throw new CoreError('JUMP_AFTER_JUMP', `${at}: two jumps in a row (${doc.pieces[i - 1].id}, then ${P.id}): a jump must land on road before the next one takes off; put a road piece between them`);
+      flight = P; return;
     }
     if (P.type !== 'road') bad(`${at}: type must be road or flight, got ${P.type}`);
     if (!(P.length > 0)) bad(`${at}: length must be positive`);
@@ -287,11 +318,12 @@ function checkDoc(doc) {
     if (P.edge) checkEdge(P, at);
     // a cup piece's c stays in [0, CUP_MAX]: every control point is, so the curve is (its basis is non-negative and sums to 1: the convex hull, ref 03 §1b)
     if (P.cup && P.channels.c.some((v) => v < -CUP_EPS || v > CUP_MAX + CUP_EPS)) throw new CoreError('BAD_CUP', `${at}: the cup must stay within 0 to ${CUP_MAX}°, but a control point is ${Math.min(...P.channels.c)} to ${Math.max(...P.channels.c)}° (the walls of a ${CUP_MAX}°+ bowl touch)`);
-    if (prev) {
-      const e = pieceEnd(prev), want = afterFlight ? { ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h: { v: 0, m: 0 }, l: { v: 0, m: 0 } } : e;
-      const p = jointProblem(want, P, kindOf(prev)); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint is C1 in every channel, ref 09 §1)`);
+    if (prev && flight) {   // D258: a LANDING starts at its flight's pose, not C1 with the take-off: level, at the flight's bank, the rest its own
+      const p = landingProblem(flight, P); if (p) throw new CoreError('LANDING', `${at}: ${p}`);
+    } else if (prev) {
+      const p = jointProblem(pieceEnd(prev), P, kindOf(prev)); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint is C1 in every channel, ref 09 §1)`);
     }
-    prev = P; afterFlight = false;
+    prev = P; flight = null;
   });
   if (doc.nextId <= doc.pieces.reduce((a, P) => Math.max(a, Number(String(P.id).replace(/^p/, '')) || 0), 0)) bad('nextId must exceed every piece id');
   return doc;
@@ -299,7 +331,7 @@ function checkDoc(doc) {
 
 // ── canonical text ─────────────────────────────────────────────────────────────────────────────────────────────────
 const pieceText = (P) => (P.type === 'flight'
-  ? JSON.stringify({ id: P.id, type: 'flight', gap: P.gap, drop: P.drop, land: P.land })
+  ? JSON.stringify({ id: P.id, type: 'flight', forward: P.forward, left: P.left, up: P.up, heading: P.heading, pitch: P.pitch, bank: P.bank })
   : JSON.stringify({ id: P.id, type: 'road', length: P.length, family: P.family, knots: P.knots, channels: Object.fromEntries(CHANNELS.filter((ch) => !OPTIONAL[ch] || P[OPTIONAL[ch]]).map((ch) => [ch, P.channels[ch]])) }));
 function serialize(doc) {
   checkDoc(doc);
@@ -325,12 +357,41 @@ function parse(text) {
   let o; try { o = JSON.parse(text); } catch (e) { throw new CoreError('BAD_JSON', e.message); }
   if (!o || (o.schema !== SCHEMA && !OLD_SCHEMAS.includes(o.schema))) throw new CoreError('BAD_DOC', `schema must be ${SCHEMA} (or an older ${OLD_SCHEMAS.join(', ')}), got ${o && o.schema} (a newer file needs a newer builder)`);
   const upgrade = o.schema === 't180b.core/1';   // a core/1 file has no offsets: they are zero, one per control point; core/1 and /2 have no cup: legacy pieces
-  const pieces = (o.pieces || []).map((P) => (P && P.type === 'flight'
-    ? { id: P.id, type: 'flight', gap: q(P.gap, DEC.m), drop: q(P.drop, DEC.m), land: q(P.land, DEC.rad) }
+  const read = (o.pieces || []).map((P) => (P && P.type === 'flight'
+    ? (P.gap !== undefined || P.drop !== undefined || P.land !== undefined ? { id: P.id, type: 'flight', old: { gap: q(P.gap, DEC.m), drop: q(P.drop, DEC.m), land: q(P.land, DEC.rad) } } : { ...flightPiece(P), id: P.id })
     : cupOf(P, { id: P.id, type: P.type, length: q(P.length, DEC.m), family: P.family, knots: (P.knots || []).map((t) => q(t, DEC.m)),
       channels: Object.fromEntries(CHANNELS.map((ch) => [ch, parseChannel(P, ch, upgrade)])) })));
-  const s = o.start || {};
-  return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start: { pos: (s.pos || []).map((x) => q(x, DEC.m)), heading: q(s.heading, DEC.rad), pitch: q(s.pitch, DEC.rad) }, nextId: o.nextId, pieces }));
+  const s = o.start || {}, start = { pos: (s.pos || []).map((x) => q(x, DEC.m)), heading: q(s.heading, DEC.rad), pitch: q(s.pitch, DEC.rad) };
+  return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start, nextId: o.nextId, pieces: convertOldFlights(read, start) }));
+}
+
+/**
+ * D258: an OLD flight (D243's { gap, drop, land }: a solved flight plus a landing ramp the adapter generated, sized at the design speed) opens as the FREE
+ * flight that lands where the road after it already was: at the END of that ramp. The ramp was `gap` along the ground and `drop` down to the lip, then a
+ * horizontal landingRamp(...).length more at the landing pitch, sized from the take-off's pitch, which is reckoned here by the adapter's own rule (pitch
+ * rate linear over 2 m chords). Nothing turns; the bank is the take-off's, as the road after it already carried. So every road piece keeps its place (a
+ * closed lap still closes) and the generated ramp becomes air: the car now lands on the road that followed it. No keeper track or saved piece held one (checked).
+ */
+function convertOldFlights(pieces, start) {
+  if (!pieces.some((P) => P && P.type === 'flight' && P.old)) return pieces;
+  const { landingRamp } = require('../validate/jumps.js');
+  let pitch = start.pitch, prev = null;
+  return pieces.map((P) => {
+    if (!P || P.type !== 'flight') {
+      if (P && P.type === 'road' && P.length > 0 && Array.isArray(P.knots)) {
+        const n = Math.max(1, Math.ceil(P.length / 2 - 1e-9)); let a = valuesAt(P, 0);
+        for (let j = 0; j < n; j++) { const s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n, b = valuesAt(P, s1); pitch += ((a.kv + b.kv) / 2) * (s1 - s0); a = b; }
+      }
+      prev = P; return P;
+    }
+    if (!P.old) { pitch = P.pitch; prev = P; return P; }
+    const { gap, drop, land } = P.old;
+    if (!(gap > 0) || !Number.isFinite(drop) || !(Math.abs(land) < Math.PI / 2)) throw new CoreError('BAD_FLIGHT', `piece ${P.id}: an old flight needs gap > 0, drop and a landing pitch short of vertical`);
+    if (!prev || prev.type !== 'road') throw new CoreError('BAD_DOC', `piece ${P.id}: a flight must follow a road piece`);
+    const r = landingRamp({ D: gap, dh: -drop, thetaRad: pitch, landRad: land, v: MACH6.designSpeedKmh / 3.6 }).length;
+    const out = { ...flightPiece({ forward: gap + r, left: 0, up: -drop + r * Math.tan(land), heading: 0, pitch: land, bank: pieceEnd(prev).phi.v }), id: P.id };
+    pitch = out.pitch; prev = out; return out;
+  });
 }
 
 // ── undo as history (the same contract as src/doc/history.js, for this document) ────────────────────────────────────
@@ -355,9 +416,8 @@ function redo(h) { if (h.dragBase) throw new CoreError('IN_DRAG', 'redo during a
  *   - φ is the READ's normal against the geometry's gravity frame at the nearest read station. The fit's own bank is
  *     against a rotation-minimising frame whose start is not in the file, so it cannot be turned into a gravity roll;
  *   - w is the read's width there; r is the family's measured rate.
- * A jump joint becomes a flight: gap = the horizontal distance between the take-off and landing points, drop = their height
- * difference, land = the landing pitch. The core then puts validation's landing ramp after it, so the line after a jump
- * sits one ramp further on than the real track's (a stated difference, measured by the round trip, spec test 1).
+ * A jump joint becomes a FREE flight (D258): the landing point's place in the take-off's heading frame, the turn between their headings, the landing's
+ * pitch and bank, so the line after a jump starts where the real track's does (no generated ramp any more).
  * The lap is returned OPEN: closing it is close.js's (the spec's GO §1 "then close").
  */
 function fromPositionFit(fit, read, { name = 'Local example', family = 'bowl', sampleM = 1 } = {}) {
@@ -399,7 +459,9 @@ function fromPositionFit(fit, read, { name = 'Local example', family = 'bowl', s
   pieces.forEach((pc, i) => {
     if (i > 0 && fit.pieces[i - 1].endType === 'jump') {
       const a = pieces[i - 1].rows[pieces[i - 1].rows.length - 1], b = pc.rows[0];
-      doc = appendPiece(doc, flightPiece({ gap: Math.hypot(b.r[0] - a.r[0], b.r[2] - a.r[2]), drop: a.r[1] - b.r[1], land: b.p }));
+      const tha = Math.atan2(a.T[0], a.T[2]), thb = Math.atan2(b.T[0], b.T[2]), d = sub(b.r, a.r), dh = thb - tha;
+      const prevPhi = endState(doc).phi.v, bank = b.phi + 2 * Math.PI * Math.round((prevPhi - b.phi) / (2 * Math.PI));
+      doc = appendPiece(doc, flightPiece({ forward: d[0] * Math.sin(tha) + d[2] * Math.cos(tha), left: d[0] * Math.cos(tha) - d[2] * Math.sin(tha), up: d[1], heading: Math.atan2(Math.sin(dh), Math.cos(dh)), pitch: b.p, bank }));
     }
     const from = endState(doc), ch = { kh: interp(pc.rows, 'kh'), kv: interp(pc.rows, 'kv'), phi: interp(pc.rows, 'phi'), w: interp(pc.rows, 'w'), h: () => 0, l: () => 0, r: () => RATES[family] };
     if (from) { const off = from.phi.v - ch.phi(0); const base = ch.phi; ch.phi = (s) => base(s) + 2 * Math.PI * Math.round(off / (2 * Math.PI)); }
@@ -479,6 +541,6 @@ module.exports = {
   fromPositionFit,
   SCHEMA, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
-  createDoc, roadPiece, flightPiece, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
+  createDoc, roadPiece, flightPiece, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };

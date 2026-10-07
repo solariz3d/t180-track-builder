@@ -56,18 +56,19 @@ test('checkDoc REFUSES a hand-built document with a broken joint, by the name JO
   }
 });
 
-test('a flight must follow road; the road after it starts level (κh = κv = 0), the rest carried', () => {
+// CHANGED D258 (the free jump): the road after a flight starts level at the FLIGHT's bank (the landing's own), the rest carried as a default
+test('a flight must follow road; the road after it starts level (κh = κv = 0) at the flight\'s bank, the rest carried', () => {
   const d0 = D.createDoc('f');
-  assert.throws(() => D.appendPiece(d0, D.flightPiece({ gap: 20, drop: 1, land: -2 * DEG })), (e) => e.code === 'BAD_DOC' && /follow a road/.test(e.message));
-  const d1 = D.appendPiece(D.appendPiece(d0, D.roadPiece({ length: 60, channels: consts({ kh: 0.004, phi: 0.2 }) })), D.flightPiece({ gap: 20, drop: 1, land: -2 * DEG }));
+  assert.throws(() => D.appendPiece(d0, D.flightPiece({ forward: 20, up: -1, pitch: -2 * DEG })), (e) => e.code === 'BAD_DOC' && /follow a road/.test(e.message));
+  const d1 = D.appendPiece(D.appendPiece(d0, D.roadPiece({ length: 60, channels: consts({ kh: 0.004, phi: 0.2, w: 24 }) })), D.flightPiece({ forward: 20, up: -1, pitch: -2 * DEG, bank: 0.15 }));
   const e = D.endState(d1);
-  assert.deepEqual([e.kh.v, e.kv.v, e.phi.v], [0, 0, 0.2]);
+  assert.deepEqual([e.kh.v, e.kv.v, e.phi.v, e.w.v], [0, 0, 0.15, 24]);
 });
 
 test('load then save is byte-exact, and a value finer than its quantum is snapped as it enters', () => {
   let d = D.createDoc('Round trip', { start: { pos: [1, 2, 3], heading: 0.5, pitch: 0.01 } });
   d = D.appendPiece(d, D.roadPiece({ length: 123.45678, family: 'half-pipe', channels: { kh: (s) => Math.sin(s / 40) * 0.003, kv: flat(0), phi: (s) => 0.001 * s, w: flat(31.5), r: flat(4.55) } }));
-  d = D.appendPiece(d, D.flightPiece({ gap: 40, drop: 3, land: -0.05 }));
+  d = D.appendPiece(d, D.flightPiece({ forward: 40, up: -3, pitch: -0.05 }));
   d = D.appendPiece(d, D.roadPiece({ length: 90, family: 'half-pipe', from: D.endState(d), channels: consts({ phi: 0.1, w: 31.5, r: 4.55 }) }));
   const t = D.serialize(d);
   assert.equal(D.serialize(D.parse(t)), t);

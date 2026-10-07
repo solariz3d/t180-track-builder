@@ -83,7 +83,7 @@ const SRC = Object.freeze({
   'leaves-surface': 'ARCHITECTURE.md:68-69 (the load on the centreline is below zero: the car leaves the road); on an OPEN track since D256, where a closed one has it in the lap proof',
   'holds-above': 'D256 (exo_memory/loop/design_speed_measure_2026-10-06.md): the centreline faces the ground here and holds the car only above this speed (km/h), from fN(v) = (κ⃗·n)v²/(1 − κ⃗·o) + g(n·ŷ)',
   'no-speed-holds': 'D256: the centreline faces the ground and nothing curves it toward the car, so no speed holds the car on it',
-  'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check)',
+  'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check); a WARNING on the equation core\'s free jump since D258: the user placed the landing there',
 });
 
 // THE DOWNFORCE STEP a jump carries (R1, research §4): the car's downforce is a ray 1 m ahead of it, so it goes to zero
@@ -91,8 +91,8 @@ const SRC = Object.freeze({
 // The landing should expect that step, not only the fall. Its size is not given: the research's figure (about 2.4 g at
 // 100 m/s) rests on UNVERIFIED arithmetic (the script's speed unit), so only the fact and its source are carried.
 const DOWNFORCE_STEP = (car) => ({ aheadM: car.downforceRay.aheadM, note: `the downforce drops to zero as the car's downforce ray, ${car.downforceRay.aheadM} m ahead, passes the lip, and returns in one step when it finds the landing (docs/research/04_ac_physics_drivability.md §4)` });
-/** D243: segment j is the equation core's FLIGHT (src/core/adapter.js): word 'core', part 'gap', followed by its own landing ramp (part 'land', the same id). */
-const isCoreFlight = (segments, j) => { const g = segments[j], n = segments[j + 1]; return g.word === 'core' && g.part === 'gap' && !!n && n.part === 'land' && n.id === g.id && n.kind === 'road'; };
+/** D243, D258: segment j is the equation core's FLIGHT (src/core/adapter.js): word 'core', part 'gap', carrying its pose (to), followed by road (the landing the user placed). */
+const isCoreFlight = (segments, j) => { const g = segments[j], n = segments[j + 1]; return g.word === 'core' && g.part === 'gap' && !!g.to && !!n && n.kind === 'road'; };   // g.to: the adapter writes a flight's pose on its gap (a planted hole has none)
 
 function segProfiles(segments) {
   return segments.map((g) => (g.kind === 'gap' ? null : P.normalize(g.profile)));
@@ -358,7 +358,7 @@ function core(path, segments, opts, from, carried, upto) {
     // landing ramp, the road resolve sized to catch both measured falls at the design speed (resolve.js landingRamp). A
     // search shorter than the ramp read a touchdown ON the ramp as a miss: the measured 81 m jump at 755 km/h comes down
     // about 152 m past the lip, on a 162 m ramp (the ripple, p-d182-ripple-E; test/validate_jumps.test.js).
-    const own = segments[j + 1] && segments[j + 1].part === 'land' && segments[j + 1].id === g.id ? segments[j + 1].length : 0;
+    const own = segments[j + 1] && segments[j + 1].part === 'land' && segments[j + 1].id === g.id ? segments[j + 1].length : 0;   // a word jump's own ramp (the core's free jump has none)
     const searchM = Math.max(opts.landingSearchM || 150, own);
     const landingRoad = [];
     for (let i = land; i < n && isRoad(i) && S[i].s - S[land].s <= searchM; i++) landingRoad.push({ x: x(S[i].pos), y: S[i].pos[1] - A.pos[1] });
@@ -366,6 +366,14 @@ function core(path, segments, opts, from, carried, upto) {
     // A landing lip NOT AHEAD of the take-off lip (a measured gap ≤ 0: the flight would go straight up or backwards) has
     // no flight to check. It is RED, with that reason, and never a throw: validation runs under the user's hand, and a
     // throw there is a crash path (D179: checkJump threw on it, and buildExport passed the throw straight through)
+    // D258, THE FREE JUMP (the equation core's flight): the user placed the landing and tunes it by driving (the keeper: "through testing in the game trial
+    // and error driving it themselves"), so nothing is computed about where the car lands: no arcs, no landing zone, no reach. Its gap is intended (above).
+    // A landing placed BEHIND its take-off is a WARNING, never a red: he put it there
+    if (isCoreFlight(segments, j)) {
+      jumps.push({ s: A.s, id: g.id, free: true, speed: v, gap: D, climb: dh, rampDeg: Math.asin(Math.max(-1, Math.min(1, A.T[1]))) * 180 / Math.PI, minSpeed: null, landings: [], reachable: true, badGap: !(D > 0) });
+      if (!(D > 0)) amber.push({ s: A.s, s1: S[last].s, u: null, reason: 'jump-gap-not-forward', worst: Number.isFinite(D) ? -D : null });
+      return;
+    }
     if (!(D > 0)) {
       jumps.push({ s: A.s, id: g.id, speed: v, gap: D, climb: dh, rampDeg: Math.asin(Math.max(-1, Math.min(1, A.T[1]))) * 180 / Math.PI, minSpeed: null, landings: [], reachable: false, badGap: true });
       red.push({ s: A.s, s1: S[last].s, u: null, reason: 'jump-gap-not-forward', worst: Number.isFinite(D) ? -D : null });
@@ -426,7 +434,7 @@ function proveLap(S, isRoad, v, lines, jumps) {
   }
   for (const l of lines) if (l.u === 0 && l.fN_g < 0) where.push({ s: l.s, reason: 'leaves-surface', fN_g: l.fN_g });
   for (const jp of jumps) {
-    if (jp.pending) continue;
+    if (jp.pending || jp.free) continue;   // D258: a free jump is the user's to tune by driving; the lap proof says nothing about it
     if (jp.badGap) { where.push({ s: jp.s, reason: 'jump-gap-not-forward', gap: jp.gap }); continue; }
     for (const L of jp.landings) if (!L.caught) warn.push({ s: jp.s, reason: `jump-not-caught-${L.g}g`, speed: jp.speed, minSpeed: L.minSpeed });
     if (!jp.reachable) warn.push({ s: jp.s, reason: 'landing-unreachable' });

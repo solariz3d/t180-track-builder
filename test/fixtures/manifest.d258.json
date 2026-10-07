@@ -1,0 +1,52 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196 (manifest.d196.json), D222 (manifest.d222.json) and D230 (manifest.d230.json); F7 only",
+ "made_at": "D258, pane E, e-freejump-wt: t180 744297c (before) and the D258 core (after), both digested by the SEALED test/fixtures/fixtures.js digests() itself (sha256 d24dcf49..., run unchanged in a VM: scratch freejump/f7digests.js)",
+ "reason": "The keeper, 2026-10-06 15:09: a jump is placed by hand and tuned by driving (exo_memory/loop/plan_t180_free_jump_2026-10-06.md). An OLD flight ({gap, drop, land}: a solved gap plus a landing ramp the adapter generated) opens as the FREE flight that lands where the road after it already was, the END of that ramp; the ramp becomes air. So F7 renders differently in segs, path and mesh (one gap segment to the landing, no ramp road), while every road piece keeps its place.",
+ "fixtures": {
+  "F7-hill-then-jump": {
+   "before": {
+    "segs": "0da1ae2bd5f461de272f06caba70456f97240966975e9bff61aa8e8645d68f9e",
+    "path": "710df38a2ae085543f6e7d7be9c48a8d1b6b8731950c3aa1667a38c510252014",
+    "mesh": "6c45e85bd795922ce4dd11a686c597e1fd8ba465aadcdab8aa8ff7e5564d0883",
+    "meshParts": 805
+   },
+   "after_d258": {
+    "segs": "f98397145bb82e116ddcfb39ca72aecf325e1fff2da0a8d83ee3945d70a03f15",
+    "path": "7f64622e5f84a8431c1edcb09c9b9eb7ad4875d414d567d7b49bc1c48fb2d6de",
+    "mesh": "6fceb6cd12a73f68fc72401181a40d7ee71927a6568129bc42ac82a8f18582ae",
+    "meshParts": 800
+   },
+   "measure": {
+    "oldFlight": {
+     "gap": 30,
+     "drop": 2,
+     "land": -0.05
+    },
+    "freeFlight": {
+     "forward": 70.6132,
+     "left": 0,
+     "up": -4.0324,
+     "heading": 0,
+     "pitch": -0.05,
+     "bank": 0
+    },
+    "landingRoadStartMovedM": {
+     "vertical": 0.000045,
+     "horizontal": 0.000021
+    },
+    "trackEndMovedM": 0.000045,
+    "why": "the pose is quantised to 0.1 mm (DEC.m 4)"
+   }
+  }
+ },
+ "unchanged": [
+  "F1-bowl-default-lap-closed",
+  "F2-halfpipe-default-lap-closed",
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}

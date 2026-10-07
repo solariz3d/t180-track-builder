@@ -180,7 +180,7 @@ test('row 4b: refused by name: a legacy run after a cup or a tube (PIECE_KIND), 
   const cupRun = PC.saveRun(cupLap(), 1, 1, { name: 'cup bend' }), legacyHead = extend(D.createDoc('l'), { length: 200, family: 'bowl' });
   assert.doesNotThrow(() => PC.insert(legacyHead, cupRun), 'a cup after a legacy piece starts at the edge that piece renders, as Extend does');
   const closed = legacyLap(); assert.throws(() => PC.insert(closed, legacyRun), (e) => e.code === 'CLOSED');
-  let withJump = extend(D.createDoc('j'), { length: 200, family: 'bowl' }); withJump = D.appendPiece(withJump, D.flightPiece({ gap: 30, drop: 1, land: -2 * DEG })); withJump = extend(withJump, { length: 200 });
+  let withJump = extend(D.createDoc('j'), { length: 200, family: 'bowl' }); withJump = D.appendPiece(withJump, D.flightPiece({ forward: 30, up: -1, pitch: -2 * DEG })); withJump = extend(withJump, { length: 200 });
   const jumpRun = PC.saveRun(withJump, 1, 2, { name: 'jump and road' }); assert.equal(jumpRun.pieces[0].type, 'flight');
   assert.throws(() => PC.insert(D.createDoc('e'), jumpRun), (e) => e.code === 'BAD_DOC' && /follow a road/.test(e.message));
   let hill = extend(D.createDoc('h'), { length: 400, family: 'bowl' }); hill = SC.brush(hill, { mode: 'hill', s0: 380, r: 60, delta: 5 }).doc;
@@ -208,12 +208,13 @@ test('row 5: the mirror: a mirrored run\'s path is the mirror image of the origi
 });
 
 test('row 6: jumps in a run: a run with a flight in the middle and one that starts with a flight are saved with their flights as they were, and go in at another head', () => {
-  let d = extend(D.createDoc('j'), { length: 250, family: 'bowl' }); d = D.appendPiece(d, D.flightPiece({ gap: 28, drop: 1.5, land: -2 * DEG })); d = extend(d, { length: 200, transition: 80, targets: { kh: 1 / 300 } });
-  const mid = PC.saveRun(d, 0, 2, { name: 'road jump road' }); assert.deepEqual(mid.pieces.map((P) => P.type), ['road', 'flight', 'road']); assert.deepEqual([mid.pieces[1].gap, mid.pieces[1].drop, mid.pieces[1].land], [28, 1.5, q9(-2 * DEG)]);
+  let d = extend(D.createDoc('j'), { length: 250, family: 'bowl' }); d = D.appendPiece(d, D.flightPiece({ forward: 28, up: -1.5, pitch: -2 * DEG })); d = extend(d, { length: 200, transition: 80, targets: { kh: 1 / 300 } });
+  // CHANGED D258 (the free jump): a flight is saved as its landing's pose (forward, up, pitch here); its landing is NOT C1 with the take-off, so it goes in as saved
+  const mid = PC.saveRun(d, 0, 2, { name: 'road jump road' }); assert.deepEqual(mid.pieces.map((P) => P.type), ['road', 'flight', 'road']); assert.deepEqual([mid.pieces[1].forward, mid.pieces[1].up, mid.pieces[1].pitch], [28, -1.5, q9(-2 * DEG)]);
   const head = extend(D.createDoc('h'), { length: 180, family: 'bowl', first: { w: 26 } }), put = PC.insert(head, mid); assert.deepEqual(put.pieces.slice(1).map((P) => P.type), ['road', 'flight', 'road']); D.checkDoc(put);
-  assert.equal(put.pieces[2].gap, 28); assert.deepEqual(A.toPath(put).path.samples.every((s) => s.pos.every(Number.isFinite)), true);
+  assert.equal(put.pieces[2].forward, 28); assert.deepEqual(A.toPath(put).path.samples.every((s) => s.pos.every(Number.isFinite)), true);
   const lead = PC.saveRun(d, 1, 2, { name: 'jump then road' }); assert.equal(lead.pieces[0].type, 'flight'); const put2 = PC.insert(head, lead); D.checkDoc(put2); assert.deepEqual(put2.pieces.map((P) => P.type), ['road', 'flight', 'road']);
-  const w0 = D.pieceEnd(head.pieces[0]).w.v, w1 = put2.pieces[2].channels.w[0]; assert.ok(Math.abs(w1 - w0) <= 1.01e-4, `the road after the jump carries the head's width through it (${w1} against ${w0})`);
+  const w1 = put2.pieces[2].channels.w[0], wSaved = d.pieces[2].channels.w[0]; assert.ok(Math.abs(w1 - wSaved) <= 1.01e-4, `the landing keeps its own saved width (${w1} against ${wSaved}): it is not joined to the take-off`);
   assert.throws(() => PC.saveRun(d, 1, 1, { name: 'only a jump' }), (e) => e.code === 'NO_ROAD');
 });
 const q9 = (x) => Number(x.toFixed(9));
@@ -222,13 +223,13 @@ test('row 7: NO PIECE MAKES A DOCUMENT THE DOCUMENT WOULD REFUSE: every kind of 
   const runs = {};
   runs.legacy = PC.saveRun(legacyLap(), 1, 3, { name: 'legacy' }); runs.cup = PC.saveRun(cupLap(60), 1, 3, { name: 'cup' }); runs.tube = PC.saveRun(tubeLap(30), 1, 3, { name: 'tube' });
   let e1 = extend(D.createDoc('e'), { length: 200, family: 'bowl', first: { e: 15 } }); e1 = extend(e1, { length: 150, transition: 60, targets: { e: 40 } }); runs.edge = PC.saveRun(e1, 0, 1, { name: 'edge' });
-  let j1 = extend(D.createDoc('j'), { length: 200, family: 'bowl' }); j1 = D.appendPiece(j1, D.flightPiece({ gap: 25, drop: 1, land: -2 * DEG })); j1 = extend(j1, { length: 150 }); runs.jump = PC.saveRun(j1, 0, 2, { name: 'jump' }); runs.jumpFirst = PC.saveRun(j1, 1, 2, { name: 'jump first' });
+  let j1 = extend(D.createDoc('j'), { length: 200, family: 'bowl' }); j1 = D.appendPiece(j1, D.flightPiece({ forward: 25, up: -1, pitch: -2 * DEG })); j1 = extend(j1, { length: 150 }); runs.jump = PC.saveRun(j1, 0, 2, { name: 'jump' }); runs.jumpFirst = PC.saveRun(j1, 1, 2, { name: 'jump first' });
   const heads = {
     empty: D.createDoc('h0'), legacy: extend(D.createDoc('h1'), { length: 220, family: 'bowl', first: { w: 22, phi: 0.3 } }), 'legacy half-pipe': extend(D.createDoc('h1b'), { length: 220, family: 'half-pipe' }),
     cup: extend(D.createDoc('h2'), { length: 220, first: { c: 30 } }), 'cup near its limit': extend(D.createDoc('h3'), { length: 220, first: { c: 140 } }), 'cup at 0': extend(D.createDoc('h3b'), { length: 220, first: { c: 0 } }),
     tube: extend(D.createDoc('h4'), { length: 220, first: { w: 30, t: 200 } }), 'tube closed': extend(D.createDoc('h5'), { length: 220, first: { w: 30, t: 360 } }),
     edge: extend(extend(D.createDoc('h6'), { length: 200, family: 'bowl', first: { e: 20 } }), { length: 120, transition: 60, targets: { e: 35 } }), banked: extend(D.createDoc('h7'), { length: 220, family: 'bowl', first: { phi: 0.5 } }),
-    afterJump: extend(D.appendPiece(extend(D.createDoc('h8'), { length: 220, family: 'bowl' }), D.flightPiece({ gap: 25, drop: 1, land: -2 * DEG })), { length: 100 }), closed: legacyLap(),
+    afterJump: extend(D.appendPiece(extend(D.createDoc('h8'), { length: 220, family: 'bowl' }), D.flightPiece({ forward: 25, up: -1, pitch: -2 * DEG })), { length: 100 }), closed: legacyLap(),
   };
   let ok = 0, refused = 0; const seen = new Set();
   for (const [rn, run] of Object.entries(runs)) for (const [hn, head] of Object.entries(heads)) for (const opts of [{}, { mirror: true }, { keepStart: true }]) {
@@ -267,9 +268,12 @@ test('row 8: a malformed file is refused BY NAME, case by case (the good one sti
   { const o = goodCup(); delete o.pieces[0].channels.c; refuses(o, 'MIXED_RUN'); }   // one piece loses its cup: the run is mixed
   { const o = good(); o.pieces[1].channels.w = o.pieces[1].channels.w.map((v) => v + 3); refuses(o, 'JOINT', /joint is C1/); }
   { const o = goodCup(); o.pieces[1].channels.c = o.pieces[1].channels.c.map((v, i) => (i < 3 ? v : v + 200)); refuses(o, 'BAD_CUP'); }
-  { const o = good(); o.pieces.splice(1, 0, { type: 'flight', gap: 0, drop: 0, land: 0 }); refuses(o, 'BAD_PIECE_NUMBER', /gap > 0/); } { const o = good(); o.pieces.splice(1, 0, { type: 'flight', gap: 20, drop: 'x', land: 0 }); refuses(o, 'BAD_PIECE_NUMBER'); } { const o = good(); o.pieces.splice(1, 0, { type: 'flight', gap: 20, drop: 0, land: 0, id: 'p9' }); refuses(o, 'BAD_PIECE_FIELD'); }
-  { const o = good(); o.pieces = [{ type: 'flight', gap: 20, drop: 0, land: 0 }]; refuses(o, 'NO_ROAD'); }
-  { const o = good(); o.pieces.splice(1, 0, { type: 'flight', gap: 20, drop: 0, land: 0 }); refuses(o, 'JOINT'); }   // a jump in the middle of a run whose road after it does not start level: the document says JOINT
+  // CHANGED D258 (the free jump): a flight in a piece file is its landing's pose (forward, left, up, heading, pitch, bank); the old gap/drop/land shape is OLD_FLIGHT
+  const fl = (o = {}) => ({ type: 'flight', forward: 20, left: 0, up: 0, heading: 0, pitch: 0, bank: 0, ...o });
+  { const o = good(); o.pieces.splice(1, 0, fl({ forward: 0 })); refuses(o, 'FLIGHT_TOO_SHORT'); } { const o = good(); o.pieces.splice(1, 0, fl({ up: 'x' })); refuses(o, 'BAD_PIECE_NUMBER'); } { const o = good(); o.pieces.splice(1, 0, fl({ id: 'p9' })); refuses(o, 'BAD_PIECE_FIELD'); }
+  { const o = good(); o.pieces.splice(1, 0, { type: 'flight', gap: 20, drop: 0, land: 0 }); refuses(o, 'OLD_FLIGHT'); }
+  { const o = good(); o.pieces = [fl()]; refuses(o, 'NO_ROAD'); }
+  { const o = good(); o.pieces.splice(1, 0, fl({ bank: 0.3 })); refuses(o, 'LANDING'); }   // a jump in the middle of a run whose road after it does not start at its bank: the document says LANDING
   refuses(' '.repeat(8e6 + 1), 'BAD_PIECE_SIZE');
 });
 
@@ -318,7 +322,7 @@ function variedDoc() {
   let d = extend(D.createDoc('varied'), { length: 120, family: 'bowl', first: { w: 22.5, phi: 0.12 } });
   d = extend(d, { length: 100, transition: 60, targets: { phi: -0.2, w: 31.3, kh: 1 / 250 } });
   d = extend(d, { length: 90, transition: 60, targets: { kh: 0 } });
-  d = D.appendPiece(d, D.flightPiece({ gap: 25, drop: 1, land: -2 * DEG }));
+  d = D.appendPiece(d, D.flightPiece({ forward: 25, up: -1, pitch: -2 * DEG }));
   d = extend(d, { length: 110, transition: 50, targets: { phi: 0.07, w: 26.1 } });
   return extend(d, { length: 80, transition: 40, targets: { phi: -0.05, w: 19.7, kh: -1 / 300 } });
 }
@@ -354,13 +358,15 @@ test('row 5b: a mirror flips the bank EXACTLY, the start bank included (a run th
   a.forEach((P, i) => { for (const ch of D.CHANNELS) { const neg = ['kh', 'phi', 'l'].includes(ch); assert.deepEqual(b[i].channels[ch], neg ? P.channels[ch].map((x) => (x === 0 ? 0 : -x)) : P.channels[ch], `piece ${i}: ${ch} ${neg ? 'is negated' : 'is the same'}`); } });
 });
 
-test('row 6b: a run that starts with a jump, put at a head that is TURNING and CLIMBING, has its road after the jump start level (turn and climb 0) with the rest carried from the head', () => {
-  let j = extend(D.createDoc('j'), { length: 200, family: 'bowl', first: { w: 24 } }); j = D.appendPiece(j, D.flightPiece({ gap: 25, drop: 1, land: -2 * DEG })); j = extend(j, { length: 100 });
+// CHANGED D258 (the free jump): the landing after a run's leading jump is the user's own piece, NOT C1 with the take-off, so it goes in AS SAVED: level (turn and
+// climb 0, the document's landing rule), its own width (was: the head's width carried through the jump)
+test('row 6b: a run that starts with a jump, put at a head that is TURNING and CLIMBING, has its road after the jump start level (turn and climb 0) with its own saved width', () => {
+  let j = extend(D.createDoc('j'), { length: 200, family: 'bowl', first: { w: 24 } }); j = D.appendPiece(j, D.flightPiece({ forward: 25, up: -1, pitch: -2 * DEG })); j = extend(j, { length: 100 });
   const run = PC.saveRun(j, 1, 2, { name: 'jump first' });
   let head = extend(D.createDoc('head'), { length: 200, family: 'bowl' }); head = extend(head, { length: 80, transition: 40, targets: { kh: 1 / 200, kv: 0.01, w: 30 } });
-  const e = D.endState(head); assert.ok(e.kh.v > 0.004 && e.kv.v > 0.008, 'control: the head is turning and climbing'); assert.notEqual(e.w.v, run.start.w, 'control: the run does not already join the head, so it is continued');
+  const e = D.endState(head); assert.ok(e.kh.v > 0.004 && e.kv.v > 0.008, 'control: the head is turning and climbing'); assert.notEqual(e.w.v, run.start.w, 'control: the head\'s width is not the run\'s');
   const out = PC.insert(head, run), road = out.pieces[head.pieces.length + 1];
-  assert.equal(out.pieces[head.pieces.length].type, 'flight'); assert.equal(road.channels.kh[0], 0); assert.equal(road.channels.kv[0], 0); assert.equal(road.channels.w[0], e.w.v, 'the width is carried from the head');
+  assert.equal(out.pieces[head.pieces.length].type, 'flight'); assert.equal(road.channels.kh[0], 0); assert.equal(road.channels.kv[0], 0); assert.equal(road.channels.w[0], run.start.w, 'the landing keeps its own saved width');
 });
 
 test('row 4c: a closed track says CLOSED whatever the run is: a legacy run into a closed CUP track is CLOSED, not PIECE_KIND (the kind is the second question)', () => {
@@ -375,7 +381,7 @@ const openDocs = {
   legacy: () => { let d = extend(D.createDoc('del legacy'), { length: 300, family: 'bowl' }); d = extend(d, { length: 150, transition: 60, targets: { kh: TURN } }); d = extend(d, { length: 150, transition: 60, targets: { kh: TURN } }); return extend(d, { length: 100, transition: 60, targets: { kh: 0 } }); },
   cup: () => { let d = extend(D.createDoc('del cup'), { length: 300, family: 'bowl', first: { c: 45 } }); d = extend(d, { length: 150, transition: 60, targets: { kh: TURN, c: 30 } }); d = extend(d, { length: 150, transition: 60, targets: { kh: TURN, c: 55 } }); return extend(d, { length: 100, transition: 60, targets: { kh: 0, c: 45 } }); },
   tube: () => { let d = extend(D.createDoc('del tube'), { length: 300, first: { w: 40, t: 360 } }); d = extend(d, { length: 150, transition: 60, targets: { kh: TURN } }); d = extend(d, { length: 150, transition: 60, targets: { kh: TURN, w: 34 } }); return extend(d, { length: 100, transition: 60, targets: { kh: 0 } }); },
-  jump: () => { let d = extend(D.createDoc('del jump'), { length: 200, family: 'bowl' }); d = extend(d, { length: 100, transition: 40, targets: { kh: 1 / 300 } }); d = D.appendPiece(d, D.flightPiece({ gap: 25, drop: 1, land: -2 * DEG })); return extend(d, { length: 150 }); },
+  jump: () => { let d = extend(D.createDoc('del jump'), { length: 200, family: 'bowl' }); d = extend(d, { length: 100, transition: 40, targets: { kh: 1 / 300 } }); d = D.appendPiece(d, D.flightPiece({ forward: 25, up: -1, pitch: -2 * DEG })); return extend(d, { length: 150 }); },
   varied: variedDoc,
   kinds: () => { let d = extend(D.createDoc('del kinds'), { length: 100, family: 'bowl' }); d = extend(d, { length: 80, transition: 40, targets: { c: 40 } }); d = extend(d, { length: 80, transition: 40, targets: { c: 40 } }); d = extend(d, { length: 80, transition: 40, targets: { t: 300, w: 30 } }); return extend(d, { length: 60, transition: 30, targets: { kh: TURN } }); },   // legacy, cup, cup, tube, tube
 };
@@ -435,7 +441,7 @@ test('row 10d: jumps: deleting the road before a jump, a jump itself, and the ro
 
 // D243 follow-up (C's look at 47820c4): LAND ON ROAD FIRST through the saved pieces. Before 47820c4, deleting the road between two jumps and adding a run that
 // starts with a jump at a head that is a jump both BUILT a track with two jumps in a row; a hand-made file that starts with two jumps was listed as good.
-const twoJumps = () => { let d = openDocs.jump(); d = D.appendPiece(d, D.flightPiece({ gap: 20, drop: 0.5, land: 0 })); return extend(d, { length: 120 }); };   // road, road, flight, road, flight, road
+const twoJumps = () => { let d = openDocs.jump(); d = D.appendPiece(d, D.flightPiece({ forward: 20, up: -0.5, pitch: 0 })); return extend(d, { length: 120 }); };   // road, road, flight, road, flight, road
 test('row 10i: deleting the road between two jumps is REFUSED BY NAME (DELETE_REJOIN, naming land on road first), and nothing is touched', () => {
   const d = twoJumps(), before = D.serialize(d);
   assert.deepEqual(d.pieces.map((P) => P.type), ['road', 'road', 'flight', 'road', 'flight', 'road']);

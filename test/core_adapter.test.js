@@ -50,19 +50,18 @@ const segStart = (segs, i) => segs.slice(0, i).reduce((a, g) => a + g.length, 0)
 /** where segment i starts inside its own piece: the lengths of that piece's earlier segments */
 function offsetIn(segs, i) { const id = segs[i].id; let s = 0; for (let j = 0; j < i; j++) if (segs[j].id === id) s += segs[j].length; return s; }
 
-test('a flight becomes the old jump: its gap solved, its landing ramp sized by validation, and the road after it continuous', () => {
+// CHANGED D258 (the free jump): a flight is ONE gap segment that carries its landing's pose (to) and ends exactly there; no ramp is generated
+test('a flight becomes ONE gap segment carrying its landing\'s pose; the road after it starts exactly there; no ramp is generated', () => {
   let d = extend(D.createDoc('j'), { length: 120, first: { kv: 0 } });
   d = extend(d, { length: 60, transition: 60, targets: { kv: 0 } });
-  d = D.appendPiece(d, D.flightPiece({ gap: 30, drop: 2, land: -2 * DEG }));
+  d = D.appendPiece(d, D.flightPiece({ forward: 30, up: -2, pitch: -2 * DEG }));
   d = extend(d, { length: 100 });
   const { segments, path } = toPath(d);
-  assert.deepEqual(segments.filter((g) => g.id === 'p3').map((g) => [g.part, g.kind]), [['gap', 'gap'], ['land', 'road']]);
-  // the ramp is validation's: its horizontal length over cos(landing pitch), at the design speed (as the paused resolver sizes it)
-  const jumps = require('../src/validate/jumps.js'), { MACH6 } = require('../src/validate/limits.js');
-  const lip = segments.findIndex((g) => g.part === 'gap'), pitch = [...segments.slice(0, lip)].reduce((a, g) => a + ((g.kp0 + g.kp1) / 2) * g.length, 0);
-  const want = jumps.landingRamp({ D: 30, dh: -2, thetaRad: pitch, landRad: -2 * DEG, v: MACH6.designSpeedKmh / 3.6 }).length / Math.cos(-2 * DEG);
-  // 1e-6 m: the pitch recomputed here differs from the adapter's in the last bits; dropping the cos (the mutant) moves it 0.02 m
-  assert.ok(Math.abs(segments[lip + 1].length - want) < 1e-6, `ramp ${segments[lip + 1].length} m vs ${want} m`);
+  assert.deepEqual(segments.filter((g) => g.id === 'p3').map((g) => [g.part, g.kind]), [['gap', 'gap']]);
+  const lip = segments.findIndex((g) => g.part === 'gap');
+  assert.deepEqual(segments[lip].to, { x: [0, -2, 30], theta: 0, p: d.pieces[2].pitch }, 'the pose: left, up, forward; heading turn; pitch (as stored: quantised to 1e-9 rad)');
+  const a = path.starts[lip], b = path.starts[lip + 1];
+  assert.ok(Math.abs(b.x[2] - a.x[2] - 30) < 1e-9 && Math.abs(b.x[1] - a.x[1] + 2) < 1e-9 && Math.abs(b.p - d.pieces[2].pitch) < 1e-12, 'the landing starts exactly at its pose');
   const res = validate(path, segments, {});
   assert.equal(res.jumps.length, 1);
   for (let i = 1; i < path.samples.length; i++) assert.ok(lenv([0, 1, 2].map((c) => path.samples[i].pos[c] - path.samples[i - 1].pos[c])) <= path.samples[i].s - path.samples[i - 1].s + 1e-6);

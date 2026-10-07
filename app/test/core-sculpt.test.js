@@ -89,7 +89,7 @@ test('row 4: turn and climb cannot be chosen in Sculpt (nor height or sideways):
   // beginSculpt's own refusals
   const t = await mk('legacy'); t.beginSculpt({ channel: 'phi' }); assert.match(t.getState().message, /^SCULPT_OFF/);
   t.setSculpt(true); t.beginSculpt({ channel: 'phi' }); assert.match(t.getState().message, /select ONE piece/); t.selectPiece(1); t.selectPiece(3, { extend: true }); t.beginSculpt({ channel: 'phi' }); assert.match(t.getState().message, /select ONE piece/, 'a run is not one piece');
-  const flight = D.appendPiece(t.getState().history.present, D.flightPiece({ gap: 20, drop: 1, land: 0 })); t.commitDoc(flight); t.beginSculpt({ channel: 'phi', piece: flight.pieces.length - 1 }); assert.match(t.getState().message, /^SCULPT_PIECE/);
+  const flight = D.appendPiece(t.getState().history.present, D.flightPiece({ forward: 20, up: -1, pitch: 0 })); t.commitDoc(flight); t.beginSculpt({ channel: 'phi', piece: flight.pieces.length - 1 }); assert.match(t.getState().message, /^SCULPT_PIECE/);
   t.beginSculpt({ channel: 'phi', piece: 99 }); assert.match(t.getState().message, /^SCULPT_PIECE/, 'a piece that does not exist');
 });
 

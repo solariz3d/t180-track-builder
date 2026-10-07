@@ -83,7 +83,7 @@ test('ENDSTATE (ruling 2): endState reports the tube sweep t ONLY for a tube hea
   const cup = extend(start(), { length: 60, targets: { c: 40 } }); assert.deepStrictEqual(D.endState(cup).t, { v: 0, m: 0 }, 'a cup head reads t = 0');
   const tube = extend(start(), { length: 100, targets: { t: 200 }, transition: 100 }), te = D.endState(tube);
   assert.ok(Math.abs(te.t.v - D.channelAt(last(tube), 't', last(tube).length).v) < 1e-9 && te.t.v > 150, 'a tube head reads its own sweep'); assert.strictEqual(te.tNext.v, te.t.v);
-  const fl = D.appendPiece(tube, D.flightPiece({ gap: 30, drop: 0, land: 0 })); assert.ok(Math.abs(D.endState(fl).t.v - te.t.v) < 1e-9, 'the sweep is carried through a flight');
+  const fl = D.appendPiece(tube, D.flightPiece({ forward: 30, up: 0, pitch: 0 })); assert.ok(Math.abs(D.endState(fl).t.v - te.t.v) < 1e-9, 'the sweep is carried through a flight');
   const started = extend(plain, { length: 100, targets: { t: 200 }, transition: 100 }); assert.ok(Math.abs(started.pieces[1].channels.t[0] - 2 * edge) < 1e-5, 'a tube after a plain piece starts at 2 x its edge');
 });
 test('A TUBE JOINT: a tube after another kind starts at the edge that piece renders (t = 2·edge); a cup after a tube starts at t/2; tube to tube is C1 in t', () => {
@@ -158,10 +158,10 @@ test('E6: edge THEN roll: at φ = +30° the left edge surface is 105° from grav
   for (let i = 0; i < pa.length; i++) assert.deepStrictEqual([pa[i].pos, pa[i].T, pa[i].U], [pb[i].pos, pb[i].T, pb[i].U], 'the edge never moves the centreline or its frame (KE6-2)');
 });
 test('E4 (ii): e, s and t are CARRIED across a flight like c, and an edge continues after the jump', () => {
-  const d = extend(start(), { length: 200, targets: { e: 15, s: 0.8 } }), fl = D.appendPiece(d, D.flightPiece({ gap: 30, drop: 0, land: 0 })), after = extend(fl, { length: 100 }), p = last(after);
+  const d = extend(start(), { length: 200, targets: { e: 15, s: 0.8 } }), fl = D.appendPiece(d, D.flightPiece({ forward: 30, up: 0, pitch: 0 })), after = extend(fl, { length: 100 }), p = last(after);
   assert.ok(p.edge, 'the piece after the jump continues the edge'); assert.ok(Math.abs(D.channelAt(p, 'e', 0).v - 15) < 1e-6 && Math.abs(D.channelAt(p, 's', 0).v - 0.8) < 1e-6, 'e and s are carried through the flight');
   assert.doesNotThrow(() => D.checkDoc(after));
-  const t = extend(extend(start(), { length: 100, targets: { t: 200 }, transition: 100 }), { length: 60 }), tf = extend(D.appendPiece(t, D.flightPiece({ gap: 30, drop: 0, land: 0 })), { length: 50 });
+  const t = extend(extend(start(), { length: 100, targets: { t: 200 }, transition: 100 }), { length: 60 }), tf = extend(D.appendPiece(t, D.flightPiece({ forward: 30, up: 0, pitch: 0 })), { length: 50 });
   assert.ok(last(tf).tube && Math.abs(D.channelAt(last(tf), 't', 0).v - D.pieceEnd(t.pieces[2]).t.v) < 1e-6, 't is carried through the flight');
 });
 test('E4 (vi, vii): inside an edge piece every segment is a chord that shares ONE row grid and meets the next on the same profile, so the mesh emits no seam zip; the joint from a plain piece steps ≤ 1 mm', () => {

@@ -49,7 +49,7 @@ for (const [what, opts, reason] of [
 
 // ── row 2: a real hole is still refused at export ──
 const R = 180, Q = (Math.PI * R) / 2;
-const MISS_JUMP = { gap: 60, drop: 1, land: 0 };   // E's row 5b lap: its 6.3 g fall misses, nothing else found
+const MISS_JUMP = { forward: 60, up: -1 };   // CHANGED D258: E's row 5b lap as a free jump (the landing placed 60 m on, 1 m down; nothing is computed about where the car lands)
 function shutLap() {
   let d = extend(D.createDoc('jump lap'), { length: 300, family: 'bowl' });
   d = jump(d, MISS_JUMP); d = extend(d, { length: 300 });
@@ -66,9 +66,10 @@ const build = (doc, segs) => {
 test('row 2: a real HOLE (a road segment of the landing road made a gap, no ramp) in a closed jump lap is RED and refused; the lap without it exports', () => {
   const doc = shutLap(), segs = A.toSegments(doc);
   const fine = build(doc, segs);
-  assert.ok(fine.kn5.length > 1000, 'control: the jump lap alone exports (its miss is a warning)');
-  const holed = segs.map((g) => ({ ...g })), i = holed.findIndex((g, k) => k > 0 && holed[k - 1].part === 'land' && g.part === 'body');
-  assert.ok(i > 0, 'control: there is road after the landing ramp to hole');
+  assert.ok(fine.kn5.length > 1000, 'control: the jump lap alone exports');
+  // CHANGED D258: the free jump has no generated ramp; the hole goes in the LANDING road, its second segment (the first one after the flight's gap is the landing's start)
+  const holed = segs.map((g) => ({ ...g })), i = holed.findIndex((g, k) => k > 1 && holed[k - 2].part === 'gap' && holed[k - 1].part === 'body' && g.part === 'body');
+  assert.ok(i > 0, 'control: there is road in the landing to hole');
   holed.splice(i, 1, { ...holed[i], kind: 'gap', part: 'gap', profile: null });
   assert.throws(() => build(doc, holed), (e) => e.code === 'RED' && e.red.some((x) => x.reason === 'gap-in-road'));
 });

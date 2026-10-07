@@ -63,14 +63,15 @@ test('the integral is exact: it agrees with an independent composite Simpson rul
   assert.ok(Math.abs(channelIntegral(P, 'kh') - simp) < 1e-12, `${channelIntegral(P, 'kh')} vs ${simp}`);
 });
 
-test('pitch accumulates across pieces, and a flight sets it to its landing pitch (turn 0, climb = land − take-off, length = what the adapter builds)', () => {
+// CHANGED D258 (the free jump): the flight's landing pitch is its `pitch` (was `land`); its turn is its heading turn, 0 here
+test('pitch accumulates across pieces, and a flight sets it to its landing pitch (turn 0, climb = landing pitch − take-off, length = what the adapter builds)', () => {
   let d = extend(D.createDoc('p', { start: { pitch: 0.01 } }), { length: 100, first: { kv: 0.0005 } });
   d = extend(d, { length: 60, transition: 60, targets: { kv: 0 } });
   const up = pieceReadout(d, 0).climbDeg + pieceReadout(d, 1).climbDeg;
-  d = D.appendPiece(d, D.flightPiece({ gap: 30, drop: 2, land: -2 * RAD }));
+  d = D.appendPiece(d, D.flightPiece({ forward: 30, up: -2, pitch: -2 * RAD }));
   d = extend(d, { length: 50 });
   // the reference is the STORED landing pitch: the document quantises it to 1e-9 rad (−2° is stored as −1.9999999977°)
-  const f = pieceReadout(d, 2), after = pieceReadout(d, 3), land = d.pieces[2].land * DEG;
+  const f = pieceReadout(d, 2), after = pieceReadout(d, 3), land = d.pieces[2].pitch * DEG;
   assert.ok(Math.abs(f.pitchFromDeg - (0.01 * DEG + up)) < 1e-9);
   assert.ok(Math.abs(f.climbDeg - (land - f.pitchFromDeg)) < 1e-9 && f.turnDeg === 0, `climb ${f.climbDeg}° vs ${land - f.pitchFromDeg}°`);
   assert.equal(f.lengthM, toSegments(d).filter((g) => g.id === d.pieces[2].id).reduce((a, g) => a + g.length, 0));

@@ -252,7 +252,7 @@ test('row 8: delete in the MIDDLE is previewed (displacement, overlap check); Ap
   assert.equal(u.getState().history.present, ub); assert.match(u.getState().message, /changed while its copy was being written/);
   // a join the core refuses is DELETE_REJOIN: no preview, nothing changed (the jump would be first)
   const j = await createCoreShell({ brushFn: null, autosaveMs: 0 }); j.extend({ length: 200, family: 'bowl' }); j.extend({ length: 100, transition: 40, targets: { kh: 1 / 300 } });
-  j.commitDoc(D.appendPiece(j.getState().history.present, D.flightPiece({ gap: 25, drop: 1, land: -2 * DEG }))); j.extend({ length: 150 });
+  j.commitDoc(D.appendPiece(j.getState().history.present, D.flightPiece({ forward: 25, up: -1, pitch: -2 * DEG }))); j.extend({ length: 150 });
   const jd = j.getState().history.present; j.selectPiece(0); j.selectPiece(1, { extend: true }); j.deleteSelection();
   assert.match(j.getState().message, /DELETE_REJOIN/); assert.equal(j.getState().deleteProposal, null); assert.equal(j.getState().history.present, jd);
 });

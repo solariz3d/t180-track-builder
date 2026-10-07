@@ -33,12 +33,16 @@ const CHANGED = ['F4-halfpipe-width-31.5-to-12-along-s', 'F6-bowl-r-brushed', 'F
 const AMEND2 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d222.json'), 'utf8'));
 const KN5_CHANGED = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-closed'];
 const AMEND3 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d230.json'), 'utf8'));
+// D258 (the free jump): F7's old jump opens as a free flight to the end of its old ramp (the ramp becomes air), so F7 renders differently; manifest.d258.json records it
+const AMEND4 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d258.json'), 'utf8'));
+const JUMP_CHANGED = ['F7-hill-then-jump'];
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
   const man = JSON.parse(JSON.stringify(MANIFEST));
   for (const [k, v] of Object.entries(AMEND.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_d196));
   for (const [k, v] of Object.entries(AMEND2.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_d222));
   for (const [k, v] of Object.entries(AMEND3.fixtures)) { const { kn5Bytes, ...digests } = v.after_d230; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // kn5Bytes is the record's measure, not a digest the check computes
+  for (const [k, v] of Object.entries(AMEND4.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_d258));   // D258
   return man;
 }
 
@@ -55,15 +59,21 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d230.json'))), '8feef64205e1255eaa4ae4581a4c6392bb131e9a8f5568cd85d6ce03314cf16c');
   assert.deepEqual(Object.keys(AMEND3.fixtures), KN5_CHANGED);
   assert.deepEqual([...AMEND3.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !KN5_CHANGED.includes(k)).sort());
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d258.json'))), '5b5b38e619117ab414b7cdeb196cf44a4cce873336e38c9886d69f36ddb07ae6');   // D258
+  assert.deepEqual(Object.keys(AMEND4.fixtures), JUMP_CHANGED);
+  assert.deepEqual([...AMEND4.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !JUMP_CHANGED.includes(k)).sort());
+  assert.deepEqual(AMEND4.fixtures['F7-hill-then-jump'].before, MANIFEST.fixtures['F7-hill-then-jump'].render, 'D258: "before" is the seal\'s F7 (F7 was in no earlier amendment)');
 });
-test('row 5a (amended D196, D222): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, the path is byte-identical in all, and the four others are identical', () => {
+// CHANGED D258: F7 (the old jump, now a free flight to the end of its old ramp) differs in segs, path and mesh; the path is byte-identical in every OTHER fixture
+test('row 5a (amended D196, D222, D258): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, F7 in segs, path and mesh, and the three others are identical', () => {
   const r = check(FX); assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /\n5 of 9 differ\n?$/);
+  assert.match(r.stdout, /\n6 of 9 differ\n?$/);
+  for (const k of JUMP_CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in segs, path, mesh, meshParts\n`), `${k} should differ in segs, path, mesh, meshParts:\n${r.stdout}`);
   for (const k of CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in segs, mesh, meshParts\n`), `${k} should differ in segs, mesh, meshParts only:\n${r.stdout}`);
   for (const k of KN5_CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in kn5\n`), `${k} should differ in kn5 only:\n${r.stdout}`);
-  for (const k of Object.keys(MANIFEST.fixtures).filter((n) => !CHANGED.includes(n) && !KN5_CHANGED.includes(n))) assert.ok(r.stdout.includes(`${k}: identical`), `${k} should be byte-identical to c964c2d`);
-  assert.equal((r.stdout.match(/: identical/g) || []).length, 4, r.stdout);
-  assert.ok(!/DIFFERS in [^\n]*path/.test(r.stdout), 'the geometry (path) changed');
+  for (const k of Object.keys(MANIFEST.fixtures).filter((n) => !CHANGED.includes(n) && !KN5_CHANGED.includes(n) && !JUMP_CHANGED.includes(n))) assert.ok(r.stdout.includes(`${k}: identical`), `${k} should be byte-identical to c964c2d`);
+  assert.equal((r.stdout.match(/: identical/g) || []).length, 3, r.stdout);
+  assert.equal((r.stdout.match(/DIFFERS in [^\n]*path/g) || []).length, 1, 'the geometry (path) changed outside F7');
 });
 test('row 5a (amended D196): against the D196 baseline every fixture renders identically: "0 of 9 differ"', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-cup-fx-'));

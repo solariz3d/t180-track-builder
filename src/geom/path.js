@@ -65,6 +65,12 @@ function checkSegments(segments, from = 0) {
     if (!g || typeof g !== 'object') throw new Error(`${at}: not an object`);
     if (!Number.isFinite(g.length) || g.length <= 0) throw new Error(`${at}: length must be a positive finite number, got ${g.length}`);
     for (const f of ['k0', 'k1', 'kp0', 'kp1', 'roll0', 'roll1', 'heartline', 'heartline1', 'rollRate0', 'rollRate1']) if (g[f] !== undefined && !Number.isFinite(g[f])) throw new Error(`${at}: ${f} is not finite`);
+    if (g.to !== undefined) {
+      const t = g.to;
+      if (!t || !Array.isArray(t.x) || t.x.length !== 3 || !t.x.every(Number.isFinite) || !Number.isFinite(t.theta) || !Number.isFinite(t.p)) throw new Error(`${at}: to needs x [left, up, forward], theta and p`);
+      if (!(Math.abs(t.p) < Math.PI / 2)) throw new Error(`${at}: to.p must be inside (−90°, 90°), got ${t.p}`);
+      if (!(len(t.x) > 0)) throw new Error(`${at}: a flight's end must be away from its start`);
+    }
   }
 }
 const num = (v) => (v === undefined ? 0 : v);
@@ -137,12 +143,74 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
 // and re-places the rest; with the gravity frame R0 is always (1, 0, 0), so that is the first block whose start pitch is
 // unchanged. (Under the rotation-minimising frame, D177's first build, R0 also carried the frame's twist, and a turn edit on
 // a slope regrew the whole tail.)
-const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline, g.heartline1, g.rollRate0, g.rollRate1].map((v) => (v === undefined ? '' : num(v))).join(',');   // an absent field is empty, a 0 is "0": the new fields change the key only where a segment sets them
+const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline, g.heartline1, g.rollRate0, g.rollRate1].map((v) => (v === undefined ? '' : num(v))).join(',')   // an absent field is empty, a 0 is "0": the new fields change the key only where a segment sets them
+  + (g.to ? `|to:${g.to.x.join(',')},${g.to.theta},${g.to.p}` : '');   // D258: a free flight's end pose is part of its shape
 const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1], c * v[2] - sn * v[0]];
 const same3 = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
+/**
+ * D258, A FREE FLIGHT (the keeper places the landing by hand): a segment with `to` = { x: [left, up, forward], theta, p } ENDS at that pose, in its own
+ * local coordinates (heading 0 at its start, the start pitch p0): x is where the landing starts (left along the heading's horizontal left, up along world up,
+ * forward along the heading's horizontal forward), theta its heading (+ = left) and p its pitch. Between, the centreline is the cubic Hermite from the start
+ * (tangent T(0, p0)) to x (tangent T(theta, p)), both tangents scaled by the chord: no road is there, it only carries the stations, the AI line and the
+ * frame across the air. Its end state is the given pose EXACTLY, so the landing and everything after it are placed by the same chain as any segment.
+ * The segment's `length` is the s it spans (flightLength gives the curve's own); the stations are spread over it by the curve's parameter.
+ */
+function flightCurve(p0, to) {
+  const X = [to.x[0], to.x[1], to.x[2]], c = len(X), T0 = mul(tangent(0, p0), c), T1 = mul(tangent(to.theta, to.p), c);
+  const at = (t) => { const t2 = t * t, t3 = t2 * t; return add(add(mul(T0, t3 - 2 * t2 + t), mul(X, -2 * t3 + 3 * t2)), mul(T1, t3 - t2)); };
+  const d1 = (t) => { const t2 = t * t; return add(add(mul(T0, 3 * t2 - 4 * t + 1), mul(X, -6 * t2 + 6 * t)), mul(T1, 3 * t2 - 2 * t)); };
+  const d2 = (t) => add(add(mul(T0, 6 * t - 4), mul(X, -12 * t + 6)), mul(T1, 6 * t - 2));
+  return { X, at, d1, d2 };
+}
+/** The arc length of a free flight's curve from start pitch p0 (5-point Gauss–Legendre on 64 pieces). */
+function flightLength(p0, to) {
+  const { d1 } = flightCurve(p0, to), n = 64; let L = 0;
+  for (let i = 0; i < n; i++) { const a = i / n, b = (i + 1) / n; for (const [xi, w] of GL5) L += len(d1((a + b) / 2 + xi * (b - a) / 2)) * w * (b - a) / 2; }
+  return L;
+}
+/**
+ * The curve's parameter t at arc length a along it: the cumulative length on 64 pieces (5-point Gauss–Legendre each, as flightLength), then two Newton steps
+ * inside the piece (dt = (a − len(t)) / |C′(t)|), so the stations of a flight are spread by DISTANCE along it, as s is everywhere else on the path.
+ */
+function arcTable(C) {
+  const n = 64, cum = [0];
+  for (let i = 0; i < n; i++) { const a = i / n, b = (i + 1) / n; let l = 0; for (const [xi, w] of GL5) l += len(C.d1((a + b) / 2 + xi * (b - a) / 2)) * w * (b - a) / 2; cum.push(cum[i] + l); }
+  const lenTo = (i, t) => { const a = i / n; let l = 0; for (const [xi, w] of GL5) l += len(C.d1((a + t) / 2 + xi * (t - a) / 2)) * w * (t - a) / 2; return cum[i] + l; };
+  const tAt = (s) => {
+    if (s <= 0) return 0; if (s >= cum[n]) return 1;
+    let lo = 0, hi = n; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] <= s) lo = m; else hi = m; }
+    let t = (lo + (s - cum[lo]) / (cum[lo + 1] - cum[lo])) / n;
+    for (let k = 0; k < 2; k++) t = Math.min((lo + 1) / n, Math.max(lo / n, t - (lenTo(lo, t) - s) / len(C.d1(t))));
+    return t;
+  };
+  return { total: cum[n], tAt };
+}
+function growFlightBlock(g, gi, p0, R0, step, isLast, work) {
+  const L = g.length, C = flightCurve(p0, g.to), endTheta = g.to.theta, endP = g.to.p, A = arcTable(C);
+  let thPrev = 0;
+  const rec = (u) => {
+    const t = u >= L ? 1 : A.tAt((u / L) * A.total), x = C.at(t), d = C.d1(t), sp = len(d), T = mul(d, 1 / sp);   // u is a share of the curve's own length (L is it, to the last bits)
+    const run = Math.hypot(T[0], T[2]);
+    let theta = run > 1e-9 ? Math.atan2(T[0], T[2]) : thPrev; theta += 2 * Math.PI * Math.round((thPrev - theta) / (2 * Math.PI)); thPrev = theta;   // continuous along the curve
+    if (u >= L) theta = endTheta;
+    const dd = C.d2(t), kvec = mul(sub(dd, mul(T, dot(dd, T))), 1 / (sp * sp));
+    const R = [Math.cos(theta), 0, -Math.sin(theta)], phi = num(g.roll0) + (num(g.roll1) - num(g.roll0)) * smooth(u / L);
+    const U0 = cross(T, R), Lr = add(mul(R, Math.cos(phi)), mul(U0, Math.sin(phi))), Ur = cross(T, Lr);
+    work.n++;
+    return { s: u, seg: gi, pos: x, T, L: Lr, U: Ur, kvec, roll: phi, bankG: Math.asin(Math.max(-1, Math.min(1, Lr[1]))),
+      grade: run > 1e-12 ? T[1] / run : (T[1] > 0 ? Infinity : -Infinity), _R: R, _x: x };
+  };
+  const us = [0];
+  for (let k = 1; k * step < L - 1e-9; k++) us.push(k * step);
+  if (isLast) us.push(L);
+  const recs = us.map(rec), endRec = rec(L);
+  return { key: blockKey(g), p0, R0: R0.slice(), L, recs, endRec, n: us.length, endL: { x: C.X, theta: endTheta, p: endP, T: tangent(endTheta, endP), R: [Math.cos(endTheta), 0, -Math.sin(endTheta)] }, pl: null };
+}
+
 /** Grow segment g (index gi) as a block, in local coordinates, from pitch p0 and local frame R0. */
 function growBlock(g, gi, p0, R0, step, isLast, work) {
+  if (g.to) return growFlightBlock(g, gi, p0, R0, step, isLast, work);
   const L = g.length, k0 = num(g.k0), k1 = num(g.k1), q0 = num(g.kp0), q1 = num(g.kp1);
   const thAt = (u) => k0 * u + (k1 - k0) * u * u / (2 * L), pAt = (u) => p0 + q0 * u + (q1 - q0) * u * u / (2 * L);
   let x = [0, 0, 0], T = tangent(0, p0), R = R0.slice();
@@ -330,4 +398,4 @@ function headCamera(head, { back = 15, up = 6 } = {}) {
   return { eye: add(sub(head.pos, mul(head.T, back)), mul(head.U, up)), look: head.T.slice(), up: head.U.slice(), target: add(head.pos, mul(head.T, back)) };
 }
 
-module.exports = { buildPath, extendPath, rebuildPathFrom, buildHead, headCamera, doubleReflect, tangent, rotate, angleAbout, _vec: { add, sub, mul, dot, cross, len, unit } };
+module.exports = { buildPath, extendPath, rebuildPathFrom, buildHead, headCamera, doubleReflect, tangent, rotate, angleAbout, flightLength, _vec: { add, sub, mul, dot, cross, len, unit } };
