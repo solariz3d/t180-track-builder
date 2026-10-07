@@ -110,6 +110,26 @@ test('S2 (iii): the floor of the spiral is a smooth helix: the road centre has c
   for (const x of S) { const s = x.s - off; if (s < 20 || s > P2.length - 5) continue; const q = [0, 1, 2].map((k) => x.pos[k] - o[k]), al = q[0] * b0.T[0] + q[1] * b0.T[1] + q[2] * b0.T[2], pp = Math.hypot(...q.map((v, k) => v - al * b0.T[k])); worstR = Math.max(worstR, Math.abs(pp - R0)); }
   assert.ok(worstR <= 5e-3, `the floor centre is ${worstR} m off the radius R from the tube axis`);
 });
+// ── S2 (vi, vii), D268 landing hold: where the heartline still shows. D268 keeps an UNROLLED tube's road centre on the drawn curve whatever its heartline
+// (src/geom/path.js: x + hl·(U0 − U)), so S2 (i, ii) and X1 no longer see how the heartline eases (their tubes close unrolled). A ROLLED tube still turns
+// about its axis, so the heartline's easing shows there: these two rows hold it (the harness's KS2-2 and KS2-4).
+test('S2 (vi): a tube that CLOSES WHILE BANKED (60°): the road centre steps at most 1 mm at every segment joint (the heartline is continuous along the road, never a step per segment)', () => {
+  let d = extend(start(), { length: 100, targets: { phi: 60 * DEG } });
+  d = extend(d, { length: 200, targets: { t: 300 } }); d = extend(d, { length: 200, targets: { t: 360 } });
+  const t = A.toPath(d), segs = t.segments, hl = segs.map((g) => (g.heartline1 === undefined ? 0 : g.heartline1));
+  assert.ok(Math.max(...hl) > 3, `control: the heartline grows in (${Math.max(...hl).toFixed(2)} m)`);
+  assert.ok(Math.abs(t.path.samples[t.path.samples.length - 1].roll - 60 * DEG) < 1e-6, 'control: the tube closes rolled 60°');
+  let worst = 0; for (let j = 1; j < segs.length; j++) { const a = t.path.segEnd[j - 1].pos, b = t.path.samples[t.path.segFirst[j]].pos; worst = Math.max(worst, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])); }
+  assert.ok(worst <= 1e-3, `the road centre steps ${worst} m at a segment joint`);
+});
+test('S2 (vii): an OPEN tube (sweep below 300°) has no roll axis of its own: rolled 90°, its road centre stays on the drawn curve within 1 mm (the heartline grows in from 300° only)', () => {
+  let d = extend(start(), { length: 200, targets: { t: 270 } }); d = extend(d, { length: 200, targets: { phi: 90 * DEG } });
+  const t = A.toPath(d), off = d.pieces[0].length + d.pieces[1].length, S = t.path.samples.filter((x) => x.s >= off);
+  assert.ok(Math.abs(D.valuesAt(d.pieces[2], 100).t - 270) < 1e-6, 'control: the tube is open at 270°');
+  assert.ok(Math.abs(S[S.length - 1].roll - 90 * DEG) < 1e-6, 'control: rolled 90°');
+  const worst = Math.max(...S.map((x) => Math.hypot(x.pos[0] - x._x[0], x.pos[1] - x._x[1], x.pos[2] - x._x[2])));
+  assert.ok(worst <= 1e-3, `the road centre leaves the drawn curve by ${worst} m`);
+});
 test('S4: the validator reads the spiral\'s load: the floor centre\'s normal load is 1 g·(gravity along the floor normal) + v²·κ_helix/g within 0.05 g at 460 km/h (KS4-1: from kvec of the integrated curve it would read 1 g)', () => {
   const d = spiral(), { path, v } = check(d), R0 = 31 / (2 * Math.PI), off = d.pieces[0].length + d.pieces[1].length, P2 = d.pieces[2], bys = new Map(path.samples.map((x) => [x.s, x]));
   const lines = v.lines.filter((l) => l.u === 0 && l.s - off > 30 && l.s - off < P2.length - 30); assert.ok(lines.length > 500);
