@@ -1,0 +1,85 @@
+{
+ "note": "FRICTION of each reference road surface as a percent of AC's road grip (FRICTION 1 = 100). Numbers only.",
+ "tracks": [
+  {
+   "name": "82 % grip",
+   "key": "ROAD",
+   "friction": 0.82,
+   "percent": 82,
+   "value": 82,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "100 % grip",
+   "key": "ROAD",
+   "friction": 1,
+   "percent": 100,
+   "value": 100,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "110 % grip",
+   "key": "SLOW",
+   "friction": 1.1,
+   "percent": 110,
+   "value": 110,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "99 % grip",
+   "key": "ROAD",
+   "friction": 0.99,
+   "percent": 99,
+   "value": 99,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "97 % grip",
+   "key": "TRM-BRC",
+   "friction": 0.97,
+   "percent": 97,
+   "value": 97,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "98 % grip",
+   "key": "ASPH_BRANDS",
+   "friction": 0.98,
+   "percent": 98,
+   "value": 98,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "101 % grip",
+   "key": "START",
+   "friction": 1.01,
+   "percent": 101,
+   "value": 101,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "95 % grip",
+   "key": "PAVE",
+   "friction": 0.95,
+   "percent": 95,
+   "value": 95,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "99.5 % grip",
+   "key": "ASPRBRING",
+   "friction": 0.995,
+   "percent": 99.5,
+   "value": 100,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  },
+  {
+   "name": "99.4 % grip",
+   "key": "ASPH_SILV",
+   "friction": 0.994,
+   "percent": 99.4,
+   "value": 99,
+   "basis": "the road surface's key, chosen by name (the mesh names were not read)"
+  }
+ ]
+}

@@ -93,7 +93,7 @@ function pieceReadout(doc, i) {
       landing: { forwardM: P.forward, leftM: P.left, upM: P.up, headingDeg: P.heading * DEG, pitchDeg: P.pitch * DEG, bankDeg: P.bank * DEG } };   // D258: the pose the UI's number boxes show
   }
   const turn = channelIntegral(P, 'kh'), climb = channelIntegral(P, 'kv');
-  const out = { type: 'road', id: P.id, lengthM: P.length, turnDeg: turn * DEG, climbDeg: climb * DEG,
+  const out = { type: 'road', id: P.id, lengthM: P.length, gripPct: D.gripOf(P), turnDeg: turn * DEG, climbDeg: climb * DEG,   // gripPct: D261, the piece's grip for the hover label
     bankFromDeg: D.channelAt(P, 'phi', 0).v * DEG, bankToDeg: D.channelAt(P, 'phi', P.length).v * DEG,
     cupFromDeg: P.tube ? D.channelAt(P, 't', 0).v / 2 : P.cup ? D.channelAt(P, 'c', 0).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', 0).v, D.channelAt(P, 'r', 0).v),
     cupToDeg: P.tube ? D.channelAt(P, 't', P.length).v / 2 : P.cup ? D.channelAt(P, 'c', P.length).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', P.length).v, D.channelAt(P, 'r', P.length).v),

@@ -37,7 +37,7 @@ const NEGATED = Object.freeze(['kh', 'phi', 'l']);        // what a left/right m
 const MAX_CHARS = 8e6, MAX_PIECES = 2000, MAX_KNOTS = 4000;   // a text, a run and a piece's knots: far above any real track (a 1 km piece has 49 knots), far below a denial of service
 const TOP_KEYS = Object.freeze(['schema', 'generator', 'name', 'start', 'pieces']);
 // the cup, edge and tube flags are IMPLIED by the channel arrays in the text (as in a document's); a piece object may carry them (checkPiece's own output does), if they agree with the arrays
-const ROAD_KEYS = Object.freeze(['type', 'length', 'family', 'knots', 'channels', 'cup', 'edge', 'tube']), FLIGHT_KEYS = Object.freeze(['type', ...D.FLIGHT_POSE]);   // D258: a free flight; its bank is kept as its change from the run's start bank, like phi
+const ROAD_KEYS = Object.freeze(['type', 'length', 'family', 'knots', 'channels', 'cup', 'edge', 'tube', 'grip']), FLIGHT_KEYS = Object.freeze(['type', ...D.FLIGHT_POSE]);   // D258: a free flight; its bank is kept as its change from the run's start bank, like phi
 
 const err = (code, msg) => new D.CoreError(code, msg);
 const q = (x, dec) => { const v = Number(x.toFixed(dec)); return Object.is(v, -0) ? 0 : v; };
@@ -79,7 +79,7 @@ function saveRun(doc, from, to = from, { name } = {}) {
     if (!isRoad(P)) return flightOut(P, -(start.phi || 0));
     const channels = {};
     for (const ch of D.CHANNELS) { if (!hasChannel(P, ch)) continue; channels[ch] = STATE.includes(ch) ? P.channels[ch].map((v) => q(v - start[ch], D.DEC[ch])) : P.channels[ch].slice(); }
-    return { type: 'road', length: P.length, family: P.family, knots: P.knots.slice(), channels, ...(P.cup ? { cup: true } : {}), ...(P.edge ? { edge: true } : {}), ...(P.tube ? { tube: true } : {}) };
+    return { type: 'road', length: P.length, family: P.family, ...(P.grip !== undefined ? { grip: P.grip } : {}), knots: P.knots.slice(), channels, ...(P.cup ? { cup: true } : {}), ...(P.edge ? { edge: true } : {}), ...(P.tube ? { tube: true } : {}) };
   });
   try { return freeze(checkPiece({ schema: SCHEMA, generator: GENERATOR, name, start, pieces })); } catch (e) {
     // every joint inside the lap was already C1, so across the start line a JOINT can only be the line itself (a step the close does not solve, as a cup against a legacy start)
@@ -100,7 +100,7 @@ function absolute(piece, shifts = null) {
       channels[ch] = STATE.includes(ch) ? c.map((v) => q(v + base, D.DEC[ch])) : c.slice();
     }
     for (const ch of Object.keys(D.OPTIONAL)) if (!P[D.OPTIONAL[ch]]) channels[ch] = new Array(P.knots.length + 4).fill(D.OPT_DEFAULT[ch]);   // a piece without the channel: its default, as roadPiece and parse make it (never rendered)
-    return { type: 'road', length: P.length, family: P.family, knots: P.knots.slice(), channels, ...(P.cup ? { cup: true } : {}), ...(P.edge ? { edge: true } : {}), ...(P.tube ? { tube: true } : {}) };
+    return { type: 'road', length: P.length, family: P.family, ...(P.grip !== undefined ? { grip: P.grip } : {}), knots: P.knots.slice(), channels, ...(P.cup ? { cup: true } : {}), ...(P.edge ? { edge: true } : {}), ...(P.tube ? { tube: true } : {}) };
   });
 }
 
@@ -155,7 +155,7 @@ function checkPiece(piece) {
       channels[ch] = c.map((v) => q(v, D.DEC[ch]));
       if (STATE.includes(ch) && channels[ch][0] !== 0 && roads[0] === P) bad('BAD_PIECE_CHANNEL', `${at}: the first piece's ${ch} change must start at 0 (it is stored as the change from the run's start), got ${channels[ch][0]}`);
     }
-    out.pieces.push({ type: 'road', length, family: P.family, knots, channels, ...(f.cup ? { cup: true } : {}), ...(f.edge ? { edge: true } : {}), ...(f.tube ? { tube: true } : {}) });
+    out.pieces.push({ type: 'road', length, family: P.family, ...(P.grip !== undefined && P.grip !== D.GRIP_DEFAULT ? { grip: D.checkGrip(P.grip, `${at}: grip`) } : {}), knots, channels, ...(f.cup ? { cup: true } : {}), ...(f.edge ? { edge: true } : {}), ...(f.tube ? { tube: true } : {}) });
   });
   const first = out.pieces.find(isRoad), sig = signature(first);
   if (out.pieces.filter(isRoad).some((P) => signature(P) !== sig)) bad('MIXED_RUN', 'the run mixes cross-sections (legacy, cup, tube, with or without an edge): a saved run is one kind');
@@ -175,7 +175,7 @@ function checkPiece(piece) {
 }
 
 // ── text ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
-const roadText = (P) => JSON.stringify({ type: 'road', length: P.length, family: P.family, knots: P.knots, channels: Object.fromEntries(D.CHANNELS.filter((ch) => P.channels[ch] !== undefined).map((ch) => [ch, P.channels[ch]])) });
+const roadText = (P) => JSON.stringify({ type: 'road', length: P.length, family: P.family, ...(P.grip !== undefined && P.grip !== D.GRIP_DEFAULT ? { grip: P.grip } : {}), knots: P.knots, channels: Object.fromEntries(D.CHANNELS.filter((ch) => P.channels[ch] !== undefined).map((ch) => [ch, P.channels[ch]])) });
 const pieceText = (P) => (isRoad(P) ? roadText(P) : JSON.stringify(flightOut(P, 0)));
 /** The canonical text of a piece (checked first): stable key order, one piece to a line, a final newline. */
 function serialize(piece) {
