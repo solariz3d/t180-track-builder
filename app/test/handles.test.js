@@ -232,66 +232,65 @@ test('row 12: the label shows the exact value the drag sets, and what a double-c
   R.S.fire('pointerup', { clientX: x, clientY: y }); R.drag('length:0', 40); const l = R.at('length:0'); texts.length = 0; R.S.fire('pointermove', { clientX: l.x, clientY: l.y }); R.S.tick(); assert.equal(texts[texts.length - 1], 'length 176.8 m · double-click: 160.0', 'length: a double-click would put back 160');
 });
 
-// D251 item 5: POINTER LOCK. A stage that can lock: requestPointerLock answers by firing pointerlockchange (or pointerlockerror), the document says which element holds it
-function lockRig(mode) {   // mode: 'grant' | 'refuse' | 'reject' | 'throw' | 'none'
-  const S = fakeStage(), doc = S.stage.ownerDocument, dl = {}; let n = 0;
-  doc.addEventListener = (t, f) => { (dl[t] = dl[t] || []).push(f); }; doc.removeEventListener = (t, f) => { dl[t] = (dl[t] || []).filter((g) => g !== f); }; doc.pointerLockElement = null;
-  const emit = (t) => (dl[t] || []).slice().forEach((f) => f({}));
-  doc.exitPointerLock = () => { n++; doc.pointerLockElement = null; emit('pointerlockchange'); };
-  if (mode !== 'none') S.stage.requestPointerLock = () => {
-    if (mode === 'throw') throw new Error('not allowed');
-    if (mode === 'reject') return Promise.reject(new Error('refused'));
-    if (mode === 'refuse') { emit('pointerlockerror'); return undefined; }
-    doc.pointerLockElement = S.stage; emit('pointerlockchange'); return undefined;
-  };
+// D270 (the keeper, 14:32: "when you first click the points on the track, there is this window that says tauri.localhost to show your cursor press ESC. i DONT want that"): NO POINTER LOCK. Chromium draws that
+// notice itself whenever a page locks the pointer and nothing in WebView2 or Tauri turns it off, so a grab holds the pointer with setPointerCapture, hides the cursor, and gives it back at the handle on release.
+// A stage that spies on requestPointerLock and a document that lists its listeners; win.__TAURI__ is the native window (setCursorPosition), present or not.
+function grabRig(native = 'ok') {   // native: 'ok' | 'none' | 'throw' | 'reject'
+  const S = fakeStage(), doc = S.stage.ownerDocument, dl = {}; let locks = 0, exits = 0;
+  doc.addEventListener = (t, f) => { (dl[t] = dl[t] || []).push(f); }; doc.removeEventListener = (t, f) => { dl[t] = (dl[t] || []).filter((g) => g !== f); };
+  doc.exitPointerLock = () => { exits++; };
+  S.stage.requestPointerLock = () => { locks++; };
+  const warps = [], caps = [], cursors = []; S.stage.setPointerCapture = (id) => caps.push(id);
+  let shown = ''; Object.defineProperty(S.stage.style, 'cursor', { get: () => shown, set: (v) => { shown = v; cursors.push(v); } });
+  if (native !== 'none') S.win.__TAURI__ = { dpi: { LogicalPosition: class { constructor(x, y) { this.x = x; this.y = y; } } }, window: { getCurrentWindow: () => ({ setCursorPosition: (p) => { warps.push([p.x, p.y]); if (native === 'throw') throw new Error('denied'); return native === 'reject' ? Promise.reject(new Error('denied')) : Promise.resolve(); } }) } };
   const calls = [], cur = { turn: 2, width: 31, length: 160, bank: 0 };
   const host = { model: () => ({ ...MODEL, kinds: ['width', 'turn', 'length', 'bank'], base: (k) => cur[k], ctx: () => ({ half: 10 }) }), pose: () => POSE,
     begin: (h) => calls.push(['begin', h.id]), apply: (h, v, mods, final) => { cur[h.kind] = v; calls.push(['apply', h.id, v, !!final]); }, end: (h) => calls.push(['end', h.id]) };
   const ov = HD.mount(S.stage, S.win, host); S.tick();
-  return { S, ov, doc, calls, cur, exits: () => n, listeners: dl, at: (id) => ov.handles().find((x) => x.id === id).screen };
+  return { S, ov, doc, calls, cur, locks: () => locks, exits: () => exits, warps, caps, cursors, listeners: dl, key: (k) => (dl.keydown || []).slice().forEach((f) => f({ type: 'keydown', key: k })), at: (id) => ov.handles().find((x) => x.id === id).screen };
 }
 
-test('row 13: pointer lock: a press on a handle asks for it; locked, the drag runs on the movement (the first one after the lock, which Chromium fills with the jump to the lock, is dropped) and the pointer\'s own position is ignored, so it never stops at the screen edge; release unlocks', () => {
-  const R = lockRig('grant'), t = R.at('turn:1'), u = [t.dx / t.len, t.dy / t.len];
-  R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); assert.equal(R.doc.pointerLockElement, R.S.stage, 'the stage holds the lock');
-  // locked, the events carry the click point (clientX/Y do not move). The first movement is the spike seen in the window, (64, -112); then 16 steps of 50 px along the arrow's opposite: 800 px, far past the 900 x 600 stage
-  R.S.fire('pointermove', { clientX: t.x, clientY: t.y, movementX: 0, movementY: 0 }); R.S.fire('pointermove', { clientX: t.x, clientY: t.y, movementX: 64, movementY: -112 });
-  let total = 0; for (let i = 0; i < 16; i++) { total -= 50; R.S.fire('pointermove', { clientX: t.x, clientY: t.y, movementX: -u[0] * 50, movementY: -u[1] * 50 }); }
+test('row 13: no pointer lock (D270): a grab never asks for one and registers no lock listener, so Chromium has no notice to show; the pointer is captured, the cursor is hidden for the drag and the value follows the pointer past the stage at the same pixel speed', () => {
+  const R = grabRig(), t = R.at('turn:1'), u = [t.dx / t.len, t.dy / t.len];
+  R.S.fire('pointerdown', { clientX: t.x, clientY: t.y, pointerId: 7 });
+  assert.equal(R.locks(), 0, 'requestPointerLock is not called'); assert.deepEqual(R.caps, [7], 'the pointer is captured instead'); assert.equal(R.S.stage.style.cursor, 'none', 'the cursor is hidden during the drag');
+  assert.equal((R.listeners.pointerlockchange || []).length + (R.listeners.pointerlockerror || []).length, 0, 'no lock listeners');
+  // 16 steps of 50 px along the arrow's opposite: 800 px, past the 900 x 600 stage (a captured pointer keeps reporting its position outside it)
+  let total = 0; for (let i = 0; i < 16; i++) { total -= 50; R.S.fire('pointermove', { clientX: t.x + u[0] * total, clientY: t.y + u[1] * total }); }
   R.S.tick(); const last = R.calls.filter((c) => c[0] === 'apply').pop();
-  assert.equal(last[2], HD.targetFor('turn', 2, total, {}, {}), 'the value follows the 800 px of travel and not the spike'); assert.ok(last[2] > -90 && last[2] < 2, `control: not clamped (${last[2]})`);
-  assert.ok(Math.abs(t.x + u[0] * total) > 900 || Math.abs(t.y + u[1] * total) > 600, 'control: that travel is beyond the stage, which a drag on the pointer\'s position could not give');
-  R.S.fire('pointerup', { clientX: t.x, clientY: t.y }); assert.equal(R.exits(), 1, 'release unlocks'); assert.equal(R.doc.pointerLockElement, null);
-  assert.deepEqual(R.calls.slice(-2).map((c) => c[0]), ['apply', 'end']); assert.equal(R.cur.turn, HD.targetFor('turn', 2, total, {}, {}), 'the release did not reset the drag to the click point');
+  assert.equal(last[2], HD.targetFor('turn', 2, total, {}, {}), 'the same value the D251 rate gives for that travel'); assert.ok(last[2] > -90 && last[2] < 2, `control: not clamped (${last[2]})`);
+  R.S.fire('pointerup', { clientX: t.x + u[0] * total, clientY: t.y + u[1] * total });
+  assert.equal(R.locks(), 0); assert.equal(R.exits(), 0, 'and nothing to unlock'); assert.equal(R.S.stage.style.cursor, '', 'release gives the cursor back'); assert.deepEqual(R.calls.slice(-2).map((c) => c[0]), ['apply', 'end']);
+  assert.deepEqual(R.warps, [[t.x, t.y]], 'and puts it back at the handle that was grabbed');
 });
 
-test('row 13b: the lock refused, or the WebView has none: the drag is today\'s, on the pointer\'s position; every refusal shape', () => {
-  for (const mode of ['refuse', 'reject', 'throw', 'none']) {
-    const R = lockRig(mode), t = R.at('turn:1'), u = [t.dx / t.len, t.dy / t.len];
-    R.S.fire('pointerdown', { clientX: t.x, clientY: t.y });
-    return_(R, mode, t, u);
-  }
-  function return_(R, mode, t, u) {
-    // (a rejected promise settles in a later tick: the drag has worked on position the whole time, so it needs no waiting for)
-    R.S.fire('pointermove', { clientX: t.x + u[0] * -20, clientY: t.y + u[1] * -20, movementX: 999, movementY: 999 }); R.S.tick();
-    assert.equal(R.calls.filter((c) => c[0] === 'apply').pop()[2], 0, `${mode}: 20 px by position (movementX is ignored when there is no lock): 2 - 1.66 held at 0`);
-    R.S.fire('pointerup', { clientX: t.x + u[0] * -20, clientY: t.y + u[1] * -20 }); assert.equal(R.exits(), 0, `${mode}: nothing to unlock`); assert.equal(R.cur.turn, 0);
+test('row 13b: the cursor goes back at the handle through the native window when there is one; with none (a browser, a test host) or a refusal the release still ends cleanly', () => {
+  for (const native of ['none', 'throw', 'reject']) {
+    const R = grabRig(native), t = R.at('turn:1'), u = [t.dx / t.len, t.dy / t.len];
+    R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: t.x + u[0] * -20, clientY: t.y + u[1] * -20 }); R.S.tick();
+    assert.equal(R.calls.filter((c) => c[0] === 'apply').pop()[2], 0, `${native}: 20 px: 2 - 1.66 held at 0`);
+    R.S.fire('pointerup', { clientX: t.x + u[0] * -20, clientY: t.y + u[1] * -20 }); assert.equal(R.ov.dragging(), false, `${native}: the drag ended`); assert.equal(R.S.stage.style.cursor, '', `${native}: the cursor is back`); assert.equal(R.cur.turn, 0);
+    assert.equal(R.warps.length, native === 'none' ? 0 : 1, `${native}: the native move was tried once, or not at all`);
   }
 });
 
-test('row 13c: Esc (the browser unlocks while the button is down) ends the drag where it is; and unmount unlocks', () => {
-  const R = lockRig('grant'), t = R.at('turn:1'), u = [t.dx / t.len, t.dy / t.len];
-  R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: t.x, clientY: t.y, movementX: 0, movementY: 0 }); R.S.fire('pointermove', { clientX: t.x, clientY: t.y, movementX: 64, movementY: -112 }); R.S.fire('pointermove', { clientX: t.x, clientY: t.y, movementX: u[0] * -100, movementY: u[1] * -100 }); R.S.tick();
-  R.doc.pointerLockElement = null; R.listeners.pointerlockchange.forEach((f) => f({}));   // Esc: the browser took the lock away, not us
-  assert.equal(R.ov.dragging(), false, 'the drag ended'); assert.deepEqual(R.calls.slice(-2).map((c) => c[0]), ['apply', 'end']); assert.equal(R.cur.turn, HD.targetFor('turn', 2, -100, {}, {}), 'at the value it had reached'); assert.equal(R.exits(), 0, 'we did not unlock what was already unlocked');
-  // a later press works again; unmount while locked gives the lock back
-  R.S.fire('pointerdown', { clientX: t.x, clientY: t.y, timeStamp: 5000 }); assert.equal(R.doc.pointerLockElement, R.S.stage); R.ov.unmount(); assert.equal(R.exits(), 1, 'unmount unlocks'); assert.equal((R.listeners.pointerlockchange || []).length, 0, 'and takes the lock listeners off');
+test('row 13c: Esc ends the drag where it is, as a release does, and gives the cursor back; Esc with no drag, or another key, does nothing; unmount takes the key listener off', () => {
+  const R = grabRig(), t = R.at('turn:1'), u = [t.dx / t.len, t.dy / t.len];
+  R.key('Escape'); assert.deepEqual(R.calls, [], 'Esc with no drag does nothing');
+  R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: t.x + u[0] * -100, clientY: t.y + u[1] * -100 }); R.S.tick();
+  R.key('a'); assert.equal(R.ov.dragging(), true, 'another key leaves it');
+  R.key('Escape');
+  assert.equal(R.ov.dragging(), false, 'the drag ended'); assert.deepEqual(R.calls.slice(-2).map((c) => c[0]), ['apply', 'end']); assert.equal(R.cur.turn, HD.targetFor('turn', 2, -100, {}, {}), 'at the value it had reached'); assert.equal(R.S.stage.style.cursor, '', 'the cursor is back'); assert.deepEqual(R.warps, [[t.x, t.y]]);
+  R.S.fire('pointerup', { clientX: t.x, clientY: t.y }); assert.equal(R.calls.filter((c) => c[0] === 'end').length, 1, 'the button coming up afterwards ends nothing twice');
+  // a later press works again; unmount while dragging gives the cursor back and the key listener up
+  R.S.fire('pointerdown', { clientX: t.x, clientY: t.y, timeStamp: 5000 }); assert.equal(R.S.stage.style.cursor, 'none'); R.ov.unmount(); assert.equal(R.S.stage.style.cursor, '', 'unmount gives the cursor back'); assert.equal((R.listeners.keydown || []).length, 0, 'and takes the key listener off');
 });
 
-test('row 11b: the double-click is two presses within 400 ms on one handle that changed nothing, so it works while the pointer is locked (no dblclick event comes then, seen in the window); a drag between them, or a pause, is not one', () => {
+test('row 11b: the double-click is two presses within 400 ms on one handle that changed nothing (no dblclick need come); a drag between them, or a pause, is not one', () => {
   const press = (R, id, ts, dx = 0) => { const a = R.at(id); R.S.fire('pointerdown', { clientX: a.x, clientY: a.y, timeStamp: ts }); R.S.fire('pointerup', { clientX: a.x + dx, clientY: a.y, timeStamp: ts + 40 }); };
-  let R = lockRig('grant'); press(R, 'turn:1', 1000); assert.equal(R.cur.turn, 2, 'one click changes nothing'); press(R, 'turn:1', 1200); assert.ok(Object.is(R.cur.turn, 0), 'the second press, 160 ms after the first release, resets turn to 0'); assert.equal(R.doc.pointerLockElement, null, 'the reset left no lock behind');
-  R = lockRig('grant'); press(R, 'turn:1', 1000); press(R, 'turn:1', 1600); assert.equal(R.cur.turn, 2, 'a pause longer than 400 ms is two single clicks');
-  R = lockRig('grant'); const a = R.at('length:0'), u = [a.dx / a.len, a.dy / a.len]; R.S.fire('pointerdown', { clientX: a.x, clientY: a.y, timeStamp: 1000 }); R.S.fire('pointermove', { clientX: a.x, clientY: a.y, movementX: 0, movementY: 0 }); R.S.fire('pointermove', { clientX: a.x, clientY: a.y, movementX: 7, movementY: 7 }); R.S.fire('pointermove', { clientX: a.x, clientY: a.y, movementX: u[0] * 40, movementY: u[1] * 40 }); R.S.tick(); R.S.fire('pointerup', { clientX: a.x, clientY: a.y, timeStamp: 1100 });
+  let R = grabRig(); press(R, 'turn:1', 1000); assert.equal(R.cur.turn, 2, 'one click changes nothing'); press(R, 'turn:1', 1200); assert.ok(Object.is(R.cur.turn, 0), 'the second press, 160 ms after the first release, resets turn to 0'); assert.equal(R.S.stage.style.cursor, '', 'the reset left the cursor shown');
+  R = grabRig(); press(R, 'turn:1', 1000); press(R, 'turn:1', 1600); assert.equal(R.cur.turn, 2, 'a pause longer than 400 ms is two single clicks');
+  R = grabRig(); const a = R.at('length:0'), u = [a.dx / a.len, a.dy / a.len]; R.S.fire('pointerdown', { clientX: a.x, clientY: a.y, timeStamp: 1000 }); R.S.fire('pointermove', { clientX: a.x + u[0] * 40, clientY: a.y + u[1] * 40 }); R.S.tick(); R.S.fire('pointerup', { clientX: a.x + u[0] * 40, clientY: a.y + u[1] * 40, timeStamp: 1100 });
   assert.equal(R.cur.length, 176.8); press(R, 'length:0', 1200); assert.equal(R.cur.length, 176.8, 'a press right after a DRAG is not a double-click'); press(R, 'length:0', 1300); assert.equal(R.cur.length, 160, 'but a click and a click after it is: back to before the drag');
 });
 

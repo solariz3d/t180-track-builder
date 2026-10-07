@@ -169,7 +169,7 @@ function mount(stage, win, host) {
   canvas.setAttribute('aria-label', 'drag handles');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
   stage.append(canvas);
-  let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0, pre = null, lockChanged = null, lockFailed = null, lastClick = null;   // lastClick: { id, t } the last press-and-release on a handle that changed nothing (the first half of a double-click)   // pre: { kind, from, to } the last drag that moved a value (the double-click's "before the drag")
+  let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0, pre = null, onKeyDown = null, lastClick = null;   // lastClick: { id, t } the last press-and-release on a handle that changed nothing (the first half of a double-click)   // pre: { kind, from, to } the last drag that moved a value (the double-click's "before the drag")
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const layout = () => {
     model = host.model(); const pose = host.pose(), W = stage.clientWidth, H = stage.clientHeight;
@@ -221,40 +221,35 @@ function mount(stage, win, host) {
     const m = model; if (!m) return;
     const now = typeof e.timeStamp === 'number' ? e.timeStamp : Date.now();
     if (lastClick && lastClick.id === h.id && now - lastClick.t < DOUBLE_MS) { lastClick = null; resetHandle(h); return; }
-    drag = { h, x0: x, y0: y, v: { x, y }, lock: 'none', axis: h.screen, base: m.base(h.kind), ctx: m.ctx(h.kind), value: m.base(h.kind) };
-    host.begin(h); wantLock();
+    drag = { h, x0: x, y0: y, cx: e.clientX, cy: e.clientY, moved: false, v: { x, y }, axis: h.screen, base: m.base(h.kind), ctx: m.ctx(h.kind), value: m.base(h.kind) };
+    host.begin(h); stage.style.cursor = 'none';
     if (stage.setPointerCapture && e.pointerId !== undefined) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* the pointer is gone */ } }
   };
-  // D251 item 5 (the keeper, 11:29): POINTER LOCK. Pressing a handle locks the pointer where it clicked, so the cursor does not travel and a drag never stops at the screen edge; the drag then runs on movementX/Y
-  // (the virtual position `drag.v` is the click point plus the movement so far). If the lock is refused, or the WebView has none, the drag is today's (the pointer's own position). Release unlocks; Esc (the
-  // browser's own unlock) ends the drag where it is, as a release does.
-  const wantLock = () => {
-    if (typeof stage.requestPointerLock !== 'function') { drag.lock = 'none'; return; }
-    drag.lock = 'pending';
-    try { const p = stage.requestPointerLock(); if (p && typeof p.catch === 'function') p.catch(() => { if (drag && drag.lock === 'pending') drag.lock = 'refused'; }); } catch (err) { drag.lock = 'refused'; }
+  // D270 (the keeper, 14:32: no "to show your cursor press ESC" window): NO POINTER LOCK. D251 locked the pointer on a press so a drag never stopped at the screen edge, but Chromium draws that notice itself whenever a
+  // page locks the pointer, and no WebView2 or Tauri setting turns it off. A grab now holds the pointer with setPointerCapture (above: it keeps reporting its position outside the stage), hides the cursor for
+  // the drag, and on release puts it back at the handle that was grabbed through the native window (Tauri's setCursorPosition, when there is one; a browser or a test host has none and the cursor simply stays
+  // where the drag ended). Esc ends the drag where it is, as a release does. The value is the pointer's own position, so the per-pixel speeds are D251's to the pixel.
+  const putCursorBack = (d) => {
+    const T = win.__TAURI__, w = T && T.window && T.window.getCurrentWindow && T.window.getCurrentWindow(), P = T && T.dpi && T.dpi.LogicalPosition;
+    if (!d.moved || !w || !w.setCursorPosition || !P) return;
+    const failed = (err) => console.warn('handles: the cursor could not be put back at the handle:', err && err.message ? err.message : err);   // cosmetic: the drag is already over
+    try { const r = w.setCursorPosition(new P(d.cx, d.cy)); if (r && typeof r.catch === 'function') r.catch(failed); } catch (err) { failed(err); }
   };
-  const onLockChange = () => {
-    if (!drag) return;
-    if (doc.pointerLockElement === stage) { drag.lock = 'on'; drag.skip = true; }
-    else if (drag.lock === 'on') { drag.lock = 'lost'; onUp(null); }   // Esc, or the window lost focus: the drag ends here
-  };
-  const onLockError = () => { if (drag && drag.lock === 'pending') drag.lock = 'refused'; };
-  const unlock = () => { if (doc.exitPointerLock && doc.pointerLockElement === stage) { try { doc.exitPointerLock(); } catch (err) { /* already unlocked */ } } };
-  lockChanged = onLockChange; lockFailed = onLockError;
-  if (doc.addEventListener) { doc.addEventListener('pointerlockchange', lockChanged); doc.addEventListener('pointerlockerror', lockFailed); }
+  onKeyDown = (e) => { if (drag && e && e.key === 'Escape') onUp(null); };
+  if (doc.addEventListener) doc.addEventListener('keydown', onKeyDown);
   const onMove = (e) => {
     const [x, y] = rel(e);
     if (drag) {
-      if (drag.lock === 'on') { const mx = e.movementX || 0, my = e.movementY || 0; if (drag.skip && (mx || my)) { drag.skip = false; return; } drag.v.x += mx; drag.v.y += my; } else drag.v = { x, y };
+      drag.v = { x, y }; drag.moved = true;
       waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; if (!frameReq) frameReq = win.requestAnimationFrame(flush); return; }
     const h = hitTest(drawn, x, y); hover = h; stage.style.cursor = h ? cursorFor(h.screen) : '';
   };
   const onUp = (e) => {
     if (!drag) return;
     if (frameReq) { win.cancelAnimationFrame(frameReq); frameReq = 0; }
-    if (e && e.clientX !== undefined) { if (drag.lock !== 'on') { const [x, y] = rel(e); drag.v = { x, y }; } waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; }
-    const wasLocked = drag.lock === 'on'; apply(true); const h = drag.h; if (drag.value !== drag.base) { pre = { kind: h.kind, from: drag.base, to: drag.value }; lastClick = null; } else lastClick = { id: h.id, t: e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now() };
-    drag = null; if (wasLocked) unlock(); host.end(h); stage.style.cursor = '';
+    if (e && e.clientX !== undefined) { const [x, y] = rel(e); drag.v = { x, y }; drag.moved = drag.moved || x !== drag.x0 || y !== drag.y0; waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; }
+    apply(true); const h = drag.h, d = drag; if (drag.value !== drag.base) { pre = { kind: h.kind, from: drag.base, to: drag.value }; lastClick = null; } else lastClick = { id: h.id, t: e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now() };
+    drag = null; stage.style.cursor = ''; putCursorBack(d); host.end(h);
   };
   // D251: a double-click ON a handle resets it: 0 for bank, turn and climb; the value before the last drag for length, width and cup (kept only while the field still reads what that drag set, so a value typed
   // since, or another piece, is not "put back" to a stale one). Taken in the capture phase like the press, so the camera's own double-click does not also fire.
@@ -273,7 +268,7 @@ function mount(stage, win, host) {
   raf = win.requestAnimationFrame(frame);
   return {
     handles: () => drawn.slice(), hovered: () => hover, dragging: () => !!drag,
-    unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) { doc.removeEventListener('pointerlockchange', lockChanged); doc.removeEventListener('pointerlockerror', lockFailed); } if (drag && drag.lock === 'on') unlock(); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
+    unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) doc.removeEventListener('keydown', onKeyDown); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
   };
 }
 
