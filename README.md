@@ -53,8 +53,9 @@ and so on), and two pieces always meet without a kink or a step in any of them. 
 - **Edge angle** (°) **and edge start** (a share of the half-width, 0.5 to 0.95): how far the outer part of the road
   curls up, and where across the road it begins.
 - **Tube sweep** (°, up to 360): the road wraps round into a tube. A closed tube is a pipe the car drives inside.
-- **Jumps.** **Add jump** places a flight at the open end: its gap, its drop and its landing angle. The take-off and the
-  landing ramp are built from them, and the car's arc is drawn over the preview.
+- **Jumps.** **Jump** (beside Extend) places the piece the fields describe, then a free landing: a 60 m straight, 40 m ahead at the same height, lined up. Nothing is
+  solved across the air: you move the landing (drag its arrows on the track, or type forward, sideways, height, heading, pitch and bank), export, drive it in Assetto Corsa
+  and move it again until it works. It is movable while it is the last piece; Extend from it fixes it (delete back to it to move it again).
 
 Each field has an **at start** tick: reach the value at the start of the piece instead of easing to it along the piece.
 

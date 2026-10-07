@@ -7,6 +7,7 @@
 //   4  value from drag: each kind's rate, its clamps, its rounding, Shift (a tenth of the speed) and Ctrl (snap to 5 degrees, 10 m, 5 m)
 //   5  the screen: where a handle is, one metre along its axis in px, behind the camera, an axis seen end-on
 //   6  hit test: the nearest handle inside the radius, none outside
+//  14  D258: the free jump's landing kinds: four marks at the landing, each out along its own arrow (the take-off's heading frame), their speeds, holds, snaps and resets
 //   8  D251: the speed is per PIXEL: the same drag in px gives the same value zoomed in or out
 //   9  D251: the detents: a drag holds about 6 px at the value it started from and, for bank, turn and climb, at 0
 //  10  D251: the value is rounded to the kind's step even with Shift, so a fine drag lands on 0.0, not 0.03
@@ -292,4 +293,21 @@ test('row 11b: the double-click is two presses within 400 ms on one handle that 
   R = lockRig('grant'); press(R, 'turn:1', 1000); press(R, 'turn:1', 1600); assert.equal(R.cur.turn, 2, 'a pause longer than 400 ms is two single clicks');
   R = lockRig('grant'); const a = R.at('length:0'), u = [a.dx / a.len, a.dy / a.len]; R.S.fire('pointerdown', { clientX: a.x, clientY: a.y, timeStamp: 1000 }); R.S.fire('pointermove', { clientX: a.x, clientY: a.y, movementX: 0, movementY: 0 }); R.S.fire('pointermove', { clientX: a.x, clientY: a.y, movementX: 7, movementY: 7 }); R.S.fire('pointermove', { clientX: a.x, clientY: a.y, movementX: u[0] * 40, movementY: u[1] * 40 }); R.S.tick(); R.S.fire('pointerup', { clientX: a.x, clientY: a.y, timeStamp: 1100 });
   assert.equal(R.cur.length, 176.8); press(R, 'length:0', 1200); assert.equal(R.cur.length, 176.8, 'a press right after a DRAG is not a double-click'); press(R, 'length:0', 1300); assert.equal(R.cur.length, 160, 'but a click and a click after it is: back to before the drag');
+});
+
+test('row 14: the landing\'s kinds (D258): four free marks at the landing, each out along its own arrow, the arrows ARE the take-off\'s heading frame; their speeds, holds, snaps, resets and labels', () => {
+  const free = { pos: [10, 2, 100], T0: [0, 0, 1], L0: [1, 0, 0], U0: [0, 1, 0], T1: [0.6, 0, 0.8], L1: [0.8, 0, -0.6] };
+  const list = HD.placeHandles({ ...MODEL, kinds: HD.LANDING_ORDER, free }), h = byId(list);
+  assert.deepEqual(list.map((x) => x.id), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'one mark each, in order');
+  assert.deepEqual([h['landfwd:0'].pos, h['landfwd:0'].axis], [[10, 2, 110], [0, 0, 1]], 'forward: 10 m ahead of the landing, its arrow along the take-off\'s heading');
+  assert.deepEqual([h['landleft:0'].pos, h['landleft:0'].axis], [[18, 2, 100], [1, 0, 0]], 'sideways: 8 m to the left, its arrow to the left'); assert.deepEqual([h['landup:0'].pos, h['landup:0'].axis], [[10, 8, 100], [0, 1, 0]], 'height: 6 m up, its arrow up');
+  assert.deepEqual(h['landturn:0'].axis, [0.8, 0, -0.6], 'heading: along the landing\'s own left'); close(h['landturn:0'].pos[0], 19, 1e-12); close(h['landturn:0'].pos[2], 112, 1e-12); close(h['landturn:0'].pos[1], 2, 1e-12);
+  assert.equal(new Set(list.map((x) => x.pos.join())).size, 4, 'no two marks on one point: they can be picked apart');
+  assert.deepEqual(HD.placeHandles({ ...MODEL, kinds: HD.LANDING_ORDER }), [], 'no landing frame, no marks'); assert.deepEqual(HD.placeHandles({ ...MODEL, kinds: HD.LANDING_ORDER, free: { pos: [0, 0, 0] } }), [], 'a frame without its axes places nothing');
+  const T = HD.targetFor; assert.equal(T('landfwd', 40, 100), 55, 'forward: 0.15 m a pixel'); assert.equal(T('landleft', 0, 100), 10, 'sideways: 0.1 m'); assert.equal(T('landup', 0, 100), 5, 'height: 0.05 m'); assert.equal(T('landturn', 0, 100), 10, 'heading: 0.1 degree');
+  assert.equal(T('landup', 0, 200, {}, { shift: true }), 1, 'Shift: a tenth'); assert.equal(T('landfwd', 40, 33, {}, { ctrl: true }), 45, 'Ctrl snaps forward to 5 m'); assert.equal(T('landleft', 3.2, 0, {}, { ctrl: true }), 3, 'sideways to 1 m'); assert.equal(T('landturn', 0, 52, {}, { ctrl: true }), 5, 'heading to 5 degrees');
+  assert.equal(T('landfwd', 40, 3), 40, 'forward holds its start'); assert.equal(T('landleft', 8, -70), 1, 'sideways moves'); assert.equal(T('landleft', 8, -78), 0, 'and holds at 0: inside 6 px (0.6 m)'); assert.ok(Object.is(T('landup', 0.2, 0), 0.2) && Object.is(T('landturn', -1, 8), 0), 'height holds its start; heading holds at 0');
+  assert.equal(T('landfwd', 40, 1e6), 2000); assert.equal(T('landturn', 0, -1e6), -180); assert.equal(T('landup', 0, -1e6), -500);
+  assert.equal(HD.resetValue('landleft', 12), 0); assert.equal(HD.resetValue('landup', null), 0); assert.equal(HD.resetValue('landturn', 5), 0); assert.equal(HD.resetValue('landfwd', 55), 55, 'forward goes back to before its drag'); assert.equal(HD.resetValue('landfwd', null), null, 'or nowhere');
+  assert.equal(HD.format('landfwd', 40), 'forward 40.0 m'); assert.equal(HD.format('landleft', -8), 'sideways -8.0 m'); assert.equal(HD.format('landup', 3.5), 'height 3.5 m'); assert.equal(HD.format('landturn', 10), 'heading 10.0°');
 });
