@@ -165,12 +165,13 @@ function ensureDiffuse(scene) {
  * every per-mesh field writeKn5 writes besides the geometry) are joined: positions, normals and uvs concatenated as they are (the same Float32
  * values, so every vertex is byte-identical in world space), the indices offset. A chunk closes before it would pass `maxVerts` (65,536: writeKn5
  * stores 16-bit indices) or when its bounding box's diagonal would pass `chunkM` (400 m, so AC can still leave off what is out of view).
- * The merged meshes are named `1ROAD_chunk_<n>` and `UNDERSKIN_chunk_<n>`: a road chunk keeps the `1ROAD` physics prefix (surfaces.ini's ROAD, and
+ * The merged meshes are named `1ROAD_<piece>_chunk_<n>` and `UNDERSKIN_<piece>_chunk_<n>`, after the piece of their FIRST mesh (a textured piece's
+ * floor is its own material, so its road is a chunk of its own and still carries its name): a road chunk keeps the `1ROAD` physics prefix (surfaces.ini's ROAD, and
  * the soft-collision block's `MESHES=1ROAD?`), and a skin chunk stays a non-physics name. A chunk of ONE mesh is that mesh, unchanged (its name too).
  * Everything else (markers, walls, paint, the pit lane, a test export's end wall) is kept as it is, in place: a chunk sits where its first mesh sat.
  * Tangents are writeKn5's, from each vertex's own triangles; a merge shares no vertex between meshes, so they are the same.
  */
-const MERGE_CLASSES = Object.freeze([{ re: /^1ROAD_(?!PIT)/, prefix: '1ROAD_chunk_' }, { re: /^UNDERSKIN_/, prefix: 'UNDERSKIN_chunk_' }]);
+const MERGE_CLASSES = Object.freeze([{ re: /^1ROAD_(?!PIT)/, base: '1ROAD_' }, { re: /^UNDERSKIN_/, base: 'UNDERSKIN_' }]);
 const MERGE_MAX_VERTS = 65536, MERGE_CHUNK_M = 400;
 function mergeForAc(scene, { maxVerts = MERGE_MAX_VERTS, chunkM = MERGE_CHUNK_M } = {}) {
   const kids = scene.root.children, out = [], open = new Map(), taken = new Set(kids.map((n) => n.name));
@@ -190,7 +191,8 @@ function mergeForAc(scene, { maxVerts = MERGE_MAX_VERTS, chunkM = MERGE_CHUNK_M 
   const children = out.map((x) => {
     if (!x.parts) return x;
     if (x.parts.length === 1) return x.parts[0];
-    let name; do { name = `${MERGE_CLASSES[x.c].prefix}${count[x.c]++}`; } while (taken.has(name)); taken.add(name);
+    const base = MERGE_CLASSES[x.c].base, piece = x.parts[0].name.slice(base.length).split('_')[0] || 'x';
+    let name; do { name = `${base}${piece}_chunk_${count[x.c]++}`; } while (taken.has(name)); taken.add(name);
     const positions = new Float32Array(x.nv * 3), normals = new Float32Array(x.nv * 3), uvs = new Float32Array(x.nv * 2);
     const indices = new Uint16Array(x.parts.reduce((a, p) => a + p.indices.length, 0));
     let v = 0, t = 0;
