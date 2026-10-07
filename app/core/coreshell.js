@@ -74,7 +74,8 @@ const XS = require('./xsec.js');   // the cross-section channels' names (D225): 
 const CL = require('./centreline.js');   // D244b: the Sculpt guard (the centreline must not move)
 const JU = require('../../src/core/jump.js');   // D258: the free jump (E): a free flight and the landing you place by hand
 const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
-const LD = require('./landing.js');   // the landing's number boxes: values and units
+const LD = require('./landing.js');
+const GL = require('./griplike.js');   // D261: the grip field's checks and words   // the landing's number boxes: values and units
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted (D239)
@@ -479,6 +480,23 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return set({ selection: Object.freeze({ base: d, anchor, from, to, longWay, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, message: null });
     },
     clearSelection: () => set({ selection: null, deleteProposal: null, message: null }),
+    /**
+     * D261, GRIP of the selected pieces (the keeper: "change which piece has different grip"; the core is src/core/document.js setGrip, E's): `g` a whole percent 50 to 150 (a number or the field's
+     * text; anything else is refused in plain words, nothing changes). Only ROAD has grip, so a flight in the selection is left as it is. ONE undo step; the selection stays on the pieces.
+     * 100 is AC's own road and writes no grip at all.
+     */
+    setGrip(g) {
+      const s = st.selection, d = doc();
+      if (!s || s.base !== d) return set({ message: 'select the pieces first: click a piece on the track (shift-click for a run)' });
+      const c = GL.check(g); if (!c.ok) return set({ message: c.why });
+      const idx = d.pieces.map((P, i) => (s.ids.includes(P.id) && P.type === 'road' ? i : -1)).filter((i) => i >= 0);
+      if (!idx.length) return set({ message: 'the selection has no road piece: only road has grip' });
+      if (idx.every((i) => D.gripOf(d.pieces[i]) === c.grip)) return set({ ...ok(`the selected piece${idx.length === 1 ? '' : 's'} already ${idx.length === 1 ? 'has' : 'have'} grip ${c.grip}%`) });
+      let nd; try { nd = D.setGrip(d, idx, c.grip); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }
+      return commit('grip', () => nd, { lastEdited: null, selection: Object.freeze({ ...s, base: nd }), ...ok(`grip ${c.grip}% on ${idx.length} piece${idx.length === 1 ? '' : 's'}${c.grip < GL.TESTED_MIN || c.grip > GL.TESTED_MAX ? ' (untested: drive it)' : ''}; the checker does not model grip`) });
+    },
+    /** The grip of the road at the head (100 on an empty track or one with no grip set): what the Extend field shows, and what the next piece takes unless it is changed. */
+    headGrip() { const d = doc(); for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return D.gripOf(d.pieces[i]); return D.GRIP_DEFAULT; },
     /** What the selection is, for the panel: { from, to, count, lengthM, atEnd, saveProblem }; saveProblem is why it cannot be kept as a piece (null when it can). null when nothing is selected. */
     selectionInfo() {
       const s = st.selection, d = doc();
