@@ -219,6 +219,25 @@ test('row 6: jumps in a run: a run with a flight in the middle and one that star
 });
 const q9 = (x) => Number(x.toFixed(9));
 
+// row 6c (the P49/P51 ruling): a run that STARTS with a jump, put in after a head that is CURVING AND CLIMBING (and banked): it goes in exactly as saved
+// (D258: the landing is not joined to the take-off), so nothing of the head's turn, climb or offsets reaches the landing; a landing damaged to start turning is refused by name
+test('row 6c: a run that starts with a jump goes in exactly as saved after a curving, climbing, banked head (mirrored too); a landing that does not start level is refused by name (LANDING)', () => {
+  let d = extend(D.createDoc('j'), { length: 250, family: 'bowl' }); d = D.appendPiece(d, D.flightPiece({ forward: 28, up: -1.5, pitch: -2 * DEG }));
+  d = extend(d, { length: 200, transition: 80, targets: { kh: 1 / 300, w: 30 } }); d = extend(d, { length: 150 });
+  const lead = PC.saveRun(d, 1, 3, { name: 'jump then road' }); assert.equal(lead.pieces[0].type, 'flight');
+  let head = extend(D.createDoc('h'), { length: 180, family: 'bowl', first: { w: 26, phi: 0.2 } }); head = extend(head, { length: 220, transition: 60, targets: { kh: 1 / 200, kv: 0.002 } });
+  const e = D.endState(head); assert.ok(Math.abs(e.kh.v) > 1e-3 && Math.abs(e.kv.v) > 1e-3 && Math.abs(e.phi.v) > 0.1, 'control: the head is curving, climbing and banked');
+  for (const mirror of [false, true]) {
+    const p = mirror ? PC.mirrored(PC.checkPiece(lead)) : PC.checkPiece(lead), put = PC.insert(head, lead, { mirror }), asSaved = PC.absolute(p).reduce((x, P) => D.appendPiece(x, P), head);
+    assert.equal(D.serialize(put), D.serialize(asSaved), `mirror ${mirror}: byte for byte the run as saved, after the head`);
+    const landing = put.pieces[head.pieces.length + 1];
+    for (const ch of ['kh', 'kv', 'h', 'l']) assert.equal(landing.channels[ch][0], 0, `mirror ${mirror}: the landing's ${ch} starts at 0, not the head's`);
+    assert.equal(landing.channels.phi[0], put.pieces[head.pieces.length].bank, 'the landing starts at its flight\'s bank');
+  }
+  const bad = JSON.parse(PC.serialize(lead)); for (const P of bad.pieces) if (P.type === 'road') P.channels.kh = P.channels.kh.map((x) => x + 0.003);   // every road turns 0.003 more: the joint between them still holds, but the landing now starts turning
+  assert.throws(() => PC.insert(head, PC.parse(JSON.stringify(bad))), (x) => x.code === 'LANDING', 'refused by name: a landing starts level');
+});
+
 test('row 7: NO PIECE MAKES A DOCUMENT THE DOCUMENT WOULD REFUSE: every kind of run against every kind of head either goes in as a valid track or is refused by a CoreError, never a crash and never a bad document', () => {
   const runs = {};
   runs.legacy = PC.saveRun(legacyLap(), 1, 3, { name: 'legacy' }); runs.cup = PC.saveRun(cupLap(60), 1, 3, { name: 'cup' }); runs.tube = PC.saveRun(tubeLap(30), 1, 3, { name: 'tube' });
