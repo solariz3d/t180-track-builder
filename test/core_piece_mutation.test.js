@@ -45,7 +45,9 @@ const MUTANTS = [
   { id: 'P26 a mixed run in a file is accepted', pattern: 'row 8', edits: [[X, "if (out.pieces.filter(isRoad).some((P) => signature(P) !== sig)) bad('MIXED_RUN'", "if (false) bad('MIXED_RUN'"]] },
   { id: 'P27 a start key the run does not carry is accepted', pattern: 'row 8', edits: [[X, 'for (const k of Object.keys(piece.start)) if (!want.includes(k)) bad(', 'for (const k of []) if (!want.includes(k)) bad(']] },
   { id: 'P28 the document\'s own check of the run is skipped (a broken joint, a cup past its limit)', pattern: 'row 8', edits: [[X, "D.checkDoc({ ...D.createDoc('piece check'), nextId: run.length + 1, pieces: run });", '']] },   // re-anchored: C's D240 F1 (c775694) made the per-piece appendPiece loop one checkDoc
-  { id: 'P29 a flight with no gap is accepted', pattern: 'row 8', edits: [[X, 'if (!(P.gap > 0)) bad(', 'if (false) bad(']] },
+  // re-anchored (the anchor sweep on 6a799cb): D258 (1e76d35) made a saved flight a landing POSE, so piece.js no longer checks a gap; a flight that goes
+  // nowhere is refused by the document's own flight check (FLIGHT_TOO_SHORT, which every piece passes through D.appendPiece), and row 8 asks for it by name
+  { id: 'P29 a flight with no gap is accepted', pattern: 'row 8', edits: [['core/document.js', "if (!(d >= FLIGHT_MIN_M)) throw new CoreError('FLIGHT_TOO_SHORT',", "if (false) throw new CoreError('FLIGHT_TOO_SHORT',"]] },
   { id: 'P30 a run with no road is accepted', pattern: 'row 8', edits: [[X, "if (!roads.length) bad('NO_ROAD', 'a run needs at least one road piece');", '']] },
   { id: 'P31 numbers are not quantised as they enter', pattern: 'row 8c', edits: [[X, 'channels[ch] = c.map((v) => q(v, D.DEC[ch]));', 'channels[ch] = c.slice();']] },
   // text
