@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Undo survives Save, closing the program and reopening (D272; the keeper, 11:55: "found a critical bug for qofl, so when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track … not cool").** Every open built a fresh history from the file, so the steps you had made were gone. Save now also writes a SIDECAR, `eq-<name>.t180undo`, beside the track: the past and the future, the last 200 steps of each side, every one a full serialized document (about 3.7 MB for a 12-piece track, 11 MB for a 46-piece one, at the cap). It is written AFTER the track file, so a sidecar that fails to write never fails the save (the status line says the history was not kept). Open restores it only when the sidecar's present equals the opened file byte for byte; otherwise it is dropped and never mixed, silently when the file was simply replaced or changed elsewhere, with one status line when the sidecar is damaged; the track always opens. The autosave carries its history the same way, so Restore after a crash can undo. **Unchanged:** the track file's bytes, share codes, exports, Previous versions… and the pre-Close / pre-Delete backups. **Rename and Delete:** the app has no track rename or delete, so there is nothing to carry or remove; Save As writes a sidecar beside the new name and leaves the old name's alone. **New native commands:** `save_undo` and `open_undo` in `src-tauri/src/lib.rs` (a new `.t180undo` file kind; `track_names` never lists it). **Cost:** Open reads one more file: +125 ms (12 pieces) to +315 ms (46 pieces) at the cap.
+
 ## [0.3.3] - 2026-10-08
 
 ### Added

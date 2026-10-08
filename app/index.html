@@ -136,6 +136,8 @@
     listBackups: (name) => (tauri ? call('list_track_backups', { name }) : Promise.resolve([])),
     openBackup: (file) => call('open_track_backup', { file }),
     openDoc: (name) => call('open_track', { name }),
+    saveUndo: (name, text) => (tauri ? call('save_undo', { name, text }) : Promise.resolve()),   // D272: the track's undo history, beside it (eq-<name>.t180undo; src-tauri/src/lib.rs)
+    openUndo: (name) => (tauri ? call('open_undo', { name }) : Promise.resolve(null)),
     listDocs: () => call('list_tracks'),
     // D240, saved pieces: one <name>.t180piece each in the app's pieces folder (src-tauri/src/lib.rs); a name already used is refused natively, never overwritten
     listPieces: () => (tauri ? call('list_pieces') : Promise.resolve([])),

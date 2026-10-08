@@ -27,6 +27,7 @@ mod backups;
 const TRACK_EXT: &str = "t180track";
 const LIBRARY_FILE: &str = "library.t180lib";
 const PIECE_EXT: &str = "t180piece";
+const UNDO_EXT: &str = "t180undo";
 
 /// 1 to 64 characters: ASCII letters, digits, space, '_' or '-', starting with a letter or digit.
 pub fn valid_name(name: &str) -> bool {
@@ -194,6 +195,34 @@ fn open_track_backup(app: tauri::AppHandle, file: String) -> Result<String, Stri
 fn open_track(app: tauri::AppHandle, name: String) -> Result<String, String> {
     let path = track_path(&app, &name)?;
     fs::read_to_string(&path).map_err(|e| format!("could not open {}: {e}", path.display()))
+}
+
+// D272, THE UNDO SIDECAR: `<name>.t180undo` beside `<name>.t180track` in the tracks folder, the page's undo history for that track (JSON, schema core-undo; this side only keeps and returns the text, the page
+// checks it against the track before using it). It has its own extension, so track_names never lists it, a track's backups never copy it, and the track file is the same bytes with or without it. A name is a
+// track's name (no path can ride in it). A sidecar that is not there is Ok(None), not an error: most tracks have none.
+pub fn undo_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
+    if !valid_name(name) {
+        return Err(format!("{name:?} is not a track name: 1 to 64 letters, digits, spaces, _ or -"));
+    }
+    Ok(dir.join(format!("{name}.{UNDO_EXT}")))
+}
+pub fn save_undo_file(dir: &Path, name: &str, text: &str) -> Result<(), String> {
+    write_atomic(&undo_file(dir, name)?, text)
+}
+pub fn open_undo_file(dir: &Path, name: &str) -> Result<Option<String>, String> {
+    let path = undo_file(dir, name)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    fs::read_to_string(&path).map(Some).map_err(|e| format!("could not read {}: {e}", path.display()))
+}
+#[tauri::command]
+fn save_undo(app: tauri::AppHandle, name: String, text: String) -> Result<(), String> {
+    save_undo_file(&tracks_dir(&app)?, &name, &text)
+}
+#[tauri::command]
+fn open_undo(app: tauri::AppHandle, name: String) -> Result<Option<String>, String> {
+    open_undo_file(&tracks_dir(&app)?, &name)
 }
 
 #[tauri::command]
@@ -474,7 +503,7 @@ pub fn run() {
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export, folder_is_empty, remove_empty_folder,
             get_ac_root, find_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
-            test_export_folder, list_pieces, open_piece, save_piece, delete_piece
+            test_export_folder, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo
         ])
         .run(tauri::generate_context!())
         .expect("error while running the T-180 Track Builder");
@@ -650,6 +679,25 @@ mod tests {
             assert!(piece_file(&d, bad).is_err() && save_piece_file(&d, bad, "x", true).is_err(), "{bad:?} is not a piece name");
         }
         assert!(!d.join("tmp-write").exists() && fs::read_dir(&d).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".tmp-write")), "no temporary file is left");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn an_undo_sidecar_is_kept_beside_its_track_replaced_read_back_and_never_listed_as_a_track() {
+        let d = scratch("undo");
+        assert_eq!(open_undo_file(&d, "eq-lap").unwrap(), None, "no sidecar is not an error");
+        fs::write(d.join("eq-lap.t180track"), "the track").unwrap();
+        save_undo_file(&d, "eq-lap", "{\"schema\":1}").unwrap();
+        assert_eq!(open_undo_file(&d, "eq-lap").unwrap().as_deref(), Some("{\"schema\":1}"));
+        save_undo_file(&d, "eq-lap", "second").unwrap();
+        assert_eq!(open_undo_file(&d, "eq-lap").unwrap().as_deref(), Some("second"), "a save replaces it");
+        assert_eq!(fs::read_to_string(d.join("eq-lap.t180track")).unwrap(), "the track", "the track file is untouched");
+        assert_eq!(track_names(&d).unwrap(), vec!["eq-lap".to_string()], "the sidecar is not a track in the list");
+        assert!(d.join("eq-lap.t180undo").is_file());
+        for bad in ["", "../x", "a/b", "a\\b", "..", ".", "x.y", "é"] {
+            assert!(undo_file(&d, bad).is_err() && save_undo_file(&d, bad, "x").is_err() && open_undo_file(&d, bad).is_err(), "{bad:?} is not a track name");
+        }
+        assert!(fs::read_dir(&d).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".tmp-write")), "no temporary file is left");
         fs::remove_dir_all(&d).unwrap();
     }
 

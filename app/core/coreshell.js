@@ -10,6 +10,7 @@
 //   await shell.exportTo(dir)   shell.openExample(fitText, readText, name)   await shell.save(name)   await shell.open(name)
 //   shell.buildExport(opts)   shell.exportDoc()   shell.commitDoc(doc)                       (D239: install and share codes use them)
 //   shell.restore()   await shell.discardRecovery()   await shell.flushAutosave()   await shell.cleanExit()   (D239: autosave)
+//   (D272: save also writes the undo history beside the track, open reads it back: see UNDO_CAP below)
 //   await shell.backupNow(reason)   await shell.listVersions()   await shell.openVersion(file)   (D239 amendment: previous versions;
 //   every Save also moves the file it overwrites into track-backups, natively: src-tauri/src/backups.rs)
 //
@@ -81,6 +82,33 @@ const GL = require('./griplike.js');   // D261: the grip field's checks and word
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted (D239)
 const BRUSH_MODES = Object.freeze(['local', 'rate']);
+// D272 (the keeper, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool"): THE UNDO HISTORY SURVIVES SAVE AND RESTART.
+// Save writes a SIDECAR, storage.saveUndo(PREFIX + name, text), beside the track (natively eq-<name>.t180undo; the track file is unchanged, so share codes, exports and older builds read it as ever):
+// { schema: 1, kind: 'core-undo', present, past: [...], future: [...] }, every document D.serialize'd, the last UNDO_CAP steps (the past's newest, the future's nearest). Open restores it ONLY when its
+// `present` is the opened file byte for byte; a mismatch (the file was replaced, pasted, edited elsewhere, or saved by an older build) drops it silently, never mixed; a sidecar that is damaged opens
+// the track with no history and says so once. The autosave carries the same text in its `undo` field, so Restore after a crash can undo too.
+const UNDO_CAP = 200;
+const UNDO_KIND = 'core-undo';
+const serialText = new WeakMap();   // a document is immutable: its text is computed once, so a save or an autosave only serializes the steps made since the last
+const textOf = (d) => { let t = serialText.get(d); if (t === undefined) { t = D.serialize(d); serialText.set(d, t); } return t; };
+/** The sidecar text for a history whose present is `presentText`: the last UNDO_CAP past steps and the UNDO_CAP nearest future ones. */
+function packHistory(h, presentText) {
+  return JSON.stringify({ schema: 1, kind: UNDO_KIND, present: presentText, past: h.past.slice(-UNDO_CAP).map(textOf), future: h.future.slice(0, UNDO_CAP).map(textOf) });
+}
+/** { history } for a sidecar that belongs to `presentText` (the opened document `d`), { mismatch: true } for one that belongs to another file, { bad: why } for one that cannot be read. All or nothing. */
+function unpackHistory(sideText, presentText, d) {
+  let o;
+  try { o = JSON.parse(sideText); } catch (e) { return { bad: `it is not JSON (${e.message})` }; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return { bad: 'it is not a record' };
+  if (o.kind !== UNDO_KIND || o.schema !== 1) return { bad: 'it is not an undo history this build reads' };
+  if (typeof o.present !== 'string' || !Array.isArray(o.past) || !Array.isArray(o.future)) return { bad: 'it is missing its present, past or future' };
+  if (o.present !== presentText) return { mismatch: true };
+  const docs = (list, what) => list.map((t, i) => { if (typeof t !== 'string') throw new Error(`${what} step ${i + 1} is not text`); try { return D.parse(t); } catch (e) { throw new Error(`${what} step ${i + 1}: ${e.message}`); } });
+  try {
+    const past = docs(o.past, 'past'), future = docs(o.future, 'future');
+    return { history: Object.freeze({ ...D.createHistory(d), past: Object.freeze(past), future: Object.freeze(future) }) };
+  } catch (e) { return { bad: e.message }; }
+}
 // D244b, SCULPT: the channels that shape a placed piece without steering the track (bank, width, wall rise, cup, edge angle, edge start, tube sweep). Turn (kh), climb (kv) and the height and sideways offsets
 // are NOT in it: they carry everything after them. In Sculpt the brush takes these only, and every step is checked against the centreline (app/core/centreline.js)
 const SCULPT_CHANNELS = Object.freeze(['phi', 'c', 'w', 'e', 's', 'r', 't']);
@@ -118,7 +146,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!unreadable && (!o || typeof o !== 'object' || Array.isArray(o))) unreadable = 'it is not an autosave record';
       if (unreadable) await keepDamaged(unreadable);
       else if (o.kind === 'core') {
-        try { recovery = { name: o.name || null, doc: D.parse(o.doc) }; } catch (e) { await keepDamaged(e.message); }
+        try { recovery = { name: o.name || null, doc: D.parse(o.doc), docText: o.doc, undoText: o.undo }; } catch (e) { await keepDamaged(e.message); }
       } else {
         const aside = `pieces autosave ${new Date().toISOString().slice(0, 10)}`;
         try {
@@ -161,7 +189,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   async function writeAutosave() {
     if (!autoDue) return;
     autoDue = false;
-    const payload = JSON.stringify({ schema: 1, kind: 'core', name: st.name, doc: D.serialize(st.history.present) });
+    const h = st.history, payload = JSON.stringify({ schema: 1, kind: 'core', name: st.name, doc: textOf(h.present), ...(h.past.length || h.future.length ? { undo: packHistory(h, textOf(h.present)) } : {}) });   // D272: its history rides along
     try { await storage.saveAutosave(payload); } catch (e) { set({ message: `autosave failed: ${e.message}` }); }
   }
   async function clearAutosave() {
@@ -684,9 +712,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     async save(name) {
       if (!storage) return set({ message: 'saving is not available here' });
       if (!NAME_RE.test(name || '')) return set({ message: `a track name is 1 to 60 letters, digits, spaces, _ or -, starting with a letter or digit; got ${JSON.stringify(name)}` });
-      await storage.saveDoc(PREFIX + name, D.serialize(doc()));
+      const body = D.serialize(doc());
+      await storage.saveDoc(PREFIX + name, body);
+      // D272: then its undo history, beside it. AFTER the track, and a failure here never fails the save: the track is kept, and the one line says what was not.
+      let note = null;
+      if (typeof storage.saveUndo === 'function') {
+        try { await storage.saveUndo(PREFIX + name, packHistory(st.history, body)); } catch (e) { note = `saved ${name}, but its undo history could not be kept (${e && e.message || e}): after reopening it, Ctrl+Z will not reach back past this save`; }
+      }
       await clearAutosave();   // saved under a name: nothing is left to recover (D239, as the piece builder did)
-      return set({ name, dirty: false, message: null });
+      return set({ name, dirty: false, message: note });
     },
     /**
      * A PASTED TRACK (D239, a share code): it REPLACES the open one as one undo step, so the old track is one Ctrl+Z away. The document
@@ -698,8 +732,13 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** Take the track the last session left unsaved. It becomes the open track, with a fresh history, still unsaved. */
     restore() {
       if (!st.recovery) return set({ message: 'there is no unsaved track to restore' });
-      const { doc: d, name } = st.recovery;
-      return set({ history: D.createHistory(d), ...resolvedOf(d), name, dirty: true, recovery: null, lastEdited: null, exportReds: null, message: null });
+      const { doc: d, name, docText, undoText } = st.recovery;
+      let history = D.createHistory(d), note = null;   // D272: the autosave's history, when it has one and it is this document's
+      if (undoText !== undefined && undoText !== null) {
+        const r = typeof undoText === 'string' ? unpackHistory(undoText, docText, d) : { bad: 'it is not text' };
+        if (r.history) history = r.history; else note = `the autosave's undo history could not be used (${r.mismatch ? 'it is not this track\'s' : r.bad}): the track was restored without it`;
+      }
+      return set({ history, ...resolvedOf(d), name, dirty: true, recovery: null, lastEdited: null, exportReds: null, message: note });
     },
     async discardRecovery() { await clearAutosave(); return set({ recovery: null }); },
     /** The window is closing on purpose: nothing is left to recover. */
@@ -743,7 +782,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!storage) return set({ message: 'opening is not available here' });
       const text = await storage.openDoc(PREFIX + name), d = attempt(() => D.parse(text));
       if (!d) return st;
-      return set({ history: D.createHistory(d), ...resolvedOf(d), name, dirty: false, lastEdited: null, message: null, exportReds: null });
+      // D272: its undo history from the sidecar, if there is one and it is this file's; reading it never blocks the open
+      let history = D.createHistory(d), note = null;
+      if (typeof storage.openUndo === 'function') {
+        try {
+          const side = await storage.openUndo(PREFIX + name);
+          if (side !== null && side !== undefined) { const r = unpackHistory(side, text, d); if (r.history) history = r.history; else if (r.bad) note = `the saved undo history for ${name} could not be used (${r.bad}): the track opened without it`; }
+        } catch (e) { note = `could not read the undo history for ${name} (${e && e.message || e}): the track opened without it`; }
+      }
+      return set({ history, ...resolvedOf(d), name, dirty: false, lastEdited: null, message: note, exportReds: null });
     },
     /** The saved equation tracks (the piece builder's are not listed here). */
     async list() { if (!storage) return []; return (await storage.listDocs()).filter((n) => n.startsWith(PREFIX)).map((n) => n.slice(PREFIX.length)); },
