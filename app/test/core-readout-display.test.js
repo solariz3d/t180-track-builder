@@ -671,6 +671,25 @@ test('if that copy cannot be written, Apply changes nothing and says why', async
   P.panel.unmount();
 });
 
+// ── D271, LEVEL and TO FLOOR (the keeper: "a way to snap the track to the floor to be true flat … its hard to calculate by hand") ──
+test('D271: Level ends the piece straight and level; To floor too short says the length that works, which then works; each is one undo step', async () => {
+  const P = await mountPanel(), A = require('../../src/core/adapter.js'), DEGR = Math.PI / 180;
+  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
+  const end = () => { const S = A.toPath(P.shell.getState().history.present).path.samples, e = S[S.length - 1]; return { pitch: Math.atan2(e.T[1], Math.hypot(e.T[0], e.T[2])) / DEGR, y: e.pos[1] }; };
+  P.type('length m', 300); P.type('climb °/100m', 0.5); button('Extend').onclick();
+  P.type('length m', 600); P.type('climb °/100m', 0); button('Extend').onclick();
+  assert.equal(P.shell.getState().history.present.pieces.length, 2, status()); assert.ok(end().pitch > 1, `control: the head is tilted ${end().pitch.toFixed(2)}°`);
+  P.type('length m', 500); button('Level').onclick();
+  assert.equal(P.shell.getState().history.present.pieces.length, 3, status()); assert.ok(Math.abs(end().pitch) <= 0.01, `Level: the end pitch is ${end().pitch.toFixed(5)}°`);
+  P.shell.undo(); assert.equal(P.shell.getState().history.present.pieces.length, 2, 'Level is one undo step');
+  P.type('length m', 100); button('To floor').onclick();
+  assert.equal(P.shell.getState().history.present.pieces.length, 2, 'too short: nothing placed'); const m = /FLOOR_TOO_SHORT.*needs at least (\d+) m/.exec(status()); assert.ok(m, `the message names the length: ${status()}`);
+  P.type('length m', m[1]); button('To floor').onclick();
+  assert.equal(P.shell.getState().history.present.pieces.length, 3, status()); const e = end(); assert.ok(Math.abs(e.pitch) <= 0.01 && Math.abs(e.y) <= 0.01, `To floor: pitch ${e.pitch.toFixed(5)}°, height ${e.y.toFixed(4)} m`);
+  P.shell.undo(); assert.equal(P.shell.getState().history.present.pieces.length, 2, 'To floor is one undo step');
+  P.panel.unmount();
+});
+
 // ── D242 item 6, STRAIGHTS AFTER A TURN (the keeper: "impossible to create a perfect straight") ──
 test('D242: after a 30°/100m turn, Straight extends a piece whose turn and climb are 0 from 20 m on, and puts the "at start" boxes back; turn 0 without "at start" shows the hint', async () => {
   const P = await mountPanel(), Dm = require('../../src/core/document.js');

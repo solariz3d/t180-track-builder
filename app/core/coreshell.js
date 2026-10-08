@@ -37,6 +37,7 @@
 
 const D = require('../../src/core/document.js');
 const { extend } = require('../../src/core/extend.js');
+const LV = require('../../src/core/level.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
 /**
@@ -297,6 +298,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
 
     /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute). */
     extend: (opts) => commit('extend', () => extend(doc(), opts), { lastEdited: [doc().pieces.length] }),
+    /** D271 LEVEL: extend with the fields' piece, its climb solved so it ends straight and level (pitch 0); src/core/level.js. One undo step, like extend. */
+    extendLevel: (opts) => commit('level', () => LV.extendLevel(doc(), opts), { lastEdited: [doc().pieces.length] }),
+    /** D271 TO FLOOR: …and on the floor (height 0). Too short a piece is refused by name with the length that works (FLOOR_TOO_SHORT), as the message. */
+    extendToFloor: (opts) => commit('toFloor', () => LV.extendToFloor(doc(), opts), { lastEdited: [doc().pieces.length] }),
     /**
      * REMOVE THE HEAD (Ctrl+Backspace, the piece builder's key moved to this page, D239 note): the last piece goes, as ONE undo step. An
      * empty track is refused by name. On a closed loop the loop is OPEN again (what Close changed in the other pieces stays; Ctrl+Z puts
