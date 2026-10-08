@@ -284,8 +284,12 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
     if (seam && pi === firstRoad && P.cup) join = { profile: legacyLast(doc.pieces[lastRoad]) };   // the lap's start is a cup that follows the legacy END round the seam
     // a cup piece followed by a LEGACY road piece (a file can hold one; Extend never makes one) fades into that piece's first profile, and so does the
     // lap's last cup piece into the legacy START: the last metres of the cup are the reverse morph (tailZone)
+    // D274 (the keeper: projecting a tube off a cup road "bugs the track, then eventually turns into a tube"): ONLY a next piece the LEGACY path builds. A tube,
+    // or a piece with an edge, is built by xsecSegments, which morphs out of the previous piece's own last profile itself (MORPH_M); the fade here rendered such a
+    // piece as a legacy bowl (legacyFirst) and bent the PLACED cup's last 10 m into it (17.9° of surface angle on FIRST TRACK) before the tube morphed out of that
     const nextP = doc.pieces[pi + 1];
-    const tail = !P.cup || !cupRuns ? null : nextP && nextP.type === 'road' && !nextP.cup ? legacyFirst(nextP) : seam && pi === lastRoad ? legacyFirst(doc.pieces[firstRoad]) : null;
+    const nextLegacy = nextP && nextP.type === 'road' && !nextP.cup && !nextP.tube && !nextP.edge;
+    const tail = !P.cup || !cupRuns ? null : nextLegacy ? legacyFirst(nextP) : seam && pi === lastRoad ? legacyFirst(doc.pieces[firstRoad]) : null;
     const cup = xs ? xsecSegments(P, n, at, lastKind && lastKind !== kind && lastProfile ? { profile: lastProfile } : null) : P.cup ? (cupRuns ? cupSegmentsRuns(P, n, at, join, tail) : cupSegmentsLocal(P, n, at)) : null;
     lastLegacy = kind === 'legacy'; lastKind = kind;
     for (let j = 0; j < n; j++) {
