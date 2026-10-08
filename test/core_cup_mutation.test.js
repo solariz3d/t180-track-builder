@@ -62,7 +62,7 @@ const MUTANTS = [
   { id: 'M44 (R3) close() does not hold the cup at the legacy start edge', file: 'seam', pattern: 'R3', edits: [[C + 'close.js', 'if (!!F.cup === !!L.cup) return null;', 'return null;']] },
   { id: 'M45 (R3) close() never refuses a seam it cannot fade', file: 'seam', pattern: 'R3', edits: [[C + 'close.js', 'if (lap && lap.m > SEAM_MAX_M) throw', 'if (false) throw']] },
   { id: 'M47 (R3) the mirror: a cup START does not fade out of the legacy END', file: 'seam', pattern: 'R3', edits: [[C + 'adapter.js', 'if (seam && pi === firstRoad && P.cup) join =', 'if (false) join =']] },
-  { id: 'M50 (R3) a cup followed by a legacy piece inside the track is not faded (only the lap seam is)', file: 'seam', pattern: 'R3', edits: [[C + 'adapter.js', "nextP && nextP.type === 'road' && !nextP.cup ? legacyFirst(nextP) : seam", 'false ? 0 : seam']] },
+  { id: 'M50 (R3) a cup followed by a legacy piece inside the track is not faded (only the lap seam is)', file: 'seam', pattern: 'R3', edits: [[C + 'adapter.js', 'nextLegacy ? legacyFirst(nextP) : seam', 'false ? 0 : seam']] },   // re-anchored after D274 (ddea381): the fade's condition is now `nextLegacy` (a next piece the legacy path builds); the same mutant
   { id: 'M48 (R3) validation does not red a joint step', file: 'seam', pattern: 'R3', edits: [['validate/index.js', "if (jointStep.has(j)) raw.segReds.push", "if (false) raw.segReds.push"]] },
   { id: 'M49 (R3) jointSteps ignores the lap seam', file: 'seam', pattern: 'R3', edits: [['geom/profile.js', 'if (closed && segments.length > 1 && road(a)', 'if (false && segments.length > 1 && road(a)']] },
   // row 5: legacy stays legacy
