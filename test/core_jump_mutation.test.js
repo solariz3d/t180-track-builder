@@ -44,6 +44,9 @@ function runMutant(m) {
     for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
     fs.cpSync(path.join(ROOT, 'app'), path.join(dir, 'app'), { recursive: true, filter: (p) => !/[\\/]app[\\/]test([\\/]|$)/.test(p) && !/node_modules/.test(p) });
     fs.mkdirSync(path.join(dir, 'test')); fs.copyFileSync(path.join(__dirname, TEST), path.join(dir, 'test', TEST));
+    // the fixtures the test reads beside itself (row 6, "an OLD document jump opens as the free flight…", reads fixtures/F7-hill-then-jump.core2.json):
+    // without them the copy's CONTROL failed on that row alone (1 !== 0), while the tree passed. 98 KB, copied as they are (raw bytes: .gitattributes -text)
+    fs.cpSync(path.join(__dirname, 'fixtures'), path.join(dir, 'test', 'fixtures'), { recursive: true });
     let n = 1, parses = true;
     if (m.file) {
       const f = path.join(dir, m.file), src = fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n'); n = src.split(m.from).length - 1;
