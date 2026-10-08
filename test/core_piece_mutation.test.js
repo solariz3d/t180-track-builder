@@ -70,9 +70,16 @@ const MUTANTS = [
   { id: 'P46 keepStart is ignored (the run continues from the head anyway)', pattern: 'row 4', edits: [[X, 'if (keepStart) { try {', 'if (false) { try {']] },
   { id: 'P47 the slope of the joint is the head\'s over a half span, not a third', pattern: 'row 3', edits: [[X, 'const { v, m } = at(ch), c = first.channels[ch]; c[0] = q(v, D.DEC[ch]); c[1] = q(v + (m * h1) / 3, D.DEC[ch]);', 'const { v, m } = at(ch), c = first.channels[ch]; c[0] = q(v, D.DEC[ch]); c[1] = q(v + (m * h1) / 2, D.DEC[ch]);']] },
   { id: 'P48 the joint takes the head\'s value only (no slope)', pattern: 'row 3', edits: [[X, 'const { v, m } = at(ch), c = first.channels[ch]; c[0] = q(v, D.DEC[ch]); c[1] = q(v + (m * h1) / 3, D.DEC[ch]);', 'const { v, m } = at(ch), c = first.channels[ch]; c[0] = q(v, D.DEC[ch]); c[1] = q(v + c[1] - c[0] + 0 * m * h1, D.DEC[ch]);']] },
-  { id: 'P49 a jump before the road does not zero the turn, climb and offsets', pattern: 'row 6', edits: [[X, 'const want = after ? { ...head, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h: { v: 0, m: 0 }, l: { v: 0, m: 0 } } : head;', 'const want = head;']] },
+  // (P49, "a jump before the road does not zero the turn, climb and offsets", and P51 below, are EQUIVALENT and are not run (the librarian's ruling, shown,
+  //  not inferred). Since D258 a run that starts with a jump goes in AS SAVED: insert() calls continued() only when the as-saved run fails with JOINT, and
+  //  for a jump-led run it cannot: the run's own joints were judged by checkPiece on the same arrays, the flight has no joint with the head, and a landing that
+  //  does not start level is LANDING, not JOINT. So continued()'s `after` branch is never entered. Measured on a6cee64 in copies with each edit: rows 6, 6b,
+  //  6c and 7 (every kind of run, jump-led included, against every kind of head) pass under P49, P51 and a SENTINEL that throws if continued() is entered with
+  //  a leading jump (never hit), and row 6c's insert after a curving, climbing, banked head is byte-identical under all of them (sha256 2e36ecbd…, mirrored
+  //  4411e85a…). The branch is dead code; removing it is the code's owner's call, not a test's.)
   { id: 'P50 a tube after another kind starts from the head\'s t (0), not tNext', pattern: 'row 3c', edits: [[X, "const at = (ch) => (ch === 't' ? want.tNext : want[ch]);", 'const at = (ch) => want[ch];']] },
-  { id: 'P51 the road after a leading jump is not what carries the head on', pattern: 'row 6', edits: [[X, 'const i0 = p.pieces.findIndex(isRoad), after = i0 > 0;', 'const i0 = 0, after = false;']] },
+  // (P51, "the road after a leading jump is not what carries the head on", is EQUIVALENT and is not run: see P49 above. Every run that reaches continued()
+  //  starts with a road, where findIndex(isRoad) is already 0 and `after` already false, so the edit changes nothing that runs.)
   { id: 'P52 the joint values are taken from the saved start, not the head', pattern: 'row 3', edits: [[X, 'const { v, m } = at(ch), c = first.channels[ch]; c[0] = q(v, D.DEC[ch]);', 'const { v, m } = at(ch), c = first.channels[ch]; c[0] = q(c[0], D.DEC[ch]);']] },
   // delete
   { id: "D1 a closed track can be deleted from", pattern: "row 10", edits: [[X, "if (doc.closed) throw err('CLOSED', 'a closed track has no open end; open it first');\n  const n = doc.pieces.length;", "const n = doc.pieces.length;"]] },
