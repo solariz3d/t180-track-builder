@@ -307,8 +307,11 @@ function mount(root, shell) {
     return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), at: { width: 1 }, kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }) };
   };
   let sculptDrag = null;
-  // D258: THE LANDING (the free jump): while it is the head, its four handles (forward, sideways, height, heading) are the ones on the track, and a drag is the shell's landing drag (one undo step; the same
-  // numbers as the boxes below the Jump button). They take the place of the Extend ghost's handles, which would be on the piece Extend adds from the landing.
+  // D258: THE LANDING (the free jump): while it is the head, its four handles (forward, sideways, height, heading) are on the track, and a drag is the shell's landing drag (one undo step; the same
+  // numbers as the boxes below the Jump button). D278 (the keeper: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and
+  // height"): they used to TAKE THE PLACE of the Extend ghost's handles, and the landing stays the head until a piece is extended from it, so right after a Jump the only handles were the landing's and the
+  // only way back to the Extend ghost's was to commit an Extend. They now stand BESIDE them (the landing's at the landing's start, the Extend ghost's on the piece that would follow the landing road): the
+  // base equation's controls are there at once, and the landing stays tunable until an Extend fixes it, as before.
   const LAND_FIELD = { landfwd: 'forward', landleft: 'left', landup: 'up', landturn: 'heading' };
   const landingModel = () => {
     const st = shell.getState(); if (!handlesOn.checked || st.sculpt) return null;
@@ -318,7 +321,12 @@ function mount(root, shell) {
   };
   let landDrag = false;
   const handlesHost = {
-    model: () => landingModel() || sculptModel() || ghostModel(),
+    model: () => {
+      const L = landingModel(); if (!L) return sculptModel() || ghostModel();
+      const G = ghostModel(); if (!G) return L;   // no Extend ghost (a jump's ghost is on screen, or none can be built yet): the landing's four alone
+      // D278: the Extend ghost's model with the landing's four added; each kind answers for itself (a landing handle's value is the landing's, an Extend handle's is its field's)
+      return { ...G, mode: 'extend+landing', kinds: [...L.kinds, ...G.kinds], free: L.free, base: (k) => (LAND_FIELD[k] ? L.base(k) : G.base(k)), ctx: (k) => (LAND_FIELD[k] ? L.ctx(k) : G.ctx(k)) };
+    },
     pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; },
     begin: (h) => { if (LAND_FIELD[h.kind]) { shell.beginLanding(); landDrag = !!shell.getState().landingDrag; return; } const m = sculptModel(); if (!m) scrubbing = true; if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
     apply: (h, value) => {
@@ -428,7 +436,12 @@ function mount(root, shell) {
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
     if (d !== shownFor) {   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head, and an UNDONE Extend's own values (item 7)
       const m = shownFor ? madeWith.get(shownFor) : null, undone = !!m && m.before === d;   // only an Undo steps from a document back to the one it was made from
-      showGrip(); showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value; shownFor = d;
+      // D278: the Extend handles stand beside the landing's, so a landing move (typed or dragged) is a new document that must NOT wipe what was typed or dragged into the Extend fields: those that differ from what
+      // the panel last put there are kept (they stay un-applied, as before the move); every other field shows the head, as ever
+      const keep = st.lastStep && st.lastStep.op === 'landing' && !undone ? FIELDS.filter(unapplied).map((fl) => [fl, fl.value]) : [];
+      showGrip(); showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value;
+      if (keep.length) { for (const [fl, v] of keep) fl.value = v; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); }
+      shownFor = d;
     }
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
     extendBtn.disabled = jumpBtn.disabled = !!d.closed; closeBtn.disabled = closeHow.disabled = !!d.closed || !d.pieces.length;
