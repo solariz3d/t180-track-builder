@@ -26,7 +26,14 @@ const { _vec: { dot } } = require('./place.js');
 
 const COS15 = Math.cos(15 * Math.PI / 180), SIN15 = Math.sin(15 * Math.PI / 180);
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1].every((x) => x === 0);
+// A STRAIGHT for the grid amber: a word-built 'straight' exactly (curvature and roll 0), or an EQUATION piece (word 'core', src/core/adapter.js) that is
+// nearly straight by the same bar the automatic placement uses (app/core/coreshell.js STRAIGHT_K, STRAIGHT_ROLL: radius 5 km or more, bank 0.5 degrees or
+// less). Before this every core segment failed the word test, so every grid on a core track was "on a core, not a straight" (2026-10-09, the keeper's
+// TEST OVAL: a grid on a dead-straight first piece warned).
+const CORE_STRAIGHT_K = 1 / 5000, CORE_STRAIGHT_ROLL = 0.5 * Math.PI / 180;
+const isStraight = (g) => g.kind === 'road' && (g.word === 'straight'
+  ? [g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1].every((x) => x === 0)
+  : g.word === 'core' && [g.k0, g.k1, g.kp0, g.kp1].every((x) => Math.abs(x) <= CORE_STRAIGHT_K) && [g.roll0, g.roll1].every((x) => Math.abs(x) <= CORE_STRAIGHT_ROLL));
 
 function checkPlaced(placed, layout, path, missing = [], notes = [], segments = null) {
   const by = (k) => placed.filter((m) => m.kind === k), find = (n) => placed.find((m) => m.name === n);

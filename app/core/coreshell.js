@@ -528,6 +528,31 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       let nd; try { nd = D.setGrip(d, idx, c.grip); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }
       return commit('grip', () => nd, { lastEdited: null, selection: Object.freeze({ ...s, base: nd }), ...ok(`grip ${c.grip}% on ${idx.length} piece${idx.length === 1 ? '' : 's'}${c.grip < GL.TESTED_MIN || c.grip > GL.TESTED_MAX ? ' (untested: drive it)' : ''}`) });
     },
+    /**
+     * SPAWNS (2026-10-09): place the start by hand. `sp` is { line: { along }, grid: { count, rowGapM, colGapM }, hotlap?: { piece, along } }, or null to go back
+     * to the export placing the start itself. One undo step; a bad value is refused in plain words and nothing changes.
+     */
+    setSpawns(sp) {
+      const d = doc();
+      if (sp && (!d.pieces[0] || d.pieces[0].type !== 'road')) return set({ message: 'put the first piece down first: the start line goes on it' });
+      let nd; try { nd = D.setSpawns(d, sp); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }
+      if (nd === d || JSON.stringify(nd.spawns) === JSON.stringify(d.spawns)) return st;
+      return commit('spawns', () => nd, { lastEdited: null, ...ok(sp ? 'start placed by hand' : 'start back to automatic') });
+    },
+    /**
+     * Where the cars start, for the panel and the preview: { spawns, firstLength, placed, check, notes, missing } from the hand-placed layout, or null when the
+     * track has no spawns (or nothing resolves yet). `placed` is src/markers placeAll's: every marker with its world position, or an `error`.
+     */
+    spawnsInfo() {
+      const d = doc();
+      if (!d.spawns || !st.resolved || !st.resolved.segments || !st.resolved.segments.length) return null;
+      try {
+        const { layout, path, firstLength } = spawnsLayout(d, st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !d.closed });
+        const M = require('../../src/markers/index.js'), r = M.placeAll(layout, path, st.resolved.segments);
+        const res = require('../../src/markers/layout.js').resolveLayout(layout, path, st.resolved.segments);
+        return { spawns: d.spawns, firstLength, layout, placed: r.placed, check: r.check, notes: res.notes, missing: res.missing };
+      } catch (e) { return { spawns: d.spawns, error: e.message }; }
+    },
     /** The grip of the road at the head (100 on an empty track or one with no grip set): what the Extend field shows, and what the next piece takes unless it is changed. */
     headGrip() { const d = doc(); for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return D.gripOf(d.pieces[i]); return D.GRIP_DEFAULT; },
     /** What the selection is, for the panel: { from, to, count, lengthM, atEnd, saveProblem }; saveProblem is why it cannot be kept as a piece (null when it can). null when nothing is selected. */
@@ -679,7 +704,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (opts.test && doc().closed) throw exportError('TEST_CLOSED', 'this track is closed: use Export (the test export is for an unfinished, open track)');
       if (!doc().closed && !opts.test) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');
       let markers;
-      try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
+      // SPAWNS (2026-10-09): a track whose start was placed by hand exports exactly that; one that never was keeps the automatic placement
+      if (doc().spawns) markers = spawnsLayout(doc(), st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test }).layout;
+      else try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
       return exporter.runSegments(st.resolved.segments, { name: api.exportDoc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start }, { ...opts, markers });
     },
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
@@ -876,6 +903,34 @@ function startLayout(segments, lift, start, { open = false } = {}) {   // open (
   return Markers.defaultLayout(lift ? lift(p) : p, marked);
 }
 
+/**
+ * THE HAND-PLACED START (the keeper, 2026-10-09: "move the start line around the first piece … a numbered grid that fits the track … a hotlap spawn I
+ * plop down"): the layout the doc's `spawns` says, in src/markers/layout.js's shape, on the same path startLayout builds. The line is `along` metres into
+ * the FIRST piece (clamped to it: a piece shortened after the line was placed keeps the line on it); the grid is two staggered columns of `count` slots
+ * with the doc's spacing, pole 10 m behind the line (src/markers/layout.js PACK); the pit boxes stay automatic until the pit module exists (two boxes
+ * on the centreline, 16 m behind the last grid slot); the hotlap is the doc's piece and distance, or the automatic design-speed run-up when not placed.
+ * Returns { layout, path, firstLength }.
+ */
+function spawnsLayout(doc, segments, lift, start, { open = false } = {}) {
+  const { buildPath } = require('../../src/geom/index.js'), Markers = require('../../src/markers/layout.js'), { segStarts } = require('../../src/markers/place.js');
+  const sp = doc.spawns, first = doc.pieces[0];
+  if (!sp) throw Object.assign(new Error('spawnsLayout: the track has no spawns'), { code: 'NO_SPAWNS' });
+  if (!first || first.type !== 'road') throw Object.assign(new Error('the start line goes on the first piece, and the track has no first road piece'), { code: 'NO_START_STRAIGHT' });
+  const p0 = buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) }), path = lift ? lift(p0) : p0;
+  const firstLength = segments.filter((g) => g.id === first.id).reduce((a, g) => a + g.length, 0);
+  const line = { word: first.id, along: Math.min(Math.max(sp.line.along, 0), firstLength) };
+  const grid = { pattern: '2-staggered', count: sp.grid.count, poleBackM: Markers.DEFAULTS.poleBackM, rowGapM: sp.grid.rowGapM, colGapM: sp.grid.colGapM, edits: {} };
+  // the pits, behind the grid, as an anchor (segment id and metres into the first segment carrying that id: anchorS's convention)
+  const starts = segStarts(path, segments), sLine = Markers.anchorS(line, segments, starts);
+  const lastBack = Math.max(...Markers.gridSlots(grid).map((x) => x.backM)), L = path.lengthM, s0 = path.samples[0].s;
+  let sPit = sLine - (lastBack + 16); if (!open) sPit = ((sPit - s0) % L + L) % L + s0;
+  let k = 0; for (let i = 0; i < segments.length; i++) if (starts[i] <= sPit) k = i;
+  const firstOf = segments.findIndex((g) => g.id === segments[k].id);
+  const pits = { at: { word: segments[k].id, along: Math.max(0, sPit - starts[firstOf]) }, count: Markers.DEFAULTS.pits, spacingM: Markers.DEFAULTS.pitSpacingM, u: 0, lane: null };
+  const hotlap = sp.hotlap ? { at: { word: sp.hotlap.piece, along: sp.hotlap.along } } : { speedKmh: null };
+  return { layout: { version: 1, height: Markers.DEFAULTS.height, gateInsetM: Markers.DEFAULTS.gateInsetM, line, grid, pits, hotlap, sectors: [] }, path, firstLength };
+}
+
 /** The road pieces overlapping [a, b] of the path's s (the adapter's s, flights and ramps included: sculpt.js pieceOffsets), for
  *  close's "edited last". */
 function piecesIn(doc, a, b) {
@@ -884,4 +939,4 @@ function piecesIn(doc, a, b) {
   return out.length ? out : null;
 }
 
-module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, SCULPT_CHANNELS, STRAIGHT_K, piecesIn, straightPieces, startLayout, profilerOf, thumbOf, displacementAfterDelete };
+module.exports = { createCoreShell, NAME_RE, PREFIX, BRUSH_MODES, SCULPT_CHANNELS, STRAIGHT_K, piecesIn, straightPieces, startLayout, spawnsLayout, profilerOf, thumbOf, displacementAfterDelete };
