@@ -159,6 +159,16 @@ half-pipes.
       ground to come back to. How CSP could drive them (ext_config or Lua) is **unverified**.
   - All painted marks are texture layers on the road (§5b), drawn in the road's own coordinates so they bend with
     banking and walls, and use the texture maker's styles.
+- **Built on core tracks (2026-10-09): the start placed by hand.** The core document may carry `spawns`
+  (src/core/document.js): the line's distance into the FIRST piece, the grid pack (count, spacing along a column,
+  spacing between columns) and an optional hotlap anchor (piece id, distance). app/core/coreshell.js `spawnsLayout`
+  turns it into the layout above and the export writes it; without it the export keeps the automatic placement
+  (`startLayout`, the longest straight). The panel is app/core/spawnsui.js, the preview marks app/core/spawnslayer.js.
+  The pack's starting spacing comes from the measured T-180 (src/markers/layout.js `T180`, `PACK`). Still to come:
+  the **pit-lane module** (the keeper: a pit road off to the side, its own geometry meshing into the track,
+  unlocked once the first piece is down, giving a second spawn point for practice); until then two pit boxes sit
+  behind the grid. `SLOT_HALF_*`, the slot the checks use, is still the older inferred 4.8 m x 2.0 m; moving it to
+  the measured size changes which narrow tube floors fit a grid (test/export_tube_grid.test.js rows 1-3).
 
 ## 6. Export: writing a working AC track directly
 - **kn5 version 5, written by us.**

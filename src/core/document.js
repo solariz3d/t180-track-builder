@@ -202,6 +202,45 @@ function setGrip(doc, indices, g) {
   return deepFreeze(checkDoc({ ...doc, pieces }));
 }
 
+// ── SPAWNS (the keeper, 2026-10-09: "move the start line around the first piece … a numbered grid … a hotlap spawn I plop down") ───────────────────────
+// Where the cars start, chosen by hand. It lives ON THE DOCUMENT, and a track that never had one carries NO spawns field, in memory and in the file, so
+// every track made before it is the same document and the same text (D261's rule for grip). Without it the export places the start itself
+// (app/core/coreshell.js startLayout, the longest straight); with it the export uses exactly this.
+//   { line: { along },                         the start/finish line, metres into the FIRST piece (clamped to its length where it is used)
+//     grid: { count, rowGapM, colGapM },       the grid pack: how many slots, the along-the-road spacing of one column (a staggered pair every
+//                                              rowGapM) and the across-the-road spacing of the two columns
+//     hotlap?: { piece, along } }              the hotlap spawn, a piece id and metres into it; absent until placed
+// Pieces are NOT required to exist here: an edit that deletes the hotlap's piece must not be refused for it. The export says so instead.
+const SPAWN_COUNT_MAX = 64, SPAWN_GAP_MAX = 200;
+function checkSpawns(sp, at = 'spawns') {
+  const bad = (m) => { throw new CoreError('BAD_SPAWNS', `${at}: ${m}`); };
+  const pos = (x, what, max) => { if (typeof x !== 'number' || !Number.isFinite(x) || x <= 0 || x > max) bad(`${what} must be a number above 0 and at most ${max}, got ${JSON.stringify(x)}`); };
+  if (!sp || typeof sp !== 'object') bad('must be an object with a line and a grid');
+  if (!sp.line || typeof sp.line.along !== 'number' || !Number.isFinite(sp.line.along) || sp.line.along < 0) bad(`line.along must be a distance of 0 m or more into the first piece, got ${JSON.stringify(sp.line && sp.line.along)}`);
+  const g = sp.grid;
+  if (!g || !Number.isInteger(g.count) || g.count < 1 || g.count > SPAWN_COUNT_MAX) bad(`grid.count must be a whole number from 1 to ${SPAWN_COUNT_MAX}, got ${JSON.stringify(g && g.count)}`);
+  pos(g.rowGapM, 'grid.rowGapM', SPAWN_GAP_MAX); pos(g.colGapM, 'grid.colGapM', SPAWN_GAP_MAX);
+  if (sp.hotlap !== undefined) {
+    const h = sp.hotlap;
+    if (!h || typeof h.piece !== 'string' || !h.piece) bad(`hotlap.piece must be a piece id, got ${JSON.stringify(h && h.piece)}`);
+    if (typeof h.along !== 'number' || !Number.isFinite(h.along) || h.along < 0) bad(`hotlap.along must be a distance of 0 m or more, got ${JSON.stringify(h.along)}`);
+  }
+  for (const k of Object.keys(sp)) if (!['line', 'grid', 'hotlap'].includes(k)) bad(`unknown field "${k}" (a spawns block has line, grid and hotlap)`);
+  return sp;
+}
+/** The spawns block in its canonical, quantised form (the order and the numbers the file carries). */
+function normSpawns(sp) {
+  checkSpawns(sp);
+  const out = { line: { along: q(sp.line.along, DEC.m) }, grid: { count: sp.grid.count, rowGapM: q(sp.grid.rowGapM, DEC.m), colGapM: q(sp.grid.colGapM, DEC.m) } };
+  if (sp.hotlap !== undefined) out.hotlap = { piece: sp.hotlap.piece, along: q(sp.hotlap.along, DEC.m) };
+  return checkSpawns(out);
+}
+/** The document with spawns sp, or with NO spawns field at all when sp is null (back to the export's own placement). */
+function setSpawns(doc, sp) {
+  const { spawns, ...rest } = doc;
+  return deepFreeze(checkDoc(sp == null ? rest : { ...rest, spawns: normSpawns(sp) }));
+}
+
 function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM = KNOT_M, knots, cup = false, edge = false, tube = false, grip = GRIP_DEFAULT }) {
   checkGrip(grip);
   if (!(length > 0)) throw new CoreError('BAD_LENGTH', `a piece's length must be positive, got ${length}`);
@@ -320,6 +359,7 @@ function checkDoc(doc) {
   if (!doc.start || !Array.isArray(doc.start.pos) || doc.start.pos.length !== 3 || !doc.start.pos.every(Number.isFinite) || !Number.isFinite(doc.start.heading) || !Number.isFinite(doc.start.pitch)) bad('start needs pos [x, y, z], heading and pitch');
   if (!Number.isInteger(doc.nextId) || doc.nextId < 1) bad('nextId must be a positive integer');
   if (!Array.isArray(doc.pieces)) bad('pieces must be an array');
+  if (doc.spawns !== undefined) checkSpawns(doc.spawns);
   const ids = new Set(); let prev = null, flight = null;
   doc.pieces.forEach((P, i) => {
     const at = `piece ${i} (${P && P.id})`;
@@ -365,7 +405,8 @@ const pieceText = (P) => (P.type === 'flight'
 function serialize(doc) {
   checkDoc(doc);
   const head = [`  "schema": ${JSON.stringify(doc.schema)}`, `  "generator": ${JSON.stringify(GENERATOR)}`, `  "name": ${JSON.stringify(doc.name)}`, `  "closed": ${doc.closed}`,
-    `  "start": ${JSON.stringify({ pos: doc.start.pos, heading: doc.start.heading, pitch: doc.start.pitch })}`, `  "nextId": ${doc.nextId}`];
+    `  "start": ${JSON.stringify({ pos: doc.start.pos, heading: doc.start.heading, pitch: doc.start.pitch })}`, `  "nextId": ${doc.nextId}`,
+    ...(doc.spawns !== undefined ? [`  "spawns": ${JSON.stringify(normSpawns(doc.spawns))}`] : [])];
   const body = doc.pieces.length ? `  "pieces": [\n${doc.pieces.map((P) => `    ${pieceText(P)}`).join(',\n')}\n  ]` : '  "pieces": []';
   return `{\n${[...head, body].join(',\n')}\n}\n`;
 }
@@ -391,7 +432,8 @@ function parse(text) {
     : cupOf(P, { id: P.id, type: P.type, length: q(P.length, DEC.m), family: P.family, ...(P && P.grip !== undefined && P.grip !== GRIP_DEFAULT ? { grip: checkGrip(P.grip, `piece ${P.id}: grip`) } : {}), knots: (P.knots || []).map((t) => q(t, DEC.m)),
       channels: Object.fromEntries(CHANNELS.map((ch) => [ch, parseChannel(P, ch, upgrade)])) })));
   const s = o.start || {}, start = { pos: (s.pos || []).map((x) => q(x, DEC.m)), heading: q(s.heading, DEC.rad), pitch: q(s.pitch, DEC.rad) };
-  return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start, nextId: o.nextId, pieces: convertOldFlights(read, start) }));
+  return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start, nextId: o.nextId, pieces: convertOldFlights(read, start),
+    ...(o.spawns !== undefined ? { spawns: normSpawns(o.spawns) } : {}) }));
 }
 
 /**
@@ -570,6 +612,7 @@ module.exports = {
   fromPositionFit,
   SCHEMA, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
+  checkSpawns, normSpawns, setSpawns, SPAWN_COUNT_MAX, SPAWN_GAP_MAX,
   createDoc, roadPiece, flightPiece, GRIP_MIN, GRIP_MAX, GRIP_DEFAULT, gripOf, checkGrip, withGrip, setGrip, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };

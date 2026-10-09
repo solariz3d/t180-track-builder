@@ -39,6 +39,15 @@ const PATTERNS = Object.freeze({ '2-staggered': { cols: 2, stagger: true }, '2-a
 // 8 m apart along (a staggered pair every 16 m), 3 m either side of the centre; 2 pit boxes 8 m apart; 1.5 m up.
 const DEFAULTS = Object.freeze({ height: 1.5, gateInsetM: 0.5, lineMarginM: 15, poleBackM: 10, rowGapM: 16, colGapM: 6, count: 4, pits: 2, pitSpacingM: 8, pattern: '2-staggered' });
 const SLOT_HALF_LENGTH = 2.4, SLOT_HALF_WIDTH = 1.0;   // src/export/markers.js DEFAULTS (inferred there: T-180 size not measured)
+// THE T-180, MEASURED (2026-10-09, tools/kn5.cjs over every installed T-180's collider.kn5 and body .kn5: 25 cars, 14 models): one collider for all of them,
+// 2.67 m wide x 5.95 m long x 0.99 m tall; the bodies run 5.29 to 6.67 m long (Fumee and Type A longest) and 2.20 to 2.65 m wide. The slot above (SLOT_HALF_*)
+// is still the older inferred one: the measured size is used for the hand-placed grid pack below, and moving SLOT_HALF_* to it is the loop's call (it
+// changes which narrow tube floors fit a grid: test/export_tube_grid.test.js rows 1-3 fail with it).
+const T180 = Object.freeze({ widthM: 2.67, lengthM: 6.67, colliderLengthM: 5.95 });
+// THE HAND-PLACED GRID PACK's starting spacing (the keeper: "the general size and spacing that would just work first"), from T180: two staggered columns
+// 6 m apart centre to centre (3.3 m of air between cars side by side), a slot every 8 m along (alternate columns), so one column is 16 m nose-to-nose
+// (9.3 m of air nose to tail); pole 10 m behind the line (its nose 6.7 m from the line). The keeper stretches or condenses it from here.
+const PACK = Object.freeze({ count: 8, rowGapM: 16, colGapM: 6, rowGapMinM: T180.lengthM + 1, colGapMinM: T180.widthM + 0.5 });   // the minimums: one column nose to tail with 1 m of air, two columns side by side with 0.5 m
 
 function gridSlots(grid) {
   const p = PATTERNS[grid.pattern];
@@ -93,6 +102,18 @@ function resolveLayout(layout, path, segments) {
   const sPit = anchorS(layout.pits.at, segments, starts);
   if (sPit == null) missing.push({ what: 'the pit boxes', word: layout.pits.at.word });
   else for (let k = 0; k < layout.pits.count; k++) markers.push({ name: `AC_PIT_${k}`, kind: 'pit', n: k, s: back(sPit, k * layout.pits.spacingM), u: layout.pits.u, h });
+  // the hotlap PLACED BY HAND (the keeper, 2026-10-09: "I place it down manually … literally plop down the spawn"): hotlap.at is an anchor like the line's.
+  // It stands where it is put; what it reports is the run it gets to the line, and the speed the T-180 reaches over that run on the flat at full thrust.
+  if (layout.hotlap.at) {
+    const sAt = anchorS(layout.hotlap.at, segments, starts);
+    if (sAt == null) missing.push({ what: 'the hotlap spawn', word: layout.hotlap.at.word });
+    else {
+      const run = path.closed ? ((sLine - sAt) % L + L) % L : sLine - sAt;
+      if (!(run > 0)) notes.push({ id: 'hotlap-past-line', level: 'amber', text: `the hotlap spawn is ${(-run).toFixed(0)} m past the start line: the car starts its lap from there` });
+      const kmhAt = run > 0 ? speedAfterM(run) * 3.6 : 0;
+      markers.push({ name: 'AC_HOTLAP_START_0', kind: 'hotlap', s: sAt, u: 0, h, runUpM: Math.max(run, 0), speedKmh: Math.round(kmhAt) });
+    }
+  } else {
   // the hotlap: a run-up that reaches the design speed at the line (§5c: "so the car arrives at speed")
   const kmh = layout.hotlap.speedKmh != null ? layout.hotlap.speedKmh : MACH6.designSpeedKmh, need = runUpM(kmh / 3.6);
   let sHot = back(sLine, need);
@@ -102,6 +123,7 @@ function resolveLayout(layout, path, segments) {
     sHot = s0;
   }
   markers.push({ name: 'AC_HOTLAP_START_0', kind: 'hotlap', s: sHot, u: 0, h, runUpM: need, speedKmh: kmh });
+  }
   (layout.sectors || []).forEach((a, i) => {
     const s = anchorS(a, segments, starts);
     if (s == null) { missing.push({ what: `sector ${i + 1}`, word: a.word }); return; }
@@ -172,4 +194,4 @@ function defaultLayout(path, segments, o = {}) {
   return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: [] };
 }
 
-module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, FLOOR_MAX_DEG, ONE_SLOT_MARGIN_M, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf };
+module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, T180, PACK, FLOOR_MAX_DEG, ONE_SLOT_MARGIN_M, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf };

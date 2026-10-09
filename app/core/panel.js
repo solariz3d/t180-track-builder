@@ -22,7 +22,9 @@ const HD = require('./handles.js');   // D244: the drag handles on the Extend gh
 const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
 const LD = require('./landing.js');
 const GL = require('./griplike.js');   // D261: the grip field's checks and words, the "grip like…" entries
-const GR = require('./griplayer.js');   // D261: the track coloured by grip
+const GR = require('./griplayer.js');
+const SU = require('./spawnsui.js');     // 2026-10-09: the start line, the grid pack and the hotlap, placed by hand
+const SPL = require('./spawnslayer.js');  // and drawn on the preview   // D261: the track coloured by grip
 const VO = require('./valuesoverlay.js');   // D267: the values of the piece being edited, large over the 3D view   // D258: the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
 
@@ -415,7 +417,8 @@ function mount(root, shell) {
   } });
 
   const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
-  const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send });   // D240 (the selection's clicks are the brush's while the brush is armed)
+  const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send });
+  const spawns = SU.mount({ shell, el, win });   // D240 (the selection's clicks are the brush's while the brush is armed)
   // D269: the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
   const bin = doc.getElementById ? doc.getElementById('pieces-bin') : null; if (bin) bin.replaceChildren(...pieces.nodes.library.slice(1));
   root.replaceChildren(
@@ -427,6 +430,7 @@ function mount(root, shell) {
     el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn), jumpNote, landingBox,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
+    ...spawns.nodes,
     ...pieces.nodes.selection, ...(bin ? [] : pieces.nodes.library),
     el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
     msg,
@@ -457,7 +461,8 @@ function mount(root, shell) {
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
-  const gripLayer = stage ? GR.mount(stage, shell, win) : null;   // D261: the track coloured by grip, off until "colour by grip" is ticked
+  const gripLayer = stage ? GR.mount(stage, shell, win) : null;
+  const spawnsLayer = stage ? SPL.mount(stage, shell, win) : null;   // the hand-placed start, drawn when the track has one   // D261: the track coloured by grip, off until "colour by grip" is ticked
   colourOn.onchange = () => { if (gripLayer) gripLayer.setVisible(colourOn.checked); if (labels) labels.setGripView(colourOn.checked); };
   const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // D244: the drag handles' overlay
   const flights = stage ? FL.mount(stage, win) : null;   // D243: the flights as dashed arcs
@@ -466,7 +471,7 @@ function mount(root, shell) {
   doc.addEventListener('t180:handles-request', onHandlesRequest);
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, values, options: opts, unmount() { unsub(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, spawns, spawnsLayer, values, options: opts, unmount() { unsub(); spawns.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
