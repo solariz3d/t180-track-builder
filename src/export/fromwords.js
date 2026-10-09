@@ -240,7 +240,9 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // opts.textures: the texture set the preview draws (src/texture/set.js); the export follows the preview's own rule
   // D230: every core road cell gets an underside skin that casts shadows, and a closed tube's inside is dark (src/export/underskin.js); a word document's scene comes back as it is
   // D261: a piece whose grip is not 100 drives on its own surface: its road cells are named 1GRIPnnn_… (src/export/gripkeys.js), after the skins take their names from 1ROAD_
-  const scene = withGripKeys(withUnderskin(withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null), mesh, segs), mesh, segs);
+  // D279: the pit lane wears the road's floor (src/export/pitlane.js withLaneFloor), right after the road's cells take theirs
+  const textured = withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null);
+  const scene = withGripKeys(withUnderskin(pit ? PitLane.withLaneFloor(textured, pit.lane, segs, o.textures || null) : textured, mesh, segs), mesh, segs);
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);
