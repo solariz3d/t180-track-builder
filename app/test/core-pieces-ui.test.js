@@ -579,10 +579,10 @@ test('row 14b: the landing boxes appear while a landing is the head, show the po
   P1.panel.unmount();
 });
 
-test('row 14c: the landing\'s four handles replace the Extend ghost\'s; a drag moves the number of its box in ONE undo step; Shift is fine, Ctrl snaps; two quick presses reset one; an Extend takes them away', async () => {
+test('row 14c: the landing\'s four handles (D278: BESIDE the Extend ghost\'s, where D258 had them replace it: row 14d); a drag moves the number of its box in ONE undo step; Shift is fine, Ctrl snaps; two quick presses reset one; an Extend takes them away', async () => {
   const P1 = await handlePanel(), { shell } = P1; P1.button('Jump').onclick(); for (let i = 0; i < 3; i++) P1.frame();
-  assert.deepEqual(P1.panel.handles.handles().map((h) => h.id), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'the four landing handles, none of the Extend ghost\'s'); assert.ok(P1.panel.handles.handles().every((h) => h.screen), 'all on screen');
-  let seen = null; P1.doc.dispatchEvent(new P1.win.CustomEvent('t180:handles-request', { detail: { reply: (l) => { seen = l; } } })); assert.deepEqual(seen.map((h) => h.kind), ['landfwd', 'landleft', 'landup', 'landturn'], 'the read-only request lists them too');
+  assert.deepEqual(P1.panel.handles.handles().map((h) => h.id).filter((i) => i.startsWith('land')), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'the four landing handles (D278: the Extend ghost\'s ten are up beside them, row 14d)'); assert.ok(P1.panel.handles.handles().every((h) => h.screen), 'all on screen');
+  let seen = null; P1.doc.dispatchEvent(new P1.win.CustomEvent('t180:handles-request', { detail: { reply: (l) => { seen = l; } } })); assert.deepEqual(seen.map((h) => h.kind).filter((k) => k.startsWith('land')), ['landfwd', 'landleft', 'landup', 'landturn'], 'the read-only request lists them too');
   const pose = () => shell.landing().pose, past = () => shell.getState().history.past.length, n0 = past();
   dragBy(P1, 'landfwd:0', 100); assert.equal(pose().forward, 55, '100 px along the arrow at 0.15 m a pixel'); assert.equal(past(), n0 + 1, 'ONE undo step for the whole drag'); assert.equal(P1.input('landing forward').value, '55', 'the box shows it');
   assert.deepEqual([pose().left, pose().up, pose().heading], [0, 0, 0], 'only forward moved');
@@ -596,7 +596,53 @@ test('row 14c: the landing\'s four handles replace the Extend ghost\'s; a drag m
   // an Extend fixes the landing: its handles go, the Extend ghost's come back
   P1.button('Extend').onclick(); for (let i = 0; i < 40; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are back, the landing\'s are gone'); assert.ok(!P1.panel.handles.handles().some((h) => h.kind.startsWith('land')));
   // the switch turns them off
-  shell.removeHead(); for (let i = 0; i < 3; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 4, 'back on the landing'); P1.input('drag handles').checked = false; P1.input('drag handles').onchange(); for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'the switch is off');
+  shell.removeHead(); for (let i = 0; i < 3; i++) P1.frame(); assert.equal(P1.panel.handles.handles().filter((h) => h.kind.startsWith('land')).length, 4, 'back on the landing'); P1.input('drag handles').checked = false; P1.input('drag handles').onchange(); for (let i = 0; i < 3; i++) P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'the switch is off');
+  P1.panel.unmount();
+});
+
+test('row 14d (D278, the keeper: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and height"): right after Jump the Extend ghost\'s handles are up BESIDE the landing\'s four; an Extend handle types into its field and edits no document; a landing handle still moves the landing in ONE undo step; Extend fixes the landing, and its handles go', async () => {
+  const P1 = await handlePanel(), { shell } = P1, box = landingBoxOf(P1);
+  const EXT = ['length:0', 'width:1', 'width:-1', 'bank:1', 'bank:-1', 'cup:1', 'cup:-1', 'turn:1', 'turn:-1', 'climb:0'], LAND = ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'];
+  const settle = () => { for (let i = 0; i < 40; i++) P1.frame(); }, idsOf = () => P1.panel.handles.handles().map((h) => h.id);
+  P1.button('Jump').onclick(); settle();
+  // 1  both sets: the landing's four (the landing is the head, still tunable) AND the Extend ghost's ten (the base equation's controls for the piece that comes next)
+  assert.deepEqual(idsOf().filter((i) => i.startsWith('land')), LAND, 'the landing\'s four are up'); assert.deepEqual(idsOf().filter((i) => !i.startsWith('land')), EXT, 'and the Extend ghost\'s ten, as before the jump');
+  assert.ok(P1.panel.handles.handles().every((h) => h.screen), 'all on screen'); assert.equal(box.style.display, '', 'the landing\'s boxes are up too');
+  let seen = null; P1.doc.dispatchEvent(new P1.win.CustomEvent('t180:handles-request', { detail: { reply: (l) => { seen = l; } } })); assert.deepEqual(seen.map((h) => h.id).sort(), [...LAND, ...EXT].sort(), 'the read-only request lists all fourteen');
+  // 2  an Extend handle types into its field: no document edit, nothing in Undo, the landing where it was
+  const d0 = shell.getState().history.present, past0 = shell.getState().history.past.length, pose0 = shell.landing().pose, turn = fieldOf(P1, 'turn °/100m'), len = fieldOf(P1, 'length m');
+  const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); assert.equal(Number(turn.value), Math.round((t0 + 3.32) * 10) / 10, 'the turn field took the drag (0.083 a degree per 100 m per pixel)');
+  const l0 = len.value; dragBy(P1, 'length:0', 50); assert.notEqual(len.value, l0, 'the length field took the drag');
+  assert.equal(shell.getState().history.present, d0, 'an Extend handle is no document edit'); assert.equal(shell.getState().history.past.length, past0, 'nothing in Undo'); assert.deepEqual(shell.landing().pose, pose0, 'the landing did not move');
+  settle(); assert.equal(idsOf().length, 14, 'both sets are still up after the drags');
+  // 3  a landing handle still moves the landing, in ONE undo step, and leaves the fields alone
+  const turnTyped = turn.value; dragBy(P1, 'landfwd:0', 100); assert.equal(shell.landing().pose.forward, 55, '100 px along the arrow at 0.15 m a pixel'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step for the whole drag'); assert.equal(turn.value, turnTyped, 'the Extend fields are untouched');
+  settle(); assert.equal(idsOf().length, 14);
+  // 4  the landing's number boxes still tune it while it is the head, with the Extend handles up
+  const LB = (n) => P1.input(`landing ${n}`); LB('up').value = '2'; LB('up').onchange(); assert.equal(shell.landing().pose.up, 2); settle(); assert.equal(idsOf().length, 14);
+  // 4b what was typed or dragged into the Extend fields survives a landing move (the move is a new document, and the panel used to refill every field from the head); a field nobody touched follows the head
+  const bank = fieldOf(P1, 'bank °'), bank0 = bank.value, turnKept = turn.value, lenKept = len.value; assert.notEqual(turnKept, String(t0), 'control: the turn field holds the dragged value');
+  LB('bank').value = '6'; LB('bank').onchange(); settle(); assert.equal(turn.value, turnKept, 'the dragged turn survived the landing move'); assert.equal(len.value, lenKept, 'and the dragged length');
+  assert.notEqual(bank.value, bank0, 'the bank nobody typed follows the head: the landing road\'s bank moved with the landing\'s'); assert.equal(idsOf().length, 14);
+  // 5  Extend places the piece the fields (and the dragged handles) describe, FIXES the landing: its boxes and handles go, the Extend ghost's ten stay
+  const n = shell.getState().history.present.pieces.length; P1.button('Extend').onclick(); settle();
+  assert.equal(shell.getState().history.present.pieces.length, n + 1, 'Extend placed a piece after the landing'); assert.equal(shell.landing(), null, 'the landing is not the head any more'); assert.equal(box.style.display, 'none', 'the landing\'s boxes are gone');
+  assert.deepEqual(idsOf(), EXT, 'the road\'s handles only, no landing arrows'); assert.ok(!P1.panel.handles.handles().some((h) => h.kind.startsWith('land')));
+  // 6  deleting back to the landing makes it the head again: its boxes and its handles come back beside the Extend ghost's
+  shell.removeHead(); settle(); assert.equal(box.style.display, ''); assert.deepEqual(idsOf().filter((i) => i.startsWith('land')), LAND); assert.equal(idsOf().length, 14);
+  // 7  the switch turns every one of them off
+  P1.input('drag handles').checked = false; P1.input('drag handles').onchange(); settle(); assert.deepEqual(idsOf(), [], 'the switch is off: no handles at all');
+  P1.panel.unmount();
+});
+
+test('row 14e (D278): a hover on Jump shows the jump ghost with no Extend handles on it, while a landing\'s own handles stay; a hover on Extend with a landing as the head shows the Extend ghost\'s handles; Sculpt takes the landing\'s handles away as before', async () => {
+  const P1 = await handlePanel(), { shell } = P1, settle = () => { for (let i = 0; i < 40; i++) P1.frame(); }, idsOf = () => P1.panel.handles.handles().map((h) => h.id);
+  P1.button('Jump').onclick(); settle(); assert.equal(idsOf().length, 14);
+  // a jump's ghost (hover on Jump) is not Extend's: no Extend handles on it; the landing of the track that is already placed keeps its four
+  P1.button('Jump').onmouseenter(); settle(); assert.deepEqual(idsOf(), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'a jump\'s ghost carries none of Extend\'s handles');
+  P1.button('Jump').onmouseleave(); settle(); assert.equal(idsOf().length, 14, 'the Extend handles come back with the ghost gone');
+  // sculpt: the landing is not a sculpt target; the handles are the selected piece\'s or none
+  P1.input('sculpt on').checked = true; P1.input('sculpt on').onchange(); settle(); assert.ok(!idsOf().some((i) => i.startsWith('land')), 'no landing arrows while sculpting');
   P1.panel.unmount();
 });
 
