@@ -23,10 +23,13 @@ function slotCorners(m, halfL = HALF_L, halfW = HALF_W) {
 }
 
 function marks(info) {
-  if (!info || !Array.isArray(info.placed)) return [];
+  if (!info) return [];
+  if (!Array.isArray(info.placed)) return info.lane ? [{ kind: 'lane', label: '', path: info.lane.left, bad: false }, { kind: 'lane', label: 'PIT LANE', path: info.lane.right, bad: false }] : [];
   const bad = new Set();
   for (const c of (info.check && info.check.checks) || []) for (const p of c.problems || []) for (const m of p.match(/AC_[A-Z_]+_\d+(?:_[LR])?/g) || []) bad.add(m);
   const out = [], by = (n) => info.placed.find((m) => m.name === n && m.pos);
+  // the PIT LANE (2026-10-09): its two edges as open lines, grey (red when it cannot be built: then there is no outline, the panel says why)
+  if (info.lane) { out.push({ kind: 'lane', label: '', path: info.lane.left, bad: false }, { kind: 'lane', label: 'PIT LANE', path: info.lane.right, bad: false }); }
   const L = by('AC_TIME_0_L'), R = by('AC_TIME_0_R');
   if (L && R) out.push({ kind: 'line', label: 'START', line: [L.surface || L.pos, R.surface || R.pos], bad: bad.has('AC_TIME_0_L') || bad.has('AC_TIME_0_R') });
   for (const m of info.placed) {
@@ -41,7 +44,7 @@ function marks(info) {
   return out;
 }
 
-const COLOUR = { line: '#ffffff', grid: '#5fd3ff', pit: '#a8b0bd', hotlap: '#ff9a2e', bad: '#ff4d4d' };
+const COLOUR = { line: '#ffffff', grid: '#5fd3ff', pit: '#d6dbe3', hotlap: '#ff9a2e', lane: '#a8b0bd', bad: '#ff4d4d' };
 
 function mount(stage, shell, win) {
   const doc = stage.ownerDocument, canvas = doc.createElement('canvas');
@@ -53,7 +56,8 @@ function mount(stage, shell, win) {
   const refresh = (st) => {
     if (st.history.present === forDoc && st.resolved === forResolved) return;
     forDoc = st.history.present; forResolved = st.resolved;
-    items = marks(st.history.present.spawns ? shell.spawnsInfo() : null);
+    const d = st.history.present;
+    items = marks(d.spawns || d.pitLane ? shell.spawnsInfo() : null);
   };
   const unsub = shell.subscribe(refresh); refresh(shell.getState());
   const frame = () => {
@@ -69,6 +73,14 @@ function mount(stage, shell, win) {
     const scr = (p) => { const c = M.apply(VP, p); return c[3] > 0 ? { x: (c[0] / c[3] * 0.5 + 0.5) * W, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * H } : null; };
     ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
     for (const it of items) {
+      if (it.path) {   // an open polyline (the pit lane's edges), broken where it passes behind the camera
+        ctx.strokeStyle = it.bad ? COLOUR.bad : COLOUR.lane; ctx.lineWidth = 3; let run = [], drew = [];
+        const flush = () => { if (run.length > 1) { ctx.beginPath(); run.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); drew = drew.concat(run); } run = []; };
+        for (const q of it.path) { const p = scr(q); if (p) run.push(p); else flush(); } flush();
+        if (it.label && drew.length) { const p = drew[Math.floor(drew.length / 2)], tw = ctx.measureText(it.label).width + 8; ctx.fillStyle = '#0b0d11'; ctx.fillRect(p.x - tw / 2, p.y - 8, tw, 16); ctx.fillStyle = COLOUR.lane; ctx.fillText(it.label, p.x, p.y + 0.5); }
+        if (drew.length) drawn.push({ kind: it.kind, label: it.label, bad: it.bad, points: drew });
+        continue;
+      }
       const pts = (it.line || it.corners).map(scr); if (pts.some((p) => !p)) continue;
       const col = it.bad ? COLOUR.bad : COLOUR[it.kind];
       ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); if (it.corners) ctx.closePath();

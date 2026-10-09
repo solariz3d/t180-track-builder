@@ -540,18 +540,62 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return commit('spawns', () => nd, { lastEdited: null, ...ok(sp ? 'start placed by hand' : 'start back to automatic') });
     },
     /**
+     * THE PIT LANE (2026-10-09): `lane` is src/core/document.js's pit lane ({ side, leave, rejoin, offsetM, width, divergeM, mergeM, speedKmh, boxes,
+     * boxSpacingM }), or null to remove it. One undo step; a bad value is refused in plain words. Whether it can be BUILT here (a join on a wall is refused)
+     * is spawnsInfo's laneError: an unbuildable lane is still kept, so moving a join off the wall needs no retyping.
+     */
+    setPitLane(lane) {
+      const d = doc();
+      if (lane && (!d.pieces[0] || d.pieces[0].type !== 'road')) return set({ message: 'put the first piece down first: the pit lane leaves the road beside it' });
+      let nd; try { nd = D.setPitLane(d, lane); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }
+      if (JSON.stringify(nd.pitLane) === JSON.stringify(d.pitLane)) return st;
+      return commit('pitLane', () => nd, { lastEdited: null, ...ok(lane ? 'pit lane set' : 'pit lane removed') });
+    },
+    /**
+     * FLATTEN FOR THE PIT (the keeper's idea, 2026-10-09): lower the cup, tube sweep and edge to the plain road beside the whole pit lane, easing back over
+     * 60 m either side (src/core/pitflat.js), so the lane can leave and rejoin and runs level beside the road. Shape only: the route does not move. One undo step.
+     */
+    flattenForPit() {
+      const d = doc(), lane = d.pitLane;
+      if (!lane) return set({ message: 'add a pit lane first' });
+      const off = SC.pieceOffsets(d), at = (a) => { const i = d.pieces.findIndex((P) => P.id === a.word); return i < 0 ? null : off[i] + a.along; };
+      const s0 = at(lane.leave), s1 = at(lane.rejoin);
+      if (s0 === null || s1 === null) return set({ message: 'a pit lane join is on a piece that is not on the track any more: pick its piece again' });
+      let nd; try { nd = require('../../src/core/pitflat.js').flattenUnder(d, { s0, s1, ramp: 60 }); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }
+      // a TUBE opened under the racing line leaves the line without road where it opens (measured on the keeper's T-180 TUBE OVAL: downforce-ray gaps at every
+      // ramp tried, 60 to 300 m), so the export will refuse it: say so now, not at export time
+      const tubeOpened = nd.pieces.some((P, i) => P.tube && P.channels.t !== d.pieces[i].channels.t);
+      return commit('flattenForPit', () => nd, { lastEdited: null, ...ok(tubeOpened
+        ? 'the tube beside the pit lane is opened (Ctrl+Z closes it). A tube opened under the racing line usually leaves the line without road where it opens, and the export will say so: on a tube track, start the tube after the pit straight instead'
+        : 'the road beside the pit lane is flattened (Ctrl+Z puts the walls back)') });
+    },
+    /**
      * Where the cars start, for the panel and the preview: { spawns, firstLength, placed, check, notes, missing } from the hand-placed layout, or null when the
      * track has no spawns (or nothing resolves yet). `placed` is src/markers placeAll's: every marker with its world position, or an `error`.
      */
     spawnsInfo() {
       const d = doc();
-      if (!d.spawns || !st.resolved || !st.resolved.segments || !st.resolved.segments.length) return null;
+      if ((!d.spawns && !d.pitLane) || !st.resolved || !st.resolved.segments || !st.resolved.segments.length) return null;
+      const segs = st.resolved.segments;
       try {
-        const { layout, path, firstLength } = spawnsLayout(d, st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !d.closed });
-        const M = require('../../src/markers/index.js'), r = M.placeAll(layout, path, st.resolved.segments);
-        const res = require('../../src/markers/layout.js').resolveLayout(layout, path, st.resolved.segments);
-        return { spawns: d.spawns, firstLength, layout, placed: r.placed, check: r.check, notes: res.notes, missing: res.missing };
-      } catch (e) { return { spawns: d.spawns, error: e.message }; }
+        let layout, path, firstLength;
+        if (d.spawns) ({ layout, path, firstLength } = spawnsLayout(d, segs, st.resolved.lift, st.resolved.start, { open: !d.closed }));
+        else {   // the automatic start, with a pit lane to show: the same placement the export makes
+          const { buildPath } = require('../../src/geom/index.js'), p0 = buildPath(segs, { step: 2, closed: !!d.closed, ...(st.resolved.start ? { start: st.resolved.start } : {}) });
+          path = st.resolved.lift ? st.resolved.lift(p0) : p0;
+          try { layout = startLayout(segs, st.resolved.lift, st.resolved.start, { open: !d.closed }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; layout = null; }
+        }
+        // the pit lane: built as the export builds it (src/geom/pitlane.js); a lane that cannot be built says why, in the export's words
+        let lane = null, laneError = null;
+        if (d.pitLane) {
+          try { lane = require('../../src/geom/pitlane.js').buildPitLane(path, segs, laneRoad(d)); } catch (e) { if (e.name !== 'PitLaneError') throw e; laneError = e.message; }
+          if (layout) layout = withPitBoxes(layout, d.pitLane);
+        }
+        if (!layout) return { spawns: d.spawns, pitLane: d.pitLane, lane: lane && laneOutline(lane, d.pitLane.width), laneError, error: 'the start cannot be placed automatically (no straight long enough): place it by hand' };
+        const M = require('../../src/markers/index.js'), r = M.placeAll(layout, path, segs, lane ? { lane: { path: lane.path, segments: lane.segments } } : {});
+        const res = require('../../src/markers/layout.js').resolveLayout(layout, path, segs);
+        return { spawns: d.spawns, pitLane: d.pitLane, firstLength, layout, placed: r.placed, check: r.check, notes: res.notes, missing: res.missing, lane: lane && laneOutline(lane, d.pitLane.width), laneError };
+      } catch (e) { return { spawns: d.spawns, pitLane: d.pitLane, error: e.message }; }
     },
     /** The grip of the road at the head (100 on an empty track or one with no grip set): what the Extend field shows, and what the next piece takes unless it is changed. */
     headGrip() { const d = doc(); for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return D.gripOf(d.pieces[i]); return D.GRIP_DEFAULT; },
@@ -707,7 +751,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       // SPAWNS (2026-10-09): a track whose start was placed by hand exports exactly that; one that never was keeps the automatic placement
       if (doc().spawns) markers = spawnsLayout(doc(), st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test }).layout;
       else try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
-      return exporter.runSegments(st.resolved.segments, { name: api.exportDoc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start }, { ...opts, markers });
+      const pit = laneRoad(doc());
+      if (pit) markers = withPitBoxes(markers, doc().pitLane);
+      return exporter.runSegments(st.resolved.segments, { name: api.exportDoc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start, ...(pit ? { pitLane: pit } : {}) }, { ...opts, markers });
     },
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
     async exportTo(dir, opts = {}) {
@@ -929,6 +975,17 @@ function spawnsLayout(doc, segments, lift, start, { open = false } = {}) {
   const pits = { at: { word: segments[k].id, along: Math.max(0, sPit - starts[firstOf]) }, count: Markers.DEFAULTS.pits, spacingM: Markers.DEFAULTS.pitSpacingM, u: 0, lane: null };
   const hotlap = sp.hotlap ? { at: { word: sp.hotlap.piece, along: sp.hotlap.along } } : { speedKmh: null };
   return { layout: { version: 1, height: Markers.DEFAULTS.height, gateInsetM: Markers.DEFAULTS.gateInsetM, line, grid, pits, hotlap, sectors: [] }, path, firstLength };
+}
+
+/** The pit lane's ROAD part (src/doc/pitlane.js's shape, for src/geom/pitlane.js and the export's meta.pitLane), or null without a lane. */
+function laneRoad(doc) { if (!doc.pitLane) return null; const { boxes, boxSpacingM, ...road } = doc.pitLane; return road; }
+/** The layout with the pit lane's boxes: its count and spacing (the boxes go ON the lane: src/markers/index.js placeAll moves them there). */
+function withPitBoxes(layout, pitLane) { return { ...layout, pits: { ...layout.pits, count: pitLane.boxes, spacingM: pitLane.boxSpacingM } }; }
+/** The lane's two edges as world polylines, for the preview: the lane's own path stations, out by half its width either way along its L. */
+function laneOutline(lane, width) {
+  const half = width / 2, S = lane.path.samples, stride = Math.max(1, Math.ceil(S.length / 400)), L = [], R = [];
+  for (let i = 0; i < S.length; i += stride) { const m = S[i]; L.push(m.pos.map((v, k) => v + m.L[k] * half)); R.push(m.pos.map((v, k) => v - m.L[k] * half)); }
+  return { left: L, right: R, lengthM: lane.path.lengthM, joins: lane.joins };
 }
 
 /** The road pieces overlapping [a, b] of the path's s (the adapter's s, flights and ramps included: sculpt.js pieceOffsets), for

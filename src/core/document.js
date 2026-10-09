@@ -235,6 +235,34 @@ function normSpawns(sp) {
   if (sp.hotlap !== undefined) out.hotlap = { piece: sp.hotlap.piece, along: q(sp.hotlap.along, DEC.m) };
   return checkSpawns(out);
 }
+// ── THE PIT LANE on a core track (the keeper, 2026-10-09: "a pit road that is off to the side of the track, and can connect to the track … a secondary spawn
+// point for practice, so cars don't spawn right on the track"). The lane itself is the word builder's (src/doc/pitlane.js, built by src/geom/pitlane.js:
+// it leaves the road's edge tangentially, runs beside it, and rejoins), anchored here to PIECE ids and metres into them; plus the pit boxes on it:
+//   { side, leave: { word, along }, rejoin: { word, along }, offsetM, width, divergeM, mergeM, speedKmh, boxes, boxSpacingM }
+// Absent on a track that never had one (byte for byte as before). Anchors are not required to exist here, as with the spawns: the export says so.
+const PL = require('../doc/pitlane.js');
+const PIT_BOXES_MAX = 32;
+const PIT_DEFAULT = Object.freeze({ ...PL.DEFAULTS, boxes: 4, boxSpacingM: 10 });
+function checkPitLane(lane, at = 'pitLane') {
+  const bad = (m) => { throw new CoreError('BAD_PIT_LANE', `${at}: ${m}`); };
+  if (!lane || typeof lane !== 'object') bad('must be an object');
+  const { boxes, boxSpacingM, ...road } = lane;
+  const p = PL.problem(road); if (p) bad(p.replace(/^pitLane:?\s*/, ''));
+  if (!Number.isInteger(boxes) || boxes < 1 || boxes > PIT_BOXES_MAX) bad(`boxes must be a whole number from 1 to ${PIT_BOXES_MAX}, got ${JSON.stringify(boxes)}`);
+  if (typeof boxSpacingM !== 'number' || !Number.isFinite(boxSpacingM) || boxSpacingM < 4 || boxSpacingM > 100) bad(`boxSpacingM must be from 4 to 100 m, got ${JSON.stringify(boxSpacingM)}`);
+  return lane;
+}
+function normPitLane(lane) {
+  checkPitLane(lane);
+  const { boxes, boxSpacingM, ...road } = lane;
+  return checkPitLane({ ...PL.quantised(road, (v) => q(v, DEC.m), (v) => Math.round(v * 100) / 100), boxes, boxSpacingM: q(boxSpacingM, DEC.m) });
+}
+/** The document with pit lane `lane`, or with NO pitLane field when lane is null. */
+function setPitLane(doc, lane) {
+  const { pitLane, ...rest } = doc;
+  return deepFreeze(checkDoc(lane == null ? rest : { ...rest, pitLane: normPitLane(lane) }));
+}
+
 /** The document with spawns sp, or with NO spawns field at all when sp is null (back to the export's own placement). */
 function setSpawns(doc, sp) {
   const { spawns, ...rest } = doc;
@@ -360,6 +388,7 @@ function checkDoc(doc) {
   if (!Number.isInteger(doc.nextId) || doc.nextId < 1) bad('nextId must be a positive integer');
   if (!Array.isArray(doc.pieces)) bad('pieces must be an array');
   if (doc.spawns !== undefined) checkSpawns(doc.spawns);
+  if (doc.pitLane !== undefined) checkPitLane(doc.pitLane);
   const ids = new Set(); let prev = null, flight = null;
   doc.pieces.forEach((P, i) => {
     const at = `piece ${i} (${P && P.id})`;
@@ -406,7 +435,8 @@ function serialize(doc) {
   checkDoc(doc);
   const head = [`  "schema": ${JSON.stringify(doc.schema)}`, `  "generator": ${JSON.stringify(GENERATOR)}`, `  "name": ${JSON.stringify(doc.name)}`, `  "closed": ${doc.closed}`,
     `  "start": ${JSON.stringify({ pos: doc.start.pos, heading: doc.start.heading, pitch: doc.start.pitch })}`, `  "nextId": ${doc.nextId}`,
-    ...(doc.spawns !== undefined ? [`  "spawns": ${JSON.stringify(normSpawns(doc.spawns))}`] : [])];
+    ...(doc.spawns !== undefined ? [`  "spawns": ${JSON.stringify(normSpawns(doc.spawns))}`] : []),
+    ...(doc.pitLane !== undefined ? [`  "pitLane": ${JSON.stringify(normPitLane(doc.pitLane))}`] : [])];
   const body = doc.pieces.length ? `  "pieces": [\n${doc.pieces.map((P) => `    ${pieceText(P)}`).join(',\n')}\n  ]` : '  "pieces": []';
   return `{\n${[...head, body].join(',\n')}\n}\n`;
 }
@@ -433,7 +463,7 @@ function parse(text) {
       channels: Object.fromEntries(CHANNELS.map((ch) => [ch, parseChannel(P, ch, upgrade)])) })));
   const s = o.start || {}, start = { pos: (s.pos || []).map((x) => q(x, DEC.m)), heading: q(s.heading, DEC.rad), pitch: q(s.pitch, DEC.rad) };
   return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start, nextId: o.nextId, pieces: convertOldFlights(read, start),
-    ...(o.spawns !== undefined ? { spawns: normSpawns(o.spawns) } : {}) }));
+    ...(o.spawns !== undefined ? { spawns: normSpawns(o.spawns) } : {}), ...(o.pitLane !== undefined ? { pitLane: normPitLane(o.pitLane) } : {}) }));
 }
 
 /**
@@ -612,7 +642,7 @@ module.exports = {
   fromPositionFit,
   SCHEMA, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
-  checkSpawns, normSpawns, setSpawns, SPAWN_COUNT_MAX, SPAWN_GAP_MAX,
+  checkSpawns, normSpawns, setSpawns, SPAWN_COUNT_MAX, SPAWN_GAP_MAX, checkPitLane, normPitLane, setPitLane, PIT_DEFAULT, PIT_BOXES_MAX,
   createDoc, roadPiece, flightPiece, GRIP_MIN, GRIP_MAX, GRIP_DEFAULT, gripOf, checkGrip, withGrip, setGrip, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };

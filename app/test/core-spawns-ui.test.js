@@ -139,3 +139,26 @@ test('the panel still loads through the webview\'s loader, with no node built-in
   const P = await loadCjs('app/core/panel.js', async (p) => fs.readFileSync(path.join(REPO, p), 'utf8'));
   assert.equal(typeof P.mount, 'function');
 });
+
+test('the Pit lane section: ticking it puts a lane along the start straight, sized to fit, and says how long it is and how many boxes are on it', async () => {
+  const P = await mounted();
+  assert.ok(P.root.all().some((e) => e.tagName === 'H3' && e.textContent === 'Pit lane'));
+  const on = P.by('pit lane'); on.checked = true; on.onchange();
+  const lane = P.s.getState().history.present.pitLane;
+  assert.deepEqual([lane.leave, lane.rejoin, lane.divergeM, lane.mergeM], [{ word: 'p1', along: 30 }, { word: 'p1', along: 270 }, 80, 80]);
+  assert.match(P.by('pit lane status').textContent, /Pit lane: \d+ m, 4 of 4 pit boxes on it/);
+});
+
+test('the Pit lane section changes the side, the boxes and a join, one undo step each; unticking removes the lane', async () => {
+  const P = await mounted();
+  const on = P.by('pit lane'); on.checked = true; on.onchange();
+  const sel = P.by('pit lane side'); sel.value = 'L'; sel.onchange();
+  P.set('pit boxes', 3);
+  P.set('pit lane rejoins at metres into its piece', 260);
+  const lane = P.s.getState().history.present.pitLane;
+  assert.deepEqual([lane.side, lane.boxes, lane.rejoin.along], ['L', 3, 260]);
+  P.s.undo();
+  assert.equal(P.s.getState().history.present.pitLane.rejoin.along, 270);
+  on.checked = false; on.onchange();
+  assert.equal(P.s.getState().history.present.pitLane, undefined);
+});

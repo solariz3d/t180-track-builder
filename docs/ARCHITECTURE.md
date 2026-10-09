@@ -164,10 +164,14 @@ half-pipes.
   spacing between columns) and an optional hotlap anchor (piece id, distance). app/core/coreshell.js `spawnsLayout`
   turns it into the layout above and the export writes it; without it the export keeps the automatic placement
   (`startLayout`, the longest straight). The panel is app/core/spawnsui.js, the preview marks app/core/spawnslayer.js.
-  The pack's starting spacing comes from the measured T-180 (src/markers/layout.js `T180`, `PACK`). Still to come:
-  the **pit-lane module** (the keeper: a pit road off to the side, its own geometry meshing into the track,
-  unlocked once the first piece is down, giving a second spawn point for practice); until then two pit boxes sit
-  behind the grid. `SLOT_HALF_*`, the slot the checks use, is still the older inferred 4.8 m x 2.0 m; moving it to
+  The pack's starting spacing comes from the measured T-180 (src/markers/layout.js `T180`, `PACK`). The **pit lane**
+  on core tracks is the optional `pitLane` block (the word builder's side road, src/doc/pitlane.js, anchored to piece
+  ids, plus `boxes` and `boxSpacingM`): the export builds it beside the road (src/geom/pitlane.js) and stands the pit
+  boxes on it; the panel is app/core/pitui.js. Where the road's edge is a cup wall or a tube, "Flatten road for pit"
+  (src/core/pitflat.js) lowers the shape channels to the plain road beside the lane, route untouched; it works for
+  cups and does not for tubes (an opened tube leaves the racing line without road). Without a lane, two pit boxes
+  sit behind the grid. Still to come: a free-form pit platform (the keeper's "platform maker", part of the later
+  environment tools). `SLOT_HALF_*`, the slot the checks use, is still the older inferred 4.8 m x 2.0 m; moving it to
   the measured size changes which narrow tube floors fit a grid (test/export_tube_grid.test.js rows 1-3).
 
 ## 6. Export: writing a working AC track directly
