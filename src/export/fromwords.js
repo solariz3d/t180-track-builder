@@ -73,6 +73,7 @@ const Markers = require('../markers/index.js');
 const trackfiles = require('./trackfiles.js');
 const ailine = require('./ailine.js');
 const PitLane = require('./pitlane.js');
+const PitBoxes = require('./pitboxes.js');
 const { withTextureSet } = require('../texture/set.js');
 const { withUnderskin } = require('./underskin.js');
 const { withGripKeys } = require('./gripkeys.js');
@@ -242,7 +243,10 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // D261: a piece whose grip is not 100 drives on its own surface: its road cells are named 1GRIPnnn_… (src/export/gripkeys.js), after the skins take their names from 1ROAD_
   // D279: the pit lane wears the road's floor (src/export/pitlane.js withLaneFloor), right after the road's cells take theirs
   const textured = withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null);
-  const scene = withGripKeys(withUnderskin(pit ? PitLane.withLaneFloor(textured, pit.lane, segs, o.textures || null) : textured, mesh, segs), mesh, segs);
+  const laned = pit ? PitLane.withLaneFloor(textured, pit.lane, segs, o.textures || null) : textured;
+  // D279 follow-up: the painted pit boxes wear the road under them, its material and its texture coordinates (src/export/pitboxes.js)
+  const boxed = PitBoxes.withPitBoxFloor(laned, mk.paint, { path: p, segments: segs, lane: pit ? pit.lane : null, set: o.textures || null });
+  const scene = withGripKeys(withUnderskin(boxed, mesh, segs), mesh, segs);
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);

@@ -42,6 +42,8 @@ const AMEND4 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d258.json'), '
 const JUMP_CHANGED = ['F7-hill-then-jump'];
 // D260 (the draw calls): the road cells and the skins are exported in chunks, so F1 F2's kn5 changes and nothing else; manifest.d260.json records it
 const AMEND5 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d260.json'), 'utf8'));
+// D279 (the painted pit boxes wear the road): each closed fixture's two PAINT_PIT_n move from t180b_paint to the road's t180b_road with the road's coordinates, so F1 F2's kn5 changes and nothing else; manifest.d279.json records it
+const AMEND6 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d279.json'), 'utf8'));
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
   const man = JSON.parse(JSON.stringify(MANIFEST));
@@ -50,6 +52,7 @@ function amendedManifest() {
   for (const [k, v] of Object.entries(AMEND3.fixtures)) { const { kn5Bytes, ...digests } = v.after_d230; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // kn5Bytes is the record's measure, not a digest the check computes
   for (const [k, v] of Object.entries(AMEND4.fixtures)) man.fixtures[k].render = JSON.parse(JSON.stringify(v.after_d258));   // D258
   for (const [k, v] of Object.entries(AMEND5.fixtures)) { const { kn5Bytes, ...digests } = v.after_d260; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D260
+  for (const [k, v] of Object.entries(AMEND6.fixtures)) { const { kn5Bytes, ...digests } = v.after_d279; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D279
   return man;
 }
 
@@ -73,6 +76,9 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d260.json'))), '58ce2577d0fcf5c30e7094e5e1238b2219f0108035a666fabbf0511b1715ae1f');   // D260
   assert.deepEqual(Object.keys(AMEND5.fixtures), KN5_CHANGED);
   assert.deepEqual([...AMEND5.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !KN5_CHANGED.includes(k)).sort());
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d279.json'))), '544395e3d53eb61ee042d98a11e6c83134a67376dc2a9bd565393696149e131c');   // D279
+  assert.deepEqual(Object.keys(AMEND6.fixtures), KN5_CHANGED);
+  assert.deepEqual([...AMEND6.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !KN5_CHANGED.includes(k)).sort());
 });
 // CHANGED D258: F7 (the old jump, now a free flight to the end of its old ramp) differs in segs, path and mesh; the path is byte-identical in every OTHER fixture
 test('row 5a (amended D196, D222, D258): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, F7 in segs, path and mesh, and the three others are identical', () => {
@@ -118,6 +124,18 @@ test('row 5 CONTROL: the check has teeth: a manifest with one digest altered rea
     fs.appendFileSync(path.join(dir, man.fixtures['F5-flat-20m-bank-30'].file), ' ');
     r = check(dir); assert.match(r.stdout, /F5-flat-20m-bank-30: FIXTURE FILE CHANGED/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('D279 amendment record: F1 F2 keep every digest but the kn5, and the measure says only their pit boxes changed, in material and coordinates', () => {
+  for (const k of KN5_CHANGED) {
+    const v = AMEND6.fixtures[k], prev = AMEND5.fixtures[k].after_d260;
+    for (const d of ['segs', 'path', 'mesh', 'meshParts', 'kn5', 'kn5Bytes']) assert.equal(v.before_d260[d], prev[d], `${k}: "before" is the D260 record's ${d}`);
+    for (const d of ['segs', 'path', 'mesh', 'meshParts', 'kn5Bytes']) assert.equal(v.after_d279[d], prev[d], `${k}: ${d} changed`);
+    assert.notEqual(v.after_d279.kn5, v.before_d260.kn5, `${k}: the kn5 did not change`);
+    const m = v.measure;
+    assert.ok(m.pitBoxes > 0, `${k}: the fixture has pit boxes`);
+    assert.deepEqual(m.changedNodes, { PAINT_PIT_n: m.pitBoxes }, `${k}: only the pit boxes changed`);
+    assert.deepEqual(m.fieldsChanged, { 'material t180b_paint -> t180b_road': m.pitBoxes, uvs: m.pitBoxes }, `${k}: in material and coordinates only`);
+  }
 });
 test('D260 amendment record: F1 F2 keep their segs, path and mesh digests, only the kn5 moved, and its triangle set and markers are the same in far fewer meshes', () => {
   for (const k of KN5_CHANGED) {

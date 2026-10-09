@@ -29,13 +29,13 @@ const MATERIAL = Object.freeze({ name: 't180b_paint', shader: 'ksPerPixel', alph
 /** One patch s ∈ [sA, sB] × u ∈ [uA, uB], as grid quads on the surface. Returns { P, N, UV, I } (plain arrays). */
 function patch(path, segments, starts, sA, sB, uA, uB) {
   const nU = Math.max(2, Math.ceil((uB - uA) / ACROSS_STEP) + 1), rows = [sA, sB];
-  const P = [], N = [], UV = [], I = [];
+  const P = [], N = [], UV = [], I = [], SU = [];   // SU (D279 follow-up): each vertex's (s, u), so the export can give a pit box the road's own coordinates
   for (const [r, s] of rows.entries()) for (let j = 0; j < nU; j++) {
     const u = uA + (uB - uA) * j / (nU - 1), sf = surfaceAt(path, segments, s, u, starts);
-    P.push(...add(sf.pos, mul(sf.n, LIFT))); N.push(...sf.n); UV.push(j / (nU - 1), r);
+    P.push(...add(sf.pos, mul(sf.n, LIFT))); N.push(...sf.n); UV.push(j / (nU - 1), r); SU.push(s, u);
   }
   for (let j = 0; j < nU - 1; j++) { const A = j, B = j + 1, C = nU + j, D = C + 1; I.push(A, C, B, B, C, D); }   // u rises to the left: CCW from above
-  return { P, N, UV, I };
+  return { P, N, UV, I, SU };
 }
 
 function node(name, parts, material) {
@@ -53,7 +53,12 @@ function box(path, segments, starts, s, u) {
 
 function paintFor(placed, path, segments, { material = 0, lane = null } = {}) {
   const starts = segStarts(path, segments), laneStarts = lane ? segStarts(lane.path, lane.segments) : null, meshes = [], items = [], skipped = [];
-  const add1 = (name, from, kind, s, u, parts) => { meshes.push(node(name, parts, material)); items.push({ name, from, kind, s, u }); };
+  // D279 follow-up: for each PIT box, its vertices' (s, u) in vertex order and whether it lies on the lane (src/export/pitboxes.js dresses it as the road)
+  const su = new Map();
+  const add1 = (name, from, kind, s, u, parts, onLane = false) => {
+    meshes.push(node(name, parts, material)); items.push({ name, from, kind, s, u });
+    if (kind === 'pit') su.set(name, { su: Float64Array.from(parts.flatMap((p) => p.SU)), onLane });
+  };
   const l = placed.find((m) => m.name === 'AC_TIME_0_L' && !m.error);
   if (l) {
     const sp = l.span;
@@ -63,9 +68,9 @@ function paintFor(placed, path, segments, { material = 0, lane = null } = {}) {
     if (m.error || (m.kind !== 'grid' && m.kind !== 'pit')) continue;
     const name = m.kind === 'grid' ? `PAINT_GRID_${m.n}` : `PAINT_PIT_${m.n}`;
     const [p, g, st] = m.onLane ? [lane.path, lane.segments, laneStarts] : [path, segments, starts];   // a lane's box on the lane
-    try { add1(name, m.name, m.kind, m.s, m.u, box(p, g, st, m.s, m.u)); } catch (e) { skipped.push({ name, why: e.message }); }
+    try { add1(name, m.name, m.kind, m.s, m.u, box(p, g, st, m.s, m.u), !!m.onLane); } catch (e) { skipped.push({ name, why: e.message }); }
   }
-  return { material: MATERIAL, meshes, items, skipped };
+  return { material: MATERIAL, meshes, items, skipped, su };
 }
 
 module.exports = { paintFor, MATERIAL, LIFT, LINE_W, EDGE_W };

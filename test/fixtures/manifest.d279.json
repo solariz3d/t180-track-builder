@@ -1,0 +1,74 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258 and D260 (manifest.d260.json); F1 F2 only, their kn5 only",
+ "made_at": "D279 follow-up, pane E, e-pitbox-wt: t180 0dc10dc (before, a git archive) and the D279 pit-box export (after), both rendered from the same fixture files as test/fixtures/fixtures.js digests() renders them, and compared scene node by scene node (scratch pitbox/fxmeasure.js)",
+ "reason": "The keeper, 2026-10-09, asked which pits should wear the track's texture: \"The painted pit boxes\" (exo_memory/loop/plan_t180_pit_texture_2026-10-09.md, Amendment). Each PAINT_PIT_n now wears the material of the road under it, with the road's own texture coordinates (src/export/pitboxes.js). The fixtures are exported with no texture set, so their two pit boxes each move from t180b_paint to the road's own t180b_road and take the road's coordinates; every other node is byte for byte the same, so only the kn5 of the two closed fixtures changes.",
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "before_d260": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "339c952e5a96ee6762cfc6bd9851691519d1053103d30763d2018ba3b521df26",
+    "kn5Bytes": 7112528
+   },
+   "after_d279": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "23dd3e64ca56b33299b4f55db256bd6ad35b87b18c0c358b3d7293bd278a72d0",
+    "kn5Bytes": 7112528
+   },
+   "measure": {
+    "nodes": 1505,
+    "pitBoxes": 2,
+    "changedNodes": {
+     "PAINT_PIT_n": 2
+    },
+    "fieldsChanged": {
+     "material t180b_paint -> t180b_road": 2,
+     "uvs": 2
+    }
+   }
+  },
+  "F2-halfpipe-default-lap-closed": {
+   "before_d260": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "986c29aec9e805ae216a079ffd8e9cf151afaf9df125f3fa34807dc538045ae0",
+    "kn5Bytes": 9434428
+   },
+   "after_d279": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "9df47bda651695f3016284dcd8db54f121e1009fd60794d2434dd57af0186e2d",
+    "kn5Bytes": 9434428
+   },
+   "measure": {
+    "nodes": 1505,
+    "pitBoxes": 2,
+    "changedNodes": {
+     "PAINT_PIT_n": 2
+    },
+    "fieldsChanged": {
+     "material t180b_paint -> t180b_road": 2,
+     "uvs": 2
+    }
+   }
+  }
+ },
+ "unchanged": [
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}
