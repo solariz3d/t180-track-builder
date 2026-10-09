@@ -37,4 +37,26 @@ function withLane(scene, laneMesh) {
   return { ...scene, materials: mats, root: { ...scene.root, children: [...scene.root.children, ...laneMesh.scene.root.children.map(remap)] } };
 }
 
-module.exports = { laneForExport, withLane };
+/**
+ * D279 (the keeper, 2026-10-09: "ALSO MAKE the pits the same texture as the track"): the lane wears the road's FLOOR. withTextureSet
+ * (src/texture/set.js) gives a textured floor material to the road's own cells only, so the lane kept the plain road material while the
+ * road around it wore the texture. Here every lane cell (1ROAD_PIT_…) takes the floor material of the road segment the lane LEAVES from:
+ * the same material, so the same diffuse texture, under every setting (a made texture, the user's picture). An untextured floor changes
+ * nothing (the lane and the road already share t180b_road). The surface key, the mesh count, the pit box paint and the texture
+ * coordinates are untouched: a word document's road cells keep mesh.js's 10 m repeats too, and only an equation-core road re-runs its
+ * coordinates (src/texture/flow.js), which has no pit lane today (app/core passes none to the export).
+ *   withLaneFloor(scene, lane, mainSegments, set) -> scene    lane: buildPitLane's result (its joins.leave.s), set: the texture set or null
+ */
+function withLaneFloor(scene, lane, mainSegments, set) {
+  if (!set || !lane) return scene;
+  let at = 0, seg = null;
+  for (const g of mainSegments) { if (at <= lane.joins.leave.s + 1e-9) seg = g; else break; at += g.length; }
+  const slots = seg ? set.bySegment(seg.id) : null, f = slots && slots.floor;
+  if (!f || !(f.settings.texture || f.settings.make)) return scene;
+  const idx = scene.materials.findIndex((m) => m.name === f.material);
+  if (idx < 0) throw new Error(`PIT_LANE_FLOOR: the lane leaves segment ${seg.id}, whose floor material ${f.material} is not in the scene`);
+  const remap = (n) => (n.type === 'mesh' ? (/^1ROAD_PIT_/.test(n.name) ? { ...n, material: idx } : n) : { ...n, children: (n.children || []).map(remap) });
+  return { ...scene, root: remap(scene.root) };
+}
+
+module.exports = { laneForExport, withLane, withLaneFloor };
