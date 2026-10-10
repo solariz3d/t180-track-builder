@@ -161,7 +161,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   }
   let st = {
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
-    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, landingDrag: null, exportReds: null,
+    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, landingDrag: null, spawnsDrag: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
     selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
     sculpt: false,   // D244b: the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
@@ -580,10 +580,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /**
      * Where the cars start, for the panel and the preview: { spawns, firstLength, placed, check, notes, missing } from the hand-placed layout, or null when the
      * track has no spawns (or nothing resolves yet). `placed` is src/markers placeAll's: every marker with its world position, or an `error`.
+     * `{ auto: true }` (D285, the preview's drag marks) answers for the AUTOMATIC start too, the placement the export would make, so there is a line to grab.
      */
-    spawnsInfo() {
+    spawnsInfo(opts = {}) {
       const d = doc();
-      if ((!d.spawns && !d.pitLane) || !st.resolved || !st.resolved.segments || !st.resolved.segments.length) return null;
+      if ((!d.spawns && !d.pitLane && !opts.auto) || !st.resolved || !st.resolved.segments || !st.resolved.segments.length) return null;
       const segs = st.resolved.segments;
       try {
         let layout, path, firstLength;
@@ -604,6 +605,53 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const res = require('../../src/markers/layout.js').resolveLayout(layout, path, segs);
         return { spawns: d.spawns, pitLane: d.pitLane, firstLength, layout, placed: r.placed, check: r.check, notes: res.notes, missing: res.missing, lane: lane && laneOutline(lane, d.pitLane.width), laneError };
       } catch (e) { return { spawns: d.spawns, pitLane: d.pitLane, error: e.message }; }
+    },
+    /**
+     * THE START, FOR DRAGGING (D285; the keeper: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars"): the road the
+     * start sits on, in the path's own metres, so the preview can turn a pointer position into a place on the road. { path, starts, first: { id, s0, len }, roads:
+     * [{ id, s0, s1 }] (every road piece, in lap order), spawns } or null when nothing resolves; `spawns` is the doc's block, or, on an automatic track, the block the
+     * automatic layout comes to (what the first drag writes), or `error` says why it cannot (the automatic line is not on the first piece, where a hand-placed one must be).
+     */
+    spawnsPath() {
+      const d = doc(), segs = st.resolved && st.resolved.segments, first = d.pieces[0];
+      if (!segs || !segs.length || !first || first.type !== 'road') return null;
+      const { buildPath } = require('../../src/geom/index.js'), { segStarts } = require('../../src/markers/place.js');
+      const p0 = buildPath(segs, { step: 2, closed: !!d.closed, ...(st.resolved.start ? { start: st.resolved.start } : {}) }), path = st.resolved.lift ? st.resolved.lift(p0) : p0;
+      const starts = segStarts(path, segs), span = (id) => { const k = segs.findIndex((g) => g.id === id); return k < 0 ? null : { id, s0: starts[k], s1: starts[k] + segs.filter((g) => g.id === id).reduce((a, g) => a + g.length, 0) }; };
+      const roads = d.pieces.filter((P) => P.type === 'road').map((P) => span(P.id)).filter(Boolean), f = span(first.id);
+      if (!f) return null;
+      const out = { path, starts, first: { id: f.id, s0: f.s0, len: f.s1 - f.s0 }, roads, spawns: d.spawns || null };
+      if (!d.spawns) {
+        let lay = null; try { lay = startLayout(segs, st.resolved.lift, st.resolved.start, { open: !d.closed }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; }
+        if (!lay) return { ...out, error: 'the start cannot be placed automatically (no straight long enough): tick "place by hand" first' };
+        if (lay.line.word !== first.id) return { ...out, error: `the automatic start is on piece ${lay.line.word}; a start placed by hand goes on the first piece (${first.id}): tick "place by hand" to put it there` };
+        const { PACK } = require('../../src/markers/layout.js'), g = lay.grid, one = g.pattern === '1-column';
+        out.spawns = { line: { along: Math.min(Math.max(lay.line.along, 0), f.s1 - f.s0) }, grid: { count: Math.min(g.count, 64), rowGapM: Math.max(one ? g.rowGapM * 2 : g.rowGapM, PACK.rowGapMinM), colGapM: Math.max(g.colGapM, PACK.colGapMinM), poleBackM: g.poleBackM } };
+      }
+      return out;
+    },
+    /**
+     * A DRAG of the start (D285): beginSpawnsDrag opens it (on an automatic track it first writes the spawns the automatic layout comes to: "start placed by hand"),
+     * spawnsDragTo(sp) sets the spawns block from the document as it was when the drag began, endSpawnsDrag is ONE undo step for the whole drag, conversion included.
+     */
+    beginSpawnsDrag() {
+      if (st.spawnsDrag) return set({ message: 'a start drag is already open' });
+      const P = api.spawnsPath(); if (!P) return set({ message: 'put the first piece down first: the start line goes on it' });
+      if (P.error) return set({ message: P.error });
+      const base = doc();
+      return attempt(() => {
+        let h = D.beginDrag(st.history);
+        if (!base.spawns) h = D.dragTo(h, D.setSpawns(base, P.spawns));
+        return set({ history: h, spawnsDrag: { base }, ...(base.spawns ? { message: null } : { dirty: true, lastStep: { op: 'spawns', ms: 0 }, message: 'start placed by hand' }) });
+      });
+    },
+    spawnsDragTo(sp) {
+      const b = st.spawnsDrag; if (!b) return set({ message: 'no start drag is open' });
+      return attempt(() => { const t0 = now(), h = D.dragTo(st.history, D.setSpawns(b.base, sp)); return set({ history: h, dirty: true, lastStep: { op: 'spawns', ms: now() - t0 }, message: null }); });
+    },
+    endSpawnsDrag() {
+      if (!st.spawnsDrag) return st;
+      return attempt(() => set({ history: D.endDrag(st.history), spawnsDrag: null, lastEdited: null }));
     },
     /** The grip of the road at the head (100 on an empty track or one with no grip set): what the Extend field shows, and what the next piece takes unless it is changed. */
     headGrip() { const d = doc(); for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return D.gripOf(d.pieces[i]); return D.GRIP_DEFAULT; },
@@ -973,7 +1021,7 @@ function spawnsLayout(doc, segments, lift, start, { open = false } = {}) {
   const p0 = buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) }), path = lift ? lift(p0) : p0;
   const firstLength = segments.filter((g) => g.id === first.id).reduce((a, g) => a + g.length, 0);
   const line = { word: first.id, along: Math.min(Math.max(sp.line.along, 0), firstLength) };
-  const grid = { pattern: '2-staggered', count: sp.grid.count, poleBackM: Markers.DEFAULTS.poleBackM, rowGapM: sp.grid.rowGapM, colGapM: sp.grid.colGapM, edits: {} };
+  const grid = { pattern: '2-staggered', count: sp.grid.count, poleBackM: sp.grid.poleBackM !== undefined ? sp.grid.poleBackM : Markers.DEFAULTS.poleBackM, rowGapM: sp.grid.rowGapM, colGapM: sp.grid.colGapM, edits: {} };
   // the pits, behind the grid, as an anchor (segment id and metres into the first segment carrying that id: anchorS's convention)
   const starts = segStarts(path, segments), sLine = Markers.anchorS(line, segments, starts);
   const lastBack = Math.max(...Markers.gridSlots(grid).map((x) => x.backM)), L = path.lengthM, s0 = path.samples[0].s;

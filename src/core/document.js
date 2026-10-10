@@ -208,7 +208,9 @@ function setGrip(doc, indices, g) {
 // (app/core/coreshell.js startLayout, the longest straight); with it the export uses exactly this.
 //   { line: { along },                         the start/finish line, metres into the FIRST piece (clamped to its length where it is used)
 //     grid: { count, rowGapM, colGapM },       the grid pack: how many slots, the along-the-road spacing of one column (a staggered pair every
-//                                              rowGapM) and the across-the-road spacing of the two columns
+//                                              rowGapM) and the across-the-road spacing of the two columns; plus poleBackM? (D285): how far behind the line the
+//                                              pole slot sits, set by dragging the pack. ABSENT until a drag sets it, and absent means the 10 m the export always
+//                                              used (src/markers/layout.js DEFAULTS), so every file made before it is the same text
 //     hotlap?: { piece, along } }              the hotlap spawn, a piece id and metres into it; absent until placed
 // Pieces are NOT required to exist here: an edit that deletes the hotlap's piece must not be refused for it. The export says so instead.
 const SPAWN_COUNT_MAX = 64, SPAWN_GAP_MAX = 200;
@@ -220,6 +222,7 @@ function checkSpawns(sp, at = 'spawns') {
   const g = sp.grid;
   if (!g || !Number.isInteger(g.count) || g.count < 1 || g.count > SPAWN_COUNT_MAX) bad(`grid.count must be a whole number from 1 to ${SPAWN_COUNT_MAX}, got ${JSON.stringify(g && g.count)}`);
   pos(g.rowGapM, 'grid.rowGapM', SPAWN_GAP_MAX); pos(g.colGapM, 'grid.colGapM', SPAWN_GAP_MAX);
+  if (g.poleBackM !== undefined) pos(g.poleBackM, 'grid.poleBackM', SPAWN_GAP_MAX);   // D285: how far behind the line the pole slot sits; absent = the export's 10 m
   if (sp.hotlap !== undefined) {
     const h = sp.hotlap;
     if (!h || typeof h.piece !== 'string' || !h.piece) bad(`hotlap.piece must be a piece id, got ${JSON.stringify(h && h.piece)}`);
@@ -231,7 +234,7 @@ function checkSpawns(sp, at = 'spawns') {
 /** The spawns block in its canonical, quantised form (the order and the numbers the file carries). */
 function normSpawns(sp) {
   checkSpawns(sp);
-  const out = { line: { along: q(sp.line.along, DEC.m) }, grid: { count: sp.grid.count, rowGapM: q(sp.grid.rowGapM, DEC.m), colGapM: q(sp.grid.colGapM, DEC.m) } };
+  const out = { line: { along: q(sp.line.along, DEC.m) }, grid: { count: sp.grid.count, rowGapM: q(sp.grid.rowGapM, DEC.m), colGapM: q(sp.grid.colGapM, DEC.m), ...(sp.grid.poleBackM !== undefined ? { poleBackM: q(sp.grid.poleBackM, DEC.m) } : {}) } };
   if (sp.hotlap !== undefined) out.hotlap = { piece: sp.hotlap.piece, along: q(sp.hotlap.along, DEC.m) };
   return checkSpawns(out);
 }

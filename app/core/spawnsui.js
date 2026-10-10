@@ -10,7 +10,8 @@
 //
 //   mount({ shell, el, win }) -> { nodes, update(state), unmount() }
 'use strict';
-const { PACK } = require('../../src/markers/layout.js');
+const { PACK, DEFAULTS } = require('../../src/markers/layout.js');
+const { POLE_MIN_M, POLE_MAX_M } = require('./spawndrag.js');
 
 const lenOf = (segments, id) => (segments || []).filter((g) => g.id === id).reduce((a, g) => a + g.length, 0);
 const r1 = (x) => Math.round(x * 10) / 10;
@@ -24,6 +25,7 @@ function mount({ shell, el, win }) {
   const cars = el('input', { type: 'number', step: '1', min: '1', max: '64', 'aria-label': 'grid cars' });
   const packL = el('input', { type: 'number', step: '0.5', min: String(PACK.rowGapMinM), 'aria-label': 'pack length: metres along the road between two cars in a column', title: `metres along the road between two cars in the same column (the other column sits halfway); at least ${PACK.rowGapMinM.toFixed(1)} m, a T-180 and a metre` });
   const packW = el('input', { type: 'number', step: '0.5', min: String(PACK.colGapMinM), 'aria-label': 'pack width: metres between the two columns', title: `metres between the two columns, centre to centre; at least ${PACK.colGapMinM.toFixed(2)} m, a T-180 and half a metre` });
+  const poleN = el('input', { type: 'number', step: '0.5', min: String(POLE_MIN_M), max: String(POLE_MAX_M), 'aria-label': 'pole gap: metres from the start line to the pole car', title: 'metres from the start line back to the centre of the pole car; drag any grid box on the preview to change it' });
   const resetPack = el('button', { text: 'Measured spacing', title: `back to the spacing from the measured T-180 (6.67 m x 2.67 m): ${PACK.rowGapM} m along a column, ${PACK.colGapM} m between columns` });
   const hotSet = el('button', { text: 'Hotlap on selected piece', title: 'select a piece on the track first (click it), then put the hotlap spawn on it; slide it along the piece after' });
   const hotPiece = el('select', { 'aria-label': 'hotlap piece' });
@@ -33,7 +35,7 @@ function mount({ shell, el, win }) {
   const hotSay = el('p', { class: 'message', 'aria-label': 'hotlap speed', style: 'font-size:12px;margin:2px 0' });
   const checks = el('ul', { 'aria-label': 'start and grid checks', style: 'margin:2px 0;padding-left:18px;font-size:12px' });
   const field = (label, ...kids) => el('label', { style: 'display:block;margin:2px 0' }, el('span', { text: label }), ' ', ...kids);
-  const handBox = el('div', {}, field('start line m', lineN, ' ', lineOf), lineR, field('cars', cars), field('pack length m', packL), field('pack width m', packW), el('div', { class: 'actions' }, resetPack),
+  const handBox = el('div', {}, field('start line m', lineN, ' ', lineOf), lineR, field('cars', cars), field('pack length m', packL), field('pack width m', packW), field('pole gap m', poleN), el('div', { class: 'actions' }, resetPack),
     el('div', { class: 'actions' }, hotSet, hotOff), field('hotlap piece', hotPiece), field('hotlap m', hotN), hotR, hotSay, checks);
 
   const doc = () => shell.getState().history.present;
@@ -54,6 +56,7 @@ function mount({ shell, el, win }) {
   cars.onchange = () => { const v = num(cars); if (v !== null) put({ grid: { ...sp().grid, count: v } }); };
   packL.onchange = () => { const v = num(packL); if (v !== null) put({ grid: { ...sp().grid, rowGapM: Math.max(v, PACK.rowGapMinM) } }); };
   packW.onchange = () => { const v = num(packW); if (v !== null) put({ grid: { ...sp().grid, colGapM: Math.max(v, PACK.colGapMinM) } }); };
+  poleN.onchange = () => { const v = num(poleN); if (v !== null) put({ grid: { ...sp().grid, poleBackM: Math.min(Math.max(v, POLE_MIN_M), POLE_MAX_M) } }); };
   resetPack.onclick = () => put({ grid: { ...sp().grid, rowGapM: PACK.rowGapM, colGapM: PACK.colGapM } });
   hotSet.onclick = () => {
     const sel = shell.getState().selection;
@@ -79,7 +82,7 @@ function mount({ shell, el, win }) {
     if (!s) return;
     const L = lenOf(st.resolved.segments, first.id);
     lineR.max = String(r1(L)); lineR.value = lineN.value = String(Math.min(s.line.along, L)); lineOf.textContent = `of ${r1(L)} m (first piece)`;
-    cars.value = String(s.grid.count); packL.value = String(s.grid.rowGapM); packW.value = String(s.grid.colGapM);
+    cars.value = String(s.grid.count); packL.value = String(s.grid.rowGapM); packW.value = String(s.grid.colGapM); poleN.value = String(s.grid.poleBackM !== undefined ? s.grid.poleBackM : DEFAULTS.poleBackM);
     const roads = d.pieces.filter((P) => P.type === 'road');
     hotPiece.replaceChildren(...roads.map((P) => new win.Option(P.id, P.id)));
     const h = s.hotlap;

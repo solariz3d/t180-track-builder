@@ -5,7 +5,7 @@
 //   · the PIT boxes (automatic until the pit module) in grey, and the HOTLAP spawn in orange with the speed it reaches by the line
 //   · a red box for any slot the checks put off the road or overlapping, with the checks' words in the panel (app/core/spawnsui.js)
 // The marks come from the shell's spawnsInfo (the same placement the export writes), computed only when the track or its spawns change, not every frame.
-// Shown only when the track has spawns (a track with the automatic start draws nothing here).
+// Drawn for the AUTOMATIC start too since D285 (the same marks the export would place), because they are what the mouse grabs (app/core/spawndrag.js).
 //
 //   slotCorners(m, halfL, halfW)            -> [p0, p1, p2, p3]     pure: a marker's car box on the road, world space
 //   marks(info)                             -> [{ kind, label, corners | line, bad }]   pure: what to draw for a spawnsInfo
@@ -57,7 +57,7 @@ function mount(stage, shell, win) {
     if (st.history.present === forDoc && st.resolved === forResolved) return;
     forDoc = st.history.present; forResolved = st.resolved;
     const d = st.history.present;
-    items = marks(d.spawns || d.pitLane ? shell.spawnsInfo() : null);
+    items = marks(shell.spawnsInfo({ auto: true }));   // D285: the automatic start too, so there is a line, a pack and a hotlap to grab (app/core/spawndrag.js)
   };
   const unsub = shell.subscribe(refresh); refresh(shell.getState());
   const frame = () => {
