@@ -40,6 +40,7 @@ const D = require('../../src/core/document.js');
 const { extend } = require('../../src/core/extend.js');
 const LV = require('../../src/core/level.js');
 const TB = require('../../src/core/turnby.js');
+const SH = require('../../src/core/sharp.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
 /**
@@ -334,6 +335,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** D280 TURN BY: extend with the fields' piece, its turn solved so it turns EXACTLY `deg` degrees (+ = left) and ends straight (turn rate 0); src/core/turnby.js.
      *  One undo step, like extend; too short a piece is refused by name with the length that works (TURN_TOO_SHORT), as the message. */
     extendTurnBy: (opts, deg) => commit('turnBy', () => TB.extendTurnBy(doc(), opts, (Number(deg) * Math.PI) / 180), { lastEdited: [doc().pieces.length] }),
+    /** D282 SHARP: a corner of `deg` degrees (+ = left) at radius R m, ramped in and out over `ramp` m, exiting dead straight; src/core/sharp.js. Its two pieces
+     *  are ONE undo step; a radius too tight for the width is refused by name with the tightest that works (SHARP_TOO_TIGHT), as the message, and nothing changes. */
+    extendSharp: (opts, { deg, R, ramp }) => commit('sharp', () => SH.extendSharp(doc(), opts, { angle: (Number(deg) * Math.PI) / 180, R: Number(R), ramp: Number(ramp) }), { lastEdited: [doc().pieces.length, doc().pieces.length + 1] }),
     /**
      * REMOVE THE HEAD (Ctrl+Backspace, the piece builder's key moved to this page, D239 note): the last piece goes, as ONE undo step. An
      * empty track is refused by name. On a closed loop the loop is OPEN again (what Close changed in the other pieces stays; Ctrl+Z puts
