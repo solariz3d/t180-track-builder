@@ -151,7 +151,8 @@ function mount(stage, win, shell, host) {
   const flush = () => { frameReq = 0; apply(); };
   const onDown = (e) => {
     if (e.button !== 0 || drag) return;
-    const [x, y] = rel(e), hit = hitAt(x, y); if (!hit) return;
+    const [x, y] = rel(e); if (host.yieldTo && host.yieldTo(x, y)) return;   // a handle under the pointer is the handle's
+    const hit = hitAt(x, y); if (!hit) return;
     const info = infoNow(), v = view(), P = pathNow(); if (!info || !v || !P || P.error) { if (P && P.error) { e.preventDefault(); e.stopImmediatePropagation(); shell.beginSpawnsDrag(); } return; }
     const first = P.first, sLine = markerS(info, 'AC_TIME_0_L'); if (sLine === null) return;
     // what the grab is relative to: the pointer's place on the road, so the mark does not jump to the pointer
@@ -173,7 +174,7 @@ function mount(stage, win, shell, host) {
   const onMove = (e) => {
     const [x, y] = rel(e);
     if (drag) { waiting = { x, y }; if (!frameReq) frameReq = win.requestAnimationFrame(flush); return; }
-    const h = hitAt(x, y);
+    const h = host.yieldTo && host.yieldTo(x, y) ? null : hitAt(x, y);
     if (h) { stage.style.cursor = 'grab'; hovering = true; } else if (hovering) { stage.style.cursor = ''; hovering = false; }
   };
   const onUp = (e) => {
@@ -183,10 +184,12 @@ function mount(stage, win, shell, host) {
     apply(); drag = null; hovering = false; stage.style.cursor = ''; shell.endSpawnsDrag();
   };
   const onKeyDown = (e) => { if (drag && e && e.key === 'Escape') onUp(null); };
-  stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
+  stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
+  let late = false;   // the move listener is added by late(), AFTER the handles' own: they set the cursor on every move, so ours has to be the last word
   if (doc && doc.addEventListener) doc.addEventListener('keydown', onKeyDown);
   return {
     dragging: () => !!drag,
+    late() { if (!late) { late = true; stage.addEventListener('pointermove', onMove); } },
     unmount() {
       if (frameReq) win.cancelAnimationFrame(frameReq);
       stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp);
