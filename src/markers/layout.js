@@ -161,6 +161,10 @@ const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g
 /**
  * The default layout: the line near the far end of the LONGEST straight, the grid behind it, the pits behind the grid.
  * Throws { code: 'NO_START_STRAIGHT' } when no straight is long or wide enough.
+ * o.firstPiece (D284, the keeper 2026-10-10: "every piece i put down, the start line moves up again and again"): the line goes near the far end of the
+ * run's FIRST piece (the segments carrying the run's first id) instead of the run's, and never nearer the run's start than the grid and pits need. On an
+ * OPEN track the far end of the run is often the build head, so appending a Straight to it lengthened the run and carried the line along every time;
+ * the run's first piece does not change on an append. A closed track does not pass it, so a finished track's start is where it always was.
  */
 function defaultLayout(path, segments, o = {}) {
   const c = { ...DEFAULTS, ...o };
@@ -172,7 +176,7 @@ function defaultLayout(path, segments, o = {}) {
       // the floor of a segment is the narrowest of its start, middle and end cross-sections (a cup's segments carry a blend, not one shape)
       const floorOf = (x) => Math.min(floorHalf(Prof.readAt(x, 0)), floorHalf(Prof.readAt(x, x.length / 2)), floorHalf(Prof.readAt(x, x.length)));
       const hw = Math.min(floorOf(g), prev ? floorHalf(Prof.readAt(prev, prev.length)) : Infinity);
-      run = run ? { ...run, b: starts[k] + g.length, half: Math.min(run.half, hw) } : { a: starts[k], b: starts[k] + g.length, half: hw };
+      run = run ? { ...run, b: starts[k] + g.length, half: Math.min(run.half, hw) } : { a: starts[k], b: starts[k] + g.length, half: hw, k0: k };
       if (!best || run.b - run.a > best.b - best.a) best = run;
     } else run = null;
   });
@@ -189,7 +193,12 @@ function defaultLayout(path, segments, o = {}) {
   const lastBack = Math.max(...gridSlots(grid).map((x) => x.backM));
   const need = c.lineMarginM + lastBack + c.pits * c.pitSpacingM + SLOT_HALF_LENGTH;
   if (best.b - best.a < need) throw err(`the longest straight is ${(best.b - best.a).toFixed(1)} m; a grid of ${c.count} and ${c.pits} pit boxes need ${need.toFixed(1)} m`);
-  const sLine = best.b - c.lineMarginM, sPit = sLine - lastBack - c.pitSpacingM;
+  let sLine = best.b - c.lineMarginM;
+  if (c.firstPiece) {
+    let j = best.k0; while (j + 1 < segments.length && segments[j + 1].id === segments[best.k0].id) j++;
+    sLine = Math.min(best.b, Math.max(starts[j] + segments[j].length, best.a + need)) - c.lineMarginM;
+  }
+  const sPit = sLine - lastBack - c.pitSpacingM;
   const at = (s) => { let k = 0; segments.forEach((g, j) => { if (starts[j] <= s + 1e-9) k = j; }); const id = segments[k].id, first = segments.findIndex((g) => g.id === id); return { word: id, along: s - starts[first] }; };
   return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: [] };
 }
