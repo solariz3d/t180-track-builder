@@ -954,7 +954,7 @@ function startLayout(segments, lift, start, { open = false } = {}) {   // open (
   const nearly = (g) => g.kind === 'road' && [g.k0, g.k1, g.kp0, g.kp1].every((x) => Math.abs(x) <= STRAIGHT_K) && [g.roll0, g.roll1].every((x) => Math.abs(x) <= STRAIGHT_ROLL);
   const marked = segments.map((g) => (nearly(g) ? { ...g, word: 'straight', k0: 0, k1: 0, kp0: 0, kp1: 0, roll0: 0, roll1: 0 } : g));
   const p = buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) });
-  return Markers.defaultLayout(lift ? lift(p) : p, marked);
+  return Markers.defaultLayout(lift ? lift(p) : p, marked, open ? { firstPiece: true } : {});   // D284: on an open track the line stays on its straight's first piece as pieces are added
 }
 
 /**
