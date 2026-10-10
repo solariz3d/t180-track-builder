@@ -25,6 +25,7 @@ const GL = require('./griplike.js');   // D261: the grip field's checks and word
 const GR = require('./griplayer.js');
 const SU = require('./spawnsui.js');     // 2026-10-09: the start line, the grid pack and the hotlap, placed by hand
 const SPL = require('./spawnslayer.js');  // and drawn on the preview
+const SPD = require('./spawndrag.js');    // D285: and dragged there
 const PIT = require('./pitui.js');       // 2026-10-09: the pit lane, its practice spawns on it   // D261: the track coloured by grip
 const VO = require('./valuesoverlay.js');   // D267: the values of the piece being edited, large over the 3D view   // D258: the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
@@ -483,13 +484,14 @@ function mount(root, shell) {
   const spawnsLayer = stage ? SPL.mount(stage, shell, win) : null;   // the hand-placed start, drawn when the track has one   // D261: the track coloured by grip, off until "colour by grip" is ticked
   colourOn.onchange = () => { if (gripLayer) gripLayer.setVisible(colourOn.checked); if (labels) labels.setGripView(colourOn.checked); };
   const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // D244: the drag handles' overlay
+  const spawnDrag = stage ? SPD.mount(stage, win, shell, { pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; } }) : null;   // D285: the start line, the pack and the hotlap grabbed with the mouse (mounted after the handles: a handle wins where both are under the pointer)
   const flights = stage ? FL.mount(stage, win) : null;   // D243: the flights as dashed arcs
   // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
   const onHandlesRequest = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(handles ? handles.handles().filter((h) => h.screen).map((h) => ({ id: h.id, kind: h.kind, side: h.side, x: h.screen.x, y: h.screen.y, dx: h.screen.dx, dy: h.screen.dy })) : []); };
   doc.addEventListener('t180:handles-request', onHandlesRequest);
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawns, spawnsLayer, values, options: opts, unmount() { unsub(); spawns.unmount(); pit.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, spawns, spawnsLayer, spawnDrag, values, options: opts, unmount() { unsub(); spawns.unmount(); pit.unmount(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
