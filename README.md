@@ -13,9 +13,9 @@ can be put on them, but the walls, tubes and jumps are built for a T-180.
 Windows only. The installer installs for the current user, needs no administrator rights, and is not code-signed, so
 Windows SmartScreen warns about an unknown publisher the first time.
 
-**The current installer is 0.3.3** (2026-10-07), `T-180 Track Builder_0.3.3_x64-setup.exe`, from the
-[v0.3.3 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.3.3). What changed since 0.2.2 is listed under
-`[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
+**The current installer is 0.3.4** (2026-10-07), `T-180 Track Builder_0.3.4_x64-setup.exe`, from the
+[v0.3.4 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.3.4). What changed since 0.2.2 is listed under
+`[0.3.4]`, `[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
 
 Uninstalling leaves your tracks and settings in place (see *Where your files live*).
 
