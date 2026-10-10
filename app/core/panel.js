@@ -239,6 +239,13 @@ function mount(root, shell) {
   const levelHere = (fn) => { const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell[fn](opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
   const levelBtn = el('button', { text: 'Level', title: 'a piece of the length above that ends straight and LEVEL (pitch 0): its climb is solved for you', onclick: () => levelHere('extendLevel') });
   const floorBtn = el('button', { text: 'To floor', title: 'a piece of the length above that ends straight, level and ON THE FLOOR (height 0): too short a piece is refused with the length that works', onclick: () => levelHere('extendToFloor') });
+  // D280, TURN BY (the keeper: "90 degree turns not coming out straight"): the turn field is a RATE, and a piece eased to a rate ENDS at it, so the next piece
+  // starts still turning. This extends with the fields' piece and lets the core solve its turn (src/core/turnby.js): exactly the angle typed beside it, ending
+  // with turn rate 0; too short a piece is refused by name with the length that works
+  const turnBy = num(90, 1, 'the angle the piece turns, degrees (+ = left, − = right)'); turnBy.oninput = turnBy.onchange = () => {};
+  const turnByBtn = el('button', { text: 'Turn by', title: 'a piece of the length above that turns EXACTLY the angle beside it and ends straight (turn rate 0): too short a piece is refused with the length that works', onclick: () => {
+    const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnBy(opts(), turnBy.value); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
+  } });
   // and the hint when the turn field asks for 0 after a turn without "at start": that eases over the whole piece, so it is not straight until its end
   // D267: no paragraph under the buttons; the sense is the "at start" box's tooltip
   const turnStartTitle = atStart.turn.getAttribute('title');
@@ -429,7 +436,7 @@ function mount(root, shell) {
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
       fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn), field('colour by grip', colourOn)),
     wnote, gripNote, roBox,
-    el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn), jumpNote, landingBox,
+    el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn, turnByBtn, field('turn by °', turnBy)), jumpNote, landingBox,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
     ...spawns.nodes,
