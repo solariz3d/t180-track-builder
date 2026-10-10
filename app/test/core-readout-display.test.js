@@ -690,6 +690,23 @@ test('D271: Level ends the piece straight and level; To floor too short says the
   P.panel.unmount();
 });
 
+// ── D280, TURN BY (the keeper: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt") ──
+test('D280: Turn by places a piece that turns exactly the typed angle and ends straight; a Straight after it turns 0.0°; one undo step; too short names the length', async () => {
+  const P = await mountPanel(), RD = require('../../src/core/readout.js');
+  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
+  const doc = () => P.shell.getState().history.present, turnOf = (i) => RD.pieceReadout(doc(), i).turnDeg;
+  P.type('length m', 300); button('Extend').onclick();
+  P.type('length m', 750); P.type('turn by °', -90); button('Turn by').onclick();
+  assert.equal(doc().pieces.length, 2, status()); assert.ok(Math.abs(turnOf(1) + 90) <= 0.01, `Turn by: ${turnOf(1).toFixed(5)}°`);
+  P.type('length m', 100); button('Straight').onclick();
+  assert.equal(Math.abs(turnOf(2)).toFixed(1), '0.0', `the Straight after it: ${turnOf(2)}°`);
+  P.shell.undo(); P.shell.undo(); assert.equal(doc().pieces.length, 1, 'Turn by is one undo step');
+  P.type('length m', 5); button('Turn by').onclick();
+  assert.equal(doc().pieces.length, 1, 'too short: nothing placed'); const m = /TURN_TOO_SHORT.*at least (\d+) m/.exec(status()); assert.ok(m, `the message names the length: ${status()}`);
+  P.type('length m', m[1]); button('Turn by').onclick(); assert.equal(doc().pieces.length, 2, status());
+  P.panel.unmount();
+});
+
 // ── D242 item 6, STRAIGHTS AFTER A TURN (the keeper: "impossible to create a perfect straight") ──
 test('D242: after a 30°/100m turn, Straight extends a piece whose turn and climb are 0 from 20 m on, and puts the "at start" boxes back; turn 0 without "at start" shows the hint', async () => {
   const P = await mountPanel(), Dm = require('../../src/core/document.js');

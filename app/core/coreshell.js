@@ -39,6 +39,7 @@
 const D = require('../../src/core/document.js');
 const { extend } = require('../../src/core/extend.js');
 const LV = require('../../src/core/level.js');
+const TB = require('../../src/core/turnby.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
 /**
@@ -330,6 +331,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     extendLevel: (opts) => commit('level', () => LV.extendLevel(doc(), opts), { lastEdited: [doc().pieces.length] }),
     /** D271 TO FLOOR: …and on the floor (height 0). Too short a piece is refused by name with the length that works (FLOOR_TOO_SHORT), as the message. */
     extendToFloor: (opts) => commit('toFloor', () => LV.extendToFloor(doc(), opts), { lastEdited: [doc().pieces.length] }),
+    /** D280 TURN BY: extend with the fields' piece, its turn solved so it turns EXACTLY `deg` degrees (+ = left) and ends straight (turn rate 0); src/core/turnby.js.
+     *  One undo step, like extend; too short a piece is refused by name with the length that works (TURN_TOO_SHORT), as the message. */
+    extendTurnBy: (opts, deg) => commit('turnBy', () => TB.extendTurnBy(doc(), opts, (Number(deg) * Math.PI) / 180), { lastEdited: [doc().pieces.length] }),
     /**
      * REMOVE THE HEAD (Ctrl+Backspace, the piece builder's key moved to this page, D239 note): the last piece goes, as ONE undo step. An
      * empty track is refused by name. On a closed loop the loop is OPEN again (what Close changed in the other pieces stays; Ctrl+Z puts
