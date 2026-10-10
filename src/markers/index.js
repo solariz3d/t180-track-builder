@@ -15,7 +15,7 @@
 // It needs only the resolved segments and C's path, and no node module, so it runs in the app's webview as it does
 // under node (the export does, through app/export/node-shim.js).
 'use strict';
-const { resolveLayout, defaultLayout, gridSlots, runUpM, speedAfterM, PATTERNS, DEFAULTS } = require('./layout.js');
+const { resolveLayout, defaultLayout, gridSlots, runUpM, speedAfterM, PATTERNS, DEFAULTS, SLOT_HALF_LENGTH } = require('./layout.js');
 const { placeMarker, segStarts } = require('./place.js');
 const { checkPlaced } = require('./checks.js');
 const { paintFor } = require('./paint.js');
@@ -23,11 +23,26 @@ const { paintFor } = require('./paint.js');
 function placeAll(layout, path, segments, { paintMaterial = 0, lane = null } = {}) {
   const starts = segStarts(path, segments), laneStarts = lane ? segStarts(lane.path, lane.segments) : null;
   const r = resolveLayout(layout, path, segments);
-  if (lane) {   // the pit boxes move onto the lane: from `along` into it, backwards by the spacing
-    const at = layout.pits.lane && Number.isFinite(layout.pits.lane.along) ? layout.pits.lane.along : lane.path.lengthM / 2;
+  if (lane) {   // the pit boxes move onto the lane
     r.markers = r.markers.filter((m) => m.kind !== 'pit');
     r.missing = r.missing.filter((m) => m.what !== 'the pit boxes');
-    for (let k = 0; k < layout.pits.count; k++) r.markers.push({ name: `AC_PIT_${k}`, kind: 'pit', n: k, s: lane.path.samples[0].s + at - k * layout.pits.spacingM, u: layout.pits.u, h: layout.height, onLane: true });
+    const s0 = lane.path.samples[0].s, n = layout.pits.count, gap = layout.pits.spacingM;
+    if (layout.pits.lane && Number.isFinite(layout.pits.lane.along)) {   // set by hand: from `along` into the lane, backwards by the spacing (as it always was)
+      for (let k = 0; k < n; k++) r.markers.push({ name: `AC_PIT_${k}`, kind: 'pit', n: k, s: s0 + layout.pits.lane.along - k * gap, u: layout.pits.u, h: layout.height, onLane: true });
+    } else {
+      // D285 (the keeper, 2026-10-10: "the pit lane spacing starts half way through the pit … Pit 1 starts half way to the back of the pits"): the row was
+      // laid from the lane's MIDPOINT backwards, so the front half of the lane stood empty. Now it is CENTRED on the lane's usable straight (its 'body',
+      // between the entry and exit tapers; a lane with no parts is usable end to end), box 0 first after the entry and each next box `spacingM` further
+      // on, so the gap before the first box equals the gap after the last. A row longer than the straight is still centred: it spills onto both tapers
+      // equally, and the amber below says so.
+      const part = (name) => lane.segments.findIndex((g) => g.part === name);
+      const iIn = part('in'), iBody = part('body');
+      const a = iIn >= 0 && iBody >= 0 ? lane.segments[iIn].length : 0, b = iBody >= 0 ? a + lane.segments[iBody].length : lane.path.lengthM;
+      const first = (a + b) / 2 - (n - 1) * gap / 2;
+      for (let k = 0; k < n; k++) r.markers.push({ name: `AC_PIT_${k}`, kind: 'pit', n: k, s: s0 + first + k * gap, u: layout.pits.u, h: layout.height, onLane: true });
+      const needM = (n - 1) * gap + 2 * SLOT_HALF_LENGTH;
+      if (needM > b - a + 1e-9) r.notes.push({ id: 'pit-boxes-on-taper', level: 'amber', text: `the ${n} pit boxes need ${needM.toFixed(0)} m and the pit lane's straight part is ${(b - a).toFixed(0)} m: the first and last boxes stand on the lane's tapers` });
+    }
   }
   const placed = r.markers.map((m) => {
     const [p, g, st] = m.onLane ? [lane.path, lane.segments, laneStarts] : [path, segments, starts];

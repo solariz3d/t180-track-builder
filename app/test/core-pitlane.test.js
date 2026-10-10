@@ -48,7 +48,9 @@ test('the pit boxes follow the lane\'s count and spacing', async () => {
   s.setPitLane({ ...LANE(), boxes: 6, boxSpacingM: 14 });
   const pits = s.spawnsInfo().placed.filter((m) => /^AC_PIT_/.test(m.name));
   assert.equal(pits.length, 6);
-  const gaps = pits.slice(1).map((m, k) => pits[k].s - m.s);
+  // amended D285 (the rule changed): the row was laid from the lane's midpoint BACKWARDS; now box 0 is the first after the entry and each next box is
+  // the spacing FURTHER ON (src/markers/index.js), so the gap is measured forwards. Count and spacing are checked exactly as before.
+  const gaps = pits.slice(1).map((m, k) => m.s - pits[k].s);
   assert.ok(gaps.every((g) => Math.abs(g - 14) < 1e-6), JSON.stringify(gaps));
 });
 
