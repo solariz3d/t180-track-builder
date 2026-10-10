@@ -707,6 +707,25 @@ test('D280: Turn by places a piece that turns exactly the typed angle and ends s
   P.panel.unmount();
 });
 
+// ── D282, SHARP (the keeper: "i also want to be able to make thunderhead 90 degrees too"): a second turn type beside the broad curve ──
+test('D282: Sharp places a corner of the typed angle at the typed radius as ONE undo step; too tight a radius names the tightest at this width and places nothing', async () => {
+  const P = await mountPanel(), RD = require('../../src/core/readout.js');
+  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
+  const doc = () => P.shell.getState().history.present, turnOf = (i) => RD.pieceReadout(doc(), i).turnDeg;
+  P.type('length m', 200); button('Extend').onclick();
+  P.type('sharp °', -90); P.type('sharp radius m', 30); P.type('sharp ramp m', 4); button('Sharp').onclick();
+  // the corner is exact on the PATH the app draws and exports (src/core/sharp.js); the readout's exact integral of the spline reads up to ~0.14° more on a 4 m ramp,
+  // the adapter's 2 m trapezoid (exo_memory/handback/p-sharp-E_2026-10-09.md), so the angle is read where it is driven
+  const Ad = require('../../src/core/adapter.js'), S = Ad.toPath(doc()).path.samples, hd = (x) => Math.atan2(x.T[0], x.T[2]) * 180 / Math.PI, a = S.reduce((p, x) => (Math.abs(x.s - 200) < Math.abs(p.s - 200) ? x : p));
+  assert.equal(doc().pieces.length, 3, status()); assert.ok(Math.abs(hd(S[S.length - 1]) - hd(a) + 90) <= 0.01, `Sharp on the path: ${(hd(S[S.length - 1]) - hd(a)).toFixed(5)}°`);
+  P.type('length m', 100); button('Straight').onclick(); assert.equal(Math.abs(turnOf(3)).toFixed(1), '0.0', `the Straight after it: ${turnOf(3)}°`);
+  P.shell.undo(); P.shell.undo(); assert.equal(doc().pieces.length, 1, 'Sharp is one undo step');
+  P.type('sharp radius m', 5); button('Sharp').onclick();
+  assert.equal(doc().pieces.length, 1, 'too tight: nothing placed'); const m = /SHARP_TOO_TIGHT.*tightest at this width: ([\d.]+) m/.exec(status()); assert.ok(m, `the message names the radius: ${status()}`);
+  P.type('sharp radius m', m[1]); button('Sharp').onclick(); assert.equal(doc().pieces.length, 3, status());
+  P.panel.unmount();
+});
+
 // ── D242 item 6, STRAIGHTS AFTER A TURN (the keeper: "impossible to create a perfect straight") ──
 test('D242: after a 30°/100m turn, Straight extends a piece whose turn and climb are 0 from 20 m on, and puts the "at start" boxes back; turn 0 without "at start" shows the hint', async () => {
   const P = await mountPanel(), Dm = require('../../src/core/document.js');

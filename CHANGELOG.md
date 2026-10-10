@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Sharp: a second turn type for Thunderhead-style corners, beside the broad curve (D282; the keeper, 2026-10-09: "THERE is nothign wrong with the 90 degree curves that can be made now … but i also want to be able to make thunderhead 90 degrees too").** Thunderhead's turns after the jump hold about a 22 m radius for close to 90°, and take only 0–8 m to tighten and to straighten. The broad curve eases over the whole piece, and its "at start" ease is a fixed 20 m on 20 m knots, so neither could draw that. The new **Sharp** button takes an angle, a radius and a ramp (default 4 m). It places one corner, made of two pieces but undone in one step: the turn tightens to the radius over the ramp, holds it for exactly the angle, then straightens over the ramp and exits dead straight. Both pieces carry 2 m knots, so a short ramp is drawn as asked rather than overshooting. At R 22, width 24, a 90° corner turns 90.000° at R 22.0, tightens in 1.5 m and straightens in 3.5 m (10–90%), turns 0.000° on the Straight after it, and is green at full speed. A radius too tight for the road's width and cross-section is refused with the tightest that works ("tightest at this width: 24.2 m" for a 45 m bowl, 13.4 m at 24 m), and the track is left as it was. That limit comes from the geometry itself: the road folding at its inner edge, the rim stacking within 2 m of the road, or the normal load passing the proven 90 g. The broad curve, its "at start" ease and Turn by are unchanged.
+
 ## [0.3.4] - 2026-10-09
 
 ### Fixed
