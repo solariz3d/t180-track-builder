@@ -348,3 +348,15 @@ test('row 20: the preview draws the AUTOMATIC start too (a line, a pack and a ho
   const E = await mounted({ build: () => {}, pose: { eye: [0, 80, -60], target: [0, 0, 0], up: [0, 1, 0], fov: 1 } });
   assert.deepEqual(E.panel.spawnsLayer.items(), [], 'nothing on an empty track');
 });
+
+test('row 21: a handle under the pointer is the handle\'s: the press, and the hover cursor, are left alone when the host says one is there, whatever order the listeners run in', async () => {
+  const T = await mounted({ at: 230 }); T.s.setSpawns({ line: { along: 250 }, grid: { count: 4, rowGapM: 16, colGapM: 6 } });
+  T.panel.spawnDrag.unmount();
+  let handle = true; const mine = SPD.mount(T.stage, T.win, T.s, { pose: () => T.view.pose, yieldTo: () => handle }); mine.late();
+  const on = T.fire('pointerdown', gate(T).x, gate(T).y);
+  assert.ok(!on.stopped && !on.prevented && T.s.getState().spawnsDrag === null, 'a handle there: not grabbed');
+  T.fire('pointermove', gate(T).x, gate(T).y); assert.equal(T.stage.style.cursor, '', 'and no grab cursor');
+  handle = false;
+  const off = T.fire('pointerdown', gate(T).x, gate(T).y); assert.ok(off.stopped && T.s.getState().spawnsDrag, 'no handle: the line is grabbed');
+  T.fire('pointerup', gate(T).x, gate(T).y); mine.unmount();
+});
