@@ -50,7 +50,14 @@ test('soak: a phrase in the track is not sculpted as a word (seed 17, 29 ops: NO
 
 test('soak: --progress holds the LAST op begun, with its index, its name and the memory (D181: a native crash prints nothing)', async () => {
   const fs = require('fs'), os = require('os');
-  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 't180-soak-')), 'progress.txt');
-  await runSoak({ seed: 7, ops: 12, maxWords: 6, fullEvery: 10, progress: f });
-  assert.match(fs.readFileSync(f, 'utf8'), /^11 (place|sculpt|undo|redo|removeHead|save|open|picker) rss=\d+\.\d heap=\d+\.\d external=\d+\.\d arrayBuffers=\d+\.\d\n$/);
+  // the folder is removed whatever happens, a failed assertion included: every run used to leave one (1,260 by 2026-10-11, D300)
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-soak-')), f = path.join(dir, 'progress.txt');
+  try {
+    await runSoak({ seed: 7, ops: 12, maxWords: 6, fullEvery: 10, progress: f });
+    // T180_SOAK_TEMPCHECK_THROW: test/perf_soak_tempclean.test.js sets it to prove the folder goes on a FAILING run too
+    if (process.env.T180_SOAK_TEMPCHECK_THROW) throw new Error('T180_SOAK_TEMPCHECK_THROW: a planted failure, after the folder was made');
+    assert.match(fs.readFileSync(f, 'utf8'), /^11 (place|sculpt|undo|redo|removeHead|save|open|picker) rss=\d+\.\d heap=\d+\.\d external=\d+\.\d arrayBuffers=\d+\.\d\n$/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
