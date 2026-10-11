@@ -1,5 +1,5 @@
 // perf_soak_tempclean.test.js: node --test test/perf_soak_tempclean.test.js. The soak's --progress test makes a `t180-soak-` folder in the
-// system temp folder; 1,260 of them had piled up by 2026-10-11, one per run of the suite and of every mutation harness that runs it. This
+// system temp folder; 1,260 of them had piled up by 2026-10-11, one per run of that file. This
 // runs that test in a child whose temp folder (TEMP, TMP and TMPDIR) is a private one, then counts what is left in it: nothing, after a
 // passing run AND after a run made to fail on purpose (T180_SOAK_TEMPCHECK_THROW, read by that test after it has made its folder).
 'use strict';
