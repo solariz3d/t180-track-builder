@@ -32,7 +32,7 @@ const D = require('./document.js');
 const SCHEMA = 't180b.piece/1', GENERATOR = 't180-track-builder/core 0.3.0';
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;   // the shell's NAME_RE (app/core/coreshell.js): a piece name becomes a file name, so no path can ride in it
 const RATE = Object.freeze(['kh', 'kv', 'h', 'l']);      // stored as the document holds them
-const STATE = Object.freeze(['phi', 'w', 'r', 'c', 'e', 's', 't']);   // stored as their change from the run's start
+const STATE = Object.freeze(['phi', 'w', 'r', 'c', 'e', 's', 't', 'er']);   // stored as their change from the run's start (er, the right edge: absent in a symmetric run's text, read as e)
 const NEGATED = Object.freeze(['kh', 'phi', 'l']);        // what a left/right mirror flips
 const MAX_CHARS = 8e6, MAX_PIECES = 2000, MAX_KNOTS = 4000;   // a text, a run and a piece's knots: far above any real track (a 1 km piece has 49 knots), far below a denial of service
 const TOP_KEYS = Object.freeze(['schema', 'generator', 'name', 'start', 'pieces']);
@@ -148,7 +148,7 @@ function checkPiece(piece) {
     if ((P.channels.e === undefined) !== (P.channels.s === undefined)) bad('BAD_PIECE_CHANNEL', `${at}: an edge piece carries both e and s, or neither`);
     const channels = {};
     for (const ch of D.CHANNELS) {
-      const c = P.channels[ch];
+      const c = ch === 'er' && P.channels.er === undefined && f.edge ? P.channels.e : P.channels[ch];   // a symmetric edge run (every file before er): its right side is its left
       if (D.OPTIONAL[ch] && !f[D.OPTIONAL[ch]]) { if (c !== undefined) bad('BAD_PIECE_CHANNEL', `${at}: channel ${ch}`); continue; }
       if (!Array.isArray(c) || c.length !== knots.length + 4) bad('BAD_PIECE_CHANNEL', `${at}: channel ${ch} needs ${knots.length + 4} control points (the knots make ${knots.length + 4}), got ${Array.isArray(c) ? c.length : JSON.stringify(c)}`);
       if (!c.every(isNum)) bad('BAD_PIECE_NUMBER', `${at}: channel ${ch} has a control point that is not a finite number`);
@@ -161,7 +161,7 @@ function checkPiece(piece) {
   if (out.pieces.filter(isRoad).some((P) => signature(P) !== sig)) bad('MIXED_RUN', 'the run mixes cross-sections (legacy, cup, tube, with or without an edge): a saved run is one kind');
   const want = D.CHANNELS.filter((ch) => STATE.includes(ch) && hasChannel(first, ch));
   for (const k of Object.keys(piece.start)) if (!want.includes(k)) bad('BAD_PIECE_START', `start has "${k}", which this ${sig} run does not carry (it needs ${want.join(', ')})`);
-  for (const ch of want) { const v = piece.start[ch]; if (!isNum(v)) bad('BAD_PIECE_START', `start needs a finite ${ch} (the run carries it), got ${JSON.stringify(v)}`); out.start[ch] = q(v, D.DEC[ch]); }
+  for (const ch of want) { const v = ch === 'er' && piece.start.er === undefined ? piece.start.e : piece.start[ch]; if (!isNum(v)) bad('BAD_PIECE_START', `start needs a finite ${ch} (the run carries it), got ${JSON.stringify(v)}`); out.start[ch] = q(v, D.DEC[ch]); }
   // the run as the document would hold it: its own joints (C1 in every channel), cup, tube and edge limits, flights, all by the document's own checks.
   // ONE checkDoc of the assembled run (C's D240 F1): appending piece by piece re-checked the whole growing document each time, so the time grew with
   // the square of the run (800 pieces took about 1 s). appendPiece adds nothing checkDoc lacks here: its CLOSED check cannot fire on this fresh scratch
@@ -175,11 +175,13 @@ function checkPiece(piece) {
 }
 
 // ── text ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
-const roadText = (P) => JSON.stringify({ type: 'road', length: P.length, family: P.family, ...(P.grip !== undefined && P.grip !== D.GRIP_DEFAULT ? { grip: P.grip } : {}), knots: P.knots, channels: Object.fromEntries(D.CHANNELS.filter((ch) => P.channels[ch] !== undefined).map((ch) => [ch, P.channels[ch]])) });
+const symEdge = (P) => !P.channels.er || P.channels.er.every((v, i) => v === P.channels.e[i]);   // a road whose right edge is its left: its text carries no er
+const roadText = (P) => JSON.stringify({ type: 'road', length: P.length, family: P.family, ...(P.grip !== undefined && P.grip !== D.GRIP_DEFAULT ? { grip: P.grip } : {}), knots: P.knots, channels: Object.fromEntries(D.CHANNELS.filter((ch) => P.channels[ch] !== undefined && (ch !== 'er' || !symEdge(P))).map((ch) => [ch, P.channels[ch]])) });
 const pieceText = (P) => (isRoad(P) ? roadText(P) : JSON.stringify(flightOut(P, 0)));
 /** The canonical text of a piece (checked first): stable key order, one piece to a line, a final newline. */
 function serialize(piece) {
-  const p = checkPiece(piece), start = Object.fromEntries(D.CHANNELS.filter((ch) => p.start[ch] !== undefined).map((ch) => [ch, p.start[ch]]));
+  const p = checkPiece(piece), sym = p.start.er === p.start.e && p.pieces.filter(isRoad).every(symEdge);   // a symmetric run writes no er, as every file before it
+  const start = Object.fromEntries(D.CHANNELS.filter((ch) => p.start[ch] !== undefined && !(ch === 'er' && sym)).map((ch) => [ch, p.start[ch]]));
   const head = [`  "schema": ${JSON.stringify(SCHEMA)}`, `  "generator": ${JSON.stringify(GENERATOR)}`, `  "name": ${JSON.stringify(p.name)}`, `  "start": ${JSON.stringify(start)}`];
   return `{\n${[...head, `  "pieces": [\n${p.pieces.map((P) => `    ${pieceText(P)}`).join(',\n')}\n  ]`].join(',\n')}\n}\n`;
 }
@@ -196,9 +198,11 @@ function parse(text) {
 function mirrored(piece) {
   const neg = (a) => a.map((v) => (v === 0 ? 0 : -v));
   const start = { ...piece.start }; if (start.phi !== undefined) start.phi = start.phi === 0 ? 0 : -start.phi;
+  if (start.e !== undefined && start.er !== undefined) [start.e, start.er] = [start.er, start.e];   // the right edge is the left in the mirror
   const pieces = piece.pieces.map((P) => {
     if (!isRoad(P)) return { ...P, left: P.left === 0 ? 0 : -P.left, heading: P.heading === 0 ? 0 : -P.heading, bank: P.bank === 0 ? 0 : -P.bank };   // D258: the landing on the other side, turned and banked the other way
     const channels = { ...P.channels }; for (const ch of NEGATED) if (channels[ch] !== undefined) channels[ch] = neg(channels[ch]);
+    if (channels.e !== undefined && channels.er !== undefined) [channels.e, channels.er] = [channels.er, channels.e];
     return { ...P, channels };
   });
   return freeze({ ...piece, start, pieces });

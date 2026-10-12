@@ -32,8 +32,8 @@ const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
-const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, e: 0.2, s: 0.002, t: 0.5, height: 0.03, lateral: 0.03 });
-const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', e: 'edge angle', s: 'edge start', t: 'tube sweep', height: 'height', lateral: 'sideways' });
+const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, e: 0.2, er: 0.2, s: 0.002, t: 0.5, height: 0.03, lateral: 0.03 });
+const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', e: 'edge angle', er: 'right edge', s: 'edge start', t: 'tube sweep', height: 'height', lateral: 'sideways' });
 const DEG = Math.PI / 180;
 
 /**
@@ -46,8 +46,8 @@ const DEG = Math.PI / 180;
 // if that is shorter: the core needs a transition no longer than the piece), then held for the rest of the piece. Unticked, it blends over
 // the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres (A's D194b contract).
 const AT_START_M = 20;
-const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
-function extendOptions({ length, turn, climb, bank, width, cup, edge, start, tube, grip, empty = false, atStart = {} }) {
+const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {} }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup);
   if (t !== null) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
@@ -64,6 +64,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, start, tub
   // t/2 + e ≤ 180), and a clamp here would hide them (E2's plant KE2-2). The edge angle and the sweep are DEGREES, as c is; the start a share.
   const e = num(edge), sl = num(start), tb = num(tube);
   if (e !== null) targets[XS.CHANNEL.edge] = e;
+  const er = num(edgeR); if (er !== null) targets.er = er;   // the RIGHT edge (2026-10-12): blank follows the edge angle, so a typed one splits the sides (src/core/extend.js)
   if (sl !== null) targets[XS.CHANNEL.start] = sl;
   if (tb !== null) targets[XS.CHANNEL.tube] = tb;
   const out = { length: Number(length), targets };
@@ -107,10 +108,13 @@ function mount(root, shell) {
   // THE CROSS-SECTION (D225): the edge curve (an extra angle on the outer band, from the edge start out; 0 = off) and the tube (the sweep of
   // a circular section, 360 = a closed pipe). The bank field above takes any number of degrees, 360 included (the spiral): it has no min or max
   const edge = el('input', { type: 'number', value: '', step: '1', min: '0', title: 'edge angle: how many degrees MORE the very edge tilts than the plain profile would, rising smoothly from the edge start out; 0 = off. Bank still rolls the whole section. Shows the edge at the head; left as shown, it keeps it' }),
+    // the keeper, 2026-10-12: bank the outside of a turn harder and turn the inside down, so the inside line is not banked. Blank follows the edge angle (both
+    // sides the same, as before); typed, it is the RIGHT side and the edge angle becomes the LEFT side
+    edgeR = el('input', { type: 'number', value: '', step: '1', min: '0', title: 'right edge: the RIGHT side\'s edge angle, in degrees MORE than the plain profile, like the edge angle. Left as shown it follows the edge angle (both sides the same); type a different number and the edge angle is the LEFT side. For a right turn: a big edge angle (the outside, left) and a small right edge (the inside), so the inside line is not banked. Shows the right edge at the head' }),
     start = el('input', { type: 'number', value: '', step: '0.01', min: '0.5', max: '0.95', title: 'edge start: where the edge curve begins, as a share of the half-width from the centre (0.64 = the outer 36% each side curves more; 0.5 to 0.95). Shows it at the head; left as shown, it keeps it' }),
     tube = el('input', { type: 'number', value: '', step: '1', min: '0', max: '360', title: 'tube sweep: the cross-section as an arc of this many degrees, 0 (none) to 360 (a closed pipe). Shows the sweep at the head; left as shown, it keeps it' });
   const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => HD.wrapTurn(h.phi / DEG)], width: [width, (h) => h.w], cup: [cup, (h) => h.c],
-    edge: [edge, (h) => h[XS.CHANNEL.edge]], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
+    edge: [edge, (h) => h[XS.CHANNEL.edge]], edgeR: [edgeR, (h) => h.er], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
   // THE WIDTH REFERENCE (D232, the keeper: "a drop down that tells you the width of different known t-180 tracks, such as thunderhead, aurora, nordic"):
   // picking a known track puts its measured median into the width field, like typing it (so on an empty track it is the first piece's start, which is the
   // new-track default). For a TUBE (the sweep field at 360) the figures are the distance round and the entry says how wide that is across.
@@ -156,7 +160,7 @@ function mount(root, shell) {
   const showGrip = () => { shownGrip = String(shell.headGrip()); gripF.value = shownGrip; gripNote.textContent = GL.note(shownGrip); };
   const gripOpt = () => (gripF.value === '' || gripF.value === shownGrip ? '' : gripF.value);   // untouched = blank = the new piece keeps the head's grip
   const colourOn = el('input', { type: 'checkbox', 'aria-label': 'colour by grip', title: 'colour the track by grip: blue below 100%, white at 100%, orange above; the hover label says each piece\'s grip' });
-  const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), start: asTyped('start'), tube: asTyped('tube'),
+  const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: asTyped('edgeR'), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length });
   // D242 item 7 (the keeper, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
@@ -199,7 +203,7 @@ function mount(root, shell) {
   // so the ghost showed the piece before the last edit, or none: found in the window proof, D186)
   // (the cup's handler is the cup-or-tube one below, D225: the cup is not in this list, where its handler would only be replaced)
   for (const f of [len, turn, climb, bank, width, ...Object.values(atStart)]) f.oninput = f.onchange = ghost;
-  for (const f of [edge, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way (D225)
+  for (const f of [edge, edgeR, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way (D225)
   for (const f of [cup, tube]) f.oninput = f.onchange = () => { exclusive(f); ghost(); };   // cup OR tube: the rule first, then the ghost
   tube.oninput = tube.onchange = () => { exclusive(tube); ghost(); fillWidthLike(); };   // a tube's entries read round and across (D232)
   width.oninput = width.onchange = () => { ghost(); showTubeNote(); };
@@ -269,7 +273,7 @@ function mount(root, shell) {
   const sculptOn = el('input', { type: 'checkbox', 'aria-label': 'sculpt on', title: 'Sculpt: reshape a piece that is already placed (bank, cup, width, edge, wall rise, tube sweep) without moving the rest of the track. Select ONE piece, then drag its handles or use the brush. Turn and climb are not offered; the centreline is checked on every step' });
   const handlesOn = el('input', { type: 'checkbox', 'aria-label': 'drag handles', title: 'drag handles: marks on the ghost of the piece Extend would add (and on the piece you are sculpting); drag one to change its value, Shift for fine steps, Ctrl to snap to round numbers. Off: the ghost shows only while the pointer is on Extend' });
   handlesOn.checked = true;
-  const channelsFor = (m) => (sculptOn.checked ? shell.sculptChannels() : m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r', 'c', 'e', 's', 't']);
+  const channelsFor = (m) => (sculptOn.checked ? shell.sculptChannels() : m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r', 'c', 'e', 's', 't', 'er']);
   const fillChannels = () => { channel.replaceChildren(...channelsFor(mode.value).map((c) => new win.Option(CHANNEL_NAMES[c], c))); };
   mode.replaceChildren(...shell.brushModes().map((m) => new win.Option(m === 'local' ? 'height / sideways (local)' : 'rate (one channel)', m)));
   mode.onchange = fillChannels; fillChannels();
@@ -443,7 +447,7 @@ function mount(root, shell) {
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
-      fieldAt('edge angle °', edge, 'edge'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn), field('colour by grip', colourOn)),
+      fieldAt('edge angle °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn), field('colour by grip', colourOn)),
     wnote, gripNote, roBox,
     el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn, turnByBtn, field('turn by °', turnBy), sharpBtn, field('sharp °', sharpDeg), field('sharp radius m', sharpR), field('sharp ramp m', sharpRamp)), jumpNote, landingBox,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),

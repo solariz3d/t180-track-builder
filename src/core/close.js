@@ -195,7 +195,7 @@ function heldCup(F, L) {
 
 /** The residual, measured on the adapter's path and the document itself (ref 10 §3). */
 /** The channels whose VALUE must meet round the seam: heading, pitch, width and rise always; the cup, the edge pair and the tube sweep where both ends carry them. */
-const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's'] : []), ...(sm.tubeBoth ? ['t'] : [])];
+const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's', 'er'] : []), ...(sm.tubeBoth ? ['t'] : [])];
 function residual(doc) {
   if (!doc.pieces.some((P) => P.type === 'road')) throw new D.CoreError('EMPTY', 'close: no road to close');
   const S = toPath({ ...doc, closed: false }).path.samples, a = S[0], z = S[S.length - 1];

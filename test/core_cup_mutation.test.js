@@ -25,7 +25,7 @@ const MUTANTS = [
   { id: 'M7 the fit\'s ringing is not clamped after the Extend fit', pattern: 'row 2', edits: [[C + 'extend.js', 'const c = piece.channels.c = piece.channels.c.map((x) => Math.min(D.CUP_MAX, Math.max(0, x))), n = c.length;', 'const c = piece.channels.c, n = c.length;']] },
   { id: 'M8 Extend does not refuse a typed cup past 150', pattern: 'row 2 \\(iii\\)', edits: [[C + 'extend.js', 'targets.c >= 0 && targets.c <= D.CUP_MAX)) throw', 'targets.c >= 0 && targets.c <= 1e9)) throw']] },
   { id: 'M9 Extend does not refuse a first-piece cup past 150', pattern: 'row 2 PLANTED', edits: [[C + 'extend.js', 'first.c >= 0 && first.c <= D.CUP_MAX)) throw', 'first.c >= 0 && first.c <= 1e9)) throw']] },
-  { id: 'M10 the brush has no cup channel', pattern: 'row 2 \\(iii\\)', edits: [[C + 'sculpt.js', "'l', 'c', 'e', 's', 't'], what:", "'l', 'e', 's', 't'], what:"]] },
+  { id: 'M10 the brush has no cup channel', pattern: 'row 2 \\(iii\\)', edits: [[C + 'sculpt.js', "'l', 'c', 'e', 's', 't', 'er'], what:", "'l', 'e', 's', 't', 'er'], what:"]] },
   { id: 'M10b a cup that ends at a limit is not made flat (the next piece would need a control point past it)', pattern: 'ends flat', edits: [[C + 'extend.js', 'if (c[n - 1] <= 1e-3 || c[n - 1] >= D.CUP_MAX - 1e-3) c[n - 2] = c[n - 1];', 'if (false) c[n - 2] = c[n - 1];']] },
   { id: 'M10c the document guard has no tolerance for a solver\'s float noise at the limit', pattern: 'ends flat', edits: [[C + 'document.js', 'CUP_EPS = 1e-9;', 'CUP_EPS = 0;']] },
   // R2: the morph out of a legacy cross-section
@@ -68,7 +68,7 @@ const MUTANTS = [
   // row 5: legacy stays legacy
   { id: 'M21 a legacy piece is rendered as a cup piece at c = 0', pattern: 'row 5', edits: [[C + 'adapter.js', 'cup[j].profile : L.profile;   // a legacy piece', 'cup[j].profile : cupProfile(P.family, mid.w, mid.c);   // a legacy piece']] },
   { id: 'M22 a /2 piece is read as a cup piece', pattern: 'row 5', edits: [[C + 'document.js', "...(has('c') ? { cup: true } : {}),", 'cup: true,']] },
-  { id: 'M23 a legacy piece\'s text carries a c array', pattern: 'row 5', edits: [[C + 'document.js', 'CHANNELS.filter((ch) => !OPTIONAL[ch] || P[OPTIONAL[ch]]).map(', 'CHANNELS.map(']] },
+  { id: 'M23 a legacy piece\'s text carries a c array', pattern: 'row 5', edits: [[C + 'document.js', "CHANNELS.filter((ch) => (!OPTIONAL[ch] || P[OPTIONAL[ch]]) && (ch !== 'er' || isSplit(P))).map(", 'CHANNELS.map(']] },
   { id: 'M24 (K5-2) the schema is still core/2', pattern: 'row 5', edits: [[C + 'document.js', "const SCHEMA = 't180b.core/4',", "const SCHEMA = 't180b.core/2',"]] },
   { id: 'M25 a cup brush is allowed to reach a legacy piece', pattern: 'row 5e', edits: [[C + 'sculpt.js', "if (channel === 'c' && !P.cup) throw new D.CoreError('NOT_CUP'", "if (false) throw new D.CoreError('NOT_CUP'"]] },
   // row 6: cup then roll

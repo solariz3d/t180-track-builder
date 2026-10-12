@@ -77,14 +77,22 @@ function rampControl(piece, ch, from, target, R, held) {
   }
 }
 
-function extend(doc, { length, transition, targets = {}, family, knotM, first, grip } = {}) {
+function extend(doc, opts = {}) {
+  let { length, transition, targets = {}, family, knotM, first, grip } = opts;
   if (!(length > 0)) throw new D.CoreError('BAD_LENGTH', `extend needs a positive length, got ${length}`);
+  // er, the RIGHT edge angle (document.js): an edge angle typed without a right one sets both sides, as before er existed; a right one typed alone
+  // splits them. Its ramp follows e's unless it has its own.
+  const set = (v) => v !== undefined && v !== null;
+  if (set(targets.e) && !set(targets.er)) targets = { ...targets, er: targets.e };
+  if (first && set(first.e) && !set(first.er)) first = { ...first, er: first.e };
+  if (transition !== null && typeof transition === 'object' && !Array.isArray(transition) && transition.e !== undefined && transition.er === undefined) transition = { ...transition, er: transition.e };
   for (const k of Object.keys(targets)) if (!D.CHANNELS.includes(k)) throw new D.CoreError('BAD_TARGET', `no channel "${k}" (known: ${D.CHANNELS.join(', ')})`);
   if (targets.c !== undefined && targets.c !== null && !(Number.isFinite(targets.c) && targets.c >= 0 && targets.c <= D.CUP_MAX)) throw new D.CoreError('BAD_CUP', 'the cup target must be from 0 to ' + D.CUP_MAX + ' degrees, got ' + targets.c);
   if (first && first.c !== undefined && !(Number.isFinite(first.c) && first.c >= 0 && first.c <= D.CUP_MAX)) throw new D.CoreError('BAD_CUP', 'the first piece cup must be from 0 to ' + D.CUP_MAX + ' degrees, got ' + first.c);
   const given = (v) => v !== undefined && v !== null;
   for (const [where, o] of [['target', targets], ['first-piece', first || {}]]) {
     if (given(o.e) && !(Number.isFinite(o.e) && o.e >= 0)) throw new D.CoreError('BAD_EDGE', `the ${where} edge angle e must be 0 or more degrees, got ${o.e}`);
+    if (given(o.er) && !(Number.isFinite(o.er) && o.er >= 0)) throw new D.CoreError('BAD_EDGE', `the ${where} right edge angle er must be 0 or more degrees, got ${o.er}`);
     if (given(o.s) && !(Number.isFinite(o.s) && o.s >= D.S_MIN && o.s <= D.S_MAX)) throw new D.CoreError('BAD_EDGE', `the ${where} edge start s must be from ${D.S_MIN} to ${D.S_MAX} of the half-width, got ${o.s}`);
     if (given(o.t) && !(Number.isFinite(o.t) && o.t >= 0 && o.t <= D.TUBE_MAX)) throw new D.CoreError('BAD_TUBE', `the ${where} tube sweep t must be from 0 to ${D.TUBE_MAX} degrees, got ${o.t}`);
     if (given(o.c) && given(o.t)) throw new D.CoreError('BAD_TARGET', `a piece is a cup or a tube, not both: the ${where} gives a cup c and a tube sweep t`);
@@ -109,12 +117,14 @@ function extend(doc, { length, transition, targets = {}, family, knotM, first, g
   let from = D.endState(doc), held = true; const from0 = from;   // from0: null on an empty track (the at-start `first` applies)
   const f0 = first || {}, kind = given(targets.c) ? 'cup' : given(targets.t) ? 'tube' : !from && given(f0.c) ? 'cup' : !from && given(f0.t) ? 'tube' : D.endKind(doc), cup = kind === 'cup', tube = kind === 'tube';
   if (cup && from && from.c.v > D.CUP_MAX + 1e-6) throw new D.CoreError('BAD_CUP', `a cup cannot start where the tube before it ends: its edge is ${from.c.v.toFixed(2)}° (t/2), past the cup's ${D.CUP_MAX}°; open the tube to a sweep of ${2 * D.CUP_MAX}° or less first (t <= ${2 * D.CUP_MAX}), then switch to a cup`);
-  const lastE = last && last.edge ? D.pieceEnd(last).e : null;
-  const edge = given(targets.e) || given(targets.s) || (!from && (given(f0.e) || given(f0.s))) || !!(lastE && (Math.abs(lastE.v) > 1e-9 || Math.abs(lastE.m) > 1e-9));
+  const lastEnd = last && last.edge ? D.pieceEnd(last) : null, lastE = lastEnd && lastEnd.e, lastER = lastEnd && lastEnd.er;
+  const live = (x) => !!(x && (Math.abs(x.v) > 1e-9 || Math.abs(x.m) > 1e-9));   // a side still turning its edge
+  const edge = given(targets.e) || given(targets.er) || given(targets.s) || (!from && (given(f0.e) || given(f0.er) || given(f0.s))) || live(lastE) || live(lastER);
   if (!from) {   // an empty track: the start state, and nothing held
     const f = { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], r: RATES[fam], h: 0, l: 0, ...(first || {}) };
     if (f.c === undefined) f.c = D.legacyEdgeDeg(fam, f.w, f.r);   // a cup asked for on an empty track starts at the edge the family renders
     if (f.e === undefined) f.e = 0;
+    if (f.er === undefined) f.er = f.e;
     if (f.s === undefined) f.s = D.S_DEFAULT;
     if (f.t === undefined) f.t = 2 * f.c;   // a tube asked for on an empty track starts at twice that edge (its own edge is t/2)
     from = Object.fromEntries(D.CHANNELS.map((ch) => [ch, { v: f[ch], m: 0 }])); held = false;
@@ -140,9 +150,13 @@ function extend(doc, { length, transition, targets = {}, family, knotM, first, g
     const what = tube ? 'tube (180°, t/2 + e)' : 'cup/bowl (150°, c + e)';
     if (given(targets.e) && targets.e > cap(C.e.length - 1) + 1e-6) throw new D.CoreError('BAD_EDGE', `the edge target ${targets.e}° is past what the ${what} cap leaves at the end of this piece (${Math.max(0, cap(C.e.length - 1)).toFixed(3)}°)`);
     if (!from0 && given(f0.e) && f0.e > cap(0) + 1e-6) throw new D.CoreError('BAD_EDGE', `the first piece's edge ${f0.e}° is past what the ${what} cap leaves at its start (${Math.max(0, cap(0)).toFixed(3)}°)`);
-    C.e = C.e.map((x, i) => Math.min(Math.max(0, cap(i)), Math.max(0, x)));   // the fit's ringing never leaves [0, cap]
+    if (given(targets.er) && targets.er > cap(C.er.length - 1) + 1e-6) throw new D.CoreError('BAD_EDGE', `the right edge target ${targets.er}° is past what the ${what} cap leaves at the end of this piece (${Math.max(0, cap(C.er.length - 1)).toFixed(3)}°)`);
+    if (!from0 && given(f0.er) && f0.er > cap(0) + 1e-6) throw new D.CoreError('BAD_EDGE', `the first piece's right edge ${f0.er}° is past what the ${what} cap leaves at its start (${Math.max(0, cap(0)).toFixed(3)}°)`);
+    for (const ch of ['e', 'er']) {
+      C[ch] = C[ch].map((x, i) => Math.min(Math.max(0, cap(i)), Math.max(0, x)));   // the fit's ringing never leaves [0, cap]
+      const ne = C[ch].length; if (C[ch][ne - 1] <= 1e-3) C[ch][ne - 2] = C[ch][ne - 1];   // an edge that ends at 0 ends flat, so the piece after it starts clean
+    }
     C.s = C.s.map((x) => Math.min(D.S_MAX, Math.max(D.S_MIN, x)));
-    const ne = C.e.length; if (C.e[ne - 1] <= 1e-3) C.e[ne - 2] = C.e[ne - 1];   // an edge that ends at 0 ends flat, so the piece after it starts clean
   }
   return D.appendPiece(doc, piece);
 }

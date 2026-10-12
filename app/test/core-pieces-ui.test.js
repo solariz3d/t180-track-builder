@@ -501,7 +501,7 @@ test('row 12: Sculpt through the panel: only the shape channels; ONE selected pi
   const options = () => P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'brush channel').children.map((o) => o.value);
   assert.ok(options().includes('kh') && options().includes('kv'), 'control: with Sculpt off the brush offers turn and climb');
   sw.checked = true; sw.onchange(); P1.frame(); assert.equal(shell.getState().sculpt, true);
-  assert.deepEqual(options().sort(), ['c', 'e', 'phi', 'r', 's', 't', 'w'], 'Sculpt on: the shape channels only'); assert.equal(P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'brush mode').disabled, true);
+  assert.deepEqual(options().sort(), ['c', 'e', 'er', 'phi', 'r', 's', 't', 'w'], 'Sculpt on: the shape channels only (er, the right edge: 2026-10-12)'); assert.equal(P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'brush mode').disabled, true);
   assert.deepEqual(P1.panel.handles.handles(), [], 'Sculpt on, nothing selected: no handles (and the Extend ghost is not drawn for them)'); assert.match(P1.text('sculpt hint'), /^Select ONE piece/);
   P1.click(400); P1.frame(); P1.frame(); assert.equal(shell.sculptInfo().index, 1); assert.match(P1.text('sculpt hint'), /^Sculpting p2: drag its handles \(bank, width\)/);
   assert.deepEqual(P1.panel.handles.handles().map((h) => h.id), ['bank:1', 'bank:-1', 'width:1', 'width:-1'], 'the legacy piece has no cup, so no cup handles; both sides of the rest');
