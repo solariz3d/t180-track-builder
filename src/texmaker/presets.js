@@ -5,7 +5,10 @@
 
 const PRESETS = Object.freeze({
   asphalt: { texmaker: 1, name: 'asphalt', base: '#3a3a3c', layers: [
-    { type: 'noise', blend: 'multiply', colour: '#000000', amount: 0.25, cells: 6, octaves: 5, persistence: 0.55, seed: 3 },
+    // dense on purpose: at T-180 speed the 2 cm grain blurs to grey, so the blotches (~60 cm at the 10 m default
+    // tiling) and the ~10 cm flecks are what the eye tracks streaming past, and more of them reads as more distance
+    { type: 'noise', blend: 'multiply', colour: '#000000', amount: 0.35, cells: 16, octaves: 4, persistence: 0.55, seed: 3 },
+    { type: 'grain', blend: 'multiply', colour: '#000000', amount: 0.24, cells: 96, seed: 11 },
     { type: 'grain', blend: 'multiply', colour: '#000000', amount: 0.35, cells: 512, seed: 7 },
     { type: 'grain', blend: 'over', colour: '#8a8a8a', amount: 0.12, cells: 256, seed: 8 },
   ] },
