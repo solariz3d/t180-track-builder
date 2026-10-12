@@ -36,9 +36,34 @@ function piece(a, b, pa, pb) {
   if (Math.abs(d) < 1e-9) return [Math.cos(pa) * h, Math.sin(pa) * h];
   return [h * (Math.sin(pb) - Math.sin(pa)) / d, -h * (Math.cos(pb) - Math.cos(pa)) / d];
 }
+// THE RUNNING SUMS OF A FROZEN PROFILE (2026-10-12, the placement lag): offsetAt sums the closed-form pieces from the centre out through every knot
+// before u, so a caller that asks at each of a profile's n knots (the checker's constOf, the stacked check) paid O(n² log n), and an edge or tube
+// profile has 64+ knots a side. For a FROZEN profile (the window's cached segments, src/core/adapter.js toSegments `cache`) the sums at each knot
+// are made once, in the same order, so offsetAt adds only the last partial piece: the same additions in the same order, so bit-identical.
+// Any other profile is summed as before.
+const sumsMemo = new WeakMap();
+function sumsOf(P) {
+  let m = sumsMemo.get(P);
+  if (m) return m;
+  const side = (sgn) => {
+    const knots = P.u.filter((x) => (sgn > 0 ? x > 0 : x < 0)).sort((x, y) => sgn * (x - y)), X = [], S = [], psi = [];
+    let x = 0, s = 0, a = 0, pa = psiAt(P, 0);
+    for (const k of knots) { const pb = psiAt(P, k), [c, d] = piece(a, k, pa, pb); x += c; s += d; X.push(x); S.push(s); psi.push(pb); a = k; pa = pb; }
+    return { knots, X, S, psi };
+  };
+  m = { pos: side(1), neg: side(-1), psi0: psiAt(P, 0) };
+  sumsMemo.set(P, m);
+  return m;
+}
 /** Offset [X, Y] of the surface point at u, exactly (piecewise closed form). */
 function offsetAt(P, u) {
   if (u === 0) return [0, 0];
+  if (Object.isFrozen(P) && Object.isFrozen(P.u) && Object.isFrozen(P.psi)) {
+    const sgn = u > 0 ? 1 : -1, m = sumsOf(P), sd = sgn > 0 ? m.pos : m.neg, K = sd.knots;
+    let lo = 0, hi = K.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (sgn * K[mid] < sgn * u) lo = mid + 1; else hi = mid; }   // c = knots strictly inside (0, u)
+    const c = lo, a = c ? K[c - 1] : 0, pa = c ? sd.psi[c - 1] : m.psi0, [dx, ds] = piece(a, u, pa, psiAt(P, u));
+    return [(c ? sd.X[c - 1] : 0) + dx, sgn * ((c ? sd.S[c - 1] : 0) + ds)];
+  }
   const sgn = u > 0 ? 1 : -1; let X = 0, S = 0, a = 0, pa = psiAt(P, 0);
   const knots = P.u.filter((x) => (sgn > 0 ? x > 0 && x < u : x < 0 && x > u)).sort((x, y) => sgn * (x - y));
   for (const k of [...knots, u]) { const pb = psiAt(P, k), [c, s] = piece(a, k, pa, pb); X += c; S += s; a = k; pa = pb; }
@@ -180,10 +205,20 @@ function stepBetween(A, B) {
  * segment's last cross-section and its first. lap is true for the closed lap's seam (last road segment to the first). A joint inside a cup
  * piece is 0 by construction (the run scheme shares rows); the legacy <-> cup joints are matched by the morphs (src/core/adapter.js).
  */
+// A joint's step depends on its two segments alone. The window's shell reuses an unchanged piece's segments FROZEN (src/core/adapter.js
+// toSegments `cache`), so a joint between two frozen segments is measured once and remembered: the track checker measured every joint of
+// the keeper's 6 km track again on every placement, 6 of the 11 s that a place-then-undo cost (2026-10-12). Any other joint is measured each time.
+const stepMemo = new WeakMap();
 function jointSteps(segments, closed) {
   if (!segments.some(readsBlend)) return [];
   const out = [], road = (g) => g && g.kind === 'road' && g.profile;
-  const step = (a, b) => stepBetween(readAt(a, a.length), readAt(b, 0));
+  const measure = (a, b) => stepBetween(readAt(a, a.length), readAt(b, 0));
+  const step = (a, b) => {
+    if (!Object.isFrozen(a) || !Object.isFrozen(b)) return measure(a, b);
+    let byNext = stepMemo.get(a); if (!byNext) { byNext = new WeakMap(); stepMemo.set(a, byNext); }
+    let m = byNext.get(b); if (m === undefined) { m = measure(a, b); byNext.set(b, m); }
+    return m;
+  };
   for (let j = 1; j < segments.length; j++) { const a = segments[j - 1], b = segments[j]; if (road(a) && road(b) && (readsBlend(a) || readsBlend(b))) out.push({ j, lap: false, m: step(a, b) }); }
   const a = segments[segments.length - 1], b = segments[0];
   if (closed && segments.length > 1 && road(a) && road(b) && (readsBlend(a) || readsBlend(b))) out.push({ j: 0, lap: true, m: step(a, b) });

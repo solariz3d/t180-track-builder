@@ -174,7 +174,11 @@ function ensureDiffuse(scene) {
  * Tangents are writeKn5's, from each vertex's own triangles; a merge shares no vertex between meshes, so they are the same.
  */
 const MERGE_CLASSES = Object.freeze([{ re: /^(1(?:ROAD|GRIP\d{3})_)(?!PIT)/ }, { re: /^(UNDERSKIN_)/ }]);   // group 1 is the chunk's name prefix (its surface key)
-const MERGE_MAX_VERTS = 65536, MERGE_CHUNK_M = 400;
+// 32,768, half the 16-bit budget (2026-10-12, the keeper on TEST TRACK 10: the road went invisible from the 90° turns on, though the car still drove on it).
+// Its two largest chunks held 65,088 and 65,472 vertices, every other under 60,000; the same export with chunks capped at 32,768 drew the whole lap
+// (the keeper drove it: "works"). Inferred, not measured: AC or Custom Shaders Patch adds vertices of its own to a mesh on load, so one filled to the
+// index budget passes it and is left undrawn, while the physics reads the kn5 as written. Twice the draw calls, still a few dozen on a lap.
+const MERGE_MAX_VERTS = 32768, MERGE_CHUNK_M = 400;
 function mergeForAc(scene, { maxVerts = MERGE_MAX_VERTS, chunkM = MERGE_CHUNK_M } = {}) {
   const kids = scene.root.children, out = [], open = new Map(), taken = new Set(kids.map((n) => n.name));
   const box = (P) => { const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { if (P[i + k] < b[k]) b[k] = P[i + k]; if (P[i + k] > b[k + 3]) b[k + 3] = P[i + k]; } return b; };

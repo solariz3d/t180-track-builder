@@ -316,8 +316,14 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
   };
   // Everything a piece's segments are built from, beside the piece itself: its neighbours (the roll restart after a flight, a cup's tail
   // fade into the next piece), its role at the lap seam and the seam's two ends, the state carried in from the piece before, and the options.
-  const inputsOf = (pi) => [pi === 0, pi ? doc.pieces[pi - 1].type : null, doc.pieces[pi + 1] || null, seam, pi === firstRoad, pi === lastRoad,
-    seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, segM, designKmh, cupRuns];
+  // Each entry is only as wide as `piece` reads it, so placing a piece after this one does not rebuild it: the next piece matters only as a cup's
+  // tail target (a legacy road after a cup, `nextLegacy` below), and the first/last road roles only at a mixed lap seam (`seam`).
+  const inputsOf = (pi) => {
+    const P = doc.pieces[pi], nextP = doc.pieces[pi + 1];
+    const tailTo = P.type === 'road' && P.cup && cupRuns && nextP && nextP.type === 'road' && !nextP.cup && !nextP.tube && !nextP.edge ? nextP : null;
+    return [pi === 0, pi ? doc.pieces[pi - 1].type : null, tailTo, seam, seam && pi === firstRoad, seam && pi === lastRoad,
+      seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, segM, designKmh, cupRuns];
+  };
   doc.pieces.forEach((P, pi) => {
     if (!cache) { piece(P, pi); return; }
     const k = inputsOf(pi), hit = cache.get(P);

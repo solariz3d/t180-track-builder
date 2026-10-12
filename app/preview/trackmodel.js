@@ -57,6 +57,18 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // D235: `detail` > 1 meshes a COARSER preview (app/preview/coarse.js thins each segment's row grid) while the track is being dragged; 1 is full detail, the export's.
   // A change of detail is a full rebuild. `lastResolved` is the state's document the last update was built from: the very same object builds nothing again.
   let detail = 1, detailMoved = false, lastResolved = null;
+  // UNDO OF A PLACEMENT (the keeper, 2026-10-12: "undoing the last piece lags too long"). A removal was a full rebuild: 1.2 to 1.4 s on his 10-piece
+  // track, against 65 ms to place the piece. An 'extend' grows the path and the mesh IN PLACE (geom extendPath / extendMesh), so just before it the
+  // model copies what those two touch: the path's arrays and the last block (extendPath pops a sample and shortens the last block), and the mesh
+  // state's piece and seam lists (extendMesh only appends; it never changes an old piece). If the very next change is back to exactly those
+  // segments (the same keys, and the lift giving the same lift keys), that copy IS the track: it is put back and nothing is meshed. Any other
+  // change in between drops the copy (a sculpt changes old pieces in place). app/test/preview-undo.test.js: equal to a full build, and growable.
+  let undoSnap = null;
+  // the path's samples are VIEWS of its block objects (src/geom/path.js SampleView), so the copy keeps the SAME blocks (a sculpt later re-places them in place,
+  // and the views must follow); extendPath changes an old block only by shortening the last one (last.n--), which `lastN` puts back on a restore
+  const copyPath = (p) => ({ ...p, samples: p.samples.slice(), blocks: p.blocks.slice(), segFirst: p.segFirst.slice(), starts: p.starts.slice(), segEnd: p.segEnd.slice() });
+  const copyMesh = (m) => ({ ...m, _state: { ...m._state, pieces: m._state.pieces.slice(), seams: m._state.seams.slice() } });
+  const canSnap = () => !!(path && Array.isArray(path.blocks) && Array.isArray(path.starts) && Array.isArray(path.segEnd) && mesh && mesh._state && Array.isArray(mesh._state.pieces));
   /**
    * The segments the MESH is given: a segment whose lifted samples differ from the base carries `_lift`, a key made from those
    * samples. So its handles (mesh.js handleKey) change exactly where the lift changed, and sculptMesh remeshes exactly those
@@ -97,14 +109,28 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       let how, from = null, fromS = null;
       // the lift, redone on the base path after any growth; the first segment whose lifted samples changed
       const relift = () => { shown = lift ? lift(path) : path; const lk = segs.map((_, j) => liftOf(path, shown, j)); let a = 0; while (a < lk.length && a < liftKeys.length && lk[a] === liftKeys[a]) a++; return { lk, a }; };
+      // an undo straight back over the last placement: put the copy back (see UNDO OF A PLACEMENT above)
+      const snap = undoSnap; undoSnap = null;
+      if (snap && path && !isClosed && !closed && !startMoved && !detailMoved && detail === 1 && snap.detail === 1 && nk.length < keys.length
+        && nk.length === snap.keys.length && nk.every((k, j) => k === snap.keys[j])) {
+        snap.path.blocks[snap.path.blocks.length - 1].n = snap.lastN;   // undo extendPath's last.n-- on the shared block
+        const sh = lift ? lift(snap.path) : snap.path, lk = segs.map((_, j) => liftOf(snap.path, sh, j));
+        if (lk.length === snap.liftKeys.length && lk.every((k, j) => k === snap.liftKeys[j])) {
+          path = snap.path; shown = sh; mesh = snap.mesh; keys = nk; liftKeys = lk; closed = false; lastResolved = resolved; detailMoved = false;
+          last = { path: shown, mesh, how: 'full', batches: snap.last.batches, bounds: snap.last.bounds, segments: resolved.segments, g: null, fromS: null };
+          return last;
+        }
+      }
       if (!path || isClosed || closed || startMoved || detailMoved) how = full(segs, isClosed, lift, nk);
       else if (g === keys.length && g === nk.length) {
         const { lk, a } = relift();
         if (a === lk.length && a === liftKeys.length) how = 'same';
         else { from = a; fromS = path.starts[a].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), a); liftKeys = lk; how = 'sculpt'; }   // only the offsets changed (a hill brush)
       } else if (g === keys.length) {
+        if (canSnap() && last) undoSnap = { keys: keys.slice(), liftKeys: liftKeys.slice(), path: copyPath(path), lastN: path.blocks[path.blocks.length - 1].n, mesh: copyMesh(mesh), last, detail };
         from = g; fromS = path.lengthM; geom.extendPath(path, segs);
         const { lk, a } = relift();
+        if (a < keys.length) undoSnap = null;   // the lift moved an OLD piece: sculptMesh changes old pieces in place, so the copy is not the old track
         mesh = a < keys.length ? geom.sculptMesh(mesh, shown, meshSegs(segs, lk), a) : geom.extendMesh(mesh, shown, meshSegs(segs, lk)); liftKeys = lk; how = 'extend';
       } else if (nk.length >= keys.length) {
         geom.rebuildPathFrom(path, segs, g);

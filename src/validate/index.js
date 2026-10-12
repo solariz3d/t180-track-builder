@@ -94,8 +94,18 @@ const DOWNFORCE_STEP = (car) => ({ aheadM: car.downforceRay.aheadM, note: `the d
 /** D243, D258: segment j is the equation core's FLIGHT (src/core/adapter.js): word 'core', part 'gap', carrying its pose (to), followed by road (the landing the user placed). */
 const isCoreFlight = (segments, j) => { const g = segments[j], n = segments[j + 1]; return g.word === 'core' && g.part === 'gap' && !!g.to && !!n && n.kind === 'road'; };   // g.to: the adapter writes a flight's pose on its gap (a planted hole has none)
 
+// WHAT DEPENDS ON A FROZEN SEGMENT ALONE IS COMPUTED ONCE (2026-10-12, the keeper: "a solid lag when putting the pieces down"). The window's shell
+// reuses an unchanged piece's segments FROZEN (src/core/adapter.js toSegments `cache`), and on his 6 km track the checker spent about 4 of every
+// placement's seconds recomputing, for every segment, what only its cross-section decides: its normalized profile, the per-u constants (constOf),
+// the lateral points of the stacked check (latOf), and a cup blend's profile at a station. Each is now remembered per frozen segment (or per the
+// frozen profile made from one), and frozen itself, so a reader that writes to a shared one throws. A segment that is not frozen (every other
+// caller's) is computed every time, exactly as before. The arithmetic is the same calls on the same inputs, so every figure is bit-identical.
+const deepFreeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) deepFreeze(o[k]); } return o; };
+const normMemo = new WeakMap(), constMemo = new WeakMap(), latMemo = new WeakMap(), blendMemo = new WeakMap();
+/** Look up f(key) in memo when key is frozen, else compute it. */
+const remembered = (memo, key, f) => { if (!Object.isFrozen(key)) return f(); let v = memo.get(key); if (v === undefined) { v = deepFreeze(f()); memo.set(key, v); } return v; };
 function segProfiles(segments) {
-  return segments.map((g) => (g.kind === 'gap' ? null : P.normalize(g.profile)));
+  return segments.map((g) => (g.kind === 'gap' ? null : remembered(normMemo, g, () => P.normalize(g.profile))));
 }
 
 /**
@@ -214,8 +224,8 @@ function core(path, segments, opts, from, carried, upto) {
   // several vectors per station and line); each station then combines it with its own frame, in the same arithmetic
   // order as the vector helpers above, so every figure is bit-identical to the per-station form it replaced.
   const perSeg = new Map();
-  const constOf = (prof) => prof.u.map((u) => { const [X, Y] = P.offsetAt(prof, u), [nl, nu] = P.normalAt(prof, u), psi = P.psiAt(prof, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
-    return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; });
+  const constOf = (prof) => remembered(constMemo, prof, () => prof.u.map((u) => { const [X, Y] = P.offsetAt(prof, u), [nl, nu] = P.normalAt(prof, u), psi = P.psiAt(prof, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
+    return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; }));
   const segConst = (j) => {
     let c = perSeg.get(j);
     if (c) return c;
@@ -226,7 +236,13 @@ function core(path, segments, opts, from, carried, upto) {
   // so the loads, the folds and the steepness read the road as the mesh draws it, not the blend's target for the whole segment
   const segS0 = new Array(segments.length);
   for (let i = 0; i < n; i++) if (segS0[S[i].seg] === undefined) segS0[S[i].seg] = S[i].s;
-  const constAt = (p) => { const g = segments[p.seg]; return P.readsBlend(g) && g.blend ? constOf(P.atSegment(g, p.s - segS0[p.seg])) : segConst(p.seg); };   // only a cup's blend: a word's font transition is judged at its target, as before
+  const blendConst = (g, d) => {   // a cup blend's constants at distance d into frozen segment g, remembered per (g, d)
+    if (!Object.isFrozen(g)) return constOf(P.atSegment(g, d));
+    let byD = blendMemo.get(g); if (!byD) { byD = new Map(); blendMemo.set(g, byD); }
+    let c = byD.get(d); if (c === undefined) { c = deepFreeze(constOf(P.atSegment(g, d))); byD.set(d, c); }
+    return c;
+  };
+  const constAt = (p) => { const g = segments[p.seg]; return P.readsBlend(g) && g.blend ? blendConst(g, p.s - segS0[p.seg]) : segConst(p.seg); };   // only a cup's blend: a word's font transition is judged at its target, as before
   // the normal n(u) at a station: L·nl + U·nu (add(mul(L, nl), mul(U, nu)))
   const nx = (p, c) => p.L[0] * c.nl + p.U[0] * c.nu, ny = (p, c) => p.L[1] * c.nl + p.U[1] * c.nu, nz = (p, c) => p.L[2] * c.nl + p.U[2] * c.nu;
   for (let i = from; i < end; i++) {
@@ -519,10 +535,13 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   const latOf = (j) => {
     let e = lat.get(j);
     if (e) return e;
-    const prof = profiles[j], us = [];
-    for (let k = 0; k < prof.u.length; k++) { us.push(prof.u[k]); if (k + 1 < prof.u.length) { const m = Math.ceil((prof.u[k + 1] - prof.u[k]) / 1); for (let jj = 1; jj < m; jj++) us.push(prof.u[k] + (prof.u[k + 1] - prof.u[k]) * jj / m); } }
-    const xy = us.map((u) => P.offsetAt(prof, u));
-    e = { us, xy, r: Math.max(0, ...xy.map(([X, Y]) => Math.hypot(X, Y))) };
+    const prof = profiles[j];
+    e = remembered(latMemo, prof, () => {
+      const us = [];
+      for (let k = 0; k < prof.u.length; k++) { us.push(prof.u[k]); if (k + 1 < prof.u.length) { const m = Math.ceil((prof.u[k + 1] - prof.u[k]) / 1); for (let jj = 1; jj < m; jj++) us.push(prof.u[k] + (prof.u[k + 1] - prof.u[k]) * jj / m); } }
+      const xy = us.map((u) => P.offsetAt(prof, u));
+      return { us, xy, r: Math.max(0, ...xy.map(([X, Y]) => Math.hypot(X, Y))) };
+    });
     lat.set(j, e); return e;
   };
   let rMax = 0;
