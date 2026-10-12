@@ -1,0 +1,60 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260 and D279 (manifest.d279.json); F2 only (F1's largest chunk, 27,594 vertices, is under the new cap: its kn5 is byte-identical), their kn5 only",
+ "made_at": "the Third Place, 2026-10-12, feature/denser-asphalt: one script (scratch meshcap_measure.js) rendering both from the same tree as test/fixtures/fixtures.js digests() does, with the merge cap 65,536 (before) and 32,768 (after)",
+ "reason": "The keeper, 2026-10-12, on TEST TRACK 10: the road went invisible from the 90° turns on while the car still drove on it. Its two largest chunks held 65,088 and 65,472 vertices; the same export capped at 32,768 drew the whole lap (the keeper drove it: \"works\"). src/export/acready.js MERGE_MAX_VERTS 65,536 -> 32,768.",
+ "fixtures": {
+  "F2-halfpipe-default-lap-closed": {
+   "before_d279": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "9df47bda651695f3016284dcd8db54f121e1009fd60794d2434dd57af0186e2d",
+    "kn5Bytes": 9434428
+   },
+   "after_meshcap": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "269a3d7c47ac608f00ee4701cee63492d8565237b72bcc239e4f88148b03ec87",
+    "kn5Bytes": 9434501
+   },
+   "measure": {
+    "triangleSet": {
+     "equal": true,
+     "missingFromAfter": 0,
+     "extraInAfter": 0,
+     "triangles": 185936
+    },
+    "meshesBefore": {
+     "meshes": 15,
+     "chunks": 8,
+     "other": 7,
+     "maxVerts": 41172,
+     "triangles": 185936
+    },
+    "meshesAfter": {
+     "meshes": 16,
+     "chunks": 9,
+     "other": 7,
+     "maxVerts": 32712,
+     "triangles": 185936
+    },
+    "othersByteEqual": true,
+    "markersEqual": true,
+    "kn5ChangeBytes": 73
+   }
+  }
+ },
+ "unchanged": [
+  "F1-bowl-default-lap-closed",
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}

@@ -52,8 +52,15 @@ test('row 1: the merge keeps every vertex and every triangle (position, normal, 
   assert.equal(meshes(before).length, 40, 'control: the scene it was given is untouched');
 });
 
+test('row 2b: with the default budget no chunk passes 32,768 vertices (AC left the keeper\x27s two chunks near 65,536 undrawn: the road went invisible but drivable)', () => {
+  const big = []; for (let i = 0; i < 16; i++) big.push(strip(`1ROAD_w_${i}`, { x0: 2 * i, rows: 100, cols: 50, step: 0.01 }));   // 5,000 vertices each, 80,000 in all
+  const b = meshes(mergeForAc(scene(big)));
+  assert.ok(b.every((n) => n.positions.length / 3 <= 32768), b.map((n) => n.positions.length / 3).join(', '));
+  assert.equal(b.reduce((a, n) => a + n.positions.length / 3, 0), 80000, 'no vertex lost');
+});
+
 test('row 2: a chunk never passes the 16-bit index budget or its length; a lone mesh stays as it was; another material or other flags never join', () => {
-  assert.equal(MERGE_MAX_VERTS, 65536, 'writeKn5 writes 16-bit indices'); assert.equal(MERGE_CHUNK_M, 400);
+  assert.equal(MERGE_MAX_VERTS, 32768, 'half the 16-bit index budget: a chunk filled to 65,536 was left undrawn by AC (2026-10-12)'); assert.equal(MERGE_CHUNK_M, 400);
   const big = []; for (let i = 0; i < 6; i++) big.push(strip(`1ROAD_w_${i}`, { x0: 2 * i, rows: 100, cols: 50, step: 0.01 }));   // 5,000 vertices each
   const b = meshes(mergeForAc(scene(big), { maxVerts: 12000 })); assert.deepEqual(b.map((n) => n.positions.length / 3), [10000, 10000, 10000], 'by the vertex budget');
   assert.ok(b.every((n) => Math.max(...n.indices) < 12000));
