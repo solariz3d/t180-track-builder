@@ -707,6 +707,24 @@ test('D280: Turn by places a piece that turns exactly the typed angle and ends s
   P.panel.unmount();
 });
 
+// ── TURN TO GRID (2026-10-12, the keeper: "Its hard to get a straight aligned to the grid from a free flowing spiral turn") ──
+test('Turn to grid: the line under the buttons says how far the end is off the grid, and the button turns onto it (90 by default, 45 when picked)', async () => {
+  const P = await mountPanel();
+  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
+  const note = () => P.root.all().find((e) => e.attrs['aria-label'] === 'end heading').textContent, doc = () => P.shell.getState().history.present;
+  P.type('length m', 300); button('Extend').onclick();
+  assert.match(note(), /on the 90° grid/, `a straight first piece is on the grid: ${note()}`);
+  P.type('length m', 600); P.type('turn by °', 37); button('Turn by').onclick();
+  assert.match(note(), /end heading 37.00°, 37.00° off the 90° grid/, note());
+  P.type('length m', 400); button('Turn to grid').onclick();
+  assert.equal(doc().pieces.length, 3, status()); assert.match(note(), /on the 90° grid/, note());
+  P.shell.undo(); assert.equal(doc().pieces.length, 2, 'one undo step');
+  const step = P.root.all().find((e) => e.attrs['aria-label'] === 'grid step'); step.value = '45'; step.onchange();
+  assert.match(note(), /8.00° off the 45° grid/, note());
+  button('Turn to grid').onclick(); assert.match(note(), /on the 45° grid/, note());
+  P.panel.unmount();
+});
+
 // ── D282, SHARP (the keeper: "i also want to be able to make thunderhead 90 degrees too"): a second turn type beside the broad curve ──
 test('D282: Sharp places a corner of the typed angle at the typed radius as ONE undo step; too tight a radius names the tightest at this width and places nothing', async () => {
   const P = await mountPanel(), RD = require('../../src/core/readout.js');
