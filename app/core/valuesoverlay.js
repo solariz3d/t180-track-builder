@@ -20,7 +20,10 @@ function entries(f, widthText) {
 function mount(stage, win) {
   const doc = stage.ownerDocument, layer = doc.createElement('div');
   layer.setAttribute('aria-label', 'piece values');
-  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;gap:22px;padding:6px 16px;background:rgba(11,13,17,0.86);color:#ffffff;font:bold 28px/1.2 system-ui,"Segoe UI",sans-serif;white-space:nowrap`;
+  // the keeper, 2026-10-12: the numbers "look goofy". A dashboard read: Bahnschrift (Windows' DIN face, on every Windows
+  // 10 and 11) with fixed-width digits, so a number does not jitter as a handle drags it; each label small and grey above
+  // its value, and a thin rule between the values.
+  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;padding:7px 4px;border-radius:8px;background:rgba(11,13,17,0.86);color:#ffffff;font:bold 26px/1.05 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
   stage.append(layer);
   let shown = null;
   const set = (list) => {
@@ -28,7 +31,16 @@ function mount(stage, win) {
     shown = list && list.length ? list : null;
     if (!shown) { layer.style.display = 'none'; layer.replaceChildren(); return; }
     layer.style.display = 'flex';
-    layer.replaceChildren(...shown.map((e) => { const s = doc.createElement('span'); s.setAttribute('data-value', e.key); s.textContent = `${e.label} ${e.value}`; return s; }));
+    layer.replaceChildren(...shown.map((e, i) => {
+      const s = doc.createElement('span'), label = doc.createElement('span'), value = doc.createElement('span');
+      s.setAttribute('data-value', e.key);
+      s.style.cssText = `display:flex;flex-direction:column;align-items:center;padding:0 16px${i ? ';border-left:1px solid rgba(255,255,255,0.14)' : ''}`;
+      label.style.cssText = 'font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#8d98a8;margin-bottom:3px';
+      label.textContent = e.label;
+      value.textContent = e.value;
+      s.append(label, value);
+      return s;
+    }));
   };
   return { set, entries: () => (shown ? shown.slice() : null), visible: () => !!shown, layer, unmount() { layer.remove(); } };
 }
