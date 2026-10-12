@@ -16,8 +16,8 @@
 const D = require('./document.js');
 const SC = require('./sculpt.js');
 
-const SHAPE = ['c', 't', 'e'];
-const FLAG = { c: 'cup', t: 'tube', e: 'edge' };
+const SHAPE = ['c', 't', 'e', 'er'];   // er: the right edge (2026-10-12), flattened with the left
+const FLAG = { c: 'cup', t: 'tube', e: 'edge', er: 'edge' };
 
 function weight(s, s0, s1, ramp) {
   if (s >= s0 && s <= s1) return 1;

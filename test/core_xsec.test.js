@@ -29,7 +29,8 @@ test('SCHEMA: new documents are t180b.core/4; /1, /2 and /3 text still loads; a 
   assert.strictEqual(D.SCHEMA, 't180b.core/4'); assert.strictEqual(JSON.parse(text).schema, 't180b.core/4');
   assert.ok(!/"(e|s|t)":\[/.test(text), 'a cup piece writes no edge or tube channel');
   for (const old of ['t180b.core/3', 't180b.core/2']) assert.strictEqual(D.serialize(D.parse(text.replace('t180b.core/4', old))), text, `${old} loads and saves as the same /4 text (only the schema string differs)`);
-  assert.throws(() => D.parse(text.replace('t180b.core/4', 't180b.core/5')), /a newer file needs a newer builder/);
+  // core/5 is the split-edge version (er, 2026-10-12): the next one is the unknown newer file
+  assert.throws(() => D.parse(text.replace('t180b.core/4', 't180b.core/6')), /a newer file needs a newer builder/);
 });
 test('SCHEMA: an edge piece and a tube piece write their channels, read back with their flags, and save to the same text (round trip)', () => {
   let d = extend(start(), { length: 200, targets: { e: 15, s: 0.7 } }); d = extend(d, { length: 100, targets: { t: 200 } });

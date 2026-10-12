@@ -141,7 +141,7 @@ const SHARP_NOTE = 'Sharp brush: acts at exactly the size you set by adding fine
 const MODES = Object.freeze({
   hill: { channels: ['h'], what: 'height offset, m' },
   swerve: { channels: ['l'], what: 'lateral offset, m (+ = left)' },
-  value: { channels: ['phi', 'w', 'r', 'h', 'l', 'c', 'e', 's', 't'], what: 'a value channel: bank, width, rise, height, lateral offset, cup (cup pieces only), edge angle or edge start (edge pieces only), tube sweep (tube pieces only); a brush that takes one outside its range is refused by name' },
+  value: { channels: ['phi', 'w', 'r', 'h', 'l', 'c', 'e', 's', 't', 'er'], what: 'a value channel: bank, width, rise, height, lateral offset, cup (cup pieces only), edge angle or edge start (edge pieces only), tube sweep (tube pieces only); a brush that takes one outside its range is refused by name' },
   rate: { channels: ['kh', 'kv'], what: 'turn or climb harder from here on: a heading- or pitch-rate brush, which re-closes a closed lap' },
 });
 

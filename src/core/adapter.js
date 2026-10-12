@@ -88,12 +88,12 @@ function tubeProfile(w, t) {
  * sides. Its knots are the base's plus nE + 1 equal steps of the outer zone each side (the slice itself and the edge included); ψ_mid at a new knot is the base's own linear
  * interpolation, as the mesh reads it. A piece with no edge never calls this: its profile object is the base, untouched (e = 0 is the identity, seal E3).
  */
-function edgeProfile(base, e, s, nE) {
+function edgeProfile(base, e, s, nE, er = e) {   // er: the RIGHT side (u < 0), e the left; equal, it is the symmetric edge exactly as before
   const P = normalize(base), hr = -P.u[0], hl = P.u[P.u.length - 1], us = [...P.u];
   for (let k = 0; k <= nE; k++) { const f = s + ((1 - s) * k) / nE; us.push(hl * f, -hr * f); }
   us.sort((a, b) => a - b);
   const u = us.filter((x, i) => i === 0 || x - us[i - 1] > 1e-12);
-  const psi = u.map((x) => { const h = x < 0 ? hr : hl, r = h > 0 ? Math.abs(x) / h : 0; return psiAt(P, x) + (r > s ? e * DEG * smooth((r - s) / (1 - s)) : 0); });
+  const psi = u.map((x) => { const h = x < 0 ? hr : hl, r = h > 0 ? Math.abs(x) / h : 0; return psiAt(P, x) + (r > s ? (x < 0 ? er : e) * DEG * smooth((r - s) / (1 - s)) : 0); });
   return { font: P.font === 'tube' ? 'tube-edge' : 'edge', u, psi, material: P.material };   // the font says which cap applies (validate: edge-past-cap)
 }
 /** The middle cross-section of piece P at the channel values x: the legacy profileAt, the cup, or the tube. */
@@ -111,8 +111,8 @@ const heartlineOf = (P, x) => (P.tube ? (x.w / (2 * Math.PI)) * smooth((x.t - HE
  */
 function xsecSegments(P, n, at, join) {
   const s = (j) => (P.length * j) / n, E = Array.from({ length: n + 1 }, (_, j) => at(s(j))), edge = !!P.edge;
-  const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => x.e)))) : 0;
-  const own = (x) => { const b = baseProfileOf(P, x); return edge ? edgeProfile(b, x.e, x.s, nE) : b; };
+  const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => Math.max(x.e, x.er))))) : 0;   // sized by the steeper side
+  const own = (x) => { const b = baseProfileOf(P, x); return edge ? edgeProfile(b, x.e, x.s, nE, x.er) : b; };
   const Lm = join ? Math.min(MORPH_M, P.length) : 0, J = join ? normalize(join.profile) : null;
   const prof = E.map((x, j) => { const o = own(x); return J && s(j) < Lm - 1e-9 ? blend(J, normalize(o), smooth(s(j) / Lm)) : o; });
   const fractions = commonFractions(prof), hl = E.map((x) => heartlineOf(P, x)), spiral = hl.some((x) => x > 0), out = new Array(n);

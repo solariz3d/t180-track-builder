@@ -75,7 +75,7 @@ test('row 3: the joints stay C1: the sculpted piece\'s value and slope at both e
 });
 
 test('row 4: turn and climb cannot be chosen in Sculpt (nor height or sideways): refused BY NAME, no drag opens, nothing changes; and the other refusals', async () => {
-  assert.deepEqual(SCULPT_CHANNELS.slice().sort(), ['c', 'e', 'phi', 'r', 's', 't', 'w'], 'bank, cup, width, edge angle, edge start, wall rise, tube sweep');
+  assert.deepEqual(SCULPT_CHANNELS.slice().sort(), ['c', 'e', 'er', 'phi', 'r', 's', 't', 'w'], 'bank, cup, width, edge angle, right edge (2026-10-12), edge start, wall rise, tube sweep');
   for (const ch of ['kh', 'kv', 'h', 'l']) assert.ok(!SCULPT_CHANNELS.includes(ch), `${ch} is not offered`);
   const s = await mk('legacy'), before = s.getState().history.present; s.setSculpt(true); s.selectPiece(2);
   for (const ch of ['kh', 'kv']) { s.beginSculpt({ channel: ch }); assert.equal(s.getState().brush, null, `${ch}: no drag opened`); assert.match(s.getState().message, /^SCULPT_CHANNEL: Sculpt offers only the shape channels/); assert.match(s.getState().message, new RegExp(`"${ch}"`)); }

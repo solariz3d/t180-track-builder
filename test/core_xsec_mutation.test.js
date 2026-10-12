@@ -15,24 +15,24 @@ const FILES = { core: 'core_xsec.test.js', math: 'core_xsec_math.test.js', val: 
 
 const MUTANTS = [
   // ── E1: the edge profile (KE1-*) ──
-  { id: 'KE1-1 G = t (the slice is a kink)', file: 'math', pattern: 'slice is no kink|analytic', edits: [[C + 'adapter.js', 'e * DEG * smooth((r - s) / (1 - s))', 'e * DEG * Math.max(0, Math.min(1, (r - s) / (1 - s)))']] },
-  { id: 'KE1-2 the edge term is signed by the side (right side −e)', file: 'core', pattern: 'E1 \\(i\\)', edits: [[C + 'adapter.js', 'e * DEG * smooth((r - s) / (1 - s))', '(x < 0 ? -1 : 1) * e * DEG * smooth((r - s) / (1 - s))']] },
-  { id: 'KE1-3 e is taken as radians', file: 'core', pattern: 'E1 \\(i\\)', edits: [[C + 'adapter.js', 'e * DEG * smooth((r - s) / (1 - s))', 'e * smooth((r - s) / (1 - s))']] },
-  { id: 'KE1-4 four intervals for the outer zone', file: 'core', pattern: 'E4 \\(v\\)', edits: [[C + 'adapter.js', 'const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => x.e)))) : 0;', 'const nE = edge ? 4 : 0;']] },
+  { id: 'KE1-1 G = t (the slice is a kink)', file: 'math', pattern: 'slice is no kink|analytic', edits: [[C + 'adapter.js', '(x < 0 ? er : e) * DEG * smooth((r - s) / (1 - s))', '(x < 0 ? er : e) * DEG * Math.max(0, Math.min(1, (r - s) / (1 - s)))']] },
+  { id: 'KE1-2 the edge term is signed by the side (right side −e)', file: 'core', pattern: 'E1 \\(i\\)', edits: [[C + 'adapter.js', '(x < 0 ? er : e) * DEG * smooth((r - s) / (1 - s))', '(x < 0 ? -er : e) * DEG * smooth((r - s) / (1 - s))']] },
+  { id: 'KE1-3 e is taken as radians', file: 'core', pattern: 'E1 \\(i\\)', edits: [[C + 'adapter.js', '(x < 0 ? er : e) * DEG * smooth((r - s) / (1 - s))', '(x < 0 ? er : e) * smooth((r - s) / (1 - s))']] },
+  { id: 'KE1-4 four intervals for the outer zone', file: 'core', pattern: 'E4 \\(v\\)', edits: [[C + 'adapter.js', 'const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => Math.max(x.e, x.er))))) : 0;', 'const nE = edge ? 4 : 0;']] },
   { id: 'KE1-5 the slice is placed at the full width, not the half-width (the edge is never reached)', file: 'core', pattern: 'E1 \\(i\\)', edits: [[C + 'adapter.js', 'r = h > 0 ? Math.abs(x) / h : 0;', 'r = h > 0 ? Math.abs(x) / (2 * h) : 0;']] },
   // ── E2: the domain (KE2-*) ──
   { id: 'KE2-1 the cap is applied to e alone, not the total', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'if (v + e[i] > CUP_MAX + EDGE_EPS) throw', 'if (e[i] > CUP_MAX + EDGE_EPS) throw']] },
   { id: 'KE2-2 no guard on the edge in the document', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'if (P.edge) checkEdge(P, at);', 'if (false) checkEdge(P, at);']] },
   { id: 'KE2-3 s has no lower bound', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'if (s.some((v) => v < S_MIN - EDGE_EPS || v > S_MAX + EDGE_EPS))', 'if (s.some((v) => v > S_MAX + EDGE_EPS))']] },
-  { id: 'KE2-4 e may be negative (a lip)', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'if (e.some((v) => v < -EDGE_EPS)) throw', 'if (false) throw']] },
-  { id: 'KE2-5 extend does not refuse a target the cap cannot hold', file: 'core', pattern: 'EXTEND: e, s and t targets', edits: [[C + 'extend.js', 'if (given(targets.e) && targets.e > cap(C.e.length - 1) + 1e-6) throw', 'if (false) throw']] },
-  { id: 'KE2-6 the fit\'s ringing is not clamped (e)', file: 'core', pattern: 'ringing', edits: [[C + 'extend.js', 'C.e = C.e.map((x, i) => Math.min(Math.max(0, cap(i)), Math.max(0, x)));', 'C.e = C.e;']] },
+  { id: 'KE2-4 e may be negative (a lip)', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'if (P.channels.e.some((v) => v < -EDGE_EPS)) throw', 'if (false) throw'], [C + 'document.js', 'if (er.some((v) => v < -EDGE_EPS)) throw', 'if (false) throw']] },
+  { id: 'KE2-5 extend does not refuse a target the cap cannot hold', file: 'core', pattern: 'EXTEND: e, s and t targets', edits: [[C + 'extend.js', 'if (given(targets.e) && targets.e > cap(C.e.length - 1) + 1e-6) throw', 'if (false) throw'], [C + 'extend.js', 'if (given(targets.er) && targets.er > cap(C.er.length - 1) + 1e-6) throw', 'if (false) throw']] },
+  { id: 'KE2-6 the fit\'s ringing is not clamped (e)', file: 'core', pattern: 'ringing', edits: [[C + 'extend.js', 'C[ch] = C[ch].map((x, i) => Math.min(Math.max(0, cap(i)), Math.max(0, x)));', 'C[ch] = C[ch];']] },
   { id: 'KE2-7 a legacy piece\'s total cap ignores its own edge angle (e alone against 150)', file: 'core', pattern: 'DOMAIN', edits: [[C + 'document.js', 'const mid = legacyEdgeDeg(P.family, Math.max(...P.channels.w), Math.max(...P.channels.r)) + Math.max(...e);', 'const mid = Math.max(...e);']] },
   // ── E3: the schema and the identity ──
   { id: 'KE3-3 the schema is still /3', file: 'core', pattern: 'SCHEMA', edits: [[C + 'document.js', "const SCHEMA = 't180b.core/4',", "const SCHEMA = 't180b.core/3',"]] },
-  { id: 'KE3-4 every piece\'s text carries e, s and t', file: 'core', pattern: 'SCHEMA: new documents', edits: [[C + 'document.js', 'CHANNELS.filter((ch) => !OPTIONAL[ch] || P[OPTIONAL[ch]]).map(', 'CHANNELS.map(']] },
+  { id: 'KE3-4 every piece\'s text carries e, s and t', file: 'core', pattern: 'SCHEMA: new documents', edits: [[C + 'document.js', "CHANNELS.filter((ch) => (!OPTIONAL[ch] || P[OPTIONAL[ch]]) && (ch !== 'er' || isSplit(P))).map(", 'CHANNELS.map(']] },
   { id: 'KE3-5 a /3 file is not read', file: 'core', pattern: 'SCHEMA: new documents', edits: [[C + 'document.js', "OLD_SCHEMAS = Object.freeze(['t180b.core/1', 't180b.core/2', 't180b.core/3'])", "OLD_SCHEMAS = Object.freeze(['t180b.core/1', 't180b.core/2'])"]] },
-  { id: 'KE3-6 a text with an edge array is not read as an edge piece', file: 'core', pattern: 'SCHEMA: an edge piece', edits: [[C + 'document.js', "...(has('e', 's') ? { edge: true } : {})", '']] },
+  { id: 'KE3-6 a text with an edge array is not read as an edge piece', file: 'core', pattern: 'SCHEMA: an edge piece', edits: [[C + 'document.js', "...(has('e', 's', 'er') ? { edge: true } : {})", '']] },
   // ── E4: along the road (KE4-*) ──
   { id: 'KE4-1 e is left out of the joint test', file: 'core', pattern: 'JOINT \\(E4 i', edits: [[C + 'document.js', 'const c = P.channels[ch] || [OPT_DEFAULT[ch], OPT_DEFAULT[ch]], v = c[0],', "if (ch === 'e') continue; const c = P.channels[ch] || [OPT_DEFAULT[ch], OPT_DEFAULT[ch]], v = c[0],"]] },
   // re-anchored (D268 landing hold): its old anchor left document.js with D258's free jump (1e76d35); the state after a flight is now afterFlight, which resets the
@@ -83,7 +83,7 @@ const MUTANTS = [
   // ── close ──
   { id: 'KC1 close does not refuse a seam that joins a tube to another kind', file: 'core', pattern: 'CLOSE \\(E4 iii', edits: [[C + 'close.js', "if (!!F.tube !== !!L.tube) throw new D.CoreError('TUBE_SEAM'", "if (false) throw new D.CoreError('TUBE_SEAM'"]] },
   { id: 'KC2 close does not refuse an edge active at one end only', file: 'core', pattern: 'CLOSE \\(E4 iii', edits: [[C + 'close.js', 'if (Math.abs(E[0]) > EDGE_SEAM_TOL || Math.abs(E[1]) > EDGE_SEAM_TOL) throw', 'if (false) throw']] },
-  { id: 'KC3 close moves e (it joins e at a seam where only one end has it)', file: 'core', pattern: 'CLOSE: a lap whose edge ends', edits: [[C + 'close.js', "const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's'] : []),", "const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(true ? ['e', 's'] : []),"]] },
+  { id: 'KC3 close moves e (it joins e at a seam where only one end has it)', file: 'core', pattern: 'CLOSE: a lap whose edge ends', edits: [[C + 'close.js', "const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's', 'er'] : []),", "const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(true ? ['e', 's', 'er'] : []),"]] },
   // ── the brush ──
   { id: 'KB1 an e brush may reach a piece without an edge', file: 'core', pattern: 'BRUSH', edits: [[C + 'sculpt.js', "if (D.OPTIONAL[channel] && channel !== 'c' && !P[D.OPTIONAL[channel]]) throw", 'if (false) throw']] },
 ];
