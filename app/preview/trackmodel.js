@@ -34,7 +34,17 @@ const { batchesOf } = require('./batches.js');
 const { coarsen, CHEAP_FACTOR } = require('./coarse.js');
 const { worldBounds } = require('./look.js');
 
-const { keyOf } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
+const { keyOf: hashOf } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
+// A FROZEN segment cannot change, so its key is hashed once and remembered: the equation core's shell reuses an unchanged piece's segments,
+// deep-frozen (src/core/adapter.js toSegments `cache`), and keying all 3,077 of a 9-piece track's on every placement was about 55 ms of it.
+// Any other segment is hashed every time, as before.
+const keyMemo = new WeakMap();
+const keyOf = (seg) => {
+  if (!Object.isFrozen(seg)) return hashOf(seg);
+  let k = keyMemo.get(seg);
+  if (k === undefined) { k = hashOf(seg); keyMemo.set(seg, k); }
+  return k;
+};
 /** m between path stations: the export's (src/export/fromwords.js buildExport `step: 2`) and validation's. */
 const STEP = 2;
 
