@@ -1,8 +1,12 @@
 // adapter.js: the core's document → the SAME path samples src/geom builds (the spec's GO §6), so the preview, cameras,
 // mesh, validation and export are reused unchanged.
 //
-//   toSegments(doc, { segM = 2, designKmh, cupRuns = true }) -> src/geom segments (each carries its profile; a cup's, and a legacy segment whose
-//                                               width or r changes (D196, a CHORD, `chord: true`), also a blend: see legacySeg)
+//   toSegments(doc, { segM = 2, designKmh, cupRuns = true, cache }) -> src/geom segments (each carries its profile; a cup's, and a legacy segment whose
+//                                               width or r changes (D196, a CHORD, `chord: true`), also a blend: see legacySeg). `cache`, a WeakMap
+//                                               the caller keeps (the window's shell, so placing a piece does not rebuild every piece before it):
+//                                               a piece whose own object, neighbours, seam role and incoming state are all what they were last
+//                                               time returns its last segments (FROZEN, shared between documents) instead of building them again.
+//                                               The result equals the uncached one exactly (test/core_segcache.test.js); without `cache`, unchanged.
 //   toPath(doc, { step = 0.5, segM = 2, designKmh }) -> { segments, path }; path = buildPath(segments, { step, closed, start }),
 //                                               samples { s, seg, pos, T, L, U, kvec, roll, bankG, grade }
 //   profileAt(family, w, r)                    the LEGACY cross-section at a station (ref 09 §3), unchanged since D186
@@ -254,7 +258,15 @@ function legacySeg(fam, a, b, mid, length) {
   return { profile: B, blend: { from: A, s0: 0, length }, start: A, end: B, chord: true };
 }
 
-function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns = true } = {}) {
+/** Freeze a segment and every object and array inside it (its profiles, blend, fractions), so a cached segment cannot change under a reader that keys it once. */
+function deepFreeze(v) {
+  if (v === null || typeof v !== 'object' || Object.isFrozen(v) || ArrayBuffer.isView(v)) return v;
+  Object.freeze(v);
+  for (const k of Object.keys(v)) deepFreeze(v[k]);
+  return v;
+}
+
+function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns = true, cache = null } = {}) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
   if (!(segM > 0)) throw new D.CoreError('BAD_STEP', `segM must be positive, got ${segM}`);
@@ -268,7 +280,7 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
   const legacyAt = (P, j) => { const n = nOf(P), s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n; return legacySeg(P.family, chan(P, s0), chan(P, s1), chan(P, (s0 + s1) / 2), s1 - s0); };
   const legacyFirst = (P) => legacyAt(P, 0).start;   // the first row of the piece's first segment
   const legacyLast = (P) => legacyAt(P, nOf(P) - 1).end;   // and the last row of its last
-  doc.pieces.forEach((P, pi) => {
+  const piece = (P, pi) => {
     if (P.type === 'flight') {
       const to = { x: [P.left, P.up, P.forward], theta: P.heading, p: P.pitch };
       segs.push({ id: P.id, word: 'core', part: 'gap', kind: 'gap', length: flightLength(pitch, to), k0: 0, k1: 0, kp0: 0, kp1: 0, roll0: roll, roll1: P.bank, heartline: 0, profile: null, blend: null, speed: null, to });
@@ -301,6 +313,24 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
     }
     lastPlain = xs ? baseProfileOf(P, a) : lastProfile;   // the piece's own last row without its edge
     roll = a.phi;
+  };
+  // Everything a piece's segments are built from, beside the piece itself: its neighbours (the roll restart after a flight, a cup's tail
+  // fade into the next piece), its role at the lap seam and the seam's two ends, the state carried in from the piece before, and the options.
+  const inputsOf = (pi) => [pi === 0, pi ? doc.pieces[pi - 1].type : null, doc.pieces[pi + 1] || null, seam, pi === firstRoad, pi === lastRoad,
+    seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, segM, designKmh, cupRuns];
+  doc.pieces.forEach((P, pi) => {
+    if (!cache) { piece(P, pi); return; }
+    const k = inputsOf(pi), hit = cache.get(P);
+    if (hit && hit.k.length === k.length && hit.k.every((x, i) => Object.is(x, k[i]))) {
+      for (const g of hit.out) segs.push(g);
+      ({ pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain } = hit.st);
+      return;
+    }
+    const from = segs.length;
+    piece(P, pi);
+    const out = segs.slice(from);
+    out.forEach(deepFreeze);   // shared by every later document that reuses them: a reader that writes to one throws instead of changing another's
+    cache.set(P, { k, out, st: { pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain } });
   });
   return segs;
 }

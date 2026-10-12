@@ -229,7 +229,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // D258: the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
   const jumpFor = (extendOpts) => JU.jumpHere(doc(), extendOpts || null);
   let reads = [], readsFor = null;
-  const segmentsOf = (d) => (d.pieces.length ? toSegments(d) : []);
+  // the keeper, 2026-10-12: "a solid lag when putting the pieces down". Every commit converted EVERY piece again (about 90 ms on a 9-piece
+  // track); the cache returns an unchanged piece's last segments, so a placement converts only what changed (adapter.js toSegments `cache`)
+  const segCache = new WeakMap();
+  const segmentsOf = (d) => (d.pieces.length ? toSegments(d, { cache: segCache }) : []);
   // THE START POSE travels with the segments (found by test 1, D186): the geometry's shape depends on the start PITCH, so a path
   // grown from the origin at pitch 0 is not the document's lap. A real track opened as an example starts where its first station is.
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
