@@ -25,7 +25,8 @@ const GL = require('./griplike.js');   // D261: the grip field's checks and word
 const GR = require('./griplayer.js');
 const SU = require('./spawnsui.js');     // 2026-10-09: the start line, the grid pack and the hotlap, placed by hand
 const SPL = require('./spawnslayer.js');  // and drawn on the preview
-const SPD = require('./spawndrag.js');    // D285: and dragged there
+const SPD = require('./spawndrag.js');
+const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // D285: and dragged there
 const PIT = require('./pitui.js');       // 2026-10-09: the pit lane, its practice spawns on it   // D261: the track coloured by grip
 const VO = require('./valuesoverlay.js');   // D267: the values of the piece being edited, large over the 3D view   // D258: the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
@@ -251,6 +252,21 @@ function mount(root, shell) {
   const turnByBtn = el('button', { text: 'Turn by', title: 'a piece of the length above that turns EXACTLY the angle beside it and ends straight (turn rate 0): too short a piece is refused with the length that works', onclick: () => {
     const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnBy(opts(), turnBy.value); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
+  // TURN TO GRID (2026-10-12, the keeper: "it should also connect to the 90 degree angle of the grid like snap to grid … Its hard to get a straight aligned to the grid
+  // from a free flowing spiral turn"): Turn by, with the angle that brings the end onto the nearest grid direction (src/core/gridturn.js). The line under it says
+  // where the end points now and how far it is off the grid, so the user can see the alignment before and after
+  const gridStep = el('select', { 'aria-label': 'grid step', title: 'the grid directions Turn to grid snaps to: every 90° (the grid lines), 45° or 15°' });
+  gridStep.replaceChildren(...[90, 45, 15].map((d) => new win.Option(`${d}°`, String(d))));
+  const headingNote = el('p', { class: 'message', 'aria-label': 'end heading', style: 'font-size:12px;margin:2px 0' });
+  const showHeading = () => {
+    if (!shell.getState().history.present.pieces.length) { headingNote.textContent = ''; return; }
+    const h = shell.endHeadingDeg(), step = Number(gridStep.value) || 90, off = GT.offGridDeg(h, step), shown = ((h % 360) + 360) % 360;
+    headingNote.textContent = Math.abs(off) < 0.005 ? `end heading ${shown.toFixed(2)}°, on the ${step}° grid` : `end heading ${shown.toFixed(2)}°, ${Math.abs(off).toFixed(2)}° off the ${step}° grid`;
+  };
+  gridStep.onchange = showHeading;
+  const gridBtn = el('button', { text: 'Turn to grid', title: 'a piece of the length above that turns onto the nearest grid direction (the step beside it) and ends straight, so the straight after it runs along the grid: too short a piece is refused with the length that works', onclick: () => {
+    const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnToGrid(opts(), Number(gridStep.value) || 90); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
+  } });
   // D282, SHARP (the keeper: "i also want to be able to make track H 90 degrees too"): a SECOND turn type beside the broad curve, which it leaves as it is. A
   // corner of the angle typed, held at the radius typed, ramped in and out over a few metres (track H's are 0–8 m) and exiting dead straight
   // (src/core/sharp.js). The length field does not apply: the corner's length is its angle times its radius. Too tight a radius for the width is refused by name
@@ -449,7 +465,8 @@ function mount(root, shell) {
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
       fieldAt('edge angle °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn), field('colour by grip', colourOn)),
     wnote, gripNote, roBox,
-    el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn, turnByBtn, field('turn by °', turnBy), sharpBtn, field('sharp °', sharpDeg), field('sharp radius m', sharpR), field('sharp ramp m', sharpRamp)), jumpNote, landingBox,
+    el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn, turnByBtn, field('turn by °', turnBy), gridBtn, field('grid °', gridStep), sharpBtn, field('sharp °', sharpDeg), field('sharp radius m', sharpR), field('sharp ramp m', sharpRamp)), jumpNote, landingBox,
+    headingNote,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
     el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
     ...spawns.nodes,
@@ -460,6 +477,7 @@ function mount(root, shell) {
   );
   let shownFor = null;
   const draw = (st) => {
+    showHeading();   // the end heading line (Turn to grid)
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
     if (d !== shownFor) {   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head, and an UNDONE Extend's own values (item 7)
       const m = shownFor ? madeWith.get(shownFor) : null, undone = !!m && m.before === d;   // only an Undo steps from a document back to the one it was made from
