@@ -512,12 +512,15 @@ function convertOldFlights(pieces, start) {
 // ── undo as history (the same contract as src/doc/history.js, for this document) ────────────────────────────────────
 const freezeH = (h) => Object.freeze(h);
 function createHistory(doc) { return freezeH({ past: Object.freeze([]), present: checkDoc(doc), future: Object.freeze([]), dragBase: null }); }
-function commit(h, doc) { if (h.dragBase) throw new CoreError('IN_DRAG', 'commit during a drag; end the drag first'); if (doc === h.present) return h; return freezeH({ past: Object.freeze([...h.past, h.present]), present: checkDoc(doc), future: Object.freeze([]), dragBase: null }); }
+// 2026-10-13 (the keeper, ELYSIUM: undo "freezes like its trying to do something, but then when it releases its the same"): a step whose document has the
+// same CONTENT as the one before (a new object, the same text) is no step: it was kept as one (ELYSIUM's history held one), and undoing it changed nothing.
+const sameContent = (a, b) => a === b || serialize(a) === serialize(b);
+function commit(h, doc) { if (h.dragBase) throw new CoreError('IN_DRAG', 'commit during a drag; end the drag first'); if (doc === h.present || sameContent(doc, h.present)) return h; return freezeH({ past: Object.freeze([...h.past, h.present]), present: checkDoc(doc), future: Object.freeze([]), dragBase: null }); }
 function beginDrag(h) { if (h.dragBase) throw new CoreError('IN_DRAG', 'a drag is already open'); return freezeH({ ...h, dragBase: h.present }); }
 function dragTo(h, doc) { if (!h.dragBase) throw new CoreError('NO_DRAG', 'dragTo outside a drag'); return freezeH({ ...h, present: checkDoc(doc) }); }
 function endDrag(h) {
   if (!h.dragBase) throw new CoreError('NO_DRAG', 'endDrag outside a drag');
-  if (h.present === h.dragBase) return freezeH({ ...h, dragBase: null });
+  if (sameContent(h.present, h.dragBase)) return freezeH({ ...h, present: h.dragBase, dragBase: null });   // moved and put back, or re-set to the same values: no step
   return freezeH({ past: Object.freeze([...h.past, h.dragBase]), present: h.present, future: Object.freeze([]), dragBase: null });
 }
 function undo(h) { if (h.dragBase) throw new CoreError('IN_DRAG', 'undo during a drag'); if (!h.past.length) return h; return freezeH({ past: Object.freeze(h.past.slice(0, -1)), present: h.past[h.past.length - 1], future: Object.freeze([h.present, ...h.future]), dragBase: null }); }

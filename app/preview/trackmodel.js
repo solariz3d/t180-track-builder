@@ -136,6 +136,16 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         geom.rebuildPathFrom(path, segs, g);
         const { lk, a } = relift(), s0 = Math.min(g, a);
         from = s0; fromS = path.starts[s0].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), s0); liftKeys = lk; how = 'sculpt';
+      } else if (!isClosed && !closed && g === nk.length && mesh && mesh._state && typeof geom.reuseMesh === 'function') {
+        // A REMOVAL FROM THE END of an open track (an undo of a placement, in a history not made in this session; 2026-10-13: 19 to 20 s on the keeper's 24 km ELYSIUM, a full
+        // mesh): the path is grown again (cheap), and the mesh keeps every remaining piece whose segment and lift are what they were, placed anew (geom.reuseMesh, the
+        // closed loop's own reuse, given the old mesh cut to the remaining pieces; equal to a full build to round-off, app/test/preview-undo.test.js row 6).
+        const at0 = startOpt ? { start: startOpt } : {};   // where the track starts, as full() places it
+        path = geom.buildPath(segs, { ...pathOpts, closed: false, ...at0 }); shown = lift ? lift(path) : path;
+        const lk = segs.map((_, j) => liftOf(path, shown, j)), n = segs.length, old = mesh._state;
+        const cut = { ...mesh, _state: { ...old, pieces: old.pieces.slice(0, n), seams: old.seams.slice(0, n), nseg: n } };
+        mesh = geom.reuseMesh(cut, shown, meshSegs(segs, lk), segs.map((_, j) => nk[j] === keys[j] && lk[j] === liftKeys[j]));
+        liftKeys = lk; how = 'full';
       } else how = full(segs, isClosed, lift, nk);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
       keys = nk; closed = isClosed;
       const batches = how === 'same' && last ? last.batches : batchesOf(mesh);

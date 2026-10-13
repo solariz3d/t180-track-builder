@@ -106,7 +106,13 @@ function unpackHistory(sideText, presentText, d) {
   if (o.kind !== UNDO_KIND || o.schema !== 1) return { bad: 'it is not an undo history this build reads' };
   if (typeof o.present !== 'string' || !Array.isArray(o.past) || !Array.isArray(o.future)) return { bad: 'it is missing its present, past or future' };
   if (o.present !== presentText) return { mismatch: true };
-  const docs = (list, what) => list.map((t, i) => { if (typeof t !== 'string') throw new Error(`${what} step ${i + 1} is not text`); try { return D.parse(t); } catch (e) { throw new Error(`${what} step ${i + 1}: ${e.message}`); } });
+  // SHARED PIECES (2026-10-13, the keeper on ELYSIUM: after reopening, each undo froze the window): every step was parsed on its own, so a piece unchanged between
+  // two steps was two different objects, and everything that reuses work for an unchanged piece by its OBJECT (the segment cache, adapter.js toSegments `cache`; the
+  // preview's keys; the checker) saw 24 km of new road on every undo: 54 to 102 s an undo, measured. Now a piece whose text is the same as one already read IS that
+  // object (the opened track's own pieces first), as it would have been had the history been made in this session.
+  const known = new Map(d.pieces.map((P) => [JSON.stringify(P), P]));
+  const shared = (doc) => { let same = true; const pieces = doc.pieces.map((P) => { const k = JSON.stringify(P), have = known.get(k); if (have) { if (have !== P) same = false; return have; } known.set(k, P); return P; }); return same ? doc : Object.freeze({ ...doc, pieces: Object.freeze(pieces) }); };
+  const docs = (list, what) => list.map((t, i) => { if (typeof t !== 'string') throw new Error(`${what} step ${i + 1} is not text`); try { return shared(D.parse(t)); } catch (e) { throw new Error(`${what} step ${i + 1}: ${e.message}`); } });
   try {
     const past = docs(o.past, 'past'), future = docs(o.future, 'future');
     return { history: Object.freeze({ ...D.createHistory(d), past: Object.freeze(past), future: Object.freeze(future) }) };
@@ -783,8 +789,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     cancelDelete: () => set({ deleteProposal: null, message: null }),
 
-    undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: null }); }),
-    redo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); const h = D.redo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: null }); }),
+    // undo and redo SAY what they changed (2026-10-13: on ELYSIUM the last steps were start-line moves, invisible in the preview, so undo looked broken)
+    undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); if (!st.history.past.length) return set({ message: 'nothing to undo' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: `undid: ${stepWords(st.history.present, h.present)}` }); }),
+    redo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); if (!st.history.future.length) return set({ message: 'nothing to redo' }); const h = D.redo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: `redid: ${stepWords(h.present, st.history.present)}` }); }),
     /** Put a prepared core document in front of the user, as opening one does: fresh history, nothing to undo. */
     adopt: (d) => attempt(() => { D.checkDoc(d); return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: false, lastEdited: null, message: null, exportReds: null }); }),
     newDoc(name = 'untitled') { const d = D.createDoc(name); return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: false, lastEdited: null, message: null, exportReds: null }); },
@@ -1048,6 +1055,20 @@ function spawnsLayout(doc, segments, lift, start, { open = false } = {}) {
 }
 
 /** The pit lane's ROAD part (src/doc/pitlane.js's shape, for src/geom/pitlane.js and the export's meta.pitLane), or null without a lane. */
+/** What one undo step changed, in words, from the document after it (`from`) back to the one before it (`to`): the pieces first, then the start, the pit lane, the loop. */
+function stepWords(from, to) {
+  const said = [], ids = (d) => d.pieces.map((P) => P.id), a = ids(from), b = ids(to);
+  const gone = a.filter((id) => !b.includes(id)), back = b.filter((id) => !a.includes(id));
+  if (gone.length) said.push(`${gone.length === 1 ? 'piece' : 'pieces'} ${gone.join(', ')} placed`);
+  if (back.length) said.push(`${back.length === 1 ? 'piece' : 'pieces'} ${back.join(', ')} removed`);
+  const reshaped = to.pieces.filter((P) => a.includes(P.id) && JSON.stringify(P) !== JSON.stringify(from.pieces.find((Q) => Q.id === P.id))).map((P) => P.id);
+  if (reshaped.length) said.push(`${reshaped.length === 1 ? 'piece' : 'pieces'} ${reshaped.slice(0, 4).join(', ')}${reshaped.length > 4 ? '…' : ''} reshaped`);
+  if (JSON.stringify(from.spawns) !== JSON.stringify(to.spawns)) said.push('the start line or grid moved');
+  if (JSON.stringify(from.pitLane) !== JSON.stringify(to.pitLane)) said.push('the pit lane changed');
+  if (!!from.closed !== !!to.closed) said.push(from.closed ? 'the loop closed' : 'the loop opened');
+  if (from.name !== to.name) said.push('the name changed');
+  return said.length ? said.join('; ') : 'a change';
+}
 function laneRoad(doc) { if (!doc.pitLane) return null; const { boxes, boxSpacingM, ...road } = doc.pitLane; return road; }
 /** The layout with the pit lane's boxes: its count and spacing (the boxes go ON the lane: src/markers/index.js placeAll moves them there). */
 function withPitBoxes(layout, pitLane) { return { ...layout, pits: { ...layout.pits, count: pitLane.boxes, spacingM: pitLane.boxSpacingM } }; }

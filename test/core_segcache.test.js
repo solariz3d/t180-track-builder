@@ -31,7 +31,7 @@ function same(s, what) {
 
 test('row 1: after every kind of edit the cached segments equal a fresh conversion, and unchanged pieces are reused', async () => {
   const s = await createCoreShell({});
-  const step = (what, fn) => { fn(); assert.equal(s.getState().message, null, `${what}: ${s.getState().message}`); same(s, what); };
+  const step = (what, fn) => { fn(); const m = s.getState().message; assert.ok(m === null || /^(undid|redid): /.test(m), `${what}: ${m}`); same(s, what); };   // undo and redo name their step (2026-10-13)
   step('bowl', () => s.extend({ length: 300, family: 'bowl' }));
   step('turn', () => s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }));
   step('straighten', () => s.extend({ length: 60, transition: 40, targets: { kh: 0 } }));

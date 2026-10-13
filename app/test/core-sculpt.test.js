@@ -58,7 +58,7 @@ test('row 2: one drag is ONE undo step (three moves, one step), and Undo gives b
   s.beginSculpt({ channel: 'phi' }); for (const d of [0.05, 0.1, 0.2]) { s.sculptTo(d); assert.equal(s.getState().history.past.length, n0, 'a step inside a drag is not a history entry'); } s.endSculpt();
   const after = s.getState().history.present; assert.notEqual(after, before); assert.equal(s.getState().history.past.length, n0 + 1, 'ONE undo step');
   s.undo(); assert.equal(s.getState().history.present, before, 'Undo: the very same document'); s.redo(); assert.equal(s.getState().history.present, after, 'Redo: the same one again');
-  assert.equal(s.getState().message, null);
+  assert.match(s.getState().message, /^redid: piece p\d+ reshaped$/, 'redo says what it did (2026-10-13: undo and redo name their step)');
 });
 
 test('row 3: the joints stay C1: the sculpted piece\'s value and slope at both ends are what they were, and every other piece is the very same object', async () => {
