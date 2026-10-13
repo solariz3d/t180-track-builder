@@ -64,7 +64,7 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
   let design = designSpeedKmh;
   const vo = () => ({ ...extra, csp, ...(design === undefined ? { fullSpeed: true } : design == null ? {} : { designSpeed: design / 3.6 }) });
   let live = createLive({ validate: vo() });
-  let segs = null, path = null, resolvedSeen = null, source = null;   // source: 'shared' (a view of the preview's path) | 'own'
+  let segs = null, path = null, resolvedSeen = null, source = null, lastClosed = null;   // source: 'shared' (a view of the preview's path) | 'own'
   const out = { state: { path: null, result: null, map: null, arcs: [], changed: null, full: true, how: null, error: null, pathFrom: null } };
 
   function plan(r) {
@@ -107,6 +107,13 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
     }
     resolvedSeen = r;
     if (!r.segments.length) { segs = r.segments; path = null; source = null; live = createLive({ validate: vo() }); out.state = { path: null, result: null, map: null, arcs: [], changed: null, full: true, how: 'empty', error: null, pathFrom: null }; onUpdate(out.state); return; }
+    // THE ROAD UNCHANGED (2026-10-13, ELYSIUM: undoing a start-line move re-checked all 24 km, seconds of a frozen window, for a road that had not moved). When every
+    // segment is the very object the result was made from (the core shell reuses unchanged segments), the loop is open or closed as before, and the preview's
+    // path is the one this result viewed (the preview grows and re-lifts a NEW path object for any change of the road, a hill brush included), the result stands.
+    if (!force && segs && source === 'shared' && path && r.segments.length === segs.length && !!r.closed === lastClosed && r.segments.every((g, j) => g === segs[j])) {
+      const sp = shared(r);
+      if (sp && path.src === sp) { out.state = { ...out.state, how: 'same' }; onUpdate(out.state); return; }
+    }
     let p = force ? { how: 'full' } : plan(r);
     try {
       let np = null, fromS;
@@ -133,7 +140,7 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
       // the track is PENDING until the drag ends (above). Only a sculpt: an append or a full build checks everything
       const uptoS = dragging && p.how === 'sculpt' ? windowEnd(np, r.segments, p.g) : null;
       const u = live.update(np, r.segments, p.how === 'full' ? { lap: !dragging } : { fromS, lap: !dragging, uptoS });
-      path = np; segs = r.segments; source = pathFrom;
+      path = np; segs = r.segments; source = pathFrom; lastClosed = !!r.closed;
       out.state = { path, result: u.result, map: u.map, arcs: jumpArcs(u.result, path), changed: u.changed, full: u.full, how: p.how, error: null, pathFrom };
     } catch (e) {
       path = null; segs = null; source = null; live = createLive({ validate: vo() });

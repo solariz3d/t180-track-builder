@@ -65,7 +65,7 @@ test('row 3: a brush between the placement and the undo drops the copy: the undo
   s.beginBrush({ channel: 'height', s0: 150, r: 60 }); s.brushTo(3); s.endBrush(); model.update(s.getState().resolved);
   s.undo(); model.update(s.getState().resolved);   // the brush undone
   const before = n.build; s.undo(); const r = model.update(s.getState().resolved);   // the placement undone
-  assert.ok(n.build > before, 'no copy to put back: a rebuild');
+  // no copy to put back: since 2026-10-13 a removal from the end reuses the remaining pieces' mesh (no full build), and equals a fresh build below
   sameAsFresh(r, s.getState().resolved, 'after the brush and both undos');
 });
 
@@ -93,6 +93,6 @@ test('row 4: two placements undone in a row: the first is restored, the second r
   assert.equal(n.build, before, 'the last placement is restored');
   sameAsFresh(r, s.getState().resolved, 'one undo');
   before = n.build; s.undo(); r = model.update(s.getState().resolved);
-  assert.ok(n.build > before, 'the one before has no copy: a rebuild');
+  // the one before has no copy: a removal, which reuses the remaining mesh (2026-10-13), and equals a fresh build below
   sameAsFresh(r, s.getState().resolved, 'two undos');
 });
