@@ -105,11 +105,13 @@ test('map.png parses, is WIDTH×HEIGHT, and paints the road where map.ini says i
   assert.deepStrictEqual(png.px(0, 0), [0, 0, 0, 0], 'the margin is transparent');
 });
 
-test('outline.png and preview.png parse at the UI sizes', () => {
+// CHANGED 2026-10-14 (ELYSIUM in Content Manager: outlines piled on each other): preview.png no longer draws the road; CM lays outline.png over it, so it
+// was drawn twice at two sizes. It asserted 'preview centre shows road', the behaviour removed; it now asserts the backdrop alone, while outline.png keeps the road
+test('outline.png and preview.png parse at the UI sizes; the road is drawn in outline.png only (preview.png is the backdrop alone)', () => {
   const o = parsePng(T.outlinePng(scene())), v = parsePng(T.previewPng(scene()));
   assert.deepStrictEqual([o.width, o.height, v.width, v.height], [365, 192, 355, 200]);
-  assert.deepStrictEqual(v.px(0, 0), [24, 26, 30, 255], 'preview has an opaque backdrop');
-  assert.deepStrictEqual(v.px(177, 100), [200, 200, 200, 255], 'preview centre shows road');
+  for (const [x, y] of [[0, 0], [177, 100], [354, 199], [90, 50]]) assert.deepStrictEqual(v.px(x, y), [24, 26, 30, 255], `preview at ${x},${y}: the backdrop`);
+  assert.deepStrictEqual(o.px(182, 96), [255, 255, 255, 255], 'outline centre shows the road');
 });
 
 test('encodePng refuses a buffer of the wrong size', () => {

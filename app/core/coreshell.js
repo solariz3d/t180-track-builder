@@ -57,6 +57,7 @@ function bankWithinTurn(b, delta) {
   return Math.abs(b0 + delta) < TURN ? delta : w - b0;
 }
 const { close, closeWindow } = require('../../src/core/close.js');
+const { finishToStart } = require('../../src/core/finish.js');   // 2026-10-14: Finish to start, new road from the end to the start (the close's `finish` option)
 // D242: the close preview's overlap check builds the closed track's mesh and validates it as the export does (src/export/fromwords.js). D240 follow-up: it lives in
 // app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
 const { overlapCheck } = require('./overlapjob.js');
@@ -502,12 +503,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      * self-intersection and the validator's checks, as the export runs them). Apply (async) first writes the open track to its backups (backupNow
      * 'pre-close'), refuses by name if that copy fails, and then commits the close as ONE undo step; Cancel drops it.
      */
-    proposeClose({ fraction = 0.2, last = false, whole = false } = {}) {
+    // `finish: true` (2026-10-14, the keeper's "Yes" to Finish to start): nothing the user built moves; NEW road is laid from the end to the start and only it is
+    // bent to close the lap (src/core/finish.js). The same preview, overlap check, Apply and Cancel as any close
+    proposeClose({ fraction = 0.2, last = false, whole = false, finish = false } = {}) {
       if (doc().closed) return set({ message: 'the loop is already closed: there is nothing to preview' });
       if (lastRoad(doc()) < 0) return set({ message: 'there is no road to close yet: extend first' });
       return attempt(() => {
         const base = doc(), t0 = now();
-        const res = whole ? close(base, { edited: wholeLapEdited(base) }) : close(base, { window: closeWindow(base, { fraction, last }) });
+        const fin = finish ? finishToStart(base) : null;
+        const res = fin ? { converged: true, doc: fin.doc, report: `Finish to start: ${fin.plan.report}`, window: { pieces: fin.window, text: `the new road (${fin.window.length} piece${fin.window.length === 1 ? '' : 's'}, ${fin.plan.lengthM} m)` } }
+          : whole ? close(base, { edited: wholeLapEdited(base) }) : close(base, { window: closeWindow(base, { fraction, last }) });
         if (!res.converged) return set({ message: res.report, closeProposal: null });   // the whole-lap close hands back a best try; a local one has refused already
         const r = resolvedOf(res.doc), ms = now() - t0;
         const proposal = Object.freeze({ base, doc: res.doc, resolved: r.resolved, whole: !!whole, window: res.window, report: res.report, ms,
@@ -1075,7 +1080,7 @@ function spawnsLayout(doc, segments, lift, start, { open = false } = {}) {
   const firstOf = segments.findIndex((g) => g.id === segments[k].id);
   const pits = { at: { word: segments[k].id, along: Math.max(0, sPit - starts[firstOf]) }, count: Markers.DEFAULTS.pits, spacingM: Markers.DEFAULTS.pitSpacingM, u: 0, lane: null };
   const hotlap = sp.hotlap ? { at: { word: sp.hotlap.piece, along: sp.hotlap.along } } : { speedKmh: null };
-  return { layout: { version: 1, height: Markers.DEFAULTS.height, gateInsetM: Markers.DEFAULTS.gateInsetM, line, grid, pits, hotlap, sectors: [] }, path, firstLength };
+  return { layout: { version: 1, height: Markers.DEFAULTS.height, gateInsetM: Markers.DEFAULTS.gateInsetM, line, grid, pits, hotlap, sectors: open ? [] : Markers.lapSectors(path, segments, sLine) }, path, firstLength };   // a closed lap's sector gates (2026-10-14)
 }
 
 /** The pit lane's ROAD part (src/doc/pitlane.js's shape, for src/geom/pitlane.js and the export's meta.pitLane), or null without a lane. */

@@ -413,9 +413,14 @@ function mount(root, shell) {
   // D242: Close PROPOSES first (the keeper, TEST 1: the one-click close moved every piece, and the lap ran into itself). Only the stretch chosen here moves;
   // the closed track is shown as a ghost with how far each piece moved and an overlap check; Apply commits it (one undo step), Cancel drops it
   const closeHow = el('select', { 'aria-label': 'close using', title: 'which part of the lap the close may move: everything before it stays exactly as it is' });
-  for (const [v, t] of [['0.2', 'the last ~20% of the lap'], ['last', 'the last piece only'], ['0.4', 'the last ~40% of the lap'], ['whole', 'the whole lap (moves every piece)']]) closeHow.append(new win.Option(t, v));
+  // 2026-10-14: 'finish' = Finish to start: new road from the end to the start, and nothing already built moves (src/core/finish.js)
+  for (const [v, t] of [['0.2', 'the last ~20% of the lap'], ['last', 'the last piece only'], ['0.4', 'the last ~40% of the lap'], ['whole', 'the whole lap (moves every piece)'], ['finish', 'new road from the end to the start (moves nothing)']]) closeHow.append(new win.Option(t, v));
   const closeBtn = el('button', { text: 'Close the loop', title: 'shows the closed track first (a ghost, how far each piece moves, any overlap): then Apply or Cancel', onclick: () => {
-    const v = closeHow.value; shell.proposeClose(v === 'last' ? { last: true } : v === 'whole' ? { whole: true } : { fraction: Number(v) });
+    // a long track takes seconds to close (ELYSIUM, 24 km: ~2-4 s): say so FIRST, and let the page paint it, so the wait never reads as nothing happening
+    const v = closeHow.value, opts = v === 'last' ? { last: true } : v === 'whole' ? { whole: true } : v === 'finish' ? { finish: true } : { fraction: Number(v) };
+    proposalBox.replaceChildren(el('p', { text: v === 'finish' ? 'Finishing to the start: laying new road and closing it…' : 'Closing the loop…' }));
+    closeAsked = shell.getState().history.present;
+    (win.setTimeout || setTimeout)(() => shell.proposeClose(opts), 30);
   } });
   const applyBtn = el('button', { text: 'Apply', title: 'close the loop as previewed (one undo step)', onclick: () => shell.applyClose() });
   const cancelBtn = el('button', { text: 'Cancel', title: 'drop the preview: nothing changes', onclick: () => shell.cancelClose() });
@@ -424,11 +429,17 @@ function mount(root, shell) {
   const placeButton = (it, text) => el('button', { text, title: `${it.what}${it.detail ? `: ${it.detail}` : ''}: show it`, class: 'linkish', onclick: () => focus(it.s) });
   // D240 follow-up: the preview shows AT ONCE and its overlap check runs off the thread (shell.proposalCheck(p): 'checking' | 'done' | 'failed'); Apply is off until it is done, and the line says how
   // long it has been going (redrawn twice a second while it runs); Cancel stops it
-  let tick = 0;
+  // a close that REFUSES says why HERE, in red, where the button was pressed (the keeper read ELYSIUM's refusals as nothing happening: they were one line
+  // of the status bar), until the track changes
+  let tick = 0, closeAsked = null;
   const drawProposal = (p) => {
     if (tick) { win.clearTimeout(tick); tick = 0; }
     applyBtn.style.display = cancelBtn.style.display = p ? '' : 'none';
-    if (!p) { proposalBox.replaceChildren(); return; }
+    if (!p) {
+      const st = shell.getState(), refused = closeAsked && closeAsked === st.history.present && st.message && st.messageKind === 'error';
+      proposalBox.replaceChildren(...(refused ? [el('p', { 'aria-label': 'close refused', text: `Not closed: ${st.message}`, style: 'color: var(--bad)' })] : []));
+      return;
+    }
     const ck = shell.proposalCheck(p);
     applyBtn.disabled = ck.status !== 'done';
     const moved = p.displacement.filter((x) => x.maxM > 1e-3).sort((a, b) => b.maxM - a.maxM), still = p.displacement.length - moved.length;

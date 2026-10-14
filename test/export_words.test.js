@@ -47,7 +47,8 @@ test('the sample exports: the kn5 reads back through tools/kn5.cjs with every AC
   assert.strictEqual(f.folder, 't180b_sample_loop');
   const back = readKn5(path.join(f.dir, 't180b_sample_loop.kn5'));
   const names = back.dummies.map((d) => d.name).filter((n) => /^AC_/.test(n)).sort();
-  assert.deepStrictEqual(names, ['AC_HOTLAP_START_0', 'AC_PIT_0', 'AC_PIT_1', 'AC_START_0', 'AC_START_1', 'AC_START_2', 'AC_START_3', 'AC_TIME_0_L', 'AC_TIME_0_R']);
+  // 2026-10-14: a closed lap has its two sector gates too (src/markers/layout.js lapSectors), AC_TIME_1 and AC_TIME_2
+  assert.deepStrictEqual(names, ['AC_HOTLAP_START_0', 'AC_PIT_0', 'AC_PIT_1', 'AC_START_0', 'AC_START_1', 'AC_START_2', 'AC_START_3', 'AC_TIME_0_L', 'AC_TIME_0_R', 'AC_TIME_1_L', 'AC_TIME_1_R', 'AC_TIME_2_L', 'AC_TIME_2_R']);
   // and the export's own read-back, taken before the folder was written, saw the same markers
   assert.deepStrictEqual(sample.r.readback.dummies.filter((n) => /^AC_/.test(n)).sort(), names);
 });

@@ -166,6 +166,24 @@ const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g
  * OPEN track the far end of the run is often the build head, so appending a Straight to it lengthened the run and carried the line along every time;
  * the run's first piece does not change on an append. A closed track does not pass it, so a finished track's start is where it always was.
  */
+/**
+ * THE SECTOR GATES of a closed lap (2026-10-14; ELYSIUM's export had only the start gate, and its two sector gates were added by hand at about a third and two
+ * thirds of the lap): AC_TIME_1 and AC_TIME_2 a third and two thirds of the way round from the start line, each as an anchor { word, along } (anchorS's
+ * convention). A third that falls in the air (a jump's flight) moves forward onto the next road. [] for an open track (its gates are the point-to-point pair).
+ */
+function lapSectors(path, segments, sLine) {
+  if (!path.closed || !(path.lengthM > 0)) return [];
+  const starts = segStarts(path, segments), s0 = path.samples[0].s, L = path.lengthM;
+  const wrap = (s) => ((s - s0) % L + L) % L + s0;
+  const at = (s) => {
+    let k = 0; segments.forEach((g, j) => { if (starts[j] <= s + 1e-9) k = j; });
+    while (segments[k].kind === 'gap') { k = (k + 1) % segments.length; s = starts[k]; }   // onto the road after a flight
+    const id = segments[k].id, first = segments.findIndex((g) => g.id === id);
+    return { word: id, along: Math.max(0, s - starts[first]) };
+  };
+  return [1, 2].map((i) => at(wrap(sLine + (i * L) / 3)));
+}
+
 function defaultLayout(path, segments, o = {}) {
   const c = { ...DEFAULTS, ...o };
   const starts = segStarts(path, segments);
@@ -200,7 +218,7 @@ function defaultLayout(path, segments, o = {}) {
   }
   const sPit = sLine - lastBack - c.pitSpacingM;
   const at = (s) => { let k = 0; segments.forEach((g, j) => { if (starts[j] <= s + 1e-9) k = j; }); const id = segments[k].id, first = segments.findIndex((g) => g.id === id); return { word: id, along: s - starts[first] }; };
-  return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: [] };
+  return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: lapSectors(path, segments, sLine) };
 }
 
-module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, T180, PACK, FLOOR_MAX_DEG, ONE_SLOT_MARGIN_M, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf };
+module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, T180, PACK, FLOOR_MAX_DEG, ONE_SLOT_MARGIN_M, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf, lapSectors };

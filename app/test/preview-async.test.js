@@ -287,13 +287,13 @@ test('row 5: the panels: "Checking for overlaps… N s", Apply disabled until th
   const s = await nearLap(run, null, { now: () => clock });
   const P1 = await mountPanel(s);
   // Close's box
-  P1.button('Close the loop').onclick(); const cp = s.getState().closeProposal; assert.ok(cp, s.getState().message);
+  P1.button('Close the loop').onclick(); P1.fire(); const cp = s.getState().closeProposal; assert.ok(cp, s.getState().message);
   assert.match(P1.text('overlap check'), /^Checking the closed track for overlaps… 0 s\. Apply is off until this finishes; Cancel stops it\.$/); assert.equal(P1.button('Apply').disabled, true);
   assert.match(P1.root.all().map((e) => e.textContent).join('|'), /Preview: only .* may move/, 'the preview\'s words are there while it checks');
   clock = 7400; P1.fire(); assert.match(P1.text('overlap check'), /Checking the closed track for overlaps… 7 s\./, 'the seconds count up');
   run.jobs[0].resolve(RED); await tick(); assert.equal(P1.button('Apply').disabled, false, 'Apply is on once the result is in'); assert.equal(P1.text('overlap check'), null); assert.match(P1.root.all().map((e) => e.textContent).join('|'), /The closed track OVERLAPS ITSELF \(1 place\):/);   // D248: the count is of places (was "(1)")
   s.cancelClose(); assert.equal(P1.button('Apply').style.display, 'none');
-  P1.button('Close the loop').onclick(); const cj = run.jobs[run.jobs.length - 1]; assert.equal(P1.button('Apply').disabled, true); P1.button('Cancel').onclick(); assert.equal(cj.cancelled, 1, 'Cancel in the panel stops the job');
+  P1.button('Close the loop').onclick(); P1.fire(); const cj = run.jobs[run.jobs.length - 1]; assert.equal(P1.button('Apply').disabled, true); P1.button('Cancel').onclick(); assert.equal(cj.cancelled, 1, 'Cancel in the panel stops the job');
   // the delete's box
   const t = await track(run), P2 = await mountPanel(t); t.selectPiece(1); P2.button('Delete selected').onclick(); const dj = run.jobs[run.jobs.length - 1];
   assert.match(P2.text('overlap check'), /^Checking the track for overlaps… 0 s\. Apply is off until this finishes; Cancel stops it\.$/); assert.equal(P2.button('Apply delete').disabled, true);

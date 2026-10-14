@@ -1,0 +1,116 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279 and the mesh cap (manifest.meshcap.json); F1 F2 only (the closed laps), their kn5 only",
+ "made_at": "the Third Place, 2026-10-14, feature/denser-asphalt: one script (scratch sectors_measure.js) rendering both from the same tree as test/fixtures/fixtures.js digests() does, with the sectors of the default layout emptied (before) and as they are (after)",
+ "reason": "The ELYSIUM export (2026-10-12) had only the start gate; its two sector gates were added by hand at about a third and two thirds of the lap. src/markers/layout.js lapSectors: the default layout of a closed lap (and of a hand-placed start, app/core/coreshell.js spawnsLayout) gets AC_TIME_1 and AC_TIME_2 there.",
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "before_sectors": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "23dd3e64ca56b33299b4f55db256bd6ad35b87b18c0c358b3d7293bd278a72d0",
+    "kn5Bytes": 7112528
+   },
+   "after_sectors": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "fda70fbef52810d4f2ef25a0697fb954d450a9843a45ed17af047eb18e450871",
+    "kn5Bytes": 7112880
+   },
+   "measure": {
+    "triangleSet": {
+     "equal": true,
+     "missingFromAfter": 0,
+     "extraInAfter": 0,
+     "triangles": 139498
+    },
+    "meshesBefore": {
+     "meshes": 15,
+     "chunks": 8,
+     "other": 7,
+     "maxVerts": 27594,
+     "triangles": 139498
+    },
+    "meshesAfter": {
+     "meshes": 15,
+     "chunks": 8,
+     "other": 7,
+     "maxVerts": 27594,
+     "triangles": 139498
+    },
+    "meshesByteEqual": true,
+    "markersAdded": [
+     "AC_TIME_1_L",
+     "AC_TIME_1_R",
+     "AC_TIME_2_L",
+     "AC_TIME_2_R"
+    ],
+    "markersRemoved": [],
+    "markersKeptEqual": true,
+    "kn5ChangeBytes": 352
+   }
+  },
+  "F2-halfpipe-default-lap-closed": {
+   "before_sectors": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "269a3d7c47ac608f00ee4701cee63492d8565237b72bcc239e4f88148b03ec87",
+    "kn5Bytes": 9434501
+   },
+   "after_sectors": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "bb1fcb4e55ea3fe141c50d5a4f6ae3b95f099cdeaabe5074dca2da2305456c54",
+    "kn5Bytes": 9434853
+   },
+   "measure": {
+    "triangleSet": {
+     "equal": true,
+     "missingFromAfter": 0,
+     "extraInAfter": 0,
+     "triangles": 185936
+    },
+    "meshesBefore": {
+     "meshes": 16,
+     "chunks": 9,
+     "other": 7,
+     "maxVerts": 32712,
+     "triangles": 185936
+    },
+    "meshesAfter": {
+     "meshes": 16,
+     "chunks": 9,
+     "other": 7,
+     "maxVerts": 32712,
+     "triangles": 185936
+    },
+    "meshesByteEqual": true,
+    "markersAdded": [
+     "AC_TIME_1_L",
+     "AC_TIME_1_R",
+     "AC_TIME_2_L",
+     "AC_TIME_2_R"
+    ],
+    "markersRemoved": [],
+    "markersKeptEqual": true,
+    "kn5ChangeBytes": 352
+   }
+  }
+ },
+ "unchanged": [
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}

@@ -36,17 +36,19 @@ function fakeWindow() {
   doc.addEventListener = (e, f) => { (doc.listeners[e] = doc.listeners[e] || []).push(f); };
   doc.removeEventListener = (e, f) => { doc.listeners[e] = (doc.listeners[e] || []).filter((x) => x !== f); };
   doc.dispatchEvent = (ev) => { for (const f of (doc.listeners[ev.type] || []).slice()) f(ev); return true; };
-  const frames = [];
+  // timers are COLLECTED, never run by themselves (as before: setTimeout did nothing); a test runs them with flush(). 2026-10-14: Close hands its work to a
+  // timer so its "working…" line paints first, so a test that presses Close flushes before reading the preview
+  const frames = [], timers = [];
   const win = { CustomEvent: class { constructor(type, init = {}) { this.type = type; this.detail = init.detail; } }, Option: class { constructor(t, v) { this.textContent = t; this.value = v; } },
-    requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, cancelAnimationFrame: () => {}, setTimeout: (f) => 0, clearTimeout: () => {}, frames };
+    requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, cancelAnimationFrame: () => {}, setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout: (i) => { if (timers[i - 1]) timers[i - 1] = null; }, frames };
   doc.defaultView = win;
-  return { doc, win, tick: () => { const fs = frames.splice(0); for (const f of fs) f(0); } };
+  return { doc, win, tick: () => { const fs = frames.splice(0); for (const f of fs) f(0); }, flush: () => { const ts = timers.splice(0); for (const f of ts) if (f) f(); } };
 }
 /** D242: the pointer over the preview, as the browser sends it: a pointermove (css px of the stage) or a pointerleave on #preview. */
 const hover = (P, x, y) => { for (const f of (P.stage.listeners.pointermove || []).slice()) f({ clientX: x, clientY: y, button: 0, preventDefault() {} }); };
 const leave = (P) => { for (const f of (P.stage.listeners.pointerleave || []).slice()) f({}); };
 async function mountPanel(wrap = (s) => s, shellOpts = {}) {
-  const { doc, win, tick } = fakeWindow();
+  const { doc, win, tick, flush } = fakeWindow();
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
   const root = doc.createElement('div'), shell = wrap(await createCoreShell({ brushFn: null, ...shellOpts }));
   const panel = require('../core/panel.js').mount(root, shell);
@@ -56,7 +58,7 @@ async function mountPanel(wrap = (s) => s, shellOpts = {}) {
   const type = (text, v) => { const f = field(text); f.value = String(v); f.oninput(); };
   // the options the PANEL uses (D193: a field left as shown sends no target, so the raw field text is no longer the options)
   const opts = () => panel.options();
-  return { doc, win, tick, stage, root, shell, panel, label, field, cell, type, opts };
+  return { doc, win, tick, flush, stage, root, shell, panel, label, field, cell, type, opts };
 }
 
 // THE STUB (D190): A's core, which adds the channel c, cupFromDeg / cupToDeg and Extend's target c, does not exist at c964c2d. These
@@ -643,7 +645,7 @@ test('no water: the panel has no Water section, the shell no pour and no water s
 const closeLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
 const previewThenApply = async (P) => {
   P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'whole';
-  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick(); P.flush();   // Close's work runs on a timer (2026-10-14)
   assert.ok(P.shell.getState().closeProposal, P.shell.getState().message);
   await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Apply').onclick();
 };
@@ -653,12 +655,28 @@ test('Close the loop, then Apply, writes a copy of the track as it was BEFORE cl
   const P = await mountPanel((s) => s, { storage });
   closeLap(P.shell); const before = D.serialize(P.shell.getState().history.present);
   P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'whole';
-  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick(); P.flush();   // Close's work runs on a timer (2026-10-14)
   assert.equal(order.length, 0, 'the preview writes no copy');
   await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Apply').onclick();
   assert.equal(order.length, 1, 'one copy');
   assert.deepEqual([order[0][1], order[0][2], order[0][3]], ['eq-unsaved', before, false], 'the copy is the open track as it was, written while it was still open');
   assert.equal(P.shell.getState().history.present.closed, true, P.shell.getState().message);
+  P.panel.unmount();
+});
+// 2026-10-14 (ELYSIUM: Close froze the window, then refused in one line of the status bar, and read as nothing happening): the Close box says it is working
+// the moment the button is pressed, and a refusal shows there in red until the track changes
+test('Close says it is working at once, and a refusal shows in the Close box, in red', async () => {
+  const P = await mountPanel();
+  P.shell.extend({ length: 300 });   // a straight: no turn to close with, so Close refuses by name
+  const box = () => P.root.all().find((e) => e.attrs['aria-label'] === 'close preview');
+  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'last';
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
+  assert.equal(box().textContent, 'Closing the loop…', 'before the work runs');
+  P.flush();
+  const refused = P.root.all().find((e) => e.attrs['aria-label'] === 'close refused');
+  assert.ok(refused, `no refusal in the box: "${box().textContent}" / ${P.shell.getState().message}`);
+  assert.match(refused.textContent, /^Not closed: /); assert.equal(refused.attrs.style, 'color: var(--bad)', 'in red');
+  P.shell.extend({ length: 50 }); assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'close refused'), undefined, 'gone once the track changes');
   P.panel.unmount();
 });
 test('if that copy cannot be written, Apply changes nothing and says why', async () => {

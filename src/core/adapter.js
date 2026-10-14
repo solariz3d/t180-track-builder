@@ -341,8 +341,8 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
   return segs;
 }
 
-function toPath(doc, { step = 0.5, segM = 2, designKmh, cupRuns } = {}) {
-  const segments = toSegments(doc, { segM, designKmh, cupRuns });
+function toPath(doc, { step = 0.5, segM = 2, designKmh, cupRuns, cache = null } = {}) {
+  const segments = toSegments(doc, { segM, designKmh, cupRuns, cache });   // cache: toSegments' per-piece cache (2026-10-14: src/core/close.js keeps one for a whole close)
   const path = buildPath(segments, { step, closed: doc.closed, start: { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch } });
   return { segments, path: heartlineLift(segments, offsetPath(doc, segments, path)) };
 }

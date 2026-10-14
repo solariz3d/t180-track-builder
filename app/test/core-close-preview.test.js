@@ -125,3 +125,16 @@ test('row 7: Apply writes the copy from BEFORE the close first (backupNow(\'pre-
   assert.equal(u.getState().history.present, ub, 'the edit stands; no close was committed over it'); assert.equal(ub.closed, false);
   assert.match(u.getState().message, /changed while its copy was being written/);
 });
+
+// 2026-10-14, FINISH TO START (src/core/finish.js; the keeper's "Yes"): Close's 'finish' choice lays NEW road from the end to the start and bends only it
+test('finish: the preview adds new road, moves nothing already built, and Apply is one undo step back to the open track', async () => {
+  const s = await openLap(), base = s.getState().history.present, n = base.pieces.length;
+  s.proposeClose({ finish: true });
+  const st = s.getState(), p = st.closeProposal;
+  assert.ok(p, st.message); assert.equal(st.history.present, base, 'nothing committed'); assert.equal(p.doc.closed, true);
+  assert.ok(p.doc.pieces.length > n, 'new road was laid'); base.pieces.forEach((P, i) => assert.equal(p.doc.pieces[i], P, `piece ${i} is the users own, the very object`));
+  assert.ok(p.displacement.every((x) => x.maxM === 0), `nothing built moves: ${p.displacement.filter((x) => x.maxM).map((x) => x.id)}`);
+  assert.match(p.window.text, /^the new road \(\d+ pieces?, \d+ m\)$/); assert.match(st.message, /close preview: Finish to start: (LSL|RSR|LSR|RSL) at R \d+ m/);
+  await s.applyClose(); assert.equal(s.getState().history.present.closed, true);
+  s.undo(); assert.equal(s.getState().history.present, base, 'Undo after Apply: the open track, the very same document');
+});
