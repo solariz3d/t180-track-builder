@@ -448,11 +448,12 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   // width: either side's handle, 1 m OUTWARD, is the same change of the one field
   const w0 = Number(width.value); dragBy(P1, 'width:1', 20); const wl = Number(width.value); width.value = String(w0); width.oninput(); P1.frame(); dragBy(P1, 'width:-1', 20); const wr = Number(width.value);
   assert.equal(wl, Number((w0 + 1.4).toFixed(1))); assert.equal(wr, wl, 'the right edge, 20 px outward, is the same 1.4 m of width');
-  // D250 item 3, the keeper's picture: LENGTH and WIDTH are at the piece's NEAR end (the head, where the ghost starts); the width marks sit at the TARGET half-width, so they follow the drag
-  const nearOf = () => { const r = shell.getState().resolved, placed = G.buildPath(r.segments, { step: 2, closed: false, start: r.start }).samples, end = placed[placed.length - 1].s; return S.ghost.samples.find((m) => m.s >= end - 1e-9); };
+  // CHANGED 2026-10-14: LENGTH and WIDTH are at the piece's FRONT (the ghost's far end, where it grows to; they were at the near end, D250 item 3); the width marks
+  // sit at the TARGET half-width, so they follow the drag
+  const nearOf = () => S.ghost.samples[S.ghost.samples.length - 1];   // the front: the ghost's last station
   const lat = (h, near) => (h.pos[0] - near.pos[0]) * near.L[0] + (h.pos[1] - near.pos[1]) * near.L[1] + (h.pos[2] - near.pos[2]) * near.L[2];
   width.value = String(w0); width.oninput(); P1.frame(); let near = nearOf(), now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
-  for (const k of ['length:0', 'width:1', 'width:-1']) assert.ok(Math.hypot(now[k].pos[0] - near.pos[0] - (k === 'length:0' ? 0 : lat(now[k], near) * near.L[0]), now[k].pos[2] - near.pos[2] - (k === 'length:0' ? 0 : lat(now[k], near) * near.L[2])) < 1e-6, `${k} is on the ghost's first station`);
+  for (const k of ['length:0', 'width:1', 'width:-1']) assert.ok(Math.hypot(now[k].pos[0] - near.pos[0] - (k === 'length:0' ? 0 : lat(now[k], near) * near.L[0]), now[k].pos[2] - near.pos[2] - (k === 'length:0' ? 0 : lat(now[k], near) * near.L[2])) < 1e-6, `${k} is on the ghost's last station (the front)`);
   const nearly = (x, y, eps) => assert.ok(Math.abs(x - y) <= eps, `${x} is not within ${eps} of ${y}`);
   near = nearOf(); nearly(lat(now['width:1'], near), w0 / 2, 1e-6); nearly(lat(now['width:-1'], near), -w0 / 2, 1e-6); width.value = String(w0 + 4); width.oninput(); P1.frame(); now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
   nearly(lat(now['width:1'], nearOf()), (w0 + 4) / 2, 1e-6); const turnNow = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]))['turn:1']; assert.ok(Math.abs(lat(turnNow, nearOf())) > 0, 'control: the turn mark is a different handle, three quarters along');

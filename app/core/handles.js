@@ -28,11 +28,14 @@ const DEG = Math.PI / 180;
  * units (the core's channels are the same, degrees and metres). `zero`: a kind whose natural rest is 0 (bank, turn, climb): the drag holds there, and a double-click resets to it.
  */
 const EXTEND_KINDS = Object.freeze({
-  // D250 item 3 (the keeper chose "Near end, like my picture"): LENGTH and WIDTH are at the piece's NEAR end, as in his marked-up screenshot. The near end stays where it is when the value changes, so
-  // length is dragged AWAY from the piece (back toward the camera, `sign: 'back'`: stretching the near edge toward you is longer), and the width marks sit at the TARGET half-width (`target: true`: the
-  // field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. Turn and climb stay at the far side, bank and cup mid-piece.
-  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 0, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'back', perPx: 0.42, min: 1, max: 5000, step: 0.1, snap: 10 }),
-  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.1, snap: 5 }),
+  // D250 item 3 put LENGTH and WIDTH at the piece's NEAR end; since 2026-10-14 they are at its FRONT (below). The width marks sit at the TARGET half-width
+  // (`target: true`: the field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. Turn and climb are three
+  // quarters along, bank and cup mid-piece.
+  // 2026-10-14: LENGTH and WIDTH moved to the FRONT of the piece (its far end, where the piece grows to), a suggestion from a track maker who tried the
+  // builder: the white length mark at the centreline there, dragged FORWARD to lengthen (`sign: 'forward'`, it follows the front end as it moves), and the red
+  // width marks at that end's edges. The width the field sets is the width the piece ENDS at, so its marks now sit where that width is reached
+  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 1, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'forward', perPx: 0.42, min: 1, max: 5000, step: 0.1, snap: 10 }),
+  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.1, snap: 5 }),
   bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.1, snap: 5 }),
   cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.24, min: 0, max: 150, step: 0.1, snap: 5 }),
   // 2026-10-14, the keeper: "why cant turns turn more than 90 degrees ... it shouldnt be constrained unless you click 90 degree turn first": no clamp (Turn by and Turn to grid
