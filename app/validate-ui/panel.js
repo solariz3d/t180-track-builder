@@ -17,8 +17,10 @@
 //     revalidate from the old end, then re-colour only what changed                              how: 'append'
 //   · a SCULPT of an earlier word (a prefix kept by identity, the first changed segment still there; the part count
 //     may change, e.g. an ease set to 0): C's rebuildPathFrom from it, revalidate from its start  how: 'sculpt'
-//   · anything else (the first build, a removed head, undo across a length change, a new or opened document, a closed
-//     loop): a full buildPath and validate                                                        how: 'full'
+//   · a TRIM, the head's word taken off (an undo of a placement; 2026-10-13, ELYSIUM's undo took 2.2 s of a frozen window
+//     re-checking 24 km): revalidate from the start of the new head's word, the rest carried         how: 'trim'
+//   · anything else (the first build, undo across a length change, a new or opened document, a closed loop): a full
+//     buildPath and validate                                                                       how: 'full'
 // The prefix check is by object identity, so a shell that resolved from scratch simply takes the full route.
 //
 // ONE PATH (D177; C's hardening §1 item 2). With `sharedPath` (a function returning the preview's { path, segments } as
@@ -74,6 +76,9 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
     while (g < n && segs[g] === next[g]) g++;
     if (g === segs.length && next.length > segs.length) return { how: 'append', g };
     if (g < segs.length && g < next.length) return { how: 'sculpt', g };
+    // a TRIM: the head's word(s) taken off, every remaining segment the very same object (an undo of a placement, a removed head). The road
+    // before the new head's word cannot have changed, so it is carried and the check runs from the start of that word (it becomes the head)
+    if (g === next.length && next.length > 0 && next.length < segs.length) { let k = next.length - 1; while (k > 0 && next[k - 1].id === next[k].id) k--; return { how: 'trim', g: k }; }
     return { how: 'full' };
   }
 
@@ -122,17 +127,19 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
         // ONE PATH: a view of the preview's, which the preview has already grown for this document. The view keeps what
         // came before the change only when it is a view of the SAME path object (the preview grows it in place; a new
         // object means the preview rebuilt it, and so does this)
-        const keep = p.how !== 'full' && source === 'shared' && path && path.src === sp;
-        if (!keep) p = { how: 'full' };
+        const keep = p.how !== 'full' && p.how !== 'trim' && source === 'shared' && path && path.src === sp;
+        // a trim needs no old view: the preview's path for the shorter track (rebuilt, or the copy it kept before the placement) has the same 2 m
+        // stations bit for bit up to the new end, so a FRESH view of it carries the old result's stations by index
+        if (!keep && !(p.how === 'trim' && source === 'shared')) p = { how: 'full' };
         np = viewOf(sp, STEP, keep ? path : null, keep ? p.g : 0);
-        if (np) { if (p.how === 'append') fromS = path.lengthM; else if (p.how === 'sculpt') fromS = fromSOf(np, p.g); }
+        if (np) { if (p.how === 'append') fromS = path.lengthM; else if (p.how === 'sculpt' || p.how === 'trim') fromS = fromSOf(np, p.g); }
       }
       if (!np) {
         // the controller's OWN path: no preview path for this document, or one it cannot view at STEP
         if (source !== 'own') p = { how: 'full' };
         if (p.how === 'append') { fromS = path.lengthM; np = extendPath(path, r.segments); }
         else if (p.how === 'sculpt') { np = rebuildPathFrom(path, r.segments, p.g); fromS = fromSOf(np, p.g); }
-        else np = buildPath(r.segments, { step: STEP, closed: !!r.closed });
+        else { np = buildPath(r.segments, { step: STEP, closed: !!r.closed }); if (p.how === 'trim') fromS = fromSOf(np, p.g); }
       }
       const pathFrom = np.src ? 'shared' : 'own';
       // the lap is proven when no drag is open (a closed loop's lap, never on a drag tick)

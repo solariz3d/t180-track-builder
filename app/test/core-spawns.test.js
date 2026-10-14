@@ -35,6 +35,21 @@ test('the start line sits where it is put on the first piece, and the export wri
   assert.ok(Math.abs(at(exported(s), 'AC_TIME_0_L').s - 120) < 1e-6, 'the export uses the hand-placed line');
 });
 
+// 2026-10-13 (ELYSIUM: three panels asked on every change, each building the whole path): one answer per document and resolved track
+test('spawnsInfo answers once per document: asked again with nothing changed it is the same answer, and a moved line is a new one', async () => {
+  const s = await closedLap();
+  assert.equal(s.spawnsInfo(), null, 'no spawns and not asked for the automatic start: nothing');
+  const autoInfo = s.spawnsInfo({ auto: true });
+  assert.ok(autoInfo && autoInfo.placed, 'the automatic start, asked for');
+  assert.equal(s.spawnsInfo(), null, 'not asked for it again: still nothing (auto is part of the question)');
+  s.setSpawns({ line: { along: 120 }, grid: GRID });
+  const a1 = s.spawnsInfo();
+  assert.equal(s.spawnsInfo(), a1); assert.equal(s.spawnsInfo({ auto: true }), a1, 'with spawns placed, auto asks the same question');
+  s.setSpawns({ line: { along: 150 }, grid: GRID });
+  const a2 = s.spawnsInfo();
+  assert.notEqual(a2, a1);
+  assert.ok(Math.abs(at(a2.placed, 'AC_TIME_0_L').s - 150) < 1e-6, 'the new answer is the moved line');
+});
 test('the grid is numbered from pole, two staggered columns with the pack\'s spacing behind the line', async () => {
   const s = await closedLap();
   s.setSpawns({ line: { along: 150 }, grid: GRID });

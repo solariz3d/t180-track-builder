@@ -59,12 +59,13 @@ test('a drag on an earlier word is a SCULPT from that word, and still equals a f
   assert.deepStrictEqual(levels(ctl.state.map), levels(fresh(shell)));
 });
 
-test('removing the head, and undo, take the full route and still equal a full run', async () => {
+// CHANGED 2026-10-13: removing the head is a TRIM now (app/validate-ui/panel.js: the road before the new head's word is carried), not the full route
+test('removing the head is a trim, its undo is an append, and both still equal a full run', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createValidationController(shell);
   for (const w of ['straight', 'turn', 'straight']) shell.place(w);
   shell.removeHead();
-  assert.strictEqual(ctl.state.how, 'full');
+  assert.strictEqual(ctl.state.how, 'trim');
   assert.deepStrictEqual(levels(ctl.state.map), levels(fresh(shell)));
   shell.undo();
   assert.deepStrictEqual(levels(ctl.state.map), levels(fresh(shell)));

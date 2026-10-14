@@ -179,6 +179,16 @@ test('the preview gives the build view the LAST road piece\'s span (a jump after
   assert.equal(widthAtHead([]), null);
 });
 
+// 2026-10-13: the head's span is remembered per FROZEN segment (it was re-read every frame); an unfrozen segment is read every time
+test('the head span of a frozen segment is the same as reading it, and an unfrozen segment changed in place is read again', () => {
+  const { widthAtHead } = require(path.join(ADIR, 'preview', 'preview.js'));
+  const wide = fontProfile('half-pipe', { width: 67, wall: 8, psiL: 1, psiR: 1 }), narrow = fontProfile('half-pipe', { width: 20, wall: 4, psiL: 1, psiR: 1 });
+  const frozen = Object.freeze({ id: 'f', kind: 'road', length: 40, profile: wide });
+  assert.equal(widthAtHead([frozen]), spanOf(normalize(wide))); assert.equal(widthAtHead([frozen]), spanOf(normalize(wide)));
+  const loose = { id: 'l', kind: 'road', length: 40, profile: wide };
+  assert.equal(widthAtHead([loose]), spanOf(normalize(wide)));
+  loose.profile = narrow; assert.equal(widthAtHead([loose]), spanOf(normalize(narrow)));
+});
 test('the ghost (the first word before anything is placed) carries its segments, so the build view frames it too', () => {
   const TM = require(path.join(ADIR, 'preview', 'trackmodel.js')), tm = TM.createTrackModel();
   tm.update({ segments: [] });
