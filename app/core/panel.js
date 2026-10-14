@@ -179,7 +179,7 @@ function mount(root, shell) {
   const RO = ['length', 'turn', 'climb', 'bank', 'cup', 'edge', 'start', 'tube'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
   const roName = (k) => (k === 'length' ? 'length' : k === 'cup' ? 'cup from → to' : k === 'edge' ? 'edge from → to' : k === 'start' ? 'edge start from → to' : k === 'tube' ? 'tube from → to' : `${k} change`);
   const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:#eef1f6' },
-    ...RO.flatMap((k) => [el('span', { text: roName(k), style: 'color:#aab2c0;font-weight:600' }), roCells[k]]));
+    ...RO.flatMap((k) => [el('span', { text: roName(k), style: 'color:var(--dim);font-weight:600' }), roCells[k]]));
   const readout = () => {
     let f = null, why = '';
     try {
@@ -387,7 +387,7 @@ function mount(root, shell) {
   // fields' own), then a free flight to a default landing (a 60 m straight, 40 m ahead, the same height, lined up). While the landing is the head it is moved by the four handles on it (forward, sideways,
   // height, heading) and by these boxes: forward, sideways (+ left), height (+ up) in m, heading, pitch, bank in degrees (shell.moveLanding: one undo step each). Extend from the landing fixes it; deleting
   // back to it makes it the head again. A move the core refuses (LANDING_NOT_HEAD, a landing under 1 m from the take-off) says why in plain words. Nothing is solved or drawn for the air: drive it in AC.
-  const jumpNote = el('div', { 'aria-label': 'jump note', style: 'font-size:12px;margin:2px 0;color:#aab2c0' });
+  const jumpNote = el('div', { 'aria-label': 'jump note', style: 'font-size:12px;margin:2px 0;color:var(--dim)' });
   const sayJump = (...lines) => jumpNote.replaceChildren(...lines.filter(Boolean).map((t) => el('p', { text: t, style: 'margin:2px 0' })));
   const LANDING_HINT = 'Move the landing: drag its arrows on the track (white forward, orange sideways, yellow height, purple heading) or type below. Shift is fine, Ctrl snaps. Extend from it when it is right: that fixes it (delete back to it to move it again).';
   const jumpGhost = () => {
@@ -450,7 +450,7 @@ function mount(root, shell) {
       tick = win.setTimeout(() => { tick = 0; const st = shell.getState(); drawProposal(st.closeProposal && st.closeProposal.base === st.history.present ? st.closeProposal : null); }, 500);
     } else if (ck.status === 'failed') kids.push(el('p', { 'aria-label': 'overlap check', text: `The overlap check could not run: ${ck.error}. Cancel and press Close again.`, style: 'color: var(--bad)' }));
     else {
-      kids.push(el('p', { 'aria-label': 'overlap check time', style: 'font-size:12px;color:#aab2c0;margin:2px 0', text: `Checked in ${(ck.elapsedMs / 1000).toFixed(1)} s${ck.timing ? ` (the worker's start ${(ck.timing.loadMs / 1000).toFixed(1)} s, the check itself ${(ck.timing.jobMs / 1000).toFixed(1)} s)` : ''}.` }));
+      kids.push(el('p', { 'aria-label': 'overlap check time', style: 'font-size:12px;color:var(--dim);margin:2px 0', text: `Checked in ${(ck.elapsedMs / 1000).toFixed(1)} s${ck.timing ? ` (the worker's start ${(ck.timing.loadMs / 1000).toFixed(1)} s, the check itself ${(ck.timing.jobMs / 1000).toFixed(1)} s)` : ''}.` }));
       const groups = RG.groupReds([...ck.result.overlaps, ...ck.result.others], p.resolved.segments);
       if (!groups.length) kids.push(el('p', { 'aria-label': 'overlap check', text: 'No overlap and no red on the closed track.' }));
       for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The closed track OVERLAPS ITSELF' : g.title} (${RG.placesText(g)}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.places.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));

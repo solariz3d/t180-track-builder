@@ -35,13 +35,13 @@ function mount(root) {
   const send = (detail) => doc.dispatchEvent(new win.CustomEvent('t180:guides', { detail }));
   const gridBar = doc.createElement('div'), words = doc.createElement('p'), gridButtons = new Map(), mirrorButtons = new Map();
   gridBar.setAttribute('role', 'toolbar'); gridBar.setAttribute('aria-label', 'Grid and symmetry');
-  const tag = (text) => { const s = doc.createElement('span'); s.textContent = text; s.style.cssText = 'margin:0 6px 0 10px;color:#9aa3b2'; return s; };
+  const tag = (text) => { const s = doc.createElement('span'); s.textContent = text; s.style.cssText = 'margin:0 6px 0 10px;color:var(--dim)'; return s; };
   gridBar.append(tag('Grid'));
   for (const m of ['auto', 'ground', '3d', 'off']) { const b = doc.createElement('button'); b.type = 'button'; b.textContent = GRID_LABEL[m]; b.onclick = () => send({ grid: m }); gridButtons.set(m, b); gridBar.append(b); }
   gridBar.append(tag('Mirror'));
   for (const m of ['off', 'x', 'z', 'both']) { const b = doc.createElement('button'); b.type = 'button'; b.textContent = MIRROR_LABEL[m]; b.title = m === 'x' ? 'left/right: x flips about the centre' : m === 'z' ? 'front/back: z flips about the centre' : m === 'both' ? 'point symmetry: a half turn about the centre' : 'no mirror'; b.onclick = () => send({ mirror: m }); mirrorButtons.set(m, b); gridBar.append(b); }
   const reset = doc.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset centre'; reset.title = 'put the symmetry centre back at the middle of the track\'s box'; reset.onclick = () => send({ centre: null }); gridBar.append(reset);
-  words.style.cssText = 'margin:4px 10px;color:#9aa3b2;font-size:12px'; words.setAttribute('aria-live', 'polite');
+  words.style.cssText = 'margin:4px 10px;color:var(--dim);font-size:12px'; words.setAttribute('aria-live', 'polite');
   root.append(bar, gridBar, words, keys);
   const follow = (e) => { for (const [m, b] of buttons) b.setAttribute('aria-pressed', String(e.detail && e.detail.mode === m)); };
   const guides = (e) => {
