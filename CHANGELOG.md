@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The length and width handles sit at the front of the new piece.** The white length mark and the red width marks were on the piece's near end, where it joins the track; they are now on its far end, where the piece grows to, which is where those values take effect: the length mark is the end of the piece, dragged forward to lengthen it, and the width marks stand at the width the piece ends at. A track maker who tried the builder suggested it. The other handles are where they were (`app/core/handles.js`). **Tests changed, and why:** `app/test/handles.test.js` (rows 1, 1b and 2) and `app/test/core-pieces-ui.test.js` (row 11) placed these marks at the near end and the length drag backward; they now place them at the front and the drag forward.
+
 ## [0.3.5] - 2026-10-14
 
 ### Added
