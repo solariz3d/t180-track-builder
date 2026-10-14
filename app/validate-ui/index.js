@@ -22,9 +22,18 @@
 // validates a 2 m view of that path (pathview.js; the identity while the preview's step is 2 m too) when `segments` is
 // the very array of the document being validated, and otherwise grows its own path, so an unanswered event costs
 // speed, never correctness.
+//
+// OFF THE WINDOW'S THREAD (the keeper, 2026-10-14: on ELYSIUM, 24 km, the check froze the window ~0.7 s per placed piece and ~30 s on opening it).
+// Where the page can make a Web Worker, the check runs there (checkrunner.js -> checkworker.js -> checkjob.js, the same resolve, the same
+// preview path, the same controller): the panel sends the document on every change, at most once a frame, and shows the answer when it comes,
+// with "checking…" while a newer document is still being checked. The worker sends back what this panel shows (findings, lap, jumps, arcs, the
+// load graph), not the per-station colour map: in that mode 't180:validation' carries map null and levelAt / rgbaAt read the red and amber
+// RANGES at s (colour.js rangeLevel), and its path is the preview's. With no Worker (headless tests) or one that cannot take the document,
+// the check runs here as before.
 'use strict';
 const { createValidationController, summary } = require('./panel.js');
-const { levelAt, rgbaAt, PALETTE, LEVEL } = require('./colour.js');
+const { levelAt, rgbaAt, rangeLevel, PALETTE, LEVEL } = require('./colour.js');
+const { createCheckRunner } = require('./checkrunner.js');
 const { graphModel, drawGraph } = require('./graph.js');
 const { lapText, lapWhereText, findingLine } = require('./labels.js');
 
@@ -42,9 +51,10 @@ function mount(root, shell) {
   function render(state) {
     const s = summary(state);
     head.textContent = state.error ? `not validated: ${state.error}`
-      : `${s.red} red · ${s.amber} amber · ${lapText(s.lap)} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}${s.jumpsPending ? ` (${s.jumpsPending} waiting for ${s.jumpsPending === 1 ? 'its landing' : 'their landings'})` : ''}${s.pendingFrom != null ? ` · checked to ${Math.round(s.pendingFrom)} m, the rest when the drag ends` : ''}`;
+      : state.checking && !state.result ? 'checking…'
+      : `${s.red} red · ${s.amber} amber · ${lapText(s.lap)} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}${s.jumpsPending ? ` (${s.jumpsPending} waiting for ${s.jumpsPending === 1 ? 'its landing' : 'their landings'})` : ''}${s.pendingFrom != null ? ` · checked to ${Math.round(s.pendingFrom)} m, the rest when the drag ends` : ''}${state.checking ? ' · checking…' : ''}`;
     head.style.color = state.error ? css(PALETTE[LEVEL.RED]) : '';
-    const gm = graphModel(state);
+    const gm = 'graph' in state ? state.graph : graphModel(state);   // the worker sends its graph ready-made
     graph.style.display = gm ? '' : 'none';   // hidden while there is no load to draw
     // the canvas's backing store follows its SHOWN size (D177 window pass: drawn at 480 px and shown at ~265, its labels
     // were too small to read); DPR-aware, so the 10 px labels are 10 css px on any screen
@@ -65,12 +75,16 @@ function mount(root, shell) {
       const legs = j.arcs.map((a) => `${a.g} g ${a.caught ? `lands at ${a.touchdown.x.toFixed(1)} m` : a.clear ? 'clears, no touchdown found' : `falls short (needs ${(a.minSpeed * 3.6).toFixed(0)} km/h)`}`);
       list.append(el('li', { textContent: `jump at s ${j.s.toFixed(0)} m${j.speed ? `, ${(j.speed * 3.6).toFixed(0)} km/h` : ', drawn at each landing\'s minimum speed'}: ${legs.join('; ')}` }));
     }
-    const map = state.map;
+    const map = state.map || null, res = state.result;
+    const byRange = (s) => (res ? rangeLevel(res, s) : LEVEL.CLEAR);   // the worker's answer has no map: the red and amber ranges at s
     root.dispatchEvent(new CustomEvent('t180:validation', { bubbles: true, detail: {
       path: state.path, result: state.result, map, arcs: state.arcs,
-      levelAt: (s, u) => (map ? levelAt(map, s, u) : LEVEL.CLEAR), rgbaAt: (s, u) => (map ? rgbaAt(map, s, u) : PALETTE[LEVEL.CLEAR]),
+      levelAt: (s, u) => (map ? levelAt(map, s, u) : byRange(s)), rgbaAt: (s, u) => (map ? rgbaAt(map, s, u) : PALETTE[byRange(s)]),
     } }));
   }
+  const trackPath = () => { let got = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { got = x; } } })); return got && got.path ? got.path : null; };
+  const worker = mountWorker();
+  if (worker) return worker;
   let ctl = null;
   // D256: there is no design-speed slider any more; the controller checks at full speed (panel.js). The slider it replaced never sized the
   // equation core's jump ramps either, whatever D179 said here: src/core/adapter.js toSegments sizes them at MACH6.designSpeedKmh, 460 km/h
@@ -81,6 +95,41 @@ function mount(root, shell) {
   ctl = createValidationController(shell, { onUpdate: render, schedule: raf, sharedPath });
   csp.onchange = () => ctl.setCsp(csp.checked);
   return { dispose: () => ctl.dispose() };
+
+  /** The check in a Web Worker, or null when the page cannot make one (then the controller above runs here). */
+  function mountWorker() {
+    const WorkerCtor = typeof Worker === 'function' ? Worker : null;
+    if (!WorkerCtor) return null;
+    let last = null, runner = null, broken = false, frame = 0, sentDoc = null, sentDrag = null, unsub = null;
+    const show = (st) => { last = st; render(st); };
+    try {
+      runner = createCheckRunner({
+        WorkerCtor,
+        onAnswer: (out, { pending }) => show({ ...out, path: trackPath(), map: null, checking: pending }),
+        onFail: (message) => show({ ...(last || { result: null, arcs: [], graph: null }), error: message, checking: false }),
+      });
+    } catch (e) { return null; }
+    const send = (force) => {
+      frame = 0;
+      const st = shell.getState(), d = st.history.present, drag = !!st.history.dragBase;
+      if (!force && d === sentDoc && drag === sentDrag) return;
+      try { runner.send({ doc: d, dragging: drag, csp: csp.checked }); } catch (e) { broken = true; return fallBack(); }   // a document the worker cannot take: check here
+      sentDoc = d; sentDrag = drag;
+      show({ ...(last || { result: null, arcs: [], graph: null, error: null }), checking: true });
+    };
+    const later = () => { if (!frame && !broken) frame = raf(() => send(false)); };
+    unsub = shell.subscribe(later);
+    csp.onchange = () => send(true);
+    send(true);
+    let fallen = null;
+    function fallBack() {
+      if (unsub) unsub(); runner.dispose();
+      const ask = () => { let got = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { got = x; } } })); return got; };   // the controller's shared path, as below
+      fallen = createValidationController(shell, { onUpdate: render, schedule: raf, sharedPath: ask });
+      csp.onchange = () => fallen.setCsp(csp.checked);
+    }
+    return { dispose: () => { if (unsub) unsub(); runner.dispose(); if (fallen) fallen.dispose(); } };
+  }
 }
 
 module.exports = { mount };

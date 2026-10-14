@@ -35,10 +35,16 @@ const ringShape = (profile) => { const P = normalize(profile), n = P.psi.length;
  * shape a core chord segment starts from; a segment that morphs from an open section into the tube is not a ring until the morph is done), and it is not
  * a ramp from another section (profileIn).
  */
+// 2026-10-14 (ELYSIUM: ~245 ms of every placed piece, the preview's texture coordinates normalising each new cell's section twice): a FROZEN
+// segment (the core shell's, src/core/adapter.js toSegments cache) cannot change, so its answer is remembered; any other is read each time.
+const ringMemo = new WeakMap();
 function closedRing(seg) {
   if (!seg || !seg.profile || seg.profileIn !== undefined) return false;
-  return ringShape(seg.profile) && (!seg.blend || (!!seg.blend.from && ringShape(seg.blend.from)));
+  if (!Object.isFrozen(seg)) return ringOf(seg);
+  let v = ringMemo.get(seg); if (v === undefined) { v = ringOf(seg); ringMemo.set(seg, v); }
+  return v;
 }
+function ringOf(seg) { return ringShape(seg.profile) && (!seg.blend || (!!seg.blend.from && ringShape(seg.blend.from))); }
 
 /** The floor slot's settings if this segment is a core segment that wears a texture, else null. */
 function floorOf(seg, set) {
