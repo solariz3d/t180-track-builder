@@ -164,9 +164,9 @@ function positionJacobian(doc, step = 1) {
  * The linear rows on the ADAPTER's segment rule (adapter.js toSegments: heading and pitch rates linear over each segment, so
  * the net heading is Σ ½(a + b)·Δs). Returns the gradient of the net heading and net pitch with respect to each control point.
  */
-function netRows(doc) {
+function netRows(doc, { cache = null } = {}) {
   const out = { kh: new Map(), kv: new Map(), kvBase: 0, khBase: 0 };
-  const segs = toSegments(doc), byId = new Map(doc.pieces.map((P, p) => [P.id, p]));
+  const segs = toSegments(doc, { cache }), byId = new Map(doc.pieces.map((P, p) => [P.id, p]));
   let s = new Map();
   for (const g of segs) {
     // D258: A JUMP sets the pitch to its landing's (adapter.js), so the net pitch is counted again from there: the lap's end pitch is the last jump's
@@ -196,11 +196,11 @@ function heldCup(F, L) {
 /** The residual, measured on the adapter's path and the document itself (ref 10 §3). */
 /** The channels whose VALUE must meet round the seam: heading, pitch, width and rise always; the cup, the edge pair and the tube sweep where both ends carry them. */
 const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's', 'er'] : []), ...(sm.tubeBoth ? ['t'] : [])];
-function residual(doc) {
+function residual(doc, { cache = null } = {}) {
   if (!doc.pieces.some((P) => P.type === 'road')) throw new D.CoreError('EMPTY', 'close: no road to close');
-  const S = toPath({ ...doc, closed: false }).path.samples, a = S[0], z = S[S.length - 1];
+  const S = toPath({ ...doc, closed: false }, { cache }).path.samples, a = S[0], z = S[S.length - 1];
   const road = doc.pieces.filter((P) => P.type === 'road'), F = road[0], L = road[road.length - 1];
-  const rows = netRows(doc), net = { kh: rows.khBase, kv: rows.kvBase };   // kvBase: a jump's landing pitch, when the lap has one (D243); khBase: the jumps' heading turns (D258)
+  const rows = netRows(doc, { cache }), net = { kh: rows.khBase, kv: rows.kvBase };   // kvBase: a jump's landing pitch, when the lap has one (D243); khBase: the jumps' heading turns (D258)
   for (const ch of ['kh', 'kv']) for (const [key, w] of rows[ch]) { const [p, i] = key.split(':').map(Number); net[ch] += w * doc.pieces[p].channels[ch][i]; }
   const turns = Math.round(net.kh / TAU), bank = L.channels.phi.at(-1) - F.channels.phi[0], m = Math.round(bank / TAU);
   const r = [z.pos[0] - a.pos[0], z.pos[1] - a.pos[1], z.pos[2] - a.pos[2], net.kh - TAU * turns, net.kv, bank - TAU * m];
@@ -251,9 +251,13 @@ function close(doc, opts = {}) {
     else { const a = 3 / hEnd(doc.pieces[L]), b = 3 / hStart(doc.pieces[F]); put(L, nL - 1, a); put(L, nL - 2, -a); put(F, 1, -b); put(F, 0, b); }
     return row; };
 
-  let work = apply(doc, expand, x, false, keep), m = residual(work), it = 0;
+  // ONE SEGMENT CACHE FOR THE WHOLE CLOSE (2026-10-14, Finish to start on ELYSIUM: each step converted all 43 pieces again, twice, ~4 s of a step's ~4.4 s,
+  // 234 s for one close). A step changes only the pieces it may move; every other piece is the same object and its segments are toSegments' cached ones,
+  // which equal the uncached exactly (src/core/adapter.js, test/core_segcache.test.js)
+  const cache = new WeakMap();
+  let work = apply(doc, expand, x, false, keep), m = residual(work, { cache }), it = 0;
   for (; it < maxIter && !done(m); it++) {
-    const Jp = positionJacobian(work), nr = netRows(work), J = [];
+    const Jp = positionJacobian(work), nr = netRows(work, { cache }), J = [];
     for (let k = 0; k < 3; k++) { const row = new Float64Array(N); toCols('kh', Jp.kh, row, k); toCols('kv', Jp.kv, row, k); J.push(row); }
     for (const ch of ['kh', 'kv']) { const row = new Float64Array(N); toCols(ch, nr[ch], row); J.push(row); }
     J.push(valueRow('phi', 'value'));
@@ -265,11 +269,11 @@ function close(doc, opts = {}) {
     const y = solve(M, m.r.map((v) => -v)), delta = new Float64Array(N);
     J.forEach((row, i) => { for (let k = 0; k < N; k++) delta[k] += winv[k] * row[k] * y[i]; });
     let alpha = 1, xn, wn, mn;                                  // halve the step while it makes things worse (E's rule, not a formula)
-    for (let hh = 0; hh < 12; hh++, alpha /= 2) { xn = x.map((v, k) => v + alpha * delta[k]); wn = apply(doc, expand, xn, false, keep); mn = residual(wn); if (merit(mn) < merit(m)) break; }
+    for (let hh = 0; hh < 12; hh++, alpha /= 2) { xn = x.map((v, k) => v + alpha * delta[k]); wn = apply(doc, expand, xn, false, keep); mn = residual(wn, { cache }); if (merit(mn) < merit(m)) break; }
     x = xn; work = wn; m = mn;
   }
   // what is STORED is quantised (README): measure the quantised document, and report that
-  const stored = apply(doc, expand, x, true, keep), ms = residual(stored), converged = done(m) && ms.gapM < 0.01;
+  const stored = apply(doc, expand, x, true, keep), ms = residual(stored, { cache }), converged = done(m) && ms.gapM < 0.01;
   // D242: a local close that does not close is a REFUSAL by name, never a best try handed back: the window could not do it, and nothing outside it may help
   if (local && !converged) throw refuse(`it gets no closer than ${ms.gapM.toFixed(3)} m (tangent ${ms.tangentRad.toExponential(1)} rad) in ${it} step(s)`);
   let out;
@@ -279,12 +283,12 @@ function close(doc, opts = {}) {
   }
   if (local) {   // the roll-rate bar (src/validate: 20 m chord), read in the window only: a close may not push the window past it (a red that was already there elsewhere is not the close's)
     const V = require('../validate/index.js');
-    const rollIn = (d, closed) => { const { path } = toPath({ ...d, closed }); let mx = 0; for (const q of V._internal.rollRates(path.samples, () => true, closed, path.lengthM)) if (q.s >= win.fromS - 1e-9) mx = Math.max(mx, q.rate); return mx; };
+    const rollIn = (d, closed) => { const { path } = toPath({ ...d, closed }, { cache }); let mx = 0; for (const q of V._internal.rollRates(path.samples, () => true, closed, path.lengthM)) if (q.s >= win.fromS - 1e-9) mx = Math.max(mx, q.rate); return mx; };
     const after = rollIn(out, true);
     if (after > V.ROLL_RED_DEG_M) { const before = rollIn(doc, false); if (after > before + 1e-9) throw refuse(`the road would roll too fast there: ${after.toFixed(3)}°/m over 20 m, past the ${V.ROLL_RED_DEG_M}°/m bar (it was ${before.toFixed(3)}°/m)`); }
   }
   if (held && converged) {   // never converged over a step: the seam's curve, measured on the segments the lap will be drawn from
-    const lap = jointSteps(toSegments({ ...out, closed: true }), true).find((x) => x.lap);
+    const lap = jointSteps(toSegments({ ...out, closed: true }, { cache }), true).find((x) => x.lap);
     if (lap && lap.m > SEAM_MAX_M) throw new D.CoreError('CUP_SEAM', `close: the lap seam would step ${(lap.m * 1000).toFixed(2)} mm (more than ${SEAM_MAX_M * 1000} mm) between the cup and the legacy piece at the start: the closing piece is too short to fade one into the other; lengthen it`);
   }
   // a seam between a cup piece and a legacy one is not solved (the cup would have to move to a rendered edge): its step is reported

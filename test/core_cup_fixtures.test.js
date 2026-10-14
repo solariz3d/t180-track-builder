@@ -46,6 +46,9 @@ const AMEND5 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d260.json'), '
 const AMEND6 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d279.json'), 'utf8'));
 // THE MESH CAP (2026-10-12): the export's chunks are capped at 32,768 vertices, so F2's one chunk over it is split in two and its kn5 changes; F1 and nothing else stay; manifest.meshcap.json records it
 const AMEND7 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.meshcap.json'), 'utf8'));
+// THE SECTOR GATES (2026-10-14): a closed lap's default layout gets AC_TIME_1 and AC_TIME_2 at a third and two thirds of the lap, so F1 F2's kn5 gain four markers and
+// nothing else changes; manifest.sectors.json records it
+const AMEND8 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.sectors.json'), 'utf8'));
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
   const man = JSON.parse(JSON.stringify(MANIFEST));
@@ -56,6 +59,7 @@ function amendedManifest() {
   for (const [k, v] of Object.entries(AMEND5.fixtures)) { const { kn5Bytes, ...digests } = v.after_d260; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D260
   for (const [k, v] of Object.entries(AMEND6.fixtures)) { const { kn5Bytes, ...digests } = v.after_d279; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D279
   for (const [k, v] of Object.entries(AMEND7.fixtures)) { const { kn5Bytes, ...digests } = v.after_meshcap; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // the mesh cap
+  for (const [k, v] of Object.entries(AMEND8.fixtures)) { const { kn5Bytes, ...digests } = v.after_sectors; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // the sector gates
   return man;
 }
 
@@ -128,6 +132,20 @@ test('row 5 CONTROL: the check has teeth: a manifest with one digest altered rea
     r = check(dir); assert.match(r.stdout, /F5-flat-20m-bank-30: FIXTURE FILE CHANGED/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+test('sector gates amendment record: only F1 F2 (the closed laps) changed, only their kn5, and the measure says the same triangles and meshes with exactly AC_TIME_1 and AC_TIME_2 added', () => {
+  const closed = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-closed'];
+  assert.deepEqual(Object.keys(AMEND8.fixtures), closed);
+  assert.deepEqual([...AMEND8.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !closed.includes(k)).sort());
+  for (const [k, v] of Object.entries(AMEND8.fixtures)) {
+    const prev = k in AMEND7.fixtures ? AMEND7.fixtures[k].after_meshcap : AMEND6.fixtures[k].after_d279;   // the record each was last amended by
+    for (const d of ['segs', 'path', 'mesh', 'meshParts', 'kn5', 'kn5Bytes']) assert.equal(v.before_sectors[d], prev[d], `${k}: "before" is the last record's ${d}`);
+    for (const d of ['segs', 'path', 'mesh', 'meshParts']) assert.equal(v.after_sectors[d], prev[d], `${k}: ${d} changed`);
+    assert.notEqual(v.after_sectors.kn5, v.before_sectors.kn5, `${k}: the kn5 did not change`);
+    const m = v.measure; assert.equal(m.triangleSet.equal, true); assert.equal(m.meshesByteEqual, true, `${k}: a mesh changed`);
+    assert.deepEqual(m.markersAdded, ['AC_TIME_1_L', 'AC_TIME_1_R', 'AC_TIME_2_L', 'AC_TIME_2_R']); assert.deepEqual(m.markersRemoved, []); assert.equal(m.markersKeptEqual, true);
+  }
+});
+
 test('mesh cap amendment record: only the F2 kn5 changed, every other digest is the one in the D279 record, and the measure says the same triangles and markers in one more chunk, none over 32,768 vertices', () => {
   assert.deepEqual(Object.keys(AMEND7.fixtures), ['F2-halfpipe-default-lap-closed']);
   assert.deepEqual([...AMEND7.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => k !== 'F2-halfpipe-default-lap-closed').sort());

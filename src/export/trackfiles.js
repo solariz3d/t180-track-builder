@@ -180,7 +180,11 @@ function fittedPng(scene, w, h, { margin = 8, rgba = [255, 255, 255, 255], backg
 }
 // Sizes: the CM-generated UI of the track K on D (ui/outline.png 365×192, ui/preview.png 355×200). inferred: CM's defaults.
 const outlinePng = (scene) => fittedPng(scene, 365, 192);
-const previewPng = (scene) => fittedPng(scene, 355, 200, { rgba: [200, 200, 200, 255], background: [24, 26, 30] });
+// preview.png is the BACKDROP alone (the keeper, 2026-10-12, ELYSIUM in Content Manager: "the outline of it, like there are multiple on each other overlayed"):
+// CM lays outline.png over preview.png, and the road drawn into both at different sizes (365×192, 355×200) showed two outlines, offset, a pile of them on a
+// track that passes over itself. A track's preview is its picture; the outline is CM's to draw. `scene` is kept for the signature (layouts.js, writeTrackFiles)
+const PREVIEW_BG = [24, 26, 30];
+const previewPng = (scene) => { const w = 355, h = 200, img = Buffer.alloc(w * h * 4); for (let i = 0; i < img.length; i += 4) { img[i] = PREVIEW_BG[0]; img[i + 1] = PREVIEW_BG[1]; img[i + 2] = PREVIEW_BG[2]; img[i + 3] = 255; } return encodePng(w, h, img); };
 
 // ── PNG, dependency-free (RFC 2083 / the PNG spec: signature, IHDR, IDAT, IEND; CRC-32 over type + data) ─────────────
 const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
