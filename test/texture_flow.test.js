@@ -127,3 +127,15 @@ test('row 6: a WORD document\'s coordinates are untouched by a set (flow is for 
   assert.equal(flowUvs(mesh, segs, set).size, 0, 'a word document is not a core track: mesh.js\'s coordinates stand');
   assert.ok(segs.every((g) => g.word !== 'core'));
 });
+
+// 2026-10-14: closedRing is remembered per FROZEN segment (it normalised each new cell's section twice on every placement); an unfrozen one is read each time
+test('closedRing gives a frozen segment the answer of reading it, ring or not, and reads an unfrozen segment again after it changes', () => {
+  const ring = A.toSegments(tubeOval(31))[100], open = A.toSegments(tubeOval(31))[0];
+  const thaw = (g) => ({ ...g });
+  assert.equal(closedRing(Object.freeze(thaw(ring))), closedRing(thaw(ring))); assert.equal(closedRing(thaw(ring)), true);
+  const notRing = { ...thaw(ring), profileIn: thaw(ring).profile };
+  assert.equal(closedRing(Object.freeze({ ...notRing })), false, 'a ramp from another section is no ring, frozen or not');
+  const loose = thaw(ring); assert.equal(closedRing(loose), true);
+  loose.profileIn = loose.profile; assert.equal(closedRing(loose), false, 'changed in place: read again');
+  assert.equal(closedRing(Object.freeze(thaw(open))), closedRing(thaw(open)));
+});

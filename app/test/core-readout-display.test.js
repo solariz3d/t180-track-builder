@@ -782,3 +782,20 @@ test('D242 item 7: Undo gives back the undone piece\'s values: the fields read w
   assert.equal(P.field('turn °/100m').value, '30', 'Redo: the fields show the head (its end turn), as before, not the typed 5');
   P.panel.unmount();
 });
+
+// 2026-10-14 (ELYSIUM: every label read again on every edit, ~260 ms): the shell reuses a road piece's readout while the start and every piece up to
+// it are unchanged. After every kind of change the labels must equal a fresh read of the document, piece by piece.
+test('the piece labels equal a fresh read after a placement, an undo, a redo, a bend in the middle and a moved start', async () => {
+  const s = await createCoreShell({});
+  const R = 180, Q = (Math.PI * R) / 2;
+  s.extend({ length: 200, family: 'bowl' }); s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 300 }); s.extend({ length: 150, targets: { kv: 0.002 } });
+  const fresh = () => { const d = s.getState().history.present; return d.pieces.map((_, i) => RD.pieceReadout(d, i)); };
+  const check = (what) => assert.deepEqual(s.pieceReadouts(), fresh(), what);
+  check('built');
+  s.extend({ length: 120 }); check('placed');
+  s.undo(); check('undone'); s.redo(); check('redone');
+  s.beginBrush({ mode: 'rate', channel: 'kh', s0: 300, r: 60 }); s.brushTo(0.0005); s.endBrush();
+  assert.equal(s.getState().message, null, s.getState().message); check('a bend in the middle (every later pose moves)');
+  const d = s.getState().history.present;
+  s.adopt({ ...d, start: { ...d.start, heading: d.start.heading + 0.3, pitch: 0.05 } }); check('the start moved');
+});

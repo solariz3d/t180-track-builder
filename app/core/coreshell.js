@@ -413,7 +413,19 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], c: D.legacyEdgeDeg(fam, WIDTHS[fam], RATES[fam]), ...XS.headOf(null) };
     },
     /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
-    pieceReadouts() { const d = doc(); if (readsFor !== d) { reads = d.pieces.map((_, i) => RD.pieceReadout(d, i)); readsFor = d; } return reads; },
+    // 2026-10-14 (ELYSIUM: ~260 ms of every placed piece on the window's thread, every one of the 43 labels read again): a ROAD piece's readout reads
+    // the start and the pieces up to it alone (src/core/readout.js: the piece, and the pose entering it from every earlier piece), so while the
+    // start and every piece up to it are the very objects they were, it is the readout it was. A flight's reads the whole document: read again.
+    pieceReadouts() {
+      const d = doc();
+      if (readsFor !== d) {
+        // the start compared by VALUE: a history read back from its file (unpackHistory) gives each step its own start object, the same pose
+        const was = readsFor, old = reads; let same = !!was && (was.start === d.start || JSON.stringify(was.start) === JSON.stringify(d.start));
+        reads = d.pieces.map((P, i) => { if (same && was.pieces[i] !== P) same = false; return same && P.type === 'road' && old[i] ? old[i] : RD.pieceReadout(d, i); });
+        readsFor = d;
+      }
+      return reads;
+    },
 
     /**
      * THE BRUSH, one drag = one undo step. beginBrush fixes the brush (its mode, channel, centre s0 and radius r, all on the
