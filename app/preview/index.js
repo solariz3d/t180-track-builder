@@ -46,7 +46,8 @@ function mount(root, shell) {
   const doc = root.ownerDocument, win = doc.defaultView;
   const canvas = doc.createElement('canvas'), hud = doc.createElement('div');
   canvas.style.cssText = 'display:block;width:100%;height:100%;outline:none';
-  hud.style.cssText = 'position:absolute;left:8px;bottom:6px;font:12px ui-monospace,Consolas,monospace;color:#c3cad4;background:rgba(10,12,16,0.6);padding:1px 5px;border-radius:3px;pointer-events:none';   // legible on the light AC road too (D177)
+  hud.style.cssText = 'position:absolute;left:8px;bottom:6px;font:12px ui-monospace,Consolas,monospace;color:var(--dim);background:rgba(10,12,16,0.6);padding:1px 5px;border-radius:3px;pointer-events:none';   // legible on the light AC road too (D177)
+  hud.className = 'preview-hud';   // a page can place it (app/index.html moves it clear of its floating panel)
   root.append(canvas, hud);
   const announce = (mode) => doc.dispatchEvent(new win.CustomEvent('t180-camera-mode', { detail: { mode, modes: MODES.slice() } }));
   let p, real = null;

@@ -21,7 +21,7 @@ function mount({ shell, el, win }) {
   const mode = el('p', { class: 'message', 'aria-label': 'how the start is placed', style: 'font-size:12px;margin:2px 0' });
   const lineR = el('input', { type: 'range', min: '0', max: '100', step: '0.5', 'aria-label': 'start line along the first piece', style: 'width:100%' });
   const lineN = el('input', { type: 'number', step: '0.5', min: '0', 'aria-label': 'start line metres into the first piece' });
-  const lineOf = el('span', { style: 'font-size:12px;color:#aab2c0' });
+  const lineOf = el('span', { style: 'font-size:12px;color:var(--dim)' });
   const cars = el('input', { type: 'number', step: '1', min: '1', max: '64', 'aria-label': 'grid cars' });
   const packL = el('input', { type: 'number', step: '0.5', min: String(PACK.rowGapMinM), 'aria-label': 'pack length: metres along the road between two cars in a column', title: `metres along the road between two cars in the same column (the other column sits halfway); at least ${PACK.rowGapMinM.toFixed(1)} m, a T-180 and a metre` });
   const packW = el('input', { type: 'number', step: '0.5', min: String(PACK.colGapMinM), 'aria-label': 'pack width: metres between the two columns', title: `metres between the two columns, centre to centre; at least ${PACK.colGapMinM.toFixed(2)} m, a T-180 and half a metre` });
