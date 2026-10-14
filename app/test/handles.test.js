@@ -310,3 +310,20 @@ test('row 14: the landing\'s kinds (D258): four free marks at the landing, each 
   assert.equal(HD.resetValue('landleft', 12), 0); assert.equal(HD.resetValue('landup', null), 0); assert.equal(HD.resetValue('landturn', 5), 0); assert.equal(HD.resetValue('landfwd', 55), 55, 'forward goes back to before its drag'); assert.equal(HD.resetValue('landfwd', null), null, 'or nowhere');
   assert.equal(HD.format('landfwd', 40), 'forward 40.0 m'); assert.equal(HD.format('landleft', -8), 'sideways -8.0 m'); assert.equal(HD.format('landup', 3.5), 'height 3.5 m'); assert.equal(HD.format('landturn', 10), 'heading 10.0°');
 });
+
+// 2026-10-14, the keeper: "why cant turns turn more than 90 degrees" ... "it shouldnt be constrained unless you click 90 degree turn first"; and "the camera
+// orientation changes which way you have to drag the pieces ... should be the same every way you look at it". The turn handle has no clamp (Turn by and
+// Turn to grid are the exact-angle tools), and it reads the pointer's own left and right on screen: a drag to the right is a right turn from any view.
+test('the turn handle is not clamped: a long drag goes past 90°/100 m either way', () => {
+  assert.equal(HD.targetFor('turn', 0, 5000), 415, '5000 px at 0.083 a pixel'); assert.equal(HD.targetFor('turn', 0, -5000), -415);
+});
+test('the turn handle: a drag to the right is a right turn and to the left a left turn, whichever way the left of the road lies on screen', () => {
+  const view = (pose) => { const vp = M.viewProj(pose, W / Hh), h = byId(HD.placeHandles(MODEL)); return ['turn:1', 'turn:-1'].map((id) => HD.screenAxis(vp, W, Hh, h[id].pos, h[id].axis)); };
+  const behind = view(POSE), ahead = view({ eye: [0, 60, 260], target: [0, 0, 60], up: [0, 1, 0], fov: 60 * Math.PI / 180 });
+  assert.ok(behind[0].dx < 0 && ahead[0].dx > 0, 'the left of the road is screen-left from behind and screen-right from ahead');
+  for (const ax of [...behind, ...ahead, null]) {
+    assert.ok(HD.dragPixels(ax, 10, 0, 'turn') < 0, 'a drag to the right turns right (negative: + is left)');
+    assert.ok(HD.dragPixels(ax, -10, 0, 'turn') > 0, 'a drag to the left turns left');
+    assert.equal(HD.dragPixels(ax, 0, 25, 'turn'), 0, 'up and down move nothing');
+  }
+});
