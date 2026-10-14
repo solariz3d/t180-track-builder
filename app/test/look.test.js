@@ -181,17 +181,18 @@ test('preview: showGhost draws the ghost, clearGhost removes it, and placing the
 test('preview: a frame draws the grid and the head marker as lines (the grid only with ground: true)', () => {
   const shell = { getState: () => ({ resolved: { segments: words(3), closed: false } }), subscribe: () => () => {} };
   const { calls, win, canvas } = fake(), p = P.createPreview({ canvas, shell, win, ground: true }); win.step();
-  const cells = p.view().track.batches.filter((b) => !b.seam).length;
-  assert.ok(p.view().grid > 0);
-  assert.equal(p.renderer.stats().lines, 1 + 1 + 2 * cells, 'the grid, the head marker, and the edges and ties of each road cell');
-  assert.equal(calls.drawArrays, 1 + 1 + 2 * cells);
+  // 2026-10-13: the road's cells are drawn MERGED (app/preview/renderer.js CHUNKS): one edges and one ties draw per chunk
+  const cells = p.view().track.batches.filter((b) => !b.seam).length, chunks = p.renderer.stats().chunks;
+  assert.ok(p.view().grid > 0); assert.ok(chunks >= 1 && chunks < cells, `${chunks} chunks for ${cells} cells`);
+  assert.equal(p.renderer.stats().lines, 1 + 1 + 2 * chunks, 'the grid, the head marker, and the edges and ties of each chunk');
+  assert.equal(calls.drawArrays, 1 + 1 + 2 * chunks);
 });
 test('preview: by default there is no ground grid, only the track and the head marker', () => {
   const shell = { getState: () => ({ resolved: { segments: words(3), closed: false } }), subscribe: () => () => {} };
   const { calls, win, canvas } = fake(), p = P.createPreview({ canvas, shell, win }); win.step();
-  const cells = p.view().track.batches.filter((b) => !b.seam).length;
-  assert.equal(p.view().grid, 0);
-  assert.equal(calls.drawArrays, 1 + 2 * cells, 'the head marker and each road cell, no grid');
+  const chunks = p.renderer.stats().chunks;
+  assert.equal(p.view().grid, 0); assert.ok(chunks >= 1);
+  assert.equal(calls.drawArrays, 1 + 2 * chunks, 'the head marker and each chunk of road, no grid');
 });
 
 // ── grid and marker ──

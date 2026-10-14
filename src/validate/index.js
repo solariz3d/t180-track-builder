@@ -213,7 +213,10 @@ function core(path, segments, opts, from, carried, upto) {
   if (carried) {
     for (const l of carried.lines) if (l.i < from) raw.lines.push(l);
     for (const p of carried.pts) if (p.i < from) raw.pts.push(p);
-    for (const r of carried.segReds) if (r.j < carried.fromSeg) raw.segReds.push(r);
+    // segment reds are recomputed from THIS run's fromSeg on (below), so the ones before it are carried. It read carried.fromSeg, the PREVIOUS
+    // run's cut (0 after a full validate), and the second revalidate in a row dropped every segment red before the head (2026-10-13)
+    const cutSeg = S[Math.min(from, n - 1)].seg;
+    for (const r of carried.segReds) if (r.j < cutSeg) raw.segReds.push(r);
     // a carried stack stays only if BOTH its station and its deepest partner lie before the cut; a station whose deepest
     // partner was in the changed part is re-queried against every point (an edit can remove what it was stacked on)
     for (const [k, e] of carried.stacked) { if (e.i >= from) continue; if (e.p < from) raw.stacked.set(k, { ...e }); else rederive.add(e.i); }

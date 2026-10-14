@@ -17,17 +17,21 @@
 //                   batch is drawn with its AC shader (acshaders.js, the Ms-PL port) and the uniforms aclook.js
 //                   uniformsFor gives, under aclook.js's ONE reference light. look 'words', or no materialOf, draws the
 //                   D170 per-word colours instead. A sampler whose texture is not in extras.textures gets one white texel.
-//   r.stats()  -> { uploads, buffers, draws, lines, acDraws, textures }      uploads = bufferData + texImage2D calls
+//   r.stats()  -> { uploads, buffers, draws, lines, acDraws, textures, chunks }      uploads = bufferData + texImage2D calls;
+//                 chunks = the placed track's merged chunks drawn last frame (CHUNKS below)
+//   createRenderer(gl, { chunkVertices })   the most vertices in one chunk (default and maximum 65,535: Uint16 indices)
 //   r.dispose()
 //
 // LIGHT (D170 item 1): the lighting is look.js `shade`, compiled into the fragment shader from the same constants, so a
 // floor, a bank and a wall of one colour read as different surfaces. The ROAD LINES (edges, centre, ties across) come
 // from look.js `linesFor`, in each cell's own frame, drawn with its model matrix.
 //
-// GPU BUFFERS ARE KEYED BY THE ARRAY OBJECT. The geometry hands the same Float32Array back for a piece it did not
+// GPU BUFFERS ARE KEYED BY THE ARRAY OBJECT (since 2026-10-13 the arrays are the merged CHUNKS' arrays, below). The geometry hands the same Float32Array back for a piece it did not
 // rebuild (extendMesh keeps old pieces, sculptMesh keeps pieces that only moved), and linesFor memoises by that array,
 // so those cost no upload; only arrays new in this frame are uploaded, and arrays no longer drawn are deleted after the
-// frame. A drag that sculpts one word uploads that word's cells, lines and the seams beside it, and nothing else.
+// frame. Since the CHUNKS (below) a drag that sculpts one word re-merges and uploads the chunks holding its cells and every
+// chunk it MOVED (a chunk is baked to world space, so a piece that only moved is new geometry to the GPU); chunks before
+// the edit, and every chunk after an extend but the last, upload nothing.
 'use strict';
 
 const M = require('../camera/math.js');
@@ -72,6 +76,62 @@ uniform vec3 uColour; uniform float uAlpha; uniform vec3 uFog; uniform float uFo
 void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = uFade.y > uFade.x ? clamp((uFade.y - vDepth) / (uFade.y - uFade.x), 0.0, 1.0) : 1.0; gl_FragColor = vec4(mix(uFog, uColour, fog), uAlpha * f); }`;
 
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+
+// CHUNKS (the keeper, 2026-10-13: "the preview is so damn laggy" on ELYSIUM, 24 km). A batch is one ~2 m cell, so a long
+// track was 12,069 surface draws and 24,233 line draws a frame: 11 fps on an RTX 5080, ~87 ms of JS per frame issuing
+// them (scratchpad perf/drive.js). Consecutive batches drawn alike (one material, or one colour) are now MERGED into a
+// chunk of at most CHUNK_V vertices, baked to world space with each batch's own model matrix (the same arithmetic the
+// shaders did with uModel), and the chunk is drawn once with the identity. ELYSIUM: 42 chunks, merged in ~80 ms.
+// A chunk is kept while its batches are the same arrays under the same matrices, so an extend re-merges only the chunk at
+// the end, and a sculpt the chunks it touched or moved; a chunk no longer drawn is dropped with its buffers (gen sweep).
+const CHUNK_V = 65535;   // Uint16 indices
+const colourKey = (b) => (b.colour ? b.colour.join(',') : '');   // the 'words' look: one colour per chunk
+const sameModel = (a, b) => { for (let i = 0; i < 16; i++) if (a[i] !== b[i]) return false; return true; };
+function bakePoints(dst, at, src, M, w) {   // world = local · M (row-vector; column-major GL reading), w = 1 points, 0 directions
+  for (let k = 0; k < src.length; k += 3) {
+    const x = src[k], y = src[k + 1], z = src[k + 2], o = at + k;
+    dst[o] = x * M[0] + y * M[4] + z * M[8] + w * M[12]; dst[o + 1] = x * M[1] + y * M[5] + z * M[9] + w * M[13]; dst[o + 2] = x * M[2] + y * M[6] + z * M[10] + w * M[14];
+  }
+}
+/** Consecutive batches with one `keyOf` value, at most CHUNK_V vertices each (a batch larger than that is a chunk alone). */
+function groupBatches(batches, keyOf, maxV = CHUNK_V) {
+  const out = []; let cur = null;
+  for (const b of batches) {
+    const k = keyOf(b), nv = b.positions.length / 3;
+    if (!cur || cur.key !== k || cur.nv + nv > maxV) { cur = { key: k, list: [], nv: 0 }; out.push(cur); }
+    cur.list.push(b); cur.nv += nv;
+  }
+  return out;
+}
+/** A chunk's merged arrays: positions, normals, uvs (when every batch has them), indices; tangents and lines on first use. */
+function mergeChunk(g) {
+  let ni = 0; for (const b of g.list) ni += b.indices.length;
+  const P = new Float32Array(g.nv * 3), N = new Float32Array(g.nv * 3), I = new Uint16Array(ni), withUv = g.list.every((b) => b.uvs);
+  const U = withUv ? new Float32Array(g.nv * 2) : null;
+  let v = 0, i = 0;
+  for (const b of g.list) {
+    bakePoints(P, v * 3, b.positions, b.model, 1); bakePoints(N, v * 3, b.normals, b.model, 0);
+    if (U) U.set(b.uvs, v * 2);
+    const ix = b.indices; for (let k = 0; k < ix.length; k++) I[i + k] = ix[k] + v;
+    i += ix.length; v += b.positions.length / 3;
+  }
+  return { positions: P, normals: N, uvs: U, indices: I, model: IDENTITY, key: g.list[0].key, list: g.list, members: g.list.map((b) => ({ p: b.positions, n: b.normals, u: b.uvs, i: b.indices, m: Array.from(b.model) })) };
+}
+function chunkTangents(c) {
+  if (!c.tangents) { c.tangents = new Float32Array(c.positions.length); let at = 0; for (const b of c.list) { bakePoints(c.tangents, at, tangentsFor(b), b.model, 0); at += b.positions.length; } }
+  return c.tangents;
+}
+function chunkLines(c) {
+  if (c.lines === undefined) {
+    const parts = c.list.map((b) => [b, linesFor(b)]).filter(([, L]) => L);
+    if (!parts.length) c.lines = null;
+    else {
+      const join = (k) => { const out = new Float32Array(parts.reduce((a, [, L]) => a + L[k].length, 0)); let at = 0; for (const [b, L] of parts) { bakePoints(out, at, L[k], b.model, 1); at += L[k].length; } return out; };
+      c.lines = { edges: join('edges'), ties: join('ties') };
+    }
+  }
+  return c.lines;
+}
 const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.55, 0.85, 1.0] });
 const GHOST_ALPHA = 0.42;
 // D179, the usability pass (p-d179-lookpass-C §1): the ties are one near-black line per station; from overhead or far
@@ -82,8 +142,9 @@ const GHOST_ALPHA = 0.42;
 const TIE_FADE = Object.freeze([60, 250]);
 const CLEAR = Object.freeze([0.03, 0.035, 0.045]);
 
-function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clear = CLEAR } = {}) {
+function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');
+  if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('renderer: shader compile failed:\n' + (gl.getShaderInfoLog(s) || '(no log)'));
@@ -95,10 +156,31 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
     const u = (n) => gl.getUniformLocation(p, n);
     return { p, pos: gl.getAttribLocation(p, 'aPos'), nrm: gl.getAttribLocation(p, 'aNrm'), vp: u('uVP'), model: u('uModel'), colour: u('uColour'), alpha: u('uAlpha'), fog: u('uFog'), fogD: u('uFogDensity') };
   };
+  // the merged chunks, keyed by their first batch's positions array; a chunk is reused only when its group key, its batches'
+  // arrays and their model matrices are all unchanged
+  // and the chunks of the very same batches ARRAY drawn the same way (`how`) are the last frame's: the track model and the preview hand a new
+  // array for any change, so a still frame does not re-group 12,069 cells and compare their matrices (~1.3 ms a frame on ELYSIUM)
+  const chunkMemo = new WeakMap(), lastChunks = new WeakMap();
+  function chunksOf(batches, keyOf, how) {
+    const last = lastChunks.get(batches);
+    if (last && last.how === how) return last.out;
+    const out = chunksFresh(batches, keyOf);
+    lastChunks.set(batches, { how, out });
+    return out;
+  }
+  function chunksFresh(batches, keyOf) {
+    return groupBatches(batches, keyOf, chunkVertices).map((g) => {
+      const hit = chunkMemo.get(g.list[0].positions);
+      if (hit && hit.group === g.key && hit.members.length === g.list.length && g.list.every((b, k) => {
+        const m = hit.members[k]; return m.p === b.positions && m.n === b.normals && m.u === b.uvs && m.i === b.indices && sameModel(m.m, b.model);
+      })) { hit.list = g.list; return hit; }
+      const c = mergeChunk(g); c.group = g.key; c.colour = g.list[0].colour; chunkMemo.set(g.list[0].positions, c); return c;
+    });
+  }
   const surf = program(VS, FS), line = program(LVS, LFS);
   line.fade = gl.getUniformLocation(line.p, 'uFade');
   const buffers = new Map();   // typed array → { buf, gen }
-  let gen = 0, uploads = 0, draws = 0, lines = 0;
+  let gen = 0, uploads = 0, draws = 0, lines = 0, chunkCount = 0;
   function bufferFor(arr, target) {
     let e = buffers.get(arr);
     if (!e) { const buf = gl.createBuffer(); gl.bindBuffer(target, buf); gl.bufferData(target, arr, gl.STATIC_DRAW); uploads++; e = { buf, gen }; buffers.set(arr, e); }
@@ -140,11 +222,11 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
     }
     e.gen = gen; return e.t;
   }
-  function drawAc(batches, vp, pose, materialOf, images) {
+  function drawAc(chunks, vp, pose, images) {
     const L = ACLOOK.LIGHT;
-    for (const b of batches) {
-      const m = materialOf(b);
-      if (!m) throw new Error(`renderer: no material for ${b.key}`);
+    for (const b of chunks) {
+      const m = b.group;
+      if (!b.uvs) throw new Error(`renderer: ${b.key} has no uvs for its AC material`);
       const u = ACLOOK.uniformsFor(m), pr = ac[u.program];
       use(pr, vp);
       gl.uniform1f(pr.ksAmbient, u.ambient); gl.uniform1f(pr.ksDiffuse, u.diffuse); gl.uniform1f(pr.ksSpecular, u.specular);
@@ -165,23 +247,23 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
       bufferFor(b.positions, gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.pos, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.normals, gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.nrm, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.uvs, gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.uv, 2, gl.FLOAT, false, 0, 0);
-      bufferFor(tangentsFor(b), gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.tan, 3, gl.FLOAT, false, 0, 0);
+      bufferFor(chunkTangents(b), gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.tan, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.indices, gl.ELEMENT_ARRAY_BUFFER);
-      gl.uniformMatrix4fv(pr.model, false, new Float32Array(b.model));
+      gl.uniformMatrix4fv(pr.model, false, b.model);
       gl.drawElements(gl.TRIANGLES, b.indices.length, gl.UNSIGNED_SHORT, 0); draws++; acDraws++;
       gl.disableVertexAttribArray(pr.nrm); gl.disableVertexAttribArray(pr.uv); gl.disableVertexAttribArray(pr.tan);
     }
     gl.activeTexture(gl.TEXTURE0);
   }
   const use = (pr, vp) => { gl.useProgram(pr.p); gl.uniformMatrix4fv(pr.vp, false, vp); gl.uniform3f(pr.fog, fog[0], fog[1], fog[2]); gl.uniform1f(pr.fogD, fogDensity); };
-  function drawSurfaces(batches, vp, alpha, tint) {
+  function drawSurfaces(chunks, vp, alpha, tint) {
     use(surf, vp); gl.uniform1f(surf.alpha, alpha);
     gl.enableVertexAttribArray(surf.pos); gl.enableVertexAttribArray(surf.nrm);
-    for (const b of batches) {
+    for (const b of chunks) {
       bufferFor(b.positions, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.pos, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.normals, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.nrm, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.indices, gl.ELEMENT_ARRAY_BUFFER);
-      gl.uniformMatrix4fv(surf.model, false, new Float32Array(b.model));
+      gl.uniformMatrix4fv(surf.model, false, b.model);
       const c = tint || b.colour; gl.uniform3f(surf.colour, c[0], c[1], c[2]);
       gl.drawElements(gl.TRIANGLES, b.indices.length, gl.UNSIGNED_SHORT, 0); draws++;
     }
@@ -194,21 +276,20 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
     bufferFor(arr, gl.ARRAY_BUFFER); gl.vertexAttribPointer(line.pos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.LINES, 0, arr.length / 3); lines++;
   }
-  function drawRoadLines(batches, vp, alpha, blending = false) {
+  function drawRoadLines(chunks, vp, alpha, blending = false) {
     use(line, vp); gl.enableVertexAttribArray(line.pos);
     // the ties fade with distance, which needs blending; the ghost pass has it on already
     if (!blending) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
-    for (const b of batches) {
-      const L = linesFor(b); if (!L) continue;
-      const model = new Float32Array(b.model);
-      drawLines(L.edges, model, COLOURS.edge, alpha); drawLines(L.ties, model, COLOURS.tie, alpha, TIE_FADE);
+    for (const c of chunks) {
+      const L = chunkLines(c); if (!L) continue;
+      drawLines(L.edges, IDENTITY, COLOURS.edge, alpha); drawLines(L.ties, IDENTITY, COLOURS.tie, alpha, TIE_FADE);
     }
     if (!blending) gl.disable(gl.BLEND);
   }
   return {
     draw(batches, pose, { width, height }, extras = {}) {
       if (!(width > 0 && height > 0)) throw new Error('renderer: the canvas has no size');
-      gen++; draws = 0; lines = 0; acDraws = 0;
+      gen++; draws = 0; lines = 0; acDraws = 0; chunkCount = 0;
       const look = extras.look || 'ac';
       if (look !== 'ac' && look !== 'words') throw new Error(`renderer: unknown look ${look}`);
       gl.viewport(0, 0, width, height);
@@ -216,13 +297,19 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
       gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
       const vp = new Float32Array(M.viewProj(pose, width / height));
       if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, COLOURS.grid, 1); }
-      if (look === 'ac' && typeof extras.materialOf === 'function') drawAc(batches, vp, pose, extras.materialOf, extras.textures);
-      else drawSurfaces(batches, vp, 1, null);
-      if (extras.lines !== false) drawRoadLines(batches, vp, 1);
+      let chunks;
+      if (look === 'ac' && typeof extras.materialOf === 'function') {
+        const materialOf = extras.materialOf;
+        chunks = chunksOf(batches, (b) => { const m = materialOf(b); if (!m) throw new Error(`renderer: no material for ${b.key}`); return m; }, materialOf);
+        drawAc(chunks, vp, pose, extras.textures);
+      } else { chunks = chunksOf(batches, colourKey, 'colour'); drawSurfaces(chunks, vp, 1, null); }
+      chunkCount = chunks.length;
+      if (extras.lines !== false) drawRoadLines(chunks, vp, 1);
       if (extras.ghost && extras.ghost.length) {       // see-through, over the placed track, without writing depth
+        const ghost = chunksOf(extras.ghost, () => 'ghost', 'ghost');
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
-        drawSurfaces(extras.ghost, vp, GHOST_ALPHA, COLOURS.ghost);
-        drawRoadLines(extras.ghost, vp, 0.8, true);
+        drawSurfaces(ghost, vp, GHOST_ALPHA, COLOURS.ghost);
+        drawRoadLines(ghost, vp, 0.8, true);
         gl.depthMask(true); gl.disable(gl.BLEND);
       }
       // D237 (app/preview/guides.js): the 3D grid's lattice and the symmetry axes, faint blended lines that the track hides where it is nearer: depth-tested, no depth written
@@ -241,7 +328,7 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
       for (const [arr, e] of buffers) if (e.gen !== gen) { gl.deleteBuffer(e.buf); buffers.delete(arr); }   // no longer drawn
       for (const [arr, e] of texes) if (e.gen !== gen) { gl.deleteTexture(e.t); texes.delete(arr); }
     },
-    stats: () => ({ uploads, buffers: buffers.size, draws, lines, acDraws, textures: texes.size }),
+    stats: () => ({ uploads, buffers: buffers.size, draws, lines, acDraws, textures: texes.size, chunks: chunkCount }),
     dispose() {
       for (const e of buffers.values()) gl.deleteBuffer(e.buf); buffers.clear();
       for (const e of texes.values()) gl.deleteTexture(e.t); texes.clear(); if (white) gl.deleteTexture(white);

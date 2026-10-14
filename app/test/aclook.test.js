@@ -264,7 +264,8 @@ test('preview: the AC look is the default: every placed batch is drawn with its 
   const { p, win } = previewOn(d); win.step();
   const s = p.renderer.stats(), n = p.view().track.batches.length;
   p.dispose();
-  assert.deepStrictEqual([p.view().look, s.acDraws], ['ac', n]);
+  // 2026-10-13: batches of one material are drawn merged, one AC draw per chunk (app/preview/renderer.js CHUNKS)
+  assert.deepStrictEqual([p.view().look, s.acDraws, s.chunks >= 1 && s.chunks <= n], ['ac', s.chunks, true]);
 });
 test('preview: a texture set with a made floor texture is uploaded at its size and drawn', () => {
   let d = D.createDoc('P'); d = D.appendWord(d, 'straight', { speed: 30 });

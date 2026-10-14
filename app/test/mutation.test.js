@@ -82,7 +82,7 @@ const MUTATIONS = [
   { id: 'B13 the grid floats above y = 0', file: 'preview/look.js',
     from: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y, z0, x, y, z1);', to: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y + 0.5, z0, x, y + 0.5, z1);', caughtBy: 'grid: every vertex at y = 0' },   // D237: re-pointed, gridLines takes a height `y` (default 0); the mutant and the test that catches it are unchanged
   { id: 'B14 the ghost is never drawn', file: 'preview/renderer.js',
-    from: 'drawSurfaces(extras.ghost, vp, GHOST_ALPHA, COLOURS.ghost);', to: '', caughtBy: 'preview: showGhost draws the ghost' },
+    from: 'drawSurfaces(ghost, vp, GHOST_ALPHA, COLOURS.ghost);', to: '', caughtBy: 'preview: showGhost draws the ghost' },   // re-pointed 2026-10-13: the ghost is drawn as merged chunks
   { id: 'B16 the head marker does not grow with distance (a speck from overhead)', file: 'preview/preview.js',
     from: 'Math.max(3, 0.02 * Math.hypot(', to: 'Math.max(3, 0 * Math.hypot(', caughtBy: 'head marker: it grows' },
   { id: 'B15 the head marker is never drawn', file: 'preview/renderer.js',
@@ -112,7 +112,13 @@ const MUTATIONS = [
   { id: 'L15 a property is read from the wrong material', file: 'preview/aclook.js', from: 'const m = scene.materials[b.materialIndex];', to: 'const m = scene.materials[0] && { ...scene.materials[0], name: String(b.materialIndex) };', caughtBy: 'list: every mesh the preview draws is in the kn5' },
   { id: 'L16 L does not change the look (the colour per word is unreachable)', file: 'preview/preview.js', from: "if (a.look) { look = look === 'ac' ? 'words' : 'ac';", to: 'if (a.look) {', caughtBy: 'preview: L toggles the look' },
   // D179, the usability pass
-  { id: 'L17 the ties never fade (they hatch the road dark at a distance)', file: 'preview/renderer.js', from: 'drawLines(L.ties, model, COLOURS.tie, alpha, TIE_FADE);', to: 'drawLines(L.ties, model, COLOURS.tie, alpha);', caughtBy: 'renderer: the ties fade out' },
+  { id: 'L17 the ties never fade (they hatch the road dark at a distance)', file: 'preview/renderer.js', from: 'drawLines(L.ties, IDENTITY, COLOURS.tie, alpha, TIE_FADE);', to: 'drawLines(L.ties, IDENTITY, COLOURS.tie, alpha);', caughtBy: 'renderer: the ties fade out' },   // re-pointed 2026-10-13: the lines are drawn per merged chunk
+  // 2026-10-13, the merged CHUNKS (app/preview/renderer.js; the keeper: ELYSIUM at 11 fps)
+  { id: 'K1 a kept chunk ignores the matrices of its cells (a moved piece is drawn where it was)', file: 'preview/renderer.js', from: ' && sameModel(m.m, b.model)', to: '', caughtBy: 'renderer: after a sculpt that moves later pieces, the drawn road equals' },
+  { id: 'K2 the cells are never merged (one draw per cell again)', file: 'preview/renderer.js', from: 'cur.nv + nv > maxV', to: 'true', caughtBy: 'renderer: merged chunks draw the triangles' },
+  { id: 'K3 the indices of a merged cell are not moved past the cells before it', file: 'preview/renderer.js', from: 'I[i + k] = ix[k] + v;', to: 'I[i + k] = ix[k];', caughtBy: 'renderer: merged chunks draw the triangles' },
+  { id: 'K4 normals are baked as points (translated with the cell)', file: 'preview/renderer.js', from: 'bakePoints(N, v * 3, b.normals, b.model, 0);', to: 'bakePoints(N, v * 3, b.normals, b.model, 1);', caughtBy: 'renderer: merged chunks draw the triangles' },
+  { id: 'K5 a chunk may outgrow its vertex limit', file: 'preview/renderer.js', from: 'cur.nv + nv > maxV', to: 'cur.nv + nv > maxV * 4', caughtBy: 'renderer: merged chunks draw the triangles' },
   { id: 'L18 the canvas is cleared to the fog colour again', file: 'preview/renderer.js', from: 'gl.clearColor(clear[0], clear[1], clear[2], 1);', to: 'gl.clearColor(fog[0], fog[1], fog[2], 1);', caughtBy: 'renderer: the canvas is cleared to CLEAR' },
   // L130-R: the newest movement key, the takeover once, the wheel's deltaX, the key's action at key-down, the overhead sliding to the head
   { id: 'N3 a repeated key-down makes the key the newest again', file: 'preview/preview.js', from: 'if (!held.has(id)) held.set(id, a);', to: 'held.delete(id); held.set(id, a);', caughtBy: 'a held key that repeats' },

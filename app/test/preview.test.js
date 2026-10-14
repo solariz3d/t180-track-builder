@@ -133,19 +133,72 @@ test('renderer: every array is uploaded once; drawing the same batches again upl
   r.draw(bs, pose, { width: 800, height: 600 });
   assert.equal(calls.bufferData, sum(bs), 'no upload for arrays already on the GPU');
 });
-test('renderer: after a sculpt that moves later pieces, only the edited piece and its seams are uploaded; stale buffers are deleted', () => {
-  const { gl, calls } = fakeGL(), r = R.createRenderer(gl), tm = TM.createTrackModel(), segs = words(12);
-  let t = tm.update({ segments: segs, closed: false }); r.draw(t.batches, pose, { width: 800, height: 600 });
-  const up0 = calls.bufferData, before = new Set(t.batches.map((b) => b.positions));
-  const edited = segs.slice(); edited[4] = { ...segs[4], length: 70 };
-  t = tm.update({ segments: edited, closed: false }); assert.equal(t.how, 'sculpt');
-  const fresh = t.batches.filter((b) => !before.has(b.positions));
-  assert.ok(fresh.every((b) => b.key.includes(`_${segs[4].id}`) || b.key.includes(`_${segs[5].id}`)), `fresh: ${fresh.map((b) => b.key)}`);
+// 2026-10-13 (the keeper: ELYSIUM's preview at 11 fps): the renderer draws consecutive batches MERGED into world-space chunks
+// (app/preview/renderer.js CHUNKS). This replaced "a sculpt uploads only the edited piece": a chunk is baked to world space, so
+// a piece that only MOVED is new to the GPU. What still holds, and is tested here: chunks wholly BEFORE the edit upload nothing.
+const vertsOf = (bs) => bs.reduce((a, b) => a + b.positions.length / 3, 0);
+test('renderer: after a sculpt, the chunks before the edited piece upload nothing; stale buffers are deleted', () => {
+  const tm = TM.createTrackModel(), segs = words(12);
+  let t = tm.update({ segments: segs, closed: false });
+  const { gl, calls } = fakeGL(), r = R.createRenderer(gl, { chunkVertices: Math.ceil(vertsOf(t.batches) / 8) });
   r.draw(t.batches, pose, { width: 800, height: 600 });
-  assert.equal(calls.bufferData - up0, sum(fresh), 'uploads = the new arrays only');
-  assert.ok(fresh.length < t.batches.length / 3, `${fresh.length} of ${t.batches.length} batches re-uploaded`);
-  assert.equal(r.stats().buffers, sum(t.batches), 'no buffer kept for an array no longer drawn');
-  assert.ok(calls.deleteBuffer > 0);
+  const full = calls.bufferData, chunks0 = r.stats().chunks; assert.ok(chunks0 >= 6, `${chunks0} chunks`);
+  const edited = segs.slice(); edited[9] = { ...segs[9], length: 70 };
+  t = tm.update({ segments: edited, closed: false }); assert.equal(t.how, 'sculpt');
+  r.draw(t.batches, pose, { width: 800, height: 600 });
+  const again = calls.bufferData - full;
+  assert.ok(again > 0 && again < full / 2, `${again} uploads after the sculpt, ${full} for the whole track`);
+  assert.ok(calls.deleteBuffer > 0, 'the replaced chunks are deleted from the GPU');
+  const kept = r.stats().buffers; r.draw(t.batches, pose, { width: 800, height: 600 });
+  assert.equal(calls.bufferData - full - again, 0, 'drawing it again uploads nothing'); assert.equal(r.stats().buffers, kept);
+});
+/** A WebGL stand-in that records what each triangle draw reads: the aPos array and the index array bound at drawElements. */
+function geomGL() {
+  const { gl } = fakeGL(), data = new Map(), bound = {}, at = {}, drawn = [];
+  Object.assign(gl, {
+    getAttribLocation: (p, n) => n, bindBuffer: (t, b) => { bound[t] = b; }, bufferData: (t, arr) => { data.set(bound[t], arr); },
+    vertexAttribPointer: (loc) => { at[loc] = bound[gl.ARRAY_BUFFER]; },
+    drawElements: (mode, count) => { drawn.push({ pos: data.get(at.aPos), nrm: data.get(at.aNrm), idx: data.get(bound[gl.ELEMENT_ARRAY_BUFFER]), count }); },
+  });
+  return { gl, drawn };
+}
+/** Every triangle corner in world space, in draw order: [x, y, z, nx, ny, nz] (the position, then the normal turned by the matrix). */
+const corners = (list) => list.flatMap(({ pos, nrm, idx, model }) => Array.from(idx, (v) => {
+  const at = (A, w) => { const x = A[v * 3], y = A[v * 3 + 1], z = A[v * 3 + 2], M = model;
+    return M ? [0, 1, 2].map((d) => x * M[d] + y * M[4 + d] + z * M[8 + d] + w * M[12 + d]) : [x, y, z]; };
+  return [...at(pos, 1), ...at(nrm, 0)];
+}));
+/** The largest difference between two corner lists of one length. */
+const worstOff = (got, want) => { let off = 0; got.forEach((p, k) => p.forEach((c, d) => { off = Math.max(off, Math.abs(c - want[k][d])); })); return off; };
+test('renderer: merged chunks draw the triangles of the cells, in order, where the cells put them in world space, in a handful of draws', () => {
+  const segs = words(9), bs = fullOf(segs).map((b) => ({ ...b, colour: [0.5, 0.5, 0.5] }));   // one colour: everything may merge
+  for (const limit of [65535, Math.ceil(vertsOf(bs) / 5)]) {
+    const { gl, drawn } = geomGL(), r = R.createRenderer(gl, { chunkVertices: limit });
+    r.draw(bs, pose, { width: 800, height: 600 }, { look: 'words' });
+    assert.ok(drawn.length < bs.length && drawn.length <= 2 * Math.ceil(vertsOf(bs) / limit), `${drawn.length} draws for ${bs.length} cells (limit ${limit})`);   // greedy: under twice the fewest possible
+    assert.ok(drawn.every((d) => d.pos.length / 3 <= limit && d.count === d.idx.length), 'no chunk over the limit, each drawn whole');
+    const got = corners(drawn), want = corners(bs.map((b) => ({ pos: b.positions, nrm: b.normals, idx: b.indices, model: b.model })));
+    assert.equal(got.length, want.length, `every triangle drawn once (limit ${limit})`);
+    const off = worstOff(got, want);
+    assert.ok(off < 1e-4, `each corner where its cell put it, and its normal turned with it, within 1e-4 (worst ${off}, limit ${limit})`);   // float32 rounding of the baked arrays
+  }
+});
+test('renderer: after a sculpt that moves later pieces, the drawn road equals a fresh renderer drawing of it (no chunk kept at its old place, even with the same cells)', () => {
+  const tm = TM.createTrackModel(), segs = words(12);
+  let t = tm.update({ segments: segs, closed: false });
+  const limit = Math.ceil(vertsOf(t.batches) / 8), { gl, drawn } = geomGL(), r = R.createRenderer(gl, { chunkVertices: limit });
+  r.draw(t.batches, pose, { width: 800, height: 600 }, { look: 'words' });
+  // a turn bent harder at the SAME length: no cell count changes, so every chunk after it keeps its cells' arrays and only their matrices move
+  const edited = segs.slice(); edited[3] = { ...segs[3], k1: segs[3].k1 * 2 };
+  t = tm.update({ segments: edited, closed: false }); assert.equal(t.how, 'sculpt');
+  const n0 = drawn.length; r.draw(t.batches, pose, { width: 800, height: 600 }, { look: 'words' });
+  const fresh = geomGL(); R.createRenderer(fresh.gl, { chunkVertices: limit }).draw(t.batches, pose, { width: 800, height: 600 }, { look: 'words' });
+  const got = corners(drawn.slice(n0)), want = corners(fresh.drawn);
+  assert.equal(got.length, want.length);
+  assert.ok(worstOff(got, want) < 1e-4, `worst ${worstOff(got, want)}`);
+});
+test('renderer: a chunk limit outside 1..65535 is refused', () => {
+  for (const v of [0, 70000, 1.5, '10']) assert.throws(() => R.createRenderer(fakeGL().gl, { chunkVertices: v }), /chunkVertices must be a whole number/);
 });
 test('renderer: a shader that does not compile throws with the compiler\'s log; a canvas without size is refused', () => {
   assert.throws(() => R.createRenderer(fakeGL({ compiles: false }).gl), /shader compile failed:\nERROR: 0:3/);

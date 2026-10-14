@@ -177,6 +177,30 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const mayAutosave = canAutosave && !(recovery && recovery.blocked);
   const subs = new Set();
   let currentJob = null;   // D240 follow-up: the overlap check running for the preview on screen: { entry, job }
+  /** spawnsInfo's answer for document d (memoised by spawnsInfo; `auto` as it normalises it). */
+  let spawnsMemo = null;
+  function spawnsInfoOf(d, auto) {
+    const segs = st.resolved.segments;
+    try {
+      let layout, path, firstLength;
+      if (d.spawns) ({ layout, path, firstLength } = spawnsLayout(d, segs, st.resolved.lift, st.resolved.start, { open: !d.closed }));
+      else {   // the automatic start, with a pit lane to show: the same placement the export makes
+        const { buildPath } = require('../../src/geom/index.js'), p0 = buildPath(segs, { step: 2, closed: !!d.closed, ...(st.resolved.start ? { start: st.resolved.start } : {}) });
+        path = st.resolved.lift ? st.resolved.lift(p0) : p0;
+        try { layout = startLayout(segs, st.resolved.lift, st.resolved.start, { open: !d.closed }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; layout = null; }
+      }
+      // the pit lane: built as the export builds it (src/geom/pitlane.js); a lane that cannot be built says why, in the export's words
+      let lane = null, laneError = null;
+      if (d.pitLane) {
+        try { lane = require('../../src/geom/pitlane.js').buildPitLane(path, segs, laneRoad(d)); } catch (e) { if (e.name !== 'PitLaneError') throw e; laneError = e.message; }
+        if (layout) layout = withPitBoxes(layout, d.pitLane);
+      }
+      if (!layout) return { spawns: d.spawns, pitLane: d.pitLane, lane: lane && laneOutline(lane, d.pitLane.width), laneError, error: 'the start cannot be placed automatically (no straight long enough): place it by hand' };
+      const M = require('../../src/markers/index.js'), r = M.placeAll(layout, path, segs, lane ? { lane: { path: lane.path, segments: lane.segments } } : {});
+      const res = require('../../src/markers/layout.js').resolveLayout(layout, path, segs);
+      return { spawns: d.spawns, pitLane: d.pitLane, firstLength, layout, placed: r.placed, check: r.check, notes: res.notes, missing: res.missing, lane: lane && laneOutline(lane, d.pitLane.width), laneError };
+    } catch (e) { return { spawns: d.spawns, pitLane: d.pitLane, error: e.message }; }
+  }
   let autoDue = false, autoTimer = null;
   const set = (patch) => {
     if ('message' in patch && !('messageKind' in patch)) patch = { ...patch, messageKind: patch.message ? 'error' : null };
@@ -605,26 +629,14 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     spawnsInfo(opts = {}) {
       const d = doc();
       if ((!d.spawns && !d.pitLane && !opts.auto) || !st.resolved || !st.resolved.segments || !st.resolved.segments.length) return null;
-      const segs = st.resolved.segments;
-      try {
-        let layout, path, firstLength;
-        if (d.spawns) ({ layout, path, firstLength } = spawnsLayout(d, segs, st.resolved.lift, st.resolved.start, { open: !d.closed }));
-        else {   // the automatic start, with a pit lane to show: the same placement the export makes
-          const { buildPath } = require('../../src/geom/index.js'), p0 = buildPath(segs, { step: 2, closed: !!d.closed, ...(st.resolved.start ? { start: st.resolved.start } : {}) });
-          path = st.resolved.lift ? st.resolved.lift(p0) : p0;
-          try { layout = startLayout(segs, st.resolved.lift, st.resolved.start, { open: !d.closed }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; layout = null; }
-        }
-        // the pit lane: built as the export builds it (src/geom/pitlane.js); a lane that cannot be built says why, in the export's words
-        let lane = null, laneError = null;
-        if (d.pitLane) {
-          try { lane = require('../../src/geom/pitlane.js').buildPitLane(path, segs, laneRoad(d)); } catch (e) { if (e.name !== 'PitLaneError') throw e; laneError = e.message; }
-          if (layout) layout = withPitBoxes(layout, d.pitLane);
-        }
-        if (!layout) return { spawns: d.spawns, pitLane: d.pitLane, lane: lane && laneOutline(lane, d.pitLane.width), laneError, error: 'the start cannot be placed automatically (no straight long enough): place it by hand' };
-        const M = require('../../src/markers/index.js'), r = M.placeAll(layout, path, segs, lane ? { lane: { path: lane.path, segments: lane.segments } } : {});
-        const res = require('../../src/markers/layout.js').resolveLayout(layout, path, segs);
-        return { spawns: d.spawns, pitLane: d.pitLane, firstLength, layout, placed: r.placed, check: r.check, notes: res.notes, missing: res.missing, lane: lane && laneOutline(lane, d.pitLane.width), laneError };
-      } catch (e) { return { spawns: d.spawns, pitLane: d.pitLane, error: e.message }; }
+      // ONE ANSWER PER DOCUMENT (2026-10-13, ELYSIUM: every change built the 24 km path once for each of the three panels that ask, the start-and-grid
+      // panel, the pit lane panel and the preview's marks, ~330 ms of each undo). The answer depends on the document and its resolved track alone, both
+      // immutable, and `auto` changes it only on a track with neither spawns nor a pit lane; the callers only read it.
+      const auto = !!opts.auto && !d.spawns && !d.pitLane;
+      if (spawnsMemo && spawnsMemo.d === d && spawnsMemo.resolved === st.resolved && spawnsMemo.auto === auto) return spawnsMemo.info;
+      const info = spawnsInfoOf(d, auto);
+      spawnsMemo = { d, resolved: st.resolved, auto, info };
+      return info;
     },
     /**
      * THE START, FOR DRAGGING (D285; the keeper: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars"): the road the

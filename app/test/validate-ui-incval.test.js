@@ -125,6 +125,18 @@ for (const share of [true, false]) {
   });
 }
 
+// 2026-10-13 (ELYSIUM: an undo of a placement froze the window 2.2 s re-checking 24 km): taking the head's word off is a TRIM, re-checked
+// from the start of the new head's word with the rest carried, on the preview's path and on the controller's own, exactly a full validate
+for (const share of [true, false]) {
+  test(`undo of a placement and removing the head are a TRIM (${share ? 'shared' : 'own'} path), each exactly a full validate`, async () => {
+    const { shell, ctl } = await rig({ share });
+    for (const w of ['straight', 'turn', 'sweep', 'straight', 'turn']) shell.place(w);
+    const n = ctl.state.path.samples.length;
+    shell.undo(); assert.strictEqual(ctl.state.how, 'trim'); assert.ok(ctl.state.path.samples.length < n); checkState(shell, ctl, 'after the undo');
+    shell.removeHead(); assert.strictEqual(ctl.state.how, 'trim'); checkState(shell, ctl, 'after removing the head');
+    shell.redo(); checkState(shell, ctl, 'after a redo');
+  });
+}
 test('the property test reaches STACKED road: the edits lay road over road, and it still equals a full validate', async () => {
   // tight left turns only, so the track winds back over itself
   const { shell, ctl } = await rig({ share: true });

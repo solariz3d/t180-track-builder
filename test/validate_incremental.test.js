@@ -77,6 +77,18 @@ test('append after a NON-jump gap at the head: the old head loses its exemption 
   assert.deepStrictEqual(inc, full);
 });
 
+// 2026-10-13, found while making undo incremental: a SEGMENT-level red before the cut (a gap in the road) was dropped by the second
+// revalidate in a row, because the carry kept segment reds before the PREVIOUS run's cut (0 after a full validate) instead of this one's.
+// The panel then showed a broken track as clean after the next placement, while a full validate (the export's) still found it.
+test('a gap in the road well before the head stays red through two appends in a row, as in a full validate', () => {
+  const sp = (len) => (at) => X.straight(len, at);
+  const P = [[X.seg({ speed: 60 }), sp(50)], [X.seg({ id: 'g', kind: 'gap', word: 'straight', speed: 60 }), sp(10)], [X.seg({ id: 'c', speed: 60 }), sp(30)], [X.seg({ id: 'd', speed: 60 }), sp(30)], [X.seg({ id: 'e', speed: 60 }), sp(30)]];
+  const a = grow(P.slice(0, 3)), b = grow(P.slice(0, 4)), c = grow(P), end = (g) => g.path.samples[g.path.samples.length - 1].s;
+  const v1 = validate(a.path, a.segs), v2 = revalidate(v1, b.path, b.segs, end(a)), v3 = revalidate(v2, c.path, c.segs, end(b));
+  assert.ok(v1.red.some((x) => x.reason === 'gap-in-road'), 'red in the full validate');
+  assert.deepStrictEqual(v2, validate(b.path, b.segs), 'after one append');
+  assert.deepStrictEqual(v3, validate(c.path, c.segs), 'after the second append');
+});
 test('a new piece laid 1.5 m over the old road turns the OLD road red too, exactly as a full validate does', () => {
   // the append jumps back over the start (a hole too, which is fine: the point is the stack on OLD stations)
   const pieces = [[X.seg({ speed: 60 }), straightPiece(60)], [X.seg({ id: 'over', speed: 60 }), (at) => X.straight(40, { seg: at.seg, s0: at.s0, start: [0, 1.5, 0] })]];

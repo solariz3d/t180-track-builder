@@ -354,8 +354,14 @@ function pickAt(path, pose, x, y, w, h, maxPx = 40) {
 }
 
 /** The road's span at the head (m): the last road segment's cross-section (profile.js spanOf), for the build view's framing. */
+// THE HEAD'S SECTION IS READ ONCE PER SEGMENT (2026-10-13, ELYSIUM's preview): widthAtHead and clearanceAtHead run on every frame, and a cup's
+// section at the head is a blend made afresh by readAt, so offsetAt summed it from scratch each time: about 0.6 s of every 4 s of frames.
+// Both depend on the head segment alone, so for a FROZEN segment (the core shell's, src/core/adapter.js) the answer is remembered; any
+// other segment is read each time, as before.
+const headMemo = { width: new WeakMap(), clearance: new WeakMap() };
+const perHead = (memo, g, f) => { if (!Object.isFrozen(g)) return f(g); if (!memo.has(g)) memo.set(g, f(g)); return memo.get(g); };
 function widthAtHead(segments) {
-  for (let i = (segments || []).length - 1; i >= 0; i--) if (segments[i] && segments[i].profile) return spanOf(readAt(segments[i], segments[i].length));   // at the HEAD: the end of the last segment (a cup's segments carry a blend)
+  for (let i = (segments || []).length - 1; i >= 0; i--) if (segments[i] && segments[i].profile) return perHead(headMemo.width, segments[i], (g) => spanOf(readAt(g, g.length)));   // at the HEAD: the end of the last segment (a cup's segments carry a blend)
   return null;
 }
 
@@ -369,12 +375,16 @@ function widthAtHead(segments) {
 function clearanceAtHead(segments) {
   for (let i = (segments || []).length - 1; i >= 0; i--) {
     const g = segments[i]; if (!g || !g.profile) continue;
-    const P = readAt(g, g.length), uL = Math.max(...P.u), uR = Math.min(...P.u);
-    if (!(psiAt(P, uL) >= Math.PI - 1e-6 && psiAt(P, uR) >= Math.PI - 1e-6)) return null;
-    let lat = 0; for (let k = 1; k <= 64; k++) for (const u of [uL * k / 64, uR * k / 64]) lat = Math.max(lat, Math.abs(offsetAt(P, u)[0]));
-    return { up: 0.9 * Math.min(offsetAt(P, uL)[1], offsetAt(P, uR)[1]), lat: 0.9 * lat };
+    return perHead(headMemo.clearance, g, clearanceOf);
   }
   return null;
+}
+/** clearanceAtHead's reading of one segment's section at its end. */
+function clearanceOf(g) {
+  const P = readAt(g, g.length), uL = Math.max(...P.u), uR = Math.min(...P.u);
+  if (!(psiAt(P, uL) >= Math.PI - 1e-6 && psiAt(P, uR) >= Math.PI - 1e-6)) return null;
+  let lat = 0; for (let k = 1; k <= 64; k++) for (const u of [uL * k / 64, uR * k / 64]) lat = Math.max(lat, Math.abs(offsetAt(P, u)[0]));
+  return { up: 0.9 * Math.min(offsetAt(P, uL)[1], offsetAt(P, uR)[1]), lat: 0.9 * lat };
 }
 
 /**
