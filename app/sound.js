@@ -16,6 +16,7 @@
 'use strict';
 
 const SLOTS = Object.freeze({ tick: 'drag_tick.wav', place: 'place.wav', undo: 'undo.wav', loopClosed: 'loop_closed.wav' });
+const FAST_TICK_MS = 45;   // ticks closer than this are quieter (a fast drag), down to 0.35 of full
 const TICK_MS = 4;   // 2026-10-15: one tick per value change (the handles apply once a frame); this only guards two in the same instant
 const KEYS = Object.freeze({ muted: 't180.sound.muted', volume: 't180.sound.volume' });
 
@@ -45,7 +46,7 @@ function createSound(win, { base = 'sounds/', log = (m) => { try { console.warn(
   const write = (k, v) => { try { if (store) store.setItem(k, String(v)); } catch (e) { /* a private window: the session keeps it */ } };
   let muted = read(KEYS.muted) === '1';
   const v0 = Number(read(KEYS.volume)); let volume = read(KEYS.volume) !== null && Number.isFinite(v0) ? clamp01(v0) : 0.6;
-  let ctx = null, gain = null, lastTick = -Infinity;
+  let ctx = null, gain = null, lastTick = -Infinity, lastTickBus = null;
   const buffers = {}, missing = new Set(), loading = {};
   const Ctx = win.AudioContext || win.webkitAudioContext;
   const start = () => {
@@ -66,8 +67,17 @@ function createSound(win, { base = 'sounds/', log = (m) => { try { console.warn(
   const play = (slot) => {
     if (!SLOTS[slot]) throw new Error(`sound: no slot "${slot}"`);
     if (muted || !ctx || !buffers[slot]) return false;
-    if (slot === 'tick') { const now = ctx.currentTime * 1000; if (now - lastTick < TICK_MS) return false; lastTick = now; }
-    try { const s = ctx.createBufferSource(); s.buffer = buffers[slot]; s.connect(gain); s.start(); return true; } catch (e) { log(`sound: ${slot} could not play (${e && e.message})`); return false; }
+    // A FAST DRAG MUST NOT STACK TICKS INTO A BUZZ (2026-10-15, heard on the sketch page): each tick goes through its own gain, the next tick chokes it
+    // (a real detent does not ring under the next one), and ticks closer than FAST_TICK_MS come out quieter, so a quick drag is a smooth ratchet
+    let out = gain;
+    if (slot === 'tick') {
+      const now = ctx.currentTime * 1000, gap = now - lastTick; if (gap < TICK_MS) return false; lastTick = now;
+      try {
+        if (lastTickBus) { const g = lastTickBus.gain, t = ctx.currentTime; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + 0.003); }
+        out = ctx.createGain(); out.gain.value = Math.max(0.35, Math.min(1, gap / FAST_TICK_MS)); out.connect(gain); lastTickBus = out;
+      } catch (e) { out = gain; }
+    }
+    try { const s = ctx.createBufferSource(); s.buffer = buffers[slot]; s.connect(out); s.start(); return true; } catch (e) { log(`sound: ${slot} could not play (${e && e.message})`); return false; }
   };
   const doc = win.document;
   const onGesture = () => start();
@@ -87,4 +97,4 @@ function createSound(win, { base = 'sounds/', log = (m) => { try { console.warn(
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { createSound, soundFor, SLOTS, TICK_MS, KEYS };
+if (typeof module !== 'undefined') module.exports = { createSound, soundFor, SLOTS, TICK_MS, FAST_TICK_MS, KEYS };
