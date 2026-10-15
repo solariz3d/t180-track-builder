@@ -698,3 +698,11 @@ test('D257: Ctrl+Z still leaves the camera where it started (and still undoes): 
   const e1 = eyeOf(x); assert.ok(e1[1] < e0[1] - 1, 'control: it was descending');
   x.key('keydown', CTRL_Z); const e2 = eyeOf(x); assert.ok(Math.abs(e2[1] - e0[1]) < 1e-9, `the descent undone: ${e2[1] - e0[1]}`); assert.ok(Math.hypot(e2[0] - e0[0], e2[2] - e0[2]) > 1, 'the forward travel kept');
 });
+// 2026-10-14, Sigil: until a picture is chosen for the road, the preview wears one dark surface; a chosen picture brings the set back.
+test('the surface: asphalt or solid draws the sigil surface, an image draws the set, and no kind keeps the set', () => {
+  const hud = { textContent: '' }, x = livePreview({ hud });
+  x.p.setTextureSet(null, 'asphalt'); x.win.step(); assert.equal(x.p.surface, 'sigil'); assert.ok(/sigil look/.test(hud.textContent), hud.textContent);
+  x.p.setTextureSet(null, 'solid'); assert.equal(x.p.surface, 'sigil');
+  x.p.setTextureSet(null, 'image'); x.win.step(); assert.equal(x.p.surface, 'textures'); assert.ok(/AC look/.test(hud.textContent), hud.textContent);
+  x.p.setTextureSet(null); assert.equal(x.p.surface, 'textures', 'an old caller with no kind is not switched to sigil');
+});

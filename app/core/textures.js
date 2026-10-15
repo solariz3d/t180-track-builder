@@ -87,7 +87,8 @@ function mount(root, shell) {
   const head = el('div', { className: 't-head' }), pick = el('select', {}, [el('option', { value: 'asphalt', textContent: 'Asphalt (made here)' }), el('option', { value: 'solid', textContent: 'Solid colour' }), el('option', { value: 'image', textContent: 'My picture' })]);
   const file = el('input', { type: 'file', accept: '.png,.jpg,.jpeg,image/png,image/jpeg', title: 'a PNG or JPG you have the right to use' }), note = el('div', { className: 't-budget' });
   root.append(el('div', { className: 't-add' }, [el('b', { textContent: 'road surface ' }), pick, file]), head, note);
-  const announce = (set) => root.dispatchEvent(new CustomEvent('t180:textures', { bubbles: true, detail: { set } }));
+  // `kind` (2026-10-14) tells the preview which surface was CHOSEN: it draws the Sigil surface until a picture is ('image'), the export always writes the set
+  const announce = (set) => root.dispatchEvent(new CustomEvent('t180:textures', { bubbles: true, detail: { set, kind: ctl ? ctl.kind : start } }));
   const show = (c) => {
     const s = c.state;
     head.textContent = s.error ? `road surface: ${s.error}` : s.kind === 'solid' ? 'road surface: solid colour' : s.kind === 'image' ? `road surface: your picture "${s.image}"` : 'road surface: asphalt';

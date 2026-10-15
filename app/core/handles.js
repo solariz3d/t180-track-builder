@@ -35,13 +35,14 @@ const EXTEND_KINDS = Object.freeze({
   // builder: the white length mark at the centreline there, dragged FORWARD to lengthen (`sign: 'forward'`, it follows the front end as it moves), and the red
   // width marks at that end's edges. The width the field sets is the width the piece ENDS at, so its marks now sit where that width is reached
   length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 1, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'forward', perPx: 0.42, min: 1, max: 5000, step: 0.1, snap: 10 }),
-  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.1, snap: 5 }),
-  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.1, snap: 5 }),
+  // 2026-10-14, the second move: WIDTH to the middle of the piece, BANK three quarters along, TURN at the front edges (the length mark stays at the front centre)
+  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0.5, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.1, snap: 5 }),
+  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.75, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.1, snap: 5 }),
   cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.24, min: 0, max: 150, step: 0.1, snap: 5 }),
   // 2026-10-14, the keeper: "why cant turns turn more than 90 degrees ... it shouldnt be constrained unless you click 90 degree turn first": no clamp (Turn by and Turn to grid
   // are the exact-angle tools); and "the camera orientation changes which way you have to drag ... should be the same every way you look at it": `screen: 'x'`, the
   // pointer's own left and right (a drag to the right is a right turn, from any view), not the road's left as it happens to lie on screen
-  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 0.75, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.1, snap: 5 }),
+  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.1, snap: 5 }),
   climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.1, snap: 5 }),
 });
 // D258, THE FREE JUMP'S LANDING (the keeper: drag it in the 3D view AND type it in number boxes). `free: true` kinds sit at the LANDING's start (model.free.pos), not along a piece, and their axes are the

@@ -74,7 +74,7 @@ function mount(root, shell) {
     if (typeof d.reply === 'function') d.reply({ ok: true });
   };
   const hideGhost = () => p.clearGhost();
-  const textures = (e) => { p.setTextureSet(e.detail ? e.detail.set : null); };
+  const textures = (e) => { p.setTextureSet(e.detail ? e.detail.set : null, e.detail ? e.detail.kind : undefined); };
   const viewNow = (e) => { if (!e.detail || typeof e.detail.reply !== 'function') return; const v = p.view(), h = v.track && v.track.path ? v.track.path.head : null; e.detail.reply({ pose: v.pose, mode: v.mode, head: h ? { pos: h.pos.slice(), T: h.T.slice() } : null }); };
   const pickNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.pick(e.detail.x, e.detail.y)); };
   const trackNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.track()); };

@@ -9,6 +9,8 @@
 //       t = { path, segments, closed, how, g, fromS }   how: 'extend' | 'sculpt' | 'full' | 'empty'
 //   p.track()   the same object for the current track, or null (for a reader that arrives later)
 //   p.setTextureSet(set)    A's texture set (src/texture/set.js; the textures panel sends it as 't180:textures'), or null
+//   p.setTextureSet(set, kind)   with the surface the panel has CHOSEN: 'asphalt' or 'solid' draw the SIGIL surface (below), 'image' (the user's picture) draws the set;
+//                           with no kind (a set handed over by anything else) the set is drawn as before
 //   p.pick(x, y)            the track station under a canvas point (css px): { s, pos, px } or null (D186: the brush)
 //   p.setLook('ac' | 'words')   'ac' (the default): the AC shaders with the exported materials and textures
 //                               (app/preview/aclook.js, acshaders.js); 'words': the D170 colour per placed word
@@ -53,6 +55,12 @@ const { previewTextures } = require('../../src/texture/set.js');
 const { normalize, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
 const { keyAction: shortcutOf } = require('../core/keys.js');   // D257: what Ctrl+key does in the app (undo, redo, save, remove the head): the keys that stop Left Ctrl
+
+// the Sigil surface's one material and its 2×2 texture (warm near-black; the lighting does the rest)
+const SIGIL_TEX = 't180_sigil_surface';
+const SIGIL_MAT = Object.freeze({ name: 't180_sigil', shader: 'ksPerPixel', alphaTested: false, samplers: [{ name: 'txDiffuse', slot: 0, texture: SIGIL_TEX }],
+  props: [{ name: 'ksAmbient', value: [0.9] }, { name: 'ksDiffuse', value: [1.5] }, { name: 'ksSpecular', value: [0.06] }, { name: 'ksSpecularEXP', value: [28] }, { name: 'ksEmissive', value: [0, 0, 0] }, { name: 'ksAlphaRef', value: [0] }] });
+const SIGIL_LOOK = Object.freeze({ materialOf: () => SIGIL_MAT, textures: new Map([[SIGIL_TEX, { width: 2, height: 2, rgba: new Uint8Array([17, 14, 11, 255, 17, 14, 11, 255, 17, 14, 11, 255, 17, 14, 11, 255]) }]]) });
 
 const FLY = { w: [1, 0, 0], s: [-1, 0, 0], d: [0, 1, 0], a: [0, -1, 0], e: [0, 0, 1], q: [0, 0, -1] };
 const TURN = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
@@ -107,7 +115,10 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const sayGuides = () => { if (onGuides) onGuides(guidesState()); };
   let set = null, images = [], look = 'ac', resolved = null, resolvedFor = null;
   // the look is resolved again only when the scene's materials or the set change, never per frame
-  const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
+  // THE SIGIL SURFACE (2026-10-14): until a picture is chosen for the road, the preview draws every batch with ONE material, a dark warm surface that the
+  // AC lighting shades (so turns, banks and walls still read) under the bone edge lines. Only the preview: the export writes the chosen surface as ever
+  let sigil = false;
+  const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = sigil ? SIGIL_LOOK : resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
   // D228: a textured EQUATION-CORE cell's coordinates run on the path's own arc length (src/texture/flow.js), the same coordinates the export writes.
   // Batches whose uvs are unchanged keep the very same array (the renderer keeps a GPU buffer per array), so an edit re-uploads only the new pieces.
   let flowMemo = new WeakMap(), flowSet = null, flowTrack = null, flowOut = null;
@@ -280,7 +291,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
-    if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? 'AC look' : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}`;
+    if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? (sigil ? 'sigil look' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}`;
   }
   raf = win.requestAnimationFrame(frame);
   said();
@@ -291,7 +302,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     track: () => shared(),
     /** What each placed batch is drawn with, in the 'ac' look: { materialOf, textures } (aclook.js resolveLook). */
     lookNow: () => (track && track.mesh ? lookFor(track.mesh.scene) : null),
-    setTextureSet(s) { set = s || null; images = set ? previewTextures(set) : []; resolvedFor = null; return images.length; },
+    setTextureSet(s, kind) { set = s || null; sigil = kind === 'asphalt' || kind === 'solid'; images = set && !sigil ? previewTextures(set) : []; resolvedFor = null; return images.length; },
+    get surface() { return sigil ? 'sigil' : 'textures'; },
     setLook(l) { if (l !== 'ac' && l !== 'words') throw new Error(`preview: unknown look ${l}`); look = l; return look; },
     /** D237: the grid mode, the mirror and the centre of the symmetry guides (each optional): grid auto | ground | 3d | off, mirror off | x | z | both, centre { x, z } or null for the box's middle. */
     setGuides({ grid: g, mirror: m, centre: c } = {}) {
