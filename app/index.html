@@ -83,6 +83,9 @@
   input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; }
   input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--accent); }
   select { background: var(--bg); color: var(--text); }
+  .sound-row { display: flex; align-items: center; gap: 10px; padding: 4px 2px; color: var(--dim); }
+  .sound-row label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .sound-row input[type="range"] { flex: 1; min-width: 90px; accent-color: var(--accent); }
   /* THE OPEN LISTS IN THE SIGIL LOOK (2026-10-14): every list that drops open is black with its names in white, the chosen one in the accent */
   option { background: var(--bg); color: var(--text); }
   option:checked { background: var(--accent-dim); color: #fff; }
@@ -176,6 +179,7 @@
     <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
     <button id="testexport" title="TEST export of an UNFINISHED track into Assetto Corsa, as t180b_&lt;name&gt;_test, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export. Export to Assetto Corsa does the same on an open track.">Test export (unfinished)…</button>
     <span id="more-install"></span>
+    <div id="sound-row" class="sound-row" title="the builder's sounds: a tick while a handle is dragged, placing a piece, undo, and closing the loop. Sounds by solariz3d, made in Serum"><label><input type="checkbox" id="sound-mute"> mute</label><input type="range" id="sound-volume" min="0" max="100" step="1" aria-label="sound volume"></div>
     <div id="share" title="the whole track as one line of text to share (Copy track code), or open a track from such a line (Paste track code…). The open track is one Ctrl+Z away"></div>
   </div></details>
   <span id="status" style="color: var(--dim)" data-tauri-drag-region></span>
@@ -329,6 +333,15 @@
     };
     const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
+    // THE SOUNDS (app/sound.js): place, undo and loop closed are read off the shell's state; the drag tick comes from the handles. Mute and volume in the ⋯ menu
+    try {
+      const sound = (await loadCjs('app/sound.js', get)).createSound(window, { base: 'sounds/' });
+      let before = shell.getState(); shell.subscribe((st) => { const p = before; before = st; sound.handle(p, st); });
+      const mute = $('sound-mute'), vol = $('sound-volume');
+      mute.checked = sound.muted; vol.value = String(Math.round(sound.volume * 100));
+      mute.onchange = () => sound.setMuted(mute.checked);
+      vol.oninput = () => sound.setVolume(Number(vol.value) / 100);
+    } catch (e) { console.error(`sounds not started: ${e && e.message}`); }
     const refreshList = async () => { try { const names = await shell.list(); $('open').replaceChildren(new Option('Open…', ''), ...names.map((n) => new Option(n, n))); } catch (e) { status.textContent = e.message; } };
     $('new').onclick = () => shell.newDoc();
     $('save').onclick = async () => { try { await shell.save($('name').value.trim()); await refreshList(); } catch (e) { status.textContent = e.message; } };

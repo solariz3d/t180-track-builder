@@ -228,8 +228,10 @@ function mount(stage, win, host) {
   const apply = (final) => {
     if (!drag || !waiting) return; const w = waiting; waiting = null;
     const d = dragPixels(drag.axis, w.x - drag.x0, w.y - drag.y0, drag.h.kind), mods = { shift: w.shift, ctrl: w.ctrl };
-    drag.value = targetFor(drag.h.kind, drag.base, d, drag.ctx, mods);
+    const was = drag.value; drag.value = targetFor(drag.h.kind, drag.base, d, drag.ctx, mods);
     host.apply(drag.h, drag.value, mods, final);
+    // the drag tick (app/sound.js): one event each time the dragged value moves a step
+    if (drag && drag.value !== was && doc.dispatchEvent && win.CustomEvent) { try { doc.dispatchEvent(new win.CustomEvent('t180:handle-step', { detail: { kind: drag.h.kind, value: drag.value } })); } catch (e) { /* a sound is never worth a drag */ } }
   };
   const flush = () => { frameReq = 0; apply(false); };
   const onDown = (e) => {
