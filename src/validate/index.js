@@ -256,7 +256,7 @@ function core(path, segments, opts, from, carried, upto) {
     // roll-rate bar does below: the paused piece builder's word documents are not newly judged by them (its S phrase and its starter chain lift off at their
     // own tempo on the centreline, measured and flagged in the hand-back, never judged before)
     const coreRoad = segments[p.seg].word === 'core';
-    let aT = 0;
+    let aT = 0, centre = null, hardest = null;   // opts.leanLines: the station's two kept lines
     if (sp.v) { const a = S[Math.max(0, i - 1)], b = S[Math.min(n - 1, i + 1)]; const va = sp.v[Math.max(0, i - 1)], vb = sp.v[Math.min(n - 1, i + 1)]; if (b.s > a.s) aT = (vb * vb - va * va) / (2 * (b.s - a.s)); }
     for (const c of cs) {
       const u = c.u;
@@ -291,14 +291,18 @@ function core(path, segments, opts, from, carried, upto) {
       // 2026-10-15: fHold_g is the load WITH the car's downforce (d·v along the road's normal): what decides whether the car stays on. fN_g, the
       // load the 90 g and 20 g lines judge, is left as it was (limits.js MACH6.downforce says why)
       line.fHold_g = line.fN_g + dfPerMps * v / G;
-      // opts.centrelineLines (2026-10-15, ELYSIUM's Close killed the page: the overlap check's two workers each kept ~2.1 million lines, 650 MB, and read none):
-      // keep only u = 0, the one line the lap proof reads; every red and amber is still judged on every line, above and below
-      if (!opts.centrelineLines || u === 0) raw.lines.push({ i, line });
+      // opts.leanLines (2026-10-15, ELYSIUM's Close killed the page: ~2.1 million lines, 650 MB, in each overlap-check worker and in the track checker, which read
+      // almost none): only the centreline (the lap proof's line) and the station's hardest-hit line (the load graph's) are kept, pushed after the station's
+      // loop below. Every red and amber is still judged on every line here
+      if (!opts.leanLines) raw.lines.push({ i, line });
+      else if (u === 0) centre = line;
+      else if (!hardest || line.fN_g > hardest.fN_g) hardest = line;
       // D256: the centreline lift-off on an OPEN track (a closed one has it in the lap proof below, so it is not counted twice)
       if (!path.closed && coreRoad && u === 0 && line.fHold_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fHold_g });
       if (line.fN_g > car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-above-proven', worst: line.fN_g });
       else if (line.fN_g >= car.suspensionStopG) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'on-the-stops', worst: line.fN_g });
     }
+    if (centre || hardest) for (const line of [centre, hardest].filter(Boolean).sort((a, b) => a.u - b.u)) raw.lines.push({ i, line });   // u order within the station, as the full set
     if (i + 1 < n && isRoad(i + 1) && S[i + 1].seg === p.seg) for (const c of cs) {
       const q = S[i + 1];
       const d = Math.max(-1, Math.min(1, nx(p, c) * nx(q, c) + ny(p, c) * ny(q, c) + nz(p, c) * nz(q, c)));
@@ -490,8 +494,9 @@ const uptoOf = (S, opts) => { if (opts.uptoS == null) return undefined; const k 
 
 /**
  * validate(path, segments, opts): the whole track. With opts.uptoS, only the stations before it; the rest is PENDING
- * (result.pendingFrom), checked by the next revalidate. With opts.centrelineLines, result.lines holds only the centreline (u = 0)
- * lines: the same red, amber, info and lap, for a caller that reads no load graph (app/core/overlapjob.js).
+ * (result.pendingFrom), checked by the next revalidate. With opts.leanLines, result.lines holds at each station only the centreline (u = 0)
+ * and the hardest-hit line: the same red, amber, info, lap and load graph (app/validate-ui/graph.js, the highest load per station), for the overlap
+ * check (app/core/overlapjob.js) and the track checker's worker (app/validate-ui/checkjob.js), which read nothing else of them.
  */
 function validate(path, segments, opts = {}) { return core(path, segments, opts, 0, null, uptoOf(path.samples, opts)); }
 

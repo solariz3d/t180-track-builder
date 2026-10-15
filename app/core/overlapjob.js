@@ -31,14 +31,14 @@ const { OVERLAP, mergeParts } = require('./overlapmerge.js');
  * never the page's or the export's.
  */
 // 2026-10-15 (ELYSIUM, 24 km: its Close killed the page): those four fields are now dropped AS the mesh is built (buildMesh's `lean`), for deleting them after
-// held them all at once first, ~900 MB there; and the validator keeps only the centreline's load lines (`centrelineLines`), for its 2.1 million others were
+// held them all at once first, ~900 MB there; and the validator keeps two load lines a station (`leanLines`), for its 2.1 million others were
 // 650 MB the check never read. With two of these checks at once beside the page and the track checker, the page's 4 GB was spent
 function checkMesh(p, segs, selfCheck) {
   const mesh = G.buildMesh(p, segs, { lean: true });
   if (selfCheck) { mesh.selfCheck = G.selfCheck(mesh, { closed: !!p.closed, lengthM: p.lengthM }); mesh.folds.push(...asFolds(mesh.selfCheck)); }
   return mesh;
 }
-const speedOpts = (designSpeedKmh) => ({ centrelineLines: true, ...(Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : { fullSpeed: true }) });
+const speedOpts = (designSpeedKmh) => ({ leanLines: true, ...(Number.isFinite(designSpeedKmh) && designSpeedKmh > 0 ? { designSpeed: designSpeedKmh / 3.6 } : { fullSpeed: true }) });
 function overlapCheck(resolved, designSpeedKmh, { closed = true } = {}) {   // D240: `closed: false` for the open track a delete leaves
   const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
   const mesh = checkMesh(p, segs, true), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);

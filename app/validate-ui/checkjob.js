@@ -16,7 +16,7 @@
 //
 // What goes back is what the panel shows (index.js render): the findings (red, amber, info), the lap, the jumps, pendingFrom, the jump arcs and
 // the load graph (graph.js graphModel). Not the per-station lines and colour map (tens of thousands of objects on a long track, and
-// copying them back would cost the window what this saves).
+// copying them back would cost the window what this saves); since 2026-10-15 they are not even made here (no colour map, `leanLines`).
 'use strict';
 
 const AD = require('../../src/core/adapter.js');
@@ -54,7 +54,9 @@ function createCheckJob() {
       try { resolved = resolvedOf(intern(doc)); } catch (e) { if (e.name !== 'CoreError') throw e; resolved = null; resolveError = e.message; }
       if (resolved) { try { track = model.update(resolved); } catch (e) { track = null; } }   // the controller grows its own path when there is no shared one
       state = { resolved, resolveError, history: { dragBase: dragging ? true : null } };
-      if (!ctl) ctl = createValidationController(shell, { csp: wantCsp, sharedPath: () => track });   // its first update runs here
+      // 2026-10-15 (ELYSIUM's Close killed the page: the page, this worker and the overlap check share one ~4 GB budget, and this worker held ~1 GB at rest): no colour
+      // map (nothing here sends it back) and two load lines a station, the centreline and the hardest-hit one (the lap and the graph read nothing else)
+      if (!ctl) ctl = createValidationController(shell, { csp: wantCsp, sharedPath: () => track, colours: false, validate: { leanLines: true } });   // its first update runs here
       else if (!!wantCsp !== csp) ctl.setCsp(!!wantCsp);   // re-validates the whole track for that export
       else for (const f of subs) f(state);
       csp = !!wantCsp;

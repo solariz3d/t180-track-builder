@@ -2,7 +2,7 @@
 // 2026-10-15, reported: Close on ELYSIUM (24 km, "new road from the end to the start") turned the window white. Measured in the page: the overlap check's two workers each
 // built the check's mesh holding every piece's spare boundary rows at once (~900 MB) and kept the validator's 2.1 million load lines (~650 MB) it never read; beside the page
 // (1.1 GB) and the track checker (0.8 GB) that spent the page's 4 GB and the page died. The check now builds its mesh LEAN (src/geom/mesh.js buildMesh `lean`) and asks the
-// validator for the centreline's lines only (`centrelineLines`). These rows hold that the lean check holds less and answers EXACTLY what the full check answers.
+// validator for two load lines a station (`leanLines`), and the track checker's worker does the same and makes no colour map. These rows hold that the lean check holds less and answers EXACTLY what the full check answers.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -40,12 +40,29 @@ test('a lean mesh is the same scene, cells and folds as the full one, and keeps 
   }
 });
 
-test('the validator with centrelineLines keeps only the centreline\'s lines, and judges the track exactly as without', async () => {
+test('the validator with leanLines keeps each station\'s centreline and hardest-hit line, and judges the track and draws the graph exactly as without', async () => {
   const cp = await coilClosed(), { segs, p } = pathOf(cp.doc, true);
-  const opts = { csp: true, softCollision: true, fullSpeed: true }, full = V.validate(p, segs, opts), lean = V.validate(p, segs, { ...opts, centrelineLines: true });
+  const opts = { csp: true, softCollision: true, fullSpeed: true }, full = V.validate(p, segs, opts), lean = V.validate(p, segs, { ...opts, leanLines: true });
   for (const k of ['red', 'amber', 'info', 'lap', 'speed', 'jumps', 'notChecked']) assert.deepEqual(lean[k], full[k], k);
-  assert.deepEqual(lean.lines, full.lines.filter((l) => l.u === 0), 'the centreline\'s lines, as the full result has them');
-  assert.ok(lean.lines.length > 0 && lean.lines.length * 5 < full.lines.length, `far fewer lines: ${lean.lines.length} of ${full.lines.length} (the coil's bowl has ~9 lines across; ELYSIUM's road ~175)`);
+  // the kept lines are the full result's own: per station its centreline and, of the others, the one with the highest load (the first such, in u order)
+  const byS = new Map(); for (const l of full.lines) { if (!byS.has(l.s)) byS.set(l.s, []); byS.get(l.s).push(l); }
+  const want = [...byS.values()].flatMap((ls) => { const c = ls.find((l) => l.u === 0), h = ls.filter((l) => l.u !== 0).reduce((m, l) => (!m || l.fN_g > m.fN_g ? l : m), null); return [c, h].filter(Boolean).sort((a, b) => a.u - b.u); });
+  assert.deepEqual(lean.lines, want, 'the centreline and the hardest-hit line of each station, as the full result has them');
+  assert.ok(lean.lines.length > 0 && lean.lines.length * 3 < full.lines.length, `far fewer lines: ${lean.lines.length} of ${full.lines.length} (the coil's bowl has ~9 lines across; ELYSIUM's road ~175)`);
+  const { graphModel } = require('../validate-ui/graph.js');
+  assert.deepEqual(graphModel({ result: lean, path: p }), graphModel({ result: full, path: p }), 'the load graph is the same');
+  assert.deepEqual(V.lapOf(p, segs, V.validate(p, segs, { ...opts, leanLines: true, lap: false })), full.lap, 'and a deferred lap, proven from the lean lines, is the full one');
+});
+
+test('the track checker\'s worker job makes no colour map and lean lines, and answers what the page\'s own check answers', async () => {
+  const cp = await coilClosed();
+  const { createCheckJob } = require('../validate-ui/checkjob.js'), { createValidationController } = require('../validate-ui/panel.js');
+  const out = createCheckJob().run({ doc: cp.doc });
+  const state = { resolved: cp.resolved, history: {} }, ctl = createValidationController({ getState: () => state, subscribe: () => () => {} }, { csp: true });
+  const r = ctl.state.result, { graphModel } = require('../validate-ui/graph.js');
+  assert.ok(ctl.state.map, 'control: the page\'s check has its colour map');
+  assert.deepEqual(out.result, { red: r.red, amber: r.amber, info: r.info, lap: r.lap, jumps: r.jumps, pendingFrom: r.pendingFrom == null ? null : r.pendingFrom }, 'the same findings');
+  assert.deepEqual(out.graph, graphModel(ctl.state), 'the same load graph');
 });
 
 test('the overlap check (lean) answers exactly what the full mesh and full validator answer', async () => {
