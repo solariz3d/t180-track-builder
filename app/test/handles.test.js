@@ -258,12 +258,18 @@ test('row 13: no pointer lock (D270): a grab never asks for one and registers no
   assert.equal(R.locks(), 0, 'requestPointerLock is not called'); assert.deepEqual(R.caps, [7], 'the pointer is captured instead'); assert.equal(R.S.stage.style.cursor, 'none', 'the cursor is hidden during the drag');
   assert.equal((R.listeners.pointerlockchange || []).length + (R.listeners.pointerlockerror || []).length, 0, 'no lock listeners');
   // 16 steps of 50 px along the arrow's opposite: 800 px, past the 900 x 600 stage (a captured pointer keeps reporting its position outside it)
-  let total = 0; for (let i = 0; i < 16; i++) { total -= 50; R.S.fire('pointermove', { clientX: t.x + u[0] * total, clientY: t.y + u[1] * total }); }
+  // (2026-10-14: the drag now puts the hidden cursor back at the grab as it goes, so the pointer here moves as a real one does: by steps from where it is, and to the grab
+  // when the window puts it there; the travel is the same 800 px)
+  let total = 0, pos = [t.x, t.y], seen = 0;
+  for (let i = 0; i < 16; i++) {
+    total -= 50; pos = [pos[0] - u[0] * 50, pos[1] - u[1] * 50]; R.S.fire('pointermove', { clientX: pos[0], clientY: pos[1] });
+    while (seen < R.warps.length) { pos = R.warps[seen++]; R.S.fire('pointermove', { clientX: pos[0], clientY: pos[1] }); }
+  }
   R.S.tick(); const last = R.calls.filter((c) => c[0] === 'apply').pop();
   assert.equal(last[2], HD.targetFor('turn', 2, total, {}, {}), 'the same value the D251 rate gives for that travel'); assert.ok(last[2] > -90 && last[2] < 2, `control: not clamped (${last[2]})`);
-  R.S.fire('pointerup', { clientX: t.x + u[0] * total, clientY: t.y + u[1] * total });
+  R.S.fire('pointerup', { clientX: pos[0], clientY: pos[1] });
   assert.equal(R.locks(), 0); assert.equal(R.exits(), 0, 'and nothing to unlock'); assert.equal(R.S.stage.style.cursor, '', 'release gives the cursor back'); assert.deepEqual(R.calls.slice(-2).map((c) => c[0]), ['apply', 'end']);
-  assert.deepEqual(R.warps, [[t.x, t.y]], 'and puts it back at the handle that was grabbed');
+  assert.ok(R.warps.length >= 2 && R.warps.every((w) => w[0] === t.x && w[1] === t.y), 'the cursor is put back at the handle that was grabbed, during the drag and on release: ' + JSON.stringify(R.warps));
 });
 
 test('row 13b: the cursor goes back at the handle through the native window when there is one; with none (a browser, a test host) or a refusal the release still ends cleanly', () => {
@@ -342,5 +348,41 @@ test('leaving a hold walks on in tenths: no jump from 0, for every kind', () => 
     assert.ok(Math.abs(first - base) <= Math.max(0.1, Math.ceil(K.perPx * 0.25 * 10) / 10) + 1e-9, `${kind}: the first value off the hold is one small step from ${base}, not a jump: ${first}`);
     // a kind that moves a tenth or less a pixel (turn, climb, width) walks in exact tenths; faster ones (bank 0.45, cup 0.24, length 0.42 a pixel) move a pixel's worth, as everywhere else in the drag
     if (K.perPx <= 0.1) assert.ok(steps.every((d) => d === 0.1), `${kind}: every change is one tenth (got ${[...new Set(steps)].join(', ')})`);
+  }
+});
+
+// 2026-10-14, reported: zoomed out, a long length drag stopped at about 400 to 600 m, "it just doesnt let you make it bigger in one go". The cursor is hidden while a
+// handle is dragged, and it ran into the edge of the SCREEN unseen: 0.42 m a pixel over a screen's 1,000 to 1,400 px. The drag now puts the hidden cursor back where it
+// was grabbed whenever it has gone WARP_PX from it (the native window's setCursorPosition, as on release) and keeps the travel, so a drag never runs out of screen.
+test('a long drag never runs out of screen: the hidden cursor is put back at the grab and the travel adds up', () => {
+  const R = grabRig(), l = R.at('length:0'), u = [l.dx / l.len, l.dy / l.len], W = 900, H = 600;
+  let pos = [l.x, l.y], seen = 0;
+  const onScreen = (p) => [Math.max(0, Math.min(W - 1, p[0])), Math.max(0, Math.min(H - 1, p[1]))];
+  R.S.fire('pointerdown', { clientX: pos[0], clientY: pos[1] });
+  for (let k = 0; k < 250; k++) {                                   // 1,000 px of mouse travel, 4 px a move, along the handle's own axis
+    pos = onScreen([pos[0] + u[0] * 4, pos[1] + u[1] * 4]);
+    R.S.fire('pointermove', { clientX: pos[0], clientY: pos[1] }); R.S.tick();
+    while (seen < R.warps.length) { pos = R.warps[seen++]; R.S.fire('pointermove', { clientX: pos[0], clientY: pos[1] }); R.S.tick(); }   // the OS moves the cursor
+  }
+  assert.ok(R.warps.length >= 2, `control: the cursor was put back during the drag (${R.warps.length} times)`);
+  R.S.fire('pointerup', { clientX: pos[0], clientY: pos[1] }); R.S.tick();
+  assert.equal(R.cur.length, Math.round((160 + 994 * 0.42) * 10) / 10, '1,000 px forward, the first 6 held, 0.42 m a pixel');
+});
+
+test('a drag with no native window (a browser) behaves as before: the cursor is never moved, the value follows the pointer', () => {
+  const R = grabRig('none'), l = R.at('length:0'), u = [l.dx / l.len, l.dy / l.len];
+  R.S.fire('pointerdown', { clientX: l.x, clientY: l.y });
+  R.S.fire('pointermove', { clientX: l.x + u[0] * 300, clientY: l.y + u[1] * 300 }); R.S.tick();
+  R.S.fire('pointerup', { clientX: l.x + u[0] * 300, clientY: l.y + u[1] * 300 }); R.S.tick();
+  assert.deepEqual(R.warps, []); assert.equal(R.cur.length, Math.round((160 + 294 * 0.42) * 10) / 10);
+});
+
+test('if the window refuses to move the cursor, the drag gives the travel back and follows the pointer as before (nothing counted twice)', () => {
+  for (const native of ['throw']) {
+    const R = grabRig(native), l = R.at('length:0'), u = [l.dx / l.len, l.dy / l.len];
+    R.S.fire('pointerdown', { clientX: l.x, clientY: l.y });
+    for (let k = 1; k <= 75; k++) { R.S.fire('pointermove', { clientX: l.x + u[0] * 4 * k, clientY: l.y + u[1] * 4 * k }); R.S.tick(); }
+    R.S.fire('pointerup', { clientX: l.x + u[0] * 300, clientY: l.y + u[1] * 300 }); R.S.tick();
+    assert.equal(R.cur.length, Math.round((160 + 294 * 0.42) * 10) / 10, `${native}: 300 px, the first 6 held, 0.42 m a pixel, counted once`);
   }
 });

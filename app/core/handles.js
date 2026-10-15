@@ -61,6 +61,8 @@ const KINDS = Object.freeze({ ...EXTEND_KINDS, ...LANDING });
 const LANDING_ORDER = Object.freeze(['landfwd', 'landleft', 'landup', 'landturn']);
 const FINE = 0.1;            // Shift: a tenth of the speed
 const DOUBLE_MS = 400;       // two presses on one handle this close are a double-click
+const WARP_PX = 120;         // 2026-10-14: how far the hidden cursor may go from the grab before it is put back there (the drag never runs out of screen)
+const WARP_WAIT_MS = 250;    // and how long a drag waits to see it arrive back before it gives up putting it back
 const DETENT_PX = 6;         // D251: the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
 const EDGE_ON_PX_PER_M = 0.05;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead. A FAR handle's axis is short too (the far end of a ghost seen from behind: 0.3 px/m, found in the window) but has a direction, so it is not edge-on
 const HIT_PX = 12;
@@ -237,7 +239,7 @@ function mount(stage, win, host) {
     const m = model; if (!m) return;
     const now = typeof e.timeStamp === 'number' ? e.timeStamp : Date.now();
     if (lastClick && lastClick.id === h.id && now - lastClick.t < DOUBLE_MS) { lastClick = null; resetHandle(h); return; }
-    drag = { h, x0: x, y0: y, cx: e.clientX, cy: e.clientY, moved: false, v: { x, y }, axis: h.screen, base: m.base(h.kind), ctx: m.ctx(h.kind), value: m.base(h.kind) };
+    drag = { h, x0: x, y0: y, cx: e.clientX, cy: e.clientY, moved: false, v: { x, y }, acc: { x: 0, y: 0 }, warp: null, noWarp: false, axis: h.screen, base: m.base(h.kind), ctx: m.ctx(h.kind), value: m.base(h.kind) };
     host.begin(h); stage.style.cursor = 'none';
     if (stage.setPointerCapture && e.pointerId !== undefined) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* the pointer is gone */ } }
   };
@@ -253,17 +255,35 @@ function mount(stage, win, host) {
   };
   onKeyDown = (e) => { if (drag && e && e.key === 'Escape') onUp(null); };
   if (doc.addEventListener) doc.addEventListener('keydown', onKeyDown);
+  // A DRAG NEVER RUNS OUT OF SCREEN (2026-10-14, reported: zoomed out, a length drag stopped at about 400 to 600 m and would go no further in one go). The hidden
+  // cursor ran into the edge of the screen unseen (0.42 m a pixel over 1,000 to 1,400 px). Whenever it has gone WARP_PX from where it was grabbed, it is put back
+  // there through the native window (as on release) and the travel so far is kept in `acc`, so the value is the whole travel. Until the cursor is seen back at the
+  // grab, moves are ignored (they are from before the jump); if it is not seen within WARP_WAIT_MS, or the native call fails, the travel is given back and this
+  // drag stops putting the cursor back (it then stops at the screen edge, as before). With no native window (a browser, a test host) nothing changes.
+  const nativeCursor = () => { const T = win.__TAURI__, w = T && T.window && T.window.getCurrentWindow && T.window.getCurrentWindow(), P = T && T.dpi && T.dpi.LogicalPosition; return w && w.setCursorPosition && P ? { w, P } : null; };
+  const giveBack = (d) => { if (!d.warp) return; d.acc.x -= d.warp.dx; d.acc.y -= d.warp.dy; d.warp = null; d.noWarp = true; };
+  const warpBack = (d, x, y) => {
+    const n = d.noWarp ? null : nativeCursor(); if (!n || Math.hypot(x - d.x0, y - d.y0) < WARP_PX) return;
+    d.warp = { dx: x - d.x0, dy: y - d.y0, until: Date.now() + WARP_WAIT_MS }; d.acc.x += d.warp.dx; d.acc.y += d.warp.dy;
+    const failed = (err) => { if (drag === d) giveBack(d); console.warn('handles: the cursor could not be put back during the drag:', err && err.message ? err.message : err); };
+    try { const r = n.w.setCursorPosition(new n.P(d.cx, d.cy)); if (r && typeof r.catch === 'function') r.catch(failed); } catch (err) { failed(err); }
+  };
+  const atGrab = (d, x, y) => Math.abs(x - d.x0) <= 2 && Math.abs(y - d.y0) <= 2;
   const onMove = (e) => {
     const [x, y] = rel(e);
     if (drag) {
-      drag.v = { x, y }; drag.moved = true;
-      waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; if (!frameReq) frameReq = win.requestAnimationFrame(flush); return; }
+      if (drag.warp) { if (atGrab(drag, x, y)) drag.warp = null; else { if (Date.now() > drag.warp.until) giveBack(drag); else return; } }
+      drag.v = { x: x + drag.acc.x, y: y + drag.acc.y }; drag.moved = true;
+      waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; if (!frameReq) frameReq = win.requestAnimationFrame(flush);
+      warpBack(drag, x, y); return; }
     const h = hitTest(drawn, x, y); hover = h; stage.style.cursor = h ? cursorFor(h.screen) : '';
   };
   const onUp = (e) => {
     if (!drag) return;
     if (frameReq) { win.cancelAnimationFrame(frameReq); frameReq = 0; }
-    if (e && e.clientX !== undefined) { const [x, y] = rel(e); drag.v = { x, y }; drag.moved = drag.moved || x !== drag.x0 || y !== drag.y0; waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; }
+    // a release while the cursor is being put back carries a position from before the jump: the drag ends where the last move left it
+    if (e && e.clientX !== undefined && !drag.warp) { const [x0, y0] = rel(e), x = x0 + drag.acc.x, y = y0 + drag.acc.y; drag.v = { x, y }; drag.moved = drag.moved || x !== drag.x0 || y !== drag.y0; waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey }; }
+    else if (drag.warp) waiting = { x: drag.v.x, y: drag.v.y, shift: !!(e && e.shiftKey), ctrl: !!(e && e.ctrlKey) };
     apply(true); const h = drag.h, d = drag; if (drag.value !== drag.base) { pre = { kind: h.kind, from: drag.base, to: drag.value }; lastClick = null; } else lastClick = { id: h.id, t: e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now() };
     drag = null; stage.style.cursor = ''; putCursorBack(d); host.end(h);
   };

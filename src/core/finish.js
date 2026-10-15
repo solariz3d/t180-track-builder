@@ -18,7 +18,7 @@ const D = require('./document.js');
 const { toPath } = require('./adapter.js');
 const { extend } = require('./extend.js');
 const { extendTurnBy } = require('./turnby.js');
-const { close } = require('./close.js');
+const { close, residual } = require('./close.js');
 const { ROLL_AMBER_DEG_M } = require('../validate/index.js');
 
 const DEG = Math.PI / 180, TAU = 2 * Math.PI;
@@ -66,9 +66,10 @@ function endPose(doc) {
 /** The route's pieces appended to doc: Turn by, the straight, Turn by (each left out when it is next to nothing), the climb rate eased to 0; then, when the
  *  bank must come round, a straight of rollM metres that rolls to `bank` (radians) onto the start. A ROLL IS NEVER LAID IN A TURN: rolled in the turn of
  *  the first try on ELYSIUM, the road met the car with no speed that holds it (the checker's red "no speed holds") for 480 m. */
-function lay(doc, r, roll) {
+function lay(doc, r, roll, flip = false) {
   let d = doc;
-  const turn = (a) => { if (Math.abs(a) >= MIN_TURN) d = extendTurnBy(d, { length: Math.max(MIN_TURN_M, Math.round(r.radiusM * Math.abs(a))), targets: { kv: 0 } }, a); };
+  // in the FLIPPED frame (close.js residual) a turn of the heading channel turns the road the other way: the route's turns are laid mirrored
+  const turn = (a) => { if (Math.abs(a) >= MIN_TURN) d = extendTurnBy(d, { length: Math.max(MIN_TURN_M, Math.round(r.radiusM * Math.abs(a))), targets: { kv: 0 } }, flip ? -a : a); };
   turn(r.a1);
   if (r.straightM >= MIN_STRAIGHT_M) d = extend(d, { length: Math.round(r.straightM), targets: { kh: 0, kv: 0 } });
   turn(r.a2);
@@ -86,7 +87,11 @@ function finishToStart(doc, { radii = RADII_M } = {}) {
   const e = endPose(doc), th0 = doc.start.heading;
   // THE BANK: the lap closes where the bank is the start's, mod 360°, so the finish rolls to the one nearest the end's (at most 180°); more than a few
   // degrees is rolled on a straight of its own onto the start, at no more than the amber rate (Close mends a few degrees in passing)
-  const b0 = D.valuesAt(doc.pieces[0], 0).phi, b1 = D.valuesAt(last, last.length).phi, bank = b0 + TAU * Math.round((b1 - b0) / TAU), rollRad = Math.abs(bank - b1);
+  // THE FLIPPED FRAME (2026-10-14, ELYSIUM): over the top of a loop the end is carried as (heading + 180°, 180° − pitch, bank + 180°), the same orientation
+  // written the other way, so an end at bank −180° there is UPRIGHT; the finish rolled it 180° (upside down) and laid its turns the wrong way. Its target bank
+  // is the start's plus 180° in that form, and its turns are mirrored (lay)
+  const flip = residual(doc).flip, half = flip ? Math.PI : 0;
+  const b0 = D.valuesAt(doc.pieces[0], 0).phi, b1 = D.valuesAt(last, last.length).phi, bank = b0 + half + TAU * Math.round((b1 - b0 - half) / TAU), rollRad = Math.abs(bank - b1);
   const roll = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil((rollRad / ROLL_RATE) * 1.1) } : null;
   // the route aims at the start, or, with a roll, at the point that straight's length behind the start, on the start's heading
   const f0 = fwd(th0), back = roll ? roll.lengthM : 0, p0 = [doc.start.pos[0] - back * f0[0], doc.start.pos[2] - back * f0[1]];
@@ -96,7 +101,7 @@ function finishToStart(doc, { radii = RADII_M } = {}) {
   let best = null;
   for (const r of all) {
     let laid;
-    try { laid = lay(doc, r, roll); } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
+    try { laid = lay(doc, r, roll, flip); } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
     const window = []; for (let i = doc.pieces.length; i < laid.pieces.length; i++) window.push(i);
     if (!window.length) continue;
     let res;
