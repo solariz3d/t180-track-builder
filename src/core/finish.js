@@ -19,7 +19,7 @@ const { toPath } = require('./adapter.js');
 const { extend } = require('./extend.js');
 const { extendTurnBy } = require('./turnby.js');
 const { close, residual } = require('./close.js');
-const { ROLL_AMBER_DEG_M } = require('../validate/index.js');
+const V = require('../validate/index.js'), { ROLL_AMBER_DEG_M } = V;
 
 const DEG = Math.PI / 180, TAU = 2 * Math.PI;
 const RADII_M = Object.freeze([300, 450, 650, 200, 900]);   // tried in this order within each route length (first guesses: a T-180 corner at speed; the checker judges the loads)
@@ -28,6 +28,10 @@ const MIN_TURN = 0.5 * DEG, MIN_STRAIGHT_M = 10, MIN_TURN_M = 40;
 // to the nearest such bank (at most 180°), on its LONGEST piece, at no more than the checker's AMBER roll rate (src/validate ROLL_AMBER_DEG_M, 0.93°/m over
 // 20 m); a route too short for that is not tried at all
 const ROLL_RATE = ROLL_AMBER_DEG_M * DEG, ROLL_FREE = 5 * DEG;
+// THE ROLL'S PEAK (2026-10-15, ELYSIUM: "the road rolls too fast" at the roll, 54° over 64 m): the roll eases in and out, so the rate the checker reads over its
+// 20 m chord PEAKS at about 1.45 to 1.5 times the average (angle / length), and a roll sized so its AVERAGE was amber read 1.13 to 1.27°/m, past the red bar. So the first
+// guess is the average at 1/1.5 of amber, and then the laid roll is MEASURED as the checker measures it (rollPeak) and lengthened until its worst station is under amber
+const ROLL_PEAK_OVER_MEAN = 1.5, ROLL_LENGTHEN = 1.03, ROLL_ROUNDS = 6;
 
 const fwd = (th) => [Math.sin(th), Math.cos(th)];   // plan view (x, z): heading about world up, as the geometry's T = (cos p sin θ, sin p, cos p cos θ)
 const left = (th) => [Math.cos(th), -Math.sin(th)];   // L = (cos θ, 0, −sin θ)
@@ -99,7 +103,14 @@ function lay(doc, r, roll) {
   return d;
 }
 
-function finishToStart(doc, { radii = RADII_M } = {}) {
+/** The worst roll rate (°/m) on the pieces from index `from` on of a closed document, read as the checker reads it (validate's own rollRates, over its 20 m chord). */
+function rollPeak(doc, from) {
+  const { segments, path } = toPath(doc, { step: 2 }), S = path.samples, ids = new Set(doc.pieces.slice(from).map((P) => P.id));
+  const rates = V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', true, path.lengthM).filter((q) => ids.has(segments[S[q.i].seg].id));
+  return rates.reduce((m, q) => Math.max(m, q.rate), 0);
+}
+
+function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN } = {}) {   // rollGuess: the first guess's factor, for the test that the measured lengthening works from a bad one
   D.checkDoc(doc);
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is already closed: there is no end to finish from');
   const last = doc.pieces[doc.pieces.length - 1];
@@ -114,13 +125,14 @@ function finishToStart(doc, { radii = RADII_M } = {}) {
   // is the start's plus 180° in that form (its turns are NOT mirrored: lay)
   const flip = residual(doc).flip, half = flip ? Math.PI : 0;
   const b0 = D.valuesAt(doc.pieces[0], 0).phi, b1 = D.valuesAt(last, last.length).phi, bank = b0 + half + TAU * Math.round((b1 - b0 - half) / TAU), rollRad = Math.abs(bank - b1);
-  const roll = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil((rollRad / ROLL_RATE) * 1.1) } : null;
+  let roll = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil((rollRad / ROLL_RATE) * rollGuess) } : null;
+  const gap = Math.hypot(doc.start.pos[0] - e.p[0], doc.start.pos[1] - e.y, doc.start.pos[2] - e.p[1]);
+  for (let round = 0; ; round++) {
   // the route aims at the start, or, with a roll, at the point that straight's length behind the start, on the start's heading
   const f0 = fwd(th0), back = roll ? roll.lengthM : 0, p0 = [doc.start.pos[0] - back * f0[0], doc.start.pos[2] - back * f0[1]];
-  const gap = Math.hypot(doc.start.pos[0] - e.p[0], doc.start.pos[1] - e.y, doc.start.pos[2] - e.p[1]);
   // the radii in the order given (the gentler first), and at each radius the shortest route first
   const all = [...oneTurnRoutes(e.p, e.th, p0, th0), ...radii.flatMap((R) => routes(e.p, e.th, p0, th0, R).sort((a, b) => a.lengthM - b.lengthM))];   // the one-turn routes first (2026-10-15)
-  let best = null;
+  let best = null, tooFast = 0;
   for (const r of all) {
     let laid;
     try { laid = lay(doc, r, roll); } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
@@ -132,9 +144,17 @@ function finishToStart(doc, { radii = RADII_M } = {}) {
     const deg = (a) => Math.round((a / DEG) * 10) / 10, added = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + P.length, 0);
     const rolled = roll ? `, then ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright onto the start` : '';
     const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}`;
-    return { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, lengthM: Math.round(added), report }) };
+    const peak = roll ? rollPeak(res.doc, doc.pieces.length) : 0;
+    if (peak > ROLL_AMBER_DEG_M) { tooFast = peak; break; }   // the roll reads too fast as the checker reads it: lengthen it and search again (below)
+    return { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollPeakDegM: Math.round(peak * 1000) / 1000, lengthM: Math.round(added), report }) };
+  }
+  if (tooFast) {
+    if (round >= ROLL_ROUNDS) throw new D.CoreError('FINISH_ROLL', `the roll upright onto the start still reads ${tooFast.toFixed(3)}°/m (the amber bar is ${ROLL_AMBER_DEG_M}) at ${roll.lengthM} m after ${round + 1} lengthenings`);
+    roll = { bank, lengthM: Math.ceil(roll.lengthM * (tooFast / ROLL_AMBER_DEG_M) * ROLL_LENGTHEN) };
+    continue;
   }
   throw new D.CoreError('FINISH_NO_ROUTE', `no finish closes from here: the end is ${Math.round(gap)} m from the start${roll ? ` and must roll ${Math.round(rollRad / DEG)}° to meet it (${roll.lengthM} m of straight)` : ''}, and none of the ${all.length} routes tried (turn, straight, turn at radius ${radii.join(', ')} m) could be closed${best ? ` (the first refusal: ${best})` : ''}. Extend toward the start and try again`);
+  }
 }
 
 module.exports = { finishToStart, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };
