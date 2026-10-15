@@ -62,10 +62,10 @@ function windowEnd(path, segments, g) {
   return fromSOf(path, m);
 }   // m between stations: the step the export and the D167 tests use (inferred: not tuned for the preview)
 
-function createValidationController(shell, { csp = true, designSpeedKmh, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn(), sharedPath = null } = {}) {
+function createValidationController(shell, { csp = true, designSpeedKmh, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn(), sharedPath = null, colours = true } = {}) {   // colours: false makes no colour map (live.js; the checker worker sends none back)
   let design = designSpeedKmh;
   const vo = () => ({ ...extra, csp, ...(design === undefined ? { fullSpeed: true } : design == null ? {} : { designSpeed: design / 3.6 }) });
-  let live = createLive({ validate: vo() });
+  let live = createLive({ validate: vo(), colours });
   let segs = null, path = null, resolvedSeen = null, source = null, lastClosed = null;   // source: 'shared' (a view of the preview's path) | 'own'
   const out = { state: { path: null, result: null, map: null, arcs: [], changed: null, full: true, how: null, error: null, pathFrom: null } };
 
@@ -105,13 +105,13 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
         try {
           const u = live.update(path, segs, { fromS: res.pendingFrom });
           out.state = { ...out.state, result: u.result, map: u.map, arcs: jumpArcs(u.result, path), changed: u.changed, full: false, how: 'drag-end' };
-        } catch (e) { path = null; segs = null; source = null; live = createLive({ validate: vo() }); out.state = { ...out.state, error: e.message }; }
+        } catch (e) { path = null; segs = null; source = null; live = createLive({ validate: vo(), colours }); out.state = { ...out.state, error: e.message }; }
         onUpdate(out.state);
       } else if (!dragging && res && res.lap && res.lap.reason === 'deferred') { out.state = { ...out.state, result: withLap(res, lapOf(out.state.path, segs, res)) }; onUpdate(out.state); }
       return;
     }
     resolvedSeen = r;
-    if (!r.segments.length) { segs = r.segments; path = null; source = null; live = createLive({ validate: vo() }); out.state = { path: null, result: null, map: null, arcs: [], changed: null, full: true, how: 'empty', error: null, pathFrom: null }; onUpdate(out.state); return; }
+    if (!r.segments.length) { segs = r.segments; path = null; source = null; live = createLive({ validate: vo(), colours }); out.state = { path: null, result: null, map: null, arcs: [], changed: null, full: true, how: 'empty', error: null, pathFrom: null }; onUpdate(out.state); return; }
     // THE ROAD UNCHANGED (2026-10-13, ELYSIUM: undoing a start-line move re-checked all 24 km, seconds of a frozen window, for a road that had not moved). When every
     // segment is the very object the result was made from (the core shell reuses unchanged segments), the loop is open or closed as before, and the preview's
     // path is the one this result viewed (the preview grows and re-lifts a NEW path object for any change of the road, a hill brush included), the result stands.
@@ -150,7 +150,7 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
       path = np; segs = r.segments; source = pathFrom; lastClosed = !!r.closed;
       out.state = { path, result: u.result, map: u.map, arcs: jumpArcs(u.result, path), changed: u.changed, full: u.full, how: p.how, error: null, pathFrom };
     } catch (e) {
-      path = null; segs = null; source = null; live = createLive({ validate: vo() });
+      path = null; segs = null; source = null; live = createLive({ validate: vo(), colours });
       out.state = { ...out.state, error: e.message };
     }
     onUpdate(out.state);
@@ -161,8 +161,8 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
   update(shell.getState());
   return {
     get state() { return out.state; },
-    setCsp(v) { csp = !!v; live = createLive({ validate: vo() }); update(shell.getState(), true); },
-    setDesignSpeed(kmh) { design = kmh == null ? null : kmh; live = createLive({ validate: vo() }); update(shell.getState(), true); },
+    setCsp(v) { csp = !!v; live = createLive({ validate: vo(), colours }); update(shell.getState(), true); },
+    setDesignSpeed(kmh) { design = kmh == null ? null : kmh; live = createLive({ validate: vo(), colours }); update(shell.getState(), true); },
     get designSpeedKmh() { return design; },
     dispose() { unsubscribe(); },
   };

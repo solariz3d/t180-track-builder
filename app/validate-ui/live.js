@@ -21,13 +21,15 @@ function fromSOf(path, g) {
   return p ? p.s : path.lengthM;
 }
 
-function createLive({ validate: vopts = {} } = {}) {
+// `colours: false` (2026-10-15): no colour map is made (map stays null, changed null). The track checker's worker (app/validate-ui/checkjob.js) sends none back,
+// and on a 24 km track the map held ~250 MB of the page's shared 4 GB
+function createLive({ validate: vopts = {}, colours = true } = {}) {
   let result = null, map = null;
   return {
     update(path, segments, { fromS, lap = true, uptoS = null } = {}) {
       const full = !result || fromS === undefined, o = { ...vopts, ...(lap === false ? { lap: false } : {}), ...(uptoS != null ? { uptoS } : {}) };
       const next = full ? validate(path, segments, o) : revalidate(result, path, segments, fromS, o);
-      const rc = map && !full ? recolour(map, next, { car: vopts.car, path }) : { map: colourMap(next, { car: vopts.car, path }), changed: null };
+      const rc = !colours ? { map: null, changed: null } : map && !full ? recolour(map, next, { car: vopts.car, path }) : { map: colourMap(next, { car: vopts.car, path }), changed: null };
       result = next; map = rc.map;
       return { result, map, changed: rc.changed, full };
     },
