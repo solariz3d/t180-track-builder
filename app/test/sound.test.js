@@ -57,13 +57,13 @@ test('a slot with no file, or a file that is not audio, is silent and says so on
   assert.equal(logs.length, 3, logs.join(' | ')); assert.ok(logs.some((m) => /no loop_closed\.wav yet/.test(m)));
 });
 
-test('the drag tick follows the handle event, at most one every TICK_MS', async () => {
+test('the drag tick follows the handle event: one tick per value change, only two in the same instant are one', async () => {
   const F = fakeWindow({ files: ALL }), s = createSound(F.win, { log: () => {} });
   F.fire('pointerdown'); await s.ready();
   F.fire('t180:handle-step'); F.fire('t180:handle-step'); assert.equal(F.played.length, 1, 'two steps in the same instant: one tick');
   F.ctxs[0].currentTime = (TICK_MS + 1) / 1000; F.fire('t180:handle-step'); assert.equal(F.played.length, 2, 'a step after TICK_MS ticks again');
   s.unmount(); F.ctxs[0].currentTime = 1; F.fire('t180:handle-step'); assert.equal(F.played.length, 2, 'unmounted: no more ticks');
-  assert.ok(TICK_MS >= 20 && TICK_MS <= 60);
+  assert.ok(TICK_MS > 0 && TICK_MS <= 8, `the guard is only for two ticks in one instant, never a rate limit: ${TICK_MS} ms`);
 });
 
 test('mute and volume: remembered, clamped, and a bad volume is refused', async () => {

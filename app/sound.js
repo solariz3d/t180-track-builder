@@ -9,14 +9,14 @@
 //
 // WHAT PLAYS WHEN is read off the shell's state, not wired into each button: soundFor(prev, next) compares two states' histories, so every way
 // of placing, undoing or closing makes its sound and nothing else does (opening a track, a sculpt, a typed field: no sound). The drag tick comes
-// from app/core/handles.js, which fires `t180:handle-step` when a dragged value changes, at most one tick every TICK_MS.
+// from app/core/handles.js, which fires `t180:handle-step` each time a dragged value changes: one click per change of the number, so the sound follows the value (at most one per TICK_MS, a guard for two in the same instant).
 //
 // MUTE AND VOLUME are remembered in localStorage (t180.sound.muted, t180.sound.volume); a window that cannot store them keeps them for the session.
 // Audio starts on the first press or key in the window (Chromium's rule: no sound before the user acts).
 'use strict';
 
 const SLOTS = Object.freeze({ tick: 'drag_tick.wav', place: 'place.wav', undo: 'undo.wav', loopClosed: 'loop_closed.wav' });
-const TICK_MS = 35;
+const TICK_MS = 4;   // 2026-10-15: one tick per value change (the handles apply once a frame); this only guards two in the same instant
 const KEYS = Object.freeze({ muted: 't180.sound.muted', volume: 't180.sound.volume' });
 
 /** Which sound two consecutive shell states call for: 'place', 'undo', 'loopClosed' or null. */
