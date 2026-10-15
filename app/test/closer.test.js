@@ -150,8 +150,9 @@ test('a second X while the prompt is open is ignored: one prompt, one close', as
 test('app/index.html gives the closer the prompt, and the builder says whether there is unsaved work', () => {
   assert.match(HTML, /installCloseHandler\(win, \(\) => closeCleanup, \{ ask: closeAsk, save: closeSave \}\)/);
   assert.equal((HTML.match(/closeDirty = \(\) => !!shell\.getState\(\)\.dirty;/g) || []).length, 1, 'set by the equation builder');
-  // the plugin COMMAND, as the Export picker calls it: tauri-plugin-dialog 2.8.0 injects no window.__TAURI__.dialog
-  assert.match(HTML, /call\('plugin:dialog\|message', \{[^}]*buttons: \{ YesNoCancelCustom: \['Save', "Don't save", 'Cancel'\] \}/);
+  // 2026-10-14: the prompt is asked in the page (app/askdialog.js), no longer the native box; the same three answers reach the closer
+  assert.match(HTML, /askChoice\(document, \{ title: 'Save before closing\?'/);
+  assert.match(HTML, /value: 'discard'[\s\S]*value: 'cancel'[\s\S]*value: 'save', kind: 'main', default: true/);
   assert.doesNotMatch(HTML, /__TAURI__\.dialog/);
 });
 test('the window may show the prompt: dialog:allow-message is in its capability', () => {
