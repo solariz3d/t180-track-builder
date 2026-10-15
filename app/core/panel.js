@@ -491,7 +491,7 @@ function mount(root, shell) {
     el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
     msg,
   );
-  let shownFor = null;
+  let shownFor = null, lentFrom = null;   // lentFrom: the selected piece whose values the fields hold (2026-10-15)
   const draw = (st) => {
     showHeading();   // the end heading line (Turn to grid)
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
@@ -502,8 +502,24 @@ function mount(root, shell) {
       const keep = st.lastStep && st.lastStep.op === 'landing' && !undone ? FIELDS.filter(unapplied).map((fl) => [fl, fl.value]) : [];
       showGrip(); showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value;
       if (keep.length) { for (const [fl, v] of keep) fl.value = v; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); }
-      shownFor = d;
+      shownFor = d; lentFrom = null;
     }
+    // A SELECTED PIECE LENDS ITS VALUES (2026-10-15, the keeper: "when clicking a previous placed part of the track, while its highlighted, make the values
+    // change to it, so you can mimic certain values within a new piece"): one selected road piece puts its end values and its length in the Extend fields.
+    // They differ from what the fields SHOW (the head), so Extend takes them as targets and places a piece like it. A run of several lends nothing (the fields
+    // stay); clearing the selection shows the head again. A cup and a tube are one-of (exclusive): the lent kind wins
+    const sel = st.selection && st.selection.base === d ? st.selection : null, one = sel && sel.ids.length === 1 ? sel.ids[0] : null;
+    if (one && one !== lentFrom) {
+      const ps = shell.pieceState(one);
+      if (ps) {
+        for (const [k, [input, of]] of Object.entries(HEAD)) input.value = show(of(ps));
+        len.value = show(ps.length);
+        for (const [k, fl] of [['cup', cup], ['tube', tube]]) { fl.disabled = false; fl.setAttribute('title', baseTitle[k]); }
+        if (ps.tube) exclusive(tube); else if (cup.value !== shown.cup) exclusive(cup);
+        fillWidthLike(); readout();
+      }
+      lentFrom = one;
+    } else if (!sel && lentFrom) { showHead(); lentFrom = null; readout(); }
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
     extendBtn.disabled = jumpBtn.disabled = !!d.closed; closeBtn.disabled = closeHow.disabled = !!d.closed || !d.pieces.length;
     drawProposal(st.closeProposal && st.closeProposal.base === d ? st.closeProposal : null);

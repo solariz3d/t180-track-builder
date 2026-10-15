@@ -413,6 +413,14 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const fam = 'bowl';   // extend.js: `family || (last ? last.family : 'bowl')`
       return { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], c: D.legacyEdgeDeg(fam, WIDTHS[fam], RATES[fam]), ...XS.headOf(null) };
     },
+    /** A placed ROAD piece's end values in headState's shape, with its length and whether it is a tube; null for no such piece (2026-10-15: a selected
+     *  piece lends them to the Extend fields, so a new piece can be made like it). */
+    pieceState(id) {
+      const P = doc().pieces.find((x) => x.id === id);
+      if (!P || P.type !== 'road') return null;
+      const e = D.pieceEnd(P);
+      return { kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, !!P.tube), length: P.length, tube: !!P.tube };
+    },
     /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
     // 2026-10-14 (ELYSIUM: ~260 ms of every placed piece on the window's thread, every one of the 43 labels read again): a ROAD piece's readout reads
     // the start and the pieces up to it alone (src/core/readout.js: the piece, and the pose entering it from every earlier piece), so while the
