@@ -322,7 +322,9 @@ function sculptMesh(prev, path, segments, g) {
 function reuseMesh(prev, path, segments, same, { from = 0, grow = from > 0 } = {}) {
   const old = prev._state, n = segments.length;
   if (!Array.isArray(same) || same.length !== n) throw new Error('reuseMesh: needs a same[] flag for each segment');
-  if (!grow ? old.nseg !== n : (old.closed || path.closed || from > old.nseg || from > n)) throw new Error('reuseMesh: needs a mesh of the same number of segments (or, with from, an open one at least from long)');
+  // a grow may CLOSE the track (2026-10-15: Finish to start's preview and Apply on a 24 km track, 6 s each in full): from an OPEN mesh only; the closed
+  // loop's own joint, last piece to first, is always made again below
+  if (!grow ? old.nseg !== n : (old.closed || from > old.nseg || from > n)) throw new Error('reuseMesh: needs a mesh of the same number of segments (or, with from, an open one at least from long)');
   const st = { o: old.o, pieces: new Array(n), seams: new Array(n).fill(null), workC: { n: 0 }, nseg: n, closed: !!path.closed, reused: 0 }, moved = new Array(n).fill(false);
   const closed = !!path.closed;
   for (let j = 0; j < n; j++) {

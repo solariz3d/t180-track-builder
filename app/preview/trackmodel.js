@@ -86,12 +86,20 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // the model keeps the last closed mesh made at each detail (`slots`: segment keys, lift keys, mesh), and a segment whose key is the one it was meshed from keeps its vertex arrays
   // (geom.reuseMesh), so a brush that reaches 60 m of a 6 km loop meshes 60 m, both while dragging (coarse) and when full detail comes back (the pre-drag full mesh is still in its slot).
   const slots = new Map();
+  let builtDetail = 1;   // the detail the current mesh was made at
+  /** How many leading segments of the track as it was are unchanged in the new one (0: no prefix to keep). */
+  const grownFrom = (was, nk, lk) => { let g = 0; while (g < was.keys.length && g < nk.length && was.keys[g] === nk[g] && was.liftKeys[g] === lk[g]) g++; return g === was.keys.length ? g : 0; };
   function full(segs, isClosed, lift, nk) {
+    const was = { mesh, keys, liftKeys, closed, detail: builtDetail };   // the track as it was, for a close that only ADDS road (below)
     path = geom.buildPath(segs, { ...pathOpts, closed: isClosed, ...(startOpt ? { start: startOpt } : {}) }); shown = lift ? lift(path) : path;
     liftKeys = segs.map((_, j) => liftOf(path, shown, j));
     const ms = meshSegs(segs, liftKeys), slot = isClosed ? slots.get(detail) : null;
     if (slot && typeof geom.reuseMesh === 'function' && slot.mesh && slot.keys.length === segs.length) mesh = geom.reuseMesh(slot.mesh, shown, ms, segs.map((_, j) => nk[j] === slot.keys[j] && liftKeys[j] === slot.liftKeys[j]));
+    // AN OPEN TRACK CLOSED BY ADDING ROAD (2026-10-15, Finish to start on the keeper's 24 km ELYSIUM: Apply rebuilt every piece, 6.5 s with the window frozen):
+    // every placed piece is the same and lies where it lay, so its mesh is kept and only the new road and the closing joint are made (geom.reuseMesh, grow)
+    else if (isClosed && !was.closed && was.mesh && was.mesh._state && was.detail === detail && typeof geom.reuseMesh === 'function' && grownFrom(was, nk, liftKeys) > 0) mesh = geom.reuseMesh(was.mesh, shown, ms, segs.map((_, j) => j < was.keys.length && nk[j] === was.keys[j] && liftKeys[j] === was.liftKeys[j]), { grow: true });
     else mesh = geom.buildMesh(shown, ms, meshOpts);
+    builtDetail = detail;
     if (isClosed) slots.set(detail, { keys: nk, liftKeys, mesh }); else slots.clear();
     return 'full';
   }
@@ -194,6 +202,11 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       if (!Array.isArray(segs) || !segs.length) throw new Error('ghost: a close proposal needs a resolved { segments }');
       const nk = segs.map(keyOf); let from = 0; while (from < keys.length && from < nk.length && keys[from] === nk[from]) from++;
       const p0 = geom.buildPath(segs, { ...pathOpts, closed: !!candidate.closed, ...(candidate.start ? { start: candidate.start } : {}) }), p = typeof candidate.lift === 'function' ? candidate.lift(p0) : p0;
+      // a proposal that only ADDS road to the open track (Finish to start: nothing placed moves) keeps the placed mesh and makes only the new road (2026-10-15: 6.3 s in full on 24 km)
+      if (mesh && mesh._state && !closed && builtDetail === detail && from === keys.length && typeof geom.reuseMesh === 'function') {
+        const lk = segs.map((_, j) => liftOf(p0, p, j)), same = segs.map((_, j) => j < keys.length && lk[j] === liftKeys[j]);   // the lift too, as full() keeps it
+        if (same.slice(0, keys.length).every(Boolean)) return { batches: batchesOf(geom.reuseMesh(mesh, p, meshSegs(segs, lk), same, { grow: true }), from), path: p, head: p.head, segments: segs, from };
+      }
       return { batches: batchesOf(geom.buildMesh(p, segs, meshOpts), from), path: p, head: p.head, segments: segs, from };
     },
     /** The path everything reads: the base path lifted by the document's offsets (the same object when there are none). */
