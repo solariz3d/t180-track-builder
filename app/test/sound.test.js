@@ -2,7 +2,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createSound, soundFor, TICK_MS, KEYS } = require('../sound.js');
+const { createSound, soundFor, TICK_MS, FAST_TICK_MS, KEYS } = require('../sound.js');
 
 // a history as the shell keeps it: past, present, future
 const H = (past, present, future = []) => ({ past, present, future });
@@ -22,12 +22,12 @@ test('soundFor: a placed piece, an undo and a closed loop each name their sound;
 });
 
 function fakeWindow({ files = {}, stored = {} } = {}) {
-  const played = [], listeners = {}, store = { ...stored }, ctxs = [];
+  const played = [], listeners = {}, store = { ...stored }, ctxs = [], gains = [];
   class Ctx {
     constructor() { this.currentTime = 0; this.destination = {}; ctxs.push(this); }
-    createGain() { return { gain: { value: 1 }, connect() {} }; }
+    createGain() { const g = { value: 1, choked: false, cancelScheduledValues() {}, setValueAtTime() {}, linearRampToValueAtTime(v) { if (v === 0) g.choked = true; } }; const n = { gain: g, connect() {} }; gains.push(n); return n; }
     decodeAudioData(buf) { if (buf === 'bad') return Promise.reject(new Error('not audio')); return Promise.resolve({ buf }); }
-    createBufferSource() { const ctx = this; return { connect() {}, start() { played.push([this.buffer.buf, ctx.currentTime]); } }; }
+    createBufferSource() { const ctx = this; return { connect(o) { this.out = o; }, start() { played.push([this.buffer.buf, ctx.currentTime, this.out]); } }; }
   }
   const win = {
     AudioContext: Ctx,
@@ -36,7 +36,7 @@ function fakeWindow({ files = {}, stored = {} } = {}) {
     document: { addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); }, removeEventListener: (t, f) => { listeners[t] = (listeners[t] || []).filter((g) => g !== f); } },
   };
   const fire = (t) => (listeners[t] || []).slice().forEach((f) => f({ type: t }));
-  return { win, played, store, fire, listeners, ctxs };
+  return { win, played, store, fire, listeners, ctxs, gains };
 }
 const ALL = { 'drag_tick.wav': 'tick', 'place.wav': 'place', 'undo.wav': 'undo', 'loop_closed.wav': 'closed' };
 
@@ -87,4 +87,16 @@ test('handle(prev, next) plays what soundFor names', async () => {
   const d1 = doc(1), d2 = doc(2);
   assert.equal(s.handle(S(H([], d1)), S(H([d1], d2))), true); assert.deepEqual(F.played.map((p) => p[0]), ['place']);
   assert.equal(s.handle(S(H([d1], d2)), S(H([d1], d2))), false);
+});
+
+test('a fast drag does not stack ticks: each tick chokes the one before, and ticks close together are quieter', async () => {
+  const F = fakeWindow({ files: ALL }), s = createSound(F.win, { log: () => {} });
+  F.fire('pointerdown'); await s.ready(); const c = F.ctxs[0];
+  c.currentTime = 1; F.fire('t180:handle-step'); const first = F.played.at(-1)[2];
+  assert.equal(first.gain.value, 1, 'a lone tick is full');
+  c.currentTime = 1 + 0.006; F.fire('t180:handle-step'); const second = F.played.at(-1)[2];
+  assert.equal(first.gain.choked, true, 'the first is cut off when the second starts');
+  assert.ok(second.gain.value < 0.5 && second.gain.value >= 0.35, 'a tick 6 ms after the last is quieter: ' + second.gain.value);
+  c.currentTime = 1 + 0.006 + (FAST_TICK_MS + 5) / 1000; F.fire('t180:handle-step'); assert.equal(F.played.at(-1)[2].gain.value, 1, 'a slow tick is full again');
+  assert.equal(F.played.length, 3, 'every tick still plays: none is dropped');
 });
