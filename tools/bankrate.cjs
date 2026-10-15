@@ -38,6 +38,9 @@ function ratesOf(read) {
 const q = (a, p) => { const s = [...a].sort((x, y) => x - y); const i = (s.length - 1) * p, lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo); };
 const band = (a) => ({ n: a.length, p50: q(a, 0.5), p90: q(a, 0.9), p99: q(a, 0.99), max: Math.max(...a) });
 
+/** The reads build() needs that are missing from `dir` (names of files). */
+function missing(dir) { return LAYOUTS.map(([f]) => `${f}.read.json`).filter((f) => !fs.existsSync(path.join(dir, f))); }
+
 function build(dir) {
   const all = [], perLayout = {};
   for (const [file, name] of LAYOUTS) {
@@ -56,4 +59,4 @@ if (require.main === module) {
   console.log(`banking > ${MOVING}°/m        `, row(b.changing));
 }
 
-module.exports = { build, ratesOf, MOVING };
+module.exports = { build, missing, ratesOf, MOVING };
