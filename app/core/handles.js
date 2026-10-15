@@ -135,9 +135,16 @@ function targetFor(kind, base, px, ctx = {}, mods = {}) {
   let v = base + px * r;
   if (mods.ctrl) v = round(v, K.snap);
   else {
-    let best = null;
-    for (const t of K.zero ? [0, base] : [base]) { const e = Math.abs(v - t); if (e < DETENT_PX * r && (best === null || e < best.e)) best = { t, e }; }
-    v = round(best ? best.t : v, K.step);
+    // THE HOLDS ARE DEAD TRAVEL (2026-10-14, reported: on a 1000 m piece a turn drag jumped from 0 straight to 0.5, then moved in steps): the DETENT_PX inside a hold
+    // no longer count, so leaving it continues from the held value at the next step (0.1, 0.2, ...). Before, the value was measured from where the drag started,
+    // so leaving the hold landed DETENT_PX * perPx away: 0.5 for turn and climb, 2.7 degrees of bank, 2.5 m of length.
+    const H = DETENT_PX * r, dir = Math.sign(px);
+    v = base + dir * Math.max(0, Math.abs(px) * r - H);                         // the hold at the starting value
+    if (K.zero && base !== 0 && Math.sign(v) !== Math.sign(base)) {              // crossed (or reached) 0: the hold there
+      const past = Math.abs(v);
+      v = past < H ? 0 : Math.sign(v) * (past - H);
+    }
+    v = round(v, K.step);
   }
   return clamp(v, K.min, K.max);
 }

@@ -76,7 +76,7 @@ test('row 3: the two mirrored handles change the SAME value: the same outward mo
     assert.ok(dl > 0 && dr > 0, `${k}: both are positive (outward)`);
   }
   // the value both give for the same pointer travel outward
-  assert.equal(HD.targetFor('width', 31, 30, {}), 33, 'width: 30 px at 0.068 m each');
+  assert.equal(HD.targetFor('width', 31, 30, {}), 32.6, 'width: 30 px, less the 6 px hold, at 0.068 m each');
   // turn: dragging EITHER handle toward the left is the same positive change
   const tl = HD.screenAxis(VP, W, Hh, h['turn:1'].pos, h['turn:1'].axis), tr = HD.screenAxis(VP, W, Hh, h['turn:-1'].pos, h['turn:-1'].axis);
   assert.ok(tl.dx < 0 && tr.dx < 0, 'turn: the same screen direction (left) from both sides'); assert.ok(HD.dragPixels(tr, -10, 0, 'turn') > 0 && HD.dragPixels(tl, -10, 0, 'turn') > 0);
@@ -84,12 +84,12 @@ test('row 3: the two mirrored handles change the SAME value: the same outward mo
 
 test('row 4: a value from a drag in PIXELS: the rates per pixel (today\'s speeds at the default camera; length five times), the clamps, the rounding, Shift (a tenth) and Ctrl (snap)', () => {
   const T = HD.targetFor;
-  assert.equal(T('length', 160, 100), 202, 'length: 0.42 m a pixel, five times today\'s 0.085'); assert.equal(T('length', 160, -1000), 1, 'length: never under 1 m'); assert.equal(T('length', 160, 20), 168.4, 'rounded to 0.1 m');
-  assert.equal(T('width', 31, 100), 37.8, 'width: 0.068 m a pixel'); assert.equal(T('width', 31, -1000), 0.5, 'width: a floor');
-  assert.equal(T('bank', 0, 50), 22.5, 'bank: 0.45 degrees a pixel, whatever the width of the road'); assert.equal(T('bank', 0, 50, { half: 3 }), 22.5); assert.equal(T('bank', 5, 0, { half: 15 }), 5, 'no drag, no change');
+  assert.equal(T('length', 160, 100), 199.5, 'length: 0.42 m a pixel, five times today\'s 0.085'); assert.equal(T('length', 160, -1000), 1, 'length: never under 1 m'); assert.equal(T('length', 160, 20), 165.9, 'rounded to 0.1 m');
+  assert.equal(T('width', 31, 100), 37.4, 'width: 0.068 m a pixel'); assert.equal(T('width', 31, -1000), 0.5, 'width: a floor');
+  assert.equal(T('bank', 0, 50), 19.8, 'bank: 0.45 degrees a pixel, whatever the width of the road'); assert.equal(T('bank', 0, 50, { half: 3 }), 19.8); assert.equal(T('bank', 5, 0, { half: 15 }), 5, 'no drag, no change');
   assert.equal(T('cup', 15.5, 1000), 150, 'cup: 0 to 150, the core range'); assert.equal(T('cup', 15.5, -1000), 0);
-  assert.equal(T('turn', 0, 40), 3.3, 'turn: 0.083 a pixel'); assert.equal(T('climb', 2, -10), 1.2, 'climb: 0.082 a pixel');
-  assert.equal(T('length', 160, 100, {}, { shift: true }), 164.2, 'Shift: a tenth of the speed'); assert.equal(T('turn', 0, 100, {}, { shift: true }), 0.8);
+  assert.equal(T('turn', 0, 40), 2.8, 'turn: 0.083 a pixel'); assert.equal(T('climb', 2, -10), 1.7, 'climb: 0.082 a pixel');
+  assert.equal(T('length', 160, 100, {}, { shift: true }), 163.9, 'Shift: a tenth of the speed'); assert.equal(T('turn', 0, 100, {}, { shift: true }), 0.8);
   assert.equal(T('length', 163, 0, {}, { ctrl: true }), 160, 'Ctrl snaps length to 10 m'); assert.equal(T('width', 31, 0, {}, { ctrl: true }), 30, 'width to 5 m');
   assert.equal(T('bank', 0, 52, {}, { ctrl: true }), 25, 'bank to 5 degrees'); assert.equal(T('cup', 14, 0, {}, { ctrl: true }), 15); assert.equal(T('turn', 3, 0, {}, { ctrl: true }), 5);
   assert.throws(() => T('nope', 0, 0), /no kind "nope"/);
@@ -151,7 +151,7 @@ test('row 7: the overlay: a press ON a handle opens the drag and nothing else se
   assert.equal(calls.length, 1, 'nothing applied until the frame'); S.tick();
   assert.deepEqual(calls[1], ['apply', 'width:1', 35, false, true, false], '30 px outward is 2 m wider, 33, which Ctrl snaps to 5 m: 35');
   // the release applies the position it carries, once more, and ends
-  S.fire('pointerup', { clientX: ax.x + px * 40, clientY: ax.y + (ax.dy / ax.len) * 40 }); assert.deepEqual(calls.slice(2), [['apply', 'width:1', 33.7, false, false, true], ['end', 'width:1']]); assert.equal(ov.dragging(), false);
+  S.fire('pointerup', { clientX: ax.x + px * 40, clientY: ax.y + (ax.dy / ax.len) * 40 }); assert.deepEqual(calls.slice(2), [['apply', 'width:1', 33.3, false, false, true], ['end', 'width:1']]); assert.equal(ov.dragging(), false);
   // a second press while no drag is open works again; and unmount takes the listeners off
   S.fire('pointerdown', { clientX: ax.x, clientY: ax.y }); S.fire('pointercancel', {}); assert.equal(calls[calls.length - 1][0], 'end');
   ov.unmount(); assert.equal(S.canvas.gone, true); assert.equal((S.listeners.pointerdown || []).length, 0);
@@ -192,35 +192,35 @@ test('row 8: the speed is per PIXEL: 20 px of drag changes a field by the same a
     out[name] = { turn: R.drag('turn:1', 20), width: R.drag('width:1', 20), length: R.drag('length:0', 20), screen: Math.hypot(len.dx, len.dy) };
   }
   assert.ok(out.near.screen > 2 * out.far.screen, `control: the far camera really is zoomed out (${out.near.screen.toFixed(2)} px a metre against ${out.far.screen.toFixed(2)})`);
-  assert.deepEqual([out.near.turn, out.near.width, out.near.length], [1.7, 32.4, 168.4], '20 px: turn 0.083 a pixel, width 0.068 m a pixel, length 0.42 m a pixel');
-  assert.deepEqual([out.far.turn, out.far.width, out.far.length], [1.7, 32.4, 168.4], 'the same when zoomed out');
+  assert.deepEqual([out.near.turn, out.near.width, out.near.length], [1.2, 32, 165.9], '20 px, the first 6 held: turn 0.083 a pixel, width 0.068 m a pixel, length 0.42 m a pixel');
+  assert.deepEqual([out.far.turn, out.far.width, out.far.length], [1.2, 32, 165.9], 'the same when zoomed out');
 });
 
 test('row 9: the detents: a drag holds 6 px at the value it started from and, for bank, turn and climb, at 0; Ctrl snaps instead; past the hold it moves again', () => {
-  const v0 = rig({ base: B2 }).drag('turn:1', -20); assert.ok(Object.is(v0, 0), `20 px down from 2 is 0.34 from 0, inside the hold (6 px = 0.5): exactly 0, not ${v0}`);
+  const v0 = rig({ base: B2 }).drag('turn:1', -33); assert.ok(Object.is(v0, 0), `33 px down from 2: 6 held at 2, 24 to reach 0, 3 into the hold at 0: exactly 0, not ${v0}`);
   assert.equal(rig({ base: B2 }).drag('turn:1', -3), 2, 'a 3 px wobble from the start changes nothing');
-  assert.equal(rig({ base: B2 }).drag('turn:1', -8), 1.3, 'past the hold it moves again: 8 px is 0.66 below 2');
-  assert.equal(rig().drag('length:0', 5), 160, 'length holds its start too: 5 px is 2.1 m, held'); assert.equal(rig().drag('length:0', 20), 168.4);
+  assert.equal(rig({ base: B2 }).drag('turn:1', -8), 1.8, 'past the hold it moves on from the held value, no jump: 8 px, 2 past the hold, is 0.17 below 2');
+  assert.equal(rig().drag('length:0', 5), 160, 'length holds its start too: 5 px is 2.1 m, held'); assert.equal(rig().drag('length:0', 20), 165.9);
   const bank5 = { ...B2, turn: 0, bank: 5 };
-  assert.equal(rig({ base: bank5 }).drag('bank:1', -10), 0, 'bank: 10 px from 5 is 0.5 from 0, inside the 6 px (2.7 degrees) hold: 0'); assert.equal(rig({ base: bank5 }).drag('bank:1', -22), -4.9, 'bank: 22 px is 4.9 below 0, past the hold');
+  assert.equal(rig({ base: bank5 }).drag('bank:1', -20), 0, 'bank: 20 px from 5, 6 held at 5, reaches 0 and is 1.3 into the 2.7 degree hold there: 0'); assert.equal(rig({ base: bank5 }).drag('bank:1', -30), -3.1, 'bank: 30 px is past both holds: 3.1 below 0');
   assert.equal(rig({ base: B2 }).drag('turn:1', -20, { ctrl: true }), 0, 'Ctrl snaps to 5, no detent: 0.34 snaps to 0'); assert.equal(rig({ base: B2 }).drag('turn:1', 40, { ctrl: true }), 5, 'Ctrl: 5.3 snaps to 5');
   const off = HD.DETENT_PX; assert.equal(off, 6, 'the hold is one number: 0 turns it off (the keeper may drop it)');
 });
 
 test('row 10: the value is rounded to the step with Shift too: a fine drag lands on 0.0, not 0.03', () => {
-  const v0 = rig({ base: B2 }).drag('turn:1', -240, { shift: true }); assert.ok(Object.is(v0, 0), `a slow drag to nothing is exactly 0, not ${v0}`);
-  assert.equal(rig({ base: B2 }).drag('turn:1', -103.7, { shift: true }), 1.1, 'Shift: 0.0083 a pixel, 103.7 px is 0.86: 1.1 to the tenth, not 1.14');
+  const v0 = rig({ base: B2 }).drag('turn:1', -250, { shift: true }); assert.ok(Object.is(v0, 0), `a slow drag to nothing is exactly 0, not ${v0}`);
+  assert.equal(rig({ base: B2 }).drag('turn:1', -103.7, { shift: true }), 1.2, 'Shift: 0.0083 a pixel, 103.7 px less the 6 px hold is 0.81: 1.2 to the tenth, not 1.19');
   assert.equal(HD.targetFor('turn', 0, 5, {}, { shift: true }), 0, 'a fine drag of 5 px is 0.04: held at 0, never 0.04');
-  assert.equal(HD.targetFor('turn', 2, -60, {}, { shift: true }), 1.5, '60 px fine is 0.5: 1.5'); assert.equal(HD.targetFor('width', 31, 77, {}, { shift: true }), 31.5, 'width: 77 px fine is 0.54 m: 31.5, not 31.54');
+  assert.equal(HD.targetFor('turn', 2, -60, {}, { shift: true }), 1.6, '60 px fine, less the hold, is 0.45: 1.6'); assert.equal(HD.targetFor('width', 31, 77, {}, { shift: true }), 31.5, 'width: 77 px fine is 0.54 m: 31.5, not 31.54');
 });
 
 test('row 11: a double-click on a handle resets it: 0 for bank, turn, climb; the value before the last drag for length, width, cup; and it is the handle\'s, not the camera\'s', () => {
   const R = rig({ base: { turn: 2, width: 31, length: 160, bank: 7.5 } });
   const t = R.at('turn:1'), onTurn = R.S.fire('dblclick', { clientX: t.x, clientY: t.y }); assert.equal(onTurn.stopped, true, 'taken by the handle'); assert.deepEqual(R.calls, [['begin', 'turn:1'], ['apply', 'turn:1', 0, true], ['end', 'turn:1']], 'one step: turn goes to 0'); assert.ok(Object.is(R.cur.turn, 0));
   R.calls.length = 0; const b = R.at('bank:1'); R.S.fire('dblclick', { clientX: b.x, clientY: b.y }); assert.equal(R.cur.bank, 0, 'bank to 0');
-  R.calls.length = 0; assert.equal(R.drag('length:0', 40), 176.8); const l = R.at('length:0'); R.S.fire('dblclick', { clientX: l.x, clientY: l.y }); assert.equal(R.cur.length, 160, 'length back to the value before the drag');
+  R.calls.length = 0; assert.equal(R.drag('length:0', 40), 174.3); const l = R.at('length:0'); R.S.fire('dblclick', { clientX: l.x, clientY: l.y }); assert.equal(R.cur.length, 160, 'length back to the value before the drag');
   R.calls.length = 0; R.S.fire('dblclick', { clientX: l.x, clientY: l.y }); assert.deepEqual(R.calls, [], 'already there: nothing happens');
-  assert.equal(R.drag('width:1', 20), 32.4); assert.equal(R.drag('width:1', 20), 33.8); const w = R.at('width:1'); R.S.fire('dblclick', { clientX: w.x, clientY: w.y }); assert.equal(R.cur.width, 32.4, 'back to before the last drag');
+  assert.equal(R.drag('width:1', 20), 32); assert.equal(R.drag('width:1', 20), 33); const w = R.at('width:1'); R.S.fire('dblclick', { clientX: w.x, clientY: w.y }); assert.equal(R.cur.width, 32, 'back to before the last drag');
   R.cur.width = 40; R.calls.length = 0; R.S.fire('dblclick', { clientX: w.x, clientY: w.y }); assert.deepEqual(R.calls, [], 'a value typed since is the keeper\'s: no stale "before" is put back');
   const away = R.S.fire('dblclick', { clientX: 5, clientY: 5 }); assert.equal(away.stopped, false); assert.equal(away.prevented, false);
 });
@@ -229,9 +229,9 @@ test('row 12: the label shows the exact value the drag sets, and what a double-c
   const texts = [], ctx = new Proxy({}, { get: (t, k) => (k === 'measureText' ? (x) => ({ width: x.length * 7 }) : k === 'fillText' ? (x) => { texts.push(x); } : (t[k] === undefined ? () => {} : t[k])), set: (t, k, v) => { t[k] = v; return true; } });
   const R = rig({ ctx, base: B2 }), t = R.at('turn:1');
   R.S.fire('pointermove', { clientX: t.x, clientY: t.y }); R.S.tick(); assert.equal(texts[texts.length - 1], 'turn 2.0°/100 m · double-click: 0', 'hovering: the value it has and what a double-click sets');
-  const { x, y } = R.along('turn:1', -20); R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: x, clientY: y }); R.S.tick(); R.S.tick();
+  const { x, y } = R.along('turn:1', -33); R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: x, clientY: y }); R.S.tick(); R.S.tick();
   assert.equal(R.last()[2], 0); assert.equal(texts[texts.length - 1], 'turn 0.0°/100 m', 'dragging: exactly what is set, held at 0.0');
-  R.S.fire('pointerup', { clientX: x, clientY: y }); R.drag('length:0', 40); const l = R.at('length:0'); texts.length = 0; R.S.fire('pointermove', { clientX: l.x, clientY: l.y }); R.S.tick(); assert.equal(texts[texts.length - 1], 'length 176.8 m · double-click: 160.0', 'length: a double-click would put back 160');
+  R.S.fire('pointerup', { clientX: x, clientY: y }); R.drag('length:0', 40); const l = R.at('length:0'); texts.length = 0; R.S.fire('pointermove', { clientX: l.x, clientY: l.y }); R.S.tick(); assert.equal(texts[texts.length - 1], 'length 174.3 m · double-click: 160.0', 'length: a double-click would put back 160');
 });
 
 // D270 (the keeper, 14:32: "when you first click the points on the track, there is this window that says tauri.localhost to show your cursor press ESC. i DONT want that"): NO POINTER LOCK. Chromium draws that
@@ -269,9 +269,9 @@ test('row 13: no pointer lock (D270): a grab never asks for one and registers no
 test('row 13b: the cursor goes back at the handle through the native window when there is one; with none (a browser, a test host) or a refusal the release still ends cleanly', () => {
   for (const native of ['none', 'throw', 'reject']) {
     const R = grabRig(native), t = R.at('turn:1'), u = [t.dx / t.len, t.dy / t.len];
-    R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: t.x + u[0] * -20, clientY: t.y + u[1] * -20 }); R.S.tick();
-    assert.equal(R.calls.filter((c) => c[0] === 'apply').pop()[2], 0, `${native}: 20 px: 2 - 1.66 held at 0`);
-    R.S.fire('pointerup', { clientX: t.x + u[0] * -20, clientY: t.y + u[1] * -20 }); assert.equal(R.ov.dragging(), false, `${native}: the drag ended`); assert.equal(R.S.stage.style.cursor, '', `${native}: the cursor is back`); assert.equal(R.cur.turn, 0);
+    R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.S.fire('pointermove', { clientX: t.x + u[0] * -33, clientY: t.y + u[1] * -33 }); R.S.tick();
+    assert.equal(R.calls.filter((c) => c[0] === 'apply').pop()[2], 0, `${native}: 33 px from 2: 6 held, 24 to reach 0, 3 into the hold at 0`);
+    R.S.fire('pointerup', { clientX: t.x + u[0] * -33, clientY: t.y + u[1] * -33 }); assert.equal(R.ov.dragging(), false, `${native}: the drag ended`); assert.equal(R.S.stage.style.cursor, '', `${native}: the cursor is back`); assert.equal(R.cur.turn, 0);
     assert.equal(R.warps.length, native === 'none' ? 0 : 1, `${native}: the native move was tried once, or not at all`);
   }
 });
@@ -293,7 +293,7 @@ test('row 11b: the double-click is two presses within 400 ms on one handle that 
   let R = grabRig(); press(R, 'turn:1', 1000); assert.equal(R.cur.turn, 2, 'one click changes nothing'); press(R, 'turn:1', 1200); assert.ok(Object.is(R.cur.turn, 0), 'the second press, 160 ms after the first release, resets turn to 0'); assert.equal(R.S.stage.style.cursor, '', 'the reset left the cursor shown');
   R = grabRig(); press(R, 'turn:1', 1000); press(R, 'turn:1', 1600); assert.equal(R.cur.turn, 2, 'a pause longer than 400 ms is two single clicks');
   R = grabRig(); const a = R.at('length:0'), u = [a.dx / a.len, a.dy / a.len]; R.S.fire('pointerdown', { clientX: a.x, clientY: a.y, timeStamp: 1000 }); R.S.fire('pointermove', { clientX: a.x + u[0] * 40, clientY: a.y + u[1] * 40 }); R.S.tick(); R.S.fire('pointerup', { clientX: a.x + u[0] * 40, clientY: a.y + u[1] * 40, timeStamp: 1100 });
-  assert.equal(R.cur.length, 176.8); press(R, 'length:0', 1200); assert.equal(R.cur.length, 176.8, 'a press right after a DRAG is not a double-click'); press(R, 'length:0', 1300); assert.equal(R.cur.length, 160, 'but a click and a click after it is: back to before the drag');
+  assert.equal(R.cur.length, 174.3); press(R, 'length:0', 1200); assert.equal(R.cur.length, 174.3, 'a press right after a DRAG is not a double-click'); press(R, 'length:0', 1300); assert.equal(R.cur.length, 160, 'but a click and a click after it is: back to before the drag');
 });
 
 test('row 14: the landing\'s kinds (D258): four free marks at the landing, each out along its own arrow, the arrows ARE the take-off\'s heading frame; their speeds, holds, snaps, resets and labels', () => {
@@ -305,9 +305,9 @@ test('row 14: the landing\'s kinds (D258): four free marks at the landing, each 
   assert.deepEqual(h['landturn:0'].axis, [0.8, 0, -0.6], 'heading: along the landing\'s own left'); close(h['landturn:0'].pos[0], 19, 1e-12); close(h['landturn:0'].pos[2], 112, 1e-12); close(h['landturn:0'].pos[1], 2, 1e-12);
   assert.equal(new Set(list.map((x) => x.pos.join())).size, 4, 'no two marks on one point: they can be picked apart');
   assert.deepEqual(HD.placeHandles({ ...MODEL, kinds: HD.LANDING_ORDER }), [], 'no landing frame, no marks'); assert.deepEqual(HD.placeHandles({ ...MODEL, kinds: HD.LANDING_ORDER, free: { pos: [0, 0, 0] } }), [], 'a frame without its axes places nothing');
-  const T = HD.targetFor; assert.equal(T('landfwd', 40, 100), 55, 'forward: 0.15 m a pixel'); assert.equal(T('landleft', 0, 100), 10, 'sideways: 0.1 m'); assert.equal(T('landup', 0, 100), 5, 'height: 0.05 m'); assert.equal(T('landturn', 0, 100), 10, 'heading: 0.1 degree');
+  const T = HD.targetFor; assert.equal(T('landfwd', 40, 100), 54.1, 'forward: 0.15 m a pixel past the 6 px hold'); assert.equal(T('landleft', 0, 100), 9.4, 'sideways: 0.1 m'); assert.equal(T('landup', 0, 100), 4.7, 'height: 0.05 m'); assert.equal(T('landturn', 0, 100), 9.4, 'heading: 0.1 degree');
   assert.equal(T('landup', 0, 200, {}, { shift: true }), 1, 'Shift: a tenth'); assert.equal(T('landfwd', 40, 33, {}, { ctrl: true }), 45, 'Ctrl snaps forward to 5 m'); assert.equal(T('landleft', 3.2, 0, {}, { ctrl: true }), 3, 'sideways to 1 m'); assert.equal(T('landturn', 0, 52, {}, { ctrl: true }), 5, 'heading to 5 degrees');
-  assert.equal(T('landfwd', 40, 3), 40, 'forward holds its start'); assert.equal(T('landleft', 8, -70), 1, 'sideways moves'); assert.equal(T('landleft', 8, -78), 0, 'and holds at 0: inside 6 px (0.6 m)'); assert.ok(Object.is(T('landup', 0.2, 0), 0.2) && Object.is(T('landturn', -1, 8), 0), 'height holds its start; heading holds at 0');
+  assert.equal(T('landfwd', 40, 3), 40, 'forward holds its start'); assert.equal(T('landleft', 8, -70), 1.6, 'sideways moves'); assert.equal(T('landleft', 8, -88), 0, 'and holds at 0: 6 px held at 8, 80 to reach 0, 2 into the 6 px (0.6 m) hold there'); assert.ok(Object.is(T('landup', 0.2, 0), 0.2) && Object.is(T('landturn', -1, 18), 0), 'height holds its start; heading holds at 0');
   assert.equal(T('landfwd', 40, 1e6), 2000); assert.equal(T('landturn', 0, -1e6), -180); assert.equal(T('landup', 0, -1e6), -500);
   assert.equal(HD.resetValue('landleft', 12), 0); assert.equal(HD.resetValue('landup', null), 0); assert.equal(HD.resetValue('landturn', 5), 0); assert.equal(HD.resetValue('landfwd', 55), 55, 'forward goes back to before its drag'); assert.equal(HD.resetValue('landfwd', null), null, 'or nowhere');
   assert.equal(HD.format('landfwd', 40), 'forward 40.0 m'); assert.equal(HD.format('landleft', -8), 'sideways -8.0 m'); assert.equal(HD.format('landup', 3.5), 'height 3.5 m'); assert.equal(HD.format('landturn', 10), 'heading 10.0°');
@@ -317,7 +317,7 @@ test('row 14: the landing\'s kinds (D258): four free marks at the landing, each 
 // orientation changes which way you have to drag the pieces ... should be the same every way you look at it". The turn handle has no clamp (Turn by and
 // Turn to grid are the exact-angle tools), and it reads the pointer's own left and right on screen: a drag to the right is a right turn from any view.
 test('the turn handle is not clamped: a long drag goes past 90°/100 m either way', () => {
-  assert.equal(HD.targetFor('turn', 0, 5000), 415, '5000 px at 0.083 a pixel'); assert.equal(HD.targetFor('turn', 0, -5000), -415);
+  assert.equal(HD.targetFor('turn', 0, 5000), 414.5, '5000 px, less the 6 px hold, at 0.083 a pixel'); assert.equal(HD.targetFor('turn', 0, -5000), -414.5);
 });
 test('the turn handle: a drag to the right is a right turn and to the left a left turn, whichever way the left of the road lies on screen', () => {
   const view = (pose) => { const vp = M.viewProj(pose, W / Hh), h = byId(HD.placeHandles(MODEL)); return ['turn:1', 'turn:-1'].map((id) => HD.screenAxis(vp, W, Hh, h[id].pos, h[id].axis)); };
@@ -327,5 +327,20 @@ test('the turn handle: a drag to the right is a right turn and to the left a lef
     assert.ok(HD.dragPixels(ax, 10, 0, 'turn') < 0, 'a drag to the right turns right (negative: + is left)');
     assert.ok(HD.dragPixels(ax, -10, 0, 'turn') > 0, 'a drag to the left turns left');
     assert.equal(HD.dragPixels(ax, 0, 25, 'turn'), 0, 'up and down move nothing');
+  }
+});
+
+// 2026-10-14, reported: on a 1000 m straight, a turn added by dragging jumped from 0 straight to 0.5 (the 6 px hold times 0.083 a pixel), which on a long piece is
+// 5 degrees of heading at once. The hold is now DEAD TRAVEL: leaving it continues from the held value, so the drag walks 0.1, 0.2, ... with nothing skipped.
+test('leaving a hold walks on in tenths: no jump from 0, for every kind', () => {
+  for (const kind of ['turn', 'climb', 'bank', 'cup', 'width', 'length']) {
+    const K = HD.KINDS[kind], base = K.zero ? 0 : 50, seen = [];
+    for (let px = 0; px <= HD.DETENT_PX + 40; px += 0.25) seen.push(HD.targetFor(kind, base, px));
+    const steps = seen.slice(1).map((v, i) => Math.round((v - seen[i]) * 10) / 10).filter((d) => d !== 0);
+    assert.ok(steps.length > 3, `${kind}: control, the drag moved`);
+    const first = seen.find((v) => v !== base);
+    assert.ok(Math.abs(first - base) <= Math.max(0.1, Math.ceil(K.perPx * 0.25 * 10) / 10) + 1e-9, `${kind}: the first value off the hold is one small step from ${base}, not a jump: ${first}`);
+    // a kind that moves a tenth or less a pixel (turn, climb, width) walks in exact tenths; faster ones (bank 0.45, cup 0.24, length 0.42 a pixel) move a pixel's worth, as everywhere else in the drag
+    if (K.perPx <= 0.1) assert.ok(steps.every((d) => d === 0.1), `${kind}: every change is one tenth (got ${[...new Set(steps)].join(', ')})`);
   }
 });
