@@ -83,6 +83,24 @@
   input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; }
   input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--accent); }
   select { background: var(--bg); color: var(--text); }
+  /* THE OPEN LISTS IN THE SIGIL LOOK (2026-10-14): every list that drops open is black with its names in white, the chosen one in the accent */
+  option { background: var(--bg); color: var(--text); }
+  option:checked { background: var(--accent-dim); color: #fff; }
+  /* the header's two lists (Open, Previous versions) as a full Sigil panel: Chromium's customizable select (WebView2 135 and later; an older runtime keeps the colours above) */
+  @supports (appearance: base-select) {
+    header select, header select::picker(select) { appearance: base-select; }
+    header select { background: transparent; min-width: 150px; }
+    header select::picker-icon { color: var(--dim); transition: rotate .15s; }
+    header select:open::picker-icon { rotate: 180deg; color: var(--accent); }
+    header select::picker(select) { background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); border-radius: 2px; padding: 4px 0;
+      margin-top: 4px; max-height: min(70vh, 560px); min-width: max(anchor-size(width), 260px); box-shadow: 0 18px 50px rgba(0, 0, 0, .65); }
+    header select option { background: transparent; color: #fff; padding: 7px 14px; font: 300 13px var(--body); letter-spacing: .03em; border-left: 2px solid transparent; }
+    header select option:first-of-type { color: var(--dim); font: 300 11px var(--display); letter-spacing: .3em; text-transform: uppercase; }
+    header select option:hover, header select option:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent); border-left-color: var(--accent); outline: none; }
+    header select option:checked { background: transparent; color: var(--accent); }
+    header select option::checkmark { content: "\25CF"; order: 1; margin-left: auto; font-size: 7px; color: var(--accent); }
+    header select option:first-of-type::checkmark { content: ""; }
+  }
   button[disabled] { opacity: .4; cursor: default; }
   /* The left column scrolls as ONE (up and down only): #palette and #side take their natural height inside it */
   /* Both columns sit in the window-filling third row by name. Auto-placed, they slid up into the banner's content-sized
