@@ -132,7 +132,7 @@ function chunkLines(c) {
   }
   return c.lines;
 }
-const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.55, 0.85, 1.0] });
+const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.73, 0.66, 1.0] });   // 2026-10-14, Sigil: the accent violet (#b9a8ff); was sky blue, which tinted the whole view
 const GHOST_ALPHA = 0.42;
 // D179, the usability pass (p-d179-lookpass-C §1): the ties are one near-black line per station; from overhead or far
 // away they outnumber the pixels and hatch the lit road dark (measured: 42–51% of the overhead's drawn pixels near-black),
@@ -140,7 +140,7 @@ const GHOST_ALPHA = 0.42;
 // facing away from the sun (a tube's ceiling, L* about 14) were only ΔE00 about 6 from a background that was the fog colour.
 // The fog colour itself is part of the look and is unchanged (src/lookmatch/raster.js uses the same).
 const TIE_FADE = Object.freeze([60, 250]);
-const CLEAR = Object.freeze([0.03, 0.035, 0.045]);
+const CLEAR = Object.freeze([0.024, 0.023, 0.021]);   // 2026-10-14, Sigil: a warm near-black (was a blue-black, 0.03 0.035 0.045); still darker than the fog
 
 function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');

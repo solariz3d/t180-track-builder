@@ -77,7 +77,9 @@
   #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   #camera [role="toolbar"] button { border-color: transparent; text-transform: uppercase; letter-spacing: .22em; font-size: 10.5px; padding: 6px 10px; }
   #camera [role="toolbar"] button[aria-pressed="true"], #camera [role="toolbar"] button.on { color: var(--accent); box-shadow: 0 -1px 0 var(--accent) inset; }
-  .preview-hud { left: 346px !important; top: 14px; bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; letter-spacing: .14em; text-transform: uppercase; }
+  /* the depth behind the track: a soft vignette over the view (the road keeps its own lighting) */
+  #preview::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 55% 38%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
+  .preview-hud { z-index: 2; left: 346px !important; top: 14px; bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; letter-spacing: .14em; text-transform: uppercase; }
   #camera p { margin: 0; color: var(--dim); font-size: 11px; letter-spacing: .04em; text-shadow: 0 0 6px #000; }
   /* The side sections never scroll sideways (seen at the default window size once E's 480 px load graph showed): what a
      panel puts here is held to the column's width. Canvases, images and tables shrink to fit, long words break, and the
@@ -87,7 +89,7 @@
   #side canvas, #side img, #side svg, #side video { display: block; max-width: 100%; height: auto; }
   #side table { display: block; max-width: 100%; overflow-x: auto; }
   #reds:empty { display: none; }
-  h3 { font: 400 10px var(--display); text-transform: uppercase; letter-spacing: .34em; color: var(--dim); margin: 18px 0 8px; display: flex; align-items: center; gap: 10px; }
+  h3 { font: 400 12px var(--display); text-transform: uppercase; letter-spacing: .34em; color: var(--dim); margin: 18px 0 8px; display: flex; align-items: center; gap: 10px; }
   h3::after { content: ""; flex: 1; height: 1px; background: var(--hair); }
   .pickers { display: grid; gap: 6px; }
   /* D235 (the keeper's screenshot: the Extend fields ran under the scroll bar, and the "width like…" select was cut off): the field column is minmax(0, 1fr), not 1fr,

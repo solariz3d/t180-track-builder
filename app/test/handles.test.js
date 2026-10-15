@@ -32,19 +32,20 @@ test('row 1: every kind is placed where the keeper marked it, and every kind wit
   assert.deepEqual(list.map((x) => x.kind), ['length', 'width', 'width', 'bank', 'bank', 'cup', 'cup', 'turn', 'turn', 'climb'], 'ten handles: the one-sided kinds once, the others twice');
   // CHANGED 2026-10-14: length and width moved from the near end to the FRONT of the piece (its far end, where it grows to)
   assert.deepEqual(h['length:0'].pos, [0, 0, 200], 'length: the centreline at the front (far) end');
-  assert.deepEqual([h['width:1'].pos, h['width:-1'].pos], [[10, 0, 200], [-10, 0, 200]], 'width: both edges at the front (far) end');
-  assert.deepEqual([h['bank:1'].pos, h['bank:-1'].pos], [[10, 0, 120], [-10, 0, 120]], 'bank: both edges, mid piece');
+  // CHANGED 2026-10-14 (the second move): width to the middle of the piece, bank three quarters along, turn at the front edges
+  assert.deepEqual([h['width:1'].pos, h['width:-1'].pos], [[10, 0, 120], [-10, 0, 120]], 'width: both edges, mid piece');
+  assert.deepEqual([h['bank:1'].pos, h['bank:-1'].pos], [[10, 0, 160], [-10, 0, 160]], 'bank: both edges three quarters along');
   assert.deepEqual([h['cup:1'].pos, h['cup:-1'].pos], [[3, 0, 120], [-3, 0, 120]], 'cup: just inside the centre, both sides, mid piece');
-  assert.deepEqual([h['turn:1'].pos, h['turn:-1'].pos], [[10, 0, 160], [-10, 0, 160]], 'turn: both edges three quarters along');
+  assert.deepEqual([h['turn:1'].pos, h['turn:-1'].pos], [[10, 0, 200], [-10, 0, 200]], 'turn: both edges at the front (far) end');
   assert.deepEqual(h['climb:0'].pos, [0, 0, 160], 'climb: the centreline three quarters along');
   for (const k of ['width', 'bank', 'cup', 'turn']) assert.equal(h[`${k}:1`].pos[0], -h[`${k}:-1`].pos[0], `${k}: mirrored`);
 });
 test('row 1b: the road\'s width at the handle sets how far out an edge handle sits, and an unknown or absent kind places nothing', () => {
   const narrow = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, kinds: ['width'] }));
-  assert.deepEqual(narrow['width:1'].pos, [12, 0, 200], 'with no target given, the front end (share 1) is where the road is: 12 m from the centre');
+  assert.deepEqual(narrow['width:1'].pos, [8, 0, 120], 'with no target given, mid piece (share 0.5) is where the road is: 8 m from the centre');
   // the width mark sits at the TARGET half-width (the field's value) when one is given, so it follows the drag at the front end
   const target = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, halfTarget: 9, kinds: ['width', 'bank'] }));
-  assert.deepEqual([target['width:1'].pos, target['width:-1'].pos], [[9, 0, 200], [-9, 0, 200]], 'the front end, at the target width'); assert.deepEqual(target['bank:1'].pos, [8, 0, 120], 'only a target kind uses it: bank still sits at the road\'s own edge, mid piece');
+  assert.deepEqual([target['width:1'].pos, target['width:-1'].pos], [[9, 0, 120], [-9, 0, 120]], 'mid piece, at the target width'); assert.deepEqual(target['bank:1'].pos, [10, 0, 160], 'only a target kind uses it: bank still sits at the road\'s own edge, mid piece');
   const placed = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, halfTarget: 9, at: { width: 1 }, kinds: ['width'] })); assert.deepEqual(placed['width:1'].pos, [9, 0, 200], 'an `at` override moves it (Sculpt keeps the width mark at the far end of the piece)');
   assert.deepEqual(byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, at: { width: 1 }, kinds: ['width'] }))['width:1'].pos, [12, 0, 200], 'with no target, the road\'s own half-width at that share');
   assert.deepEqual(HD.placeHandles({ ...MODEL, kinds: ['nope'] }), []); assert.deepEqual(HD.placeHandles({ ...MODEL, samples: [] }), []);
