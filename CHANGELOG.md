@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Sounds, ready for the files.** Four sound slots: a tick while a handle is dragged (at most one every 35 ms), placing a piece, undo, and closing the loop. Each plays its WAV from `app/sounds/` (`drag_tick.wav`, `place.wav`, `undo.wav`, `loop_closed.wav`); a missing file leaves that slot silent and notes it once in the console. Which sound plays is read from the change in the track's history, so every way of placing, undoing or closing makes its sound, and opening a track or sculpting makes none. Mute and volume sit in the ⋯ menu and are remembered. Audio starts on the first click or key (Chromium's rule). No sound files are included yet: they are being made by hand in Serum. New: `app/sound.js`, `app/sounds/README.md` (the four slots, their lengths and the format); `app/core/handles.js` announces each step of a drag. Tests: `app/test/sound.test.js`.
+
 ## [0.3.6] - 2026-10-14
 
 ### Changed
