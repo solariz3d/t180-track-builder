@@ -202,8 +202,14 @@ function residual(doc, { cache = null } = {}) {
   const road = doc.pieces.filter((P) => P.type === 'road'), F = road[0], L = road[road.length - 1];
   const rows = netRows(doc, { cache }), net = { kh: rows.khBase, kv: rows.kvBase };   // kvBase: a jump's landing pitch, when the lap has one (D243); khBase: the jumps' heading turns (D258)
   for (const ch of ['kh', 'kv']) for (const [key, w] of rows[ch]) { const [p, i] = key.split(':').map(Number); net[ch] += w * doc.pieces[p].channels[ch][i]; }
-  const turns = Math.round(net.kh / TAU), bank = L.channels.phi.at(-1) - F.channels.phi[0], m = Math.round(bank / TAU);
-  const r = [z.pos[0] - a.pos[0], z.pos[1] - a.pos[1], z.pos[2] - a.pos[2], net.kh - TAU * turns, net.kv, bank - TAU * m];
+  // THE FLIPPED FRAME (2026-10-14, ELYSIUM: the end met the start to 18 cm and 0.57°, and Close refused, setting out to roll it 180°). Over the top of a loop
+  // the frame is carried as (heading + π, π − pitch, bank + π): the same orientation, written the other way. When the net pitch is nearer π than 0, the seam
+  // is measured in that form, so the target is the orientation and not the numbers: heading − π, π − pitch, bank − π (each to the nearest whole turn).
+  // `flip` tells the solver the pitch row's sign is reversed (its derivative is minus the net pitch's)
+  const flip = Math.cos(net.kv) < 0, half = flip ? Math.PI : 0;
+  const turns = Math.round((net.kh - half) / TAU), bank = L.channels.phi.at(-1) - F.channels.phi[0], m = Math.round((bank - half) / TAU);
+  const pitch = flip ? Math.PI - net.kv : net.kv, pTurns = Math.round(pitch / TAU);
+  const r = [z.pos[0] - a.pos[0], z.pos[1] - a.pos[1], z.pos[2] - a.pos[2], net.kh - half - TAU * turns, pitch - TAU * pTurns, bank - half - TAU * m];
   const names = ['x', 'y', 'z', 'net heading − 2πk', 'net pitch', 'bank at the seam'];
   const sm = seamOf(doc), cupBoth = sm.cupBoth;   // the cup continues round the seam only when both ends are cup pieces (a mixed seam is reported, not solved); e, s, t likewise (D225)
   for (const ch of valueChannels(sm)) { r.push(L.channels[ch].at(-1) - F.channels[ch][0]); names.push(`${ch} value at the seam`); }
@@ -214,7 +220,7 @@ function residual(doc, { cache = null } = {}) {
     const cl = L.channels[ch], n = cl.length, cf = F.channels[ch];
     r.push((3 * (cl[n - 1] - cl[n - 2])) / hEnd(L) - (3 * (cf[1] - cf[0])) / hStart(F)); names.push(`${ch} slope at the seam`);
   }
-  return { r, names, turns, gapM: Math.hypot(r[0], r[1], r[2]), tangentRad: Math.acos(Math.max(-1, Math.min(1, a.T[0] * z.T[0] + a.T[1] * z.T[1] + a.T[2] * z.T[2]))), pathEnd: z, pathStart: a };
+  return { r, names, turns, flip, gapM: Math.hypot(r[0], r[1], r[2]), tangentRad: Math.acos(Math.max(-1, Math.min(1, a.T[0] * z.T[0] + a.T[1] * z.T[1] + a.T[2] * z.T[2]))), pathEnd: z, pathStart: a };
 }
 
 /**
@@ -259,7 +265,7 @@ function close(doc, opts = {}) {
   for (; it < maxIter && !done(m); it++) {
     const Jp = positionJacobian(work), nr = netRows(work, { cache }), J = [];
     for (let k = 0; k < 3; k++) { const row = new Float64Array(N); toCols('kh', Jp.kh, row, k); toCols('kv', Jp.kv, row, k); J.push(row); }
-    for (const ch of ['kh', 'kv']) { const row = new Float64Array(N); toCols(ch, nr[ch], row); J.push(row); }
+    for (const ch of ['kh', 'kv']) { const row = new Float64Array(N); toCols(ch, nr[ch], row); if (ch === 'kv' && m.flip) row.forEach((v, k) => { row[k] = -v; }); J.push(row); }   // the flipped frame: the pitch row is π − pitch
     J.push(valueRow('phi', 'value'));
     for (const ch of valueChannels(seamOf(doc))) J.push(valueRow(ch, 'value'));
     if (held) { const row = new Float64Array(N), Pi = held.end === 'last' ? roadIdx[roadIdx.length - 1] : roadIdx[0], ii = held.end === 'last' ? doc.pieces[Pi].channels.c.length - 1 : 0; for (const [c, coef] of expand.c[Pi][ii]) row[c] += coef; J.push(row); }
@@ -273,7 +279,7 @@ function close(doc, opts = {}) {
     x = xn; work = wn; m = mn;
   }
   // what is STORED is quantised (README): measure the quantised document, and report that
-  const stored = apply(doc, expand, x, true, keep), ms = residual(stored, { cache }), converged = done(m) && ms.gapM < 0.01;
+  const stored = apply(doc, expand, x, true, keep), ms = residual(stored, { cache }), converged = done(m) && ms.gapM < 1e-3;   // the closed path's own bar (src/geom/path.js closeTol 1e-3 m): a stored gap past it was reported closed (it was 0.01) and then could not be built (2026-10-14, 1.65 mm on ELYSIUM)
   // D242: a local close that does not close is a REFUSAL by name, never a best try handed back: the window could not do it, and nothing outside it may help
   if (local && !converged) throw refuse(`it gets no closer than ${ms.gapM.toFixed(3)} m (tangent ${ms.tangentRad.toExponential(1)} rad) in ${it} step(s)`);
   let out;
