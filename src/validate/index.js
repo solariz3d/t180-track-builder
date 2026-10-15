@@ -247,6 +247,7 @@ function core(path, segments, opts, from, carried, upto) {
   };
   const constAt = (p) => { const g = segments[p.seg]; return P.readsBlend(g) && g.blend ? blendConst(g, p.s - segS0[p.seg]) : segConst(p.seg); };   // only a cup's blend: a word's font transition is judged at its target, as before
   // the normal n(u) at a station: L·nl + U·nu (add(mul(L, nl), mul(U, nu)))
+  const dfPerMps = car.downforce ? car.downforce.nPerMps / car.downforce.massKg : 0;   // m/s² of downforce per m/s of speed (2026-10-15; a car with none: 0)
   const nx = (p, c) => p.L[0] * c.nl + p.U[0] * c.nu, ny = (p, c) => p.L[1] * c.nl + p.U[1] * c.nu, nz = (p, c) => p.L[2] * c.nl + p.U[2] * c.nu;
   for (let i = from; i < end; i++) {
     if (!isRoad(i)) continue;
@@ -267,11 +268,18 @@ function core(path, segments, opts, from, carried, upto) {
       if (margin <= 0) { raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'fold', worst: -margin }); continue; }
       // D256 holds-above: on the CENTRELINE, a surface facing the ground (n·ŷ < 0) holds the car only while v²(κ⃗·n)/margin outweighs
       // gravity's pull off it, i.e. above v = sqrt(−g(n·ŷ) / ((κ⃗·n)/margin)) at a steady speed. Information in km/h; red where no speed holds
+      // 2026-10-15, THE DOWNFORCE COUNTS (limits.js MACH6.downforce): d·v more presses the car on, so it holds where kn·v² + d·v + g·(n·ŷ) ≥ 0.
+      // Curving toward the car (kn > 0) or not at all, there is one speed above which it holds; curving AWAY (kn < 0) it holds only between two
+      // speeds, and is red when there are none, or when the lower is past the car's top speed
       if (u === 0 && coreRoad) {
         const nyc = ny(p, c);
         if (nyc < -1e-9) {
-          const kn = (K[0] * nx(p, c) + K[1] * nyc + K[2] * nz(p, c)) / margin;
-          if (kn > 0) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'holds-above', worst: Math.sqrt(-G * nyc / kn) * 3.6 });
+          const kn = (K[0] * nx(p, c) + K[1] * nyc + K[2] * nz(p, c)) / margin, gy = G * nyc;   // gy < 0: gravity pulling the car off
+          let vHold = null;
+          if (kn > 1e-12) vHold = (-dfPerMps + Math.sqrt(dfPerMps * dfPerMps - 4 * kn * gy)) / (2 * kn);
+          else if (kn >= -1e-12) vHold = dfPerMps > 0 ? -gy / dfPerMps : null;
+          else { const disc = dfPerMps * dfPerMps + 4 * kn * -gy; if (disc >= 0) { const v1 = (dfPerMps - Math.sqrt(disc)) / (2 * -kn); if (v1 <= kmh(car.vmaxKmh)) vHold = v1; } }
+          if (vHold !== null) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'holds-above', worst: vHold * 3.6 });
           else raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'no-speed-holds', worst: null });
         }
       }
@@ -280,9 +288,12 @@ function core(path, segments, opts, from, carried, upto) {
       const l0 = c.sg === 0 ? Lv[0] : Lv[0] * c.cos + Uv[0] * c.sgsin, l1 = c.sg === 0 ? Lv[1] : Lv[1] * c.cos + Uv[1] * c.sgsin, l2 = c.sg === 0 ? Lv[2] : Lv[2] * c.cos + Uv[2] * c.sgsin;
       const w = v * v / margin, f0 = (K[0] * w + Tv[0] * aT) + 0, f1 = (K[1] * w + Tv[1] * aT) + G, f2 = (K[2] * w + Tv[2] * aT) + 0;
       const line = { s: p.s, u, fN_g: (f0 * n0 + f1 * n1 + f2 * n2) / G, fLat_g: (f0 * l0 + f1 * l1 + f2 * l2) / G, fAlong_g: (f0 * Tv[0] + f1 * Tv[1] + f2 * Tv[2]) / G, f_g: Math.hypot(f0, f1, f2) / G };
+      // 2026-10-15: fHold_g is the load WITH the car's downforce (d·v along the road's normal): what decides whether the car stays on. fN_g, the
+      // load the 90 g and 20 g lines judge, is left as it was (limits.js MACH6.downforce says why)
+      line.fHold_g = line.fN_g + dfPerMps * v / G;
       raw.lines.push({ i, line });
       // D256: the centreline lift-off on an OPEN track (a closed one has it in the lap proof below, so it is not counted twice)
-      if (!path.closed && coreRoad && u === 0 && line.fN_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fN_g });
+      if (!path.closed && coreRoad && u === 0 && line.fHold_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fHold_g });
       if (line.fN_g > car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-above-proven', worst: line.fN_g });
       else if (line.fN_g >= car.suspensionStopG) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'on-the-stops', worst: line.fN_g });
     }
@@ -451,7 +462,7 @@ function proveLap(S, isRoad, v, lines, jumps) {
     if (i) { const va = (v[i] + v[i - 1]) / 2; t += va > 0 ? (S[i].s - S[i - 1].s) / va : Infinity; }
     if (isRoad(i) && !(v[i] > 0)) where.push({ s: S[i].s, reason: 'stall' });
   }
-  for (const l of lines) if (l.u === 0 && l.fN_g < 0) where.push({ s: l.s, reason: 'leaves-surface', fN_g: l.fN_g });
+  for (const l of lines) { const hold = l.fHold_g !== undefined ? l.fHold_g : l.fN_g; if (l.u === 0 && hold < 0) where.push({ s: l.s, reason: 'leaves-surface', fN_g: hold }); }   // with the downforce (2026-10-15)
   for (const jp of jumps) {
     if (jp.pending || jp.free) continue;   // D258: a free jump is the user's to tune by driving; the lap proof says nothing about it
     if (jp.badGap) { where.push({ s: jp.s, reason: 'jump-gap-not-forward', gap: jp.gap }); continue; }

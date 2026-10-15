@@ -37,3 +37,17 @@ test('Finish to start from a flipped-frame end lays no roll (the end is already 
   const turned = fin.plan.report.match(/turn (-?[\d.]+)°/g) || [];
   assert.ok(turned.every((t) => Math.abs(parseFloat(t.slice(5))) < 270), `no near-full-circle turn (the mirrored-turn sign): ${fin.plan.report}`);
 });
+
+// 2026-10-15, reported on ELYSIUM: Level curved the road DOWN. Level corrects the end's physical pitch through the climb channel, and in the flipped
+// frame more climb pitches the road physically down, so every correction went the wrong way: ELYSIUM's −0.50° became −1.01°.
+test('Level on a flipped-frame end with a slope ends level (pitch 0), as it does on an upright track', () => {
+  const { extend } = require('../src/core/extend.js'), L = require('../src/core/level.js');
+  const pitchOf = (d) => { const S = toPath({ ...d, closed: false }).path.samples, T = S.at(-1).T; return Math.atan2(T[1], Math.hypot(T[0], T[2])); };
+  const sloped = extend(flippedLap(), { length: 300, targets: { kv: 0.0015 } });
+  assert.ok(Math.abs(pitchOf(sloped)) > 0.05, `control: the end slopes (${(pitchOf(sloped) * 180 / Math.PI).toFixed(2)}°)`);
+  const lv = L.extendLevel(sloped, { length: 400 });
+  assert.ok(Math.abs(pitchOf(lv)) < 1e-4, `Level ends level: ${(pitchOf(lv) * 180 / Math.PI).toFixed(4)}°`);
+  // To floor from the levelled end (from an end still sloping down it refuses, flipped or not: a limit of its own, not the frame)
+  const fl = L.extendToFloor(lv, { length: 2500 }), endY = toPath({ ...fl, closed: false }).path.samples.at(-1).pos[1];
+  assert.ok(Math.abs(pitchOf(fl)) < 1e-4 && Math.abs(endY) < 0.01, `To floor ends level on the floor: ${(pitchOf(fl) * 180 / Math.PI).toFixed(4)}°, ${endY.toFixed(3)} m`);
+});

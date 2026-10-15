@@ -45,13 +45,22 @@ test('D256: without fullSpeed an open track still claims no speed (the validator
   assert.strictEqual(validate(X.pathOf(X.loop(20)), [core()], {}).speedFrom, 'none');
 });
 
-test('D256 lift-off on an OPEN track: a crest the car flies off at 970 km/h is RED leaves-surface, and is not at 460', () => {
-  const R = 3000, A = 0.1, p = X.pathOf(crest(R, A));   // fN = cos θ − v²/(gR): about +0.45 at 460, −1.47 at 970
+// 2026-10-15: THE DOWNFORCE COUNTS. The installed Mach 6 is pressed onto the road by 200 N per m/s of speed along its own up (docs/research/04 §4,
+// MACH6.downforce): 6.46 g at 970 km/h. A crest of R 3000 m (−1.47 g without it) now holds; R 600 m still lets go.
+const dfG = (v) => MACH6.downforce.nPerMps * v / MACH6.downforce.massKg / G;
+test('D256 lift-off on an OPEN track: a crest the car flies off at 970 km/h, downforce and all, is RED leaves-surface, and is not at 460', () => {
+  const R = 600, A = 0.1, p = X.pathOf(crest(R, A));   // cos θ − v²/(gR) + downforce: about +1.3 at 460, −4.9 at 970
   const full = validate(p, [core()], { fullSpeed: true });
   assert.ok(reasons(full.red).includes('leaves-surface'), JSON.stringify(full.red));
   const worst = full.red.find((x) => x.reason === 'leaves-surface').worst;
-  close(worst, kmh(MACH6.vmaxKmh) ** 2 / (G * R) - Math.cos(A / 2), 1e-6, 'its worst is how far below zero the centreline\'s load goes, in g: at the arc\'s ends, where gravity presses least');
+  close(worst, kmh(MACH6.vmaxKmh) ** 2 / (G * R) - Math.cos(A / 2) - dfG(kmh(MACH6.vmaxKmh)), 1e-6, 'its worst is how far below zero the centreline\'s hold goes, in g, downforce counted: at the arc\'s ends, where gravity presses least');
   assert.ok(!reasons(validate(p, [core()], { designSpeed: kmh(460) }).red).includes('leaves-surface'));
+});
+
+test('2026-10-15: a crest the downforce holds is not red: R 3000 m at 970 km/h pulls −1.47 g, and 6.46 g of downforce keeps the car on it', () => {
+  const full = validate(X.pathOf(crest(3000, 0.1)), [core()], { fullSpeed: true });
+  assert.ok(!reasons(full.red).includes('leaves-surface'), JSON.stringify(full.red));
+  close(dfG(kmh(MACH6.vmaxKmh)), 6.46, 0.01, 'the downforce at 970 km/h');
 });
 
 test('D256 lift-off: a CLOSED track keeps it in the lap proof, so it is not counted twice', () => {
@@ -60,11 +69,12 @@ test('D256 lift-off: a CLOSED track keeps it in the lap proof, so it is not coun
   assert.ok(!reasons(r.red).includes('leaves-surface'));
 });
 
-test('D256 holds-above: the top of a vertical loop of radius R holds above sqrt(gR), shown as information in km/h', () => {
+test('D256 holds-above: the top of a vertical loop of radius R holds above the speed where curve and downforce beat gravity, shown as information in km/h', () => {
   const R = 20, r = validate(X.pathOf(X.loop(R)), [core()], {});   // no speed at all: it is the road's shape, not a speed
   const h = r.info.filter((x) => x.reason === 'holds-above');
   assert.ok(h.length > 0, JSON.stringify(r.info));
-  close(Math.max(...h.map((x) => x.worst)), Math.sqrt(G * R) * 3.6, 1e-6, 'the highest need is at the top');
+  const d = MACH6.downforce.nPerMps / MACH6.downforce.massKg, top = (-d + Math.sqrt(d * d + 4 * G / R)) / (2 / R);   // v²/R + d·v = g
+  close(Math.max(...h.map((x) => x.worst)), top * 3.6, 1e-6, 'the highest need is at the top (42.7 km/h at R 20, where the curve alone needs 50.4)');
   assert.ok(h.every((x) => x.s0 > Math.PI * R / 2 - 2 && x.s1 < 3 * Math.PI * R / 2 + 2), 'only the half past vertical');
   assert.ok(!reasons(r.red).includes('no-speed-holds'));
 });
@@ -73,8 +83,16 @@ test('D256 holds-above: an upright road shows none', () => {
   for (const p of [X.straight(50), X.leftTurn(50, 1), crest(3000, 0.1)]) assert.ok(!reasons(validate(X.pathOf(p), [core()], {}).info).includes('holds-above'));
 });
 
-test('D256 no-speed-holds: a road facing the ground that nothing curves is RED, since no speed holds the car on it', () => {
+test('2026-10-15 holds-above: a road facing the ground that nothing curves is held by the downforce alone, above g·m / 200 = 150 km/h', () => {
   const r = validate(X.pathOf(upsideDown(50)), [core()], {});
+  assert.ok(!reasons(r.red).includes('no-speed-holds'), JSON.stringify(r.red));
+  const h = r.info.filter((x) => x.reason === 'holds-above'); assert.ok(h.length > 0);
+  close(h[0].worst, G * MACH6.downforce.massKg / MACH6.downforce.nPerMps * 3.6, 1e-6, 'downforce = weight at 41.7 m/s');
+});
+
+test('D256 no-speed-holds: a road facing the ground and curving AWAY from the car more tightly than the downforce can answer (R 200 m) is RED', () => {
+  const away = upsideDown(50).map((p) => ({ ...p, kvec: [0, 1 / 200, 0] }));   // n = −ŷ, so κ⃗·n = −1/200: the road falls away from the car
+  const r = validate(X.pathOf(away), [core()], {});
   assert.ok(reasons(r.red).includes('no-speed-holds'), JSON.stringify(r.red));
   assert.ok(!reasons(r.info).includes('holds-above'));
 });

@@ -42,14 +42,18 @@ test('a wall past vertical on the outside of a turn takes the turn\'s load INTO 
   assert.ok(w.fN_g > 10, `a 90 m/s turn at R≈${R} presses the outside wall at ${w.fN_g.toFixed(1)} g`);
 });
 
-test('a vertical loop: at the top the load is v²/R − g, so below √(gR) the car leaves the surface', () => {
+// 2026-10-15: the car's downforce (MACH6.downforce, d·v along the road's normal) also holds it on: the load (fN_g) is unchanged, the HOLD (fHold_g) adds
+// it, and the car leaves the top only below v* where v²/R + d·v = g (11.85 m/s at R 20; √(gR), 14.0, without the downforce)
+test('a vertical loop: at the top the load is v²/R − g; with the downforce the car leaves the surface only below v², R and d·v together meeting g', () => {
   const R = 20, v = 30, r = validate(X.pathOf(X.loop(R), true), [X.seg({ speed: v })]);
   const top = r.lines.filter((l) => l.u === 0).reduce((a, b) => (Math.abs(b.s - Math.PI * R) < Math.abs(a.s - Math.PI * R) ? b : a));
   close(top.fN_g, (v * v / R - G) / G, 1e-6);
-  const slow = validate(X.pathOf(X.loop(R), true), [X.seg({ speed: Math.sqrt(G * R) * 0.9 })]);
+  const d = MACH6.downforce.nPerMps / MACH6.downforce.massKg, vStar = (-d + Math.sqrt(d * d + 4 * G / R)) / (2 / R);
+  close(top.fHold_g, (v * v / R - G + d * v) / G, 1e-6);
+  const slow = validate(X.pathOf(X.loop(R), true), [X.seg({ speed: vStar * 0.9 })]);
   assert.strictEqual(slow.lap.ok, false);
   assert.ok(slow.lap.where.some((w) => w.reason === 'leaves-surface'));
-  const fast = validate(X.pathOf(X.loop(R), true), [X.seg({ speed: Math.sqrt(G * R) * 1.1 })]);
+  const fast = validate(X.pathOf(X.loop(R), true), [X.seg({ speed: vStar * 1.1 })]);
   assert.strictEqual(fast.lap.ok, true, JSON.stringify(fast.lap.where.slice(0, 3)));
 });
 

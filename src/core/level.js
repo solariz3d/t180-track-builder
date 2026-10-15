@@ -14,7 +14,7 @@
 // each 2 m segment, src/core/adapter.js toSegments), so one step is exact. To floor adds the end height, which is not linear (∫ sin p ds), so the
 // step is iterated (Gauss–Newton) with the residual read on the adapter's own path (toPath: what the app draws and exports, offsets included).
 // THE LIMIT (To floor's refusal, and nothing else): the road's centre must keep the car on it at the open track's speed, the validator's own D256
-// check (src/validate/index.js 'leaves-surface' on the centreline: fN = g·cos p + v²·κ_climb ≥ 0 at vmax 970 km/h, src/validate/limits.js). A
+// check (src/validate/index.js 'leaves-surface' on the centreline: g·cos p + v²·κ_climb + the downforce ≥ 0 at vmax 970 km/h, src/validate/limits.js). A
 // shape that would lift the car off is never placed, and never clamped: the user is told the length that does it.
 'use strict';
 const D = require('./document.js');
@@ -22,6 +22,7 @@ const { extend } = require('./extend.js');
 const { toPath } = require('./adapter.js');
 const { basis, denseSolve } = require('../../tools/piecewise.cjs');
 const { MACH6, G } = require('../validate/limits.js');
+const { netRows } = require('./close.js');
 
 const SEG_M = 2;               // the adapter's segment (toSegments segM): the pitch is integrated on its ends
 const PITCH_TOL = 1e-6;        // rad (0.00006°): the bar is 0.01°
@@ -43,17 +44,25 @@ function stationsOf(P) {
   const n = Math.max(1, Math.ceil(P.length / SEG_M - 1e-9)), kv = [0, 0, 0, 0, ...P.knots, P.length, P.length, P.length, P.length];
   return Array.from({ length: n + 1 }, (_, j) => { const s = (P.length * j) / n, b = basis(kv, Math.min(Math.max(s, 0), P.length)); return { s, first: b.first, N: Array.from(b.N) }; });
 }
+// THE FLIPPED FRAME (2026-10-15, reported on ELYSIUM: Level curved the road DOWN). Past the top of a loop the frame is carried as (heading + π, π − pitch,
+// bank + π) (src/core/close.js residual): there more climb rate pitches the road physically DOWN. The pitch here is the PHYSICAL pitch (headOf), so its
+// response to the climb channel carries `sgn`: +1 upright, −1 flipped. Without it every correction went the wrong way (ELYSIUM: −0.50° became −1.01°).
+function flipOf(doc) {
+  if (!doc.pieces.some((P) => P.type === 'road')) return false;
+  const rows = netRows(doc); let kv = rows.kvBase; for (const [key, w] of rows.kv) { const [pi, i] = key.split(':').map(Number); kv += w * doc.pieces[pi].channels.kv[i]; }
+  return Math.cos(kv) < 0;
+}
 /** The end pitch's change over the piece as weights on the control points (the adapter's trapezoid), and the pitch at each station. */
-function pitchRows(P, st, c, p0) {
+function pitchRows(P, st, c, p0, sgn = 1) {
   const m = c.length, w = new Float64Array(m), cum = new Float64Array(m), p = [p0], dpdc = [new Float64Array(m)];
   const kvAt = (x) => x.N.reduce((a, N, k) => a + N * c[x.first + k], 0);
   for (let j = 1; j < st.length; j++) {
     const a = st[j - 1], b = st[j], h = b.s - a.s;
-    for (let k = 0; k < 4; k++) { cum[a.first + k] += (h / 2) * a.N[k]; cum[b.first + k] += (h / 2) * b.N[k]; }
-    p.push(p[j - 1] + ((kvAt(a) + kvAt(b)) / 2) * h); dpdc.push(Float64Array.from(cum));
+    for (let k = 0; k < 4; k++) { cum[a.first + k] += sgn * (h / 2) * a.N[k]; cum[b.first + k] += sgn * (h / 2) * b.N[k]; }
+    p.push(p[j - 1] + sgn * ((kvAt(a) + kvAt(b)) / 2) * h); dpdc.push(Float64Array.from(cum));
   }
   w.set(cum);
-  return { w, p, dpdc, kv: st.map(kvAt) };
+  return { w, p, dpdc, kv: st.map((x) => sgn * kvAt(x)) };   // kv here: the PHYSICAL climb curvature (the crest check reads it)
 }
 /** The piece with its climb control points replaced (quantised as stored), and the document with it as the head. */
 function withClimb(doc, c) {
@@ -70,8 +79,10 @@ function step(J, r, m) {
   free.forEach((i, k) => { d[i] = A.reduce((s, row, q) => s + row[k] * lam[q], 0); });
   return d;
 }
-/** The car stays on the road's centre over the piece at the open track's speed: g·cos p + v²·kv ≥ 0 at every station. The worst margin (m/s²; < 0 lifts off). */
-const crestMargin = (rows) => Math.min(...rows.kv.map((k, j) => G * Math.cos(rows.p[j]) + V_OPEN * V_OPEN * k));
+/** The car stays on the road's centre over the piece at the open track's speed: g·cos p + v²·kv + the downforce ≥ 0 at every station (the validator's own
+ *  leaves-surface check, which counts the car's downforce since 2026-10-15: limits.js MACH6.downforce). The worst margin (m/s²; < 0 lifts off). */
+const DF = MACH6.downforce ? (MACH6.downforce.nPerMps / MACH6.downforce.massKg) * V_OPEN : 0;
+const crestMargin = (rows) => Math.min(...rows.kv.map((k, j) => G * Math.cos(rows.p[j]) + V_OPEN * V_OPEN * k + DF));
 
 /** The piece Extend would place with climb 0 (its easing: the rate to 0 over the whole piece), the climb's own at-start ramp dropped. */
 function basePiece(doc, opts) {
@@ -81,11 +92,12 @@ function basePiece(doc, opts) {
   return extend(doc, o);
 }
 
-function solve(doc, opts, floor, { model = false, head: given = null } = {}) {
+function solve(doc, opts, floor, { model = false, head: given = null, flip = null } = {}) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to level');
   const head = given || headOf(doc), d0 = basePiece(doc, opts), P0 = d0.pieces[d0.pieces.length - 1], st = stationsOf(P0), m = P0.channels.kv.length;
+  const sgn = (flip === null ? flipOf(doc) : flip) ? -1 : 1;
   let c = Float64Array.from(P0.channels.kv); c[m - 1] = 0; c[m - 2] = 0;   // it ends straight: rate 0 and slope 0
-  let d = withClimb(d0, c), rows = pitchRows(P0, st, c, head.p);
+  let d = withClimb(d0, c), rows = pitchRows(P0, st, c, head.p, sgn);
   for (let it = 0; it < MAX_ITER; it++) {
     const pEnd = rows.p[rows.p.length - 1];
     if (!floor) {
@@ -98,7 +110,7 @@ function solve(doc, opts, floor, { model = false, head: given = null } = {}) {
       const wy = new Float64Array(m); for (let j = 1; j < st.length; j++) { const h = st[j].s - st[j - 1].s, ca = Math.cos(rows.p[j - 1]), cb = Math.cos(rows.p[j]); for (let i = 0; i < m; i++) wy[i] += (h / 2) * (ca * rows.dpdc[j - 1][i] + cb * rows.dpdc[j][i]); }
       const dl = step([rows.w, wy], [pEnd, yEnd], m); c = c.map((x, i) => x + dl[i]);
     }
-    d = withClimb(d0, c); c = Float64Array.from(d.pieces[d.pieces.length - 1].channels.kv); rows = pitchRows(P0, st, c, head.p);
+    d = withClimb(d0, c); c = Float64Array.from(d.pieces[d.pieces.length - 1].channels.kv); rows = pitchRows(P0, st, c, head.p, sgn);
   }
   const yEnd = model ? yModel(rows, st, head.y) : headOf(d).y, pEnd = rows.p[rows.p.length - 1];
   return { doc: d, pEnd, yEnd, crest: crestMargin(rows), converged: Math.abs(pEnd) <= PITCH_TOL && (!floor || Math.abs(yEnd) <= Y_TOL) };
@@ -114,12 +126,12 @@ const feasible = (doc, opts, L, how = {}) => { try { const r = solve(doc, { ...o
 /** The shortest whole-metre length at which To floor works from this head (with these fields), or null when none up to MAX_SEARCH_M does. */
 function shortestToFloor(doc, opts) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to level');
-  const how = { model: true, head: headOf(doc) };   // the search on the model, from the head read once
+  const how = { model: true, head: headOf(doc), flip: flipOf(doc) };   // the search on the model, from the head (and its frame) read once
   let lo = 0, hi = Math.max(40, Number(opts.length) || 40);
   while (!feasible(doc, opts, hi, how)) { lo = hi; hi *= 1.5; if (hi > MAX_SEARCH_M) return null; }
   while (hi - lo > 1) { const mid = Math.round((lo + hi) / 2); if (feasible(doc, opts, mid, how)) hi = mid; else lo = mid; }
   let L = Math.ceil(hi);
-  for (let k = 0; k < 20 && !feasible(doc, opts, L, { head: how.head }); k++) L++;   // the named length must WORK on the adapter's path: checked there, a metre at a time if the model was short
+  for (let k = 0; k < 20 && !feasible(doc, opts, L, { head: how.head, flip: how.flip }); k++) L++;   // the named length must WORK on the adapter's path: checked there, a metre at a time if the model was short
   return L;
 }
 /** Extend with a piece that ends straight, level and on the floor (height 0), or refuse by name with the shortest length that does it. */

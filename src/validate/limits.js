@@ -21,6 +21,13 @@ const MACH6 = Object.freeze({
   // the car's up axis; suction full within fullWithinM of the ray's start, none at noneAtM, and none on a miss (inferred
   // there from the code). src/validate/raygap.js uses aheadM as the reach of a gap the ray can fall into.
   downforceRay: Object.freeze({ upM: 0.4, aheadM: 1.0, lengthM: 1.0, fullWithinM: 0.5, noneAtM: 0.9 }),
+  // THE DOWNFORCE ITSELF (docs/research/04_ac_physics_drivability.md §4, the same script.lua:424-433): `-200 × horizontal speed × suction`, along the
+  // car's own up axis, so it presses the car onto the road whichever way the road faces; TOTALMASS 850 (§5). 2.4 g at 100 m/s, 6.46 g at 970 km/h.
+  // The research marks the m/s reading UNVERIFIED; the keeper's full-speed laps of ELYSIUM (2026-10-15: crests and an inverted stretch this check
+  // called red, driven clean) are the evidence for it. Counted where the road holds the car (leaves-surface, holds-above, no-speed-holds), with
+  // the suction full: a road under the ray. Where the ray loses the road (a gap, a jump lip) the downforce-ray-gap check is the one that speaks.
+  // NOT counted in the load (fN_g) the 90 g and 20 g lines judge: those were measured on real laps, downforce already in them.
+  downforce: Object.freeze({ nPerMps: 200, massKg: 850 }),
   // FINDINGS.md:312-313 (§7d), as tools/read_track.cjs:149-151 implements it: "The deepest allowed drop is
   // dist·tan10° + ½·6.5 g·(dist / 375 km/h)²". ARCHITECTURE.md:79: "A landing must be reachable. The same bound".
   reach: Object.freeze({ downDeg: 10, fallG: 6.5, minTakeoffKmh: 375 }),
