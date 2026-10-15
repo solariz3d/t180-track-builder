@@ -51,7 +51,7 @@ test('row 3: a track is finished with new pieces only, closed, and the new road 
   assert.ok(r.doc.pieces.length > d.pieces.length, 'road was added');
   d.pieces.forEach((P, i) => assert.equal(r.doc.pieces[i], P, `piece ${i} is the user's own, untouched`));
   assert.ok(r.window.every((i) => i >= d.pieces.length), 'only the new pieces were bent');
-  assert.match(r.plan.report, /^(LSL|RSR|LSR|RSL) at R \d+ m: turn -?\d+(\.\d)?°, \d+ m straight, turn -?\d+(\.\d)?°; \d+ new pieces?, \d+ m; closed/);
+  assert.match(r.plan.report, /^(LSL|RSR|LSR|RSL|CS|SC) at R \d+ m: turn -?\d+(\.\d)?°, \d+ m straight, turn -?\d+(\.\d)?°; \d+ new pieces?, \d+ m; closed/);
 });
 
 test('row 4: refusals by name: a closed loop, an empty track', () => {
@@ -69,4 +69,31 @@ test('row 5: an end upside down rolls back upright on a straight of its own onto
   assert.ok(lastNew.channels.kh.every((v) => Math.abs(v) < 2e-3), 'and it is a straight (no turn to speak of: Close may bend it a hair)');
   const end = D.valuesAt(lastNew, lastNew.length).phi, start = D.valuesAt(r.doc.pieces[0], 0).phi;
   assert.ok(Math.abs(Math.atan2(Math.sin(end - start), Math.cos(end - start))) < 1e-6, 'the bank at the seam is that of the start, mod 360°');
+});
+
+// 2026-10-15, reported on ELYSIUM: the end pointed 90° off with the start 468 m to its left and 76 m ahead, and Finish laid a 307° right turn, 431 m and a
+// 37° left (2.3 km) for what is one left quarter turn and a straight. Its routes were only at the fixed radii (200 m and up). It now first solves the
+// ONE-TURN routes exactly: a turn then a straight (CS), or a straight then a turn (SC), whose radius and length the end and the start fix between them.
+test('row 6: an end a quarter turn short of the lap is finished with one turn and one straight, not a detour', () => {
+  let d = D.createDoc('quarter');
+  d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG); d = extend(d, { length: 600 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG); d = extend(d, { length: 200 });   // three sides: a quarter turn short
+  const r = F.finishToStart(d);
+  assert.equal(r.doc.closed, true);
+  assert.match(r.plan.word, /^(CS|SC)$/, r.plan.report);
+  const turned = r.plan.turns.filter((t) => Math.abs(t) > 0.5);
+  assert.equal(turned.length, 1, `one turn: ${r.plan.report}`); assert.ok(Math.abs(turned[0] - 90) < 1, `a left quarter turn: ${turned[0]}°`);
+  assert.ok(r.plan.lengthM < 1500, `${r.plan.lengthM} m of new road`);
+  d.pieces.forEach((P, i) => assert.equal(r.doc.pieces[i], P, `piece ${i} is the user's own, untouched`));
+});
+
+test('row 7: the one-turn routes, laid out, end on the start pose; none tighter than the floor', () => {
+  for (const [p1, th1, p0, th0] of [[[0, 0], 0, [-300, 500], -Math.PI / 2], [[100, 0], Math.PI / 2, [600, 800], 0], [[0, 0], 0, [0, 500], 0]]) {
+    for (const r of F.oneTurnRoutes(p1, th1, p0, th0)) {
+      const e1 = arc(p1, th1, r.a1 || 1e-12, r.radiusM), f = fwd(e1.th), e2 = arc([e1.p[0] + r.straightM * f[0], e1.p[1] + r.straightM * f[1]], e1.th, r.a2 || 1e-12, r.radiusM);
+      assert.ok(Math.hypot(e2.p[0] - p0[0], e2.p[1] - p0[1]) < 1e-6, `${r.word}: ends ${Math.hypot(e2.p[0] - p0[0], e2.p[1] - p0[1])} m off`);
+      assert.ok(Math.abs(wrap(e2.th - th0)) < 1e-9, `${r.word}: heading off by ${wrap(e2.th - th0)}`);
+      assert.ok(r.radiusM >= F.ONE_TURN_MIN_R && r.straightM >= 0);
+    }
+  }
+  assert.deepEqual(F.oneTurnRoutes([0, 0], 0, [5, 3], Math.PI / 2), [], 'a turn tighter than the floor is no route');
 });
