@@ -291,7 +291,9 @@ function core(path, segments, opts, from, carried, upto) {
       // 2026-10-15: fHold_g is the load WITH the car's downforce (d·v along the road's normal): what decides whether the car stays on. fN_g, the
       // load the 90 g and 20 g lines judge, is left as it was (limits.js MACH6.downforce says why)
       line.fHold_g = line.fN_g + dfPerMps * v / G;
-      raw.lines.push({ i, line });
+      // opts.centrelineLines (2026-10-15, ELYSIUM's Close killed the page: the overlap check's two workers each kept ~2.1 million lines, 650 MB, and read none):
+      // keep only u = 0, the one line the lap proof reads; every red and amber is still judged on every line, above and below
+      if (!opts.centrelineLines || u === 0) raw.lines.push({ i, line });
       // D256: the centreline lift-off on an OPEN track (a closed one has it in the lap proof below, so it is not counted twice)
       if (!path.closed && coreRoad && u === 0 && line.fHold_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fHold_g });
       if (line.fN_g > car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-above-proven', worst: line.fN_g });
@@ -488,7 +490,8 @@ const uptoOf = (S, opts) => { if (opts.uptoS == null) return undefined; const k 
 
 /**
  * validate(path, segments, opts): the whole track. With opts.uptoS, only the stations before it; the rest is PENDING
- * (result.pendingFrom), checked by the next revalidate.
+ * (result.pendingFrom), checked by the next revalidate. With opts.centrelineLines, result.lines holds only the centreline (u = 0)
+ * lines: the same red, amber, info and lap, for a caller that reads no load graph (app/core/overlapjob.js).
  */
 function validate(path, segments, opts = {}) { return core(path, segments, opts, 0, null, uptoOf(path.samples, opts)); }
 
