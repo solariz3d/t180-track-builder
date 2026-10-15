@@ -869,3 +869,18 @@ test('D259: dragging the bank handle from 350 by about +20 gives about 10 (not 3
     P1.button('Extend').onclick(); P1.frame(); assert.ok(Math.abs(headBank(shell) - shown) < 0.11, `applied as shown: ${headBank(shell)} for ${shown}`);
   }
 });
+
+// 2026-10-14 (stretching a long piece lagged): a piece is cut into equal chords of about 2 m, so a length that is not a whole 2 m changes every chord on every move and
+// the cheap ghost could reuse nothing. While the LENGTH handle is dragged the preview is built at the nearest whole 2 m; the release builds the exact length.
+test('row 18b: a length drag previews whole 2 m, and the release previews the exact length the field shows', async () => {
+  const P1 = await handlePanel(), { S } = P1, tot = (c) => c.segments.reduce((a, s) => a + s.length, 0);
+  const b = handleOf(P1, 'length:0').screen; fire(P1, 'pointerdown', b.x, b.y);
+  const lens = []; for (const k of [3, 7, 11, 17]) { fire(P1, 'pointermove', b.x + b.dx * k, b.y + b.dy * k); P1.frame(); lens.push(tot(S.lastCandidate)); }
+  fire(P1, 'pointerup', b.x + b.dx * 17, b.y + b.dy * 17);
+  const lenField = P1.all().find((e) => e.tagName === 'INPUT' && (e.attrs.title === 'metres added' || e.title === 'metres added'));
+  const exact = Number(lenField.value), placed = tot(S.lastCandidate) - exact;
+  assert.ok(Math.abs(exact / 2 - Math.round(exact / 2)) > 1e-6, `control: the drag ended off a whole 2 m (${exact} m)`);
+  for (const L of lens) { const nw = L - placed; assert.ok(Math.abs(nw / 2 - Math.round(nw / 2)) < 1e-6, `a drag step previews a whole 2 m: ${nw} m`); }
+  assert.ok(Math.abs(tot(S.lastCandidate) - placed - exact) < 1e-6, 'the release previews exactly the field');
+  P1.panel.unmount();
+});

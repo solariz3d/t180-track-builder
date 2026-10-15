@@ -57,6 +57,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // D235: `detail` > 1 meshes a COARSER preview (app/preview/coarse.js thins each segment's row grid) while the track is being dragged; 1 is full detail, the export's.
   // A change of detail is a full rebuild. `lastResolved` is the state's document the last update was built from: the very same object builds nothing again.
   let detail = 1, detailMoved = false, lastResolved = null;
+  let lastCheap = null;   // the last CHEAP ghost's mesh and keys, reused by the next one (ghostFor)
   // UNDO OF A PLACEMENT (the keeper, 2026-10-12: "undoing the last piece lags too long"). A removal was a full rebuild: 1.2 to 1.4 s on his 10-piece
   // track, against 65 ms to place the piece. An 'extend' grows the path and the mesh IN PLACE (geom extendPath / extendMesh), so just before it the
   // model copies what those two touch: the path's arrays and the last block (extendPath pops a sample and shortens the last block), and the mesh
@@ -166,7 +167,13 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
       const nk = segs.map(keyOf);
       if (nk.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
-      if (!path) { const p = geom.buildPath(segs, { ...pathOpts, ...(candidate.start ? { start: candidate.start } : {}) }); return { batches: batchesOf(geom.buildMesh(p, segs, meshOpts)), path: p, head: p.head, segments: segs }; }
+      // THE CHEAP GHOST REMEMBERS ITS LAST MESH (2026-10-14, stretching a long piece): a drag rebuilds the candidate on every move, but a length drag leaves most of its
+      // segments exactly as they were, so a new piece whose segment key is the last cheap ghost's at the same index keeps its mesh and only moves (geom.reuseMesh, `from`:
+      // the placed track is taken as it is). Valid only on the same placed path; any full ghost, update or change of detail forgets it.
+      const reuse = cheap && typeof geom.reuseMesh === 'function' && lastCheap && lastCheap.base === path && lastCheap.from === keys.length ? lastCheap : null;
+      const remember = (gm) => { lastCheap = cheap ? { base: path, from: keys.length, mesh: gm, nk } : null; return gm; };
+      const meshNew = (p, build) => remember(reuse ? geom.reuseMesh(reuse.mesh, p, segs, nk.map((k, j) => j >= keys.length && k === reuse.nk[j]), { from: keys.length, grow: true }) : build());
+      if (!path) { const p = geom.buildPath(segs, { ...pathOpts, ...(candidate.start ? { start: candidate.start } : {}) }); return { batches: batchesOf(meshNew(p, () => geom.buildMesh(p, segs, meshOpts))), path: p, head: p.head, segments: segs }; }
       if (closed) throw new Error('ghost: a closed loop has no open end');
       // copies: extendPath only pops and pushes these arrays and never edits a sample, and of the blocks it changes only the
       // last one's sample count (so that block is copied); extendMesh only sets new pieces and seams
@@ -174,7 +181,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const p = { ...path, samples: path.samples.slice(), starts: path.starts.slice(), segFirst: path.segFirst.slice(), segEnd: path.segEnd.slice(), blocks };
       const st = mesh._state, m = { ...mesh, _state: { ...st, pieces: st.pieces.slice(), seams: st.seams.slice() } };
       geom.extendPath(p, segs);
-      const gm = geom.extendMesh(m, p, segs), from = keys.length;
+      const gm = meshNew(p, () => geom.extendMesh(m, p, segs)), from = keys.length;
       return { batches: batchesOf(gm, from), path: p, head: p.head, segments: segs };   // D235: only the NEW pieces' batches are built (it built every batch and kept the new ones)
     },
     /**

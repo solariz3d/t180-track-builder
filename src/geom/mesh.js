@@ -313,14 +313,21 @@ function sculptMesh(prev, path, segments, g) {
  * frame, as sculptMesh's reuse test), keeps its local arrays and only its placement moves; every other piece is meshed again, and so is every seam that touches one. The closed
  * loop's own joint (the last piece to the first) is always made again: the last piece's end is where the whole loop's drift shows. `prev` is not changed: moved pieces are copies.
  * The result equals buildMesh(path, segments, prev's options) to round-off (D236; app/test/preview-speed.test.js proves it on a closed cup loop, a closed tube and an open track).
+ *
+ * `from` (2026-10-14, the ghost while a length is dragged, app/preview/trackmodel.js): pieces and seams before `from` are taken from `prev` as they are (the caller's word that
+ * the path up to there is the very same: the placed track under a ghost), and `prev` may then have a DIFFERENT number of segments, open tracks only: a piece past prev's end
+ * is meshed new. `grow` allows the different count with nothing taken as it is (`from` 0: a ghost on an empty track). With neither, the rule is as
+ * before: the same number of segments.
  */
-function reuseMesh(prev, path, segments, same) {
+function reuseMesh(prev, path, segments, same, { from = 0, grow = from > 0 } = {}) {
   const old = prev._state, n = segments.length;
-  if (old.nseg !== n || !Array.isArray(same) || same.length !== n) throw new Error('reuseMesh: needs a mesh of the same number of segments and a same[] flag for each');
+  if (!Array.isArray(same) || same.length !== n) throw new Error('reuseMesh: needs a same[] flag for each segment');
+  if (!grow ? old.nseg !== n : (old.closed || path.closed || from > old.nseg || from > n)) throw new Error('reuseMesh: needs a mesh of the same number of segments (or, with from, an open one at least from long)');
   const st = { o: old.o, pieces: new Array(n), seams: new Array(n).fill(null), workC: { n: 0 }, nseg: n, closed: !!path.closed, reused: 0 }, moved = new Array(n).fill(false);
   const closed = !!path.closed;
   for (let j = 0; j < n; j++) {
     const seg = segments[j];
+    if (j < from) { st.pieces[j] = old.pieces[j]; continue; }
     if (seg.kind === 'gap') { st.pieces[j] = null; continue; }
     const eff = effective(segments, j, st.o, closed), prior = old.pieces[j], f0 = path.samples[path.segFirst[j]];
     // a piece with no document ramp of its own takes its previous piece's font (effective): it is the same only if that one is too
@@ -330,6 +337,7 @@ function reuseMesh(prev, path, segments, same) {
   }
   for (let g = 1; g < n; g++) {
     const A = st.pieces[g - 1], B = st.pieces[g];
+    if (g < from) { st.seams[g] = old.seams[g]; continue; }
     if (moved[g - 1] && moved[g] && old.pieces[g - 1] && old.pieces[g]) st.seams[g] = old.seams[g] ? { ...old.seams[g], F: B.F } : null;   // both pieces only moved: the seam between them moves with the later one
     else st.seams[g] = A && B ? meshSeam(A, B, st.workC) : null;
   }
