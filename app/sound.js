@@ -18,8 +18,8 @@
 // nothing else does (opening a track, a sculpt, a typed field: no sound). The ticks come from app/core/handles.js (`t180:handle-step`).
 //
 // THE SPACE: everything sits in a dark, empty, wide space: a mid/side widener with short early reflections, and a long "void" reverb (a far
-// pre-delay, a ~7 s tail whose highs die first). Place, undo and the loop close's lead also ECHO (420 ms, alternating ears, each repeat 0.62 of the
-// last); the ticks and the loop close's chords stay dry.
+// pre-delay, a ~11 s tail whose highs die first). Place, undo and the loop close's lead also ECHO, faintly (420 ms, alternating ears, each repeat half
+// the last); the ticks and the loop close's chords stay dry.
 //
 // MUTE AND VOLUME are remembered in localStorage (t180.sound.muted, t180.sound.volume). Audio starts on the first press or key in the window
 // (Chromium's rule: no sound before the user acts).
@@ -112,20 +112,21 @@ function createEngine(ctx) {
   };
   // the VOID: vast and dark
   const voidSend = ctx.createGain(), vhp = ctx.createBiquadFilter(), voidVerb = ctx.createConvolver(), vg = ctx.createGain();
-  voidSend.gain.value = 0.55; vhp.type = 'highpass'; vhp.frequency.value = 220; voidVerb.buffer = noiseIR(7.5, 0.085, 0.95, (t) => 0.85 * Math.exp(-t / 1.4) + 0.03); vg.gain.value = 0.9;
+  // 2026-10-15, the keeper: a bigger room, the echo quieter. Walls further off (a 140 ms pre-delay, was 85), a ~11 s tail (decay 0.6, was 0.95 over 7.5 s), a little more sent in
+  voidSend.gain.value = 0.65; vhp.type = 'highpass'; vhp.frequency.value = 220; voidVerb.buffer = noiseIR(11, 0.14, 0.6, (t) => 0.85 * Math.exp(-t / 2.1) + 0.03); vg.gain.value = 0.9;
   preBus.connect(voidSend); voidSend.connect(vhp); vhp.connect(voidVerb); voidVerb.connect(vg); vg.connect(out);
   // a short bright room, for the voices' own air (joins after the echo send, so a dry voice's room stays dry)
   const room = ctx.createConvolver(), roomG = ctx.createGain(); room.buffer = noiseIR(1.6, 0, 3.2, () => 1); roomG.gain.value = 0.32; room.connect(roomG); roomG.connect(preBus);
   // the ECHO: 420 ms, alternating ears, each repeat 0.62 of the last, a little darker, a slow tape warble
   const dIn = ctx.createGain(), dl = ctx.createDelay(1.5), dr = ctx.createDelay(1.5), fbl = ctx.createGain(), fbr = ctx.createGain();
   const lpd = ctx.createBiquadFilter(), hpd = ctx.createBiquadFilter(), dm = ctx.createChannelMerger(2), dOut = ctx.createGain();
-  dIn.gain.value = 1; dl.delayTime.value = 0.42; dr.delayTime.value = 0.42; fbl.gain.value = 0.62; fbr.gain.value = 0.62;
+  dIn.gain.value = 1; dl.delayTime.value = 0.42; dr.delayTime.value = 0.42; fbl.gain.value = 0.5; fbr.gain.value = 0.5;   // each repeat half the last (was 0.62)
   lpd.type = 'lowpass'; lpd.frequency.value = 5200; hpd.type = 'highpass'; hpd.frequency.value = 150;
   const wow = ctx.createOscillator(), wowL = ctx.createGain(), wowR = ctx.createGain(); wow.frequency.value = 0.27; wowL.gain.value = 0.0035; wowR.gain.value = -0.0028;
   wow.connect(wowL); wowL.connect(dl.delayTime); wow.connect(wowR); wowR.connect(dr.delayTime); wow.start();
   master.connect(dIn); dIn.connect(hpd); hpd.connect(lpd); lpd.connect(dl);
   dl.connect(dm, 0, 0); dl.connect(fbl); fbl.connect(dr); dr.connect(dm, 0, 1); dr.connect(fbr); fbr.connect(hpd);
-  dm.connect(dOut); dOut.gain.value = 1.25; dOut.connect(out);
+  dm.connect(dOut); dOut.gain.value = 0.5; dOut.connect(out);   // a faint trail behind the sound, about 8 dB down on the first draft (1.25)
 
   // ── voices ── (each connects to `bus`, which a caller can set to dryBus for a call)
   let bus = master;
