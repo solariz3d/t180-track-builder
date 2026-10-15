@@ -15,7 +15,7 @@
 // neighbouring segments still have the same row grid (no seam zipper appears) and an unchanged segment is the same object from one update to the next.
 'use strict';
 
-const { normalize, blendSamples } = require('../../src/geom/profile.js');
+const { normalize, blendSamples, commonFractions } = require('../../src/geom/profile.js');
 
 const DEG = Math.PI / 180;
 const FACTOR = 6;
@@ -65,4 +65,22 @@ function coarsen(segments, factor = FACTOR) {
   });
 }
 
-module.exports = { coarsen, FACTOR, CHEAP_FACTOR };
+/**
+ * coarsen() for a RUN of new segments rebuilt on every pointer move (the cheap ghost, app/preview/trackmodel.js ghostFor). 2026-10-14, reported: stretching a
+ * piece past about 500 m dropped the frames massively. A plain piece's segments carry no row grid, the candidate is a new set of objects on every move, so
+ * gridOf's memo (keyed on profile OBJECTS) never hit and each 2 m segment ran its own 4,000-step search: 802 searches at 1600 m, ~90 ms a move. Here the
+ * segments that need a grid get ONE, from commonFractions over all their profiles (the same measure as blendSamples, bounding every profile in the run, the
+ * list subsampled to `cap`), so the search runs once a move and neighbouring segments share their rows (no seam zipper). Segments that have a grid are thinned
+ * as coarsen() does. The preview only, as coarsen: the release builds the full ghost, and nothing here reaches the export.
+ */
+function coarsenRun(segments, factor = CHEAP_FACTOR, { cap = 24 } = {}) {
+  if (!(factor >= 2) || !Array.isArray(segments)) return segments;
+  const plain = (g) => g && !Array.isArray(g.fractions) && g.kind === 'road' && g.profile;
+  const need = segments.filter(plain);
+  if (need.length < 2) return coarsen(segments, factor);
+  const profiles = []; for (const g of need) { if (g.blend) profiles.push(g.blend.from); profiles.push(g.profile); }
+  const fr = commonFractions(profiles, { maxAcross: factor, maxSeam: factor * DEG, cap });
+  return segments.map((g) => (plain(g) ? { ...g, blend: g.blend || { from: g.profile, s0: 1, length: 1 }, fractions: fr } : coarsen([g], factor)[0]));
+}
+
+module.exports = { coarsen, coarsenRun, FACTOR, CHEAP_FACTOR };
