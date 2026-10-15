@@ -31,7 +31,7 @@
 
 const G = require('../../src/geom/index.js');
 const { batchesOf } = require('./batches.js');
-const { coarsen, CHEAP_FACTOR } = require('./coarse.js');
+const { coarsen, coarsenRun, CHEAP_FACTOR } = require('./coarse.js');
 const { worldBounds } = require('./look.js');
 
 const { keyOf: hashOf } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
@@ -162,7 +162,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
      */
     ghostFor(candidate, { cheap = false } = {}) {
       const all = candidate && candidate.segments;
-      const segs = candidate && detail > 1 ? coarsen(all, detail) : cheap && Array.isArray(all) ? [...all.slice(0, keys.length), ...coarsen(all.slice(keys.length), CHEAP_FACTOR)] : all;
+      const segs = candidate && detail > 1 ? coarsen(all, detail) : cheap && Array.isArray(all) ? [...all.slice(0, keys.length), ...coarsenRun(all.slice(keys.length), CHEAP_FACTOR)] : all;
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
       const nk = segs.map(keyOf);
       if (nk.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
