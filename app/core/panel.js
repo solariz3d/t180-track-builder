@@ -189,7 +189,7 @@ function mount(root, shell) {
         edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup) }; }
     } catch (e) { why = e.message; }
     for (const k of RO) roCells[k].textContent = f ? f[k] : '—';
-    if (values) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${show(Number(width.value))} m` : '') : null);   // D267: the same numbers, large over the 3D view
+    if (values) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // D267: the same numbers, large over the 3D view
     roBox.title = why;
   };
   let scrubbing = false;   // D266 item 2: an Extend handle is being dragged: the ghost is built CHEAP until the release (handlesHost.end builds the full one)

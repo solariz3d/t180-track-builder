@@ -26,15 +26,15 @@
 const M = require('../camera/math.js');
 
 const MINUS = '−';
-/** Round half away from zero at 0.1, with a guard for binary fractions (33.35 is 33.3499999… in binary). */
-const round1 = (x) => Math.sign(x) * Math.round(Math.abs(x) * 10 + 1e-7) / 10;
+/** Round half away from zero at 0.01, with a guard for binary fractions (33.345 is 33.3449999… in binary). Two decimals since 2026-10-15 ("everything to 0.00"). */
+const round2 = (x) => Math.sign(x) * Math.round(Math.abs(x) * 100 + 1e-7) / 100;
 function fmtDeg(x) {
   if (!Number.isFinite(x)) return '—';
-  const v = round1(x);
-  if (v === 0) return '0.0°';                                   // never "+0.0°" or "−0.0°"
-  return `${v > 0 ? '+' : MINUS}${Math.abs(v).toFixed(1)}°`;
+  const v = round2(x);
+  if (v === 0) return '0.00°';                                  // never "+0.00°" or "−0.00°"
+  return `${v > 0 ? '+' : MINUS}${Math.abs(v).toFixed(2)}°`;
 }
-const fmtM = (x) => (Number.isFinite(x) ? `${round1(x).toFixed(1)} m` : '—');
+const fmtM = (x) => (Number.isFinite(x) ? `${round2(x).toFixed(2)} m` : '—');
 /** A readout (src/core/readout.js) as the strings a person reads. Δbank = bankTo − bankFrom (the change the piece makes). */
 function formatReadout(r) {
   return { length: fmtM(r.lengthM), turn: fmtDeg(r.turnDeg), climb: fmtDeg(r.climbDeg), bank: fmtDeg(r.bankToDeg - r.bankFromDeg) };

@@ -176,9 +176,9 @@ test('xsec panel: a changed field is a target, and its cell shows the DOCUMENT, 
   p.type('length m', 100); p.type('edge angle °', 15); p.type('edge start', 0.7); p.type('tube sweep °', 180);
   const t = p.opts().targets;
   assert.deepEqual([t[E], t[S], t[T]], [15, 0.7, 180]);
-  assert.equal(p.cell('edge'), '0.0° → 15.9°', 'edge from → to: the document rings past the typed 15');
+  assert.equal(p.cell('edge'), '0.00° → 15.87°', 'edge from → to: the document rings past the typed 15');
   assert.equal(p.cell('start'), '0.64 → 0.71', 'edge start from → to, two decimals');
-  assert.equal(p.cell('tube'), '0.0° → 179.1°', 'tube from → to');
+  assert.equal(p.cell('tube'), '0.00° → 179.13°', 'tube from → to');
   p.box('edge angle °').checked = true; p.box('edge angle °').oninput();
   assert.deepEqual(p.opts().transition, { [E]: 20 }, 'the edge\'s at-start box');
 });
@@ -187,7 +187,7 @@ test('xsec panel: a changed field is a target, and its cell shows the DOCUMENT, 
 test('xsec panel: the edge angle and the edge start each redraw the readout on their own, with no other field typed after them', async () => {
   const p = await mountPanel(stubXsec);
   p.type('length m', 100); p.type('edge angle °', 15);
-  assert.equal(p.cell('edge'), '0.0° → 15.9°', 'the edge angle alone redraws its cell');
+  assert.equal(p.cell('edge'), '0.00° → 15.87°', 'the edge angle alone redraws its cell');
   p.type('edge start', 0.7);
   assert.equal(p.cell('start'), '0.64 → 0.71', 'the edge start alone redraws its cell');
 });
@@ -211,7 +211,7 @@ test('xsec panel (A\'s core): each cross-section cell is the core\'s own readout
     assert.equal(p.cell('edge'), `${fmtDegCell(r.edgeFromDeg)} → ${fmtDegCell(r.edgeToDeg)}`, `${JSON.stringify(typed)}: edge`);
     assert.equal(p.cell('start'), `${fmtShareCell(r.sliceFrom)} → ${fmtShareCell(r.sliceTo)}`, `${JSON.stringify(typed)}: edge start`);
     assert.equal(p.cell('tube'), `${fmtDegCell(r.tubeFromDeg)} → ${fmtDegCell(r.tubeToDeg)}`, `${JSON.stringify(typed)}: tube`);
-    if (!typed['tube sweep °']) assert.equal(p.cell('tube'), '0.0° → 0.0°', 'a piece that is not a tube reads a sweep of 0 ("none")');
+    if (!typed['tube sweep °']) assert.equal(p.cell('tube'), '0.00° → 0.00°', 'a piece that is not a tube reads a sweep of 0 ("none")');
   }
 });
 test('xsec panel: a core that reports no cross-section readout shows — in those cells', async () => {
