@@ -884,3 +884,28 @@ test('row 18b: a length drag previews whole 2 m, and the release previews the ex
   assert.ok(Math.abs(tot(S.lastCandidate) - placed - exact) < 1e-6, 'the release previews exactly the field');
   P1.panel.unmount();
 });
+
+// 2026-10-15, the keeper: "when clicking a previous placed part of the track, while its highlighted, make the values change to it, so you can mimic certain
+// values within a new piece you place down". A SINGLE selected road piece lends its end values (and its length) to the Extend fields; Extend then places a
+// piece like it. A run of several pieces lends nothing (which one would it be). Clearing the selection, or any new document, shows the head again.
+test('a selected piece lends its values to the Extend fields: Extend places a piece like it; a run lends nothing; clearing shows the head', async () => {
+  const P1 = await mountPanel(), { shell } = P1, r2 = (x) => Math.round(x * 100) / 100;
+  const f = (t) => fieldOf(P1, t), turnF = f('turn °/100m'), lenF = f('length m'), widthF = f('width m');
+  P1.frame();
+  const head = { turn: turnF.value, width: widthF.value };
+  P1.click(400); P1.frame();                                         // p2: 150 m, turning at TURN
+  const p2 = shell.getState().history.present.pieces[1], e = D.pieceEnd(p2);
+  assert.equal(Number(turnF.value), r2(e.kh.v * 100 / DEG), 'turn: the selected piece\'s'); assert.notEqual(turnF.value, head.turn, 'control: not the head\'s');
+  assert.equal(Number(lenF.value), 150, 'length: the selected piece\'s'); assert.equal(Number(widthF.value), r2(e.w.v));
+  P1.click(100, { shiftKey: true }); P1.frame();                     // a run p1..p2: lends nothing new (the fields stay as they were)
+  assert.equal(Number(turnF.value), r2(e.kh.v * 100 / DEG), 'a run does not overwrite what the single piece lent');
+  P1.click(400); P1.frame();
+  P1.button('Extend').onclick(); P1.frame();
+  const d = shell.getState().history.present, placed = d.pieces[d.pieces.length - 1], pe = D.pieceEnd(placed);
+  assert.equal(d.pieces.length, 6, 'Extend placed one piece');
+  assert.ok(Math.abs(pe.kh.v - e.kh.v) < 1e-6, `it ends turning like p2: ${pe.kh.v} vs ${e.kh.v}`); assert.equal(placed.length, 150, 'and is as long');
+  assert.equal(shell.getState().selection, null, 'the new document clears the selection');
+  assert.equal(Number(turnF.value), r2(shell.headState().kh * 100 / DEG), 'the fields show the (new) head');
+  P1.click(400); P1.frame(); assert.equal(Number(lenF.value), 150);
+  P1.click(null); P1.frame(); assert.equal(Number(turnF.value), r2(shell.headState().kh * 100 / DEG), 'a click on nothing: the head again');
+});
