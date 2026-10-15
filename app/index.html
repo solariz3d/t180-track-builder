@@ -32,6 +32,32 @@
   header h1::before { content: ""; width: 14px; height: 14px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 16%, transparent 18%); flex: none; }
   header input, header select { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 5px 8px; font: inherit; }
   header label { color: var(--dim); white-space: nowrap; }
+  /* THE TITLE BAR (2026-10-14): the Windows frame is off, so the header is the bar (app/titlebar.js). Hairline glyphs, no fills. */
+  header { padding-right: 0; user-select: none; }
+  header .drag { flex: 1 1 0; align-self: stretch; min-width: 24px; }
+  #winctl { display: flex; align-self: stretch; margin-left: 4px; }
+  #winctl button { width: 46px; height: 100%; border: 0; border-radius: 0; background: transparent; padding: 0; position: relative; cursor: default; }
+  #winctl button::before, #winctl button::after { content: ""; position: absolute; left: 50%; top: 50%; box-sizing: border-box; }
+  #win-min::before { width: 10px; height: 0; border-top: 1px solid var(--text); transform: translate(-50%, -50%); }
+  #win-max::before { width: 10px; height: 10px; border: 1px solid var(--text); transform: translate(-50%, -50%); }
+  #win-max.restore::before { width: 8px; height: 8px; transform: translate(-35%, -65%); }
+  #win-max.restore::after { width: 8px; height: 8px; border: 1px solid var(--text); background: var(--panel); transform: translate(-65%, -35%); }
+  #win-close::before, #win-close::after { width: 13px; height: 0; border-top: 1px solid var(--text); }
+  #win-close::before { transform: translate(-50%, -50%) rotate(45deg); }
+  #win-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
+  #win-min:hover, #win-max:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  #win-close:hover { background: #b0303a; }
+  #win-close:hover::before, #win-close:hover::after { border-color: #fff; }
+  /* A QUESTION IN THE PAGE (app/askdialog.js): the save-on-close prompt, in the same black, bone and violet. */
+  .ask-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(6, 6, 6, .62); backdrop-filter: blur(3px); }
+  .ask-card { width: min(380px, calc(100vw - 48px)); background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); padding: 22px 24px 18px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6); }
+  .ask-card h2 { margin: 0 0 10px; font: 300 12px var(--display); letter-spacing: .32em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+  .ask-card h2::before { content: ""; width: 10px; height: 10px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 18%, transparent 20%); flex: none; }
+  .ask-card p { margin: 0 0 20px; color: var(--dim); }
+  .ask-row { display: flex; gap: 8px; justify-content: flex-end; }
+  .ask-row .ask-quiet { margin-right: auto; color: var(--dim); }
+  .ask-row .ask-main { border-color: var(--accent); color: var(--accent); }
+  .ask-row button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
   #banner { grid-column: 1 / -1; }
   #banner:empty { display: none; }
   /* D252: the ⋯ menu beside Export to Assetto Corsa (Export… into any folder, the TEST export, the Assetto Corsa folder, See it in Assetto): it drops down over the page */
@@ -119,8 +145,8 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>T-180 TRACK BUILDER</h1>
+<header data-tauri-drag-region>
+  <h1 data-tauri-drag-region>T-180 TRACK BUILDER</h1>
   <button id="new" title="New track">New</button>
   <input id="name" placeholder="track name" aria-label="track name" size="16">
   <button id="save" title="Ctrl+S">Save</button>
@@ -134,7 +160,9 @@
     <span id="more-install"></span>
     <div id="share" title="the whole track as one line of text to share (Copy track code), or open a track from such a line (Paste track code…). The open track is one Ctrl+Z away"></div>
   </div></details>
-  <span id="status" style="color: var(--dim)"></span>
+  <span id="status" style="color: var(--dim)" data-tauri-drag-region></span>
+  <span class="drag" data-tauri-drag-region></span>
+  <div id="winctl" hidden><button id="win-min" title="Minimize" aria-label="Minimize"></button><button id="win-max" title="Maximize" aria-label="Maximize"></button><button id="win-close" title="Close" aria-label="Close"></button></div>
 </header>
 <div id="banner"></div>
 <div id="left">
@@ -202,10 +230,11 @@
   const closeAsk = async () => {
     if (typeof closeDirty !== 'function' || !closeDirty()) return null;
     if (!tauri) return null;
-    // the plugin command itself, as the Export folder picker calls it: the dialog plugin injects no JS dialog API into this window
-    // (tauri-plugin-dialog 2.8.0 src/lib.rs injects init-iife.js only). The answer is the clicked button's label.
-    const r = await call('plugin:dialog|message', { message: 'This track has changes that are not saved.', title: 'Save before closing?', kind: 'warning', buttons: { YesNoCancelCustom: ['Save', "Don't save", 'Cancel'] } });
-    return r === 'Save' ? 'save' : r === "Don't save" ? 'discard' : 'cancel';
+    // 2026-10-14, Sigil: asked inside the page in the builder's own look (app/askdialog.js), no longer a native Windows box.
+    // A failure to ask throws, and app/closer.js then closes as before (a broken prompt must not trap the window).
+    const { askChoice } = await loadCjs('app/askdialog.js', get);
+    return askChoice(document, { title: 'Save before closing?', message: 'This track has changes that are not saved.', cancelValue: 'cancel',
+      buttons: [{ label: "Don't save", value: 'discard', kind: 'quiet' }, { label: 'Cancel', value: 'cancel' }, { label: 'Save', value: 'save', kind: 'main', default: true }] });
   };
   // D234 (the keeper read the outcome of a refused export from Content Manager, not from the app): a refused or failed export is also an ALERT, a native error dialog,
   // besides the red box and the status line. Not when the page's test seam answered the folder (an automated drive must not wait on a dialog).
@@ -225,6 +254,8 @@
   } catch (e) {
     if (win && win.onCloseRequested) win.onCloseRequested(async (ev) => { ev.preventDefault(); try { await win.destroy(); } catch (err) { /* nothing more to try */ } });
   }
+  // the title bar AFTER the close handler, so its X always has a handler to reach (app/titlebar.js)
+  try { await (await loadCjs("app/titlebar.js", get)).wireTitlebar(document, win); } catch (e) { console.error(`title bar not wired: ${e && e.message}`); }
 
   // ONE BUILDER (D239): the EQUATION TRACK (app/core, src/core). The Pieces builder (D186's second mode, ?mode=pieces, the t180.mode
   // setting) is removed; the word tracks it saved stay on disk in the app's tracks folder (app/README.md says where), never deleted.
