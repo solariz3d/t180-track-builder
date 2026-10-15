@@ -242,14 +242,25 @@ function seamsAround(st, gs) {
   }
 }
 
+// opts.lean (2026-10-15, ELYSIUM's Close killed the page): each piece's boundary rows, end shapes and handle key (first, last, ends, handles) are kept so a
+// later extend, sculpt or reuse can make its seams; a mesh that is only READ (the overlap check, app/core/overlapjob.js) needs none of them. Lean drops each
+// piece's as soon as the seams on both its sides are made, so they are never all held at once (~900 MB on a 24 km track). The scene, the cells and the folds
+// are the same; the lean mesh cannot be extended, sculpted or reused.
+const SPARE = Object.freeze(['first', 'last', 'ends', 'handles']);
+const dropSpare = (pc) => { if (pc) for (const k of SPARE) delete pc[k]; };
 function buildMesh(path, segments, opts = {}) {
   const st = { o: options(opts), pieces: [], seams: [], workC: { n: 0 }, nseg: segments.length, closed: !!path.closed };
-  meshRange(st, path, segments, 0, segments.length);
-  seamsAround(st, segments.map((_, g) => g));
-  if (path.closed && segments.length > 1) {                // a closed loop also joins its last piece to its first
-    const A = st.pieces[segments.length - 1], B = st.pieces[0];
+  const n = segments.length, joint = path.closed && n > 1;
+  if (!opts.lean) { meshRange(st, path, segments, 0, n); seamsAround(st, segments.map((_, g) => g)); }
+  else for (let g = 0; g < n; g++) {
+    meshRange(st, path, segments, g, g + 1); seamsAround(st, [g]);
+    if (g > 0 && !(joint && g - 1 === 0)) dropSpare(st.pieces[g - 1]);   // a closed loop's first piece keeps its rows for the joint below
+  }
+  if (joint) {                                             // a closed loop also joins its last piece to its first
+    const A = st.pieces[n - 1], B = st.pieces[0];
     st.seams[0] = A && B ? meshSeam(A, B, st.workC) : null;
   }
+  if (opts.lean) { dropSpare(st.pieces[0]); dropSpare(st.pieces[n - 1]); }
   st.work = st.workC.n;
   const out = assemble(st);
   if (opts.selfCheck) {                                    // opt-in: a whole-track check, O(triangles · log)
