@@ -85,3 +85,33 @@ test('row 5: an empty run and a run of one segment are coarsened as before', asy
   assert.equal(one.length, 1); assert.deepEqual(coarsenRun(one, 12)[0].fractions, coarsen(one, 12)[0].fractions);
   assert.equal(coarsenRun(one, 1), one, 'detail 1 is the same array');
 });
+
+// 2026-10-14, the second pass: the cheap ghost REMEMBERS its last mesh, and a length drag (whole 2 m, app/core/panel.js) leaves every chord but the end as it was.
+test('row 6: a cheap ghost after a cheap ghost reuses the unchanged chords and draws the same as one built fresh', async () => {
+  const G = require('../../src/geom/index.js');
+  const sh = await createCoreShell({ brushFn: null, autosaveMs: 0 }); sh.extend({ length: 300 });
+  let stats = null; const geom = { ...G, reuseMesh: (...a) => { const m = G.reuseMesh(...a); stats = m.stats; return m; } };
+  const tm = createTrackModel({ geom }); tm.update(sh.getState().resolved);
+  const opts = (L) => ({ length: L, targets: { c: 15.5, w: 31, [XS.CHANNEL.start]: 0.64 } });
+  tm.ghostFor(sh.candidate(opts(1000)), { cheap: true }); const c2 = sh.candidate(opts(1006)), g = tm.ghostFor(c2, { cheap: true });
+  const fresh = createTrackModel(); fresh.update(sh.getState().resolved); const f = fresh.ghostFor(c2, { cheap: true });
+  const newPieces = c2.segments.length - sh.getState().resolved.segments.length;
+  assert.ok(stats && stats.reused >= newPieces - 8, `reused ${stats && stats.reused} of ${newPieces} new chords`);
+  assert.equal(vertsOf(g), vertsOf(f), 'the same vertex count as a fresh cheap ghost');
+  const flat = (x) => x.batches.flatMap((b) => Array.from(b.positions));
+  const a = flat(g), b = flat(f); let worst = 0; for (let i = 0; i < a.length; i++) worst = Math.max(worst, Math.abs(a[i] - b[i]));
+  assert.ok(worst < 1e-3, `every vertex where a fresh build puts it (worst ${worst} m)`);
+  assert.equal(samplesKey(g.path), samplesKey(f.path), 'the same path');
+  const full = tm.ghostFor(c2); assert.ok(vertsOf(full) > vertsOf(g), 'a full ghost after it is full detail (the memory is not used for it)');
+});
+
+test('row 7: reuseMesh keeps its old rule unless asked: a different count needs `grow`, and a closed loop is refused with it', async () => {
+  const G = require('../../src/geom/index.js');
+  const sh = await createCoreShell({ brushFn: null, autosaveMs: 0 }), tm = createTrackModel(); tm.update(sh.getState().resolved);
+  const s1 = sh.candidate({ length: 20 }).segments, s2 = sh.candidate({ length: 30 }).segments;
+  const p1 = G.buildPath(s1, { step: 2 }), m1 = G.buildMesh(p1, s1), p2 = G.buildPath(s2, { step: 2 });
+  assert.throws(() => G.reuseMesh(m1, p2, s2, s2.map(() => true)), /same number of segments/);
+  const grown = G.reuseMesh(m1, p2, s2, s2.map((_, j) => j < s1.length - 1), { grow: true }), built = G.buildMesh(p2, s2);
+  assert.equal(grown.stats.reused, s1.length - 1, 'every chord said to be the same is kept'); assert.equal(grown.cells.length, built.cells.length);
+  assert.throws(() => G.reuseMesh({ _state: { ...m1._state, closed: true } }, p2, s2, s2.map(() => false), { grow: true }), /same number of segments/);
+});

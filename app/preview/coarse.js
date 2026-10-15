@@ -48,6 +48,9 @@ function gridOf(from, profile, factor) {
   return fr;
 }
 
+/** One segment with a grid, thinned (as coarsen does), memoised by its (canonical) grid. */
+const thinSeg = (g, factor) => (g.fractions.length <= 2 ? g : { ...g, fractions: thin(g.fractions, factor) });
+
 function coarsen(segments, factor = FACTOR) {
   if (!(factor >= 2) || !Array.isArray(segments)) return segments;
   let m = segMemo.get(factor); if (!m) segMemo.set(factor, (m = new WeakMap()));
@@ -73,14 +76,62 @@ function coarsen(segments, factor = FACTOR) {
  * list subsampled to `cap`), so the search runs once a move and neighbouring segments share their rows (no seam zipper). Segments that have a grid are thinned
  * as coarsen() does. The preview only, as coarsen: the release builds the full ghost, and nothing here reaches the export.
  */
+const runMemo = new Map();   // the key of a run's distinct profiles -> its grid; the newest 16
+// a 64-bit hash of numbers rounded to 1e-9 (two 32-bit lanes): a text key of a 100-knot edge profile cost ~12 ms a drag move at 1300 m
+function hashRounded(lists, salt = '') {
+  let a = 0x9e3779b9 ^ salt.length, b = 0x85ebca6b;
+  for (let i = 0; i < salt.length; i++) { a = Math.imul(a ^ salt.charCodeAt(i), 0x01000193); b = Math.imul(b + salt.charCodeAt(i), 0x5bd1e995); }
+  for (const L of lists) {
+    a = Math.imul(a ^ L.length, 0x27d4eb2d); b = Math.imul(b ^ (L.length + 0x165667b1), 0xc2b2ae35);
+    for (let i = 0; i < L.length; i++) {
+      const r = Math.round(L[i] * 1e9), lo = r % 4294967296 | 0, hi = Math.floor(r / 4294967296) | 0;
+      a = Math.imul(a ^ lo, 0x85ebca6b) ^ (a >>> 13); a = Math.imul(a ^ hi, 0xc2b2ae35) ^ (a >>> 16);
+      b = Math.imul(b ^ hi, 0x27d4eb2d) ^ (b >>> 15); b = Math.imul(b ^ lo, 0x165667b1) ^ (b >>> 13);
+    }
+  }
+  return (a >>> 0).toString(36) + '.' + (b >>> 0).toString(36);
+}
+const keyMemo = new WeakMap();   // a profile object -> its rounded key (a frozen profile cannot change; any other is keyed afresh)
+const profileKey = (P) => {
+  let k = Object.isFrozen(P) ? keyMemo.get(P) : undefined;
+  if (k === undefined) { k = hashRounded([P.u, P.psi], `${P.font}|${P.material}`); if (Object.isFrozen(P)) keyMemo.set(P, k); }
+  return k;
+};
+// ONE profile object per rounded value, kept across calls (the newest 4,096): a segment rebuilt with its profile off by round-off (a width read off a spline
+// at a knot vector that moved with the length) gets the same object back, so its key is the same and its mesh is reused. Moves a vertex by under 1e-9 m, in the
+// drag preview only.
+const canonMemo = new Map();
+function canon(P) {
+  const k = profileKey(P); let c = canonMemo.get(k);
+  if (!c) { c = P; canonMemo.set(k, c); if (canonMemo.size > 4096) canonMemo.delete(canonMemo.keys().next().value); }
+  return c;
+}
+// the same for a segment's own row grid (a piece with an edge carries one, src/core/adapter.js), and for every profile it carries, before it is thinned
+const gridCanon = new Map();
+function canonGrid(fr) {
+  const k = hashRounded([fr]); let c = gridCanon.get(k);
+  if (!c) { c = fr; gridCanon.set(k, c); if (gridCanon.size > 256) gridCanon.delete(gridCanon.keys().next().value); }
+  return c;
+}
+const canonSeg = (g) => (!g || g.kind !== 'road' || !g.profile ? g : { ...g, profile: canon(g.profile), ...(g.blend ? { blend: { ...g.blend, from: canon(g.blend.from) } } : {}),
+  ...(g.profileIn ? { profileIn: canon(g.profileIn) } : {}), ...(Array.isArray(g.fractions) ? { fractions: canonGrid(g.fractions) } : {}) });
 function coarsenRun(segments, factor = CHEAP_FACTOR, { cap = 24 } = {}) {
   if (!(factor >= 2) || !Array.isArray(segments)) return segments;
   const plain = (g) => g && !Array.isArray(g.fractions) && g.kind === 'road' && g.profile;
   const need = segments.filter(plain);
-  if (need.length < 2) return coarsen(segments, factor);
-  const profiles = []; for (const g of need) { if (g.blend) profiles.push(g.blend.from); profiles.push(g.profile); }
-  const fr = commonFractions(profiles, { maxAcross: factor, maxSeam: factor * DEG, cap });
-  return segments.map((g) => (plain(g) ? { ...g, blend: g.blend || { from: g.profile, s0: 1, length: 1 }, fractions: fr } : coarsen([g], factor)[0]));
+  if (need.length < 2) return need.length ? coarsen(segments, factor) : segments.map((g) => (Array.isArray(g && g.fractions) ? thinSeg(canonSeg(g), factor) : g));
+  // the grid is a function of the DISTINCT profiles (commonFractions bounds the largest step of any of them, so a repeat changes nothing), keyed by value rounded
+  // to 1e-9: a run rebuilt with the same profiles, up to round-off, gets the very same array, so its segments keep their keys and the ghost can reuse their mesh
+  const distinct = new Map();
+  for (const g of need) for (const P of g.blend ? [g.blend.from, g.profile] : [g.profile]) { const c = canon(P), k = profileKey(c); if (!distinct.has(k)) distinct.set(k, c); }
+  const key = `${factor}|${cap}|${[...distinct.keys()].sort().join('#')}`;
+  let fr = runMemo.get(key);
+  if (!fr) { fr = commonFractions([...distinct.values()], { maxAcross: factor, maxSeam: factor * DEG, cap }); runMemo.set(key, fr); if (runMemo.size > 16) runMemo.delete(runMemo.keys().next().value); }
+  return segments.map((g) => {
+    if (!plain(g)) return Array.isArray(g && g.fractions) ? thinSeg(canonSeg(g), factor) : coarsen([g], factor)[0];
+    const P = canon(g.profile);
+    return { ...g, profile: P, blend: g.blend ? { ...g.blend, from: canon(g.blend.from) } : { from: P, s0: 1, length: 1 }, fractions: fr };
+  });
 }
 
 module.exports = { coarsen, coarsenRun, FACTOR, CHEAP_FACTOR };
