@@ -199,7 +199,7 @@ test('D259: a Sculpt bank drag from 350 by +20 gives about 10, from -350 by -20 
     sculptBank(s, first); const b0 = midBank(s); near(b0, first, 0, `first to ${first}`);
     if (then) { sculptBank(s, then); near(midBank(s), turn(b0 + then), b0, `${b0.toFixed(2)} by ${then}`); assert.equal(Math.sign(midBank(s)), Math.sign(first), 'its sign kept'); }
   }
-  assert.equal(HD.format('bank', 370), 'bank 10.0°'); assert.equal(HD.format('bank', -370), 'bank -10.0°'); assert.equal(HD.format('bank', 300), 'bank 300.0°'); assert.equal(HD.format('bank', 360), 'bank 0.0°');
+  assert.equal(HD.format('bank', 370), 'bank 10.00°'); assert.equal(HD.format('bank', -370), 'bank -10.00°'); assert.equal(HD.format('bank', 300), 'bank 300.00°'); assert.equal(HD.format('bank', 360), 'bank 0.00°');
 });
 test('D259: a value brush on bank that would take the bank past one turn wraps it back from 0 (by +370 gives about 10), and within a turn it is applied as given (+300)', async () => {
   const at = (s) => D.channelAt(s.getState().history.present.pieces[0], 'phi', 150).v / DEGR;

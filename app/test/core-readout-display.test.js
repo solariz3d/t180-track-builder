@@ -85,16 +85,16 @@ function stubCup(real) {
   });
 }
 
-test('the strings: one decimal, the unit written, a sign on angles, 0.0° bare, half away from zero, no wrap', () => {
-  assert.equal(LB.fmtDeg(0.04), '0.0°'); assert.equal(LB.fmtDeg(-0.04), '0.0°'); assert.equal(LB.fmtDeg(0), '0.0°');
-  assert.equal(LB.fmtDeg(0.06), '+0.1°'); assert.equal(LB.fmtDeg(-3), '−3.0°'); assert.equal(LB.fmtDeg(720), '+720.0°');
-  assert.equal(LB.fmtDeg(-33.35), '−33.4°', 'half away from zero'); assert.equal(LB.fmtDeg(2.25), '+2.3°');
-  // the guard is for COMPUTED values (A's integrals): a quarter that came out 2e-13 short still rounds as the half it is. (A typed
-  // two-decimal half never needs it: 0 of 8,010 such values round differently without it, measured in scratchpad l130/halves.js.)
-  assert.equal(LB.fmtDeg(0.25 - 2e-13), '+0.3°'); assert.equal(LB.fmtDeg(-(12.45 - 2e-12)), '−12.5°');
-  assert.equal(LB.fmtM(150), '150.0 m'); assert.equal(LB.fmtM(0.04), '0.0 m');
+test('the strings: two decimals (2026-10-15: "everything to 0.00"), the unit written, a sign on angles, 0.00° bare, half away from zero, no wrap', () => {
+  assert.equal(LB.fmtDeg(0.004), '0.00°'); assert.equal(LB.fmtDeg(-0.004), '0.00°'); assert.equal(LB.fmtDeg(0), '0.00°');
+  assert.equal(LB.fmtDeg(0.006), '+0.01°'); assert.equal(LB.fmtDeg(-3), '−3.00°'); assert.equal(LB.fmtDeg(720), '+720.00°');
+  assert.equal(LB.fmtDeg(-33.345), '−33.35°', 'half away from zero'); assert.equal(LB.fmtDeg(2.225), '+2.23°');
+  assert.equal(LB.fmtDeg(31.45), '+31.45°', 'a typed two-decimal value reads as typed');
+  // the guard is for COMPUTED values (A's integrals): a half that came out 2e-13 short still rounds as the half it is
+  assert.equal(LB.fmtDeg(0.025 - 2e-13), '+0.03°'); assert.equal(LB.fmtDeg(-(12.445 - 2e-12)), '−12.45°');
+  assert.equal(LB.fmtM(150), '150.00 m'); assert.equal(LB.fmtM(0.004), '0.00 m'); assert.equal(LB.fmtM(118.48), '118.48 m');
   const f = LB.formatReadout({ lengthM: 60, turnDeg: 45, climbDeg: 8, bankFromDeg: 10, bankToDeg: -5 });
-  assert.deepEqual(f, { length: '60.0 m', turn: '+45.0°', climb: '+8.0°', bank: '−15.0°' }, 'bank is the CHANGE: to − from');
+  assert.deepEqual(f, { length: '60.00 m', turn: '+45.00°', climb: '+8.00°', bank: '−15.00°' }, 'bank is the CHANGE: to − from');
 });
 
 test('the layout: never over the head\'s keep-out, never two labels overlapping, the priority one placed first, a crowded one culled', () => {
@@ -227,7 +227,7 @@ test('the panel: a field set extend refuses shows — (and says why in the title
   const P = await mountPanel();
   P.shell.extend({ length: 200 });
   P.type('length m', -5); assert.equal(P.cell('length'), '—');
-  P.type('length m', 120); assert.equal(P.cell('length'), '120.0 m');
+  P.type('length m', 120); assert.equal(P.cell('length'), '120.00 m');
   const before = P.cell('turn'); P.shell.extend(P.opts());
   assert.equal(LB.formatReadout(P.shell.pieceReadouts().at(-1)).turn, before, 'what the panel promised is what was placed');
   P.panel.unmount();
@@ -345,11 +345,11 @@ test('the Extend panel has a "cup °" field beside bank, 0 to 150, and Extend ha
 test('the readout shows cup from → to: the DOCUMENT\'s values with the bank cell\'s rounding, never the typed target, never bank\'s', async () => {
   const P = await mountPanel(stubCup);
   P.shell.extend({ length: 200 }); P.type('length m', 100);
-  assert.equal(P.cell('cup'), '11.7° → 11.7°', 'a legacy piece reads its rendered edge (the core\'s number), rounded as bank is');
+  assert.equal(P.cell('cup'), '11.68° → 11.68°', 'a legacy piece reads its rendered edge (the core\'s number), rounded as bank is');
   P.type('cup °', 90);
-  assert.equal(P.cell('cup'), '11.7° → 90.9°', 'the document rings to 90.871: the readout shows that, not the typed 90.0');
+  assert.equal(P.cell('cup'), '11.68° → 90.87°', 'the document rings to 90.871: the readout shows that, not the typed 90.0');
   P.type('bank °', 30);
-  assert.equal(P.cell('bank'), '+30.0°'); assert.equal(P.cell('cup'), '11.7° → 90.9°', 'bank moves the bank cell only');
+  assert.equal(P.cell('bank'), '+30.00°'); assert.equal(P.cell('cup'), '11.68° → 90.87°', 'bank moves the bank cell only');
   const r = P.shell.candidateReadout(P.opts());
   assert.equal(P.cell('cup'), `${LB.fmtDeg(r.cupFromDeg).replace('+', '')} → ${LB.fmtDeg(r.cupToDeg).replace('+', '')}`, 'each number is the core\'s, rounded as the bank cell rounds');
   // the on-track labels stay as they are (the seal): a readout carrying cup fields labels exactly as one without
@@ -361,7 +361,7 @@ test('the readout shows cup from → to: the DOCUMENT\'s values with the bank ce
 test('the cup cell follows the cup field inside its input handler, and a cup the core refuses shows — and says why', async () => {
   const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubCup(s)));
   P.shell.extend({ length: 200 }); P.type('length m', 100);
-  P.type('cup °', 45); assert.equal(P.cell('cup'), '11.7° → 45.9°', 'no tick, no frame: the cell changed inside the handler');
+  P.type('cup °', 45); assert.equal(P.cell('cup'), '11.68° → 45.87°', 'no tick, no frame: the cell changed inside the handler');
   P.type('cup °', 200);
   const box = P.root.all().find((e) => e.attrs.class === 'readout');
   assert.equal(P.cell('cup'), '—'); assert.match(box.title, /outside 0–150/, 'the core\'s reason is shown (the box\'s title)');

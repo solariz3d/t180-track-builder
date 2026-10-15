@@ -14,9 +14,9 @@ const TESTS = ['core-shell.test.js', 'core-readout-display.test.js'];
 const MUTATIONS = [
   // L130, the readout display (app/core/labels.js, app/core/panel.js)
   { id: 'R1 the sign of an angle flipped', file: 'core/labels.js', from: "return `${v > 0 ? '+' : MINUS}", to: "return `${v > 0 ? MINUS : '+'}", caughtBy: 'the strings' },
-  { id: 'R2 zero is signed', file: 'core/labels.js', from: "if (v === 0) return '0.0°';", to: '', caughtBy: 'the strings' },
+  { id: 'R2 zero is signed', file: 'core/labels.js', from: "if (v === 0) return '0.00°';", to: '', caughtBy: 'the strings' },   // re-pointed 2026-10-15: two decimals
   { id: 'R3 bank shown as its end value, not the change', file: 'core/labels.js', from: 'bank: fmtDeg(r.bankToDeg - r.bankFromDeg)', to: 'bank: fmtDeg(r.bankToDeg)', caughtBy: 'the strings' },
-  { id: 'R4 rounding without the binary guard', file: 'core/labels.js', from: 'Math.abs(x) * 10 + 1e-7', to: 'Math.abs(x) * 10', caughtBy: 'the strings' },
+  { id: 'R4 rounding without the binary guard', file: 'core/labels.js', from: 'Math.abs(x) * 100 + 1e-7', to: 'Math.abs(x) * 100', caughtBy: 'the strings' },   // re-pointed 2026-10-15: two decimals
   { id: 'R5 the head keep-out ignored', file: 'core/labels.js', from: 'if (keep && hits(rect, keep)) continue;', to: '', caughtBy: 'the layout' },
   { id: 'R6 labels may overlap', file: 'core/labels.js', from: 'if (drawn.some((d) => hits(rect, d.rect))) continue;', to: '', caughtBy: 'the layout' },
   { id: 'R7 anchors cached by the path object', file: 'core/labels.js', from: 'if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; pickedFor = undefined; }', to: 'if (anchorsFor !== track.path) { anchors = anchorsOf(track); anchorsFor = track.path; pickedFor = undefined; }', caughtBy: 'the labels follow a path the preview extends IN PLACE' },   // D242: re-anchored (the line gained the hover re-pick)

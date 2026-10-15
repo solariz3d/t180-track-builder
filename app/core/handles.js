@@ -34,16 +34,16 @@ const EXTEND_KINDS = Object.freeze({
   // 2026-10-14: LENGTH and WIDTH moved to the FRONT of the piece (its far end, where the piece grows to), a suggestion from a track maker who tried the
   // builder: the white length mark at the centreline there, dragged FORWARD to lengthen (`sign: 'forward'`, it follows the front end as it moves), and the red
   // width marks at that end's edges. The width the field sets is the width the piece ENDS at, so its marks now sit where that width is reached
-  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 1, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'forward', perPx: 0.42, min: 1, max: 5000, step: 0.1, snap: 10 }),
+  length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 1, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'forward', perPx: 0.42, min: 1, max: 5000, step: 0.01, snap: 10 }),
   // 2026-10-14, the second move: WIDTH to the middle of the piece, BANK three quarters along, TURN at the front edges (the length mark stays at the front centre)
-  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0.5, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.1, snap: 5 }),
-  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.75, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.1, snap: 5 }),
-  cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.24, min: 0, max: 150, step: 0.1, snap: 5 }),
+  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0.5, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.01, snap: 5 }),
+  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.75, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.01, snap: 5 }),
+  cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.24, min: 0, max: 150, step: 0.01, snap: 5 }),
   // 2026-10-14, the keeper: "why cant turns turn more than 90 degrees ... it shouldnt be constrained unless you click 90 degree turn first": no clamp (Turn by and Turn to grid
   // are the exact-angle tools); and "the camera orientation changes which way you have to drag ... should be the same every way you look at it": `screen: 'x'`, the
   // pointer's own left and right (a drag to the right is a right turn, from any view), not the road's left as it happens to lie on screen
-  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.1, snap: 5 }),
-  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.1, snap: 5 }),
+  turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.01, snap: 5 }),
+  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.01, snap: 5 }),
 });
 // D258, THE FREE JUMP'S LANDING (the keeper: drag it in the 3D view AND type it in number boxes). `free: true` kinds sit at the LANDING's start (model.free.pos), not along a piece, and their axes are the
 // TAKE-OFF's heading frame (T0 forward, L0 left, U0 up), because that is the frame the landing's pose is given in (src/core/document.js flightPiece), so the arrow moves the number of its box. Each mark sits `leadM` m out along its own
@@ -51,10 +51,10 @@ const EXTEND_KINDS = Object.freeze({
 // direction (T1) and drags sideways along its own left (L1): turning the landing about its start.
 // The speeds are per pixel like the Extend handles' (D251), first guesses to be tuned by hand: forward 0.15 m, sideways 0.1 m, height 0.05 m, heading 0.1 degree a pixel.
 const LANDING = Object.freeze({
-  landfwd: Object.freeze({ label: 'forward', unit: 'm', colour: '#ffffff', free: true, axis: 'T', frame: 'T0', lead: 'T0', leadM: 10, perPx: 0.15, min: -2000, max: 2000, step: 0.1, snap: 5 }),
-  landleft: Object.freeze({ label: 'sideways', unit: 'm', colour: '#ff9f43', free: true, axis: 'L', frame: 'L0', lead: 'L0', leadM: 8, zero: true, perPx: 0.1, min: -1000, max: 1000, step: 0.1, snap: 1 }),
-  landup: Object.freeze({ label: 'height', unit: 'm', colour: '#ffd23d', free: true, axis: 'U', frame: 'U0', lead: 'U0', leadM: 6, zero: true, perPx: 0.05, min: -500, max: 500, step: 0.1, snap: 0.5 }),
-  landturn: Object.freeze({ label: 'heading', unit: '°', colour: '#b968ff', free: true, axis: 'L', frame: 'L1', lead: 'T1', leadM: 15, zero: true, perPx: 0.1, min: -180, max: 180, step: 0.1, snap: 5 }),
+  landfwd: Object.freeze({ label: 'forward', unit: 'm', colour: '#ffffff', free: true, axis: 'T', frame: 'T0', lead: 'T0', leadM: 10, perPx: 0.15, min: -2000, max: 2000, step: 0.01, snap: 5 }),
+  landleft: Object.freeze({ label: 'sideways', unit: 'm', colour: '#ff9f43', free: true, axis: 'L', frame: 'L0', lead: 'L0', leadM: 8, zero: true, perPx: 0.1, min: -1000, max: 1000, step: 0.01, snap: 1 }),
+  landup: Object.freeze({ label: 'height', unit: 'm', colour: '#ffd23d', free: true, axis: 'U', frame: 'U0', lead: 'U0', leadM: 6, zero: true, perPx: 0.05, min: -500, max: 500, step: 0.01, snap: 0.5 }),
+  landturn: Object.freeze({ label: 'heading', unit: '°', colour: '#b968ff', free: true, axis: 'L', frame: 'L1', lead: 'T1', leadM: 15, zero: true, perPx: 0.1, min: -180, max: 180, step: 0.01, snap: 5 }),
 });
 const ORDER = Object.freeze(['length', 'width', 'bank', 'cup', 'turn', 'climb']);
 const KINDS = Object.freeze({ ...EXTEND_KINDS, ...LANDING });
@@ -160,12 +160,12 @@ function hitTest(list, x, y, r = HIT_PX) {
   return best;
 }
 
-/** "bank 12.0°", "width 31.0 m", "turn 0.0°/100 m": the name and the value, as the field would show it. */
+/** "bank 12.00°", "width 31.00 m", "turn 0.00°/100 m": the name and the value, to two decimals. */
 function format(kind, value) {
   const K = KINDS[kind];
   // D259 (the keeper: "it continues after 360 forever instead of resetting back to 0"; "same for -360"): the bank label keeps within one turn, sign kept (370 reads 10)
   const v = kind === 'bank' ? wrapTurn(Number(value)) : Number(value);
-  return `${K.label} ${v.toFixed(kind === 'length' || kind === 'width' ? 1 : 1)}${K.unit === 'm' ? ' m' : K.unit}`;
+  return `${K.label} ${v.toFixed(2)}${K.unit === 'm' ? ' m' : K.unit}`;   // two decimals (2026-10-15, the keeper: "everything to 0.00")
 }
 /** D259: a bank in degrees kept within ONE turn, its sign kept (the keeper, 18:24): 370 -> 10, -370 -> -10, 300 stays 300, 360 -> 0; no "-0". */
 function wrapTurn(x) { const w = x % 360; return Object.is(w, -0) ? 0 : w; }
@@ -213,7 +213,7 @@ function mount(stage, win, host) {
       }
       ctx.fillStyle = K.colour; ctx.strokeStyle = '#0b0d11'; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
       if (on) {
-        const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(1)}` : ''); ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
+        const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
         const w = ctx.measureText(text).width + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 34, 4, H - 24);
         ctx.fillStyle = 'rgba(11,13,17,0.92)'; ctx.fillRect(bx, by, w, 22); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, 22);
         ctx.fillStyle = '#eef1f6'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 6, by + 11);

@@ -143,7 +143,7 @@ test('row 3: the library lists name, length, turn, climb and a thumbnail; an unr
   for (const x of [a, b]) { assert.ok(x.thumb.points.length >= 2 && x.thumb.points.length <= 48 + 1); assert.ok(x.thumb.points.every(([px, py]) => px >= 0 && px <= 100 && py >= 0 && py <= 60), 'inside the 100 x 60 box'); }
   assert.ok(b.thumb.points[b.thumb.points.length - 1][1] !== b.thumb.points[0][1], 'a turn is not drawn as a line');
   assert.match(c.error, /BAD_PIECE_JSON/); assert.equal(c.summary, null); assert.match(w.error, /BAD_PIECE_SCHEMA/);
-  assert.match(PU.describe(a), /^1 piece · 300 m · turn 0\.0° · climb 0\.0° · plain$/); assert.match(PU.describe(b), /^2 pieces · 300 m · turn \+\d+\.\d° · climb 0\.0° · plain$/); assert.match(PU.describe(c), /^cannot be used: BAD_PIECE_JSON/);
+  assert.match(PU.describe(a), /^1 piece · 300 m · turn 0\.00° · climb 0\.00° · plain$/); assert.match(PU.describe(b), /^2 pieces · 300 m · turn \+\d+\.\d\d° · climb 0\.00° · plain$/); assert.match(PU.describe(c), /^cannot be used: BAD_PIECE_JSON/);
   assert.equal(thumbOf(PC.parse(st.pieces.get('a straight'))).points.length >= 2, true);
 });
 
@@ -357,7 +357,7 @@ test('row 10: the panel: a click selects the piece under it and a shift-click th
   P1.click(400); P1.click(550, { shiftKey: true }); assert.equal(P1.button('Save as piece').disabled, false);
   const name = P1.input('piece name'); name.value = 'two turns'; P1.button('Save as piece').onclick(); await tick(); await tick();
   assert.equal(st.pieces.has('two turns'), true); assert.equal(name.value, '', 'the name box is cleared after a save'); assert.equal(P1.rows().length, 1);
-  assert.match(P1.rows()[0].textContent, /two turns/); assert.match(P1.text('two turns details'), /^2 pieces · 300 m · turn \+\d+\.\d° · climb 0\.0° · plain$/);
+  assert.match(P1.rows()[0].textContent, /two turns/); assert.match(P1.text('two turns details'), /^2 pieces · 300 m · turn \+\d+\.\d\d° · climb 0\.00° · plain$/);
   // Add at head, plain then mirrored
   const n0 = shell.getState().history.present.pieces.length;
   P1.buttons('Add at head')[0].onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n0 + 2);
@@ -443,11 +443,11 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   assert.deepEqual(seen.map((h) => h.id), hs.map((h) => h.id), 'the read-only request (for the window proof) lists the same handles'); assert.ok(seen.every((h) => Number.isFinite(h.x) && Number.isFinite(h.dy)));
   // length: a drag along the road, 20 m
   const len = fieldOf(P1, 'length m'), width = fieldOf(P1, 'width m'), bank = fieldOf(P1, 'bank °'), turn = fieldOf(P1, 'turn °/100m'), cup = fieldOf(P1, 'cup °');
-  assert.equal(len.value, '100'); const ghosts0 = S.ghosts; dragBy(P1, 'length:0', 50); assert.equal(len.value, '118.5', 'length: 50 px along the road, the first 6 held, 0.42 m each'); assert.ok(S.ghosts > ghosts0, 'the ghost followed the field (typed)');
+  assert.equal(len.value, '100'); const ghosts0 = S.ghosts; dragBy(P1, 'length:0', 50); assert.equal(len.value, '118.48', 'length: 50 px along the road, the first 6 held, 0.42 m each'); assert.ok(S.ghosts > ghosts0, 'the ghost followed the field (typed)');
   assert.equal(shell.getState().history.present, d0, 'a drag is no document edit'); assert.equal(shell.getState().history.past.length, past0, 'nothing in Undo');
   // width: either side's handle, 1 m OUTWARD, is the same change of the one field
   const w0 = Number(width.value); dragBy(P1, 'width:1', 20); const wl = Number(width.value); width.value = String(w0); width.oninput(); P1.frame(); dragBy(P1, 'width:-1', 20); const wr = Number(width.value);
-  assert.equal(wl, Math.round((w0 + 14 * 0.068) * 10) / 10); assert.equal(wr, wl, 'the right edge, 20 px outward (the first 6 held), is the same width');
+  assert.equal(wl, Math.round((w0 + 14 * 0.068) * 100) / 100); assert.equal(wr, wl, 'the right edge, 20 px outward (the first 6 held), is the same width');
   // CHANGED 2026-10-14: LENGTH at the piece's FRONT, the width marks MID PIECE, the turn marks at the front edges (they were: length and width at the near end,
   // D250 item 3); the width marks sit at the TARGET half-width, so they follow the drag
   // the station a handle sits at, as the panel places it: the ghost station nearest s0 + at·(s1 − s0), s0 the placed track's end and s1 the ghost's
@@ -467,12 +467,12 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   dragBy(P1, 'bank:1', 20); const b1 = Number(bank.value); assert.ok(b1 > 0, `bank rose: ${b1}`); bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:-1', 20); assert.equal(Number(bank.value), b1, 'the right edge dragged DOWN 20 px is the same bank');
   bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:1', 20, { shiftKey: true }); assert.ok(Math.abs(Number(bank.value) - b1 / 10) < 0.06, `Shift is a tenth: ${bank.value} against ${b1 / 10}`);
   // turn: toward the left on either side; cup outward
-  const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); const t1 = Number(turn.value); assert.equal(t1, Math.round((t0 + 2.822) * 10) / 10, 'today\'s speed at the default camera: 0.083 a degree per 100 m per pixel, past the 6 px hold'); turn.value = String(t0); turn.oninput(); P1.frame(); dragBy(P1, 'turn:-1', 40); assert.equal(Number(turn.value), t1, 'the same value from the right-hand handle');
-  const c0 = Number(cup.value); dragBy(P1, 'cup:1', 30); assert.equal(Number(cup.value), Math.round((c0 + 24 * 0.24) * 10) / 10, 'cup: 30 px, the first 6 held, 0.24 a pixel'); assert.equal(shell.getState().history.present, d0, 'still no document edit after all of it');
+  const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); const t1 = Number(turn.value); assert.equal(t1, Math.round((t0 + 2.822) * 100) / 100, 'today\'s speed at the default camera: 0.083 a degree per 100 m per pixel, past the 6 px hold'); turn.value = String(t0); turn.oninput(); P1.frame(); dragBy(P1, 'turn:-1', 40); assert.equal(Number(turn.value), t1, 'the same value from the right-hand handle');
+  const c0 = Number(cup.value); dragBy(P1, 'cup:1', 30); assert.equal(Number(cup.value), Math.round((c0 + 24 * 0.24) * 100) / 100, 'cup: 30 px, the first 6 held, 0.24 a pixel'); assert.equal(shell.getState().history.present, d0, 'still no document edit after all of it');
   // the readout follows the drag (as typed), and Extend places what was dragged: the piece is new, and it carries the width that was dragged
-  width.value = String(w0 + 4); width.oninput(); P1.frame(); assert.match(P1.root.all().find((e) => e.attrs['data-readout'] === 'length').textContent, /118\.5/, 'the readout shows the dragged length');
+  width.value = String(w0 + 4); width.oninput(); P1.frame(); assert.match(P1.root.all().find((e) => e.attrs['data-readout'] === 'length').textContent, /118\.48/, 'the readout shows the dragged length');
   P1.button('Extend').onclick(); const d1 = shell.getState().history.present; assert.equal(d1.pieces.length, n0 + 1, 'Extend adds the piece'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step');
-  const placed = d1.pieces[d1.pieces.length - 1]; assert.equal(placed.length, 118.5); assert.ok(Math.abs(D.channelAt(placed, 'w', placed.length).v - (w0 + 4)) < 1e-6, 'the width that was dragged is the width the piece ends at');
+  const placed = d1.pieces[d1.pieces.length - 1]; assert.equal(placed.length, 118.48); assert.ok(Math.abs(D.channelAt(placed, 'w', placed.length).v - (w0 + 4)) < 1e-6, 'the width that was dragged is the width the piece ends at');
   P1.panel.unmount();
 });
 
@@ -485,7 +485,7 @@ test('row 11b: no ghost, no handles; a press ON a handle is the handle\'s and th
   const armed = P1.input('brush on'); armed.checked = true; const h = handleOf(P1, 'length:0'); P1.T.s = 100;
   for (const [aria, v] of [['brush mode', 'rate'], ['brush channel', 'phi']]) P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === aria).value = v;   // (the fake select has no value of its own)
   const on = fire(P1, 'pointerdown', h.screen.x, h.screen.y); assert.equal(on.stopped, true); assert.equal(shell.getState().brush, null, 'on a handle: not the brush\'s'); fire(P1, 'pointerup', h.screen.x, h.screen.y);
-  const lenField = fieldOf(P1, 'length m'); dragBy(P1, 'length:0', 50); assert.equal(lenField.value, '118.5', 'a whole drag on a handle with the brush armed edits the field'); assert.equal(shell.getState().brush, null); assert.ok(!shell.getState().lastStep || !/brush/.test(shell.getState().lastStep.op), 'and no brush stroke ran');
+  const lenField = fieldOf(P1, 'length m'); dragBy(P1, 'length:0', 50); assert.equal(lenField.value, '118.48', 'a whole drag on a handle with the brush armed edits the field'); assert.equal(shell.getState().brush, null); assert.ok(!shell.getState().lastStep || !/brush/.test(shell.getState().lastStep.op), 'and no brush stroke ran');
   const off = fire(P1, 'pointerdown', 5, 5); assert.equal(off.stopped, false); assert.ok(shell.getState().brush, 'elsewhere: the brush opens'); fire(P1, 'pointerup', 5, 5); armed.checked = false;
   // cup or tube: a tube in use takes the cup's handles away (its field is disabled)
   const tube = fieldOf(P1, 'tube sweep °'); tube.value = '200'; tube.oninput(); P1.frame(); assert.equal(fieldOf(P1, 'cup °').disabled, true); assert.ok(!P1.panel.handles.handles().some((x) => x.kind === 'cup'), 'no cup handles while a tube is being made'); assert.equal(P1.panel.handles.handles().length, 8);
@@ -592,13 +592,13 @@ test('row 14c: the landing\'s four handles (D278: BESIDE the Extend ghost\'s, wh
   const pose = () => shell.landing().pose, past = () => shell.getState().history.past.length, n0 = past();
   dragBy(P1, 'landfwd:0', 100); assert.equal(pose().forward, 54.1, '100 px along the arrow, the first 6 held, at 0.15 m a pixel'); assert.equal(past(), n0 + 1, 'ONE undo step for the whole drag'); assert.equal(P1.input('landing forward').value, '54.1', 'the box shows it');
   assert.deepEqual([pose().left, pose().up, pose().heading], [0, 0, 0], 'only forward moved');
-  dragBy(P1, 'landup:0', 200, { shiftKey: true }); assert.equal(pose().up, 1, 'Shift: a tenth: 200 px at 0.05 m is 10 m, a tenth of it 1 m'); dragBy(P1, 'landfwd:0', 33, { ctrlKey: true }); assert.equal(pose().forward, 60, 'Ctrl snaps forward to 5 m: 55 + 4.95 is 60');
+  dragBy(P1, 'landup:0', 200, { shiftKey: true }); assert.equal(pose().up, 0.97, 'Shift: a tenth: 200 px at 0.005 m, less the 6 px hold, is 0.97 m'); dragBy(P1, 'landfwd:0', 33, { ctrlKey: true }); assert.equal(pose().forward, 60, 'Ctrl snaps forward to 5 m: 55 + 4.95 is 60');
   dragBy(P1, 'landturn:0', 100); assert.equal(pose().heading, 9.4, 'the heading handle: 0.1 degree a pixel past the 6 px hold'); dragBy(P1, 'landleft:0', 100); assert.equal(pose().left, 9.4, 'sideways: 0.1 m a pixel');
   const dl = shell.getState().history.present; assert.equal(shell.getState().history.past.length, n0 + 5);
   // two quick presses reset: sideways to 0 (and heading and height too: the zero kinds); forward is not reset to 0 but to what it was before its last drag (60 was its snap's, 55 before)
   const quick = (id, t0) => { const a = handleOf(P1, id).screen; fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t0 }); fire(P1, 'pointerup', a.x, a.y, { timeStamp: t0 + 40 }); fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t0 + 200 }); fire(P1, 'pointerup', a.x, a.y, { timeStamp: t0 + 240 }); P1.frame(); };
   quick('landleft:0', STAMP + 1e5); assert.equal(pose().left, 0, 'sideways reset to 0'); quick('landturn:0', STAMP + 3e5); assert.equal(pose().heading, 0); quick('landup:0', STAMP + 6e5); assert.equal(pose().up, 0);
-  assert.ok(past() > n0 + 5, 'each reset is an undo step'); P1.shell.undo(); assert.equal(pose().up, 1, 'Undo gives the reset back');
+  assert.ok(past() > n0 + 5, 'each reset is an undo step'); P1.shell.undo(); assert.equal(pose().up, 0.97, 'Undo gives the reset back');
   // an Extend fixes the landing: its handles go, the Extend ghost's come back
   P1.button('Extend').onclick(); for (let i = 0; i < 40; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are back, the landing\'s are gone'); assert.ok(!P1.panel.handles.handles().some((h) => h.kind.startsWith('land')));
   // the switch turns them off
@@ -617,7 +617,7 @@ test('row 14d (D278, the keeper: "after placing jump piece, it doesnt go back to
   let seen = null; P1.doc.dispatchEvent(new P1.win.CustomEvent('t180:handles-request', { detail: { reply: (l) => { seen = l; } } })); assert.deepEqual(seen.map((h) => h.id).sort(), [...LAND, ...EXT].sort(), 'the read-only request lists all fourteen');
   // 2  an Extend handle types into its field: no document edit, nothing in Undo, the landing where it was
   const d0 = shell.getState().history.present, past0 = shell.getState().history.past.length, pose0 = shell.landing().pose, turn = fieldOf(P1, 'turn °/100m'), len = fieldOf(P1, 'length m');
-  const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); assert.equal(Number(turn.value), Math.round((t0 + 2.822) * 10) / 10, 'the turn field took the drag (0.083 a degree per 100 m per pixel, past the 6 px hold)');
+  const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); assert.equal(Number(turn.value), Math.round((t0 + 2.822) * 100) / 100, 'the turn field took the drag (0.083 a degree per 100 m per pixel, past the 6 px hold)');
   const l0 = len.value; dragBy(P1, 'length:0', 50); assert.notEqual(len.value, l0, 'the length field took the drag');
   assert.equal(shell.getState().history.present, d0, 'an Extend handle is no document edit'); assert.equal(shell.getState().history.past.length, past0, 'nothing in Undo'); assert.deepEqual(shell.landing().pose, pose0, 'the landing did not move');
   settle(); assert.equal(idsOf().length, 14, 'both sets are still up after the drags');
@@ -724,7 +724,7 @@ test('row 16c: the track coloured by grip (D261): blue below 100, white at 100, 
   box.checked = true; box.onchange(); assert.equal(layer.visible(), true); P1.frame(); P1.frame(); assert.ok(layer.lines().length >= 1, 'on: the pieces in view are drawn (the stub preview looks at the end of the track)'); assert.ok(layer.lines().every((l) => l.colour === GR.gripColour(l.grip) && [70, 100, 130].includes(l.grip)), 'each in the colour of its grip');
   box.checked = false; box.onchange(); P1.frame(); assert.deepEqual(layer.lines(), [], 'off again');
   // the hover label's words: a piece off 100 says its grip; a plain one does not, unless the view is on
-  const reads = shell.pieceReadouts(); assert.deepEqual(LB.labelText(reads[0]), ['300.0 m', 'turn 0.0° · climb 0.0° · bank 0.0°'], 'a plain piece: the label is as it was'); assert.match(LB.labelText(reads[1])[1], /· grip 70%$/); assert.match(LB.labelText(reads[3])[1], /· grip 130%$/);
+  const reads = shell.pieceReadouts(); assert.deepEqual(LB.labelText(reads[0]), ['300.00 m', 'turn 0.00° · climb 0.00° · bank 0.00°'], 'a plain piece: the label is as it was'); assert.match(LB.labelText(reads[1])[1], /· grip 70%$/); assert.match(LB.labelText(reads[3])[1], /· grip 130%$/);
   assert.match(LB.labelText(reads[0], true)[1], /· grip 100%$/, 'the view on: every piece says it'); assert.deepEqual(LB.labelText({ ...reads[0], gripPct: undefined }, true), LB.labelText(reads[0]), 'a readout without a grip adds nothing');
   P1.panel.unmount();
 });
@@ -778,17 +778,17 @@ test('row 19: no help paragraph stays in the left column (D267): the tube width,
 test('row 19b: the values of the piece being edited are drawn LARGE over the 3D view (D267): length, turn, climb, bank and width, updated as a handle is dragged or a field is typed, hidden on a closed loop', async () => {
   const VO = require('../core/valuesoverlay.js'), P1 = await handlePanel(), { shell } = P1, layer = P1.panel.values;
   assert.ok(layer, 'the panel mounts the overlay on the preview stage'); const shown = () => layer.entries() && Object.fromEntries(layer.entries().map((e) => [e.key, e.value]));
-  P1.frame(); const first = shown(); assert.ok(first && ['length', 'turn', 'climb', 'bank', 'width'].every((k) => typeof first[k] === 'string' && first[k] !== ''), JSON.stringify(first)); assert.equal(first.length, '100.0 m'); assert.equal(first.width, '31 m');
+  P1.frame(); const first = shown(); assert.ok(first && ['length', 'turn', 'climb', 'bank', 'width'].every((k) => typeof first[k] === 'string' && first[k] !== ''), JSON.stringify(first)); assert.equal(first.length, '100.00 m'); assert.equal(first.width, '31.00 m');
   // typing: it follows at once
-  fieldOf(P1, 'length m').value = '250'; fieldOf(P1, 'length m').oninput(); assert.equal(shown().length, '250.0 m'); fieldOf(P1, 'turn °/100m').value = '12'; fieldOf(P1, 'turn °/100m').oninput(); assert.equal(shown().turn, P1.all().find((e) => e.attrs['data-readout'] === 'turn').textContent, 'the overlay says what the panel\'s own readout says'); assert.notEqual(shown().turn, '0.0°', 'a typed turn shows');
-  fieldOf(P1, 'bank °').value = '20'; fieldOf(P1, 'bank °').oninput(); assert.match(shown().bank, /^\+/); fieldOf(P1, 'width m').value = '40'; fieldOf(P1, 'width m').oninput(); assert.equal(shown().width, '40 m');
+  fieldOf(P1, 'length m').value = '250'; fieldOf(P1, 'length m').oninput(); assert.equal(shown().length, '250.00 m'); fieldOf(P1, 'turn °/100m').value = '12'; fieldOf(P1, 'turn °/100m').oninput(); assert.equal(shown().turn, P1.all().find((e) => e.attrs['data-readout'] === 'turn').textContent, 'the overlay says what the panel\'s own readout says'); assert.notEqual(shown().turn, '0.00°', 'a typed turn shows');
+  fieldOf(P1, 'bank °').value = '20'; fieldOf(P1, 'bank °').oninput(); assert.match(shown().bank, /^\+/); fieldOf(P1, 'width m').value = '40'; fieldOf(P1, 'width m').oninput(); assert.equal(shown().width, '40.00 m');
   // a handle drag: the numbers move with each step
   fieldOf(P1, 'turn °/100m').value = '0'; fieldOf(P1, 'turn °/100m').oninput(); const before = shown().turn, a = handleOf(P1, 'turn:1').screen; fire(P1, 'pointerdown', a.x, a.y); fire(P1, 'pointermove', a.x - 40, a.y); P1.frame(); const mid = shown().turn; fire(P1, 'pointermove', a.x - 80, a.y); P1.frame(); const later = shown().turn; fire(P1, 'pointerup', a.x - 80, a.y);
   assert.notEqual(mid, before, 'the first step changed the turn on screen'); assert.notEqual(later, mid, 'the next step changed it again');
   // the layer: a big font, over the view, not in the way of a click, at the one spot
   assert.match(layer.layer.style.cssText, /font:bold 2[0-9]px/, 'large type'); assert.ok(layer.layer.style.cssText.includes(VO.SPOT_CSS), 'at the spot the constant names'); assert.match(layer.layer.style.cssText, /pointer-events:none/);
   // the pure part, and nothing to show: hidden
-  assert.deepEqual(VO.entries({ length: '10.0 m', turn: '0.0°', climb: '0.0°', bank: '0.0°' }, '31 m').map((e) => e.key), ['length', 'turn', 'climb', 'bank', 'width']); assert.equal(VO.entries(null, '31 m'), null); assert.deepEqual(VO.entries({ length: '10.0 m' }, '').map((e) => e.key), ['length']);
+  assert.deepEqual(VO.entries({ length: '10.0 m', turn: '0.0°', climb: '0.0°', bank: '0.0°' }, '31.00 m').map((e) => e.key), ['length', 'turn', 'climb', 'bank', 'width']); assert.equal(VO.entries(null, '31.00 m'), null); assert.deepEqual(VO.entries({ length: '10.0 m' }, '').map((e) => e.key), ['length']);
   const lap = await handlePanel(); lap.shell.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) lap.shell.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); lap.shell.extend({ length: 60, transition: 40, targets: { kh: 0 } }); lap.shell.close(); assert.ok(lap.shell.getState().history.present.closed); lap.frame();
   assert.equal(lap.panel.values.visible(), false, 'a closed loop has no piece being edited: hidden'); lap.panel.unmount(); P1.panel.unmount();
 });
@@ -812,7 +812,7 @@ test('row 20: the saved pieces are a drop-down bin in the top bar, not a section
   P1.click(400); P1.click(550, { shiftKey: true }); assert.equal(P1.button('Save as piece').disabled, false, 'Save as piece is in the left column, with the selection'); assert.equal(P1.binButton('Save as piece'), undefined);
   P1.input('piece name').value = 'two turns'; P1.button('Save as piece').onclick(); await tick(); await tick(); await tick();
   const row = () => P1.binRows()[0]; assert.equal(P1.binRows().length, 1); assert.equal(row().attrs['data-piece'], 'two turns');
-  assert.ok(row().all().some((e) => e.tagName === 'CANVAS' && e.attrs['aria-label'] === 'plan view of two turns'), 'its thumbnail'); assert.match(P1.binAll().find((e) => e.attrs['aria-label'] === 'two turns details').textContent, /^2 pieces · 300 m · turn \+\d+\.\d° · climb 0\.0° · plain$/, 'its one-line summary'); assert.ok(row().textContent.includes('two turns'), 'its name');
+  assert.ok(row().all().some((e) => e.tagName === 'CANVAS' && e.attrs['aria-label'] === 'plan view of two turns'), 'its thumbnail'); assert.match(P1.binAll().find((e) => e.attrs['aria-label'] === 'two turns details').textContent, /^2 pieces · 300 m · turn \+\d+\.\d\d° · climb 0\.00° · plain$/, 'its one-line summary'); assert.ok(row().textContent.includes('two turns'), 'its name');
   // Add at head: one undo step
   const n0 = shell.getState().history.present.pieces.length, past0 = shell.getState().history.past.length;
   P1.binButton('Add at head').onclick(); await tick(); await tick(); assert.equal(shell.getState().history.present.pieces.length, n0 + 2); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step');
