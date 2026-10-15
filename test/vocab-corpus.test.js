@@ -6,6 +6,11 @@
 // NOT DEFAULTS, so not checked against a band: a straight's bank (it has no inside to lean to; it keeps the head's roll)
 // and heading (the builder's straight is straight; the reader's straights turn 0.06–1.6° per fragment); the inversion's
 // length, heading and bank (its class is the upside-down fragment, and the builder's word is a whole roll).
+//
+// THE READS: the BANK_RATE test reads reads/<layout>.read.json for every layout in tools/corpus.cjs LAYOUTS. reads/ is
+// gitignored (the layouts are other authors' tracks and stay local), so a fresh clone has none and the test SKIPS, saying
+// why; with only some of them it skips too, naming how many are missing. To run it, make the reads with the commands in
+// docs/FINDINGS.md §7f (`node reads/readall.js`, or `node tools/read_track.cjs` once per track) into reads/.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -19,6 +24,7 @@ const { placePhrase, PHRASES } = require('../src/doc/phrasebook.js');
 const { validate } = require('../src/validate/index.js');
 const { MACH6 } = require('../src/validate/limits.js');
 const CORPUS = require('../src/doc/corpus.json');
+const { LAYOUTS } = require('../tools/corpus.cjs');
 
 const DEG = Math.PI / 180, C = CORPUS.classes;
 const ROAD = ['straight', 'sweep', 'turn', 'tight', 'wall-ride', 'inversion'], CURVED = ['sweep', 'turn', 'tight', 'wall-ride'];
@@ -123,9 +129,21 @@ test('THE BANK RAMPS: a wall-ride after a turn still reaches its class bank, ove
 
 test('BANK_RATE is what tools/bankrate.cjs measures from reads/ (the p90 of the steps where the bank is changing)', (t) => {
   const reads = path.join(__dirname, '..', 'reads');
-  if (!fs.existsSync(reads)) { t.skip('reads/ is not in this checkout (the layouts are other authors\' tracks and stay local)'); return; }
-  const { build } = require('../tools/bankrate.cjs');
+  if (!fs.existsSync(reads)) { t.skip('reads/ is not in this checkout (the layouts are other authors\' tracks and stay local; docs/FINDINGS.md §7f makes them)'); return; }
+  const { build, missing } = require('../tools/bankrate.cjs');
+  const gone = missing(reads);
+  if (gone.length) { t.skip(`reads/ is partial here (${gone.length} of ${LAYOUTS.length} missing, e.g. ${gone[0]}): the p90 needs every layout's read, so a partial set is the clone's gap and not the code's (docs/FINDINGS.md §7f makes them)`); return; }
   assert.equal(Number(build(reads).changing.p90.toFixed(3)), V.BANK_RATE);
+});
+
+test('bankrate.missing names exactly the layout reads a reads/ folder lacks (what the BANK_RATE test skips on)', () => {
+  const { missing } = require('../tools/bankrate.cjs');
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'bankrate-'));
+  try {
+    assert.deepEqual(missing(dir), LAYOUTS.map(([f]) => `${f}.read.json`), 'an empty folder lacks every read');
+    fs.writeFileSync(path.join(dir, `${LAYOUTS[0][0]}.read.json`), '{}');
+    assert.deepEqual(missing(dir), LAYOUTS.slice(1).map(([f]) => `${f}.read.json`), 'a read that is present is not named');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('THE BANK RAMPS: the inversion is not ramped — its whole roll is the word, so it keeps its length after any bank', () => {
