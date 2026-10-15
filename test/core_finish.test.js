@@ -71,6 +71,38 @@ test('row 5: an end upside down rolls back upright on a straight of its own onto
   assert.ok(Math.abs(Math.atan2(Math.sin(end - start), Math.cos(end - start))) < 1e-6, 'the bank at the seam is that of the start, mod 360°');
 });
 
+// 2026-10-15, reported on ELYSIUM (the finish's roll, 54° over 64 m, was red: "the road rolls too fast" at p43): the roll was sized so its AVERAGE rate was
+// the amber bar, but it eases in and out, and the checker reads its PEAK over 20 m (1.219°/m there, past the 1.2144 red bar). The laid roll is now read as
+// the checker reads it: no station of the new road rolls past amber
+test('row 8: the roll Finish lays, read as the checker reads it, is under the amber bar everywhere on the new road (54° and 180°)', () => {
+  const AD = require('../src/core/adapter.js'), G = require('../src/geom/index.js'), V = require('../src/validate/index.js');
+  for (const bank of [54 * DEG, Math.PI]) {
+    let d = openTrack(); d = extend(d, { length: 400, transition: 390, targets: { phi: bank } });
+    const r = F.finishToStart(d), segs = AD.toSegments(r.doc), st = r.doc.start;
+    let p = G.buildPath(segs, { step: 2, closed: true, start: { pos: st.pos.slice(), theta: st.heading, p: st.pitch } }); if (AD.offsetPath) p = AD.offsetPath(r.doc, segs, p);
+    const newIds = new Set(r.doc.pieces.slice(d.pieces.length).map((P) => P.id)), S = p.samples;
+    const onNew = V._internal.rollRates(S, (i) => segs[S[i].seg].kind !== 'gap', true, p.lengthM).filter((q) => newIds.has(segs[S[q.i].seg].id));
+    const worst = onNew.reduce((m, q) => Math.max(m, q.rate), 0);
+    assert.ok(r.plan.rollM > 0 && onNew.length > 0, `control: a roll was laid (${r.plan.report})`);
+    assert.ok(worst <= V.ROLL_AMBER_DEG_M, `rolling ${Math.round(bank / DEG)}°: the new road's worst roll rate ${worst.toFixed(3)}°/m, the amber bar ${V.ROLL_AMBER_DEG_M} (${r.plan.rollM} m of roll)`);
+  }
+});
+
+// the same road from a first guess that is too short (the roll sized as its average, factor 1): the laid roll is MEASURED and lengthened until it is under amber, so
+// the answer does not depend on the ease shape the first guess assumed
+test('row 9: a roll whose first guess is too short (factor 1, and the old 1.1) is measured and lengthened until it is under the amber bar', () => {
+  const AD = require('../src/core/adapter.js'), G = require('../src/geom/index.js'), V = require('../src/validate/index.js');
+  let d = openTrack(); d = extend(d, { length: 400, transition: 390, targets: { phi: 54 * DEG } });
+  for (const factor of [1, 1.1]) {
+    const guess = Math.ceil((54 / V.ROLL_AMBER_DEG_M) * factor), r = F.finishToStart(d, { rollGuess: factor }), segs = AD.toSegments(r.doc), st = r.doc.start;
+    assert.ok(r.plan.rollM > guess, `factor ${factor}: the roll was lengthened past its first guess of ${guess} m (${r.plan.rollM} m)`);
+    let p = G.buildPath(segs, { step: 2, closed: true, start: { pos: st.pos.slice(), theta: st.heading, p: st.pitch } }); if (AD.offsetPath) p = AD.offsetPath(r.doc, segs, p);
+    const newIds = new Set(r.doc.pieces.slice(d.pieces.length).map((P) => P.id)), S = p.samples;
+    const worst = V._internal.rollRates(S, (i) => segs[S[i].seg].kind !== 'gap', true, p.lengthM).filter((q) => newIds.has(segs[S[q.i].seg].id)).reduce((m, q) => Math.max(m, q.rate), 0);
+    assert.ok(worst <= V.ROLL_AMBER_DEG_M, `factor ${factor}: the new road's worst roll rate ${worst.toFixed(3)}°/m, the amber bar ${V.ROLL_AMBER_DEG_M} (${r.plan.rollM} m of roll)`);
+  }
+});
+
 // 2026-10-15, reported on ELYSIUM: the end pointed 90° off with the start 468 m to its left and 76 m ahead, and Finish laid a 307° right turn, 431 m and a
 // 37° left (2.3 km) for what is one left quarter turn and a straight. Its routes were only at the fixed radii (200 m and up). It now first solves the
 // ONE-TURN routes exactly: a turn then a straight (CS), or a straight then a turn (SC), whose radius and length the end and the start fix between them.
