@@ -309,14 +309,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const sculptRatios = new WeakMap();
   const sculptRatio = (b) => {
     const key = b.base; let m = sculptRatios.get(key); if (!m) sculptRatios.set(key, m = {});
-    if (m[b.channel] !== undefined) return m[b.channel];
+    const id = `${b.channel}@${b.sculptPiece}`;
+    if (m[id] !== undefined) return m[id];
     let k = 1;
     try {
       const i = b.sculptPiece, P = b.base.pieces[i], unit = sculpt(b.base, { channel: b.channel, s0: b.s0, r: b.r, delta: 1 }).doc.pieces[i], mid = P.length / 2;
       const got = D.channelAt(unit, b.channel, mid).v - D.channelAt(P, b.channel, mid).v;
       if (Number.isFinite(got) && got > 0.5 && got <= 1.5) k = got;
     } catch (e) { if (!(e instanceof D.CoreError)) throw e; }   // a brush that will not run at unit delta is refused by its own step, with its own words
-    return (m[b.channel] = k);
+    return (m[id] = k);
   };
 
   const api = {
