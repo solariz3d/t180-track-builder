@@ -133,7 +133,7 @@ test('renderer: every array is uploaded once; drawing the same batches again upl
   r.draw(bs, pose, { width: 800, height: 600 });
   assert.equal(calls.bufferData, sum(bs), 'no upload for arrays already on the GPU');
 });
-// 2026-10-13 (the keeper: ELYSIUM's preview at 11 fps): the renderer draws consecutive batches MERGED into world-space chunks
+// 2026-10-13 (reported: ELYSIUM's preview at 11 fps): the renderer draws consecutive batches MERGED into world-space chunks
 // (app/preview/renderer.js CHUNKS). This replaced "a sculpt uploads only the edited piece": a chunk is baked to world space, so
 // a piece that only MOVED is new to the GPU. What still holds, and is tested here: chunks wholly BEFORE the edit upload nothing.
 const vertsOf = (bs) => bs.reduce((a, b) => a + b.positions.length / 3, 0);
@@ -213,7 +213,7 @@ test('the preview shader sources carry no environment (v1 is the track only): no
   assert.ok(!/sampler|texture|sky/i.test(R.VS + R.FS));
 });
 
-// ── 2026-09-29, the keeper: "the camera will keep moving forward by itself", "shift to speed camera too", "move and mouse look
+// ── 2026-09-29, reported: "the camera will keep moving forward by itself", "shift to speed camera too", "move and mouse look
 //    simultaneously". Stated first: a key held when the window loses focus is let go (its key-up never comes); a key pressed
 //    as 'w' and released as 'W' lets go; Shift sprints; the first move from a follow view takes it over into free; a right
 //    drag looks from any view, and a drag to the right turns right. ──
@@ -283,7 +283,7 @@ const W_DOWN = { key: 'w', code: 'KeyW', target: {} }, D_DOWN = { key: 'd', code
 /** The eye's move over one frame with the given keys held, on a fresh preview, for comparing the movement direction. */
 function oneFrame(downs) { const x = livePreview(); for (const d of downs) x.key('keydown', d); x.win.step(); const e0 = x.p.rig.free.state().eye; x.win.step(); return sub(x.p.rig.free.state().eye, e0); }
 const close3 = (a, b) => len(sub(a, b)) < 1e-9;
-// ── D188, the keeper (13:05): "say I am W forward, then I press D, it should go diagonally". MOVEMENT IS PER AXIS: forward/back (W S),
+// ── D188, reported (13:05): "say I am W forward, then I press D, it should go diagonally". MOVEMENT IS PER AXIS: forward/back (W S),
 //    left/right (A D) and down/up (Q E) each resolve on their own; on an axis where both keys are held the NEWER wins, and on its
 //    release the other takes over; the axes combine (W+D is a diagonal) and the direction is normalised (a diagonal is 1.0× a straight
 //    line, not √2). This REPLACES the 03:0x rule "only the newest movement key moves" and its tests. ──
@@ -370,7 +370,7 @@ test('P2: a key that flies by its label but sits on another physical key (anothe
   x.key('keydown', lab); x.win.step(); const e0 = x.p.rig.free.state().eye; x.win.step(); assert.ok(len3(x.p.rig.free.state().eye, e0) > 0, 'it flies forward');
   x.key('keyup', { key: 'w', code: 'KeyZ' }); const e1 = x.p.rig.free.state().eye; x.win.step(); assert.deepEqual(x.p.rig.free.state().eye, e1);
 });
-// ── L132, the keeper's first use (06:22–06:23): "the shift speed increase is too slow should go faster the longer you hold it down";
+// ── L132, the first report (06:22–06:23): "the shift speed increase is too slow should go faster the longer you hold it down";
 //    "when i was entering into the input bar ... it stopped me from being able to move around"; "there needs to be a distinction from
 //    zooming in and traversing in" then "or maybe the zoom is good". Stated first: Shift ramps ×4 → ×20 over 2.5 s held and resets on
 //    release and on blur; Enter/Esc and a click on the canvas take focus off a field; a NUMBER field lets the camera keys through and a
@@ -385,16 +385,19 @@ test('the sprint curve: ×4 at 0 s, ×20 from 2.5 s, smooth and rising between (
   let prev = 4; for (let t = 0; t <= 2.5; t += 0.05) { const v = P.boostAt(t); assert.ok(v >= prev - 1e-12, 'rises at ' + t); prev = v; }
   assert.ok(P.boostAt(0.02) - 4 < 0.05 && 20 - P.boostAt(2.48) < 0.05, 'flat at both ends: no jump');
 });
+// AMENDED D336: a held key now needs the OS's key-repeat to stay held past the safety net's 1.5 s (preview.js HELD_NET_MS; the OS repeats the LAST key pressed, here
+// Shift). These two rows hold keys for 2.5-3 s, so the fake now sends Shift's repeat each frame, as the OS does; what they check, the sprint, is unchanged
+const SHIFT_REPEAT = { ...SHIFT_DOWN, repeat: true };
 test('keys: Shift held ramps the speed: ×4 at the press, then along the curve, ×20 at 2.5 s (measured per frame)', () => {
   const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', SHIFT_DOWN);
   for (let n = 0; n <= 27; n++) {
-    const want = 3 * P.boostAt(n * 0.1), got = flown(x);
+    const want = 3 * P.boostAt(n * 0.1); x.key('keydown', SHIFT_REPEAT); const got = flown(x);
     if ([0, 10, 25, 27].includes(n)) assert.ok(Math.abs(got - want) < 1e-9, 'frame ' + n + ' (held ' + (n * 0.1).toFixed(1) + ' s): ' + got + ' m vs ' + want + ' m');
   }
-  assert.ok(Math.abs(flown(x) - 60) < 1e-9, '×20 of 3 m');
+  x.key('keydown', SHIFT_REPEAT); assert.ok(Math.abs(flown(x) - 60) < 1e-9, '×20 of 3 m');
 });
 test('keys: releasing Shift returns to ×1, and pressing it again starts at ×4 again', () => {
-  const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', SHIFT_DOWN); for (let n = 0; n < 30; n++) x.win.step();
+  const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', SHIFT_DOWN); for (let n = 0; n < 30; n++) { x.key('keydown', SHIFT_REPEAT); x.win.step(); }
   x.key('keyup', SHIFT_UP); assert.ok(Math.abs(flown(x) - 3) < 1e-9, 'released: ×1');
   x.key('keydown', SHIFT_DOWN); assert.ok(Math.abs(flown(x) - 12) < 1e-9, 'pressed again: ×4, not ×20');
 });
@@ -514,7 +517,7 @@ test('W2: the same sideways swipe with Ctrl held does not move the LENS either (
   assert.equal(x.p.rig.fov, f0, `a sideways swipe with Ctrl moved the lens from ${(f0 * 180 / Math.PI).toFixed(1)}° to ${(x.p.rig.fov * 180 / Math.PI).toFixed(1)}°`);
 });
 
-// ── D195, the keeper (2026-09-30 02:56): "before pressing extend for the first piece, the preview is very laggy and continues to lag
+// ── D195, reported (2026-09-30 02:56): "before pressing extend for the first piece, the preview is very laggy and continues to lag
 //    until the first piece is put down". Measured in the real window (pane E's hand-back): with NOTHING placed and no ghost, the
 //    camera's context was null, so no frame drew (0 draws), the wheel and keys changed nothing on screen, and a key pressed then
 //    took the view over only when a ghost later appeared. Stated first: with nothing placed, a frame draws at once, looking at
@@ -565,7 +568,7 @@ test('D195: once a ghost shows on the empty track, the camera follows the ghost\
   assert.ok(len(sub(v.pose.target, h.pos)) < len(sub(v.pose.target, [0, 0, 0])), 'framed on the ghost\'s head, not the start');
 });
 
-// ── D252, the keeper (11:36): "space bar to go up, lft control to go down?" SPACE flies up and LEFT CTRL flies down, held like E and Q (which stay),
+// ── D252, reported (11:36): "space bar to go up, lft control to go down?" SPACE flies up and LEFT CTRL flies down, held like E and Q (which stay),
 //    by the physical key; Right Ctrl does not fly. Ctrl is the app's too (Ctrl+Z/Y/S/Backspace, Ctrl+wheel the lens, Ctrl snaps a handle drag), so
 //    Left Ctrl flies only while it is the ONLY key down and no mouse button is: when another key, the wheel or a button joins it, that press's
 //    descent is undone and the camera is where Ctrl found it. Space never reaches a focused button (taken) but types in a text field. ──
@@ -592,7 +595,7 @@ test('D252: Ctrl+Z never moves the camera: the descent before Z is undone, in fr
   const b = livePreview(); assert.equal(b.p.rig.mode, 'build'); b.key('keydown', LCTRL()); b.win.step(); b.key('keydown', CTRL_Z); b.win.step();
   assert.equal(b.p.rig.mode, 'build', 'from the build view, Ctrl+Z leaves it the build view');
 });
-// D257 AMENDED THIS ROW BY NAME (the keeper, 14:51: "Down left control only works when no other inputs are being pushed"): it was D252's "a key held BEFORE
+// D257 AMENDED THIS ROW BY NAME (reported, 14:51: "Down left control only works when no other inputs are being pushed"): it was D252's "a key held BEFORE
 // Ctrl (Shift for Ctrl+Shift+Z, or W) means Ctrl never flies on that press". Now only a SHORTCUT key held first (one keys.js acts on with Ctrl) does; Shift
 // or W held first does not stop it, and Ctrl+Shift+Z still leaves the camera where it was, because its Z undoes the press's descent
 test('D257: a SHORTCUT key held BEFORE Ctrl (Z) means Ctrl never flies on that press; Shift or W held first does not stop it, and Ctrl+Shift+Z still leaves the camera put', () => {
@@ -623,7 +626,7 @@ test('D252: Space is TAKEN (preventDefault, down and up) so a focused button is 
   y.key('keydown', SPACE({ target: f, preventDefault: () => { pf++; } })); y.key('keyup', { key: ' ', code: 'Space', target: f, preventDefault: () => { pf++; } }); y.win.step(); y.win.step();
   assert.equal(pf, 0, 'a text field types its space'); assert.equal(y.p.rig.mode, 'build', 'and the camera did not take over');
 });
-// D255 AMENDED THIS ROW BY NAME (the keeper, 12:53: "space works instantly to go up, but control lags before going down"): it was D252's
+// D255 AMENDED THIS ROW BY NAME (reported, 12:53: "space works instantly to go up, but control lags before going down"): it was D252's
 // "Ctrl then Z WITHIN 200 ms leaves the camera untouched from the very start" (the 200 ms hold, now removed). Left Ctrl descends on the FIRST frame,
 // like Space; the undo of that press's descent when a key joins it stays, so Ctrl+Z still leaves the camera where it was (the brief dip is accepted)
 test('D255: Left Ctrl descends on the FIRST frame, like Space; Ctrl+Z still puts the camera back where Ctrl found it, and the view it found', () => {
@@ -635,7 +638,7 @@ test('D255: Left Ctrl descends on the FIRST frame, like Space; Ctrl+Z still puts
   b.key('keydown', CTRL_Z); b.win.step(); assert.equal(b.p.rig.mode, 'build', 'Ctrl+Z gives the build view back');
 });
 
-// D255 (the keeper, 12:53: "right click turn only, left click will be used for clicking things"): the camera turns with the RIGHT button only, in every mode;
+// D255 (reported, 12:53: "right click turn only, left click will be used for clicking things"): the camera turns with the RIGHT button only, in every mode;
 // a LEFT drag never turns it (it looked in free mode before), so the left button is free for the pieces, the handles and the brush
 test('D255: a LEFT drag never turns the camera, in free mode either; a RIGHT drag still looks', () => {
   const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); assert.equal(x.p.rig.mode, 'free'); const s0 = x.p.rig.free.state();
@@ -671,7 +674,7 @@ test('a handle drag (pointerdown only, its mousedown suppressed) with Ctrl held 
   y.key('pointerdown', { button: 0, pointerType: 'mouse', clientX: 5, clientY: 5 }); assert.ok(len(sub(eyeOf(y), f0)) < 1e-9, 'a press joined: back where Ctrl found it');
 });
 
-// D257, the keeper (14:51): "Down left control only works when no other inputs are being pushed. cant even click drag look around and go down." Left Ctrl now
+// D257, reported (14:51): "Down left control only works when no other inputs are being pushed. cant even click drag look around and go down." Left Ctrl now
 // flies down TOGETHER with the movement keys (W A S D, Q E, Space, Shift, the arrows) and a RIGHT-button look drag; only a SHORTCUT key (one keys.js acts on with
 // Ctrl: Z, Y, S, Backspace), the wheel (the lens) or a LEFT-button press (a handle drag, Ctrl to snap) stops it and undoes that press's descent.
 const fresh = () => { const x = pressed(['w']); x.key('keyup', UPK('w')); x.win.step(); return x; };
