@@ -71,13 +71,17 @@ test('row 5 (B4): a piece too short to shape is refused by name with the shortes
   assert.throws(() => TB.extendTurnBy({ ...straight(), closed: true }, { length: 750 }, -90 * DEG), (e) => e.code === 'CLOSED');
 });
 
-test('row 6 (B6, the keeper 18:55: "THERE is nothign wrong with the 90 degree curves that can be made now"): Turn by −90 over 750 m keeps today\'s broad curve within 1°/100 m outside its end zone', () => {
+// AMENDED D331 C (ledger D332, 2026-10-15). This row was B6, the keeper's 18:55 "THERE is nothign wrong with the 90 degree curves that can be made now": Turn by
+// kept today's broad curve (Extend's piece eased to an end rate) within 1°/100 m outside its last two knot spans. That curve peaks late and lets go about four times
+// as fast as it builds up (a 90° Turn by over 105 m peaked at 74%), which on a steep bank is the "crooked" twist-and-dip the keeper reported on ELYSIUM, and his
+// word of 2026-10-15 (plan :367-369, ruled :373-385) replaces it with a symmetric ease. The new rule, the same piece: the peak within 10% of the middle, the
+// let-go no steeper than the build-up, and no tighter than today's curve was at its end (a symmetric ease peaks at about twice the average rate, which is the
+// rate an eased piece ends at). test/turn_corner.test.js row 3 holds the same rule on a 105 m corner, flat and banked 53.5°, and for Turn to grid.
+test('row 6 (B6, amended D331 C): Turn by −90 over 750 m eases in and out symmetrically: its peak within 10% of the middle, its let-go no steeper than its build-up, no tighter than today\'s curve ended', () => {
   const base = straight(), T = TB.extendTurnBy(base, { length: 750 }, -90 * DEG).pieces[1];
-  // today's curve for the same angle, found on the readout by bisection on Extend's end rate (independent of turnby.js's own solve)
-  const f = (R) => readTurn(extend(base, { length: 750, targets: { kh: R } }), 1) + 90; let lo = -1, hi = 1;
-  for (let k = 0; k < 80; k++) { const mid = (lo + hi) / 2; if (f(lo) * f(mid) <= 0) hi = mid; else lo = mid; }
-  const B = extend(base, { length: 750, targets: { kh: (lo + hi) / 2 } }).pieces[1], zone = T.knots[T.knots.length - 2];   // the end zone: the last two knot spans
-  assert.ok(zone > 700, `the end zone starts at ${zone} m`);
-  let worst = 0; for (let s = 0; s <= zone; s++) worst = Math.max(worst, Math.abs(D.channelAt(T, 'kh', s).v - D.channelAt(B, 'kh', s).v) * 100 / DEG);
-  assert.ok(worst <= 1, `max |turn rate − today's| before ${zone} m: ${worst.toFixed(3)}°/100 m`);
+  let pk = 0, at = 0; for (let s = 0; s <= T.length; s += 0.5) { const v = -D.channelAt(T, 'kh', s).v; if (v > pk) { pk = v; at = s; } }
+  let up = 0, down = 0; for (let s = 0; s <= T.length; s += 0.5) { const g = -D.channelAt(T, 'kh', s).d1; if (s < at) up = Math.max(up, g); else down = Math.max(down, -g); }
+  assert.ok(Math.abs(at / T.length - 0.5) <= 0.1, `the peak is at ${(100 * at / T.length).toFixed(1)}% of the piece`);
+  assert.ok(down <= up * 1.001, `lets go at ${down.toExponential(3)} rad/m², builds up at ${up.toExponential(3)}`);
+  assert.ok(pk * 100 / DEG <= 24 * 1.02, `the peak rate ${(pk * 100 / DEG).toFixed(2)}°/100 m against the −24°/100 m today's −90° piece ends at`);
 });

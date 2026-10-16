@@ -277,7 +277,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   /** The boxes' values ({ forward, left, up, heading, pitch, bank }, in m and degrees) as the pose the core takes (radians). */
   const landingPose = (ui) => Object.assign({}, ...Object.entries(ui || {}).map(([k, v]) => LD.poseOf(k, v)));
   // D258: the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
-  const jumpFor = (extendOpts) => JU.jumpHere(doc(), extendOpts || null);
+  // D331 B: the turn field read as a corner (extendOpts.turnDeg) is placed by Extend alone (TB.extendCorner). Jump, Level and To floor solve or place the piece
+  // their own way and would drop it, so they refuse it by name, and the turn typed is never silently lost
+  const noCorner = (o, what) => {
+    if (o && ('turnDeg' in o || 'climbDeg' in o)) {
+      const which = ['turnDeg' in o ? `turn ${o.turnDeg}°` : null, 'climbDeg' in o ? `climb ${o.climbDeg}°` : null].filter(Boolean).join(' and ');
+      throw new D.CoreError('TURN_AS_CORNER', `${what} takes the turn and the climb as rates: set "turn & climb as" to rate, or place the ${which} with Extend first`);
+    }
+  };
+  const jumpFor = (extendOpts) => { noCorner(extendOpts, 'Jump'); return JU.jumpHere(doc(), extendOpts || null); };
   let reads = [], readsFor = null;
   // the keeper, 2026-10-12: "a solid lag when putting the pieces down". Every commit converted EVERY piece again (about 90 ms on a 9-piece
   // track); the cache returns an unchanged piece's last segments, so a placement converts only what changed (adapter.js toSegments `cache`)
@@ -379,12 +387,13 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return attempt(() => set({ history: D.endDrag(st.history), landingDrag: null, lastEdited: null }));
     },
 
-    /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute). */
-    extend: (opts) => commit('extend', () => extend(doc(), opts), { lastEdited: [doc().pieces.length] }),
+    /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute); `turnDeg` (D331 B, the turn field
+     *  read as a corner) makes the piece turn exactly that many degrees and end straight (src/core/turnby.js extendCorner). */
+    extend: (opts) => commit('extend', () => TB.extendCorner(doc(), opts), { lastEdited: [doc().pieces.length] }),
     /** D271 LEVEL: extend with the fields' piece, its climb solved so it ends straight and level (pitch 0); src/core/level.js. One undo step, like extend. */
-    extendLevel: (opts) => commit('level', () => LV.extendLevel(doc(), opts), { lastEdited: [doc().pieces.length] }),
+    extendLevel: (opts) => commit('level', () => { noCorner(opts, 'Level'); return LV.extendLevel(doc(), opts); }, { lastEdited: [doc().pieces.length] }),
     /** D271 TO FLOOR: …and on the floor (height 0). Too short a piece is refused by name with the length that works (FLOOR_TOO_SHORT), as the message. */
-    extendToFloor: (opts) => commit('toFloor', () => LV.extendToFloor(doc(), opts), { lastEdited: [doc().pieces.length] }),
+    extendToFloor: (opts) => commit('toFloor', () => { noCorner(opts, 'To floor'); return LV.extendToFloor(doc(), opts); }, { lastEdited: [doc().pieces.length] }),
     /** D280 TURN BY: extend with the fields' piece, its turn solved so it turns EXACTLY `deg` degrees (+ = left) and ends straight (turn rate 0); src/core/turnby.js.
      *  One undo step, like extend; too short a piece is refused by name with the length that works (TURN_TOO_SHORT), as the message. */
     extendTurnBy: (opts, deg) => commit('turnBy', () => TB.extendTurnBy(doc(), opts, (Number(deg) * Math.PI) / 180), { lastEdited: [doc().pieces.length] }),
@@ -414,9 +423,12 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return wasClosed && st.history.present !== d ? set(ok('removed the last piece: the loop is open again (Ctrl+Z puts the closed lap back)')) : r;
     },
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
-    candidate: (opts) => { const d = extend(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) }; },
+    candidate: (opts) => { const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) }; },
     /** The ghost's readout: what extend(opts) would place, before it is placed (A: the same numbers as after). Throws on bad fields. */
     candidateReadout: (opts) => RD.candidateReadout(doc(), opts),
+    /** D331 A: what easing the ghost's piece out would add (readout.js candidateCorner), apart from candidateReadout, whose numbers are the placed piece's. Through the
+     *  shell, because the panel loads in the webview with no node built-in and the core's readout pulls src/core/document.js (core-pieces-ui.test.js row 17). */
+    candidateCorner: (opts) => RD.candidateCorner(doc(), opts),
     /**
      * The head's END state in the core's units: kh, kv (rad/m), phi (rad), w (m), c (degrees; a legacy piece's is the edge it renders).
      * And the cross-section channels (D225, app/core/xsec.js): the edge angle and the tube sweep in degrees, the edge start as a share,

@@ -47,11 +47,15 @@ function fakeWindow() {
 /** D242: the pointer over the preview, as the browser sends it: a pointermove (css px of the stage) or a pointerleave on #preview. */
 const hover = (P, x, y) => { for (const f of (P.stage.listeners.pointermove || []).slice()) f({ clientX: x, clientY: y, button: 0, preventDefault() {} }); };
 const leave = (P) => { for (const f of (P.stage.listeners.pointerleave || []).slice()) f({}); };
-async function mountPanel(wrap = (s) => s, shellOpts = {}) {
+async function mountPanel(wrap = (s) => s, shellOpts = {}, { turnAsRate = true } = {}) {
   const { doc, win, tick, flush } = fakeWindow();
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
   const root = doc.createElement('div'), shell = wrap(await createCoreShell({ brushFn: null, ...shellOpts }));
   const panel = require('../core/panel.js').mount(root, shell);
+  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the keeper's word, plan :367-369, ruled :373-385). Every row in
+  // this file types the turn as a RATE (°/100 m), the field's meaning when it was written, so the helper puts "turn as" on rate, the switch the ruling keeps one
+  // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js (D331 B).
+  if (turnAsRate !== false) { const ta = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); ta.value = 'rate'; ta.onchange(); }
   const label = (text) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text);
   const field = (text) => label(text).children[1];
   const cell = (k) => root.all().find((e) => e.attrs['data-readout'] === k).textContent;
@@ -816,4 +820,86 @@ test('the piece labels equal a fresh read after a placement, an undo, a redo, a 
   assert.equal(s.getState().message, null, s.getState().message); check('a bend in the middle (every later pose moves)');
   const d = s.getState().history.present;
   s.adopt({ ...d, start: { ...d.start, heading: d.start.heading + 0.3, pitch: 0.05 } }); check('the start moved');
+});
+
+// D331 (ledger D332), readouts A and D: the panel's readout of the piece Extend would add shows the CORNER it belongs to (the turn since the road was last
+// straight, whether it ends turning, and what "turn 0 at start" would then add: src/core/readout.js corner, cornerNext) and its bank against GRAVITY (the
+// road's real tilt, which past an inversion is not the bank field's number).
+test('the panel shows the corner (its turn, "ends turning at …", what turn 0 at start would add) and the gravity bank, for the piece Extend would add', async () => {
+  const P = await mountPanel();
+  P.shell.extend({ length: 100, family: 'bowl' });
+  P.type('length m', 105.05); P.type('turn °/100m', 171.37); P.type('bank °', 30);
+  const d = P.shell.getState().history.present, r = RD.candidateReadout(d, P.opts()), n = RD.candidateCorner(d, P.opts());
+  assert.ok(r.corner && n && n.nextFrom === 'turn 0 at start', 'the candidate ends turning, at the open end');
+  const c = P.cell('corner');
+  assert.ok(c.startsWith(LB.fmtDeg(r.corner.turnDeg)), `the corner's turn first: ${c}`);
+  assert.ok(c.includes(`ends turning at ${LB.fmtDeg(r.corner.endsTurningDegPer100m)}/100 m`) && /\+171\.37°\/100 m/.test(c), `ends turning at its rate: ${c}`);
+  assert.ok(c.includes(`turn 0 at start adds ${LB.fmtDeg(n.nextAddsDeg)}`), `what easing it out would add: ${c}`);
+  assert.equal(P.cell('gravity'), `${LB.fmtDeg(r.gravityBankFromDeg)} → ${LB.fmtDeg(r.gravityBankToDeg)}`);
+  P.panel.unmount();
+  const Q = await mountPanel();   // a straight piece after a straight is in no corner, and on the level its bank to gravity is its bank
+  Q.shell.extend({ length: 100 }); Q.type('length m', 50); Q.type('bank °', 20);
+  assert.equal(Q.cell('corner'), 'none (straight)');
+  assert.equal(Q.cell('gravity'), `0.00° → ${LB.fmtDeg(20)}`);
+  Q.panel.unmount();
+});
+
+// D331 B (ledger D332; the keeper, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). The turn field is read as a
+// CORNER by default: typed 90, the piece Extend places turns the map heading by exactly 90° and ends straight; "turn as" rate is the old field, one switch away.
+test('D331 B: by default the turn field is a corner: it shows nothing at the head, a typed 90 is the ghost\'s and the placed piece\'s exact 90.00°, ending straight', async () => {
+  const P = await mountPanel(undefined, {}, { turnAsRate: false });
+  const turnAs = P.root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as');
+  assert.equal(turnAs.value, 'corner', 'the default'); assert.ok(P.label('turn °'), 'the field says degrees');
+  P.shell.extend({ length: 100, family: 'bowl' }); P.shell.extend({ length: 60, targets: { kh: 0.004 } });   // a head still turning
+  assert.equal(P.field('turn °').value, '', 'a corner has no value at the head: blank, so left alone the track keeps turning');
+  P.type('length m', 105.05); P.type('turn °', 90);
+  assert.deepEqual(P.opts().turnDeg, 90); assert.equal(P.opts().targets.kh, undefined, 'no rate target');
+  assert.equal(P.cell('turn'), LB.fmtDeg(90), 'the ghost turns 90.00°');
+  assert.ok(P.cell('corner').endsWith('ends straight'), `the ghost's corner ends straight: ${P.cell('corner')}`);
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
+  const d = P.shell.getState().history.present, i = d.pieces.length - 1, Q = d.pieces[i];
+  assert.ok(Math.abs(RD.pieceReadout(d, i).turnDeg - 90) <= 0.01, `the placed piece turns ${RD.pieceReadout(d, i).turnDeg}°`);
+  assert.equal(Q.channels.kh[Q.channels.kh.length - 1], 0, 'and ends straight');
+  turnAs.value = 'rate'; turnAs.onchange(); P.shell.undo();   // D242 item 7: Undo gives the undone piece's fields back, the way its turn was read included
+  assert.equal(turnAs.value, 'corner'); assert.equal(P.field('turn °').value, '90', 'the corner it was made with');
+  P.panel.unmount();
+});
+test('D331 B: "turn as" rate is the old field (°/100 m, the head\'s rate shown); switching back puts the field back; Level, To floor and Jump refuse a corner by name and place nothing', async () => {
+  const P = await mountPanel(undefined, {}, { turnAsRate: false });
+  const turnAs = P.root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'), button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t);
+  P.shell.extend({ length: 100, family: 'bowl' }); P.shell.extend({ length: 60, targets: { kh: 30 * Math.PI / 180 / 100 } });
+  turnAs.value = 'rate'; turnAs.onchange();
+  assert.ok(P.label('turn °/100m'), 'the field says a rate'); assert.equal(P.field('turn °/100m').value, '30', 'it shows the head\'s rate, as before D331');
+  P.type('turn °/100m', 12); assert.equal(P.opts().turnDeg, undefined); assert.ok(Math.abs(P.opts().targets.kh - 12 * Math.PI / 180 / 100) < 1e-15, 'a rate target, as before');
+  turnAs.value = 'corner'; turnAs.onchange();
+  assert.equal(P.field('turn °').value, '', 'switching puts the field back to what it shows, so the 12 typed as a rate is not applied as a corner');
+  P.type('turn °', 45); const n = P.shell.getState().history.present.pieces.length;
+  for (const b of ['Level', 'To floor', 'Jump']) {
+    button(b).onclick();
+    assert.equal(P.shell.getState().history.present.pieces.length, n, `${b} placed nothing`);
+    assert.match(P.shell.getState().message || '', new RegExp(`${b} takes the turn and the climb as rates`), `${b} says why`);
+  }
+  P.panel.unmount();
+});
+// D331, the climb too (the keeper: "i wonder, the climb might need to do the same?"; plan :387-399): the climb field follows the same switch
+test('D331 climb: by default the climb field is a corner: blank at the head, a typed 10 is the ghost\'s and the placed piece\'s exact 10.00°, at a steady pitch after; the climb corner cell reads it', async () => {
+  const P = await mountPanel(undefined, {}, { turnAsRate: false });
+  P.shell.extend({ length: 100, family: 'bowl' }); P.shell.extend({ length: 60, targets: { kv: 0.003 } });   // a head still climbing
+  assert.ok(P.label('climb °'), 'the field says degrees'); assert.equal(P.field('climb °').value, '', 'blank at the head');
+  P.type('length m', 105.05);   // (the readout follows the fields in their handlers)
+  assert.match(P.cell('climbCorner'), /ends climbing at \+17\.19°\/100 m$/, `left blank, the ghost keeps climbing: ${P.cell('climbCorner')}`);
+  P.type('climb °', 10);
+  assert.equal(P.opts().climbDeg, 10); assert.equal(P.opts().targets.kv, undefined, 'no rate target');
+  assert.equal(P.cell('climb'), LB.fmtDeg(10), 'the ghost climbs 10.00°');
+  assert.ok(P.cell('climbCorner').endsWith('ends at a steady pitch'), `the ghost's climb corner: ${P.cell('climbCorner')}`);
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
+  const d = P.shell.getState().history.present, i = d.pieces.length - 1, Q = d.pieces[i];
+  assert.ok(Math.abs(RD.pieceReadout(d, i).climbDeg - 10) <= 0.01, `the placed piece climbs ${RD.pieceReadout(d, i).climbDeg}°`);
+  assert.equal(Q.channels.kv[Q.channels.kv.length - 1], 0, 'and ends at a climb rate of 0');
+  const turnAs = P.root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); turnAs.value = 'rate'; turnAs.onchange();
+  assert.ok(P.label('climb °/100m'), 'on rate the field says a rate'); assert.equal(P.field('climb °/100m').value, '0', 'and shows the head\'s climb rate');
+  turnAs.value = 'corner'; turnAs.onchange(); P.type('climb °', 5); const n = P.shell.getState().history.present.pieces.length;
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Level').onclick();   // Level solves the climb itself: a climb corner is refused by name, not dropped
+  assert.equal(P.shell.getState().history.present.pieces.length, n, 'Level placed nothing'); assert.match(P.shell.getState().message || '', /place the climb 5° with Extend first/);
+  P.panel.unmount();
 });
