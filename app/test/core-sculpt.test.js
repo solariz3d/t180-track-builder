@@ -209,3 +209,18 @@ test('D259: a value brush on bank that would take the bank past one turn wraps i
     near(at(s), turn(b0 + by), b0, `a brush by ${by} at its centre`);
   }
 });
+
+// D335 (plan :555-583): a Sculpt drag lands on the value it was asked for. The brush's bump on the control points peaks a little under its delta at the piece's middle (0.995 of it on a 100 m
+// piece, measured), so a bank drag to 180 left the piece at 179.10 while the handle's label said 180.00. The drag's delta is now scaled by what the brush really gives at the middle.
+for (const kind of ['legacy', 'cup', 'opentube']) {
+  test(`row 10 (D335): a Sculpt drag lands on the asked bank (to 1e-6 degrees) and width (to 0.5 mm, the width is not quite linear in the brush; the label shows 0.01) at the piece's middle (${kind}), and a drag back to 0 lands on 0`, async () => {
+    const s = await mk(kind); s.setSculpt(true); s.selectPiece(2);
+    const base = s.sculptInfo().values;
+    for (const bank of [10, 90, 180, 270, -135]) {
+      s.beginSculpt({ channel: 'phi' }); s.sculptTo(bank * Math.PI / 180); const got = s.sculptInfo().values.phi; s.endSculpt();
+      assert.ok(Math.abs(got - (base.phi + bank)) < 1e-6, `${kind}: asked +${bank}°, the piece reads ${got - base.phi}°`); s.undo(); s.selectPiece(2);
+    }
+    s.beginSculpt({ channel: 'w' }); s.sculptTo(5); const w = s.sculptInfo().values.w; s.endSculpt(); assert.ok(Math.abs(w - (base.w + 5)) < 5e-4, `${kind}: asked +5 m of width, the piece reads ${w - base.w}`); s.undo(); s.selectPiece(2);
+    s.beginSculpt({ channel: 'phi' }); s.sculptTo(0.3); s.sculptTo(0); assert.ok(Math.abs(s.sculptInfo().values.phi - base.phi) < 1e-9, 'back to 0: the start'); s.endSculpt();
+  });
+}
