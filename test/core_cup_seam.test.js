@@ -14,11 +14,12 @@ const { close } = require('../src/core/close.js');
 const A = require('../src/core/adapter.js');
 const V = require('../src/validate/index.js');
 const PF = require('../src/geom/profile.js');
-const { buildMesh } = require('../src/geom/mesh.js');
+const { buildMesh, rowVertices } = require('../src/geom/mesh.js');
 
 const Rr = 180, Q = (Math.PI * Rr) / 2;
 function rowGap(a, b) {
-  const P = (r) => r.map((v) => v.p), sub = (x, y) => [x[0] - y[0], x[1] - y[1], x[2] - y[2]], dot = (x, y) => x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
+  // the kept rows are packed (2026-10-15, memory headroom): rowVertices reads them back as the { p } this measure walks
+  const P = (r) => rowVertices(r).map((v) => v.p), sub = (x, y) => [x[0] - y[0], x[1] - y[1], x[2] - y[2]], dot = (x, y) => x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
   const near = (q, poly) => { let best = Infinity; for (let i = 0; i + 1 < poly.length; i++) { const d = sub(poly[i + 1], poly[i]), w = sub(q, poly[i]), t = Math.max(0, Math.min(1, dot(w, d) / (dot(d, d) || 1))), r = sub(w, d.map((x) => x * t)); best = Math.min(best, Math.hypot(r[0], r[1], r[2])); } return best; };
   const A1 = P(a), B1 = P(b); return Math.max(...A1.map((q) => near(q, B1)), ...B1.map((q) => near(q, A1)));
 }

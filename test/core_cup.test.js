@@ -17,7 +17,7 @@ const A = require('../src/core/adapter.js');
 const S = require('../src/core/sculpt.js');
 const { close } = require('../src/core/close.js');
 const R = require('../src/core/readout.js');
-const { buildMesh } = require('../src/geom/mesh.js');
+const { buildMesh, rowVertices } = require('../src/geom/mesh.js');
 const { FLOORS } = require('../src/geom/fonts.js');
 const PF = require('../src/geom/profile.js'), { offsetAt } = PF;
 
@@ -267,7 +267,8 @@ for (const [family, w] of [['bowl', 12], ['half-pipe', 24], ['bowl', 18], ['flat
   test(`R2 / row 3 (iv): a ${family} road ${w} m wide handing over to a cup piece has no step over 1 mm across the WHOLE curve at the joint (36.0 mm bowl 12 m and 148.2 mm half-pipe 24 m before)`, () => {
     let d = extend(D.createDoc('j'), { length: 100, family, first: { w } }); d = extend(d, { length: 120, transition: 60, targets: { c: 60 } });
     const segs = A.toSegments(d), path = A.toPath(d).path, mesh = buildMesh(path, segs), g = segs.findIndex((x) => x.id === 'p2');
-    const gap = rowGap(mesh._state.pieces[g - 1].last, mesh._state.pieces[g].first);
+    // the kept rows are packed (2026-10-15, memory headroom); rowVertices reads them back as the { p } this measure walks
+    const gap = rowGap(rowVertices(mesh._state.pieces[g - 1].last), rowVertices(mesh._state.pieces[g].first));
     assert.ok(gap <= 0.001, `the two rows at the joint are ${(gap * 1000).toFixed(2)} mm apart`);
   });
 }

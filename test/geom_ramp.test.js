@@ -18,8 +18,10 @@ const F = require('./geom_fixtures.js');
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const len = (a) => Math.hypot(a[0], a[1], a[2]);
-function toPolyline(x, row) {
-  let best = Infinity;
+// the kept rows are packed (2026-10-15, memory headroom): rowVertices reads them back as the { p } these measures walk
+const { rowVertices } = require(require('path').join(GDIR, 'mesh.js'));
+function toPolyline(x, packed) {
+  const row = rowVertices(packed); let best = Infinity;
   for (let k = 0; k + 1 < row.length; k++) {
     const a = row[k].p, d = sub(row[k + 1].p, a), w = sub(x, a), t = Math.max(0, Math.min(1, dot(w, d) / (dot(d, d) || 1)));
     best = Math.min(best, len(sub(w, [d[0] * t, d[1] * t, d[2] * t])));
@@ -31,7 +33,7 @@ const WIDE = F.prof('flat', [-18, 0, 18], [0, 0, 0]);
 function step(fa, fb, opts = {}) {
   const segs = [{ id: 'a', kind: 'road', length: 40, k0: 0.01, k1: 0.01, profile: fa }, { id: 'b', kind: 'road', length: 60, k0: 0.01, k1: 0.01, profile: fb }];
   const m = G.buildMesh(G.buildPath(segs), segs, opts), [A, Bp] = m._state.pieces;
-  return { m, A, Bp, worst: Math.max(...Bp.first.map((v) => toPolyline(v.p, A.last))) };
+  return { m, A, Bp, worst: Math.max(...rowVertices(Bp.first).map((v) => toPolyline(v.p, A.last))) };
 }
 
 for (const [name, fa, fb] of [['flat → half-pipe', F.FLAT, F.HALFPIPE], ['half-pipe → flat', F.HALFPIPE, F.FLAT], ['half-pipe → wall-ride (past vertical)', F.HALFPIPE, F.WALLRIDE], ['flat 26 m → flat 36 m', F.FLAT, WIDE]]) {
@@ -101,7 +103,7 @@ test('document blend: a transition split across two segments of one word continu
   const segs = [{ id: 'a', kind: 'road', length: 40, profile: FL }, { id: 'b1', kind: 'road', length: 12, profile: HP, blend: bl(0) },
     { id: 'b2', kind: 'road', length: 48, profile: HP, blend: bl(12) }];
   const m = G.buildMesh(G.buildPath(segs), segs), [, B1, B2] = m._state.pieces;
-  const worst = Math.max(...B2.first.map((v) => toPolyline(v.p, B1.last)));
+  const worst = Math.max(...rowVertices(B2.first).map((v) => toPolyline(v.p, B1.last)));
   assert.ok(worst < 1e-9, `the two segments' rows coincide at the cut (step ${worst} m)`);
   assert.ok(!m.cells.some((c) => c.seam && c.name.includes('b2')), 'no seam where the transition continues');
   // at the cut, 12 m into a 20 m ramp, the surface is MID-blend (w = smoothstep(0.6)), not already the half-pipe
@@ -117,7 +119,7 @@ test('document blend: a transition split across two segments of one word continu
 test('document blend: null means no ramp, even after a different font (the document spoke; the geometry adds none)', () => {
   const segs = [{ id: 'a', kind: 'road', length: 40, profile: FL }, { id: 'b', kind: 'road', length: 60, profile: HP, blend: null }];
   const m = G.buildMesh(G.buildPath(segs), segs), [A, Bp] = m._state.pieces;
-  assert.ok(Math.max(...Bp.first.map((v) => toPolyline(v.p, A.last))) > 1, 'the fonts step, as the document asked');
+  assert.ok(Math.max(...rowVertices(Bp.first).map((v) => toPolyline(v.p, A.last))) > 1, 'the fonts step, as the document asked');
 });
 test('document blend: a malformed field is refused loudly (no from, negative s0, zero length)', () => {
   const base = { id: 'a', kind: 'road', length: 40, profile: FL };
