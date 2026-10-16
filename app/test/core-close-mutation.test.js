@@ -20,7 +20,9 @@ const MUTATIONS = [
   { id: 'K6 the default window ignores the fraction (the last piece only)', file: 'src/core/close.js', from: 'want = Math.max(0, Math.min(1, fraction)) * total', to: 'want = 0', tests: [LOCAL], caughtBy: 'row 2: the default window' },
   { id: 'K7 an empty window is accepted', file: 'src/core/close.js', from: "if (!set.size) throw new D.CoreError('CLOSE_WINDOW'", to: "if (false) throw new D.CoreError('CLOSE_WINDOW'", tests: [LOCAL], caughtBy: 'row 5: a window with no road piece' },
   // app/core/coreshell.js: the PREVIEW (items 2 and 3)
-  { id: 'A1 the app close is the whole-lap close again', file: 'app/core/coreshell.js', from: 'close(base, { window: closeWindow(base, { fraction, last }) })', to: 'close(base, { edited: wholeLapEdited(base) })', tests: [PREVIEW], caughtBy: 'row 1: Close PROPOSES' },
+  // A1's line moved with the close itself into app/core/closejob.js (2026-10-15, Close off the window's thread); the shell runs that job on the page, so the same row
+  // catches it. The whole-lap close there is told the last piece, as wholeLapEdited gives it on a lap with no straight and no edit
+  { id: 'A1 the app close is the whole-lap close again', file: 'app/core/closejob.js', from: 'close(doc, { window: closeWindow(doc, { fraction, last }) })', to: 'close(doc, { edited: [doc.pieces.length - 1] })', tests: [PREVIEW], caughtBy: 'row 1: Close PROPOSES' },
   { id: 'A2 an edit keeps a stale preview', file: 'app/core/coreshell.js', from: 'patch.history.present !== st.closeProposal.base)', to: 'false)', tests: [PREVIEW], caughtBy: 'row 2: Cancel drops the preview' },
   { id: 'A3 the overlap check has no mesh self-check (no folds)', file: 'app/core/overlapjob.js', from: 'folds: mesh.folds, roadMesh,', to: 'roadMesh,', tests: [PREVIEW], caughtBy: 'row 4: the preview\'s OVERLAP CHECK' },
   { id: 'A4 the overlap check is skipped', file: 'app/core/coreshell.js', from: 'Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh))', to: 'Object.freeze({ overlaps: [], others: [], amber: 0 })', tests: [PREVIEW], caughtBy: 'row 4: the preview\'s OVERLAP CHECK' },

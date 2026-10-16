@@ -56,11 +56,13 @@ function bankWithinTurn(b, delta) {
   const b0 = D.channelAt(P, 'phi', Math.min(P.length, Math.max(0, b.s0 - offs[i]))).v, TURN = 2 * Math.PI, w = (b0 + delta) % TURN;
   return Math.abs(b0 + delta) < TURN ? delta : w - b0;
 }
-const { close, closeWindow } = require('../../src/core/close.js');
-const { finishToStart } = require('../../src/core/finish.js');   // 2026-10-14: Finish to start, new road from the end to the start (the close's `finish` option)
+const { close } = require('../../src/core/close.js');
 // D242: the close preview's overlap check builds the closed track's mesh and validates it as the export does (src/export/fromwords.js). D240 follow-up: it lives in
 // app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
 const { overlapCheck } = require('./overlapjob.js');
+// 2026-10-15: the close itself (Finish to start, a window, the whole lap) and how far each piece moves are app/core/closejob.js, ONE pure job the shell runs on the page
+// (no closeRunner given: tests) or that a Web Worker runs (app/core/closeworker.js), so working out a preview never holds the window (4.1 s on a 24 km track)
+const CJ = require('./closejob.js');
 const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
 const overlapPlacesText = (ck, segs, o) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs, o).flatMap((g) => g.places) });   // D248: "N places", merged as the red list shows them
 const AD = require('../../src/core/adapter.js');
@@ -133,7 +135,7 @@ const SCULPT_CHANNELS = Object.freeze(['phi', 'c', 'w', 'e', 's', 'r', 't', 'er'
 const callTimers = { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (t) => clearTimeout(t) };
 const exportError = (code, message) => Object.assign(new Error(message), { name: 'ExportError', code });
 
-async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers, overlapRunner = null } = {}) {
+async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers, overlapRunner = null, closeRunner = null } = {}) {
   const ok = (msg) => ({ message: msg, messageKind: 'ok' });
   // AUTOSAVE (D239): what the last session left behind, read once at the start (the header says what happens to each kind)
   const canAutosave = !!storage && typeof storage.saveAutosave === 'function';
@@ -173,6 +175,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
     selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
     sculpt: false,   // D244b: the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
+    closePending: null,   // 2026-10-15: a close the worker is working out, { base, finish, startedAt }: no preview yet (closeRunner)
   };
   // a Pieces autosave that could not be kept aside is never overwritten: this session simply does not autosave
   const mayAutosave = canAutosave && !(recovery && recovery.blocked);
@@ -256,6 +259,21 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return entry;   // the caller puts it in the SAME state change as the preview (a panel drawn for the preview must already see its check)
   }
   const doc = () => st.history.present;
+  // 2026-10-15: THE CLOSE OFF THE THREAD (closeRunner): the job being worked out for proposeClose, { job }, and its stop
+  let closeJob = null;
+  function abortClose() { const j = closeJob; closeJob = null; if (j) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
+  /** The close preview made from the close's answer `res` (closejob.js runClose) for the open track `base`: the preview and its overlap check, as proposeClose always made them. */
+  function previewOf(base, res, whole, t0) {
+    if (!res.converged) return set({ message: res.report, closeProposal: null, closePending: null });   // the whole-lap close hands back a best try; a local one has refused already
+    const r = resolvedOf(res.doc), ms = now() - t0;
+    const proposal = Object.freeze({ base, doc: res.doc, resolved: r.resolved, whole: !!whole, window: res.window, report: res.report, ms,
+      displacement: Object.freeze(res.displacement), check: overlapRunner ? null : Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh)) });
+    const moved = proposal.displacement.filter((x) => x.maxM > 1e-3);
+    const words = (ck) => `close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move${ck.overlaps.length ? `; the closed track OVERLAPS ITSELF in ${overlapPlacesText(ck, r.resolved.segments)}` : ''}. Apply or cancel`;
+    if (!overlapRunner) return set({ closeProposal: proposal, closePending: null, ...ok(words(proposal.check)) });
+    const entry = beginCheck(proposal, res.doc, true, (e) => (e.status === 'done' ? ok(words(e.result)) : { message: `the overlap check could not run: ${e.error}. Cancel the preview and try Close again` }));
+    return set({ closeProposal: proposal, closePending: null, proposalCheck: entry, ...ok(`close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move. Checking for overlaps: Apply is off until that finishes (Cancel stops it)`) });
+  }
   /** The boxes' values ({ forward, left, up, heading, pitch, bank }, in m and degrees) as the pose the core takes (radians). */
   const landingPose = (ui) => Object.assign({}, ...Object.entries(ui || {}).map(([k, v]) => LD.poseOf(k, v)));
   // D258: the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
@@ -513,24 +531,34 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      */
     // `finish: true` (2026-10-14, the keeper's "Yes" to Finish to start): nothing the user built moves; NEW road is laid from the end to the start and only it is
     // bent to close the lap (src/core/finish.js). The same preview, overlap check, Apply and Cancel as any close
+    // 2026-10-15: with a closeRunner (the page's: a Web Worker) the close is worked out OFF the window's thread: this returns at once with state.closePending
+    // and no preview, and the answer makes the preview below (an edit meanwhile drops it by name; Cancel or a newer Close stops it). A runner that cannot start,
+    // or a job that fails, closes on the page instead, so the answer is never lost, only slower
     proposeClose({ fraction = 0.2, last = false, whole = false, finish = false } = {}) {
-      if (doc().closed) return set({ message: 'the loop is already closed: there is nothing to preview' });
-      if (lastRoad(doc()) < 0) return set({ message: 'there is no road to close yet: extend first' });
-      return attempt(() => {
-        const base = doc(), t0 = now();
-        const fin = finish ? finishToStart(base) : null;
-        const res = fin ? { converged: true, doc: fin.doc, report: `Finish to start: ${fin.plan.report}`, window: { pieces: fin.window, text: `the new road (${fin.window.length} piece${fin.window.length === 1 ? '' : 's'}, ${fin.plan.lengthM} m)` } }
-          : whole ? close(base, { edited: wholeLapEdited(base) }) : close(base, { window: closeWindow(base, { fraction, last }) });
-        if (!res.converged) return set({ message: res.report, closeProposal: null });   // the whole-lap close hands back a best try; a local one has refused already
-        const r = resolvedOf(res.doc), ms = now() - t0;
-        const proposal = Object.freeze({ base, doc: res.doc, resolved: r.resolved, whole: !!whole, window: res.window, report: res.report, ms,
-          displacement: Object.freeze(displacementOf(base, res.doc)), check: overlapRunner ? null : Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh)) });
-        const moved = proposal.displacement.filter((x) => x.maxM > 1e-3);
-        const words = (ck) => `close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move${ck.overlaps.length ? `; the closed track OVERLAPS ITSELF in ${overlapPlacesText(ck, r.resolved.segments)}` : ''}. Apply or cancel`;
-        if (!overlapRunner) return set({ closeProposal: proposal, ...ok(words(proposal.check)) });
-        const entry = beginCheck(proposal, res.doc, true, (e) => (e.status === 'done' ? ok(words(e.result)) : { message: `the overlap check could not run: ${e.error}. Cancel the preview and try Close again` }));
-        return set({ closeProposal: proposal, proposalCheck: entry, ...ok(`close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move. Checking for overlaps: Apply is off until that finishes (Cancel stops it)`) });
+      abortClose();
+      if (doc().closed) return set({ closePending: null, message: 'the loop is already closed: there is nothing to preview' });
+      if (lastRoad(doc()) < 0) return set({ closePending: null, message: 'there is no road to close yet: extend first' });
+      const base = doc(), t0 = now(), args = { doc: base, fraction, last: !!last, whole: !!whole, finish: !!finish, edited: whole ? wholeLapEdited(base) : null };
+      const onPage = () => attempt(() => previewOf(base, CJ.runClose(args), !!whole, t0));
+      let job = null;
+      if (closeRunner) { try { job = closeRunner.start(args); } catch (e) { job = null; } }
+      if (!job) return onPage();
+      const entry = { job };
+      closeJob = entry;
+      job.promise.then((a) => {
+        if (closeJob !== entry) return;   // cancelled or replaced meanwhile
+        closeJob = null;
+        if (doc() !== base) return set({ closePending: null, message: 'the track changed while the close was being worked out: press Close again' });
+        if (a.refused) return set({ closePending: null, message: a.refused.message });
+        return attempt(() => previewOf(base, { ...a.out, doc: a.out.doc && CJ.relink(base, a.out.doc) }, !!whole, t0));
+      }, (e) => {
+        if (closeJob !== entry || (e && e.cancelled)) return;
+        closeJob = null;
+        if (doc() !== base) return set({ closePending: null, message: 'the track changed while the close was being worked out: press Close again' });
+        set({ closePending: null });
+        return onPage();
       });
+      return set({ closeProposal: null, closePending: Object.freeze({ base, finish: !!finish, startedAt: t0 }), message: null });
     },
     async applyClose() {
       const p = st.closeProposal;
@@ -544,7 +572,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (st.closeProposal !== p || p.base !== doc()) return set({ closeProposal: null, message: 'the track changed while its copy was being written: press Close again' });
       return set({ history: D.commit(st.history, p.doc), resolved: p.resolved, resolveError: null, dirty: true, closeProposal: null, lastStep: { op: 'close', ms: p.ms }, ...ok(`loop closed: ${p.report}`) });
     },
-    cancelClose: () => set({ closeProposal: null, message: null }),
+    cancelClose: () => { abortClose(); return set({ closeProposal: null, closePending: null, message: null }); },
     /**
      * The overlap check of a preview (a closeProposal or a deleteProposal), for the panels: { status: 'done' | 'checking' | 'failed' | 'none', result, error, via, elapsedMs }. A preview made with no runner
      * carries its check, so it reads 'done' at once; with one it reads 'checking' until the worker answers. Apply is refused until 'done'.
@@ -998,18 +1026,6 @@ function profilerOf(path, segments) {
   return (m) => { const g = segments[m.seg]; return Prof.readsBlend(g) && g.blend ? Prof.atSegment(g, m.s - starts[m.seg]) : g.profile; };
 }
 
-/**
- * D242: how far each road piece's CENTRELINE moves between two documents of the same pieces (a close changes control points, never lengths):
- * [{ piece, id, maxM }], the largest distance between the two paths' stations of that piece (the same stations: each segment samples on its own grid).
- */
-function displacementOf(a, b) {
-  const pa = AD.toPath({ ...a, closed: false }).path.samples, pb = AD.toPath({ ...b, closed: false }).path.samples, segs = toSegments({ ...a, closed: false });
-  const idOf = (m) => (segs[m.seg] ? segs[m.seg].id : null), out = new Map();
-  a.pieces.forEach((P, i) => { if (P.type === 'road') out.set(P.id, { piece: i, id: P.id, maxM: 0 }); });
-  const n = Math.min(pa.length, pb.length);
-  for (let k = 0; k < n; k++) { const e = out.get(idOf(pa[k])); if (!e) continue; const d = Math.hypot(pa[k].pos[0] - pb[k].pos[0], pa[k].pos[1] - pb[k].pos[1], pa[k].pos[2] - pb[k].pos[2]); if (d > e.maxM) e.maxM = d; }
-  return [...out.values()];
-}
 /**
  * D240: how far each road or jump piece AFTER a deleted run moves: [{ piece (its number in `b`), id, maxM }], the largest distance between its centreline in `a` and in `b`,
  * station for station (a piece keeps its length, so it keeps its stations). The pieces before the gap are the same in both and read 0.
