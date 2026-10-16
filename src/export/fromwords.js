@@ -76,6 +76,7 @@ const PitLane = require('./pitlane.js');
 const PitBoxes = require('./pitboxes.js');
 const { withTextureSet } = require('../texture/set.js');
 const { withUnderskin } = require('./underskin.js');
+const { withCatch, catchCells, rangesOfAmber, CATCH_OFFSET_M } = require('./catch.js');   // D341: a physical catch under the road (src/export/catch.js)
 const { withGripKeys } = require('./gripkeys.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
 const { placeMarker, surfaceAt } = require('../markers/place.js');
@@ -246,7 +247,16 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const laned = pit ? PitLane.withLaneFloor(textured, pit.lane, segs, o.textures || null) : textured;
   // D279 follow-up: the painted pit boxes wear the road under them, its material and its texture coordinates (src/export/pitboxes.js)
   const boxed = PitBoxes.withPitBoxFloor(laned, mk.paint, { path: p, segments: segs, lane: pit ? pit.lane : null, set: o.textures || null });
-  const scene = withGripKeys(withUnderskin(boxed, mesh, segs), mesh, segs);
+  // D341: the catch under the road: 'loaded' (the default) where validation lists a sustained load, 'all', 'off', or { s0, s1 } ranges (src/export/catch.js). It is appended after the skins, so the road
+  // cells keep their places for the grip keys, and a track with no sustained load exports the kn5 it did before
+  const catchMode = o.underCatch === undefined || o.underCatch === 'loaded' ? rangesOfAmber(v.amber) : o.underCatch;
+  let catchChosen;
+  try { catchChosen = catchCells(mesh.cells, segs, catchMode); } catch (e) { throw new ExportError('BAD_OPTION', e.message); }
+  if (catchChosen.length) {
+    const sA = Math.min(...catchChosen.map((k) => mesh.cells[k].s0)), sB = Math.max(...catchChosen.map((k) => mesh.cells[k].s1));
+    warnings.push(`catch: a second road surface ${CATCH_OFFSET_M} m under the road on ${catchChosen.length} cells, s ${sA.toFixed(0)}–${sB.toFixed(0)} m (${o.underCatch === 'all' ? 'all road' : Array.isArray(catchMode) && o.underCatch !== undefined && o.underCatch !== 'loaded' ? 'the ranges given' : 'where the load stays over 55 g for more than 0.5 s'}); it is a second chance for a body that gets through the road, untested in AC`);
+  }
+  const scene = withGripKeys(withCatch(withUnderskin(boxed, mesh, segs), mesh, segs, catchMode), mesh, segs);
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);

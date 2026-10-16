@@ -23,6 +23,7 @@ function reasonText(reason, car = MACH6) {
     'wall-ride-from-wall-object': 'a wall-ride is built on a wall object',
     'steep-without-raycast': `a surface is steeper than ${car.steepDeg}°, which needs CSP's wall raycasting`,
     'load-above-proven': `the load is over ${car.provenG} g, more than any track has proven`,
+    'load-sustained': `the load stays over ${car.sustainedG} g for more than ${car.sustainedS} s: held that long it has put a car through the road (a warning)`,
     'seam-past-envelope': `a seam is sharper than measured on real tracks (over ${car.seamP90Deg}°)`,
     'on-the-stops': `the car is on its suspension stops (${car.suspensionStopG} g or more)`,
     'head-in-the-air': 'the open end is in the air: place the landing',
