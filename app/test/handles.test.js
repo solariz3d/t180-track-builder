@@ -82,14 +82,14 @@ test('row 3: the two mirrored handles change the SAME value: the same outward mo
   assert.ok(tl.dx < 0 && tr.dx < 0, 'turn: the same screen direction (left) from both sides'); assert.ok(HD.dragPixels(tr, -10, 0, 'turn') > 0 && HD.dragPixels(tl, -10, 0, 'turn') > 0);
 });
 
-test('row 4: a value from a drag in PIXELS: the rates per pixel (today\'s speeds at the default camera; length five times), the clamps, the rounding, Shift (a tenth) and Ctrl (snap)', () => {
+test('row 4: a value from a drag in PIXELS: the rates per pixel (today\'s speeds at the default camera; length five times), the clamps, the rounding, Shift (one step a pixel: D330) and Ctrl (snap)', () => {
   const T = HD.targetFor;
   assert.equal(T('length', 160, 100), 199.48, 'length: 0.42 m a pixel, five times today\'s 0.085'); assert.equal(T('length', 160, -1000), 1, 'length: never under 1 m'); assert.equal(T('length', 160, 20), 165.88, 'rounded to 0.01 m');
   assert.equal(T('width', 31, 100), 37.39, 'width: 0.068 m a pixel'); assert.equal(T('width', 31, -1000), 0.5, 'width: a floor');
   assert.equal(T('bank', 0, 50), 19.8, 'bank: 0.45 degrees a pixel, whatever the width of the road'); assert.equal(T('bank', 0, 50, { half: 3 }), 19.8); assert.equal(T('bank', 5, 0, { half: 15 }), 5, 'no drag, no change');
   assert.equal(T('cup', 15.5, 1000), 150, 'cup: 0 to 150, the core range'); assert.equal(T('cup', 15.5, -1000), 0);
   assert.equal(T('turn', 0, 40), 2.82, 'turn: 0.083 a pixel'); assert.equal(T('climb', 2, -10), 1.67, 'climb: 0.082 a pixel');
-  assert.equal(T('length', 160, 100, {}, { shift: true }), 163.95, 'Shift: a tenth of the speed'); assert.equal(T('turn', 0, 100, {}, { shift: true }), 0.78);
+  assert.equal(T('length', 160, 100, {}, { shift: true }), 161, 'Shift (D330: the rule changed, it was a tenth of the speed): one pixel is one step, 0.01'); assert.equal(T('turn', 0, 100, {}, { shift: true }), 1);
   assert.equal(T('length', 163, 0, {}, { ctrl: true }), 160, 'Ctrl snaps length to 10 m'); assert.equal(T('width', 31, 0, {}, { ctrl: true }), 30, 'width to 5 m');
   assert.equal(T('bank', 0, 52, {}, { ctrl: true }), 25, 'bank to 5 degrees'); assert.equal(T('cup', 14, 0, {}, { ctrl: true }), 15); assert.equal(T('turn', 3, 0, {}, { ctrl: true }), 5);
   assert.throws(() => T('nope', 0, 0), /no kind "nope"/);
@@ -207,11 +207,12 @@ test('row 9: the detents: a drag holds 6 px at the value it started from and, fo
   const off = HD.DETENT_PX; assert.equal(off, 6, 'the hold is one number: 0 turns it off (the keeper may drop it)');
 });
 
-test('row 10: the value is rounded to the step with Shift too: a fine drag lands on 0.0, not 0.03', () => {
-  const v0 = rig({ base: B2 }).drag('turn:1', -250, { shift: true }); assert.ok(Object.is(v0, 0), `a slow drag to nothing is exactly 0, not ${v0}`);
-  assert.equal(rig({ base: B2 }).drag('turn:1', -103.7, { shift: true }), 1.19, 'Shift: 0.0083 a pixel, 103.7 px less the 6 px hold is 0.81: 1.19 to the hundredth, not 1.18909');
-  assert.equal(HD.targetFor('turn', 0, 5, {}, { shift: true }), 0, 'a fine drag of 5 px is 0.04: held at 0, never 0.04');
-  assert.equal(HD.targetFor('turn', 2, -60, {}, { shift: true }), 1.55, '60 px fine, less the hold, is 0.448: 1.55'); assert.equal(HD.targetFor('width', 31, 77, {}, { shift: true }), 31.48, 'width: 77 px fine, less the hold, is 0.4828 m: 31.48, not 31.4828');
+// D330: the rule changed (Shift was a tenth of the speed with the 6 px hold; it is one pixel = one step, no hold), so the numbers are the new rule's; what the row is for stands: a fine drag lands ON the step
+test('row 10: the value is rounded to the step with Shift too: a precise drag lands on the hundredth, never on a fraction of one', () => {
+  const v0 = rig({ base: B2 }).drag('turn:1', -200, { shift: true }); assert.ok(Object.is(v0, 0), `a precise drag of 200 px from 2.00 is exactly 0, not ${v0}`);
+  assert.equal(rig({ base: B2 }).drag('turn:1', -103.7, { shift: true }), 0.96, 'Shift: a pixel is a step, 103.7 px is 1.037: 0.96 to the hundredth, not 0.963');
+  assert.equal(HD.targetFor('turn', 0, 5, {}, { shift: true }), 0.05, 'a precise drag of 5 px is 0.05: no hold');
+  assert.equal(HD.targetFor('turn', 2, -60, {}, { shift: true }), 1.4, '60 px precise is 0.6: 1.4'); assert.equal(HD.targetFor('width', 31, 77, {}, { shift: true }), 31.77, 'width: 77 px precise is 0.77 m: 31.77');
 });
 
 test('row 11: a double-click on a handle resets it: 0 for bank, turn, climb; the value before the last drag for length, width, cup; and it is the handle\'s, not the camera\'s', () => {
@@ -312,7 +313,7 @@ test('row 14: the landing\'s kinds (D258): four free marks at the landing, each 
   assert.equal(new Set(list.map((x) => x.pos.join())).size, 4, 'no two marks on one point: they can be picked apart');
   assert.deepEqual(HD.placeHandles({ ...MODEL, kinds: HD.LANDING_ORDER }), [], 'no landing frame, no marks'); assert.deepEqual(HD.placeHandles({ ...MODEL, kinds: HD.LANDING_ORDER, free: { pos: [0, 0, 0] } }), [], 'a frame without its axes places nothing');
   const T = HD.targetFor; assert.equal(T('landfwd', 40, 100), 54.1, 'forward: 0.15 m a pixel past the 6 px hold'); assert.equal(T('landleft', 0, 100), 9.4, 'sideways: 0.1 m'); assert.equal(T('landup', 0, 100), 4.7, 'height: 0.05 m'); assert.equal(T('landturn', 0, 100), 9.4, 'heading: 0.1 degree');
-  assert.equal(T('landup', 0, 200, {}, { shift: true }), 0.97, 'Shift: a tenth (200 px less the 6 px hold, at 0.005 m: 0.97)'); assert.equal(T('landfwd', 40, 33, {}, { ctrl: true }), 45, 'Ctrl snaps forward to 5 m'); assert.equal(T('landleft', 3.2, 0, {}, { ctrl: true }), 3, 'sideways to 1 m'); assert.equal(T('landturn', 0, 52, {}, { ctrl: true }), 5, 'heading to 5 degrees');
+  assert.equal(T('landup', 0, 200, {}, { shift: true }), 2, 'Shift (D330: one pixel a step): 200 px is 2.00 m'); assert.equal(T('landfwd', 40, 33, {}, { ctrl: true }), 45, 'Ctrl snaps forward to 5 m'); assert.equal(T('landleft', 3.2, 0, {}, { ctrl: true }), 3, 'sideways to 1 m'); assert.equal(T('landturn', 0, 52, {}, { ctrl: true }), 5, 'heading to 5 degrees');
   assert.equal(T('landfwd', 40, 3), 40, 'forward holds its start'); assert.equal(T('landleft', 8, -70), 1.6, 'sideways moves'); assert.equal(T('landleft', 8, -88), 0, 'and holds at 0: 6 px held at 8, 80 to reach 0, 2 into the 6 px (0.6 m) hold there'); assert.ok(Object.is(T('landup', 0.2, 0), 0.2) && Object.is(T('landturn', -1, 18), 0), 'height holds its start; heading holds at 0');
   assert.equal(T('landfwd', 40, 1e6), 2000); assert.equal(T('landturn', 0, -1e6), -180); assert.equal(T('landup', 0, -1e6), -500);
   assert.equal(HD.resetValue('landleft', 12), 0); assert.equal(HD.resetValue('landup', null), 0); assert.equal(HD.resetValue('landturn', 5), 0); assert.equal(HD.resetValue('landfwd', 55), 55, 'forward goes back to before its drag'); assert.equal(HD.resetValue('landfwd', null), null, 'or nowhere');
@@ -384,4 +385,148 @@ test('if the window refuses to move the cursor, the drag gives the travel back a
     R.S.fire('pointerup', { clientX: l.x + u[0] * 300, clientY: l.y + u[1] * 300 }); R.S.tick();
     assert.equal(R.cur.length, Math.round((160 + 294 * 0.42) * 100) / 100, `${native}: 300 px, the first 6 held, 0.42 m a pixel, counted once`);
   }
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+// D330 (2026-10-15, reported: "when scrubbing a turn from say a 1000m straight, it jumps to 0.08 instead of 0.01, and isnt a completely precise scrub or scroll. I need every one to be").
+// Every handle's step is 0.01 but a pixel of drag moved perPx (turn 0.083, climb 0.082, bank 0.45, length 0.42 ...): about 8 steps a pixel, so no drag could land on every 0.01, and Shift
+// (a tenth, 0.0083 a pixel for turn) did not either. PRECISE (one constant, the gesture): while it is held one pixel is exactly one step, with no hold, for every kind; the wheel over a
+// handle and the arrow keys while one is held move exactly one step.
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+const ALL_KINDS = [...HD.ORDER, ...HD.LANDING_ORDER];
+
+test('D330 precise: the gesture is one constant, and with it one pixel of drag is exactly one step (0.01) for every handle kind, both ways, none skipped, no hold', () => {
+  assert.equal(HD.PRECISE_MOD, 'shift', 'the gesture is one constant (the keeper may change it)');
+  const mods = { [HD.PRECISE_MOD]: true }, bad = [];
+  for (const kind of ALL_KINDS) {
+    const K = HD.KINDS[kind]; assert.equal(K.step, 0.01, kind + ': the step is 0.01');
+    for (const dir of [1, -1]) {
+      let prev = HD.targetFor(kind, 5, 0, {}, mods);
+      if (prev !== 5) bad.push(kind + ': no drag changed the value: ' + prev);
+      for (let n = 1; n <= 300; n++) {
+        const v = HD.targetFor(kind, 5, dir * n, {}, mods), want = Math.round((5 + dir * n * 0.01) * 100) / 100;
+        if (v !== want) { bad.push(kind + ' ' + dir * n + ' px: ' + v + ', wanted ' + want); break; }
+        if (Math.abs(Math.abs(v - prev) - 0.01) > 1e-9) { bad.push(kind + ' ' + dir * n + ' px: a step of ' + (v - prev)); break; }
+        prev = v;
+      }
+    }
+  }
+  assert.deepEqual(bad, []);
+  // the reported case: turn from a 1000 m straight (a turn of 0), through 0 and out the other side, and from a value that is not on a round number
+  const T = HD.targetFor; assert.equal(T('turn', 0, 37, {}, mods), 0.37); assert.equal(T('turn', 0, -37, {}, mods), -0.37); assert.equal(T('turn', 0.05, -10, {}, mods), -0.05, 'through 0, no hold there'); assert.equal(T('turn', 1.23, 5, {}, mods), 1.28);
+  assert.equal(T('turn', 0, 1, {}, mods), 0.01, 'one pixel, one step, not the 0.08 of the coarse drag'); assert.equal(T('turn', 0, 1), 0, 'control: the coarse drag still holds its first 6 px');
+  assert.equal(T('length', 160, 100, {}, { ctrl: true, [HD.PRECISE_MOD]: true }), 160, 'Ctrl keeps its snap');
+});
+
+test('D330 precise through the overlay: a Shift drag of n px along the handle changes turn, width, length and bank by exactly n x 0.01', () => {
+  for (const n of [1, 7, 37, 150]) {
+    const R = rig(); assert.equal(R.drag('turn:1', n, { shift: true }), n / 100, 'turn ' + n);
+    assert.equal(rig().drag('width:1', n, { shift: true }), Math.round((31 + n * 0.01) * 100) / 100, 'width ' + n);
+    assert.equal(rig().drag('length:0', n, { shift: true }), Math.round((160 + n * 0.01) * 100) / 100, 'length ' + n);
+    assert.equal(rig().drag('bank:1', n, { shift: true }), Math.round(n) / 100, 'bank ' + n);
+  }
+});
+
+/** every handle kind on one stage, each with a current value of 5, as the panel's fields hold them */
+function allKindsRig() {
+  const free = { pos: [10, 2, 100], T0: [0, 0, 1], L0: [1, 0, 0], U0: [0, 1, 0], T1: [0.6, 0, 0.8], L1: [0.8, 0, -0.6] }, cur = {}; for (const k of ALL_KINDS) cur[k] = 5;
+  const S = fakeStage(), calls = [], doc = S.stage.ownerDocument, dl = {}; doc.addEventListener = (t, f) => { (dl[t] = dl[t] || []).push(f); }; doc.removeEventListener = (t, f) => { dl[t] = (dl[t] || []).filter((g) => g !== f); };
+  const host = { model: () => ({ ...MODEL, kinds: ALL_KINDS, free, base: (k) => cur[k], ctx: () => ({ half: 10 }) }), pose: () => POSE,
+    begin: (h) => calls.push(['begin', h.id]), apply: (h, v, mods, final) => { cur[h.kind] = v; calls.push(['apply', h.id, v, !!final]); }, end: (h) => calls.push(['end', h.id]) };
+  const ov = HD.mount(S.stage, S.win, host); S.tick();
+  return { S, ov, calls, cur, key: (k) => (dl.keydown || []).slice().forEach((g) => g({ type: 'keydown', key: k })) };
+}
+
+test('D330 wheel: one notch over a handle is exactly one step (0.01) on every handle kind, up adds and down subtracts; over nothing the camera has it; at a clamp it stays', () => {
+  const R = allKindsRig(), hit = new Set();
+  for (const h of R.ov.handles()) {
+    if (!h.screen) continue;
+    const want = HD.hitTest(R.ov.handles(), h.screen.x, h.screen.y); if (want.id !== h.id) continue;   // two marks on one point: the nearer one is the one that is hit
+    for (const [deltaY, d] of [[-100, 0.01], [100, -0.01]]) {
+      const before = R.cur[h.kind]; R.calls.length = 0;
+      const ev = R.S.fire('wheel', { clientX: h.screen.x, clientY: h.screen.y, deltaY });
+      assert.equal(ev.stopped, true, h.id + ': the handle takes the wheel from the camera'); assert.equal(ev.prevented, true);
+      assert.deepEqual(R.calls, [['begin', h.id], ['apply', h.id, Math.round((before + d) * 100) / 100, true], ['end', h.id]], h.id + ' ' + deltaY);
+    }
+    hit.add(h.kind);
+  }
+  assert.deepEqual([...hit].sort(), [...ALL_KINDS].sort(), 'control: every kind of handle was reached');
+  const away = R.S.fire('wheel', { clientX: 3, clientY: 3, deltaY: -100 }); assert.equal(away.stopped, false, 'a wheel over nothing is the camera\'s'); assert.equal(away.prevented, false);
+  const cup = R.ov.handles().find((h) => h.kind === 'cup' && HD.hitTest(R.ov.handles(), h.screen.x, h.screen.y).id === h.id); R.cur.cup = 150; R.calls.length = 0; R.S.fire('wheel', { clientX: cup.screen.x, clientY: cup.screen.y, deltaY: -100 }); assert.deepEqual(R.calls, [], 'cup is at its 150 limit: no step, no undo step');
+  R.ov.unmount(); assert.equal((R.S.listeners.wheel || []).length, 0, 'unmount takes the wheel listener off');
+});
+
+test('D330 arrows: while a handle is held each arrow press is exactly one step on top of the drag; with nothing held they do nothing and are not taken', () => {
+  const R = grabRig('none'), t = R.at('turn:1'), pressed = [];
+  const key = (k) => { const ev = { type: 'keydown', key: k, prevented: false, preventDefault() { this.prevented = true; } }; (R.listeners.keydown || []).slice().forEach((f) => f(ev)); pressed.push(ev); return ev; };
+  R.calls.length = 0; const idle = key('ArrowUp'); assert.deepEqual(R.calls, [], 'nothing held: nothing'); assert.equal(idle.prevented, false, 'and the key is not taken');
+  R.S.fire('pointerdown', { clientX: t.x, clientY: t.y }); R.calls.length = 0;
+  const last = () => R.calls.filter((c) => c[0] === 'apply').pop()[2];
+  key('ArrowUp'); assert.equal(last(), 2.01); key('ArrowRight'); assert.equal(last(), 2.02); key('ArrowDown'); assert.equal(last(), 2.01); key('ArrowLeft'); assert.equal(last(), 2.00);
+  assert.ok(pressed.slice(1).every((e) => e.prevented), 'held: the arrows are the handle\'s, not the page\'s');
+  key('ArrowUp'); key('ArrowUp'); key('ArrowUp'); assert.equal(last(), 2.03, 'three presses, three steps');
+  R.S.fire('pointerup', { clientX: t.x, clientY: t.y }); R.S.tick(); assert.equal(R.cur.turn, 2.03, 'the release keeps what the arrows set');
+  assert.equal(key('Enter').prevented, false);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+// D330 (2026-10-15, reported: "sometimes my mouse move gets interrupted by something and ruins the smooth flow making the track longer, i have to let go of click, and click the drag again").
+// A long drag puts the hidden cursor back at the grab every WARP_PX and keeps the travel in acc. The old rule: moves were ignored until an event showed the cursor within 2 px of the grab; if
+// none did within WARP_WAIT_MS the travel was given back and the drag stopped warping for good (then it stalls at the screen edge). Two ways to lose it, tested here with a hand and an OS:
+//   late: the window thread is busy, the warp is applied late and the events before it arrive late (the hypothesis)   fast: the hand is already 4 px away when the first event after the warp is seen
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+/** a long length drag: the hand moves step px along the handle's axis an event; the page's warp is applied lag events later (the cursor then jumps to the grab); late ms pass before those
+ *  events are seen; lead px of hand motion come before the first event after the warp. Returns { R, hand, warps } */
+function longDrag({ lag = 0, late = 0, lead = 0, step = 4, steps = 250, lost = false } = {}) {
+  const R = grabRig(), l = R.at('length:0'), u = [l.dx / l.len, l.dy / l.len], real = Date.now; let clock = 1e6; Date.now = () => clock;
+  const scr = (p) => [Math.max(0, Math.min(899, p[0])), Math.max(0, Math.min(599, p[1]))];
+  try {
+    let hand = 0, offset = 0, seen = 0, cycles = 0, worst = 0;
+    const at = (extra = 0) => scr([l.x + u[0] * (hand + extra - offset), l.y + u[1] * (hand + extra - offset)]);
+    const send = () => { const p = at(); R.S.fire('pointermove', { clientX: p[0], clientY: p[1] }); R.S.tick(); if (hand > HD.DETENT_PX) worst = Math.max(worst, Math.abs(R.cur.length - lengthFor(hand))); };   // worst: the field's largest distance from where the hand's travel puts it, on the way
+    R.S.fire('pointerdown', { clientX: l.x, clientY: l.y });
+    for (let k = 0; k < steps; k++) {
+      hand += step; clock += 16; send();
+      while (seen < R.warps.length) {
+        cycles++; clock += late;                                            // the thread was busy: the events that follow are seen late
+        if (lost) { const base = R.warps.length; for (let i = 0; i < 80 && R.warps.length === base; i++) { hand += step; clock += 16; send(); } }   // the OS lost the first ask: only an ask made again gets through
+        for (let i = 0; i < lag; i++) { hand += step; clock += 16; send(); }   // the cursor is still on the old track
+        offset = hand; hand += lead; clock += 16; send(); seen = R.warps.length;   // the OS applies the warp (asks made while it was pending are the same one): the cursor is at the grab, lead px of hand motion on
+      }
+    }
+    const p = at(); R.S.fire('pointerup', { clientX: p[0], clientY: p[1] }); R.S.tick();
+    return { R, hand, warps: R.warps.length, cycles, worst };
+  } finally { Date.now = real; }
+}
+const lengthFor = (hand) => Math.round((160 + (hand - HD.DETENT_PX) * HD.KINDS.length.perPx) * 100) / 100;
+
+test('a long drag: with the cursor put back promptly and the next event at the grab, the travel adds up (the control the two below depart from)', () => {
+  const r = longDrag(); assert.ok(r.warps >= 4, 'control: warped ' + r.warps + ' times'); assert.equal(r.R.cur.length, lengthFor(r.hand));
+});
+
+test('a long drag whose warp is applied LATE (a busy window thread: the events before it arrive after WARP_WAIT_MS) keeps its travel and keeps warping', () => {
+  const r = longDrag({ lag: 3, late: HD.WARP_WAIT_MS + 100 });
+  assert.ok(r.warps >= 4, 'one late return must not switch warping off for the whole grab: warped ' + r.warps + ' times');
+  assert.equal(r.R.cur.length, lengthFor(r.hand), 'the travel is all there: no jump back at the return, none of the moves in the gap lost');
+  assert.ok(r.worst < 1, 'and the field follows the hand all the way, no jump forward while the return is awaited: it was ' + r.worst.toFixed(2) + ' m off at worst');
+});
+
+test('a long drag with a FAST hand (the first event after a warp is already 4 px from the grab) does not stall: the return is seen, not waited for', () => {
+  const r = longDrag({ lead: 4 });
+  assert.ok(r.warps >= 4, 'warped ' + r.warps + ' times'); assert.equal(r.R.cur.length, lengthFor(r.hand));
+  assert.ok(r.worst < 1, 'the field follows the hand: ' + r.worst.toFixed(2) + ' m off at worst');
+  const q = longDrag({ lead: 12, lag: 2, late: HD.WARP_WAIT_MS + 50 }); assert.equal(q.R.cur.length, lengthFor(q.hand), 'fast and late together');
+});
+
+test('a warp the OS lost is asked for again after WARP_WAIT_MS, and the travel adds up', () => {
+  const r = longDrag({ lost: true }); assert.ok(r.cycles >= 4, 'control: ' + r.cycles + ' warps'); assert.ok(r.warps >= 2 * r.cycles, 'each warp was asked for again: ' + r.warps + ' asks for ' + r.cycles + ' warps');
+  assert.equal(r.R.cur.length, lengthFor(r.hand)); assert.ok(r.worst < 1, 'on the way: ' + r.worst.toFixed(2) + ' m off at worst');
+});
+
+test('a window that refuses to move the cursor is tried WARP_MISSES times, never forever, and the travel is counted once', () => {
+  const R = grabRig('throw'), l = R.at('length:0'), u = [l.dx / l.len, l.dy / l.len];
+  R.S.fire('pointerdown', { clientX: l.x, clientY: l.y });
+  for (let k = 1; k <= 200; k++) { R.S.fire('pointermove', { clientX: Math.min(899, l.x + u[0] * 4 * k), clientY: Math.min(599, l.y + u[1] * 4 * k) }); R.S.tick(); }
+  assert.equal(R.warps.length, HD.WARP_MISSES, 'the native move was tried ' + R.warps.length + ' times');
+  assert.ok(HD.WARP_MISSES >= 2, 'one refusal is not the end of warping');
 });
