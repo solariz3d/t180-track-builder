@@ -27,6 +27,9 @@
 
 const KEYS = Object.freeze({ muted: 't180.sound.muted', volume: 't180.sound.volume' });
 const TICK_MS = 4;            // two ticks in one instant are one
+// the tick's tine (D334): its ring in s, the FM body's bark (modulation index at the strike), and the three parts' levels
+// (a stronger bark read as "an error buzz"; these levels put a drag at about -31 LUFS, under a place at -28)
+const TINE = Object.freeze({ d: 0.34, bark: 0.8, body: 0.11, bell: 0.035, click: 0.02 });
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -112,7 +115,7 @@ function createEngine(ctx) {
   };
   // the VOID: vast and dark
   const voidSend = ctx.createGain(), vhp = ctx.createBiquadFilter(), voidVerb = ctx.createConvolver(), vg = ctx.createGain();
-  // 2026-10-15, the keeper: a bigger room, the echo quieter. Walls further off (a 140 ms pre-delay, was 85), a ~11 s tail (decay 0.6, was 0.95 over 7.5 s), a little more sent in
+  // 2026-10-15, asked for on hearing it: a bigger room, the echo quieter. Walls further off (a 140 ms pre-delay, was 85), a ~11 s tail (decay 0.6, was 0.95 over 7.5 s), a little more sent in
   voidSend.gain.value = 0.65; vhp.type = 'highpass'; vhp.frequency.value = 220; voidVerb.buffer = noiseIR(11, 0.14, 0.6, (t) => 0.85 * Math.exp(-t / 2.1) + 0.03); vg.gain.value = 0.9;
   preBus.connect(voidSend); voidSend.connect(vhp); vhp.connect(voidVerb); voidVerb.connect(vg); vg.connect(out);
   // a short bright room, for the voices' own air (joins after the echo send, so a dry voice's room stays dry)
@@ -165,11 +168,21 @@ function createEngine(ctx) {
 
   // the tick: the tine, through its own gain that the next tick chokes; `spread` plays two copies apart (the width handle)
   let tickBus = null;
-  function tineVoice(f, t0, into, d = 0.09) {
+  // 2026-10-16 (D334, measured with earshot): the old tine, a bare sine whose 14:1 modulation collapsed in 30 ms inside a 90 ms envelope, read as
+  // "bubbles underwater" at -46 LUFS. A tine is three things at once: a warm 1:1 FM body with a short bark, a bell partial high up that dies fast,
+  // and a tiny bright click on the strike; and it rings for a third of a second
+  let clickBuf = null;
+  function tineVoice(f, t0, into, d = TINE.d) {
     const car = ctx.createOscillator(), mod = ctx.createOscillator(), mgn = ctx.createGain(), g = ctx.createGain();
-    car.frequency.value = f; mod.frequency.value = f * 14; mgn.gain.setValueAtTime(f * 0.9, t0); mgn.gain.exponentialRampToValueAtTime(f * 0.01, t0 + 0.03);
-    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    car.frequency.value = f; mod.frequency.value = f; mgn.gain.setValueAtTime(f * TINE.bark, t0); mgn.gain.exponentialRampToValueAtTime(f * 0.05, t0 + 0.12);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(TINE.body, t0 + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
     mod.connect(mgn); mgn.connect(car.frequency); car.connect(g); g.connect(into); car.start(t0); mod.start(t0); car.stop(t0 + d + 0.02); mod.stop(t0 + d + 0.02);
+    const bell = ctx.createOscillator(), bg = ctx.createGain(); bell.frequency.value = Math.min(f * 7.1, 15000);   // the tine's own ring, above the body
+    bg.gain.setValueAtTime(0.0001, t0); bg.gain.exponentialRampToValueAtTime(TINE.bell, t0 + 0.001); bg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.06);
+    bell.connect(bg); bg.connect(into); bell.start(t0); bell.stop(t0 + 0.08);
+    if (!clickBuf) { clickBuf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.006), ctx.sampleRate); const x = clickBuf.getChannelData(0); for (let i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * Math.exp(-i / (x.length / 5)); }
+    const cs = ctx.createBufferSource(), chp = ctx.createBiquadFilter(), cg = ctx.createGain(); cs.buffer = clickBuf; chp.type = 'highpass'; chp.frequency.value = 3500; cg.gain.value = TINE.click;
+    cs.connect(chp); chp.connect(cg); cg.connect(into); cs.start(t0); cs.stop(t0 + 0.01);
   }
   function tick({ midi, pan = 0, spread = null }) {
     const now = ctx.currentTime;
