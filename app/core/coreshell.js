@@ -261,6 +261,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const doc = () => st.history.present;
   // 2026-10-15: THE CLOSE OFF THE THREAD (closeRunner): the job being worked out for closeBest (D339), { job }, and its stop
   let closeJob = null;
+  // D343: the open track's reds as the page's live checker found them, per document (app/validate-ui/index.js noteCheck): a press reuses them instead of checking
+  // the open track again (64 s of a 25 km press). Only a check with CSP on counts, as the press checks with it on
+  const checked = new WeakMap();
   function abortClose() { const j = closeJob; closeJob = null; if (j) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
   /** The boxes' values ({ forward, left, up, heading, pitch, bank }, in m and degrees) as the pose the core takes (radians). */
   const landingPose = (ui) => Object.assign({}, ...Object.entries(ui || {}).map(([k, v]) => LD.poseOf(k, v)));
@@ -552,7 +555,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       abortClose();
       if (doc().closed) return Promise.resolve(set({ closePending: null, message: 'the loop is already closed' }));
       if (lastRoad(doc()) < 0) return Promise.resolve(set({ closePending: null, message: 'there is no road to close yet: extend first' }));
-      const base = doc(), t0 = now(), args = { doc: base, best: true, edited: wholeLapEdited(base) };
+      const known = checked.get(doc()), base = doc(), t0 = now(), args = { doc: base, best: true, edited: wholeLapEdited(base), openReds: known && known.csp ? known.red : null };
       const changed = () => set({ closePending: null, message: 'the track changed while the close was being worked out: press Close again' });
       const land = async (out) => {
         if (doc() !== base) return changed();
@@ -582,6 +585,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       });
     },
     cancelClose: () => { abortClose(); return set({ closePending: null, message: null }); },
+    /** D343: the live checker's finished answer for document `d` (its reds, and whether CSP was on), kept for a press on that very document. */
+    noteCheck(d, { csp = true, red = null } = {}) { if (d && typeof d === 'object' && Array.isArray(red)) checked.set(d, { csp: !!csp, red: red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 })) }); },
     /**
      * The overlap check of a preview (a closeProposal or a deleteProposal), for the panels: { status: 'done' | 'checking' | 'failed' | 'none', result, error, via, elapsedMs }. A preview made with no runner
      * carries its check, so it reads 'done' at once; with one it reads 'checking' until the worker answers. Apply is refused until 'done'.

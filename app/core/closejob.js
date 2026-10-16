@@ -6,7 +6,9 @@
 //     edited     whole: true only: the pieces the whole-lap close goes round (the shell knows the stretch edited last)
 //   A core refusal (CoreError) is thrown, as close() and finishToStart() throw it.
 //
-//   runCloseBest({ doc, edited })  -> { converged, report, doc, window, displacement, route, tried }   (D339: Close is ONE press)
+//   runCloseBest({ doc, edited, openReds, exhaustive })  -> { converged, report, doc, window, displacement, route, tried, phases }   (D339: Close is ONE press)
+//     openReds   (D343) the open track's reds [{ reason, s }] from the page's live checker, when it checked this very track with CSP on: no fresh check of it
+//     exhaustive (D343) every route run before any is checked, as D339 did; without it the near bend is closed and checked first, and when it proves nothing else runs
 //     Runs every route there is on the open track: the near-closed bend (an end already at the start, src/core/finish.js isNear), the last piece, the last
 //     ~20% and ~40% of the lap, the whole lap (round `edited`), and new road from the end to the start (Finish; not tried when the end is already at the start:
 //     its answer there IS the bend). It then picks ONE by a fixed order: (1) the closed lap must PROVE (the checker's lap proof) and add no red the open track
@@ -23,10 +25,10 @@ const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 const { close, closeWindow, residual } = require('../../src/core/close.js');
 const { finishToStart, isNear } = require('../../src/core/finish.js');
-const { validate } = require('../../src/validate/index.js');
+const { createCheckJob } = require('../validate-ui/checkjob.js');
 
-function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false } = {}) {
-  if (best) return runCloseBest({ doc, edited });
+function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null } = {}) {
+  if (best) return runCloseBest({ doc, edited, openReds });
   const fin = finish ? finishToStart(doc) : null;
   const res = fin ? { converged: true, doc: fin.doc, report: `Finish to start: ${fin.plan.report}`, window: { pieces: fin.window, text: fin.plan.windowText || `the new road (${fin.window.length} piece${fin.window.length === 1 ? '' : 's'}, ${fin.plan.lengthM} m)` } }
     : whole ? close(doc, { edited }) : close(doc, { window: closeWindow(doc, { fraction, last }) });
@@ -45,10 +47,20 @@ function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = f
 // CLOSE_ITER: a route that will close does so in a few steps (2 for every route that closed on ELYSIUM and on the test laps); one that will not would run
 // Close's 30, about 40 s on a 25 km track, for nothing. 8 is four times what a closing route took.
 const RED_NEAR_M = 10, CHECK = Object.freeze({ fullSpeed: true, csp: true }), MOVE_FLOOR_M = 10, MOVE_TIE_M = 1e-3, CLOSE_ITER = 8;
-const redsOf = (d) => { const { path } = AD.toPath(d), v = validate(path, toSegments(d), CHECK); return { lap: v.lap, reds: (v.red || []).map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 })) }; };
+// D343: a track is checked by THE LIVE CHECKER'S OWN JOB (app/validate-ui/checkjob.js, what the page's checker worker runs), not by validate() on a path of its own:
+// the same path the validation panel reads (the track model's), the same reds (so the open track's, which the page already holds, compare with a candidate's
+// like for like), the same lap proof, and on a 25 km track 17.7 s where validate() on the adapter's 0.5 m path took 48 s (measured on ELYSIUM's closed bend:
+// the same lap verdict, the same two reds, a metre apart for the different sampling). One job per press, for every check in it. A track the job cannot check is
+// a lap that does not prove, with the job's reason
+const redsOf = (d, job) => {
+  const o = job.run({ doc: d, csp: CHECK.csp });
+  if (!o.result) return { lap: { ok: false, reason: o.error || o.how || 'it could not be checked', where: [] }, reds: [] };
+  return { lap: o.result.lap, reds: (o.result.red || []).map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 })) };
+};
 const fmtM = (m) => (m >= 100 ? `${Math.round(m)} m` : `${(Math.round(m * 10) / 10).toFixed(1)} m`);
-function runCloseBest({ doc, edited = null } = {}) {
+function runCloseBest({ doc, edited = null, openReds = null, exhaustive = false } = {}) {
   const road = doc.pieces.filter((P) => P.type === 'road'), near = road.length ? isNear(doc) : false, tried = [], gapM = road.length ? residual(doc).gapM : 0, moveCap = gapM + MOVE_FLOOR_M;
+  const phases = { routesMs: 0, checksMs: 0, openCheckMs: null, openReds: openReds ? 'given' : null };
   const routes = [];
   if (near) routes.push({ route: 'near', run: () => { const f = finishToStart(doc); return { converged: true, doc: f.doc, report: f.plan.report, window: f.window, plan: f.plan }; } });
   routes.push({ route: 'last', run: () => close(doc, { window: closeWindow(doc, { last: true }), maxIter: CLOSE_ITER }) });
@@ -56,35 +68,49 @@ function runCloseBest({ doc, edited = null } = {}) {
   routes.push({ route: 'fraction 0.4', run: () => close(doc, { window: closeWindow(doc, { fraction: 0.4 }), maxIter: CLOSE_ITER }) });
   routes.push({ route: 'whole', run: () => close(doc, { edited: edited || [doc.pieces.length - 1], maxIter: CLOSE_ITER }) });
   if (!near) routes.push({ route: 'finish', run: () => { const f = finishToStart(doc); return { converged: true, doc: f.doc, report: f.plan.report, window: f.window, plan: f.plan }; } });
-  for (const R of routes) {
-    let res; const t0 = Date.now();
-    try { res = R.run(); } catch (e) { if (!e || e.name !== 'CoreError') throw e; tried.push({ route: R.route, refused: e.message, ms: Date.now() - t0 }); continue; }
-    if (!res || !res.converged) { tried.push({ route: R.route, refused: (res && res.report) || 'it did not close', ms: Date.now() - t0 }); continue; }
+  const runRoute = (R, rank) => {
+    let res; const t0 = Date.now(), done = (x) => { x.ms = Date.now() - t0; phases.routesMs += x.ms; tried.push(x); return x; };
+    try { res = R.run(); } catch (e) { if (!e || e.name !== 'CoreError') throw e; return done({ route: R.route, refused: e.message }); }
+    if (!res || !res.converged) return done({ route: R.route, refused: (res && res.report) || 'it did not close' });
     const displacement = displacementOf(doc, res.doc), maxMoveM = displacement.reduce((m, x) => Math.max(m, x.maxM), 0);
-    const newRoadM = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + (P.length || 0), 0);
-    const newPieces = res.doc.pieces.length - doc.pieces.length;
-    if (newPieces === 0 && maxMoveM > moveCap) { tried.push({ route: R.route, refused: `it would move the track up to ${fmtM(maxMoveM)}, past the ${fmtM(moveCap)} a close may move it`, maxMoveM, ms: Date.now() - t0 }); continue; }
-    tried.push({ route: R.route, doc: res.doc, report: res.report, window: res.window, plan: res.plan, displacement, maxMoveM, newRoadM, newPieces, rank: tried.length, ms: Date.now() - t0 });
-  }
-  // THE ORDER: no new road first, then the least movement by the most-moved piece; the route order breaks a tie (the bend, then the shorter windows)
-  const closed = tried.filter((t) => t.doc).sort(byOrder);
-  let open = null, firstMiss = null;
-  for (const t of closed) {
-    const t2 = Date.now(), c = redsOf(t.doc); t.checkMs = Date.now() - t2;
+    const newRoadM = res.doc.pieces.slice(doc.pieces.length).reduce((t, P) => t + (P.length || 0), 0), newPieces = res.doc.pieces.length - doc.pieces.length;
+    if (newPieces === 0 && maxMoveM > moveCap) return done({ route: R.route, refused: `it would move the track up to ${fmtM(maxMoveM)}, past the ${fmtM(moveCap)} a close may move it`, maxMoveM });
+    return done({ route: R.route, doc: res.doc, report: res.report, window: res.window, plan: res.plan, displacement, maxMoveM, newRoadM, newPieces, rank });
+  };
+  // the open track's reds: GIVEN by the page when its live checker already checked this very track (D343: a fresh check was 64 s of a 25 km press), else checked
+  // here, once, and only when a closed lap that proves has a red at all
+  let open = openReds ? { reds: openReds } : null;
+  const job = createCheckJob();
+  const check = (t) => {
+    const t0 = Date.now(), c = redsOf(t.doc, job); t.checkMs = Date.now() - t0; phases.checksMs += t.checkMs;
     t.lap = c.lap && { ok: c.lap.ok, reason: c.lap.reason, where: (c.lap.where || []).slice(0, 3) };
-    // the open track is checked only when it can matter (once, and only if a closed lap that proves has any red at all): the checker is most of a press's cost
-    if (c.lap && c.lap.ok === true && c.reds.length && !open) { const t1 = Date.now(); open = redsOf({ ...doc, closed: false }); open.ms = Date.now() - t1; }
+    if (c.lap && c.lap.ok === true && c.reds.length && !open) { const t1 = Date.now(); open = redsOf({ ...doc, closed: false }, job); phases.openCheckMs = Date.now() - t1; }
     t.newReds = !c.reds.length ? [] : open ? c.reds.filter((x) => !open.reds.some((o) => o.reason === x.reason && Math.abs(o.s - x.s) <= RED_NEAR_M)) : c.reds;
-    if (c.lap && c.lap.ok === true && !t.newReds.length) {
-      const report = wordsOf(doc, t);
-      return { converged: true, report, doc: t.doc, window: windowOf(doc, t), displacement: t.displacement, route: t.route, tried: summary(tried), openCheckMs: open ? open.ms : null };
-    }
+    if (c.lap && c.lap.ok === true && !t.newReds.length) return true;
     t.miss = c.lap && c.lap.ok !== true ? `the lap does not prove${c.lap.where && c.lap.where.length ? ` (${c.lap.where[0].reason || 'it fails'} at ${((c.lap.where[0].s || 0) / 1000).toFixed(2)} km)` : c.lap.reason ? ` (${c.lap.reason})` : ''}`
       : `it adds ${t.newReds.length} red${t.newReds.length === 1 ? '' : 's'} (${t.newReds[0].reason} at ${(t.newReds[0].s / 1000).toFixed(2)} km)`;
+    return false;
+  };
+  const picked = (t) => ({ converged: true, report: wordsOf(doc, t), doc: t.doc, window: windowOf(doc, t), displacement: t.displacement, route: t.route, tried: summary(tried), phases });
+  // THE NEAR BEND FIRST (D343). When the end is already at the start, the bend is the shortest stretch that closes, and it heads the order on every track measured
+  // (no road, and no route moved less by a millimetre: test/core_close_best.test.js compares the pick with the exhaustive order's). So it is closed and checked
+  // on its own, and when it proves the other routes are never run. `exhaustive` runs them all first, as D339 did
+  let from = 0;
+  if (near && !exhaustive) {
+    const t = runRoute(routes[0], 0); from = 1;
+    if (t.doc && check(t)) return picked(t);
+  }
+  for (let k = from; k < routes.length; k++) runRoute(routes[k], k);
+  // THE ORDER: no new road first, then the least movement by the most-moved piece; the route order breaks a tie (the bend, then the shorter windows)
+  const closed = tried.filter((t) => t.doc).sort(byOrder);
+  let firstMiss = null;
+  for (const t of closed) {
+    if (t.miss) { if (!firstMiss) firstMiss = t; continue; }   // the near bend, already checked above
+    if (check(t)) return picked(t);
     if (!firstMiss) firstMiss = t;
   }
   const why = firstMiss ? `${routeWords(doc, firstMiss)}: ${firstMiss.miss}` : (tried.find((t) => t.route === 'near') || tried.find((t) => t.route === 'finish') || tried[0] || { refused: 'there is nothing to close' }).refused;
-  return { converged: false, report: `not closed, nothing changed: no way of closing the loop proves the lap; the closest, ${why}`, doc: null, window: null, displacement: null, route: null, tried: summary(tried), openCheckMs: open ? open.ms : null };
+  return { converged: false, report: `not closed, nothing changed: no way of closing the loop proves the lap; the closest, ${why}`, doc: null, window: null, displacement: null, route: null, tried: summary(tried), phases };
 }
 /** THE ORDER, as a comparator over the routes that closed ({ newPieces, maxMoveM, rank }): no new road first; then the least movement of the most-moved piece; within
  *  MOVE_TIE_M, the route order (rank). Whether a route proves is not in it: the routes are checked in this order, and the first that proves is the pick. */

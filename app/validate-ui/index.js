@@ -101,11 +101,17 @@ function mount(root, shell) {
     const WorkerCtor = typeof Worker === 'function' ? Worker : null;
     if (!WorkerCtor) return null;
     let last = null, runner = null, broken = false, frame = 0, sentDoc = null, sentDrag = null, unsub = null;
+    const jobs = new Map();   // serial -> the document, CSP and drag it was sent with (D343)
     const show = (st) => { last = st; render(st); };
     try {
       runner = createCheckRunner({
         WorkerCtor,
-        onAnswer: (out, { pending }) => show({ ...out, path: trackPath(), map: null, checking: pending }),
+        onAnswer: (out, { serial, pending }) => {
+          // D343: a finished answer (no drag, nothing deferred) is the open track's reds for that document: the shell keeps them for a Close press on it
+          const job = jobs.get(serial); for (const k of [...jobs.keys()]) if (k <= serial) jobs.delete(k);   // older answers are dropped by the runner: their entries go too
+          if (job && !job.dragging && out && !out.error && out.result && out.result.pendingFrom == null && typeof shell.noteCheck === 'function') shell.noteCheck(job.doc, { csp: job.csp, red: out.result.red });
+          show({ ...out, path: trackPath(), map: null, checking: pending });
+        },
         onFail: (message) => show({ ...(last || { result: null, arcs: [], graph: null }), error: message, checking: false }),
       });
     } catch (e) { return null; }
@@ -113,7 +119,7 @@ function mount(root, shell) {
       frame = 0;
       const st = shell.getState(), d = st.history.present, drag = !!st.history.dragBase;
       if (!force && d === sentDoc && drag === sentDrag) return;
-      try { runner.send({ doc: d, dragging: drag, csp: csp.checked }); } catch (e) { broken = true; return fallBack(); }   // a document the worker cannot take: check here
+      try { const serial = runner.send({ doc: d, dragging: drag, csp: csp.checked }); jobs.set(serial, { doc: d, csp: csp.checked, dragging: drag }); } catch (e) { broken = true; return fallBack(); }   // a document the worker cannot take: check here
       sentDoc = d; sentDrag = drag;
       show({ ...(last || { result: null, arcs: [], graph: null, error: null }), checking: true });
     };
