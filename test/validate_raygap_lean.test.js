@@ -152,7 +152,8 @@ test('row 2: the check\'s lean mesh gives the check on buildMesh\'s own self-che
   const roadMesh = walkScene(full.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
   const v = V.validate(p, r.segments, { csp: true, softCollision: true, folds: full.folds, roadMesh, fullSpeed: true });
   const whole = OJ.runJob({ doc, closed: true });
-  assert.deepEqual(whole, { overlaps: v.red.filter((x) => OJ.OVERLAP.has(x.reason)), others: v.red.filter((x) => !OJ.OVERLAP.has(x.reason)), amber: v.amber.length }, 'the lean check is the check on the full mesh');
+  assert.deepEqual(whole, { overlaps: v.red.filter((x) => OJ.OVERLAP.has(x.reason)), others: v.red.filter((x) => !OJ.OVERLAP.has(x.reason)), amber: v.amber.length,
+    lap: { ok: v.lap.ok, reason: v.lap.reason || null, first: v.lap.where && v.lap.where.length ? { s: v.lap.where[0].s, reason: v.lap.where[0].reason } : null, count: v.lap.where ? v.lap.where.length : 0 } }, 'the lean check is the check on the full mesh (D331: with the verdict of the lap proof, which the answer now carries)');
   assert.ok(whole.overlaps.length > 0);
   assert.deepEqual(OJ.mergeParts(OJ.runJob({ doc, closed: true, part: 'rest' }), OJ.runJob({ doc, closed: true, part: 'rays' })), whole, 'the two parts are the one-piece check (the D240 merge rule)');
 });
