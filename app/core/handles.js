@@ -258,13 +258,20 @@ function mount(stage, win, host) {
     d.pxFine += raw; d.px += raw * g;
   };
   const stamp = (e) => (e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now());
+  // the drag tick (app/sound.js): one event each time a handle's value moves a step. D345: every path that moves a value sends it from here, the drag (and the
+  // arrows, through apply) and the wheel, which sent nothing: a scroll was silent and sound.js's last value went stale, so the next drag ticked from it
+  // `single` (D345 addition 2): a DELIBERATE single step, the wheel's notch, an arrow's nudge or a reset, which sound.js ticks whatever its size; a drag's steps
+  // carry no flag and tick only on a whole number. singleNext marks the arrow's step, which goes through apply like a drag's
+  let singleNext = false;
+  const stepped = (kind, was, value, single = false) => {
+    if (value !== was && doc.dispatchEvent && win.CustomEvent) { try { doc.dispatchEvent(new win.CustomEvent('t180:handle-step', { detail: single ? { kind, value, single: true } : { kind, value } })); } catch (e) { /* a sound is never worth a drag */ } }
+  };
   const apply = (final) => {
     if (!drag || !waiting) return; const w = waiting; waiting = null;
     const mods = { shift: w.shift, ctrl: w.ctrl, alt: w.alt }, d = mods.shift ? drag.pxFine : drag.px;
     const was = drag.value; drag.value = targetFor(drag.h.kind, drag.base, d, { ...drag.ctx, hold: false }, mods); drag.mods = mods;
     host.apply(drag.h, drag.value, mods, final);
-    // the drag tick (app/sound.js): one event each time the dragged value moves a step
-    if (drag && drag.value !== was && doc.dispatchEvent && win.CustomEvent) { try { doc.dispatchEvent(new win.CustomEvent('t180:handle-step', { detail: { kind: drag.h.kind, value: drag.value } })); } catch (e) { /* a sound is never worth a drag */ } }
+    if (drag) stepped(drag.h.kind, was, drag.value, singleNext);
   };
   const flush = () => { frameReq = 0; apply(false); };
   const onDown = (e) => {
@@ -296,7 +303,7 @@ function mount(stage, win, host) {
     const dir = NUDGE[e.key]; if (!dir) return;
     if (e.preventDefault) e.preventDefault();
     const K = KINDS[drag.h.kind]; drag.base = round(drag.base + dir * K.step, K.step);
-    drag.moved = true; waiting = { x: drag.v.x, y: drag.v.y, shift: !!drag.mods.shift, ctrl: !!drag.mods.ctrl, alt: !!drag.mods.alt }; apply(false);
+    drag.moved = true; waiting = { x: drag.v.x, y: drag.v.y, shift: !!drag.mods.shift, ctrl: !!drag.mods.ctrl, alt: !!drag.mods.alt }; singleNext = true; try { apply(false); } finally { singleNext = false; }
   };
   if (doc.addEventListener) doc.addEventListener('keydown', onKeyDown);
   // A DRAG NEVER RUNS OUT OF SCREEN (2026-10-14, reported: zoomed out, a length drag stopped at about 400 to 600 m and would go no further in one go). The hidden
@@ -354,7 +361,7 @@ function mount(stage, win, host) {
     const m = model; if (!m) return;
     const now = m.base(h.kind), v = resetValue(h.kind, pre && pre.kind === h.kind && pre.to === now ? pre.from : null);
     if (v === null || v === now) return;
-    host.begin(h); host.apply(h, v, {}, true); host.end(h); pre = null;
+    host.begin(h); host.apply(h, v, {}, true); host.end(h); stepped(h.kind, now, v, true); pre = null;
   };
   const onDouble = (e) => {
     if (drag) return;
@@ -368,7 +375,7 @@ function mount(stage, win, host) {
     e.preventDefault(); e.stopImmediatePropagation();
     const K = KINDS[h.kind], now = m.base(h.kind), v = clamp(round(now + (e.deltaY < 0 ? 1 : -1) * K.step, K.step), K.min, K.max);
     if (v === now) return;
-    host.begin(h); host.apply(h, v, {}, true); host.end(h); pre = { kind: h.kind, from: now, to: v }; lastClick = null;
+    host.begin(h); host.apply(h, v, {}, true); host.end(h); stepped(h.kind, now, v, true); pre = { kind: h.kind, from: now, to: v }; lastClick = null;
   };
   stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('wheel', onWheel, { capture: true, passive: false }); stage.addEventListener('dblclick', onDouble, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
   raf = win.requestAnimationFrame(frame);
