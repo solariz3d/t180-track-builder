@@ -60,13 +60,17 @@ test('row 4: refusals by name: a closed loop, an empty track', () => {
   assert.throws(() => F.finishToStart(D.createDoc('empty')), (e) => e.name === 'CoreError' && e.code === 'EMPTY');
 });
 
-test('row 5: an end upside down rolls back upright on a straight of its own onto the start, never in a turn, and the lap closes with the bank of the start', () => {
+// D331: the rule changed. The roll was always the LAST piece onto the start; that road left the surface on this very fixture (the checker's lap proof: the car leaves the road at 3.59 km, the
+// old order's result), so the roll is laid first, on its own straight at the end, when rolling last would leave the road (row 10). Still never in a turn, still on a straight of its own.
+test('row 5: an end upside down rolls back upright on a straight of its own (last onto the start, or first when that keeps the car on the road), never in a turn, and the lap closes with the bank of the start', () => {
   let d = openTrack(); d = extend(d, { length: 400, transition: 390, targets: { phi: Math.PI } });   // the end rolled over gently (under the bar): bank 180°
   const r = F.finishToStart(d), added = r.doc.pieces.slice(d.pieces.length), lastNew = added[added.length - 1];
   assert.equal(r.doc.closed, true); assert.ok(r.plan.rollM >= Math.ceil(Math.PI / (0.9338 * DEG)), `${r.plan.rollM} m to roll 180° at the amber rate`);
-  assert.match(r.plan.report, /rolling 180° upright onto the start/);
-  assert.equal(Math.round(lastNew.length), r.plan.rollM, 'the roll is the last new piece');
-  assert.ok(lastNew.channels.kh.every((v) => Math.abs(v) < 2e-3), 'and it is a straight (no turn to speak of: Close may bend it a hair)');
+  assert.match(r.plan.report, /rolling 180° upright (onto the start|first)/);
+  const rollPiece = r.plan.rollFirst ? added[0] : lastNew;
+  assert.equal(Math.round(rollPiece.length), r.plan.rollM, 'the roll is the last new piece, or the first');
+  assert.ok(rollPiece.channels.kh.every((v) => Math.abs(v) < 2e-3), 'and it is a straight (no turn to speak of: Close may bend it a hair)');
+  assert.equal(lapOf(r.doc).ok, true, 'and the car stays on the road all the way round');
   const end = D.valuesAt(lastNew, lastNew.length).phi, start = D.valuesAt(r.doc.pieces[0], 0).phi;
   assert.ok(Math.abs(Math.atan2(Math.sin(end - start), Math.cos(end - start))) < 1e-6, 'the bank at the seam is that of the start, mod 360°');
 });
@@ -100,6 +104,61 @@ test('row 9: a roll whose first guess is too short (factor 1, and the old 1.1) i
     const newIds = new Set(r.doc.pieces.slice(d.pieces.length).map((P) => P.id)), S = p.samples;
     const worst = V._internal.rollRates(S, (i) => segs[S[i].seg].kind !== 'gap', true, p.lengthM).filter((q) => newIds.has(segs[S[q.i].seg].id)).reduce((m, q) => Math.max(m, q.rate), 0);
     assert.ok(worst <= V.ROLL_AMBER_DEG_M, `factor ${factor}: the new road's worst roll rate ${worst.toFixed(3)}°/m, the amber bar ${V.ROLL_AMBER_DEG_M} (${r.plan.rollM} m of roll)`);
+  }
+});
+
+// 2026-10-15, ELYSIUM's newest save (the build of cb3a7ff): Close with "new road from the end to the start" converged, the preview said "No overlap and no red", and the checker then said
+// "lap FAILS": the car leaves the road at the new road. Cause, measured: Finish judged a route by Close's convergence, and on an end banked 54° a turn on the wrong side of the bank
+// has a negative normal load (the car is pulled off the surface), and Close bends the new pieces hard to meet the start (a 45 m miss became -55 g). This row is that, small: any track
+// whose end is banked, closed by Finish, must pass the checker's own lap proof (the independent oracle: validate, not Finish's own test of it).
+const bankedEnd = (turnDeg, straightM, bankDeg) => {   // a straight, a left turn, a straight, then the road banked over 200 m and held
+  let d = D.createDoc('banked'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 500 }, turnDeg * DEG); d = extend(d, { length: straightM });
+  d = extend(d, { length: 200, transition: 100, targets: { phi: bankDeg * DEG } }); return extend(d, { length: 100, targets: { kv: 0 } });
+};
+function lapOf(doc) { const AD = require('../src/core/adapter.js'), V = require('../src/validate/index.js'), { path } = AD.toPath(doc, { step: 2 }); return V.validate(path, AD.toSegments(doc), { fullSpeed: true }).lap; }
+test('row 10: a banked end: the road Finish lays keeps the car on it (the lap proof of the checker passes), at 54° and at 126°', () => {
+  for (const [turn, straight, bank] of [[120, 200, 54], [90, 400, 126]]) {
+    const d = bankedEnd(turn, straight, bank), r = F.finishToStart(d), lap = lapOf(r.doc);
+    assert.equal(r.doc.closed, true);
+    assert.equal(lap.ok, true, `end banked ${bank}°: the lap fails, the car leaves the road at ${JSON.stringify((lap.where || []).slice(0, 2))} (${r.plan.report})`);
+  }
+});
+
+// the road test Finish applies (F.roadHold) is the lap proof's own test of the centreline, so it finds what the checker finds. The fixture is the road the OLD Finish laid at a 54° end
+// (a synthetic track, test/fixtures/finish-banked-end-leaves-road.core2.json): the checker's lap proof fails on it at 1.5 km, and roadHold must put its lowest load inside the stretch the
+// checker names, below 0; on the road the new Finish lays at the same end it finds none (the same verdict, on the same track).
+test('row 11: F.roadHold is the own test of the lap proof: the same place on the road the old Finish laid at a banked end, and nothing on the new road', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const bad = D.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'finish-banked-end-leaves-road.core2.json'), 'utf8')), lap = lapOf(bad), hold = F.roadHold(bad, 0);
+  assert.equal(lap.ok, false, 'control: the checker fails this lap'); const where = lap.where.filter((w) => w.reason === 'leaves-surface').map((w) => w.s);
+  assert.ok(where.length > 0, 'control: it names where the car leaves the road');
+  assert.ok(hold.worst < 0, `roadHold finds it: ${hold.worst}`); assert.ok(hold.at >= Math.min(...where) - 2 && hold.at <= Math.max(...where) + 2, `at ${hold.at}, inside the checker's ${Math.min(...where)} to ${Math.max(...where)} m`);
+  // the same figure, not only the same sign: the lowest centreline load with the downforce the checker's own lines carry (fHold_g), over the same stations
+  const AD = require('../src/core/adapter.js'), V = require('../src/validate/index.js'), { path: P } = AD.toPath(bad, { step: 2 }), lines = V.validate(P, AD.toSegments(bad), { fullSpeed: true }).lines.filter((l) => l.u === 0);
+  const lowest = Math.min(...lines.map((l) => l.fHold_g)); assert.ok(Math.abs(hold.worst - lowest) < 0.3, `roadHold ${hold.worst.toFixed(3)} g, the checker's lowest ${lowest.toFixed(3)} g`);
+  // it reads only the pieces from the index asked for: the stretch where the car leaves the road is in the earlier pieces, so after them the answer is a road that holds
+  let at = 0, lastBad = -1; bad.pieces.forEach((Q, i) => { if (where.some((w) => w >= at && w < at + Q.length)) lastBad = i; at += Q.length; });
+  assert.ok(lastBad >= 0 && lastBad < bad.pieces.length - 1, 'control: the road is left in a piece before the last'); assert.ok(F.roadHold(bad, lastBad + 1).worst >= 0, 'the pieces after it hold the car');
+  const good = F.finishToStart(bankedEnd(120, 200, 54)); assert.ok(F.roadHold(good.doc, 0).worst >= 0, 'the new road holds the car'); assert.equal(lapOf(good.doc).ok, true);
+});
+
+// when no road the car can stay on exists from where the track ends (here it has dropped 148 m and points down 18 degrees), Finish says so by name, with where and how hard, and what to
+// do, instead of closing the loop into a lap the checker fails (the old answer on this track: a closed loop the car leaves at 2.2 km)
+test('row 13: an end Finish cannot close onto a road the car stays on is refused by name, with where the car leaves the road and what to change', () => {
+  let d = D.createDoc('dropped'); d = extend(d, { length: 300 }); d = extendTurnBy(d, { length: 400 }, 90 * DEG); d = extend(d, { length: 600, transition: 300, targets: { kv: -0.001 } }); d = extend(d, { length: 100, targets: { kv: 0 } });
+  assert.throws(() => F.finishToStart(d), (e) => e.name === 'CoreError' && e.code === 'FINISH_LEAVES_ROAD' && /the car would leave the road at [0-9]+[.][0-9][0-9] km [(]a load of -?[0-9]+ g/.test(e.message) && /[0-9.]+ m below it/.test(e.message) && /level and straighten the last pieces/.test(e.message), 'refused by name');
+});
+
+
+// The compact road is kept when the car stays on it. An eased turn falls short of the circle the route was planned on, so the road as laid ended 20 m or more from the start and Close bent the
+// new pieces hard to meet it (-55 g on ELYSIUM); the route is now RE-AIMED by where its road really ends until it ends within 0.3 m, and then the roll laid last passes the road test. Without the
+// re-aim this banked end (a right-hand turn into a road banked the way it turns) failed the road test and was thrown away for a 3.1 km road with the roll first; with it, 1.3 km.
+test('row 12: re-aimed by where it really ends, the compact road with the roll last is kept at a banked end that turns the way it is banked (and its mirror)', () => {
+  for (const [turn, bank] of [[-150, 54], [150, -54]]) {
+    const d = bankedEnd(turn, 200, bank), r = F.finishToStart(d);
+    assert.equal(r.plan.rollFirst, false, `turn ${turn}, bank ${bank}: the roll is the last piece (${r.plan.report})`);
+    assert.ok(r.plan.lengthM < 2000, `and the road is the compact one, ${r.plan.lengthM} m`);
+    assert.ok(r.plan.minHoldG >= 0 && lapOf(r.doc).ok === true, 'and the car stays on it');
   }
 });
 
