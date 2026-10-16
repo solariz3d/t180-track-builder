@@ -224,3 +224,11 @@ for (const kind of ['legacy', 'cup', 'opentube']) {
     s.beginSculpt({ channel: 'phi' }); s.sculptTo(0.3); s.sculptTo(0); assert.ok(Math.abs(s.sculptInfo().values.phi - base.phi) < 1e-9, 'back to 0: the start'); s.endSculpt();
   });
 }
+
+test('row 10b (D335): a Sculpt drag uses its own piece\'s ratio, also after an undo brings back the same document', async () => {
+  const s = await mk('legacy'); s.setSculpt(true); s.selectPiece(2);
+  s.beginSculpt({ channel: 'phi' }); s.sculptTo(Math.PI); s.endSculpt(); s.undo();
+  s.selectPiece(0); const b0 = s.sculptInfo().values.phi;
+  s.beginSculpt({ channel: 'phi' }); s.sculptTo(Math.PI); const got = s.sculptInfo().values.phi - b0; s.endSculpt();
+  assert.ok(Math.abs(got - 180) < 1e-6, `piece 0 asked +180°, reads ${got}°`);
+});
