@@ -1,20 +1,20 @@
 // core-close-preview.test.js: node --test app/test/core-close-preview.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D242: the app's Close PROPOSES before it commits (the keeper, TEST 1: the one-click close moved every piece and the lap ran into itself). Rows:
-//   (rows 1, 2 and 5 on a NEAR lap, 8.87 m from closing; rows 3 and 4 on laps only a wider window can close)
-//   1  propose: nothing committed; only the window moves (every earlier piece 0 m); Apply is ONE undo step, and Undo gives the open lap back
-//   2  Cancel drops the preview; an edit drops a stale one; Apply with nothing to apply says so
-//   3  a window that cannot close the loop: refused BY NAME in the message, no preview
-//   4  the preview's OVERLAP CHECK: a coil (two circles on one another, TEST 1's stacking) is reported as the road overlapping itself
-//   5  the preview shows the proposal as a GHOST, and a click on a place moves the camera there (free mode, looking at the station)
+// D242 made the app's Close PROPOSE before it committed; D339 (the ruling: "one single press and the algo runs it") made it ONE press again, with the lap proof as
+// the guard the preview's Apply was (app/core/closejob.js runCloseBest picks the way of closing). The file keeps its name, which the mutation harness reads. Rows:
+//   (rows 1 and 7 on a NEAR lap, 8.87 m from closing; row 2 on a coil no way of closing proves)
+//   1  one press closes it AT ONCE: one undo step, the line says what it did, and Undo gives the open lap back
+//   2  when no way proves, nothing changes: the same document, a line that says why, and no copy written
 //   6  a refused export names EVERY red in plain words, grouped, with where
-//   7  Apply writes the copy from BEFORE the close first (backupNow('pre-close'), the D239 amendment), and a copy that fails refuses the Apply by name
+//   7  the press writes the copy from BEFORE the close first (backupNow('pre-close'), the D239 amendment); a copy that fails refuses it by name; an edit while
+//      the copy is written is never closed over
+//   (D339 removed: row 3, a window refused by name, and row 4, the preview's overlap check, which test/core_close_best.test.js and core_close_local.test.js cover
+//   as routes; row 5, the preview's ghost; and "finish", the preview of new road)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { createCoreShell } = require('../core/coreshell.js');
-const P = require('../preview/preview.js');
 
 const R = 180, Q = (Math.PI * R) / 2;
 /** An OPEN lap that ends near its start: 300 m, `turns` quarter turns, then `lastLen` m. */
@@ -35,62 +35,22 @@ async function nearLap() {
   assert.equal(s.getState().history.present.closed, false); return s;
 }
 
-test('row 1: Close PROPOSES: nothing is committed, only the window moves (every earlier piece 0 m); Apply is one undo step, and Undo gives the open lap back', async () => {
-  const s = await nearLap(), base = s.getState().history.present, n = base.pieces.length;
-  s.proposeClose({ last: true });
-  const st = s.getState(), p = st.closeProposal;
-  assert.ok(p, st.message); assert.equal(st.history.present, base, 'nothing committed'); assert.equal(p.base, base); assert.equal(p.doc.closed, true);
-  assert.deepEqual(p.window.ids, [base.pieces[n - 1].id]);
-  for (const x of p.displacement) if (x.piece < n - 1) assert.equal(x.maxM, 0, `${x.id} is outside the window: it does not move at all`);
-  assert.ok(p.displacement.find((x) => x.piece === n - 1).maxM > 1e-3, 'control: the last piece is what moves');
-  assert.match(st.message, /close preview: .*Apply or cancel/);
-  await s.applyClose(); assert.equal(s.getState().history.present.closed, true); assert.equal(s.getState().closeProposal, null); assert.match(s.getState().message, /loop closed/);
-  s.undo(); assert.equal(s.getState().history.present, base, 'Undo after Apply: the open lap, the very same document');
-});
-
-test('row 2: Cancel drops the preview; an edit drops a stale preview; Apply with nothing to apply says so', async () => {
+test('row 1: one press closes a near lap AT ONCE: one undo step, the line says what it did, and Undo gives the open lap back', async () => {
   const s = await nearLap(), base = s.getState().history.present;
-  s.proposeClose({ last: true }); assert.ok(s.getState().closeProposal); s.cancelClose(); assert.equal(s.getState().closeProposal, null); assert.equal(s.getState().history.present, base);
-  await s.applyClose(); assert.match(s.getState().message, /nothing to apply/); assert.equal(s.getState().history.present, base);
-  s.proposeClose({ last: true }); assert.ok(s.getState().closeProposal);
-  s.extend({ length: 20 }); assert.equal(s.getState().closeProposal, null, 'an edit drops the preview made for the old track');
+  await s.closeBest();
+  const st = s.getState();
+  assert.equal(st.history.present.closed, true, st.message); assert.equal(st.history.past[st.history.past.length - 1], base, 'one undo step');
+  assert.match(st.message, /^closed: (bent|laid)/); assert.equal(st.messageKind, 'ok'); assert.equal(st.dirty, true);
+  s.undo(); assert.equal(s.getState().history.present, base, 'Undo gives the open lap back');
 });
 
-test('row 3: a window that cannot close the loop is refused BY NAME in the message, and there is no preview', async () => {
-  const s = await openLap({ lastLen: 30 });
-  s.proposeClose({ last: true });
-  assert.equal(s.getState().closeProposal || null, null); assert.match(s.getState().message, /can't close using only the last 30 m \(p\d+\).*widen the window/i);
-});
-
-test('row 4: the preview\'s OVERLAP CHECK: a coil (two circles on one another, as TEST 1 stacked) is reported as the road overlapping itself, with where', async () => {
-  const s = await openLap({ turns: 8, lastLen: 60 });
-  s.proposeClose();
-  const p = s.getState().closeProposal; assert.ok(p, s.getState().message);
-  assert.ok(p.check.overlaps.length > 0, 'the closed coil overlaps itself');
-  // the MESH-only reds, which the live panel cannot see (it validates without the mesh): self-intersection from the mesh's own check, and a downforce ray that meets another road
-  for (const r of ['self-intersection', 'downforce-ray-gap', 'stacked-within-2m']) assert.ok(p.check.overlaps.some((x) => x.reason === r), `the check finds ${r} (B's lprobe: 2 self-intersection, 15 ray, 2 stacked)`);
-  assert.match(s.getState().message, /OVERLAPS ITSELF in \d+ place/);
-  const RG = require('../validate-ui/redgroups.js'), g = RG.groupReds(p.check.overlaps, p.resolved.segments);
-  assert.equal(g[0].key, 'overlap'); assert.ok(g[0].items.every((it) => /^p\d+$/.test(it.piece) && / km$/.test(it.km)), 'each place names its km and its piece');
-});
-
-function headlessPreview(s) {
-  let q = [], now = 0;   // frames run only when step() is called: the pose a view reports is the one the last frame drew
-  const win = { devicePixelRatio: 1, document: { hidden: false, activeElement: null, body: {}, addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: (fn) => { q.push(fn); return q.length; }, cancelAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {} };
-  const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0 }, { get: (t, k) => (k in t ? t[k] : () => {}) });
-  const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
-  const pv = P.createPreview({ canvas, shell: s, win });
-  pv.step = () => { const f = q; q = []; now += 16; for (const g of f) g(now); };
-  return pv;
-}
-test('row 5: the preview shows the proposal as a GHOST (dropped on Cancel), and focus(s) puts the camera in free mode looking at the station', async () => {
-  const s = await nearLap(), pv = headlessPreview(s);
-  assert.equal(pv.view().ghost, 0, 'no ghost before'); s.proposeClose({ last: true }); assert.ok(pv.view().ghost > 0, 'the proposal is drawn as a ghost');
-  s.cancelClose(); assert.equal(pv.view().ghost, 0, 'Cancel drops the ghost');
-  assert.equal(pv.focus(150), true); pv.step(); assert.equal(pv.view().mode, 'free');
-  const v = pv.view(), m = require('../camera/cameras.js').sampleAt(v.track.path, 150), d = [0, 1, 2].map((k) => v.pose.target[k] - v.pose.eye[k]), toM = [0, 1, 2].map((k) => m.pos[k] - v.pose.eye[k]);
-  const cos = (d[0] * toM[0] + d[1] * toM[1] + d[2] * toM[2]) / (Math.hypot(...d) * Math.hypot(...toM)); assert.ok(cos > 0.999, `the camera looks at the station at 150 m (cos ${cos})`);
-  pv.dispose();
+test('row 2: when no way of closing proves, nothing changes: the same document, a line that says why, and no copy written', async () => {
+  const s = await openLap({ turns: 8, lastLen: 60 }), base = s.getState().history.present, calls = [];
+  s.backupNow = async (reason) => { calls.push(reason); return { file: 'x', reason }; };
+  await s.closeBest();
+  assert.equal(s.getState().history.present, base, 'nothing changed');
+  assert.match(s.getState().message, /^not closed, nothing changed: no way of closing the loop proves the lap; the closest, /); assert.equal(s.getState().messageKind, 'error');
+  assert.deepEqual(calls, [], 'no copy is written for a close that does not happen');
 });
 
 test('row 6: a refused export names EVERY red in plain words, grouped, with where (not the export\'s first id)', async () => {
@@ -108,33 +68,19 @@ test('row 6: a refused export names EVERY red in plain words, grouped, with wher
   assert.ok(!/downforce-ray-gap/.test(msg), 'no validator id in the words'); assert.equal(s.getState().exportReds.length, 4, 'every red is kept for the red box');
 });
 
-test('row 7: Apply writes the copy from BEFORE the close first (backupNow(\'pre-close\'), the D239 amendment), and a copy that fails (rejects or throws) refuses the Apply by name', async () => {
+test('row 7: the press writes the copy from BEFORE the close first (backupNow(\'pre-close\'), the D239 amendment); a copy that fails refuses it by name; an edit while the copy is written is never closed over', async () => {
   const s = await nearLap(), base = s.getState().history.present, calls = [];
   s.backupNow = async (reason) => { calls.push({ reason, present: s.getState().history.present }); return { file: 'x', reason }; };   // the shell's backupNow stood in for: what it is handed, and when
-  s.proposeClose({ last: true }); assert.ok(s.getState().closeProposal, s.getState().message); assert.equal(calls.length, 0, 'a preview writes nothing');
-  await s.applyClose(); assert.equal(s.getState().history.present.closed, true, s.getState().message);
+  await s.closeBest(); assert.equal(s.getState().history.present.closed, true, s.getState().message);
   assert.deepEqual(calls.map((c) => c.reason), ['pre-close']); assert.equal(calls[0].present, base, 'the backup is of the OPEN lap, taken before the close is committed');
   for (const fail of [async () => { throw new Error('disk full'); }, () => { throw new Error('disk full'); }]) {   // the real one REJECTS; a sync throw is refused the same
     const t = await nearLap(), tb = t.getState().history.present; t.backupNow = fail;
-    t.proposeClose({ last: true }); assert.ok(t.getState().closeProposal, t.getState().message); await t.applyClose();
+    await t.closeBest();
     assert.equal(t.getState().history.present, tb, 'a failed copy: nothing changed'); assert.match(t.getState().message, /not closed: the copy from before the close could not be written \(disk full\)/);
   }
-  // an edit while the copy is being written drops the preview: the stale close is never committed over it
-  const u = await nearLap(); let release; u.backupNow = () => new Promise((r) => { release = r; });
-  u.proposeClose({ last: true }); const pending = u.applyClose(); u.extend({ length: 20 }); const ub = u.getState().history.present; release(null); await pending;
+  // an edit while the copy is being written: the close of the track that is no longer there is never committed over it
+  const u = await nearLap(); let release, asked; const copying = new Promise((r) => { asked = r; }); u.backupNow = () => { asked(); return new Promise((r) => { release = r; }); };
+  const pending = u.closeBest(); await copying; u.extend({ length: 20 }); const ub = u.getState().history.present; release(null); await pending;
   assert.equal(u.getState().history.present, ub, 'the edit stands; no close was committed over it'); assert.equal(ub.closed, false);
-  assert.match(u.getState().message, /changed while its copy was being written/);
-});
-
-// 2026-10-14, FINISH TO START (src/core/finish.js; the keeper's "Yes"): Close's 'finish' choice lays NEW road from the end to the start and bends only it
-test('finish: the preview adds new road, moves nothing already built, and Apply is one undo step back to the open track', async () => {
-  const s = await openLap(), base = s.getState().history.present, n = base.pieces.length;
-  s.proposeClose({ finish: true });
-  const st = s.getState(), p = st.closeProposal;
-  assert.ok(p, st.message); assert.equal(st.history.present, base, 'nothing committed'); assert.equal(p.doc.closed, true);
-  assert.ok(p.doc.pieces.length > n, 'new road was laid'); base.pieces.forEach((P, i) => assert.equal(p.doc.pieces[i], P, `piece ${i} is the users own, the very object`));
-  assert.ok(p.displacement.every((x) => x.maxM === 0), `nothing built moves: ${p.displacement.filter((x) => x.maxM).map((x) => x.id)}`);
-  assert.match(p.window.text, /^the new road \(\d+ pieces?, \d+ m\)$/); assert.match(st.message, /close preview: Finish to start: (LSL|RSR|LSR|RSL) at R \d+ m/);
-  await s.applyClose(); assert.equal(s.getState().history.present.closed, true);
-  s.undo(); assert.equal(s.getState().history.present, base, 'Undo after Apply: the open track, the very same document');
+  assert.match(u.getState().message, /changed while the close was being worked out/);
 });

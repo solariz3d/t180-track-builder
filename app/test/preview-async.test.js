@@ -67,10 +67,20 @@ async function track(runner = null, st = null) {
   return s;
 }
 
+/** D339: the close preview is gone. What these rows took from it (the closed track and its synchronous overlap check) comes from the same parts it used:
+ *  closejob.js runClose (the route the preview ran; the last ~20% by default) and overlapjob.js overlapCheck (the check it ran when it had no runner).
+ *  { refused } when the route refuses or does not close, as the preview then made none. */
+function closedCheck(s, opts = {}) {
+  const CJ = require('../core/closejob.js');
+  let out; try { out = CJ.runClose({ doc: s.getState().history.present, ...opts }); } catch (e) { if (e.name === 'CoreError') return { refused: e.message }; throw e; }
+  if (!out.converged) return { refused: out.report };
+  const resolved = OJ.resolveDoc(out.doc);
+  return { doc: out.doc, resolved, check: structuredClone(OJ.overlapCheck(resolved, null, { closed: true })) };
+}
+
 test('row 1: the job a worker runs gives EXACTLY the synchronous overlapCheck, on a coil and on TEST-1-sized tracks', async () => {
   // a coil (two circles on one another), the preview of Close: the check must find the overlaps and the job must find the same ones
-  const coil = await openLap({ turns: 8, lastLen: 60 }); coil.proposeClose();
-  const cp = coil.getState().closeProposal; assert.ok(cp && cp.check.overlaps.length > 0, 'control: the coil overlaps itself');
+  const coil = await openLap({ turns: 8, lastLen: 60 }), cp = closedCheck(coil); assert.ok(cp.check && cp.check.overlaps.length > 0, 'control: the coil overlaps itself');
   assert.deepEqual(clone(OJ.runJob({ doc: cp.doc, designSpeedKmh: null, closed: true })), cp.check, 'the coil: Close\'s check');
   assert.deepEqual(clone(OJ.runJob({ doc: cp.doc, designSpeedKmh: 120, closed: true })), clone(OJ.overlapCheck(OJ.resolveDoc(cp.doc), 120, { closed: true })), 'a design speed goes through the same way');
   // the delete's preview of the same coil, an OPEN track
@@ -86,9 +96,9 @@ test('row 1: the job a worker runs gives EXACTLY the synchronous overlapCheck, o
   for (let i = 0; i < 4; i++) { d = extend(d, { length: (Math.PI * 1000) / 2, transition: 60, targets: { kh: 1 / 1000 } }); d = extend(d, { length: i % 2 ? 3000 : 1000, transition: 60, targets: { kh: 0 } }); }
   const lap = await nearLap(null, D.checkDoc({ ...d, pieces: d.pieces.slice(0, -1), nextId: d.nextId })).catch((e) => e);
   if (lap instanceof Error) { assert.fail(`the 14 km lap could not be made near-closed: ${lap.message}`); }
-  lap.proposeClose({ last: true }); const lp = lap.getState().closeProposal;
-  if (lp) assert.deepEqual(clone(OJ.runJob({ doc: lp.doc, designSpeedKmh: null, closed: true })), lp.check, 'a 14 km lap: Close\'s check');
-  else assert.match(lap.getState().message, /CLOSE_WINDOW|could not|converge|refus/i, 'the big lap was refused by name, so only the delete is compared: ' + lap.getState().message);
+  const lp = closedCheck(lap, { last: true });
+  if (lp.check) assert.deepEqual(clone(OJ.runJob({ doc: lp.doc, designSpeedKmh: null, closed: true })), lp.check, 'a 14 km lap: Close\'s check');
+  else assert.match(lp.refused, /CLOSE_WINDOW|could not|converge|refus/i, 'the big lap was refused by name, so only the delete is compared: ' + lap.getState().message);
 });
 
 test('row 2: the worker SCRIPT, run in a sandbox with a fake self, loads its modules through the app\'s own loader and answers with the same result', async () => {
@@ -100,7 +110,7 @@ test('row 2: the worker SCRIPT, run in a sandbox with a fake self, loads its mod
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(dir, 'overlapworker.js'), 'utf8'), ctx, { filename: 'overlapworker.js' });
   assert.equal(typeof ctx.onmessage, 'function', 'the worker listens for a message');
-  const coil = await openLap({ turns: 8, lastLen: 60 }); coil.proposeClose(); const cp = coil.getState().closeProposal;
+  const coil = await openLap({ turns: 8, lastLen: 60 }), cp = closedCheck(coil);
   await ctx.onmessage({ data: { id: 7, doc: clone(cp.doc), designSpeedKmh: null, closed: true } });
   assert.equal(posted.length, 1, JSON.stringify(posted).slice(0, 300)); assert.equal(posted[0].id, 7); assert.equal(posted[0].ok, true, posted[0].error);
   assert.deepEqual(structuredClone(posted[0].result), cp.check, 'the worker answers with the synchronous result');
@@ -172,7 +182,7 @@ test('row 3c: THE POOL FIX: one part FAILS while the other is still computing, t
 test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece check (a coil with overlaps, a jump, a cup, a tube, a 13 km delete, a 14 km Close)', async () => {
   const parts = (doc, closed, speed = null) => mergeParts(clone(OJ.runJob({ doc, designSpeedKmh: speed, closed, part: 'rest' })), clone(OJ.runJob({ doc, designSpeedKmh: speed, closed, part: 'rays' })));
   const mk = () => createCoreShell({ brushFn: null, autosaveMs: 0 });
-  const coil = await openLap({ turns: 8, lastLen: 60 }); coil.proposeClose(); const cp = coil.getState().closeProposal; assert.ok(cp.check.overlaps.length > 0);
+  const coil = await openLap({ turns: 8, lastLen: 60 }), cp = closedCheck(coil); assert.ok(cp.check.overlaps.length > 0);
   assert.deepEqual(parts(cp.doc, true), clone(cp.check), 'a coil\'s Close (overlaps of three kinds)'); assert.deepEqual(parts(cp.doc, true, 120), clone(OJ.overlapCheck(OJ.resolveDoc(cp.doc), 120, { closed: true })), 'with a design speed');
   coil.cancelClose(); coil.selectPiece(0); coil.deleteSelection(); const dp = coil.getState().deleteProposal; assert.deepEqual(parts(dp.doc, false), clone(dp.check), 'a coil\'s delete');
   const DEG = Math.PI / 180, j = await mk(); j.extend({ length: 200, family: 'bowl' }); j.extend({ length: 100, transition: 40, targets: { kh: 1 / 300 } }); j.commitDoc(D.appendPiece(j.getState().history.present, D.flightPiece({ forward: -30, left: 60, heading: Math.PI }))); j.extend({ length: 150 }); j.extend({ length: 150, transition: 40, targets: { kh: 1 / 200 } }); j.extend({ length: 100 });
@@ -190,32 +200,12 @@ test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece chec
   const big = await mk(); big.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 45; i++) big.extend({ length: i % 3 === 2 ? 250 : 300, transition: 60, targets: { kh: (i % 2 ? -1 : 1) / 300 } });
   big.selectPiece(20); big.deleteSelection(); const bp = big.getState().deleteProposal; assert.deepEqual(parts(bp.doc, false), clone(bp.check), '13 km, 46 pieces');
   let d = extend(D.createDoc('big lap'), { length: 3000, family: 'bowl' }); for (let i = 0; i < 4; i++) { d = extend(d, { length: (Math.PI * 1000) / 2, transition: 60, targets: { kh: 1 / 1000 } }); d = extend(d, { length: i % 2 ? 3000 : 1000, transition: 60, targets: { kh: 0 } }); }
-  const lap = await nearLap(null, D.checkDoc({ ...d, pieces: d.pieces.slice(0, -1), nextId: d.nextId })); lap.proposeClose({ last: true }); const lp = lap.getState().closeProposal; assert.ok(lp, lap.getState().message);
+  const lap = await nearLap(null, D.checkDoc({ ...d, pieces: d.pieces.slice(0, -1), nextId: d.nextId })); const lp = closedCheck(lap, { last: true }); assert.ok(lp.check, lp.refused);
   assert.deepEqual(parts(lp.doc, true), clone(lp.check), '14 km lap\'s Close');
   assert.throws(() => OJ.runJob({ doc: cp.doc, part: 'nope' }), /no such part/);
 });
 
-test('row 4a: Close, with a runner: the preview is there at once, Apply is refused until the result lands (then works, the backup first); Cancel stops the check; a stale answer changes nothing', async () => {
-  const run = fakeRunner(), s = await nearLap(run), base = s.getState().history.present, calls = [];
-  s.backupNow = async (reason) => { calls.push(reason); return { file: 'x', reason }; };
-  s.proposeClose({ last: true }); const p = s.getState().closeProposal;
-  assert.ok(p, s.getState().message); assert.equal(p.check, null, 'no result yet'); assert.ok(p.displacement.length > 0 && p.resolved.segments.length > 0, 'the ghost and the displacement are there at once');
-  assert.deepEqual(s.proposalCheck(p).status, 'checking'); assert.equal(run.jobs.length, 1); assert.equal(run.jobs[0].args.closed, true); assert.equal(run.jobs[0].args.doc, p.doc, 'the worker is sent the proposed document');
-  assert.match(s.getState().message, /Checking for overlaps: Apply is off until that finishes \(Cancel stops it\)/);
-  await s.applyClose(); assert.equal(s.getState().history.present, base, 'Apply before the result changes nothing'); assert.match(s.getState().message, /the overlap check of this preview has not finished/); assert.deepEqual(calls, [], 'and writes no backup');
-  run.jobs[0].resolve(RED); await tick();
-  assert.equal(s.proposalCheck(p).status, 'done'); assert.deepEqual(s.proposalCheck(p).result, RED); assert.equal(s.getState().closeProposal, p, 'the proposal object is the same, so the preview is not rebuilt');
-  assert.match(s.getState().message, /the closed track OVERLAPS ITSELF in 1 place\. Apply or cancel$/);
-  await s.applyClose(); assert.equal(s.getState().history.present.closed, true, s.getState().message); assert.deepEqual(calls, ['pre-close']); assert.equal(s.getState().proposalCheck, null);
-  // Cancel stops the check; the late answer changes nothing
-  const t = await nearLap(run); t.proposeClose({ last: true }); const job = run.jobs[run.jobs.length - 1], tp = t.getState().closeProposal;
-  t.cancelClose(); assert.equal(job.cancelled, 1, 'Cancel terminates the worker'); assert.equal(t.getState().proposalCheck, null); assert.equal(t.getState().closeProposal, null);
-  job.resolve(RED); await tick(); assert.equal(t.getState().proposalCheck, null, 'a stale answer is ignored'); assert.equal(t.proposalCheck(tp).status, 'none');
-  // a failed check refuses Apply by name and says so
-  const u = await nearLap(run); u.proposeClose({ last: true }); const uj = run.jobs[run.jobs.length - 1], up = u.getState().closeProposal; uj.reject(new Error('worker crashed')); await tick();
-  assert.equal(u.proposalCheck(up).status, 'failed'); assert.match(u.getState().message, /the overlap check could not run: worker crashed\. Cancel the preview and try Close again/);
-  await u.applyClose(); assert.equal(u.getState().history.present.closed, false); assert.match(u.getState().message, /has not finished/);
-});
+// D339: row 4a (Close's preview with a runner: Apply refused until the check landed) went with the preview: Close is one press, applied at once.
 
 test('row 4b: the delete, with a runner: the same, and every way the preview can go (Cancel, an edit, an Undo, another selection, a newer preview) stops the running check', async () => {
   const run = fakeRunner(), st = { backups: [], async backupDoc(name, text) { st.backups.push(name); return 'f'; } }, s = await track(run, st), base = s.getState().history.present;
@@ -282,18 +272,10 @@ async function mountPanel(shell) {
   return { root, panel, button, text, fire, win };
 }
 
-test('row 5: the panels: "Checking for overlaps… N s", Apply disabled until the result lands, then the groups; Cancel stops the job (Close\'s box and the delete\'s box)', async () => {
+test('row 5: the delete\'s panel: "Checking for overlaps… N s", Apply disabled until the result lands, then the groups; Cancel stops the job', async () => {
   const run = fakeRunner(); let clock = 0;
   const s = await nearLap(run, null, { now: () => clock });
-  const P1 = await mountPanel(s);
-  // Close's box
-  P1.button('Close the loop').onclick(); P1.fire(); const cp = s.getState().closeProposal; assert.ok(cp, s.getState().message);
-  assert.match(P1.text('overlap check'), /^Checking the closed track for overlaps… 0 s\. Apply is off until this finishes; Cancel stops it\.$/); assert.equal(P1.button('Apply').disabled, true);
-  assert.match(P1.root.all().map((e) => e.textContent).join('|'), /Preview: only .* may move/, 'the preview\'s words are there while it checks');
-  clock = 7400; P1.fire(); assert.match(P1.text('overlap check'), /Checking the closed track for overlaps… 7 s\./, 'the seconds count up');
-  run.jobs[0].resolve(RED); await tick(); assert.equal(P1.button('Apply').disabled, false, 'Apply is on once the result is in'); assert.equal(P1.text('overlap check'), null); assert.match(P1.root.all().map((e) => e.textContent).join('|'), /The closed track OVERLAPS ITSELF \(1 place\):/);   // D248: the count is of places (was "(1)")
-  s.cancelClose(); assert.equal(P1.button('Apply').style.display, 'none');
-  P1.button('Close the loop').onclick(); P1.fire(); const cj = run.jobs[run.jobs.length - 1]; assert.equal(P1.button('Apply').disabled, true); P1.button('Cancel').onclick(); assert.equal(cj.cancelled, 1, 'Cancel in the panel stops the job');
+  // D339: Close's box went with the preview (Close is one press, applied at once, with no overlap check to wait for)
   // the delete's box
   const t = await track(run), P2 = await mountPanel(t); t.selectPiece(1); P2.button('Delete selected').onclick(); const dj = run.jobs[run.jobs.length - 1];
   assert.match(P2.text('overlap check'), /^Checking the track for overlaps… 0 s\. Apply is off until this finishes; Cancel stops it\.$/); assert.equal(P2.button('Apply delete').disabled, true);
@@ -319,6 +301,5 @@ test('row 6: the ghost is on the preview WHILE the check runs, and it is not reb
   const ghost = pv.view().ghost; run.jobs[0].resolve(CLEAR); await tick();
   assert.equal(s.proposalCheck(p).status, 'done'); assert.equal(s.getState().deleteProposal, p, 'the same proposal object: the preview keys on it, so it did not rebuild'); assert.equal(pv.view().ghost, ghost);
   s.cancelDelete(); assert.equal(pv.view().ghost, 0, 'Cancel drops the ghost');
-  const c = await nearLap(run), pc = headlessPreview(c); c.proposeClose({ last: true }); assert.ok(pc.view().ghost > 0, 'Close\'s ghost too, while its check runs'); assert.equal(c.proposalCheck(c.getState().closeProposal).status, 'checking');
-  pc.dispose(); pv.dispose();
+  pv.dispose();
 });

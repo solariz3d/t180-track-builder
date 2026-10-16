@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..');
-const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js';
+const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js', BEST = 'test/core_close_best.test.js';
 
 const MUTATIONS = [
   // src/core/close.js: the LOCAL close (items 1 and the refusal by name)
@@ -19,21 +19,22 @@ const MUTATIONS = [
   { id: 'K5 the window is not named for a person', file: 'src/core/close.js', from: "${contiguousTail ? 'the last ' : ''}", to: '', tests: [LOCAL], caughtBy: 'row 1: a close confined to the LAST piece' },
   { id: 'K6 the default window ignores the fraction (the last piece only)', file: 'src/core/close.js', from: 'want = Math.max(0, Math.min(1, fraction)) * total', to: 'want = 0', tests: [LOCAL], caughtBy: 'row 2: the default window' },
   { id: 'K7 an empty window is accepted', file: 'src/core/close.js', from: "if (!set.size) throw new D.CoreError('CLOSE_WINDOW'", to: "if (false) throw new D.CoreError('CLOSE_WINDOW'", tests: [LOCAL], caughtBy: 'row 5: a window with no road piece' },
-  // app/core/coreshell.js: the PREVIEW (items 2 and 3)
-  // A1's line moved with the close itself into app/core/closejob.js (2026-10-15, Close off the window's thread); the shell runs that job on the page, so the same row
-  // catches it. The whole-lap close there is told the last piece, as wholeLapEdited gives it on a lap with no straight and no edit
-  { id: 'A1 the app close is the whole-lap close again', file: 'app/core/closejob.js', from: 'close(doc, { window: closeWindow(doc, { fraction, last }) })', to: 'close(doc, { edited: [doc.pieces.length - 1] })', tests: [PREVIEW], caughtBy: 'row 1: Close PROPOSES' },
-  { id: 'A2 an edit keeps a stale preview', file: 'app/core/coreshell.js', from: 'patch.history.present !== st.closeProposal.base)', to: 'false)', tests: [PREVIEW], caughtBy: 'row 2: Cancel drops the preview' },
-  { id: 'A3 the overlap check has no mesh self-check (no folds)', file: 'app/core/overlapjob.js', from: 'folds: mesh.folds, roadMesh,', to: 'roadMesh,', tests: [PREVIEW], caughtBy: 'row 4: the preview\'s OVERLAP CHECK' },
-  { id: 'A4 the overlap check is skipped', file: 'app/core/coreshell.js', from: 'Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh))', to: 'Object.freeze({ overlaps: [], others: [], amber: 0 })', tests: [PREVIEW], caughtBy: 'row 4: the preview\'s OVERLAP CHECK' },
-  { id: 'A5 Apply commits the base, not the proposal', file: 'app/core/coreshell.js', from: 'history: D.commit(st.history, p.doc), resolved: p.resolved, resolveError: null, dirty: true, closeProposal: null,', to: 'history: D.commit(st.history, p.base), resolved: p.resolved, resolveError: null, dirty: true, closeProposal: null,', tests: [PREVIEW], caughtBy: 'row 1: Close PROPOSES' },
   { id: 'A6 the refused export keeps the export\'s own message (ids)', file: 'app/core/coreshell.js', from: "e.code === 'RED' && Array.isArray(e.red) ? `not exported:", to: "false ? `not exported:", tests: [PREVIEW], caughtBy: 'row 6: a refused export names EVERY red' },
-  { id: 'A9 Apply writes no copy from before the close', file: 'app/core/coreshell.js', from: "try { await api.backupNow('pre-close'); }", to: 'try { }', tests: [PREVIEW], caughtBy: 'row 7: Apply writes the copy from BEFORE the close' },
-  { id: 'A11 an edit during the copy still gets the stale close committed', file: 'app/core/coreshell.js', from: 'if (st.closeProposal !== p || p.base !== doc()) return set(', to: 'if (false) return set(', tests: [PREVIEW], caughtBy: 'row 7: Apply writes the copy from BEFORE the close' },
-  { id: 'A10 a failed backup still closes', file: 'app/core/coreshell.js', from: "catch (e) { return set({ message: `not closed: the copy", to: "catch (e) { set({ message: `not closed: the copy", tests: [PREVIEW], caughtBy: 'row 7: Apply writes the copy from BEFORE the close' },
-  // app/preview: the ghost
-  { id: 'A7 the proposal is not drawn as a ghost', file: 'app/preview/preview.js', from: 'if (prop) { try { ghost = { ...model.proposalGhost(prop.resolved), proposal: true }; } catch (e) { ghost = null; } }', to: '', tests: [PREVIEW], caughtBy: 'row 5: the preview shows the proposal as a GHOST' },
-  { id: 'A8 focus looks from the station, not at it', file: 'app/preview/preview.js', from: 'rig.free.lookFrom(eye, m.pos.slice())', to: 'rig.free.lookFrom(eye, eye.map((v, k) => v + m.T[k]))', tests: [PREVIEW], caughtBy: 'row 5: the preview shows the proposal as a GHOST' },
+  // D339, Close is ONE press (app/core/closejob.js runCloseBest, app/core/coreshell.js closeBest). The preview's mutants went with it: A1 (the default window), A2 (a stale
+  // preview kept), A3 (the preview's overlap check without folds), A4 (the overlap check skipped), A5 (Apply committing the base), A7 (the ghost) and A8 (focus on a place).
+  // A9, A10 and A11 are the press's own now: its copy first, a failed copy, an edit while the copy is written. B1 to B9 are the picker's rules, one each.
+  { id: 'A9 the press writes no copy from before the close', file: 'app/core/coreshell.js', from: "try { await api.backupNow('pre-close'); }", to: 'try { }', tests: [PREVIEW], caughtBy: 'row 7: the press writes the copy from BEFORE the close first' },
+  { id: 'A10 a failed copy still closes', file: 'app/core/coreshell.js', from: 'catch (e) { return set({ closePending: null, message: `not closed: the copy', to: 'catch (e) { set({ closePending: null, message: `not closed: the copy', tests: [PREVIEW], caughtBy: 'row 7: the press writes the copy from BEFORE the close first' },
+  { id: 'A11 an edit while the copy is written is closed over', file: 'app/core/coreshell.js', from: 'if (doc() !== base) return changed();   // an edit while the copy was written', to: 'if (false) return changed();   // an edit while the copy was written', tests: [PREVIEW], caughtBy: 'row 7: the press writes the copy from BEFORE the close first' },
+  { id: 'B1 a way that does not prove is picked', file: 'app/core/closejob.js', from: 'if (c.lap && c.lap.ok === true && !t.newReds.length) {', to: 'if (true) {', tests: [BEST], caughtBy: 'row 4: when no way proves' },
+  { id: 'B2 a way that adds a red is picked', file: 'app/core/closejob.js', from: 'if (c.lap && c.lap.ok === true && !t.newReds.length) {', to: 'if (c.lap && c.lap.ok === true) {', tests: [BEST], caughtBy: 'row 4: when no way proves' },
+  { id: 'B3 new road is not put last', file: 'app/core/closejob.js', from: '((a.newPieces > 0) - (b.newPieces > 0)) || ', to: '', tests: [BEST], caughtBy: 'row 8: the order' },
+  { id: 'B4 the most movement is tried first', file: 'app/core/closejob.js', from: 'a.maxMoveM - b.maxMoveM : a.rank - b.rank', to: 'b.maxMoveM - a.maxMoveM : a.rank - b.rank', tests: [BEST], caughtBy: 'row 7: the pick is the least-moving way that proves' },
+  { id: 'B5 Finish is tried when the end is already at the start', file: 'app/core/closejob.js', from: "if (!near) routes.push({ route: 'finish'", to: "if (true) routes.push({ route: 'finish'", tests: [BEST], caughtBy: 'row 1: an end already at the start' },
+  { id: 'B6 a bend may reshape the track (no move cap)', file: 'app/core/closejob.js', from: 'if (newPieces === 0 && maxMoveM > moveCap) {', to: 'if (false) {', tests: [BEST], caughtBy: 'row 5: a bend that would move the track further' },
+  { id: 'B7 a press that finds no way still applies', file: 'app/core/coreshell.js', from: 'if (!out.converged) return set({ closePending: null, message: out.report });', to: '', tests: [PREVIEW], caughtBy: 'row 2: when no way of closing proves, nothing changes' },
+  { id: 'B8 the press commits the open track', file: 'app/core/coreshell.js', from: 'history: D.commit(st.history, out.doc), ...resolvedOf(out.doc)', to: 'history: D.commit(st.history, base), ...resolvedOf(base)', tests: [PREVIEW], caughtBy: 'row 1: one press closes a near lap AT ONCE' },
+  { id: 'B9 a tie is not broken by the route order (micro-metres decide)', file: 'app/core/closejob.js', from: 'Math.abs(a.maxMoveM - b.maxMoveM) > MOVE_TIE_M ? a.maxMoveM - b.maxMoveM : a.rank - b.rank', to: 'a.maxMoveM - b.maxMoveM', tests: [BEST], caughtBy: 'row 1: an end already at the start' },
   // app/validate-ui/redgroups.js: every red in plain words (item 4)
   { id: 'G1 a ray red on an overlap keeps its own words', file: 'app/validate-ui/redgroups.js', from: "(reason === 'downforce-ray-gap' && nearOverlap(r))", to: 'false', tests: [GROUPS], caughtBy: 'the overlap is ONE group' },
   { id: 'G2 every ray red is called an overlap', file: 'app/validate-ui/redgroups.js', from: "(reason === 'downforce-ray-gap' && nearOverlap(r))", to: "(reason === 'downforce-ray-gap')", tests: [GROUPS], caughtBy: 'a downforce-ray-gap with NO overlap near it' },
@@ -81,7 +82,7 @@ function runMutant(m) {
 }
 
 test('control: the unmutated temp copy passes every test file the mutants use', () => {
-  const r = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: [LOCAL, PREVIEW, GROUPS, DISPLAY], caughtBy: '(no test is named this)' });
+  const r = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: [LOCAL, PREVIEW, GROUPS, DISPLAY, BEST], caughtBy: '(no test is named this)' });
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
 });
 for (const m of MUTATIONS) {

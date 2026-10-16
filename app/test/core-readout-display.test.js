@@ -645,23 +645,21 @@ test('no water: the panel has no Water section, the shell no pour and no water s
 });
 
 // ── D239 amendment (the keeper lost TEST 1 to one Close, with no copy from before it): Close keeps a copy FIRST ──────────
-// D242 took the call over: the button PREVIEWS, and Apply (the one close path) writes the copy before it commits the close
+// D339: Close is ONE press (no preview, no Apply): the press writes the copy before it commits the close
 const closeLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
-const previewThenApply = async (P) => {
-  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'whole';
-  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick(); P.flush();   // Close's work runs on a timer (2026-10-14)
-  assert.ok(P.shell.getState().closeProposal, P.shell.getState().message);
-  await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Apply').onclick();
+/** A coil (two circles on one another): no way of closing it proves, so a press refuses. */
+const coilLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
+/** Press Close the loop and wait until the press has landed (its work runs on a timer, and the copy and the close after it are awaited). */
+const pressClose = async (P) => {
+  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick(); P.flush();
+  for (let i = 0; i < 400 && (P.shell.getState().closePending || P.shell.getState().message === null); i++) await new Promise((r) => setImmediate(r));
 };
-test('Close the loop, then Apply, writes a copy of the track as it was BEFORE closing it (shell.backupNow), then closes', async () => {
+test('Close the loop writes a copy of the track as it was BEFORE closing it (shell.backupNow), then closes, in one press', async () => {
   const D = require('../../src/core/document.js'), order = [];
   const storage = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], backupDoc: async (name, text) => { order.push(['backup', name, text, P.shell.getState().history.present.closed]); return `${name}.x.t180track`; } };
   const P = await mountPanel((s) => s, { storage });
   closeLap(P.shell); const before = D.serialize(P.shell.getState().history.present);
-  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'whole';
-  P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick(); P.flush();   // Close's work runs on a timer (2026-10-14)
-  assert.equal(order.length, 0, 'the preview writes no copy');
-  await P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Apply').onclick();
+  await pressClose(P);
   assert.equal(order.length, 1, 'one copy');
   assert.deepEqual([order[0][1], order[0][2], order[0][3]], ['eq-unsaved', before, false], 'the copy is the open track as it was, written while it was still open');
   assert.equal(P.shell.getState().history.present.closed, true, P.shell.getState().message);
@@ -671,23 +669,22 @@ test('Close the loop, then Apply, writes a copy of the track as it was BEFORE cl
 // the moment the button is pressed, and a refusal shows there in red until the track changes
 test('Close says it is working at once, and a refusal shows in the Close box, in red', async () => {
   const P = await mountPanel();
-  P.shell.extend({ length: 300 });   // a straight: no turn to close with, so Close refuses by name
-  const box = () => P.root.all().find((e) => e.attrs['aria-label'] === 'close preview');
-  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'last';
+  coilLap(P.shell);   // a coil: no way of closing it proves, so the press refuses
+  const box = () => P.root.all().find((e) => e.attrs['aria-label'] === 'close');
   P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop').onclick();
   assert.equal(box().textContent, 'Closing the loop…', 'before the work runs');
-  P.flush();
+  P.flush(); for (let i = 0; i < 400 && P.shell.getState().message === null; i++) await new Promise((r) => setImmediate(r));
   const refused = P.root.all().find((e) => e.attrs['aria-label'] === 'close refused');
   assert.ok(refused, `no refusal in the box: "${box().textContent}" / ${P.shell.getState().message}`);
-  assert.match(refused.textContent, /^Not closed: /); assert.equal(refused.attrs.style, 'color: var(--bad)', 'in red');
+  assert.match(refused.textContent, /^not closed, nothing changed: /); assert.equal(refused.attrs.style, 'color: var(--bad)', 'in red');
   P.shell.extend({ length: 50 }); assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'close refused'), undefined, 'gone once the track changes');
   P.panel.unmount();
 });
-test('if that copy cannot be written, Apply changes nothing and says why', async () => {
+test('if that copy cannot be written, the press changes nothing and says why', async () => {
   const storage = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], backupDoc: async () => { throw new Error('disk full'); } };
   const P = await mountPanel((s) => s, { storage });
   closeLap(P.shell); const before = P.shell.getState().history.present;
-  await previewThenApply(P);
+  await pressClose(P);
   assert.equal(P.shell.getState().history.present, before, 'not closed, not changed');
   assert.match(P.root.all().find((e) => e.attrs.role === 'status').textContent, /not closed: the copy from before the close could not be written \(disk full\)/);
   P.panel.unmount();

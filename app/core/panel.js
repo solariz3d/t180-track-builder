@@ -15,7 +15,6 @@
 'use strict';
 
 const LB = require('./labels.js');
-const RG = require('../validate-ui/redgroups.js'), VL = require('../validate-ui/labels.js');   // D242: every red in plain words, grouped, with where
 const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
 const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
 const HD = require('./handles.js');   // D244: the drag handles on the Extend ghost, and (Sculpt, D244b) on a placed piece
@@ -471,67 +470,30 @@ function mount(root, shell) {
   let jumpNoteFor = null;
 
   // CLOSE, EXAMPLE
-  // D242: Close PROPOSES first (the keeper, TEST 1: the one-click close moved every piece, and the lap ran into itself). Only the stretch chosen here moves;
-  // the closed track is shown as a ghost with how far each piece moved and an overlap check; Apply commits it (one undo step), Cancel drops it
-  const closeHow = el('select', { 'aria-label': 'close using', title: 'which part of the lap the close may move: everything before it stays exactly as it is' });
-  // 2026-10-14: 'finish' = Finish to start: new road from the end to the start, and nothing already built moves (src/core/finish.js)
-  for (const [v, t] of [['0.2', 'the last ~20% of the lap'], ['last', 'the last piece only'], ['0.4', 'the last ~40% of the lap'], ['whole', 'the whole lap (moves every piece)'], ['finish', 'new road from the end to the start (moves nothing)']]) closeHow.append(new win.Option(t, v));
-  closeHow.value = 'finish';   // D331: new road from the end to the start (moves nothing already built); the "last ~20%" refuses on a long track. The others are one click away
-  const closeBtn = el('button', { text: 'Close the loop', title: 'shows the closed track first (a ghost, how far each piece moves, any overlap): then Apply or Cancel', onclick: () => {
-    // a long track takes seconds to close (ELYSIUM, 24 km: ~2-4 s): say so FIRST, and let the page paint it, so the wait never reads as nothing happening
-    const v = closeHow.value, opts = v === 'last' ? { last: true } : v === 'whole' ? { whole: true } : v === 'finish' ? { finish: true } : { fraction: Number(v) };
-    proposalBox.replaceChildren(el('p', { text: v === 'finish' ? 'Finishing to the start: laying new road and closing it…' : 'Closing the loop…' }));
+  // D339: Close is ONE press (the ruling: no choice of how, no preview). The core tries every way of closing the loop and applies the one that passes the lap
+  // proof with no new red, adds no road if it can, and moves the track least (app/core/closejob.js runCloseBest); the line under the button says what it did, or
+  // why nothing changed. Undo gives the open track back. A long track takes a while (the checker runs on each way it tries), so it runs off the window's thread
+  const closeBtn = el('button', { text: 'Close the loop', title: 'closes the loop the least-changing way the lap proof passes, at once; Undo gives the open track back', onclick: () => {
+    // say so FIRST, and let the page paint it, so the wait never reads as nothing happening
+    proposalBox.replaceChildren(el('p', { text: 'Closing the loop…' }));
     closeAsked = shell.getState().history.present;
-    (win.setTimeout || setTimeout)(() => shell.proposeClose(opts), 30);
+    (win.setTimeout || setTimeout)(() => shell.closeBest(), 30);
   } });
-  const applyBtn = el('button', { text: 'Apply', title: 'close the loop as previewed (one undo step)', onclick: () => shell.applyClose() });
-  const cancelBtn = el('button', { text: 'Cancel', title: 'drop the preview: nothing changes', onclick: () => shell.cancelClose() });
-  const proposalBox = el('div', { 'aria-label': 'close preview', class: 'head' });
-  const focus = (s) => send('t180-camera-focus', { s });   // a click on a place moves the camera there (app/preview/index.js)
-  const placeButton = (it, text) => el('button', { text, title: `${it.what}${it.detail ? `: ${it.detail}` : ''}: show it`, class: 'linkish', onclick: () => focus(it.s) });
-  // D240 follow-up: the preview shows AT ONCE and its overlap check runs off the thread (shell.proposalCheck(p): 'checking' | 'done' | 'failed'); Apply is off until it is done, and the line says how
-  // long it has been going (redrawn twice a second while it runs); Cancel stops it
-  // a close that REFUSES says why HERE, in red, where the button was pressed (the keeper read ELYSIUM's refusals as nothing happening: they were one line
-  // of the status bar), until the track changes
-  let tick = 0, closeAsked = null;
-  const drawProposal = (p) => {
-    if (tick) { win.clearTimeout(tick); tick = 0; }
-    applyBtn.style.display = cancelBtn.style.display = p ? '' : 'none';
-    if (!p) {
-      // 2026-10-15: a close the worker is working out (shell.getState().closePending): say what is being done, and offer Cancel, until its preview lands
-      const pend = shell.getState().closePending;
-      if (pend && pend.base === shell.getState().history.present) {
-        cancelBtn.style.display = ''; applyBtn.disabled = true;   // nothing to apply yet (hidden, but never left on)
-        proposalBox.replaceChildren(el('p', { 'aria-label': 'close working', text: `${pend.finish ? 'Finishing to the start: laying new road and closing it' : 'Closing the loop'}… The window stays free; Cancel stops it.` }));
-        return;
-      }
-      const st = shell.getState(), refused = closeAsked && closeAsked === st.history.present && st.message && st.messageKind === 'error';
-      proposalBox.replaceChildren(...(refused ? [el('p', { 'aria-label': 'close refused', text: `Not closed: ${st.message}`, style: 'color: var(--bad)' })] : []));
+  const cancelBtn = el('button', { text: 'Cancel', title: 'stop the close being worked out: nothing changes', onclick: () => shell.cancelClose() });
+  const proposalBox = el('div', { 'aria-label': 'close', class: 'head' });
+  // what the press did, HERE, where the button was pressed (a refusal in red), until the track changes
+  let closeAsked = null;
+  const drawProposal = () => {
+    const st = shell.getState(), pend = st.closePending, h = st.history;
+    cancelBtn.style.display = 'none';
+    if (pend && pend.base === h.present) {
+      cancelBtn.style.display = '';
+      proposalBox.replaceChildren(el('p', { 'aria-label': 'close working', text: 'Closing the loop: trying each way of closing it and checking the lap… The window stays free; Cancel stops it.' }));
       return;
     }
-    const ck = shell.proposalCheck(p);
-    applyBtn.disabled = ck.status !== 'done';
-    const moved = p.displacement.filter((x) => x.maxM > 1e-3).sort((a, b) => b.maxM - a.maxM), still = p.displacement.length - moved.length;
-    const kids = [el('p', { text: p.whole ? 'Preview: the WHOLE lap may move.' : `Preview: only ${p.window.text} may move; everything before it is kept exactly.` }),
-      el('p', { text: moved.length ? `Moves: ${moved.slice(0, 8).map((x) => `${x.id} up to ${x.maxM.toFixed(x.maxM < 10 ? 2 : 1)} m`).join(', ')}${moved.length > 8 ? `, and ${moved.length - 8} more` : ''}; ${still} piece${still === 1 ? '' : 's'} stay where they were.` : 'Nothing moves by more than a millimetre.' })];
-    if (ck.status !== 'done' && ck.status !== 'failed') {
-      kids.push(el('p', { 'aria-label': 'overlap check', text: `Checking the closed track for overlaps… ${Math.floor(ck.elapsedMs / 1000)} s. Apply is off until this finishes; Cancel stops it.` }));
-      tick = win.setTimeout(() => { tick = 0; const st = shell.getState(); drawProposal(st.closeProposal && st.closeProposal.base === st.history.present ? st.closeProposal : null); }, 500);
-    } else if (ck.status === 'failed') kids.push(el('p', { 'aria-label': 'overlap check', text: `The overlap check could not run: ${ck.error}. Cancel and press Close again.`, style: 'color: var(--bad)' }));
-    else {
-      kids.push(el('p', { 'aria-label': 'overlap check time', style: 'font-size:12px;color:var(--dim);margin:2px 0', text: `Checked in ${(ck.elapsedMs / 1000).toFixed(1)} s${ck.timing ? ` (the worker's start ${(ck.timing.loadMs / 1000).toFixed(1)} s, the check itself ${(ck.timing.jobMs / 1000).toFixed(1)} s)` : ''}.` }));
-      const groups = RG.groupReds([...ck.result.overlaps, ...ck.result.others], p.resolved.segments);
-      // D331: the lap proof's verdict (overlapjob.js): a close whose lap the checker would fail says so BEFORE Apply, and is not called clean
-      const lap = ck.result.lap, lapFails = !!lap && lap.ok === false;
-      if (!groups.length && !lapFails) kids.push(el('p', { 'aria-label': 'overlap check', text: 'No overlap and no red on the closed track.' }));
-      if (lapFails) {
-        const w = lap.first, more = lap.count > 1 ? ` (${lap.count} places along the lap)` : '';
-        kids.push(el('p', { 'aria-label': 'lap check', style: 'color: var(--bad)', text: w && w.reason === 'leaves-surface' ? `The lap fails: the car leaves the road at ${(w.s / 1000).toFixed(2)} km${more}.` : `The lap fails${w ? `: ${VL.lapWhereText(w)} at ${(w.s / 1000).toFixed(2)} km${more}` : ''}.` }));
-        if (w) kids.push(el('div', { class: 'actions' }, placeButton({ s: w.s, what: 'the lap fails', detail: '' }, 'show where')));
-      }
-      for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The closed track OVERLAPS ITSELF' : g.title} (${RG.placesText(g)}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.places.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));
-    }
-    proposalBox.replaceChildren(...kids);
+    const refused = closeAsked && closeAsked === h.present && st.message && st.messageKind === 'error';
+    const closed = closeAsked && h.present.closed && h.past.length && h.past[h.past.length - 1] === closeAsked && st.message && st.messageKind === 'ok';
+    proposalBox.replaceChildren(...(refused ? [el('p', { 'aria-label': 'close refused', text: st.message, style: 'color: var(--bad)' })] : closed ? [el('p', { 'aria-label': 'close done', text: st.message })] : []));
   };
   // held to the column's width (a file input is wider than the 280 px column by default, and the column scrolled sideways)
   const fitIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the fit, *.pieces.json', style: 'max-width: 100%; min-width: 0' }), readIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the read, *.read.json', style: 'max-width: 100%; min-width: 0' });
@@ -555,7 +517,7 @@ function mount(root, shell) {
     el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn, turnByBtn, field('turn by °', turnBy), gridBtn, field('grid °', gridStep), sharpBtn, field('sharp °', sharpDeg), field('sharp radius m', sharpR), field('sharp ramp m', sharpRamp)), jumpNote, landingBox,
     headingNote,
     el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
-    el('h3', { text: 'Close' }), el('div', { class: 'pickers' }, field('using', closeHow)), el('div', { class: 'actions' }, closeBtn, applyBtn, cancelBtn), proposalBox,
+    el('h3', { text: 'Close' }), el('div', { class: 'actions' }, closeBtn, cancelBtn), proposalBox,
     ...spawns.nodes,
     ...pit.nodes,
     ...pieces.nodes.selection, ...(bin ? [] : pieces.nodes.library),
@@ -593,8 +555,8 @@ function mount(root, shell) {
       lentFrom = one;
     } else if (!sel && lentFrom) { showHead(); lentFrom = null; readout(); }
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
-    extendBtn.disabled = jumpBtn.disabled = !!d.closed; closeBtn.disabled = closeHow.disabled = !!d.closed || !d.pieces.length;
-    drawProposal(st.closeProposal && st.closeProposal.base === d ? st.closeProposal : null);
+    extendBtn.disabled = jumpBtn.disabled = !!d.closed; closeBtn.disabled = !!d.closed || !d.pieces.length;
+    drawProposal();
     msg.textContent = st.message || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
     readout();   // the track changed, so the piece the fields would add changed
     hintNow(); fillLanding();
@@ -618,7 +580,7 @@ function mount(root, shell) {
   doc.addEventListener('t180:handles-request', onHandlesRequest);
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawns, spawnsLayer, spawnDrag, values, options: opts, unmount() { unsub(); spawns.unmount(); pit.unmount(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (tick) win.clearTimeout(tick); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, spawns, spawnsLayer, spawnDrag, values, options: opts, unmount() { unsub(); spawns.unmount(); pit.unmount(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

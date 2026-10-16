@@ -151,6 +151,9 @@ function roadHold(doc, from) {
   return { worst, at };
 }
 
+/** Whether the open track's end already meets its start (THE END ALREADY AT THE START): within NEAR_M, and heading, pitch and bank each within NEAR_RAD. */
+function isNear(doc, rs = residual(doc)) { return rs.gapM <= NEAR_M && Math.abs(rs.r[3]) <= NEAR_RAD && Math.abs(rs.r[4]) <= NEAR_RAD && Math.abs(rs.r[5]) <= NEAR_RAD; }
+
 function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN } = {}) {   // rollGuess: the first guess's factor, for the test that the measured lengthening works from a bad one
   D.checkDoc(doc);
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is already closed: there is no end to finish from');
@@ -170,7 +173,7 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   const gap = Math.hypot(doc.start.pos[0] - e.p[0], doc.start.pos[1] - e.y, doc.start.pos[2] - e.p[1]);
   const deg = (a) => Math.round((a / DEG) * 10) / 10, f0 = fwd(th0);
   const rs = residual(doc);
-  if (rs.gapM <= NEAR_M && Math.abs(rs.r[3]) <= NEAR_RAD && Math.abs(rs.r[4]) <= NEAR_RAD && Math.abs(rs.r[5]) <= NEAR_RAD) {
+  if (isNear(doc, rs)) {
     const off = `${rs.gapM.toFixed(3)} m from the start (heading ${deg(rs.r[3])}°, pitch ${deg(rs.r[4])}° off)`, road = [];
     for (let i = doc.pieces.length - 1; i >= 0 && doc.pieces[i].type === 'road' && road.length < NEAR_PIECES; i--) road.unshift(i);
     let why = null;
@@ -257,4 +260,4 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   throw new D.CoreError('FINISH_NO_ROUTE', `no finish closes from here: the end is ${Math.round(gap)} m from the start${rollText}, and none of the ${fail.tried} routes tried (turn, straight, turn at radius ${radii.join(', ')} m) could be closed${fail.best ? ` (the first refusal: ${fail.best})` : ''}. Extend toward the start and try again`);
 }
 
-module.exports = { finishToStart, roadHold, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };
+module.exports = { finishToStart, isNear, NEAR_M, roadHold, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };
