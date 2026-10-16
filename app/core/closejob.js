@@ -17,7 +17,7 @@ const { finishToStart } = require('../../src/core/finish.js');
 
 function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null } = {}) {
   const fin = finish ? finishToStart(doc) : null;
-  const res = fin ? { converged: true, doc: fin.doc, report: `Finish to start: ${fin.plan.report}`, window: { pieces: fin.window, text: `the new road (${fin.window.length} piece${fin.window.length === 1 ? '' : 's'}, ${fin.plan.lengthM} m)` } }
+  const res = fin ? { converged: true, doc: fin.doc, report: `Finish to start: ${fin.plan.report}`, window: { pieces: fin.window, text: fin.plan.windowText || `the new road (${fin.window.length} piece${fin.window.length === 1 ? '' : 's'}, ${fin.plan.lengthM} m)` } }
     : whole ? close(doc, { edited }) : close(doc, { window: closeWindow(doc, { fraction, last }) });
   if (!res.converged) return { converged: false, report: res.report, doc: null, window: null, displacement: null };
   return { converged: true, report: res.report, doc: res.doc, window: res.window, displacement: displacementOf(doc, res.doc) };

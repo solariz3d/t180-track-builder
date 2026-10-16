@@ -42,6 +42,21 @@ const ROLL_PEAK_OVER_MEAN = 1.5, ROLL_LENGTHEN = 1.03, ROLL_ROUNDS = 6;
 // straight at the end, so every turn after it is made upright, where no bank can turn a load away from the road. Nothing that is left is a refusal that says why.
 const REFINE_ROUNDS = 4, REFINE_M = 0.3, GATE_TRIES = 2;
 
+// THE END ALREADY AT THE START (D337, 2026-10-16, reported on ELYSIUM: the end was built by hand to 0.105 m from the start, 0.1° of heading and 2.7° of pitch off,
+// and Finish laid 2.2 km of new road in a full circle). The routes join two poses with turns of a fixed radius, and between two poses that almost coincide every
+// such route turns 360°. So an end within NEAR_M of the start, with its heading, pitch and bank each within NEAR_RAD of the start's (close.js residual, the
+// flipped frame included), is closed by the SMALLEST change: Close with its window the shortest stretch of the last pieces that closes (THE WINDOW), and no new road. NEAR_RAD is
+// ROLL_FREE, the few degrees Close mends in passing. NEAR_M (chosen): 1 m, under a thirtieth of the narrowest road this corpus measures wide (35 m) and well inside
+// what the last pieces absorb. The bent road is held to the lap proof's own test
+// (roadHold) like any finish; if the bend cannot close, or the car would leave the road, it is refused by name, never answered with a loop.
+// THE WINDOW: the last road piece alone first, then the last two, and so on to NEAR_PIECES, and the first that closes with the car on the road is taken: the
+// smallest stretch that can absorb the gap. On ELYSIUM the last piece alone gets no closer than 0.062 m (its start is held to the piece before it, and the 2.7° of
+// pitch has to come out somewhere), and the last two close, moving them about 4 m at most: that is the pitch, not the 0.105 m, turned out over 508 m. Three pieces
+// move 5.7 m, four 7.1 m, so the smallest window is also the smallest move.
+// NEAR_ITER: a window that will close does so in a couple of steps (2 on ELYSIUM, every window); one that will not would run Close's 30, about 40 s on a 25 km
+// track, before the next window is tried. 6 is three times what a closing window took.
+const NEAR_M = 1, NEAR_RAD = ROLL_FREE, NEAR_PIECES = 6, NEAR_ITER = 6;
+
 const fwd = (th) => [Math.sin(th), Math.cos(th)];   // plan view (x, z): heading about world up, as the geometry's T = (cos p sin θ, sin p, cos p cos θ)
 const left = (th) => [Math.cos(th), -Math.sin(th)];   // L = (cos θ, 0, −sin θ)
 const mod = (a) => ((a % TAU) + TAU) % TAU;
@@ -154,6 +169,24 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   const roll0 = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil((rollRad / ROLL_RATE) * rollGuess) } : null;
   const gap = Math.hypot(doc.start.pos[0] - e.p[0], doc.start.pos[1] - e.y, doc.start.pos[2] - e.p[1]);
   const deg = (a) => Math.round((a / DEG) * 10) / 10, f0 = fwd(th0);
+  const rs = residual(doc);
+  if (rs.gapM <= NEAR_M && Math.abs(rs.r[3]) <= NEAR_RAD && Math.abs(rs.r[4]) <= NEAR_RAD && Math.abs(rs.r[5]) <= NEAR_RAD) {
+    const off = `${rs.gapM.toFixed(3)} m from the start (heading ${deg(rs.r[3])}°, pitch ${deg(rs.r[4])}° off)`, road = [];
+    for (let i = doc.pieces.length - 1; i >= 0 && doc.pieces[i].type === 'road' && road.length < NEAR_PIECES; i--) road.unshift(i);
+    let why = null;
+    for (let k = 1; k <= road.length; k++) {
+      const window = road.slice(road.length - k);
+      let res;
+      try { res = close(doc, { window, maxIter: NEAR_ITER }); } catch (err) { if (err.name !== 'CoreError') throw err; why = err.message; continue; }
+      if (!res.converged) { why = res.report; continue; }
+      const hold = roadHold(res.doc, window[0]);
+      if (hold.worst < 0) { why = `the car would leave the road at ${(hold.at / 1000).toFixed(2)} km (a load of ${hold.worst.toFixed(0)} g)`; continue; }
+      const lenM = window.reduce((a, i) => a + doc.pieces[i].length, 0), which = k === 1 ? `the last piece, p${window[0] + 1},` : `the last ${k} pieces, p${window[0] + 1} to p${window[k - 1] + 1} (${Math.round(lenM)} m),`;
+      const report = `the end is already ${off}: ${which} bent onto it, with no new road; ${res.report}`;
+      return { doc: res.doc, window, plan: Object.freeze({ word: 'BEND', radiusM: 0, turns: [0, 0], straightM: 0, rollM: 0, rollFirst: false, rollPeakDegM: 0, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: 0, windowText: k === 1 ? `the last piece (p${window[0] + 1}, ${Math.round(lenM)} m)` : `the last ${k} pieces (p${window[0] + 1} to p${window[k - 1] + 1}, ${Math.round(lenM)} m)`, report }) };
+    }
+    throw new D.CoreError('FINISH_NEAR', `the end is already ${off}, too close for new road (every route would be a loop), and bending the last ${road.length} piece(s) onto the start does not close it${why ? ` (${why})` : ''}: close with the last ~20% of the lap instead`);
+  }
   // One order of laying: 'last' (the roll, if there is one, is the last piece onto the start: the shortest roads) or 'first' (the roll is laid at the end first, on its own straight, and
   // the route runs from the upright end). Returns { result } | { tooFast } (the roll reads too fast: lengthen it and search again) | { fail } (what was refused, and the least bad road the car left).
   const search = (mode, roll) => {

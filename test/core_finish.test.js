@@ -188,3 +188,45 @@ test('row 7: the one-turn routes, laid out, end on the start pose; none tighter 
   }
   assert.deepEqual(F.oneTurnRoutes([0, 0], 0, [5, 3], Math.PI / 2), [], 'a turn tighter than the floor is no route');
 });
+
+// D337 (2026-10-16, reported on ELYSIUM: the end was hand-built to within a hair of the start, and Close laid 2.2 km of new road in a loop). The routes join two
+// poses with turns of a fixed radius, and between two poses that almost coincide every such route is a full circle. An end already at the start is closed by
+// the SMALLEST change: the shortest stretch of the last pieces that Close can bend onto the start, with no new road.
+function quarterTrack() {
+  let d = D.createDoc('quarter');
+  d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG); d = extend(d, { length: 600 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG);
+  return d;
+}
+test('row 14: an end already at the start is closed by bending its last pieces, with no new road and no loop', () => {
+  const open = { ...F.finishToStart(quarterTrack()).doc, closed: false };   // finished, then opened again: the end is on the start
+  const r = F.finishToStart(open);
+  assert.equal(r.doc.closed, true);
+  assert.equal(r.doc.pieces.length, open.pieces.length, `no new road: ${r.plan.report}`);
+  assert.equal(r.plan.word, 'BEND', r.plan.report);
+  const k = r.window.length, n = open.pieces.length;
+  assert.deepEqual(r.window, Array.from({ length: k }, (_, j) => n - k + j), 'the window is the last pieces');
+  open.pieces.slice(0, n - k).forEach((P, i) => assert.equal(r.doc.pieces[i], P, `piece ${i} is the user's own, untouched`));
+});
+
+// row 15: the reported save itself (fixtures-d337, uncommitted: a private track, not for a public repository; skipped with the reason when absent). Its state
+// before the close is the history's newest open one (pre-close.t180track): 46 pieces, the end 0.105 m from the start, 0.1° of heading and 2.7° of pitch off.
+const FX15 = require('path').join(__dirname, '..', 'fixtures-d337', 'pre-close.t180track');
+test('row 15: the reported near-closed save closes by bending its last pieces: no new road, nothing else moves, the lap proves', { skip: require('fs').existsSync(FX15) ? false : 'fixtures-d337/pre-close.t180track is not here (a private track, kept off the repository)' }, () => {
+  const AD = require('../src/core/adapter.js'), { runClose } = require('../app/core/closejob.js'), { validate } = require('../src/validate/index.js');
+  const base = D.parse(require('fs').readFileSync(FX15, 'utf8')), { residual } = require('../src/core/close.js'), rs = residual(base);
+  const res = runClose({ doc: base, finish: true });
+  assert.ok(res.converged && res.doc.closed, res.report);
+  assert.equal(res.doc.pieces.length, base.pieces.length, `no new pieces: ${res.report}`);
+  assert.match(res.report, /bent onto it, with no new road/);
+  // the bound on the move is derived, not picked: the gap, plus the pitch the end is off turned out over the window (a bend that turns a road's end by θ
+  // over L moves its middle by about θ·L/4). On this save: 0.105 + 0.0466 × 508 / 4 = 6.0 m; measured 3.99 m on p45 and p46 (2026-10-16)
+  const win = new Set(res.window.pieces), lenM = res.window.pieces.reduce((a, i) => a + base.pieces[i].length, 0), bound = rs.gapM + Math.abs(rs.r[4]) * lenM / 4;
+  for (const x of res.displacement) {
+    if (win.has(x.piece)) assert.ok(x.maxM <= bound, `p${x.piece + 1} moves ${x.maxM} m, past the ${bound.toFixed(2)} m the gap and the pitch need`);
+    else assert.equal(x.maxM, 0, `p${x.piece + 1} does not move`);
+  }
+  const open = AD.toPath({ ...base, closed: false }).path.lengthM, { path: p } = AD.toPath(res.doc);
+  assert.ok(Math.abs(p.lengthM - open) < 1e-6, `no length added: ${p.lengthM} against ${open}`);
+  const v = validate(p, AD.toSegments(res.doc), { fullSpeed: true, csp: true });
+  assert.equal(v.lap.ok, true, `the lap proves: ${JSON.stringify(v.lap).slice(0, 300)}`);
+});
