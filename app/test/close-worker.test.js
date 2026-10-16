@@ -105,6 +105,10 @@ test('row 3: while the worker works the close is pending with no preview; an edi
   s.proposeClose({ last: true }); s.proposeClose({ finish: true }); assert.equal(r.jobs[2].cancelled, 1, 'a newer Close cancels the older');
   r.jobs[3].resolve(answerOf(edited, { finish: true })); await tick(); await tick(); assert.ok(s.getState().closeProposal, s.getState().message);
   assert.equal(s.getState().closeProposal.base, edited);
+  // the whole-lap close is told what to go round (the stretch edited last and the user's straights, D186 C): the worker cannot work it out itself
+  s.cancelClose(); s.proposeClose({ whole: true }); const sent = r.jobs[4].args.edited;
+  assert.ok(Array.isArray(sent) && sent.includes(edited.pieces.length - 1) && sent.includes(0), `the whole-lap close goes round the last piece and the opening straight: ${JSON.stringify(sent)}`);
+  s.cancelClose();
   for (const runner of [handRunner({ throwOnStart: true }), null]) {
     const u = await openLap({ closeRunner: runner }); u.proposeClose({ finish: true });
     assert.ok(u.getState().closeProposal, 'no worker: the preview is made on the page, at once'); assert.equal(u.getState().closePending || null, null);
