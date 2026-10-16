@@ -336,6 +336,12 @@
     };
     const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
+    // D340, THE LATE-INPUT LOG: each key event the preview handled late ('t180:input-late', app/preview/preview.js checkLate) is appended to input-late.log in
+    // the app's data folder (src-tauri/src/lib.rs append_input_log, off the main thread, size-capped), buffered and written later, never on the key's path
+    try {
+      const inputLog = (await loadCjs('app/core/inputlog.js', get)).createInputLog({ write: (text) => (tauri ? call('append_input_log', { text }) : Promise.resolve()) });
+      document.addEventListener('t180:input-late', (e) => { if (e.detail) inputLog.add(e.detail); });
+    } catch (e) { console.error(`late-input log not wired: ${e && e.message}`); }
     // THE SOUNDS (app/sound.js): place, undo and loop closed are read off the shell's state; the drag tick comes from the handles. Mute and volume in the ⋯ menu
     try {
       const sound = (await loadCjs('app/sound.js', get)).createSound(window, { base: 'sounds/' });

@@ -98,7 +98,7 @@ function swallowsKeys(t) { return !!t && typeof t.matches === 'function' && t.ma
 // D336: how long a held key may go with no keydown at all, while one should be repeating, before it is let go. Windows' slowest key-repeat waits 1 s before the
 // first repeat and then repeats every 400 ms, so 1.5 s never drops a key really held there; a lost key-up then stops within 1.5 s instead of never.
 const HELD_NET_MS = 1500;
-function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false, gridMode = null, layer = null, onGuides = null, heldNetMs = HELD_NET_MS }) {
+function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false, gridMode = null, layer = null, onGuides = null, heldNetMs = HELD_NET_MS, onInputLate = null }) {
   if (!canvas || !shell || !win) throw new Error('preview: needs { canvas, shell, win }');
   const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
   if (!gl) throw new Error('preview: WebGL is not available in this window');
@@ -213,6 +213,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     const rec = { type, code: e.code || String(e.key), lateMs: Math.round(late), longestFrameGapMs: Math.round(gap), cause: gap > late / 2 ? 'page busy' : 'host late', at: Math.round(now) };
     inputLate.push(rec); if (inputLate.length > LATE_KEEP) inputLate.shift();
     lateShown = { rec, until: now + LATE_SHOW_MS };
+    if (onInputLate) { try { onInputLate({ ...rec }); } catch (x) { console.warn(`preview: the late-input log failed: ${x && x.message || x}`); } }   // D340: and to disk (app/core/inputlog.js), through the mount
   };
   const onKey = (e) => {
     checkLate(e, 'keydown');

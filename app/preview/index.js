@@ -57,7 +57,8 @@ function mount(root, shell) {
   const publishGuides = (s) => doc.dispatchEvent(new win.CustomEvent('t180:guides-state', { detail: s }));
   try {
     // gridMode 'auto' (D237): the ground grid while the track is flat, the 3D lattice once it has height; the buttons in the camera panel turn it off
-    p = createPreview({ canvas, shell, win, hud, onMode: announce, onTrack: publish, gridMode: 'auto', layer, onGuides: publishGuides });
+    // D340: each late key event (preview.js checkLate) is raised as 't180:input-late', which the page appends to input-late.log (app/core/inputlog.js)
+    p = createPreview({ canvas, shell, win, hud, onMode: announce, onTrack: publish, gridMode: 'auto', layer, onGuides: publishGuides, onInputLate: (r) => doc.dispatchEvent(new win.CustomEvent('t180:input-late', { detail: r })) });
     real = createGuidesLayer({ root, win, onCentre: (c) => { p.setGuides({ centre: c }); } });
   } catch (e) {
     if (p) p.dispose();   // the preview came up and the layer did not: do not leave its frame loop running under the message
