@@ -249,12 +249,12 @@ function mount(stage, win, host) {
   // D335: each pointer step adds to two sums of pixels along the handle's axis AS IT IS NOW (the road rolls under the pointer, so the axis the mark moves on turns: measured against the
   // axis at the grab the bank stalled near 165 degrees and would have gone back). `pxFine` is the raw pixels (Shift: one is a step); `px` is the pixels weighted by the pointer's speed
   // (scrubGain), so a slow scrub is 0.01 a pixel and a flick is the kind's own perPx.
-  const track = (x, y, t) => {
+  const track = (x, y, t, ctrl) => {
     const d = drag, cur = drawn.find((c) => c.id === d.h.id), ax = cur && cur.screen ? cur.screen : d.axis;
     const raw = dragPixels(ax, x - d.last.x, y - d.last.y, d.h.kind); d.last = { x, y };
     d.trail.push({ x, y, t }); while (d.trail.length > 2 && t - d.trail[1].t >= SPEED_WINDOW_MS) d.trail.shift();
     let len = 0; for (let i = 1; i < d.trail.length; i++) len += Math.hypot(d.trail[i].x - d.trail[i - 1].x, d.trail[i].y - d.trail[i - 1].y);
-    const span = Math.max(t - d.trail[0].t, 1), g = scrubGain(d.h.kind, len / span);
+    const span = Math.max(t - d.trail[0].t, 1), g = ctrl ? 1 : scrubGain(d.h.kind, len / span);
     d.pxFine += raw; d.px += raw * g;
   };
   const stamp = (e) => (e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now());
@@ -334,7 +334,7 @@ function mount(stage, win, host) {
         }
         if (drag.warp) { stale = drag.warp; stale.lx = x; stale.ly = y; }
       }
-      drag.v = { x: x + drag.acc.x - (stale ? stale.dx : 0), y: y + drag.acc.y - (stale ? stale.dy : 0) }; drag.moved = true; track(drag.v.x, drag.v.y, stamp(e));
+      drag.v = { x: x + drag.acc.x - (stale ? stale.dx : 0), y: y + drag.acc.y - (stale ? stale.dy : 0) }; drag.moved = true; track(drag.v.x, drag.v.y, stamp(e), !!e.ctrlKey);
       waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey, alt: !!e.altKey }; if (!frameReq) frameReq = win.requestAnimationFrame(flush);
       warpBack(drag, x, y); return; }
     const h = hitTest(drawn, x, y); hover = h; stage.style.cursor = h ? cursorFor(h.screen) : '';
@@ -343,7 +343,7 @@ function mount(stage, win, host) {
     if (!drag) return;
     if (frameReq) { win.cancelAnimationFrame(frameReq); frameReq = 0; }
     // a release while the cursor is being put back carries a position from before the jump: the drag ends where the last move left it
-    if (e && e.clientX !== undefined && !drag.warp) { const [x0, y0] = rel(e), x = x0 + drag.acc.x, y = y0 + drag.acc.y; drag.v = { x, y }; drag.moved = drag.moved || x !== drag.x0 || y !== drag.y0; track(x, y, stamp(e)); waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey, alt: !!e.altKey }; }
+    if (e && e.clientX !== undefined && !drag.warp) { const [x0, y0] = rel(e), x = x0 + drag.acc.x, y = y0 + drag.acc.y; drag.v = { x, y }; drag.moved = drag.moved || x !== drag.x0 || y !== drag.y0; track(x, y, stamp(e), !!e.ctrlKey); waiting = { x: drag.v.x, y: drag.v.y, shift: !!e.shiftKey, ctrl: !!e.ctrlKey, alt: !!e.altKey }; }
     else if (drag.warp) waiting = { x: drag.v.x, y: drag.v.y, shift: !!(e && e.shiftKey), ctrl: !!(e && e.ctrlKey), alt: !!(e && e.altKey) };
     apply(true); const h = drag.h, d = drag; if (drag.value !== drag.base0) { pre = { kind: h.kind, from: drag.base0, to: drag.value }; lastClick = null; } else lastClick = { id: h.id, t: e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now() };
     drag = null; stage.style.cursor = ''; putCursorBack(d); host.end(h);
