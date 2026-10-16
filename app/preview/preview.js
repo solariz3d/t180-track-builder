@@ -202,12 +202,12 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // with what the page was doing meanwhile, from its own frame times: 'page busy' when the frames stopped for most of the delay (the page's main thread was
   // late), 'host late' when they kept coming (the page was free; the event arrived late from WebView2 or the OS). It changes nothing the keys do.
   const LATE_MS = 250, LATE_KEEP = 20, LATE_SHOW_MS = 8000;
-  const inputLate = [], frameTimes = []; let lateShown = null;
+  const inputLate = [], frameTimes = []; let lateShown = null, frameDropped = -Infinity;   // frameDropped: the newest frame time trimmed from frameTimes
   const clockNow = () => (win.performance && typeof win.performance.now === 'function' ? win.performance.now() : null);
   const checkLate = (e, type) => {
     const now = clockNow(); if (now === null || !(e && e.timeStamp > 0)) return;
     const late = now - e.timeStamp; if (!(late > LATE_MS)) return;
-    let gap = 0, from = null;   // the longest stretch with no frame between the stamp and now
+    let gap = 0, from = frameDropped > e.timeStamp ? frameDropped : null;   // the longest stretch with no frame between the stamp and now (frames trimmed after the stamp count as drawn)
     for (const t of frameTimes) { if (t <= e.timeStamp) { from = e.timeStamp; continue; } gap = Math.max(gap, t - (from === null ? e.timeStamp : from)); from = t; }
     gap = Math.max(gap, now - (from === null ? e.timeStamp : from));
     const rec = { type, code: e.code || String(e.key), lateMs: Math.round(late), longestFrameGapMs: Math.round(gap), cause: gap > late / 2 ? 'page busy' : 'host late', at: Math.round(now) };
@@ -281,7 +281,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const onAnyDown = (e) => {
     if (e && e.button === 2) { rightSeen = true; orphanUp = false; if (e.target !== canvas) lookMenu = false; }   // a right press that is not a look: its menu is the page's (onDown sets the flag after this, for a look)
     if (e && e.button !== undefined && e.button !== 0) return;
-    if (e && e.target && typeof e.target.closest === 'function' && e.target.closest('[data-tauri-drag-region]')) letGo();
+    if (e && e.target && typeof e.target.hasAttribute === 'function' && e.target.hasAttribute('data-tauri-drag-region')) letGo();
     buttons = 1; spoilCtrl();   // (a left press during a look leaves lookMenu: the right button's release is still the look's)
   };
   const onAnyUp = (e) => { if (!e || e.button === undefined || e.button === 0) buttons = 0; };   // D252 follow-up (C's finding 5): a handle's preventDefault on pointerdown suppresses the compatibility mousedown, so a press is read from pointerdown too
@@ -298,8 +298,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   function frame(t) {
     raf = win.requestAnimationFrame(frame);
     const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0, elapsed = prev ? t - prev : 0; prev = t;
-    frameTimes.push(t); while (frameTimes.length && frameTimes[0] < t - 10000) frameTimes.shift();   // D340: the last 10 s of frame times, for checkLate
-    if (heldNetMs > 0 && expectRepeat && held.size) { quietMs += elapsed; if (quietMs > heldNetMs) { held.clear(); expectRepeat = false; boost = false; ctrlFly = null; } }   // D336: the net (above onKey)
+    frameTimes.push(t); while (frameTimes.length && frameTimes[0] < t - 10000) frameDropped = frameTimes.shift();   // D340: the last 10 s of frame times, for checkLate
+    if (heldNetMs > 0 && expectRepeat && held.size) { quietMs += elapsed; if (quietMs > heldNetMs) { held.clear(); down.clear(); shortcutDown.clear(); expectRepeat = false; boost = false; ctrlFly = null; } }   // D336: the net (above onKey)
     const sprint = boost ? boostAt(boostT) : 1; boostT = boost ? boostT + dt : 0;   // the speed THIS frame, then one more frame of Shift held
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {

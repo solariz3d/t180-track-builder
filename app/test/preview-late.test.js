@@ -45,6 +45,12 @@ test('row 1: a key-up handled 2.9 s after its stamp while the frames kept coming
   assert.ok(Math.abs(log[0].lateMs - 2896) < 1, `late ${log[0].lateMs}`); assert.equal(log[0].cause, 'host late');
   assert.match(W.hud.textContent, /key-up KeyW came 2\.9 s late \(host late\)/);
 });
+test('row 1b: a key-up handled 25 s after its stamp while the frames kept coming is still "host late"', () => {
+  const W = world(); W.key('keydown', { key: 'w', code: 'KeyW', timeStamp: W.now() }); W.frame(16);
+  const stamped = W.now(); for (let i = 0; i < 1563; i++) W.frame(16);   // 25 s of frames, every 16 ms
+  W.key('keyup', { key: 'w', code: 'KeyW', timeStamp: stamped }); W.frame(16);
+  const log = W.p.view().inputLate; assert.equal(log.length, 1, JSON.stringify(log)); assert.equal(log[0].cause, 'host late');
+});
 test('row 2: a key-up handled 2.9 s late after a 2.9 s frame gap is kept as "page busy"', () => {
   const W = world(); W.key('keydown', { key: 'w', code: 'KeyW', timeStamp: W.now() }); W.frame(16);
   const stamped = W.now(); W.advance(2900);   // the main thread blocked: no frame

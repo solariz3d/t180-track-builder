@@ -287,7 +287,7 @@ pub fn append_capped(path: &Path, text: &str, cap: u64) -> Result<(), String> {
         let mut f = fs::OpenOptions::new().create(true).append(true).open(path).map_err(|e| format!("could not open {}: {e}", path.display()))?;
         return f.write_all(text.as_bytes()).map_err(|e| format!("could not append to {}: {e}", path.display()));
     }
-    let old = fs::read_to_string(path).unwrap_or_default();
+    let old = fs::read_to_string(path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
     let kept = tail(&old, (cap / 2).saturating_sub(text.len() as u64));
     write_atomic(path, &format!("{kept}{text}"))
 }
@@ -590,6 +590,9 @@ mod tests {
         append_capped(&p, &"x".repeat(300), 100).unwrap();   // one write larger than the cap, with no newline: nothing of it fits whole
         assert!(fs::read_to_string(&p).unwrap().len() <= 100);
         assert!(!p.with_extension("tmp-write").exists());
+        fs::write(&p, vec![0xFFu8; 100]).unwrap();   // a log that cannot be read as text
+        assert!(append_capped(&p, "{\"n\":1}\n", 100).is_err(), "an unreadable log is reported, never replaced");
+        assert_eq!(fs::read(&p).unwrap(), vec![0xFFu8; 100]);
         fs::remove_dir_all(&d).unwrap();
     }
 

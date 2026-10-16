@@ -230,3 +230,12 @@ test('row 15: the reported near-closed save closes by bending its last pieces: n
   const v = validate(p, AD.toSegments(res.doc), { fullSpeed: true, csp: true });
   assert.equal(v.lap.ok, true, `the lap proves: ${JSON.stringify(v.lap).slice(0, 300)}`);
 });
+
+// D342 (the FINISH_NEAR refusal, which no row reached): an end ON the start whose last piece is a crest the car leaves at full speed. Every bend window
+// Finish tries holds that piece, so each fails the road test, and Finish refuses by name instead of laying a loop
+test('row 16: an end at the start whose every bend leaves the road is refused by name (FINISH_NEAR), never given new road', () => {
+  let d = D.createDoc('crest'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG); d = extend(d, { length: 600 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG); d = extend(d, { length: 600 }); d = extendTurnBy(d, { length: 300 }, 90 * DEG);
+  d = extend(d, { length: 400, transition: 200, targets: { kv: -0.002 } });   // the crest, last
+  const open = D.checkDoc({ ...require('../src/core/close.js').close(d, { edited: [0, 2, 4, 6] }).doc, closed: false });
+  assert.throws(() => F.finishToStart(open), (e) => e.name === 'CoreError' && e.code === 'FINISH_NEAR' && /too close for new road/.test(e.message), 'refused by name');
+});

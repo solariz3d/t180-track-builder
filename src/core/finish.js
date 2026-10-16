@@ -5,6 +5,7 @@
 //
 //   finishToStart(doc, { radii }) -> { doc, window, plan }   the open document with new pieces appended from its end to its start, CLOSED; `window` the new
 //                                                            pieces' indices; `plan` = { word, radiusM, turns: [deg, deg], straightM, lengthM, report }
+//                                                            An end already at the start (NEAR_M, NEAR_RAD) adds no road: `window` is the user's last pieces, bent, and `plan.word` is 'BEND'
 //
 // HOW. In plan view the end and the start are two poses (a point and a heading), and the shortest smooth way between two poses with a turning radius is a
 // turn, a straight and a turn (Dubins 1957, the CSC words LSL, RSR, LSR, RSL). Each is laid as the builder lays road: Turn by pieces (exact angles that end
