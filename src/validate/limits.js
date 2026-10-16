@@ -13,6 +13,11 @@ const MACH6 = Object.freeze({
   // what any track has proven': load above the highest survived (about 90 g today). It is shown, not forbidden."
   // The withdrawn 60 g red line (FINDINGS.md:116-118, struck) is deliberately absent.
   provenG: 90,
+  // D341 (plan :876-884; hand-back p-d341, the ELYSIUM replay of 2026-10-16): the 90 g line above rests on SPIKES, episodes of 0.1-0.25 s. A SUSTAINED load is
+  // proven much lower: seven passes of one turn held 56-62 g (over 45 g for about 2 s) with 4-8 cm of box clearance, and the eighth, at 62 g, went through
+  // the road 0.4 s after its peak. So a load above sustainedG held for more than sustainedS seconds is AMBER (advisory, like the line above).
+  sustainedG: 55,
+  sustainedS: 0.5,
   // FINDINGS.md:336-337 (§7d): "the measured range is 3.2–6.3 g"; ARCHITECTURE.md:73-78: "a jump must hold at both
   // ends of that range … the landing ramp must catch both". The clean flight and the override dive (FINDINGS.md:383-386).
   jumpG: Object.freeze([3.2, 6.3]),

@@ -62,6 +62,28 @@ function rollRates(S, isRoad, closed, L) {
   return out;
 }
 
+/**
+ * D341: the loads held. For each station the hardest line's load (the centre line and the hardest other line are all that leanLines keeps; with every line kept it is the same maximum);
+ * a run of consecutive road stations over car.sustainedG that lasts more than car.sustainedS seconds at the speed model's speeds is amber at every station of it. Read from the whole
+ * track on every call, as the roll rate is, so revalidate equals validate. A run does not wrap the lap's seam, and a run ends at a gap in the road.
+ */
+function sustainedLoad(rawLines, S, v, isRoad, car, end) {
+  const out = [];
+  if (!v || !(car.sustainedG > 0) || !(car.sustainedS > 0)) return out;
+  const hardest = new Map();
+  for (const { i, line } of rawLines) { if (i >= end) continue; const h = hardest.get(i); if (!h || line.fN_g > h.fN_g) hardest.set(i, line); }
+  let run = [], dur = 0;
+  const close = () => { if (run.length && dur > car.sustainedS) for (const r of run) out.push({ s: r.s, u: r.u, reason: 'load-sustained', worst: r.fN_g }); run = []; dur = 0; };
+  for (let i = 0; i < end; i++) {
+    const h = hardest.get(i);
+    if (!h || !isRoad(i) || !(h.fN_g > car.sustainedG)) { close(); continue; }
+    if (run.length) { const a = v[i - 1], b = v[i], va = (a + b) / 2; dur += va > 0 ? (S[i].s - S[i - 1].s) / va : Infinity; }
+    run.push(h);
+  }
+  close();
+  return out;
+}
+
 const SRC = Object.freeze({
   'gap-in-road': 'ARCHITECTURE.md:82; FINDINGS.md:110',
   'missing-soft-collision': 'ARCHITECTURE.md:83; FINDINGS.md:89, :110',
@@ -71,6 +93,7 @@ const SRC = Object.freeze({
   'wall-ride-from-wall-object': 'ARCHITECTURE.md:86',
   'steep-without-raycast': 'ARCHITECTURE.md:87 (community-reported)',
   'load-above-proven': 'FINDINGS.md:105, :112-113',
+  'load-sustained': 'D341: the ELYSIUM replay of 2026-10-16 (56-62 g held for about 2 s: seven passes held, one went through the road); src/validate/limits.js sustainedG, sustainedS',
   'seam-past-envelope': 'FINDINGS.md:24, :110-111',
   'on-the-stops': 'FINDINGS.md:103-104',
   'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
@@ -367,7 +390,7 @@ function core(path, segments, opts, from, carried, upto) {
     else if (q.rate > ROLL_AMBER_DEG_M) rollAmber.push({ s: q.s, u: null, reason: 'roll-rate', worst: q.rate });
   }
   for (const e of raw.stacked.values()) red.push({ s: e.s, u: e.u, reason: 'stacked-within-2m', worst: e.worst });
-  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber], info = raw.pts.filter((p) => p.kind === 'info');
+  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end)], info = raw.pts.filter((p) => p.kind === 'info');
   const lines = raw.lines.slice().sort((a, b) => a.i - b.i).map((l) => l.line);   // station order, u order within
 
   // ── jumps (ARCHITECTURE.md:72-80) ──
@@ -630,4 +653,4 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   }
 }
 
-module.exports = { validate, revalidate, lapOf, speedProfile, SRC, ROLL_RED_DEG_M, ROLL_AMBER_DEG_M, ROLL_CHORD_M, TUBE_MIN_W, _internal: { ranges, rollRates } };
+module.exports = { validate, revalidate, lapOf, speedProfile, SRC, ROLL_RED_DEG_M, ROLL_AMBER_DEG_M, ROLL_CHORD_M, TUBE_MIN_W, _internal: { ranges, rollRates, sustainedLoad } };

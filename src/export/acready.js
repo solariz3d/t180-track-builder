@@ -173,7 +173,7 @@ function ensureDiffuse(scene) {
  * Everything else (markers, walls, paint, the pit lane, a test export's end wall) is kept as it is, in place: a chunk sits where its first mesh sat.
  * Tangents are writeKn5's, from each vertex's own triangles; a merge shares no vertex between meshes, so they are the same.
  */
-const MERGE_CLASSES = Object.freeze([{ re: /^(1(?:ROAD|GRIP\d{3})_)(?!PIT)/ }, { re: /^(UNDERSKIN_)/ }]);   // group 1 is the chunk's name prefix (its surface key)
+const MERGE_CLASSES = Object.freeze([{ re: /^(1ROAD_CATCH_)/ }, { re: /^(1(?:ROAD|GRIP\d{3})_)(?!PIT)/ }, { re: /^(UNDERSKIN_)/ }]);   // D341: the catch under the road (catch.js) is first: a class of its own, so it never renumbers the road's chunks   // group 1 is the chunk's name prefix (its surface key)
 // 32,768, half the 16-bit budget (2026-10-12, the keeper on TEST TRACK 10: the road went invisible from the 90° turns on, though the car still drove on it).
 // Its two largest chunks held 65,088 and 65,472 vertices, every other under 60,000; the same export with chunks capped at 32,768 drew the whole lap
 // (the keeper drove it: "works"). Inferred, not measured: AC or Custom Shaders Patch adds vertices of its own to a mesh on load, so one filled to the
