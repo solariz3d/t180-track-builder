@@ -401,8 +401,13 @@ test('keys: releasing Shift returns to ×1, and pressing it again starts at ×4 
   x.key('keyup', SHIFT_UP); assert.ok(Math.abs(flown(x) - 3) < 1e-9, 'released: ×1');
   x.key('keydown', SHIFT_DOWN); assert.ok(Math.abs(flown(x) - 12) < 1e-9, 'pressed again: ×4, not ×20');
 });
+// AMENDED D337 (the collation's mutant N13 went uncaught on 678f23a): this row held W and Shift for 3 s with no key-repeat, so D336's safety net (preview.js
+// HELD_NET_MS, 1.5 s) let go of them first, and its `boost = false` zeroed the ramp before the blur did: the blur's own reset was no longer what the row tested.
+// The fake now sends Shift's repeat each frame, as the OS does for the last key pressed (the same as the two rows above), and the row first checks that the
+// ramp really is at ×20 when the blur comes
 test('keys: a blur resets the ramp (the key-up never comes), and the next press starts at ×4', () => {
-  const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', SHIFT_DOWN); for (let n = 0; n < 30; n++) x.win.step();
+  const x = livePreview(); x.key('keydown', W_DOWN); x.win.step(); x.key('keydown', SHIFT_DOWN); for (let n = 0; n < 30; n++) { x.key('keydown', SHIFT_REPEAT); x.win.step(); }
+  x.key('keydown', SHIFT_REPEAT); assert.ok(Math.abs(flown(x) - 60) < 1e-9, 'before the blur: ×20, so the reset below is the blur\'s');
   x.blur(); x.key('keydown', W_DOWN); x.key('keydown', SHIFT_DOWN);   // no frame in between: only the blur's own reset can have zeroed the ramp
   assert.ok(Math.abs(flown(x) - 12) < 1e-9, 'after the blur: ×4');
 });
