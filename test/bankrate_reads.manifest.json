@@ -1,0 +1,21 @@
+{
+  "what": "The reads src/doc/vocab.js BANK_RATE was measured from: node tools/bankrate.cjs reads gives p90 0.849 over n 33,127 changing steps (vocab.js:117). One read per tools/corpus.cjs LAYOUTS entry, with its sha256. The BANK_RATE test in vocab-corpus.test.js runs only when reads/ holds exactly these bytes; it skips, naming the files, otherwise.",
+  "sha256": {
+    "rainbow_rd.read.json": "9dfd8510703f574dcf4a06020e9289145375b7cad4fa6478622999ce9849de53",
+    "centrifuge.read.json": "1fae0ae152ec8dbaed97ea645aea0c4311a9c5b0e90ab85e928d8bce99717eb3",
+    "hazenloop.read.json": "f1177130219e5a146f7279aa34c8f13bdda6271f1e3ebafae17ee0c28d381ddf",
+    "Chases_Onuris__layout_long.read.json": "5ea084c31f4d06a9de217a52fc701db6fd9fcb8853ffd783fbd938296c04255a",
+    "Chases_Onuris__layout_medium.read.json": "41ae0ae689718c9c9e8c5006552289042960e265309c74f82deaefac212d10a6",
+    "Chases_Onuris__layout_short.read.json": "ac979de1026451ed288e81007cd5019773e51c314d9de985d5b25b22958c08ef",
+    "sakura_speedway.read.json": "dcb039d30a59659e135e826a14d0509c090a0d5c10f20e1425bc8cf5512e0ee6",
+    "coast.read.json": "0d6749fd566e236fb84e28d99a4a6bd0b8ed358a41aa5e582ff9a9621379c0bd",
+    "ohyeah2389_nordic.read.json": "0dd6fb4bd569d24b67372ccf403beab606d0fda450319a0e658b3eb77f7fa634",
+    "thunderhead_raceway__normal.read.json": "1e0739697233eae1198afe8bd5d09939b5c9b90e3815487b7ed645244bac060e",
+    "eagleton__eagleton.read.json": "cd7fefd28706bc7870752f6b4668f575186cac38ba5e0ccdeda0d776423c5fde",
+    "eagleton__eagleton_short.read.json": "d99ce3ecb2662fcb682828a12098e8e8042d12d75222ae4db9f08abb26c00916",
+    "ohyeah2389_t180testtrack.read.json": "a0df89c028afab219163fb99b5d93d377ecdd3370f90fbc315bb4eaa09dc8f2c",
+    "bowltrack_2.read.json": "49b0544a0dcbafc253aef4d9bb18635a48091d3ee53638707bdfa5db321c88aa",
+    "t180_bowltrack.read.json": "d3577544651f47445134cec437a161ee42d3419208c8a87db7783144bf8b35a7",
+    "serpents_spiral.read.json": "ce06ee9e2e2a4dc80f93acfa83c2fb7368c46761ca878b4a1578329cad224fae"
+  }
+}

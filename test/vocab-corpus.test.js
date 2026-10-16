@@ -8,9 +8,12 @@
 // length, heading and bank (its class is the upside-down fragment, and the builder's word is a whole roll).
 //
 // THE READS: the BANK_RATE test reads reads/<layout>.read.json for every layout in tools/corpus.cjs LAYOUTS. reads/ is
-// gitignored (the layouts are other authors' tracks and stay local), so a fresh clone has none and the test SKIPS, saying
-// why; with only some of them it skips too, naming how many are missing. To run it, make the reads with the commands in
-// docs/FINDINGS.md §7f (`node reads/readall.js`, or `node tools/read_track.cjs` once per track) into reads/.
+// gitignored (the layouts are other authors' tracks and stay local). BANK_RATE was measured from one exact set of those
+// files, named with their sha256 in test/bankrate_reads.manifest.json, and the test runs only when reads/ holds exactly
+// those bytes: with any file missing or different it SKIPS and names them (a different read of a layout moves the p90:
+// one re-read of Hazen Loop gives 0.85, not 0.849). Other files in reads/ are not named: build() never opens them. To run
+// it, make the reads with the commands in docs/FINDINGS.md §7f (`node reads/readall.js`, or `node tools/read_track.cjs`
+// once per track) into reads/, or copy that exact set from a machine that has it.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -25,6 +28,7 @@ const { validate } = require('../src/validate/index.js');
 const { MACH6 } = require('../src/validate/limits.js');
 const CORPUS = require('../src/doc/corpus.json');
 const { LAYOUTS } = require('../tools/corpus.cjs');
+const READS_MANIFEST = require('./bankrate_reads.manifest.json');
 
 const DEG = Math.PI / 180, C = CORPUS.classes;
 const ROAD = ['straight', 'sweep', 'turn', 'tight', 'wall-ride', 'inversion'], CURVED = ['sweep', 'turn', 'tight', 'wall-ride'];
@@ -130,19 +134,31 @@ test('THE BANK RAMPS: a wall-ride after a turn still reaches its class bank, ove
 test('BANK_RATE is what tools/bankrate.cjs measures from reads/ (the p90 of the steps where the bank is changing)', (t) => {
   const reads = path.join(__dirname, '..', 'reads');
   if (!fs.existsSync(reads)) { t.skip('reads/ is not in this checkout (the layouts are other authors\' tracks and stay local; docs/FINDINGS.md §7f makes them)'); return; }
-  const { build, missing } = require('../tools/bankrate.cjs');
-  const gone = missing(reads);
-  if (gone.length) { t.skip(`reads/ is partial here (${gone.length} of ${LAYOUTS.length} missing, e.g. ${gone[0]}): the p90 needs every layout's read, so a partial set is the clone's gap and not the code's (docs/FINDINGS.md §7f makes them)`); return; }
+  const { build, inputDiff } = require('../tools/bankrate.cjs');
+  const { missing, changed } = inputDiff(reads, READS_MANIFEST.sha256);
+  if (missing.length || changed.length) {
+    t.skip(`reads/ is not the set BANK_RATE was measured from (test/bankrate_reads.manifest.json): ${missing.length} missing${missing.length ? ` (${missing.join(', ')})` : ''}, ${changed.length} with different bytes${changed.length ? ` (${changed.join(', ')})` : ''}. That is the clone's data, not the code (docs/FINDINGS.md §7f makes the reads)`);
+    return;
+  }
   assert.equal(Number(build(reads).changing.p90.toFixed(3)), V.BANK_RATE);
 });
 
-test('bankrate.missing names exactly the layout reads a reads/ folder lacks (what the BANK_RATE test skips on)', () => {
-  const { missing } = require('../tools/bankrate.cjs');
+test('the BANK_RATE manifest names exactly the reads bankrate.cjs build() opens, each with a sha256', () => {
+  assert.deepEqual(Object.keys(READS_MANIFEST.sha256).sort(), LAYOUTS.map(([f]) => `${f}.read.json`).sort());
+  for (const [f, h] of Object.entries(READS_MANIFEST.sha256)) assert.match(h, /^[0-9a-f]{64}$/, `${f}: a sha256`);
+});
+
+test('bankrate.inputDiff names the reads that are missing and the ones whose bytes differ from the manifest (what the BANK_RATE test skips on)', () => {
+  const { inputDiff } = require('../tools/bankrate.cjs');
+  const sha = (text) => require('crypto').createHash('sha256').update(text).digest('hex');
+  const want = { 'a.read.json': sha('A'), 'b.read.json': sha('B'), 'c.read.json': sha('C') };
   const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'bankrate-'));
   try {
-    assert.deepEqual(missing(dir), LAYOUTS.map(([f]) => `${f}.read.json`), 'an empty folder lacks every read');
-    fs.writeFileSync(path.join(dir, `${LAYOUTS[0][0]}.read.json`), '{}');
-    assert.deepEqual(missing(dir), LAYOUTS.slice(1).map(([f]) => `${f}.read.json`), 'a read that is present is not named');
+    assert.deepEqual(inputDiff(dir, want), { missing: ['a.read.json', 'b.read.json', 'c.read.json'], changed: [] }, 'an empty folder: every read missing');
+    fs.writeFileSync(path.join(dir, 'a.read.json'), 'A'); fs.writeFileSync(path.join(dir, 'b.read.json'), 'B, read again'); fs.writeFileSync(path.join(dir, 'extra.read.json'), 'X');
+    assert.deepEqual(inputDiff(dir, want), { missing: ['c.read.json'], changed: ['b.read.json'] }, 'a matching read is not named, a different one is, and a file outside the manifest is not');
+    fs.writeFileSync(path.join(dir, 'b.read.json'), 'B'); fs.writeFileSync(path.join(dir, 'c.read.json'), 'C');
+    assert.deepEqual(inputDiff(dir, want), { missing: [], changed: [] }, 'the exact set: nothing named');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

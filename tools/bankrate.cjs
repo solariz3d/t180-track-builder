@@ -38,8 +38,17 @@ function ratesOf(read) {
 const q = (a, p) => { const s = [...a].sort((x, y) => x - y); const i = (s.length - 1) * p, lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo); };
 const band = (a) => ({ n: a.length, p50: q(a, 0.5), p90: q(a, 0.9), p99: q(a, 0.99), max: Math.max(...a) });
 
-/** The reads build() needs that are missing from `dir` (names of files). */
-function missing(dir) { return LAYOUTS.map(([f]) => `${f}.read.json`).filter((f) => !fs.existsSync(path.join(dir, f))); }
+/** `dir` against a manifest { file: sha256 }: the files it lacks, and the ones whose bytes hash differently. Files that are
+ *  not in the manifest are not looked at (build() never opens them). */
+function inputDiff(dir, sha256) {
+  const missing = [], changed = [];
+  for (const [file, want] of Object.entries(sha256)) {
+    const p = path.join(dir, file);
+    if (!fs.existsSync(p)) { missing.push(file); continue; }
+    if (require('crypto').createHash('sha256').update(fs.readFileSync(p)).digest('hex') !== want) changed.push(file);
+  }
+  return { missing, changed };
+}
 
 function build(dir) {
   const all = [], perLayout = {};
@@ -59,4 +68,4 @@ if (require.main === module) {
   console.log(`banking > ${MOVING}°/m        `, row(b.changing));
 }
 
-module.exports = { build, missing, ratesOf, MOVING };
+module.exports = { build, inputDiff, ratesOf, MOVING };
