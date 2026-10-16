@@ -196,7 +196,26 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // so as long as no key has been released since the last fresh press, SOME keydown keeps arriving; when none at all arrives for heldNetMs, the key-up was lost.
   // Once any key is released the OS repeats nothing (the keys still held go silent, legitimately), so the net does not act until the next fresh press.
   let quietMs = 0, expectRepeat = false;
+  // D340, LATE INPUT, an instrument for the real window: the camera "coasts ... for like 3 seconds till it stops" after its keys are let go, which a headless page
+  // does not reproduce (every key-up reached it within 3 ms under load). Each key event is checked as it is handled against the time the OS stamped it
+  // (e.timeStamp, the page's own clock): one handled more than LATE_MS late is kept (view().inputLate, the last LATE_KEEP) and said in the HUD for LATE_SHOW_MS,
+  // with what the page was doing meanwhile, from its own frame times: 'page busy' when the frames stopped for most of the delay (the page's main thread was
+  // late), 'host late' when they kept coming (the page was free; the event arrived late from WebView2 or the OS). It changes nothing the keys do.
+  const LATE_MS = 250, LATE_KEEP = 20, LATE_SHOW_MS = 8000;
+  const inputLate = [], frameTimes = []; let lateShown = null;
+  const clockNow = () => (win.performance && typeof win.performance.now === 'function' ? win.performance.now() : null);
+  const checkLate = (e, type) => {
+    const now = clockNow(); if (now === null || !(e && e.timeStamp > 0)) return;
+    const late = now - e.timeStamp; if (!(late > LATE_MS)) return;
+    let gap = 0, from = null;   // the longest stretch with no frame between the stamp and now
+    for (const t of frameTimes) { if (t <= e.timeStamp) { from = e.timeStamp; continue; } gap = Math.max(gap, t - (from === null ? e.timeStamp : from)); from = t; }
+    gap = Math.max(gap, now - (from === null ? e.timeStamp : from));
+    const rec = { type, code: e.code || String(e.key), lateMs: Math.round(late), longestFrameGapMs: Math.round(gap), cause: gap > late / 2 ? 'page busy' : 'host late', at: Math.round(now) };
+    inputLate.push(rec); if (inputLate.length > LATE_KEEP) inputLate.shift();
+    lateShown = { rec, until: now + LATE_SHOW_MS };
+  };
   const onKey = (e) => {
+    checkLate(e, 'keydown');
     quietMs = 0; if (!e.repeat) expectRepeat = true;   // any keydown at all re-confirms the held keys
     if (typeof e.code === 'string' && e.code) { if (isShortcut(e)) { shortcutDown.add(e.code); spoilCtrl(); } down.add(e.code); }   // D257: only a SHORTCUT stops Left Ctrl
     boost = !!e.shiftKey;   // Shift is the sprint: read on every key-down, typing included
@@ -225,6 +244,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // lets go; and every held key is dropped when the window loses focus or is hidden, since the key-up then never arrives.
   // That lost key-up was the camera that kept flying forward by itself (reported, 2026-09-29).
   const onUp = (e) => {
+    checkLate(e, 'keyup');
     expectRepeat = false;   // the OS stops repeating at a release (D336): the keys still held may now be silent
     held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code); shortcutDown.delete(e.code);
     if (e.code === 'ControlLeft') ctrlFly = null;   // a descent that ran alone is kept
@@ -277,6 +297,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   function frame(t) {
     raf = win.requestAnimationFrame(frame);
     const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0, elapsed = prev ? t - prev : 0; prev = t;
+    frameTimes.push(t); while (frameTimes.length && frameTimes[0] < t - 10000) frameTimes.shift();   // D340: the last 10 s of frame times, for checkLate
     if (heldNetMs > 0 && expectRepeat && held.size) { quietMs += elapsed; if (quietMs > heldNetMs) { held.clear(); expectRepeat = false; boost = false; ctrlFly = null; } }   // D336: the net (above onKey)
     const sprint = boost ? boostAt(boostT) : 1; boostT = boost ? boostT + dt : 0;   // the speed THIS frame, then one more frame of Shift held
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
@@ -315,14 +336,14 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
-    if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? (sigil ? 'sigil look' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}`;
+    if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? (sigil ? 'sigil look' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}${lateShown && t < lateShown.until ? ` · ${lateShown.rec.type === 'keyup' ? 'key-up' : 'key-down'} ${lateShown.rec.code} came ${(lateShown.rec.lateMs / 1000).toFixed(1)} s late (${lateShown.rec.cause})` : ''}`;
   }
   raf = win.requestAnimationFrame(frame);
   said();
   return {
     rig, model, renderer,
     /** What is on screen now, for the window proof (app/testhook/probe.js): read-only. */
-    view: () => ({ track, detail: model.detail, pose: shownPose, mode: rig.mode, error: err, ghost: ghost ? ghost.batches.length : 0, grid: grid ? grid.positions.length / 6 : 0, guides: guidesState(), look, textures: images.length }),
+    view: () => ({ track, detail: model.detail, pose: shownPose, mode: rig.mode, error: err, ghost: ghost ? ghost.batches.length : 0, grid: grid ? grid.positions.length / 6 : 0, guides: guidesState(), look, textures: images.length, inputLate: inputLate.map((r) => ({ ...r })) }),
     track: () => shared(),
     /** What each placed batch is drawn with, in the 'ac' look: { materialOf, textures } (aclook.js resolveLook). */
     lookNow: () => (track && track.mesh ? lookFor(track.mesh.scene) : null),
