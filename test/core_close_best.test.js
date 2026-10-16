@@ -9,6 +9,10 @@
 //   6  the reported save (fixtures-d337, uncommitted: a private track; skipped with the reason when absent): one press bends its last 2 pieces by up to 4.0 m
 //   7  the pick is the least-moving way that proves (every way that moves the track less was refused or shown to fail)
 //   8  the order itself (closejob.js byOrder): no new road first, even against no movement at all; then the least movement; within a millimetre, the route order
+//   9  (D343) the near bend first: when it proves, no other route runs
+//  10  (D343) the fast pick is the exhaustive order's on every track (route, words, closed track)
+//  11  (D343) given the open track's reds, the open track is not checked again, and the pick is the same
+//  12  (D343) the reported save (fixture): one press with the live checker's reds, under 30 s, and the same pick as a press that checks the open track itself
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -47,6 +51,7 @@ test('row 1: an end already at the start: one press is the near-closed bend, wit
   assert.ok(r.displacement.every((x) => x.maxM <= 1e-3), 'nothing moved more than 1 mm');
   assert.match(r.report, /^closed: /);
   assert.equal(routeOf(r, 'finish'), undefined, 'Finish is not tried when the end is already at the start');
+  assert.equal(routeOf(CJ.runCloseBest({ doc: open, exhaustive: true }), 'finish'), undefined, 'not even when every route is run (D343: the fast path stops at the bend)');
 });
 
 test('row 2: ends 2, 5 and 10 m past the start, and 5 m short of it, close by a bend: no new road, no loop', () => {
@@ -111,4 +116,46 @@ test('row 6: the reported near-closed save: one press bends its last 2 pieces by
   assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.0 m');
   assert.equal(r.doc.pieces.length, base.pieces.length);
   assert.equal(routeOf(r, 'near').lapOk, true, 'the lap proves'); assert.equal(routeOf(r, 'near').newReds, 0, 'and adds no red');
+});
+
+// ── D343: the one press made fast. The open track's reds come from the page's live checker when it checked this very track; the near bend is closed and checked
+// first, and when it proves nothing else runs. The pick must be the exhaustive order's (D339's: every route run, then ranked) on every track.
+const coilDoc = () => { const R = 180, Q = (Math.PI * R) / 2; let d = extend(D.createDoc('coil'), { length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); return extend(d, { length: 60, transition: 40, targets: { kh: 0 } }); };
+const stadiumBehind = (g) => { let d = D.createDoc('stadium'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 1000 }, 180 * DEG); d = extend(d, { length: 400 + g }); return extendTurnBy(d, { length: 1000 }, 180 * DEG); };
+/** The open track's reds as the page's live checker holds them (its own job, app/validate-ui/checkjob.js, with CSP on), as { reason, s }: what a press is handed. */
+const openRedsOf = (doc) => require('../app/validate-ui/checkjob.js').createCheckJob().run({ doc: { ...doc, closed: false }, csp: true }).result.red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 }));
+
+test('row 9: when the end is at the start, the near bend is closed and checked first, and once it proves no other route is run', () => {
+  const r = CJ.runCloseBest({ doc: onStart() });
+  assert.equal(r.route, 'near', r.report);
+  assert.deepEqual(r.tried.map((t) => t.route), ['near'], 'only the near bend ran');
+  const all = CJ.runCloseBest({ doc: onStart(), exhaustive: true });
+  assert.ok(all.tried.length >= 5, `the exhaustive order runs every route: ${all.tried.map((t) => t.route)}`);
+});
+
+test('row 10: the pick is the exhaustive order\'s on every track: the same route, the same words, the same closed track', () => {
+  for (const [what, make] of [['on the start', onStart], ['2 m past', () => past(2)], ['5 m past', () => past(5)], ['10 m past', () => past(10)], ['5 m short', () => short(5)], ['far', quarterTrack], ['a coil', coilDoc], ['20 m behind', () => stadiumBehind(20)]]) {
+    const fast = CJ.runCloseBest({ doc: make() }), all = CJ.runCloseBest({ doc: make(), exhaustive: true });
+    assert.equal(fast.route, all.route, `${what}: ${fast.report} / ${all.report}`); assert.equal(fast.report, all.report, what);
+    assert.equal(fast.doc ? D.serialize(fast.doc) : null, all.doc ? D.serialize(all.doc) : null, `${what}: the same closed track`);
+  }
+});
+
+test('row 11: given the open track\'s reds, the press does not check the open track, and picks exactly as it does without them', () => {
+  const doc = coilDoc(), plain = CJ.runCloseBest({ doc }), given = CJ.runCloseBest({ doc, openReds: openRedsOf(doc) });
+  assert.ok(plain.phases.openCheckMs !== null, 'without them the open track is checked (a closed lap that proves has a red)');
+  assert.equal(given.phases.openCheckMs, null, 'given them, it is not'); assert.equal(given.phases.openReds, 'given');
+  assert.equal(given.report, plain.report); assert.equal(given.route, plain.route);
+});
+
+const FX12 = path.join(__dirname, '..', 'fixtures-d337', 'pre-close.t180track');
+test('row 12: the reported save: one press, with the reds the live checker found, closes in under 30 s, and picks as a press without them does', { skip: fs.existsSync(FX12) ? false : 'fixtures-d337/pre-close.t180track is not here (a private track, kept off the repository)' }, () => {
+  const base = D.parse(fs.readFileSync(FX12, 'utf8')), openReds = openRedsOf(base);   // what the page's checker already holds, before the press
+  // the bound is on the press's own CPU time: a wall clock in a suite that runs four files at once, on a machine other seats share, measures the machine (a loaded
+  // run read 102.8 s wall for the press that takes 25 s alone); the wall time is reported beside it
+  const c0 = process.cpuUsage(), t0 = Date.now(), r = CJ.runCloseBest({ doc: base, openReds }), ms = Date.now() - t0, cpu = process.cpuUsage(c0), cpuMs = (cpu.user + cpu.system) / 1000;
+  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.0 m'); assert.deepEqual(r.tried.map((t) => t.route), ['near']);
+  assert.ok(cpuMs < 30000, `one press used ${Math.round(cpuMs)} ms of CPU (${ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs}, open ${r.phases.openCheckMs})`);
+  const own = CJ.runCloseBest({ doc: base });
+  assert.equal(own.report, r.report, 'a press that checks the open track itself picks the same'); assert.equal(D.serialize(own.doc), D.serialize(r.doc));
 });

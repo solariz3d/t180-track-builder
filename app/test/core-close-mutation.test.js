@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..');
-const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js', BEST = 'test/core_close_best.test.js';
+const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js', BEST = 'test/core_close_best.test.js', WORKER = 'app/test/close-worker.test.js';
 
 const MUTATIONS = [
   // src/core/close.js: the LOCAL close (items 1 and the refusal by name)
@@ -26,15 +26,20 @@ const MUTATIONS = [
   { id: 'A9 the press writes no copy from before the close', file: 'app/core/coreshell.js', from: "try { await api.backupNow('pre-close'); }", to: 'try { }', tests: [PREVIEW], caughtBy: 'row 7: the press writes the copy from BEFORE the close first' },
   { id: 'A10 a failed copy still closes', file: 'app/core/coreshell.js', from: 'catch (e) { return set({ closePending: null, message: `not closed: the copy', to: 'catch (e) { set({ closePending: null, message: `not closed: the copy', tests: [PREVIEW], caughtBy: 'row 7: the press writes the copy from BEFORE the close first' },
   { id: 'A11 an edit while the copy is written is closed over', file: 'app/core/coreshell.js', from: 'if (doc() !== base) return changed();   // an edit while the copy was written', to: 'if (false) return changed();   // an edit while the copy was written', tests: [PREVIEW], caughtBy: 'row 7: the press writes the copy from BEFORE the close first' },
-  { id: 'B1 a way that does not prove is picked', file: 'app/core/closejob.js', from: 'if (c.lap && c.lap.ok === true && !t.newReds.length) {', to: 'if (true) {', tests: [BEST], caughtBy: 'row 4: when no way proves' },
-  { id: 'B2 a way that adds a red is picked', file: 'app/core/closejob.js', from: 'if (c.lap && c.lap.ok === true && !t.newReds.length) {', to: 'if (c.lap && c.lap.ok === true) {', tests: [BEST], caughtBy: 'row 4: when no way proves' },
+  { id: 'B1 a way that does not prove is picked', file: 'app/core/closejob.js', from: 'if (c.lap && c.lap.ok === true && !t.newReds.length) return true;', to: 'return true;', tests: [BEST], caughtBy: 'row 4: when no way proves' },
+  { id: 'B2 a way that adds a red is picked', file: 'app/core/closejob.js', from: 'if (c.lap && c.lap.ok === true && !t.newReds.length) return true;', to: 'if (c.lap && c.lap.ok === true) return true;', tests: [BEST], caughtBy: 'row 4: when no way proves' },
   { id: 'B3 new road is not put last', file: 'app/core/closejob.js', from: '((a.newPieces > 0) - (b.newPieces > 0)) || ', to: '', tests: [BEST], caughtBy: 'row 8: the order' },
   { id: 'B4 the most movement is tried first', file: 'app/core/closejob.js', from: 'a.maxMoveM - b.maxMoveM : a.rank - b.rank', to: 'b.maxMoveM - a.maxMoveM : a.rank - b.rank', tests: [BEST], caughtBy: 'row 7: the pick is the least-moving way that proves' },
   { id: 'B5 Finish is tried when the end is already at the start', file: 'app/core/closejob.js', from: "if (!near) routes.push({ route: 'finish'", to: "if (true) routes.push({ route: 'finish'", tests: [BEST], caughtBy: 'row 1: an end already at the start' },
-  { id: 'B6 a bend may reshape the track (no move cap)', file: 'app/core/closejob.js', from: 'if (newPieces === 0 && maxMoveM > moveCap) {', to: 'if (false) {', tests: [BEST], caughtBy: 'row 5: a bend that would move the track further' },
+  { id: 'B6 a bend may reshape the track (no move cap)', file: 'app/core/closejob.js', from: 'if (newPieces === 0 && maxMoveM > moveCap) return done(', to: 'if (false) return done(', tests: [BEST], caughtBy: 'row 5: a bend that would move the track further' },
   { id: 'B7 a press that finds no way still applies', file: 'app/core/coreshell.js', from: 'if (!out.converged) return set({ closePending: null, message: out.report });', to: '', tests: [PREVIEW], caughtBy: 'row 2: when no way of closing proves, nothing changes' },
   { id: 'B8 the press commits the open track', file: 'app/core/coreshell.js', from: 'history: D.commit(st.history, out.doc), ...resolvedOf(out.doc)', to: 'history: D.commit(st.history, base), ...resolvedOf(base)', tests: [PREVIEW], caughtBy: 'row 1: one press closes a near lap AT ONCE' },
-  { id: 'B9 a tie is not broken by the route order (micro-metres decide)', file: 'app/core/closejob.js', from: 'Math.abs(a.maxMoveM - b.maxMoveM) > MOVE_TIE_M ? a.maxMoveM - b.maxMoveM : a.rank - b.rank', to: 'a.maxMoveM - b.maxMoveM', tests: [BEST], caughtBy: 'row 1: an end already at the start' },
+  { id: 'B9 a tie is not broken by the route order (micro-metres decide)', file: 'app/core/closejob.js', from: 'Math.abs(a.maxMoveM - b.maxMoveM) > MOVE_TIE_M ? a.maxMoveM - b.maxMoveM : a.rank - b.rank', to: 'a.maxMoveM - b.maxMoveM', tests: [BEST], caughtBy: 'row 8: the order' },
+  // D343, the press made fast: the near bend first (and nothing else when it proves), and the live checker's reds for the open track
+  { id: 'F1 the near bend is not checked first (every route runs)', file: 'app/core/closejob.js', from: 'if (near && !exhaustive) {', to: 'if (false) {', tests: [BEST], caughtBy: 'row 9: when the end is at the start' },
+  { id: 'F2 the given open-track reds are ignored (it is checked again)', file: 'app/core/closejob.js', from: 'let open = openReds ? { reds: openReds } : null;', to: 'let open = null;', tests: [BEST], caughtBy: 'row 11: given the open track' },
+  { id: 'F3 the press hands the worker no reds', file: 'app/core/coreshell.js', from: 'openReds: known && known.csp ? known.red : null', to: 'openReds: null', tests: [WORKER], caughtBy: 'row 7: a press hands the worker the reds' },
+  { id: 'F4 a check made with CSP off is used', file: 'app/core/coreshell.js', from: 'openReds: known && known.csp ? known.red : null', to: 'openReds: known ? known.red : null', tests: [WORKER], caughtBy: 'row 7: a press hands the worker the reds' },
   // app/validate-ui/redgroups.js: every red in plain words (item 4)
   { id: 'G1 a ray red on an overlap keeps its own words', file: 'app/validate-ui/redgroups.js', from: "(reason === 'downforce-ray-gap' && nearOverlap(r))", to: 'false', tests: [GROUPS], caughtBy: 'the overlap is ONE group' },
   { id: 'G2 every ray red is called an overlap', file: 'app/validate-ui/redgroups.js', from: "(reason === 'downforce-ray-gap' && nearOverlap(r))", to: "(reason === 'downforce-ray-gap')", tests: [GROUPS], caughtBy: 'a downforce-ray-gap with NO overlap near it' },
@@ -82,7 +87,7 @@ function runMutant(m) {
 }
 
 test('control: the unmutated temp copy passes every test file the mutants use', () => {
-  const r = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: [LOCAL, PREVIEW, GROUPS, DISPLAY, BEST], caughtBy: '(no test is named this)' });
+  const r = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: [LOCAL, PREVIEW, GROUPS, DISPLAY, BEST, WORKER], caughtBy: '(no test is named this)' });
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
 });
 for (const m of MUTATIONS) {

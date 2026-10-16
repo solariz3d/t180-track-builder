@@ -55,6 +55,16 @@ function sumsOf(P) {
   sumsMemo.set(P, m);
   return m;
 }
+/**
+ * D343: a FROZEN copy of profile P (P itself when it is frozen already), so offsetAt takes its running sums above. For a profile a caller builds and then reads at
+ * many u (a cup blend at a station, a joint's two cross-sections): an unfrozen one is summed from the centre out to every u, each time; on a 25 km cup track that was
+ * 18 of the checker's 23 s. The copy has the same fields and the same numbers, and the running sums add the same pieces in the same order, so every figure is
+ * the same. The copy is the caller's own: no profile anyone else holds is frozen by it.
+ */
+function sealed(P) {
+  if (Object.isFrozen(P) && Object.isFrozen(P.u) && Object.isFrozen(P.psi)) return P;
+  return Object.freeze({ ...P, u: Object.freeze(P.u.slice()), psi: Object.freeze(P.psi.slice()) });
+}
 /** Offset [X, Y] of the surface point at u, exactly (piecewise closed form). */
 function offsetAt(P, u) {
   if (u === 0) return [0, 0];
@@ -193,7 +203,7 @@ function readsBlend(seg) { return !!(seg && (seg.cup || seg.chord)); }
  * within the chord). 0 for identical profiles.
  */
 function stepBetween(A, B) {
-  A = normalize(A); B = normalize(B);
+  A = sealed(normalize(A)); B = sealed(normalize(B));   // D343: read at every fraction, so frozen copies (sealed)
   const EA = edgesOf(A), EB = edgesOf(B), fs = [...new Set([...fractions(A), ...fractions(B), 0])];
   let worst = 0;
   for (const f of fs) { const pa = offsetAt(A, uAt(EA, f)), pb = offsetAt(B, uAt(EB, f)); worst = Math.max(worst, Math.hypot(pa[0] - pb[0], pa[1] - pb[1])); }
@@ -225,4 +235,4 @@ function jointSteps(segments, closed) {
   return out;
 }
 
-module.exports = { normalize, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, commonFractions, usOf, smoothstep, atSegment, readAt, readsBlend, stepBetween, jointSteps };
+module.exports = { normalize, sealed, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, commonFractions, usOf, smoothstep, atSegment, readAt, readsBlend, stepBetween, jointSteps };
