@@ -17,13 +17,14 @@ const { close } = require('../src/core/close.js');
 const A = require('../src/core/adapter.js');
 const PF = require('../src/geom/profile.js');
 const V = require('../src/validate/index.js');
-const { buildMesh } = require('../src/geom/mesh.js');
+const { buildMesh, rowVertices } = require('../src/geom/mesh.js');
 const { profilerOf } = require('../app/core/coreshell.js');
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(0, 16);
 const run = (steps) => steps.reduce((d, a) => extend(d, a), D.createDoc('t'));
 function rowGap(a, b) {
-  const P = (r) => r.map((v) => v.p), sub = (x, y) => [x[0] - y[0], x[1] - y[1], x[2] - y[2]], dot = (x, y) => x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
+  // the kept rows are packed (2026-10-15, memory headroom): rowVertices reads them back as the { p } this measure walks
+  const P = (r) => rowVertices(r).map((v) => v.p), sub = (x, y) => [x[0] - y[0], x[1] - y[1], x[2] - y[2]], dot = (x, y) => x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
   const near = (q, poly) => { let best = Infinity; for (let i = 0; i + 1 < poly.length; i++) { const d = sub(poly[i + 1], poly[i]), w = sub(q, poly[i]), t = Math.max(0, Math.min(1, dot(w, d) / (dot(d, d) || 1))), r = sub(w, d.map((x) => x * t)); best = Math.min(best, Math.hypot(r[0], r[1], r[2])); } return best; };
   const A1 = P(a), B1 = P(b); return Math.max(...A1.map((q) => near(q, B1)), ...B1.map((q) => near(q, A1)));
 }

@@ -74,6 +74,20 @@ function vertex(sm, P, u) {
   return { p: add(sm.pos, q), n: add(mul(sm.L, nl), mul(sm.U, nu)), q };
 }
 function rowWith(sm, P, Us) { return Us.map((u) => vertex(sm, P, u)); }
+// A KEPT ROW (2026-10-15, memory headroom): the boundary rows every piece keeps for its seams (pc.first, pc.last) are PACKED, a Float64Array of six numbers a
+// vertex, p then n (a seam reads nothing else; q is only the fold check's, inside meshPiece). As { p, n, q } objects they were about 160 bytes a vertex inside
+// V8's 4 GB pointer cage: 2.67 million of them, ~430 MB of the page's ~780 MB at rest, on ELYSIUM (24 km). An ArrayBuffer's data lives outside the cage, and
+// the doubles are the very numbers vertex() makes, so every seam, and so the mesh, is the same to the byte (test/geom_mesh_rows.test.js).
+const RW = 6;
+function packRow(row) {
+  const out = new Float64Array(row.length * RW);
+  row.forEach((v, k) => { const o = k * RW; out[o] = v.p[0]; out[o + 1] = v.p[1]; out[o + 2] = v.p[2]; out[o + 3] = v.n[0]; out[o + 4] = v.n[1]; out[o + 5] = v.n[2]; });
+  return out;
+}
+const rowP = (row, k) => [row[k * RW], row[k * RW + 1], row[k * RW + 2]];
+const rowN = (row, k) => [row[k * RW + 3], row[k * RW + 4], row[k * RW + 5]];
+/** A kept row read back as [{ p, n }] (for a reader outside the mesh: a test). */
+function rowVertices(row) { return Array.from({ length: row.length / RW }, (_, k) => ({ p: rowP(row, k), n: rowN(row, k) })); }
 function options(opts) {
   return {
     maxSeam: (opts.maxSeamDeg === undefined ? 1 : opts.maxSeamDeg) * DEG, chordErr: opts.chordErr === undefined ? 0.02 : opts.chordErr,
@@ -176,31 +190,31 @@ function meshPiece(g, seg, S, o, work) {
     }
     return { positions, normals, uvs, indices, s0: S[run.rows[0]].s, s1: S[run.rows[R - 1]].s, vertices: R * K, rowS: run.rows.map((i) => S[i].s) };
   });
-  return { g, id: seg.id, part: seg.part, key, K, Us, P, F, folds, stations: stations.map((x) => x), cells: built, first: V[0], last: V[V.length - 1], firstS: S[0], lastS: S[S.length - 1], stationS: stations.map((i) => S[i].s), ends: { first: shapes[0], last: shapes[S.length - 1] },
+  return { g, id: seg.id, part: seg.part, key, K, Us, P, F, folds, stations: stations.map((x) => x), cells: built, first: packRow(V[0]), last: packRow(V[V.length - 1]), firstS: S[0], lastS: S[S.length - 1], stationS: stations.map((i) => S[i].s), ends: { first: shapes[0], last: shapes[S.length - 1] },
     handles: handleKey(seg), p0: pitchOf(S[0]), b0: S[0].bankG };
 }
 /** The seam between two consecutive road pieces, or null where their boundary rows coincide. */
 function meshSeam(A, B, work) {
-  const ra = rowsOf(A, 'last', work), rb = rowsOf(B, 'first', work);
-  if (ra.length === rb.length && ra.every((v, k) => len(sub(v.p, rb[k].p)) < 1e-9)) return null;
-  const F = B.F, Ka = ra.length, Kb = rb.length;
-  const pts = [...ra, ...rb], positions = new Float32Array(pts.length * 3), normals = new Float32Array(pts.length * 3), uvs = new Float32Array(pts.length * 2);
-  pts.forEach((v, i) => {
-    const pl = toLocal(F, v.p), nl = dirLocal(F, v.n); positions.set(pl, i * 3); normals.set(nl, i * 3);
+  const ra = rowsOf(A, 'last', work), rb = rowsOf(B, 'first', work), Ka = ra.length / RW, Kb = rb.length / RW;
+  if (Ka === Kb) { let k = 0; while (k < Ka && len(sub(rowP(ra, k), rowP(rb, k))) < 1e-9) k++; if (k === Ka) return null; }
+  const F = B.F, nv = Ka + Kb;
+  const positions = new Float32Array(nv * 3), normals = new Float32Array(nv * 3), uvs = new Float32Array(nv * 2);
+  for (let i = 0; i < nv; i++) {
+    const row = i < Ka ? ra : rb, k = i < Ka ? i : i - Ka, pl = toLocal(F, rowP(row, k)), nl = dirLocal(F, rowN(row, k)); positions.set(pl, i * 3); normals.set(nl, i * 3);
     uvs[i * 2] = (i < Ka ? A.Us[i] : B.Us[i - Ka]) / 10; uvs[i * 2 + 1] = 0;
-  });
+  }
   // zipper: walk both rows by their fraction across; triangles wound as the strip quads (A, C, B) and (B, C, D)
   const idx = []; let i = 0, j = 0;
   while (i < Ka - 1 || j < Kb - 1) {
     const ta = i < Ka - 1 ? (i + 1) / (Ka - 1) : Infinity, tb = j < Kb - 1 ? (j + 1) / (Kb - 1) : Infinity;
     if (ta <= tb) { idx.push(i, Ka + j, i + 1); i++; } else { idx.push(i, Ka + j, Ka + j + 1); j++; }
   }
-  return { positions, normals, uvs, indices: Uint16Array.from(idx), s: B.firstS.s, vertices: pts.length, F };
+  return { positions, normals, uvs, indices: Uint16Array.from(idx), s: B.firstS.s, vertices: nv, F };
 }
 
 /** A piece's boundary row in CURRENT world coordinates; a reused (moved) piece recomputes it only when a seam needs it. */
 function rowsOf(pc, which, work) {
-  if (pc.stale && pc.stale[which]) { const sm = which === 'first' ? pc.firstS : pc.lastS, e = pc.ends[which]; pc[which] = rowWith(sm, e.P, e.Us); pc.stale[which] = false; if (work) work.n += pc.K; }
+  if (pc.stale && pc.stale[which]) { const sm = which === 'first' ? pc.firstS : pc.lastS, e = pc.ends[which]; pc[which] = packRow(rowWith(sm, e.P, e.Us)); pc.stale[which] = false; if (work) work.n += pc.K; }
   return pc[which];
 }
 /** Assemble the scene from the per-piece state. O(pieces), no geometry is recomputed here. */
@@ -358,4 +372,4 @@ function reuseMesh(prev, path, segments, same, { from = 0, grow = from > 0 } = {
   st.work = st.workC.n;
   return assemble(st);
 }
-module.exports = { buildMesh, extendMesh, sculptMesh, reuseMesh, vertex, profiles, toLocal };
+module.exports = { buildMesh, extendMesh, sculptMesh, reuseMesh, vertex, rowVertices, profiles, toLocal };
