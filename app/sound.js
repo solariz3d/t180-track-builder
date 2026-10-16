@@ -169,7 +169,7 @@ function createEngine(ctx) {
   // the tick: the tine, through its own gain that the next tick chokes; `spread` plays two copies apart (the width handle)
   let tickBus = null;
   // 2026-10-16 (D334, measured with earshot): the old tine, a bare sine whose 14:1 modulation collapsed in 30 ms inside a 90 ms envelope, read as
-  // "bubbles underwater" at -46 LUFS. A tine is three things at once: a warm 1:1 FM body with a short bark, a bell partial high up that dies fast,
+  // a muffled "liquid bloop" at -46 LUFS. A tine is three things at once: a warm 1:1 FM body with a short bark, a bell partial high up that dies fast,
   // and a tiny bright click on the strike; and it rings for a third of a second
   let clickBuf = null;
   function tineVoice(f, t0, into, d = TINE.d) {
