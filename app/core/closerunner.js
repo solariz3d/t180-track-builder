@@ -1,7 +1,7 @@
 // closerunner.js: works out Close's preview OFF the page's thread (2026-10-15: Finish to start held the window 4.1 s on a 24 km track), on ONE WARM WORKER
 // (app/core/closeworker.js, made when the runner is, so its modules load while it sits idle). The core shell is given a runner and asks it for a job:
 //
-//   runner.start({ doc, fraction, last, whole, finish, edited }) -> { promise, cancel() }
+//   runner.start({ doc, fraction, last, whole, finish, edited, best }) -> { promise, cancel() }   (best: D339's one press, closejob.js runCloseBest)
 //     promise  resolves with { out, ms } (closejob.js runClose's answer, after the postMessage) or { refused: { code, message } } (the core refused the close),
 //              or rejects (the worker failed; or { cancelled: true } after cancel)
 //     cancel() terminates the worker at once (whatever it was computing is dropped) and makes a fresh one; so does any failure
@@ -17,7 +17,7 @@ function createCloseRunner({ win, url = 'core/closeworker.js', WorkerCtor = win 
   return {
     /** The worker now in use (for the tests). */
     worker: () => w,
-    start({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null }) {
+    start({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false }) {
       if (running) running.cancel();   // one job at a time: the shell cancels the old one first, this is only a guard
       const mine = w, mySerial = ++serial, job = { promise: null, cancel: null };
       let settled = false, reject;
@@ -32,7 +32,7 @@ function createCloseRunner({ win, url = 'core/closeworker.js', WorkerCtor = win 
           res(m.ok ? { out: m.out, ms: m.ms } : { refused: m.refused });
         };
         mine.onerror = (e) => fail(new Error((e && e.message) || 'the close worker failed'));
-        mine.postMessage({ serial: mySerial, doc, fraction, last: !!last, whole: !!whole, finish: !!finish, edited });
+        mine.postMessage({ serial: mySerial, doc, fraction, last: !!last, whole: !!whole, finish: !!finish, edited, best: !!best });
       });
       job.cancel = () => fail(Object.assign(new Error('cancelled'), { cancelled: true }));
       running = job;

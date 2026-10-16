@@ -57,7 +57,7 @@ function bankWithinTurn(b, delta) {
   return Math.abs(b0 + delta) < TURN ? delta : w - b0;
 }
 const { close } = require('../../src/core/close.js');
-// D242: the close preview's overlap check builds the closed track's mesh and validates it as the export does (src/export/fromwords.js). D240 follow-up: it lives in
+// D242: a preview's overlap check (the middle delete's; Close's preview went in D339) builds the track's mesh and validates it as the export does (src/export/fromwords.js). D240 follow-up: it lives in
 // app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
 const { overlapCheck } = require('./overlapjob.js');
 // 2026-10-15: the close itself (Finish to start, a window, the whole lap) and how far each piece moves are app/core/closejob.js, ONE pure job the shell runs on the page
@@ -259,21 +259,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return entry;   // the caller puts it in the SAME state change as the preview (a panel drawn for the preview must already see its check)
   }
   const doc = () => st.history.present;
-  // 2026-10-15: THE CLOSE OFF THE THREAD (closeRunner): the job being worked out for proposeClose, { job }, and its stop
+  // 2026-10-15: THE CLOSE OFF THE THREAD (closeRunner): the job being worked out for closeBest (D339), { job }, and its stop
   let closeJob = null;
   function abortClose() { const j = closeJob; closeJob = null; if (j) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
-  /** The close preview made from the close's answer `res` (closejob.js runClose) for the open track `base`: the preview and its overlap check, as proposeClose always made them. */
-  function previewOf(base, res, whole, t0) {
-    if (!res.converged) return set({ message: res.report, closeProposal: null, closePending: null });   // the whole-lap close hands back a best try; a local one has refused already
-    const r = resolvedOf(res.doc), ms = now() - t0;
-    const proposal = Object.freeze({ base, doc: res.doc, resolved: r.resolved, whole: !!whole, window: res.window, report: res.report, ms,
-      displacement: Object.freeze(res.displacement), check: overlapRunner ? null : Object.freeze(overlapCheck(r.resolved, st.designSpeedKmh)) });
-    const moved = proposal.displacement.filter((x) => x.maxM > 1e-3);
-    const words = (ck) => `close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move${ck.overlaps.length ? `; the closed track OVERLAPS ITSELF in ${overlapPlacesText(ck, r.resolved.segments)}` : ''}. Apply or cancel`;
-    if (!overlapRunner) return set({ closeProposal: proposal, closePending: null, ...ok(words(proposal.check)) });
-    const entry = beginCheck(proposal, res.doc, true, (e) => (e.status === 'done' ? ok(words(e.result)) : { message: `the overlap check could not run: ${e.error}. Cancel the preview and try Close again` }));
-    return set({ closeProposal: proposal, closePending: null, proposalCheck: entry, ...ok(`close preview: ${res.report}; ${moved.length} of ${proposal.displacement.length} pieces move. Checking for overlaps: Apply is off until that finishes (Cancel stops it)`) });
-  }
   /** The boxes' values ({ forward, left, up, heading, pitch, bank }, in m and degrees) as the pose the core takes (radians). */
   const landingPose = (ui) => Object.assign({}, ...Object.entries(ui || {}).map(([k, v]) => LD.poseOf(k, v)));
   // D258: the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
@@ -303,7 +291,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return set({ history: D.commit(st.history, d), ...r, dirty: true, message: null, lastStep: { op, ms }, ...extra });
   });
   const lastRoad = (d) => { for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return i; return -1; };
-  // the WHOLE-LAP close's protected stretch (the old one-click close, and proposeClose({ whole: true })): the stretch edited last AND the user's straights,
+  // the WHOLE-LAP close's protected stretch (the old one-click close, and the whole-lap route of closeBest): the stretch edited last AND the user's straights,
   // since close.js spreads the correction over every piece it is not told to avoid, and left alone it bent a 300 m straight to a 370 m radius (D186 C)
   const wholeLapEdited = (d) => { const last = lastRoad(d); return [...new Set([...(st.lastEdited || [last]), ...straightPieces(d)])]; };
   // the brush, as E's hand-back gives its API: height -> hill, sideways -> swerve; a rate channel (kh, kv) -> rate, which re-closes a
@@ -551,57 +539,49 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
 
     /**
-     * D242, THE CLOSE PREVIEW (the keeper, TEST 1: "the close the loop fucked up my track ... completing the loop altered the rest of the track
-     * equation"). Close no longer commits at once: it PROPOSES. By default only the last ~20% of the lap may move (src/core/close.js closeWindow;
-     * `last: true` is the last piece alone, `whole: true` the old whole-lap close, kept for when it is asked for); a window that cannot close the loop
-     * is refused BY NAME (CLOSE_WINDOW). The proposal carries how far each piece's centreline moved and an OVERLAP CHECK of the closed track (the mesh's
-     * self-intersection and the validator's checks, as the export runs them). Apply (async) first writes the open track to its backups (backupNow
-     * 'pre-close'), refuses by name if that copy fails, and then commits the close as ONE undo step; Cancel drops it.
+     * D339, CLOSE IS ONE PRESS (the ruling: "one single press and the algo runs it"; the choice of how and the preview step are gone). The core runs every way of
+     * closing the loop it has and picks one (app/core/closejob.js runCloseBest): the closed lap must PROVE and add no new red; then no new road; then the least
+     * movement. It is applied AT ONCE as one undo step, and the message says what it did ("closed: bent the last 2 pieces (508 m) by up to 4.0 m"); the lap proof
+     * is the guard the preview's Apply used to be. When none proves, nothing changes and the message says why, with the closest way's reason.
+     * The document AS IT IS NOW goes to track-backups first (backupNow 'pre-close', the D239 amendment: hours of work on TEST 1 were lost to one Close, with no
+     * copy from before it), so a Close can be undone after the app is closed; a copy that fails refuses the close by name, and nothing changes.
+     * With a closeRunner (the page's Web Worker) the work is off the window's thread: state.closePending until it lands (an edit meanwhile drops it by name;
+     * cancelClose stops it). A runner that cannot start, or a job that fails, closes on the page instead. Returns a promise of the state when it has landed.
      */
-    // `finish: true` (2026-10-14, the keeper's "Yes" to Finish to start): nothing the user built moves; NEW road is laid from the end to the start and only it is
-    // bent to close the lap (src/core/finish.js). The same preview, overlap check, Apply and Cancel as any close
-    // 2026-10-15: with a closeRunner (the page's: a Web Worker) the close is worked out OFF the window's thread: this returns at once with state.closePending
-    // and no preview, and the answer makes the preview below (an edit meanwhile drops it by name; Cancel or a newer Close stops it). A runner that cannot start,
-    // or a job that fails, closes on the page instead, so the answer is never lost, only slower
-    proposeClose({ fraction = 0.2, last = false, whole = false, finish = false } = {}) {
+    closeBest() {
       abortClose();
-      if (doc().closed) return set({ closePending: null, message: 'the loop is already closed: there is nothing to preview' });
-      if (lastRoad(doc()) < 0) return set({ closePending: null, message: 'there is no road to close yet: extend first' });
-      const base = doc(), t0 = now(), args = { doc: base, fraction, last: !!last, whole: !!whole, finish: !!finish, edited: whole ? wholeLapEdited(base) : null };
-      const onPage = () => attempt(() => previewOf(base, CJ.runClose(args), !!whole, t0));
+      if (doc().closed) return Promise.resolve(set({ closePending: null, message: 'the loop is already closed' }));
+      if (lastRoad(doc()) < 0) return Promise.resolve(set({ closePending: null, message: 'there is no road to close yet: extend first' }));
+      const base = doc(), t0 = now(), args = { doc: base, best: true, edited: wholeLapEdited(base) };
+      const changed = () => set({ closePending: null, message: 'the track changed while the close was being worked out: press Close again' });
+      const land = async (out) => {
+        if (doc() !== base) return changed();
+        if (!out.converged) return set({ closePending: null, message: out.report });
+        try { await api.backupNow('pre-close'); } catch (e) { return set({ closePending: null, message: `not closed: the copy from before the close could not be written (${e && e.message || e}); nothing changed` }); }
+        if (doc() !== base) return changed();   // an edit while the copy was written: never commit a close of a track that is no longer there
+        return set({ history: D.commit(st.history, out.doc), ...resolvedOf(out.doc), dirty: true, closePending: null, lastStep: { op: 'close', ms: now() - t0 }, ...ok(out.report) });
+      };
+      const onPage = () => { let out; try { out = CJ.runClose(args); } catch (e) { if (e && e.name === 'CoreError') return set({ closePending: null, message: e.message }); throw e; } return land(out); };
       let job = null;
       if (closeRunner) { try { job = closeRunner.start(args); } catch (e) { job = null; } }
-      if (!job) return onPage();
+      if (!job) return Promise.resolve().then(onPage);
       const entry = { job };
       closeJob = entry;
-      job.promise.then((a) => {
-        if (closeJob !== entry) return;   // cancelled or replaced meanwhile
+      set({ closePending: Object.freeze({ base, startedAt: t0 }), message: null });
+      return job.promise.then((a) => {
+        if (closeJob !== entry) return st;   // cancelled or replaced meanwhile
         closeJob = null;
-        if (doc() !== base) return set({ closePending: null, message: 'the track changed while the close was being worked out: press Close again' });
         if (a.refused) return set({ closePending: null, message: a.refused.message });
-        return attempt(() => previewOf(base, { ...a.out, doc: a.out.doc && CJ.relink(base, a.out.doc) }, !!whole, t0));
+        return land({ ...a.out, doc: a.out.doc && CJ.relink(base, a.out.doc) });
       }, (e) => {
-        if (closeJob !== entry || (e && e.cancelled)) return;
+        if (closeJob !== entry || (e && e.cancelled)) return st;
         closeJob = null;
-        if (doc() !== base) return set({ closePending: null, message: 'the track changed while the close was being worked out: press Close again' });
+        if (doc() !== base) return changed();
         set({ closePending: null });
         return onPage();
       });
-      return set({ closeProposal: null, closePending: Object.freeze({ base, finish: !!finish, startedAt: t0 }), message: null });
     },
-    async applyClose() {
-      const p = st.closeProposal;
-      if (!p) return set({ message: 'nothing to apply: press Close first' });
-      if (p.base !== doc()) return set({ closeProposal: null, message: 'the track changed since the close preview: press Close again' });
-      if (!checkOf(p)) return set({ message: 'the overlap check of this preview has not finished: Apply when it has (Cancel drops the preview)' });
-      // the document AS IT IS NOW goes to track-backups first (backupNow, D239 amendment: the keeper lost TEST 1 to one Close, with no copy from before
-      // it), so a Close can be undone after the app is closed. A copy that fails (throws or rejects) refuses the close by name, and nothing changes
-      try { await api.backupNow('pre-close'); } catch (e) { return set({ message: `not closed: the copy from before the close could not be written (${e && e.message || e}); nothing changed` }); }
-      // the copy was written while the page was live: an edit in that time drops the preview (set), so a stale one is never committed
-      if (st.closeProposal !== p || p.base !== doc()) return set({ closeProposal: null, message: 'the track changed while its copy was being written: press Close again' });
-      return set({ history: D.commit(st.history, p.doc), resolved: p.resolved, resolveError: null, dirty: true, closeProposal: null, lastStep: { op: 'close', ms: p.ms }, ...ok(`loop closed: ${p.report}`) });
-    },
-    cancelClose: () => { abortClose(); return set({ closeProposal: null, closePending: null, message: null }); },
+    cancelClose: () => { abortClose(); return set({ closePending: null, message: null }); },
     /**
      * The overlap check of a preview (a closeProposal or a deleteProposal), for the panels: { status: 'done' | 'checking' | 'failed' | 'none', result, error, via, elapsedMs }. A preview made with no runner
      * carries its check, so it reads 'done' at once; with one it reads 'checking' until the worker answers. Apply is refused until 'done'.
@@ -992,7 +972,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      * to the track's backups (native backup_track: track-backups/<eq-name>.<local time>.t180track, newest 20 kept), under the saved
      * name or, unsaved, under "unsaved". `reason` is said in the result. Resolves { file, reason }, or null where there is no native
      * side to write to (headless, a browser); a write that FAILS rejects, so the caller can refuse the operation it was guarding.
-     * applyClose (D242's Close, the panel's one close path) awaits it first and refuses the close if it rejects.
+     * closeBest (D339's one-press Close, the panel's one close path) awaits it first and refuses the close if it rejects.
      */
     async backupNow(reason = '') {
       if (!storage || typeof storage.backupDoc !== 'function') return null;

@@ -14,13 +14,23 @@ const { walkScene, isDrivable } = require('../../src/export/markers.js');
 const { asFolds } = require('../../src/geom/bvh.js');
 
 const R = 180, Q = (Math.PI * R) / 2;
-/** A coil (two circles on one another) proposed closed: a track whose check finds overlaps of several kinds. */
+/** D339: the close preview is gone. What these rows took from it (the closed track and its synchronous overlap check) comes from the same parts it used:
+ *  closejob.js runClose (the route the preview ran; the last ~20% by default) and overlapjob.js overlapCheck (the check it ran when it had no runner).
+ *  { refused } when the route refuses or does not close, as the preview then made none. */
+function closedCheck(s, opts = {}) {
+  const CJ = require('../core/closejob.js');
+  let out; try { out = CJ.runClose({ doc: s.getState().history.present, ...opts }); } catch (e) { if (e.name === 'CoreError') return { refused: e.message }; throw e; }
+  if (!out.converged) return { refused: out.report };
+  const resolved = OJ.resolveDoc(out.doc);
+  return { doc: out.doc, resolved, check: structuredClone(OJ.overlapCheck(resolved, null, { closed: true })) };
+}
+/** A coil (two circles on one another) closed: a track whose check finds overlaps of several kinds. */
 async function coilClosed() {
   const s = await createCoreShell({ brushFn: null, autosaveMs: 0 });
   s.extend({ length: 300, family: 'bowl' });
   for (let i = 0; i < 8; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
   s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
-  s.proposeClose(); const cp = s.getState().closeProposal; assert.ok(cp && cp.check.overlaps.length > 0, 'control: the coil overlaps itself');
+  const cp = closedCheck(s); assert.ok(cp.check && cp.check.overlaps.length > 0, 'control: the coil overlaps itself');
   return cp;
 }
 const pathOf = (doc, closed) => { const r = OJ.resolveDoc(doc), p0 = G.buildPath(r.segments, { step: 2, closed, start: r.start }); return { segs: r.segments, p: r.lift ? r.lift(p0) : p0 }; };

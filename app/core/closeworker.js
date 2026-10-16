@@ -1,7 +1,7 @@
 // closeworker.js: the WEB WORKER Close works out its preview in (2026-10-15: Finish to start held the window 4.1 s on a 24 km track). It loads app/core/closejob.js
 // through the app's own CommonJS loader (app/lib/cjs.js, with the exporter's in-memory node shim the core's modules need, as app/core/overlapworker.js does) and
 // answers ONE kind of message:
-//   in:  { serial, doc, fraction, last, whole, finish, edited }   the open track and how to close it (closejob.js runClose)
+//   in:  { serial, doc, fraction, last, whole, finish, edited, best }   the open track and how to close it (closejob.js runClose; best: D339's one press, runCloseBest)
 //   out: { serial, ok: true, out, ms }                            runClose's answer (plain data) and how long it took
 //        { serial, ok: false, refused: { code, message } }        the core refused the close (a CoreError: its words are the message the user reads)
 //        { serial, ok: false, error }                             the reason, when it could not run

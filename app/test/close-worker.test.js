@@ -1,17 +1,18 @@
 // close-worker.test.js: node --test app/test/close-worker.test.js
-// 2026-10-15, CLOSE OFF THE WINDOW'S THREAD: Close's "new road from the end to the start" held the window 4.1 s on a 24 km track (the preview's road and how far
-// each piece moved were worked out on the page). The work is one pure job (app/core/closejob.js), run in a Web Worker (app/core/closeworker.js) through
-// app/core/closerunner.js, as the track checker went in 7512f84. Rows:
-//   1  THE PREVIEW IS IDENTICAL: through the worker (every message structured-cloned, as a postMessage does) the proposal is the page's, for finish, the last
-//      ~20%, the last piece and the whole lap; and Finish to start still leaves the user's pieces as the very same objects
-//   2  a close the core refuses says the same words through the worker as on the page, and makes no preview
-//   3  the shell while the worker works: the call returns at once with the close pending and no preview; an edit meanwhile drops the answer by name;
-//      Cancel and a newer Close cancel the job; a runner that cannot start, or a job that fails, closes on the page instead
+// 2026-10-15, CLOSE OFF THE WINDOW'S THREAD: Close's work held the window 4.1 s on a 24 km track. The work is one pure job (app/core/closejob.js), run in a Web
+// Worker (app/core/closeworker.js) through app/core/closerunner.js, as the track checker went in 7512f84. D339: Close is ONE press (closejob.js runCloseBest: every
+// route tried, one picked, applied at once), so the rows that held the preview and the "close using" box went with them (rows 7 and 8, and the preview halves of
+// 1, 2, 3 and 6). Rows:
+//   1  THE ANSWER IS IDENTICAL: through the worker (every message structured-cloned, as a postMessage does) one press closes the track exactly as on the page, near
+//      and far, with the same words; and new road leaves the user's pieces as the very same objects
+//   2  when no way proves, the worker says the same words as the page, and nothing changes
+//   3  the shell while the worker works: the press returns with the close pending; an edit meanwhile drops the answer by name; Cancel and a newer press cancel the
+//      job; the whole lap's stretch is sent; a runner that cannot start, or a job that fails, closes on the page instead
 //   4  the runner: one warm worker made with it; a reply that is not the current job's is ignored; a refusal resolves; cancel and a failure make a fresh worker;
 //      a page without Worker throws
-//   5  the worker SCRIPT, in a sandbox with the real files: it loads closejob.js through the app's loader and answers as runClose does; a refusal and a bad
-//      job are answered, never a hang
-//   6  the panel while the worker works: it says what is being done and that Cancel stops it; Cancel stops the job; the preview replaces the line
+//   5  the worker SCRIPT, in a sandbox with the real files: it loads closejob.js through the app's loader and answers as runClose does (a single route, and the
+//      one press); a refusal and a bad job are answered, never a hang
+//   6  the panel: ONE Close button (no "close using" box, no Apply); while the worker works it says so and Cancel stops it; then the line says what was done
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -56,27 +57,28 @@ async function nearLap(closeRunner = null) {
   const s = await createCoreShell({ brushFn: null, autosaveMs: 0, closeRunner }); s.adopt(near); return s;
 }
 const settled = async (s) => { for (let i = 0; i < 200 && s.getState().closePending; i++) await tick(); assert.equal(s.getState().closePending, null, 'the close came back'); };
-const shown = (s) => { const st = s.getState(), p = st.closeProposal; return { message: st.message, proposal: p ? { doc: p.doc, report: p.report, window: p.window, whole: p.whole, displacement: p.displacement, check: p.check } : null }; };
-
-test('row 1: through the worker the preview is the page\'s, for finish, the last ~20%, the last piece and the whole lap; Finish keeps the user\'s pieces as the very same objects', async () => {
-  for (const [make, opts] of [[openLap, { finish: true }], [nearLap, {}], [nearLap, { last: true }], [nearLap, { whole: true }]]) {
-    const page = await make(), off = await (make === openLap ? openLap({ closeRunner: workerRunner() }) : nearLap(workerRunner()));
+test('row 1: through the worker one press closes the track exactly as on the page, near and far, with the same words; new road keeps the user\'s pieces as the very same objects', async () => {
+  for (const make of [nearLap, (r) => openLap({ closeRunner: r })]) {
+    const page = await make(null), off = await make(workerRunner());
     assert.deepStrictEqual(off.getState().history.present, page.getState().history.present, 'the same open track');
-    page.proposeClose(opts); off.proposeClose(opts); await settled(off);
-    const a = shown(page), b = shown(off), what = JSON.stringify(opts);
-    assert.ok(a.proposal, `${what}: the page makes a preview: ${a.message}`);
-    assert.deepStrictEqual(b, a, `${what}: the worker's preview and message are the page's`);
-    assert.ok(Object.isFrozen(b.proposal.doc) && b.proposal.doc.pieces.every(Object.isFrozen), `${what}: the document is frozen, as the core's are`);
-    if (opts.finish) { const base = off.getState().history.present; base.pieces.forEach((P, i) => assert.equal(b.proposal.doc.pieces[i], P, `piece ${i} is the user's own, the very object`)); }
-    await off.applyClose(); assert.equal(off.getState().history.present.closed, true, `${what}: Apply closes the loop`);
+    const base = off.getState().history.present;
+    await page.closeBest(); await off.closeBest();
+    const a = page.getState(), b = off.getState();
+    assert.equal(a.history.present.closed, true, `the page closes it: ${a.message}`); assert.match(a.message, /^closed: /);
+    assert.deepStrictEqual(b.history.present, a.history.present, 'the worker\'s closed track is the page\'s'); assert.equal(b.message, a.message, 'and its words');
+    assert.ok(Object.isFrozen(b.history.present) && b.history.present.pieces.every(Object.isFrozen), 'the document is frozen, as the core\'s are');
+    assert.equal(b.history.past[b.history.past.length - 1], base, 'one undo step back to the open track');
+    if (b.history.present.pieces.length > base.pieces.length) base.pieces.forEach((P, i) => assert.equal(b.history.present.pieces[i], P, `piece ${i} is the user's own, the very object`));
   }
 });
 
-test('row 2: a close the core refuses says the same words through the worker as on the page, and makes no preview', async () => {
-  const page = await openLap({ lastLen: 30 }), off = await openLap({ lastLen: 30, closeRunner: workerRunner() });
-  page.proposeClose({ last: true }); off.proposeClose({ last: true }); await settled(off);
-  assert.equal(off.getState().closeProposal || null, null); assert.match(off.getState().message, /can't close using only the last 30 m/i);
-  assert.equal(off.getState().message, page.getState().message); assert.equal(off.getState().messageKind, page.getState().messageKind);
+/** A coil: 300 m and eight quarter turns of 180 m, two circles on one another; no way of closing it proves (each adds a red where the road meets itself). */
+const coil = (closeRunner) => openLap({ turns: 8, lastLen: 60, closeRunner });
+test('row 2: when no way of closing proves, the worker says the same words as the page, and nothing changes', async () => {
+  const page = await coil(null), off = await coil(workerRunner()), base = off.getState().history.present;
+  await page.closeBest(); await off.closeBest();
+  assert.equal(off.getState().history.present, base, 'nothing changed'); assert.equal(page.getState().history.present.closed, false);
+  assert.match(off.getState().message, /^not closed, nothing changed: /); assert.equal(off.getState().message, page.getState().message); assert.equal(off.getState().messageKind, page.getState().messageKind);
 });
 
 /** A runner whose jobs the test settles by hand. */
@@ -89,33 +91,28 @@ function handRunner({ throwOnStart = false } = {}) {
   } };
   return r;
 }
-const answerOf = (doc, opts) => ({ out: clone(CJ.runClose({ doc: clone(doc), ...opts })), ms: 1 });
+const answerOf = (doc, opts = {}) => ({ out: clone(CJ.runClose({ doc: clone(doc), best: true, ...opts })), ms: 1 });
 
-test('row 3: while the worker works the close is pending with no preview; an edit drops the answer by name; Cancel and a newer Close cancel it; no runner or a failed job closes on the page', async () => {
-  const r = handRunner(), s = await openLap({ closeRunner: r }), base = s.getState().history.present;
-  s.proposeClose({ finish: true });
+test('row 3: while the worker works the close is pending; an edit drops the answer by name; Cancel and a newer press cancel it; no runner or a failed job closes on the page', async () => {
+  const r = handRunner(), s = await nearLap(r), base = s.getState().history.present;
+  const p0 = s.closeBest();
   let st = s.getState();
-  assert.equal(r.jobs.length, 1); assert.equal(st.closeProposal || null, null, 'no preview yet'); assert.ok(st.closePending && st.closePending.base === base, 'the close is pending, for this track');
-  assert.deepStrictEqual(r.jobs[0].args, { doc: base, fraction: 0.2, last: false, whole: false, finish: true, edited: null });
+  assert.equal(r.jobs.length, 1); assert.ok(st.closePending && st.closePending.base === base, 'the close is pending, for this track'); assert.equal(st.history.present, base, 'nothing is applied yet');
+  assert.equal(r.jobs[0].args.best, true, 'the job is the one press'); assert.equal(r.jobs[0].args.doc, base);
+  const sent = r.jobs[0].args.edited; assert.ok(Array.isArray(sent) && sent.includes(base.pieces.length - 1), `the whole-lap route is told what to go round: ${JSON.stringify(sent)}`);
   s.extend({ length: 50 }); const edited = s.getState().history.present;
-  r.jobs[0].resolve(answerOf(base, { finish: true })); await tick(); await tick();
-  st = s.getState(); assert.equal(st.closeProposal || null, null, 'a stale answer makes no preview'); assert.equal(st.history.present, edited, 'and changes nothing');
-  assert.equal(st.closePending, null); assert.match(st.message, /track changed while the close was being worked out/);
-  s.proposeClose({ finish: true }); s.cancelClose(); assert.equal(r.jobs[1].cancelled, 1, 'Cancel stops the job'); assert.equal(s.getState().closePending, null);
-  s.proposeClose({ last: true }); s.proposeClose({ finish: true }); assert.equal(r.jobs[2].cancelled, 1, 'a newer Close cancels the older');
-  r.jobs[3].resolve(answerOf(edited, { finish: true })); await tick(); await tick(); assert.ok(s.getState().closeProposal, s.getState().message);
-  assert.equal(s.getState().closeProposal.base, edited);
-  // the whole-lap close is told what to go round (the stretch edited last and the user's straights, D186 C): the worker cannot work it out itself
-  s.cancelClose(); s.proposeClose({ whole: true }); const sent = r.jobs[4].args.edited;
-  assert.ok(Array.isArray(sent) && sent.includes(edited.pieces.length - 1) && sent.includes(0), `the whole-lap close goes round the last piece and the opening straight: ${JSON.stringify(sent)}`);
-  s.cancelClose();
+  r.jobs[0].resolve(answerOf(base)); await p0;
+  st = s.getState(); assert.equal(st.history.present, edited, 'a stale answer changes nothing'); assert.equal(st.closePending, null); assert.match(st.message, /track changed while the close was being worked out/);
+  s.closeBest(); s.cancelClose(); assert.equal(r.jobs[1].cancelled, 1, 'Cancel stops the job'); assert.equal(s.getState().closePending, null);
+  s.closeBest(); const p3 = s.closeBest(); assert.equal(r.jobs[2].cancelled, 1, 'a newer press cancels the older');
+  r.jobs[3].resolve(answerOf(edited)); await p3; assert.equal(s.getState().history.present.closed, true, s.getState().message); assert.match(s.getState().message, /^closed: /);
   for (const runner of [handRunner({ throwOnStart: true }), null]) {
-    const u = await openLap({ closeRunner: runner }); u.proposeClose({ finish: true });
-    assert.ok(u.getState().closeProposal, 'no worker: the preview is made on the page, at once'); assert.equal(u.getState().closePending || null, null);
+    const u = await nearLap(runner); await u.closeBest();
+    assert.equal(u.getState().history.present.closed, true, `no worker: closed on the page: ${u.getState().message}`); assert.equal(u.getState().closePending || null, null);
   }
-  const f = handRunner(), v = await openLap({ closeRunner: f }); v.proposeClose({ finish: true });
-  f.jobs[0].reject(new Error('worker died')); await tick(); await tick();
-  assert.ok(v.getState().closeProposal, `a failed job closes on the page: ${v.getState().message}`); assert.equal(v.getState().closePending, null);
+  const fr = handRunner(), v = await nearLap(fr), pv = v.closeBest();
+  fr.jobs[0].reject(new Error('worker died')); await pv;
+  assert.equal(v.getState().history.present.closed, true, `a failed job closes on the page: ${v.getState().message}`); assert.equal(v.getState().closePending, null);
 });
 
 test('row 4: the runner: one warm worker; a reply that is not the current job\'s is ignored; a refusal resolves; cancel and a failure make a fresh worker; no Worker throws', async () => {
@@ -125,7 +122,7 @@ test('row 4: the runner: one warm worker; a reply that is not the current job\'s
   const runner = createCloseRunner({ win: {}, WorkerCtor: FakeWorker });
   assert.equal(made.length, 1, 'the worker exists before any job: it is warm'); assert.equal(made[0].url, 'core/closeworker.js');
   const a = runner.start({ doc: { x: 1 }, finish: true }); assert.equal(made.length, 1, 'a job makes no worker');
-  assert.deepStrictEqual(made[0].sent[0], { serial: 1, doc: { x: 1 }, fraction: 0.2, last: false, whole: false, finish: true, edited: null });
+  assert.deepStrictEqual(made[0].sent[0], { serial: 1, doc: { x: 1 }, fraction: 0.2, last: false, whole: false, finish: true, edited: null, best: false });
   made[0].onmessage({ data: { serial: 99, ok: true, out: 'not mine' } });
   made[0].onmessage({ data: { serial: 1, ok: true, out: { n: 1 }, ms: 7 } });
   assert.deepStrictEqual(await a.promise, { out: { n: 1 }, ms: 7 }, 'the current job\'s answer, never another\'s');
@@ -141,7 +138,7 @@ test('row 4: the runner: one warm worker; a reply that is not the current job\'s
   made[4].onmessage({ data: { serial: 7, ok: true, out: 'h', ms: 0 } }); assert.deepStrictEqual(await h.promise, { out: 'h', ms: 0 });
 });
 
-test('row 5: the worker SCRIPT loads closejob.js through the app\'s loader and answers as runClose does; a refusal and a bad job are answered', async () => {
+test('row 5: the worker SCRIPT loads closejob.js through the app\'s loader and answers as runClose does (a route, and the one press); a refusal and a bad job are answered', async () => {
   const dir = path.join(__dirname, '..', 'core'), ROOT = path.resolve(__dirname, '..', '..'), posted = [];
   const ctx = { URL, console, Buffer, structuredClone, setTimeout, clearTimeout, TextEncoder, TextDecoder, performance, location: { href: 'http://localhost/app/core/closeworker.js' } };
   ctx.self = ctx; ctx.postMessage = (m) => posted.push(clone(m));
@@ -154,6 +151,10 @@ test('row 5: the worker SCRIPT loads closejob.js through the app\'s loader and a
   await ctx.onmessage({ data: { serial: 3, doc: clone(doc), finish: true } });
   assert.equal(posted.length, 1); assert.equal(posted[0].serial, 3); assert.equal(posted[0].ok, true, posted[0].error);
   assert.deepStrictEqual(posted[0].out, clone(CJ.runClose({ doc, finish: true })), 'the worker answers as runClose does'); assert.ok(Number.isFinite(posted[0].ms));
+  await ctx.onmessage({ data: { serial: 6, doc: clone(doc), best: true, edited: [doc.pieces.length - 1] } });
+  // the timings in the answer (each route's ms, the checks' ms) are the run's own, so they are left out of the comparison
+  const untimed = (o) => JSON.parse(JSON.stringify(o, (k, v) => (k === 'ms' || k === 'checkMs' || k === 'openCheckMs' ? undefined : v)));
+  const best = posted.pop(); assert.equal(best.ok, true, best.error); assert.deepStrictEqual(untimed(best.out), untimed(clone(CJ.runClose({ doc, best: true, edited: [doc.pieces.length - 1] }))), 'the one press answers as runCloseBest does');
   const short = (await openLap({ lastLen: 30 })).getState().history.present;
   let want; try { CJ.runClose({ doc: short, last: true }); } catch (e) { want = e; }
   await ctx.onmessage({ data: { serial: 4, doc: clone(short), last: true } });
@@ -198,57 +199,16 @@ async function mountPanel(shell) {
   return { root, panel, button, text, fire, win };
 }
 
-test('row 6: the panel while the worker works: it says what is being done and that Cancel stops it, Cancel stops the job, and the preview replaces the line when it lands', async () => {
-  const r = handRunner(), s = await openLap({ closeRunner: r }), P = await mountPanel(s), base = s.getState().history.present;
-  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = '0.2';   // D331: the box now starts on the finish (row 7); this first press is the windowed close, so it chooses it
+test('row 6: the panel has ONE Close button (no "close using" box, no Apply); while the worker works it says so and Cancel stops it; then the line says what was done', async () => {
+  const r = handRunner(), s = await nearLap(r), P = await mountPanel(s), base = s.getState().history.present;
+  assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'close using') || null, null, 'no choice of how to close'); assert.equal(P.button('Apply') || null, null, 'no Apply');
   P.button('Close the loop').onclick(); P.fire();
-  assert.equal(r.jobs.length, 1, 'the panel asked for the close');
-  assert.equal(P.text('close working'), 'Closing the loop… The window stays free; Cancel stops it.');
-  assert.equal(P.button('Cancel').style.display, '', 'Cancel is offered while it works'); assert.equal(P.button('Apply').style.display, 'none', 'Apply is not');
-  assert.equal(P.button('Apply').disabled, true, 'and Apply is off: there is nothing to apply yet (the after run of closefreeze.js clicked a hidden, enabled Apply)');
-  P.button('Cancel').onclick(); assert.equal(r.jobs[0].cancelled, 1, 'Cancel in the panel stops the job'); assert.equal(P.text('close working'), null);
-  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'finish';
+  assert.equal(r.jobs.length, 1, 'the panel asked for the close'); assert.equal(r.jobs[0].args.best, true);
+  assert.equal(P.text('close working'), 'Closing the loop: trying each way of closing it and checking the lap… The window stays free; Cancel stops it.');
+  assert.equal(P.button('Cancel').style.display, '', 'Cancel is offered while it works');
+  P.button('Cancel').onclick(); assert.equal(r.jobs[0].cancelled, 1, 'Cancel in the panel stops the job'); assert.equal(P.text('close working'), null); assert.equal(P.button('Cancel').style.display, 'none');
   P.button('Close the loop').onclick(); P.fire();
-  assert.equal(P.text('close working'), 'Finishing to the start: laying new road and closing it… The window stays free; Cancel stops it.');
-  r.jobs[1].resolve(answerOf(base, { finish: true })); await tick(); await tick();
-  assert.equal(P.text('close working'), null); assert.match(P.root.all().map((e) => e.textContent).join('|'), /Preview: only the new road .* may move/);
-  assert.equal(P.button('Apply').style.display, '');
-});
-
-// D331 (ELYSIUM's newest save): "close using" started on "the last ~20%", which refuses on a long track (the road would roll too fast over that much of it), so a first press of "Close the loop"
-// gave a refusal; it now starts on "new road from the end to the start" (moves nothing already built), and the other four are one click away.
-test('row 7: "close using" starts on "new road from the end to the start": a first press asks for the finish, and the other options are still there', async () => {
-  const r = handRunner(), s = await openLap({ closeRunner: r }), P = await mountPanel(s), how = P.root.all().find((e) => e.attrs['aria-label'] === 'close using');
-  assert.equal(how.value, 'finish', 'the box starts on the finish');
-  const values = how.children.map((e) => e.value);
-  assert.deepEqual(values.slice().sort(), ['0.2', '0.4', 'finish', 'last', 'whole'], 'every option is still one click away');
-  P.button('Close the loop').onclick(); P.fire();
-  assert.equal(r.jobs.length, 1); assert.equal(r.jobs[0].args.finish, true, 'a first press, with the box untouched, asks for the finish');
-  assert.equal(P.text('close working'), 'Finishing to the start: laying new road and closing it… The window stays free; Cancel stops it.');
-});
-
-// the preview must say when the lap fails (it said "No overlap and no red on the closed track" for a close whose lap the checker then failed). A real close whose lap fails: the whole-lap
-// close of this banked track (a synthetic one: a straight, a right turn of 120 degrees, a straight, the road banked 54 degrees) leaves the car off the road at the start
-test('row 8: the Close preview says when the lap fails, and where, for any option, and is not "No overlap and no red" then; a lap that holds still says that', async () => {
-  const DEG = Math.PI / 180, { extend } = require('../../src/core/extend.js'), { extendTurnBy } = require('../../src/core/turnby.js');
-  const banked = (turn) => { let d = D.createDoc('banked'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 500 }, turn * DEG); d = extend(d, { length: 200 }); d = extend(d, { length: 200, transition: 100, targets: { phi: 54 * DEG } }); return extend(d, { length: 100, targets: { kv: 0 } }); };
-  const run = async (doc, how) => {
-    const s = await createCoreShell({ brushFn: null, autosaveMs: 0 }); s.adopt(doc); const P = await mountPanel(s);
-    P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = how; P.button('Close the loop').onclick(); P.fire();
-    return { s, P, text: P.root.all().map((e) => e.textContent).join('|') };
-  };
-  const failing = await run(banked(-120), 'whole');
-  assert.ok(failing.s.getState().closeProposal, failing.s.getState().message);
-  assert.match(failing.text, /The lap fails: the car leaves the road at [0-9]+[.][0-9][0-9] km/, 'the preview names the failing lap and where');
-  assert.doesNotMatch(failing.text, /No overlap and no red on the closed track/, 'and does not call it clean');
-  assert.equal(failing.P.button('Apply').disabled, false, 'Apply is still the user\'s to press');
-  // the keeper's case exactly: no overlap and no red in the preview, and the lap fails (the check's answer is stood in for, so the panel's own words are what is under test)
-  { const s2 = await createCoreShell({ brushFn: null, autosaveMs: 0 }); s2.adopt(banked(120)); const real = s2.proposalCheck.bind(s2);
-    s2.proposalCheck = (p) => ({ ...real(p), status: 'done', result: { overlaps: [], others: [], amber: 0, lap: { ok: false, reason: null, first: { s: 23932.6, reason: 'leaves-surface' }, count: 12 } } });
-    const P2 = await mountPanel(s2); P2.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'finish'; P2.button('Close the loop').onclick(); P2.fire();
-    const t2 = P2.root.all().map((e) => e.textContent).join('|');
-    assert.match(t2, /The lap fails: the car leaves the road at 23[.]93 km [(]12 places along the lap[)]/); assert.doesNotMatch(t2, /No overlap and no red on the closed track/, 'no red and no overlap is not "clean" when the lap fails'); }
-  const holding = await run(banked(120), 'finish');
-  assert.ok(holding.s.getState().closeProposal, holding.s.getState().message);
-  assert.doesNotMatch(holding.text, /The lap fails/); assert.match(holding.text, /No overlap and no red on the closed track/);
+  r.jobs[1].resolve(answerOf(base)); await tick(); await tick(); await tick();
+  assert.equal(s.getState().history.present.closed, true, s.getState().message);
+  assert.match(P.text('close done') || '', /^closed: /, 'the line under the button says what it did'); assert.equal(P.text('close working'), null);
 });
