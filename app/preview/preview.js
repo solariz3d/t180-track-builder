@@ -281,7 +281,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const onAnyDown = (e) => {
     if (e && e.button === 2) { rightSeen = true; orphanUp = false; if (e.target !== canvas) lookMenu = false; }   // a right press that is not a look: its menu is the page's (onDown sets the flag after this, for a look)
     if (e && e.button !== undefined && e.button !== 0) return;
-    if (e && e.target && typeof e.target.closest === 'function' && e.target.closest('[data-tauri-drag-region]')) letGo();
+    if (e && e.target && typeof e.target.hasAttribute === 'function' && e.target.hasAttribute('data-tauri-drag-region')) letGo();
     buttons = 1; spoilCtrl();   // (a left press during a look leaves lookMenu: the right button's release is still the look's)
   };
   const onAnyUp = (e) => { if (!e || e.button === undefined || e.button === 0) buttons = 0; };   // D252 follow-up (C's finding 5): a handle's preventDefault on pointerdown suppresses the compatibility mousedown, so a press is read from pointerdown too

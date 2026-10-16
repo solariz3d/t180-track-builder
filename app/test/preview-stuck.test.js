@@ -36,10 +36,10 @@ function makeHost() {
   const node = (name, extra = {}) => { const n = { name, ...extra }; n.addEventListener = on(n); n.removeEventListener = off; return n; };
   const doc = node('doc', { hidden: false, activeElement: null }); doc.body = node('body');
   const win = node('win', { devicePixelRatio: 1, document: doc });
-  const el = (name, attrs = {}) => node(name, { attrs, matches: () => false, closest: (sel) => (sel === '[data-tauri-drag-region]' && attrs['data-tauri-drag-region'] !== undefined ? 1 : null) });
+  const el = (name, attrs = {}) => node(name, { attrs, matches: () => false, hasAttribute: (a) => attrs[a] !== undefined, closest: (sel) => (sel === '[data-tauri-drag-region]' && attrs['data-tauri-drag-region'] !== undefined ? 1 : null) });
   const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0 }, { get: (t, k) => (k in t ? t[k] : () => {}) });
   const canvas = el('canvas'); Object.assign(canvas, { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl });
-  const panel = el('panel'), title = el('title', { 'data-tauri-drag-region': '' });
+  const panel = el('panel'), title = el('title', { 'data-tauri-drag-region': '' }), headerButton = el('headerButton'); headerButton.closest = (sel) => (sel === '[data-tauri-drag-region]' ? title : null);   // a button inside the header, which drags nothing
   let q = [], t = 0;
   win.requestAnimationFrame = (f) => q.push(f); win.cancelAnimationFrame = () => {};
   win.step = (ms) => { t += ms; const f = q; q = []; for (const g of f) g(t); };
@@ -51,7 +51,7 @@ function makeHost() {
     for (const n of chain.slice().reverse()) if (!run(n, false)) return e;
     return e;
   };
-  return { win, doc, canvas, panel, title, fire, now: () => t };
+  return { win, doc, canvas, panel, title, headerButton, fire, now: () => t };
 }
 
 // ── the host model (H1-H5) over the page: the physical keys and buttons, and what is delivered ─────────────────────────────────────────────────────────────
@@ -171,6 +171,13 @@ test('row 3 (H2): a press on the title bar lets go of the held keys, whose key-u
   const W = makeWorld({ heldNetMs: 0 });
   W.press('w'); W.press('shift'); W.run(100); W.titleDown(); W.release('w'); W.release('shift'); W.titleUp();
   W.run(64); const e0 = W.eye(); W.run(500); assert.ok(moved(W.eye(), e0) < 1e-9, 'still');
+});
+test('row 3b (H2, a control): a click on a button inside the header (Save) does not let go of the held keys', () => {
+  const W = makeWorld({ heldNetMs: 0 });
+  W.press('w'); W.run(100); W.press('d'); W.run(100);
+  W.H.fire(W.H.headerButton, 'pointerdown', { button: 0 }); W.H.fire(W.H.headerButton, 'mousedown', { button: 0 }); W.H.fire(W.H.headerButton, 'pointerup', { button: 0 }); W.H.fire(W.H.headerButton, 'mouseup', { button: 0 });
+  W.release('d'); W.run(64);
+  const e0 = W.eye(); W.run(300); assert.ok(moved(W.eye(), e0) > 1e-6, 'W, still held and silent, still flies');
 });
 // THE SAFETY NET (heldNetMs, default 1500 ms)
 const flies = (W, ms, repeat) => { const e0 = W.eye(); W.run(ms, repeat); return moved(W.eye(), e0) > 1e-6; };
