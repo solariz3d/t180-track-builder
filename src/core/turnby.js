@@ -6,16 +6,25 @@
 //                                     turn rate 0 and its slope 0, so the next piece starts dead straight. Refused by name (TURN_TOO_SHORT) when the piece is
 //                                     too short to have a free turn control point; the refusal carries `needM`, the shortest length that has one.
 //   shortestTurnBy(doc, opts)         that length (m, whole metres).
+//   extendCorner(doc, opts)           Extend with the panel's turn field read as a CORNER (D331 B, the panel's default): opts.turnDeg (degrees, + = left) is the
+//                                     exact map heading change of the piece, which ends straight (extendTurnBy, so the same refusals); without turnDeg, Extend.
 //
-// HOW (level.js's way for the climb, on the turn). The piece starts as TODAY'S broad curve, Extend's own piece eased to the end rate that turns theta (the
-// keeper, 18:55: "THERE is nothign wrong with the 90 degree curves that can be made now"), and then ONLY its turn control points are corrected by the least-norm step close.js takes (ref 04 §3: δ = Jᵀ(JJᵀ)⁻¹(−r)): the joint's first two stay (the piece continues C1 from the head,
-// src/core/README.md) and the last two stay 0 (it ends straight: rate 0 and slope 0). The heading change is LINEAR in them (the adapter's rule: the heading
-// grows by the trapezoid of kh over each 2 m segment, src/core/adapter.js toSegments), so one step is exact; a second step takes up the storage rounding.
+// HOW. D331 C (ledger D332; the keeper, 2026-10-15: "the turn angle should take into account the banking to make the turns more intuitive ... but then turns that
+// have less banking or no banking also just work how it should to convey the proper degrees to line up with the grid"). The turn rate is a SYMMETRIC EASE: it
+// rises over the first half of the piece and falls over the second by the same Bloss blend (extend.js bloss), so it peaks at the middle and lets go exactly as
+// gently as it built up. Before D331 the piece started as Extend's, eased to an end rate (the keeper's 18:55 "THERE is nothign wrong with the 90 degree curves
+// that can be made now"), and was ended in its last two knot spans, so a 90° Turn by over 105 m peaked at 74% of the piece and let go about four times as fast as it
+// came in; on a steep bank, where most of a turn bends through the road's up (on 53.5°, cos = 0.59 of it lies in the road's plane), a quick let-go is a sudden
+// twist-and-dip. The ease is read at the knot averages (extend.js rampControl's variation-diminishing way: no ringing, and symmetric knots give symmetric
+// control points); a head still turning fades out over the first half; the joint's first two control points stay (the piece continues C1 from the head,
+// src/core/README.md) and the last two are 0 (it ends straight: rate 0 and slope 0). The heading change is LINEAR in the control points (the adapter's rule: the
+// heading grows by the trapezoid of kh over each 2 m segment, src/core/adapter.js toSegments), so the ease's height that turns theta is one solve; the stored
+// rounding is then taken up by the least-norm step close.js takes (ref 04 §3: δ = Jᵀ(JJᵀ)⁻¹(−r)) on the free control points.
 // THE LIMIT: none but having a free control point. Neither the document nor the validator bounds the turn rate (at the open track's 970 km/h the loads of a
 // turn are amber, D256), so a short sharp turn is the user's to judge by driving it; how sharp a builder turn can be is D280 part 2's to measure.
 'use strict';
 const D = require('./document.js');
-const { extend } = require('./extend.js');
+const { extend, bloss } = require('./extend.js');
 const { basis } = require('../../tools/piecewise.cjs');
 
 const SEG_M = 2;               // the adapter's segment (toSegments segM): the heading is integrated on its ends
@@ -36,65 +45,102 @@ function turnWeights(P) {
   }
   return w;
 }
-/** The document with the head piece's turn control points replaced (quantised as stored). */
-function withTurn(doc, c) {
-  const pieces = doc.pieces.slice(), P = pieces[pieces.length - 1];
-  pieces[pieces.length - 1] = { ...P, channels: { ...P.channels, kh: Array.from(c, (x) => q(x, D.DEC.kh)) } };
+/** The document with the head piece's control points of each channel in `cs` ({ kh, kv }) replaced (quantised as stored). */
+function withChannels(doc, cs) {
+  const pieces = doc.pieces.slice(), P = pieces[pieces.length - 1], channels = { ...P.channels };
+  for (const [ch, c] of Object.entries(cs)) channels[ch] = Array.from(c, (x) => q(x, D.DEC[ch]));
+  pieces[pieces.length - 1] = { ...P, channels };
   return freeze(D.checkDoc({ ...doc, pieces }));
 }
 /** The free columns: all but the joint's first two and the last two. */
 const freeOf = (m) => { const f = []; for (let i = 2; i <= m - 3; i++) f.push(i); return f; };
 
-/** Extend's piece with the turn eased over it to the rate R (the turn's own at-start ramp dropped): TODAY'S broad curve, as Extend makes it. */
-function easedPiece(doc, opts, R) {
+/** Extend's piece with each channel aimed at (kh, kv) eased over it to a rate of 0 (its own at-start ramp dropped): its knots and its joint are the corner's. */
+function easedPiece(doc, opts, chs) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to turn from');
-  const targets = { ...(opts.targets || {}), kh: R }, o = { ...opts, targets };
-  if (o.transition && typeof o.transition === 'object') { const { kh, ...rest } = o.transition; if (Object.keys(rest).length) o.transition = rest; else delete o.transition; }
+  const targets = { ...(opts.targets || {}) }, o = { ...opts, targets };
+  for (const ch of chs) targets[ch] = 0;
+  if (o.transition && typeof o.transition === 'object') { const rest = { ...o.transition }; for (const ch of chs) delete rest[ch]; if (Object.keys(rest).length) o.transition = rest; else delete o.transition; }
   return extend(doc, o);
 }
 const headOf = (d) => d.pieces[d.pieces.length - 1];
 const turnOf = (w, c) => w.reduce((a, wi, i) => a + wi * c[i], 0);
-/** TODAY'S broad curve that turns theta: Extend's eased piece at the end rate R it would take (the piece is linear in R; its knots do not depend on it,
- *  so one solve), the keeper's 18:55 "THERE is nothign wrong with the 90 degree curves that can be made now". Turn by changes only how it ENDS. */
-function broadCurve(doc, opts, theta) {
-  const R1 = 1e-3, d0 = easedPiece(doc, opts, 0), w = turnWeights(headOf(d0)), t0 = turnOf(w, headOf(d0).channels.kh), t1 = turnOf(w, headOf(easedPiece(doc, opts, R1)).channels.kh);
-  if (!(Math.abs(t1 - t0) > 0)) return d0;
-  return easedPiece(doc, opts, q(((theta - t0) * R1) / (t1 - t0), D.DEC.kh));
+/** The symmetric ease, 0 → 1 → 0 over u in [0, 1]: the Bloss blend up over the first half and down over the second (1 at u = ½; slope 0 at both ends and at the peak). */
+const ease = (u) => (u <= 0 || u >= 1 ? 0 : u <= 0.5 ? bloss(2 * u) : bloss(2 - 2 * u));
+/** Channel ch's control points as base + A·shape: the symmetric ease of height A, plus the head's rate fading out over the first half, read at the knot
+ *  averages; the joint's first two control points are Extend's (C1 from the head) and the last two 0. null when the piece has no free control point. */
+function symmetricEase(P, ch) {
+  const m = P.channels[ch].length, U = D.knotVector(P), L = P.length, k0 = P.channels[ch][0], base = Float64Array.from(P.channels[ch]), shape = new Float64Array(m);
+  if (!freeOf(m).length) return null;
+  for (let i = 2; i <= m - 3; i++) { const u = (U[i + 1] + U[i + 2] + U[i + 3]) / 3 / L; base[i] = u < 0.5 ? k0 * (1 - bloss(2 * u)) : 0; shape[i] = ease(u); }
+  base[m - 1] = base[m - 2] = 0;   // it ends straight (level-rate for the climb): rate 0 and slope 0
+  return { base, shape };
 }
 
-function solve(doc, opts, theta) {
-  if (!Number.isFinite(theta)) throw new D.CoreError('BAD_TARGET', `Turn by needs a finite angle, got ${theta}`);
-  const d0 = broadCurve(doc, opts, theta), P0 = headOf(d0), m = P0.channels.kh.length, free = freeOf(m);
-  if (!free.length) return { doc: null, converged: false, short: true };
-  const w = turnWeights(P0);
-  let c = Float64Array.from(P0.channels.kh); c[m - 1] = 0; c[m - 2] = 0;   // it ends straight: rate 0 and slope 0
-  let d = withTurn(d0, c);
-  for (let it = 0; it < MAX_ITER; it++) {
-    c = Float64Array.from(d.pieces[d.pieces.length - 1].channels.kh);
-    const r = w.reduce((a, wi, i) => a + wi * c[i], 0) - theta;
-    if (Math.abs(r) <= TURN_TOL) return { doc: d, converged: true, residual: r };
-    // the least-norm step on the free columns, for the one row w: δ_i = w_i·(−r)/Σ w_k² (k free)
-    const ww = free.reduce((a, i) => a + w[i] * w[i], 0);
-    if (!(ww > 0)) return { doc: null, converged: false, short: true };
-    for (const i of free) c[i] += (w[i] * -r) / ww;
-    d = withTurn(d0, c);
+/** The piece whose channels in `aims` ({ kh: θ, kv: Δp }, rad) change the heading and the pitch by exactly those angles, each ending at rate 0. The two are solved
+ *  apart: the heading is ∫kh and the pitch ∫kv on the same segments (adapter.js toSegments), and neither channel enters the other's integral. */
+function solve(doc, opts, aims) {
+  for (const [ch, a] of Object.entries(aims)) if (!Number.isFinite(a)) throw new D.CoreError('BAD_TARGET', `${ch === 'kh' ? 'Turn by' : 'Climb by'} needs a finite angle, got ${a}`);
+  const chs = Object.keys(aims), d0 = easedPiece(doc, opts, chs), P0 = headOf(d0), w = turnWeights(P0), free = freeOf(P0.channels.kh.length), cs = {};
+  for (const ch of chs) {
+    const st = symmetricEase(P0, ch), t1 = st ? turnOf(w, st.shape) : 0;
+    if (!st || !(Math.abs(t1) > 0)) return { doc: null, converged: false, short: true };
+    const A = (aims[ch] - turnOf(w, st.base)) / t1;   // the ease's height that turns (or pitches) by the aim: the angle is linear in it
+    cs[ch] = Float64Array.from(st.base, (b, i) => b + A * st.shape[i]);
   }
-  const cf = d.pieces[d.pieces.length - 1].channels.kh, r = w.reduce((a, wi, i) => a + wi * cf[i], 0) - theta;
-  return { doc: d, converged: Math.abs(r) <= TURN_TOL, residual: r };
+  let d = withChannels(d0, cs);
+  for (let it = 0; it < MAX_ITER; it++) {
+    let done = true;
+    for (const ch of chs) {
+      const c = Float64Array.from(headOf(d).channels[ch]), r = turnOf(w, c) - aims[ch];
+      if (Math.abs(r) <= TURN_TOL) { cs[ch] = c; continue; }
+      done = false;
+      // the least-norm step on the free columns, for the one row w: δ_i = w_i·(−r)/Σ w_k² (k free)
+      const ww = free.reduce((a, i) => a + w[i] * w[i], 0);
+      if (!(ww > 0)) return { doc: null, converged: false, short: true };
+      for (const i of free) c[i] += (w[i] * -r) / ww;
+      cs[ch] = c;
+    }
+    if (done) return { doc: d, converged: true };
+    d = withChannels(d0, cs);
+  }
+  const converged = chs.every((ch) => Math.abs(turnOf(w, headOf(d).channels[ch]) - aims[ch]) <= TURN_TOL);
+  return { doc: d, converged };
 }
 
-/** The shortest whole-metre length whose piece has a free turn control point (and converges), from this head with these fields. */
-function shortestTurnBy(doc, opts, theta = 0) {
+/** The shortest whole-metre length whose piece has a free control point (and converges), from this head with these fields; aims as solve's (a number: the turn). */
+function shortestTurnBy(doc, opts, aims = 0) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to turn from');
-  for (let L = Math.max(1, Math.ceil(Number(opts.length) || 1)); L <= 2000; L++) { const r = solve(doc, { ...opts, length: L }, theta); if (r.converged) return L; }
+  const a = typeof aims === 'number' ? { kh: aims } : aims;
+  for (let L = Math.max(1, Math.ceil(Number(opts.length) || 1)); L <= 2000; L++) { const r = solve(doc, { ...opts, length: L }, a); if (r.converged) return L; }
   return null;
 }
-/** Extend with a piece that turns exactly theta (rad) and ends straight, or refuse by name with the shortest length that does it. */
-function extendTurnBy(doc, opts, theta) {
-  const r = solve(doc, opts, theta);
+const DEGS = (x) => `${((x * 180) / Math.PI).toFixed(1)}°`;
+/** Extend with the piece solve(aims) makes, or refuse by name (TURN_TOO_SHORT with a turn aimed at, CLIMB_TOO_SHORT for a climb alone) with the shortest length that does it. */
+function extendBy(doc, opts, aims) {
+  for (const k of ['turnDeg', 'climbDeg']) if (opts && k in opts) { const { [k]: _, ...rest } = opts; opts = rest; }   // the fields read as corners are extendCorner's
+  const r = solve(doc, opts, aims);
   if (r.converged) return r.doc;
-  const need = shortestTurnBy(doc, opts, theta);
-  throw Object.assign(new D.CoreError('TURN_TOO_SHORT', need === null ? `a ${opts.length} m piece cannot be shaped to turn by ${(theta * 180 / Math.PI).toFixed(1)}°` : `a ${opts.length} m piece is too short to turn by ${(theta * 180 / Math.PI).toFixed(1)}° and end straight: it needs at least ${need} m`), { needM: need });
+  const need = shortestTurnBy(doc, opts, aims), what = [aims.kh !== undefined ? `turn by ${DEGS(aims.kh)}` : null, aims.kv !== undefined ? `climb by ${DEGS(aims.kv)}` : null].filter(Boolean).join(' and ');
+  const ends = aims.kh !== undefined ? 'end straight' : 'end at a steady pitch';
+  throw Object.assign(new D.CoreError(aims.kh !== undefined ? 'TURN_TOO_SHORT' : 'CLIMB_TOO_SHORT', need === null ? `a ${opts.length} m piece cannot be shaped to ${what}` : `a ${opts.length} m piece is too short to ${what} and ${ends}: it needs at least ${need} m`), { needM: need });
+}
+/** Extend with a piece that turns exactly theta (rad) and ends straight, or refuse by name with the shortest length that does it. Turn by's angle is its own (a
+ *  turn field read as a corner is dropped); a climb field read as a corner is kept, as Turn by keeps a climb rate typed in the fields. */
+const extendTurnBy = (doc, opts, theta) => extendBy(doc, opts, { kh: theta, ...(opts && Number.isFinite(opts.climbDeg) ? { kv: (opts.climbDeg * Math.PI) / 180 } : {}) });
+/** D331 (climb): Extend with a piece whose pitch changes by exactly dp (rad, + = nosing up) and ends at a climb rate of 0 (a steady pitch, not necessarily level). */
+const extendClimbBy = (doc, opts, dp) => extendBy(doc, opts, { kv: dp });
+/** D331 B: Extend with the turn and the climb fields read as corners when opts.turnDeg / opts.climbDeg are given (those exact changes of heading and pitch,
+ *  each ending at rate 0), else Extend as it always was. */
+function extendCorner(doc, opts = {}) {
+  if (!('turnDeg' in opts) && !('climbDeg' in opts)) return extend(doc, opts);
+  const { turnDeg, climbDeg, ...rest } = opts, aims = {};
+  for (const [ch, k, v] of [['kh', 'turnDeg', turnDeg], ['kv', 'climbDeg', climbDeg]]) {
+    if (!(k in opts)) continue;
+    if (!Number.isFinite(v)) throw new D.CoreError('BAD_TARGET', `a corner needs a finite number of degrees, got ${k} ${v}`);
+    aims[ch] = (v * Math.PI) / 180;
+  }
+  return extendBy(doc, rest, aims);
 }
 
-module.exports = { extendTurnBy, shortestTurnBy, turnWeights };
+module.exports = { extendTurnBy, extendClimbBy, extendCorner, shortestTurnBy, turnWeights };

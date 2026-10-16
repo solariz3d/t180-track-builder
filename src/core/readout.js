@@ -25,6 +25,7 @@
 
 const D = require('./document.js');
 const { extend } = require('./extend.js');
+const { extendCorner } = require('./turnby.js');   // D331 B: the ghost is the piece Extend places, the turn field read as a corner or as a rate
 const { toSegments } = require('./adapter.js');
 
 const DEG = 180 / Math.PI;
@@ -43,6 +44,104 @@ function channelIntegral(P, ch, a = 0, b = P.length) {
   }
   return sum;
 }
+
+// ── THE CORNER (D331, ledger D332: a hand-made "90°" turn on ELYSIUM turned 99.6°, and nothing on screen summed it) ───────────────────────────────────
+// The turn channel is a RATE, so a piece eased to one ENDS STILL TURNING, and the next piece spends its first metres easing that rate out. A piece's own turn
+// then tells only part of the corner. corner(doc, i) reads the corner piece i belongs to, from the document alone:
+//   turnDeg    the heading change from where the road was last straight (κh = 0) to the end of piece i; a piece that ends straight is read up to its turning
+//              part's start, so it reports the corner that ended in it. Across pieces and inside them; a flight or the track's start begins a corner.
+//   fromId     the piece the corner began in
+//   endsTurningDegPer100m   κh at the piece's end, degrees per 100 m (as the Extend field reads), or null when it ends straight
+// and cornerNext(doc, i) (below) what comes after a piece that ends turning adds: { nextAddsDeg, nextFrom }:
+//   'next piece'          the degrees the next piece turns before it is straight
+//   'the corner goes on'  (no degrees) the next piece never goes straight
+//   'turn 0 at start'     at the open end, what the panel's "turn 0, at start" would add (a 20 m ramp, app/core/panel.js:49 AT_START_M)
+// null when the piece neither turns nor ends a corner. Straight is |κh| < 1e-9 rad/m (κh is stored to 1e-9), found on a 0.25 m scan.
+const STRAIGHT = 1e-9, SCAN_M = 0.25, AT_START_M = 20;
+const isRoad = (P) => P && P.type !== 'flight';
+const khAt = (P, s, ch = 'kh') => D.channelAt(P, ch, s).v;   // (the climb's corner reads kv the same way: ch)
+// THE SPANS. κh is a cubic B-spline: on knot span k (between [0, ...knots, L][k] and [k + 1]) it is a blend of control points k..k + 3 alone, and it lies
+// inside their hull. So a span whose four are all 0 is straight throughout, one whose four are all non-zero and of one sign is straight nowhere, and only a
+// span with mixed control points is scanned (SCAN_M steps). (A full read of ELYSIUM's 42 labels: 344 ms scanning every metre, against 177 ms before the corner.)
+const spanEnds = (P) => [0, ...P.knots, P.length];
+function spanKind(P, k, ch = 'kh') {
+  const c = P.channels[ch].slice(k, k + 4);
+  if (c.every((v) => Math.abs(v) < STRAIGHT)) return 'straight';
+  return c.every((v) => v >= STRAIGHT) || c.every((v) => v <= -STRAIGHT) ? 'turning' : 'mixed';
+}
+/** The last s ≤ from where piece P is straight (span by span, scanning only mixed spans), or null. */
+function lastStraight(P, from, ch = 'kh') {
+  const t = spanEnds(P);
+  for (let k = t.length - 2; k >= 0; k--) {
+    if (t[k] > from) continue;
+    const hi = Math.min(from, t[k + 1]), kind = spanKind(P, k, ch);
+    if (kind === 'straight') return hi;
+    if (kind === 'mixed') for (let s = hi; ; s -= SCAN_M) { const x = Math.max(t[k], s); if (Math.abs(khAt(P, x, ch)) < STRAIGHT) return x; if (x === t[k]) break; }
+  }
+  return null;
+}
+/** The first s ≥ 0 where piece P is straight (span by span), or null when it never is. */
+function firstStraight(P, ch = 'kh') {
+  const t = spanEnds(P);
+  for (let k = 0; k + 1 < t.length; k++) {
+    const kind = spanKind(P, k, ch);
+    if (kind === 'straight') return t[k];
+    if (kind === 'mixed') for (let s = t[k]; ; s += SCAN_M) { const x = Math.min(t[k + 1], s); if (Math.abs(khAt(P, x, ch)) < STRAIGHT) return x; if (x === t[k + 1]) break; }
+  }
+  return null;
+}
+/** Where piece P's trailing straight begins (P.length when it ends turning; 0 when it is straight throughout). */
+function trailingStraightFrom(P, ch = 'kh') {
+  const t = spanEnds(P);
+  for (let k = t.length - 2; k >= 0; k--) {
+    const kind = spanKind(P, k, ch);
+    if (kind === 'straight') continue;
+    if (kind === 'turning') return t[k + 1];
+    let s = t[k + 1]; while (s > t[k] && Math.abs(khAt(P, s, ch)) < STRAIGHT) s = Math.max(t[k], s - SCAN_M);
+    return s;
+  }
+  return 0;
+}
+/** The corner of channel ch (kh the turn, kv the climb) that piece i belongs to: { deg, fromId, endsPer100m }, or null (see THE CORNER above). */
+function cornerOf(doc, i, ch) {
+  const P = doc.pieces[i];
+  if (!isRoad(P) || P.channels[ch].every((v) => Math.abs(v) < STRAIGHT)) return null;   // every control point 0: straight throughout (no scan)
+  // the piece's own turning stretch ends where its trailing straight begins
+  const end = trailingStraightFrom(P, ch);
+  if (end === 0 && Math.abs(khAt(P, 0, ch)) < STRAIGHT) return null;   // straight from its start to its end
+  // back to where the road was last straight, from inside piece i (before its turning end) and on into earlier pieces
+  let j = i, s0 = lastStraight(P, end, ch);
+  while (s0 === null) { if (j === 0 || !isRoad(doc.pieces[j - 1])) { s0 = 0; break; } j--; s0 = lastStraight(doc.pieces[j], doc.pieces[j].length, ch); }
+  let turn = channelIntegral(doc.pieces[j], ch, s0, j === i ? P.length : doc.pieces[j].length);
+  for (let k = j + 1; k <= i; k++) turn += channelIntegral(doc.pieces[k], ch);
+  const kEnd = khAt(P, P.length, ch), ends = Math.abs(kEnd) >= STRAIGHT;
+  return { deg: turn * DEG, fromId: doc.pieces[j].id, endsPer100m: ends ? kEnd * DEG * 100 : null };
+}
+function corner(doc, i) { const c = cornerOf(doc, i, 'kh'); return c && { turnDeg: c.deg, fromId: c.fromId, endsTurningDegPer100m: c.endsPer100m }; }
+/** D331, the climb too (plan :387-399): the climb's corner, the pitch change since the climb rate was last 0 (a steady pitch, not necessarily level), where it
+ *  began, and the climb rate it ends at, degrees per 100 m, or null when it ends at a steady pitch. */
+function climbCorner(doc, i) { const c = cornerOf(doc, i, 'kv'); return c && { climbDeg: c.deg, fromId: c.fromId, endsClimbingDegPer100m: c.endsPer100m }; }
+/**
+ * cornerNext(doc, i): when piece i ends still turning, what comes after it adds to the corner: { nextAddsDeg, nextFrom }, or null when it ends straight.
+ * Kept OUT of pieceReadout on purpose: a piece's readout reads only the start and the pieces up to it, and the shell reuses it on that promise
+ * (app/core/coreshell.js pieceReadouts); this reads the piece after.
+ */
+function cornerNext(doc, i) {
+  const P = doc.pieces[i];
+  if (!isRoad(P) || Math.abs(khAt(P, P.length)) < STRAIGHT) return null;
+  const N = doc.pieces[i + 1];
+  if (isRoad(N)) {   // a next piece that never goes straight is not an ease-out: the corner goes on through it
+    const f = firstStraight(N); return f === null ? { nextAddsDeg: null, nextFrom: 'the corner goes on' } : { nextAddsDeg: channelIntegral(N, 'kh', 0, f) * DEG, nextFrom: 'next piece' };
+  }
+  if (N) return null;   // a flight after it: the landing sets the heading
+  // the open end: what "turn 0, at start" would add, by placing it (extend is pure)
+  const d = extend(doc, { length: 2 * AT_START_M, targets: { kh: 0 }, transition: { kh: AT_START_M } }), M = d.pieces[d.pieces.length - 1];
+  return { nextAddsDeg: channelIntegral(M, 'kh', 0, firstStraight(M) ?? M.length) * DEG, nextFrom: 'turn 0 at start' };
+}
+// ── THE GRAVITY BANK (D331 D): the road's bank against gravity, as src/geom/path.js reads it (sampleAt: bankG = asin(L.y)). With the gravity frame the
+// unrolled left is horizontal and the unrolled up U0 = T × R has U0.y = cos p, so the rolled left's height is L.y = cos p · sin φ: past an inversion
+// (pitch 186°) a bank of −234° reads −53.5°, the road's real tilt, where φ itself reads in the flipped form. Without the lift of h and l (ref 09 §7).
+const gravityBank = (p, phi) => Math.asin(Math.max(-1, Math.min(1, Math.cos(p) * Math.sin(phi)))) * DEG;
 
 /** The pose entering piece i: heading θ and pitch p (rad), from the start and every earlier piece. */
 function poseBefore(doc, i) {
@@ -100,7 +199,9 @@ function pieceReadout(doc, i) {
     edgeFromDeg: P.edge ? D.channelAt(P, 'e', 0).v : 0, edgeToDeg: P.edge ? D.channelAt(P, 'e', P.length).v : 0,
     sliceFrom: P.edge ? D.channelAt(P, 's', 0).v : D.S_DEFAULT, sliceTo: P.edge ? D.channelAt(P, 's', P.length).v : D.S_DEFAULT,
     tubeFromDeg: P.tube ? D.channelAt(P, 't', 0).v : 0, tubeToDeg: P.tube ? D.channelAt(P, 't', P.length).v : 0,
-    pitchFromDeg: pose.p * DEG, pitchToDeg: (pose.p + climb) * DEG, offsets: null };
+    pitchFromDeg: pose.p * DEG, pitchToDeg: (pose.p + climb) * DEG, offsets: null,
+    gravityBankFromDeg: gravityBank(pose.p, D.channelAt(P, 'phi', 0).v), gravityBankToDeg: gravityBank(pose.p + climb, D.channelAt(P, 'phi', P.length).v),   // D331 D
+    corner: corner(doc, i), climbCorner: climbCorner(doc, i) };   // D331 A, and the climb's
   if (D.OFFSETS.some((ch) => P.channels[ch].some((v) => v !== 0))) {
     const a = liftedAngles(P, 0, pose.theta, pose.p), b = liftedAngles(P, P.length, pose.theta + turn, pose.p + climb);
     out.offsets = {
@@ -111,10 +212,15 @@ function pieceReadout(doc, i) {
   return out;
 }
 
-/** The readout of the piece extend(doc, opts) would place: the ghost, before it is placed. Same numbers as after placing. */
+/** The readout of the piece Extend would place (extendCorner: extend, or with opts.turnDeg the corner, D331 B): the ghost, before it is placed. Same numbers as after placing. */
 function candidateReadout(doc, opts) {
-  const d = extend(doc, opts);
+  const d = extendCorner(doc, opts);
   return pieceReadout(d, d.pieces.length - 1);
 }
+/** D331 A: what easing the piece extend(doc, opts) would place out would add (cornerNext of the ghost, the open end). Apart from candidateReadout, whose numbers are the placed piece's. */
+function candidateCorner(doc, opts) {
+  const d = extendCorner(doc, opts);
+  return cornerNext(d, d.pieces.length - 1);
+}
 
-module.exports = { pieceReadout, candidateReadout, channelIntegral };
+module.exports = { pieceReadout, candidateReadout, candidateCorner, cornerNext, channelIntegral };

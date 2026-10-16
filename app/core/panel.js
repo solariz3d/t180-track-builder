@@ -48,11 +48,18 @@ const DEG = Math.PI / 180;
 // the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres (A's D194b contract).
 const AT_START_M = 20;
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {} }) {
+// THE TURN AS A CORNER (D331 B; the keeper, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). turnAs 'corner' (the
+// panel's default) reads the turn field as the piece's exact heading change in degrees, ending straight: `turnDeg`, which src/core/turnby.js extendCorner places
+// with Turn by's symmetric ease (so it has no "at start" ramp of its own). A typed 0 still eases to a rate of 0, because a "corner of 0°" after a road still
+// turning would bend back the other way. turnAs 'rate' (and this function's default, for its other callers) is the old meaning: degrees per 100 m, a target rate.
+// The CLIMB the same way, on the same switch (the keeper: "the climb might need to do the same?"; plan :387-399): as a corner it is `climbDeg`, the exact pitch
+// change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate' }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
-  const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup);
-  if (t !== null) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
-  if (c !== null) targets.kv = c * DEG / 100;          // degrees of pitch per 100 m
+  const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
+  if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
+  if (t !== null && !corner) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
+  if (c !== null && !climbCorner) targets.kv = c * DEG / 100;          // degrees of pitch per 100 m
   // degrees of bank, + = left side up. NOT wrapped to ±180: 360 is a full turn of roll, -540 one and a half the other way (the spiral,
   // E's seal S1: the core's φ channel winds continuously, and a wrap here would turn a 360° spiral into no roll at all)
   if (b !== null) targets.phi = b * DEG;
@@ -69,6 +76,8 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   if (sl !== null) targets[XS.CHANNEL.start] = sl;
   if (tb !== null) targets[XS.CHANNEL.tube] = tb;
   const out = { length: Number(length), targets };
+  if (corner) out.turnDeg = t;
+  if (climbCorner) out.climbDeg = c;   // D331, the climb too (plan :387-399): the exact pitch change, ending at a climb rate of 0
   if (num(grip) !== null) out.grip = num(grip);   // D261: a grip typed in the field (blank: the new piece keeps the last road's); the core refuses a value that is not a whole percent 50 to 150
   // only a field WITH a target can be "at the start" (an untouched field has none, D193); none ticked: no `transition`, exactly as before
   const transition = {};
@@ -81,6 +90,28 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
 const fmtCup = (x) => LB.fmtDeg(x).replace(/^\+/, '');
 /** An edge start as the readout shows it: a share, two decimals, half away from zero (one decimal would read C's 0.64 as 0.6). */
 const fmtShare = (x) => (Math.round(Math.abs(x) * 100 + 1e-7) / 100 * Math.sign(x) || 0).toFixed(2);
+/**
+ * D331: the corner cell. "+90.00° · ends turning at +171.37°/100 m · turn 0 at start adds +9.64°": the turn since the road was last straight, then whether
+ * this piece ends turning (and at what rate), then what easing it out would add (src/core/readout.js corner, cornerNext). "none (straight)" when the
+ * piece is in no corner; — when the core does not report one.
+ */
+function fmtCorner(r, n) {
+  if (!('corner' in r)) return '—';
+  if (!r.corner) return 'none (straight)';
+  const c = r.corner, parts = [LB.fmtDeg(c.turnDeg)];
+  parts.push(c.endsTurningDegPer100m === null ? 'ends straight' : `ends turning at ${LB.fmtDeg(c.endsTurningDegPer100m)}/100 m`);
+  if (n && n.nextFrom === 'turn 0 at start') parts.push(`turn 0 at start adds ${LB.fmtDeg(n.nextAddsDeg)}`);
+  else if (n && n.nextFrom === 'next piece') parts.push(`the next piece adds ${LB.fmtDeg(n.nextAddsDeg)}`);
+  else if (n) parts.push('the corner goes on');
+  return parts.join(' · ');
+}
+/** D331, the climb too: the climb corner's cell, "+12.00° · ends climbing at +1.72°/100 m" or "… · ends at a steady pitch", or "none (steady pitch)". */
+function fmtClimbCorner(r) {
+  if (!('climbCorner' in r)) return '—';
+  if (!r.climbCorner) return 'none (steady pitch)';
+  const c = r.climbCorner;
+  return [LB.fmtDeg(c.climbDeg), c.endsClimbingDegPer100m === null ? 'ends at a steady pitch' : `ends climbing at ${LB.fmtDeg(c.endsClimbingDegPer100m)}/100 m`].join(' · ');
+}
 /** "from → to" for a pair of readout values, or — when the core does not report them (a core without the channel) */
 const pairOf = (r, [from, to], fmt) => (Number.isFinite(r[from]) && Number.isFinite(r[to]) ? `${fmt(r[from])} → ${fmt(r[to])}` : '—');
 
@@ -89,7 +120,7 @@ function mount(root, shell) {
   const el = (tag, attrs = {}, ...kids) => { const e = doc.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; };
   const field = (label, input) => el('label', { class: 'picker' }, el('span', { text: label }), input);
   // a channel field with its "at start" box after the input (D194b); the input stays the label's second child
-  const fieldAt = (label, input, k) => el('label', { class: 'picker' }, el('span', { text: label }), input, el('span', { class: 'at-start', style: 'white-space:nowrap;font-size:12px', title: atStart[k].getAttribute ? atStart[k].getAttribute('title') : '' }, atStart[k], el('span', { text: ' at start' })));
+  const fieldAt = (label, input, k) => el('label', { class: 'picker' }, typeof label === 'string' ? el('span', { text: label }) : label, input, el('span', { class: 'at-start', style: 'white-space:nowrap;font-size:12px', title: atStart[k].getAttribute ? atStart[k].getAttribute('title') : '' }, atStart[k], el('span', { text: ' at start' })));
   const num = (value, step, title) => el('input', { type: 'number', value: String(value), step: String(step), title: title || '' });
   const send = (name, detail) => doc.dispatchEvent(new win.CustomEvent(name, { detail }));
 
@@ -131,7 +162,20 @@ function mount(root, shell) {
   };
   const shown = {};
   const show = (x) => { const v = Math.round(x * 100) / 100; return String(Object.is(v, -0) ? 0 : v); };   // two decimals, no trailing zeros, no "-0"
-  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); };   // (baseTitle is set below, before the first draw)
+  // THE TURN AS A CORNER (D331 B, the default; extendOptions above). As a corner the turn field holds the degrees the new piece turns and shows nothing at the
+  // head (a corner has no "value at the head": left blank, the track keeps turning as now); as a rate it is the old field, the head's turn in °/100 m. The switch
+  // is kept from piece to piece, like the "at start" boxes. The CLIMB field follows the same switch (plan :387-399): as a corner, the degrees the pitch changes
+  const turnAs = el('select', { 'aria-label': 'turn and climb as', title: 'how the turn and climb fields are read: as a CORNER, the exact degrees the piece turns on the map (90 lines up with the grid, banked or flat) and the exact degrees its pitch changes, easing in and out and ending at a rate of 0; as a RATE, degrees per 100 m the piece eases to (it ends still turning, or still climbing, at that rate)' });
+  turnAs.replaceChildren(new win.Option('corner °, ends straight', 'corner'), new win.Option('rate °/100 m', 'rate')); turnAs.value = 'corner';
+  const cornerMode = () => turnAs.value === 'corner';
+  const TURN_TITLE = { corner: 'the degrees this piece turns on the map, + = left: exact, easing in and out, ending straight (0 eases to straight). Blank: the track keeps turning as now', rate: turn.getAttribute('title') };
+  const CLIMB_TITLE = { corner: 'the degrees this piece changes the pitch, + = up: exact, easing in and out, ending at a climb rate of 0, so a steady pitch (0 eases to a steady pitch). Blank: the track keeps climbing as now', rate: climb.getAttribute('title') };
+  const showTurnHead = (h) => {
+    for (const [k, f, lab, unit, title] of [['turn', turn, turnLabel, 'turn', TURN_TITLE], ['climb', climb, climbLabel, 'climb', CLIMB_TITLE]]) {
+      shown[k] = cornerMode() ? '' : show(HEAD[k][1](h)); f.value = shown[k]; lab.textContent = cornerMode() ? `${unit} °` : `${unit} °/100m`; f.setAttribute('title', title[turnAs.value]);
+    }
+  };
+  const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } showTurnHead(h); for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); };   // (baseTitle is set below, before the first draw)
   // A PIECE IS A CUP OR A TUBE, never both (A's contract: `c` and `t` targets together are refused BAD_TARGET). CHOSEN: the field changed
   // LAST wins. Changing one puts the other back to what it shows (so it sends no target) and DISABLES it, with a tooltip saying why; putting
   // the changed one back to its shown value enables the other again, and so does every new document (showHead).
@@ -151,6 +195,9 @@ function mount(root, shell) {
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
   const atStart = Object.fromEntries(Object.keys(HEAD).map((k) => [k, el('input', { type: 'checkbox', 'aria-label': `${k} at the start`,
     title: `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
+  // the turn field's label says which way it is read (D331 B); switching puts the field back to what it shows, so nothing typed in the other unit is applied
+  const turnLabel = el('span', { text: 'turn °' }), turnField = fieldAt(turnLabel, turn, 'turn'), climbLabel = el('span', { text: 'climb °' }), climbField = fieldAt(climbLabel, climb, 'climb');
+  turnAs.onchange = () => { showTurnHead(shell.headState()); applied.turn = turn.value; applied.climb = climb.value; ghost(); };
   // GRIP (D261, the keeper: a different grip per piece; the core is src/core/document.js, E's). A whole percent 50 to 150 (100 is AC's own road), shown as the head's; left as shown the new piece keeps it, a changed
   // value is the new piece's grip. "grip like…" fills it from a known track (src/doc/grips.json). The words say what the number is, "untested: drive it" outside 60 to 110, and that the checker does not model grip.
   const gripF = el('input', { type: 'number', value: '100', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'grip', title: GL.tip() });
@@ -163,21 +210,24 @@ function mount(root, shell) {
   const colourOn = el('input', { type: 'checkbox', 'aria-label': 'colour by grip', title: 'colour the track by grip: blue below 100%, white at 100%, orange above; the hover label says each piece\'s grip' });
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: asTyped('edgeR'), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
-    empty: !shell.getState().history.present.pieces.length });
+    empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value });
   // D242 item 7 (the keeper, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
   const madeWith = new WeakMap();
-  const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])) });
+  const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value });
   const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
-  const putBack = (m) => { len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
+  const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
   // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
   // the typed target, which the core's fit may ring past and its guard may refuse (E's seal row 7)
   let values = null;   // D267: the values of the piece being edited, large over the 3D view (app/core/valuesoverlay.js); mounted where the stage is found, below
-  const RO = ['length', 'turn', 'climb', 'bank', 'cup', 'edge', 'start', 'tube'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
-  const roName = (k) => (k === 'length' ? 'length' : k === 'cup' ? 'cup from → to' : k === 'edge' ? 'edge from → to' : k === 'start' ? 'edge start from → to' : k === 'tube' ? 'tube from → to' : `${k} change`);
+  // D331 (ledger D332): 'corner' (the turn since the road was last straight; whether this piece ends turning, and what easing it out would then add) and
+  // 'gravity' (the bank against gravity, from → to: the road's real tilt, where the bank field reads in the flipped form past an inversion)
+  const RO = ['length', 'turn', 'climb', 'bank', 'cup', 'edge', 'start', 'tube', 'corner', 'climbCorner', 'gravity'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
+  const roName = (k) => (k === 'length' ? 'length' : k === 'cup' ? 'cup from → to' : k === 'edge' ? 'edge from → to' : k === 'start' ? 'edge start from → to' : k === 'tube' ? 'tube from → to'
+    : k === 'corner' ? 'corner' : k === 'climbCorner' ? 'climb corner' : k === 'gravity' ? 'bank to gravity from → to' : `${k} change`);
   const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:#eef1f6' },
     ...RO.flatMap((k) => [el('span', { text: roName(k), style: 'color:var(--dim);font-weight:600' }), roCells[k]]));
   const readout = () => {
@@ -186,7 +236,8 @@ function mount(root, shell) {
       if (shell.getState().history.present.closed) why = 'the loop is closed';
       else { const r = shell.candidateReadout(opts()); f = { ...LB.formatReadout(r), cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`,
         // the cross-section cells read the DOCUMENT (the core's readout), never the typed field (E's seal E7, KE7-1)
-        edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup) }; }
+        edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup),
+        climbCorner: fmtClimbCorner(r), corner: fmtCorner(r, 'corner' in r && r.corner && r.corner.endsTurningDegPer100m !== null ? shell.candidateCorner(opts()) : null), gravity: pairOf(r, ['gravityBankFromDeg', 'gravityBankToDeg'], LB.fmtDeg) }; }
     } catch (e) { why = e.message; }
     for (const k of RO) roCells[k].textContent = f ? f[k] : '—';
     if (values) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // D267: the same numbers, large over the 3D view
@@ -283,7 +334,7 @@ function mount(root, shell) {
   // and the hint when the turn field asks for 0 after a turn without "at start": that eases over the whole piece, so it is not straight until its end
   // D267: no paragraph under the buttons; the sense is the "at start" box's tooltip
   const turnStartTitle = atStart.turn.getAttribute('title');
-  const hintNow = () => { const typed = asTyped('turn'); const hint = typed !== '' && Number(typed) === 0 && Number(shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; atStart.turn.setAttribute('title', hint ? `${turnStartTitle} ${hint}` : turnStartTitle); };
+  const hintNow = () => { const typed = asTyped('turn'); const hint = typed !== '' && Number(typed) === 0 && Number(cornerMode() ? show(shell.headState().kh * 100 / DEG) : shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; atStart.turn.setAttribute('title', hint ? `${turnStartTitle} ${hint}` : turnStartTitle); };
 
   // BRUSH
   const mode = el('select', { 'aria-label': 'brush mode' }), channel = el('select', { 'aria-label': 'brush channel' }), radius = num(60, 10, 'brush radius, m');
@@ -337,7 +388,8 @@ function mount(root, shell) {
     const s1 = info.samples[info.samples.length - 1].s; if (!(s1 - info.s0 > 0.5)) return null;
     // the road's half-width at a share of the piece: from the head's width to the field's, read when asked (a press must not see the width of the frame before)
     const half = (f) => { const w1 = fieldNum(width), w0 = d.pieces.length ? (fieldNum({ value: shown.width }) ?? w1) : w1; return ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2; };
-    const kinds = HD.ORDER.filter((k) => !HANDLE_FIELD[k].disabled && fieldNum(HANDLE_FIELD[k]) !== null);
+    // the turn and climb handles drag a RATE (°/100 m, app/core/handles.js): with them read as corners (D331 B) they are not offered, and the corner is typed
+    const kinds = HD.ORDER.filter((k) => !HANDLE_FIELD[k].disabled && fieldNum(HANDLE_FIELD[k]) !== null && !((k === 'turn' || k === 'climb') && cornerMode()));
     const wt = fieldNum(width);   // the width mark sits at the TARGET width (the field), so it follows the drag from the near end
     return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, halfTarget: wt === null ? undefined : wt / 2, kinds, base: (k) => fieldNum(HANDLE_FIELD[k]), ctx: (k) => ({ half: half(HD.KINDS[k].at) }) };
   };
@@ -493,7 +545,7 @@ function mount(root, shell) {
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), fieldAt('turn °/100m', turn, 'turn'), fieldAt('climb °/100m', climb, 'climb'), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, field('turn & climb as', turnAs), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
       fieldAt('edge angle °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn), field('colour by grip', colourOn)),
     wnote, gripNote, roBox,
     el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn, turnByBtn, field('turn by °', turnBy), gridBtn, field('grid °', gridStep), sharpBtn, field('sharp °', sharpDeg), field('sharp radius m', sharpR), field('sharp ramp m', sharpRamp)), jumpNote, landingBox,
@@ -528,6 +580,7 @@ function mount(root, shell) {
       const ps = shell.pieceState(one);
       if (ps) {
         for (const [k, [input, of]] of Object.entries(HEAD)) input.value = show(of(ps));
+        if (cornerMode()) { const at = d.pieces.findIndex((p) => p.id === one); const r = shell.pieceReadouts()[at]; turn.value = show(r.turnDeg); climb.value = show(r.climbDeg); }   // D331 B: as corners, the piece lends the degrees it turns and climbs
         len.value = show(ps.length);
         for (const [k, fl] of [['cup', cup], ['tube', tube]]) { fl.disabled = false; fl.setAttribute('title', baseTitle[k]); }
         if (ps.tube) exclusive(tube); else if (cup.value !== shown.cup) exclusive(cup);

@@ -322,7 +322,7 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs2 = frames.splice(0); for (const f of fs2) f(0); } };
 }
-async function mountPanel(st = store(), { bin = false } = {}) {
+async function mountPanel(st = store(), { bin = false, turnAsRate = true } = {}) {
   const { doc, win, tick: frame } = fakeWindow();
   let menuEl = null, binEl = null;   // D269: the top bar's Pieces menu (index.html: <details id="pieces"><div id="pieces-bin">), found by the panel by id as #preview is
   if (bin) { menuEl = doc.createElement('details'); menuEl.setAttribute('id', 'pieces'); menuEl.open = false; binEl = doc.createElement('div'); binEl.setAttribute('id', 'pieces-bin'); menuEl.append(binEl); }
@@ -333,6 +333,10 @@ async function mountPanel(st = store(), { bin = false } = {}) {
   doc.addEventListener('t180-pick', (ev) => ev.detail.reply(T.s === null ? null : { s: T.s, pos: [0, 0, 0], px: 1 }));
   doc.addEventListener('t180:track-request', (ev) => ev.detail.reply({ segments: shell.getState().resolved.segments, path: { samples: [] } }));
   const panel = require('../core/panel.js').mount(root, shell);
+  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the keeper's word, plan :367-369, ruled :373-385). Every row in
+  // this file types the turn as a RATE (°/100 m), the field's meaning when it was written, so the helper puts "turn as" on rate, the switch the ruling keeps one
+  // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js (D331 B).
+  if (turnAsRate !== false) { const ta = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); ta.value = 'rate'; ta.onchange(); }
   const all = () => root.all(), button = (text) => all().find((e) => e.tagName === 'BUTTON' && e.textContent === text);
   const buttons = (text) => all().filter((e) => e.tagName === 'BUTTON' && e.textContent === text);
   const pointer = (type, x, y, extra = {}) => { for (const f of (stage.listeners[type] || []).slice()) f({ clientX: x, clientY: y, button: 0, preventDefault() {}, ...extra }); };
@@ -420,8 +424,8 @@ function fire(P1, type, x, y, extra = {}) {
   return ev;
 }
 const fieldOf = (P1, text) => P1.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text).children[1];
-async function handlePanel({ deaf = false } = {}) {
-  const P1 = await mountPanel(); P1.deaf = deaf; const S = stubPreview(P1); S.deaf = deaf;
+async function handlePanel({ deaf = false, turnAsRate = true } = {}) {
+  const P1 = await mountPanel(undefined, { turnAsRate }); P1.deaf = deaf; const S = stubPreview(P1); S.deaf = deaf;
   const l = P1.stage.listeners.pointerdown; l.unshift(l.pop());   // the handles' listener is the capture-phase one: first
   fieldOf(P1, 'length m').value = '100';   // (the fake DOM does not turn the value attribute into the value, a real input shows 100)
   P1.frame(); P1.frame(); return Object.assign(P1, { S });
@@ -435,6 +439,16 @@ function dragBy(P1, id, px, extra = {}) {
   fire(P1, 'pointerup', a.x + a.dx * k, a.y + a.dy * k, extra);
 }
 
+// D331 B: the turn handle drags a RATE (app/core/handles.js, °/100 m), so with the turn field read as a corner (the default) it is not offered; on rate it is back
+test('row 11d (D331 B): with the turn read as a corner, the ghost has no turn handle (it drags a rate); "turn as" rate brings it back', async () => {
+  const P1 = await handlePanel({ turnAsRate: false }), turnAs = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as');
+  fieldOf(P1, 'turn °').value = '90'; fieldOf(P1, 'turn °').oninput(); fieldOf(P1, 'climb °').value = '5'; fieldOf(P1, 'climb °').oninput(); P1.frame();
+  const ids = () => P1.panel.handles.handles().map((h) => h.id);
+  assert.ok(ids().length > 0, 'the ghost has handles: ' + ids().join(' ')); assert.ok(!ids().some((id) => id.startsWith('turn:') || id.startsWith('climb:')), 'none for the turn or the climb: ' + ids().join(' '));
+  turnAs.value = 'rate'; turnAs.onchange(); P1.frame();
+  assert.ok(ids().some((id) => id.startsWith('turn:')) && ids().some((id) => id.startsWith('climb:')), 'on rate the turn and climb handles are back: ' + ids().join(' '));
+  P1.panel.unmount();
+});
 test('row 11: Extend\'s handles: on the ghost and only while there is one; a drag types into the matching field and reaches no document until Extend; mirrored handles change the same field; Extend places what was dragged', async () => {
   const P1 = await handlePanel(), { shell, S } = P1, d0 = shell.getState().history.present, n0 = d0.pieces.length, past0 = shell.getState().history.past.length;
   const hs = P1.panel.handles.handles(); assert.deepEqual(hs.map((h) => h.id), ['length:0', 'width:1', 'width:-1', 'bank:1', 'bank:-1', 'cup:1', 'cup:-1', 'turn:1', 'turn:-1', 'climb:0'], 'ten handles on the ghost, both sides where there are sides');
@@ -908,4 +922,19 @@ test('a selected piece lends its values to the Extend fields: Extend places a pi
   assert.equal(Number(turnF.value), r2(shell.headState().kh * 100 / DEG), 'the fields show the (new) head');
   P1.click(400); P1.frame(); assert.equal(Number(lenF.value), 150);
   P1.click(null); P1.frame(); assert.equal(Number(turnF.value), r2(shell.headState().kh * 100 / DEG), 'a click on nothing: the head again');
+});
+test('D331 B: with the turn read as a corner (the default), a selected piece lends the degrees it turns, and Extend places a piece that turns them and ends straight', async () => {
+  const P1 = await mountPanel(undefined, { turnAsRate: false }), { shell } = P1, r2 = (x) => Math.round(x * 100) / 100, turnF = fieldOf(P1, 'turn °');
+  P1.frame(); P1.click(400); P1.frame();                            // p2: 150 m, turning
+  const d0 = shell.getState().history.present, want = shell.pieceReadouts()[1].turnDeg;
+  assert.ok(Math.abs(want) > 1, `p2 turns ${want}°`); assert.equal(Number(turnF.value), r2(want), 'the turn field: the degrees p2 turns');
+  assert.equal(Number(fieldOf(P1, 'climb °').value), r2(shell.pieceReadouts()[1].climbDeg), 'the climb field: the degrees p2 climbs');  P1.button('Extend').onclick(); P1.frame();
+  const d = shell.getState().history.present, i = d.pieces.length - 1;
+  assert.equal(d.pieces.length, d0.pieces.length + 1); assert.ok(Math.abs(shell.pieceReadouts()[i].turnDeg - r2(want)) <= 0.01, `the new piece turns ${shell.pieceReadouts()[i].turnDeg}°`);
+  assert.equal(D.pieceEnd(d.pieces[i]).kh.v, 0, 'and ends straight');
+  // and the climb: a piece eased to a climb rate lends the degrees it climbs (p2 climbs 0°, where its rate and its degrees are the same number)
+  const at0 = shell.getState().history.present.pieces.reduce((a, p) => a + p.length, 0);
+  shell.extend({ length: 100, targets: { kv: 0.003 } }); P1.frame(); P1.click(at0 + 50); P1.frame();
+  const k = shell.getState().history.present.pieces.length - 1, up = shell.pieceReadouts()[k].climbDeg; assert.ok(up > 1, `it climbs ${up}°`);
+  assert.equal(Number(fieldOf(P1, 'climb °').value), r2(up), 'the climb field: the degrees it climbs, not its climb rate');
 });
