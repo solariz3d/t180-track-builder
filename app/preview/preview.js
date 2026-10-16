@@ -18,22 +18,22 @@
 // KEYS (keyAction below, tested headless):  C  next camera      B  the build view, from anywhere
 //   L  the look: the AC shaders (default) or the colour per placed word (ARCHITECTURE §4's feedback layer)
 //   flying:  W / S forward and back,  A / D left and right,  Q / E or Left Ctrl / Space down and up,  Shift sprints (×4, rising to ×20 over 2.5 s held). Movement is PER AXIS
-//   (the keeper, D188): W/S, A/D and Q/E each resolve on their own, the NEWER key of an axis winning and the other taking over on its
+//   (reported, D188): W/S, A/D and Q/E each resolve on their own, the NEWER key of an axis winning and the other taking over on its
 //   release, and the axes combine, so W+D goes diagonally at the same speed as a straight line. From any view the first move takes the view over
-//   into free mode, once (C and B after it are not undone by a key still held). Looking: the RIGHT-button drag, in every view (D255, the keeper: "right click
+//   into free mode, once (C and B after it are not undone by a key still held). Looking: the RIGHT-button drag, in every view (D255, reported: "right click
 //   turn only, left click will be used for clicking things": the left button never turns the camera; it is the pieces', the handles' and the brush's), or
 //   the arrow keys; drag right turns right. Moving and looking work at the same time. The scroll wheel zooms every view (free mode
 //   dollies); Ctrl + wheel is the LENS (the field of view, 10° to 100°, in every view) and a middle click resets it to 60°.
 //   A text field swallows the camera keys; a number field lets them through; Enter or Esc in a field, or a click on the canvas, lets go of it.
-//   D252 (the keeper: "space bar to go up, lft control to go down?"): Space and LEFT Ctrl, by the physical key (Right Ctrl does not fly). Left Ctrl
-//   flies down TOGETHER with the movement keys (W A S D, Q E, Space, Shift, the arrows) and a RIGHT-button look drag (D257, the keeper: "cant even click drag
+//   D252 (reported: "space bar to go up, lft control to go down?"): Space and LEFT Ctrl, by the physical key (Right Ctrl does not fly). Left Ctrl
+//   flies down TOGETHER with the movement keys (W A S D, Q E, Space, Shift, the arrows) and a RIGHT-button look drag (D257, reported: "cant even click drag
 //   look around and go down"); Ctrl+Space nets zero. Only a SHORTCUT key (one app/core/keys.js acts on with Ctrl: Z, Y, S, Backspace), the wheel (Ctrl+wheel,
 //   the lens) or a LEFT-button press (a handle drag, Ctrl to snap) stops it, and that press's descent is undone, so a Ctrl shortcut leaves the camera where it was. It descends
-//   INSTANTLY, like Space (D255, the keeper: "space works instantly to go up, but control lags before going down": D252's 200 ms hold is removed;
+//   INSTANTLY, like Space (D255, reported: "space works instantly to go up, but control lags before going down": D252's 200 ms hold is removed;
 //   a shortcut's brief dip is accepted, and undone when its key joins). Space is taken
 //   (it never clicks a focused button) except in a text field, where it types.
-//   No ground grid unless createPreview({ ground: true }): just the track (the keeper, 2026-09-29).
-//   D237 (the keeper: "a 3D grid ... a 2D grid if the track has no height, but as soon as the track turns up or downward the grid becomes 3D", and symmetry): createPreview({ gridMode })
+//   No ground grid unless createPreview({ ground: true }): just the track (reported, 2026-09-29).
+//   D237 (reported: "a 3D grid ... a 2D grid if the track has no height, but as soon as the track turns up or downward the grid becomes 3D", and symmetry): createPreview({ gridMode })
 //   'auto' | 'ground' | '3d' | 'off' starts the grid in that mode (the app's mount asks for 'auto'; with neither gridMode nor ground the preview starts with NO grid, as before). At run time:
 //   p.setGuides({ grid, mirror, centre })   grid: auto | ground | 3d | off;  mirror: off | x | z | both;  centre: { x, z } | null (the box's middle)
 //   p.guides()                              what is asked and what is drawn: { grid, drawn, flat, range, mirror, centre, gap, lines, levels, spacing }
@@ -87,7 +87,7 @@ function heldKey(e) {
   if (e && typeof e.code === 'string' && /^Arrow/.test(e.code)) return e.code;
   const k = String(e && e.key); return k.length === 1 ? k.toLowerCase() : k;
 }
-// SHIFT'S SPRINT RAMPS (the keeper, 2026-09-29 06:22: "should go faster the longer you hold it down"): ×4 at the press, rising along a
+// SHIFT'S SPRINT RAMPS (reported, 2026-09-29 06:22: "should go faster the longer you hold it down"): ×4 at the press, rising along a
 // smoothstep to ×20 over 2.5 s held; ×1 the moment it is released, and reset when the window loses focus.
 const BOOST = { from: 4, to: 20, secs: 2.5 };
 function boostAt(t) { const u = Number.isFinite(t) ? Math.max(0, Math.min(1, t / BOOST.secs)) : 0; return BOOST.from + (BOOST.to - BOOST.from) * u * u * (3 - 2 * u); }
@@ -95,7 +95,10 @@ function boostAt(t) { const u = Number.isFinite(t) ? Math.max(0, Math.min(1, t /
 /** A field that takes TEXT swallows the camera keys (typing a name never moves the camera); a NUMBER field does not, so the camera flies while a value is edited. */
 function swallowsKeys(t) { return !!t && typeof t.matches === 'function' && t.matches('input, select, textarea') && !t.matches('input[type="number"]'); }
 
-function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false, gridMode = null, layer = null, onGuides = null }) {
+// D336: how long a held key may go with no keydown at all, while one should be repeating, before it is let go. Windows' slowest key-repeat waits 1 s before the
+// first repeat and then repeats every 400 ms, so 1.5 s never drops a key really held there; a lost key-up then stops within 1.5 s instead of never.
+const HELD_NET_MS = 1500;
+function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false, gridMode = null, layer = null, onGuides = null, heldNetMs = HELD_NET_MS }) {
   if (!canvas || !shell || !win) throw new Error('preview: needs { canvas, shell, win }');
   const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
   if (!gl) throw new Error('preview: WebGL is not available in this window');
@@ -139,7 +142,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   };
   // a change to the placed track retires the ghost: it was built on the old head (the palette shows it again on hover)
   const shared = () => (track && track.how !== 'kept' ? { path: track.path, segments: track.segments, closed: !!(track.path && track.path.closed), how: track.how, g: track.g, fromS: track.fromS } : null);
-  // D235 (the keeper: "make the changes render faster while you change it from one to the next"): while a brush drag is open (state.brush) the model meshes a COARSER
+  // D235 (reported: "make the changes render faster while you change it from one to the next"): while a brush drag is open (state.brush) the model meshes a COARSER
   // preview (app/preview/coarse.js: a closed tube's brush step is about 3× cheaper), and full detail comes back FULL_AFTER_MS after the drag ends, once, unless another
   // drag starts first. Nothing here touches what is exported: the model's detail changes the preview's mesh only, and the shell's resolved state is the export's.
   const FULL_AFTER_MS = 250; let fullTimer = 0;
@@ -164,8 +167,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   /** The camera's context: the head and path, the track's box (the overhead fit) and the view's aspect. With nothing
    *  placed yet but a ghost showing, the ghost's head and path stand in, so the first word can be previewed too. With
    *  NOTHING placed and no ghost, the track's START stands in (D195): before it, the context was null there, so no frame
-   *  drew, the view froze, and the wheel and keys pressed meanwhile were applied late, when a ghost first appeared (the
-   *  keeper, 2026-09-30 02:56: "very laggy ... until the first piece is put down"). */
+   *  drew, the view froze, and the wheel and keys pressed meanwhile were applied late, when a ghost first appeared (as
+   *  reported 2026-09-30 02:56: "very laggy ... until the first piece is put down"). */
   const ctx = (aspect) => {
     if (track && track.path) return { head: track.path.head, path: track.path, bounds: track.bounds, aspect, width: widthAtHead(track.segments) };
     if (ghost && ghost.path) return { head: ghost.head, path: ghost.path, bounds: null, aspect, width: widthAtHead(ghost.segments) };
@@ -189,7 +192,12 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     // the view back only when Ctrl ALONE took it over (D257: a W held with it is a flight of its own)
     if (f.mode !== 'free' && ![...held.keys()].some((k) => k !== 'ControlLeft')) { takeover = false; if (rig.mode === 'free') { rig.setMode(f.mode, ctx()); said(); } }
   };
+  // D336, THE SAFETY NET: a held key whose key-up the page never gets (any path, known or not) is let go. While a key is held the OS repeats the LAST key pressed,
+  // so as long as no key has been released since the last fresh press, SOME keydown keeps arriving; when none at all arrives for heldNetMs, the key-up was lost.
+  // Once any key is released the OS repeats nothing (the keys still held go silent, legitimately), so the net does not act until the next fresh press.
+  let quietMs = 0, expectRepeat = false;
   const onKey = (e) => {
+    quietMs = 0; if (!e.repeat) expectRepeat = true;   // any keydown at all re-confirms the held keys
     if (typeof e.code === 'string' && e.code) { if (isShortcut(e)) { shortcutDown.add(e.code); spoilCtrl(); } down.add(e.code); }   // D257: only a SHORTCUT stops Left Ctrl
     boost = !!e.shiftKey;   // Shift is the sprint: read on every key-down, typing included
     // ENTER or ESC in a field lets go of it, so the camera keys work again (Enter in a text area is a new line: left alone)
@@ -215,31 +223,46 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   };
   // HELD KEYS are keyed by the PHYSICAL key (e.code), so a key pressed as 'w' and released as 'W' (Shift in between) still
   // lets go; and every held key is dropped when the window loses focus or is hidden, since the key-up then never arrives.
-  // That lost key-up was the camera that kept flying forward by itself (the keeper, 2026-09-29).
+  // That lost key-up was the camera that kept flying forward by itself (reported, 2026-09-29).
   const onUp = (e) => {
+    expectRepeat = false;   // the OS stops repeating at a release (D336): the keys still held may now be silent
     held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code); shortcutDown.delete(e.code);
     if (e.code === 'ControlLeft') ctrlFly = null;   // a descent that ran alone is kept
     if (e.code === 'Space' && !swallowsKeys(e.target)) e.preventDefault();   // D252: a button clicks on the key-UP of Space too
   };
-  const letGo = () => { held.clear(); takeover = false; boost = false; boostT = 0; drag = null; down.clear(); shortcutDown.clear(); buttons = 0; ctrlFly = null; };
+  const letGo = () => { held.clear(); expectRepeat = false; quietMs = 0; takeover = false; boost = false; boostT = 0; drag = null; down.clear(); shortcutDown.clear(); buttons = 0; ctrlFly = null; };
   const onVis = () => { if (win.document && win.document.hidden) letGo(); };
   let boost = false, boostT = 0;   // Shift is down; and for how long (s)
   // MOUSE LOOK: the right button drags the look from any view (it takes the view over into free); the left button never looks (D255: it is the
   // pieces', the handles' and the brush's). Keys and the mouse work at the same time.
   let drag = null;
+  // D336 (the camera that stayed flying after every key was let go). A right-button LOOK that ends with the pointer over a panel fires `contextmenu` at that panel,
+  // not at the canvas, so the canvas's noMenu missed it and the window opened its own menu: while that is open the page gets no key-ups and no blur, so a key let
+  // go then stayed held. The release of a look the canvas started is the look's, wherever it lands: its menu is prevented (once; a right click that began on a
+  // panel keeps the page's menu)
+  // The same for a right release whose PRESS the page never saw (it went down while the OS had the window, a title-bar drag): it cannot be a click on a panel,
+  // and its menu takes the key-ups the same way. A menu opened from the keyboard has no release, so it is untouched
+  let lookMenu = false, rightSeen = false, orphanUp = false;
+  const onMenu = (e) => { if (lookMenu || orphanUp) { lookMenu = false; orphanUp = false; e.preventDefault(); } };
   const onDown = (e) => {
     const ae = win.document && win.document.activeElement;   // a click on the canvas takes focus off a field (a preventDefault below would keep it)
     if (ae && ae !== win.document.body && typeof ae.blur === 'function') ae.blur();
     if (e.button === 1) { rig.resetLens(); e.preventDefault(); return; }   // the middle click: the lens back to 60°
     if (e.button === 2) {   // D255: the RIGHT button only, in every view; the left is for clicking things (it looked in free mode before)
       if (rig.mode !== 'free') { const c = ctx(); if (!c) return; rig.setMode('free', c); said(); }
-      drag = [e.clientX, e.clientY]; e.preventDefault();
+      drag = [e.clientX, e.clientY]; lookMenu = true; e.preventDefault();
     }
   };
   const onMove = (e) => { if (!drag) return; rig.free.look((e.clientX - drag[0]) * 0.004, -(e.clientY - drag[1]) * 0.004); drag = [e.clientX, e.clientY]; };
-  const onRelease = (e) => { drag = null; if (!e || e.button === undefined || e.button === 0) buttons = 0; };
+  const onRelease = (e) => { drag = null; if (!e || e.button === undefined || e.button === 0) buttons = 0; if (e && e.button === 2) { orphanUp = !rightSeen; rightSeen = false; } };
   // D252: a press anywhere (a handle drag included) stops Left Ctrl; D257: the LEFT button only, the right button's look drag flies with it
-  const onAnyDown = (e) => { if (e && e.button !== undefined && e.button !== 0) return; buttons = 1; spoilCtrl(); };
+  // D336: a press on the title bar's drag region hands the window to the OS's move loop, which takes the key-ups with no blur, so the held keys are let go first
+  const onAnyDown = (e) => {
+    if (e && e.button === 2) { rightSeen = true; orphanUp = false; if (e.target !== canvas) lookMenu = false; }   // a right press that is not a look: its menu is the page's (onDown sets the flag after this, for a look)
+    if (e && e.button !== undefined && e.button !== 0) return;
+    if (e && e.target && typeof e.target.closest === 'function' && e.target.closest('[data-tauri-drag-region]')) letGo();
+    buttons = 1; spoilCtrl();   // (a left press during a look leaves lookMenu: the right button's release is still the look's)
+  };
   const onAnyUp = (e) => { if (!e || e.button === undefined || e.button === 0) buttons = 0; };   // D252 follow-up (C's finding 5): a handle's preventDefault on pointerdown suppresses the compatibility mousedown, so a press is read from pointerdown too
   const noMenu = (e) => e.preventDefault();
   // THE SCROLL WHEEL zooms every view: a follow view comes nearer or backs off, free mode flies along its view. CTRL + WHEEL is the
@@ -249,16 +272,17 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   win.addEventListener('keydown', onKey); win.addEventListener('keyup', onUp); win.addEventListener('blur', letGo);
   if (win.document) win.document.addEventListener('visibilitychange', onVis);
   canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease); win.addEventListener('mousedown', onAnyDown, true); win.addEventListener('pointerdown', onAnyDown, true); win.addEventListener('pointerup', onAnyUp, true);
-  canvas.addEventListener('contextmenu', noMenu); canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('contextmenu', noMenu); canvas.addEventListener('wheel', onWheel, { passive: false }); win.addEventListener('contextmenu', onMenu, true);
 
   function frame(t) {
     raf = win.requestAnimationFrame(frame);
-    const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0; prev = t;
+    const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0, elapsed = prev ? t - prev : 0; prev = t;
+    if (heldNetMs > 0 && expectRepeat && held.size) { quietMs += elapsed; if (quietMs > heldNetMs) { held.clear(); expectRepeat = false; boost = false; ctrlFly = null; } }   // D336: the net (above onKey)
     const sprint = boost ? boostAt(boostT) : 1; boostT = boost ? boostT + dt : 0;   // the speed THIS frame, then one more frame of Shift held
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {
       const k = sprint * flySpeed * dt;
-      // MOVEMENT IS PER AXIS (the keeper, 2026-09-29 13:05: "say I am W forward, then I press D, it should go diagonally"). `held` is in the order
+      // MOVEMENT IS PER AXIS (reported, 2026-09-29 13:05: "say I am W forward, then I press D, it should go diagonally"). `held` is in the order
       // pressed, so on each of forward/back, right/left and up/down the LAST key seen is the NEWER and wins; a key-up hands the axis to the other.
       // The axes combine and the direction is normalised, so a diagonal is 1.0× a straight line. The look keys all turn.
       const dir = [0, 0, 0];
@@ -276,7 +300,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     const c = ctx(w > 0 && h > 0 ? w / h : 0);
     if (c && w > 0 && h > 0) {
       const tb = track && track.bounds ? track.bounds : null;
-      if (gMode !== 'legacy') grid = null;   // no ground: just the track, so the camera goes anywhere with nothing to clip (the keeper, 2026-09-29): the legacy { ground: true } grid only
+      if (gMode !== 'legacy') grid = null;   // no ground: just the track, so the camera goes anywhere with nothing to clip (reported, 2026-09-29): the legacy { ground: true } grid only
       else if (tb !== gridFor) { grid = gridLines(tb); gridFor = tb; }       // the grid follows the track's box, rebuilt only when it changes
       // D237: the plan (the 3D grid, the axes, the mirror ghost) follows the track's box and centreline, the mode, the mirror and the centre, and is rebuilt only when one of them changes
       const pathNow = track && track.path ? track.path : null, deps = planDeps;
@@ -343,7 +367,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
       if (win.document) win.document.removeEventListener('visibilitychange', onVis);
       canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease); win.removeEventListener('mousedown', onAnyDown, true); win.removeEventListener('pointerdown', onAnyDown, true); win.removeEventListener('pointerup', onAnyUp, true);
-      canvas.removeEventListener('contextmenu', noMenu); canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('contextmenu', noMenu); canvas.removeEventListener('wheel', onWheel); win.removeEventListener('contextmenu', onMenu, true);
       renderer.dispose();
     },
   };
