@@ -64,6 +64,15 @@ test('row 3b: a run is ONE stretch: two loaded stretches under the time with a q
   assert.deepStrictEqual(sustainedLoad(raw(brokenByRoad), S, v, (i) => i !== 4, car, 40), [], 'a station that is not road ends a run');
 });
 
+test('row 3c: on a closed lap a held load across the seam is one run', () => {
+  const { sustainedLoad } = require('../src/validate/index.js')._internal;
+  const S = Array.from({ length: 40 }, (_, i) => ({ s: i * 10 })), v = S.map(() => 100);
+  const raw = (gs) => gs.map((g, i) => ({ i, line: { s: i * 10, u: 0, fN_g: g } }));
+  const wrapped = [...Array(4).fill(70), ...Array(32).fill(10), ...Array(4).fill(70)];   // 0.3 s at the start, 0.3 s at the end
+  assert.deepStrictEqual(sustainedLoad(raw(wrapped), S, v, () => true, MACH6, 40), [], 'open: two short runs');
+  assert.strictEqual(sustainedLoad(raw(wrapped), S, v, () => true, MACH6, 40, 400).length, 8, 'closed, a 400 m lap: one 0.7 s run');
+});
+
 test('row 5: the limits carry both numbers: 55 g for more than 0.5 s, from the ELYSIUM replay of 2026-10-16', () => {
   assert.strictEqual(MACH6.sustainedG, 55); assert.strictEqual(MACH6.sustainedS, 0.5);
 });
