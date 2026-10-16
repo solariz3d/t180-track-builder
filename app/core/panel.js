@@ -375,6 +375,9 @@ function mount(root, shell) {
   // the ONE selected placed piece, and a drag is the shell's sculpt (one undo step, the shape channels only, the centreline guarded).
   const askOf = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
   const HANDLE_FIELD = { length: len, width, bank, cup, turn, climb }, SCULPT_CH = { cup: 'c', width: 'w', bank: 'phi' };   // (not in the order of the Extend options: a mutation harness anchors on that line)
+  // D331 (plan :417-426): with the turn and climb read as corners, their handles are the corner kinds, which drag the corner's degrees into the same fields; a blank
+  // field (the head, as a corner) starts the drag from 0
+  const CORNER_KIND = { turn: 'turnDeg', climb: 'climbDeg' }; Object.assign(HANDLE_FIELD, { turnDeg: turn, climbDeg: climb });
   let triedDoc = null, sinceTry = 0; const RETRY_FRAMES = 30;   // the document the ghost was last asked for on behalf of the handles, and the frames since
   const fieldNum = (f) => { const v = Number(f.value); return f.value !== '' && Number.isFinite(v) ? v : null; };
   const ghostModel = () => {
@@ -388,10 +391,11 @@ function mount(root, shell) {
     const s1 = info.samples[info.samples.length - 1].s; if (!(s1 - info.s0 > 0.5)) return null;
     // the road's half-width at a share of the piece: from the head's width to the field's, read when asked (a press must not see the width of the frame before)
     const half = (f) => { const w1 = fieldNum(width), w0 = d.pieces.length ? (fieldNum({ value: shown.width }) ?? w1) : w1; return ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2; };
-    // the turn and climb handles drag a RATE (°/100 m, app/core/handles.js): with them read as corners (D331 B) they are not offered, and the corner is typed
-    const kinds = HD.ORDER.filter((k) => !HANDLE_FIELD[k].disabled && fieldNum(HANDLE_FIELD[k]) !== null && !((k === 'turn' || k === 'climb') && cornerMode()));
+    // the turn and climb handles: as rates (°/100 m) the old kinds, which need a number in the field; as corners (D331) the corner kinds, offered on a blank field too
+    const corner = (k) => cornerMode() && HD.KINDS[k].unit === '°' && Object.values(CORNER_KIND).includes(k);
+    const kinds = HD.ORDER.map((k) => (cornerMode() && CORNER_KIND[k] ? CORNER_KIND[k] : k)).filter((k) => !HANDLE_FIELD[k].disabled && (corner(k) || fieldNum(HANDLE_FIELD[k]) !== null));
     const wt = fieldNum(width);   // the width mark sits at the TARGET width (the field), so it follows the drag from the near end
-    return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, halfTarget: wt === null ? undefined : wt / 2, kinds, base: (k) => fieldNum(HANDLE_FIELD[k]), ctx: (k) => ({ half: half(HD.KINDS[k].at) }) };
+    return { mode: 'extend', samples: info.samples, s0: info.s0, s1, half, halfTarget: wt === null ? undefined : wt / 2, kinds, base: (k) => fieldNum(HANDLE_FIELD[k]) ?? (corner(k) ? 0 : null), ctx: (k) => ({ half: half(HD.KINDS[k].at) }) };
   };
   let sculptSamples = null;   // the selected piece's samples, kept for the track they came from
   const sculptModel = () => {

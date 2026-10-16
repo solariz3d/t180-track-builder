@@ -44,6 +44,11 @@ const EXTEND_KINDS = Object.freeze({
   // pointer's own left and right (a drag to the right is a right turn, from any view), not the road's left as it happens to lie on screen
   turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.01, snap: 5 }),
   climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.01, snap: 5 }),
+  // D331 (plan :417-426, the keeper scrubs turns with these): with the turn and climb fields read as CORNERS (app/core/panel.js "turn & climb as", the default) the
+  // panel offers these two in place of turn and climb. They sit and move as those do, with A2's precise rules unchanged (Shift one pixel = 0.01, the wheel and the
+  // arrows one step, Ctrl snaps to 5), but the value is the corner's DEGREES, and it is labelled so. The climb's range is a pitch change of a full loop either way
+  turnDeg: Object.freeze({ label: 'turn', unit: '°', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.01, snap: 5 }),
+  climbDeg: Object.freeze({ label: 'climb', unit: '°', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -360, max: 360, step: 0.01, snap: 5 }),
 });
 // D258, THE FREE JUMP'S LANDING (the keeper: drag it in the 3D view AND type it in number boxes). `free: true` kinds sit at the LANDING's start (model.free.pos), not along a piece, and their axes are the
 // TAKE-OFF's heading frame (T0 forward, L0 left, U0 up), because that is the frame the landing's pose is given in (src/core/document.js flightPiece), so the arrow moves the number of its box. Each mark sits `leadM` m out along its own

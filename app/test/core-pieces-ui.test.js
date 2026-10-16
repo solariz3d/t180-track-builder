@@ -439,16 +439,39 @@ function dragBy(P1, id, px, extra = {}) {
   fire(P1, 'pointerup', a.x + a.dx * k, a.y + a.dy * k, extra);
 }
 
-// D331 B: the turn handle drags a RATE (app/core/handles.js, °/100 m), so with the turn field read as a corner (the default) it is not offered; on rate it is back
-test('row 11d (D331 B): with the turn read as a corner, the ghost has no turn handle (it drags a rate); "turn as" rate brings it back', async () => {
+// AMENDED D331 (plan :417-426, 2026-10-16): this row first held that the turn and climb handles are NOT offered as corners, because they drag a rate. The keeper
+// scrubs turns with them, so the ruling gives them back: as corners they are their own kinds, turnDeg and climbDeg (app/core/handles.js), dragging the corner's
+// DEGREES and labelled in degrees; on rate they are the old turn and climb. Row 11e holds the drag itself.
+test('row 11d (D331 B, amended): as corners the ghost has the corner handles, turnDeg and climbDeg, labelled in degrees, even with the fields blank; "turn & climb as" rate gives the rate handles back', async () => {
   const P1 = await handlePanel({ turnAsRate: false }), turnAs = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as');
-  fieldOf(P1, 'turn °').value = '90'; fieldOf(P1, 'turn °').oninput(); fieldOf(P1, 'climb °').value = '5'; fieldOf(P1, 'climb °').oninput(); P1.frame();
+  P1.frame();
   const ids = () => P1.panel.handles.handles().map((h) => h.id);
-  assert.ok(ids().length > 0, 'the ghost has handles: ' + ids().join(' ')); assert.ok(!ids().some((id) => id.startsWith('turn:') || id.startsWith('climb:')), 'none for the turn or the climb: ' + ids().join(' '));
+  assert.equal(fieldOf(P1, 'turn °').value, '', 'the fields are blank as corners');
+  assert.ok(ids().some((id) => id.startsWith('turnDeg:')) && ids().some((id) => id.startsWith('climbDeg:')), 'the corner handles: ' + ids().join(' '));
+  assert.ok(!ids().some((id) => id.startsWith('turn:') || id.startsWith('climb:')), 'and not the rate ones: ' + ids().join(' '));
+  assert.equal(HD.format('turnDeg', 12.5), 'turn 12.50°'); assert.equal(HD.format('climbDeg', -3), 'climb -3.00°');
   turnAs.value = 'rate'; turnAs.onchange(); P1.frame();
   assert.ok(ids().some((id) => id.startsWith('turn:')) && ids().some((id) => id.startsWith('climb:')), 'on rate the turn and climb handles are back: ' + ids().join(' '));
+  assert.ok(!ids().some((id) => id.startsWith('turnDeg:') || id.startsWith('climbDeg:')), 'and the corner ones go: ' + ids().join(' '));
   P1.panel.unmount();
 });
+// D331 (plan :420-423): A2's precise rules (D330, b32e82f) on the corner handles: with Shift one pixel is 0.01°, so a drag of n px is n × 0.01° of corner, and the
+// piece Extend places turns (or climbs) exactly that and ends at rate 0
+for (const [ch, field, id, px] of [['turn', 'turn °', 'turnDeg:1', 37], ['climb', 'climb °', 'climbDeg:0', 23]]) {
+  test(`row 11e (D331): as a corner, a Shift drag of ${px} px on the ${ch} handle is ${px} × 0.01° of corner, and the placed piece ${ch}s exactly that and ends at rate 0`, async () => {
+    const P1 = await handlePanel({ turnAsRate: false }), { shell } = P1; P1.frame();
+    dragBy(P1, id, px, { shiftKey: true }); P1.frame();
+    const v = Number(fieldOf(P1, field).value);
+    assert.equal(Math.abs(v), px * 0.01, `the ${ch} field reads ${fieldOf(P1, field).value}°`);
+    P1.button('Extend').onclick(); P1.frame();
+    // "exactly" is the solver's own tolerance, src/core/turnby.js TURN_TOL 1e-5 rad (0.00057°): measured 0.37042° for 0.37°. 0.001° is inside the 0.01° bar
+    // Turn by registered (D280 B1) and still tells 0.37 from 0.38
+    const d = shell.getState().history.present, i = d.pieces.length - 1, r = shell.pieceReadouts()[i];
+    assert.ok(Math.abs((ch === 'turn' ? r.turnDeg : r.climbDeg) - v) <= 1e-3, `the piece ${ch}s ${ch === 'turn' ? r.turnDeg : r.climbDeg}° against ${v}°`);
+    assert.equal(D.pieceEnd(d.pieces[i])[ch === 'turn' ? 'kh' : 'kv'].v, 0, 'and ends at rate 0');
+    P1.panel.unmount();
+  });
+}
 test('row 11: Extend\'s handles: on the ghost and only while there is one; a drag types into the matching field and reaches no document until Extend; mirrored handles change the same field; Extend places what was dragged', async () => {
   const P1 = await handlePanel(), { shell, S } = P1, d0 = shell.getState().history.present, n0 = d0.pieces.length, past0 = shell.getState().history.past.length;
   const hs = P1.panel.handles.handles(); assert.deepEqual(hs.map((h) => h.id), ['length:0', 'width:1', 'width:-1', 'bank:1', 'bank:-1', 'cup:1', 'cup:-1', 'turn:1', 'turn:-1', 'climb:0'], 'ten handles on the ghost, both sides where there are sides');
