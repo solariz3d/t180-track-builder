@@ -441,6 +441,13 @@ function mount(root, shell) {
     if (tick) { win.clearTimeout(tick); tick = 0; }
     applyBtn.style.display = cancelBtn.style.display = p ? '' : 'none';
     if (!p) {
+      // 2026-10-15: a close the worker is working out (shell.getState().closePending): say what is being done, and offer Cancel, until its preview lands
+      const pend = shell.getState().closePending;
+      if (pend && pend.base === shell.getState().history.present) {
+        cancelBtn.style.display = '';
+        proposalBox.replaceChildren(el('p', { 'aria-label': 'close working', text: `${pend.finish ? 'Finishing to the start: laying new road and closing it' : 'Closing the loop'}… The window stays free; Cancel stops it.` }));
+        return;
+      }
       const st = shell.getState(), refused = closeAsked && closeAsked === st.history.present && st.message && st.messageKind === 'error';
       proposalBox.replaceChildren(...(refused ? [el('p', { 'aria-label': 'close refused', text: `Not closed: ${st.message}`, style: 'color: var(--bad)' })] : []));
       return;
