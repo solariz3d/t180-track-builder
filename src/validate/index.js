@@ -65,20 +65,23 @@ function rollRates(S, isRoad, closed, L) {
 /**
  * D341: the loads held. For each station the hardest line's load (the centre line and the hardest other line are all that leanLines keeps; with every line kept it is the same maximum);
  * a run of consecutive road stations over car.sustainedG that lasts more than car.sustainedS seconds at the speed model's speeds is amber at every station of it. Read from the whole
- * track on every call, as the roll rate is, so revalidate equals validate. A run does not wrap the lap's seam, and a run ends at a gap in the road.
+ * track on every call, as the roll rate is, so revalidate equals validate. On a closed lap (wrapL, its length, > 0) a run wraps the lap's seam; a run ends at a gap in the road.
  */
-function sustainedLoad(rawLines, S, v, isRoad, car, end) {
+function sustainedLoad(rawLines, S, v, isRoad, car, end, wrapL = 0) {
   const out = [];
   if (!v || !(car.sustainedG > 0) || !(car.sustainedS > 0)) return out;
   const hardest = new Map();
   for (const { i, line } of rawLines) { if (i >= end) continue; const h = hardest.get(i); if (!h || line.fN_g > h.fN_g) hardest.set(i, line); }
+  const hot = (i) => { const h = hardest.get(i); return !!h && isRoad(i) && h.fN_g > car.sustainedG; };
+  let first = 0;   // a closed lap starts the walk at a quiet station, so a run across the seam is one run
+  if (wrapL > 0) { while (first < end && hot(first)) first++; if (first === end) first = 0; }
   let run = [], dur = 0;
   const close = () => { if (run.length && dur > car.sustainedS) for (const r of run) out.push({ s: r.s, u: r.u, reason: 'load-sustained', worst: r.fN_g }); run = []; dur = 0; };
-  for (let i = 0; i < end; i++) {
-    const h = hardest.get(i);
-    if (!h || !isRoad(i) || !(h.fN_g > car.sustainedG)) { close(); continue; }
-    if (run.length) { const a = v[i - 1], b = v[i], va = (a + b) / 2; dur += va > 0 ? (S[i].s - S[i - 1].s) / va : Infinity; }
-    run.push(h);
+  for (let j = 0; j < end; j++) {
+    const i = (first + j) % end;
+    if (!hot(i)) { close(); continue; }
+    if (run.length) { const p = (i + end - 1) % end, va = (v[p] + v[i]) / 2, ds = i > 0 ? S[i].s - S[p].s : S[0].s + wrapL - S[p].s; dur += va > 0 ? ds / va : Infinity; }
+    run.push(hardest.get(i));
   }
   close();
   return out;
@@ -390,7 +393,7 @@ function core(path, segments, opts, from, carried, upto) {
     else if (q.rate > ROLL_AMBER_DEG_M) rollAmber.push({ s: q.s, u: null, reason: 'roll-rate', worst: q.rate });
   }
   for (const e of raw.stacked.values()) red.push({ s: e.s, u: e.u, reason: 'stacked-within-2m', worst: e.worst });
-  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end)], info = raw.pts.filter((p) => p.kind === 'info');
+  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = raw.pts.filter((p) => p.kind === 'info');
   const lines = raw.lines.slice().sort((a, b) => a.i - b.i).map((l) => l.line);   // station order, u order within
 
   // ── jumps (ARCHITECTURE.md:72-80) ──
