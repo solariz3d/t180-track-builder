@@ -81,7 +81,11 @@ function tickPlan(kind, prev, value, melAt = 0) {
   let crossed = false;
   for (let m = Math.ceil(lo - eps); m <= hi + eps; m++) if (Math.abs(m - prev) > eps) { crossed = true; break; }
   if (!crossed) return null;
-  const up = value > prev, n = Math.round(value);
+  return notePlan(kind, value, value > prev, melAt);
+}
+/** The note a tick plays for a handle's value, moving `up` or down (tickPlan's choice, once it has decided to tick): { midi, pan, spread, melAt }. */
+function notePlan(kind, value, up, melAt = 0) {
+  const n = Math.round(value);
   if (kind === 'climb') return { midi: scaleMidi(clamp(n, -20, 14)), pan: 0, spread: null, melAt };
   if (kind === 'bank') return { midi: arpMidi(((n % 15) + 15) % 15), pan: 0, spread: null, melAt };
   const at = melAt + (up ? 1 : -1), midi = MEL128[((at % 128) + 128) % 128];
@@ -92,6 +96,16 @@ function tickPlan(kind, prev, value, melAt = 0) {
 
 // ── the engine ──
 /** The audio graph and the voices, on one AudioContext. Everything is scheduled from ctx.currentTime. */
+/**
+ * D345 addition 2 (a default the keeper can veto): a DELIBERATE single step (`single`: a wheel notch, an arrow nudge, a reset) always ticks and moves the melody one
+ * place, whatever its size; anything else is tickPlan's (a drag: a tick only on a whole number). Its direction is the value's against `prev` (up when there is none).
+ */
+function stepPlan(kind, prev, value, melAt = 0, single = false) {
+  if (!single) return tickPlan(kind, prev, value, melAt);
+  if (!Number.isFinite(value)) return null;
+  return notePlan(kind, value, Number.isFinite(prev) ? value > prev : true, melAt);
+}
+
 function createEngine(ctx) {
   const master = ctx.createGain(), dryBus = ctx.createGain(), preBus = ctx.createGain(), out = ctx.createGain();
   master.connect(preBus); dryBus.connect(preBus);   // MASTER also feeds the echo; DRYBUS does not
@@ -231,7 +245,7 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   const lastValue = {}, melAt = {};
   const onStep = (e) => {
     const d = e && e.detail; if (!d || typeof d.kind !== 'string') return;
-    const plan = tickPlan(d.kind, lastValue[d.kind], Number(d.value), melAt[d.kind] || 0);
+    const plan = stepPlan(d.kind, lastValue[d.kind], Number(d.value), melAt[d.kind] || 0, d.single === true);
     lastValue[d.kind] = Number(d.value);
     if (!plan) return;
     melAt[d.kind] = plan.melAt;
@@ -260,4 +274,4 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { createSound, createEngine, soundFor, tickPlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
+if (typeof module !== 'undefined') module.exports = { createSound, createEngine, soundFor, tickPlan, stepPlan, notePlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
