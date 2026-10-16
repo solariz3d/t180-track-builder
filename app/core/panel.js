@@ -444,7 +444,7 @@ function mount(root, shell) {
       // 2026-10-15: a close the worker is working out (shell.getState().closePending): say what is being done, and offer Cancel, until its preview lands
       const pend = shell.getState().closePending;
       if (pend && pend.base === shell.getState().history.present) {
-        cancelBtn.style.display = '';
+        cancelBtn.style.display = ''; applyBtn.disabled = true;   // nothing to apply yet (hidden, but never left on)
         proposalBox.replaceChildren(el('p', { 'aria-label': 'close working', text: `${pend.finish ? 'Finishing to the start: laying new road and closing it' : 'Closing the loop'}… The window stays free; Cancel stops it.` }));
         return;
       }

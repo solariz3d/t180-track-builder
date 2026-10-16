@@ -200,6 +200,7 @@ test('row 6: the panel while the worker works: it says what is being done and th
   assert.equal(r.jobs.length, 1, 'the panel asked for the close');
   assert.equal(P.text('close working'), 'Closing the loop… The window stays free; Cancel stops it.');
   assert.equal(P.button('Cancel').style.display, '', 'Cancel is offered while it works'); assert.equal(P.button('Apply').style.display, 'none', 'Apply is not');
+  assert.equal(P.button('Apply').disabled, true, 'and Apply is off: there is nothing to apply yet (the after run of closefreeze.js clicked a hidden, enabled Apply)');
   P.button('Cancel').onclick(); assert.equal(r.jobs[0].cancelled, 1, 'Cancel in the panel stops the job'); assert.equal(P.text('close working'), null);
   P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'finish';
   P.button('Close the loop').onclick(); P.fire();
