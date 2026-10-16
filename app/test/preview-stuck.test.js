@@ -203,5 +203,11 @@ test('row 7 (net): at the slowest Windows key-repeat (1 s before the first, then
   const W = makeWorld(); W.press('w'); W.setRepeatStart(1000);
   for (let i = 0; i < 16; i++) assert.ok(flies(W, 500, { delay: 1000, every: 400 }), `flying at ${(i + 1) * 0.5} s`);
 });
+test('row 4b (net): after the net lets go of an S whose key-up was lost, Left Ctrl still flies down', () => {
+  const W = makeWorld();
+  W.press('s'); W.run(400); W.phys.delete('s'); W.run(1500 + 200);
+  assert.ok(!flies(W, 300), 'S was let go by the net');
+  W.press('ctrl'); assert.ok(flies(W, 200), 'Left Ctrl descends');
+});
 if (require.main !== module && process.env.STUCK_SORT) { for (const host of [{ menu: true, drag: true }, { menu: true, drag: false }, { menu: false, drag: true }, { menu: false, drag: false }]) { let bad = 0; for (let seed = 1; seed <= 400; seed++) if (!settles(seed, undefined, host).still) bad++; console.log(JSON.stringify(host), bad); } }
 module.exports = { makeWorld, settles };
