@@ -137,7 +137,7 @@ The limits come from measurements of real T-180 tracks and replays, not guesses 
 | Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z) | undo, redo |
 | Ctrl+S | save |
 | Ctrl+Backspace | remove the last piece |
-| a drag on a handle | change that value; Shift for a tenth of the speed, Ctrl to snap to round steps |
+| a drag on a handle | change that value; hold Shift to move exactly 0.01 a pixel, Ctrl to snap to round steps; the mouse wheel over a handle, or the arrow keys while one is held, move it exactly 0.01 |
 | a double-click on a handle | put the value back (0 for bank, turn and climb) |
 
 The camera keys are ignored while you type in a text field.

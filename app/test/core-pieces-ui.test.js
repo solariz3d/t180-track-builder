@@ -463,9 +463,9 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   nearly(lat(now['width:1'], mid), w0 / 2, 0.05); nearly(lat(now['width:-1'], mid), -w0 / 2, 0.05); width.value = String(w0 + 4); width.oninput(); P1.frame(); now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
   nearly(lat(now['width:1'], stationAt(0.5)), (w0 + 4) / 2, 0.05); const turnNow = now['turn:1']; assert.ok(Math.abs(along(turnNow, stationAt(1))) <= 1.01 && Math.abs(lat(turnNow, stationAt(1))) > 0, 'the turn mark sits at the front, on the edge');
   width.value = String(w0); width.oninput(); P1.frame();
-  // bank: the left edge up, the right edge down are both positive; a drag is typed (Shift: a tenth)
+  // bank: the left edge up, the right edge down are both positive; a drag is typed (Shift: one step a pixel, D330)
   dragBy(P1, 'bank:1', 20); const b1 = Number(bank.value); assert.ok(b1 > 0, `bank rose: ${b1}`); bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:-1', 20); assert.equal(Number(bank.value), b1, 'the right edge dragged DOWN 20 px is the same bank');
-  bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:1', 20, { shiftKey: true }); assert.ok(Math.abs(Number(bank.value) - b1 / 10) < 0.06, `Shift is a tenth: ${bank.value} against ${b1 / 10}`);
+  bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:1', 20, { shiftKey: true }); assert.equal(Number(bank.value), 0.2, `Shift (D330: the rule changed, it was a tenth of the speed): 20 px is 20 steps of 0.01, got ${bank.value}`);
   // turn: toward the left on either side; cup outward
   const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); const t1 = Number(turn.value); assert.equal(t1, Math.round((t0 + 2.822) * 100) / 100, 'today\'s speed at the default camera: 0.083 a degree per 100 m per pixel, past the 6 px hold'); turn.value = String(t0); turn.oninput(); P1.frame(); dragBy(P1, 'turn:-1', 40); assert.equal(Number(turn.value), t1, 'the same value from the right-hand handle');
   const c0 = Number(cup.value); dragBy(P1, 'cup:1', 30); assert.equal(Number(cup.value), Math.round((c0 + 24 * 0.24) * 100) / 100, 'cup: 30 px, the first 6 held, 0.24 a pixel'); assert.equal(shell.getState().history.present, d0, 'still no document edit after all of it');
@@ -585,20 +585,20 @@ test('row 14b: the landing boxes appear while a landing is the head, show the po
   P1.panel.unmount();
 });
 
-test('row 14c: the landing\'s four handles (D278: BESIDE the Extend ghost\'s, where D258 had them replace it: row 14d); a drag moves the number of its box in ONE undo step; Shift is fine, Ctrl snaps; two quick presses reset one; an Extend takes them away', async () => {
+test('row 14c: the landing\'s four handles (D278: BESIDE the Extend ghost\'s, where D258 had them replace it: row 14d); a drag moves the number of its box in ONE undo step; Shift is one step a pixel (D330), Ctrl snaps; two quick presses reset one; an Extend takes them away', async () => {
   const P1 = await handlePanel(), { shell } = P1; P1.button('Jump').onclick(); for (let i = 0; i < 3; i++) P1.frame();
   assert.deepEqual(P1.panel.handles.handles().map((h) => h.id).filter((i) => i.startsWith('land')), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'the four landing handles (D278: the Extend ghost\'s ten are up beside them, row 14d)'); assert.ok(P1.panel.handles.handles().every((h) => h.screen), 'all on screen');
   let seen = null; P1.doc.dispatchEvent(new P1.win.CustomEvent('t180:handles-request', { detail: { reply: (l) => { seen = l; } } })); assert.deepEqual(seen.map((h) => h.kind).filter((k) => k.startsWith('land')), ['landfwd', 'landleft', 'landup', 'landturn'], 'the read-only request lists them too');
   const pose = () => shell.landing().pose, past = () => shell.getState().history.past.length, n0 = past();
   dragBy(P1, 'landfwd:0', 100); assert.equal(pose().forward, 54.1, '100 px along the arrow, the first 6 held, at 0.15 m a pixel'); assert.equal(past(), n0 + 1, 'ONE undo step for the whole drag'); assert.equal(P1.input('landing forward').value, '54.1', 'the box shows it');
   assert.deepEqual([pose().left, pose().up, pose().heading], [0, 0, 0], 'only forward moved');
-  dragBy(P1, 'landup:0', 200, { shiftKey: true }); assert.equal(pose().up, 0.97, 'Shift: a tenth: 200 px at 0.005 m, less the 6 px hold, is 0.97 m'); dragBy(P1, 'landfwd:0', 33, { ctrlKey: true }); assert.equal(pose().forward, 60, 'Ctrl snaps forward to 5 m: 55 + 4.95 is 60');
+  dragBy(P1, 'landup:0', 200, { shiftKey: true }); assert.equal(pose().up, 2, 'Shift (D330: the rule changed, it was a tenth of the speed): one pixel a step, 200 px is 2.00 m'); dragBy(P1, 'landfwd:0', 33, { ctrlKey: true }); assert.equal(pose().forward, 60, 'Ctrl snaps forward to 5 m: 55 + 4.95 is 60');
   dragBy(P1, 'landturn:0', 100); assert.equal(pose().heading, 9.4, 'the heading handle: 0.1 degree a pixel past the 6 px hold'); dragBy(P1, 'landleft:0', 100); assert.equal(pose().left, 9.4, 'sideways: 0.1 m a pixel');
   const dl = shell.getState().history.present; assert.equal(shell.getState().history.past.length, n0 + 5);
   // two quick presses reset: sideways to 0 (and heading and height too: the zero kinds); forward is not reset to 0 but to what it was before its last drag (60 was its snap's, 55 before)
   const quick = (id, t0) => { const a = handleOf(P1, id).screen; fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t0 }); fire(P1, 'pointerup', a.x, a.y, { timeStamp: t0 + 40 }); fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t0 + 200 }); fire(P1, 'pointerup', a.x, a.y, { timeStamp: t0 + 240 }); P1.frame(); };
   quick('landleft:0', STAMP + 1e5); assert.equal(pose().left, 0, 'sideways reset to 0'); quick('landturn:0', STAMP + 3e5); assert.equal(pose().heading, 0); quick('landup:0', STAMP + 6e5); assert.equal(pose().up, 0);
-  assert.ok(past() > n0 + 5, 'each reset is an undo step'); P1.shell.undo(); assert.equal(pose().up, 0.97, 'Undo gives the reset back');
+  assert.ok(past() > n0 + 5, 'each reset is an undo step'); P1.shell.undo(); assert.equal(pose().up, 2, 'Undo gives the reset back (the value the Shift drag set, D330: 2.00)');
   // an Extend fixes the landing: its handles go, the Extend ghost's come back
   P1.button('Extend').onclick(); for (let i = 0; i < 40; i++) P1.frame(); assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are back, the landing\'s are gone'); assert.ok(!P1.panel.handles.handles().some((h) => h.kind.startsWith('land')));
   // the switch turns them off
