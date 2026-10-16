@@ -19,7 +19,7 @@ const { toPath } = require('./adapter.js');
 const { extend } = require('./extend.js');
 const { extendTurnBy } = require('./turnby.js');
 const { close, residual } = require('./close.js');
-const V = require('../validate/index.js'), { ROLL_AMBER_DEG_M } = V;
+const V = require('../validate/index.js'), { ROLL_AMBER_DEG_M } = V, { MACH6, G } = require('../validate/limits.js');
 
 const DEG = Math.PI / 180, TAU = 2 * Math.PI;
 const RADII_M = Object.freeze([300, 450, 650, 200, 900]);   // tried in this order within each route length (first guesses: a T-180 corner at speed; the checker judges the loads)
@@ -32,6 +32,15 @@ const ROLL_RATE = ROLL_AMBER_DEG_M * DEG, ROLL_FREE = 5 * DEG;
 // 20 m chord PEAKS at about 1.45 to 1.5 times the average (angle / length), and a roll sized so its AVERAGE was amber read 1.13 to 1.27°/m, past the red bar. So the first
 // guess is the average at 1/1.5 of amber, and then the laid roll is MEASURED as the checker measures it (rollPeak) and lengthened until its worst station is under amber
 const ROLL_PEAK_OVER_MEAN = 1.5, ROLL_LENGTHEN = 1.03, ROLL_ROUNDS = 6;
+
+// THE CAR MUST STAY ON THE ROAD (2026-10-15, ELYSIUM's newest save: Close "closed" and the checker said "lap FAILS", the car leaving the surface at the new road). Finish judged a route
+// by whether Close converged, and Close converges onto roads the car cannot drive: on a road banked 54° the centripetal load of a turn on the wrong side of the bank pulls the car OFF the
+// surface (the normal load is negative), and an eased turn is not the circle the route was planned on, so Close bends the new pieces hard to meet the start (a 45 m miss became
+// -55 g). So a laid route is (1) RE-AIMED by where its road really ends against the start (the eased turns fall short of the circles) until it ends within REFINE_M, (2) closed,
+// and (3) judged by the lap proof's own test on the new road before it is taken: the centreline's normal load with the downforce (fHold, src/validate/index.js), at the ghost
+// lap's speed, must be at least 0. A route that fails (3) is skipped, GATE_TRIES of them in a row per order of laying, then the next order: the roll laid FIRST, on its own
+// straight at the end, so every turn after it is made upright, where no bank can turn a load away from the road. Nothing that is left is a refusal that says why.
+const REFINE_ROUNDS = 4, REFINE_M = 0.3, GATE_TRIES = 2;
 
 const fwd = (th) => [Math.sin(th), Math.cos(th)];   // plan view (x, z): heading about world up, as the geometry's T = (cos p sin θ, sin p, cos p cos θ)
 const left = (th) => [Math.cos(th), -Math.sin(th)];   // L = (cos θ, 0, −sin θ)
@@ -82,9 +91,9 @@ function oneTurnRoutes(p1, th1, p0, th0) {
   return out.sort((a, b) => a.lengthM - b.lengthM);
 }
 
-/** The pose the open track ends at, on the adapter's own path: plan position, heading and pitch. */
-function endPose(doc) {
-  const S = toPath({ ...doc, closed: false }).path.samples, e = S[S.length - 1], T = e.T;
+/** The pose the open track ends at, on the adapter's own path: plan position, heading and pitch (step: the path's sample spacing; the end is its last sample). */
+function endPose(doc, step = 0.5) {
+  const S = toPath({ ...doc, closed: false }, { step }).path.samples, e = S[S.length - 1], T = e.T;
   return { p: [e.pos[0], e.pos[2]], y: e.pos[1], th: Math.atan2(T[0], T[2]), pitch: Math.asin(Math.max(-1, Math.min(1, T[1]))) };
 }
 
@@ -110,6 +119,23 @@ function rollPeak(doc, from) {
   return rates.reduce((m, q) => Math.max(m, q.rate), 0);
 }
 
+/**
+ * The lowest centreline load, with the car's downforce, on the pieces from index `from` on of a CLOSED document, and where: the lap proof's own test (src/validate/index.js: the
+ * station's normal load fN = (kappa . U v^2 + g U_y) / g plus the downforce d v / g, which must be at least 0 or the car leaves the surface), at the speed of the ghost lap.
+ * { worst (g), at (m along the lap) }; worst is Infinity when there is no road in them.
+ */
+function roadHold(doc, from) {
+  const { segments, path } = toPath(doc, { step: 2 }), S = path.samples, ids = new Set(doc.pieces.slice(from).map((P) => P.id));
+  const sp = V.speedProfile(path, segments, MACH6, { fullSpeed: true }), df = MACH6.downforce ? MACH6.downforce.nPerMps / MACH6.downforce.massKg : 0, vTop = MACH6.vmaxKmh / 3.6;
+  let worst = Infinity, at = null;
+  for (let i = 0; i < S.length; i++) {
+    const g = segments[S[i].seg]; if (g.kind === 'gap' || !ids.has(g.id)) continue;
+    const p = S[i], K = p.kvec, U = p.U, v = sp.v ? sp.v[i] : vTop, h = ((K[0] * U[0] + K[1] * U[1] + K[2] * U[2]) * v * v + G * U[1]) / G + (df * v) / G;
+    if (h < worst) { worst = h; at = p.s; }
+  }
+  return { worst, at };
+}
+
 function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN } = {}) {   // rollGuess: the first guess's factor, for the test that the measured lengthening works from a bad one
   D.checkDoc(doc);
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is already closed: there is no end to finish from');
@@ -125,36 +151,77 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   // is the start's plus 180° in that form (its turns are NOT mirrored: lay)
   const flip = residual(doc).flip, half = flip ? Math.PI : 0;
   const b0 = D.valuesAt(doc.pieces[0], 0).phi, b1 = D.valuesAt(last, last.length).phi, bank = b0 + half + TAU * Math.round((b1 - b0 - half) / TAU), rollRad = Math.abs(bank - b1);
-  let roll = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil((rollRad / ROLL_RATE) * rollGuess) } : null;
+  const roll0 = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil((rollRad / ROLL_RATE) * rollGuess) } : null;
   const gap = Math.hypot(doc.start.pos[0] - e.p[0], doc.start.pos[1] - e.y, doc.start.pos[2] - e.p[1]);
-  for (let round = 0; ; round++) {
-  // the route aims at the start, or, with a roll, at the point that straight's length behind the start, on the start's heading
-  const f0 = fwd(th0), back = roll ? roll.lengthM : 0, p0 = [doc.start.pos[0] - back * f0[0], doc.start.pos[2] - back * f0[1]];
-  // the radii in the order given (the gentler first), and at each radius the shortest route first
-  const all = [...oneTurnRoutes(e.p, e.th, p0, th0), ...radii.flatMap((R) => routes(e.p, e.th, p0, th0, R).sort((a, b) => a.lengthM - b.lengthM))];   // the one-turn routes first (2026-10-15)
-  let best = null, tooFast = 0;
-  for (const r of all) {
-    let laid;
-    try { laid = lay(doc, r, roll); } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
-    const window = []; for (let i = doc.pieces.length; i < laid.pieces.length; i++) window.push(i);
-    if (!window.length) continue;
-    let res;
-    try { res = close(laid, { window }); } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
-    if (!res.converged) { best = best || res.report; continue; }
-    const deg = (a) => Math.round((a / DEG) * 10) / 10, added = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + P.length, 0);
-    const rolled = roll ? `, then ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright onto the start` : '';
-    const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}`;
-    const peak = roll ? rollPeak(res.doc, doc.pieces.length) : 0;
-    if (peak > ROLL_AMBER_DEG_M) { tooFast = peak; break; }   // the roll reads too fast as the checker reads it: lengthen it and search again (below)
-    return { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollPeakDegM: Math.round(peak * 1000) / 1000, lengthM: Math.round(added), report }) };
+  const deg = (a) => Math.round((a / DEG) * 10) / 10, f0 = fwd(th0);
+  // One order of laying: 'last' (the roll, if there is one, is the last piece onto the start: the shortest roads) or 'first' (the roll is laid at the end first, on its own straight, and
+  // the route runs from the upright end). Returns { result } | { tooFast } (the roll reads too fast: lengthen it and search again) | { fail } (what was refused, and the least bad road the car left).
+  const search = (mode, roll) => {
+    const first = mode === 'first' && roll, base = first ? extend(doc, { length: roll.lengthM, targets: { kh: 0, kv: 0, phi: roll.bank } }) : doc, laidRoll = first ? null : roll;
+    const e1 = first ? endPose(base) : e;
+    // the route aims at the start, or, with a roll last, at the point that straight's length behind the start, on the start's heading
+    const back = laidRoll ? laidRoll.lengthM : 0, p0 = [doc.start.pos[0] - back * f0[0], doc.start.pos[2] - back * f0[1]];
+    // the radii in the order given (the gentler first), and at each radius the shortest route first
+    const all = [...oneTurnRoutes(e1.p, e1.th, p0, th0), ...radii.flatMap((R) => routes(e1.p, e1.th, p0, th0, R).sort((a, b) => a.lengthM - b.lengthM))];   // the one-turn routes first (2026-10-15)
+    let best = null, left = 0, worstRoad = null;
+    for (const r0 of all) {
+      let laid, r = r0;
+      try {
+        laid = lay(base, r, laidRoll);
+        // RE-AIM: where the laid road really ends against the start, in plan, moves the aim by that much and the same word is laid again (the eased turns fall short of the circles)
+        let aim = p0;
+        for (let k = 0; k < REFINE_ROUNDS; k++) {
+          const ep = endPose(laid, 5), miss = [ep.p[0] - doc.start.pos[0], ep.p[1] - doc.start.pos[2]];
+          if (Math.hypot(miss[0], miss[1]) < REFINE_M) break;
+          aim = [aim[0] - miss[0], aim[1] - miss[1]];
+          const again = (r0.word.length === 2 ? oneTurnRoutes(e1.p, e1.th, aim, th0) : routes(e1.p, e1.th, aim, th0, r0.radiusM)).find((x) => x.word === r0.word);
+          if (!again) break;
+          r = again; laid = lay(base, r, laidRoll);
+        }
+      } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
+      const window = []; for (let i = doc.pieces.length; i < laid.pieces.length; i++) window.push(i);
+      if (!window.length) continue;
+      let res;
+      try { res = close(laid, { window }); } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
+      if (!res.converged) { best = best || res.report; continue; }
+      const peak = roll ? rollPeak(res.doc, doc.pieces.length) : 0;
+      if (peak > ROLL_AMBER_DEG_M) return { tooFast: peak };   // the roll reads too fast as the checker reads it: lengthen it and search again
+      const hold = roadHold(res.doc, doc.pieces.length);
+      if (hold.worst < 0) {   // the lap proof would fail here: the car leaves the road
+        if (!worstRoad || hold.worst > worstRoad.worst) worstRoad = { ...hold, word: r.word, radiusM: r.radiusM };
+        best = best || `the car would leave the road at ${(hold.at / 1000).toFixed(2)} km (a load of ${hold.worst.toFixed(0)} g on it)`;
+        if (++left >= GATE_TRIES) break;
+        continue;
+      }
+      const added = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + P.length, 0);
+      const rolled = roll ? (first ? `, after ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright first` : `, then ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright onto the start`) : '';
+      const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}`;
+      return { result: { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollFirst: !!first, rollPeakDegM: Math.round(peak * 1000) / 1000, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: Math.round(added), report }) } };
+    }
+    return { fail: { tried: all.length, best, worstRoad } };
+  };
+  let fail = null;
+  for (const mode of roll0 ? ['last', 'first'] : ['last']) {
+    let roll = roll0;
+    for (let round = 0; ; round++) {
+      const out = search(mode, roll);
+      if (out.result) return out.result;
+      if (out.tooFast) {
+        if (round >= ROLL_ROUNDS) throw new D.CoreError('FINISH_ROLL', `the roll upright onto the start still reads ${out.tooFast.toFixed(3)}°/m (the amber bar is ${ROLL_AMBER_DEG_M}) at ${roll.lengthM} m after ${round + 1} lengthenings`);
+        roll = { bank, lengthM: Math.ceil(roll.lengthM * (out.tooFast / ROLL_AMBER_DEG_M) * ROLL_LENGTHEN) };
+        continue;
+      }
+      if (out.fail.worstRoad && (!fail || !fail.worstRoad || out.fail.worstRoad.worst > fail.worstRoad.worst)) fail = out.fail;
+      else if (!fail) fail = out.fail;
+      break;
+    }
   }
-  if (tooFast) {
-    if (round >= ROLL_ROUNDS) throw new D.CoreError('FINISH_ROLL', `the roll upright onto the start still reads ${tooFast.toFixed(3)}°/m (the amber bar is ${ROLL_AMBER_DEG_M}) at ${roll.lengthM} m after ${round + 1} lengthenings`);
-    roll = { bank, lengthM: Math.ceil(roll.lengthM * (tooFast / ROLL_AMBER_DEG_M) * ROLL_LENGTHEN) };
-    continue;
+  const rollText = roll0 ? ` and must roll ${Math.round(rollRad / DEG)}° to meet it (${roll0.lengthM} m of straight)` : '';
+  if (fail.worstRoad) {
+    const pitch = e.pitch / DEG, dy = doc.start.pos[1] - e.y;
+    throw new D.CoreError('FINISH_LEAVES_ROAD', `no finish keeps the car on the road from here: the closest ones close the loop, but the car would leave the road at ${(fail.worstRoad.at / 1000).toFixed(2)} km (a load of ${fail.worstRoad.worst.toFixed(0)} g on the surface; the best road laid was ${fail.worstRoad.word} at R ${Math.round(fail.worstRoad.radiusM)} m). The end is ${Math.round(gap)} m from the start${rollText}${Math.abs(pitch) > 1 || Math.abs(dy) > 1 ? `, ${Math.abs(dy) > 1 ? `${Math.abs(dy).toFixed(1)} m ${dy > 0 ? 'below' : 'above'} it` : ''}${Math.abs(pitch) > 1 ? `${Math.abs(dy) > 1 ? ' and ' : ' '}pointing ${Math.abs(pitch).toFixed(1)}° ${pitch > 0 ? 'up' : 'down'}` : ''}` : ''}: level and straighten the last pieces, or give the road more room, and try again`);
   }
-  throw new D.CoreError('FINISH_NO_ROUTE', `no finish closes from here: the end is ${Math.round(gap)} m from the start${roll ? ` and must roll ${Math.round(rollRad / DEG)}° to meet it (${roll.lengthM} m of straight)` : ''}, and none of the ${all.length} routes tried (turn, straight, turn at radius ${radii.join(', ')} m) could be closed${best ? ` (the first refusal: ${best})` : ''}. Extend toward the start and try again`);
-  }
+  throw new D.CoreError('FINISH_NO_ROUTE', `no finish closes from here: the end is ${Math.round(gap)} m from the start${rollText}, and none of the ${fail.tried} routes tried (turn, straight, turn at radius ${radii.join(', ')} m) could be closed${fail.best ? ` (the first refusal: ${fail.best})` : ''}. Extend toward the start and try again`);
 }
 
-module.exports = { finishToStart, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };
+module.exports = { finishToStart, roadHold, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };
