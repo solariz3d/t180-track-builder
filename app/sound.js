@@ -27,9 +27,8 @@
 
 const KEYS = Object.freeze({ muted: 't180.sound.muted', volume: 't180.sound.volume' });
 const TICK_MS = 4;            // two ticks in one instant are one
-// the tick's tine (D334): its ring in s, the FM body's bark (modulation index at the strike), and the three parts' levels
-// (a stronger bark read as "an error buzz"; these levels put a drag at about -31 LUFS, under a place at -28)
-const TINE = Object.freeze({ d: 0.34, bark: 0.8, body: 0.11, bell: 0.035, click: 0.02 });
+// the tick's tine (D345: 3a26bc5's voice, restored): its peak, 0.16 there, lifted 3 dB to D334's loudness, so a drag sits at about -31 LUFS, under a place at -28
+const TINE = Object.freeze({ peak: 0.226 });
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -82,7 +81,11 @@ function tickPlan(kind, prev, value, melAt = 0) {
   let crossed = false;
   for (let m = Math.ceil(lo - eps); m <= hi + eps; m++) if (Math.abs(m - prev) > eps) { crossed = true; break; }
   if (!crossed) return null;
-  const up = value > prev, n = Math.round(value);
+  return notePlan(kind, value, value > prev, melAt);
+}
+/** The note a tick plays for a handle's value, moving `up` or down (tickPlan's choice, once it has decided to tick): { midi, pan, spread, melAt }. */
+function notePlan(kind, value, up, melAt = 0) {
+  const n = Math.round(value);
   if (kind === 'climb') return { midi: scaleMidi(clamp(n, -20, 14)), pan: 0, spread: null, melAt };
   if (kind === 'bank') return { midi: arpMidi(((n % 15) + 15) % 15), pan: 0, spread: null, melAt };
   const at = melAt + (up ? 1 : -1), midi = MEL128[((at % 128) + 128) % 128];
@@ -93,6 +96,16 @@ function tickPlan(kind, prev, value, melAt = 0) {
 
 // ── the engine ──
 /** The audio graph and the voices, on one AudioContext. Everything is scheduled from ctx.currentTime. */
+/**
+ * D345 addition 2 (a default the keeper can veto): a DELIBERATE single step (`single`: a wheel notch, an arrow nudge, a reset) always ticks and moves the melody one
+ * place, whatever its size; anything else is tickPlan's (a drag: a tick only on a whole number). Its direction is the value's against `prev` (up when there is none).
+ */
+function stepPlan(kind, prev, value, melAt = 0, single = false) {
+  if (!single) return tickPlan(kind, prev, value, melAt);
+  if (!Number.isFinite(value)) return null;
+  return notePlan(kind, value, Number.isFinite(prev) ? value > prev : true, melAt);
+}
+
 function createEngine(ctx) {
   const master = ctx.createGain(), dryBus = ctx.createGain(), preBus = ctx.createGain(), out = ctx.createGain();
   master.connect(preBus); dryBus.connect(preBus);   // MASTER also feeds the echo; DRYBUS does not
@@ -168,21 +181,14 @@ function createEngine(ctx) {
 
   // the tick: the tine, through its own gain that the next tick chokes; `spread` plays two copies apart (the width handle)
   let tickBus = null;
-  // 2026-10-16 (D334, measured with earshot): the old tine, a bare sine whose 14:1 modulation collapsed in 30 ms inside a 90 ms envelope, read as
-  // a muffled "liquid bloop" at -46 LUFS. A tine is three things at once: a warm 1:1 FM body with a short bark, a bell partial high up that dies fast,
-  // and a tiny bright click on the strike; and it rings for a third of a second
-  let clickBuf = null;
-  function tineVoice(f, t0, into, d = TINE.d) {
+  // D345: the tine of 3a26bc5 back (a 14:1 FM pluck in a 90 ms envelope), at D334's loudness: TINE.peak lifts it 3 dB, so a drag measures about -31 LUFS as
+  // D334's did. D334's voice (a 1:1 FM body, a 7.1x bell, a high-passed click, a 0.34 s ring) is in git at 4ccf5b7 for the side-by-side; the ticks' notes,
+  // tickPlan, are unchanged
+  function tineVoice(f, t0, into, d = 0.09) {
     const car = ctx.createOscillator(), mod = ctx.createOscillator(), mgn = ctx.createGain(), g = ctx.createGain();
-    car.frequency.value = f; mod.frequency.value = f; mgn.gain.setValueAtTime(f * TINE.bark, t0); mgn.gain.exponentialRampToValueAtTime(f * 0.05, t0 + 0.12);
-    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(TINE.body, t0 + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    car.frequency.value = f; mod.frequency.value = f * 14; mgn.gain.setValueAtTime(f * 0.9, t0); mgn.gain.exponentialRampToValueAtTime(f * 0.01, t0 + 0.03);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(TINE.peak, t0 + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
     mod.connect(mgn); mgn.connect(car.frequency); car.connect(g); g.connect(into); car.start(t0); mod.start(t0); car.stop(t0 + d + 0.02); mod.stop(t0 + d + 0.02);
-    const bell = ctx.createOscillator(), bg = ctx.createGain(); bell.frequency.value = Math.min(f * 7.1, 15000);   // the tine's own ring, above the body
-    bg.gain.setValueAtTime(0.0001, t0); bg.gain.exponentialRampToValueAtTime(TINE.bell, t0 + 0.001); bg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.06);
-    bell.connect(bg); bg.connect(into); bell.start(t0); bell.stop(t0 + 0.08);
-    if (!clickBuf) { clickBuf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.006), ctx.sampleRate); const x = clickBuf.getChannelData(0); for (let i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * Math.exp(-i / (x.length / 5)); }
-    const cs = ctx.createBufferSource(), chp = ctx.createBiquadFilter(), cg = ctx.createGain(); cs.buffer = clickBuf; chp.type = 'highpass'; chp.frequency.value = 3500; cg.gain.value = TINE.click;
-    cs.connect(chp); chp.connect(cg); cg.connect(into); cs.start(t0); cs.stop(t0 + 0.01);
   }
   function tick({ midi, pan = 0, spread = null }) {
     const now = ctx.currentTime;
@@ -239,7 +245,7 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   const lastValue = {}, melAt = {};
   const onStep = (e) => {
     const d = e && e.detail; if (!d || typeof d.kind !== 'string') return;
-    const plan = tickPlan(d.kind, lastValue[d.kind], Number(d.value), melAt[d.kind] || 0);
+    const plan = stepPlan(d.kind, lastValue[d.kind], Number(d.value), melAt[d.kind] || 0, d.single === true);
     lastValue[d.kind] = Number(d.value);
     if (!plan) return;
     melAt[d.kind] = plan.melAt;
@@ -268,4 +274,4 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { createSound, createEngine, soundFor, tickPlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
+if (typeof module !== 'undefined') module.exports = { createSound, createEngine, soundFor, tickPlan, stepPlan, notePlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
