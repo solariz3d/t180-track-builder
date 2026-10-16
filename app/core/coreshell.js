@@ -315,6 +315,22 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return sculpt(b.base, { channel: b.channel, ...at });
   };
 
+  // D335: what a Sculpt drag really gives at the piece's middle per unit of delta. The brush adds its delta to the control points under a falloff, so the VALUE at the middle peaks a little under
+  // the delta (0.995 of it on a 100 m piece): a bank drag to 180 left 179.10 while the handle said 180.00. The brush is linear (E's value mode is this same sculpt), so one unit run on the drag's base gives the ratio; the drag's
+  // delta is divided by it and lands on the value asked for. Worked out once a drag (cached on its base document); 1 where it cannot be read.
+  const sculptRatios = new WeakMap();
+  const sculptRatio = (b) => {
+    const key = b.base; let m = sculptRatios.get(key); if (!m) sculptRatios.set(key, m = {});
+    if (m[b.channel] !== undefined) return m[b.channel];
+    let k = 1;
+    try {
+      const i = b.sculptPiece, P = b.base.pieces[i], unit = sculpt(b.base, { channel: b.channel, s0: b.s0, r: b.r, delta: 1 }).doc.pieces[i], mid = P.length / 2;
+      const got = D.channelAt(unit, b.channel, mid).v - D.channelAt(P, b.channel, mid).v;
+      if (Number.isFinite(got) && got > 0.5 && got <= 1.5) k = got;
+    } catch (e) { if (!(e instanceof D.CoreError)) throw e; }   // a brush that will not run at unit delta is refused by its own step, with its own words
+    return (m[b.channel] = k);
+  };
+
   const api = {
     getState: () => st,
     subscribe(f) { subs.add(f); return () => subs.delete(f); },
@@ -485,7 +501,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     brushTo(delta0) {
       const b = st.brush; if (!b) return set({ message: 'no brush drag is open' });
-      const delta = b.channel === 'phi' ? bankWithinTurn(b, delta0) : delta0;   // D259: the bank at the drag's centre keeps within one turn, its sign kept
+      const wrapped = b.channel === 'phi' ? bankWithinTurn(b, delta0) : delta0;   // D259: the bank at the drag's centre keeps within one turn, its sign kept
+      const delta = b.sculpt && Number.isInteger(b.sculptPiece) ? wrapped / sculptRatio(b) : wrapped;   // D335: so the middle of a Sculpt piece reads the value asked for
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
         // D244b: the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)

@@ -434,9 +434,10 @@ const handleOf = (P1, id) => P1.panel.handles.handles().find((h) => h.id === id)
 /** Drag the handle `id` by `px` PIXELS along its own on-screen axis (from where it was pressed; D251: the speed is per pixel, so a drag is told in pixels), release. */
 function dragBy(P1, id, px, extra = {}) {
   const h = handleOf(P1, id), a = h.screen, k = px / a.len;
-  fire(P1, 'pointerdown', a.x, a.y);
-  fire(P1, 'pointermove', a.x + a.dx * k, a.y + a.dy * k, extra); P1.frame();
-  fire(P1, 'pointerup', a.x + a.dx * k, a.y + a.dy * k, extra);
+  // D335: a drag's speed is read from the event times, so this one is a FLICK (the move 1 ms after the press: the kind's own per-pixel rate, which is what the rows below were written for)
+  const t = fire(P1, 'pointerdown', a.x, a.y).timeStamp;
+  fire(P1, 'pointermove', a.x + a.dx * k, a.y + a.dy * k, { timeStamp: t + 1, ...extra }); P1.frame();
+  fire(P1, 'pointerup', a.x + a.dx * k, a.y + a.dy * k, { timeStamp: t + 2, ...extra });
 }
 
 // AMENDED D331 (plan :417-426, 2026-10-16): this row first held that the turn and climb handles are NOT offered as corners, because they drag a rate. The keeper
@@ -480,11 +481,11 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   assert.deepEqual(seen.map((h) => h.id), hs.map((h) => h.id), 'the read-only request (for the window proof) lists the same handles'); assert.ok(seen.every((h) => Number.isFinite(h.x) && Number.isFinite(h.dy)));
   // length: a drag along the road, 20 m
   const len = fieldOf(P1, 'length m'), width = fieldOf(P1, 'width m'), bank = fieldOf(P1, 'bank °'), turn = fieldOf(P1, 'turn °/100m'), cup = fieldOf(P1, 'cup °');
-  assert.equal(len.value, '100'); const ghosts0 = S.ghosts; dragBy(P1, 'length:0', 50); assert.equal(len.value, '118.48', 'length: 50 px along the road, the first 6 held, 0.42 m each'); assert.ok(S.ghosts > ghosts0, 'the ghost followed the field (typed)');
+  assert.equal(len.value, '100'); const ghosts0 = S.ghosts; dragBy(P1, 'length:0', 50); assert.equal(len.value, '121', 'length: 50 px along the road, no hold (D335), 0.42 m each'); assert.ok(S.ghosts > ghosts0, 'the ghost followed the field (typed)');
   assert.equal(shell.getState().history.present, d0, 'a drag is no document edit'); assert.equal(shell.getState().history.past.length, past0, 'nothing in Undo');
   // width: either side's handle, 1 m OUTWARD, is the same change of the one field
   const w0 = Number(width.value); dragBy(P1, 'width:1', 20); const wl = Number(width.value); width.value = String(w0); width.oninput(); P1.frame(); dragBy(P1, 'width:-1', 20); const wr = Number(width.value);
-  assert.equal(wl, Math.round((w0 + 14 * 0.068) * 100) / 100); assert.equal(wr, wl, 'the right edge, 20 px outward (the first 6 held), is the same width');
+  assert.equal(wl, Math.round((w0 + 20 * 0.068) * 100) / 100); assert.equal(wr, wl, 'the right edge, 20 px outward, is the same width');
   // CHANGED 2026-10-14: LENGTH at the piece's FRONT, the width marks MID PIECE, the turn marks at the front edges (they were: length and width at the near end,
   // D250 item 3); the width marks sit at the TARGET half-width, so they follow the drag
   // the station a handle sits at, as the panel places it: the ghost station nearest s0 + at·(s1 − s0), s0 the placed track's end and s1 the ghost's
@@ -504,12 +505,12 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   dragBy(P1, 'bank:1', 20); const b1 = Number(bank.value); assert.ok(b1 > 0, `bank rose: ${b1}`); bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:-1', 20); assert.equal(Number(bank.value), b1, 'the right edge dragged DOWN 20 px is the same bank');
   bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:1', 20, { shiftKey: true }); assert.equal(Number(bank.value), 0.2, `Shift (D330: the rule changed, it was a tenth of the speed): 20 px is 20 steps of 0.01, got ${bank.value}`);
   // turn: toward the left on either side; cup outward
-  const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); const t1 = Number(turn.value); assert.equal(t1, Math.round((t0 + 2.822) * 100) / 100, 'today\'s speed at the default camera: 0.083 a degree per 100 m per pixel, past the 6 px hold'); turn.value = String(t0); turn.oninput(); P1.frame(); dragBy(P1, 'turn:-1', 40); assert.equal(Number(turn.value), t1, 'the same value from the right-hand handle');
-  const c0 = Number(cup.value); dragBy(P1, 'cup:1', 30); assert.equal(Number(cup.value), Math.round((c0 + 24 * 0.24) * 100) / 100, 'cup: 30 px, the first 6 held, 0.24 a pixel'); assert.equal(shell.getState().history.present, d0, 'still no document edit after all of it');
+  const t0 = Number(turn.value); dragBy(P1, "turn:1", 40); const t1 = Number(turn.value); assert.ok(Math.abs(t1 - t0 - 40 * 0.083) <= 0.011, `${t1 - t0} against 3.32: ` + 'today\'s speed at the default camera: 0.083 a degree per 100 m per pixel, no hold (D335)'); turn.value = String(t0); turn.oninput(); P1.frame(); dragBy(P1, 'turn:-1', 40); assert.equal(Number(turn.value), t1, 'the same value from the right-hand handle');
+  const c0 = Number(cup.value); dragBy(P1, 'cup:1', 30); assert.equal(Number(cup.value), Math.round((c0 + 30 * 0.24) * 100) / 100, 'cup: 30 px, no hold, 0.24 a pixel'); assert.equal(shell.getState().history.present, d0, 'still no document edit after all of it');
   // the readout follows the drag (as typed), and Extend places what was dragged: the piece is new, and it carries the width that was dragged
-  width.value = String(w0 + 4); width.oninput(); P1.frame(); assert.match(P1.root.all().find((e) => e.attrs['data-readout'] === 'length').textContent, /118\.48/, 'the readout shows the dragged length');
+  width.value = String(w0 + 4); width.oninput(); P1.frame(); assert.match(P1.root.all().find((e) => e.attrs['data-readout'] === 'length').textContent, /121\.00/, 'the readout shows the dragged length');
   P1.button('Extend').onclick(); const d1 = shell.getState().history.present; assert.equal(d1.pieces.length, n0 + 1, 'Extend adds the piece'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step');
-  const placed = d1.pieces[d1.pieces.length - 1]; assert.equal(placed.length, 118.48); assert.ok(Math.abs(D.channelAt(placed, 'w', placed.length).v - (w0 + 4)) < 1e-6, 'the width that was dragged is the width the piece ends at');
+  const placed = d1.pieces[d1.pieces.length - 1]; assert.equal(placed.length, 121); assert.ok(Math.abs(D.channelAt(placed, 'w', placed.length).v - (w0 + 4)) < 1e-6, 'the width that was dragged is the width the piece ends at');
   P1.panel.unmount();
 });
 
@@ -522,7 +523,7 @@ test('row 11b: no ghost, no handles; a press ON a handle is the handle\'s and th
   const armed = P1.input('brush on'); armed.checked = true; const h = handleOf(P1, 'length:0'); P1.T.s = 100;
   for (const [aria, v] of [['brush mode', 'rate'], ['brush channel', 'phi']]) P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === aria).value = v;   // (the fake select has no value of its own)
   const on = fire(P1, 'pointerdown', h.screen.x, h.screen.y); assert.equal(on.stopped, true); assert.equal(shell.getState().brush, null, 'on a handle: not the brush\'s'); fire(P1, 'pointerup', h.screen.x, h.screen.y);
-  const lenField = fieldOf(P1, 'length m'); dragBy(P1, 'length:0', 50); assert.equal(lenField.value, '118.48', 'a whole drag on a handle with the brush armed edits the field'); assert.equal(shell.getState().brush, null); assert.ok(!shell.getState().lastStep || !/brush/.test(shell.getState().lastStep.op), 'and no brush stroke ran');
+  const lenField = fieldOf(P1, 'length m'); dragBy(P1, 'length:0', 50); assert.equal(lenField.value, '121', 'a whole drag on a handle with the brush armed edits the field'); assert.equal(shell.getState().brush, null); assert.ok(!shell.getState().lastStep || !/brush/.test(shell.getState().lastStep.op), 'and no brush stroke ran');
   const off = fire(P1, 'pointerdown', 5, 5); assert.equal(off.stopped, false); assert.ok(shell.getState().brush, 'elsewhere: the brush opens'); fire(P1, 'pointerup', 5, 5); armed.checked = false;
   // cup or tube: a tube in use takes the cup's handles away (its field is disabled)
   const tube = fieldOf(P1, 'tube sweep °'); tube.value = '200'; tube.oninput(); P1.frame(); assert.equal(fieldOf(P1, 'cup °').disabled, true); assert.ok(!P1.panel.handles.handles().some((x) => x.kind === 'cup'), 'no cup handles while a tube is being made'); assert.equal(P1.panel.handles.handles().length, 8);
@@ -627,10 +628,10 @@ test('row 14c: the landing\'s four handles (D278: BESIDE the Extend ghost\'s, wh
   assert.deepEqual(P1.panel.handles.handles().map((h) => h.id).filter((i) => i.startsWith('land')), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'the four landing handles (D278: the Extend ghost\'s ten are up beside them, row 14d)'); assert.ok(P1.panel.handles.handles().every((h) => h.screen), 'all on screen');
   let seen = null; P1.doc.dispatchEvent(new P1.win.CustomEvent('t180:handles-request', { detail: { reply: (l) => { seen = l; } } })); assert.deepEqual(seen.map((h) => h.kind).filter((k) => k.startsWith('land')), ['landfwd', 'landleft', 'landup', 'landturn'], 'the read-only request lists them too');
   const pose = () => shell.landing().pose, past = () => shell.getState().history.past.length, n0 = past();
-  dragBy(P1, 'landfwd:0', 100); assert.equal(pose().forward, 54.1, '100 px along the arrow, the first 6 held, at 0.15 m a pixel'); assert.equal(past(), n0 + 1, 'ONE undo step for the whole drag'); assert.equal(P1.input('landing forward').value, '54.1', 'the box shows it');
+  dragBy(P1, 'landfwd:0', 100); assert.equal(pose().forward, 55, '100 px along the arrow, no hold, at 0.15 m a pixel'); assert.equal(past(), n0 + 1, 'ONE undo step for the whole drag'); assert.equal(P1.input('landing forward').value, '55', 'the box shows it');
   assert.deepEqual([pose().left, pose().up, pose().heading], [0, 0, 0], 'only forward moved');
   dragBy(P1, 'landup:0', 200, { shiftKey: true }); assert.equal(pose().up, 2, 'Shift (D330: the rule changed, it was a tenth of the speed): one pixel a step, 200 px is 2.00 m'); dragBy(P1, 'landfwd:0', 33, { ctrlKey: true }); assert.equal(pose().forward, 60, 'Ctrl snaps forward to 5 m: 55 + 4.95 is 60');
-  dragBy(P1, 'landturn:0', 100); assert.equal(pose().heading, 9.4, 'the heading handle: 0.1 degree a pixel past the 6 px hold'); dragBy(P1, 'landleft:0', 100); assert.equal(pose().left, 9.4, 'sideways: 0.1 m a pixel');
+  dragBy(P1, 'landturn:0', 100); assert.equal(pose().heading, 10, 'the heading handle: 0.1 degree a pixel, no hold (D335)'); dragBy(P1, 'landleft:0', 100); assert.equal(pose().left, 10, 'sideways: 0.1 m a pixel');
   const dl = shell.getState().history.present; assert.equal(shell.getState().history.past.length, n0 + 5);
   // two quick presses reset: sideways to 0 (and heading and height too: the zero kinds); forward is not reset to 0 but to what it was before its last drag (60 was its snap's, 55 before)
   const quick = (id, t0) => { const a = handleOf(P1, id).screen; fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t0 }); fire(P1, 'pointerup', a.x, a.y, { timeStamp: t0 + 40 }); fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t0 + 200 }); fire(P1, 'pointerup', a.x, a.y, { timeStamp: t0 + 240 }); P1.frame(); };
@@ -654,12 +655,12 @@ test('row 14d (D278, the keeper: "after placing jump piece, it doesnt go back to
   let seen = null; P1.doc.dispatchEvent(new P1.win.CustomEvent('t180:handles-request', { detail: { reply: (l) => { seen = l; } } })); assert.deepEqual(seen.map((h) => h.id).sort(), [...LAND, ...EXT].sort(), 'the read-only request lists all fourteen');
   // 2  an Extend handle types into its field: no document edit, nothing in Undo, the landing where it was
   const d0 = shell.getState().history.present, past0 = shell.getState().history.past.length, pose0 = shell.landing().pose, turn = fieldOf(P1, 'turn °/100m'), len = fieldOf(P1, 'length m');
-  const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); assert.equal(Number(turn.value), Math.round((t0 + 2.822) * 100) / 100, 'the turn field took the drag (0.083 a degree per 100 m per pixel, past the 6 px hold)');
+  const t0 = Number(turn.value); dragBy(P1, 'turn:1', 40); assert.equal(Number(turn.value), Math.round((t0 + 40 * 0.083) * 100) / 100, 'the turn field took the drag (0.083 a degree per 100 m per pixel, no hold, D335)');
   const l0 = len.value; dragBy(P1, 'length:0', 50); assert.notEqual(len.value, l0, 'the length field took the drag');
   assert.equal(shell.getState().history.present, d0, 'an Extend handle is no document edit'); assert.equal(shell.getState().history.past.length, past0, 'nothing in Undo'); assert.deepEqual(shell.landing().pose, pose0, 'the landing did not move');
   settle(); assert.equal(idsOf().length, 14, 'both sets are still up after the drags');
   // 3  a landing handle still moves the landing, in ONE undo step, and leaves the fields alone
-  const turnTyped = turn.value; dragBy(P1, 'landfwd:0', 100); assert.equal(shell.landing().pose.forward, 54.1, '100 px along the arrow, the first 6 held, at 0.15 m a pixel'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step for the whole drag'); assert.equal(turn.value, turnTyped, 'the Extend fields are untouched');
+  const turnTyped = turn.value; dragBy(P1, 'landfwd:0', 100); assert.equal(shell.landing().pose.forward, 55, '100 px along the arrow, no hold, at 0.15 m a pixel'); assert.equal(shell.getState().history.past.length, past0 + 1, 'ONE undo step for the whole drag'); assert.equal(turn.value, turnTyped, 'the Extend fields are untouched');
   settle(); assert.equal(idsOf().length, 14);
   // 4  the landing's number boxes still tune it while it is the head, with the Extend handles up
   const LB = (n) => P1.input(`landing ${n}`); LB('up').value = '2'; LB('up').onchange(); assert.equal(shell.landing().pose.up, 2); settle(); assert.equal(idsOf().length, 14);
@@ -960,4 +961,33 @@ test('D331 B: with the turn read as a corner (the default), a selected piece len
   shell.extend({ length: 100, targets: { kv: 0.003 } }); P1.frame(); P1.click(at0 + 50); P1.frame();
   const k = shell.getState().history.present.pieces.length - 1, up = shell.pieceReadouts()[k].climbDeg; assert.ok(up > 1, `it climbs ${up}°`);
   assert.equal(Number(fieldOf(P1, 'climb °').value), r2(up), 'the climb field: the degrees it climbs, not its climb rate');
+});
+
+// ── D335 (plan :555-583): scrubbing the marks on a placed piece. The pointer follows the MARK, and the road rolls under it: the bank mark's screen axis turns about 100 degrees between 0 and 180 degrees of bank ──
+/** A steady drag that follows the handle `id` as the road rolls (each step the pointer moves `step` px along where the mark's axis points NOW), `n` steps, each `dt` ms apart. Returns the sculpt bank at the piece's middle after each step. */
+function followMark(P1, id, n, step, dt, extra = {}) {
+  const a = handleOf(P1, id).screen; let t = 0, x = a.x, y = a.y; const out = [];
+  fire(P1, 'pointerdown', a.x, a.y, { timeStamp: t });
+  for (let i = 0; i < n; i++) {
+    const c = handleOf(P1, id).screen; x += c.dx / c.len * step; y += c.dy / c.len * step;
+    fire(P1, 'pointermove', x, y, { ...extra, timeStamp: (t += dt) }); P1.frame(); out.push(P1.shell.sculptInfo().values.phi);
+  }
+  fire(P1, 'pointerup', x, y, { ...extra, timeStamp: t + dt });
+  return out;
+}
+async function sculptPanel() {
+  const P1 = await handlePanel(), sw = P1.input('sculpt on'); sw.checked = true; sw.onchange(); P1.frame(); P1.click(400); P1.frame(); P1.frame(); return P1;
+}
+test('row 16 (D335): a steady bank drag on a placed piece\'s sculpt mark, the pointer following the mark as the road rolls, rises all the way, lands on 180 and never goes back (the axis fixed at the grab stalled it near 165)', async () => {
+  const P1 = await sculptPanel(), v = followMark(P1, 'bank:1', 400, 1, 1);   // 400 px at 1 px a millisecond: a fast, steady hand
+  let back = 0; for (let i = 1; i < v.length; i++) if (v[i] < v[i - 1] - 1e-9) back++;
+  assert.equal(back, 0, `the bank went back ${back} times: peak ${Math.max(...v).toFixed(2)}, end ${v[v.length - 1].toFixed(2)}`);
+  assert.ok(Math.abs(v[v.length - 1] - 180) < 1, `400 px at 0.45 a degree is 180 (it reads ${v[v.length - 1].toFixed(3)})`);
+  P1.panel.unmount();
+});
+test('row 16b (D335): a slow bank drag on a sculpt mark is 0.01 degree a pixel with no key, and the piece reads what the handle says', async () => {
+  const P1 = await sculptPanel(), phi0 = P1.shell.sculptInfo().values.phi, v = followMark(P1, 'bank:1', 100, 1, 20);   // 100 px, one pixel every 20 ms: 0.05 px a ms
+  assert.ok(Math.abs(v[v.length - 1] - phi0 - 1) < 0.02, `100 px slow is 1.00 degree (the piece rose ${v[v.length - 1] - phi0})`);
+  assert.ok(v.every((x, i) => i === 0 || x >= v[i - 1] - 1e-12), 'and it never goes back');
+  P1.panel.unmount();
 });
