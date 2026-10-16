@@ -267,6 +267,37 @@ fn open_autosave(app: tauri::AppHandle) -> Result<Option<String>, String> {
     fs::read_to_string(&path).map(Some).map_err(|e| format!("could not open {}: {e}", path.display()))
 }
 
+// ---- D340, THE LATE-INPUT LOG: the key events the page handled late (app/preview/preview.js checkLate), one JSON line each (app/core/inputlog.js), kept in
+// input-late.log in the app data folder, beside tracks\, so a coasting camera mid-drive can be read afterwards. The file is capped: an append that would take it
+// past INPUT_LOG_CAP keeps only the newest whole lines, about half the cap, then appends.
+const INPUT_LOG_FILE: &str = "input-late.log";
+const INPUT_LOG_CAP: u64 = 256 * 1024;
+
+/// Append `text` (whole lines) to `path`, keeping the file at most `cap` bytes: past the cap, the oldest lines go first (whole lines, newest kept).
+pub fn append_capped(path: &Path, text: &str, cap: u64) -> Result<(), String> {
+    use std::io::Write;
+    let tail = |s: &str, budget: u64| -> String {
+        if (s.len() as u64) <= budget { return s.to_string(); }
+        let from = s.len() - budget as usize;
+        match s.as_bytes()[from..].iter().position(|&b| b == b'\n') { Some(i) => s[from + i + 1..].to_string(), None => String::new() }
+    };
+    let text = tail(text, cap);
+    let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    if size + text.len() as u64 <= cap {
+        let mut f = fs::OpenOptions::new().create(true).append(true).open(path).map_err(|e| format!("could not open {}: {e}", path.display()))?;
+        return f.write_all(text.as_bytes()).map_err(|e| format!("could not append to {}: {e}", path.display()));
+    }
+    let old = fs::read_to_string(path).unwrap_or_default();
+    let kept = tail(&old, (cap / 2).saturating_sub(text.len() as u64));
+    write_atomic(path, &format!("{kept}{text}"))
+}
+
+/// Run OFF the main thread (Tauri v2 runs a plain command on the main thread, the one that pumps the window's messages): a write here never holds a key up.
+#[tauri::command(async)]
+fn append_input_log(app: tauri::AppHandle, text: String) -> Result<(), String> {
+    append_capped(&data_dir(&app)?.join(INPUT_LOG_FILE), &text, INPUT_LOG_CAP)
+}
+
 #[tauri::command]
 fn clear_autosave(app: tauri::AppHandle) -> Result<(), String> {
     let path = data_dir(&app)?.join(AUTOSAVE_FILE);
@@ -503,7 +534,7 @@ pub fn run() {
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export, folder_is_empty, remove_empty_folder,
             get_ac_root, find_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
-            test_export_folder, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo
+            test_export_folder, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo, append_input_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running the T-180 Track Builder");
@@ -538,6 +569,27 @@ mod tests {
         assert_eq!(test_app_data(Some("relative\\dir".into())), None, "a relative path is ignored");
         assert_eq!(test_app_data(Some(d.join("missing").to_string_lossy().into_owned())), None, "a folder that does not exist is ignored");
         assert_eq!(test_app_data(Some(String::new())), None);
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    // D340: the late-input log appends whole lines and, past its cap, keeps the newest whole lines (the oldest go), so it can never grow without bound
+    #[test]
+    fn the_input_log_appends_and_past_its_cap_keeps_the_newest_whole_lines() {
+        let d = scratch("inputlog");
+        let p = d.join("input-late.log");
+        append_capped(&p, "{\"n\":1}\n", 100).unwrap();
+        append_capped(&p, "{\"n\":2}\n", 100).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "{\"n\":1}\n{\"n\":2}\n", "appended, in order");
+        for i in 3..60 { append_capped(&p, &format!("{{\"n\":{i}}}\n"), 100).unwrap(); }
+        let s = fs::read_to_string(&p).unwrap();
+        assert!(s.len() <= 100, "at most the cap: {} bytes", s.len());
+        assert!(s.ends_with("{\"n\":59}\n"), "the newest line is kept: {s:?}");
+        assert!(s.starts_with('{') && s.lines().all(|l| l.starts_with('{') && l.ends_with('}')), "whole lines only: {s:?}");
+        let n: Vec<u32> = s.lines().map(|l| l[5..l.len() - 1].parse().unwrap()).collect();
+        assert!(n.windows(2).all(|w| w[1] == w[0] + 1), "the newest lines, in order: {n:?}");
+        append_capped(&p, &"x".repeat(300), 100).unwrap();   // one write larger than the cap, with no newline: nothing of it fits whole
+        assert!(fs::read_to_string(&p).unwrap().len() <= 100);
+        assert!(!p.with_extension("tmp-write").exists());
         fs::remove_dir_all(&d).unwrap();
     }
 
