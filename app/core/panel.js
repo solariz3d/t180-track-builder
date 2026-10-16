@@ -15,7 +15,7 @@
 'use strict';
 
 const LB = require('./labels.js');
-const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
+const RG = require('../validate-ui/redgroups.js'), VL = require('../validate-ui/labels.js');   // D242: every red in plain words, grouped, with where
 const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
 const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
 const HD = require('./handles.js');   // D244: the drag handles on the Extend ghost, and (Sculpt, D244b) on a placed piece
@@ -420,6 +420,7 @@ function mount(root, shell) {
   const closeHow = el('select', { 'aria-label': 'close using', title: 'which part of the lap the close may move: everything before it stays exactly as it is' });
   // 2026-10-14: 'finish' = Finish to start: new road from the end to the start, and nothing already built moves (src/core/finish.js)
   for (const [v, t] of [['0.2', 'the last ~20% of the lap'], ['last', 'the last piece only'], ['0.4', 'the last ~40% of the lap'], ['whole', 'the whole lap (moves every piece)'], ['finish', 'new road from the end to the start (moves nothing)']]) closeHow.append(new win.Option(t, v));
+  closeHow.value = 'finish';   // D331: new road from the end to the start (moves nothing already built); the "last ~20%" refuses on a long track. The others are one click away
   const closeBtn = el('button', { text: 'Close the loop', title: 'shows the closed track first (a ghost, how far each piece moves, any overlap): then Apply or Cancel', onclick: () => {
     // a long track takes seconds to close (ELYSIUM, 24 km: ~2-4 s): say so FIRST, and let the page paint it, so the wait never reads as nothing happening
     const v = closeHow.value, opts = v === 'last' ? { last: true } : v === 'whole' ? { whole: true } : v === 'finish' ? { finish: true } : { fraction: Number(v) };
@@ -464,7 +465,14 @@ function mount(root, shell) {
     else {
       kids.push(el('p', { 'aria-label': 'overlap check time', style: 'font-size:12px;color:var(--dim);margin:2px 0', text: `Checked in ${(ck.elapsedMs / 1000).toFixed(1)} s${ck.timing ? ` (the worker's start ${(ck.timing.loadMs / 1000).toFixed(1)} s, the check itself ${(ck.timing.jobMs / 1000).toFixed(1)} s)` : ''}.` }));
       const groups = RG.groupReds([...ck.result.overlaps, ...ck.result.others], p.resolved.segments);
-      if (!groups.length) kids.push(el('p', { 'aria-label': 'overlap check', text: 'No overlap and no red on the closed track.' }));
+      // D331: the lap proof's verdict (overlapjob.js): a close whose lap the checker would fail says so BEFORE Apply, and is not called clean
+      const lap = ck.result.lap, lapFails = !!lap && lap.ok === false;
+      if (!groups.length && !lapFails) kids.push(el('p', { 'aria-label': 'overlap check', text: 'No overlap and no red on the closed track.' }));
+      if (lapFails) {
+        const w = lap.first, more = lap.count > 1 ? ` (${lap.count} places along the lap)` : '';
+        kids.push(el('p', { 'aria-label': 'lap check', style: 'color: var(--bad)', text: w && w.reason === 'leaves-surface' ? `The lap fails: the car leaves the road at ${(w.s / 1000).toFixed(2)} km${more}.` : `The lap fails${w ? `: ${VL.lapWhereText(w)} at ${(w.s / 1000).toFixed(2)} km${more}` : ''}.` }));
+        if (w) kids.push(el('div', { class: 'actions' }, placeButton({ s: w.s, what: 'the lap fails', detail: '' }, 'show where')));
+      }
       for (const g of groups) kids.push(el('p', { text: `${g.key === 'overlap' ? 'The closed track OVERLAPS ITSELF' : g.title} (${RG.placesText(g)}):`, style: 'color: var(--bad)' }), el('div', { class: 'actions' }, ...g.places.slice(0, 24).map((it) => placeButton(it, RG.placeText(it)))));
     }
     proposalBox.replaceChildren(...kids);

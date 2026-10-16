@@ -71,7 +71,8 @@ test('the overlap check (lean) answers exactly what the full mesh and full valid
   const mesh = G.buildMesh(p, segs, {}); mesh.selfCheck = G.selfCheck(mesh, { closed: true, lengthM: p.lengthM }); mesh.folds.push(...asFolds(mesh.selfCheck));
   const roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
   const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, fullSpeed: true });
-  const OV = OJ.OVERLAP, want = { overlaps: v.red.filter((x) => OV.has(x.reason)), others: v.red.filter((x) => !OV.has(x.reason)), amber: v.amber.length };
+  const OV = OJ.OVERLAP, want = { overlaps: v.red.filter((x) => OV.has(x.reason)), others: v.red.filter((x) => !OV.has(x.reason)), amber: v.amber.length,
+    lap: { ok: v.lap.ok, reason: v.lap.reason || null, first: v.lap.where && v.lap.where.length ? { s: v.lap.where[0].s, reason: v.lap.where[0].reason } : null, count: v.lap.where ? v.lap.where.length : 0 } };   // D331: the answer carries the lap proof's verdict (the rule changed: it was thrown away)
   assert.deepEqual(OJ.runJob({ doc: cp.doc, closed: true }), want, 'the one-piece check');
   assert.deepEqual(OJ.mergeParts(OJ.runJob({ doc: cp.doc, closed: true, part: 'rest' }), OJ.runJob({ doc: cp.doc, closed: true, part: 'rays' })), want, 'its two parts, put together');
 });

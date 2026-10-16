@@ -200,6 +200,7 @@ async function mountPanel(shell) {
 
 test('row 6: the panel while the worker works: it says what is being done and that Cancel stops it, Cancel stops the job, and the preview replaces the line when it lands', async () => {
   const r = handRunner(), s = await openLap({ closeRunner: r }), P = await mountPanel(s), base = s.getState().history.present;
+  P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = '0.2';   // D331: the box now starts on the finish (row 7); this first press is the windowed close, so it chooses it
   P.button('Close the loop').onclick(); P.fire();
   assert.equal(r.jobs.length, 1, 'the panel asked for the close');
   assert.equal(P.text('close working'), 'Closing the loop… The window stays free; Cancel stops it.');
@@ -212,4 +213,42 @@ test('row 6: the panel while the worker works: it says what is being done and th
   r.jobs[1].resolve(answerOf(base, { finish: true })); await tick(); await tick();
   assert.equal(P.text('close working'), null); assert.match(P.root.all().map((e) => e.textContent).join('|'), /Preview: only the new road .* may move/);
   assert.equal(P.button('Apply').style.display, '');
+});
+
+// D331 (ELYSIUM's newest save): "close using" started on "the last ~20%", which refuses on a long track (the road would roll too fast over that much of it), so a first press of "Close the loop"
+// gave a refusal; it now starts on "new road from the end to the start" (moves nothing already built), and the other four are one click away.
+test('row 7: "close using" starts on "new road from the end to the start": a first press asks for the finish, and the other options are still there', async () => {
+  const r = handRunner(), s = await openLap({ closeRunner: r }), P = await mountPanel(s), how = P.root.all().find((e) => e.attrs['aria-label'] === 'close using');
+  assert.equal(how.value, 'finish', 'the box starts on the finish');
+  const values = how.children.map((e) => e.value);
+  assert.deepEqual(values.slice().sort(), ['0.2', '0.4', 'finish', 'last', 'whole'], 'every option is still one click away');
+  P.button('Close the loop').onclick(); P.fire();
+  assert.equal(r.jobs.length, 1); assert.equal(r.jobs[0].args.finish, true, 'a first press, with the box untouched, asks for the finish');
+  assert.equal(P.text('close working'), 'Finishing to the start: laying new road and closing it… The window stays free; Cancel stops it.');
+});
+
+// the preview must say when the lap fails (it said "No overlap and no red on the closed track" for a close whose lap the checker then failed). A real close whose lap fails: the whole-lap
+// close of this banked track (a synthetic one: a straight, a right turn of 120 degrees, a straight, the road banked 54 degrees) leaves the car off the road at the start
+test('row 8: the Close preview says when the lap fails, and where, for any option, and is not "No overlap and no red" then; a lap that holds still says that', async () => {
+  const DEG = Math.PI / 180, { extend } = require('../../src/core/extend.js'), { extendTurnBy } = require('../../src/core/turnby.js');
+  const banked = (turn) => { let d = D.createDoc('banked'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 500 }, turn * DEG); d = extend(d, { length: 200 }); d = extend(d, { length: 200, transition: 100, targets: { phi: 54 * DEG } }); return extend(d, { length: 100, targets: { kv: 0 } }); };
+  const run = async (doc, how) => {
+    const s = await createCoreShell({ brushFn: null, autosaveMs: 0 }); s.adopt(doc); const P = await mountPanel(s);
+    P.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = how; P.button('Close the loop').onclick(); P.fire();
+    return { s, P, text: P.root.all().map((e) => e.textContent).join('|') };
+  };
+  const failing = await run(banked(-120), 'whole');
+  assert.ok(failing.s.getState().closeProposal, failing.s.getState().message);
+  assert.match(failing.text, /The lap fails: the car leaves the road at [0-9]+[.][0-9][0-9] km/, 'the preview names the failing lap and where');
+  assert.doesNotMatch(failing.text, /No overlap and no red on the closed track/, 'and does not call it clean');
+  assert.equal(failing.P.button('Apply').disabled, false, 'Apply is still the user\'s to press');
+  // the keeper's case exactly: no overlap and no red in the preview, and the lap fails (the check's answer is stood in for, so the panel's own words are what is under test)
+  { const s2 = await createCoreShell({ brushFn: null, autosaveMs: 0 }); s2.adopt(banked(120)); const real = s2.proposalCheck.bind(s2);
+    s2.proposalCheck = (p) => ({ ...real(p), status: 'done', result: { overlaps: [], others: [], amber: 0, lap: { ok: false, reason: null, first: { s: 23932.6, reason: 'leaves-surface' }, count: 12 } } });
+    const P2 = await mountPanel(s2); P2.root.all().find((e) => e.attrs['aria-label'] === 'close using').value = 'finish'; P2.button('Close the loop').onclick(); P2.fire();
+    const t2 = P2.root.all().map((e) => e.textContent).join('|');
+    assert.match(t2, /The lap fails: the car leaves the road at 23[.]93 km [(]12 places along the lap[)]/); assert.doesNotMatch(t2, /No overlap and no red on the closed track/, 'no red and no overlap is not "clean" when the lap fails'); }
+  const holding = await run(banked(120), 'finish');
+  assert.ok(holding.s.getState().closeProposal, holding.s.getState().message);
+  assert.doesNotMatch(holding.text, /The lap fails/); assert.match(holding.text, /No overlap and no red on the closed track/);
 });

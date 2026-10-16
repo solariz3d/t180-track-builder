@@ -16,10 +16,12 @@ const { walkScene, isDrivable } = require('../../src/export/markers.js');
 const { asFolds } = require('../../src/geom/bvh.js');
 const AD = require('../../src/core/adapter.js');
 const { OVERLAP, mergeParts } = require('./overlapmerge.js');
+/** D331: the validator's lap proof as plain data for the preview (it was thrown away, so a close whose lap the checker then failed read "No overlap and no red"): { ok (null: an open track), reason, first: { s, reason } | null, count }. */
+const lapSummary = (lap) => ({ ok: lap.ok, reason: lap.reason || null, first: lap.where && lap.where.length ? { s: lap.where[0].s, reason: lap.where[0].reason } : null, count: lap.where ? lap.where.length : 0 });
 /**
  * D242: THE OVERLAP CHECK of a proposed (closed) track: its mesh with the self-check, then the validator with the built road for the downforce ray,
  * the same checks the export runs (src/export/fromwords.js buildFromSegments). Returns { overlaps (the road running into itself: self-intersection,
- * stacked, a downforce ray that meets another road), others (every other red), amber (count) }.
+ * stacked, a downforce ray that meets another road), others (every other red), amber (count), lap (the lap proof's verdict) }.
  */
 /** D256: a set design speed pins it; none (the app: there is no slider) checks at FULL speed, as the panel and the export do. */
 /**
@@ -43,7 +45,7 @@ function overlapCheck(resolved, designSpeedKmh, { closed = true } = {}) {   // D
   const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
   const mesh = checkMesh(p, segs, true), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
   const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, ...speedOpts(designSpeedKmh) });
-  return { overlaps: v.red.filter((x) => OVERLAP.has(x.reason)), others: v.red.filter((x) => !OVERLAP.has(x.reason)), amber: v.amber.length };
+  return { overlaps: v.red.filter((x) => OVERLAP.has(x.reason)), others: v.red.filter((x) => !OVERLAP.has(x.reason)), amber: v.amber.length, lap: lapSummary(v.lap) };
 }
 
 /** The document as the shell resolves it (coreshell.js resolvedOf): its segments, its start pose, and the lift that applies its hill and swerve offsets to a path. */
@@ -60,7 +62,7 @@ function resolveDoc(d) {
 function overlapPart(part, resolved, designSpeedKmh, { closed = true } = {}) {
   const segs = resolved.segments, p0 = G.buildPath(segs, { step: 2, closed, start: resolved.start }), p = typeof resolved.lift === 'function' ? resolved.lift(p0) : p0;
   const speed = speedOpts(designSpeedKmh);
-  if (part === 'rest') { const mesh = checkMesh(p, segs, true), v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, ...speed }); return { red: v.red, amber: v.amber.length }; }
+  if (part === 'rest') { const mesh = checkMesh(p, segs, true), v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, ...speed }); return { red: v.red, amber: v.amber.length, lap: lapSummary(v.lap) }; }
   if (part === 'rays') {
     const roadMesh = walkScene(checkMesh(p, segs, false).scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);   // only the scene's road is kept: the rest of the mesh goes before the search
     return { red: V.validate(p, segs, { csp: true, softCollision: true, roadMesh, ...speed }).red.filter((x) => x.reason === 'downforce-ray-gap') };
