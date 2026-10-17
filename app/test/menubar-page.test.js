@@ -17,6 +17,8 @@
 //      asphalt announced before the Track menu is ever opened
 //  11  (with the Build part) Build ▸ Brush shows the brush strip under the bar, not in the left column; it stays there across an edit; Brush again hides it
 //  12  (with the Track part) a menu panel gives its controls back when the menu closes: Start & grid… open, the menu closed, and its controls are gone
+//  13  (D356) a part that fails to load says why in its menu: "This menu could not be built: <reason>", never a silent placeholder (app/core/buildmenu.js answered with a
+//      module that throws, through DevTools' Fetch domain); the other menus still work
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -29,7 +31,7 @@ const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the menus are t
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav' };
 
-let srv, ch, ws, dir, base, send, ev, errors = [];
+let srv, ch, ws, dir, base, send, ev, errors = [], onEvent = null;
 test.before(async () => {
   if (skip) return;
   srv = http.createServer((q, s) => {
@@ -45,7 +47,7 @@ test.before(async () => {
   if (!tgt) throw new Error(`headless Chrome did not answer on port ${port}`);
   ws = new WebSocket(tgt.webSocketDebuggerUrl); await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error('the DevTools socket failed')); });
   let id = 0; const pend = new Map();
-  ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } else if (d.method === 'Runtime.exceptionThrown') errors.push(d.params.exceptionDetails.exception ? d.params.exceptionDetails.exception.description : d.params.exceptionDetails.text); };
+  ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } else if (d.method && onEvent) onEvent(d); if (d.method === 'Runtime.exceptionThrown') errors.push(d.params.exceptionDetails.exception ? d.params.exceptionDetails.exception.description : d.params.exceptionDetails.text); };
   send = (method, params = {}) => new Promise((r) => { const i = ++id; pend.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
   ev = async (expr) => { const d = await send('Runtime.evaluate', { expression: `(async () => { ${expr} })()`, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 500)}`); return d.result.result.value; };
   await send('Runtime.enable'); await send('Page.enable');
@@ -220,4 +222,21 @@ test('row 12: with the Track part, a menu panel gives its controls back when the
   assert.equal(await ev(`return ${carsBoxes};`), before, 'the menu closed: the panel gave its controls back');
   await open('m-track'); await clickText('m-track', 'Start & grid…');
   assert.equal(await ev(`return ${carsBoxes};`), before + 1, 'and opens again');
+});
+
+test('row 13: a part that fails to load says why in its menu, and the other menus still work', { skip }, async () => {
+  await send('Fetch.enable', { patterns: [{ urlPattern: '*app/core/buildmenu.js*' }] });
+  onEvent = (d) => {
+    if (d.method !== 'Fetch.requestPaused') return;
+    const body = Buffer.from("throw new Error('buildmenu broken on purpose (row 13)');").toString('base64');
+    send('Fetch.fulfillRequest', { requestId: d.params.requestId, responseCode: 200, responseHeaders: [{ name: 'content-type', value: 'text/javascript' }], body });
+  };
+  try {
+    await load();
+    await open('m-build');
+    const t = await ev("return document.getElementById('m-build').querySelector('.more-menu').textContent.trim();");
+    assert.match(t, /This menu could not be built: .*buildmenu broken on purpose \(row 13\)/, `the Build menu says why: ${t}`);
+    assert.doesNotMatch(t, /on the left/, 'no placeholder pointing at the left column');
+    await open('m-edit'); assert.ok((await shown('m-edit')).includes('Undo'), 'Edit still works');
+  } finally { onEvent = null; await send('Fetch.disable'); }
 });
