@@ -66,6 +66,10 @@ function reading(fn) { try { return String(fn()); } catch (e) { return e.message
 // D353: a crash AFTER a failing row of the same file leaves no file-level entry in the TAP at all (pane E measured 9 of 9 real children), so
 // crashes() cannot see it. What still shows is that the named test never reported a line of its own. For the six harnesses that look for a named test.
 /** Whether the named test reported a top-level ✔ or ✖ line of its own in a spec output. */
+// D354 (pane E, review 4, F2): this is a SUBSTRING match, so a passing test in another file whose name contains caughtBy counts as the named one;
+// if the catching test died in a crash after a failing row, its twin hides that and the mutant reads NOT CAUGHT, not NOT TESTED (message only: the
+// row is red either way). Five caughtBy strings have twins today ('extendOptions', 'the rate brush', 'the layout', 'soak:', 'renderer: after a
+// sculpt'); they stay as they are, since making them unique would rewrite what each row claims as its catch
 const reported = (out, name) => out.split(/\r?\n/).some((l) => /^[✔✖] /.test(l) && l.slice(2).includes(name));
 /** The files that ended with an exit code of their own that is not native (a module that threw on load, exit 1): a verdict, read as before D353. */
 function fileExitsIn(file) {
@@ -73,9 +77,26 @@ function fileExitsIn(file) {
   try { tap = fs.readFileSync(file, 'utf8'); } catch (e) { throw new Error(`the inner test run wrote no TAP copy (${file}): ${e.code || e.message}; the mutant was NOT TESTED`); }
   return failures(tap).filter((e) => e.exitCode !== undefined && e.exitCode !== '~' && !isNative(e));
 }
-function neverReported(crashed = []) {
-  return `the named test never reported${crashed.length ? ` (${notTested(crashed).replace(/: the mutant was NOT TESTED$/, '')})` : ''}: the mutant was NOT TESTED`;
+// D354: `loadThrows` (from fileExitsIn) and `files` (how many test files the run had) name the files that ended on their own when a load throw
+// cannot be the verdict: in a run of more than one file, another file's load throw says nothing about the named test's file (pane E, review 4, F1)
+function neverReported(crashed = [], loadThrows = [], files = 0) {
+  const why = [];
+  if (crashed.length) why.push(notTested(crashed).replace(/: the mutant was NOT TESTED$/, ''));
+  if (loadThrows.length) {
+    why.push(`a load throw in ${loadThrows.map((e) => `${path.basename((e.location || e.name).replace(/:\d+:\d+$/, ''))} (exit ${e.exitCode})`).join(', ')}; ` +
+      `the run had ${files} files`);
+  }
+  return `the named test never reported${why.length ? ` (${why.join('; ')})` : ''}: the mutant was NOT TESTED`;
 }
+// THE LOAD-THROW STAND-IN (D354): one line at the top of a module, so every test file that loads it throws on load (exit 1), as a mutant that
+// breaks loading does. In a run of one file that is a verdict, as before D353; in a run of more it reads NOT TESTED and names the files
+const LOAD_THROW = "throw new Error('D354 stand-in: the module throws on load');\n";
+// F1's shape (pane E, review 4): the test file named `throwIn` throws on load; every other file that loads the module fails a row, then dies
+const STANDIN_LOAD_THEN_CRASH = (throwIn) => `if (process.getBuiltinModule('node:path').basename(String(process.argv[1])) === ${JSON.stringify(throwIn)}) ` +
+  `throw new Error('D354 stand-in: this file throws on load'); else ${STANDIN_AFTER_FAIL}`;
+// a load throw usually exits 1; a file whose own exception handler then fails exits 7 (seen in mutation.test.js's run), so any code is named
+const NOT_TESTED_LOAD = /^the named test never reported \(a load throw in \S+\.test\.js \(exit \d+\)(, \S+\.test\.js \(exit \d+\))*; the run had \d+ files\): the mutant was NOT TESTED$/;
+const NOT_CAUGHT_LOAD = /^NOT CAUGHT; failing tests on the mutant: \S.*\.test\.js \(/;
 // THE SECOND STAND-IN: one line at the top of a module, which registers a row that fails and then a row that dies 300 ms later, in every test file
 // that loads the module, before that file's own rows run (pane E's form: an unrelated failure, then the crash)
 const STANDIN_AFTER_FAIL = "{ const T = process.getBuiltinModule('node:test'); T.test('D353 stand-in: an unrelated row that fails', () => { throw new Error('the stand-in fails first'); }); " +
@@ -83,4 +104,5 @@ const STANDIN_AFTER_FAIL = "{ const T = process.getBuiltinModule('node:test'); T
 // either NOT TESTED message: which one shows depends on whether the failed row's report reached the parent before the death (E's two timings)
 const NOT_TESTED_ANY = /^(the named test never reported( \(native crash .+\))?|native crash (3221225477|SIGSEGV) in .+): the mutant was NOT TESTED$/;
 
-module.exports = { reporterArgs, crashes, crashesIn, notTested, failures, STANDIN, NOT_TESTED, reading, reported, fileExitsIn, neverReported, STANDIN_AFTER_FAIL, NOT_TESTED_ANY };
+module.exports = { reporterArgs, crashes, crashesIn, notTested, failures, STANDIN, NOT_TESTED, reading, reported, fileExitsIn, neverReported, STANDIN_AFTER_FAIL, NOT_TESTED_ANY,
+  LOAD_THROW, STANDIN_LOAD_THEN_CRASH, NOT_TESTED_LOAD, NOT_CAUGHT_LOAD };
