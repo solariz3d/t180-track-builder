@@ -6,6 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
+const IR = require('./inner_run.js');   // D352: a crashed inner run reads NOT TESTED
 const SRC = path.join(__dirname, '..', 'src', 'geom');
 
 const MUTATIONS = [
@@ -102,11 +103,12 @@ const MUTATIONS = [
 const TEST_FILES = ['geom_path', 'geom_mesh', 'geom_grow', 'geom_sculpt', 'geom_bvh', 'geom_ramp', 'geom_loop'].map((n) => path.join(__dirname, `${n}.test.js`));
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function runOnce(geom, pattern) {
-  const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', ...(pattern ? [`--test-name-pattern=${pattern}`] : []), ...TEST_FILES],
+  const tap = path.join(path.dirname(geom), '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
+  const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), '--test-concurrency=4', ...(pattern ? [`--test-name-pattern=${pattern}`] : []), ...TEST_FILES],
     // NODE_TEST_CONTEXT is set by the parent runner and would switch the child to the parent's protocol: clear it
     { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), GEOM_DIR: geom }, encoding: 'utf8', timeout: 300000, maxBuffer: 1 << 26 });
   if (r.error) throw r.error;
-  return (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
+  return { out: (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''), crashed: IR.crashesIn(tap) };
 }
 /** The named test's verdict in one run's output: 'fail', 'pass', or null (it never reported). */
 function verdictOf(out, name) {
@@ -123,11 +125,12 @@ function runMutant(m) {
     if (applied) fs.writeFileSync(f, src.replace(m.from, m.to));
     const attempts = [];
     for (let k = 0; k < 3; k++) {
-      const out = runOnce(geom, `^${escapeRe(m.caughtBy)}`), v = verdictOf(out, m.caughtBy);
-      attempts.push({ verdict: v, tail: v ? '' : out.slice(-1500) });
+      const { out, crashed } = runOnce(geom, `^${escapeRe(m.caughtBy)}`), v = verdictOf(out, m.caughtBy);
+      attempts.push({ verdict: v, crashed, tail: v ? '' : out.slice(-1500) });
       if (v) break;
     }
     const last = attempts[attempts.length - 1];
+    if (last.verdict === null && last.crashed.length) throw new Error(IR.notTested(last.crashed));   // D352: no verdict because the file died natively
     return { applied, caught: last.verdict === 'fail', verdict: last.verdict, attempts };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -147,10 +150,18 @@ test('control: the unmutated copy passes every geometry test', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-geom-mut-')), geom = path.join(dir, 'geom');
   try {
     fs.cpSync(SRC, geom, { recursive: true });
-    const out = runOnce(geom, null), failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l) && !/# TODO/.test(l));
+    const { out, crashed } = runOnce(geom, null);
+    if (crashed.length) throw new Error(IR.notTested(crashed));   // D352: a control that crashed passed nothing
+    const failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l) && !/# TODO/.test(l));
     assert.ok(/ℹ tests \d+/.test(out), 'the control printed no summary');
     assert.deepEqual(failed, [], `the unmutated copy fails: ${failed.join(' | ')}`);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+// D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file
+test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
+  const m0 = MUTATIONS[0], first = fs.readFileSync(path.join(SRC, m0.file), 'utf8').split(/\r?\n/)[0];
+  const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash stand-in', from: first, to: IR.STANDIN + first }); return r.verdict === null ? `NO VERDICT in ${r.attempts.length} runs` : r.caught ? 'caught' : 'NOT CAUGHT'; });
+  assert.match(said, IR.NOT_TESTED);
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
