@@ -35,7 +35,7 @@
   /* THE TITLE BAR (2026-10-14): the Windows frame is off, so the header is the bar (app/titlebar.js). Hairline glyphs, no fills. */
   header { padding-right: 0; user-select: none; }
   header .drag { flex: 1 1 0; align-self: stretch; min-width: 24px; }
-  #winctl { display: flex; align-self: stretch; margin-left: 4px; }
+  #winctl { display: flex; align-self: stretch; margin-left: 8px; }   /* D355: at least 8 px clear of Export to Assetto Corsa */
   #winctl button { width: 46px; height: 100%; border: 0; border-radius: 0; background: transparent; padding: 0; position: relative; cursor: default; }
   #winctl button::before, #winctl button::after { content: ""; position: absolute; left: 50%; top: 50%; box-sizing: border-box; }
   #win-min::before { width: 10px; height: 0; border-top: 1px solid var(--text); transform: translate(-50%, -50%); }
@@ -76,7 +76,9 @@
   header > * { flex: none; }
   header #status { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   header .drag { min-width: 0; }
-  header #install { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  /* #install shrinks only as far as its button: the note's column has no minimum (minmax(0, max-content)), so the note gives way first and the button never runs under
+     the window buttons (as a flex row, the note's whole one-line text counted toward the box's minimum width and pushed the bar 108 px past 1400) */
+  header #install { flex: 0 1 auto; display: grid; grid-template-columns: auto minmax(0, max-content); align-items: center; column-gap: 8px; }
   header #install > button { white-space: nowrap; flex: none; }
   /* D355: THE BRUSH STRIP under the bar (C's panel builds it as .brush-strip and shows it only while the brush is on; the page moves it into the banner row): its
      fields run along one row, in the page's raised panel colour with a hairline under it, as the recovery bar is laid out */

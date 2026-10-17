@@ -11,7 +11,7 @@
 //   6  Reset the guide forgets that the guide was finished, so it opens by itself at the next start
 //   7  Build and Track open and say something (their parts' entries, or a placeholder until those land), never an error
 //   8  the bar fits at the default 1400 px: the seven menus and Export to Assetto Corsa each on one line and inside the window, with a long status line and
-//      a long install note (those two give way)
+//      a long install note (those two give way), and at least 8 px between Export and the window's own buttons
 //   9  Settings ▸ Wall raycasting and the checker's own CSP box follow each other both ways, and the choice survives a reload
 //  10  (with the Track part) the road surface has one controller: no #textures section in the left column, one road-surface picker on the page, and the
 //      asphalt announced before the Track menu is ever opened
@@ -161,11 +161,14 @@ test('row 8: the bar fits at 1400 px: the seven menus and Export to Assetto Cors
     const lines = (e) => { const r = document.createRange(); r.selectNodeContents(e); return new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size; };
     const head = document.querySelector('header'), hb = head.getBoundingClientRect();
     const parts = [...document.querySelectorAll('header details > summary')].concat([...document.querySelectorAll('#install > button')]);
-    return { width: innerWidth, overflow: head.scrollWidth - head.clientWidth, parts: parts.map((e) => { const b = e.getBoundingClientRect(); return { text: e.textContent.trim(), lines: lines(e), right: Math.round(b.right), top: Math.round(b.top), bottom: Math.round(b.bottom) }; }), headBottom: Math.round(hb.bottom) };`);
+    const exp = document.querySelector('#install > button').getBoundingClientRect(), win = document.getElementById('winctl'), wb = win.getBoundingClientRect();
+    return { width: innerWidth, winShown: wb.width > 0, gap: Math.round((wb.left - exp.right) * 10) / 10, overflow: head.scrollWidth - head.clientWidth, parts: parts.map((e) => { const b = e.getBoundingClientRect(); return { text: e.textContent.trim(), lines: lines(e), right: Math.round(b.right), top: Math.round(b.top), bottom: Math.round(b.bottom) }; }), headBottom: Math.round(hb.bottom) };`);
   assert.equal(m.width, 1400);
   assert.equal(m.parts.length, 8, `seven menus and the Export button: ${m.parts.map((p) => p.text).join(', ')}`);
   for (const p of m.parts) { assert.equal(p.lines, 1, `"${p.text}" is on one line`); assert.ok(p.right <= 1400, `"${p.text}" ends at ${p.right}, inside the window`); assert.ok(p.top >= 0 && p.bottom <= m.headBottom, `"${p.text}" is inside the bar`); }
   assert.ok(m.overflow <= 0, `the bar does not overflow (${m.overflow} px)`);
+  assert.equal(m.winShown, true, 'the window buttons are drawn on the bar (in the app; off Tauri too, since the display: flex on #winctl outweighs its hidden attribute)');
+  assert.ok(m.gap >= 8, `at least 8 px between Export to Assetto Corsa and the window buttons: ${m.gap} px`);
 });
 
 test('row 9: Settings ▸ Wall raycasting and the checker\'s CSP box follow each other both ways, and the choice survives a reload', { skip }, async () => {
