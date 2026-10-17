@@ -253,8 +253,10 @@ function core(path, segments, opts, from, carried, upto) {
   // several vectors per station and line); each station then combines it with its own frame, in the same arithmetic
   // order as the vector helpers above, so every figure is bit-identical to the per-station form it replaced.
   const perSeg = new Map();
-  const constOf = (prof) => remembered(constMemo, prof, () => prof.u.map((u) => { const [X, Y] = P.offsetAt(prof, u), [nl, nu] = P.normalAt(prof, u), psi = P.psiAt(prof, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
-    return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; }));
+  // D343: computed on a frozen copy (P.sealed): a cup blend's profile is made fresh at each station, and read at every one of its u, so offsetAt's running sums
+  // apply instead of summing from the centre each time (the same numbers; on a 25 km cup track this was most of the check)
+  const constOf = (prof) => remembered(constMemo, prof, () => { const fp = P.sealed(prof); return fp.u.map((u) => { const [X, Y] = P.offsetAt(fp, u), [nl, nu] = P.normalAt(fp, u), psi = P.psiAt(fp, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
+    return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; }); });
   const segConst = (j) => {
     let c = perSeg.get(j);
     if (c) return c;
