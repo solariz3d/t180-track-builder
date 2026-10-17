@@ -101,7 +101,11 @@ function tickPlan(kind, prev, value, melAt = 0) {
   return notePlan(kind, value, value > prev, melAt);
 }
 /** The note a tick plays for a handle's value, moving `up` or down (tickPlan's choice, once it has decided to tick): { midi, pan, spread, melAt }. */
+// D374: with the fields read as corners (the panel's default) the climb and turn handles are climbDeg and turnDeg (app/core/handles.js), and they sound as
+// climb and turn do; unnamed here, a corner climb walked the length melody ("it doesnt do the climb effect")
+const SOUNDS_AS = Object.freeze({ climbDeg: 'climb', turnDeg: 'turn' });
 function notePlan(kind, value, up, melAt = 0) {
+  kind = SOUNDS_AS[kind] || kind;
   const n = Math.round(value);
   if (kind === 'climb') return { midi: scaleMidi(clamp(n, -20, 14)), pan: 0, spread: null, melAt };
   if (kind === 'bank') return { midi: arpMidi(((n % 15) + 15) % 15), pan: 0, spread: null, melAt };
