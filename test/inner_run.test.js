@@ -12,6 +12,8 @@ const FILES = {
   'loadthrow.test.js': "throw new Error('the module throws on load');\n",
   'crash.test.js': IR.STANDIN + "require('node:test')('a row that never runs', () => {});\n",
   'afterfail.test.js': "require('./afterfail_mod.js'); require('node:test')('the named row', () => {});\n",   // D353: the module fails a row, then dies
+  'f1a.test.js': "require('./f1_mod.js'); require('node:test')('the named row', () => {});\n",   // D354, F1: this one throws on load
+  'f1b.test.js': "require('./f1_mod.js'); require('node:test')('the named row', () => {});\n",   // ... and this one fails a row, then dies
   'crashlater.test.js': "const test = require('node:test'); test('a row that passes first', () => {});\ntest('a row that crashes', () => { " + IR.STANDIN.trim() + " });\n",
 };
 function run(names) {
@@ -19,6 +21,7 @@ function run(names) {
   try {
     for (const n of names) fs.writeFileSync(path.join(dir, n), FILES[n]);
     fs.writeFileSync(path.join(dir, 'afterfail_mod.js'), IR.STANDIN_AFTER_FAIL);
+    fs.writeFileSync(path.join(dir, 'f1_mod.js'), IR.STANDIN_LOAD_THEN_CRASH('f1a.test.js'));
     const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...IR.reporterArgs(tap), ...names.map((n) => path.join(dir, n))],
       { cwd: dir, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), encoding: 'utf8', timeout: 60000 });
     if (r.error) throw r.error;
@@ -90,4 +93,23 @@ test('reported: a top-level ✔ or ✖ line naming the test; an indented subtest
   assert.equal(IR.neverReported(), 'the named test never reported: the mutant was NOT TESTED');
   assert.equal(IR.neverReported([{ file: 'C:\\x\\a.test.js', code: 3221225477 }]), 'the named test never reported (native crash 3221225477 in a.test.js): the mutant was NOT TESTED');
   assert.match(IR.neverReported(), IR.NOT_TESTED_ANY);
+});
+// D354 (pane E, review 4, F1)
+test('F1\'s shape: one file throws on load, another fails a row and dies; only the first leaves an exit, and the message names it', () => {
+  const r = run(['f1a.test.js', 'f1b.test.js']);
+  assert.deepEqual(r.exits.map((e) => [path.basename(e.location.replace(/:\d+:\d+$/, '')), e.exitCode]), [['f1a.test.js', '1']]);
+  assert.deepEqual(r.crashed, [], 'the crash after a failing row left an entry after all');
+  assert.match(r.out, /✖ D353 stand-in: an unrelated row that fails/);
+  assert.equal(IR.reported(r.out, 'the named row'), false, 'the named row reported');
+  assert.equal(IR.neverReported(r.crashed, r.exits, 2), 'the named test never reported (a load throw in f1a.test.js (exit 1); the run had 2 files): the mutant was NOT TESTED');
+});
+test('neverReported names every file that ended on its own and the file count, beside any crash; with none it reads as before (D354)', () => {
+  const ex = (n, code = '1') => ({ name: `C:\\x\\${n}`, location: `C:\\x\\${n}:1:1`, exitCode: code });
+  const two = IR.neverReported([], [ex('a.test.js'), ex('b.test.js', '7')], 9);
+  assert.equal(two, 'the named test never reported (a load throw in a.test.js (exit 1), b.test.js (exit 7); the run had 9 files): the mutant was NOT TESTED');
+  assert.match(two, IR.NOT_TESTED_LOAD);
+  assert.equal(IR.neverReported([{ file: 'C:\\x\\c.test.js', code: 3221225477 }], [ex('a.test.js')], 2),
+    'the named test never reported (native crash 3221225477 in c.test.js; a load throw in a.test.js (exit 1); the run had 2 files): the mutant was NOT TESTED');
+  assert.equal(IR.neverReported([], [], 2), 'the named test never reported: the mutant was NOT TESTED');
+  assert.doesNotMatch(IR.neverReported(), IR.NOT_TESTED_LOAD);
 });

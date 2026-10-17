@@ -175,7 +175,8 @@ function runMutant(m) {
     const f = m.root === 'scripts' ? path.join(dir, 'scripts', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), applied = m.from === null || src.includes(m.from);
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
     const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
-    const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), '--test-concurrency=4', path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(__dirname, 'aclook.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')],
+    const files = [path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(__dirname, 'aclook.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')];   // D354: the run's test files, counted by the D353 check
+    const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), '--test-concurrency=4', ...files],
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), APP_DIR: app, SCRIPTS_DIR: path.join(dir, 'scripts') }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
@@ -187,7 +188,12 @@ function runMutant(m) {
     if (crashed.length && !caught) throw new Error(IR.notTested(crashed));
     // D353: a crash after a failing row leaves no trace in the TAP, only the named test's silence; a file that exited on its own (a module that
     // threw on load, exit 1) reads as before, and a control (from: null) names no test
-    if (!caught && m.from !== null && !IR.reported(out, m.caughtBy) && !IR.fileExitsIn(tap).length) throw new Error(IR.neverReported(crashed));
+    // D354 (pane E, review 4, F1): a file's own exit is a verdict only when the run had one file; in a run of more, another file's load throw
+    // says nothing about the named test's file, so the silence reads NOT TESTED and names the files that ended on their own
+    if (!caught && m.from !== null && !IR.reported(out, m.caughtBy)) {
+      const exits = IR.fileExitsIn(tap);
+      if (!exits.length || files.length > 1) throw new Error(IR.neverReported(crashed, exits, files.length));
+    }
     return { applied, caught, failed: [...new Set(failed)] };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -211,6 +217,14 @@ test('a crash after an unrelated failing row reads NOT TESTED, never NOT CAUGHT 
   const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'scripts' ? path.join(ROOT, 'scripts', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash after a failing row', from: first, to: IR.STANDIN_AFTER_FAIL + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
   assert.match(said, IR.NOT_TESTED_ANY);
+});
+// D354: a mutant that makes a module throw on load, in a run of 9 files: another file's load throw says nothing about the named test's
+// file, so the silence reads NOT TESTED and names the files that threw (pane E, review 4, F1; the trade ruled at D354: an uncaught all-throw
+// mutant here read NOT CAUGHT before)
+test('a load throw in a run of several files reads NOT TESTED and names the files (the load-throw stand-in, D354)', () => {
+  const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'scripts' ? path.join(ROOT, 'scripts', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
+  const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'load throw', from: first, to: IR.LOAD_THROW + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
+  assert.match(said, IR.NOT_TESTED_LOAD);
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {

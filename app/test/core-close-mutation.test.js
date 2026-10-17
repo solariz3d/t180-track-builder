@@ -90,7 +90,12 @@ function runMutant(m) {
     if (crashed.length && !caught) throw new Error(IR.notTested(crashed));
     // D353: a crash after a failing row leaves no trace in the TAP, only the named test's silence; a file that exited on its own (a module that
     // threw on load, exit 1) reads as before, and a control (from: null) names no test
-    if (!caught && m.from !== null && !IR.reported(out, m.caughtBy) && !IR.fileExitsIn(tap).length) throw new Error(IR.neverReported(crashed));
+    // D354 (pane E, review 4, F1): a file's own exit is a verdict only when the run had one file; in a run of more, another file's load throw
+    // says nothing about the named test's file, so the silence reads NOT TESTED and names the files that ended on their own
+    if (!caught && m.from !== null && !IR.reported(out, m.caughtBy)) {
+      const exits = IR.fileExitsIn(tap);
+      if (!exits.length || m.tests.length > 1) throw new Error(IR.neverReported(crashed, exits, m.tests.length));
+    }
     return { applied, n, caught, failed: [...new Set(failed)] };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -112,6 +117,13 @@ test('a crash after an unrelated failing row reads NOT TESTED, never NOT CAUGHT 
   const m0 = MUTATIONS[0], first = fs.readFileSync(path.join(ROOT, m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash after a failing row', from: first, to: IR.STANDIN_AFTER_FAIL + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
   assert.match(said, IR.NOT_TESTED_ANY);
+});
+// D354: a mutant that makes a module throw on load, in a run of one file, is a verdict as before D353: NOT CAUGHT, naming the file. This row
+// guards the exemption on the D353 line (M2: without it the row reads NOT TESTED)
+test('a load throw in a run of one file reads NOT CAUGHT as before, never NOT TESTED (the load-throw stand-in, D354)', () => {
+  const m0 = MUTATIONS[0], first = fs.readFileSync(path.join(ROOT, m0.file), 'utf8').split(/\r?\n/)[0];
+  const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'load throw', from: first, to: IR.LOAD_THROW + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
+  assert.match(said, IR.NOT_CAUGHT_LOAD);
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
