@@ -4,7 +4,8 @@
 //   · a summary: red and amber counts, the lap (open while building), the jumps;
 //   · NO speed control (D256, the keeper: "it should always be maxed out"): an open track's loads at the lap sim's cap, 970 km/h
 //     (MACH6.vmaxKmh), a closed one on its ghost lap, the speed the export judges it at, so the two never disagree;
-//   · a CSP toggle: off validates for vanilla AC, where surfaces above 50° are red (ARCHITECTURE.md:87);
+//   · a CSP toggle: off validates for vanilla AC, where surfaces above 50° are red (ARCHITECTURE.md:87). D355: it is the saved setting `csp` (app/settings.js),
+//     shared with Settings ▸ Checker ▸ Wall raycasting: it starts from what is saved, a click on it saves it, and a change made in the menu ticks it here and re-checks;
 //   · the load graph (graph.js): the hardest line's load along the track, the 20 g and 90 g limits, red and amber
 //     stretches shaded. HIDDEN while there is no load (no speed model). It replaced, in D170, a colour ribbon that
 //     painted an all-grey bar while there were no loads (the librarian's item 5);
@@ -36,13 +37,14 @@ const { levelAt, rgbaAt, rangeLevel, PALETTE, LEVEL } = require('./colour.js');
 const { createCheckRunner } = require('./checkrunner.js');
 const { graphModel, drawGraph } = require('./graph.js');
 const { lapText, lapWhereText, findingLine } = require('./labels.js');
+const S = require('../settings.js');   // D355: the CSP box is the saved setting `csp`
 
 const css = (rgba) => `rgb(${Math.round(rgba[0] * 255)}, ${Math.round(rgba[1] * 255)}, ${Math.round(rgba[2] * 255)})`;
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
 function mount(root, shell) {
   const head = el('div', { className: 'v-summary' });
-  const csp = el('input', { type: 'checkbox', checked: true });
+  const csp = el('input', { type: 'checkbox', checked: S.get('csp', true) !== false });   // D355: the saved setting (on when nothing is saved, as before)
   const graph = el('canvas', { width: 480, height: 96, className: 'v-graph', style: 'width: 100%; height: 96px;' });
   const list = el('ul', { className: 'v-list' });
   root.append(el('label', {}, [csp, ' CSP (wall raycasting)']), head, graph, list);
@@ -92,9 +94,18 @@ function mount(root, shell) {
   // with { path, segments, closed, how, g, fromS }: app/preview/index.js); with no answer, or a path for another
   // document, the controller grows its own
   const sharedPath = () => { let got = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { got = x; } } })); return got; };
-  ctl = createValidationController(shell, { onUpdate: render, schedule: raf, sharedPath });
+  ctl = createValidationController(shell, { csp: csp.checked, onUpdate: render, schedule: raf, sharedPath });   // D355: from the saved setting
   csp.onchange = () => ctl.setCsp(csp.checked);
-  return { dispose: () => ctl.dispose() };
+  const offCsp = followCsp();
+  return { dispose: () => { offCsp(); ctl.dispose(); } };
+
+  /** D355: the box and the saved setting follow each other: a click saves it; a change in Settings ticks the box and runs its own handler (a re-check), as a click would. */
+  function followCsp() {
+    const save = () => S.set('csp', csp.checked);
+    csp.addEventListener('change', save);
+    const off = S.on('csp', (v) => { if (csp.checked === v) return; csp.checked = v; if (csp.onchange) csp.onchange(); });
+    return () => { off(); if (csp.removeEventListener) csp.removeEventListener('change', save); };
+  }
 
   /** The check in a Web Worker, or null when the page cannot make one (then the controller above runs here). */
   function mountWorker() {
@@ -126,15 +137,16 @@ function mount(root, shell) {
     const later = () => { if (!frame && !broken) frame = raf(() => send(false)); };
     unsub = shell.subscribe(later);
     csp.onchange = () => send(true);
+    const offCsp = followCsp();
     send(true);
     let fallen = null;
     function fallBack() {
       if (unsub) unsub(); runner.dispose();
       const ask = () => { let got = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { got = x; } } })); return got; };   // the controller's shared path, as below
-      fallen = createValidationController(shell, { onUpdate: render, schedule: raf, sharedPath: ask });
+      fallen = createValidationController(shell, { csp: csp.checked, onUpdate: render, schedule: raf, sharedPath: ask });
       csp.onchange = () => fallen.setCsp(csp.checked);
     }
-    return { dispose: () => { if (unsub) unsub(); runner.dispose(); if (fallen) fallen.dispose(); } };
+    return { dispose: () => { offCsp(); if (unsub) unsub(); runner.dispose(); if (fallen) fallen.dispose(); } };
   }
 }
 
