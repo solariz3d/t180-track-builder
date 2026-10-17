@@ -135,6 +135,16 @@ function runMutant(m) {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
+/** D353: one line per try that crashed natively, so a crash on try 1 of a row whose try 2 gave the verdict is printed, not lost. Print only. */
+function crashNotes(attempts) {
+  return attempts.flatMap((a, k) => (a.crashed && a.crashed.length ? [`try ${k + 1} of ${attempts.length}: ${IR.notTested(a.crashed).replace(/: the mutant was NOT TESTED$/, '')}; ${a.verdict === null ? 'no verdict from it' : `it gave ${a.verdict}`}`] : []));
+}
+test('harness: a try that crashed natively is printed with its number; a try without a crash prints nothing (D353)', () => {
+  const dead = [{ file: 'C:\\x\\geom_path.test.js', code: 3221225477 }];
+  assert.deepEqual(crashNotes([{ verdict: null, crashed: dead }, { verdict: 'fail', crashed: [] }]), ['try 1 of 2: native crash 3221225477 in geom_path.test.js; no verdict from it']);
+  assert.deepEqual(crashNotes([{ verdict: 'fail', crashed: [] }]), []);
+  assert.deepEqual(crashNotes([]), []);
+});
 // the judge itself (D181): a named test's line decides; a file-level failure alone decides nothing
 test('harness: the verdict is the own line of the named test (✖ caught, ✔ not caught), and a file-level failure alone is NO verdict', () => {
   const name = 'sculpt: path re-placement costs';
@@ -164,8 +174,9 @@ test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in,
   assert.match(said, IR.NOT_TESTED);
 });
 for (const m of MUTATIONS) {
-  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
+  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, (t) => {
     const r = runMutant(m);
+    for (const note of crashNotes(r.attempts)) t.diagnostic(note);   // D353: a crash on a try before the verdict is said, not lost (print only)
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" is not in src/geom/${m.file}`);
     assert.notEqual(r.verdict, null, `NO VERDICT in ${r.attempts.length} runs: the named test never reported. Last output:\n${r.attempts[r.attempts.length - 1].tail}`);
     assert.ok(r.caught, `NOT CAUGHT: "${m.caughtBy}…" passed on the mutant (${r.attempts.length} run(s))`);
