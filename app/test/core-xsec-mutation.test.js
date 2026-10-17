@@ -67,6 +67,9 @@ function runMutant(m) {
     // D352: a file that died natively ran none of its tests; its own ✖ line is no catch, and a run with no catch but a dead file tested nothing
     const crashed = IR.crashesIn(tap), caught = failed.some((l) => !crashed.some((c) => l.startsWith(c.file + ' (')) && l.includes(m.caughtBy));
     if (crashed.length && !caught) throw new Error(IR.notTested(crashed));
+    // D353: a crash after a failing row leaves no trace in the TAP, only the named test's silence; a file that exited on its own (a module that
+    // threw on load, exit 1) reads as before, and a control (from: null) names no test
+    if (!caught && m.from !== null && !IR.reported(out, m.caughtBy) && !IR.fileExitsIn(tap).length) throw new Error(IR.neverReported(crashed));
     return { applied, n, caught, failed: [...new Set(failed)] };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
@@ -81,6 +84,13 @@ test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in,
   const m0 = MUTATIONS[0], first = fs.readFileSync(path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash stand-in', caughtBy: '.test.js', from: first, to: IR.STANDIN + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
   assert.match(said, IR.NOT_TESTED);
+});
+// D353: a crash AFTER an unrelated failing row leaves no file-level entry in the TAP, so only the named test's silence shows it. The second
+// stand-in (test/inner_run.js STANDIN_AFTER_FAIL) fails a row and then dies, in every file that loads the first mutant's file; caughtBy is the real one
+test('a crash after an unrelated failing row reads NOT TESTED, never NOT CAUGHT (the second stand-in, D353)', () => {
+  const m0 = MUTATIONS[0], first = fs.readFileSync(path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
+  const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash after a failing row', from: first, to: IR.STANDIN_AFTER_FAIL + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
+  assert.match(said, IR.NOT_TESTED_ANY);
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
