@@ -658,7 +658,7 @@ pub fn retire_stale_laps(docs: &Path, folder: &str, stamp: &str) -> Result<Vec<S
     Ok(moved)
 }
 
-/// What install_track hands back: the files written, and what was retired (empty when the shape did not change).
+/// What install_track hands back: the files written, and the whole paths of what was retired (empty when the shape did not change).
 #[derive(serde::Serialize, Debug)]
 pub struct Installed { pub files: usize, pub retired: Vec<String>, pub retire_error: Option<String> }
 
@@ -670,7 +670,8 @@ pub fn install_with_retire(root: &Path, docs: &Path, folder: &str, files: &[(Str
     let n = ac::install_to(root, folder, files)?;
     if !changed { return Ok(Installed { files: n, retired: Vec::new(), retire_error: None }); }
     match retire_stale_laps(docs, folder, stamp) {
-        Ok(retired) => Ok(Installed { files: n, retired, retire_error: None }),
+        // the install message names where they went (app/install/install.js), so the paths go back whole
+        Ok(retired) => Ok(Installed { files: n, retired: retired.iter().map(|r| docs.join(r).display().to_string()).collect(), retire_error: None }),
         Err(e) => Ok(Installed { files: n, retired: Vec::new(), retire_error: Some(e) }),   // the install stands; the reason is handed back
     }
 }
@@ -1050,6 +1051,7 @@ mod tests {
             assert!(!docs.join("CMRT-Essential-HUD").join(n).exists());
         }
         assert_eq!(r.retired.len(), 3, "{:?}", r.retired);
+        for p in &r.retired { assert!(Path::new(p).exists(), "each retired path is whole and real, for the message: {p}"); }
         untouched_others(&docs);
         // moved, never deleted: moving the backups back restores it exactly
         fs::rename(&gb, docs.join("GhostCar").join("t180b_x")).unwrap();

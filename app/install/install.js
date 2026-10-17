@@ -9,6 +9,9 @@
 //                                    over a folder the builder did not make). D264: an OPEN track (the build refuses OPEN_LOOP)
 //                                    is installed as the TEST export instead, t180b_<name>_test, and the message says so;
 //                                    { test: true } (the ⋯ menu's Test export) asks for the test export straight away
+//                                    D372: when the track's SHAPE changed since its last install, install_track moved its old ghost and HUD laps aside
+//                                    (src-tauri/src/lib.rs install_with_retire: { files, retired, retire_error }); the message then says so and where, and a
+//                                    move that failed is said too. Nothing moved: the message is as it was
 // THE BUILD (D239): `build(opts)` is the open track's own export, the core shell's buildExport (app/core/coreshell.js), the SAME call
 // the Export button makes, so what is installed is what Export writes, byte for byte; getDoc() gives the name it installs under.
 // THE NAME. Every folder the builder writes is t180b_<track name> (src/export/fromwords.js folderName): the prefix is
@@ -45,10 +48,12 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
         test = true;
         try { out = build({ textures, test: true }); } catch (e2) { return refused(e2); }
       }
-      const names = [];
+      const names = [], retired = [], retireErrors = [];
       for (const f of out.folders) {
-        try { await native.installTrack(f.folder, f.files); } catch (e) { return { ok: false, message: `not installed: ${e.message || e}` }; }
+        let r;
+        try { r = await native.installTrack(f.folder, f.files); } catch (e) { return { ok: false, message: `not installed: ${e.message || e}` }; }
         names.push(f.folder);
+        if (r && typeof r === 'object') { if (Array.isArray(r.retired)) retired.push(...r.retired); if (r.retire_error) retireErrors.push(String(r.retire_error)); }   // D372
       }
       const doc = getDoc();
       // D250: the line says where it went (the whole folder) and that exporting again updates that same folder
@@ -57,7 +62,10 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
       const jumps = ((out.result && out.result.warnings) || []).filter((w) => /^jump: /.test(w));
       // D264: the test export says what it is, and how many reds it carries (the exporter's own TEST EXPORT warning)
       const unfinished = test ? `; this track is not closed, so it was exported as an unfinished TEST: the road ends in a run-off and a wall; reds are listed as warnings${((out.result && out.result.warnings) || []).filter((w) => /^TEST EXPORT/.test(w)).map((w) => ` (${w})`).join('')}` : '';
-      return { ok: true, folder: names[0], message: `exported "${doc.name || 'untitled'}" into Assetto Corsa as ${names.join(', ')} in ${where}${unfinished}; exporting this track again updates that folder (${PREFIX_NOTE})${jumps.length ? `. ${jumps.join('. ')}` : ''}` };
+      // D372: Assetto Corsa keeps a ghost and the CMRT HUD its laps by the track's NAME, so after a change of shape they were moved aside; never silent, either way
+      const laps = retired.length ? `. The track's shape changed, so its old ghost and HUD laps were moved aside (Assetto Corsa keeps them by the track's name, and they would race the old road): ${retired.join(', ')}; move them back to restore them` : '';
+      const lapsFailed = retireErrors.length ? `. The track's shape changed, but its old ghost and HUD laps could not be moved aside (${retireErrors.join('; ')}): they still race the old road until they are moved or deleted by hand` : '';
+      return { ok: true, folder: names[0], message: `exported "${doc.name || 'untitled'}" into Assetto Corsa as ${names.join(', ')} in ${where}${unfinished}; exporting this track again updates that folder (${PREFIX_NOTE})${jumps.length ? `. ${jumps.join('. ')}` : ''}${laps}${lapsFailed}` };
     },
   };
 }
