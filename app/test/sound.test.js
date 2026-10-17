@@ -59,6 +59,23 @@ test('tickPlan: climb rises in pitch with its value, bank arpeggiates and wraps,
   assert.ok(b[0] < b[1] && b[1] < b[2], 'banking further climbs the arpeggio'); assert.equal(b[3], b[0], 'after 15 steps it starts over');
 });
 
+// D374 (the keeper: "it doesnt do the climb effect"): with the fields read as corners (the panel's default) the climb and turn handles are climbDeg and
+// turnDeg (app/core/handles.js KINDS), and those ticks walked the length melody; every handle kind labelled climb or turn makes that handle's sound
+test('tickPlan: every handle labelled climb pitches by its value, and every one labelled turn pans, the corner kinds as the rate ones', () => {
+  const HD = require('../core/handles.js');
+  const climbs = Object.keys(HD.KINDS).filter((k) => HD.KINDS[k].label === 'climb'), turns = Object.keys(HD.KINDS).filter((k) => HD.KINDS[k].label === 'turn');
+  assert.deepEqual([climbs, turns], [['climb', 'climbDeg'], ['turn', 'turnDeg']], 'the four kinds this row covers');
+  for (const k of climbs) {
+    const c = [-20, -3, 0, 3, 8, 14].map((v) => tickPlan(k, v - 0.5, v, 7));
+    assert.deepEqual(c.map((p) => p.midi), [-20, -3, 0, 3, 8, 14].map((v) => tickPlan('climb', v - 0.5, v, 7).midi), `${k} plays climb's notes`);
+    assert.ok(c.every((p) => p.melAt === 7), `${k} leaves the melody where it was`);
+  }
+  for (const k of turns) {
+    assert.ok(tickPlan(k, 9.5, 10).pan < 0 && tickPlan(k, -9.5, -10).pan > 0, `${k} pans into the ear of the turn`);
+    assert.equal(tickPlan(k, 9.5, 10, 7).melAt, 8, `${k} walks the melody as turn does`);
+  }
+});
+
 test('tickPlan: turn pans into the ear of the turn (the handle\'s + is left); width spreads the tick from mono at 1 m to full stereo at 50 m', () => {
   assert.ok(tickPlan('turn', 9.5, 10).pan < 0, 'a left turn: the left ear'); assert.ok(tickPlan('turn', -9.5, -10).pan > 0, 'a right turn: the right ear');
   assert.equal(tickPlan('turn', 39.5, 40).pan, -1, 'clamped at full');
