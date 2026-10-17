@@ -427,7 +427,7 @@
     // last, so the preview is already listening when the road surface announces the asphalt default. D355: the road surface is the Track menu's (A's
     // app/core/trackmenu.js makes its one controller on its first items(ctx), called here, and its Road surface ▸ panel shows it); the old #textures mount is
     // only the fallback for a tree without that module, so there is never a second controller whose choice the other does not see
-    let TM = null; try { TM = await loadCjs('app/core/trackmenu.js', get); } catch (e) { TM = null; }
+    let TM = null, tmError = null; try { TM = await loadCjs('app/core/trackmenu.js', get); } catch (e) { TM = null; tmError = (e && e.message) || String(e); }   // D356: the reason is kept for the Track menu
     if (TM && typeof TM.items === 'function') { $('textures').remove(); try { TM.items({ shell, document, window }); } catch (e) { console.error(`the road surface could not start: ${e && e.message}`); } }
     else await panels.mountPanel($('textures'), 'texture', () => loadCjs('app/core/textures.js', get), shell);
     // Share codes (an equation track's code; an old Pieces code is refused by name), and Install to AC / See it in Assetto: the install
@@ -448,20 +448,24 @@
     try {
       const MB = await loadCjs('app/menubar/menubar.js', get), MI = await loadCjs('app/menubar/items.js', get), settings = await loadCjs('app/settings.js', get);
       const FR = await loadCjs('app/onboarding/firstrun.js', get);
-      const part = async (file, name) => { try { const m = await loadCjs(file, get); return typeof m[name] === 'function' ? m[name] : null; } catch (e) { return null; } };
+      // D356: a part that fails to load KEEPS ITS REASON: Build and Track then say "This menu could not be built: <reason>" (menubar.js), and Edit's selection and
+      // File ▸ Developer each say what could not be built under the page's own entries, which still work. Never a silent menu, never a placeholder
+      const part = async (file, name) => { try { const m = await loadCjs(file, get); if (typeof m[name] !== 'function') throw new Error(`${file} exports no ${name}(ctx)`); return { fn: m[name] }; } catch (e) { return { error: (e && e.message) || String(e) }; } };
+      const whole = (p) => (c) => { if (p.error) throw new Error(p.error); return p.fn(c); };
+      const some = (p, what) => (c) => (p.error ? [{ label: `${what} could not be built: ${p.error}`, disabled: true, run: () => {} }] : p.fn(c));
       // (Track and File ▸ Developer use the trackmenu loaded above: ITS road-surface controller is the one alive, and a second load would make another)
       const build = await part('app/core/buildmenu.js', 'items'), selection = await part('app/core/piecesui.js', 'items');
-      const track = TM && typeof TM.items === 'function' ? TM.items : null, developer = TM && typeof TM.developerItems === 'function' ? TM.developerItems : null;
-      const soon = (what) => [{ label: `${what} arrive here with their part of D355; until then they are on the left`, disabled: true, run: () => {} }];
+      const fromTM = (name) => (TM && typeof TM[name] === 'function' ? { fn: TM[name] } : { error: tmError || `app/core/trackmenu.js exports no ${name}(ctx)` });
+      const track = fromTM('items'), developer = fromTM('developerItems');
       const ctx = { doc: document, win: window, document, window, shell, settings, say: (t) => { status.textContent = t; },   // (A's trackmenu reads document and window)
         resetGuide: () => { FR.firstRun(FR.webStore(window)).forget(); status.textContent = 'The guide will open by itself at the next start.'; } };
       const { acFolder, acAllow } = MI.acNodes($('more-install')), soundRow = $('sound-row');
       $('m-settings-slot').append(...[acFolder, acAllow].filter(Boolean));   // in Settings from the start, not only once Settings has been opened
       MB.mountBar(document, [
-        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: developer ? developer(c) : [] }), closers: [$('new'), $('save'), $('export'), $('testexport'), $('open'), $('versions')] },
-        { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: selection ? selection(c) : [] }) },
-        { details: $('m-build'), slot: $('m-build-slot'), items: (c) => (build ? build(c) : soon('Straight, Level, Turn by… and the brush')) },
-        { details: $('m-track'), slot: $('m-track-slot'), items: (c) => (track ? track(c) : soon('Start & grid, Pit lane and Road surface')) },
+        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('testexport'), $('open'), $('versions')] },
+        { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: some(selection, 'The selection\'s entries')(c) }) },
+        { details: $('m-build'), slot: $('m-build-slot'), items: whole(build) },
+        { details: $('m-track'), slot: $('m-track-slot'), items: whole(track) },
         { details: $('pieces') },
         { details: $('m-view'), slot: $('m-view-slot'), items: (c) => MI.viewItems(c) },
         { details: $('m-settings'), slot: $('m-settings-slot'), items: (c) => MI.settingsItems(c, { soundRow, acFolder, acAllow }) },
