@@ -11,16 +11,18 @@ const FILES = {
   'failrow.test.js': "require('node:test')('a row that fails', () => { require('node:assert').equal(1, 2); });\n",
   'loadthrow.test.js': "throw new Error('the module throws on load');\n",
   'crash.test.js': IR.STANDIN + "require('node:test')('a row that never runs', () => {});\n",
+  'afterfail.test.js': "require('./afterfail_mod.js'); require('node:test')('the named row', () => {});\n",   // D353: the module fails a row, then dies
   'crashlater.test.js': "const test = require('node:test'); test('a row that passes first', () => {});\ntest('a row that crashes', () => { " + IR.STANDIN.trim() + " });\n",
 };
 function run(names) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-inner-run-')), tap = path.join(dir, 'run.tap');
   try {
     for (const n of names) fs.writeFileSync(path.join(dir, n), FILES[n]);
+    fs.writeFileSync(path.join(dir, 'afterfail_mod.js'), IR.STANDIN_AFTER_FAIL);
     const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...IR.reporterArgs(tap), ...names.map((n) => path.join(dir, n))],
       { cwd: dir, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), encoding: 'utf8', timeout: 60000 });
     if (r.error) throw r.error;
-    return { out: (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''), crashed: IR.crashesIn(tap), status: r.status };
+    return { out: (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''), crashed: IR.crashesIn(tap), exits: IR.fileExitsIn(tap), status: r.status };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
@@ -66,4 +68,26 @@ test('a file that reported a failing test of its own before it died was tested: 
     "not ok 2 - C:\\\\x\\\\a.test.js\n  ---\n  location: 'C:\\\\x\\\\a.test.js:1:1'\n  exitCode: 3221225477\n  signal: ~\n  ...\n" +
     "not ok 3 - C:\\\\x\\\\b.test.js\n  ---\n  location: 'C:\\\\x\\\\b.test.js:1:1'\n  exitCode: 3221225477\n  signal: ~\n  ...\n1..3\n";
   assert.deepEqual(IR.crashes(tap), [{ file: 'C:\\x\\b.test.js', code: 3221225477 }]);
+});
+// D353
+test('a crash after an unrelated failing row: the named row never reports, and no exit of the file is left to read', () => {
+  const r = run(['afterfail.test.js']);
+  assert.match(r.out, /✖ D353 stand-in: an unrelated row that fails/);
+  assert.equal(IR.reported(r.out, 'the named row'), false, 'the named row reported');
+  assert.deepEqual(r.exits, [], 'a non-native exit of the file was read');
+});
+test('a module that throws on load leaves its file\'s own exit (exitCode 1), which is a verdict as before; a passing file leaves none', () => {
+  const r = run(['loadthrow.test.js', 'pass.test.js']);
+  assert.deepEqual(r.exits.map((e) => [path.basename(e.location.replace(/:\d+:\d+$/, '')), e.exitCode]), [['loadthrow.test.js', '1']]);
+  assert.equal(IR.reported(r.out, 'a row that passes'), true);
+});
+test('reported: a top-level ✔ or ✖ line naming the test; an indented subtest line, another name or no output is not', () => {
+  assert.equal(IR.reported('✔ the named row (1ms)\n', 'the named row'), true);
+  assert.equal(IR.reported('✖ the named row (1ms)\r\n', 'the named row'), true);
+  assert.equal(IR.reported('  ✔ the named row (1ms)\n', 'the named row'), false);
+  assert.equal(IR.reported('✔ another row (1ms)\n', 'the named row'), false);
+  assert.equal(IR.reported('', 'the named row'), false);
+  assert.equal(IR.neverReported(), 'the named test never reported: the mutant was NOT TESTED');
+  assert.equal(IR.neverReported([{ file: 'C:\\x\\a.test.js', code: 3221225477 }]), 'the named test never reported (native crash 3221225477 in a.test.js): the mutant was NOT TESTED');
+  assert.match(IR.neverReported(), IR.NOT_TESTED_ANY);
 });
