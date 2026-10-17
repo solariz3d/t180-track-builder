@@ -13,6 +13,7 @@
 //   5  the worker SCRIPT, in a sandbox with the real files: it loads closejob.js through the app's loader and answers as runClose does (a single route, and the
 //      one press); a refusal and a bad job are answered, never a hang
 //   6  the panel: ONE Close button (no "close using" box, no Apply); while the worker works it says so and Cancel stops it; then the line says what was done
+//   7  (D343) a press hands the worker the reds the live checker found for THIS track with CSP on (shell.noteCheck), and no others
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -122,7 +123,7 @@ test('row 4: the runner: one warm worker; a reply that is not the current job\'s
   const runner = createCloseRunner({ win: {}, WorkerCtor: FakeWorker });
   assert.equal(made.length, 1, 'the worker exists before any job: it is warm'); assert.equal(made[0].url, 'core/closeworker.js');
   const a = runner.start({ doc: { x: 1 }, finish: true }); assert.equal(made.length, 1, 'a job makes no worker');
-  assert.deepStrictEqual(made[0].sent[0], { serial: 1, doc: { x: 1 }, fraction: 0.2, last: false, whole: false, finish: true, edited: null, best: false });
+  assert.deepStrictEqual(made[0].sent[0], { serial: 1, doc: { x: 1 }, fraction: 0.2, last: false, whole: false, finish: true, edited: null, best: false, openReds: null });
   made[0].onmessage({ data: { serial: 99, ok: true, out: 'not mine' } });
   made[0].onmessage({ data: { serial: 1, ok: true, out: { n: 1 }, ms: 7 } });
   assert.deepStrictEqual(await a.promise, { out: { n: 1 }, ms: 7 }, 'the current job\'s answer, never another\'s');
@@ -153,7 +154,7 @@ test('row 5: the worker SCRIPT loads closejob.js through the app\'s loader and a
   assert.deepStrictEqual(posted[0].out, clone(CJ.runClose({ doc, finish: true })), 'the worker answers as runClose does'); assert.ok(Number.isFinite(posted[0].ms));
   await ctx.onmessage({ data: { serial: 6, doc: clone(doc), best: true, edited: [doc.pieces.length - 1] } });
   // the timings in the answer (each route's ms, the checks' ms) are the run's own, so they are left out of the comparison
-  const untimed = (o) => JSON.parse(JSON.stringify(o, (k, v) => (k === 'ms' || k === 'checkMs' || k === 'openCheckMs' ? undefined : v)));
+  const untimed = (o) => JSON.parse(JSON.stringify(o, (k, v) => (/Ms$/.test(k) || k === 'ms' ? undefined : v)));
   const best = posted.pop(); assert.equal(best.ok, true, best.error); assert.deepStrictEqual(untimed(best.out), untimed(clone(CJ.runClose({ doc, best: true, edited: [doc.pieces.length - 1] }))), 'the one press answers as runCloseBest does');
   const short = (await openLap({ lastLen: 30 })).getState().history.present;
   let want; try { CJ.runClose({ doc: short, last: true }); } catch (e) { want = e; }
@@ -211,4 +212,12 @@ test('row 6: the panel has ONE Close button (no "close using" box, no Apply); wh
   r.jobs[1].resolve(answerOf(base)); await tick(); await tick(); await tick();
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
   assert.match(P.text('close done') || '', /^closed: /, 'the line under the button says what it did'); assert.equal(P.text('close working'), null);
+});
+
+test('row 7: a press hands the worker the reds the live checker found for this very track with CSP on, and no others', async () => {
+  const r = handRunner(), s = await nearLap(r), base = s.getState().history.present, reds = [{ reason: 'stacked-within-2m', s0: 120, s1: 130 }];
+  s.closeBest(); assert.equal(r.jobs[0].args.openReds, null, 'nothing noted: the worker checks the open track itself'); s.cancelClose();
+  s.noteCheck(base, { csp: false, red: reds }); s.closeBest(); assert.equal(r.jobs[1].args.openReds, null, 'a check with CSP off is not the press check'); s.cancelClose();
+  s.noteCheck(base, { csp: true, red: reds }); s.closeBest(); assert.deepEqual(r.jobs[2].args.openReds, [{ reason: 'stacked-within-2m', s: 120 }], 'this track check, as { reason, s }'); s.cancelClose();
+  s.extend({ length: 20 }); s.closeBest(); assert.equal(r.jobs[3].args.openReds, null, 'a check of another document is not used'); s.cancelClose();
 });

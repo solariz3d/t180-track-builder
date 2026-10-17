@@ -196,7 +196,17 @@ function heldCup(F, L) {
 /** The residual, measured on the adapter's path and the document itself (ref 10 §3). */
 /** The channels whose VALUE must meet round the seam: heading, pitch, width and rise always; the cup, the edge pair and the tube sweep where both ends carry them. */
 const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's', 'er'] : []), ...(sm.tubeBoth ? ['t'] : [])];
-function residual(doc, { cache = null } = {}) {
+// D343: a document is immutable (frozen, src/core/document.js), so its residual is computed once and remembered: one press asked it of the same open track four
+// times (finish.js isNear, its gap, and twice inside finishToStart), each building the whole path again (about 2 s apiece on a 25 km track). The remembered
+// answer is frozen, so no reader can change what the next one gets. A document that is not frozen is computed every time, as before.
+const residualMemo = new WeakMap();
+function residual(doc, opts = {}) {
+  if (!Object.isFrozen(doc)) return residualOf(doc, opts);
+  let v = residualMemo.get(doc);
+  if (!v) { v = residualOf(doc, opts); Object.freeze(v.r); Object.freeze(v.names); Object.freeze(v); residualMemo.set(doc, v); }
+  return v;
+}
+function residualOf(doc, { cache = null } = {}) {
   if (!doc.pieces.some((P) => P.type === 'road')) throw new D.CoreError('EMPTY', 'close: no road to close');
   const S = toPath({ ...doc, closed: false }, { cache }).path.samples, a = S[0], z = S[S.length - 1];
   const road = doc.pieces.filter((P) => P.type === 'road'), F = road[0], L = road[road.length - 1];
