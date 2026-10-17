@@ -10,6 +10,13 @@
 //   5  a blocked store throws nothing: with localStorage refused, the page starts, the menus open, and a setting holds for the session
 //   6  Reset the guide forgets that the guide was finished, so it opens by itself at the next start
 //   7  Build and Track open and say something (their parts' entries, or a placeholder until those land), never an error
+//   8  the bar fits at the default 1400 px: the seven menus and Export to Assetto Corsa each on one line and inside the window, with a long status line and
+//      a long install note (those two give way)
+//   9  Settings ▸ Wall raycasting and the checker's own CSP box follow each other both ways, and the choice survives a reload
+//  10  (with the Track part) the road surface has one controller: no #textures section in the left column, one road-surface picker on the page, and the
+//      asphalt announced before the Track menu is ever opened
+//  11  (with the Build part) Build ▸ Brush shows the brush strip under the bar, not in the left column; it stays there across an edit; Brush again hides it
+//  12  (with the Track part) a menu panel gives its controls back when the menu closes: Start & grid… open, the menu closed, and its controls are gone
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -57,7 +64,8 @@ async function load({ clear = true, blocked = false } = {}) {
   if (script) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script });
   assert.equal(await ev("return document.documentElement.dataset.menubar || 'not mounted';"), 'ready', `the menus mounted (page errors: ${errors.join(' | ') || 'none'})`);
 }
-const open = (id) => ev(`const d = document.getElementById('${id}'); d.querySelector('summary').click(); await new Promise((r) => setTimeout(r, 80)); return d.open;`);
+// opens a menu afresh (closed first if it is open: a tick keeps its menu open, and a second click on the name would close it), so its entries are rebuilt
+const open = (id) => ev(`const d = document.getElementById('${id}'); if (d.open) { d.open = false; await new Promise((r) => setTimeout(r, 50)); } d.querySelector('summary').click(); await new Promise((r) => setTimeout(r, 80)); return d.open;`);
 const openIds = () => ev("return [...document.querySelectorAll('header details')].filter((d) => d.open).map((d) => d.id);");
 /** the visible text of a menu's controls, in order (buttons, ticks, headings, selects by their first option) */
 const shown = (id) => ev(`return [...document.getElementById('${id}').querySelector('.more-menu').querySelectorAll('button, label, h3, select')].filter((e) => e.offsetParent !== null).map((e) => e.tagName === 'SELECT' ? e.options[0].text : e.textContent.trim());`);
@@ -144,4 +152,69 @@ test('row 7: Build and Track open and say something, never an error', { skip }, 
     const t = await ev(`return document.getElementById('${id}').querySelector('.more-menu').textContent.trim();`);
     assert.ok(t.length > 0, `${id} is not empty`); assert.ok(!/could not be built/.test(t), `${id}: ${t}`);
   }
+});
+
+test('row 8: the bar fits at 1400 px: the seven menus and Export to Assetto Corsa each on one line and inside the window, the status and install note giving way', { skip }, async () => {
+  await load();
+  await ev("document.getElementById('status').textContent = 'a long status line, as a refused open or a long message would leave it, '.repeat(4); const n = document.querySelector('#install .t-install-note'); if (n) n.textContent = 'Exports go into Assetto Corsa at C:\\Program Files (x86)\\Steam\\steamapps\\common\\assettocorsa'; await new Promise((r) => setTimeout(r, 100)); return true;");
+  const m = await ev(`
+    const lines = (e) => { const r = document.createRange(); r.selectNodeContents(e); return new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size; };
+    const head = document.querySelector('header'), hb = head.getBoundingClientRect();
+    const parts = [...document.querySelectorAll('header details > summary')].concat([...document.querySelectorAll('#install > button')]);
+    return { width: innerWidth, overflow: head.scrollWidth - head.clientWidth, parts: parts.map((e) => { const b = e.getBoundingClientRect(); return { text: e.textContent.trim(), lines: lines(e), right: Math.round(b.right), top: Math.round(b.top), bottom: Math.round(b.bottom) }; }), headBottom: Math.round(hb.bottom) };`);
+  assert.equal(m.width, 1400);
+  assert.equal(m.parts.length, 8, `seven menus and the Export button: ${m.parts.map((p) => p.text).join(', ')}`);
+  for (const p of m.parts) { assert.equal(p.lines, 1, `"${p.text}" is on one line`); assert.ok(p.right <= 1400, `"${p.text}" ends at ${p.right}, inside the window`); assert.ok(p.top >= 0 && p.bottom <= m.headBottom, `"${p.text}" is inside the bar`); }
+  assert.ok(m.overflow <= 0, `the bar does not overflow (${m.overflow} px)`);
+});
+
+test('row 9: Settings ▸ Wall raycasting and the checker\'s CSP box follow each other both ways, and the choice survives a reload', { skip }, async () => {
+  await load();
+  const box = "[...document.querySelectorAll('#validation label')].find((l) => /CSP/.test(l.textContent)).querySelector('input')";
+  assert.equal(await ev(`return ${box}.checked;`), true, 'on when nothing is saved');
+  await open('m-settings'); await clickText('m-settings', 'Wall raycasting (CSP)');
+  assert.equal(await ev(`return ${box}.checked;`), false, 'unticked in Settings: the checker\'s box follows');
+  assert.equal(await ev("return localStorage.getItem('t180.settings.csp');"), 'false');
+  await ev(`${box}.click(); return true;`);
+  await open('m-settings'); assert.equal(await ticked('m-settings', 'Wall raycasting (CSP)'), true, 'ticked on the checker: Settings follows');
+  await clickText('m-settings', 'Wall raycasting (CSP)');
+  await load({ clear: false });
+  assert.equal(await ev(`return ${box}.checked;`), false, 'after a reload the checker starts with it off');
+});
+
+test('row 10: with the Track part, the road surface has one controller, alive before the Track menu is opened', { skip }, async (t) => {
+  await load();
+  if (!(await ev("return (await fetch('../app/core/trackmenu.js')).ok;"))) return t.skip('app/core/trackmenu.js (the Track part, D355 part 3) is not in this tree');
+  assert.equal(await ev("return document.getElementById('textures');"), null, 'no #textures section in the left column');
+  const pickers = "[...document.querySelectorAll('select')].filter((s) => [...s.options].some((o) => /Asphalt \\(made here\\)/.test(o.text))).length";
+  assert.equal(await ev(`return ${pickers};`), 1, 'one road-surface picker on the page');
+  await open('m-track'); await clickText('m-track', 'Road surface ▸');
+  assert.equal(await ev(`return ${pickers};`), 1, 'still one with the panel open');
+  assert.equal(await ev("return !!document.querySelector('#m-track .menu-panel:not([hidden]) select');"), true, 'the picker shows in the panel');
+});
+
+test('row 11: with the Build part, Build ▸ Brush shows the brush strip under the bar, keeps it there across an edit, and hides it again', { skip }, async (t) => {
+  await load();
+  if (!(await ev("return !!document.querySelector('.brush-strip');"))) return t.skip('the brush strip (the Build part, D355 part 2) is not in this tree');
+  const where = () => ev("const s = document.querySelector('.brush-strip'), b = s.getBoundingClientRect(); return { inBanner: !!s.closest('#banner'), inLeft: !!s.closest('#left'), shown: s.offsetParent !== null && b.height > 0, top: Math.round(b.top), headBottom: Math.round(document.querySelector('header').getBoundingClientRect().bottom) };");
+  let w = await where(); assert.equal(w.inBanner, true, 'the strip is in the row under the bar'); assert.equal(w.inLeft, false); assert.equal(w.shown, false, 'hidden while the brush is off');
+  await open('m-build'); await clickText('m-build', 'Brush');
+  w = await where(); assert.equal(w.shown, true, 'Build ▸ Brush shows it'); assert.ok(w.top >= w.headBottom, `under the bar (${w.top} >= ${w.headBottom})`);
+  await ev("[...document.querySelectorAll('#palette button')].find((b) => b.textContent === 'Extend').click(); await new Promise((r) => setTimeout(r, 100)); return true;");
+  w = await where(); assert.equal(w.inBanner, true, 'an edit (the banner is redrawn) keeps it there'); assert.equal(w.shown, true);
+  await open('m-build'); await clickText('m-build', 'Brush');
+  w = await where(); assert.equal(w.shown, false, 'Brush again hides it');
+});
+
+test('row 12: with the Track part, a menu panel gives its controls back when the menu closes', { skip }, async (t) => {
+  await load();
+  if (!(await ev("return (await fetch('../app/core/trackmenu.js')).ok;"))) return t.skip('app/core/trackmenu.js (the Track part, D355 part 3) is not in this tree');
+  const carsBoxes = "document.querySelectorAll('input[aria-label=\"place the start by hand\"]').length";
+  const before = await ev(`return ${carsBoxes};`);
+  await open('m-track'); await clickText('m-track', 'Start & grid…');
+  assert.equal(await ev(`return ${carsBoxes};`), before + 1, 'the panel\'s controls are in the menu');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise((r) => setTimeout(r, 100)); return true;");
+  assert.equal(await ev(`return ${carsBoxes};`), before, 'the menu closed: the panel gave its controls back');
+  await open('m-track'); await clickText('m-track', 'Start & grid…');
+  assert.equal(await ev(`return ${carsBoxes};`), before + 1, 'and opens again');
 });
