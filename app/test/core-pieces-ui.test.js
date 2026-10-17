@@ -585,7 +585,9 @@ const statusOf = (P1) => P1.all().find((e) => e.attrs.role === 'status').textCon
 test('row 14: the Jump button (D258, the free jump): beside Extend; the old Add-jump fields are gone; hover shows a jump ghost with no Extend handles on it; a click is ONE undo step with the note; a refusal says why; Undo gives the fields back', async () => {
   const P1 = await handlePanel(), { shell, S } = P1, labels = P1.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
   for (const gone of ['jump gap m', 'drop m (+ down)', 'landing °']) assert.ok(!labels.includes(gone), `${gone} is gone`);
-  assert.equal(P1.button('Add jump'), undefined, 'no Add jump button'); const ext = P1.button('Extend'), jmp = P1.button('Jump'); assert.ok(jmp); assert.equal(P1.all().indexOf(jmp), P1.all().indexOf(ext) + 1, 'the Jump button is beside Extend');
+  assert.equal(P1.button('Add jump'), undefined, 'no Add jump button'); const ext = P1.button('Extend'), jmp = P1.button('Jump'); assert.ok(jmp && ext);
+  // AMENDED D355 part 2 (position only): Jump moved from beside Extend to the Build menu (plan_t180_handoff :1383); its button is still the panel's, and what it does is checked below unchanged
+  assert.ok(require('../core/buildmenu.js').items({ doc: P1.doc }).some((i) => i.label === 'Jump'), 'the Build menu offers Jump');
   assert.equal(P1.text('jump note'), '', 'D267: no help paragraph under the button'); assert.match(jmp.attrs.title, /free landing.*drive it in AC and move the landing until it works/, 'its sense is the button\'s tooltip');
   assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are up'); jmp.onmouseenter();
   assert.equal(S.ghostJump, true, 'the ghost is a jump\'s'); assert.equal(S.lastCandidate.jump, true); assert.ok(S.lastCandidate.segments.some((g) => g.kind === 'gap'));
