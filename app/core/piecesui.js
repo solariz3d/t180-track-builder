@@ -29,7 +29,29 @@ function describe(item) {
   return `${plural(s.pieces, 'piece')} · ${fmtLen(s.lengthM)} · turn ${LB.fmtDeg(s.turnDeg)} · climb ${LB.fmtDeg(s.climbDeg)} · ${kind}${s.flights ? ` · ${plural(s.flights, 'jump')}` : ''}`;
 }
 
-function mount({ root, stage, shell, win, el, armed = () => false, send = null }) {
+/**
+ * EDIT's selection items (D355 part 2, contract M), for the top-right bar (pane B's app/menubar/): Save as piece…, Set grip…, Delete selected, Clear selection. They are the
+ * mounted panel's own controls, asked for with the 't180:selection-request' event (the bar and the panel are loaded apart). ctx.doc (or ctx.document) is the page's document.
+ * Nothing selected: each is `disabled: true` (extra to contract M; its run does nothing either). No panel mounted: no items.
+ */
+function items(ctx = {}) {
+  const doc = ctx.doc || ctx.document || (typeof document !== 'undefined' ? document : null);
+  if (!doc || typeof doc.dispatchEvent !== 'function') return [];
+  const win = doc.defaultView || (typeof window !== 'undefined' ? window : null), Ev = win && win.CustomEvent ? win.CustomEvent : (typeof CustomEvent !== 'undefined' ? CustomEvent : null);
+  if (!Ev) return [];
+  let s = null; doc.dispatchEvent(new Ev('t180:selection-request', { detail: { reply: (x) => { s = x; } } }));
+  if (!s) return [];
+  const off = !s.selected, when = (f) => () => { if (s.selected) f(); };
+  return [
+    { section: 'Selection' },
+    { label: 'Save as piece…', panel: (box) => s.lend('save', box), disabled: off || !!s.saveProblem },
+    { label: 'Set grip…', panel: (box) => s.lend('grip', box), disabled: off },
+    { label: 'Delete selected', run: when(s.del), disabled: off },
+    { label: 'Clear selection', run: when(s.clear), disabled: off },
+  ];
+}
+
+function mount({ root, stage, shell, win, el, armed = () => false, send = null, settings = null }) {
   const doc = root.ownerDocument;
   const fire = send || ((name, detail) => doc.dispatchEvent(new win.CustomEvent(name, { detail })));
   const ask = (name) => { let got = null; fire(name, { reply: (x) => { got = x; } }); return got; };
@@ -79,6 +101,15 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
 
   // ── the library ──
   const mirror = el('input', { type: 'checkbox', 'aria-label': 'mirror on insert', title: 'add the piece as its left/right mirror image' });
+  // D355: mirror on insert is one of the six settings (contract S, key mirrorOnInsert): it starts from S, follows S.on (the Settings menu), and this box, which the Pieces
+  // menu shows, writes it, so it is kept for the next start
+  let offMirror = null;
+  if (settings) {
+    const asB = (v) => v === true || v === 'true';
+    mirror.checked = asB(settings.get('mirrorOnInsert', false));
+    offMirror = settings.on('mirrorOnInsert', (v) => { mirror.checked = asB(v); });
+    mirror.onchange = () => settings.set('mirrorOnInsert', !!mirror.checked);
+  }
   const listBox = el('div', { 'aria-label': 'saved pieces', class: 'pieces-list' }), listNote = el('p', { class: 'message', style: 'font-size:12px;margin:2px 0' });
   let renaming = null, confirming = null, libStamp = null, listSeq = 0, items = [];
   const thumb = (it) => {
@@ -164,11 +195,25 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null }
     if (st.libraryStamp !== libStamp) { const first = libStamp === null; libStamp = st.libraryStamp; if (!first && st.message && /^saved the piece/.test(st.message)) nameIn.value = ''; refreshList(); }
   };
   const unsub = shell.subscribe(draw); draw(shell.getState());
+  // D355: the parts Edit's "…" items borrow (lend), each in a slot of its own in the selection box so it goes back where it was
+  const LENT = {
+    save: el('div', {}, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'name' }), nameIn)), el('div', { class: 'actions' }, saveBtn), why),
+    grip: el('div', {}, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'grip %' }), gripIn), el('label', { class: 'picker' }, el('span', { text: 'grip like…' }), gripLike)), el('div', { class: 'actions' }, gripBtn)),
+  };
+  const slots = { save: el('div', {}, LENT.save), grip: el('div', {}, LENT.grip) };
+  const lend = (name, box) => { const n = LENT[name]; if (!n) throw new Error(`BAD_LEND: no fields named ${name}`); box.append(n); return () => slots[name].append(n); };
+  // 't180:selection-request' { detail: { reply(sel) } }: Edit's selection items (items() above), read when the menu opens
+  const onSelRequest = (e) => {
+    if (!e.detail || typeof e.detail.reply !== 'function') return;
+    const info = shell.selectionInfo();
+    e.detail.reply({ selected: !!info, saveProblem: info ? info.saveProblem || null : null, del: () => shell.deleteSelection(), clear: () => shell.clearSelection(), lend });
+  };
+  doc.addEventListener('t180:selection-request', onSelRequest);
   const nodes = {
-    selection: [el('h3', { text: 'Selected pieces' }), selInfo, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'name' }), nameIn)), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'grip %' }), gripIn), el('label', { class: 'picker' }, el('span', { text: 'grip like…' }), gripLike)), el('div', { class: 'actions' }, gripBtn, saveBtn, delBtn, clearBtn), why, el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox],
+    selection: [el('h3', { text: 'Selected pieces' }), selInfo, slots.grip, slots.save, el('div', { class: 'actions' }, delBtn, clearBtn), el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox],
     library: [el('h3', { text: 'Pieces library' }), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'mirror on insert' }), mirror)), listBox, listNote],
   };
-  return { nodes, layer, menu, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); if (menu) { doc.removeEventListener('keydown', onKey, true); doc.removeEventListener('pointerdown', onOutside, true); menu.removeEventListener('toggle', onToggle); } if (tick) win.clearTimeout(tick); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };
+  return { nodes, layer, menu, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); doc.removeEventListener('t180:selection-request', onSelRequest); if (typeof offMirror === 'function') offMirror(); if (menu) { doc.removeEventListener('keydown', onKey, true); doc.removeEventListener('pointerdown', onOutside, true); menu.removeEventListener('toggle', onToggle); } if (tick) win.clearTimeout(tick); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };
 }
 
-module.exports = { mount, describe, CLICK_PX };
+module.exports = { mount, describe, items, CLICK_PX };
