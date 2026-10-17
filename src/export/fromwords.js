@@ -1,7 +1,7 @@
 // fromwords.js: a document of words becomes a complete AC track folder, through code alone (ARCHITECTURE §5c, §6; the
 // overnight plan's step 4). No game is launched and nothing is placed by hand.
 //
-//   buildExport(doc, opts)            -> { scene, kn5, ai, path, segments, validation, markers, warnings, ... }  (writes nothing)
+//   buildExport(doc, opts)            -> { scene, kn5, ai, path, segments, geometry, validation, markers, warnings, ... }  (writes nothing; geometry: D372's hash)
 //   exportTrack(doc, { outDir, variant = 'block', t180 = true, ...opts }) -> { folders: [{ variant, folder, dir, files }], kn5Sha, warnings, ... }
 //
 // THE PIPELINE, each part called and none edited:
@@ -111,6 +111,22 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const unit = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return l > 0 ? mul(a, 1 / l) : [0, 0, 0]; };
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
+
+/**
+ * D372: THE ROAD'S GEOMETRY HASH. Assetto Corsa keys a track's ghost (Documents\Assetto Corsa\GhostCar\<folder>) and the CMRT HUD its laps by the FOLDER
+ * NAME, not the shape, so a re-export that changes the road left a ghost driving through the air (ELYSIUM, 2026-10-17). The marker carries this hash, and
+ * the install moves those laps aside when it changes (src-tauri/src/ac.rs retire_stale_laps). It is the SHAPE alone: every sample of the final path (after
+ * the equation core's lift), its position to the millimetre and its frame (T, L, U) to a millionth, and every segment's kind, length, heartline,
+ * cross-section (profile u and psi) and blend. No name, id, material, texture or grip enters it, so a texture-only re-export keeps it. "sha256:<hex>".
+ */
+const GEOMETRY_SKIP = new Set(['id', 'word', 'part', 'material', 'font', 'speed']);
+function geometryOf(p, segs) {
+  const h = crypto.createHash('sha256'), mm = (x) => Math.round(x * 1000), micro = (x) => Math.round(x * 1e6);
+  for (const q of p.samples) h.update([...q.pos.map(mm), ...q.T.map(micro), ...q.L.map(micro), ...q.U.map(micro)].join(',') + ';');
+  const shape = (k, v) => (GEOMETRY_SKIP.has(k) ? undefined : v);
+  for (const g of segs) h.update(JSON.stringify({ kind: g.kind, length: g.length, heartline: g.heartline, profile: g.profile || null, blend: g.blend || null }, shape) + ';');
+  return `sha256:${h.digest('hex')}`;
+}
 
 /** The folder name: t180b_ plus the document's name, lower-case, [a-z0-9_] only. */
 function folderName(doc) {
@@ -303,7 +319,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
 
   const turn = segs.reduce((a, g) => a + ((g.k0 + g.k1) / 2) * g.length, 0);
   return {
-    folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
+    folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, geometry: geometryOf(p, segs), resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh },
     desc: { name: (doc.name || 'Untitled') + (test ? ' (test, unfinished)' : ''), description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original', BUILDER], author, version: '0.1' },
@@ -345,7 +361,7 @@ function writeFolder(b, outDir, v) {
   files.push('ai/fast_lane.ai');
   // D243a: a TEST export says so in the folder, with every red it did not block on
   if (b.test) { fs.writeFileSync(path.join(dir, TEST_FILE), ['TEST EXPORT OF AN UNFINISHED TRACK (t180-track-builder). Not a finished track: the loop is open, the AI line is open, and the reds below did NOT block it.', `Point-to-point gates AC_AB_START/FINISH; the finish is ${b.test.runoffM} m before the road's end (a run-off), and the road ends in a wall (${b.test.wall}).`, '', `${b.test.reds.length} red finding(s):`, ...b.test.reds.map((r) => `- ${r}`), ''].join(String.fromCharCode(13, 10))); files.push(TEST_FILE); }
-  fs.writeFileSync(path.join(dir, MARKER_FILE), JSON.stringify({ tool: 't180-track-builder', module: 'src/export/fromwords.js', written: new Date().toISOString(), files }, null, 2) + '\n');
+  fs.writeFileSync(path.join(dir, MARKER_FILE), JSON.stringify({ tool: 't180-track-builder', module: 'src/export/fromwords.js', written: new Date().toISOString(), geometry: b.geometry, files }, null, 2) + '\n');
   return { variant: v.variant, folder, dir, files };
 }
 
@@ -370,7 +386,7 @@ function writeExport(b, { outDir, variant, t180 }) {
   const warnings = [...b.warnings];
   if (t180) warnings.push(trackfiles.CSP_ONLY_WARNING);
   if (t180 && vs.some((v) => !v.softCollision)) warnings.push('noblock: the folder WITHOUT the soft-collision block is RED by ARCHITECTURE §4 (a missing soft-collision block); written only as the §10.1 soft-road control, on request');
-  return { folders, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: sha256(b.ai), aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.placed.filter((m) => !m.error).map((m) => ({ name: m.name, kind: m.kind, s: m.s, u: m.u, h: m.h })), paint: b.markers.paint.items, layout: b.markers.layout, warnings };
+  return { folders, geometry: b.geometry, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: sha256(b.ai), aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.placed.filter((m) => !m.error).map((m) => ({ name: m.name, kind: m.kind, s: m.s, u: m.u, h: m.h })), paint: b.markers.paint.items, layout: b.markers.layout, warnings };
 }
 
 module.exports = { exportTrack, buildExport, exportSegments, buildFromSegments, ExportError, folderName, LAYOUT, MARKER_FILE, _internal: { stations, aiInput, roadWidthM } };
