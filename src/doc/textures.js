@@ -10,8 +10,10 @@
 //   size        px: the side a made texture is rendered at, a power of two from 16 to 8192 (AC's limit, §5b); 1024
 //               by default (inferred: a 5.6 MB DDS with its mips, see src/texture/warnings.js)
 //   tileLength  m: one repeat of the texture along the track (§5b "tiling length")
-//   fit         'tile' (repeat every tileWidth m across) or 'fit' (stretch once across the strip's own width)
-//   tileWidth   m: one repeat across, when fit is 'tile'
+//   fit         'tile' (repeat every tileWidth m across), 'fit' (stretch once across the strip's own width) or 'edge' (D371: the edge bands keep edgeBand m at any width,
+//               the centre is whole repeats; built from the track's width range once it is closed, src/texture/edge.js)
+//   tileWidth   m: one repeat across, when fit is 'tile'; the width the texture was drawn for, when fit is 'edge'
+//   edgeBand    m: the band at each edge that keeps its size, when fit is 'edge' (under half of tileWidth)
 //   offset      m: where the first repeat starts, along
 //   dir         'along' or 'across': which way the texture's own v runs (§5b "direction")
 // Lengths are quantised like every other length of the document (0.1 mm, serial.js). A jump has no surface, so it
@@ -21,11 +23,11 @@
 const TM = require('../texmaker/text.js');
 
 const SLOTS = Object.freeze(['floor', 'walls', 'lines', 'kerbs', 'edgeGlow']);
-const SETTINGS = Object.freeze(['texture', 'make', 'size', 'tileLength', 'fit', 'tileWidth', 'offset', 'dir']);
+const SETTINGS = Object.freeze(['texture', 'make', 'size', 'tileLength', 'fit', 'tileWidth', 'edgeBand', 'offset', 'dir']);
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-const DEFAULT = Object.freeze({ texture: null, make: null, size: 1024, tileLength: 10, fit: 'tile', tileWidth: 10, offset: 0, dir: 'along' });
-const LENGTHS = ['tileLength', 'tileWidth', 'offset'];
-const RANGE = { tileLength: [0.1, 1000], tileWidth: [0.1, 1000], offset: [-10000, 10000] };
+const DEFAULT = Object.freeze({ texture: null, make: null, size: 1024, tileLength: 10, fit: 'tile', tileWidth: 10, edgeBand: 1, offset: 0, dir: 'along' });
+const LENGTHS = ['tileLength', 'tileWidth', 'edgeBand', 'offset'];
+const RANGE = { tileLength: [0.1, 1000], tileWidth: [0.1, 1000], edgeBand: [0.01, 500], offset: [-10000, 10000] };
 
 // Font defaults (§5b "a font can carry default textures"). v1 ships no textures of its own, so every font's slots
 // start with no texture and 10 m tiling; the procedural maker (part 2) is where built-in textures come from.
@@ -52,10 +54,11 @@ function problem(textures, word) {
       if (k === 'texture' && !(v === null || (typeof v === 'string' && NAME_RE.test(v)))) return `${s}: texture ${JSON.stringify(v)} is not a texture name (lower-case letters, digits, _ and -)`;
       if (k === 'make' && v !== null) { if (typeof v !== 'string') return `${s}: make is a made texture's text, or null`; try { TM.parse(v); } catch (e) { if (e.name !== 'TexmakerError') throw e; return `${s}: the made texture is refused (${e.code}: ${e.message})`; } }
       if (k === 'size' && !(Number.isInteger(v) && v >= 16 && v <= 8192 && (v & (v - 1)) === 0)) return `${s}: size ${JSON.stringify(v)} is not a power of two from 16 to 8192 px`;
-      if (k === 'fit' && v !== 'tile' && v !== 'fit') return `${s}: fit is 'tile' or 'fit', not ${JSON.stringify(v)}`;
+      if (k === 'fit' && v !== 'tile' && v !== 'fit' && v !== 'edge') return `${s}: fit is 'tile', 'fit' or 'edge', not ${JSON.stringify(v)}`;
       if (k === 'dir' && v !== 'along' && v !== 'across') return `${s}: dir is 'along' or 'across', not ${JSON.stringify(v)}`;
       if (LENGTHS.includes(k) && !(Number.isFinite(v) && v >= RANGE[k][0] && v <= RANGE[k][1])) return `${s}: ${k} = ${v} is outside [${RANGE[k][0]}, ${RANGE[k][1]}] m`;
     }
+    if (o.fit === 'edge' && o.dir === 'across') return `${s}: the edge fit lays the texture across the road, so dir is 'along'`;
     if (o.texture && o.make) return `${s}: a slot takes an image or a made texture, not both`;
   }
   return null;
