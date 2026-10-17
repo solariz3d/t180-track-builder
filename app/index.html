@@ -58,6 +58,14 @@
   .ask-row .ask-quiet { margin-right: auto; color: var(--dim); }
   .ask-row .ask-main { border-color: var(--accent); color: var(--accent); }
   .ask-row button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  /* D361: File ▸ Export layouts… (app/menubar/layoutsdialog.js) */
+  .ask-card.ask-layouts { width: min(680px, calc(100vw - 48px)); }
+  .ask-layouts .lx-row { display: grid; grid-template-columns: 40px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) 40px; align-items: center; gap: 8px; margin: 0 0 6px; }
+  .ask-layouts label.lx-row { grid-template-columns: 110px minmax(0, 1fr); margin-bottom: 14px; }
+  .ask-layouts .lx-head span { color: var(--dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .ask-layouts .lx-track { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ask-layouts input[type="text"] { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 3px 5px; }
+  .ask-layouts .lx-problem { min-height: 1.2em; color: var(--accent); margin: 10px 0 14px; }
   #banner { grid-column: 1 / -1; }
   #banner:empty { display: none; }
   /* D252: the drop-down menu (it was the ⋯ menu; D355: every menu on the top bar is one): it drops down over the page */
@@ -202,6 +210,7 @@
     <hr>
     <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
     <button id="testexport" title="TEST export of an UNFINISHED track into Assetto Corsa, as t180b_&lt;name&gt;_test, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export. Export to Assetto Corsa does the same on an open track.">Test export (unfinished)…</button>
+    <button id="exportlayouts" title="Two or more saved tracks as ONE Assetto Corsa track with one layout each (the way Aurora Cryopticon ships its layouts): you name each layout and mark the main one. Re-exporting removes the files of a layout you leave out, and nothing else. Nothing is installed or launched.">Export layouts…</button>
     <span id="more-install"></span>
     <hr>
     <div id="share" title="the whole track as one line of text to share (Copy track code), or open a track from such a line (Paste track code…). The open track is one Ctrl+Z away"></div>
@@ -268,6 +277,8 @@
     openAutosave: () => (tauri ? call('open_autosave') : Promise.resolve(null)),
     clearAutosave: () => (tauri ? call('clear_autosave') : Promise.resolve()),
     writeExport: (dir, folder, files) => call('write_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }),
+    // D361: File ▸ Export layouts…, the same write, then what the folder's previous marker listed and this export does not write is removed (src-tauri/src/lib.rs)
+    writeLayouts: (dir, folder, files) => call('write_layouts_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }),
     folderIsEmpty: (dir) => call('folder_is_empty', { dir }),   // D226: only an EMPTY folder directly in content\tracks, not t180b_*, reads true
     removeEmptyFolder: (dir) => call('remove_empty_folder', { dir }),   // and only that one can be removed (rmdir: never its contents)
   };
@@ -407,6 +418,19 @@
         await notExportedAlert(shell.getState(), seam);
       } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
     };
+    // D361: File ▸ Export layouts… (app/menubar/layoutsexport.js): two or more saved tracks as one AC track folder, a layout each. Its own copy of the exporter,
+    // loaded with its own node shim, so it never touches the Export button's. If it cannot load, the button says why instead of doing nothing
+    try {
+      const lxShim = (await loadCjs('app/export/node-shim.js', get)).createShim();
+      const layoutsSrc = await loadCjs('src/export/layouts.js', get, { builtins: lxShim.builtins, globals: { Buffer: lxShim.Buffer } });
+      const LX = await loadCjs('app/menubar/layoutsexport.js', get), LD = await loadCjs('app/menubar/layoutsdialog.js', get);
+      const lx = LX.createLayoutsExport({ C, layouts: layoutsSrc, shim: lxShim, storage });
+      const pickLayoutsFolder = async (title) => (await call('test_export_folder')) || call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
+      $('exportlayouts').onclick = async () => {
+        try { await LX.exportLayoutsFlow({ lx, shell, ask: (tracks) => LD.askLayouts(document, { tracks }), pickFolder: pickLayoutsFolder, exporter, storage, say: (t) => { status.textContent = t; }, textures: textureSet }); }
+        catch (e) { status.textContent = `export layouts failed: ${e.message || e}`; }
+      };
+    } catch (e) { const why = (e && e.message) || String(e); $('exportlayouts').onclick = () => { status.textContent = `Export layouts could not start: ${why}`; }; }
     // D243a: the TEST export of an unfinished track, its own button (never the default Export). D264: it goes into Assetto Corsa by the install's path
     // (app/install/index.js, mounted below with testButton), asking for the AC folder only when it is not known; Export… (any folder) is unchanged
     refreshList();
@@ -462,7 +486,7 @@
       const { acFolder, acAllow } = MI.acNodes($('more-install')), soundRow = $('sound-row');
       $('m-settings-slot').append(...[acFolder, acAllow].filter(Boolean));   // in Settings from the start, not only once Settings has been opened
       MB.mountBar(document, [
-        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('testexport'), $('open'), $('versions')] },
+        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport'), $('open'), $('versions')] },
         { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: some(selection, 'The selection\'s entries')(c) }) },
         { details: $('m-build'), slot: $('m-build-slot'), items: whole(build) },
         { details: $('m-track'), slot: $('m-track-slot'), items: whole(track) },

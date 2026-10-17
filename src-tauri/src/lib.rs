@@ -426,6 +426,86 @@ fn write_export(dir: String, folder: String, files: Vec<ExportFile>) -> Result<u
     write_export_to(Path::new(&dir), &folder, &decoded?)
 }
 
+// ---- File ▸ Export layouts… (D361 part 2, G3): the same write, then what the folder's PREVIOUS marker listed and this export
+// does not write is removed, so a layout left out of a re-export is gone from Content Manager (it lists every ui/*/ui_track.json).
+// Only paths that marker listed (src/export/layouts.js staleFiles is the same rule), only plain files, never through a link or a
+// junction, and then each folder they leave empty, never the track folder itself. A file somebody added is in no marker of ours
+// and is never touched; a marker that cannot be read removes nothing.
+
+/// The paths the previous marker lists that are not among `new_paths`: inside the folder, never the marker itself, each once.
+pub fn stale_from_marker(marker: &str, new_paths: &[&str]) -> Vec<String> {
+    let v: serde_json::Value = match serde_json::from_str(marker) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    let Some(list) = v.get("files").and_then(|f| f.as_array()) else { return Vec::new() };
+    let mut out: Vec<String> = Vec::new();
+    for p in list.iter().filter_map(|f| f.as_str()) {
+        if valid_rel_path(p) && p != MARKER_FILE && !new_paths.contains(&p) && !out.iter().any(|x| x == p) {
+            out.push(p.to_string());
+        }
+    }
+    out
+}
+
+/// True when every folder from `target` down to `file`'s parent is a real folder (not a link or a junction) and `file` is a plain file.
+fn plain_file_inside(target: &Path, rel: &str) -> bool {
+    let mut at = target.to_path_buf();
+    let parts: Vec<&str> = rel.split('/').collect();
+    for (i, part) in parts.iter().enumerate() {
+        at = at.join(part);
+        let Ok(md) = fs::symlink_metadata(&at) else { return false };
+        if md.file_type().is_symlink() {
+            return false;
+        }
+        let last = i + 1 == parts.len();
+        if (last && !md.is_file()) || (!last && !md.is_dir()) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Write the folder as write_export_to does, then remove its previous export's stale files. Returns (files written, paths removed).
+pub fn write_layouts_export_to(dir: &Path, folder: &str, files: &[(String, Vec<u8>)]) -> Result<(usize, Vec<String>), String> {
+    let target = dir.join(folder);
+    let previous = if valid_folder(folder) { fs::read_to_string(target.join(MARKER_FILE)).ok() } else { None };
+    let written = write_export_to(dir, folder, files)?;
+    let mut removed = Vec::new();
+    if let Some(marker) = previous {
+        let new_paths: Vec<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
+        for rel in stale_from_marker(&marker, &new_paths) {
+            if !plain_file_inside(&target, &rel) {
+                continue;
+            }
+            let f = rel.split('/').fold(target.clone(), |acc, part| acc.join(part));
+            fs::remove_file(&f).map_err(|e| format!("could not remove {}: {e}", f.display()))?;
+            removed.push(rel);
+            let mut d = f.parent().map(Path::to_path_buf);
+            while let Some(here) = d {
+                if here == target || !here.starts_with(&target) || fs::read_dir(&here).map(|mut r| r.next().is_some()).unwrap_or(true) || fs::remove_dir(&here).is_err() {
+                    break;
+                }
+                d = here.parent().map(Path::to_path_buf);
+            }
+        }
+    }
+    Ok((written, removed))
+}
+
+#[derive(serde::Serialize)]
+struct LayoutsWritten {
+    written: usize,
+    removed: Vec<String>,
+}
+
+#[tauri::command]
+fn write_layouts_export(dir: String, folder: String, files: Vec<ExportFile>) -> Result<LayoutsWritten, String> {
+    let decoded: Result<Vec<(String, Vec<u8>)>, String> = files.into_iter().map(|f| decode_base64(&f.data).map(|b| (f.path, b))).collect();
+    let (written, removed) = write_layouts_export_to(Path::new(&dir), &folder, &decoded?)?;
+    Ok(LayoutsWritten { written, removed })
+}
+
 /// `dir` is exactly `…/content/tracks/<name>` (nothing deeper) with a <name> that does not start with t180b_: the folder someone made by hand
 /// for a track (D226). Content Manager reads such a folder, when it is empty, as a broken track.
 pub fn direct_foreign_track(dir: &str) -> bool {
@@ -532,7 +612,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
-            save_autosave, open_autosave, clear_autosave, write_export, folder_is_empty, remove_empty_folder,
+            save_autosave, open_autosave, clear_autosave, write_export, write_layouts_export, folder_is_empty, remove_empty_folder,
             get_ac_root, find_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
             test_export_folder, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo, append_input_log
         ])
@@ -659,6 +739,56 @@ mod tests {
         assert!(write_export_to(&d, "t180b_two", &[("../escape".to_string(), vec![1])]).is_err());
         assert!(!d.join("escape").exists());
         fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_layouts_re_export_removes_only_what_its_previous_marker_listed() {
+        let d = scratch("layouts");
+        let marker = |files: &[&str]| serde_json::json!({ "tool": "t180-track-builder", "files": files }).to_string().into_bytes();
+        let first: Vec<(String, Vec<u8>)> = vec![
+            ("models_long.ini".into(), b"l".to_vec()), ("ui/long/ui_track.json".into(), b"{}".to_vec()),
+            ("models_short.ini".into(), b"s".to_vec()), ("ui/short/ui_track.json".into(), b"{}".to_vec()), ("short/ai/fast_lane.ai".into(), vec![1]),
+            (".t180b-builder.json".into(), marker(&["models_long.ini", "ui/long/ui_track.json", "models_short.ini", "ui/short/ui_track.json", "short/ai/fast_lane.ai", "../outside.txt"])),
+        ];
+        assert_eq!(write_layouts_export_to(&d, "t180b_x", &first).unwrap(), (6, vec![]), "a first export removes nothing");
+        let t = d.join("t180b_x");
+        fs::create_dir_all(t.join("extension")).unwrap();
+        fs::write(t.join("extension").join("ext_config.ini"), "[BASIC]").unwrap();
+        fs::create_dir_all(t.join("short").join("data")).unwrap();
+        fs::write(t.join("short").join("data").join("mine.txt"), "mine").unwrap();
+        fs::write(d.join("outside.txt"), "theirs").unwrap();
+        let second: Vec<(String, Vec<u8>)> = vec![
+            ("models_long.ini".into(), b"l2".to_vec()), ("ui/long/ui_track.json".into(), b"{}".to_vec()),
+            ("models_gp.ini".into(), b"g".to_vec()), ("ui/gp/ui_track.json".into(), b"{}".to_vec()),
+            (".t180b-builder.json".into(), marker(&["models_long.ini", "ui/long/ui_track.json", "models_gp.ini", "ui/gp/ui_track.json"])),
+        ];
+        let (n, mut removed) = write_layouts_export_to(&d, "t180b_x", &second).unwrap();
+        removed.sort();
+        assert_eq!(n, 5);
+        assert_eq!(removed, vec!["models_short.ini", "short/ai/fast_lane.ai", "ui/short/ui_track.json"], "exactly the dropped layout's listed files");
+        assert!(!t.join("ui").join("short").exists() && !t.join("short").join("ai").exists(), "the folders they left empty are gone");
+        assert_eq!(fs::read_to_string(t.join("short").join("data").join("mine.txt")).unwrap(), "mine", "a file somebody added is kept");
+        assert_eq!(fs::read_to_string(t.join("extension").join("ext_config.ini")).unwrap(), "[BASIC]");
+        assert_eq!(fs::read_to_string(d.join("outside.txt")).unwrap(), "theirs", "a listed path outside the folder is never followed");
+        assert_eq!(fs::read(t.join("models_long.ini")).unwrap(), b"l2");
+        // a marker that cannot be read removes nothing
+        fs::write(t.join(".t180b-builder.json"), "{ broken").unwrap();
+        assert_eq!(write_layouts_export_to(&d, "t180b_x", &first[..2]).unwrap().1, Vec::<String>::new());
+        assert!(t.join("ui").join("gp").join("ui_track.json").exists());
+        // a folder the builder did not write is refused untouched, as write_export_to refuses it
+        fs::create_dir_all(d.join("t180b_theirs")).unwrap();
+        fs::write(d.join("t180b_theirs").join("keep.txt"), "x").unwrap();
+        assert!(write_layouts_export_to(&d, "t180b_theirs", &second).is_err());
+        assert_eq!(fs::read_dir(d.join("t180b_theirs")).unwrap().count(), 1);
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn stale_paths_come_only_from_the_marker_and_stay_inside_the_folder() {
+        let m = r#"{"files":["a.kn5","old/x.ini","old/x.ini","../up","/abs",".t180b-builder.json","b\\c"]}"#;
+        assert_eq!(stale_from_marker(m, &["a.kn5"]), vec!["old/x.ini".to_string()]);
+        assert!(stale_from_marker("not json", &[]).is_empty());
+        assert!(stale_from_marker(r#"{"nofiles":1}"#, &[]).is_empty());
     }
 
     #[test]
