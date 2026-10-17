@@ -15,7 +15,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const SND = require('../sound.js');
-const { createSound, createEngine, STEPS, SAMPLES } = SND;
+const { createSound, createEngine, SAMPLES, MELODIES, MELODY_NAMES } = SND;
+// AMENDED (D375): the 16 steps became four melodies of 64; an engine given no melody plays the first, so rows 2 and 3b read its steps where they read the 16
+const STEPS = MELODIES[MELODY_NAMES[0]].steps;
 
 const SLOTS = ['drag_tick', 'place', 'undo', 'loop_closed'];
 /** A fake AudioContext whose nodes and param calls are kept, so a test can ask which buffer each source played, at what rate, and what each gain did. */
@@ -162,11 +164,45 @@ test('row 5: a failed fetch, a refused file or a failed decode is logged and the
 const placed = () => { const d = (n) => ({ pieces: Array.from({ length: n }, (_, i) => ({ id: i })), closed: false }); return [{ history: { past: [], present: d(1), future: [] } }, { history: { past: [d(1)], present: d(2), future: [] } }]; };
 
 test('row 6: the four files are the batch-8 WAVs byte for byte, and useSamples refuses a set with one missing', () => {
-  const SHA = { drag_tick: '6e059b3bf456d731d375ccf89b374fb89d70146f8159737fc39bf2827517d7bd', place: 'feb0e8936def375353c4381a1b8eeb09cf7968a740e2c289bfb812c9daca18c2',
+  // AMENDED (D375): the drag tick is the keeper's pick of batch 9, Eiano tik (G:\Consonance-tools\b9\page\batch9\tick_eiano_tik.wav, copied byte for byte)
+  const SHA = { drag_tick: '0c63854e26167115886d2d0fc947362cdc72c82271b12e2bcb5a2cf8fe6cbfa8', place: 'feb0e8936def375353c4381a1b8eeb09cf7968a740e2c289bfb812c9daca18c2',
     undo: '7c630ede9b91662291a87f5c4ff0556d4d4cb55f6415fe0b1026bd55f33cd63f', loop_closed: '34fd8b2193a46a20add00efff7379c836b03795fb5bbd9e0531906e273852308' };
   for (const s of SLOTS) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', 'sounds', `${s}.wav`))).digest('hex'), SHA[s], `${s}.wav`);
   assert.deepEqual([...SAMPLES.slots], SLOTS);
   const e = createEngine(fakeCtx()), b = fakeBuffers(); delete b.undo;
   assert.throws(() => e.useSamples(b), /undo/, 'a set with one missing is refused, naming it');
   assert.throws(() => e.useSamples(null), /samples/);
+});
+
+// D375: each melody plays on its own place and undo slots (place_<name>, undo_<name>), so batch 10's instruments can drop in one melody at a time
+test('row 8: an engine plays the melody it was given, place forward and undo back, on that melody\'s own slots, round the 64; an unknown melody is refused', () => {
+  for (const k of MELODY_NAMES) {
+    const ctx = fakeCtx(), e = createEngine(ctx, { melody: k }); e.useSamples(fakeBuffers());
+    assert.equal(e.melody, k);
+    for (const i of [0, 17, 40, 63]) {
+      const [b, chord, mel] = MELODIES[k].steps[i], want = [...chord, mel, b].map((m) => Math.pow(2, (m - 60) / 12)).sort();
+      for (const soft of [false, true]) {
+        const got = during(ctx, () => e.step(i, soft)).sources, rates = got.map((s) => s.rate).sort();
+        assert.deepEqual(got.map((s) => s.slot), Array(6).fill(SAMPLES.file[`${soft ? 'undo' : 'place'}_${k}`]), `${k} step ${i}: its own ${soft ? 'undo' : 'place'} slot's file`);
+        rates.forEach((r, n) => near(r, want[n], `${k} step ${i} ${soft ? 'undo' : 'place'} note ${n}`));
+      }
+      assert.deepEqual(during(ctx, () => e.step(i + 64, false)).sources.map((s) => s.rate), during(ctx, () => e.step(i, false)).sources.map((s) => s.rate), `${k}: step ${i + 64} is step ${i}`);
+    }
+  }
+  assert.throws(() => createEngine(fakeCtx(), { melody: 'polka' }), /sound: no melody named polka/);
+  assert.equal(createEngine(fakeCtx()).melody, MELODY_NAMES[0], 'given none, the first');
+});
+
+test('row 9: every melody\'s place and undo slot resolves to a file that is shipped, with its reference note and gain; the player fetches each file once', async () => {
+  const shipped = new Set(fs.readdirSync(path.join(__dirname, '..', 'sounds')).filter((f) => f.endsWith('.wav')).map((f) => f.replace(/\.wav$/, '')));
+  for (const k of MELODY_NAMES) for (const kind of ['place', 'undo']) {
+    const slot = `${kind}_${k}`, file = SAMPLES.file[slot];
+    assert.ok(SAMPLES.slots.includes(file), `${slot} -> ${file}, one of the files the player loads`);
+    assert.ok(shipped.has(file), `${file}.wav is in app/sounds`);
+    assert.equal(SAMPLES.ref[file], 60, `${slot}: its file rendered on MIDI 60`); assert.ok(SAMPLES.gain[file] > 0, `${slot}: its file has a gain`);
+  }
+  assert.deepEqual([...SAMPLES.slots].sort(), [...new Set(Object.values(SAMPLES.file))].sort(), 'the player loads exactly the files the slots name');
+  assert.ok(SAMPLES.slots.every((f) => shipped.has(f)), 'every one is shipped');
+  const P = player(); P.fire('pointerdown');
+  assert.deepEqual(P.fetched, SAMPLES.slots.map((f) => `sounds/${f}.wav`), 'each file once');
 });

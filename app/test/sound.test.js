@@ -2,7 +2,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createSound, createEngine, soundFor, tickPlan, stepOf, STEPS, MEL128, KEYS } = require('../sound.js');
+const { createSound, createEngine, soundFor, tickPlan, stepOf, MELODIES, MELODY_NAMES, MEL128, KEYS } = require('../sound.js');
 
 const H = (past, present, future = []) => ({ past, present, future });
 const doc = (n, closed = false) => ({ pieces: Array.from({ length: n }, (_, i) => ({ id: `p${i}` })), closed });
@@ -19,9 +19,41 @@ test('soundFor: a placed piece, an undo and a closed loop each name their sound;
   assert.equal(soundFor(placed, placed), null); assert.equal(soundFor(null, placed), null); assert.equal(soundFor(placed, S(null)), null);
 });
 
-test('stepOf: the melody step follows the piece count, one step per piece at any pace, round the 16', () => {
-  assert.deepEqual([1, 2, 16, 17, 33].map(stepOf), [0, 1, 15, 0, 0]);
-  assert.equal(STEPS.length, 16); assert.ok(STEPS.every(([b, chord, mel]) => b < 48 && chord.length >= 3 && mel > Math.max(...chord)), 'a bass, a chord, a melody note on top');
+// AMENDED (D375): the 16 steps became four melodies of 64 (the keeper's pick of batch 9), so the step wraps at 64; the rule (one step per piece) is unchanged
+test('stepOf: the melody step follows the piece count, one step per piece at any pace, round the 64', () => {
+  assert.deepEqual([1, 2, 64, 65, 129].map(stepOf), [0, 1, 63, 0, 0]);
+});
+
+// D375: four melodies of 64 steps (G:\Consonance-tools\b9\mel9.js, batch 9: Yearning, Shoegaze, Light occult, Afterglow), each step today's shape
+test('the four melodies: 64 steps each of a bass, a chord of four and a melody note on top, each melody its own', () => {
+  assert.deepEqual([...MELODY_NAMES], ['yearning', 'shoegaze', 'occult', 'afterglow']);
+  assert.deepEqual(Object.keys(MELODIES), [...MELODY_NAMES]);
+  for (const k of MELODY_NAMES) {
+    const m = MELODIES[k];
+    assert.equal(m.steps.length, 64, `${k}: 64 steps`);
+    assert.ok(m.steps.every(([b, chord, mel]) => Number.isInteger(b) && b < 48 && chord.length === 4 && mel > Math.max(...chord)), `${k}: a bass, a chord of four, a melody note on top`);
+    assert.ok(Object.isFrozen(m) && Object.isFrozen(m.steps) && m.steps.every(Object.isFrozen), `${k}: frozen`);
+    assert.equal(typeof m.title, 'string');
+  }
+  const tops = MELODY_NAMES.map((k) => MELODIES[k].steps.map((s) => s[2]).join(','));
+  assert.equal(new Set(tops).size, 4, 'four different tunes');
+});
+
+// D375: one of the four is picked at each launch (the player's creation, once a page load), from `pick` (Math.random in the app), and never saved
+test('a launch picks one of the four melodies from its random draw, hands it to the engine, saves nothing, and refuses a draw outside 0..1', () => {
+  const got = [0, 0.26, 0.5, 0.99].map((r) => {
+    const F = fakeWindow(), seen = [];
+    const s = createSound(F.win, { engineFor: (c, o) => { seen.push(o && o.melody); return F.engineFor(c); }, pick: () => r, log: () => {} });
+    const before = s.melody; F.fire('pointerdown');
+    assert.deepEqual(seen, [before], 'the engine is built with the melody the launch picked');
+    assert.deepEqual(Object.keys(F.store), [], 'nothing is saved, so the next launch draws again');
+    return before;
+  });
+  assert.deepEqual(got, ['yearning', 'shoegaze', 'occult', 'afterglow']);
+  let seed = 7; const seeded = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const many = new Set(Array.from({ length: 40 }, () => createSound(fakeWindow().win, { pick: seeded, log: () => {} }).melody));
+  assert.deepEqual([...many].sort(), [...MELODY_NAMES].sort(), 'over 40 seeded launches, every melody comes up');
+  for (const bad of [1, -0.1, NaN, () => 'x']) assert.throws(() => createSound(fakeWindow().win, { pick: typeof bad === 'function' ? bad : () => bad, log: () => {} }), /sound: a melody pick is a number from 0 up to 1/);
 });
 
 test('the tick melody is 128 steps (16 notes × 8 chords), in a playable range, and moves', () => {
