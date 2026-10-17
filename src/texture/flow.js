@@ -25,11 +25,12 @@
 // width, so u runs from -0.5 to 0.5 across every row whatever the road's width, and follows a road that widens or narrows (ELYSIUM, 35 m to 60 m). A closed
 // ring with fit is one repeat round it. Until D364 this file read tileWidth only, so a track that changed width repeated its texture where it was wider.
 //
-// WHAT IT TOUCHES: only cells of a segment whose word is 'core' (the equation core's) with a textured FLOOR slot (an image or a made
+// EDGE (D371, src/texture/edge.js): a floor whose settings say fit 'edge' takes the band-and-centre layout the set built from the track's width range: u runs\n// 0..fb over the outer edgeBand metres of each side and fb..1-fb over the rest, so the edge bands are the same size in metres on every row, and the centre is the whole\n// repeats the texture was composed with. A row of two bands or less, and a closed ring, take the plain fit.\n//\n// WHAT IT TOUCHES: only cells of a segment whose word is 'core' (the equation core's) with a textured FLOOR slot (an image or a made
 // texture, the rule src/texture/set.js withTextureSet already uses for the material). A word document's texture coordinates, and every
 // untextured track's, are exactly what mesh.js made; the export without a texture set is byte for byte what it was.
 'use strict';
 const { normalize } = require('../geom/profile.js');
+const EDGE = require('./edge.js');
 
 const DEG = Math.PI / 180, CLOSED_RAD = (180 - 1e-3) * DEG;
 
@@ -58,23 +59,24 @@ function floorOf(seg, set) {
 }
 
 /** u for one row of `K` vertices whose arc lengths are `arc[k]` (from the mesh's own u, ×10): `fit` (D364: once across the row's own width, -0.5 to 0.5, a ring included: one repeat round), else a ring's whole-number wrap, else the plain tile. */
-function rowU(arc, K, ring, tileWidth, fit) {
+function rowU(arc, K, ring, tileWidth, fit, edge) {
   const out = new Float64Array(K);
   const w = arc[K - 1] - arc[0];
-  if (fit === 'fit' && w > 0) for (let k = 0; k < K; k++) out[k] = arc[k] / w;
+  if (fit === 'edge' && edge && !ring && w > 0) for (let k = 0; k < K; k++) out[k] = EDGE.rowMap(arc[k] - arc[0], w, edge);
+  else if ((fit === 'fit' || (fit === 'edge' && edge)) && w > 0) for (let k = 0; k < K; k++) out[k] = arc[k] / w;
   else if (ring && w > 0) { const n = Math.max(1, Math.round(w / tileWidth)); for (let k = 0; k < K; k++) out[k] = (n * arc[k]) / w; }
   else for (let k = 0; k < K; k++) out[k] = arc[k] / tileWidth;
   return out;
 }
 
 /** Texture coordinates for one cell: R rows of K vertices, row r at path arc length rowS[r]; `rings[k]` says whether vertex column k wears a closed ring. */
-function build(uvs, K, rowS, segOf, settings) {
+function build(uvs, K, rowS, segOf, settings, edge) {
   const R = uvs.length / (2 * K), out = new Float32Array(uvs.length), { tileLength, tileWidth, offset, dir, fit } = settings;
   for (let r = 0; r < R; r++) {
     const arc = new Float64Array(K); for (let k = 0; k < K; k++) arc[k] = uvs[(r * K + k) * 2] * 10;   // the mesh's u is arc length / 10
-    const u = segOf.length === 1 ? rowU(arc, K, segOf[0].ring, tileWidth, fit) : (() => {                    // a seam: two rows end to end, each its own segment's
+    const u = segOf.length === 1 ? rowU(arc, K, segOf[0].ring, tileWidth, fit, edge) : (() => {                    // a seam: two rows end to end, each its own segment's
       const o = new Float64Array(K); let a = 0;
-      for (const part of segOf) { const sub = rowU(arc.subarray(a, a + part.K), part.K, part.ring, tileWidth, fit); o.set(sub, a); a += part.K; }
+      for (const part of segOf) { const sub = rowU(arc.subarray(a, a + part.K), part.K, part.ring, tileWidth, fit, edge); o.set(sub, a); a += part.K; }
       return o;
     })();
     const v = (rowS[r] + offset) / tileLength;
@@ -85,18 +87,18 @@ function build(uvs, K, rowS, segOf, settings) {
 
 /** The new uvs of one of `mesh.cells` (buildMesh's cell record: a road cell or a seam) whose mesh object is `node`, or null when it wears no texture or is not a core cell. */
 function flowCell(mesh, segments, set, cell, node) {
-  const st = mesh && mesh._state, seg = segments[cell.piece], f = floorOf(seg, set);
+  const st = mesh && mesh._state, seg = segments[cell.piece], f = floorOf(seg, set), edge = f ? set.bySegment(seg.id).floor.edge : undefined;
   if (!f || !st || !node) return null;
   const uvs = node.uvs;
   if (!cell.seam) {
     const pc = st.pieces[cell.piece], n = Number(cell.name.slice(cell.name.lastIndexOf('_') + 1)), c = pc && pc.cells[n];
     if (!c || !c.rowS || c.rowS.length * pc.K * 2 !== uvs.length) return null;
-    return build(uvs, pc.K, c.rowS, [{ K: pc.K, ring: closedRing(seg) }], f);
+    return build(uvs, pc.K, c.rowS, [{ K: pc.K, ring: closedRing(seg) }], f, edge);
   }
   // a seam joins the piece before to this one; the lap's first seam (piece 0, on a closed track) joins the LAST piece to the first
   const ia = cell.piece === 0 ? st.pieces.length - 1 : cell.piece - 1, A = st.pieces[ia], B = st.pieces[cell.piece], sm = st.seams[cell.piece];
   if (!A || !B || !sm || (A.K + B.K) * 2 !== uvs.length) return null;
-  return build(uvs, A.K + B.K, [sm.s], [{ K: A.K, ring: closedRing(segments[ia]) }, { K: B.K, ring: closedRing(seg) }], f);   // a seam is ONE row of both rings end to end
+  return build(uvs, A.K + B.K, [sm.s], [{ K: A.K, ring: closedRing(segments[ia]) }, { K: B.K, ring: closedRing(seg) }], f, edge);   // a seam is ONE row of both rings end to end
 }
 
 /** Every textured core cell of the mesh: Map(mesh object -> uvs). The cells pair with the root's children by position (set.js withTextureSet does the same). */
