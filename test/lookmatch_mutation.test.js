@@ -6,6 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
+const IR = require('./inner_run.js');   // D352: a crashed inner run reads NOT TESTED
 const ROOT = path.join(__dirname, '..');
 
 const MUTATIONS = [
@@ -34,19 +35,30 @@ function runMutant(m) {
     fs.mkdirSync(path.join(dir, 'scripts')); fs.copyFileSync(path.join(ROOT, 'scripts', 'lookmatch.js'), path.join(dir, 'scripts', 'lookmatch.js'));
     const f = path.join(dir, m.file), src = fs.readFileSync(f, 'utf8'), applied = m.from === null || src.includes(m.from);
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
-    const r = spawnSync(process.execPath, ['--test', '--test-concurrency=4', path.join(__dirname, 'lookmatch.test.js')],
+    const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
+    const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), '--test-concurrency=4', path.join(__dirname, 'lookmatch.test.js')],
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), LOOKMATCH_DIR: path.join(dir, 'src', 'lookmatch'), LOOKMATCH_CLI: path.join(dir, 'scripts', 'lookmatch.js'), ACLOOK: path.join(dir, 'app', 'preview', 'aclook.js') }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
     if (!/ℹ tests \d+/.test(out)) throw new Error('the mutant test run printed no summary:\n' + out.slice(0, 2000));
     const failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l) && !/# TODO/.test(l)).map((l) => l.slice(2));
-    return { applied, caught: failed.some((l) => l.includes(m.caughtBy)), failed: [...new Set(failed)] };
+    // D352: a file that died natively ran none of its tests; its own ✖ line is no catch, and a run with no catch but a dead file tested nothing
+    const crashed = IR.crashesIn(tap), caught = failed.some((l) => !crashed.some((c) => l.startsWith(c.file + ' (')) && l.includes(m.caughtBy));
+    if (crashed.length && !caught) throw new Error(IR.notTested(crashed));
+    return { applied, caught, failed: [...new Set(failed)] };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 test('control: the unmutated copy passes every look-match test', () => {
   const r = runMutant({ file: 'src/lookmatch/metric.js', from: null, to: null, caughtBy: '(no test is named this)' });
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
+});
+// D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
+// it looks for '.test.js', which every dead file's own ✖ line contains, so a dead file's line must not count as the catch
+test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
+  const m0 = MUTATIONS[0], first = fs.readFileSync(path.join(ROOT, m0.file), 'utf8').split(/\r?\n/)[0];
+  const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash stand-in', caughtBy: '.test.js', from: first, to: IR.STANDIN + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
+  assert.match(said, IR.NOT_TESTED);
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
