@@ -2,7 +2,9 @@
 // Used by app/test/sound-bands.test.js and by hand: node app/test/soundrender.js OUTDIR writes each clip as a 16-bit stereo 48 kHz WAV.
 //
 //   chromePath()                    the Chrome to use (CHROME_PATH, else the usual Windows place), or null when there is none
-//   renderClips(src, clips)        -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }
+//   renderClips(src, clips, o)     -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }; o.samples = a folder; o.seed (default SEED)
+//                                   of the four slot WAVs (app/sounds): the engine is handed them (useSamples) before each clip, as the app does once they load
+//   readWav(file)                   a 16-bit PCM WAV as { L, R, sampleRate } (mono is copied to both sides)
 //   peakDb(clip)                    the sample peak in dBFS
 //   lufs(clip)                      integrated loudness, ITU-R BS.1770-4 (K-weighting, 400 ms blocks with 75% overlap, gates at -70 LUFS and -10 LU)
 //   CLIPS                           the nine sounds as one hears them: a single tick, a drag on each handle, a place, four places, four undos, the loop close
@@ -25,10 +27,14 @@ function chromePath() {
   const c = [process.env.CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].filter(Boolean);
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || null;
 }
+// the engine's noise (its reverbs, the crash) is drawn from a PRNG started at this seed for every clip, so a clip renders to the same samples every run: the bands
+// (sound-bands.test.js) are measured on one fixed sound. Math.random, which the app uses, drew new reverb noise each render and moved a clip ~1 dB
+const SEED = 1;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Render each clip in an OfflineAudioContext (48 kHz stereo) in headless Chrome; the engine runs at level 1, as the sketch page and render-builder.js ran it. */
-async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.random() * 600) } = {}) {
+async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.random() * 600), samples = null, seed = SEED } = {}) {
+  if (!Number.isInteger(seed) || seed < 0) throw new Error(`soundrender: a seed is a whole number 0 or more, got ${seed}`);
   const exe = chromePath(); if (!exe) throw new Error('soundrender: no Chrome found (set CHROME_PATH)');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180snd-test-'));
   const ch = spawn(exe, ['--headless=new', `--remote-debugging-port=${port}`, '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${dir}`, '--no-first-run', 'about:blank'], { stdio: 'ignore' });
@@ -40,12 +46,25 @@ async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.r
     let id = 0; const pend = new Map(); ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } };
     const send = (method, params = {}) => new Promise((r) => { const i = ++id; pend.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
     const ev = async (e) => { const d = await send('Runtime.evaluate', { expression: e, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`soundrender: page error ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 400)}`); return d.result.result.value; };
-    await ev(`window.__M = (() => { const module = { exports: {} }; ${src}\n; return module.exports; })(); true`);
+    await ev(`window.__M = (() => { const module = { exports: {} }; ${src}\n; return module.exports; })(); window.__SAMP = null; true`);
+    if (samples) {   // each slot's two channels go over in pieces, into one AudioBuffer per slot that every clip's context can play
+      await ev('window.__SAMP = {}; true');
+      for (const slot of ['drag_tick', 'place', 'undo', 'loop_closed']) {
+        const w = readWav(path.join(samples, `${slot}.wav`)), CHN = 1 << 17;
+        await ev(`window.__SAMP.${slot} = new AudioBuffer({ numberOfChannels: 2, length: ${w.L.length}, sampleRate: ${w.sampleRate} }); true`);
+        for (const [c, x] of [[0, w.L], [1, w.R]]) for (let i = 0; i < x.length; i += CHN) {
+          const b64 = Buffer.from(x.buffer, x.byteOffset + i * 4, Math.min(CHN, x.length - i) * 4).toString('base64');
+          await ev(`(() => { const s = atob('${b64}'), u = new Uint8Array(s.length); for (let k = 0; k < s.length; k++) u[k] = s.charCodeAt(k); window.__SAMP.${slot}.copyToChannel(new Float32Array(u.buffer), ${c}, ${i}); return true; })()`);
+        }
+      }
+    }
     const out = {};
     for (const [name, [secs, body]] of Object.entries(clips)) {
       // the render stays in the page and its samples come back in pieces: one message of a 16 s clip's two float channels (~8 MB of base64) never arrived
       const n = await ev(`(async () => {
-        const SR = 48000, ctx = new OfflineAudioContext(2, Math.ceil(SR * ${secs}), SR), M = window.__M, E = M.createEngine(ctx); E.setLevel(1);
+        const SR = 48000, ctx = new OfflineAudioContext(2, Math.ceil(SR * ${secs}), SR), M = window.__M;
+        let s = ${seed} >>> 0; const random = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };   // mulberry32, fresh from the seed for every clip
+        const E = M.createEngine(ctx, { random }); E.setLevel(1); if (window.__SAMP) E.useSamples(window.__SAMP);
         const at = (t, fn) => { ctx.suspend(t).then(() => { fn(); ctx.resume(); }); };
         ${body}
         const buf = await ctx.startRendering(); window.__buf = [buf.getChannelData(0), buf.getChannelData(1)]; return buf.length;
@@ -62,7 +81,19 @@ async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.r
   }
 }
 
-const peakDb = ({ L, R }) => { let p = 0; for (let i = 0; i < L.length; i++) p = Math.max(p, Math.abs(L[i]), Math.abs(R[i])); return 20 * Math.log10(p || 1e-12); };
+/** A 16-bit PCM WAV file as { L, R, sampleRate }, its chunks walked (so a LIST or fact chunk before the data is skipped); anything else is refused. */
+function readWav(file) {
+  const b = fs.readFileSync(file);
+  if (b.toString('ascii', 0, 4) !== 'RIFF' || b.toString('ascii', 8, 12) !== 'WAVE') throw new Error(`readWav: ${file} is not a WAV`);
+  let o = 12, fmt = null, data = null;
+  while (o + 8 <= b.length) { const id = b.toString('ascii', o, o + 4), n = b.readUInt32LE(o + 4); if (id === 'fmt ') fmt = { tag: b.readUInt16LE(o + 8), ch: b.readUInt16LE(o + 10), sr: b.readUInt32LE(o + 12), bits: b.readUInt16LE(o + 22) }; else if (id === 'data') data = b.subarray(o + 8, o + 8 + n); o += 8 + n + (n & 1); }
+  if (!fmt || !data || fmt.tag !== 1 || fmt.bits !== 16 || (fmt.ch !== 1 && fmt.ch !== 2)) throw new Error(`readWav: ${file} is not 16-bit PCM mono or stereo (${JSON.stringify(fmt)})`);
+  const n = Math.floor(data.length / (2 * fmt.ch)), L = new Float32Array(n), R = new Float32Array(n);
+  for (let i = 0; i < n; i++) { L[i] = data.readInt16LE(i * 2 * fmt.ch) / 32768; R[i] = fmt.ch === 2 ? data.readInt16LE(i * 4 + 2) / 32768 : L[i]; }
+  return { L, R, sampleRate: fmt.sr };
+}
+
+const peakDb =({ L, R }) => { let p = 0; for (let i = 0; i < L.length; i++) p = Math.max(p, Math.abs(L[i]), Math.abs(R[i])); return 20 * Math.log10(p || 1e-12); };
 
 /** BS.1770-4 K-weighting at 48 kHz (the standard's own coefficients): a high shelf, then a high-pass. */
 function kWeight(x) {
@@ -90,13 +121,14 @@ function wav({ L, R, sampleRate }) {
   return b;
 }
 
-module.exports = { CLIPS, chromePath, renderClips, peakDb, lufs, kWeight, wav };
+module.exports = { CLIPS, SEED, chromePath, renderClips, readWav, peakDb, lufs, kWeight, wav };
 
 if (require.main === module) {
-  const out = process.argv[2]; if (!out) { console.error('usage: node app/test/soundrender.js OUTDIR'); process.exit(1); }
+  const out = process.argv[2]; if (!out) { console.error('usage: node app/test/soundrender.js OUTDIR [--synth]'); process.exit(1); }
   (async () => {
     fs.mkdirSync(out, { recursive: true });
-    const clips = await renderClips(fs.readFileSync(path.join(__dirname, '..', 'sound.js'), 'utf8'));
+    const synth = process.argv[3] === '--synth';   // the synth voices (what plays until the samples are in); without it, the samples as shipped
+    const clips = await renderClips(fs.readFileSync(path.join(__dirname, '..', 'sound.js'), 'utf8'), CLIPS, { samples: synth ? null : path.join(__dirname, '..', 'sounds') });
     for (const [name, c] of Object.entries(clips)) { fs.writeFileSync(path.join(out, `${name}.wav`), wav(c)); console.log(`${name}.wav  peak ${peakDb(c).toFixed(1)} dBFS  ${lufs(c).toFixed(1)} LUFS`); }
   })().catch((e) => { console.error(e.message); process.exit(1); });
 }

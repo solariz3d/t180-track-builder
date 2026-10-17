@@ -121,7 +121,8 @@ test('a window with no audio still mounts and stays silent; an engine that throw
   const F = fakeWindow({ audio: false }), s = createSound(F.win, { engineFor: F.engineFor, log: () => {} }); F.fire('pointerdown');
   assert.equal(s.started, false); assert.equal(s.handle(S(H([], doc(1))), S(H([doc(1)], doc(2)))), null);
   const logs = [], G = fakeWindow(), t = createSound(G.win, { engineFor: () => ({ setLevel() {}, step() { throw new Error('boom'); }, tick() {}, loopClosed() {} }), log: (m) => logs.push(m) });
-  G.fire('pointerdown'); t.handle(S(H([], doc(1))), S(H([doc(1)], doc(2)))); assert.match(logs[0], /place could not play \(boom\)/);
+  // AMENDED (D349): starting audio now also loads the samples, and this fake window has no fetch, so that failure is logged first; the rule is unchanged: the throw is logged
+  G.fire('pointerdown'); t.handle(S(H([], doc(1))), S(H([doc(1)], doc(2)))); assert.match(logs.find((m) => /place/.test(m)) || '', /place could not play \(boom\)/);
 });
 
 // THE REAL ENGINE on a generic fake AudioContext: every node and parameter recorded, so the whole graph is built and every voice is scheduled
