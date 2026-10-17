@@ -2,7 +2,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createSound, createEngine, soundFor, tickPlan, stepOf, MELODIES, MELODY_NAMES, MEL128, KEYS } = require('../sound.js');
+const { createSound, createEngine, soundFor, tickPlan, stepOf, swellDb, MELODIES, MELODY_NAMES, MEL128, KEYS } = require('../sound.js');
 
 const H = (past, present, future = []) => ({ past, present, future });
 const doc = (n, closed = false) => ({ pieces: Array.from({ length: n }, (_, i) => ({ id: `p${i}` })), closed });
@@ -24,9 +24,25 @@ test('stepOf: the melody step follows the piece count, one step per piece at any
   assert.deepEqual([1, 2, 64, 65, 129].map(stepOf), [0, 1, 63, 0, 0]);
 });
 
+// D377: the place swell (the librarian's ruling, the keeper can veto): a place's level rises gently through the 64 steps to its peak over steps 45 to 52
+// (indices 44..51, the lift and the register's top) and eases home by step 64, so the next round starts where this one did
+test('swellDb: a place rises from its floor at step 1 to its peak over steps 45 to 52 and eases back to the floor by step 64, gently, round the 64', () => {
+  const db = [...Array(64)].map((_, i) => swellDb(i)), peak = Math.max(...db), floor = Math.min(...db);
+  assert.equal(db[0], floor, 'step 1 is the floor'); assert.equal(db[63], floor, 'step 64 is home, at the floor');
+  for (let i = 44; i <= 51; i++) assert.equal(db[i], peak, `step ${i + 1} is at the peak`);
+  for (let i = 0; i < 44; i++) assert.ok(db[i] < db[i + 1], `rising from step ${i + 1} to ${i + 2}`);
+  for (let i = 51; i < 63; i++) assert.ok(db[i] > db[i + 1], `easing from step ${i + 1} to ${i + 2}`);
+  assert.ok(peak - floor >= 1.5 && peak - floor <= 3, `gentle: ${(peak - floor).toFixed(2)} dB from floor to peak`);
+  for (let i = 1; i < 64; i++) assert.ok(Math.abs(db[i] - db[i - 1]) <= 0.4, `no jump between steps ${i} and ${i + 1}`);
+  assert.deepEqual([64, 108, -1].map(swellDb), [0, 44, 63].map(swellDb), 'round the 64');
+  for (const bad of [0.5, NaN, '3', null]) assert.throws(() => swellDb(bad), /sound: a melody step is a whole number/);
+});
+
 // D375: four melodies of 64 steps (G:\Consonance-tools\b9\mel9.js, batch 9: Yearning, Shoegaze, Light occult, Afterglow), each step today's shape
+// AMENDED (D377): the keeper's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js) and Aurora of batch 12 (mel12.js). The
+// names change; the rule (four melodies of 64 steps of this shape) does not
 test('the four melodies: 64 steps each of a bass, a chord of four and a melody note on top, each melody its own', () => {
-  assert.deepEqual([...MELODY_NAMES], ['yearning', 'shoegaze', 'occult', 'afterglow']);
+  assert.deepEqual([...MELODY_NAMES], ['aqua', 'skyline', 'glass', 'aurora']);
   assert.deepEqual(Object.keys(MELODIES), [...MELODY_NAMES]);
   for (const k of MELODY_NAMES) {
     const m = MELODIES[k];
@@ -49,7 +65,7 @@ test('a launch picks one of the four melodies from its random draw, hands it to 
     assert.deepEqual(Object.keys(F.store), [], 'nothing is saved, so the next launch draws again');
     return before;
   });
-  assert.deepEqual(got, ['yearning', 'shoegaze', 'occult', 'afterglow']);
+  assert.deepEqual(got, ['aqua', 'skyline', 'glass', 'aurora']);   // AMENDED (D377): the four's names
   let seed = 7; const seeded = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   const many = new Set(Array.from({ length: 40 }, () => createSound(fakeWindow().win, { pick: seeded, log: () => {} }).melody));
   assert.deepEqual([...many].sort(), [...MELODY_NAMES].sort(), 'over 40 seeded launches, every melody comes up');
