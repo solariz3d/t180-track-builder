@@ -28,6 +28,11 @@ const { finishToStart, isNear } = require('../../src/core/finish.js');
 const { createCheckJob } = require('../validate-ui/checkjob.js');
 
 function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null } = {}) {
+  // D350: frozen all through, as the core's own documents are. The close worker receives a postMessage copy, which is not frozen, so the memos that serve only a
+  // frozen document (close.js residual, and caches keyed on its frozen pieces) never applied there: on a 25 km track the worker's press took 24.5 s of CPU against
+  // 18 s on the parsed save. Nothing the press runs writes to its document (every module on its path is strict, so a write would throw). The shell's document is
+  // frozen already, so on the page this does nothing
+  deepFreeze(doc);
   if (best) return runCloseBest({ doc, edited, openReds });
   const fin = finish ? finishToStart(doc) : null;
   const res = fin ? { converged: true, doc: fin.doc, report: `Finish to start: ${fin.plan.report}`, window: { pieces: fin.window, text: fin.plan.windowText || `the new road (${fin.window.length} piece${fin.window.length === 1 ? '' : 's'}, ${fin.plan.lengthM} m)` } }
@@ -46,7 +51,7 @@ function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = f
 // 795.6 m from the start), the whole-lap close proves but moves pieces 883 m: past this, so new road is laid instead. MOVE_TIE_M: movements within a millimetre are equal, and the route order breaks the tie (the bend, the last piece, the wider windows).
 // CLOSE_ITER: a route that will close does so in a few steps (2 for every route that closed on ELYSIUM and on the test laps); one that will not would run
 // Close's 30, about 40 s on a 25 km track, for nothing. 8 is four times what a closing route took.
-const RED_NEAR_M = 10, CHECK = Object.freeze({ fullSpeed: true, csp: true }), MOVE_FLOOR_M = 10, MOVE_TIE_M = 1e-3, CLOSE_ITER = 8;
+const RED_NEAR_M = 10, CHECK = Object.freeze({ csp: true }), MOVE_FLOOR_M = 10, MOVE_TIE_M = 1e-3, CLOSE_ITER = 8;
 // D343: a track is checked by THE LIVE CHECKER'S OWN JOB (app/validate-ui/checkjob.js, what the page's checker worker runs), not by validate() on a path of its own:
 // the same path the validation panel reads (the track model's), the same reds (so the open track's, which the page already holds, compare with a candidate's
 // like for like), the same lap proof, and on a 25 km track 17.7 s where validate() on the adapter's 0.5 m path took 48 s (measured on ELYSIUM's closed bend:
