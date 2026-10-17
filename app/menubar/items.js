@@ -1,8 +1,8 @@
 // items.js: what File, Edit, View and Settings hold (D355 part 1), as contract M entries (app/menubar/menubar.js). The page's own controls keep their ids and
 // their wiring and are moved in as they are ({ node }); the parts' entries (C's Edit selection, A's File ▸ Developer) are passed in and placed under a heading.
 //
-//   fileItems(ctx, { developer })        the slot under File's own controls: Developer ▸ (A's Open example…) when there is any
-//   editItems(ctx, { selection })        Undo, Redo, then the selection's entries (C's), when there are any
+//   fileItems(ctx, { developer })        the slot under File's own controls: Developer ▸ (A's trackmenu.developerItems: Open example…) when there is any
+//   editItems(ctx, { selection })        Undo, Redo, then the selection's entries (C's piecesui.items, which bring their own Selection heading), when there are any
 //   viewItems(ctx)                       Drag handles and Colour by grip (saved settings), Show the guide
 //   settingsItems(ctx, { soundRow, acFolder, acAllow })   sound, how the turn and climb are read, the grid step, mirror on insert, the checker's wall
 //                                        raycasting, the Assetto Corsa folder and launch permission, Reset the guide
@@ -24,7 +24,7 @@ function editItems(ctx, { selection = [] } = {}) {
   return [
     { label: 'Undo', title: 'Ctrl+Z', run: (c) => c.shell.undo() },
     { label: 'Redo', title: 'Ctrl+Y or Ctrl+Shift+Z', run: (c) => c.shell.redo() },
-    ...(selection.length ? [{ separator: true }, { section: 'Selection' }, ...selection] : []),
+    ...(selection.length ? [{ separator: true }, ...selection] : []),
   ];
 }
 

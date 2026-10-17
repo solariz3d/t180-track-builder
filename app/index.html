@@ -71,6 +71,18 @@
   /* D355: THE MENUS (app/menubar/menubar.js), each the same <details class="more"> + .more-menu as Pieces ▾. Inside one: a heading is the page's h3, a hairline
      is the panel's line colour, and a tick is laid out as the sound row's mute */
   header .more > summary { white-space: nowrap; }   /* a menu's name and its ▾ stay on one line in the 44 px bar */
+  /* D355: THE BAR FITS at the default 1400 px: the menus and Export to Assetto Corsa never wrap; the status line and the install note beside Export give way first
+     (cut to their box, the whole text in the tooltip), and the gap between the two halves shrinks to nothing before anything wraps */
+  header > * { flex: none; }
+  header #status { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header .drag { min-width: 0; }
+  header #install { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  header #install > button { white-space: nowrap; flex: none; }
+  /* D355: THE BRUSH STRIP under the bar (C's panel builds it as .brush-strip and shows it only while the brush is on; the page moves it into the banner row): its
+     fields run along one row, in the page's raised panel colour with a hairline under it, as the recovery bar is laid out */
+  #banner .brush-strip { padding: 6px 12px; background: var(--raise); border-bottom: 1px solid var(--line); }
+  #banner .brush-strip .pickers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+  #banner .brush-strip .picker { grid-template-columns: auto auto; }
   .more-menu h3 { margin: 6px 0 0; }
   .more-menu hr { width: 100%; border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
   .more-menu .menu-check { display: flex; align-items: center; gap: 6px; padding: 2px 2px; color: var(--text); white-space: nowrap; cursor: pointer; }
@@ -80,7 +92,7 @@
   .more-menu #share { display: flex; flex-direction: column; gap: 6px; }   /* D267: the share codes live in the menu (they were a section of the left column) */
   .more-menu #share textarea { width: 100%; box-sizing: border-box; }
   /* D252 follow-up (C's finding 2): a long install note (the full Assetto Corsa path) pushed ⋯ right and its menu off the window; it is cut to a box, the whole text in its tooltip */
-  .t-install-note { display: inline-block; vertical-align: middle; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-install-note { display: inline-block; vertical-align: middle; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }   /* D355: in the bar it gives way before anything wraps */
   .bar { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: var(--raise); border-bottom: 1px solid var(--mine); }
   button { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 5px 11px; cursor: pointer; font: 400 12px var(--body); letter-spacing: .06em; transition: border-color .12s, color .12s; }
   button:hover:not([disabled]) { border-color: var(--accent); color: var(--accent); }
@@ -342,15 +354,16 @@
     // THE RECOVERY OFFER (D239, carried from the piece builder): a track the last session left unsaved is offered, never applied
     // D252: the banner row also carries the Assetto Corsa setup card's slot (app/install/index.js), kept across every redraw; empty, it takes no height
     const setupSlot = document.createElement('div'); setupSlot.id = 'setup';
+    const brushSlot = document.createElement('div'); brushSlot.id = 'brush-slot';   // D355: the brush strip, under the bar (moved in after the core panel mounts)
     const drawBanner = (st) => {
       const b = $('banner');
-      if (!st.recovery) { b.replaceChildren(setupSlot); return; }
+      if (!st.recovery) { b.replaceChildren(setupSlot, brushSlot); return; }
       const n = st.recovery.doc.pieces.length, restore = el('button', 'Restore it'), discard = el('button', 'Discard it');
       restore.onclick = () => { const name = st.recovery.name; shell.restore(); if (name) $('name').value = name; };
       discard.onclick = () => shell.discardRecovery();
       const bar = el('div', null, 'bar');
       bar.append(el('span', `A track from your last session was not saved${st.recovery.name ? ` ("${st.recovery.name}")` : ''}: ${n} piece${n === 1 ? '' : 's'}${st.recovery.doc.closed ? ', a closed loop' : ''}.`), restore, discard);
-      b.replaceChildren(bar, setupSlot);
+      b.replaceChildren(bar, setupSlot, brushSlot);
     };
     const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
@@ -405,11 +418,16 @@
     // the panels that read only the shared path (preview, camera, validation) are reused unchanged; the core's own controls take the
     // left column. Share codes, Install to AC / See it in Assetto and the guide are carried from the piece builder (D239).
     await panels.mountPanel($('palette'), 'equation track', () => loadCjs('app/core/index.js', get), shell);
+    { const strip = document.querySelector('#palette .brush-strip'); if (strip) brushSlot.append(strip); }   // D355: C's brush strip goes under the bar; a panel without one leaves the slot empty
     for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation']]) {
       await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
     }
-    // last, so the preview is already listening when the road surface announces the asphalt default
-    await panels.mountPanel($('textures'), 'texture', () => loadCjs('app/core/textures.js', get), shell);
+    // last, so the preview is already listening when the road surface announces the asphalt default. D355: the road surface is the Track menu's (A's
+    // app/core/trackmenu.js makes its one controller on its first items(ctx), called here, and its Road surface ▸ panel shows it); the old #textures mount is
+    // only the fallback for a tree without that module, so there is never a second controller whose choice the other does not see
+    let TM = null; try { TM = await loadCjs('app/core/trackmenu.js', get); } catch (e) { TM = null; }
+    if (TM && typeof TM.items === 'function') { $('textures').remove(); try { TM.items({ shell, document, window }); } catch (e) { console.error(`the road surface could not start: ${e && e.message}`); } }
+    else await panels.mountPanel($('textures'), 'texture', () => loadCjs('app/core/textures.js', get), shell);
     // Share codes (an equation track's code; an old Pieces code is refused by name), and Install to AC / See it in Assetto: the install
     // is the Export button's own build with the same road surface (shell.buildExport), and the launch is off by default (src-tauri/src/ac.rs)
     const b64files = (files) => files.map((f) => ({ path: f.path, data: b64(f.bytes) }));
@@ -429,9 +447,11 @@
       const MB = await loadCjs('app/menubar/menubar.js', get), MI = await loadCjs('app/menubar/items.js', get), settings = await loadCjs('app/settings.js', get);
       const FR = await loadCjs('app/onboarding/firstrun.js', get);
       const part = async (file, name) => { try { const m = await loadCjs(file, get); return typeof m[name] === 'function' ? m[name] : null; } catch (e) { return null; } };
-      const build = await part('app/core/buildmenu.js', 'items'), track = await part('app/core/trackmenu.js', 'items'), developer = await part('app/core/trackmenu.js', 'fileItems'), selection = await part('app/core/piecesui.js', 'items');
+      // (Track and File ▸ Developer use the trackmenu loaded above: ITS road-surface controller is the one alive, and a second load would make another)
+      const build = await part('app/core/buildmenu.js', 'items'), selection = await part('app/core/piecesui.js', 'items');
+      const track = TM && typeof TM.items === 'function' ? TM.items : null, developer = TM && typeof TM.developerItems === 'function' ? TM.developerItems : null;
       const soon = (what) => [{ label: `${what} arrive here with their part of D355; until then they are on the left`, disabled: true, run: () => {} }];
-      const ctx = { doc: document, win: window, shell, settings, say: (t) => { status.textContent = t; },
+      const ctx = { doc: document, win: window, document, window, shell, settings, say: (t) => { status.textContent = t; },   // (A's trackmenu reads document and window)
         resetGuide: () => { FR.firstRun(FR.webStore(window)).forget(); status.textContent = 'The guide will open by itself at the next start.'; } };
       const { acFolder, acAllow } = MI.acNodes($('more-install')), soundRow = $('sound-row');
       $('m-settings-slot').append(...[acFolder, acAllow].filter(Boolean));   // in Settings from the start, not only once Settings has been opened
