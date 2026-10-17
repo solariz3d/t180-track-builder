@@ -1,8 +1,10 @@
 // app/sound.js: the builder's sounds, made live (2026-10-15). node --test app/test/sound.test.js
 //
-// MADE, NOT PLAYED FROM FILES. Every sound is synthesized by the window's own audio engine (Web Audio, in WebView2 and every browser), from the
-// code below: nothing to install, no samples, nothing for a user to have. The design is the first draft chosen on the sketch page (batch 7,
-// 2026-10-15): a Rhodes palette, in C.
+// FOUR RECORDED SAMPLES, AND THE SYNTH BEHIND THEM (D349, 2026-10-16). The tick, place, undo and the loop close play the four files in app/sounds/,
+// rendered from Serum's factory presets on the sketch page (batch 8): each note is its slot's one sample pitched by playback rate (SAMPLES). They are
+// fetched once, when audio starts; until they are decoded, and for good if they fail to load (logged), the synth voices below play instead, made live
+// by the window's own audio engine (Web Audio, in WebView2 and every browser). The synth is the first draft chosen on the sketch page (batch 7,
+// 2026-10-15): a Rhodes palette, in C. What plays when, below, is the same for both.
 //
 // WHAT PLAYS WHEN
 //   a dragged handle's value crosses a whole number   a tick (the tine: a tiny electric-piano "tik"), DRY. What it plays depends on the handle:
@@ -29,6 +31,20 @@ const KEYS = Object.freeze({ muted: 't180.sound.muted', volume: 't180.sound.volu
 const TICK_MS = 4;            // two ticks in one instant are one
 // the tick's tine (D345: 3a26bc5's voice, restored): its peak, 0.16 there, lifted 3 dB to D334's loudness, so a drag sits at about -31 LUFS, under a place at -28
 const TINE = Object.freeze({ peak: 0.226 });
+// D349: the recorded voices. The four files in app/sounds/ (16-bit stereo 48 kHz), each rendered on one note: `ref`. A note n plays its slot's sample at rate
+// 2^((n - ref) / 12); the loop close is one whole gesture and plays as rendered. `gain` sets each slot in its loudness band in this engine's space
+// (app/test/sound-bands.test.js, measured in headless Chrome). A sample pitched up is also shorter, so a high tick carried less than a low one: unevened,
+// the climb and bank drags sat 2.6 dB under length and width 2.8 dB over it, 5.1 dB apart against a band 5 dB wide; `tickEven` lifts a tick by
+// rate^0.5, the same energy whatever its note, which brings the four drags within 2.4 dB. `tickFade` is the tick's attack fade (3 ms): one tick's peak
+// sits near -27 dBFS with or without it, but the climb and bank drags' peaks went over their -15 under 2 ms of fade, at the gain that keeps one tick in its band
+const SAMPLES = Object.freeze({
+  slots: Object.freeze(['drag_tick', 'place', 'undo', 'loop_closed']),
+  ref: Object.freeze({ drag_tick: 84, place: 60, undo: 60 }),
+  gain: Object.freeze({ drag_tick: 1.852, place: 0.645, undo: 0.596, loop_closed: 0.668 }),
+  tickFade: 0.003,
+  tickEven: 0.5,
+});
+const rateOf = (slot, midi) => (slot in SAMPLES.ref ? Math.pow(2, (midi - SAMPLES.ref[slot]) / 12) : 1);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -179,6 +195,17 @@ function createEngine(ctx) {
   }
   const dry = (fn) => { const b = bus; bus = dryBus; try { fn(); } finally { bus = b; } };
 
+  // D349: the recorded voices (SAMPLES), once useSamples has them; until then `samples` is null and the synth below plays. One sample per slot, each
+  // note pitched by playback rate from the note it was rendered on, played into `into` with its gain, pan and (for the tick) its attack fade
+  let samples = null;
+  function sampleVoice(slot, midi, { t = 0, gain = 1, pan = 0, into, fade = 0 }) {
+    const t0 = at(t), s = ctx.createBufferSource(), g = ctx.createGain(), p = ctx.createStereoPanner(), level = gain * SAMPLES.gain[slot] * (slot === 'drag_tick' ? Math.pow(rateOf(slot, midi), SAMPLES.tickEven) : 1);
+    s.buffer = samples[slot]; s.playbackRate.value = rateOf(slot, midi); p.pan.value = clamp(pan, -1, 1);
+    if (fade > 0) { g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(level, t0 + fade); } else g.gain.value = level;
+    s.connect(g); g.connect(p); p.connect(into); s.start(t0); return s;
+  }
+  const roomSend = (from, wet) => { const w = ctx.createGain(); w.gain.value = wet; from.connect(w); w.connect(room); };
+
   // the tick: the tine, through its own gain that the next tick chokes; `spread` plays two copies apart (the width handle)
   let tickBus = null;
   // D345: the tine of 3a26bc5 back (a 14:1 FM pluck in a 90 ms envelope), at D334's loudness: TINE.peak lifts it 3 dB, so a drag measures about -31 LUFS as
@@ -195,17 +222,30 @@ function createEngine(ctx) {
     if (tickBus) { const g = tickBus.gain; g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); g.linearRampToValueAtTime(0, now + 0.004); }
     const tb = ctx.createGain(); tb.gain.value = 0.6; tb.connect(dryBus); tickBus = tb;   // ticks are DRY: no echo
     const w = ctx.createGain(); w.gain.value = 0.2; tb.connect(w); w.connect(room);
+    if (samples) {   // the same two copies for width, the same choke and the same dry bus as the tine; the sample in its place
+      if (spread !== null && spread > 0) [-1, 1].forEach((side, i) => sampleVoice('drag_tick', midi + (i ? spread * 0.12 : 0), { t: i ? spread * 0.011 : 0, gain: 1 - 0.4 * spread, pan: side * spread, into: tb, fade: SAMPLES.tickFade }));
+      else sampleVoice('drag_tick', midi, { pan, into: tb, fade: SAMPLES.tickFade });
+      return;
+    }
     if (spread !== null && spread > 0) {
       [-1, 1].forEach((side, i) => { const g = ctx.createGain(), pn = ctx.createStereoPanner(); g.gain.value = 1 - 0.4 * spread; pn.pan.value = side * spread; g.connect(pn); pn.connect(tb); tineVoice(mtof(midi + (i ? spread * 0.12 : 0)), now + (i ? spread * 0.011 : 0), g); });
     } else { const pn = ctx.createStereoPanner(); pn.pan.value = clamp(pan, -1, 1); pn.connect(tb); tineVoice(mtof(midi), now, pn); }
   }
   function step(i, soft) {   // a place (soft = false) or an undo (soft = true) of melody step i
     const [b, chord, mel] = STEPS[((i % 16) + 16) % 16], vel = soft ? 0.32 : 0.55;
+    if (samples) {   // the synth's six notes, timings and levels (as the sketch page's playStep8), each the slot's sample; echoed and roomed as the Rhodes is
+      const slot = soft ? 'undo' : 'place', sb = ctx.createGain(); sb.connect(bus); roomSend(sb, 0.45);
+      chord.forEach((m, k) => sampleVoice(slot, m, { t: (soft ? 0.03 : 0.012) * k, gain: vel * 0.85 / 0.55, pan: -0.3 + k * 0.2, into: sb }));
+      sampleVoice(slot, mel, { t: soft ? 0.12 : 0.06, gain: (soft ? 0.38 : 0.7) / 0.55, into: sb });
+      sampleVoice(slot, b, { gain: (soft ? 0.16 : 0.24) / 0.24 * 0.7, into: sb });
+      return;
+    }
     chord.forEach((m, k) => rhodes(m, { t: (soft ? 0.03 : 0.012) * k, vel: vel * 0.85, pan: -0.3 + k * 0.2, d: soft ? 1.0 : 1.6 }));
     rhodes(mel, { t: soft ? 0.12 : 0.06, vel: soft ? 0.38 : 0.7, d: soft ? 1.1 : 1.8 });
     bass(b, 0, soft ? 0.6 : 0.9, soft ? 0.16 : 0.24);
   }
   function loopClosed() {   // one gesture: the roll (dry), the lead answering (echoed), the landing (dry), a high note ringing (echoed)
+    if (samples) { const lb = ctx.createGain(); lb.connect(dryBus); roomSend(lb, 0.5); sampleVoice('loop_closed', null, { into: lb }); return; }   // the whole gesture is one recording: dry, with the landing's room
     dry(() => {
       [41, 48, 53, 56, 60, 62, 65].forEach((m, i) => ep(m, { t: i * 0.06, vel: 0.5, d: 1.1, pan: -0.5 + i / 7 }));
       [53, 57, 60, 64, 67, 69, 72, 76].forEach((m, i) => ep(m, { t: 0.5 + i * 0.055, vel: 0.55, d: 1.4, pan: -0.5 + i / 8 }));
@@ -219,14 +259,20 @@ function createEngine(ctx) {
     });
     ep(88, { t: land + 1.6, vel: 0.45, d: 2.4, wet: 0.6 }); ep(91, { t: land + 2.1, vel: 0.32, d: 2.2, wet: 0.7 });
   }
-  return { master, dryBus, tick, step, loopClosed, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
+  /** Hand the engine its four decoded samples ({ drag_tick, place, undo, loop_closed }); from then on they play in place of the synth. A set with one missing is refused. */
+  function useSamples(buffers) {
+    if (!buffers || typeof buffers !== 'object') throw new Error('sound: useSamples needs the samples, got ' + buffers);
+    const missing = SAMPLES.slots.filter((s) => !buffers[s]); if (missing.length) throw new Error(`sound: the samples are missing ${missing.join(', ')}`);
+    samples = Object.fromEntries(SAMPLES.slots.map((s) => [s, buffers[s]]));
+  }
+  return { master, dryBus, tick, step, loopClosed, useSamples, get voice() { return samples ? 'samples' : 'synth'; }, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
 }
 
 /**
  * The player. `win` is the window (AudioContext, localStorage, document). Returns
  * { handle(prev, next), setMuted(b), setVolume(v), muted, volume, started, unmount() }.
  */
-function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { /* nowhere to log */ } }, engineFor = createEngine } = {}) {
+function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { /* nowhere to log */ } }, engineFor = createEngine, base = 'sounds/' } = {}) {
   const store = (() => { try { return win.localStorage || null; } catch (e) { return null; } })();
   const read = (k) => { try { return store ? store.getItem(k) : null; } catch (e) { return null; } };
   const write = (k, v) => { try { if (store) store.setItem(k, String(v)); } catch (e) { /* a private window: the session keeps it */ } };
@@ -237,7 +283,20 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   const level = () => (muted ? 0 : volume);
   const start = () => {
     if (ctx || !Ctx) return;
-    try { ctx = new Ctx(); engine = engineFor(ctx); engine.setLevel(level()); } catch (e) { ctx = null; engine = null; log(`sound: no audio here (${e && e.message})`); }
+    try { ctx = new Ctx(); engine = engineFor(ctx); engine.setLevel(level()); } catch (e) { ctx = null; engine = null; log(`sound: no audio here (${e && e.message})`); return; }
+    loadSamples();
+  };
+  // D349: the four samples, fetched from `base` and decoded once, as audio starts; the engine plays its synth until they are in, and keeps it if they fail
+  const loadSamples = () => {
+    const c = ctx, e = engine, fail = (why) => log(`sound: the samples did not load (${why}); the synth voices play instead`);
+    const get = typeof win.fetch === 'function' ? win.fetch.bind(win) : null;
+    if (!get) { fail('no fetch in this window'); return; }
+    Promise.all(SAMPLES.slots.map((s) => get(`${base}${s}.wav`)
+      .then((r) => { if (!r || !r.ok) throw new Error(`${s}.wav answered ${r ? r.status : 'nothing'}`); return r.arrayBuffer(); })
+      .then((a) => c.decodeAudioData(a))
+      .then((b) => [s, b])))
+      .then((pairs) => { if (engine === e) e.useSamples(Object.fromEntries(pairs)); })
+      .catch((err) => fail(err && err.message));
   };
   const live = () => !!engine && !muted;
   const guard = (what, fn) => { try { fn(); return true; } catch (e) { log(`sound: ${what} could not play (${e && e.message})`); return false; } };
@@ -274,4 +333,4 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { createSound, createEngine, soundFor, tickPlan, stepPlan, notePlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
+if (typeof module !== 'undefined') module.exports = { createSound, createEngine, SAMPLES, rateOf, soundFor, tickPlan, stepPlan, notePlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
