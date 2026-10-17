@@ -16,7 +16,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path'), cp = require('child_process');
 const D = require('../src/core/document.js');
 const { extend } = require('../src/core/extend.js');
 const { extendTurnBy } = require('../src/core/turnby.js');
@@ -149,13 +149,19 @@ test('row 11: given the open track\'s reds, the press does not check the open tr
 });
 
 const FX12 = path.join(__dirname, '..', 'fixtures-d337', 'pre-close.t180track');
-test('row 12: the reported save: one press, with the reds the live checker found, closes in under 30 s, and picks as a press without them does', { skip: fs.existsSync(FX12) ? false : 'fixtures-d337/pre-close.t180track is not here (a private track, kept off the repository)' }, () => {
-  const base = D.parse(fs.readFileSync(FX12, 'utf8')), openReds = openRedsOf(base);   // what the page's checker already holds, before the press
-  // the bound is on the press's own CPU time: a wall clock in a suite that runs four files at once, on a machine other seats share, measures the machine (a loaded
-  // run read 102.8 s wall for the press that takes 25 s alone); the wall time is reported beside it
-  const c0 = process.cpuUsage(), t0 = Date.now(), r = CJ.runCloseBest({ doc: base, openReds }), ms = Date.now() - t0, cpu = process.cpuUsage(c0), cpuMs = (cpu.user + cpu.system) / 1000;
-  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.0 m'); assert.deepEqual(r.tried.map((t) => t.route), ['near']);
-  assert.ok(cpuMs < 30000, `one press used ${Math.round(cpuMs)} ms of CPU (${ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs}, open ${r.phases.openCheckMs})`);
-  const own = CJ.runCloseBest({ doc: base });
-  assert.equal(own.report, r.report, 'a press that checks the open track itself picks the same'); assert.equal(D.serialize(own.doc), D.serialize(r.doc));
+test('row 12: the reported save: one press, with the reds the live checker found, closes in under 30 s, and picks as a press without them does', { skip: fs.existsSync(FX12) ? false : 'fixtures-d337/pre-close.t180track is not here (a private track, kept off the repository)' }, (t) => {
+  // each in its own process, as the app runs them: the live checker in its worker, then the press in the close worker. In one process with the checker's job and
+  // rows 1-11, the press read 53 s of CPU in the full suite for what takes 25 s alone (the heap they leave behind). The bound is on the press's own CPU time:
+  // a wall clock in a suite that runs four files at once, on a machine other seats share, measures the machine, and so does the process's CPU time, which adds
+  // the garbage collector's threads (33.5 s for 27.1 s wall in the suite): the bound is the main thread's CPU (process.threadCpuUsage), the others reported beside it
+  const own = (code) => { const p = cp.spawnSync(process.execPath, ['-e', code, FX12], { cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 1 << 28 }); assert.equal(p.status, 0, p.stderr); return JSON.parse(p.stdout); };
+  const load = "const fs = require('fs'), D = require('./src/core/document.js'), base = D.parse(fs.readFileSync(process.argv[1], 'utf8'));";
+  const openReds = own(load + " process.stdout.write(JSON.stringify(require('./app/validate-ui/checkjob.js').createCheckJob().run({ doc: { ...base, closed: false }, csp: true }).result.red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 }))));");
+  const r = own(load + ` const reds = ${JSON.stringify(openReds)}, CJ = require('./app/core/closejob.js'), c0 = process.cpuUsage(), h0 = process.threadCpuUsage(), t0 = Date.now(), r = CJ.runCloseBest({ doc: base, openReds: reds }), ms = Date.now() - t0, h = process.threadCpuUsage(h0), c = process.cpuUsage(c0);`
+    + " process.stdout.write(JSON.stringify({ report: r.report, routes: r.tried.map((t) => t.route), phases: r.phases, ms, cpuMs: (c.user + c.system) / 1000, mainMs: (h.user + h.system) / 1000, doc: D.serialize(r.doc) }));");
+  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.0 m'); assert.deepEqual(r.routes, ['near']); assert.equal(r.phases.openCheckMs, null, 'the given reds: no open check');
+  t.diagnostic(`main thread ${Math.round(r.mainMs)} ms CPU, process ${Math.round(r.cpuMs)} ms CPU, ${r.ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs}`);
+  assert.ok(r.mainMs < 30000, `one press used ${Math.round(r.mainMs)} ms of its main thread's CPU (${Math.round(r.cpuMs)} ms with the collector's threads, ${r.ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs})`);
+  const self = CJ.runCloseBest({ doc: D.parse(fs.readFileSync(FX12, 'utf8')) });
+  assert.equal(self.report, r.report, 'a press that checks the open track itself picks the same'); assert.equal(D.serialize(self.doc), r.doc);
 });
