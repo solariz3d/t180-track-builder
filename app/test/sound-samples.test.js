@@ -19,7 +19,10 @@ const { createSound, createEngine, SAMPLES, MELODIES, MELODY_NAMES } = SND;
 // AMENDED (D375): the 16 steps became four melodies of 64; an engine given no melody plays the first, so rows 2 and 3b read its steps where they read the 16
 const STEPS = MELODIES[MELODY_NAMES[0]].steps;
 
-const SLOTS = ['drag_tick', 'place', 'undo', 'loop_closed'];
+// AMENDED (D375 drop-in): each melody plays its own two files (batch 10), so the files loaded are the tick, the loop close and those eight; place.wav and
+// undo.wav stay in app/sounds (row 6 still checks them) but no slot plays them
+const MEL = ['yearning', 'shoegaze', 'occult', 'afterglow'];
+const SLOTS = ['drag_tick', 'loop_closed', ...MEL.flatMap((m) => [`place_${m}`, `undo_${m}`])];
 /** A fake AudioContext whose nodes and param calls are kept, so a test can ask which buffer each source played, at what rate, and what each gain did. */
 function fakeCtx() {
   const nodes = [];
@@ -48,8 +51,9 @@ test('row 1: the engine plays the synth before it has samples, and a sample for 
   e.useSamples(fakeBuffers());
   const tick = during(ctx, () => e.tick({ midi: 84 })), place = during(ctx, () => e.step(0, false)), undo = during(ctx, () => e.step(0, true)), closed = during(ctx, () => e.loopClosed());
   assert.deepEqual(tick.sources.map((s) => s.slot), ['drag_tick'], 'a tick: the tick sample, once');
-  assert.deepEqual(place.sources.map((s) => s.slot), Array(6).fill('place'), 'a place: the place sample for the four chord notes, the melody note and the bass');
-  assert.deepEqual(undo.sources.map((s) => s.slot), Array(6).fill('undo'), 'an undo: the undo sample, the same six notes');
+  // AMENDED (D375 drop-in): an engine given no melody plays the first, yearning, on its own place and undo files
+  assert.deepEqual(place.sources.map((s) => s.slot), Array(6).fill('place_yearning'), 'a place: the place sample for the four chord notes, the melody note and the bass');
+  assert.deepEqual(undo.sources.map((s) => s.slot), Array(6).fill('undo_yearning'), 'an undo: the undo sample, the same six notes');
   assert.deepEqual(closed.sources.map((s) => s.slot), ['loop_closed'], 'the loop close: its one sample, whole');
   assert.deepEqual([tick, place, undo, closed].map((d) => d.oscillators), [0, 0, 0, 0], 'with the samples, no synth voice plays');
 });
@@ -65,7 +69,8 @@ test('row 2: the pitch: a tick for note n plays at 2^((n-84)/12), a place\'s and
     }
   }
   assert.equal(during(ctx, () => e.loopClosed()).sources[0].rate, 1, 'the loop close plays as rendered');
-  assert.deepEqual({ ...SAMPLES.ref }, { drag_tick: 84, place: 60, undo: 60 }, 'the reference notes the samples were rendered on');
+  // AMENDED (D375 drop-in): the eight melody files, all rendered on MIDI 60 (E's batch 10 hand-back), in place of place and undo
+  assert.deepEqual({ ...SAMPLES.ref }, { drag_tick: 84, ...Object.fromEntries(MEL.flatMap((m) => [[`place_${m}`, 60], [`undo_${m}`, 60]])) }, 'the reference notes the samples were rendered on');
 });
 
 test('row 3: width keeps its two copies, each tick chokes the last, and a tick\'s attack is faded in', () => {
@@ -166,11 +171,19 @@ const placed = () => { const d = (n) => ({ pieces: Array.from({ length: n }, (_,
 test('row 6: the four files are the batch-8 WAVs byte for byte, and useSamples refuses a set with one missing', () => {
   // AMENDED (D375): the drag tick is the keeper's pick of batch 9, Eiano tik (G:\Consonance-tools\b9\page\batch9\tick_eiano_tik.wav, copied byte for byte)
   const SHA = { drag_tick: '0c63854e26167115886d2d0fc947362cdc72c82271b12e2bcb5a2cf8fe6cbfa8', place: 'feb0e8936def375353c4381a1b8eeb09cf7968a740e2c289bfb812c9daca18c2',
-    undo: '7c630ede9b91662291a87f5c4ff0556d4d4cb55f6415fe0b1026bd55f33cd63f', loop_closed: '34fd8b2193a46a20add00efff7379c836b03795fb5bbd9e0531906e273852308' };
-  for (const s of SLOTS) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', 'sounds', `${s}.wav`))).digest('hex'), SHA[s], `${s}.wav`);
+    undo: '7c630ede9b91662291a87f5c4ff0556d4d4cb55f6415fe0b1026bd55f33cd63f', loop_closed: '34fd8b2193a46a20add00efff7379c836b03795fb5bbd9e0531906e273852308',
+    // D375 drop-in: batch 10's eight (E's table, exo_memory/handback/p-d375-batch10-E_2026-10-17.md:28-37)
+    place_yearning: 'd2607f5facd0f209e916ac11e00e410cff807edbe091cc8202ac39d02f5fba81', undo_yearning: '2de01fc22e712b09d17254afbfe09de2ac9a7b77afc4ce12c93a476df15a4bd7',
+    place_shoegaze: '0e56d383420db70ea9781af5f21abc7729fb16585ad8ef6b2fb0f7ad36b069c7', undo_shoegaze: 'c9eaec216cbc4092ed3de2a47a1f5f5d4d63118d7bd053784590b4454cfc950c',
+    place_occult: '3661d6f774d6cb34a38abc41dc6613d73b5d56d28b5b1ec5bcf39f89651ae4e6', undo_occult: '93f810f129174232d4d3c9c89ff185959ae51ef4618d850c22cd3f6ac416330c',
+    place_afterglow: '79569a9369888d0484943049a951131afcf3d2d88ad7dc9606d61b6823a47be1', undo_afterglow: 'be672b7fad2fba009fd71986d14b868a234f50d00d38e4e98df786417b894d30' };
+  // AMENDED (D375 drop-in): every WAV shipped in app/sounds, loaded or not, is checked, not only the loaded ones
+  const shipped = fs.readdirSync(path.join(__dirname, '..', 'sounds')).filter((x) => x.endsWith('.wav')).map((x) => x.replace(/.wav$/, '')).sort();
+  assert.deepEqual(shipped, Object.keys(SHA).sort(), 'every WAV in app/sounds has its hash here');
+  for (const s of shipped) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', 'sounds', `${s}.wav`))).digest('hex'), SHA[s], `${s}.wav`);
   assert.deepEqual([...SAMPLES.slots], SLOTS);
-  const e = createEngine(fakeCtx()), b = fakeBuffers(); delete b.undo;
-  assert.throws(() => e.useSamples(b), /undo/, 'a set with one missing is refused, naming it');
+  const e = createEngine(fakeCtx()), b = fakeBuffers(); delete b.undo_occult;
+  assert.throws(() => e.useSamples(b), /undo_occult/, 'a set with one missing is refused, naming it');
   assert.throws(() => e.useSamples(null), /samples/);
 });
 
@@ -205,4 +218,16 @@ test('row 9: every melody\'s place and undo slot resolves to a file that is ship
   assert.ok(SAMPLES.slots.every((f) => shipped.has(f)), 'every one is shipped');
   const P = player(); P.fire('pointerdown');
   assert.deepEqual(P.fetched, SAMPLES.slots.map((f) => `sounds/${f}.wav`), 'each file once');
+});
+
+// D375 drop-in: batch 10, each melody's own instrument (Yearning WurlyKeys, Shoegaze Pads Pluck, Light occult Vintage Bells, Afterglow D_Pluck)
+test('row 10: each melody plays its own place and undo files, place_<name>.wav and undo_<name>.wav, at the place and undo gains', () => {
+  for (const m of MEL) {
+    assert.equal(SAMPLES.file[`place_${m}`], `place_${m}`, `${m}: its place file`); assert.equal(SAMPLES.file[`undo_${m}`], `undo_${m}`, `${m}: its undo file`);
+    assert.equal(SAMPLES.gain[`place_${m}`], 0.645, `${m}: the place gain (E levelled the file to it)`); assert.equal(SAMPLES.gain[`undo_${m}`], 0.596, `${m}: the undo gain`);
+    const ctx = fakeCtx(), e = createEngine(ctx, { melody: m }); e.useSamples(fakeBuffers());
+    assert.deepEqual([...new Set(during(ctx, () => e.step(5, false)).sources.map((x) => x.slot))], [`place_${m}`]);
+    assert.deepEqual([...new Set(during(ctx, () => e.step(5, true)).sources.map((x) => x.slot))], [`undo_${m}`]);
+  }
+  assert.ok(!SAMPLES.slots.includes('place') && !SAMPLES.slots.includes('undo'), 'the batch 8 place and undo files are no longer loaded');
 });

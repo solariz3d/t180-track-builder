@@ -29,18 +29,19 @@ const noChrome = { skip: chrome ? false : 'no Chrome found (set CHROME_PATH): th
 test('every sound sits inside its loudness and peak band, the ticks under a place, a place under the loop close', noChrome, async () => {
   inBands(await S.renderClips(fs.readFileSync(SRC, 'utf8'), S.CLIPS, { samples: SAMPLES_DIR }));
 });
-// D375: a launch plays one of four melodies, so each one's place and undo (with the samples) sits in the same bands as the row above measures for the first
-test('each of the four melodies\' place and undo, with the samples, sits inside its band', noChrome, async () => {
-  const { MELODY_NAMES } = require(SRC), keys = ['place_step1', 'place_steps_1to4', 'undo_steps_4to1'], out = [];
-  for (const melody of MELODY_NAMES) {
+// D375: a launch plays one of four melodies, each on its own place and undo files (batch 10, the drop-in), so each one's place and undo, with the samples,
+// sits in the same bands as the row above measures for the first. One row per melody, so a red names the melody
+for (const [melody, instrument] of [['yearning', 'WurlyKeys'], ['shoegaze', 'Pads Pluck'], ['occult', 'Vintage Bells'], ['afterglow', 'D_Pluck']]) {
+  test(`${melody} (${instrument}): its place and undo, with the samples, sit inside their bands`, noChrome, async () => {
+    const keys = ['place_step1', 'place_steps_1to4', 'undo_steps_4to1'], out = [];
     const clips = await S.renderClips(fs.readFileSync(SRC, 'utf8'), Object.fromEntries(keys.map((k) => [k, S.CLIPS[k]])), { samples: SAMPLES_DIR, melody });
     for (const k of keys) {
       const [lo, hi, pk] = BANDS[k], l = Math.round(S.lufs(clips[k]) * 10) / 10, p = Math.round(S.peakDb(clips[k]) * 10) / 10;
-      if (!(l >= lo && l <= hi && p <= pk)) out.push(`${melody} ${k} ${l} LUFS, peak ${p} dBFS (band ${lo}..${hi} LUFS, peak <= ${pk})`);
+      if (!(l >= lo && l <= hi && p <= pk)) out.push(`${k} ${l} LUFS, peak ${p} dBFS (band ${lo}..${hi} LUFS, peak <= ${pk})`);
     }
-  }
-  assert.deepEqual(out, [], 'outside the band');
-});
+    assert.deepEqual(out, [], 'outside the band');
+  });
+}
 test('the synth voices (before the samples are in, or if they fail to load) sit inside the same bands, in the same order', noChrome, async () => {
   inBands(await S.renderClips(fs.readFileSync(SRC, 'utf8')));
 });
