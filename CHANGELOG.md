@@ -5,6 +5,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **Four melodies for placing and undoing, one picked at random each time the builder starts.** Placing a piece used to step through one 16-step tune; it now steps through one of four tunes of 64 steps, each with its own mood (Yearning, Shoegaze, Light occult and Afterglow, written for the builder), and undo walks the same tune back. Which one plays is drawn afresh at each start and not remembered, so the builder sounds different from one session to the next. Each tune has its own place and undo instrument slot, so it can be given its own sound later; for now all four play on the electric piano they replace. Every tune measures inside the same loudness limits as before. (`app/sound.js` `MELODIES`, `createSound`.) Tests: `app/test/sound.test.js`, `app/test/sound-samples.test.js` rows 8 and 9, `app/test/sound-bands.test.js`.
+- **The drag tick is a new recording, a soft electric-piano tik,** chosen by ear over three others. It is levelled to sound about as loud as the old one in a drag. (`app/sounds/drag_tick.wav`.)
+
+### Fixed
+- **A climb drag rises and falls in pitch with turn and climb read as corners, the default.** In that mode the climb handle played the same tune as a length drag, so the climb had no sound of its own; the turn handle also stopped panning into the ear of the turn. Both now sound as they do with the fields read as rates. (`app/sound.js` `notePlan`.) Test: `app/test/sound.test.js`.
+
 ## [0.4.0] - 2026-10-17
 
 ### Changed
