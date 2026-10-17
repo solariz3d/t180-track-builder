@@ -58,6 +58,19 @@ const REFINE_ROUNDS = 4, REFINE_M = 0.3, GATE_TRIES = 2;
 // track, before the next window is tried. 6 is three times what a closing window took.
 const NEAR_M = 1, NEAR_RAD = ROLL_FREE, NEAR_PIECES = 6, NEAR_ITER = 6;
 
+// THE END STRAIGHT BEHIND THE START (D357; B's find at D339: ends 8, 20 and 40 m behind the start, on its line and pointing the same way, were finished with a 360°
+// loop, 1885, 1905 and 1925 m at R 300). routes() gives the plain straight first (both turns 0), but two things lost it:
+//   · Close cannot bend a LONE STRAIGHT: at zero curvature nothing in it changes the length along the road (bending its knots moves the end sideways and up,
+//     not forward), so its equations are singular and it refuses, or wanders off, though the straight already meets the start to a hundredth of a millimetre;
+//     the next route, a full circle, closes. So when Close refuses a laid road, and the road AS LAID already meets the start within
+//     Close's own bars (MET_M, the closed path's 1 mm, as close.js tolM; and MET_TOL on every other row Close solves, the heading, pitch, bank and each joined
+//     channel's value and slope at the seam), it is taken as laid: there is nothing to bend. Close is still tried first, so a route it closes is unchanged.
+//     MET_TOL (chosen): 1e-6, a seam kink of 0.00006°, against Close's 1e-9; the straights here meet to 1.3e-8 rad (the user's own Turn by pieces' heading)
+//   · a straight under MIN_STRAIGHT_M (10 m) was never laid, so at 8 m the route laid nothing at all. A route with no turn is laid whatever its length from
+//     MIN_STRAIGHT_ALONE_M (NEAR_M: an end nearer than that is the bend above), and at its exact length, since nothing else in it can take up a rounded metre
+const MET_M = 1e-3, MET_TOL = 1e-6, MIN_STRAIGHT_ALONE_M = NEAR_M;
+const freeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) freeze(o[k]); } return o; };
+
 const fwd = (th) => [Math.sin(th), Math.cos(th)];   // plan view (x, z): heading about world up, as the geometry's T = (cos p sin θ, sin p, cos p cos θ)
 const left = (th) => [Math.cos(th), -Math.sin(th)];   // L = (cos θ, 0, −sin θ)
 const mod = (a) => ((a % TAU) + TAU) % TAU;
@@ -122,7 +135,9 @@ function lay(doc, r, roll) {
   // heading channel turns the road the same way; only the PITCH reverses (close.js residual). Mirroring the turns sent ELYSIUM's quarter turn the wrong way
   const turn = (a) => { if (Math.abs(a) >= MIN_TURN) d = extendTurnBy(d, { length: Math.max(MIN_TURN_M, Math.round(r.radiusM * Math.abs(a))), targets: { kv: 0 } }, a); };
   turn(r.a1);
-  if (r.straightM >= MIN_STRAIGHT_M) d = extend(d, { length: Math.round(r.straightM), targets: { kh: 0, kv: 0 } });
+  const alone = Math.abs(r.a1) < MIN_TURN && Math.abs(r.a2) < MIN_TURN;   // D357: a route that is only a straight
+  if (r.straightM >= MIN_STRAIGHT_M && !alone) d = extend(d, { length: Math.round(r.straightM), targets: { kh: 0, kv: 0 } });
+  else if (alone && r.straightM >= MIN_STRAIGHT_ALONE_M) d = extend(d, { length: r.straightM, targets: { kh: 0, kv: 0 } });
   turn(r.a2);
   if (roll) d = extend(d, { length: roll.lengthM, targets: { kh: 0, kv: 0, phi: roll.bank } });
   return d;
@@ -150,6 +165,17 @@ function roadHold(doc, from) {
     if (h < worst) { worst = h; at = p.s; }
   }
   return { worst, at };
+}
+
+/** D357: the laid road closed AS IT IS, when it already meets the start within Close's bars (THE END STRAIGHT BEHIND THE START); else null. */
+function metAsLaid(laid) {
+  const shut = { ...laid, closed: true };
+  let rs;
+  try { rs = residual(shut); } catch (err) { if (err.name !== 'CoreError') throw err; return null; }
+  if (!(rs.gapM < MET_M) || !rs.r.slice(3).every((v) => Math.abs(v) < MET_TOL)) return null;
+  let doc;
+  try { doc = freeze(D.checkDoc(shut)); } catch (err) { if (err.name !== 'CoreError') throw err; return null; }
+  return { converged: true, doc, report: `met the start as laid: ${(rs.gapM * 1000).toFixed(3)} mm, tangent ${rs.tangentRad.toExponential(1)} rad` };
 }
 
 /** Whether the open track's end already meets its start (THE END ALREADY AT THE START): within NEAR_M, and heading, pitch and bank each within NEAR_RAD. */
@@ -219,7 +245,9 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
       const window = []; for (let i = doc.pieces.length; i < laid.pieces.length; i++) window.push(i);
       if (!window.length) continue;
       let res;
-      try { res = close(laid, { window }); } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
+      // D357: what Close refuses is taken AS LAID when it already meets the start (metAsLaid: a lone straight it cannot bend). (A windowed Close never returns
+      // unconverged: it refuses by name, close.js D242)
+      try { res = close(laid, { window }); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
       if (!res.converged) { best = best || res.report; continue; }
       const peak = roll ? rollPeak(res.doc, doc.pieces.length) : 0;
       if (peak > ROLL_AMBER_DEG_M) return { tooFast: peak };   // the roll reads too fast as the checker reads it: lengthen it and search again
