@@ -8,6 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), os = require('os'), path = require('path');
+const IR = require('./inner_run.js');   // D352: a crashed inner run reads NOT TESTED
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const C = 'core/';
@@ -87,13 +88,26 @@ function tree() {
 function runTests(dir, pattern, file = 'core_cup.test.js') {
   const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), path.join(dir, 'test', file)];
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT'));
-  const r = spawnSync(process.execPath, args, { cwd: dir, env, encoding: 'utf8', timeout: 20 * 60 * 1000 });
+  const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
+  const r = spawnSync(process.execPath, [...IR.reporterArgs(tap), ...args], { cwd: dir, env, encoding: 'utf8', timeout: 20 * 60 * 1000 });
+  const crashed = IR.crashesIn(tap);   // D352: a file that died natively counts 1 failure and ran none of its tests: NOT TESTED, never caught
+  if (crashed.length) throw new Error(IR.notTested(crashed));
   const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''), n = (k) => Number((out.match(new RegExp(`ℹ ${k} (\\d+)`)) || [])[1]);
   return { tests: n('tests'), pass: n('pass'), fail: n('fail'), skipped: n('skipped'), out };
 }
 test('CONTROL: the whole of core_cup.test.js and core_cup_readers.test.js pass on an unmutated copy of src/, tools/ and app/', () => {
   const dir = tree();
   try { for (const f of ['core_cup.test.js', 'core_cup_readers.test.js', 'core_cup_seam.test.js']) { const r = runTests(dir, undefined, f); assert.ok(r.tests > 5 && r.fail === 0, `${f}: tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+// D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file
+test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
+  const m0 = MUTANTS[0], dir = tree();
+  try {
+    const f = m0.edits[0][0].startsWith('app/') ? path.join(dir, m0.edits[0][0]) : path.join(dir, 'src', m0.edits[0][0]);
+    fs.writeFileSync(f, IR.STANDIN + fs.readFileSync(f, 'utf8'));
+    const said = IR.reading(() => { const r = runTests(dir, m0.pattern, m0.file === 'readers' ? 'core_cup_readers.test.js' : m0.file === 'seam' ? 'core_cup_seam.test.js' : 'core_cup.test.js'); return r.fail > 0 ? `caught: ${r.fail} of ${r.tests} failed` : `NOT CAUGHT: ${r.pass} pass, 0 fail`; });
+    assert.match(said, IR.NOT_TESTED);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 for (const m of MUTANTS) {
   test(`mutant ${m.id}: applied, and caught by "${m.pattern}"`, (t) => {

@@ -7,6 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), os = require('os'), path = require('path');
+const IR = require('./inner_run.js');   // D352: a crashed inner run reads NOT TESTED
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const TEST = 'core_jump.test.js';
@@ -58,6 +59,8 @@ function runMutant(m) {
     const args = ['--max-old-space-size=4096', '--test', '--test-concurrency=1', '--test-reporter=tap', ...(m.pattern ? [`--test-name-pattern=${m.pattern}`] : []), path.join(dir, 'test', TEST)];
     const r = spawnSync(process.execPath, args, { cwd: dir, encoding: 'utf8', timeout: 600000, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')) });
     if (r.error) throw r.error;
+    const crashed = IR.crashes(r.stdout);   // D352: a file that died natively counts 1 failure and ran none of its tests: NOT TESTED, never caught
+    if (crashed.length) throw new Error(IR.notTested(crashed));
     const L = r.stdout.split(/\r?\n/), get = (k) => Number((L.find((l) => l.startsWith(`# ${k} `)) || '').split(' ')[2]);
     if (!Number.isFinite(get('tests'))) throw new Error('the mutant run printed no summary:\n' + (r.stdout + r.stderr).slice(0, 2000));
     return { applied: n === 1, n, parses, tests: get('tests'), fail: get('fail'), failed: L.filter((l) => /^not ok/.test(l)).map((l) => l.slice(0, 160)) };
@@ -67,6 +70,12 @@ function runMutant(m) {
 test('control: the unmutated copy passes every row of core_jump.test.js', () => {
   const r = runMutant({ id: 'control', file: null });
   assert.ok(r.tests >= 12, `only ${r.tests} tests ran`); assert.equal(r.fail, 0, r.failed.join(' | '));
+});
+// D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file
+test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
+  const m0 = MUTANTS[0], first = fs.readFileSync(path.join(ROOT, m0.file), 'utf8').split(/\r?\n/)[0];
+  const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash stand-in', from: first, to: IR.STANDIN + first }); return r.fail > 0 ? `caught: ${r.fail} of ${r.tests} failed` : `NOT CAUGHT: ${r.tests} test(s) all pass`; });
+  assert.match(said, IR.NOT_TESTED);
 });
 for (const m of MUTANTS) {
   test(`mutation ${m.id}: applied, and caught by ${m.pattern}`, () => {

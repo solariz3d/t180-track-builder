@@ -7,6 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
+const IR = require('../../test/inner_run.js');   // D352: a crashed inner run reads NOT TESTED
 const ROOT = path.join(__dirname, '..', '..');
 const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js', BEST = 'test/core_close_best.test.js', WORKER = 'app/test/close-worker.test.js';
 
@@ -77,19 +78,30 @@ function runMutant(m) {
     for (const t of m.tests) { fs.mkdirSync(path.dirname(path.join(dir, t)), { recursive: true }); fs.copyFileSync(path.join(ROOT, t), path.join(dir, t)); }
     const f = path.join(dir, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
-    const r = spawnSync(process.execPath, ['--max-old-space-size=4096', '--test', '--test-concurrency=1', ...m.tests.map((t) => path.join(dir, t))],
+    const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
+    const r = spawnSync(process.execPath, ['--max-old-space-size=4096', '--test', ...IR.reporterArgs(tap), '--test-concurrency=1', ...m.tests.map((t) => path.join(dir, t))],
       { cwd: dir, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), encoding: 'utf8', timeout: 900000, maxBuffer: 1 << 28 });   // a failing mutant can print whole documents
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
     if (!/ℹ tests \d+/.test(out)) throw new Error('the mutant test run printed no summary:\n' + out.slice(0, 2000));
     const failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l)).map((l) => l.slice(2));
-    return { applied, n, caught: failed.some((l) => l.includes(m.caughtBy)), failed: [...new Set(failed)] };
+    // D352: a file that died natively ran none of its tests; its own ✖ line is no catch, and a run with no catch but a dead file tested nothing
+    const crashed = IR.crashesIn(tap), caught = failed.some((l) => !crashed.some((c) => l.startsWith(c.file + ' (')) && l.includes(m.caughtBy));
+    if (crashed.length && !caught) throw new Error(IR.notTested(crashed));
+    return { applied, n, caught, failed: [...new Set(failed)] };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 test('control: the unmutated temp copy passes every test file the mutants use', () => {
   const r = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: [LOCAL, PREVIEW, GROUPS, DISPLAY, BEST, WORKER], caughtBy: '(no test is named this)' });
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
+});
+// D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
+// it looks for '.test.js', which every dead file's own ✖ line contains, so a dead file's line must not count as the catch
+test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
+  const m0 = MUTATIONS[0], first = fs.readFileSync(path.join(ROOT, m0.file), 'utf8').split(/\r?\n/)[0];
+  const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash stand-in', caughtBy: '.test.js', from: first, to: IR.STANDIN + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
+  assert.match(said, IR.NOT_TESTED);
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
