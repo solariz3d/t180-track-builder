@@ -29,6 +29,7 @@ const { checkTexture, budget } = require('./warnings.js');
 const { TextureError } = require('./errors.js');
 const { makeTexture } = require('../texmaker/make.js');
 const { flowUvs } = require('./flow.js');
+const EDGE = require('./edge.js');
 
 /** FNV-1a over the UTF-16 code units, twice (two offsets), as 16 hex digits. Names a made texture; not security. */
 function hash16(str) {
@@ -38,9 +39,9 @@ function hash16(str) {
 }
 const madeName = (text, size) => `made-${hash16(text)}-${size}`;
 const CACHE = new Map(), CACHE_MAX = 32;
-function madeDds(name, text, size) {
+function madeDds(name, text, size, edge) {
   if (CACHE.has(name)) return CACHE.get(name);
-  const img = makeTexture(text, size, size), out = { img, dds: encodeDds(img) };
+  const src = makeTexture(text, size, size), img = edge ? EDGE.compose(src, edge) : src, out = { img, dds: encodeDds(img) };
   CACHE.set(name, out); if (CACHE.size > CACHE_MAX) CACHE.delete(CACHE.keys().next().value);
   return out;
 }
@@ -70,25 +71,27 @@ function buildTextureSet(doc, assets = {}, opts = {}) {
     if (!slots) { byId.set(id, null); continue; }
     const entry = {};
     for (const s of SLOTS) {
-      const m = slots[s].make, t = m ? madeName(m, slots[s].size) : slots[s].texture, key = `${s}|${t || ''}`;
-      if (m) made.set(t, { text: m, size: slots[s].size });
-      else if (t) { if (!Object.prototype.hasOwnProperty.call(assets, t)) throw new TextureError('NO_SUCH_TEXTURE', `${id}: slot ${s} names texture "${t}", which has not been added`); used.set(t, assets[t]); }
+      // D371: an 'edge' floor is laid out from the track's width range (opts.widths, src/texture/edge.js); its texture is the drawing recomposed, named for the layout
+      const edge = slots[s].fit === 'edge' && (slots[s].make || slots[s].texture) ? EDGE.layout(opts.widths, slots[s]) : null, eTag = edge ? `|edge|${edge.N}|${edge.fb}|${edge.eb}` : '';
+      const m = slots[s].make, t = m ? madeName(m + eTag, slots[s].size) : slots[s].texture && edge ? `${slots[s].texture}-edge-${hash16(eTag)}` : slots[s].texture, key = `${s}|${t || ''}`;
+      if (m) made.set(t, { text: m, size: slots[s].size, edge });
+      else if (t) { const a0 = edge ? slots[s].texture : t; if (!Object.prototype.hasOwnProperty.call(assets, a0)) throw new TextureError('NO_SUCH_TEXTURE', `${id}: slot ${s} names texture "${a0}", which has not been added`); used.set(t, edge ? { ...assets[a0], edge } : assets[a0]); }
       if (t) { if (!slotsOf.has(t)) slotsOf.set(t, new Set()); slotsOf.get(t).add(s); }
       if (!mats.has(key)) mats.set(key, { key, slot: s, texture: t || null, material: material(s, t) });
-      entry[s] = { material: mats.get(key).material.name, settings: slots[s] };
+      entry[s] = { material: mats.get(key).material.name, settings: slots[s], ...(edge ? { edge } : {}) };
     }
     byId.set(id, entry);
   }
   const textures = [], warnings = [];
   for (const name of [...used.keys(), ...made.keys()].sort()) {
     if (made.has(name)) {
-      const { text, size } = made.get(name), { img, dds } = madeDds(name, text, size);
+      const { text, size, edge } = made.get(name), { img, dds } = madeDds(name, text, size, edge);
       textures.push({ name, file: fileOf(name), dds, width: img.width, height: img.height, mips: mipCount(img.width, img.height), warnings: [], made: true, slots: [...slotsOf.get(name)].sort() });
       continue;
     }
     const a = used.get(name) || {};
     if (!a.bytes) throw new TextureError('BAD_IMAGE', `texture "${name}" has no image bytes`);
-    const img = decodeImage(a.bytes);
+    const img0 = decodeImage(a.bytes), img = a.edge ? EDGE.compose(img0, a.edge) : img0;
     const w = checkTexture(img, { role: a.role || 'diffuse', compress: !!a.compress, name });
     const refuse = w.find((x) => x.level === 'refuse'); if (refuse) throw new TextureError(refuse.code, refuse.message);
     warnings.push(...w);
