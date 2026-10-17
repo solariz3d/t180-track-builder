@@ -32,6 +32,7 @@
 // SAVED PIECES, THE UI HALF (D240; the core is src/core/piece.js):
 //   shell.selectPiece(i, { extend })   shell.clearSelection()   shell.selectionInfo()   await shell.savePiece(name)   await shell.listPieces()   await shell.insertPiece(name, { mirror })
 //   await shell.renamePiece(from, to)   await shell.deletePieceFile(name)   shell.deleteSelection()   shell.proposeDelete()   await shell.applyDelete()   shell.cancelDelete()
+//   shell.cutSelection()   await shell.applyCut()   shell.cancelCut()   (D361: the selected pieces cut out, the track left open at the gap)
 // TIMING: state.lastStep = { op, ms } for the last edit, the document operation plus the adapter's segments (spec test 6's
 // "per step" is measured by the bench on the same calls, not on this field).
 'use strict';
@@ -174,6 +175,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, landingDrag: null, spawnsDrag: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
     selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
+    cutProposal: null,   // D361: a pending cut (cutSelection's preview), dropped with the document it was made on
     sculpt: false,   // D244b: the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
     closePending: null,   // 2026-10-15: a close the worker is working out, { base, finish, startedAt }: no preview yet (closeRunner)
   };
@@ -213,6 +215,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     // D240: a SELECTION of pieces and a delete PREVIEW likewise belong to the document they were made on (piece numbers mean nothing on another)
     if (patch.history && st.selection && !('selection' in patch) && patch.history.present !== st.selection.base) patch = { ...patch, selection: null };
     if (patch.history && st.deleteProposal && !('deleteProposal' in patch) && patch.history.present !== st.deleteProposal.base) patch = { ...patch, deleteProposal: null };
+    if (patch.history && st.cutProposal && !('cutProposal' in patch) && patch.history.present !== st.cutProposal.base) patch = { ...patch, cutProposal: null };
     const before = st.history.present;
     st = Object.freeze({ ...st, ...patch });
     // D240 follow-up: the overlap check belongs to the preview it was started for; when that preview goes (Cancel, an edit, an Undo, another selection) the check is STOPPED (the worker terminated)
@@ -630,9 +633,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         }
       }
       const ids = from <= to ? d.pieces.slice(from, to + 1) : [...d.pieces.slice(from), ...d.pieces.slice(0, to + 1)];
-      return set({ selection: Object.freeze({ base: d, anchor, from, to, longWay, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, message: null });
+      return set({ selection: Object.freeze({ base: d, anchor, from, to, longWay, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, cutProposal: null, message: null });
     },
-    clearSelection: () => set({ selection: null, deleteProposal: null, message: null }),
+    clearSelection: () => set({ selection: null, deleteProposal: null, cutProposal: null, message: null }),
     /**
      * D261, GRIP of the selected pieces (the keeper: "change which piece has different grip"; the core is src/core/document.js setGrip, E's): `g` a whole percent 50 to 150 (a number or the field's
      * text; anything else is refused in plain words, nothing changes). Only ROAD has grip, so a flight in the selection is left as it is. ONE undo step; the selection stays on the pieces.
@@ -869,6 +872,33 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     cancelDelete: () => set({ deleteProposal: null, message: null }),
 
+    /**
+     * D361, CUT THE SELECTED PIECES OUT (the keeper, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"). src/core/piece.js
+     * cutRun takes them out and leaves the track OPEN at the gap, moving nothing kept (a closed lap is turned so the piece after the cut comes first). As the middle delete:
+     * cutSelection PREVIEWS it (state.cutProposal; the track unchanged), applyCut copies the track to its backups first ('pre-cut'), refuses by name if that copy fails, and
+     * commits ONE undo step; cancelCut drops it, and so does any change of the track or of the selection. No overlap check: nothing kept moves, so the cut adds no overlap.
+     * The user connects the two ends with Extend or Close, and saves under a new name to keep the old track.
+     */
+    cutSelection() {
+      const s = st.selection, d = doc();
+      if (!s || s.base !== d) return set({ message: 'select the pieces to cut first: click a piece on the track (shift-click for a run)' });
+      return attempt(() => {
+        const t0 = now(), r = PC.cutRun(d, s.from, s.to), res = resolvedOf(r.doc), ms = now() - t0;
+        const proposal = Object.freeze({ base: d, doc: r.doc, resolved: res.resolved, from: s.from, to: s.to, removed: r.removed, kept: r.kept, notes: r.notes, ms });
+        return set({ cutProposal: proposal, deleteProposal: null, ...ok(`cut preview: ${cutWords(proposal)} Apply cut or Cancel cut`) });
+      });
+    },
+    async applyCut() {
+      const p = st.cutProposal;
+      if (!p) return set({ message: 'nothing to apply: press Cut here on the selected pieces first' });
+      if (p.base !== doc()) return set({ cutProposal: null, message: 'the track changed since the cut preview: select the pieces and cut again' });
+      try { await api.backupNow('pre-cut'); } catch (e) { return set({ message: `not cut: the copy from before the cut could not be written (${e && e.message || e}); nothing changed` }); }
+      if (st.cutProposal !== p || p.base !== doc()) return set({ cutProposal: null, message: 'the track changed while its copy was being written: select the pieces and cut again' });
+      return set({ history: D.commit(st.history, p.doc), resolved: p.resolved, resolveError: null, dirty: true, cutProposal: null, deleteProposal: null, selection: null, lastEdited: null, lastStep: { op: 'cutPieces', ms: p.ms },
+        ...ok(`cut: ${cutWords(p)} Connect the two ends with Extend, or Close; save under a new name to keep the old track (Ctrl+Z puts ${p.removed.length === 1 ? 'it' : 'them'} back)`) });
+    },
+    cancelCut: () => set({ cutProposal: null, message: null }),
+
     // undo and redo SAY what they changed (2026-10-13: on ELYSIUM the last steps were start-line moves, invisible in the preview, so undo looked broken)
     undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); if (!st.history.past.length) return set({ message: 'nothing to undo' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: `undid: ${stepWords(st.history.present, h.present)}` }); }),
     redo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); if (!st.history.future.length) return set({ message: 'nothing to redo' }); const h = D.redo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: `redid: ${stepWords(h.present, st.history.present)}` }); }),
@@ -1039,6 +1069,19 @@ function profilerOf(path, segments) {
   const Prof = require('../../src/geom/profile.js'), starts = []; let a = path.samples[0].s;
   for (const g of segments) { starts.push(a); a += g.length; }
   return (m) => { const g = segments[m.seg]; return Prof.readsBlend(g) && g.blend ? Prof.atSegment(g, m.s - starts[m.seg]) : g.profile; };
+}
+
+/**
+ * D361: what a cut does, in the words the line shows (a cutSelection preview, then applyCut's message): the pieces that go, where the track now starts and ends, and what became of
+ * the start line, the hotlap and the pit lane (src/core/piece.js cutRun's notes). A note that is 'kept' or absent says nothing.
+ */
+function cutWords(p) {
+  const n = p.removed.length, span = n === 1 ? p.removed[0] : `${p.removed[0]} to ${p.removed[n - 1]}`, N = p.notes, out = [];
+  out.push(`${n} piece${n === 1 ? ' goes' : 's go'} (${span}); the track opens there: it now starts where ${p.kept[0]} began and ends at the end of ${p.kept[p.kept.length - 1]}, and the kept road stays where it is.`);
+  if (N.line === 'reset') out.push(`The start line was on ${N.lineWas}, which is no longer the first piece, so it is at the start of ${N.lineNow} now: move it in Track ▸ Start & grid.`);
+  if (N.hotlap === 'dropped') out.push('The hotlap spawn was on a cut piece and is removed.');
+  if (N.pitLane === 'dropped') out.push('The pit lane ran over a cut piece and is removed.');
+  return out.join(' ');
 }
 
 /**

@@ -219,7 +219,8 @@ test('row 7: the selection box shows only with a selection, and while a delete i
 
 test('row 8: Edit\'s selection items (piecesui via M): disabled with nothing selected; with a selection they save, set the grip, delete and clear', async () => {
   const P = await mountPanel();
-  const labels = ['Save as piece…', 'Set grip…', 'Delete selected', 'Clear selection'];
+  // AMENDED D361 part 1 (the list's rule changed: the packet adds Edit ▸ Selection ▸ Cut here after Delete selected); the row's checks now cover Cut here too
+  const labels = ['Save as piece…', 'Set grip…', 'Delete selected', 'Cut here', 'Clear selection'];
   assert.deepEqual(P.edit().filter((i) => i.label).map((i) => i.label), labels);
   for (const l of labels) assert.equal(P.item(P.edit(), l).disabled, true, `${l}: nothing selected, disabled`);
   P.click(400); P.click(550, { shiftKey: true });
