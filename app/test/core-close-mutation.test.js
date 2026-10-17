@@ -9,7 +9,7 @@ const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
 const IR = require('../../test/inner_run.js');   // D352: a crashed inner run reads NOT TESTED
 const ROOT = path.join(__dirname, '..', '..');
-const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js', BEST = 'test/core_close_best.test.js', WORKER = 'app/test/close-worker.test.js';
+const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js', BEST = 'test/core_close_best.test.js', WORKER = 'app/test/close-worker.test.js', FIN = 'test/core_finish.test.js';
 
 const MUTATIONS = [
   // src/core/close.js: the LOCAL close (items 1 and the refusal by name)
@@ -35,6 +35,8 @@ const MUTATIONS = [
   { id: 'B6 a bend may reshape the track (no move cap)', file: 'app/core/closejob.js', from: 'if (newPieces === 0 && maxMoveM > moveCap) return done(', to: 'if (false) return done(', tests: [BEST], caughtBy: 'row 5: a bend that would move the track further' },
   { id: 'B7 a press that finds no way still applies', file: 'app/core/coreshell.js', from: 'if (!out.converged) return set({ closePending: null, message: out.report });', to: '', tests: [PREVIEW], caughtBy: 'row 2: when no way of closing proves, nothing changes' },
   { id: 'B8 the press commits the open track', file: 'app/core/coreshell.js', from: 'history: D.commit(st.history, out.doc), ...resolvedOf(out.doc)', to: 'history: D.commit(st.history, base), ...resolvedOf(base)', tests: [PREVIEW], caughtBy: 'row 1: one press closes a near lap AT ONCE' },
+  { id: 'N1 a laid road Close refuses is never taken as laid (the lone straight is lost to a loop again)', file: 'src/core/finish.js', from: 'res = metAsLaid(laid); if (!res) { best = best || err.message; continue; }', to: 'best = best || err.message; continue;', tests: [FIN], caughtBy: 'row 17: an end straight behind the start' },
+  { id: 'N2 a route that is only a straight is not laid under 10 m', file: 'src/core/finish.js', from: 'else if (alone && r.straightM >= MIN_STRAIGHT_ALONE_M)', to: 'else if (false)', tests: [FIN], caughtBy: 'row 17: an end straight behind the start' },
   { id: 'F5 the worker\'s document is not frozen (the residual memo misses)', file: 'app/core/closejob.js', from: '  deepFreeze(doc);', to: '', tests: [BEST], caughtBy: 'row 13: the worker\'s press on a structuredClone' },
   { id: 'B9 a tie is not broken by the route order (micro-metres decide)', file: 'app/core/closejob.js', from: 'Math.abs(a.maxMoveM - b.maxMoveM) > MOVE_TIE_M ? a.maxMoveM - b.maxMoveM : a.rank - b.rank', to: 'a.maxMoveM - b.maxMoveM', tests: [BEST], caughtBy: 'row 8: the order' },
   // D343, the press made fast: the near bend first (and nothing else when it proves), and the live checker's reds for the open track
@@ -76,6 +78,7 @@ function runMutant(m) {
     }
     for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
     for (const t of m.tests) { fs.mkdirSync(path.dirname(path.join(dir, t)), { recursive: true }); fs.copyFileSync(path.join(ROOT, t), path.join(dir, t)); }
+    if (fs.existsSync(path.join(ROOT, 'test', 'fixtures'))) fs.cpSync(path.join(ROOT, 'test', 'fixtures'), path.join(dir, 'test', 'fixtures'), { recursive: true });   // D357: the tests' own fixtures (core_finish row 11 reads one)
     const f = path.join(dir, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
     const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
@@ -101,7 +104,7 @@ function runMutant(m) {
 }
 
 test('control: the unmutated temp copy passes every test file the mutants use', () => {
-  const r = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: [LOCAL, PREVIEW, GROUPS, DISPLAY, BEST, WORKER], caughtBy: '(no test is named this)' });
+  const r = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: [LOCAL, PREVIEW, GROUPS, DISPLAY, BEST, WORKER, FIN], caughtBy: '(no test is named this)' });   // D357: FIN too (N1, N2), so a catch there is never a row that fails unmutated
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
 });
 // D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;

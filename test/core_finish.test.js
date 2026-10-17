@@ -6,6 +6,7 @@
 //   3  a track is finished: new pieces only (every piece the user built is the very same object), the loop is closed, and the new road reaches the start
 //   4  refusals by name: a closed loop, an empty track
 //   5  an end upside down rolls upright on a straight of its own onto the start
+//  17  (D357) an end straight behind the start, on its line and pointing the same way (8, 20 and 40 m), is finished with that straight, not a loop
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -238,4 +239,19 @@ test('row 16: an end at the start whose every bend leaves the road is refused by
   d = extend(d, { length: 400, transition: 200, targets: { kv: -0.002 } });   // the crest, last
   const open = D.checkDoc({ ...require('../src/core/close.js').close(d, { edited: [0, 2, 4, 6] }).doc, closed: false });
   assert.throws(() => F.finishToStart(open), (e) => e.name === 'CoreError' && e.code === 'FINISH_NEAR' && /too close for new road/.test(e.message), 'refused by name');
+});
+
+// D357 (B's find at D339): an end straight behind the start, on the start's own line and pointing the same way, was finished with a 360° loop (1885, 1905 and
+// 1925 m at R 300). routes() offers the plain straight first (row 2), but Close cannot bend a lone straight (nothing in it changes the length along the road), so
+// it refused, and at 8 m the straight was under the floor and never laid. The bound: under 3x the gap plus the turn-in, and the turn-in here is 0 (no heading to turn)
+const stadiumBehind = (g) => { let d = D.createDoc('stadium'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 1000 }, 180 * DEG); d = extend(d, { length: 400 + g }); return extendTurnBy(d, { length: 1000 }, 180 * DEG); };
+test('row 17: an end straight behind the start, on its line and pointing the same way, is finished with that straight (8, 20 and 40 m), not a loop', () => {
+  for (const g of [8, 20, 40]) {
+    const d = stadiumBehind(g), r = F.finishToStart(d);
+    assert.ok(r.plan.lengthM < 3 * g, `gap ${g} m: ${r.plan.lengthM} m of new road (${r.plan.report})`);
+    assert.equal(r.doc.closed, true, `gap ${g} m: closed`);
+    d.pieces.forEach((P, i) => assert.equal(r.doc.pieces[i], P, `gap ${g} m: piece ${i} is the user's own, untouched`));
+    assert.ok(r.plan.turns.every((t) => t === 0), `gap ${g} m: no turn (${r.plan.turns})`);   // (=== : the report rounds a hair of a turn to -0, which is no turn)
+    assert.ok(r.plan.minHoldG >= 0, `gap ${g} m: the car stays on the road`);
+  }
 });
