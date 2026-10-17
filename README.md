@@ -36,7 +36,7 @@ T-180 Track Builder is made by one person working with a team of AI coding agent
 
 **Mistakes stay on the record.** Everyone gets things wrong, the agents and the designer alike. Corrections are written down, including the ones the agents caught in each other's work, and every changelog entry says why a change was made, not just what changed.
 
-**So far:** 280 commits since 27 September 2026, and 8 releases.
+**So far:** 281 commits since 27 September 2026, and 8 releases.
 
 ## Install
 

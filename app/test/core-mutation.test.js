@@ -76,7 +76,7 @@ const MUTATIONS = [
   { id: 'C16 the ghost is not what extend builds', file: 'core/coreshell.js',
     from: 'const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d)', to: 'const d = TB.extendCorner(doc(), { ...opts, targets: {} }); return { segments: segmentsOf(d)', caughtBy: 'the ghost of an extension' },   // D331 B: re-anchored (the ghost is placed as Extend places it, extendCorner: the turn and climb may be corners); the rule is unchanged
   { id: 'C17 export goes to the word exporter', file: 'export/export.js',
-    from: 'const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, ...(test ? { test: true } : {}) });', to: 'const result = fromwords.exportTrack(segments, { outDir: OUT, variant, textures });', caughtBy: 'export: an open track is refused' },   // D243a: re-anchored (the call passes test through)
+    from: 'const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, author: authorNow(a), ...(test ? { test: true } : {}) });', to: 'const result = fromwords.exportTrack(segments, { outDir: OUT, variant, textures });', caughtBy: 'export: an open track is refused' },   // D243a: re-anchored (the call passes test through); D369: re-anchored again (D365 added the author to the call), the mutation unchanged
   { id: 'C18 the close does not go round the user\'s straights', file: 'core/coreshell.js',
     from: '...(st.lastEdited || [last]), ...straightPieces(d)', to: '...(st.lastEdited || [last])', caughtBy: 'close: one click' },   // D242: re-anchored (the stretch is wholeLapEdited(d), shared with proposeClose({ whole }))
   { id: 'C19 the export is handed no start layout', file: 'core/coreshell.js',
