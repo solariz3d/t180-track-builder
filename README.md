@@ -8,6 +8,16 @@ can be put on them, but the walls, tubes and jumps are built for a T-180.
 
 <!-- SCREENSHOT PLACEHOLDER: one screenshot of the builder with a track and the drag handles on the Extend ghost goes here. -->
 
+## Made with AI, not made by AI
+
+AI helped write this app's code. It does not make your tracks.
+
+You build every track yourself: you pick each corner, length, climb and bank angle, and the builder turns your choices into a track Assetto Corsa can load. It makes nothing up on its own, and the same choices always give the same track.
+
+That's why your name can go on a track as its author (Settings ▸ Author name), with T-180 Track Builder credited as the tool, the way a model made in Blender is still the modeller's work.
+
+It was never the tool that bothered anyone. It's that what used to take months now takes an evening. Still feels like cheating? Open Blender and do it the long way. We'll wait.
+
 ## Install
 
 Windows only. The installer installs for the current user, needs no administrator rights, and is not code-signed, so

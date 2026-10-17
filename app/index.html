@@ -59,6 +59,8 @@
   .ask-row .ask-main { border-color: var(--accent); color: var(--accent); }
   .ask-row button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
   /* D361: File ▸ Export layouts… (app/menubar/layoutsdialog.js) */
+  .author-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 10px; }
+  .author-row input { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 3px 5px; }
   .ask-card.ask-layouts { width: min(680px, calc(100vw - 48px)); }
   .ask-layouts .lx-row { display: grid; grid-template-columns: 40px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) 40px; align-items: center; gap: 8px; margin: 0 0 6px; }
   .ask-layouts label.lx-row { grid-template-columns: 110px minmax(0, 1fr); margin-bottom: 14px; }
@@ -327,7 +329,7 @@
   await startCore();
 
   async function startCore() {
-    let C, panels, shell, exporter, coreOpts, RG;
+    let C, panels, shell, exporter, coreOpts, RG, authorNow = () => '';
     try {
       // the core's modules reach tools/piecewise.cjs (its solver), whose command-line half requires fs and path: they are given
       // the exporter's in-memory node shim, so they load and nothing touches the disk (the core calls only the solver)
@@ -336,7 +338,10 @@
       C = await loadCjs('app/core/coreshell.js', get, coreOpts);
       panels = await loadCjs('app/palette/panels.js', get);
       RG = await loadCjs('app/validate-ui/redgroups.js', get);   // D242: every red in plain words, grouped, with where
-      exporter = await (await loadCjs('app/export/export.js', get)).makeExporter(get);
+      // D365: every export (Export, Test export, Install) writes Settings ▸ Author name as the author, read at the moment of the export; if the
+      // settings cannot load, there is no name and the export writes today's author (src/export/fromwords.js authorOf)
+      try { const S0 = await loadCjs('app/settings.js', get), MI0 = await loadCjs('app/menubar/items.js', get); authorNow = () => MI0.authorName(S0); } catch (e) { console.error(`the author name could not start: ${e && e.message}`); }
+      exporter = await (await loadCjs('app/export/export.js', get)).makeExporter(get, { author: () => authorNow() });
       // D240 follow-up: a preview's overlap check runs in a Web Worker (app/core/overlapworker.js), so the page never freezes for it; a page with no worker checks on the spot, as before
       let overlapRunner = null;
       try { overlapRunner = (await loadCjs('app/core/overlaprunner.js', get)).createWorkerRunner({ win: window }); } catch (e) { overlapRunner = null; }
@@ -427,7 +432,7 @@
       const lx = LX.createLayoutsExport({ C, layouts: layoutsSrc, shim: lxShim, storage });
       const pickLayoutsFolder = async (title) => (await call('test_export_folder')) || call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
       $('exportlayouts').onclick = async () => {
-        try { await LX.exportLayoutsFlow({ lx, shell, ask: (tracks) => LD.askLayouts(document, { tracks }), pickFolder: pickLayoutsFolder, exporter, storage, say: (t) => { status.textContent = t; }, textures: textureSet }); }
+        try { await LX.exportLayoutsFlow({ lx, shell, ask: (tracks) => LD.askLayouts(document, { tracks }), pickFolder: pickLayoutsFolder, exporter, storage, say: (t) => { status.textContent = t; }, textures: textureSet, author: authorNow() }); }
         catch (e) { status.textContent = `export layouts failed: ${e.message || e}`; }
       };
     } catch (e) { const why = (e && e.message) || String(e); $('exportlayouts').onclick = () => { status.textContent = `Export layouts could not start: ${why}`; }; }
@@ -483,7 +488,7 @@
       const track = fromTM('items'), developer = fromTM('developerItems');
       const ctx = { doc: document, win: window, document, window, shell, settings, say: (t) => { status.textContent = t; },   // (A's trackmenu reads document and window)
         resetGuide: () => { FR.firstRun(FR.webStore(window)).forget(); status.textContent = 'The guide will open by itself at the next start.'; } };
-      const { acFolder, acAllow } = MI.acNodes($('more-install')), soundRow = $('sound-row');
+      const { acFolder, acAllow } = MI.acNodes($('more-install')), soundRow = $('sound-row'), authorRow = MI.authorField(document, settings);   // D365
       $('m-settings-slot').append(...[acFolder, acAllow].filter(Boolean));   // in Settings from the start, not only once Settings has been opened
       MB.mountBar(document, [
         { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport'), $('open'), $('versions')] },
@@ -492,7 +497,7 @@
         { details: $('m-track'), slot: $('m-track-slot'), items: whole(track) },
         { details: $('pieces') },
         { details: $('m-view'), slot: $('m-view-slot'), items: (c) => MI.viewItems(c) },
-        { details: $('m-settings'), slot: $('m-settings-slot'), items: (c) => MI.settingsItems(c, { soundRow, acFolder, acAllow }) },
+        { details: $('m-settings'), slot: $('m-settings-slot'), items: (c) => MI.settingsItems(c, { soundRow, acFolder, acAllow, authorRow }) },
       ], ctx);
       document.documentElement.dataset.menubar = 'ready';   // the page test waits for this
     } catch (e) { console.error(`the menus could not start: ${e && e.message}`); }

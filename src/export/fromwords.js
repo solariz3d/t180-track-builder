@@ -158,6 +158,19 @@ const rangeText = (x) => `${x.reason}${x.detail ? ` [${x.detail}]` : ''} at s ${
 /** D250: the plain warning for a landing the car may fly past at the lap's speed (validation's landing-misses-zone, amber). */
 const jumpWarning = (a) => `jump: this jump may fly past its landing at the lap's speed, at s ${a.s0.toFixed(0)}–${a.s1.toFixed(0)} m${a.worst != null ? ` (the ${a.worst} g fall misses)` : ''}; tune it by driving it in AC`;
 
+// D365, THE AUTHOR: ui_track.json's author is the person's name when one is given (opts.author: Settings ▸ Author name in the app), else
+// exactly today's BUILDER. The builder is credited either way: BUILDER is always one of the tags, and the description credits it as before.
+const BUILDER = 't180-track-builder';
+const MAX_AUTHOR = 64;
+/** opts.author -> the author written: trimmed text of 1 to 64 characters, or BUILDER for none or a blank one. Anything else is refused by name. */
+function authorOf(a) {
+  if (a === undefined || a === null) return BUILDER;
+  if (typeof a !== 'string') throw new ExportError('BAD_AUTHOR', `the author name must be text, got ${typeof a}`);
+  const t = a.trim();
+  if (t.length > MAX_AUTHOR) throw new ExportError('BAD_AUTHOR', `the author name is ${t.length} characters; at most ${MAX_AUTHOR}`);
+  return t || BUILDER;
+}
+
 /** Everything up to the bytes, and nothing written. Throws ExportError on every refusal. */
 function buildExport(doc, opts = {}) {
   try { D.checkDoc(doc); } catch (e) { throw new ExportError('BAD_DOC', e.message); }
@@ -176,6 +189,7 @@ function buildExport(doc, opts = {}) {
  */
 function buildFromSegments(segs, meta = {}, opts = {}) {
   const o = { step: 2, csp: true, ...LAYOUT, ...opts };
+  const author = authorOf(o.author);   // D365: checked first, so a bad name refuses before any of the work
   const doc = { name: meta.name, pitLane: meta.pitLane || null }, via = meta.via || 'segments';
   if (!Array.isArray(segs) || !segs.some((g) => g.kind === 'road')) throw new ExportError('EMPTY_DOC', 'the document resolves to no road');
   let p;
@@ -292,7 +306,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
     folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh },
-    desc: { name: (doc.name || 'Untitled') + (test ? ' (test, unfinished)' : ''), description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original'], author: 't180-track-builder', version: '0.1' },
+    desc: { name: (doc.name || 'Untitled') + (test ? ' (test, unfinished)' : ''), description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original', BUILDER], author, version: '0.1' },
     warnings,
   };
 }
