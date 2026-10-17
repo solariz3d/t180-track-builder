@@ -336,8 +336,10 @@ test('extendOptions: the cup field is the target c, in DEGREES, typed as it is (
 
 test('the Extend panel has a "cup °" field beside bank, 0 to 150, and Extend hands its value to the core as c', async () => {
   const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubCup(s)));
-  const pickers = P.label('bank °').parent.children.map((e) => e.children[0] && e.children[0].textContent);
-  assert.equal(pickers[pickers.indexOf('bank °') + 1], 'cup °', `cup sits right after bank (fields: ${pickers.join(', ')})`);
+  // AMENDED D355 part 2 (position only): the cup field moved from right after bank into "More shape", folded under bank (plan_t180_handoff :1384); the rest of this row is unchanged
+  const more = P.root.all().find((e) => e.tagName === 'DETAILS' && e.children[0] && e.children[0].textContent === 'More shape');
+  const pickers = more.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
+  assert.equal(pickers[0], 'cup °', `cup is the first field of More shape (fields: ${pickers.join(', ')})`);
   const f = P.field('cup °'); assert.equal(f.attrs.min, '0'); assert.equal(f.attrs.max, '150');
   P.type('length m', 100); P.type('cup °', 90);   // (the fake DOM keeps a field's initial value as an attribute: type the length)
   const btn = P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend'); btn.onclick();
@@ -627,7 +629,9 @@ test('"at start" on a field left as shown sends nothing (no target, D193); the b
 test('no water: the panel has no Water section, the shell no pour and no water state, an edit pours and draws nothing, and no file of the app names the water', async () => {
   const fs = require('fs'), path = require('path');
   const P = await mountPanel(), els = P.root.all();
-  assert.deepEqual(els.filter((e) => e.tagName === 'H3').map((e) => e.textContent), ['Equation track', 'Extend at the head', 'Brush (drag on the track)', 'Close', 'Start & grid', 'Pit lane', 'Selected pieces', 'Pieces library', 'Local example'], 'the panel\'s sections (2026-10-09 added Start & grid and Pit lane; D240 added the two for saved pieces): no Water between Close and Local example');
+  // AMENDED D355 part 2 (position only): Brush and Close moved to the Build menu and Local example to File ▸ Developer (plan_t180_handoff :1382-1391), so those headings are gone and
+  // Start & grid and Pit lane come after the selection, held for pane A's Track menu; the rule of this row, no Water section, is unchanged
+  assert.deepEqual(els.filter((e) => e.tagName === 'H3').map((e) => e.textContent), ['Equation track', 'Extend at the head', 'Selected pieces', 'Pieces library', 'Start & grid', 'Pit lane'], 'the panel\'s sections (2026-10-09 added Start & grid and Pit lane; D240 added the two for saved pieces; D355 moved Brush, Close and Local example to the menus): no Water');
   const words = els.flatMap((e) => [e.textContent, e.attrs['aria-label'], e.attrs.title]).filter(Boolean).join(' ');
   assert.doesNotMatch(words, /water|stream|pour|design speed/i, 'no control, label or tooltip names the water, its speed or its streams');
   assert.ok(els.some((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop'), 'control: the Close section is still there');

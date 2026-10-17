@@ -114,7 +114,21 @@ function fmtClimbCorner(r) {
 /** "from → to" for a pair of readout values, or — when the core does not report them (a core without the channel) */
 const pairOf = (r, [from, to], fmt) => (Number.isFinite(r[from]) && Number.isFinite(r[to]) ? `${fmt(r[from])} → ${fmt(r[to])}` : '—');
 
-function mount(root, shell) {
+// THE SETTINGS (D355, contract S: app/settings.js, pane B's: get(key, fallback), set(key, value), on(key, fn)). The panel starts its switches from S and follows S.on; the
+// Settings and View menus are where they are changed now, so the panel's own (held) copies of those switches never write S back. Until app/settings.js is in this tree
+// the settings hold for the session only, which is what S itself does on a blocked store.
+function sessionSettings() {
+  const m = new Map(), fns = new Map();
+  return { get: (k, f) => (m.has(k) ? m.get(k) : f), set: (k, v) => { m.set(k, v); for (const fn of fns.get(k) || []) fn(v); },
+    on: (k, fn) => { fns.set(k, [...(fns.get(k) || []), fn]); return () => fns.set(k, (fns.get(k) || []).filter((g) => g !== fn)); } };
+}
+function settingsOf() {
+  try { return require('../settings.js'); } catch (e) { if (!/settings\.js/.test(String(e && e.message))) throw e; return sessionSettings(); }   // only ITS absence: a settings.js that fails is a failure
+}
+const asBool = (v, d) => (v === true || v === 'true' ? true : v === false || v === 'false' ? false : d);
+
+function mount(root, shell, mountOpts = {}) {
+  const S = (mountOpts && mountOpts.settings) || settingsOf();
   const doc = root.ownerDocument, win = doc.defaultView;
   const el = (tag, attrs = {}, ...kids) => { const e = doc.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; };
   const field = (label, input) => el('label', { class: 'picker' }, el('span', { text: label }), input);
@@ -503,27 +517,60 @@ function mount(root, shell) {
   } });
 
   const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
-  const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send });
+  const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send, settings: S });
   const spawns = SU.mount({ shell, el, win });
   const pit = PIT.mount({ shell, el, win });   // D240 (the selection's clicks are the brush's while the brush is armed)
   // D269: the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
   const bin = doc.getElementById ? doc.getElementById('pieces-bin') : null; if (bin) bin.replaceChildren(...pieces.nodes.library.slice(1));
+  // D355 part 2, THE SLIM LEFT SIDE (the keeper: "we can try it, but keep it the same aesthetic as we have it now"; plan_t180_handoff :1382-1387). The commands moved to
+  // the top-right menus: Build (app/core/buildmenu.js) and, through pane A's Track and pane B's File, Settings and View. Each moved control is still THIS panel's, the same
+  // node with the same handlers, HELD out of sight below; a menu's popover borrows it while open (lend) and gives it back, so what it does is unchanged.
+  const held = el('div', { 'aria-label': 'held for the menus', hidden: '', style: 'display:none' });
+  const LENT = {
+    turnBy: el('div', { class: 'actions' }, turnByBtn, field('turn by °', turnBy)),
+    grid: el('div', {}, el('div', { class: 'actions' }, gridBtn, field('grid °', gridStep)), headingNote),
+    sharp: el('div', { class: 'actions' }, sharpBtn, field('sharp °', sharpDeg), field('sharp radius m', sharpR), field('sharp ramp m', sharpRamp)),
+    spawns: el('div', {}, ...spawns.nodes), pit: el('div', {}, ...pit.nodes),   // for pane A's Track menu (Start & grid…, Pit lane…)
+    example: el('div', {}, el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx)),   // for File ▸ Developer ▸ Open example…
+  };
+  held.append(...Object.values(LENT),
+    el('div', { class: 'pickers' }, field('turn & climb as', turnAs), field('drag handles', handlesOn), field('colour by grip', colourOn)),   // Settings and View hold these (through S)
+    el('div', { class: 'actions' }, jumpBtn, levelBtn, floorBtn, closeBtn));   // Build's commands (their buttons, so a click is what it always was)
+  /** A popover's mountFn: today's fields and button into `box`; the function returned puts them back. */
+  const lend = (name, box) => { const n = LENT[name]; if (!n) throw new Error(`BAD_LEND: no fields named ${name}`); box.append(n); return () => { if (n.parent !== held && n.parentNode !== held) held.append(n); }; };
+  // THE BRUSH STRIP: mode, what, radius and sharp (and Sculpt, the brush's shape-only kind), shown only while the brush is on. It sits at the top of this column until the bar
+  // has a place for it under the menus (exposed as brushStrip)
+  const brushStrip = el('div', { 'aria-label': 'brush strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp), field('sculpt (shape only)', sculptOn)), sculptHint);
+  const showStrip = () => { brushStrip.style.display = armed.checked || sculptOn.checked ? '' : 'none'; };
+  armed.onchange = showStrip;
+  // "More shape", folded: the channels used less often, each with its "at start" box, and the notes that explain them
+  const moreShape = el('details', { class: 'more-shape' }, el('summary', { text: 'More shape', style: 'cursor:pointer;margin:6px 0' }),
+    el('div', { class: 'pickers' }, fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
+      fieldAt('edge angle °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube')), wnote, gripNote);
+  // the selection box, shown only with a selection (and while a delete it started is previewed: its Apply and Cancel are in it)
+  const selBox = el('div', { 'aria-label': 'selected pieces' }, ...pieces.nodes.selection);
+  const showSel = (st) => { const d = st.history.present; selBox.style.display = shell.selectionInfo() || (st.deleteProposal && st.deleteProposal.base === d) ? '' : 'none'; };
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, field('turn & climb as', turnAs), fieldAt('bank °', bank, 'bank'), fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
-      fieldAt('edge angle °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), field('drag handles', handlesOn), field('colour by grip', colourOn)),
-    wnote, gripNote, roBox,
-    el('div', { class: 'actions' }, extendBtn, jumpBtn, straightBtn, levelBtn, floorBtn, turnByBtn, field('turn by °', turnBy), gridBtn, field('grid °', gridStep), sharpBtn, field('sharp °', sharpDeg), field('sharp radius m', sharpR), field('sharp ramp m', sharpRamp)), jumpNote, landingBox,
-    headingNote,
-    el('h3', { text: 'Brush (drag on the track)' }), el('div', { class: 'pickers' }, field('sculpt (shape only)', sculptOn)), sculptHint, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp)),
-    el('h3', { text: 'Close' }), el('div', { class: 'actions' }, closeBtn, cancelBtn), proposalBox,
-    ...spawns.nodes,
-    ...pit.nodes,
-    ...pieces.nodes.selection, ...(bin ? [] : pieces.nodes.library),
-    el('h3', { text: 'Local example' }), el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx),
+    brushStrip,
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, fieldAt('bank °', bank, 'bank')),
+    moreShape, roBox,
+    el('div', { class: 'actions' }, extendBtn, straightBtn), jumpNote, landingBox,
+    el('div', { class: 'actions' }, cancelBtn), proposalBox,
+    selBox, ...(bin ? [] : pieces.nodes.library),
     msg,
+    held,
   );
+  // 't180:build-request' { detail: { reply(build) } }: the Build menu's commands (app/core/buildmenu.js), read when the menu opens
+  const onBuildRequest = (e) => {
+    if (!e.detail || typeof e.detail.reply !== 'function') return;
+    const d = shell.getState().history.present;
+    e.detail.reply({ straight: () => straightBtn.onclick(), level: () => levelBtn.onclick(), toFloor: () => floorBtn.onclick(), jump: () => { if (!jumpBtn.disabled) jumpHere(); },
+      close: () => { if (!closeBtn.disabled) closeBtn.onclick(); }, canClose: !closeBtn.disabled, closed: !!d.closed,
+      brushOn: !!armed.checked, toggleBrush: () => { armed.checked = !armed.checked; showStrip(); }, lend });
+  };
+  doc.addEventListener('t180:build-request', onBuildRequest);
   let shownFor = null, lentFrom = null;   // lentFrom: the selected piece whose values the fields hold (2026-10-15)
   const draw = (st) => {
     showHeading();   // the end heading line (Turn to grid)
@@ -564,7 +611,8 @@ function mount(root, shell) {
     // D244b: the Sculpt switch follows the shell, and says what to do next
     sculptOn.checked = !!st.sculpt;
     const si = st.sculpt ? shell.sculptInfo() : null;
-    sculptHint.textContent = !st.sculpt ? '' : si ? `Sculpting ${si.id}: drag its handles (bank, width${si.hasCup ? ', cup' : ''}) or use the brush; one drag is one undo step. The route never moves.` : 'Select ONE piece: click it on the track. Only its shape (bank, cup, width, edge, wall rise, tube sweep) can change; turn and climb are not offered, and the centreline is checked on every step.';
+    showStrip(); showSel(st);   // D355: the brush strip while the brush (or Sculpt) is on; the selection box only with a selection
+    sculptHint.textContent = !st.sculpt ? '' : si ?`Sculpting ${si.id}: drag its handles (bank, width${si.hasCup ? ', cup' : ''}) or use the brush; one drag is one undo step. The route never moves.` : 'Select ONE piece: click it on the track. Only its shape (bank, cup, width, edge, wall rise, tube sweep) can change; turn and climb are not offered, and the centreline is checked on every step.';
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
@@ -578,9 +626,18 @@ function mount(root, shell) {
   // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
   const onHandlesRequest = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(handles ? handles.handles().filter((h) => h.screen).map((h) => ({ id: h.id, kind: h.kind, side: h.side, x: h.screen.x, y: h.screen.y, dx: h.screen.dx, dy: h.screen.dy })) : []); };
   doc.addEventListener('t180:handles-request', onHandlesRequest);
+  // D355: FOUR OF THE SIX KEYS of S are this panel's switches (the fifth, mirrorOnInsert, is app/core/piecesui.js's; the sixth, csp, the checker's). Each starts from
+  // what S holds (a value S does not hold, or one that is not valid, keeps today's default) and follows S.on; a change runs the switch's own handler, as a click would
+  const SETTINGS = {
+    turnClimbAs: (v) => { const w = v === 'rate' ? 'rate' : 'corner'; if (turnAs.value !== w) { turnAs.value = w; turnAs.onchange(); } },
+    dragHandles: (v) => { const w = asBool(v, true); if (handlesOn.checked !== w) { handlesOn.checked = w; handlesOn.onchange(); } },
+    colourByGrip: (v) => { const w = asBool(v, false); if (colourOn.checked !== w) { colourOn.checked = w; colourOn.onchange(); } },
+    gridStep: (v) => { const w = ['90', '45', '15'].includes(String(v)) ? String(v) : '90'; if (gridStep.value !== w) { gridStep.value = w; gridStep.onchange(); } },
+  };
+  const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawns, spawnsLayer, spawnDrag, values, options: opts, unmount() { unsub(); spawns.unmount(); pit.unmount(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, spawns, pit, spawnsLayer, spawnDrag, values, brushStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); for (const off of offSettings) if (typeof off === 'function') off(); spawns.unmount(); pit.unmount(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
