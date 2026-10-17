@@ -30,7 +30,7 @@ function describe(item) {
 }
 
 /**
- * EDIT's selection items (D355 part 2, contract M), for the top-right bar (pane B's app/menubar/): Save as piece…, Set grip…, Delete selected, Clear selection. They are the
+ * EDIT's selection items (D355 part 2, contract M), for the top-right bar (pane B's app/menubar/): Save as piece…, Set grip…, Delete selected, Cut here (D361), Clear selection. They are the
  * mounted panel's own controls, asked for with the 't180:selection-request' event (the bar and the panel are loaded apart). ctx.doc (or ctx.document) is the page's document.
  * Nothing selected: each is `disabled: true` (extra to contract M; its run does nothing either). No panel mounted: no items.
  */
@@ -47,6 +47,7 @@ function items(ctx = {}) {
     { label: 'Save as piece…', panel: (box) => s.lend('save', box), disabled: off || !!s.saveProblem },
     { label: 'Set grip…', panel: (box) => s.lend('grip', box), disabled: off },
     { label: 'Delete selected', run: when(s.del), disabled: off },
+    { label: 'Cut here', run: when(s.cut), disabled: off },   // D361: the pieces cut out, the track left open at the gap (a preview first)
     { label: 'Clear selection', run: when(s.clear), disabled: off },
   ];
 }
@@ -72,6 +73,11 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
   const applyBtn = el('button', { text: 'Apply delete', title: 'delete as previewed (the track is copied to its backups first; one undo step)', onclick: () => { void shell.applyDelete(); } });
   const cancelBtn = el('button', { text: 'Cancel delete', title: 'drop the preview: nothing changes', onclick: () => shell.cancelDelete() });
   const proposalBox = el('div', { 'aria-label': 'delete preview', class: 'head' });
+  // D361: a CUT's preview (app/core/coreshell.js cutSelection): what goes, where the open track starts and ends, and what became of the start line, hotlap and pit lane; Apply or Cancel
+  const applyCutBtn = el('button', { text: 'Apply cut', title: 'cut as previewed (the track is copied to its backups first; one undo step)', onclick: () => { void shell.applyCut(); } });
+  const cancelCutBtn = el('button', { text: 'Cancel cut', title: 'drop the preview: nothing changes', onclick: () => shell.cancelCut() });
+  const cutBox = el('div', { 'aria-label': 'cut preview', class: 'head' });
+  const drawCut = (p) => { applyCutBtn.style.display = cancelCutBtn.style.display = p ? '' : 'none'; cutBox.replaceChildren(...(p ? [el('p', { text: `Cut preview: ${p.removed.length === 1 ? p.removed[0] : `${p.removed[0]} to ${p.removed[p.removed.length - 1]}`} would be cut out. The track opens there: it starts where ${p.kept[0]} began and ends at the end of ${p.kept[p.kept.length - 1]}; nothing kept moves. Connect the ends with Extend or Close after.` })] : [])); };
   const focus = (s) => fire('t180-camera-focus', { s });
   const placeButton = (it, text) => el('button', { text, title: `${it.what}${it.detail ? `: ${it.detail}` : ''}: show it`, class: 'linkish', onclick: () => focus(it.s) });
   let tick = 0;   // D240 follow-up: while the overlap check runs off the thread the line counts the seconds, redrawn twice a second
@@ -192,6 +198,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
     }
     why.textContent = info && info.saveProblem ? `Cannot be saved as a piece: ${info.saveProblem}` : '';
     drawProposal(st.deleteProposal && st.deleteProposal.base === d ? st.deleteProposal : null);
+    drawCut(st.cutProposal && st.cutProposal.base === d ? st.cutProposal : null);
     if (st.libraryStamp !== libStamp) { const first = libStamp === null; libStamp = st.libraryStamp; if (!first && st.message && /^saved the piece/.test(st.message)) nameIn.value = ''; refreshList(); }
   };
   const unsub = shell.subscribe(draw); draw(shell.getState());
@@ -206,11 +213,11 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
   const onSelRequest = (e) => {
     if (!e.detail || typeof e.detail.reply !== 'function') return;
     const info = shell.selectionInfo();
-    e.detail.reply({ selected: !!info, saveProblem: info ? info.saveProblem || null : null, del: () => shell.deleteSelection(), clear: () => shell.clearSelection(), lend });
+    e.detail.reply({ selected: !!info, saveProblem: info ? info.saveProblem || null : null, del: () => shell.deleteSelection(), cut: () => shell.cutSelection(), clear: () => shell.clearSelection(), lend });
   };
   doc.addEventListener('t180:selection-request', onSelRequest);
   const nodes = {
-    selection: [el('h3', { text: 'Selected pieces' }), selInfo, slots.grip, slots.save, el('div', { class: 'actions' }, delBtn, clearBtn), el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox],
+    selection: [el('h3', { text: 'Selected pieces' }), selInfo, slots.grip, slots.save, el('div', { class: 'actions' }, delBtn, clearBtn), el('div', { class: 'actions' }, applyBtn, cancelBtn), proposalBox, el('div', { class: 'actions' }, applyCutBtn, cancelCutBtn), cutBox],
     library: [el('h3', { text: 'Pieces library' }), el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'mirror on insert' }), mirror)), listBox, listNote],
   };
   return { nodes, layer, menu, refresh: refreshList, items: () => items.slice(), unmount() { unsub(); doc.removeEventListener('t180:selection-request', onSelRequest); if (typeof offMirror === 'function') offMirror(); if (menu) { doc.removeEventListener('keydown', onKey, true); doc.removeEventListener('pointerdown', onOutside, true); menu.removeEventListener('toggle', onToggle); } if (tick) win.clearTimeout(tick); if (stage) { stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointerup', onUp); } if (layer) layer.unmount(); } };

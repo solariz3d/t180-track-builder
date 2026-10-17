@@ -9,6 +9,7 @@
 //   insert(doc, piece, { mirror, keepStart }) the run added at the head: a new document (the old one is untouched)
 //   mirrored(piece)                         the piece's left/right mirror image (kh, phi and l negated)
 //   summary(piece)                          { pieces, roads, flights, kind, lengthM, turnDeg, climbDeg } for a library list
+//   deleteRun(doc, from, to) / cutRun(doc, from, to)   pieces taken out of a track: the gap closed again (delete), or left as the track's two open ends (cut, D361)
 //
 // THE RELATIVE FORM (the plan's rule, plan_t180_equation_only_pieces_2026-10-04.md, D240). A piece is stored relative to its OWN START, so it can start anywhere:
 //   · TURN and CLIMB are RATES (kh, kv) and so are the two OFFSET channels (h, l, a hill and a swerve off the base line): stored as the document holds them, because each is a
@@ -28,6 +29,7 @@
 'use strict';
 
 const D = require('./document.js');
+const A = require('./adapter.js');   // D361: cutRun reads where the piece after a cut begins off the path
 
 const SCHEMA = 't180b.piece/1', GENERATOR = 't180-track-builder/core 0.3.0';
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;   // the shell's NAME_RE (app/core/coreshell.js): a piece name becomes a file name, so no path can ride in it
@@ -270,6 +272,58 @@ function deleteRun(doc, from, to = from) {
   throw err('DELETE_REJOIN', `the two sides cannot be joined C1 without moving the far side, so nothing was deleted: ${why}`);
 }
 
+// ── cut ──────────────────────────────────────────────────────────────────────────────
+/**
+ * D361 (the keeper, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"): `doc.pieces[from..to]` (inclusive; on a closed lap
+ * from > to is the run across the start line, as a selection gives it) TAKEN OUT, and the track left OPEN at the gap, with NOTHING that is kept moved or edited. Returns
+ * { doc, kept, removed, notes }. A document is one chain from its start, so the two ends of the gap are made its two ends by ROTATION (D360 §2): the piece after the cut comes
+ * first and starts where it began (its block's world start on the path: position, heading and pitch, to the document's quanta; nothing else carries across a block, src/geom/path.js
+ * BLOCKS AND THE PLACEMENT CHAIN), then round the old start line to the piece before the cut, which is the open end. On an open track a cut at its start or its end leaves one
+ * piece of road; in its middle it would leave two, which one document cannot hold, so that is refused by name (CUT_OPEN_MIDDLE). The kept pieces are the very same objects.
+ * The start line (spawns.line, metres into the FIRST piece) is kept while its piece is still first, and otherwise reset to the start of the new first piece; a hotlap on a cut
+ * piece, and a pit lane with a cut piece between its anchors, are dropped. `notes` says which: { line: 'kept' | 'reset' | null, lineWas, lineNow, hotlap, pitLane: 'kept' | 'dropped' | null }.
+ * Refused by name: BAD_RANGE, CUT_ALL (nothing would be left), CUT_STARTS_IN_AIR (the track would start with a jump), CUT_REJOIN (the kept road does not join round the old start line).
+ */
+function cutRun(doc, from, to = from) {
+  D.checkDoc(doc);
+  const n = doc.pieces.length, idx = (i) => Number.isInteger(i) && i >= 0 && i < n;
+  if (!idx(from) || !idx(to) || (!doc.closed && to < from)) throw err('BAD_RANGE', `pieces ${from} to ${to}: the track has pieces 0 to ${n - 1}${doc.closed ? '' : ', and an open track has no run across a start line'}`);
+  const run = (a, b) => { const out = []; for (let i = a; i <= b; i++) out.push(i); return out; };
+  const cut = new Set(from <= to ? run(from, to) : [...run(from, n - 1), ...run(0, to)]);
+  if (cut.size >= n) throw err('CUT_ALL', `the cut would take all ${n} pieces: nothing would be left to connect; select fewer`);
+  let keptIdx;
+  if (doc.closed) { keptIdx = []; for (let i = (to + 1) % n; i !== from; i = (i + 1) % n) keptIdx.push(i); }
+  else if (from > 0 && to < n - 1) throw err('CUT_OPEN_MIDDLE', 'this track is open, so a cut in its middle would leave two separate pieces of road, which one track cannot hold; close the loop first, or cut from one of its ends');
+  else keptIdx = from === 0 ? run(to + 1, n - 1) : run(0, from - 1);
+  const kept = keptIdx.map((i) => doc.pieces[i]);
+  if (kept[0].type === 'flight') throw err('CUT_STARTS_IN_AIR', `the track would start with the jump ${kept[0].id}: cut the jump too, or cut after its landing`);
+  let start = doc.start;
+  if (keptIdx[0] !== 0) {
+    const { segments, path } = A.toPath(doc), g = segments.findIndex((s) => s.id === kept[0].id), w = path.starts[g];
+    start = { pos: w.x.map((v) => q(v, D.DEC.m)), heading: q(w.theta, D.DEC.rad), pitch: q(w.p, D.DEC.rad) };
+  }
+  const keptIds = new Set(kept.map((P) => P.id)), notes = { line: null, lineWas: null, lineNow: null, hotlap: null, pitLane: null };
+  const { spawns: sp, pitLane: lane, ...rest } = doc, out = { ...rest, closed: false, start, pieces: kept };
+  if (sp) {
+    const line = keptIdx[0] === 0 ? sp.line : { along: 0 };
+    Object.assign(notes, keptIdx[0] === 0 ? { line: 'kept' } : { line: 'reset', lineWas: doc.pieces[0].id, lineNow: kept[0].id });
+    const hot = sp.hotlap && keptIds.has(sp.hotlap.piece) ? sp.hotlap : undefined;
+    if (sp.hotlap) notes.hotlap = hot ? 'kept' : 'dropped';
+    const { hotlap, ...spRest } = sp;
+    out.spawns = D.normSpawns({ ...spRest, line, ...(hot ? { hotlap: hot } : {}) });
+  }
+  if (lane) {
+    // a lane never crosses the start line (src/geom/pitlane.js PIT_BACKWARDS), so it runs over the pieces from its leave's to its rejoin's, in the track's order
+    const a = doc.pieces.findIndex((P) => P.id === lane.leave.word), b = doc.pieces.findIndex((P) => P.id === lane.rejoin.word);
+    const over = a >= 0 && b >= 0 && a <= b ? run(a, b) : [a, b].filter((i) => i >= 0);
+    notes.pitLane = over.some((i) => cut.has(i)) ? 'dropped' : 'kept';
+    if (notes.pitLane === 'kept') out.pitLane = lane;
+  }
+  let made;
+  try { made = D.checkDoc(out); } catch (e) { if (!(e instanceof D.CoreError)) throw e; throw err('CUT_REJOIN', `the kept road does not join round the old start line, so nothing was cut: ${e.message}`); }
+  return freeze({ doc: freeze(made), kept: kept.map((P) => P.id), removed: [...cut].map((i) => doc.pieces[i].id), notes });
+}
+
 // ── a library list's numbers ───────────────────────────────────────────────────────────────────────────────────────────
 const GL3 = [[-Math.sqrt(0.6), 5 / 9], [0, 8 / 9], [Math.sqrt(0.6), 5 / 9]];   // 3-point Gauss-Legendre: exact for a cubic, which is each span of a channel
 function integral(P, ch) {
@@ -284,4 +338,4 @@ function summary(piece) {
     turnDeg: RAD * roads.reduce((a, P) => a + integral(P, 'kh'), 0), climbDeg: RAD * roads.reduce((a, P) => a + integral(P, 'kv'), 0) };
 }
 
-module.exports = { SCHEMA, NAME_RE, RATE, STATE, saveRun, serialize, parse, checkPiece, insert, mirrored, summary, absolute, deleteRun };
+module.exports = { SCHEMA, NAME_RE, RATE, STATE, saveRun, serialize, parse, checkPiece, insert, mirrored, summary, absolute, deleteRun, cutRun };
