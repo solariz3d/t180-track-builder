@@ -60,14 +60,22 @@
   .ask-row button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
   #banner { grid-column: 1 / -1; }
   #banner:empty { display: none; }
-  /* D252: the ⋯ menu beside Export to Assetto Corsa (Export… into any folder, the TEST export, the Assetto Corsa folder, See it in Assetto): it drops down over the page */
+  /* D252: the drop-down menu (it was the ⋯ menu; D355: every menu on the top bar is one): it drops down over the page */
   .more { position: relative; }
   .more > summary { list-style: none; cursor: pointer; background: transparent; border: 1px solid var(--hair); border-radius: 2px; padding: 5px 10px; }
   .more > summary::-webkit-details-marker { display: none; }
   .more[open] > summary { border-color: var(--accent); }
   .more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; min-width: 260px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
   .more-menu > span { display: flex; flex-direction: column; gap: 6px; }
-  .pieces-menu .more-menu { left: 0; right: auto; width: 420px; max-height: 70vh; overflow-y: auto; }   /* D269: the saved pieces, a bin under the top bar */
+  .pieces-menu .more-menu { width: 420px; max-height: 70vh; overflow-y: auto; }   /* D269: the saved pieces, a bin under the top bar (D355: it opens leftwards, as every menu at the top right does) */
+  /* D355: THE MENUS (app/menubar/menubar.js), each the same <details class="more"> + .more-menu as Pieces ▾. Inside one: a heading is the page's h3, a hairline
+     is the panel's line colour, and a tick is laid out as the sound row's mute */
+  header .more > summary { white-space: nowrap; }   /* a menu's name and its ▾ stay on one line in the 44 px bar */
+  .more-menu h3 { margin: 6px 0 0; }
+  .more-menu hr { width: 100%; border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
+  .more-menu .menu-check { display: flex; align-items: center; gap: 6px; padding: 2px 2px; color: var(--text); white-space: nowrap; cursor: pointer; }
+  .more-menu .menu-slot, .more-menu .menu-panel-wrap, .more-menu .menu-panel { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+  .more-menu .menu-slot:empty { display: none; }
   .pieces-menu .piece-row:hover { background: rgba(255,255,255,0.05); }
   .more-menu #share { display: flex; flex-direction: column; gap: 6px; }   /* D267: the share codes live in the menu (they were a section of the left column) */
   .more-menu #share textarea { width: 100%; box-sizing: border-box; }
@@ -168,22 +176,32 @@
 <body>
 <header data-tauri-drag-region>
   <h1 data-tauri-drag-region>T-180 TRACK BUILDER</h1>
-  <button id="new" title="New track">New</button>
   <input id="name" placeholder="track name" aria-label="track name" size="16">
-  <button id="save" title="Ctrl+S">Save</button>
-  <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
-  <select id="versions" aria-label="previous versions of the open track" title="Every Save keeps the version it replaces (the newest 20), and Close the loop keeps the track from before it. One opens as an unsaved copy."><option value="">Previous versions…</option></select>
-  <details id="pieces" class="more pieces-menu"><summary title="your saved pieces: click one to add it at the head of the track; also mirrored, rename, delete">Pieces ▾</summary><div class="more-menu" id="pieces-bin"></div></details>
-  <span id="install" title="Export to Assetto Corsa writes into Assetto Corsa's content\tracks (found through Steam), always as a t180b_ folder"></span>
-  <details id="more" class="more"><summary title="more: export into a folder you pick, the test export, the Assetto Corsa folder, See it in Assetto">⋯</summary><div class="more-menu">
+  <span id="status" style="color: var(--dim)" data-tauri-drag-region></span>
+  <span class="drag" data-tauri-drag-region></span>
+  <!-- D355: THE MENUS, each the page's <details class="more"> drop-down (app/menubar/menubar.js fills the .menu-slot ones as they open) -->
+  <details id="m-file" class="more"><summary title="new, open, save, previous versions, export, See it in Assetto, the track codes">File ▾</summary><div class="more-menu">
+    <button id="new" title="New track">New</button>
+    <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
+    <button id="save" title="Ctrl+S">Save</button>
+    <select id="versions" aria-label="previous versions of the open track" title="Every Save keeps the version it replaces (the newest 20), and Close the loop keeps the track from before it. One opens as an unsaved copy."><option value="">Previous versions…</option></select>
+    <hr>
     <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
     <button id="testexport" title="TEST export of an UNFINISHED track into Assetto Corsa, as t180b_&lt;name&gt;_test, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export. Export to Assetto Corsa does the same on an open track.">Test export (unfinished)…</button>
     <span id="more-install"></span>
-    <div id="sound-row" class="sound-row" title="the builder's sounds: a tick while a handle is dragged, placing a piece, undo, and closing the loop. Sounds by solariz3d, made in Serum"><label><input type="checkbox" id="sound-mute"> mute</label><input type="range" id="sound-volume" min="0" max="100" step="1" aria-label="sound volume"></div>
+    <hr>
     <div id="share" title="the whole track as one line of text to share (Copy track code), or open a track from such a line (Paste track code…). The open track is one Ctrl+Z away"></div>
+    <div class="menu-slot" id="m-file-slot"></div>
   </div></details>
-  <span id="status" style="color: var(--dim)" data-tauri-drag-region></span>
-  <span class="drag" data-tauri-drag-region></span>
+  <details id="m-edit" class="more"><summary title="undo, redo, and what to do with the selected pieces">Edit ▾</summary><div class="more-menu"><div class="menu-slot" id="m-edit-slot"></div></div></details>
+  <details id="m-build" class="more"><summary title="pieces with a purpose: straight, level, to the floor, turns, a sharp corner, a jump; the brush; close the loop">Build ▾</summary><div class="more-menu"><div class="menu-slot" id="m-build-slot"></div></div></details>
+  <details id="m-track" class="more"><summary title="the whole track: start and grid, pit lane, road surface">Track ▾</summary><div class="more-menu"><div class="menu-slot" id="m-track-slot"></div></div></details>
+  <details id="pieces" class="more pieces-menu"><summary title="your saved pieces: click one to add it at the head of the track; also mirrored, rename, delete">Pieces ▾</summary><div class="more-menu" id="pieces-bin"></div></details>
+  <details id="m-view" class="more"><summary title="what the view shows: the drag handles, the track coloured by grip, the guide">View ▾</summary><div class="more-menu"><div class="menu-slot" id="m-view-slot"></div></div></details>
+  <details id="m-settings" class="more"><summary title="sound, how the turn and climb are read, the grid step, the checker, the Assetto Corsa folder; kept from one start to the next">Settings ▾</summary><div class="more-menu"><div class="menu-slot" id="m-settings-slot">
+    <div id="sound-row" class="sound-row" title="the builder's sounds: a tick while a handle is dragged, placing a piece, undo, and closing the loop. Sounds by solariz3d, made in Serum"><label><input type="checkbox" id="sound-mute"> mute</label><input type="range" id="sound-volume" min="0" max="100" step="1" aria-label="sound volume"></div>
+  </div></div></details>
+  <span id="install" title="Export to Assetto Corsa writes into Assetto Corsa's content\tracks (found through Steam), always as a t180b_ folder"></span>
   <div id="winctl" hidden><button id="win-min" title="Minimize" aria-label="Minimize"></button><button id="win-max" title="Maximize" aria-label="Maximize"></button><button id="win-close" title="Close" aria-label="Close"></button></div>
 </header>
 <div id="banner"></div>
@@ -405,6 +423,29 @@
     await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get, coreOpts), shell);
     await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet, more: $('more-install'), card: setupSlot, testButton: $('testexport') }) })), shell);
     await panels.mountPanel($('guide'), 'onboarding', () => loadCjs('app/onboarding/index.js', get), shell);
+    // D355: THE MENUS (app/menubar/). File, Edit, View and Settings are this page's; Build, Track, File ▸ Developer and Edit's selection entries are the parts'
+    // modules (contract M: items(ctx)), each loaded on its own: one that is not there yet, or fails, gives its menu a placeholder and the rest still work
+    try {
+      const MB = await loadCjs('app/menubar/menubar.js', get), MI = await loadCjs('app/menubar/items.js', get), settings = await loadCjs('app/settings.js', get);
+      const FR = await loadCjs('app/onboarding/firstrun.js', get);
+      const part = async (file, name) => { try { const m = await loadCjs(file, get); return typeof m[name] === 'function' ? m[name] : null; } catch (e) { return null; } };
+      const build = await part('app/core/buildmenu.js', 'items'), track = await part('app/core/trackmenu.js', 'items'), developer = await part('app/core/trackmenu.js', 'fileItems'), selection = await part('app/core/piecesui.js', 'items');
+      const soon = (what) => [{ label: `${what} arrive here with their part of D355; until then they are on the left`, disabled: true, run: () => {} }];
+      const ctx = { doc: document, win: window, shell, settings, say: (t) => { status.textContent = t; },
+        resetGuide: () => { FR.firstRun(FR.webStore(window)).forget(); status.textContent = 'The guide will open by itself at the next start.'; } };
+      const { acFolder, acAllow } = MI.acNodes($('more-install')), soundRow = $('sound-row');
+      $('m-settings-slot').append(...[acFolder, acAllow].filter(Boolean));   // in Settings from the start, not only once Settings has been opened
+      MB.mountBar(document, [
+        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: developer ? developer(c) : [] }), closers: [$('new'), $('save'), $('export'), $('testexport'), $('open'), $('versions')] },
+        { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: selection ? selection(c) : [] }) },
+        { details: $('m-build'), slot: $('m-build-slot'), items: (c) => (build ? build(c) : soon('Straight, Level, Turn by… and the brush')) },
+        { details: $('m-track'), slot: $('m-track-slot'), items: (c) => (track ? track(c) : soon('Start & grid, Pit lane and Road surface')) },
+        { details: $('pieces') },
+        { details: $('m-view'), slot: $('m-view-slot'), items: (c) => MI.viewItems(c) },
+        { details: $('m-settings'), slot: $('m-settings-slot'), items: (c) => MI.settingsItems(c, { soundRow, acFolder, acAllow }) },
+      ], ctx);
+      document.documentElement.dataset.menubar = 'ready';   // the page test waits for this
+    } catch (e) { console.error(`the menus could not start: ${e && e.message}`); }
   }
 
 })();

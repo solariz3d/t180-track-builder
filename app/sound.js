@@ -266,7 +266,7 @@ function createEngine(ctx, { random = Math.random } = {}) {   // `random`: where
     const missing = SAMPLES.slots.filter((s) => !buffers[s]); if (missing.length) throw new Error(`sound: the samples are missing ${missing.join(', ')}`);
     samples = Object.fromEntries(SAMPLES.slots.map((s) => [s, buffers[s]]));
   }
-  return { master, dryBus, tick, step, loopClosed, useSamples, get voice() { return samples ? 'samples' : 'synth'; }, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
+  return { master, dryBus, tick, step, loopClosed, useSamples, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
 }
 
 /**
@@ -334,4 +334,4 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { createSound, createEngine, SAMPLES, rateOf, soundFor, tickPlan, stepPlan, notePlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
+if (typeof module !== 'undefined') module.exports = { createSound, createEngine, SAMPLES, soundFor, tickPlan, stepPlan, notePlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
