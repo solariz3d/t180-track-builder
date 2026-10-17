@@ -114,7 +114,8 @@ function fmtClimbCorner(r) {
 const pairOf = (r, [from, to], fmt) => (Number.isFinite(r[from]) && Number.isFinite(r[to]) ? `${fmt(r[from])} → ${fmt(r[to])}` : '—');
 
 // THE SETTINGS (D355, contract S: app/settings.js, pane B's: get(key, fallback), set(key, value), on(key, fn)). The panel starts its switches from S and follows S.on; the
-// Settings and View menus are where they are changed now, so the panel's own (held) copies of those switches never write S back. Until app/settings.js is in this tree
+// Settings and View menus are where they are changed now, so the panel's own (held) copies of those switches never write S back; the two writes it does make (D356)
+// are the grid step picked in Build ▸ Turn to grid… and the turn-and-climb mode an Undo gives back. Until app/settings.js is in this tree
 // the settings hold for the session only, which is what S itself does on a blocked store.
 function sessionSettings() {
   const m = new Map(), fns = new Map();
@@ -229,7 +230,8 @@ function mount(root, shell, mountOpts = {}) {
   const madeWith = new WeakMap();
   const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value });
   const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
-  const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
+  // D356 (E's review 5, row 2): the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
+  const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
   // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
   // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
@@ -331,7 +333,8 @@ function mount(root, shell, mountOpts = {}) {
     const h = shell.endHeadingDeg(), step = Number(gridStep.value) || 90, off = GT.offGridDeg(h, step), shown = ((h % 360) + 360) % 360;
     headingNote.textContent = Math.abs(off) < 0.005 ? `end heading ${shown.toFixed(2)}°, on the ${step}° grid` : `end heading ${shown.toFixed(2)}°, ${Math.abs(off).toFixed(2)}° off the ${step}° grid`;
   };
-  gridStep.onchange = showHeading;
+  // D356 (E's review 5, row 1): the step is picked in Build ▸ Turn to grid…, a visible control, so picking it is the setting (as a number, the Settings menu's own form)
+  gridStep.onchange = () => { S.set('gridStep', Number(gridStep.value) || 90); showHeading(); };
   const gridBtn = el('button', { text: 'Turn to grid', title: 'a piece of the length above that turns onto the nearest grid direction (the step beside it) and ends straight, so the straight after it runs along the grid: too short a piece is refused with the length that works', onclick: () => {
     const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnToGrid(opts(), Number(gridStep.value) || 90); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
@@ -623,7 +626,7 @@ function mount(root, shell, mountOpts = {}) {
     turnClimbAs: (v) => { const w = v === 'rate' ? 'rate' : 'corner'; if (turnAs.value !== w) { turnAs.value = w; turnAs.onchange(); } },
     dragHandles: (v) => { const w = asBool(v, true); if (handlesOn.checked !== w) { handlesOn.checked = w; handlesOn.onchange(); } },
     colourByGrip: (v) => { const w = asBool(v, false); if (colourOn.checked !== w) { colourOn.checked = w; colourOn.onchange(); } },
-    gridStep: (v) => { const w = ['90', '45', '15'].includes(String(v)) ? String(v) : '90'; if (gridStep.value !== w) { gridStep.value = w; gridStep.onchange(); } },
+    gridStep: (v) => { const w = ['90', '45', '15'].includes(String(v)) ? String(v) : '90'; if (gridStep.value !== w) { gridStep.value = w; showHeading(); } },   // following S: the note only, nothing written back
   };
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
