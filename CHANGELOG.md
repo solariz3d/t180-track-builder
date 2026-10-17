@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Re-exporting a track with a new shape moves its old ghost and HUD laps aside.** Assetto Corsa keeps a track's ghost car, and the CMRT Essential HUD its best lap and sectors, by the track's folder name, not by its shape. So after a track was changed and exported again under the same name, the old ghost drove through the air where the road used to be. Each export now records a fingerprint of the road's shape in the folder it writes, and Export to Assetto Corsa compares it with the one already there. When the shape changed, the ghost folder (`Documents\Assetto Corsa\GhostCar\<track>\`) and that track's HUD lap files (`Documents\Assetto Corsa\CMRT-Essential-HUD\<track>[#]…`) are moved, not deleted, into a folder beside them named `<track>.retired-<date and time>`; moving them back restores them. A re-export that only changes textures or the author keeps them, and so does the first export of a track, or one made before this version, since nothing then shows that the shape changed. Only that track's own files are moved, and never through a link or a junction. (`src/export/fromwords.js`, `src-tauri/src/lib.rs`.) Tests: `test/export_geometry.test.js`, and the native tests in `lib.rs`.
+
 ## [0.4.0] - 2026-10-17
 
 ### Changed
