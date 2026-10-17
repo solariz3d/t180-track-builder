@@ -21,6 +21,10 @@
 // by more than the rounding (tileWidth × [n/(w/tileWidth)], at most a few per cent: 3 repeats for a 31 m ring is 10.33 m each).
 // Only a ring that is closed in every row gets this: an open tube, a cup and a plain road keep u = arc / tileWidth.
 //
+// FIT (D364): a floor whose settings say fit 'fit' (src/doc/textures.js: stretch once across the strip's own width) takes u = arc / w, w the row's own
+// width, so u runs from -0.5 to 0.5 across every row whatever the road's width, and follows a road that widens or narrows (ELYSIUM, 35 m to 60 m). A closed
+// ring with fit is one repeat round it. Until D364 this file read tileWidth only, so a track that changed width repeated its texture where it was wider.
+//
 // WHAT IT TOUCHES: only cells of a segment whose word is 'core' (the equation core's) with a textured FLOOR slot (an image or a made
 // texture, the rule src/texture/set.js withTextureSet already uses for the material). A word document's texture coordinates, and every
 // untextured track's, are exactly what mesh.js made; the export without a texture set is byte for byte what it was.
@@ -53,23 +57,24 @@ function floorOf(seg, set) {
   return f && (f.texture || f.make) ? f : null;
 }
 
-/** u for one row of `K` vertices whose arc lengths are `arc[k]` (from the mesh's own u, ×10): a ring's whole-number wrap, or the plain tile. */
-function rowU(arc, K, ring, tileWidth) {
+/** u for one row of `K` vertices whose arc lengths are `arc[k]` (from the mesh's own u, ×10): `fit` (D364: once across the row's own width, -0.5 to 0.5, a ring included: one repeat round), else a ring's whole-number wrap, else the plain tile. */
+function rowU(arc, K, ring, tileWidth, fit) {
   const out = new Float64Array(K);
   const w = arc[K - 1] - arc[0];
-  if (ring && w > 0) { const n = Math.max(1, Math.round(w / tileWidth)); for (let k = 0; k < K; k++) out[k] = (n * arc[k]) / w; }
+  if (fit === 'fit' && w > 0) for (let k = 0; k < K; k++) out[k] = arc[k] / w;
+  else if (ring && w > 0) { const n = Math.max(1, Math.round(w / tileWidth)); for (let k = 0; k < K; k++) out[k] = (n * arc[k]) / w; }
   else for (let k = 0; k < K; k++) out[k] = arc[k] / tileWidth;
   return out;
 }
 
 /** Texture coordinates for one cell: R rows of K vertices, row r at path arc length rowS[r]; `rings[k]` says whether vertex column k wears a closed ring. */
 function build(uvs, K, rowS, segOf, settings) {
-  const R = uvs.length / (2 * K), out = new Float32Array(uvs.length), { tileLength, tileWidth, offset, dir } = settings;
+  const R = uvs.length / (2 * K), out = new Float32Array(uvs.length), { tileLength, tileWidth, offset, dir, fit } = settings;
   for (let r = 0; r < R; r++) {
     const arc = new Float64Array(K); for (let k = 0; k < K; k++) arc[k] = uvs[(r * K + k) * 2] * 10;   // the mesh's u is arc length / 10
-    const u = segOf.length === 1 ? rowU(arc, K, segOf[0].ring, tileWidth) : (() => {                    // a seam: two rows end to end, each its own segment's
+    const u = segOf.length === 1 ? rowU(arc, K, segOf[0].ring, tileWidth, fit) : (() => {                    // a seam: two rows end to end, each its own segment's
       const o = new Float64Array(K); let a = 0;
-      for (const part of segOf) { const sub = rowU(arc.subarray(a, a + part.K), part.K, part.ring, tileWidth); o.set(sub, a); a += part.K; }
+      for (const part of segOf) { const sub = rowU(arc.subarray(a, a + part.K), part.K, part.ring, tileWidth, fit); o.set(sub, a); a += part.K; }
       return o;
     })();
     const v = (rowS[r] + offset) / tileLength;
