@@ -831,9 +831,10 @@ test('row 19b: the values of the piece being edited are drawn LARGE over the 3D 
   assert.equal(lap.panel.values.visible(), false, 'a closed loop has no piece being edited: hidden'); lap.panel.unmount(); P1.panel.unmount();
 });
 
-test('row 19c: the share codes are in the ⋯ menu as "Copy track code" and "Paste track code…" (D267), not a section of the left column; the code itself is unchanged', async () => {
-  const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), menu = html.slice(html.indexOf('<details id="more"'), html.indexOf('</details>', html.indexOf('<details id="more"')));   // (D269 added the Pieces menu before it: the ⋯ menu is found by its own id)
-  assert.ok(menu.includes('id="share"'), 'the share block is inside the ⋯ menu'); assert.ok(!/<aside id="side">[\s\S]*id="share"[\s\S]*<\/aside>/.test(html), 'and not in the left column');
+test('row 19c: the share codes are in the File menu as "Copy track code" and "Paste track code…" (D267; D355 moved them from the ⋯ menu), not a section of the left column; the code itself is unchanged', async () => {
+  // D355: a POSITION check re-pointed: the ⋯ menu is gone and its controls are in File (m-file); what the codes do is checked below, unchanged
+  const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), menu = html.slice(html.indexOf('<details id="m-file"'), html.indexOf('</details>', html.indexOf('<details id="m-file"')));
+  assert.ok(menu.includes('id="share"'), 'the share block is inside the File menu'); assert.ok(!/<aside id="side">[\s\S]*id="share"[\s\S]*<\/aside>/.test(html), 'and not in the left column');
   const src = fs.readFileSync(path.join(REPO, 'app/share/index.js'), 'utf8'); assert.ok(src.includes("textContent: 'Copy track code'") && src.includes("textContent: 'Paste track code…'"), 'the buttons are named for what they are'); assert.ok(!/paste a t180 code here/.test(src), 'the box does not say "t180 code"');
   // unchanged: a code made and read exactly as before (share-install.test.js has the full set)
   const { createShare } = require('../share/share.js'), a = await track(), code = await createShare(a).copyTrack(), b = await createCoreShell({ brushFn: null }); b.extend({ length: 50 });
@@ -875,9 +876,10 @@ test('row 20b: the Pieces menu opens and closes: it lists the pieces when opened
   menu.open = true; P1.doc.dispatchEvent({ type: 'pointerdown', target: P1.binRows()[0] }); assert.equal(menu.open, true, 'a press inside the menu keeps it open'); P1.doc.dispatchEvent({ type: 'pointerdown', target: P1.stage }); assert.equal(menu.open, false, 'a press outside (on the 3D view) closes it');
   menu.open = true; P1.doc.dispatchEvent({ type: 'pointerdown', target: menu }); assert.equal(menu.open, true, 'a press on the Pieces button itself is the browser\'s own toggle'); menu.open = false;
   P1.panel.unmount(); P1.doc.dispatchEvent({ type: 'keydown', key: 'Escape' });   // after unmount the listeners are gone: nothing throws
-  // the top bar: <details id="pieces"> beside Open and Previous versions, before the ⋯ menu; the bin inside it
+  // the top bar: <details id="pieces"> between the Track and View menus (D355: a POSITION check re-pointed; it stood between Previous versions and the ⋯ menu,
+  // which are now in File and gone); the bin inside it, unchanged
   const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), bar = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
-  assert.ok(/id="open"[\s\S]*id="versions"[\s\S]*<details id="pieces"[^>]*><summary[^>]*>Pieces ▾<\/summary><div class="more-menu" id="pieces-bin"><\/div><\/details>[\s\S]*id="more"/.test(bar), 'Pieces ▾ is in the top bar between Previous versions and ⋯');
+  assert.ok(/<details id="m-track"[\s\S]*<details id="pieces"[^>]*><summary[^>]*>Pieces ▾<\/summary><div class="more-menu" id="pieces-bin"><\/div><\/details>[\s\S]*<details id="m-view"/.test(bar), 'Pieces ▾ is in the top bar between Track and View');
   assert.ok(!/<aside id="palette">[\s\S]*pieces-bin/.test(html.replace(bar, '')), 'and not in the left column');
 });
 
