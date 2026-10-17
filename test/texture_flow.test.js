@@ -190,3 +190,12 @@ test('row 10: fit \'tile\' and no fit setting are what they were: the coordinate
   assert.equal(sha(base), '75dbd0e2dace1363375e543a3d432065f3e025ae57e304170c0e8f4d4c14774a', 'the coordinates of the tile mapping are unchanged by D364 part 2a (digest taken at 04d1841, before the change)');
   assert.notEqual(sha({ ...base, fit: 'fit' }), sha(base), 'control: fit is a different mapping');
 });
+
+test('row 10b: a floor whose settings carry no fit at all (a hand-made set) is mapped as tile, not as fit', () => {
+  const segs = A.toSegments(plainOval(31)), { path: p } = A.toPath(plainOval(31)), mesh = G.buildMesh(p, segs);
+  const raw = { bySegment: () => ({ floor: { settings: { make: ASPHALT, tileWidth: 12, tileLength: 20, offset: 0, dir: 'along' } } }) };
+  const a = flowUvs(mesh, segs, raw), b = flowUvs(mesh, segs, fitSet(plainOval(31), { make: ASPHALT, fit: 'tile', tileWidth: 12, tileLength: 20 }));
+  assert.ok(a.size > 100, 'control: the hand-made set textures the lap'); let n = 0;
+  for (const cell of mesh.cells) { const kid = kidOf(mesh, cell), x = a.get(kid), y = b.get(kid); if (!x) continue; assert.deepEqual(Array.from(x), Array.from(y), cell.name); n++; }
+  assert.equal(n, a.size);
+});
