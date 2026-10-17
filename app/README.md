@@ -126,6 +126,7 @@ longer show in Open…, but they stay on disk as they were.
 | `app/core/panel.js` | the core's controls in the left column. D242: Straight (turn and climb 0 at start, in one click), the Close preview's Apply/Cancel, and Undo puts the undone Extend's own field values back |
 | `app/core/widthlike.js` | the "width like…" drop-down's entries (D232): the known tracks' measured widths from `src/doc/widths.json`, in metres round-and-across for a tube |
 | `app/core/textures.js` | the core's road surface (D228): asphalt by default, solid colour, or your own picture; announces the set as `t180:textures`, which the preview draws and the core page's Export writes (`src/texture/flow.js` lays its coordinates on the path's arc length, a closed tube wraps a whole number of repeats) |
+| `app/core/trackmenu.js` | D355: the Track menu's items for the menu bar (contract M: `items(ctx)` -> Start & grid…, Pit lane…, Road surface ▸, each `{ label, panel(host) -> { unmount() } }`; `developerItems(ctx)` -> File ▸ Developer ▸ Open example…). The panels reuse `spawnsui.js`, `pitui.js` and `textures.js` unchanged; the road-surface controller is made once per shell on the first `items` call and its controls are moved in and out of the open panel |
 | `app/core/index.js` | its `mount(root, shell)` |
 
 **The core shell keeps the seam's state shape,** `state.resolved = { segments, closed }` from `src/core/adapter.js toSegments`,
