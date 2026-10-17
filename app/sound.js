@@ -40,14 +40,21 @@ const TINE = Object.freeze({ peak: 0.226 });
 // sits near -27 dBFS with or without it, but the climb and bank drags' peaks go over their -15 with less, at the gain that keeps one tick in its band (3 ms
 // put the climb drag at -14.7 on the bands' seeded render; 4 ms passes there and on 11 of 12 seeds, the twelfth one tick 0.3 dB under its floor)
 // D375: `slots` are the FILES the player fetches (ref and gain are each file's); `file` maps every slot a voice plays to its file. Each melody plays on its
-// own place_<name> and undo_<name> slots; until batch 10's instruments are picked, all four point at today's place and undo. The tick is batch 9's Eiano
+// own place_<name> and undo_<name> slots, each its own file from batch 10 (the drop-in; one line per melody below, so one pair can change alone). place.wav and
+// undo.wav, batch 8's, stay in app/sounds unplayed. A melody file's gain is today's place or undo gain: E levelled each file to it. The tick is batch 9's Eiano
 // tik (the keeper's pick), measured through this engine at the old tick's gain, its file levelled to match (G:\Consonance-tools\b9\level_ticks.js)
 const MELODY_NAMES = Object.freeze(['yearning', 'shoegaze', 'occult', 'afterglow']);
 const SAMPLES = Object.freeze({
-  slots: Object.freeze(['drag_tick', 'place', 'undo', 'loop_closed']),
-  file: Object.freeze({ drag_tick: 'drag_tick', loop_closed: 'loop_closed', ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 'place'], [`undo_${m}`, 'undo']])) }),
-  ref: Object.freeze({ drag_tick: 84, place: 60, undo: 60 }),
-  gain: Object.freeze({ drag_tick: 1.852, place: 0.645, undo: 0.596, loop_closed: 0.668 }),
+  slots: Object.freeze(['drag_tick', 'loop_closed', ...MELODY_NAMES.flatMap((m) => [`place_${m}`, `undo_${m}`])]),
+  file: Object.freeze({
+    drag_tick: 'drag_tick', loop_closed: 'loop_closed',
+    place_yearning: 'place_yearning', undo_yearning: 'undo_yearning',       // KY WurlyKeys [ASL]
+    place_shoegaze: 'place_shoegaze', undo_shoegaze: 'undo_shoegaze',       // PL Pads Pluck [BR]
+    place_occult: 'place_occult', undo_occult: 'undo_occult',               // SY Vintage Bells [FP]
+    place_afterglow: 'place_afterglow', undo_afterglow: 'undo_afterglow',   // PL D_Pluck [DU]
+  }),
+  ref: Object.freeze({ drag_tick: 84, ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 60], [`undo_${m}`, 60]])) }),
+  gain: Object.freeze({ drag_tick: 1.852, loop_closed: 0.668, ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 0.645], [`undo_${m}`, 0.596]])) }),
   tickFade: 0.004,
   tickEven: 0.5,
 });
