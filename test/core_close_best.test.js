@@ -13,6 +13,9 @@
 //  10  (D343) the fast pick is the exhaustive order's on every track (route, words, closed track)
 //  11  (D343) given the open track's reds, the open track is not checked again, and the pick is the same
 //  12  (D343) the reported save (fixture): one press with the live checker's reds, under 30 s, and the same pick as a press that checks the open track itself
+//  13  (D350) the worker's press: on a structuredClone of the track (what the close worker receives), the same pick and closed track, and residual is never computed
+//      on an unfrozen document (its memo applies)
+//  14  (D350) the same on the reported save (fixture), with the live checker's reds; the press's time, clone and parsed, reported beside it
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -164,4 +167,42 @@ test('row 12: the reported save: one press, with the reds the live checker found
   assert.ok(r.mainMs < 30000, `one press used ${Math.round(r.mainMs)} ms of its main thread's CPU (${Math.round(r.cpuMs)} ms with the collector's threads, ${r.ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs})`);
   const self = CJ.runCloseBest({ doc: D.parse(fs.readFileSync(FX12, 'utf8')) });
   assert.equal(self.report, r.report, 'a press that checks the open track itself picks the same'); assert.equal(D.serialize(self.doc), r.doc);
+});
+
+/**
+ * One press as the close worker makes it (closejob.js runClose, best: true), in its own process, on the track serialized in file `file`: as D.parse gives it
+ * (frozen) or a structuredClone of that (what postMessage hands the worker: not frozen). close.js's residual is wrapped before closejob.js loads, to count the
+ * calls made on an unfrozen document, which its memo cannot serve. Returns the pick, the closed track serialized, the counts and the main thread's CPU.
+ */
+const workerPress = (file, { clone, openReds = null }) => {
+  const code = "const fs = require('fs'), D = require('./src/core/document.js'), C = require('./src/core/close.js'), real = C.residual; let calls = 0, unfrozen = 0;"
+    + " C.residual = (d, o) => { calls++; if (!Object.isFrozen(d)) unfrozen++; return real(d, o); };"
+    + ` const CJ = require('./app/core/closejob.js'), parsed = D.parse(fs.readFileSync(process.argv[1], 'utf8')), doc = ${clone ? 'structuredClone(parsed)' : 'parsed'};`
+    + ` const h0 = process.threadCpuUsage(), r = CJ.runClose({ doc, best: true, openReds: ${JSON.stringify(openReds)} }), h = process.threadCpuUsage(h0);`
+    + " process.stdout.write(JSON.stringify({ report: r.report, routes: r.tried.map((t) => t.route), closed: D.serialize(r.doc), calls, unfrozen, mainMs: (h.user + h.system) / 1000 }));";
+  const p = cp.spawnSync(process.execPath, ['-e', code, file], { cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 1 << 28 });
+  assert.equal(p.status, 0, p.stderr); return JSON.parse(p.stdout);
+};
+
+test('row 13: the worker\'s press on a structuredClone of the track picks and closes exactly as on the track, and residual never runs on an unfrozen document', () => {
+  const file = path.join(require('os').tmpdir(), `close-best-row13-${process.pid}.t180track`);
+  fs.writeFileSync(file, D.serialize(past(5)));
+  try {
+    const parsed = workerPress(file, { clone: false }), cloned = workerPress(file, { clone: true });
+    assert.equal(cloned.report, parsed.report); assert.deepEqual(cloned.routes, parsed.routes); assert.equal(cloned.closed, parsed.closed, 'the same closed track');
+    assert.ok(cloned.calls > 0, 'the press computes the residual');
+    assert.equal(cloned.unfrozen, 0, `${cloned.unfrozen} of ${cloned.calls} residuals were on an unfrozen document: the memo cannot serve them`);
+  } finally { fs.rmSync(file, { force: true }); }
+});
+
+test('row 14: the reported save: the worker\'s press on a structuredClone, with the live checker\'s reds, picks and closes as on the parsed save, residual never unfrozen', { skip: fs.existsSync(FX12) ? false : 'fixtures-d337/pre-close.t180track is not here (a private track, kept off the repository)' }, (t) => {
+  const reds = JSON.parse(cp.spawnSync(process.execPath, ['-e', "const fs = require('fs'), D = require('./src/core/document.js'), base = D.parse(fs.readFileSync(process.argv[1], 'utf8'));"
+    + " process.stdout.write(JSON.stringify(require('./app/validate-ui/checkjob.js').createCheckJob().run({ doc: { ...base, closed: false }, csp: true }).result.red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 }))));", FX12],
+    { cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 1 << 28 }).stdout);
+  const parsed = workerPress(FX12, { clone: false, openReds: reds }), cloned = workerPress(FX12, { clone: true, openReds: reds });
+  const hash = (x) => require('crypto').createHash('sha256').update(x).digest('hex').slice(0, 12);
+  t.diagnostic(`main thread: clone ${Math.round(cloned.mainMs)} ms, parsed ${Math.round(parsed.mainMs)} ms; residual on an unfrozen document ${cloned.unfrozen} of ${cloned.calls}; closed sha256 ${hash(cloned.closed)}`);
+  assert.equal(cloned.report, 'closed: bent the last 2 pieces (508 m) by up to 4.0 m'); assert.deepEqual(cloned.routes, ['near']);
+  assert.equal(cloned.report, parsed.report); assert.equal(hash(cloned.closed), hash(parsed.closed), 'the same closed track');
+  assert.equal(cloned.unfrozen, 0, `${cloned.unfrozen} of ${cloned.calls} residuals were on an unfrozen document: the memo cannot serve them`);
 });
