@@ -15,7 +15,7 @@
 // copy of this file. The shared instance therefore lives on globalThis, and every copy's get/set/on reach the same values and the same listeners.
 'use strict';
 
-const KEYS = Object.freeze(['turnClimbAs', 'dragHandles', 'colourByGrip', 'gridStep', 'mirrorOnInsert', 'csp']);
+const KEYS = Object.freeze(['turnClimbAs', 'dragHandles', 'colourByGrip', 'gridStep', 'mirrorOnInsert', 'csp', 'author']);   // D365: author, the name an export writes (app/menubar/items.js authorName)
 const PREFIX = 't180.settings.';
 const SHARED = '__t180Settings';
 
