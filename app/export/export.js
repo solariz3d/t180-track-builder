@@ -79,27 +79,33 @@ async function removeEmptyNote(storage, t) {
   catch (e) { return ` · could not remove the empty folder "${t.cleanupName}" (${e && e.message ? e.message : e}): delete it by hand, Content Manager lists it as a broken track`; }
 }
 
-/** Load the exporter into this realm with the node shim, the way the webview runs it. `get` fetches source text. */
-async function makeExporter(get) {
+/**
+ * Load the exporter into this realm with the node shim, the way the webview runs it. `get` fetches source text.
+ * D365: `author` is a function giving the author name (Settings ▸ Author name), read at every export, so Export, Test export and Install all
+ * write it; none, a blank name, or a function that throws gives today's author (src/export/fromwords.js authorOf). An opts.author given to
+ * run/runSegments wins.
+ */
+async function makeExporter(get, { author = null } = {}) {
   const shim = createShim();
   const fromwords = await loadCjs('src/export/fromwords.js', get, { builtins: shim.builtins, globals: { Buffer: shim.Buffer } });
+  const authorNow = (given) => { if (given !== undefined) return given; if (typeof author !== 'function') return undefined; try { return author(); } catch (e) { return undefined; } };
   return {
     checkTarget,
     resolveTarget,
     removeEmptyNote,
     ExportError: fromwords.ExportError,
     // textures: the texture set the textures panel announces (the one the preview draws), or null
-    run(doc, { variant = 'block', textures = null } = {}) {
+    run(doc, { variant = 'block', textures = null, author: a } = {}) {
       shim.reset();
-      const result = fromwords.exportTrack(doc, { outDir: OUT, variant, textures });   // no selfCheck: the check is always on
+      const result = fromwords.exportTrack(doc, { outDir: OUT, variant, textures, author: authorNow(a) });   // no selfCheck: the check is always on
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
     // the equation core's track (D186): src/geom segments from src/core/adapter.js, through the SAME exporter
     // (fromwords.js exportSegments: the same validation, self-check, markers, read-back and AI line); the check stays on
     // markers: the grid layout (app/core/coreshell.js startLayout), or undefined for the export's default
-    runSegments(segments, meta, { variant = 'block', textures = null, markers, test = false } = {}) {   // test (D243a): the TEST export of an unfinished track
+    runSegments(segments, meta, { variant = 'block', textures = null, markers, test = false, author: a } = {}) {   // test (D243a): the TEST export of an unfinished track
       shim.reset();
-      const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, ...(test ? { test: true } : {}) });
+      const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, author: authorNow(a), ...(test ? { test: true } : {}) });
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
   };
