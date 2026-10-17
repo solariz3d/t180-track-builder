@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-17
+
 ### Added
 - **An edge fit for the road texture: the edge bands keep their size, whatever the width.** A new fit, `edge`, beside tile and fit. The texture is drawn once and laid out when the track is closed, from the widest and narrowest the road gets: the band along each edge keeps its size in metres (an edge glow or a line is as thin on a 60 m road as on a 35 m one, where fit made it wider) and the centre is a whole number of repeats. Off unless chosen: a box under the road-surface picker, which takes effect once the loop is closed, and the export looks at the widths again before it writes. Tile and fit are unchanged. (`src/texture/edge.js`, `flow.js`, `set.js`.) Tests: `test/texture_edge.test.js`, 9 rows.
 
