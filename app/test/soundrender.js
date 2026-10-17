@@ -2,7 +2,7 @@
 // Used by app/test/sound-bands.test.js and by hand: node app/test/soundrender.js OUTDIR writes each clip as a 16-bit stereo 48 kHz WAV.
 //
 //   chromePath()                    the Chrome to use (CHROME_PATH, else the usual Windows place), or null when there is none
-//   renderClips(src, clips, o)     -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }; o.samples = a folder
+//   renderClips(src, clips, o)     -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }; o.samples = a folder; o.seed (default SEED)
 //                                   of the four slot WAVs (app/sounds): the engine is handed them (useSamples) before each clip, as the app does once they load
 //   readWav(file)                   a 16-bit PCM WAV as { L, R, sampleRate } (mono is copied to both sides)
 //   peakDb(clip)                    the sample peak in dBFS
@@ -27,10 +27,14 @@ function chromePath() {
   const c = [process.env.CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].filter(Boolean);
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || null;
 }
+// the engine's noise (its reverbs, the crash) is drawn from a PRNG started at this seed for every clip, so a clip renders to the same samples every run: the bands
+// (sound-bands.test.js) are measured on one fixed sound. Math.random, which the app uses, drew new reverb noise each render and moved a clip ~1 dB
+const SEED = 1;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Render each clip in an OfflineAudioContext (48 kHz stereo) in headless Chrome; the engine runs at level 1, as the sketch page and render-builder.js ran it. */
-async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.random() * 600), samples = null } = {}) {
+async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.random() * 600), samples = null, seed = SEED } = {}) {
+  if (!Number.isInteger(seed) || seed < 0) throw new Error(`soundrender: a seed is a whole number 0 or more, got ${seed}`);
   const exe = chromePath(); if (!exe) throw new Error('soundrender: no Chrome found (set CHROME_PATH)');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180snd-test-'));
   const ch = spawn(exe, ['--headless=new', `--remote-debugging-port=${port}`, '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${dir}`, '--no-first-run', 'about:blank'], { stdio: 'ignore' });
@@ -58,7 +62,9 @@ async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.r
     for (const [name, [secs, body]] of Object.entries(clips)) {
       // the render stays in the page and its samples come back in pieces: one message of a 16 s clip's two float channels (~8 MB of base64) never arrived
       const n = await ev(`(async () => {
-        const SR = 48000, ctx = new OfflineAudioContext(2, Math.ceil(SR * ${secs}), SR), M = window.__M, E = M.createEngine(ctx); E.setLevel(1); if (window.__SAMP) E.useSamples(window.__SAMP);
+        const SR = 48000, ctx = new OfflineAudioContext(2, Math.ceil(SR * ${secs}), SR), M = window.__M;
+        let s = ${seed} >>> 0; const random = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };   // mulberry32, fresh from the seed for every clip
+        const E = M.createEngine(ctx, { random }); E.setLevel(1); if (window.__SAMP) E.useSamples(window.__SAMP);
         const at = (t, fn) => { ctx.suspend(t).then(() => { fn(); ctx.resume(); }); };
         ${body}
         const buf = await ctx.startRendering(); window.__buf = [buf.getChannelData(0), buf.getChannelData(1)]; return buf.length;
@@ -115,7 +121,7 @@ function wav({ L, R, sampleRate }) {
   return b;
 }
 
-module.exports = { CLIPS, chromePath, renderClips, readWav, peakDb, lufs, kWeight, wav };
+module.exports = { CLIPS, SEED, chromePath, renderClips, readWav, peakDb, lufs, kWeight, wav };
 
 if (require.main === module) {
   const out = process.argv[2]; if (!out) { console.error('usage: node app/test/soundrender.js OUTDIR [--synth]'); process.exit(1); }

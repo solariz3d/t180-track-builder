@@ -97,6 +97,21 @@ test('row 3b: a tick an octave up plays at twice the rate and sqrt 2 the level, 
   const [, chord] = STEPS[0]; assert.equal(new Set(p.slice(0, chord.length).map((x) => x.toFixed(9))).size, 1, 'a place\'s chord notes share one level whatever their pitch');
 });
 
+// D349 addition (the librarian's ruling, option a): the engine's noise (its reverbs' impulses, the loop close's crash) comes from an optional `random`, so a
+// render can be repeated exactly; without one it is Math.random, as before, so nothing a user hears changes
+test('row 7: two engines given the same seeded random build the same reverbs and crash; another seed builds others; with none, Math.random as before', () => {
+  const seeded = (seed) => () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const noise = (random) => { const ctx = fakeCtx(), e = createEngine(ctx, random ? { random } : undefined); e.loopClosed();
+    return ctx.nodes.filter((n) => (n.kind === 'Convolver' || n.kind === 'BufferSource') && n.buffer && n.buffer.getChannelData).map((n) => Array.from(n.buffer.getChannelData(0)).join(',')); };
+  const a = noise(seeded(7)), b = noise(seeded(7)), c = noise(seeded(8));
+  assert.ok(a.length >= 3, `the void, the room and the crash carry noise (${a.length})`);
+  assert.deepEqual(a, b, 'the same seed: the same noise, buffer for buffer');
+  assert.notDeepEqual(a, c, 'another seed: other noise');
+  const orig = Math.random; let calls = 0; Math.random = () => { calls++; return orig(); };
+  try { noise(null); } finally { Math.random = orig; }
+  assert.ok(calls > 0, 'with no random given, the engine draws from Math.random');
+});
+
 // the player, with a recording engine and a fake fetch
 function player({ fetchImpl, decode, noFetch = false } = {}) {
   const listeners = {}, calls = [], logs = [], fetched = [];

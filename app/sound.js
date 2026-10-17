@@ -35,13 +35,14 @@ const TINE = Object.freeze({ peak: 0.226 });
 // 2^((n - ref) / 12); the loop close is one whole gesture and plays as rendered. `gain` sets each slot in its loudness band in this engine's space
 // (app/test/sound-bands.test.js, measured in headless Chrome). A sample pitched up is also shorter, so a high tick carried less than a low one: unevened,
 // the climb and bank drags sat 2.6 dB under length and width 2.8 dB over it, 5.1 dB apart against a band 5 dB wide; `tickEven` lifts a tick by
-// rate^0.5, the same energy whatever its note, which brings the four drags within 2.4 dB. `tickFade` is the tick's attack fade (3 ms): one tick's peak
-// sits near -27 dBFS with or without it, but the climb and bank drags' peaks went over their -15 under 2 ms of fade, at the gain that keeps one tick in its band
+// rate^0.5, the same energy whatever its note, which brings the four drags within 2.4 dB. `tickFade` is the tick's attack fade (4 ms): one tick's peak
+// sits near -27 dBFS with or without it, but the climb and bank drags' peaks go over their -15 with less, at the gain that keeps one tick in its band (3 ms
+// put the climb drag at -14.7 on the bands' seeded render; 4 ms passes there and on 11 of 12 seeds, the twelfth one tick 0.3 dB under its floor)
 const SAMPLES = Object.freeze({
   slots: Object.freeze(['drag_tick', 'place', 'undo', 'loop_closed']),
   ref: Object.freeze({ drag_tick: 84, place: 60, undo: 60 }),
   gain: Object.freeze({ drag_tick: 1.852, place: 0.645, undo: 0.596, loop_closed: 0.668 }),
-  tickFade: 0.003,
+  tickFade: 0.004,
   tickEven: 0.5,
 });
 const rateOf = (slot, midi) => (slot in SAMPLES.ref ? Math.pow(2, (midi - SAMPLES.ref[slot]) / 12) : 1);
@@ -122,7 +123,7 @@ function stepPlan(kind, prev, value, melAt = 0, single = false) {
   return notePlan(kind, value, Number.isFinite(prev) ? value > prev : true, melAt);
 }
 
-function createEngine(ctx) {
+function createEngine(ctx, { random = Math.random } = {}) {   // `random`: where the noise of the reverbs and the crash comes from; a seeded one makes a render repeatable (app/test/soundrender.js)
   const master = ctx.createGain(), dryBus = ctx.createGain(), preBus = ctx.createGain(), out = ctx.createGain();
   master.connect(preBus); dryBus.connect(preBus);   // MASTER also feeds the echo; DRYBUS does not
   // the widener: L' = ½(1+W)L + ½(1−W)R and its mirror
@@ -139,7 +140,7 @@ function createEngine(ctx) {
   }
   const noiseIR = (seconds, pre, decay, shape) => {   // independent noise each side, a pre-delay, an exponential decay, a lowpass that closes as it decays
     const sr = ctx.sampleRate, p = Math.floor(sr * pre), n = Math.floor(sr * seconds), b = ctx.createBuffer(2, p + n, sr);
-    for (let c = 0; c < 2; c++) { const x = b.getChannelData(c); let lp = 0; for (let i = 0; i < n; i++) { const t = i / sr, k = shape(t); lp += k * ((Math.random() * 2 - 1) - lp); x[p + i] = lp * Math.exp(-t * decay); } }
+    for (let c = 0; c < 2; c++) { const x = b.getChannelData(c); let lp = 0; for (let i = 0; i < n; i++) { const t = i / sr, k = shape(t); lp += k * ((random() * 2 - 1) - lp); x[p + i] = lp * Math.exp(-t * decay); } }
     return b;
   };
   // the VOID: vast and dark
@@ -189,7 +190,7 @@ function createEngine(ctx) {
   }
   function crash({ t = 0, d = 2.2, peak = 0.12 }) {
     const t0 = at(t), n = ctx.createBuffer(2, Math.ceil(ctx.sampleRate * (d + 0.05)), ctx.sampleRate);
-    for (let c = 0; c < 2; c++) { const x = n.getChannelData(c); for (let i = 0; i < x.length; i++) x[i] = Math.random() * 2 - 1; }
+    for (let c = 0; c < 2; c++) { const x = n.getChannelData(c); for (let i = 0; i < x.length; i++) x[i] = random() * 2 - 1; }
     const s = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), g = ctx.createGain(); s.buffer = n; hp.type = 'highpass'; hp.frequency.value = 5200;
     g.gain.setValueAtTime(peak, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d); s.connect(hp); hp.connect(g); g.connect(bus); s.start(t0); s.stop(t0 + d + 0.05);
   }
