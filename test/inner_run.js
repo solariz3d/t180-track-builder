@@ -63,4 +63,24 @@ const NOT_TESTED = /^native crash (3221225477|SIGSEGV) in .+: the mutant was NOT
 /** What a harness row would say: the verdict fn() returns, or the message it throws. */
 function reading(fn) { try { return String(fn()); } catch (e) { return e.message; } }
 
-module.exports = { reporterArgs, crashes, crashesIn, notTested, failures, STANDIN, NOT_TESTED, reading };
+// D353: a crash AFTER a failing row of the same file leaves no file-level entry in the TAP at all (pane E measured 9 of 9 real children), so
+// crashes() cannot see it. What still shows is that the named test never reported a line of its own. For the six harnesses that look for a named test.
+/** Whether the named test reported a top-level ✔ or ✖ line of its own in a spec output. */
+const reported = (out, name) => out.split(/\r?\n/).some((l) => /^[✔✖] /.test(l) && l.slice(2).includes(name));
+/** The files that ended with an exit code of their own that is not native (a module that threw on load, exit 1): a verdict, read as before D353. */
+function fileExitsIn(file) {
+  let tap;
+  try { tap = fs.readFileSync(file, 'utf8'); } catch (e) { throw new Error(`the inner test run wrote no TAP copy (${file}): ${e.code || e.message}; the mutant was NOT TESTED`); }
+  return failures(tap).filter((e) => e.exitCode !== undefined && e.exitCode !== '~' && !isNative(e));
+}
+function neverReported(crashed = []) {
+  return `the named test never reported${crashed.length ? ` (${notTested(crashed).replace(/: the mutant was NOT TESTED$/, '')})` : ''}: the mutant was NOT TESTED`;
+}
+// THE SECOND STAND-IN: one line at the top of a module, which registers a row that fails and then a row that dies 300 ms later, in every test file
+// that loads the module, before that file's own rows run (pane E's form: an unrelated failure, then the crash)
+const STANDIN_AFTER_FAIL = "{ const T = process.getBuiltinModule('node:test'); T.test('D353 stand-in: an unrelated row that fails', () => { throw new Error('the stand-in fails first'); }); " +
+  "T.test('D353 stand-in: the row that dies', () => new Promise((r) => setTimeout(r, 300)).then(() => (process.platform === 'win32' ? process.reallyExit(3221225477) : process.kill(process.pid, 'SIGSEGV')))); }\n";
+// either NOT TESTED message: which one shows depends on whether the failed row's report reached the parent before the death (E's two timings)
+const NOT_TESTED_ANY = /^(the named test never reported( \(native crash .+\))?|native crash (3221225477|SIGSEGV) in .+): the mutant was NOT TESTED$/;
+
+module.exports = { reporterArgs, crashes, crashesIn, notTested, failures, STANDIN, NOT_TESTED, reading, reported, fileExitsIn, neverReported, STANDIN_AFTER_FAIL, NOT_TESTED_ANY };
