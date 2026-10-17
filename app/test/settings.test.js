@@ -25,7 +25,8 @@ test('row 1: a setting survives a reload, saved as t180.settings.<key> in JSON, 
   assert.equal(store.getItem('t180.settings.gridStep'), '45'); assert.equal(store.getItem('t180.settings.turnClimbAs'), '"rate"');
   assert.deepEqual([...store.m.keys()].sort(), ['t180.coreLook', 't180.settings.csp', 't180.settings.gridStep', 't180.settings.mirrorOnInsert', 't180.settings.turnClimbAs', 't180.sound.muted']);
   assert.equal(store.getItem('t180.sound.muted'), '1'); assert.equal(store.getItem('t180.coreLook'), 'solid');
-  assert.deepEqual([...S.KEYS].sort(), ['colourByGrip', 'csp', 'dragHandles', 'gridStep', 'mirrorOnInsert', 'turnClimbAs']);
+  // AMENDED (D365): the rule changed by name: a seventh setting, author (Settings ▸ Author name), joins the six
+  assert.deepEqual([...S.KEYS].sort(), ['author', 'colourByGrip', 'csp', 'dragHandles', 'gridStep', 'mirrorOnInsert', 'turnClimbAs']);
 });
 
 test('row 2: nothing saved, or saved text that is not JSON, gives the fallback', () => {

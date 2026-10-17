@@ -6,6 +6,8 @@
 //   viewItems(ctx)                       Drag handles and Colour by grip (saved settings), Show the guide
 //   settingsItems(ctx, { soundRow, acFolder, acAllow })   sound, how the turn and climb are read, the grid step, mirror on insert, the checker's wall
 //                                        raycasting, the Assetto Corsa folder and launch permission, Reset the guide
+//   authorName(settings)                 D365: the saved author name, trimmed, at most 64 characters; '' for none (then the export writes t180-track-builder)
+//   authorField(doc, settings)           D365: Settings ▸ Author name, a text field that saves what is typed (trimmed, at most 64)
 //   acNodes(container)                   the Assetto Corsa folder button and the launch-permission tick that app/install/index.js put in `container`
 //   DEFAULTS                             each saved setting's value when none is saved: today's defaults in app/core/panel.js, piecesui.js and validate-ui
 'use strict';
@@ -37,14 +39,31 @@ function viewItems() {
   ];
 }
 
-function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null } = {}) {
+const MAX_AUTHOR = 64;   // src/export/fromwords.js MAX_AUTHOR
+function authorName(settings) {
+  let v;
+  try { v = settings.get('author', ''); } catch (e) { return ''; }   // a settings object that fails gives no name: the export writes today's author
+  return typeof v === 'string' ? v.trim().slice(0, MAX_AUTHOR) : '';
+}
+function authorField(doc, settings) {
+  const label = doc.createElement('label'), span = doc.createElement('span'), input = doc.createElement('input');
+  label.className = 'author-row'; span.textContent = 'Author name';
+  label.title = "the name written as the track's author in Assetto Corsa and Content Manager; blank writes t180-track-builder. The builder is credited either way";
+  input.type = 'text'; input.maxLength = MAX_AUTHOR; input.placeholder = 't180-track-builder'; input.value = authorName(settings);
+  input.setAttribute('aria-label', 'author name');
+  input.onchange = () => { input.value = String(input.value || '').trim().slice(0, MAX_AUTHOR); settings.set('author', input.value); };
+  label.appendChild(span); label.appendChild(input);
+  return label;
+}
+
+function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, authorRow = null } = {}) {
   return [
     { section: 'Sound' }, ...(soundRow ? [{ node: soundRow }] : []),
     { section: 'Turn & climb read as' }, ...choice('turnClimbAs', [['corner', 'corner °, ends straight'], ['rate', 'rate °/100 m']]),
     { section: 'Grid step (Turn to grid)' }, ...choice('gridStep', [[90, '90°'], [45, '45°'], [15, '15°']]),
     { section: 'Pieces' }, tick('Mirror on insert', 'mirrorOnInsert', 'add saved pieces as their left/right mirror image'),
     { section: 'Checker' }, tick('Wall raycasting (CSP)', 'csp', 'the checker\'s wall raycasting'),
-    ...(acFolder || acAllow ? [{ section: 'Assetto Corsa' }, ...(acFolder ? [{ node: acFolder }] : []), ...(acAllow ? [{ node: acAllow }] : [])] : []),
+    ...(acFolder || acAllow || authorRow ? [{ section: 'Assetto Corsa' }, ...(authorRow ? [{ node: authorRow }] : []), ...(acFolder ? [{ node: acFolder }] : []), ...(acAllow ? [{ node: acAllow }] : [])] : []),
     { separator: true },
     { label: 'Reset the guide', title: 'the guide opens by itself again at the next start', run: (c) => c.resetGuide() },
   ];
@@ -59,4 +78,4 @@ function acNodes(container) {
   };
 }
 
-module.exports = { fileItems, editItems, viewItems, settingsItems, acNodes, DEFAULTS };
+module.exports = { fileItems, editItems, viewItems, settingsItems, acNodes, authorName, authorField, DEFAULTS };

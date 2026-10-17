@@ -21,7 +21,7 @@ const OUT = '/export';
 function createLayoutsExport({ C, layouts, shim, storage }) {
   const E = layouts.ExportError;
   const readOnly = { openDoc: (n) => storage.openDoc(n), listDocs: () => storage.listDocs() };
-  async function buildOne(pick, textures) {
+  async function buildOne(pick, textures, author) {
     const caught = { runSegments: (segments, meta, opts) => ({ segments, meta, opts }) };
     const sh = await C.createCoreShell({ storage: readOnly, exporter: caught, autosaveMs: 0 });
     try { await sh.open(pick.track); } catch (e) { throw new E('OPEN_FAILED', `the saved track "${pick.track}" could not be opened: ${e && e.message ? e.message : e}`); }
@@ -29,13 +29,14 @@ function createLayoutsExport({ C, layouts, shim, storage }) {
     if (st.name !== pick.track) throw new E('OPEN_FAILED', `the saved track "${pick.track}" could not be opened${st.message ? `: ${st.message}` : ''}`);
     let got;
     try { got = sh.buildExport({ textures }); } catch (e) { e.message = `${pick.track}: ${e.message}`; throw e; }
-    try { return layouts.buildFromSegments(got.segments, got.meta, got.opts); } catch (e) { e.message = `${pick.track}: ${e.message}`; throw e; }
+    // D365: the author name, as the Export button's exporter adds it
+    try { return layouts.buildFromSegments(got.segments, got.meta, { ...got.opts, author }); } catch (e) { e.message = `${pick.track}: ${e.message}`; throw e; }
   }
   return {
-    async build(picks, { name, textures = null } = {}) {
+    async build(picks, { name, textures = null, author } = {}) {
       if (!Array.isArray(picks) || picks.length < 2) throw new E('TOO_FEW_LAYOUTS', 'pick at least two saved tracks: one layout each');
       const entries = [];
-      for (const p of picks) entries.push({ layout: p.layout, name: p.name, main: p.main === true, b: await buildOne(p, textures) });
+      for (const p of picks) entries.push({ layout: p.layout, name: p.name, main: p.main === true, b: await buildOne(p, textures, author) });
       shim.reset();
       const result = layouts.exportBuilt(entries, { outDir: OUT, name, prune: false });   // the native side prunes: the old folder is on the disk, not here
       return { folder: result.folder, files: shim.files(`${OUT}/${result.folder}`), result };
@@ -44,7 +45,7 @@ function createLayoutsExport({ C, layouts, shim, storage }) {
 }
 
 /** The menu item from start to end: ask, pick the folder, build, write. Every way out says what happened through `say`. */
-async function exportLayoutsFlow({ lx, shell, ask, pickFolder, exporter, storage, say, textures = null }) {
+async function exportLayoutsFlow({ lx, shell, ask, pickFolder, exporter, storage, say, textures = null, author }) {
   const tracks = await shell.list();
   if (tracks.length < 2) return say(`Export layouts needs at least two saved tracks (one layout each); ${tracks.length} saved so far.`);
   const answer = await ask(tracks);
@@ -54,7 +55,7 @@ async function exportLayoutsFlow({ lx, shell, ask, pickFolder, exporter, storage
   const t = await exporter.resolveTarget(dir, storage);
   if (t.refused) return say(`not exported: ${t.refused.reason}`);
   let out;
-  try { say(`exporting ${answer.picks.length} layouts…`); out = await lx.build(answer.picks, { name: answer.name, textures }); }
+  try { say(`exporting ${answer.picks.length} layouts…`); out = await lx.build(answer.picks, { name: answer.name, textures, author }); }
   catch (e) { return say(`not exported: ${e.message}${await exporter.removeEmptyNote(storage, t)}`); }
   let w;
   try { w = await storage.writeLayouts(t.dir, out.folder, out.files); }
