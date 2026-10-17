@@ -13,10 +13,13 @@
 //   8   Edit's selection items (piecesui via M): nothing selected, they are disabled; with a selection they save, set the grip, delete and clear
 //   9   the six keys through S: the panel starts from what S holds, follows S.on, and a setting survives a reload (a new store over the same storage)
 //  10   a blocked store (every storage access throws) throws nothing: the panel mounts and a setting holds for the session; with no settings module at all the panel still mounts
+//  11   D356: the grid step picked in Build ▸ Turn to grid… is saved through S (the real createSettings), and survives a reload
+//  12   D356: an Undo that gives back the undone piece's turn-and-climb mode saves it through S, so Settings and the panel agree
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createCoreShell } = require('../core/coreshell.js');
+const { createSettings } = require('../settings.js');
 const BM = require('../core/buildmenu.js');
 const PU = require('../core/piecesui.js');
 
@@ -267,4 +270,37 @@ test('row 10: a blocked store throws nothing: the panel mounts and a setting hol
   P.panel.unmount();
   const Q = await mountPanel();   // no settings passed: the panel finds app/settings.js, or keeps the settings for this session only when it is not there yet
   assert.equal(Q.byLabel('turn and climb as').value, 'corner'); Q.panel.unmount();
+});
+
+// D356 part 1 (Ponytail review 5 on D355, E's rows 1-2): the panel's own writes, on the REAL settings (app/settings.js createSettings). The stand-in above,
+// settingsOver, tells its listeners on every set; the real one only on a change, and that is the difference the rows above could not see
+test('row 11: the grid step picked in Build ▸ Turn to grid… is saved: S holds it, the Settings menu hears it, and it is the step after a reload', async () => {
+  const storage = memStorage(), S = createSettings(storage), heard = [];
+  S.on('gridStep', (v) => heard.push(v));
+  const P = await mountPanel({ settings: S });
+  const pop = P.open(P.item(P.build(), 'Turn to grid…')), step = P.byLabel('grid step', pop.box.all());
+  step.value = '45'; step.onchange();
+  assert.equal(S.get('gridStep', 90), 45, 'S holds the step picked'); assert.deepEqual(heard, [45], 'and the Settings menu was told, once');
+  assert.match(P.byLabel('end heading', pop.box.all()).textContent, /45° grid/, 'the note follows, as before');
+  step.value = '90'; step.onchange();
+  assert.equal(S.get('gridStep', 45), 90, 'picking the default back is saved too'); assert.deepEqual(heard, [45, 90]);
+  step.value = '15'; step.onchange(); pop.close(); P.panel.unmount();
+  const R2 = await mountPanel({ settings: createSettings(storage) });   // a reload: a new store over the same storage, a new panel
+  assert.equal(R2.byLabel('grid step').value, '15'); R2.panel.unmount();
+});
+
+test('row 12: Undo that gives the undone piece its turn-and-climb mode back saves the mode, so Settings and the panel agree', async () => {
+  const S = createSettings(memStorage());
+  const P = await mountPanel({ settings: S });
+  assert.equal(P.byLabel('turn and climb as').value, 'corner');
+  const n = pieces(P); P.button('Extend').onclick(); assert.equal(pieces(P), n + 1, P.shell.getState().message);   // made as a corner
+  S.set('turnClimbAs', 'rate');   // the Settings menu switches to rate
+  assert.equal(P.byLabel('turn and climb as').value, 'rate', 'the panel follows S');
+  P.shell.undo();
+  assert.equal(P.byLabel('turn and climb as').value, 'corner', 'Undo gives the piece back the way it was read (D242 item 7), unchanged');
+  assert.equal(S.get('turnClimbAs', 'rate'), 'corner', 'and S says so, so the Settings menu ticks corner');
+  // an Undo whose piece was made in the mode S already holds writes nothing new
+  const heard = []; S.on('turnClimbAs', (v) => heard.push(v));
+  P.button('Extend').onclick(); P.shell.undo(); assert.deepEqual(heard, [], 'same mode: no change to tell');
+  P.panel.unmount();
 });
