@@ -29,6 +29,35 @@ const noChrome = { skip: chrome ? false : 'no Chrome found (set CHROME_PATH): th
 test('every sound sits inside its loudness and peak band, the ticks under a place, a place under the loop close', noChrome, async () => {
   inBands(await S.renderClips(fs.readFileSync(SRC, 'utf8'), S.CLIPS, { samples: SAMPLES_DIR }));
 });
+// D375: a launch plays one of four melodies, each on its own place and undo files (batch 10, the drop-in), so each one's place and undo, with the samples,
+// sits in the same bands as the row above measures for the first. One row per melody, so a red names the melody
+// AMENDED (D377): the keeper's four for 0.4.2, batch 11's three and batch 12's Aurora, in place of batch 10's
+for (const [melody, instrument] of [['aqua', 'Big Bells'], ['skyline', 'Runtheharm'], ['glass', 'VeloHarm'], ['aurora', 'Linear Arithmetic']]) {
+  test(`${melody} (${instrument}): its place and undo, with the samples, sit inside their bands`, noChrome, async () => {
+    const keys = ['place_step1', 'place_steps_1to4', 'undo_steps_4to1'], out = [];
+    const clips = await S.renderClips(fs.readFileSync(SRC, 'utf8'), Object.fromEntries(keys.map((k) => [k, S.CLIPS[k]])), { samples: SAMPLES_DIR, melody });
+    for (const k of keys) {
+      const [lo, hi, pk] = BANDS[k], l = Math.round(S.lufs(clips[k]) * 10) / 10, p = Math.round(S.peakDb(clips[k]) * 10) / 10;
+      if (!(l >= lo && l <= hi && p <= pk)) out.push(`${k} ${l} LUFS, peak ${p} dBFS (band ${lo}..${hi} LUFS, peak <= ${pk})`);
+    }
+    assert.deepEqual(out, [], 'outside the band');
+  });
+  // D377: the place swell. A walk of all 64 places (0.7 s apart, as E's arcmeasure on batch 11) cut into its eight phrases of 8: before the swell every
+  // phrase sat within 1.8 LU of the others, the loudest often the first (phrases 6-7 over 1 and 8 by 0.55 LU at most, Glass's -0.5). Now phrases 6 and 7
+  // (steps 41 to 56, the lift and the peak) are at least 0.7 LU over phrases 1 and 8, on the mean of each pair (the bands leave room for about 0.8 in
+  // Glass); and every one of the 64 places, alone, still sits inside the one-place band
+  test(`${melody} (${instrument}): its walk swells to phrases 6 and 7, and every one of its 64 places sits inside the one-place band`, noChrome, async () => {
+    const clips = { walk64: [0.05 + 63 * 0.7 + 6, 'for (let i = 0; i < 64; i++) at(0.05 + i * 0.7, () => E.step(i, false));'] };
+    for (let i = 0; i < 64; i++) clips[`p${i}`] = [6.0, `at(0.05, () => E.step(${i}, false));`];
+    const c = await S.renderClips(fs.readFileSync(SRC, 'utf8'), clips, { samples: SAMPLES_DIR, melody }), sr = 48000, w = c.walk64;
+    const ph = [...Array(8)].map((_, p) => { const a = Math.floor((0.05 + p * 5.6) * sr), b = Math.floor((0.05 + (p + 1) * 5.6) * sr); return S.lufs({ L: w.L.slice(a, b), R: w.R.slice(a, b), sampleRate: sr }); });
+    const peakPair = (ph[5] + ph[6]) / 2, ends = (ph[0] + ph[7]) / 2;
+    assert.ok(peakPair - ends >= 0.7,`phrases 6-7 ${peakPair.toFixed(1)} LUFS against phrases 1 and 8 ${ends.toFixed(1)} (phrases ${ph.map((x) => x.toFixed(1)).join(' ')})`);
+    const [lo, hi, pk] = BANDS.place_step1, out = [];
+    for (let i = 0; i < 64; i++) { const l = Math.round(S.lufs(c[`p${i}`]) * 10) / 10, p = Math.round(S.peakDb(c[`p${i}`]) * 10) / 10; if (!(l >= lo && l <= hi && p <= pk)) out.push(`step ${i + 1}: ${l} LUFS, peak ${p}`); }
+    assert.deepEqual(out, [], `outside the one-place band (${lo}..${hi} LUFS, peak <= ${pk})`);
+  });
+}
 test('the synth voices (before the samples are in, or if they fail to load) sit inside the same bands, in the same order', noChrome, async () => {
   inBands(await S.renderClips(fs.readFileSync(SRC, 'utf8')));
 });

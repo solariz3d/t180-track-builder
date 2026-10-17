@@ -2,7 +2,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createSound, createEngine, soundFor, tickPlan, stepOf, STEPS, MEL128, KEYS } = require('../sound.js');
+const { createSound, createEngine, soundFor, tickPlan, stepOf, swellDb, MELODIES, MELODY_NAMES, MEL128, KEYS } = require('../sound.js');
 
 const H = (past, present, future = []) => ({ past, present, future });
 const doc = (n, closed = false) => ({ pieces: Array.from({ length: n }, (_, i) => ({ id: `p${i}` })), closed });
@@ -19,9 +19,57 @@ test('soundFor: a placed piece, an undo and a closed loop each name their sound;
   assert.equal(soundFor(placed, placed), null); assert.equal(soundFor(null, placed), null); assert.equal(soundFor(placed, S(null)), null);
 });
 
-test('stepOf: the melody step follows the piece count, one step per piece at any pace, round the 16', () => {
-  assert.deepEqual([1, 2, 16, 17, 33].map(stepOf), [0, 1, 15, 0, 0]);
-  assert.equal(STEPS.length, 16); assert.ok(STEPS.every(([b, chord, mel]) => b < 48 && chord.length >= 3 && mel > Math.max(...chord)), 'a bass, a chord, a melody note on top');
+// AMENDED (D375): the 16 steps became four melodies of 64 (the keeper's pick of batch 9), so the step wraps at 64; the rule (one step per piece) is unchanged
+test('stepOf: the melody step follows the piece count, one step per piece at any pace, round the 64', () => {
+  assert.deepEqual([1, 2, 64, 65, 129].map(stepOf), [0, 1, 63, 0, 0]);
+});
+
+// D377: the place swell (the librarian's ruling, the keeper can veto): a place's level rises gently through the 64 steps to its peak over steps 45 to 52
+// (indices 44..51, the lift and the register's top) and eases home by step 64, so the next round starts where this one did
+test('swellDb: a place rises from its floor at step 1 to its peak over steps 45 to 52 and eases back to the floor by step 64, gently, round the 64', () => {
+  const db = [...Array(64)].map((_, i) => swellDb(i)), peak = Math.max(...db), floor = Math.min(...db);
+  assert.equal(db[0], floor, 'step 1 is the floor'); assert.equal(db[63], floor, 'step 64 is home, at the floor');
+  for (let i = 44; i <= 51; i++) assert.equal(db[i], peak, `step ${i + 1} is at the peak`);
+  for (let i = 0; i < 44; i++) assert.ok(db[i] < db[i + 1], `rising from step ${i + 1} to ${i + 2}`);
+  for (let i = 51; i < 63; i++) assert.ok(db[i] > db[i + 1], `easing from step ${i + 1} to ${i + 2}`);
+  assert.ok(peak - floor >= 1.5 && peak - floor <= 3, `gentle: ${(peak - floor).toFixed(2)} dB from floor to peak`);
+  for (let i = 1; i < 64; i++) assert.ok(Math.abs(db[i] - db[i - 1]) <= 0.4, `no jump between steps ${i} and ${i + 1}`);
+  assert.deepEqual([64, 108, -1].map(swellDb), [0, 44, 63].map(swellDb), 'round the 64');
+  for (const bad of [0.5, NaN, '3', null]) assert.throws(() => swellDb(bad), /sound: a melody step is a whole number/);
+});
+
+// D375: four melodies of 64 steps (G:\Consonance-tools\b9\mel9.js, batch 9: Yearning, Shoegaze, Light occult, Afterglow), each step today's shape
+// AMENDED (D377): the keeper's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js) and Aurora of batch 12 (mel12.js). The
+// names change; the rule (four melodies of 64 steps of this shape) does not
+test('the four melodies: 64 steps each of a bass, a chord of four and a melody note on top, each melody its own', () => {
+  assert.deepEqual([...MELODY_NAMES], ['aqua', 'skyline', 'glass', 'aurora']);
+  assert.deepEqual(Object.keys(MELODIES), [...MELODY_NAMES]);
+  for (const k of MELODY_NAMES) {
+    const m = MELODIES[k];
+    assert.equal(m.steps.length, 64, `${k}: 64 steps`);
+    assert.ok(m.steps.every(([b, chord, mel]) => Number.isInteger(b) && b < 48 && chord.length === 4 && mel > Math.max(...chord)), `${k}: a bass, a chord of four, a melody note on top`);
+    assert.ok(Object.isFrozen(m) && Object.isFrozen(m.steps) && m.steps.every(Object.isFrozen), `${k}: frozen`);
+    assert.equal(typeof m.title, 'string');
+  }
+  const tops = MELODY_NAMES.map((k) => MELODIES[k].steps.map((s) => s[2]).join(','));
+  assert.equal(new Set(tops).size, 4, 'four different tunes');
+});
+
+// D375: one of the four is picked at each launch (the player's creation, once a page load), from `pick` (Math.random in the app), and never saved
+test('a launch picks one of the four melodies from its random draw, hands it to the engine, saves nothing, and refuses a draw outside 0..1', () => {
+  const got = [0, 0.26, 0.5, 0.99].map((r) => {
+    const F = fakeWindow(), seen = [];
+    const s = createSound(F.win, { engineFor: (c, o) => { seen.push(o && o.melody); return F.engineFor(c); }, pick: () => r, log: () => {} });
+    const before = s.melody; F.fire('pointerdown');
+    assert.deepEqual(seen, [before], 'the engine is built with the melody the launch picked');
+    assert.deepEqual(Object.keys(F.store), [], 'nothing is saved, so the next launch draws again');
+    return before;
+  });
+  assert.deepEqual(got, ['aqua', 'skyline', 'glass', 'aurora']);   // AMENDED (D377): the four's names
+  let seed = 7; const seeded = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const many = new Set(Array.from({ length: 40 }, () => createSound(fakeWindow().win, { pick: seeded, log: () => {} }).melody));
+  assert.deepEqual([...many].sort(), [...MELODY_NAMES].sort(), 'over 40 seeded launches, every melody comes up');
+  for (const bad of [1, -0.1, NaN, () => 'x']) assert.throws(() => createSound(fakeWindow().win, { pick: typeof bad === 'function' ? bad : () => bad, log: () => {} }), /sound: a melody pick is a number from 0 up to 1/);
 });
 
 test('the tick melody is 128 steps (16 notes × 8 chords), in a playable range, and moves', () => {
@@ -57,6 +105,23 @@ test('tickPlan: climb rises in pitch with its value, bank arpeggiates and wraps,
   assert.equal(tickPlan('climb', 99.5, 100).midi, tickPlan('climb', 13.5, 14).midi, 'a steep climb stops rising at the top of the range');
   const b = [0, 1, 2, 15].map((v) => tickPlan('bank', v - 0.5, v).midi);
   assert.ok(b[0] < b[1] && b[1] < b[2], 'banking further climbs the arpeggio'); assert.equal(b[3], b[0], 'after 15 steps it starts over');
+});
+
+// D374 (the keeper: "it doesnt do the climb effect"): with the fields read as corners (the panel's default) the climb and turn handles are climbDeg and
+// turnDeg (app/core/handles.js KINDS), and those ticks walked the length melody; every handle kind labelled climb or turn makes that handle's sound
+test('tickPlan: every handle labelled climb pitches by its value, and every one labelled turn pans, the corner kinds as the rate ones', () => {
+  const HD = require('../core/handles.js');
+  const climbs = Object.keys(HD.KINDS).filter((k) => HD.KINDS[k].label === 'climb'), turns = Object.keys(HD.KINDS).filter((k) => HD.KINDS[k].label === 'turn');
+  assert.deepEqual([climbs, turns], [['climb', 'climbDeg'], ['turn', 'turnDeg']], 'the four kinds this row covers');
+  for (const k of climbs) {
+    const c = [-20, -3, 0, 3, 8, 14].map((v) => tickPlan(k, v - 0.5, v, 7));
+    assert.deepEqual(c.map((p) => p.midi), [-20, -3, 0, 3, 8, 14].map((v) => tickPlan('climb', v - 0.5, v, 7).midi), `${k} plays climb's notes`);
+    assert.ok(c.every((p) => p.melAt === 7), `${k} leaves the melody where it was`);
+  }
+  for (const k of turns) {
+    assert.ok(tickPlan(k, 9.5, 10).pan < 0 && tickPlan(k, -9.5, -10).pan > 0, `${k} pans into the ear of the turn`);
+    assert.equal(tickPlan(k, 9.5, 10, 7).melAt, 8, `${k} walks the melody as turn does`);
+  }
 });
 
 test('tickPlan: turn pans into the ear of the turn (the handle\'s + is left); width spreads the tick from mono at 1 m to full stereo at 50 m', () => {

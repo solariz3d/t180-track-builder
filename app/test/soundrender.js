@@ -3,7 +3,8 @@
 //
 //   chromePath()                    the Chrome to use (CHROME_PATH, else the usual Windows place), or null when there is none
 //   renderClips(src, clips, o)     -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }; o.samples = a folder; o.seed (default SEED)
-//                                   of the four slot WAVs (app/sounds): the engine is handed them (useSamples) before each clip, as the app does once they load
+//                                   of the four slot WAVs (app/sounds): the engine is handed them (useSamples) before each clip, as the app does once they load;
+//                                   o.melody (D375) = which of the engine's melodies place and undo play (the engine's first when none is given)
 //   readWav(file)                   a 16-bit PCM WAV as { L, R, sampleRate } (mono is copied to both sides)
 //   peakDb(clip)                    the sample peak in dBFS
 //   lufs(clip)                      integrated loudness, ITU-R BS.1770-4 (K-weighting, 400 ms blocks with 75% overlap, gates at -70 LUFS and -10 LU)
@@ -33,7 +34,8 @@ const SEED = 1;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Render each clip in an OfflineAudioContext (48 kHz stereo) in headless Chrome; the engine runs at level 1, as the sketch page and render-builder.js ran it. */
-async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.random() * 600), samples = null, seed = SEED } = {}) {
+async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.random() * 600), samples = null, seed = SEED, melody = null } = {}) {
+  if (melody !== null && typeof melody !== 'string') throw new Error(`soundrender: a melody is one of the engine's MELODY_NAMES, got ${melody}`);
   if (!Number.isInteger(seed) || seed < 0) throw new Error(`soundrender: a seed is a whole number 0 or more, got ${seed}`);
   const exe = chromePath(); if (!exe) throw new Error('soundrender: no Chrome found (set CHROME_PATH)');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180snd-test-'));
@@ -49,7 +51,7 @@ async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.r
     await ev(`window.__M = (() => { const module = { exports: {} }; ${src}\n; return module.exports; })(); window.__SAMP = null; true`);
     if (samples) {   // each slot's two channels go over in pieces, into one AudioBuffer per slot that every clip's context can play
       await ev('window.__SAMP = {}; true');
-      for (const slot of ['drag_tick', 'place', 'undo', 'loop_closed']) {
+      for (const slot of await ev('window.__M.SAMPLES.slots.slice()')) {   // D375: the files the engine itself loads (its SAMPLES.slots)
         const w = readWav(path.join(samples, `${slot}.wav`)), CHN = 1 << 17;
         await ev(`window.__SAMP.${slot} = new AudioBuffer({ numberOfChannels: 2, length: ${w.L.length}, sampleRate: ${w.sampleRate} }); true`);
         for (const [c, x] of [[0, w.L], [1, w.R]]) for (let i = 0; i < x.length; i += CHN) {
@@ -64,7 +66,7 @@ async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.r
       const n = await ev(`(async () => {
         const SR = 48000, ctx = new OfflineAudioContext(2, Math.ceil(SR * ${secs}), SR), M = window.__M;
         let s = ${seed} >>> 0; const random = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };   // mulberry32, fresh from the seed for every clip
-        const E = M.createEngine(ctx, { random }); E.setLevel(1); if (window.__SAMP) E.useSamples(window.__SAMP);
+        const E = M.createEngine(ctx, { random${melody ? `, melody: ${JSON.stringify(melody)}` : ''} }); E.setLevel(1); if (window.__SAMP) E.useSamples(window.__SAMP);
         const at = (t, fn) => { ctx.suspend(t).then(() => { fn(); ctx.resume(); }); };
         ${body}
         const buf = await ctx.startRendering(); window.__buf = [buf.getChannelData(0), buf.getChannelData(1)]; return buf.length;
