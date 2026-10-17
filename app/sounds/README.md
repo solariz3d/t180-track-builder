@@ -1,24 +1,22 @@
 # The builder's sounds
 
-Recorded samples rendered offline from Serum's factory presets on the sketch page (batch 8, 2026-10-16; the tick from batch 9 and the melodies' instruments from batch 10, 2026-10-17). Each is 16-bit stereo at 48 kHz.
+Recorded samples rendered offline from Serum's factory presets on the sketch page (batch 8, 2026-10-16; the tick from batch 9 and the melodies' instruments from batches 11 and 12, 2026-10-17). Each is 16-bit stereo at 48 kHz.
 
 | file | the sound | preset | rendered on | sha256 |
 |---|---|---|---|---|
 | `drag_tick.wav` | the tick of a dragged handle | Eiano tik (batch 9, the keeper's pick) | MIDI 84 | `0c63854e26167115886d2d0fc947362cdc72c82271b12e2bcb5a2cf8fe6cbfa8` |
-| `place.wav` | a piece placed (batch 8; no longer played, kept) | SY Eiano [LT] | MIDI 60 | `feb0e8936def375353c4381a1b8eeb09cf7968a740e2c289bfb812c9daca18c2` |
-| `undo.wav` | a step undone (batch 8; no longer played, kept) | SY Eiano [LT], softer | MIDI 60 | `7c630ede9b91662291a87f5c4ff0556d4d4cb55f6415fe0b1026bd55f33cd63f` |
 | `loop_closed.wav` | the loop closed | SY Eiano and SY Vintage Bells | the whole gesture | `34fd8b2193a46a20add00efff7379c836b03795fb5bbd9e0531906e273852308` |
-| `place_yearning.wav` | a piece placed, in the yearning melody | KY WurlyKeys [ASL] (batch 10) | MIDI 60 | `d2607f5facd0f209e916ac11e00e410cff807edbe091cc8202ac39d02f5fba81` |
-| `undo_yearning.wav` | a step undone, in the yearning melody | KY WurlyKeys [ASL], softer | MIDI 60 | `2de01fc22e712b09d17254afbfe09de2ac9a7b77afc4ce12c93a476df15a4bd7` |
-| `place_shoegaze.wav` | a piece placed, in the shoegaze melody | PL Pads Pluck [BR] (batch 10) | MIDI 60 | `0e56d383420db70ea9781af5f21abc7729fb16585ad8ef6b2fb0f7ad36b069c7` |
-| `undo_shoegaze.wav` | a step undone, in the shoegaze melody | PL Pads Pluck [BR], softer | MIDI 60 | `c9eaec216cbc4092ed3de2a47a1f5f5d4d63118d7bd053784590b4454cfc950c` |
-| `place_occult.wav` | a piece placed, in the occult melody | SY Vintage Bells [FP] (batch 10) | MIDI 60 | `3661d6f774d6cb34a38abc41dc6613d73b5d56d28b5b1ec5bcf39f89651ae4e6` |
-| `undo_occult.wav` | a step undone, in the occult melody | SY Vintage Bells [FP], softer | MIDI 60 | `93f810f129174232d4d3c9c89ff185959ae51ef4618d850c22cd3f6ac416330c` |
-| `place_afterglow.wav` | a piece placed, in the afterglow melody | PL D_Pluck [DU] (batch 10) | MIDI 60 | `79569a9369888d0484943049a951131afcf3d2d88ad7dc9606d61b6823a47be1` |
-| `undo_afterglow.wav` | a step undone, in the afterglow melody | PL D_Pluck [DU], softer | MIDI 60 | `be672b7fad2fba009fd71986d14b868a234f50d00d38e4e98df786417b894d30` |
+| `place_aqua.wav` | a piece placed, in the aqua melody | PL Big Bells [AS] (batch 11) | MIDI 60 | `5b8b211c557ff965f897d1c6e6c761b0e9cc0c370311c2459fcae71cd5c0e4b7` |
+| `undo_aqua.wav` | a step undone, in the aqua melody | PL Big Bells [AS], softer | MIDI 60 | `d74353c720b0788d0917939dcbdb1114400f96336f7b3f77ec7ee40e79a622ef` |
+| `place_skyline.wav` | a piece placed, in the skyline melody | SY Runtheharm [GS] (batch 11) | MIDI 60 | `33f7aac3cbabf4b86a400b6087b39f3ec3546fafe2b931b47b8b09a2e013be93` |
+| `undo_skyline.wav` | a step undone, in the skyline melody | SY Runtheharm [GS], softer | MIDI 60 | `bbb4608845e8a373ff578b63090e2fcb861c7183276864ab7efd93db3caf9bec` |
+| `place_glass.wav` | a piece placed, in the glass melody | SY VeloHarm [GS] (batch 11) | MIDI 60 | `96b5268d2ce972d05d9d625b52c86523500306f60411a64d6567d8bf26504b61` |
+| `undo_glass.wav` | a step undone, in the glass melody | SY VeloHarm [GS], softer | MIDI 60 | `1a1971604311bdad48f02a33104cf7c8b7f075c940a94a2e1c8206a9708d93c5` |
+| `place_aurora.wav` | a piece placed, in the aurora melody | SY Linear Arithmetic [FP] (batch 12) | MIDI 60 | `929e061648f00a5360db018742f35e0b33da43c506a579e2d6d4251d81e29cd7` |
+| `undo_aurora.wav` | a step undone, in the aurora melody | SY Linear Arithmetic [FP], softer | MIDI 60 | `c91f9db343bfe20ed6ee453598fdf3637990b1ac4f918996cab7532797c3ff7b` |
 
 `app/sound.js` plays every note of a sound from its one sample, pitched by playback rate from the note it was rendered on, so the melodies and the rules for which note plays are the same as before. The loop close plays whole.
 
-Place and undo play one of four melodies, picked at random each time the builder starts (`MELODIES` in `app/sound.js`). Each melody has its own two slots, `place_<name>` and `undo_<name>`, each playing that melody's own file above (`SAMPLES.file`, one line per melody, so one melody's instrument can be changed alone). Each file is levelled to play at the place or undo gain.
+Place and undo play one of four melodies, picked at random each time the builder starts (`MELODIES` in `app/sound.js`). Each melody has its own two slots, `place_<name>` and `undo_<name>`, each playing that melody's own file above (`SAMPLES.file`, one line per melody, so one melody's instrument can be changed alone). Each file is levelled to play at the place or undo gain. A place also swells with its step (`swellDb`): 1 dB under that gain at the first step, rising to 0.7 dB over it across steps 45 to 52, and easing back by step 64. An undo is not swelled.
 
 The samples load once, when audio starts (the first press or key). Until they are decoded, or if they fail to load, the builder plays its own synth voices, made live in code, so it is never silent. `app/test/sound-samples.test.js` checks every file here byte for byte against the hashes above, and that every slot names a file that is here.
