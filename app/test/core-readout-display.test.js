@@ -629,9 +629,9 @@ test('"at start" on a field left as shown sends nothing (no target, D193); the b
 test('no water: the panel has no Water section, the shell no pour and no water state, an edit pours and draws nothing, and no file of the app names the water', async () => {
   const fs = require('fs'), path = require('path');
   const P = await mountPanel(), els = P.root.all();
-  // AMENDED D355 part 2 (position only): Brush and Close moved to the Build menu and Local example to File ▸ Developer (plan_t180_handoff :1382-1391), so those headings are gone and
-  // Start & grid and Pit lane come after the selection, held for pane A's Track menu; the rule of this row, no Water section, is unchanged
-  assert.deepEqual(els.filter((e) => e.tagName === 'H3').map((e) => e.textContent), ['Equation track', 'Extend at the head', 'Selected pieces', 'Pieces library', 'Start & grid', 'Pit lane'], 'the panel\'s sections (2026-10-09 added Start & grid and Pit lane; D240 added the two for saved pieces; D355 moved Brush, Close and Local example to the menus): no Water');
+  // AMENDED D355 part 2 (position only): Brush and Close moved to the Build menu (plan_t180_handoff :1382-1387), and Start & grid, Pit lane and Local example to pane A's Track menu
+  // and File ▸ Developer, which make their own (the seam ruling, :1421-1424), so those headings are gone from this column; the rule of this row, no Water section, is unchanged
+  assert.deepEqual(els.filter((e) => e.tagName === 'H3').map((e) => e.textContent), ['Equation track', 'Extend at the head', 'Selected pieces', 'Pieces library'], 'the panel\'s sections (D240 added the two for saved pieces; D355 moved Brush and Close to the Build menu and Start & grid, Pit lane and Local example to the Track menu): no Water');
   const words = els.flatMap((e) => [e.textContent, e.attrs['aria-label'], e.attrs.title]).filter(Boolean).join(' ');
   assert.doesNotMatch(words, /water|stream|pour|design speed/i, 'no control, label or tooltip names the water, its speed or its streams');
   assert.ok(els.some((e) => e.tagName === 'BUTTON' && e.textContent === 'Close the loop'), 'control: the Close section is still there');

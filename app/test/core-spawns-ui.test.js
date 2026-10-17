@@ -46,6 +46,10 @@ async function mounted() {
   s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
   s.close();
   const panel = require('../core/panel.js').mount(root, s);
+  // AMENDED D355 seam fix (where the sections are mounted, not what they do): Start & grid and Pit lane left the core panel for pane A's Track menu (app/core/trackmenu.js,
+  // plan_t180_handoff :1421-1424), which mounts spawnsui / pitui itself with { shell, el, win }; they are mounted the same way here, into this test's root, and no row's assertion changes
+  const el = (tag, attrs = {}, ...kids) => { const e = doc.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; };
+  for (const M of [require('../core/spawnsui.js'), require('../core/pitui.js')]) root.append(...M.mount({ shell: s, el, win: doc.defaultView }).nodes);
   const by = (aria) => root.all().find((e) => e.attrs['aria-label'] === aria);
   const btn = (text) => root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === text);
   const set = (aria, v) => { const f = by(aria); f.value = String(v); f.onchange(); };

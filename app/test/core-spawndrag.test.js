@@ -68,6 +68,10 @@ async function mounted({ build = null, pose = null, hAbove = 60, at = 250 } = {}
   const bubbled = [];
   stage.addEventListener('pointerdown', (e) => bubbled.push(e), false);   // what the camera and the piece picking would see
   const panel = require('../core/panel.js').mount(root, s);
+  // AMENDED D355 seam fix (where the section is mounted, not what it does): Start & grid left the core panel for pane A's Track menu (app/core/trackmenu.js,
+  // plan_t180_handoff :1421-1424), which mounts spawnsui itself with { shell, el, win }; it is mounted the same way here, into this test's root, and no row's assertion changes
+  const el = (tag, attrs = {}, ...kids) => { const e = doc.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; };
+  root.append(...require('../core/spawnsui.js').mount({ shell: s, el, win }).nodes);
   tick();
   const VP = () => M.viewProj(view.pose, W / H);
   const px = (p) => { const c = M.apply(VP(), p); return { x: (c[0] / c[3] * 0.5 + 0.5) * W, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * H }; };

@@ -21,12 +21,11 @@ const HD = require('./handles.js');   // D244: the drag handles on the Extend gh
 const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
 const LD = require('./landing.js');
 const GL = require('./griplike.js');   // D261: the grip field's checks and words, the "grip like…" entries
-const GR = require('./griplayer.js');
-const SU = require('./spawnsui.js');     // 2026-10-09: the start line, the grid pack and the hotlap, placed by hand
-const SPL = require('./spawnslayer.js');  // and drawn on the preview
+const GR = require('./griplayer.js');   // D261: the track coloured by grip
+// (the start line, the grid pack and the hotlap, placed by hand, and the pit lane: app/core/spawnsui.js and pitui.js, mounted by the Track menu since D355)
+const SPL = require('./spawnslayer.js');  // the hand-placed start, drawn on the preview
 const SPD = require('./spawndrag.js');
 const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // D285: and dragged there
-const PIT = require('./pitui.js');       // 2026-10-09: the pit lane, its practice spawns on it   // D261: the track coloured by grip
 const VO = require('./valuesoverlay.js');   // D267: the values of the piece being edited, large over the 3D view   // D258: the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
 
@@ -509,29 +508,21 @@ function mount(root, shell, mountOpts = {}) {
     const closed = closeAsked && h.present.closed && h.past.length && h.past[h.past.length - 1] === closeAsked && st.message && st.messageKind === 'ok';
     proposalBox.replaceChildren(...(refused ? [el('p', { 'aria-label': 'close refused', text: st.message, style: 'color: var(--bad)' })] : closed ? [el('p', { 'aria-label': 'close done', text: st.message })] : []));
   };
-  // held to the column's width (a file input is wider than the 280 px column by default, and the column scrolled sideways)
-  const fitIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the fit, *.pieces.json', style: 'max-width: 100%; min-width: 0' }), readIn = el('input', { type: 'file', accept: '.json', 'aria-label': 'the read, *.read.json', style: 'max-width: 100%; min-width: 0' });
-  const readText = (inp) => (inp.files && inp.files[0] ? inp.files[0].text() : Promise.reject(new Error('pick both files')));
-  const openEx = el('button', { text: 'Open example', onclick: async () => {
-    try { const [f, r] = await Promise.all([readText(fitIn), readText(readIn)]); shell.openExample(f, r, fitIn.files[0].name.replace(/\.pieces\.json$/i, '') + ' (local)'); } catch (e) { msg.textContent = e.message; msg.className = 'message'; }
-  } });
+  // D355 seam fix (plan_t180_handoff :1421-1424): Open example…, Start & grid… and Pit lane… are pane A's Track menu's (app/core/trackmenu.js), which mounts its own
+  // spawnsui / pitui and its own file boxes when a panel opens and unmounts them when it closes; this panel no longer makes them (two live copies would each follow the shell)
 
   const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
   const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send, settings: S });
-  const spawns = SU.mount({ shell, el, win });
-  const pit = PIT.mount({ shell, el, win });   // D240 (the selection's clicks are the brush's while the brush is armed)
   // D269: the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
   const bin = doc.getElementById ? doc.getElementById('pieces-bin') : null; if (bin) bin.replaceChildren(...pieces.nodes.library.slice(1));
   // D355 part 2, THE SLIM LEFT SIDE (the keeper: "we can try it, but keep it the same aesthetic as we have it now"; plan_t180_handoff :1382-1387). The commands moved to
-  // the top-right menus: Build (app/core/buildmenu.js) and, through pane A's Track and pane B's File, Settings and View. Each moved control is still THIS panel's, the same
+  // the top-right menus: Build (app/core/buildmenu.js), pane B's Settings and View, and pane A's Track and File ▸ Developer (which make their own controls). Each moved control is still THIS panel's, the same
   // node with the same handlers, HELD out of sight below; a menu's popover borrows it while open (lend) and gives it back, so what it does is unchanged.
   const held = el('div', { 'aria-label': 'held for the menus', hidden: '', style: 'display:none' });
   const LENT = {
     turnBy: el('div', { class: 'actions' }, turnByBtn, field('turn by °', turnBy)),
     grid: el('div', {}, el('div', { class: 'actions' }, gridBtn, field('grid °', gridStep)), headingNote),
     sharp: el('div', { class: 'actions' }, sharpBtn, field('sharp °', sharpDeg), field('sharp radius m', sharpR), field('sharp ramp m', sharpRamp)),
-    spawns: el('div', {}, ...spawns.nodes), pit: el('div', {}, ...pit.nodes),   // for pane A's Track menu (Start & grid…, Pit lane…)
-    example: el('div', {}, el('div', { class: 'pickers' }, field('fit', fitIn), field('read', readIn)), el('div', { class: 'actions' }, openEx)),   // for File ▸ Developer ▸ Open example…
   };
   held.append(...Object.values(LENT),
     el('div', { class: 'pickers' }, field('turn & climb as', turnAs), field('drag handles', handlesOn), field('colour by grip', colourOn)),   // Settings and View hold these (through S)
@@ -637,7 +628,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawns, pit, spawnsLayer, spawnDrag, values, brushStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); for (const off of offSettings) if (typeof off === 'function') off(); spawns.unmount(); pit.unmount(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, brushStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

@@ -198,7 +198,9 @@ test('row 6: the left side keeps the brief\'s list, "More shape" folded, and not
   assert.ok(P.byLabel('the piece Extend would add') && !P.hiddenEl(P.byLabel('the piece Extend would add')), 'the readout is on the left');
   // every control that moved is still the panel's (the menus borrow them), so what it does is unchanged
   for (const l of ['turn and climb as', 'drag handles', 'colour by grip', 'grid step']) assert.ok(P.byLabel(l), `${l} is still in the panel`);
-  for (const b of ['Jump', 'Level', 'To floor', 'Turn by', 'Turn to grid', 'Sharp', 'Close the loop', 'Open example']) assert.ok(P.button(b), `${b} is still in the panel`);
+  for (const b of ['Jump', 'Level', 'To floor', 'Turn by', 'Turn to grid', 'Sharp', 'Close the loop']) assert.ok(P.button(b), `${b} is still in the panel`);
+  // (Open example…, Start & grid… and Pit lane… are pane A's Track menu's own, app/core/trackmenu.js: the seam ruling, plan_t180_handoff :1421-1424)
+  assert.ok(!P.button('Open example') && !P.all().some((e) => e.tagName === 'H3' && /^(Start & grid|Pit lane|Local example)$/.test(e.textContent)), 'the panel makes none of the Track menu\'s controls');
   P.panel.unmount();
 });
 
