@@ -12,8 +12,9 @@
 //                                                      back as it falls); climb rises and falls in pitch with its value; turn pans the melody into
 //                                                      the ear of the turn; bank plays an arpeggio; width also sets the tick's stereo WIDTH, mono at
 //                                                      1 m to full stereo at 50 m. One tick a frame at most, each choking the last (tickPlan).
-//   a piece is placed                                  the next of 16 steps of one melody: a Rhodes chord with a melody note on top. The step is the
-//                                                      piece count, so the tune moves one step per piece at any pace (stepOf).
+//   a piece is placed                                  the next of 64 steps of this launch's melody: a chord with a melody note on top. Four melodies
+//                                                      (MELODIES, D375), one picked at random each time the builder starts, never saved. The step
+//                                                      is the piece count, so the tune moves one step per piece at any pace (stepOf).
 //   a step is undone                                   the step being taken back, softer and darker: undo walks the same melody backwards.
 //   the loop is closed                                 one gesture: a Rhodes roll, a synth lead answering, a landing chord and crash, one high note ringing.
 // Which of the three history sounds plays is read off the shell's state (soundFor), so every way of placing, undoing or closing makes its sound and
@@ -38,14 +39,27 @@ const TINE = Object.freeze({ peak: 0.226 });
 // rate^0.5, the same energy whatever its note, which brings the four drags within 2.4 dB. `tickFade` is the tick's attack fade (4 ms): one tick's peak
 // sits near -27 dBFS with or without it, but the climb and bank drags' peaks go over their -15 with less, at the gain that keeps one tick in its band (3 ms
 // put the climb drag at -14.7 on the bands' seeded render; 4 ms passes there and on 11 of 12 seeds, the twelfth one tick 0.3 dB under its floor)
+// D375: `slots` are the FILES the player fetches (ref and gain are each file's); `file` maps every slot a voice plays to its file. Each melody plays on its
+// own place_<name> and undo_<name> slots, each its own file (one line per melody below, so one pair can change alone). A melody file's gain is today's place or undo gain: E levelled each file to it. The tick is batch 9's Eiano
+// tik (the keeper's pick), measured through this engine at the old tick's gain, its file levelled to match (G:\Consonance-tools\b9\level_ticks.js)
+// D377: the keeper's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js, their files from page11\batch11) and Aurora of
+// batch 12 (mel12.js, page12\batch12), in place of batch 10's four, whose files are gone from app/sounds with batch 8's place.wav and undo.wav
+const MELODY_NAMES = Object.freeze(['aqua', 'skyline', 'glass', 'aurora']);
 const SAMPLES = Object.freeze({
-  slots: Object.freeze(['drag_tick', 'place', 'undo', 'loop_closed']),
-  ref: Object.freeze({ drag_tick: 84, place: 60, undo: 60 }),
-  gain: Object.freeze({ drag_tick: 1.852, place: 0.645, undo: 0.596, loop_closed: 0.668 }),
+  slots: Object.freeze(['drag_tick', 'loop_closed', ...MELODY_NAMES.flatMap((m) => [`place_${m}`, `undo_${m}`])]),
+  file: Object.freeze({
+    drag_tick: 'drag_tick', loop_closed: 'loop_closed',
+    place_aqua: 'place_aqua', undo_aqua: 'undo_aqua',                       // PL Big Bells [AS]
+    place_skyline: 'place_skyline', undo_skyline: 'undo_skyline',           // SY Runtheharm [GS]
+    place_glass: 'place_glass', undo_glass: 'undo_glass',                   // SY VeloHarm [GS]
+    place_aurora: 'place_aurora', undo_aurora: 'undo_aurora',               // SY Linear Arithmetic [FP]
+  }),
+  ref: Object.freeze({ drag_tick: 84, ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 60], [`undo_${m}`, 60]])) }),
+  gain: Object.freeze({ drag_tick: 1.852, loop_closed: 0.668, ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 0.645], [`undo_${m}`, 0.596]])) }),
   tickFade: 0.004,
   tickEven: 0.5,
 });
-const rateOf = (slot, midi) => (slot in SAMPLES.ref ? Math.pow(2, (midi - SAMPLES.ref[slot]) / 12) : 1);
+const rateOf = (file, midi) => (file in SAMPLES.ref ? Math.pow(2, (midi - SAMPLES.ref[file]) / 12) : 1);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -64,15 +78,69 @@ function soundFor(prev, next) {
 }
 
 // ── the music ──
-// THE 16 STEPS of place and undo: [bass, chord, melody note]. C major with the borrowed chords that ache (Fm6, Abmaj7, Bbmaj7), rising to a high C
-const STEPS = Object.freeze([
-  [36, [52, 55, 59, 62], 67], [33, [48, 52, 55, 59], 71], [29, [52, 57, 59, 64], 69], [29, [51, 56, 60, 62], 72],   // Cmaj9 Am9 Fmaj7#11 Fm6
-  [28, [50, 55, 59, 62], 71], [33, [50, 55, 57, 62], 74], [26, [53, 57, 60, 64], 76], [31, [53, 57, 59, 64], 74],   // Em7 A7sus Dm9 G13sus
-  [36, [52, 55, 59, 62], 79], [32, [55, 60, 63, 67], 79], [34, [50, 53, 57, 62], 77], [33, [48, 52, 55, 59], 76],   // Cmaj9 Abmaj7 Bbmaj7 Am9
-  [29, [51, 56, 60, 62], 77], [31, [53, 57, 59, 64], 74], [28, [50, 55, 59, 62], 79], [36, [52, 55, 59, 64], 84],   // Fm6 G13sus Em7 Cmaj9
-].map((s) => Object.freeze(s)));
-/** The melody step a track with `pieces` pieces has just played on its last placement (0..15); the first piece is step 0. */
-const stepOf = (pieces) => (((pieces - 1) % 16) + 16) % 16;
+// THE FOUR MELODIES of place and undo (D375, the keeper's pick of batch 9, composed for this builder in G:Consonance-tools9mel9.js and copied here
+// as data): 64 steps each of [bass, chord of four, melody note on top], two steps a chord. One is picked at each launch (createSound); place walks it
+// forward, undo back
+const melody = (title, steps) => Object.freeze({ title, steps: Object.freeze(steps.map((s) => Object.freeze([s[0], Object.freeze(s[1]), s[2]]))) });
+const MELODIES = Object.freeze({
+  aqua: melody("Aqua", [
+    [38, [50, 52, 54, 57], 66], [38, [50, 52, 54, 57], 69], [31, [49, 50, 54, 59], 71], [31, [49, 50, 54, 59], 73], [38, [50, 52, 54, 57], 69], [38, [50, 52, 54, 57], 66], [31, [50, 57, 59, 66], 67], [31, [50, 57, 59, 66], 69],
+    [35, [50, 57, 59, 66], 74], [35, [50, 57, 59, 66], 73], [31, [50, 54, 57, 59], 71], [31, [50, 54, 57, 59], 74], [38, [50, 52, 54, 57], 76], [38, [50, 52, 54, 57], 78], [33, [50, 52, 55, 59], 76], [33, [50, 52, 55, 59], 74],
+    [31, [49, 50, 54, 59], 78], [31, [49, 50, 54, 59], 73], [30, [52, 54, 57, 59], 81], [30, [52, 54, 57, 59], 76], [28, [50, 52, 55, 59], 79], [28, [50, 52, 55, 59], 78], [33, [50, 54, 55, 59], 76], [33, [50, 54, 55, 59], 78],
+    [38, [52, 54, 57, 61], 81], [38, [52, 54, 57, 61], 85], [28, [50, 52, 55, 59], 83], [28, [50, 52, 55, 59], 79], [33, [50, 52, 55, 59], 79], [33, [50, 52, 55, 59], 76], [35, [50, 54, 57, 61], 78], [35, [50, 54, 57, 61], 85],
+    [31, [50, 57, 59, 67], 79], [31, [50, 57, 59, 67], 83], [33, [49, 57, 59, 64], 81], [33, [49, 57, 59, 64], 85], [35, [49, 57, 62, 66], 83], [35, [49, 57, 62, 66], 78], [28, [49, 57, 62, 66], 78], [28, [49, 57, 62, 66], 83],
+    [31, [50, 57, 59, 66], 83], [31, [50, 57, 59, 66], 86], [35, [52, 57, 61, 66], 88], [35, [52, 57, 61, 66], 85], [28, [52, 56, 59, 66], 88], [28, [52, 56, 59, 66], 87], [33, [51, 56, 61, 64], 85], [33, [51, 56, 61, 64], 87],
+    [28, [52, 56, 59, 66], 83], [28, [52, 56, 59, 66], 88], [37, [51, 56, 59, 64], 87], [37, [51, 56, 59, 64], 83], [31, [50, 59, 61, 66], 83], [31, [50, 59, 61, 66], 81], [33, [50, 59, 64, 67], 79], [33, [50, 59, 64, 67], 76],
+    [35, [50, 57, 59, 66], 78], [35, [50, 57, 59, 66], 74], [28, [50, 55, 59, 64], 76], [28, [50, 55, 59, 64], 79], [33, [49, 55, 59, 64], 73], [33, [49, 55, 59, 64], 76], [38, [50, 54, 57, 64], 78], [38, [50, 54, 57, 64], 74],
+  ]),
+  skyline: melody("Skyline", [
+    [29, [48, 53, 55, 57], 72], [29, [48, 53, 55, 57], 69], [34, [50, 52, 53, 57], 74], [34, [50, 52, 53, 57], 76], [29, [48, 53, 55, 57], 72], [29, [48, 53, 55, 57], 67], [38, [48, 52, 53, 57], 69], [38, [48, 52, 53, 57], 76],
+    [34, [48, 50, 53, 57], 77], [34, [48, 50, 53, 57], 74], [33, [48, 52, 55, 57], 76], [33, [48, 52, 55, 57], 72], [31, [50, 53, 57, 58], 74], [31, [50, 53, 57, 58], 77], [36, [50, 53, 55, 58], 79], [36, [50, 53, 55, 58], 77],
+    [38, [52, 53, 57, 60], 81], [38, [52, 53, 57, 60], 76], [34, [52, 53, 57, 62], 74], [34, [52, 53, 57, 62], 81], [31, [48, 53, 55, 58], 82], [31, [48, 53, 55, 58], 77], [36, [50, 53, 57, 58], 79], [36, [50, 53, 57, 58], 81],
+    [29, [52, 55, 57, 60], 84], [29, [52, 55, 57, 60], 81], [31, [50, 53, 55, 58], 82], [31, [50, 53, 55, 58], 81], [36, [50, 52, 55, 58], 79], [36, [50, 52, 55, 58], 76], [38, [50, 53, 57, 60], 77], [38, [50, 53, 57, 60], 81],
+    [34, [50, 53, 57, 60], 81], [34, [50, 53, 57, 60], 77], [36, [50, 55, 60, 64], 79], [36, [50, 55, 60, 64], 86], [33, [48, 55, 57, 64], 84], [33, [48, 55, 57, 64], 83], [33, [50, 55, 59, 64], 83], [33, [50, 55, 59, 64], 81],
+    [34, [50, 57, 60, 65], 84], [34, [50, 57, 60, 65], 86], [38, [52, 57, 60, 67], 84], [38, [52, 57, 60, 67], 88], [31, [50, 57, 59, 66], 88], [31, [50, 57, 59, 66], 86], [36, [52, 55, 59, 66], 83], [36, [52, 55, 59, 66], 88],
+    [31, [50, 57, 59, 66], 86], [31, [50, 57, 59, 66], 83], [28, [50, 55, 59, 66], 83], [28, [50, 55, 59, 66], 78], [33, [52, 57, 60, 67], 76], [33, [52, 57, 60, 67], 84], [36, [50, 57, 58, 65], 81], [36, [50, 57, 58, 65], 79],
+    [38, [48, 53, 57, 62], 77], [38, [48, 53, 57, 62], 76], [31, [50, 53, 57, 58], 74], [31, [50, 53, 57, 58], 77], [36, [50, 52, 55, 58], 79], [36, [50, 52, 55, 58], 76], [29, [48, 53, 55, 57], 81], [29, [48, 53, 55, 57], 77],
+  ]),
+  glass: melody("Glass", [
+    [33, [49, 51, 52, 56], 73], [33, [49, 51, 52, 56], 71], [33, [49, 51, 54, 59], 75], [33, [49, 51, 54, 59], 78], [33, [49, 52, 56, 57], 76], [33, [49, 52, 56, 57], 73], [30, [49, 52, 54, 57], 69], [30, [49, 52, 54, 57], 68],
+    [38, [49, 52, 54, 57], 78], [38, [49, 52, 54, 57], 81], [37, [49, 52, 56, 59], 80], [37, [49, 52, 56, 59], 76], [35, [50, 54, 57, 59], 78], [35, [50, 54, 57, 59], 74], [28, [50, 54, 57, 59], 81], [28, [50, 54, 57, 59], 83],
+    [30, [52, 56, 57, 59], 85], [30, [52, 56, 57, 59], 83], [38, [49, 50, 54, 57], 81], [38, [49, 50, 54, 57], 80], [35, [49, 50, 57, 64], 78], [35, [49, 50, 57, 64], 81], [28, [49, 50, 57, 66], 85], [28, [49, 50, 57, 66], 83],
+    [33, [49, 56, 59, 64], 83], [33, [49, 56, 59, 64], 85], [38, [49, 56, 57, 66], 80], [38, [49, 56, 57, 66], 76], [28, [50, 56, 59, 66], 86], [28, [50, 56, 59, 66], 83], [30, [49, 54, 57, 64], 85], [30, [49, 54, 57, 64], 81],
+    [38, [49, 54, 57, 64], 81], [38, [49, 54, 57, 64], 85], [28, [52, 56, 59, 66], 83], [28, [52, 56, 59, 66], 78], [37, [49, 56, 59, 64], 76], [37, [49, 56, 59, 64], 80], [37, [51, 56, 59, 66], 78], [37, [51, 56, 59, 66], 83],
+    [38, [52, 57, 61, 66], 85], [38, [52, 57, 61, 66], 88], [30, [56, 59, 61, 64], 88], [30, [56, 59, 61, 64], 85], [35, [54, 58, 61, 63], 87], [35, [54, 58, 61, 63], 85], [28, [56, 58, 59, 64], 87], [28, [56, 58, 59, 64], 88],
+    [35, [54, 58, 61, 63], 87], [35, [54, 58, 61, 63], 85], [32, [54, 56, 59, 63], 83], [32, [54, 56, 59, 63], 82], [28, [54, 56, 59, 64], 80], [28, [54, 56, 59, 64], 83], [28, [54, 57, 61, 62], 85], [28, [54, 57, 61, 62], 81],
+    [30, [52, 54, 57, 61], 81], [30, [52, 54, 57, 61], 80], [35, [50, 54, 57, 59], 78], [35, [50, 54, 57, 59], 74], [28, [50, 54, 56, 59], 83], [28, [50, 54, 56, 59], 86], [33, [49, 52, 57, 59], 85], [33, [49, 52, 57, 59], 81],
+  ]),
+  aurora: melody("Aurora", [
+    [32, [48, 51, 56, 58], 75], [32, [48, 51, 56, 58], 75], [37, [48, 53, 55, 56], 70], [37, [48, 53, 55, 56], 72], [32, [48, 51, 56, 58], 80], [32, [48, 51, 56, 58], 80], [29, [48, 51, 55, 56], 72], [29, [48, 51, 55, 56], 75],
+    [37, [48, 51, 53, 56], 77], [37, [48, 51, 53, 56], 77], [36, [50, 51, 55, 58], 72], [36, [50, 51, 55, 58], 74], [34, [48, 49, 53, 56], 82], [34, [48, 49, 53, 56], 80], [39, [49, 53, 56, 58], 80], [39, [49, 53, 56, 58], 82],
+    [29, [51, 55, 56, 58], 84], [29, [51, 55, 56, 58], 84], [37, [49, 53, 56, 60], 80], [37, [49, 53, 56, 60], 79], [34, [49, 51, 56, 58], 77], [34, [49, 51, 56, 58], 85], [39, [49, 53, 56, 60], 84], [39, [49, 53, 56, 60], 82],
+    [32, [51, 55, 58, 60], 84], [32, [51, 55, 58, 60], 84], [34, [49, 53, 56, 60], 80], [34, [49, 53, 56, 60], 77], [39, [49, 53, 55, 58], 79], [39, [49, 53, 55, 58], 82], [29, [51, 53, 56, 60], 84], [29, [51, 53, 56, 60], 80],
+    [37, [51, 53, 56, 60], 80], [37, [51, 53, 56, 60], 80], [39, [51, 55, 58, 65], 75], [39, [51, 55, 58, 65], 77], [36, [48, 55, 58, 63], 79], [36, [48, 55, 58, 63], 87], [36, [50, 55, 58, 65], 86], [36, [50, 55, 58, 65], 84],
+    [37, [51, 56, 60, 65], 84], [37, [51, 56, 60, 65], 87], [29, [51, 58, 60, 67], 87], [29, [51, 58, 60, 67], 84], [34, [52, 57, 62, 65], 86], [34, [52, 57, 62, 65], 88], [39, [51, 58, 62, 67], 86], [39, [51, 58, 62, 67], 82],
+    [34, [48, 57, 62, 65], 77], [34, [48, 57, 62, 65], 77], [31, [50, 57, 58, 65], 72], [31, [50, 57, 58, 65], 74], [39, [51, 55, 58, 65], 82], [39, [51, 55, 58, 65], 82], [39, [49, 56, 60, 65], 84], [39, [49, 56, 60, 65], 80],
+    [29, [48, 51, 53, 56], 80], [29, [48, 51, 53, 56], 79], [34, [48, 49, 53, 56], 75], [34, [48, 49, 53, 56], 75], [39, [49, 53, 55, 58], 70], [39, [49, 53, 55, 58], 72], [32, [48, 51, 56, 58], 80], [32, [48, 51, 56, 58], 80],
+  ]),
+});
+if (Object.keys(MELODIES).join() !== MELODY_NAMES.join() || MELODY_NAMES.some((k) => MELODIES[k].steps.length !== 64)) throw new Error('sound: the melodies are not the four of 64 steps MELODY_NAMES names');
+/** The melody step a track with `pieces` pieces has just played on its last placement (0..63); the first piece is step 0. */
+const stepOf = (pieces) => (((pieces - 1) % 64) + 64) % 64;
+// THE PLACE SWELL (D377, the librarian's ruling on E's batch 11, the keeper can veto). The steps carry pitch only, so every place played at one level and a
+// walk's phrases sat within 1.8 LU of each other. A place is now lifted by its step's swell: from `floor` dB at step 1, rising on a half cosine to `peak` over
+// steps 45 to 52 (indices rise..fall: the lift and the register's top), then easing back on a half cosine to the floor at step 64, so the next round
+// starts where this one did. Undo is not swelled. The two levels are as wide as the bands allow: every one of the 64 places of each melody, alone, stays in
+// the one-place band with 0.2 dB to spare (Glass's loud steps 43-44 set the peak), and the first place stays 0.3 dB over the loudest drag (the width
+// drag, which sets the floor; app/test/sound-bands.test.js)
+const SWELL = Object.freeze({ floor: -1.0, peak: 0.7, rise: 44, fall: 51 });
+/** The place swell, in dB, of melody step i (0..63, wrapped round the 64). */
+function swellDb(i) {
+  if (!Number.isInteger(i)) throw new Error(`sound: a melody step is a whole number, got ${i}`);
+  const k = ((i % 64) + 64) % 64, { floor, peak, rise, fall } = SWELL;
+  const s = k <= rise ? 0.5 - 0.5 * Math.cos(Math.PI * k / rise) : k <= fall ? 1 : 0.5 + 0.5 * Math.cos(Math.PI * (k - fall) / (63 - fall));
+  return floor + (peak - floor) * s;
+}
 
 // THE 128-STEP TICK MELODY (16 notes × 8 chords): each chord's notes in a wave, a little higher each phrase
 const PROG8 = [[60, 64, 67, 71, 74], [57, 60, 64, 67, 71], [53, 57, 60, 64, 66], [53, 56, 60, 62, 65], [52, 55, 59, 62, 64], [57, 62, 64, 67, 69], [50, 53, 57, 60, 64], [55, 60, 62, 65, 69]];
@@ -101,7 +169,11 @@ function tickPlan(kind, prev, value, melAt = 0) {
   return notePlan(kind, value, value > prev, melAt);
 }
 /** The note a tick plays for a handle's value, moving `up` or down (tickPlan's choice, once it has decided to tick): { midi, pan, spread, melAt }. */
+// D374: with the fields read as corners (the panel's default) the climb and turn handles are climbDeg and turnDeg (app/core/handles.js), and they sound as
+// climb and turn do; unnamed here, a corner climb walked the length melody ("it doesnt do the climb effect")
+const SOUNDS_AS = Object.freeze({ climbDeg: 'climb', turnDeg: 'turn' });
 function notePlan(kind, value, up, melAt = 0) {
+  kind = SOUNDS_AS[kind] || kind;
   const n = Math.round(value);
   if (kind === 'climb') return { midi: scaleMidi(clamp(n, -20, 14)), pan: 0, spread: null, melAt };
   if (kind === 'bank') return { midi: arpMidi(((n % 15) + 15) % 15), pan: 0, spread: null, melAt };
@@ -123,7 +195,9 @@ function stepPlan(kind, prev, value, melAt = 0, single = false) {
   return notePlan(kind, value, Number.isFinite(prev) ? value > prev : true, melAt);
 }
 
-function createEngine(ctx, { random = Math.random } = {}) {   // `random`: where the noise of the reverbs and the crash comes from; a seeded one makes a render repeatable (app/test/soundrender.js)
+// `melody` (D375): which of MELODIES place and undo play, the first if none is given; the player passes the one its launch picked
+function createEngine(ctx, { random = Math.random, melody = MELODY_NAMES[0] } = {}) {   // `random`: where the noise of the reverbs and the crash comes from; a seeded one makes a render repeatable (app/test/soundrender.js)
+  if (!MELODY_NAMES.includes(melody)) throw new Error(`sound: no melody named ${melody} (the four: ${MELODY_NAMES.join(', ')})`);
   const master = ctx.createGain(), dryBus = ctx.createGain(), preBus = ctx.createGain(), out = ctx.createGain();
   master.connect(preBus); dryBus.connect(preBus);   // MASTER also feeds the echo; DRYBUS does not
   // the widener: L' = ½(1+W)L + ½(1−W)R and its mirror
@@ -200,8 +274,9 @@ function createEngine(ctx, { random = Math.random } = {}) {   // `random`: where
   // note pitched by playback rate from the note it was rendered on, played into `into` with its gain, pan and (for the tick) its attack fade
   let samples = null;
   function sampleVoice(slot, midi, { t = 0, gain = 1, pan = 0, into, fade = 0 }) {
-    const t0 = at(t), s = ctx.createBufferSource(), g = ctx.createGain(), p = ctx.createStereoPanner(), level = gain * SAMPLES.gain[slot] * (slot === 'drag_tick' ? Math.pow(rateOf(slot, midi), SAMPLES.tickEven) : 1);
-    s.buffer = samples[slot]; s.playbackRate.value = rateOf(slot, midi); p.pan.value = clamp(pan, -1, 1);
+    const file = SAMPLES.file[slot]; if (!file) throw new Error(`sound: no sample slot ${slot}`);
+    const t0 = at(t), s = ctx.createBufferSource(), g = ctx.createGain(), p = ctx.createStereoPanner(), level = gain * SAMPLES.gain[file] * (slot === 'drag_tick' ? Math.pow(rateOf(file, midi), SAMPLES.tickEven) : 1);
+    s.buffer = samples[file]; s.playbackRate.value = rateOf(file, midi); p.pan.value = clamp(pan, -1, 1);
     if (fade > 0) { g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(level, t0 + fade); } else g.gain.value = level;
     s.connect(g); g.connect(p); p.connect(into); s.start(t0); return s;
   }
@@ -232,18 +307,19 @@ function createEngine(ctx, { random = Math.random } = {}) {   // `random`: where
       [-1, 1].forEach((side, i) => { const g = ctx.createGain(), pn = ctx.createStereoPanner(); g.gain.value = 1 - 0.4 * spread; pn.pan.value = side * spread; g.connect(pn); pn.connect(tb); tineVoice(mtof(midi + (i ? spread * 0.12 : 0)), now + (i ? spread * 0.011 : 0), g); });
     } else { const pn = ctx.createStereoPanner(); pn.pan.value = clamp(pan, -1, 1); pn.connect(tb); tineVoice(mtof(midi), now, pn); }
   }
-  function step(i, soft) {   // a place (soft = false) or an undo (soft = true) of melody step i
-    const [b, chord, mel] = STEPS[((i % 16) + 16) % 16], vel = soft ? 0.32 : 0.55;
+  function step(i, soft) {   // a place (soft = false) or an undo (soft = true) of melody step i, of this engine's melody
+    const steps = MELODIES[melody].steps, [b, chord, mel] = steps[((i % steps.length) + steps.length) % steps.length], vel = soft ? 0.32 : 0.55;
+    const lift = soft ? 1 : Math.pow(10, swellDb(i) / 20);   // D377: a place swells with its step; an undo does not
     if (samples) {   // the synth's six notes, timings and levels (as the sketch page's playStep8), each the slot's sample; echoed and roomed as the Rhodes is
-      const slot = soft ? 'undo' : 'place', sb = ctx.createGain(); sb.connect(bus); roomSend(sb, 0.45);
-      chord.forEach((m, k) => sampleVoice(slot, m, { t: (soft ? 0.03 : 0.012) * k, gain: vel * 0.85 / 0.55, pan: -0.3 + k * 0.2, into: sb }));
-      sampleVoice(slot, mel, { t: soft ? 0.12 : 0.06, gain: (soft ? 0.38 : 0.7) / 0.55, into: sb });
-      sampleVoice(slot, b, { gain: (soft ? 0.16 : 0.24) / 0.24 * 0.7, into: sb });
+      const slot = `${soft ? 'undo' : 'place'}_${melody}`, sb = ctx.createGain(); sb.connect(bus); roomSend(sb, 0.45);
+      chord.forEach((m, k) => sampleVoice(slot, m, { t: (soft ? 0.03 : 0.012) * k, gain: lift * vel * 0.85 / 0.55, pan: -0.3 + k * 0.2, into: sb }));
+      sampleVoice(slot, mel, { t: soft ? 0.12 : 0.06, gain: lift * (soft ? 0.38 : 0.7) / 0.55, into: sb });
+      sampleVoice(slot, b, { gain: lift * (soft ? 0.16 : 0.24) / 0.24 * 0.7, into: sb });
       return;
     }
-    chord.forEach((m, k) => rhodes(m, { t: (soft ? 0.03 : 0.012) * k, vel: vel * 0.85, pan: -0.3 + k * 0.2, d: soft ? 1.0 : 1.6 }));
-    rhodes(mel, { t: soft ? 0.12 : 0.06, vel: soft ? 0.38 : 0.7, d: soft ? 1.1 : 1.8 });
-    bass(b, 0, soft ? 0.6 : 0.9, soft ? 0.16 : 0.24);
+    chord.forEach((m, k) => rhodes(m, { t: (soft ? 0.03 : 0.012) * k, vel: lift * vel * 0.85, pan: -0.3 + k * 0.2, d: soft ? 1.0 : 1.6 }));
+    rhodes(mel, { t: soft ? 0.12 : 0.06, vel: lift * (soft ? 0.38 : 0.7), d: soft ? 1.1 : 1.8 });
+    bass(b, 0, soft ? 0.6 : 0.9, lift * (soft ? 0.16 : 0.24));
   }
   function loopClosed() {   // one gesture: the roll (dry), the lead answering (echoed), the landing (dry), a high note ringing (echoed)
     if (samples) { const lb = ctx.createGain(); lb.connect(dryBus); roomSend(lb, 0.5); sampleVoice('loop_closed', null, { into: lb }); return; }   // the whole gesture is one recording: dry, with the landing's room
@@ -260,20 +336,25 @@ function createEngine(ctx, { random = Math.random } = {}) {   // `random`: where
     });
     ep(88, { t: land + 1.6, vel: 0.45, d: 2.4, wet: 0.6 }); ep(91, { t: land + 2.1, vel: 0.32, d: 2.2, wet: 0.7 });
   }
-  /** Hand the engine its four decoded samples ({ drag_tick, place, undo, loop_closed }); from then on they play in place of the synth. A set with one missing is refused. */
+  /** Hand the engine its decoded sample files, keyed by file (SAMPLES.slots: { drag_tick, place, undo, loop_closed }); from then on they play in place of the synth. A set with one missing is refused. */
   function useSamples(buffers) {
     if (!buffers || typeof buffers !== 'object') throw new Error('sound: useSamples needs the samples, got ' + buffers);
     const missing = SAMPLES.slots.filter((s) => !buffers[s]); if (missing.length) throw new Error(`sound: the samples are missing ${missing.join(', ')}`);
     samples = Object.fromEntries(SAMPLES.slots.map((s) => [s, buffers[s]]));
   }
-  return { master, dryBus, tick, step, loopClosed, useSamples, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
+  return { master, dryBus, melody, tick, step, loopClosed, useSamples, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
 }
 
 /**
  * The player. `win` is the window (AudioContext, localStorage, document). Returns
- * { handle(prev, next), setMuted(b), setVolume(v), muted, volume, started, unmount() }.
+ * { handle(prev, next), setMuted(b), setVolume(v), muted, volume, started, melody, unmount() }.
+ * `pick` (D375) draws the launch's melody, once, as the player is made (one launch of the builder): a number from 0 up to 1, Math.random in the app;
+ * the melody is not saved, so the next launch draws again.
  */
-function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { /* nowhere to log */ } }, engineFor = createEngine, base = 'sounds/' } = {}) {
+function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { /* nowhere to log */ } }, engineFor = createEngine, base = 'sounds/', pick = Math.random } = {}) {
+  const r = typeof pick === 'function' ? pick() : NaN;
+  if (typeof r !== 'number' || !(r >= 0 && r < 1)) throw new Error(`sound: a melody pick is a number from 0 up to 1, got ${r}`);
+  const melody = MELODY_NAMES[Math.floor(r * MELODY_NAMES.length)];
   const store = (() => { try { return win.localStorage || null; } catch (e) { return null; } })();
   const read = (k) => { try { return store ? store.getItem(k) : null; } catch (e) { return null; } };
   const write = (k, v) => { try { if (store) store.setItem(k, String(v)); } catch (e) { /* a private window: the session keeps it */ } };
@@ -284,7 +365,7 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   const level = () => (muted ? 0 : volume);
   const start = () => {
     if (ctx || !Ctx) return;
-    try { ctx = new Ctx(); engine = engineFor(ctx); engine.setLevel(level()); } catch (e) { ctx = null; engine = null; log(`sound: no audio here (${e && e.message})`); return; }
+    try { ctx = new Ctx(); engine = engineFor(ctx, { melody }); engine.setLevel(level()); } catch (e) { ctx = null; engine = null; log(`sound: no audio here (${e && e.message})`); return; }
     loadSamples();
   };
   // D349: the four samples, fetched from `base` and decoded once, as audio starts; the engine plays its synth until they are in, and keeps it if they fail
@@ -330,8 +411,9 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
     get muted() { return muted; },
     get volume() { return volume; },
     get started() { return !!engine; },
+    get melody() { return melody; },
     unmount() { if (doc && doc.removeEventListener) { doc.removeEventListener('pointerdown', onGesture, true); doc.removeEventListener('keydown', onGesture, true); doc.removeEventListener('t180:handle-step', onStep); } },
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { createSound, createEngine, SAMPLES, soundFor, tickPlan, stepPlan, notePlan, stepOf, STEPS, MEL128, TICK_MS, KEYS };
+if (typeof module !== 'undefined') module.exports = { createSound, createEngine, SAMPLES, soundFor, tickPlan, stepPlan, notePlan, stepOf, swellDb, SWELL, MELODIES, MELODY_NAMES, MEL128, TICK_MS, KEYS };

@@ -5,6 +5,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **Four melodies for placing and undoing, one picked at random each time the builder starts.** Placing a piece used to step through one 16-step tune; it now steps through one of four tunes of 64 steps, each with its own mood and all written for the builder, and undo walks the same tune back. They are Aqua, Skyline, Glass and Aurora, and all four share one shape: eight phrases that climb to a lift into a new key at step 45 and come home to the first chord at step 64. Aurora is built on a short motif that opens the tune, comes back in the new key and returns whole at the end. Which one plays is drawn afresh at each start and not remembered, so the builder sounds different from one session to the next. Each tune has its own instrument for place and undo, chosen to fit its mood: Big Bells for Aqua, Runtheharm for Skyline, VeloHarm for Glass and Linear Arithmetic for Aurora (recordings each made from one factory preset of the Serum synthesizer, in `app/sounds/`). Every tune measures inside the same loudness limits as before. (`app/sound.js` `MELODIES`, `createSound`.) Tests: `app/test/sound.test.js`, `app/test/sound-samples.test.js` rows 8 and 9, `app/test/sound-bands.test.js`.
+- **Placing pieces now swells and settles over each tune.** Every placed piece used to sound at the same level, so a tune's climb to its peak was heard in its notes but not in its loudness. Each place is now a little quieter at the start of the tune, grows gently to its loudest over steps 45 to 52, where the tunes peak, and eases back by the end, so the next round starts where the last one did. The whole rise is 1.7 dB, as much as the loudness limits allow for every step of every tune. Undo is unchanged. (`app/sound.js` `swellDb`.) Tests: `app/test/sound.test.js`, `app/test/sound-samples.test.js` row 11, `app/test/sound-bands.test.js` (every one of the 64 places of each tune, and each tune's phrases).
+- **The drag tick is a new recording, a soft electric-piano tik,** chosen by ear over three others. It is levelled to sound about as loud as the old one in a drag. (`app/sounds/drag_tick.wav`.)
+
+### Removed
+- **The old place and undo recordings.** The single electric-piano place and undo sounds of 0.4.0 are no longer played now that each tune has its own instrument, so their files are gone from `app/sounds/` and from the installer.
+
+### Fixed
+- **A climb drag rises and falls in pitch with turn and climb read as corners, the default.** In that mode the climb handle played the same tune as a length drag, so the climb had no sound of its own; the turn handle also stopped panning into the ear of the turn. Both now sound as they do with the fields read as rates. (`app/sound.js` `notePlan`.) Test: `app/test/sound.test.js`.
+
 ## [0.4.1] - 2026-10-17
 
 ### Added
