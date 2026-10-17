@@ -240,3 +240,13 @@ test('row 13: a part that fails to load says why in its menu, and the other menu
     await open('m-edit'); assert.ok((await shown('m-edit')).includes('Undo'), 'Edit still works');
   } finally { onEvent = null; await send('Fetch.disable'); }
 });
+
+test('row 14: File holds Export layouts…, its modules load on the page, and off the app it says it needs the native side instead of doing nothing', { skip }, async () => {
+  await load();
+  await open('m-file');
+  assert.ok((await shown('m-file')).includes('Export layouts…'), 'File holds Export layouts…');
+  const said = await ev("document.getElementById('exportlayouts').click(); for (let i = 0; i < 50 && !/layouts/.test(document.getElementById('status').textContent); i++) await new Promise((r) => setTimeout(r, 50)); return document.getElementById('status').textContent;");
+  assert.doesNotMatch(said, /could not start/, `the layouts export loaded: ${said}`);
+  assert.match(said, /^export layouts failed: .*not running inside the app/, said);
+  assert.deepEqual(errors, []);
+});
