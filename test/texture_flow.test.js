@@ -139,3 +139,54 @@ test('closedRing gives a frozen segment the answer of reading it, ring or not, a
   loose.profileIn = loose.profile; assert.equal(closedRing(loose), false, 'changed in place: read again');
   assert.equal(closedRing(Object.freeze(thaw(open))), closedRing(thaw(open)));
 });
+
+// D364 part 2a: the floor's `fit` setting ('fit' = stretch once across the strip's own width, src/doc/textures.js) was read by the word documents' mapping
+// (mapping.js) and by nothing on the equation core: flow.js used tileWidth only, so a track that changes width repeated its texture where it widened
+// (ELYSIUM, 35 m to 60 m, D364 part 1). Rows:
+//   7  fit: 'fit' runs u from -0.5 to 0.5 across every row of an open road, whatever its width (35 m and 60 m) and whatever tileWidth says
+//   8  fit: 'fit' follows a road that changes width: every row spans -0.5 to 0.5 as the road goes from 35 m to 60 m, and the seam rows stay inside
+//   9  fit: 'fit' on a closed tube is ONE repeat round the ring (u from -0.5 to 0.5); tile keeps its whole-number wrap
+//   10 fit: 'tile' (and no fit setting at all) is what it was: the coordinates of the 31 m lap pinned by digest
+const fitSet = (doc, floor) => { const ids = [...new Set(A.toSegments(doc).filter((g) => g.kind === 'road').map((g) => g.id))]; return T.buildTextureSet({ words: ids.map((id) => ({ id, word: 'straight', font: 'flat', textures: { floor } })) }); };
+/** The u extremes of each row of a cell's coordinates (the rows are the vertices that share a v). */
+function rowExtents(uvs) { const rows = new Map(); for (let i = 0; i < uvs.length; i += 2) { const k = uvs[i + 1].toFixed(4), r = rows.get(k) || { lo: Infinity, hi: -Infinity }; r.lo = Math.min(r.lo, uvs[i]); r.hi = Math.max(r.hi, uvs[i]); rows.set(k, r); } return [...rows.values()]; }
+function floorFlow(doc, floor) { const segs = A.toSegments(doc), { path: p } = A.toPath(doc), mesh = G.buildMesh(p, segs); return { mesh, segs, flow: flowUvs(mesh, segs, fitSet(doc, floor)) }; }
+const kidOf = (mesh, cell) => mesh.scene.root.children[mesh.cells.indexOf(cell)].children[0];
+const spans = (r) => Math.abs(r.lo + 0.5) < 1e-4 && Math.abs(r.hi - 0.5) < 1e-4;
+
+for (const w of [35, 60]) {
+  test(`row 7 (${w} m): fit 'fit' runs u from -0.5 to 0.5 across every row of an open road, whatever tileWidth says`, () => {
+    const { mesh, flow } = floorFlow(plainOval(w), { make: ASPHALT, fit: 'fit', tileWidth: 10, tileLength: 20 });
+    const cells = mesh.cells.filter((c) => !c.seam); assert.ok(cells.length > 100, 'control: the lap has cells');
+    for (const cell of cells) for (const r of rowExtents(flow.get(kidOf(mesh, cell)))) assert.ok(spans(r), `${cell.name}: u ${r.lo}..${r.hi}`);
+  });
+}
+
+test('row 8: fit \'fit\' follows a road that changes width: every row spans -0.5 to 0.5 from 35 m to 60 m, and the seam rows stay inside', () => {
+  let d = extend(D.createDoc('ramp'), { length: 300, first: { w: 35 } }); d = extend(d, { length: 200, transition: 200, targets: { w: 60 } }); d = extend(d, { length: 100 });
+  const { mesh, flow } = floorFlow(d, { make: ASPHALT, fit: 'fit', tileWidth: 10, tileLength: 20 });
+  const widths = new Set(); for (const g of A.toSegments(d)) { const P = require('../src/geom/profile.js').normalize(g.profile); widths.add(Math.round(P.u[P.u.length - 1] - P.u[0])); }
+  assert.ok(widths.has(35) && widths.has(60), 'control: the road is 35 m and 60 m and goes between (' + [...widths].join(',') + ')');
+  for (const cell of mesh.cells.filter((c) => !c.seam)) for (const r of rowExtents(flow.get(kidOf(mesh, cell)))) assert.ok(spans(r), `${cell.name}: u ${r.lo}..${r.hi}`);
+  for (const cell of mesh.cells.filter((c) => c.seam)) { const u = flow.get(kidOf(mesh, cell)); if (!u) continue; for (let i = 0; i < u.length; i += 2) assert.ok(Math.abs(u[i]) <= 0.5 + 1e-4, `${cell.name}: a seam row reaches u ${u[i]}`); }
+  const plain = floorFlow(d, { make: ASPHALT, fit: 'tile', tileWidth: 35, tileLength: 20 });   // control: tile 35 over the same road does run past 0.5 where it is wider
+  let over = 0; for (const cell of plain.mesh.cells.filter((c) => !c.seam)) for (const r of rowExtents(plain.flow.get(kidOf(plain.mesh, cell)))) if (r.hi > 0.55) over++;
+  assert.ok(over > 10, `control: tile 35 repeats the texture on the wide part (${over} rows past 0.55)`);
+});
+
+test('row 9: fit \'fit\' on a closed tube is one repeat round the ring (u from -0.5 to 0.5); tile keeps its whole-number wrap', () => {
+  const doc = tubeOval(31), segs = A.toSegments(doc), ring = segs.findIndex((g) => closedRing(g)); assert.ok(ring >= 0, 'control: the tube lap has a ring');
+  const first = (r) => r.mesh.cells.find((c) => !c.seam && c.piece === ring);
+  const fit = floorFlow(doc, { make: ASPHALT, fit: 'fit', tileWidth: 10, tileLength: 20 }), r0 = rowExtents(fit.flow.get(kidOf(fit.mesh, first(fit))))[0];
+  assert.ok(spans(r0), `fit on a ring: u ${r0.lo}..${r0.hi}`);
+  const tile = floorFlow(doc, { make: ASPHALT, fit: 'tile', tileWidth: 10, tileLength: 20 }), t0 = rowExtents(tile.flow.get(kidOf(tile.mesh, first(tile))))[0];
+  assert.ok(Math.abs((t0.hi - t0.lo) - 3) < 1e-4, `control: tile 10 on a 31 m ring is 3 whole repeats round (${t0.hi - t0.lo})`);
+});
+
+test('row 10: fit \'tile\' and no fit setting are what they were: the coordinates of the 31 m lap pinned by digest', () => {
+  const sha = (floor) => { const { mesh, flow } = floorFlow(plainOval(31), floor); const h = require('crypto').createHash('sha256'); for (const cell of mesh.cells) { const u = flow.get(kidOf(mesh, cell)); if (u) h.update(Buffer.from(u.buffer, u.byteOffset, u.byteLength)); } return h.digest('hex'); };
+  const base = { make: ASPHALT, tileWidth: 12, tileLength: 20 };
+  assert.equal(sha({ ...base, fit: 'tile' }), sha(base), 'an explicit tile is the default');
+  assert.equal(sha(base), '75dbd0e2dace1363375e543a3d432065f3e025ae57e304170c0e8f4d4c14774a', 'the coordinates of the tile mapping are unchanged by D364 part 2a (digest taken at 04d1841, before the change)');
+  assert.notEqual(sha({ ...base, fit: 'fit' }), sha(base), 'control: fit is a different mapping');
+});
