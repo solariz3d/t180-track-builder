@@ -1,0 +1,127 @@
+/* GLASS (D379, pane E): the skin for the Glass melody (SY VeloHarm, A Lydian). Crystal: frosted panes, sharp facets, cold sheen.
+   One file, scoped to <html data-theme="glass">, over app/index.html at be4a527. It changes how things are drawn and never where they are:
+   colour, gradients, translucency and blur, corner radius, shadows, inset gloss, clip-path facets and the overlay pseudo-elements. It never
+   touches a size, a margin, a padding, a border WIDTH, a font, a letter-spacing or a weight, so every box keeps its place to the pixel
+   (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every canvas hue) are not redefined. Fonts: the page's own (Windows). */
+
+[data-theme="glass"] {
+  --bg: #06111b; --panel: #0a1824; --raise: #0f2232; --line: #2b5672; --hair: rgba(190, 230, 255, .34);
+  --text: #f0f9ff; --dim: #a9c9dd; --accent: #8fe6ff; --accent-dim: rgba(143, 230, 255, .22);
+  --frost: rgba(205, 238, 255, .14); --frost-edge: rgba(205, 240, 255, .58); --sheen: rgba(255, 255, 255, .55); --deep: rgba(4, 14, 24, .80);
+  /* D381: what the canvas layers, the overlays and the 3D view draw with (app/lib/tokens.js reads these; B's 2a). The sky is a deep cold blue, darker than
+     the fog and than the road's shadowed faces (renderer.js's D179 note); the road's edges ice-white, its ties and the ground grid cold blue. */
+  --ink: #04101a; --on-ink: #eaf6ff; --on-ink-strong: #ffffff; --veil: #071725; --veil-rule: rgba(190, 235, 255, .22);
+  --guide-bg: rgba(10, 30, 46, .96); --guide-text: #f0f9ff; --guide-label: #a9c9dd;
+  --sky: color(srgb 0.024 0.07 0.1); --fog: color(srgb 0.07 0.13 0.18); --road-edge: color(srgb 0.8 0.93 1); --road-tie: color(srgb 0.03 0.08 0.12); --ground-grid: color(srgb 0.2 0.36 0.46);
+}
+
+/* the window: a deep cold blue behind everything */
+[data-theme="glass"] body { background: radial-gradient(140% 120% at 20% 0%, #0f2a3e 0%, #071420 45%, #030a12 100%); }
+
+/* THE BAR: a frosted ice slab, lit from above, its bottom edge a bright cut */
+[data-theme="glass"] header {
+  background: linear-gradient(180deg, rgba(225, 246, 255, .14) 0%, rgba(150, 205, 235, .05) 40%, rgba(6, 20, 32, .96) 100%), var(--panel);
+  border-bottom-color: var(--frost-edge);
+  box-shadow: inset 0 1px 0 var(--sheen), inset 0 -1px 0 rgba(0, 0, 0, .35), 0 6px 24px rgba(0, 40, 70, .55);
+}
+/* the sigil becomes a cut crystal: a diamond with a bright facet */
+[data-theme="glass"] header h1::before {
+  border-color: var(--frost-edge); border-radius: 0; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  background: linear-gradient(135deg, #ffffff 0%, #bfefff 30%, #3f8fbf 52%, #0b2a40 53%, #6fd2ff 100%);
+  box-shadow: 0 0 10px rgba(143, 230, 255, .75);
+}
+[data-theme="glass"] header h1 { color: #ffffff; text-shadow: 0 0 12px rgba(143, 230, 255, .55); }
+
+/* BUTTONS AND MENU NAMES: faceted glass chips: a cold gradient split by a hard diagonal (the facet), a bright top edge, a glow on hover */
+[data-theme="glass"] button, [data-theme="glass"] .more > summary {
+  background: linear-gradient(160deg, rgba(255, 255, 255, .11) 0%, rgba(210, 240, 255, .05) 46%, rgba(120, 190, 230, .02) 46.5%, rgba(160, 220, 255, .07) 100%), rgba(4, 16, 28, .55);
+  border-color: rgba(190, 235, 255, .48); border-radius: 0; color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .42), inset 0 -1px 0 rgba(0, 20, 40, .45);
+}
+[data-theme="glass"] button:hover:not([disabled]), [data-theme="glass"] .more > summary:hover {
+  border-color: var(--accent); color: #ffffff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 0 6px rgba(143, 230, 255, .45);
+}
+[data-theme="glass"] button:active:not([disabled]) { background: linear-gradient(160deg, rgba(143, 230, 255, .34), rgba(143, 230, 255, .14)); }
+[data-theme="glass"] .more[open] > summary { border-color: var(--accent); color: #ffffff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 0 6px rgba(143, 230, 255, .5); }
+/* the window buttons stay glyphs on the bar (no chip), as today */
+[data-theme="glass"] #winctl button { background: transparent; box-shadow: none; border-color: transparent; }
+[data-theme="glass"] #win-min:hover, [data-theme="glass"] #win-max:hover { background: rgba(143, 230, 255, .22); box-shadow: none; }
+
+/* FIELDS: clear ice, a frost line under the top edge, a cold glow when focused */
+[data-theme="glass"] input[type="number"], [data-theme="glass"] input[type="text"], [data-theme="glass"] input:not([type]), [data-theme="glass"] textarea,
+[data-theme="glass"] select, [data-theme="glass"] .picker select, [data-theme="glass"] header input, [data-theme="glass"] header select, [data-theme="glass"] .save-piece input {
+  background: linear-gradient(180deg, rgba(4, 16, 28, .92), rgba(10, 30, 46, .88)); border-color: rgba(190, 235, 255, .40); border-radius: 0; color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+}
+[data-theme="glass"] input:focus, [data-theme="glass"] select:focus, [data-theme="glass"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(143, 230, 255, .35), 0 0 12px rgba(143, 230, 255, .45); }
+[data-theme="glass"] option { background: #071725; color: var(--text); }
+
+/* THE LEFT PANE: a frosted crystal slab floating over the track, one corner cut (the facet), a cold sheen across its face */
+[data-theme="glass"] #left {
+  background: linear-gradient(155deg, rgba(215, 242, 255, .12) 0%, rgba(110, 175, 215, .06) 18%, rgba(6, 22, 36, .88) 42%, rgba(4, 14, 24, .92) 100%);
+  border-color: var(--frost-edge); border-radius: 0;
+  backdrop-filter: blur(18px) saturate(160%) brightness(1.08); -webkit-backdrop-filter: blur(18px) saturate(160%) brightness(1.08);
+  box-shadow: inset 0 1px 0 var(--sheen), inset 1px 0 0 rgba(255, 255, 255, .22), 0 0 0 1px rgba(0, 10, 20, .5), 0 22px 60px rgba(0, 30, 60, .65), 0 0 40px rgba(110, 200, 255, .12);
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%);
+}
+[data-theme="glass"] #palette, [data-theme="glass"] #side { background: transparent; }
+[data-theme="glass"] #side { border-top-color: rgba(190, 235, 255, .30); }
+[data-theme="glass"] #side > section { border-bottom-color: rgba(190, 235, 255, .22); }
+/* headings: an ice rule that fades out like light along a glass edge */
+[data-theme="glass"] h3 { color: #cfeeff; }
+[data-theme="glass"] h3::after { background: linear-gradient(90deg, rgba(200, 240, 255, .75), rgba(143, 230, 255, .25) 40%, transparent); }
+
+/* THE MENUS: a crystal pane dropping from the bar, cut at the lower corner */
+[data-theme="glass"] .more-menu {
+  background: linear-gradient(165deg, rgba(220, 244, 255, .12) 0%, rgba(20, 52, 76, .80) 22%, rgba(5, 18, 30, .96) 60%), rgba(4, 14, 24, .9);
+  border-color: var(--frost-edge); border-radius: 0;
+  backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: inset 0 1px 0 var(--sheen), 0 24px 60px rgba(0, 10, 20, .75);   /* a dark drop only: a cyan glow round the menu lit the text beside it */
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
+}
+[data-theme="glass"] .more-menu hr { border-top-color: rgba(190, 235, 255, .30); }
+[data-theme="glass"] .pieces-menu .piece-row:hover { background: rgba(143, 230, 255, .10); }
+
+/* the strips under the bar */
+[data-theme="glass"] .bar, [data-theme="glass"] #banner .brush-strip { background: linear-gradient(180deg, rgba(200, 238, 255, .14), rgba(15, 34, 50, .95)); }
+
+/* THE CAMERA DOCK: a long frosted bar, lit on its top edge */
+[data-theme="glass"] #camera [role="toolbar"] {
+  background: linear-gradient(180deg, rgba(220, 244, 255, .12), rgba(8, 26, 40, .94) 55%), rgba(4, 14, 24, .9); border-color: var(--frost-edge); border-radius: 0;
+  backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: inset 0 1px 0 var(--sheen), 0 12px 36px rgba(0, 30, 60, .6), 0 0 24px rgba(110, 200, 255, .16);
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%, 0 14px);
+}
+[data-theme="glass"] #camera [role="toolbar"] button { background: transparent; box-shadow: none; border-color: transparent; }
+[data-theme="glass"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="glass"] #camera [role="toolbar"] button.on { color: #ffffff; text-shadow: 0 0 10px rgba(143, 230, 255, .9); box-shadow: 0 -2px 0 var(--accent) inset; }
+[data-theme="glass"] #camera p { color: #d4ecfa; text-shadow: 0 0 6px #000, 0 0 2px #000; background: rgba(4, 14, 24, .86); box-shadow: 0 0 0 4px rgba(4, 14, 24, .86), inset 0 1px 0 rgba(200, 240, 255, .25); }   /* the hint gets a frosted backing of its own (no padding: its box stays) */
+
+/* THE 3D VIEW: the sky, the fog, the road's edges and ties and the ground grid are this skin's 3D tokens (above); the WebGL view draws them itself
+   (D381), so the stand-in overlays of D379 (the vignette, the facet lines) are gone. */
+[data-theme="glass"] .preview-hud { color: #d4ecfa !important; text-shadow: 0 0 6px #000; }
+
+/* the save-on-close and export dialogs: a crystal card */
+[data-theme="glass"] .ask-veil { background: rgba(3, 14, 26, .58); backdrop-filter: blur(6px) saturate(140%); }
+[data-theme="glass"] .ask-card {
+  background: linear-gradient(165deg, rgba(220, 244, 255, .20) 0%, rgba(10, 30, 46, .96) 40%); border-color: var(--frost-edge); border-top-color: var(--accent); border-radius: 0;
+  box-shadow: inset 0 1px 0 var(--sheen), 0 24px 70px rgba(0, 20, 40, .75), 0 0 40px rgba(110, 200, 255, .2);
+  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
+}
+
+/* lists, selection, scrollbars */
+[data-theme="glass"] .track li.selected { background: linear-gradient(90deg, rgba(143, 230, 255, .28), rgba(143, 230, 255, .06)); color: #ffffff; }
+[data-theme="glass"] ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(200, 240, 255, .55), rgba(90, 160, 200, .45)); }
+[data-theme="glass"] ::selection { background: rgba(143, 230, 255, .35); color: #ffffff; }
+@supports (appearance: base-select) {
+  [data-theme="glass"] header select::picker(select) { background: linear-gradient(170deg, rgba(220, 244, 255, .18), #061523 40%); border-color: var(--frost-edge); border-top-color: var(--accent); border-radius: 0; }
+}
+
+/* the onboarding card: a crystal pane (its own style block draws it dark; the skin restyles it in place, the box unchanged) */
+[data-theme="glass"] .guide-card {
+  background: linear-gradient(165deg, rgba(220, 244, 255, .12) 0%, rgba(14, 40, 60, .92) 24%, rgba(5, 18, 30, .96) 70%) !important;
+  border-radius: 0 !important; color: var(--text) !important;
+  box-shadow: inset 0 0 0 1px var(--frost-edge), inset 0 2px 0 rgba(255, 255, 255, .35), 0 18px 50px rgba(0, 10, 20, .7) !important;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+/* "look here": the guide's outline follows the accent (the librarian's ruling on B's UNCLEAR six, plan :2362) */
+[data-theme="glass"] .guide-target { outline-color: var(--accent) !important; }
