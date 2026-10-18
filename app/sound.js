@@ -56,10 +56,15 @@ const SAMPLES = Object.freeze({
   }),
   ref: Object.freeze({ drag_tick: 84, ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 60], [`undo_${m}`, 60]])) }),
   gain: Object.freeze({ drag_tick: 1.852, loop_closed: 0.668, ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 0.645], [`undo_${m}`, 0.596]])) }),
-  tickFade: 0.004,
+  tickFade: 0.004,   // (SAMPLES.slots stays every file shipped for the four melodies; samplesFor below is the four ONE launch fetches, D388)
   tickEven: 0.5,
 });
-const rateOf = (file, midi) => (file in SAMPLES.ref ? Math.pow(2, (midi - SAMPLES.ref[file]) / 12) : 1);
+/** D388 (A's review, finding 1): the files ONE launch plays, in the order they are fetched: the tick, the loop close and the melody's place and undo. */
+const samplesFor = (melody) => {
+  if (!MELODY_NAMES.includes(melody)) throw new Error(`sound: no melody named ${melody} (the four: ${MELODY_NAMES.join(', ')})`);
+  return ['drag_tick', 'loop_closed', SAMPLES.file[`place_${melody}`], SAMPLES.file[`undo_${melody}`]];
+};
+const rateOf =(file, midi) => (file in SAMPLES.ref ? Math.pow(2, (midi - SAMPLES.ref[file]) / 12) : 1);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -336,11 +341,12 @@ function createEngine(ctx, { random = Math.random, melody = MELODY_NAMES[0] } = 
     });
     ep(88, { t: land + 1.6, vel: 0.45, d: 2.4, wet: 0.6 }); ep(91, { t: land + 2.1, vel: 0.32, d: 2.2, wet: 0.7 });
   }
-  /** Hand the engine its decoded sample files, keyed by file (SAMPLES.slots: { drag_tick, place, undo, loop_closed }); from then on they play in place of the synth. A set with one missing is refused. */
+  /** Hand the engine its decoded sample files, keyed by file: the files its melody plays (samplesFor: the tick, the loop close, its place and undo); from then on they
+   *  play in place of the synth. A set with one of those missing is refused; another melody's files are not needed (D388). */
   function useSamples(buffers) {
     if (!buffers || typeof buffers !== 'object') throw new Error('sound: useSamples needs the samples, got ' + buffers);
-    const missing = SAMPLES.slots.filter((s) => !buffers[s]); if (missing.length) throw new Error(`sound: the samples are missing ${missing.join(', ')}`);
-    samples = Object.fromEntries(SAMPLES.slots.map((s) => [s, buffers[s]]));
+    const need = samplesFor(melody), missing = need.filter((s) => !buffers[s]); if (missing.length) throw new Error(`sound: the samples are missing ${missing.join(', ')}`);
+    samples = Object.fromEntries(need.map((s) => [s, buffers[s]]));
   }
   return { master, dryBus, melody, tick, step, loopClosed, useSamples, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
 }
@@ -373,7 +379,7 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
     const c = ctx, e = engine, fail = (why) => log(`sound: the samples did not load (${why}); the synth voices play instead`);
     const get = typeof win.fetch === 'function' ? win.fetch.bind(win) : null;
     if (!get) { fail('no fetch in this window'); return; }
-    Promise.all(SAMPLES.slots.map((s) => get(`${base}${s}.wav`)
+    Promise.all(samplesFor(melody).map((s) => get(`${base}${s}.wav`)   // D388: only the files this launch's melody plays, so a missing file of another melody costs nothing
       .then((r) => { if (!r || !r.ok) throw new Error(`${s}.wav answered ${r ? r.status : 'nothing'}`); return r.arrayBuffer(); })
       .then((a) => c.decodeAudioData(a))
       .then((b) => [s, b])))
