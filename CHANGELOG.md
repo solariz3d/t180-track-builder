@@ -8,6 +8,9 @@ All notable changes to this project are recorded here. The format follows
 ### Added
 - **Settings ▸ Theme: choose the look, and each theme brings its own melody.** Until now the builder picked one of its four melodies at random at every start, and the look followed it. A new Theme section in Settings keeps that as **Music**, the default, and adds **Aqua**, **Skyline**, **Glass** and **Aurora**: each is that look with its own melody, at every start, and the choice is remembered. **SIGIL** is the black-and-bone look; it has no melody of its own, so with it the melody is still picked at random. Choosing a theme while the builder is open changes the look at once and the melody a moment later, once its two sound files have loaded (a few milliseconds here); until then the old melody keeps playing, and nothing already sounding is cut. If the saved choice cannot be read, the builder starts as Music. (`app/index.html`, `app/settings.js`, `app/lib/theme.js`, `app/sound.js`, `app/menubar/items.js`.) Tests: `app/test/theme.test.js`, `app/test/settings.test.js`, `app/test/sound-samples.test.js`, `app/test/menubar-page.test.js`.
 
+### Changed
+- **A new icon and a new name in the title bar.** The icon is now one closed circuit that crosses itself on a bridge, a figure-eight tilted as if banked, with the car as a blue dot, on a light tile in Skyline's colours. It is the same in every skin. The tile has a thin grey-blue rim, because Skyline's light tile on a light Windows taskbar was almost the same colour and its edge vanished. The icon file now carries 16, 24, 32, 48 and 256 pixel sizes, so Windows draws each size from its own image. In the title bar the name is now "T-180", a thin rule, then "TRACK BUILDER" in a dimmer tone, in the current skin's colours. The window title is still "T-180 Track Builder". (`src-tauri/icons/`, `app/index.html`.) Test: `test/icons.test.js`.
+
 ## [0.4.5] - 2026-10-18
 
 ### Fixed

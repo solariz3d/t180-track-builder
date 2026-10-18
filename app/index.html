@@ -48,6 +48,9 @@
   header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; }
   header h1 { font: 300 13px var(--display); margin: 0 14px 0 2px; letter-spacing: .42em; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
   header h1::before { content: ""; width: 14px; height: 14px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 16%, transparent 18%); flex: none; }
+  /* D395, THE WORDMARK: the sigil dot leads (each skin draws its own), "T-180" in the text colour, a hairline rule, then the rest dimmed; tokens only, so it follows the theme.
+     The rule sits in the old word space: the -8px takes back most of the h1's gap between the two spans, so the header is no wider than with one text (A's review 8) */
+  header h1 .wm-rest { color: var(--dim); margin-left: -8px; padding-left: 5px; border-left: 1px solid var(--hair); }
   header input, header select { background: transparent; color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 5px 8px; font: inherit; }
   header label { color: var(--dim); white-space: nowrap; }
   /* THE TITLE BAR (2026-10-14): the Windows frame is off, so the header is the bar (app/titlebar.js). Hairline glyphs, no fills. */
@@ -222,7 +225,7 @@
 </head>
 <body>
 <header data-tauri-drag-region>
-  <h1 data-tauri-drag-region>T-180 TRACK BUILDER</h1>
+  <h1 data-tauri-drag-region><span class="wm-name" data-tauri-drag-region>T-180</span> <span class="wm-rest" data-tauri-drag-region>TRACK BUILDER</span></h1>
   <input id="name" placeholder="track name" aria-label="track name" size="16">
   <span id="status" style="color: var(--dim)" data-tauri-drag-region></span>
   <span class="drag" data-tauri-drag-region></span>
