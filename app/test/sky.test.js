@@ -9,6 +9,7 @@
 //   · the drift stops under prefers-reduced-motion: the preview hands the pass t = 0
 //   · D384 widened: Glass names the new 'prism' sky (a registered style the page's loader loads); SIGIL alone names none
 //   · D391: every style keeps the two GLSL rules (no smoothstep with literal edge0 >= edge1, no sin hash), and the check is not vacuous
+//   · D393: A's probe forms pin the rules' edges (the hash by its fract(sin( shape, exponent literals judged, a sine wave of a dot product kept)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -155,6 +156,17 @@ test('D391: the GLSL rule check refuses each broken form and keeps the good ones
     assert.ok(SKY.contractProblems('t', bad).length > 0, `refused: ${bad}`);
   }
   for (const good of ['smoothstep(0.0, 0.6, -h)', 'smoothstep(-0.35, 0.17, el)', 'smoothstep(.1, .2, x)', 'float w = sin(az * 2.0 + t * 0.01);', 'smoothstep(a, b, x)', '// smoothstep(0.0, -0.6, h) in a comment']) {
+    assert.deepEqual(SKY.contractProblems('t', good), [], `kept: ${good}`);
+  }
+});
+// D393 (A's review 7 of D391, findings 1 and 2; the librarian's ruling, exo_memory/librarian/2026-10-18.md 13:59): the rules' edges, pinned by A's probe forms.
+// The hash rule keys on the hash's SHAPE, fract(sin(...)), whatever the argument; a plain sine wave of a dot product is not a hash and passes. Exponent
+// literals are literals, so their edges are judged like any other; edges written as names or expressions are not judged.
+test('D393: A\'s probe forms: the dot-less and the via-variable sin hash and exponent-literal reversed edges are refused; a sine wave of a dot product passes', () => {
+  for (const bad of ['float h = fract(sin(p.x * 12.9898 + p.y * 78.233) * 43758.5453);', 'float d = dot(p, q); return fract(sin(d) * 43758.5453);', 'smoothstep(1e-1, 1e-2, x)', 'smoothstep(2.5E+1, -1.0e0, x)']) {
+    assert.ok(SKY.contractProblems('t', bad).length > 0, `refused: ${bad}`);
+  }
+  for (const good of ['float w = sin(dot(dir, vec3(0.0, 1.0, 0.0)) * 3.0);', 'smoothstep(1e-2, 1e-1, x)', 'smoothstep(hi, lo, x)']) {
     assert.deepEqual(SKY.contractProblems('t', good), [], `kept: ${good}`);
   }
 });

@@ -13,10 +13,13 @@
 //     uniform vec3 uSkyA, uSkyB, uSkyC;        the skin's --sky-a, --sky-b, --sky-c, each falling back to --sky
 //   The source may define helpers of its own; prefix their names with the style (sun_, prism_, caustics_, aurora_), so two never clash.
 //   A module that cannot build its sky throws from source(): the renderer compiles a style when setTheme names it, so it fails loudly there.
-//   TWO GLSL RULES (D391, from E's 0.4.4 review, findings 1 and 3), checked on every source by contractProblems below, so a style breaking one is refused:
-//     · no smoothstep(e0, e1, x) with literal edges e0 >= e1: GLSL ES 1.00 leaves it undefined (write smoothstep(0.0, 0.6, -h) for a ramp downward)
-//     · no sin hash, fract(sin(dot(p, ...)) * k): GPUs reduce a large sin argument differently, so the pattern can come out banded; use a sin-free
-//       hash like prism_hash (sky/prism.js)
+//   TWO GLSL RULES (D391; made exact in D393 from A's review 7), checked on every source by contractProblems below, so a style breaking one is refused.
+//   Exactly what the check refuses (comments are skipped):
+//     · a smoothstep whose first two arguments are BOTH number literals (decimal or exponent, e.g. 0.6, .6, -0.6, 1e-1) with edge0 >= edge1: GLSL ES
+//       1.00 leaves it undefined (write smoothstep(0.0, 0.6, -h) for a ramp downward). Edges written as names or expressions are NOT judged.
+//     · the sin hash's shape, fract(sin( with any argument (with or without dot, or through a variable): GPUs reduce a large sin argument
+//       differently, so its pattern can come out banded; use a sin-free hash like prism_hash (sky/prism.js). A sine that is not inside fract (a wave,
+//       sin(dot(dir, axis) * k)) is not refused.
 'use strict';
 
 const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora']);
@@ -27,11 +30,11 @@ const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), causti
 /** D391: every way a style's GLSL breaks the two rules above, as readable lines (empty: it keeps them). Comments are not code, so they are skipped. */
 function contractProblems(style, src) {
   const code = String(src).replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, ''), out = [];
-  const num = '\\s*(-?(?:\\d+\\.?\\d*|\\.\\d+))\\s*';
+  const num = '\\s*(-?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*';   // a decimal or exponent literal (D393)
   for (const m of code.matchAll(new RegExp(`\\bsmoothstep\\s*\\(${num},${num},`, 'g'))) {
     if (Number(m[1]) >= Number(m[2])) out.push(`${style}: smoothstep(${m[1]}, ${m[2]}, ...) has edge0 >= edge1, which GLSL ES leaves undefined`);
   }
-  if (/\bsin\s*\(\s*dot\s*\(/.test(code)) out.push(`${style}: a sin hash (sin(dot(...))), whose large argument GPUs reduce differently; use a sin-free hash`);
+  if (/\bfract\s*\(\s*sin\s*\(/.test(code)) out.push(`${style}: a sin hash (fract(sin(...))), whose large argument GPUs reduce differently; use a sin-free hash`);
   return out;
 }
 
