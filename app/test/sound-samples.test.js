@@ -10,6 +10,8 @@
 //   4  the player fetches and decodes the four files once, at the first gesture, from `base`; the synth plays until they are in
 //   5  a failed fetch, a refused file or a failed decode is logged and the synth keeps playing; no fetch at all is logged the same way
 //   6  the files are the four batch-8 WAVs, byte for byte (sha256), and useSamples refuses a set with one missing
+//   15-19 (D394) Settings ▸ Theme switches the melody live: setMelody fetches only the new pair, the old melody plays until it is decoded, then the
+//      engine switches, building nothing and stopping no voice
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -128,10 +130,11 @@ function player({ fetchImpl, decode, noFetch = false, pick } = {}) {   // pick (
   const win = { AudioContext: Ctx, localStorage: { getItem: () => null, setItem() {} },
     document: { addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); }, removeEventListener() {} } };
   if (!noFetch) win.fetch = (url) => { fetched.push(url); return fetchImpl ? fetchImpl(url) : Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve({ name: url }) }); };
-  const engineFor = () => ({ tick: (p) => calls.push(['tick', p.midi]), step: (i, soft) => calls.push([soft ? 'undo' : 'place', i]), loopClosed: () => calls.push(['loopClosed']), setLevel() {}, useSamples: (b) => calls.push(['useSamples', b]) });
+  const built = [];   // D394: the melody each engine was built with
+  const engineFor = (c, o) => { built.push(o && o.melody); return { tick: (p) => calls.push(['tick', p.midi]), step: (i, soft) => calls.push([soft ? 'undo' : 'place', i]), loopClosed: () => calls.push(['loopClosed']), setLevel() {}, useSamples: (b) => calls.push(['useSamples', b]), setMelody: (m, b) => calls.push(['setMelody', m, b]) }; };
   const s = createSound(win, { engineFor, base: 'sounds/', log: (m) => logs.push(m), ...(pick ? { pick } : {}) });
   const fire = (t, detail) => (listeners[t] || []).slice().forEach((f) => f({ type: t, detail }));
-  return { s, calls, logs, fetched, fire };
+  return { s, calls, logs, fetched, fire, built };
 }
 const settle = () => new Promise((r) => setImmediate(r));
 
@@ -285,4 +288,91 @@ test('row 14 (D388): the engine needs only its own melody\'s files: four are eno
     const short = { ...four }; delete short[`undo_${m}`];
     assert.throws(() => createEngine(fakeCtx(), { melody: m }).useSamples(short), new RegExp(`undo_${m}`), `${m}: missing its own undo is refused, naming it`);
   }
+});
+
+// D394: Settings ▸ Theme. A fixed theme plays its own melody, and choosing one while the builder is open switches the melody live: the new melody's two
+// files are fetched (the tick and the loop close are already in), the old melody plays until they are decoded, then the engine switches, building nothing
+// and stopping no voice, so nothing goes silent and nothing is cut
+const FOUR = (m) => Object.fromEntries(PICKED(m).map((s) => [s, { slot: s, duration: 1 }]));
+const switches = (P) => P.calls.filter((c) => c[0] === 'setMelody');
+test('row 15 (D394): before audio starts, setMelody(name) sets the melody the engine is built with and the files the first press fetches; another name is refused by name', async () => {
+  const P = player({ pick: () => 0 });
+  assert.equal(P.s.melody, 'aqua');
+  P.s.setMelody('glass');
+  assert.equal(P.s.melody, 'glass'); assert.deepEqual(P.fetched, [], 'nothing is fetched before the first press');
+  P.fire('pointerdown'); await settle(); await settle();
+  assert.deepEqual(P.built, ['glass'], 'the engine is built with glass');
+  assert.deepEqual(P.fetched, PICKED('glass').map((f) => `sounds/${f}.wav`), 'and the first press fetches glass\'s files, once');
+  assert.deepEqual(Object.keys(P.calls.find((c) => c[0] === 'useSamples')[1]), PICKED('glass'));
+  assert.deepEqual(switches(P), [], 'nothing to switch');
+  for (const bad of ['zzz', 'Aqua', 'sigil', 'music', '', undefined, 3]) assert.throws(() => P.s.setMelody(bad), /sound: no melody named/, String(bad));
+  assert.equal(P.s.melody, 'glass', 'a refused name changes nothing');
+});
+
+test('row 16 (D394): while the samples play, setMelody fetches only the new melody\'s two files, once; the old melody plays until they are decoded, then the engine switches with its four', async () => {
+  const P = player({ pick: () => 0 });
+  P.fire('pointerdown'); await settle(); await settle();
+  assert.ok(P.calls.some((c) => c[0] === 'useSamples'), 'aqua plays recorded');
+  P.calls.length = 0; P.fetched.length = 0;
+  P.s.setMelody('glass');
+  assert.deepEqual(P.fetched, ['sounds/place_glass.wav', 'sounds/undo_glass.wav'], 'only the two new files');
+  assert.equal(P.s.melody, 'aqua', 'until they are in, aqua plays on'); assert.deepEqual(P.calls, [], 'and the engine is not touched');
+  await settle(); await settle();
+  assert.equal(switches(P).length, 1, 'one switch, once the files are in'); const [, m, set] = switches(P)[0];
+  assert.equal(m, 'glass'); assert.deepEqual(Object.keys(set), PICKED('glass'), 'with all four of glass\'s files');
+  assert.equal(set.place_glass.decoded, 'sounds/place_glass.wav'); assert.equal(set.drag_tick.decoded, 'sounds/drag_tick.wav', 'the tick and the loop close as already decoded');
+  assert.equal(P.s.melody, 'glass');
+  P.fetched.length = 0; P.s.setMelody('aqua');
+  assert.deepEqual(P.fetched, [], 'back to aqua: its files are already in, nothing is fetched');
+  assert.equal(P.s.melody, 'aqua', 'and the switch is at once'); assert.equal(switches(P).at(-1)[1], 'aqua');
+  const n = P.calls.length; P.s.setMelody('aqua'); assert.equal(P.calls.length, n, 'the melody already playing: nothing');
+  P.calls.length = 0; P.s.setMelody('skyline'); P.s.setMelody('aurora'); await settle(); await settle(); await settle();
+  assert.deepEqual(switches(P).map((c) => c[1]), ['aurora'], 'two choices before the first one\'s files are in: only the last is made');
+  assert.equal(P.s.melody, 'aurora'); assert.deepEqual(P.logs, []);
+  const Q = player({ pick: () => 0 }); Q.fire('pointerdown'); await settle(); await settle();
+  Q.s.setMelody('glass'); Q.s.setMelody('aqua'); await settle(); await settle(); await settle();
+  assert.deepEqual(switches(Q), [], 'choosing the melody playing calls off a switch still loading (Settings ▸ Theme ▸ Music or SIGIL)'); assert.equal(Q.s.melody, 'aqua');
+});
+
+test('row 17 (D394): when the new melody\'s files fail to load, that is logged and the old melody plays on', async () => {
+  const P = player({ pick: () => 0, fetchImpl: (url) => Promise.resolve({ ok: !url.includes('glass'), status: url.includes('glass') ? 404 : 200, arrayBuffer: () => Promise.resolve({ name: url }) }) });
+  P.fire('pointerdown'); await settle(); await settle();
+  P.s.setMelody('glass'); await settle(); await settle(); await settle();
+  assert.equal(P.s.melody, 'aqua', 'aqua plays on'); assert.deepEqual(switches(P), []);
+  assert.equal(P.logs.length, 1); assert.match(P.logs[0], /glass/); assert.match(P.logs[0], /aqua plays on/);
+});
+
+test('row 18 (D394): with the synth playing (the samples not in yet), setMelody switches the engine at once, and the new melody\'s files follow', async () => {
+  const P = player({ pick: () => 0 });
+  P.fire('pointerdown');   // the first files are in flight
+  P.s.setMelody('glass');
+  assert.deepEqual(switches(P).map((c) => [c[1], c[2]]), [['glass', undefined]], 'at once, on the synth');
+  assert.equal(P.s.melody, 'glass');
+  await settle(); await settle(); await settle();
+  const use = P.calls.filter((c) => c[0] === 'useSamples');
+  assert.equal(use.length, 1, 'the samples are handed over once'); assert.deepEqual(Object.keys(use[0][1]), PICKED('glass'), 'glass\'s, not aqua\'s');
+  assert.deepEqual(P.logs, []);
+});
+
+test('row 19 (D394): engine.setMelody switches what place and undo play, building nothing and stopping no voice; with samples it needs the new melody\'s four', () => {
+  const ctx = fakeCtx(), e = createEngine(ctx, { melody: 'aqua' }); e.useSamples(FOUR('aqua'));
+  assert.deepEqual(during(ctx, () => e.step(0, false)).sources.map((s) => s.slot), Array(6).fill('place_aqua'));
+  const stops = []; for (const n of ctx.nodes) n.stop = (t) => stops.push(t);
+  const gains = ctx.nodes.filter((n) => n.kind === 'Gain'), calls0 = gains.map((n) => n.gain.calls.length), values0 = gains.map((n) => n.gain.value);
+  const short = FOUR('glass'); delete short.undo_glass;
+  assert.throws(() => e.setMelody('glass', short), /undo_glass/, 'a set missing one of its four is refused, naming it');
+  assert.throws(() => e.setMelody('glass'), /samples/, 'with samples playing, the new melody\'s are needed');
+  assert.throws(() => e.setMelody('zzz', FOUR('aqua')), /sound: no melody named zzz/);
+  assert.equal(e.melody, 'aqua', 'a refused switch changes nothing');
+  const made = during(ctx, () => e.setMelody('glass', FOUR('glass'))).made;
+  assert.equal(made.length, 0, 'the switch builds no node: the same graph, the same reverb tail');
+  assert.deepEqual(stops, [], 'no voice is stopped');
+  assert.deepEqual(gains.map((n) => n.gain.calls.length), calls0, 'no gain is moved'); assert.deepEqual(gains.map((n) => n.gain.value), values0);
+  assert.equal(e.melody, 'glass');
+  assert.deepEqual(during(ctx, () => e.step(1, false)).sources.map((s) => s.slot), Array(6).fill('place_glass'), 'the next place is glass\'s');
+  assert.deepEqual(during(ctx, () => e.step(1, true)).sources.map((s) => s.slot), Array(6).fill('undo_glass'), 'and the next undo');
+  const c2 = fakeCtx(), e2 = createEngine(c2, { melody: 'aqua' });
+  e2.setMelody('aurora');
+  assert.equal(e2.melody, 'aurora', 'on the synth no files are needed');
+  const syn = during(c2, () => e2.step(0, false)); assert.ok(syn.oscillators > 0); assert.equal(syn.sources.length, 0);
 });

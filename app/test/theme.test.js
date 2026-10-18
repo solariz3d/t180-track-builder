@@ -6,6 +6,8 @@
 //   · the reader understands every colour form a skin may write, falls back to today's literal when the page has no token (and says so, once), and
 //     reads again when data-theme changes
 //   · SIGIL's tokens ARE today's literals, so SIGIL draws exactly as before: the 3D view's calls are identical with and without the tokens
+//   · (D394) Settings ▸ Theme: the head reads the saved choice; a fixed theme sets its own skin and its own melody, music (or nothing saved, or saved text
+//     that is broken) keeps the random pick, sigil keeps the random melody under SIGIL; the head never throws
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -67,7 +69,52 @@ test('the page sets the skin in its head, before the first paint, from the same 
   }
   // the boot hands that number to the player and sets the skin from sound.melody (the player's word is the last one)
   assert.match(HTML, /createSound\(window, \{[^}]*pick: \(\) => \(typeof window\.__t180MelodyPick === 'number' \? window\.__t180MelodyPick : Math\.random\(\)\)/);
-  assert.match(HTML, /applyTheme\(document, sound\.melody\)/);
+  // AMENDED (D394): the rule changed by name: a saved Settings ▸ Theme of sigil shows SIGIL over the player's melody, so the boot sets the skin from the
+  // saved choice and sound.melody together (theme.js skinFor); with no fixed theme saved (music), skinFor gives sound.melody, as before
+  assert.match(HTML, /applyTheme\(document, \w+\.skinFor\(window\.__t180Theme, sound\.melody\)\)/);
+});
+
+const SETTINGS = require(path.join(ADIR, 'settings.js'));
+const headScript = () => [...HTML.slice(0, HTML.indexOf('</head>')).matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => /data-theme/.test(s));
+/** Run the head script with Math.random() = r over `win` (its localStorage, or none); what it set, and the melody the player then draws from its pick. */
+function runHead(r, win = {}) {
+  const root = fakeRoot(), ctx = { window: win, document: { documentElement: root }, Math: Object.assign(Object.create(Math), { random: () => r }), JSON };
+  assert.doesNotThrow(() => vm.runInNewContext(headScript(), ctx), 'the head script never throws before the first paint');
+  const sound = SOUND.createSound({}, { pick: () => win.__t180MelodyPick, log: () => {} });
+  return { skin: root.getAttribute('data-theme'), melody: sound.melody, pick: win.__t180MelodyPick, theme: win.__t180Theme };
+}
+const savedTheme = (text) => ({ localStorage: { getItem: (k) => (k === 't180.settings.theme' ? text : null), setItem() {} } });
+
+test('D394: Settings ▸ Theme has six choices: music follows the melody, each of the four is its own skin, sigil is none', () => {
+  assert.deepEqual([...TH.CHOICES], ['music', ...SOUND.MELODY_NAMES, 'sigil']);
+  assert.deepEqual([...TH.CHOICES], [...SETTINGS.CHOICES.theme], 'the setting takes the same six names');
+  for (const m of SOUND.MELODY_NAMES) {
+    assert.equal(TH.skinFor('music', m), m, `music: the melody's skin (${m})`);
+    for (const t of SOUND.MELODY_NAMES) assert.equal(TH.skinFor(t, m), t, `${t} over ${m}: ${t}'s skin`);
+    assert.equal(TH.skinFor('sigil', m), null, 'sigil: no skin');
+    for (const other of ['zzz', undefined, null, 3, 'Aqua']) assert.equal(TH.skinFor(other, m), m, `${String(other)} is read as music`);
+  }
+});
+
+test('D394: the head reads the saved theme: a fixed theme sets its own skin AND melody; music, nothing saved and broken saved text keep the random pick; sigil keeps the random melody under SIGIL', () => {
+  const NAMES = SOUND.MELODY_NAMES;
+  for (const r of [0, 0.3, 0.6, 0.9999]) {
+    const random = NAMES[Math.floor(r * NAMES.length)];
+    for (const t of NAMES) {
+      const x = runHead(r, savedTheme(JSON.stringify(t)));
+      assert.equal(x.skin, t, `r = ${r}, saved ${t}: the skin`); assert.equal(x.melody, t, `r = ${r}, saved ${t}: the melody is the theme's own`); assert.equal(x.theme, t);
+    }
+    for (const [why, win] of [['music', savedTheme('"music"')], ['nothing saved', savedTheme(null)], ['no storage', {}], ['not JSON', savedTheme('glass')], ['an unknown name', savedTheme('"neon"')],
+      ['a number', savedTheme('42')], ['an object', savedTheme('{"theme":"glass"}')], ['null', savedTheme('null')], ['the wrong case', savedTheme('"Glass"')],
+      ['a store that throws', { localStorage: { getItem() { throw new Error('SecurityError: blocked'); } } }],
+      ['reading localStorage throws', Object.defineProperty({}, 'localStorage', { get() { throw new Error('SecurityError: no storage'); } })]]) {
+      const x = runHead(r, win);
+      assert.equal(x.pick, r, `${why}: the random pick is kept`); assert.equal(x.melody, random, `${why}: the random melody`); assert.equal(x.skin, random, `${why}: its skin`);
+      assert.equal(x.theme, 'music', `${why}: read as music`);
+    }
+    const s = runHead(r, savedTheme('"sigil"'));
+    assert.equal(s.skin, null, 'sigil: no data-theme (SIGIL)'); assert.equal(s.pick, r, 'sigil: the pick stays random'); assert.equal(s.melody, random); assert.equal(s.theme, 'sigil');
+  }
 });
 
 test('the reader understands every colour form a skin may write', () => {
