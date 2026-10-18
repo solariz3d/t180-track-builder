@@ -12,7 +12,7 @@
 'use strict';
 
 const SOURCE = `
-float aurora_hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float aurora_hash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }   // sin-free, as prism_hash (D391)
 float aurora_stars(vec3 dir, float t) {
   // one candidate star per cell of a 3D grid laid through the sky sphere (no seam anywhere); about one cell in 25 holds one, kept away from the cell's
   // faces so its gaussian has fallen to under 1% there

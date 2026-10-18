@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **The skies draw the same on every graphics card.** Two small things in the sky drawing were left to the graphics driver to interpret: below the horizon, Skyline's and Glass's skies darken with a step written backwards, which the shading language does not define, and the stars of Aurora and the specks in Aqua's sea were scattered by a formula that some graphics cards compute less precisely, which can make them fall into stripes. Both are now written so every card draws them alike. The stars and specks sit in new places, still scattered at random, and every sky stays as quiet near the horizon as before. A check now refuses either form in any sky, so neither can come back. (`app/preview/sky/`.) Tests: `app/test/sky.test.js`.
+
 ## [0.4.4] - 2026-10-18
 
 ### Added

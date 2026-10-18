@@ -8,6 +8,7 @@
 //   · the skin names its sky with --sky-style (and --sky-a/b/c, falling back to --sky); Skyline's is 'sun', and its screen-pinned overlay is gone
 //   · the drift stops under prefers-reduced-motion: the preview hands the pass t = 0
 //   · D384 widened: Glass names the new 'prism' sky (a registered style the page's loader loads); SIGIL alone names none
+//   · D391: every style keeps the two GLSL rules (no smoothstep with literal edge0 >= edge1, no sin hash), and the check is not vacuous
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -139,4 +140,21 @@ test('the drift stops under prefers-reduced-motion: the preview hands the sky pa
   const moving = run(false), still = run(true);
   assert.ok(moving.length >= 3 && moving[moving.length - 1] > moving[0], `the sky drifts in time (${moving})`);
   assert.ok(still.length >= 3 && still.every((t) => t === 0), `reduced motion: every frame at t = 0 (${still})`);
+});
+// D391 (E's 0.4.4 review, findings 1 and 3; the librarian's ruling, exo_memory/librarian/2026-10-18.md 13:33): the sky contract's two GLSL rules.
+// A literal smoothstep whose edge0 >= edge1 is undefined in GLSL ES 1.00, and a sin hash (fract(sin(dot(p, ...)) * k)) feeds sin arguments in the
+// tens of thousands, which GPUs reduce differently. Every style is checked as its module writes it (not through patternSource, which now refuses them).
+test('D391: every sky style keeps the GLSL rules: no smoothstep with literal edge0 >= edge1, no sin hash', () => {
+  for (const s of SKY.STYLES.filter((x) => x !== 'none')) {
+    const src = require(path.join(ADIR, 'preview', 'sky', `${s}.js`)).source();
+    assert.deepEqual(SKY.contractProblems(s, src), [], `${s}.js`);
+  }
+});
+test('D391: the GLSL rule check refuses each broken form and keeps the good ones (it is not vacuous)', () => {
+  for (const bad of ['smoothstep(0.0, -0.6, h)', 'smoothstep(0.5, 0.5, x)', 'smoothstep( .3 ,0.1, x)', 'float n = fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);']) {
+    assert.ok(SKY.contractProblems('t', bad).length > 0, `refused: ${bad}`);
+  }
+  for (const good of ['smoothstep(0.0, 0.6, -h)', 'smoothstep(-0.35, 0.17, el)', 'smoothstep(.1, .2, x)', 'float w = sin(az * 2.0 + t * 0.01);', 'smoothstep(a, b, x)', '// smoothstep(0.0, -0.6, h) in a comment']) {
+    assert.deepEqual(SKY.contractProblems('t', good), [], `kept: ${good}`);
+  }
 });

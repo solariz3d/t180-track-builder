@@ -30,7 +30,7 @@ vec3 skyPattern(vec3 dir, float t) {
   col = mix(col, uSkyA, smoothstep(0.35, 1.0, e));
   col = mix(col, uSkyA, 0.14 * (0.5 - 0.5 * cosS) * smoothstep(0.12, 0.6, e));
   col = mix(col, uSkyB, 0.22 * pow(max(cosS, 0.0), 5.0) * smoothstep(0.02, 0.2, e));
-  if (h < 0.0) col = mix(uSkyB, uSky, 0.3 * smoothstep(0.0, -0.6, h));   // below the horizon: the same pale, a little deeper (no ground: the track floats in sky)
+  if (h < 0.0) col = mix(uSkyB, uSky, 0.3 * smoothstep(0.0, 0.6, -h));   // below the horizon: the same pale, a little deeper (no ground: the track floats in sky)
   // cirrus, on a deck overhead: long along the wind, thin across it, drifting with it
   if (h > 0.05) {
     vec2 p = dir.xz / (h + 0.06);

@@ -21,7 +21,7 @@ float caustics_net(vec2 p, float t) {
   v /= 3.0;
   return pow(1.0 - v * v, 10.0);
 }
-float caustics_hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float caustics_hash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }   // sin-free, as prism_hash (D391)
 float caustics_motes(vec3 dir, float t) {
   // specks drifting in the sea, soft and dim: one candidate per cell of a 3D grid through the sky sphere, about one cell in 30 holding one, kept
   // off the cell's faces; the whole field turns slowly round the vertical (0.003 rad/s: about eight minutes to cross the view)
