@@ -24,7 +24,7 @@
 // pre-delay, a ~11 s tail whose highs die first). Place, undo and the loop close's lead also ECHO, faintly (420 ms, alternating ears, each repeat half
 // the last); the ticks and the loop close's chords stay dry.
 //
-// MUTE AND VOLUME are remembered in localStorage (t180.sound.muted, t180.sound.volume). Audio starts on the first press or key in the window
+// MUTE AND VOLUME are remembered in localStorage (t180.sound.muted, t180.sound.volume); with nothing saved the volume is 0.45 (D382). Audio starts on the first press or key in the window
 // (Chromium's rule: no sound before the user acts).
 'use strict';
 
@@ -359,7 +359,7 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
   const read = (k) => { try { return store ? store.getItem(k) : null; } catch (e) { return null; } };
   const write = (k, v) => { try { if (store) store.setItem(k, String(v)); } catch (e) { /* a private window: the session keeps it */ } };
   let muted = read(KEYS.muted) === '1';
-  const v0 = Number(read(KEYS.volume)); let volume = read(KEYS.volume) !== null && Number.isFinite(v0) ? clamp(v0, 0, 1) : 0.6;
+  const v0 = Number(read(KEYS.volume)); let volume = read(KEYS.volume) !== null && Number.isFinite(v0) ? clamp(v0, 0, 1) : 0.45; // D382: the default, 25% under the old 0.6; a saved volume is kept as saved
   let ctx = null, engine = null, lastTick = -Infinity;
   const Ctx = win.AudioContext || win.webkitAudioContext;
   const level = () => (muted ? 0 : volume);
