@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **A skin's sky now stays put in the world as you look around.** The sky effects of the skins were drawn as a layer pinned to the screen, so they followed the camera wherever it turned. The 3D view now draws the sky itself, at infinity behind the track: turning the camera moves the sky across the screen, and moving or zooming leaves it where it is, as a real sky would. Skyline's sky is the first: a day sky from a pale horizon to a deep blue overhead, with a sun fixed in one quarter of it and a faint haze along the horizon that drifts very slowly (it stands still if Windows is set to reduce motion). Its old screen-pinned haze is gone; look around to find the sun. Aqua's and Aurora's skies follow. SIGIL and Glass draw no sky and look exactly as before. (`app/preview/renderer.js`, `app/preview/sky/`.)
+
 ## [0.4.3] - 2026-10-17
 
 ### Added

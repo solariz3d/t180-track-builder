@@ -1,7 +1,7 @@
 // renderer.js: draws the track batches (app/preview/batches.js) with WebGL. Started from blackbox's renderer
 // (ui/glcore.js): a shader that fails to compile says so loudly instead of leaving a silent black canvas, and the camera
-// math is column-major (app/camera/math.js). The track only: no sky, no environment. The ground grid at y = 0 and the
-// head marker are editor UI (the D170 review, item 7), not scenery.
+// math is column-major (app/camera/math.js). The track only: no environment. The ground grid at y = 0 and the
+// head marker are editor UI (the D170 review, item 7), not scenery. A skin may name a SKY (D384, below), drawn at infinity behind the track.
 // THE AC LOOK (D177) started from the same blackbox files: ui/glcore.js's per-material uniforms (ksSpecular /
 // ksSpecularEXP / ksEmissive / ksAlphaRef from the kn5, a hemisphere ambient, the eye for the half vector) and ui/kn5.js's
 // reading of the property block (ten floats, A B C D); the lighting itself is actools' (app/preview/acshaders.js).
@@ -17,6 +17,8 @@
 //                   batch is drawn with its AC shader (acshaders.js, the Ms-PL port) and the uniforms aclook.js
 //                   uniformsFor gives, under aclook.js's ONE reference light. look 'words', or no materialOf, draws the
 //                   D170 per-word colours instead. A sampler whose texture is not in extras.textures gets one white texel.
+//   r.setTheme({ sky, fog, edge, tie, grid, skyStyle, skyA, skyB, skyC })   a skin's 3D colours and its sky (themeFrom(tokens) reads them)
+//   extras.time = seconds, for the sky's drift (the preview hands 0 under prefers-reduced-motion)
 //   r.stats()  -> { uploads, buffers, draws, lines, acDraws, textures, chunks }      uploads = bufferData + texImage2D calls;
 //                 chunks = the placed track's merged chunks drawn last frame (CHUNKS below)
 //   createRenderer(gl, { chunkVertices })   the most vertices in one chunk (default and maximum 65,535: Uint16 indices)
@@ -38,6 +40,7 @@ const M = require('../camera/math.js');
 const { LIGHT, linesFor, tangentsFor } = require('./look.js');
 const AC = require('./acshaders.js');
 const ACLOOK = require('./aclook.js');
+const SKY = require('./sky/index.js');
 
 const v3 = (v) => `vec3(${v.map((x) => x.toFixed(6)).join(', ')})`;
 const VS = `
@@ -74,6 +77,58 @@ varying float vDepth;
 uniform vec3 uColour; uniform float uAlpha; uniform vec3 uFog; uniform float uFogDensity; uniform vec2 uFade;
 /* uFade = (near, far): the line fades out between them (D179: ties at a distance); far <= near: no fade */
 void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = uFade.y > uFade.x ? clamp((uFade.y - vDepth) / (uFade.y - uFade.x), 0.0, 1.0) : 1.0; gl_FragColor = vec4(mix(uFog, uColour, fog), uAlpha * f); }`;
+
+// THE SKY (D384; the keeper, 2026-10-18: the skin's sky should stay put in the world as you move around, not follow the camera). A full-screen pass
+// drawn after the clear and before everything else, without depth: each pixel's ray is the camera's ROTATION only (skyBasis, from the inverse of the
+// view-projection with the eye at the origin), so turning moves the sky across the screen and moving or zooming does not. The pattern is the skin's style
+// (app/preview/sky/<style>.js: vec3 skyPattern(vec3 dir, float t)); 'none' draws no pass, which is today's frame call for call.
+const SKY_VS = `
+attribute vec2 aPos;
+uniform vec3 uFwd; uniform vec3 uRight; uniform vec3 uUp;
+varying vec3 vRay;
+void main(){ vRay = uFwd + aPos.x * uRight + aPos.y * uUp; gl_Position = vec4(aPos, 0.0, 1.0); }`;
+const skyFS = (pattern) => `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec3 vRay;
+uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime;
+${pattern}
+void main(){ gl_FragColor = vec4(clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0), 1.0); }`;
+const SKY_STRIP = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+/** The inverse of a column-major 4×4 (cofactors); a singular matrix throws. */
+function invert4(m) {
+  const o = new Array(16);
+  o[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15] + m[9] * m[7] * m[14] + m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
+  o[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15] - m[8] * m[7] * m[14] - m[12] * m[6] * m[11] + m[12] * m[7] * m[10];
+  o[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15] + m[8] * m[7] * m[13] + m[12] * m[5] * m[11] - m[12] * m[7] * m[9];
+  o[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14] - m[8] * m[6] * m[13] - m[12] * m[5] * m[10] + m[12] * m[6] * m[9];
+  o[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15] - m[9] * m[3] * m[14] - m[13] * m[2] * m[11] + m[13] * m[3] * m[10];
+  o[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15] + m[8] * m[3] * m[14] + m[12] * m[2] * m[11] - m[12] * m[3] * m[10];
+  o[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15] - m[8] * m[3] * m[13] - m[12] * m[1] * m[11] + m[12] * m[3] * m[9];
+  o[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14] + m[8] * m[2] * m[13] + m[12] * m[1] * m[10] - m[12] * m[2] * m[9];
+  o[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15] + m[5] * m[3] * m[14] + m[13] * m[2] * m[7] - m[13] * m[3] * m[6];
+  o[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15] - m[4] * m[3] * m[14] - m[12] * m[2] * m[7] + m[12] * m[3] * m[6];
+  o[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15] + m[4] * m[3] * m[13] + m[12] * m[1] * m[7] - m[12] * m[3] * m[5];
+  o[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14] - m[4] * m[2] * m[13] - m[12] * m[1] * m[6] + m[12] * m[2] * m[5];
+  o[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11] - m[5] * m[3] * m[10] - m[9] * m[2] * m[7] + m[9] * m[3] * m[6];
+  o[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11] + m[4] * m[3] * m[10] + m[8] * m[2] * m[7] - m[8] * m[3] * m[6];
+  o[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11] - m[4] * m[3] * m[9] - m[8] * m[1] * m[7] + m[8] * m[3] * m[5];
+  o[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10] + m[4] * m[2] * m[9] + m[8] * m[1] * m[6] - m[8] * m[2] * m[5];
+  const det = m[0] * o[0] + m[1] * o[4] + m[2] * o[8] + m[3] * o[12];
+  if (!det) throw new Error('renderer: the view-projection has no inverse');
+  return o.map((v) => v / det);
+}
+/** The sky's rays for a pose: { fwd, right, up }, so the ray at ndc (x, y) is fwd + x·right + y·up (fwd unit length). The eye is put at the origin
+ *  first, so only the camera's rotation (and its fov and aspect) counts; each ray is the far-plane point the inverse view-projection gives. */
+function skyBasis(pose, aspect) {
+  const inv = invert4(M.viewProj({ ...pose, eye: [0, 0, 0], target: pose.target.map((v, i) => v - pose.eye[i]) }, aspect));
+  const ray = (x, y) => { const p = M.apply(inv, [x, y, 1]); return [p[0] / p[3], p[1] / p[3], p[2] / p[3]]; };
+  const c = ray(0, 0), r = ray(1, 0), u = ray(0, 1), s = 1 / Math.hypot(c[0], c[1], c[2]);
+  return { fwd: c.map((v) => v * s), right: r.map((v, i) => (v - c[i]) * s), up: u.map((v, i) => (v - c[i]) * s) };
+}
 
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
@@ -144,11 +199,14 @@ const CLEAR = Object.freeze([0.024, 0.023, 0.021]);   // 2026-10-14, Sigil: a wa
 
 const FOG = Object.freeze([0.07, 0.08, 0.1]);
 // D381: a skin's 3D colours, read from the page's tokens (app/lib/tokens.js); each falls back to the literal here, which is SIGIL's token value too
-const themeFrom = (T) => ({ sky: T.floats('--sky', CLEAR), fog: T.floats('--fog', FOG), edge: T.floats('--road-edge', COLOURS.edge), tie: T.floats('--road-tie', COLOURS.tie), grid: T.floats('--ground-grid', COLOURS.grid) });
+// D384: and its sky, --sky-style (none when the page has none) with --sky-a, --sky-b and --sky-c, each falling back to the skin's --sky
+const themeFrom = (T) => { const sky = T.floats('--sky', CLEAR); return { sky, fog: T.floats('--fog', FOG), edge: T.floats('--road-edge', COLOURS.edge), tie: T.floats('--road-tie', COLOURS.tie), grid: T.floats('--ground-grid', COLOURS.grid),
+  skyStyle: T.word('--sky-style', 'none'), skyA: T.floats('--sky-a', sky), skyB: T.floats('--sky-b', sky), skyC: T.floats('--sky-c', sky) }; };
 
 function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');
   let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // D381: setTheme replaces these, the clear colour and the fog
+  let skyStyle = 'none', skyProg = null, skyBuf = null, skyA = null, skyB = null, skyC = null;   // D384: the sky; a colour left null is the clear colour
   if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -291,15 +349,39 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     }
     if (!blending) gl.disable(gl.BLEND);
   }
+  function drawSky(B, time) {
+    const sp = skyProg, s = clear, a = skyA || clear, b = skyB || clear, c = skyC || clear;
+    if (!skyBuf) { skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.bufferData(gl.ARRAY_BUFFER, SKY_STRIP, gl.STATIC_DRAW); uploads++; }
+    gl.useProgram(sp.p);
+    gl.uniform3f(sp.fwd, B.fwd[0], B.fwd[1], B.fwd[2]); gl.uniform3f(sp.right, B.right[0], B.right[1], B.right[2]); gl.uniform3f(sp.up, B.up[0], B.up[1], B.up[2]);
+    gl.uniform3f(sp.sky, s[0], s[1], s[2]); gl.uniform3f(sp.a, a[0], a[1], a[2]); gl.uniform3f(sp.b, b[0], b[1], b[2]); gl.uniform3f(sp.c, c[0], c[1], c[2]);
+    gl.uniform1f(sp.time, time);
+    gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
+    gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.enableVertexAttribArray(sp.pos); gl.vertexAttribPointer(sp.pos, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  }
   return {
     /** D381: a skin's 3D colours, { sky, fog, edge, tie, grid }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
     setTheme(t) {
       const ok = (v) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x >= 0 && x <= 1);
       for (const k of Object.keys(t || {})) {
-        if (!['sky', 'fog', 'edge', 'tie', 'grid'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
+        if (k === 'skyStyle') continue;
+        if (!['sky', 'fog', 'edge', 'tie', 'grid', 'skyA', 'skyB', 'skyC'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
         if (!ok(t[k])) throw new Error(`renderer: the ${k} colour is three numbers from 0 to 1, got ${JSON.stringify(t[k])}`);
       }
+      // D384: the sky is compiled here, so an unknown style or a pattern that does not compile fails at the skin change, before anything is replaced
+      if (t && t.skyStyle !== undefined && t.skyStyle !== skyStyle) {
+        const src = SKY.patternSource(t.skyStyle), next = src ? program(SKY_VS, skyFS(src)) : null;
+        if (next) {
+          const u = (n) => gl.getUniformLocation(next.p, n);
+          Object.assign(next, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime') });
+        }
+        if (skyProg) gl.deleteProgram(skyProg.p);
+        skyProg = next; skyStyle = t.skyStyle;
+      }
       if (t.sky) clear = t.sky; if (t.fog) fog = t.fog; if (t.edge) edge = t.edge; if (t.tie) tie = t.tie; if (t.grid) gridColour = t.grid;
+      if (t.skyA) skyA = t.skyA; if (t.skyB) skyB = t.skyB; if (t.skyC) skyC = t.skyC;
     },
     draw(batches, pose, { width, height }, extras = {}) {
       if (!(width > 0 && height > 0)) throw new Error('renderer: the canvas has no size');
@@ -309,6 +391,9 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       gl.viewport(0, 0, width, height);
       gl.clearColor(clear[0], clear[1], clear[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
+      const time = extras.time === undefined ? 0 : extras.time;
+      if (!Number.isFinite(time)) throw new Error(`renderer: the sky's time is a number of seconds, got ${String(time)}`);
+      if (skyProg) drawSky(skyBasis(pose, width / height), time);
       const vp = new Float32Array(M.viewProj(pose, width / height));
       if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, gridColour, 1); }
       let chunks;
@@ -346,9 +431,10 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     dispose() {
       for (const e of buffers.values()) gl.deleteBuffer(e.buf); buffers.clear();
       for (const e of texes.values()) gl.deleteTexture(e.t); texes.clear(); if (white) gl.deleteTexture(white);
+      if (skyProg) gl.deleteProgram(skyProg.p); if (skyBuf) gl.deleteBuffer(skyBuf);
       gl.deleteProgram(surf.p); gl.deleteProgram(line.p); for (const pr of Object.values(ac)) gl.deleteProgram(pr.p);
     },
   };
 }
 
-module.exports = { createRenderer, themeFrom, VS, FS, LVS, LFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };
+module.exports = { createRenderer, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };

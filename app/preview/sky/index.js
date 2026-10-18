@@ -15,13 +15,15 @@
 'use strict';
 
 const STYLES = Object.freeze(['none', 'sun', 'caustics', 'aurora']);
-const MODULES = { sun: './sun.js', caustics: './caustics.js', aurora: './aurora.js' };
+// each required by name, written out: the page's loader (app/lib/cjs.js) fetches only the requires it can read in the source. Requiring a module costs
+// nothing until its source() is called, so a stub that is not built yet throws only when a skin names it.
+const MODULES = { sun: require('./sun.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js') };
 
 /** The GLSL of a style's skyPattern, or null for 'none'; an unknown style throws. */
 function patternSource(style) {
   if (!STYLES.includes(style)) throw new Error(`sky: no style named ${JSON.stringify(style)} (the styles are ${STYLES.join(', ')})`);
   if (style === 'none') return null;
-  const src = require(MODULES[style]).source();
+  const src = MODULES[style].source();
   if (typeof src !== 'string' || !/vec3\s+skyPattern\s*\(\s*vec3\s+\w+\s*,\s*float\s+\w+\s*\)/.test(src)) throw new Error(`sky: ${style}.js does not define vec3 skyPattern(vec3 dir, float t)`);
   return src;
 }

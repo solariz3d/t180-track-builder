@@ -1,6 +1,6 @@
 // theme-mutation.test.js: node --test app/test/theme-mutation.test.js
-// D381 part 2a (pane B): the skin pick and the token reader, mutated. Each mutation copies app/ (all but its tests, plus
-// theme.test.js), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED theme.test.js there. "Applied" means the patch text was
+// D381 part 2a (pane B): the skin pick and the token reader, mutated; D384 part 1 (pane B): the sky pass too (S1-S13, run against sky.test.js).
+// Each mutation copies app/ (all but its tests, plus theme.test.js and sky.test.js with its fixture), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED theme.test.js there. "Applied" means the patch text was
 // found exactly once; "caught" means the named test FAILED on the mutant. A CONTROL runs the unmutated copy first. The originals are never touched.
 'use strict';
 const test = require('node:test');
@@ -22,17 +22,32 @@ const MUTATIONS = [
   { id: 'T11 an unreadable token is not reported', file: 'lib/tokens.js', from: "if (v && !c && !said.has(name)) { said.add(name); say(", to: 'if (false) { say(', caughtBy: 'the reader falls back' },
   { id: 'T12 the 3D sky ignores the skin', file: 'preview/renderer.js', from: 'if (t.sky) clear = t.sky;', to: '', caughtBy: 'SIGIL\'s 3D frame is the same' },
   { id: 'T13 SIGIL\'s grid token drifts from the literal', file: 'index.html', from: '--ground-grid: color(srgb 0.2 0.23 0.28)', to: '--ground-grid: color(srgb 0.2 0.23 0.29)', caughtBy: 'SIGIL\'s tokens are today\'s literals' },
+  // D384: the sky pass (app/preview/renderer.js, app/preview/sky/, app/preview/preview.js, app/lib/tokens.js word())
+  { id: 'S1 the sky follows the camera\'s position', test: 'sky.test.js', file: 'preview/renderer.js', from: 'eye: [0, 0, 0], target: pose.target.map((v, i) => v - pose.eye[i]) }', to: 'eye: pose.eye, target: pose.target }', caughtBy: 'moving or zooming without turning' },
+  { id: 'S2 the rays turn the other way', test: 'sky.test.js', file: 'preview/renderer.js', from: 'right: r.map((v, i) => (v - c[i]) * s)', to: 'right: r.map((v, i) => (c[i] - v) * s)', caughtBy: 'a sky feature moves on screen' },
+  { id: 'S3 the shader builds its rays without the basis', test: 'sky.test.js', file: 'preview/renderer.js', from: 'vRay = uFwd + aPos.x * uRight + aPos.y * uUp;', to: 'vRay = uFwd + aPos.x * uRight - aPos.y * uUp;', caughtBy: 'the sky pass runs before the track' },
+  { id: 'S4 the sky writes depth', test: 'sky.test.js', file: 'preview/renderer.js', from: 'gl.disable(gl.DEPTH_TEST); gl.depthMask(false);', to: 'gl.disable(gl.DEPTH_TEST);', caughtBy: 'the sky pass runs before the track' },
+  { id: 'S5 the pattern gets no time', test: 'sky.test.js', file: 'preview/renderer.js', from: 'gl.uniform1f(sp.time, time);', to: 'gl.uniform1f(sp.time, 0);', caughtBy: 'the sky pass runs before the track' },
+  { id: 'S6 none still draws a sky', test: 'sky.test.js', file: 'preview/renderer.js', from: 'next = src ? program(SKY_VS, skyFS(src)) : null;', to: 'next = program(SKY_VS, skyFS(src || SKY.patternSource(\'sun\')));', caughtBy: '\'none\' draws the very calls cbd7a40 drew' },
+  { id: 'S7 going back to none keeps the old sky', test: 'sky.test.js', file: 'preview/renderer.js', from: 'skyProg = next; skyStyle = t.skyStyle;', to: 'if (next) skyProg = next; skyStyle = t.skyStyle;', caughtBy: '\'none\' draws the very calls cbd7a40 drew' },
+  { id: 'S8 an unknown style is quietly none', test: 'sky.test.js', file: 'preview/sky/index.js', from: 'if (!STYLES.includes(style)) throw', to: 'if (!STYLES.includes(style)) return null; if (0) throw', caughtBy: 'an unknown sky style fails loudly' },
+  { id: 'S9 --sky-a falls back to black-ish, not the skin\'s sky', test: 'sky.test.js', file: 'preview/renderer.js', from: "skyA: T.floats('--sky-a', sky)", to: "skyA: T.floats('--sky-a', CLEAR)", caughtBy: 'the skin names its sky' },
+  { id: 'S10 the style word keeps its quotes', test: 'sky.test.js', file: 'lib/tokens.js', from: ".replace(/^([\"'])(.*)\\1$/, '$2')", to: '', caughtBy: 'the skin names its sky' },
+  { id: 'S11 reduced motion still drifts', test: 'sky.test.js', file: 'preview/preview.js', from: '(still && still.matches ? 0 : t / 1000)', to: '(t / 1000)', caughtBy: 'the drift stops under prefers-reduced-motion' },
+  { id: 'S12 the preview hands the sky no time', test: 'sky.test.js', file: 'preview/preview.js', from: ', time: skyTime(t) });', to: ' });', caughtBy: 'the drift stops under prefers-reduced-motion' },
+  { id: 'S13 Skyline names no sky', test: 'sky.test.js', file: 'themes/skyline.css', from: '--sky-style: sun;', to: '', caughtBy: 'the skin names its sky' },
 ];
 
 function runMutant(m) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-theme-mut-')), app = path.join(dir, 'app');
   try {
     fs.cpSync(path.join(ROOT, 'app'), app, { recursive: true, filter: (s) => path.relative(path.join(ROOT, 'app'), s) !== 'test' });
-    fs.mkdirSync(path.join(app, 'test')); fs.copyFileSync(path.join(__dirname, 'theme.test.js'), path.join(app, 'test', 'theme.test.js'));
+    fs.mkdirSync(path.join(app, 'test'));
+    for (const n of ['theme.test.js', 'sky.test.js', 'sky-fixture.js', 'sky-none-cbd7a40.json']) fs.copyFileSync(path.join(__dirname, n), path.join(app, 'test', n));
     for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
     const f = path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
-    const r = spawnSync(process.execPath, ['--test', path.join(app, 'test', 'theme.test.js')],
+    const r = spawnSync(process.execPath, ['--test', path.join(app, 'test', m.test || 'theme.test.js')],
       { env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT' && k !== 'APP_DIR')), encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
@@ -44,6 +59,10 @@ function runMutant(m) {
 
 test('control: the unmutated copy passes theme.test.js', () => {
   const r = runMutant({ id: 'control', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
+  assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
+});
+test('control: the unmutated copy passes sky.test.js', () => {
+  const r = runMutant({ id: 'control', test: 'sky.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
   assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
 });
 for (const m of MUTATIONS) {
