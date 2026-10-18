@@ -162,47 +162,50 @@ test('xsec headState (A\'s core): a non-tube head shows tube sweep 0 ("none"); a
 });
 
 // ── the panel ──
+// AMENDED D385 (2026-10-18): the field these rows type was "edge angle °"; it is now "left edge °" (the keeper: "there is the right edge but not the left edge
+// tweak"). Only the label moved: it is the same input on the same channel e, so every rule below is unchanged. Typed alone it now leaves the right side as it
+// was (app/test/core-carry.test.js), where these rows assert only e.
 test('xsec panel: the three fields are on the panel and show the head; left as shown they send nothing', async () => {
   const p = await mountPanel(stubXsec);
-  assert.equal(p.field('edge angle °').value, '0');
+  assert.equal(p.field('left edge °').value, '0');
   assert.equal(p.field('edge start').value, '0.64');
   assert.equal(p.field('tube sweep °').value, '0');
   const t = p.opts().targets;
   for (const k of [E, S, T]) assert.ok(!(k in t), `untouched, ${k} is not a target`);
-  for (const f of ['edge angle °', 'edge start', 'tube sweep °']) assert.ok(p.box(f) && p.box(f).tagName === 'INPUT', `"${f}" has its at-start box`);
+  for (const f of ['left edge °', 'edge start', 'tube sweep °']) assert.ok(p.box(f) && p.box(f).tagName === 'INPUT', `"${f}" has its at-start box`);
 });
 test('xsec panel: a changed field is a target, and its cell shows the DOCUMENT, not the typed value', async () => {
   const p = await mountPanel(stubXsec);
-  p.type('length m', 100); p.type('edge angle °', 15); p.type('edge start', 0.7); p.type('tube sweep °', 180);
+  p.type('length m', 100); p.type('left edge °', 15); p.type('edge start', 0.7); p.type('tube sweep °', 180);
   const t = p.opts().targets;
   assert.deepEqual([t[E], t[S], t[T]], [15, 0.7, 180]);
   assert.equal(p.cell('edge'), '0.00° → 15.87°', 'edge from → to: the document rings past the typed 15');
   assert.equal(p.cell('start'), '0.64 → 0.71', 'edge start from → to, two decimals');
   assert.equal(p.cell('tube'), '0.00° → 179.13°', 'tube from → to');
-  p.box('edge angle °').checked = true; p.box('edge angle °').oninput();
+  p.box('left edge °').checked = true; p.box('left edge °').oninput();
   assert.deepEqual(p.opts().transition, { [E]: 20 }, 'the edge\'s at-start box');
 });
 // Each field redraws on its OWN (X11): the row above types the tube last, and the tube's handler redraws every cell, so it could not see an edge or
 // edge-start field that redraws nothing. Since the undo guard (8926789) wraps every field's handler, such a field no longer throws either.
 test('xsec panel: the edge angle and the edge start each redraw the readout on their own, with no other field typed after them', async () => {
   const p = await mountPanel(stubXsec);
-  p.type('length m', 100); p.type('edge angle °', 15);
+  p.type('length m', 100); p.type('left edge °', 15);
   assert.equal(p.cell('edge'), '0.00° → 15.87°', 'the edge angle alone redraws its cell');
   p.type('edge start', 0.7);
   assert.equal(p.cell('start'), '0.64 → 0.71', 'the edge start alone redraws its cell');
 });
 test('xsec panel: after Extend the fields read back what the document holds', async () => {
   const p = await mountPanel(stubXsec);
-  p.type('length m', 100); p.type('edge angle °', 15); p.type('tube sweep °', 90);
+  p.type('length m', 100); p.type('left edge °', 15); p.type('tube sweep °', 90);
   p.button('Extend').onclick();
-  assert.equal(p.field('edge angle °').value, '15.87');
+  assert.equal(p.field('left edge °').value, '15.87');
   assert.equal(p.field('tube sweep °').value, '89.13');
   assert.equal(p.field('edge start').value, '0.64', 'an untouched start keeps the default');
 });
 // A's core reports the readout keys for every piece; each cell must be the core's own value, rounded as the cup cell is (E's seal E7)
 const fmtDegCell = (x) => require('../core/labels.js').fmtDeg(x).replace(/^\+/, ''), fmtShareCell = (x) => (Math.round(Math.abs(x) * 100 + 1e-7) / 100 * Math.sign(x) || 0).toFixed(2);
 test('xsec panel (A\'s core): each cross-section cell is the core\'s own readout of the candidate', async () => {
-  for (const typed of [{}, { 'edge angle °': 15, 'edge start': 0.7 }, { 'tube sweep °': 180 }, { 'tube sweep °': 300, 'edge angle °': 20 }]) {
+  for (const typed of [{}, { 'left edge °': 15, 'edge start': 0.7 }, { 'tube sweep °': 180 }, { 'tube sweep °': 300, 'left edge °': 20 }]) {
     const p = await mountPanel();   // the REAL core (A's, in this tree): no stub
     p.type('length m', 100); for (const [f, v] of Object.entries(typed)) p.type(f, v);
     const ro = p.root.all().find((e) => e.attrs.class === 'readout');
@@ -224,7 +227,7 @@ test('xsec panel: a core refusal is shown by its name (BAD_TUBE, BAD_EDGE: A\'s 
   const cases = [
     ['BAD_TUBE', (p) => { p.type('width m', 31); p.type('tube sweep °', 352); }],   // held in the slot (T1 iii)
     ['BAD_TUBE', (p) => { p.type('tube sweep °', 400); }],                          // outside [0, 360]
-    ['BAD_EDGE', (p) => { p.type('edge angle °', -5); }],                           // e < 0
+    ['BAD_EDGE', (p) => { p.type('left edge °', -5); }],                           // e < 0
     ['BAD_EDGE', (p) => { p.type('edge start', 0.3); }],                            // s below 0.5
   ];
   for (const [name, set] of cases) {

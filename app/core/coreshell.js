@@ -326,6 +326,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return (m[id] = k);
   };
 
+  // D385: the RIGHT edge er beside the left (e) in headState and pieceState, so the panel's "right edge °" shows its own side (the panel cannot read the document:
+  // src/core/document.js pulls node's fs, D263). Where the document has no er, the right follows the left, as src/core/extend.js makes it
+  const withRight = (h, end) => ({ ...h, er: end && end.er && Number.isFinite(end.er.v) ? end.er.v : h[XS.CHANNEL.edge] });
   const api = {
     getState: () => st,
     subscribe(f) { subs.add(f); return () => subs.delete(f); },
@@ -450,9 +453,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const e = D.endState(doc());
       // the head piece: the last ROAD piece (a flight carries the road's state), whose `tube` says whether the sweep is the head's (RULING 2)
       const roads = doc().pieces.filter((p) => p.type === 'road'), headIsTube = !!(roads.length && roads[roads.length - 1].tube);
-      if (e) return { kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, headIsTube) };
+      if (e) return withRight({ kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, headIsTube) }, e);
       const fam = 'bowl';   // extend.js: `family || (last ? last.family : 'bowl')`
-      return { kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], c: D.legacyEdgeDeg(fam, WIDTHS[fam], RATES[fam]), ...XS.headOf(null) };
+      return withRight({ kh: 0, kv: 0, phi: 0, w: WIDTHS[fam], c: D.legacyEdgeDeg(fam, WIDTHS[fam], RATES[fam]), ...XS.headOf(null) }, null);
     },
     /** A placed ROAD piece's end values in headState's shape, with its length and whether it is a tube; null for no such piece (2026-10-15: a selected
      *  piece lends them to the Extend fields, so a new piece can be made like it). */
@@ -460,7 +463,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const P = doc().pieces.find((x) => x.id === id);
       if (!P || P.type !== 'road') return null;
       const e = D.pieceEnd(P);
-      return { kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, !!P.tube), length: P.length, tube: !!P.tube };
+      return withRight({ kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, !!P.tube), length: P.length, tube: !!P.tube }, e);
     },
     /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
     // 2026-10-14 (ELYSIUM: ~260 ms of every placed piece on the window's thread, every one of the 43 labels read again): a ROAD piece's readout reads

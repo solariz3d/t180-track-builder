@@ -70,7 +70,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   // t/2 + e ≤ 180), and a clamp here would hide them (E2's plant KE2-2). The edge angle and the sweep are DEGREES, as c is; the start a share.
   const e = num(edge), sl = num(start), tb = num(tube);
   if (e !== null) targets[XS.CHANNEL.edge] = e;
-  const er = num(edgeR); if (er !== null) targets.er = er;   // the RIGHT edge (2026-10-12): blank follows the edge angle, so a typed one splits the sides (src/core/extend.js)
+  const er = num(edgeR); if (er !== null) targets.er = er;   // the RIGHT edge (2026-10-12): blank follows the edge angle, so a typed one splits the sides (src/core/extend.js); the panel's opts sends it with a left typed alone (D385)
   if (sl !== null) targets[XS.CHANNEL.start] = sl;
   if (tb !== null) targets[XS.CHANNEL.tube] = tb;
   const out = { length: Number(length), targets };
@@ -152,14 +152,16 @@ function mount(root, shell, mountOpts = {}) {
   // bends a channel that was still changing, and any cup target turns a legacy piece into a cup piece. Only a changed value is a target.
   // THE CROSS-SECTION (D225): the edge curve (an extra angle on the outer band, from the edge start out; 0 = off) and the tube (the sweep of
   // a circular section, 360 = a closed pipe). The bank field above takes any number of degrees, 360 included (the spiral): it has no min or max
-  const edge = el('input', { type: 'number', value: '', step: '1', min: '0', title: 'edge angle: how many degrees MORE the very edge tilts than the plain profile would, rising smoothly from the edge start out; 0 = off. Bank still rolls the whole section. Shows the edge at the head; left as shown, it keeps it' }),
-    // the keeper, 2026-10-12: bank the outside of a turn harder and turn the inside down, so the inside line is not banked. Blank follows the edge angle (both
-    // sides the same, as before); typed, it is the RIGHT side and the edge angle becomes the LEFT side
-    edgeR = el('input', { type: 'number', value: '', step: '1', min: '0', title: 'right edge: the RIGHT side\'s edge angle, in degrees MORE than the plain profile, like the edge angle. Left as shown it follows the edge angle (both sides the same); type a different number and the edge angle is the LEFT side. For a right turn: a big edge angle (the outside, left) and a small right edge (the inside), so the inside line is not banked. Shows the right edge at the head' }),
+  // D385 (the keeper, 2026-10-18: "there is the right edge but not the left edge tweak"): the LEFT and the RIGHT edge, each its own side. Each shows its side at the
+  // head; typing one changes only that side (opts below sends the other side's head value with it, since the core sets both from e alone: src/core/extend.js :83-86)
+  const edge = el('input', { type: 'number', value: '', step: '1', min: '0', title: 'left edge: how many degrees MORE the LEFT side\'s very edge tilts than the plain profile would, rising smoothly from the edge start out; 0 = off. Bank still rolls the whole section. Shows the left edge at the head; left as shown, it keeps it; typed, only the left side changes' }),
+    // the keeper, 2026-10-12: bank the outside of a turn harder and turn the inside down, so the inside line is not banked
+    edgeR = el('input', { type: 'number', value: '', step: '1', min: '0', title: 'right edge: how many degrees MORE the RIGHT side\'s very edge tilts than the plain profile would, like the left edge. Shows the right edge at the head; left as shown, it keeps it; typed, only the right side changes. For a right turn: a big left edge (the outside) and a small right edge (the inside), so the inside line is not banked' }),
     start = el('input', { type: 'number', value: '', step: '0.01', min: '0.5', max: '0.95', title: 'edge start: where the edge curve begins, as a share of the half-width from the centre (0.64 = the outer 36% each side curves more; 0.5 to 0.95). Shows it at the head; left as shown, it keeps it' }),
     tube = el('input', { type: 'number', value: '', step: '1', min: '0', max: '360', title: 'tube sweep: the cross-section as an arc of this many degrees, 0 (none) to 360 (a closed pipe). Shows the sweep at the head; left as shown, it keeps it' });
+  // (D385: the right edge is the shell's er; a shell without it, the right follows the left, as the core makes it)
   const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => HD.wrapTurn(h.phi / DEG)], width: [width, (h) => h.w], cup: [cup, (h) => h.c],
-    edge: [edge, (h) => h[XS.CHANNEL.edge]], edgeR: [edgeR, (h) => h.er], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
+    edge: [edge, (h) => h[XS.CHANNEL.edge]], edgeR: [edgeR, (h) => (Number.isFinite(h.er) ? h.er : h[XS.CHANNEL.edge])], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
   // THE WIDTH REFERENCE (D232, the keeper: "a drop down that tells you the width of different known t-180 tracks, such as track H, track N, track G"):
   // picking a known track puts its measured median into the width field, like typing it (so on an empty track it is the first piece's start, which is the
   // new-track default). For a TUBE (the sweep field at 360) the figures are the distance round and the entry says how wide that is across.
@@ -221,7 +223,9 @@ function mount(root, shell, mountOpts = {}) {
   const showGrip = () => { shownGrip = String(shell.headGrip()); gripF.value = shownGrip; gripNote.textContent = GL.note(shownGrip); };
   const gripOpt = () => (gripF.value === '' || gripF.value === shownGrip ? '' : gripF.value);   // untouched = blank = the new piece keeps the head's grip
   const colourOn = el('input', { type: 'checkbox', 'aria-label': 'colour by grip', title: 'colour the track by grip: blue below 100%, white at 100%, orange above; the hover label says each piece\'s grip' });
-  const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: asTyped('edgeR'), start: asTyped('start'), tube: asTyped('tube'),
+  // D385: typing ONE side changes only that side: the left typed alone sends the right as the head has it (the core would otherwise set both from e)
+  const rightTarget = () => { const r = asTyped('edgeR'); return r !== '' || asTyped('edge') === '' ? r : String(HEAD.edgeR[1](shell.headState())); };
+  const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value });
   // D242 item 7 (the keeper, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
@@ -229,7 +233,17 @@ function mount(root, shell, mountOpts = {}) {
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
   const madeWith = new WeakMap();
   const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value });
-  const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
+  // D385 (the keeper, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values"): AS CORNERS, after an Extend the turn and climb fields
+  // KEEP the degrees typed for the piece just placed (the new document's draw has just shown the head, blank), so Extend again places the same corner, each ending straight.
+  // A blank or a typed 0 is not carried (the field stays blank, as before). Only Extend carries (and Straight, whose 0 never is): Jump, Level, To floor, Turn by, Turn to grid
+  // and Sharp show the head as before
+  const carryCorner = (made) => {
+    if (!cornerMode() || made.turnAs !== 'corner') return;
+    let any = false;
+    for (const [k, f] of [['turn', turn], ['climb', climb]]) { const v = made.values[k]; if (v === '' || !Number.isFinite(Number(v)) || Number(v) === 0) continue; f.value = applied[k] = v; any = true; }
+    if (any) { readout(); hintNow(); }
+  };
+  const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) { madeWith.set(after, { before, made }); carryCorner(made); } };
   // D356 (E's review 5, row 2): the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
   const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
@@ -540,7 +554,7 @@ function mount(root, shell, mountOpts = {}) {
   // "More shape", folded: the channels used less often, each with its "at start" box, and the notes that explain them
   const moreShape = el('details', { class: 'more-shape' }, el('summary', { text: 'More shape', style: 'cursor:pointer;margin:6px 0' }),
     el('div', { class: 'pickers' }, fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
-      fieldAt('edge angle °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube')), wnote, gripNote);
+      fieldAt('left edge °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube')), wnote, gripNote);
   // the selection box, shown only with a selection (and while a delete it started is previewed: its Apply and Cancel are in it)
   const selBox = el('div', { 'aria-label': 'selected pieces' }, ...pieces.nodes.selection);
   const showSel = (st) => { const d = st.history.present; selBox.style.display = shell.selectionInfo() || (st.deleteProposal && st.deleteProposal.base === d) ? '' : 'none'; };
