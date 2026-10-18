@@ -23,7 +23,7 @@ function mount(stage, win) {
   // the keeper, 2026-10-12: the numbers "look goofy". A dashboard read: Bahnschrift (Windows' DIN face, on every Windows
   // 10 and 11) with fixed-width digits, so a number does not jitter as a handle drags it; each label small and grey above
   // its value, and a thin rule between the values.
-  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;padding:7px 4px;border-radius:8px;background:rgba(11,13,17,0.86);color:#ffffff;font:bold 26px/1.05 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
+  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;padding:7px 4px;border-radius:8px;background:color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent);color:var(--on-ink-strong, #ffffff);font:bold 26px/1.05 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
   stage.append(layer);
   let shown = null;
   const set = (list) => {
@@ -34,7 +34,7 @@ function mount(stage, win) {
     layer.replaceChildren(...shown.map((e, i) => {
       const s = doc.createElement('span'), label = doc.createElement('span'), value = doc.createElement('span');
       s.setAttribute('data-value', e.key);
-      s.style.cssText = `display:flex;flex-direction:column;align-items:center;padding:0 16px${i ? ';border-left:1px solid rgba(255,255,255,0.14)' : ''}`;
+      s.style.cssText = `display:flex;flex-direction:column;align-items:center;padding:0 16px${i ? ';border-left:1px solid var(--veil-rule, rgba(255,255,255,0.14))' : ''}`;
       label.style.cssText = 'font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);margin-bottom:3px';
       label.textContent = e.label;
       value.textContent = e.value;

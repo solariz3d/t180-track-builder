@@ -18,6 +18,7 @@
 'use strict';
 
 const M = require('../camera/math.js');
+const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
 
 const DEG = Math.PI / 180;
 /**
@@ -204,6 +205,7 @@ function cursorFor(axis) { return !axis || axis.len < EDGE_ON_PX_PER_M ? 'move' 
  * Returns { handles() (what was drawn last, with their screen positions), hovered(), unmount() }.
  */
 function mount(stage, win, host) {
+  const T = tokensOf(win);
   const doc = stage.ownerDocument, canvas = doc.createElement('canvas');
   canvas.setAttribute('aria-label', 'drag handles');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
@@ -227,17 +229,17 @@ function mount(stage, win, host) {
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       // the double arrow: along the way a drag runs on screen
       const ang = s.len >= EDGE_ON_PX_PER_M ? Math.atan2(s.dy, s.dx) : (K.axis === 'U' ? -Math.PI / 2 : 0), ux = Math.cos(ang), uy = Math.sin(ang), reach = on ? 22 : 17;
-      for (const [w, c] of [[5, '#0b0d11'], [2.2, K.colour]]) {
+      for (const [w, c] of [[5, T.css('--ink', '#0b0d11')], [2.2, K.colour]]) {
         ctx.lineWidth = w; ctx.strokeStyle = c; ctx.beginPath();
         for (const sg of [-1, 1]) { const ex = s.x + ux * reach * sg, ey = s.y + uy * reach * sg; ctx.moveTo(s.x + ux * (size + 2) * sg, s.y + uy * (size + 2) * sg); ctx.lineTo(ex, ey); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 + -uy * 4) * sg, ey - (uy * 5 + ux * 4) * sg); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 - -uy * 4) * sg, ey - (uy * 5 - ux * 4) * sg); }
         ctx.stroke();
       }
-      ctx.fillStyle = K.colour; ctx.strokeStyle = '#0b0d11'; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = K.colour; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
       if (on) {
         const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
         const w = ctx.measureText(text).width + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 34, 4, H - 24);
-        ctx.fillStyle = 'rgba(11,13,17,0.92)'; ctx.fillRect(bx, by, w, 22); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, 22);
-        ctx.fillStyle = '#eef1f6'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 6, by + 11);
+        ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, 22); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, 22);
+        ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 6, by + 11);
       }
     }
   };

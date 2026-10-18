@@ -98,7 +98,7 @@ function mount({ shell, el, win }) {
       for (const a of info.check.amber || []) items.push(['amber', a.text]);
     }
     for (const m of (info && info.missing) || []) items.push(['red', `${m.what} is on piece ${m.word}, which is not on the track any more`]);
-    checks.replaceChildren(...(items.length ? items : [['ok', 'Line, grid and spawns: all on the road, no overlap.']]).map(([k, t]) => el('li', { text: t, style: `color:${k === 'red' ? 'var(--bad, #ff4d4d)' : k === 'amber' ? '#ffb347' : '#8fd18f'}` })));
+    checks.replaceChildren(...(items.length ? items : [['ok', 'Line, grid and spawns: all on the road, no overlap.']]).map(([k, t]) => el('li', { text: t, style: `color:${k === 'red' ? 'var(--bad, #ff4d4d)' : k === 'amber' ? 'var(--warn, #ffb347)' : 'var(--ok, #8fd18f)'}` })));
   };
   const nodes = [el('h3', { text: 'Start & grid' }), field('place by hand', byHand), mode, handBox];
   const unsub = shell.subscribe(update); update(shell.getState());

@@ -9,6 +9,7 @@
 'use strict';
 
 const M = require('../camera/math.js');
+const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
 
 /** The flights on a path: a 'gap' segment's own samples, with the station before and the one after so the line reaches both pieces. */
 function flightsOfPath(path, segments) {
@@ -38,6 +39,7 @@ function flightLines(flights, pose, W, H) {
 }
 
 function mount(stage, win) {
+  const T = tokensOf(win);
   const doc = stage.ownerDocument, canvas = doc.createElement('canvas');
   canvas.setAttribute('aria-label', 'flights');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4';
@@ -63,7 +65,7 @@ function mount(stage, win) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     if (!drawn.length) return;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    for (const [w, dash, colour] of [[5, [10, 7], '#0b0d11'], [2.5, [10, 7], '#7fd8ff']]) {
+    for (const [w, dash, colour] of [[5, [10, 7], T.css('--ink', '#0b0d11')], [2.5, [10, 7], '#7fd8ff']]) {
       ctx.lineWidth = w; ctx.setLineDash(dash); ctx.strokeStyle = colour;
       for (const l of drawn) { ctx.beginPath(); l.points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); }
     }

@@ -26,7 +26,8 @@ const MUTATIONS = [
   // D187, B's M5 score: the head's own label is never culled, and the label box holds only an opaque background and its text
   { id: "R13 the head's label may be culled", file: 'core/labels.js', from: 'if (!placed && it.head) placed = headPlace(it, view, keep);', to: '', caughtBy: "the layout: the head's own label is never culled" },
   { id: 'R14 a head piece with nothing on screen has no label', file: 'core/labels.js', from: 'if (!p && isHead) p = hp ?', to: 'if (false) p = hp ?', caughtBy: "the head's own piece is labelled even when none of it is on screen" },
-  { id: 'R15 the road bleeds through the label', file: 'core/labels.js', from: 'background:#0b0d11;', to: 'background:rgba(11,13,17,0.94);', caughtBy: 'the label box holds only' },
+  // re-pointed D381: the box's background is the skin's --ink, made opaque (T.solid); the mutant draws it translucent, as the literal mutant did
+  { id: 'R15 the road bleeds through the label', file: 'core/labels.js', from: 'background:${bg};', to: "background:${T.alpha('--ink', 0.94, '#0b0d11')};", caughtBy: 'the label box holds only' },
   { id: 'R16 the label box has a border and round corners again', file: 'core/labels.js', from: 'border:0;border-radius:0;', to: 'border:1px solid #3a4250;border-radius:4px;', caughtBy: 'the label box holds only' },
   { id: "R17 the head's fallback place may cover the head", file: 'core/labels.js', from: 'for (const avoid of [keep, core])', to: 'for (const avoid of [null])', caughtBy: "the layout: the head's own label is never culled" },
   { id: 'R12 no ring clears a large head keep-out', file: 'core/labels.js', from: 'if (view.head) { const d = Math.hypot(it.x - view.head.x, it.y - view.head.y); gaps.push(view.head.r + d + 12, 2 * view.head.r + d + 12); }', to: '', caughtBy: 'the layout: a label anchored on a large head keep-out' },

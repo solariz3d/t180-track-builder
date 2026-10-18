@@ -1,0 +1,109 @@
+/* AURORA (D381, pane B; designed in D379): the builder under the northern lights, for the Aurora melody. A night skin: deep indigo glass, soft green and
+   violet glows, and curtains of light drifting slowly over the night behind the track. Styling only: no box property (width, height, margin, padding,
+   border width, font, letter-spacing, position) is set here, so every element keeps its place (app/test/theme.test.js reads this file for them).
+   Windows fonts only (the page's own). The warning hues are SIGIL's own on a surface as dark as SIGIL's (--bad lifted to read on indigo).
+   The drift stops for anyone who asks the system for reduced motion. */
+
+[data-theme="aurora"] {
+  --bg: #04050d; --panel: #080a1a; --raise: #0e1130; --line: #252a5c; --hair: rgba(150, 200, 255, .18);
+  --text: #eaf6ff; --dim: #b6c4e4; --accent: #6ff5c0; --accent-dim: rgba(111, 245, 192, .16);
+  --mine: #d9a55a; --bad: #ef6a52; --warn: #e3b448; --ok: #8fc9a2;
+  /* the canvas layers and the 3D view (app/lib/tokens.js): an indigo night, the road's edges lit green */
+  --ink: #070920; --on-ink: #eaf6ff; --on-ink-strong: #ffffff; --veil: #080a1e; --veil-rule: rgba(184, 146, 255, .3);
+  --guide-bg: rgba(8, 10, 30, .9); --guide-text: #eaf6ff; --guide-label: #b6c4e4;
+  --sky: color(srgb 0.03 0.035 0.11); --fog: color(srgb 0.07 0.08 0.2); --road-edge: color(srgb 0.55 1 0.82); --road-tie: color(srgb 0.04 0.05 0.14); --ground-grid: color(srgb 0.3 0.24 0.58);
+  --violet: #b892ff; --green-glow: rgba(111, 245, 192, .45); --violet-glow: rgba(160, 120, 255, .45); --night-glass: rgba(8, 10, 30, .84);
+  color-scheme: dark;
+}
+
+@keyframes aurora-drift {
+  0%   { background-position: 0% 0%, 100% 0%, 30% 0%; }
+  50%  { background-position: 60% 6%, 40% 3%, 80% 2%; }
+  100% { background-position: 0% 0%, 100% 0%, 30% 0%; }
+}
+@keyframes aurora-breathe { 0%, 100% { background-position: 0 0, 0 0, 0 0; } 50% { background-position: 30% 0, 70% 0, 0 0; } }
+
+[data-theme="aurora"], [data-theme="aurora"] body { background: radial-gradient(140% 90% at 50% -10%, #12164a 0%, #070920 45%, #03040b 100%); }
+[data-theme="aurora"] ::selection { background: rgba(160, 120, 255, .35); }
+[data-theme="aurora"] ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #3fd9a4, #8a6cff); border-radius: 4px; }
+
+/* THE TOP BAR: night, with the light along its lower edge */
+[data-theme="aurora"] header {
+  background: radial-gradient(40% 160% at 22% 0%, rgba(80, 255, 175, .22), transparent 70%), radial-gradient(40% 160% at 70% 0%, rgba(170, 110, 255, .26), transparent 70%), linear-gradient(180deg, #070818 0%, #0b0e2a 100%);
+  border-bottom-color: rgba(111, 245, 192, .45); box-shadow: 0 1px 0 rgba(184, 146, 255, .35), 0 8px 28px rgba(110, 80, 255, .28), 0 2px 12px rgba(111, 245, 192, .18);
+}
+[data-theme="aurora"] header h1 { color: #dffcf0; text-shadow: 0 0 10px var(--green-glow), 0 0 22px var(--violet-glow); }
+[data-theme="aurora"] header h1::before { border-color: var(--accent); background: radial-gradient(circle at 40% 35%, #ffffff 0 12%, var(--accent) 30%, var(--violet) 70%, transparent 74%); box-shadow: 0 0 10px var(--green-glow), 0 0 18px var(--violet-glow); }
+[data-theme="aurora"] header input, [data-theme="aurora"] header select { background: rgba(10, 14, 40, .8); border-color: rgba(150, 200, 255, .26); border-radius: 10px; }
+
+/* buttons and menu names: night glass, lit at the edge */
+[data-theme="aurora"] button, [data-theme="aurora"] .more > summary { color: var(--text); border-color: rgba(140, 230, 210, .3); border-radius: 10px; background: linear-gradient(180deg, rgba(30, 40, 90, .55), rgba(10, 12, 34, .7)); box-shadow: inset 0 1px 0 rgba(200, 240, 255, .08); }
+[data-theme="aurora"] button:hover:not([disabled]), [data-theme="aurora"] .more > summary:hover { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 12px var(--green-glow), inset 0 0 10px rgba(111, 245, 192, .12); }
+[data-theme="aurora"] button:active:not([disabled]) { background: linear-gradient(180deg, rgba(111, 245, 192, .22), rgba(160, 120, 255, .22)); }
+[data-theme="aurora"] .more[open] > summary { color: #ffffff; border-color: var(--violet); background: linear-gradient(135deg, rgba(60, 200, 160, .38), rgba(130, 90, 255, .42)); box-shadow: 0 0 14px var(--violet-glow), 0 0 26px rgba(111, 245, 192, .22); }
+/* Export to Assetto Corsa: the one call to action, lit like the curtain itself */
+[data-theme="aurora"] header #install > button { color: #03130d; border-color: #9dffd9; background: linear-gradient(100deg, #7cf7c6 0%, #6fe3d8 45%, #b9a2ff 100%); box-shadow: 0 0 14px var(--green-glow), 0 0 26px var(--violet-glow); }
+[data-theme="aurora"] #winctl button { background: transparent; border-color: transparent; border-radius: 0; box-shadow: none; }
+[data-theme="aurora"] #win-min:hover, [data-theme="aurora"] #win-max:hover { background: rgba(111, 245, 192, .12); box-shadow: none; }
+[data-theme="aurora"] #win-close:hover { background: #b0303a; box-shadow: none; }
+
+/* the menus: deep glass with a violet rim */
+[data-theme="aurora"] .more-menu { background: linear-gradient(180deg, rgba(14, 18, 52, .94), rgba(6, 8, 24, .96)); border-color: rgba(184, 146, 255, .45); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .6), 0 0 30px rgba(120, 90, 255, .25), inset 0 1px 0 rgba(111, 245, 192, .18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="aurora"] .more-menu button { border-radius: 8px; }
+[data-theme="aurora"] .more-menu hr { border-top-color: rgba(184, 146, 255, .3); }
+[data-theme="aurora"] .pieces-menu .piece-row:hover { background: rgba(111, 245, 192, .07); }
+
+/* fields */
+[data-theme="aurora"] input[type="number"], [data-theme="aurora"] input[type="text"], [data-theme="aurora"] input:not([type]), [data-theme="aurora"] textarea,
+[data-theme="aurora"] .save-piece input, [data-theme="aurora"] .picker select, [data-theme="aurora"] select { background: rgba(6, 8, 26, .85); color: var(--text); border-color: rgba(150, 200, 255, .24); border-radius: 8px; }
+[data-theme="aurora"] input:focus, [data-theme="aurora"] select:focus, [data-theme="aurora"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(111, 245, 192, .16), 0 0 12px var(--green-glow); }
+[data-theme="aurora"] option { background: #080a1a; color: var(--text); }
+[data-theme="aurora"] option:checked { background: rgba(160, 120, 255, .35); color: #fff; }
+@supports (appearance: base-select) {
+  [data-theme="aurora"] header select::picker(select) { background: #080a1a; border-color: rgba(184, 146, 255, .45); border-top-color: var(--accent); border-radius: 12px; box-shadow: 0 18px 50px rgba(0, 0, 0, .65), 0 0 30px rgba(120, 90, 255, .25); }
+}
+
+/* THE LEFT PANEL: a pane of night glass with a slow curtain of light in its top */
+[data-theme="aurora"] #left {
+  background: radial-gradient(70% 220px at 20% 0%, rgba(111, 245, 192, .2), transparent 70%), radial-gradient(60% 200px at 85% 0%, rgba(160, 120, 255, .3), transparent 70%), var(--night-glass);
+  background-size: 140% 100%, 140% 100%, 100% 100%; animation: aurora-breathe 18s ease-in-out infinite;
+  border-color: rgba(150, 200, 255, .2); border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55), 0 0 34px rgba(110, 80, 255, .22), inset 0 1px 0 rgba(111, 245, 192, .22);
+  backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+[data-theme="aurora"] #palette, [data-theme="aurora"] #side { background: transparent; }
+[data-theme="aurora"] #side, [data-theme="aurora"] #side > section { border-color: rgba(150, 200, 255, .14); }
+[data-theme="aurora"] h3 { color: var(--accent); text-shadow: 0 0 8px rgba(111, 245, 192, .35); }
+[data-theme="aurora"] h3::after { background: linear-gradient(90deg, rgba(111, 245, 192, .6), rgba(184, 146, 255, .5) 50%, rgba(184, 146, 255, 0)); }
+[data-theme="aurora"] .track li.selected { background: linear-gradient(90deg, rgba(111, 245, 192, .2), rgba(160, 120, 255, .12)); color: var(--accent); }
+[data-theme="aurora"] .bar, [data-theme="aurora"] #banner .brush-strip { background: linear-gradient(180deg, #0e1130, #080a1a); }
+
+/* THE CAMERA DOCK */
+[data-theme="aurora"] #camera [role="toolbar"] { background: var(--night-glass); border-color: rgba(150, 200, 255, .2); border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5), 0 0 24px rgba(110, 80, 255, .2); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+[data-theme="aurora"] #camera [role="toolbar"] button { background: transparent; border-color: transparent; box-shadow: none; }
+[data-theme="aurora"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="aurora"] #camera [role="toolbar"] button.on { color: var(--accent); background: rgba(111, 245, 192, .1); box-shadow: 0 -2px 0 var(--accent) inset, 0 0 12px rgba(111, 245, 192, .3); text-shadow: 0 0 8px var(--green-glow); }
+[data-theme="aurora"] #camera p { color: var(--dim) !important; background: rgba(4, 5, 16, .72); border-radius: 8px; text-shadow: none; }
+[data-theme="aurora"] .preview-hud { color: var(--text) !important; background: rgba(4, 5, 16, .72) !important; border-radius: 6px; }
+
+/* THE CURTAINS. The night itself is the 3D view's own sky (--sky, --fog above); this layer, over the view and under the marks drawn on it (the handles,
+   the selection, the labels, z 3 to 6), lays curtains of green and violet light across the top with "screen" and lets them drift. No click is taken. */
+[data-theme="aurora"] #preview::after {
+  background:
+    radial-gradient(28% 46% at 26% 4%, rgba(80, 255, 175, .95), rgba(80, 255, 175, 0) 72%),
+    radial-gradient(26% 44% at 72% 2%, rgba(170, 110, 255, .95), rgba(170, 110, 255, 0) 72%),
+    radial-gradient(60% 26% at 48% 30%, rgba(40, 220, 170, .55), rgba(40, 220, 170, 0) 72%);
+  background-size: 160% 100%, 160% 100%, 160% 100%;
+  mix-blend-mode: screen;
+  animation: aurora-drift 26s ease-in-out infinite;
+}
+
+/* the guide card, the piece values, the question in the page */
+[data-theme="aurora"] .guide-card { border-radius: 14px; box-shadow: 0 16px 44px rgba(0, 0, 0, .55), 0 0 26px rgba(110, 80, 255, .25), inset 0 1px 0 rgba(111, 245, 192, .2); }
+[data-theme="aurora"] .guide-card .guide-count { opacity: 1; color: var(--dim); }
+[data-theme="aurora"] [aria-label="piece values"] { box-shadow: 0 0 24px rgba(110, 80, 255, .25), inset 0 1px 0 rgba(111, 245, 192, .2); }
+[data-theme="aurora"] .ask-veil { background: rgba(4, 5, 16, .62); }
+[data-theme="aurora"] .ask-card { background: linear-gradient(180deg, #0e1130, #06081c); border-radius: 16px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6), 0 0 30px rgba(120, 90, 255, .3); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="aurora"] #preview::after, [data-theme="aurora"] #left { animation: none; }
+}

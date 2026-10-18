@@ -142,8 +142,13 @@ const GHOST_ALPHA = 0.42;
 const TIE_FADE = Object.freeze([60, 250]);
 const CLEAR = Object.freeze([0.024, 0.023, 0.021]);   // 2026-10-14, Sigil: a warm near-black (was a blue-black, 0.03 0.035 0.045); still darker than the fog
 
-function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
+const FOG = Object.freeze([0.07, 0.08, 0.1]);
+// D381: a skin's 3D colours, read from the page's tokens (app/lib/tokens.js); each falls back to the literal here, which is SIGIL's token value too
+const themeFrom = (T) => ({ sky: T.floats('--sky', CLEAR), fog: T.floats('--fog', FOG), edge: T.floats('--road-edge', COLOURS.edge), tie: T.floats('--road-tie', COLOURS.tie), grid: T.floats('--ground-grid', COLOURS.grid) });
+
+function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');
+  let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // D381: setTheme replaces these, the clear colour and the fog
   if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -282,11 +287,20 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
     if (!blending) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
     for (const c of chunks) {
       const L = chunkLines(c); if (!L) continue;
-      drawLines(L.edges, IDENTITY, COLOURS.edge, alpha); drawLines(L.ties, IDENTITY, COLOURS.tie, alpha, TIE_FADE);
+      drawLines(L.edges, IDENTITY, edge, alpha); drawLines(L.ties, IDENTITY, tie, alpha, TIE_FADE);
     }
     if (!blending) gl.disable(gl.BLEND);
   }
   return {
+    /** D381: a skin's 3D colours, { sky, fog, edge, tie, grid }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
+    setTheme(t) {
+      const ok = (v) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x >= 0 && x <= 1);
+      for (const k of Object.keys(t || {})) {
+        if (!['sky', 'fog', 'edge', 'tie', 'grid'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
+        if (!ok(t[k])) throw new Error(`renderer: the ${k} colour is three numbers from 0 to 1, got ${JSON.stringify(t[k])}`);
+      }
+      if (t.sky) clear = t.sky; if (t.fog) fog = t.fog; if (t.edge) edge = t.edge; if (t.tie) tie = t.tie; if (t.grid) gridColour = t.grid;
+    },
     draw(batches, pose, { width, height }, extras = {}) {
       if (!(width > 0 && height > 0)) throw new Error('renderer: the canvas has no size');
       gen++; draws = 0; lines = 0; acDraws = 0; chunkCount = 0;
@@ -296,7 +310,7 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
       gl.clearColor(clear[0], clear[1], clear[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
       const vp = new Float32Array(M.viewProj(pose, width / height));
-      if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, COLOURS.grid, 1); }
+      if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, gridColour, 1); }
       let chunks;
       if (look === 'ac' && typeof extras.materialOf === 'function') {
         const materialOf = extras.materialOf;
@@ -337,4 +351,4 @@ function createRenderer(gl, { fog = [0.07, 0.08, 0.1], fogDensity = 0.0012, clea
   };
 }
 
-module.exports = { createRenderer, VS, FS, LVS, LFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR };
+module.exports = { createRenderer, themeFrom, VS, FS, LVS, LFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };

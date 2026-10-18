@@ -45,7 +45,8 @@
 
 const { createRig, KEYS, sampleAt } = require('../camera/cameras.js');
 const { createTrackModel } = require('./trackmodel.js');
-const { createRenderer } = require('./renderer.js');
+const { createRenderer, themeFrom } = require('./renderer.js');
+const { tokensOf } = require('../lib/tokens.js');
 const { gridLines, headMarker } = require('./look.js');
 const { guidePlan, MODES: GRID_MODES, MIRRORS } = require('./guides.js');
 const { resolveLook } = require('./aclook.js');
@@ -103,6 +104,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
   if (!gl) throw new Error('preview: WebGL is not available in this window');
   const renderer = createRenderer(gl), model = createTrackModel(), rig = createRig();
+  // D381: the 3D view's sky, fog, road lines and grid are the skin's (app/lib/tokens.js); read again when <html data-theme> changes, drawn on the next frame
+  const tokens = tokensOf(win), skin = () => renderer.setTheme(themeFrom(tokens)), unskin = tokens.onChange(skin); skin();
   let track = null, err = null, raf = 0, prev = 0, shownPose = null;
   const held = new Map();   // the keys down, in the order pressed: physical key (e.code) → its action, fixed at key-down
   let takeover = false;     // a movement key went down in a follow view: the next frame takes the view over into free (once)
@@ -385,7 +388,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     pick(x, y) { return shownPose && track && track.path ? pickAt(track.path, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
     dispose() {
-      win.cancelAnimationFrame(raf); clearFull(); unsub(); if (layer) layer.dispose();
+      win.cancelAnimationFrame(raf); clearFull(); unsub(); unskin(); if (layer) layer.dispose();
       win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
       if (win.document) win.document.removeEventListener('visibilitychange', onVis);
       canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease); win.removeEventListener('mousedown', onAnyDown, true); win.removeEventListener('pointerdown', onAnyDown, true); win.removeEventListener('pointerup', onAnyUp, true);

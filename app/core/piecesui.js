@@ -119,7 +119,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
   const listBox = el('div', { 'aria-label': 'saved pieces', class: 'pieces-list' }), listNote = el('p', { class: 'message', style: 'font-size:12px;margin:2px 0' });
   let renaming = null, confirming = null, libStamp = null, listSeq = 0, items = [];
   const thumb = (it) => {
-    const c = doc.createElement('canvas'); c.setAttribute('width', '100'); c.setAttribute('height', '60'); c.setAttribute('aria-label', `plan view of ${it.name}`); c.style.cssText = 'width:100px;height:60px;background:#0b0d11;border-radius:3px;flex:none';
+    const c = doc.createElement('canvas'); c.setAttribute('width', '100'); c.setAttribute('height', '60'); c.setAttribute('aria-label', `plan view of ${it.name}`); c.style.cssText = 'width:100px;height:60px;background:var(--ink, #0b0d11);border-radius:3px;flex:none';
     const ctx = c.getContext ? c.getContext('2d') : null;
     if (ctx && it.thumb && it.thumb.points.length) {
       ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = '#ffb020'; ctx.lineWidth = 2.5; ctx.beginPath();

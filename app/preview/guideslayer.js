@@ -21,7 +21,7 @@ function createGuidesLayer({ root, win, onCentre = null }) {
   const labelEl = (i) => {
     if (pool[i]) return pool[i];
     const e = doc.createElement('div');
-    e.style.cssText = 'position:absolute;font:12px/1.2 ui-monospace,Consolas,monospace;color:#9fb4d0;background:rgba(10,12,16,0.55);padding:0 4px;border-radius:3px;white-space:nowrap;display:none';
+    e.style.cssText = 'position:absolute;font:12px/1.2 ui-monospace,Consolas,monospace;color:var(--guide-label, #9fb4d0);background:color-mix(in srgb, var(--veil, rgb(10,12,16)) 55%, transparent);padding:0 4px;border-radius:3px;white-space:nowrap;display:none';
     layer.append(e); pool[i] = e; return e;
   };
   const move = (e) => {

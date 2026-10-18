@@ -24,6 +24,7 @@
 'use strict';
 
 const M = require('../camera/math.js');
+const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
 
 const MINUS = '−';
 /** Round half away from zero at 0.01, with a guard for binary fractions (33.345 is 33.3449999… in binary). Two decimals since 2026-10-15 ("everything to 0.00"). */
@@ -127,6 +128,7 @@ function pieceAt(segments, s) {
 }
 
 function mount(stage, shell, win) {
+  const T = tokensOf(win);   // D381: the box's colours are the skin's; its background stays opaque whatever a skin writes (solid), for the M5 score
   const doc = stage.ownerDocument, layer = doc.createElement('div');
   layer.setAttribute('aria-label', 'piece readouts');
   layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden';
@@ -147,12 +149,18 @@ function mount(stage, shell, win) {
       // background and its text (B's score, D187: a border, rounded corners the road showed through, and a background the road
       // bled into put grey "ink" in the box and dragged the median below 4.5 : 1). The 2 px ring of the same colour outside the
       // box keeps the road off the box's own edge pixels.
-      e.style.cssText = 'position:absolute;font:bold 16px/1.25 system-ui,"Segoe UI",sans-serif;color:#ffffff;background:#0b0d11;'
-        + 'padding:3px 7px;border:0;border-radius:0;box-shadow:0 0 0 2px #0b0d11;white-space:pre';
+      const bg = T.solid('--ink', '#0b0d11');
+      e.style.cssText = `position:absolute;font:bold 16px/1.25 system-ui,"Segoe UI",sans-serif;color:${T.solid('--on-ink-strong', '#ffffff')};background:${bg};`
+        + `padding:3px 7px;border:0;border-radius:0;box-shadow:0 0 0 2px ${bg};white-space:pre`;
       layer.append(e); pool[i] = e;
     }
     return pool[i];
   };
+  // D381: a skin change recolours the boxes already made (the pool keeps them for the session)
+  const unskin = T.onChange(() => {
+    const bg = T.solid('--ink', '#0b0d11'), fg = T.solid('--on-ink-strong', '#ffffff');
+    for (const e of pool) if (e) { e.style.color = fg; e.style.background = bg; e.style.boxShadow = `0 0 0 2px ${bg}`; }
+  });
   const measure = (text) => { const e = box(pool.length); e.textContent = text; e.style.left = '-9999px'; e.style.top = '0'; const r = { w: e.offsetWidth, h: e.offsetHeight }; e.remove(); pool.pop(); return r; };
   const sizes = new Map();
   // a size is cached only once it is real: an element measured while the layer is out of the page measures 0
@@ -215,7 +223,7 @@ function mount(stage, shell, win) {
     setVisible(v) { on = !!v; layer.style.display = on ? '' : 'none'; },
     setGripView(v) { gripView = !!v; },
     hovered: () => hoverId,
-    unmount() { win.cancelAnimationFrame(raf); doc.removeEventListener('t180:labels', answer); stage.removeEventListener('pointermove', onPointer); stage.removeEventListener('pointerleave', onLeave); layer.remove(); },
+    unmount() { win.cancelAnimationFrame(raf); unskin(); doc.removeEventListener('t180:labels', answer); stage.removeEventListener('pointermove', onPointer); stage.removeEventListener('pointerleave', onLeave); layer.remove(); },
   };
 }
 
