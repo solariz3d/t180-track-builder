@@ -12,15 +12,14 @@
   --ink: #070920; --on-ink: #eaf6ff; --on-ink-strong: #ffffff; --veil: #080a1e; --veil-rule: rgba(184, 146, 255, .3);
   --guide-bg: rgba(8, 10, 30, .9); --guide-text: #eaf6ff; --guide-label: #b6c4e4;
   --sky: color(srgb 0.03 0.035 0.11); --fog: color(srgb 0.07 0.08 0.2); --road-edge: color(srgb 0.55 1 0.82); --road-tie: color(srgb 0.04 0.05 0.14); --ground-grid: color(srgb 0.3 0.24 0.58);
+  /* D384: the polar night is the WebGL view's own skybox, app/preview/sky/aurora.js, fixed in the world as the camera turns: stars, and curtains
+     green at their lower edge (--sky-a) and violet above (--sky-b); the night pales at the horizon to --sky-c, the same colour as --fog, so the far
+     road fogs into the sky it meets */
+  --sky-style: aurora; --sky-a: color(srgb 0.31 1 0.69); --sky-b: color(srgb 0.67 0.43 1); --sky-c: color(srgb 0.07 0.08 0.2);
   --violet: #b892ff; --green-glow: rgba(111, 245, 192, .45); --violet-glow: rgba(160, 120, 255, .45); --night-glass: rgba(8, 10, 30, .84);
   color-scheme: dark;
 }
 
-@keyframes aurora-drift {
-  0%   { background-position: 0% 0%, 100% 0%, 30% 0%; }
-  50%  { background-position: 60% 6%, 40% 3%, 80% 2%; }
-  100% { background-position: 0% 0%, 100% 0%, 30% 0%; }
-}
 @keyframes aurora-breathe { 0%, 100% { background-position: 0 0, 0 0, 0 0; } 50% { background-position: 30% 0, 70% 0, 0 0; } }
 
 [data-theme="aurora"], [data-theme="aurora"] body { background: radial-gradient(140% 90% at 50% -10%, #12164a 0%, #070920 45%, #03040b 100%); }
@@ -85,17 +84,8 @@
 [data-theme="aurora"] #camera p { color: var(--dim) !important; background: rgba(4, 5, 16, .72); border-radius: 8px; text-shadow: none; }
 [data-theme="aurora"] .preview-hud { color: var(--text) !important; background: rgba(4, 5, 16, .72) !important; border-radius: 6px; }
 
-/* THE CURTAINS. The night itself is the 3D view's own sky (--sky, --fog above); this layer, over the view and under the marks drawn on it (the handles,
-   the selection, the labels, z 3 to 6), lays curtains of green and violet light across the top with "screen" and lets them drift. No click is taken. */
-[data-theme="aurora"] #preview::after {
-  background:
-    radial-gradient(28% 46% at 26% 4%, rgba(80, 255, 175, .95), rgba(80, 255, 175, 0) 72%),
-    radial-gradient(26% 44% at 72% 2%, rgba(170, 110, 255, .95), rgba(170, 110, 255, 0) 72%),
-    radial-gradient(60% 26% at 48% 30%, rgba(40, 220, 170, .55), rgba(40, 220, 170, 0) 72%);
-  background-size: 160% 100%, 160% 100%, 160% 100%;
-  mix-blend-mode: screen;
-  animation: aurora-drift 26s ease-in-out infinite;
-}
+/* THE CURTAINS are the 3D view's own sky now (D384: --sky-style above, app/preview/sky/aurora.js), drawn at infinity so they stay put as the camera
+   turns; their drift stops under prefers-reduced-motion there. #preview::after is the page's own vignette again. */
 
 /* the guide card, the piece values, the question in the page */
 [data-theme="aurora"] .guide-card { border-radius: 14px; box-shadow: 0 16px 44px rgba(0, 0, 0, .55), 0 0 26px rgba(110, 80, 255, .25), inset 0 1px 0 rgba(111, 245, 192, .2); }
@@ -105,5 +95,5 @@
 [data-theme="aurora"] .ask-card { background: linear-gradient(180deg, #0e1130, #06081c); border-radius: 16px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6), 0 0 30px rgba(120, 90, 255, .3); }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-theme="aurora"] #preview::after, [data-theme="aurora"] #left { animation: none; }
+  [data-theme="aurora"] #left { animation: none; }
 }
