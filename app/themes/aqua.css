@@ -3,10 +3,13 @@
    teal sky. One file, scoped to <html data-theme="aqua">, over app/index.html at be4a527. It changes how things are drawn and never where they are: colour,
    gradients, translucency and blur, corner radius, shadows, inset gloss, mix-blend layers. It never touches a size, a margin, a padding, a border WIDTH, a
    font, a letter-spacing or a weight, so every box keeps its place to the pixel (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every
-   canvas hue) are not redefined. Fonts: the page's own (Windows). */
+   canvas hue) keep their hues; only --bad is lighter here (D384), so an error reads on these teal panes. Fonts: the page's own (Windows). */
 
 [data-theme="aqua"] {
   --bg: #022a35; --panel: #033846; --raise: #054556; --line: #1b8ea6; --hair: rgba(140, 240, 255, .40);
+  /* D384 (A's review 6, finding 2): SIGIL's --bad #e0573f read 3.38:1 on --panel, 4.05 on --bg and 2.81 on --raise here. The same red, lighter: hue 8.8
+     degrees (SIGIL's 8.9), saturation 0.73 (0.72), lightness 0.725 (0.56); 5.56:1 on --panel, 6.65 on --bg, 4.62 on --raise. It still means error. */
+  --bad: #ec9586;
   --text: #f2fdff; --dim: #a6ecf7; --accent: #3fe0f5; --accent-dim: rgba(63, 224, 245, .26);
   --gel-text: #01303c; --wet: rgba(255, 255, 255, .62); --deep: #011d26; --rim: rgba(150, 245, 255, .70);
   /* D381: what the canvas layers, the overlays and the 3D view draw with (app/lib/tokens.js reads these; B's 2a). The sky is deep teal water, darker than
@@ -14,6 +17,10 @@
   --ink: #011d26; --on-ink: #e6fbfe; --on-ink-strong: #ffffff; --veil: #022a35; --veil-rule: rgba(120, 235, 250, .24);
   --guide-bg: rgba(3, 48, 62, .97); --guide-text: #f2fdff; --guide-label: #a6ecf7;
   --sky: color(srgb 0 0.13 0.14); --fog: color(srgb 0.02 0.22 0.24); --road-edge: color(srgb 0.75 1 1); --road-tie: color(srgb 0 0.08 0.1); --ground-grid: color(srgb 0.06 0.42 0.45);
+  /* D384: the sky is the WebGL view's own skybox, app/preview/sky/caustics.js, fixed in the world as the camera turns: looking up from under water,
+     Snell's window overhead (--sky-a, the sky above the surface), the lit water under it (--sky-b), and the water at the horizon (--sky-c, the same
+     colour as --fog, so the far road fogs into the water it meets) */
+  --sky-style: caustics; --sky-a: color(srgb 0.72 0.95 0.98); --sky-b: color(srgb 0.05 0.38 0.42); --sky-c: color(srgb 0.02 0.22 0.24);
 }
 
 /* the window: deep water */
@@ -109,32 +116,8 @@
 
 /* THE 3D VIEW: water. The sky, the fog, the road's edges and ties and the ground grid are this skin's 3D tokens (above); the WebGL view draws them
    itself (D381), so the stand-in overlays of D379 are gone. */
-/* SOFT CAUSTIC LIGHT: sun through moving water. Wide, blurred patches of brighter water (no lines anywhere: each is a radial gradient fading to nothing,
-   and the layer is blurred again), drifting slowly in two directions. It is drawn on #preview::after, the inert overlay app/index.html already lays
-   over the WebGL canvas (positioned there, pointer-events none, under every meaning layer at z-index 3 to 6), so the skin sets no box; lighten blend.
-   A mask fades it out down the view, so it lights the sky and the upper water and
-   is gone by 60% of the height: off the road surface wherever the road sits low (the default views); a road high in the frame (looking down from above)
-   can still catch the faintest edge of it. Still under prefers-reduced-motion. */
-[data-theme="aqua"] #preview::after {
-  mix-blend-mode: lighten;
-  background:
-    radial-gradient(22% 14% at 20% 18%, rgba(70, 200, 215, .55), transparent 100%),
-    radial-gradient(18% 11% at 46% 8%, rgba(90, 220, 235, .50), transparent 100%),
-    radial-gradient(26% 15% at 74% 22%, rgba(60, 190, 205, .48), transparent 100%),
-    radial-gradient(16% 10% at 90% 6%, rgba(90, 220, 235, .45), transparent 100%),
-    radial-gradient(20% 12% at 8% 40%, rgba(50, 170, 185, .40), transparent 100%),
-    radial-gradient(24% 13% at 58% 36%, rgba(50, 170, 185, .38), transparent 100%);
-  background-size: 140% 140%, 130% 130%, 150% 150%, 120% 120%, 140% 140%, 135% 135%;
-  filter: blur(14px);
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 28%, transparent 60%); mask-image: linear-gradient(180deg, #000 0%, #000 28%, transparent 60%);
-  animation: aqua-caustics 46s ease-in-out infinite alternate;
-}
-@keyframes aqua-caustics {
-  0%   { background-position: 0% 0%, 100% 0%, 30% 20%, 80% 10%, 10% 60%, 60% 40%; }
-  50%  { background-position: 40% 30%, 60% 40%, 70% 0%, 20% 40%, 50% 20%, 20% 70%; }
-  100% { background-position: 80% 10%, 20% 20%, 10% 50%, 60% 0%, 90% 40%, 50% 10%; }
-}
-@media (prefers-reduced-motion: reduce) { [data-theme="aqua"] #preview::after { animation: none; } }
+/* The soft caustic light is the 3D view's own sky now (D384: --sky-style above, app/preview/sky/caustics.js), drawn at infinity so it stays put as
+   the camera turns; its drift stops under prefers-reduced-motion there. #preview::after is the page's own vignette again. */
 [data-theme="aqua"] .preview-hud { color: #e6fbfe !important; text-shadow: 0 0 6px #000; }
 
 /* the dialogs and the onboarding card: rounded water-glass */
