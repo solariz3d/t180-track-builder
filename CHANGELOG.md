@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-10-18
+
 ### Added
 - **Settings ▸ Theme: choose the look, and each theme brings its own melody.** Until now the builder picked one of its four melodies at random at every start, and the look followed it. A new Theme section in Settings keeps that as **Music**, the default, and adds **Aqua**, **Skyline**, **Glass** and **Aurora**: each is that look with its own melody, at every start, and the choice is remembered. **SIGIL** is the black-and-bone look; it has no melody of its own, so with it the melody is still picked at random. Choosing a theme while the builder is open changes the look at once and the melody a moment later, once its two sound files have loaded (a few milliseconds here); until then the old melody keeps playing, and nothing already sounding is cut. If the saved choice cannot be read, the builder starts as Music. (`app/index.html`, `app/settings.js`, `app/lib/theme.js`, `app/sound.js`, `app/menubar/items.js`.) Tests: `app/test/theme.test.js`, `app/test/settings.test.js`, `app/test/sound-samples.test.js`, `app/test/menubar-page.test.js`.
 
