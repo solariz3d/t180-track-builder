@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-18
+
 ### Added
 - **A left edge field beside the right one.** Under More shape, the edge field is now called **left edge °** and sits beside **right edge °**. Each shows its own side of the road at the open end, so you can see both sides of an edge that differs left to right. Before, the right edge field showed nothing there.
 
