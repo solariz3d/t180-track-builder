@@ -36,6 +36,8 @@ const MUTATIONS = [
   { id: 'S11 reduced motion still drifts', test: 'sky.test.js', file: 'preview/preview.js', from: '(still && still.matches ? 0 : t / 1000)', to: '(t / 1000)', caughtBy: 'the drift stops under prefers-reduced-motion' },
   { id: 'S12 the preview hands the sky no time', test: 'sky.test.js', file: 'preview/preview.js', from: ', time: skyTime(t) });', to: ' });', caughtBy: 'the drift stops under prefers-reduced-motion' },
   { id: 'S13 Skyline names no sky', test: 'sky.test.js', file: 'themes/skyline.css', from: '--sky-style: sun;', to: '', caughtBy: 'the skin names its sky' },
+  { id: 'S14 Glass names no sky (D384 widened)', test: 'sky.test.js', file: 'themes/glass.css', from: '--sky-style: prism;', to: '', caughtBy: 'Glass names the prism sky' },
+  { id: 'S15 the registry leaves prism out (D384 widened)', test: 'sky.test.js', file: 'preview/sky/index.js', from: "['none', 'sun', 'prism', 'caustics', 'aurora']", to: "['none', 'sun', 'caustics', 'aurora']", caughtBy: 'Glass names the prism sky' },
 ];
 
 function runMutant(m) {

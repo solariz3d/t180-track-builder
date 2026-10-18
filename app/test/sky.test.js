@@ -3,10 +3,11 @@
 // direction from the inverse of the camera's view-projection with the rotation only, so the sky stays put in the world as the camera turns. Stated first:
 //   · a sky feature moves on screen by exactly the camera's yaw (where a point infinitely far in that direction projects); moving or zooming without
 //     turning leaves every sky direction, and the pass's calls, unchanged
-//   · 'none' (SIGIL, Glass) draws the very calls cbd7a40 (v0.4.3) drew: no sky pass at all
+//   · 'none' (SIGIL, the one skin left without a sky since D384 widened) draws the very calls cbd7a40 (v0.4.3) drew: no sky pass at all
 //   · an unknown style fails loudly, at setTheme and through the registry
 //   · the skin names its sky with --sky-style (and --sky-a/b/c, falling back to --sky); Skyline's is 'sun', and its screen-pinned overlay is gone
 //   · the drift stops under prefers-reduced-motion: the preview hands the pass t = 0
+//   · D384 widened: Glass names the new 'prism' sky (a registered style the page's loader loads); SIGIL alone names none
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -65,7 +66,7 @@ test('the sky pass runs before the track, over the whole view, without writing d
   assert.match(R.SKY_VS, /uFwd \+ aPos\.x \* uRight \+ aPos\.y \* uUp/, 'the vertex shader builds each ray from the basis');
 });
 
-test('\'none\' draws the very calls cbd7a40 drew: SIGIL and Glass, with their tokens applied', () => {
+test('\'none\' draws the very calls cbd7a40 drew: SIGIL, the one skin left without a sky', () => {
   assert.deepEqual(drawScene(R), BASE, 'no theme: cbd7a40\'s calls');
   assert.deepEqual(drawScene(R, { setTheme: (r) => r.setTheme({ skyStyle: 'none', sky: [...R.CLEAR] }) }), BASE, 'none: cbd7a40\'s calls');
   assert.deepEqual(drawScene(R, { setTheme: (r) => { r.setTheme({ skyStyle: 'sun' }); r.setTheme({ skyStyle: 'none' }); } }), BASE, 'back to none from a sky: cbd7a40\'s calls again');
@@ -76,7 +77,7 @@ test('an unknown sky style fails loudly, at setTheme and in the registry; a styl
   assert.throws(() => r.setTheme({ skyStyle: 'clouds' }), /no style named "clouds"/);
   assert.throws(() => r.setTheme({ skyStyle: 3 }), /no style named 3/);
   assert.throws(() => SKY.patternSource('Sun'), /no style named "Sun"/);
-  assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'caustics', 'aurora']);
+  assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'prism', 'caustics', 'aurora']);
   assert.equal(SKY.patternSource('none'), null);
   assert.match(SKY.patternSource('sun'), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/);
 });
@@ -85,7 +86,7 @@ test('the page\'s own loader (app/lib/cjs.js, which follows only written-out req
   const { loadCjs } = require(path.join(ADIR, 'lib', 'cjs.js')), REPO = path.join(ADIR, '..');
   const Rp = await loadCjs('app/preview/renderer.js', async (p) => fs.readFileSync(path.join(REPO, p), 'utf8'));
   const r = Rp.createRenderer(recordingGL().gl);
-  r.setTheme({ skyStyle: 'sun' });
+  r.setTheme({ skyStyle: 'sun' }); r.setTheme({ skyStyle: 'prism' });
   for (const s of ['caustics', 'aurora']) {
     try { r.setTheme({ skyStyle: s }); } catch (e) { assert.match(e.message, /not built yet/, `${s}: loaded, and either built or saying it is not (not "could not be loaded")`); }
   }
@@ -106,6 +107,17 @@ test('the skin names its sky with --sky-style, and its sky colours with --sky-a/
   // the screen-pinned haze is gone; the rule that stays only keeps the base's dark lens vignette off a light sky, as D379 did
   const after = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/#preview::after\s*\{([^}]*)\}/g)].map((m) => m[1].trim());
   assert.deepEqual(after, ['background: none;'], 'Skyline\'s screen-pinned sky overlay is gone: its view overlay draws nothing');
+});
+
+test('Glass names the prism sky, a built style; SIGIL alone names none', () => {
+  assert.match(SKY.patternSource('prism'), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/, 'prism is built');
+  const r = R.createRenderer(recordingGL().gl); r.setTheme({ skyStyle: 'prism' });
+  const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const glass = strip(fs.readFileSync(path.join(ADIR, 'themes', 'glass.css'), 'utf8'));
+  assert.match(glass, /\[data-theme="glass"\]\s*\{[^}]*--sky-style:\s*prism;/, 'Glass names the prism');
+  // SIGIL is the page with no skin: the page's own style sets no --sky-style, so the renderer's 'none' holds
+  const html = strip(fs.readFileSync(path.join(ADIR, 'index.html'), 'utf8'));
+  assert.doesNotMatch(html, /--sky-style/, 'the base page (SIGIL) names no sky');
 });
 
 test('the drift stops under prefers-reduced-motion: the preview hands the sky pass t = 0', () => {
