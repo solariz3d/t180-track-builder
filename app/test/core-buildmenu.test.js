@@ -196,7 +196,8 @@ test('row 6: the left side keeps the brief\'s list, "More shape" folded, and not
   const more = P.all().find((e) => e.tagName === 'DETAILS' && e.children[0] && e.children[0].textContent === 'More shape');
   assert.ok(more, 'there is a "More shape"'); assert.equal(!!more.open, false, 'folded');
   const inMore = more.all().filter((e) => e.tagName === 'SPAN').map((e) => e.textContent);
-  for (const f of ['cup °', 'width m', 'grip %', 'edge angle °', 'right edge °', 'edge start', 'tube sweep °']) assert.ok(inMore.includes(f), `More shape holds ${f}`);
+  // AMENDED D385 (2026-10-18): "edge angle °" is now "left edge °", the same field renamed (app/test/core-carry.test.js)
+  for (const f of ['cup °', 'width m', 'grip %', 'left edge °', 'right edge °', 'edge start', 'tube sweep °']) assert.ok(inMore.includes(f), `More shape holds ${f}`);
   assert.equal(more.all().filter((e) => e.tagName === 'INPUT' && /at the start$/.test(e.attrs['aria-label'] || '')).length, 6, 'and the at-start boxes of its six channel fields');
   assert.ok(P.byLabel('the piece Extend would add') && !P.hiddenEl(P.byLabel('the piece Extend would add')), 'the readout is on the left');
   // every control that moved is still the panel's (the menus borrow them), so what it does is unchanged
