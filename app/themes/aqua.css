@@ -1,0 +1,162 @@
+/* AQUA (D379, pane E): the skin for the Aqua melody (PL Big Bells, D major). Water: glossy, liquid, rounded, caustic light. The mid-2000s glossy-optimistic
+   look: aqua gel buttons with a wet highlight on their upper half, rounded water-glass panes in deep teal, a bubble for the sigil, light rippling over a
+   teal sky. One file, scoped to <html data-theme="aqua">, over app/index.html at be4a527. It changes how things are drawn and never where they are: colour,
+   gradients, translucency and blur, corner radius, shadows, inset gloss, mix-blend layers. It never touches a size, a margin, a padding, a border WIDTH, a
+   font, a letter-spacing or a weight, so every box keeps its place to the pixel (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every
+   canvas hue) are not redefined. Fonts: the page's own (Windows). */
+
+[data-theme="aqua"] {
+  --bg: #022a35; --panel: #033846; --raise: #054556; --line: #1b8ea6; --hair: rgba(140, 240, 255, .40);
+  --text: #f2fdff; --dim: #a6ecf7; --accent: #3fe0f5; --accent-dim: rgba(63, 224, 245, .26);
+  --gel-text: #01303c; --wet: rgba(255, 255, 255, .62); --deep: #011d26; --rim: rgba(150, 245, 255, .70);
+  /* D381: what the canvas layers, the overlays and the 3D view draw with (app/lib/tokens.js reads these; B's 2a). The sky is deep teal water, darker than
+     the fog and than the road's shadowed faces (renderer.js's D179 note); the road's edges aqua-white, its ties and the ground grid teal. */
+  --ink: #011d26; --on-ink: #e6fbfe; --on-ink-strong: #ffffff; --veil: #022a35; --veil-rule: rgba(120, 235, 250, .24);
+  --guide-bg: rgba(3, 48, 62, .97); --guide-text: #f2fdff; --guide-label: #a6ecf7;
+  --sky: color(srgb 0 0.13 0.14); --fog: color(srgb 0.02 0.22 0.24); --road-edge: color(srgb 0.75 1 1); --road-tie: color(srgb 0 0.08 0.1); --ground-grid: color(srgb 0.06 0.42 0.45);
+}
+
+/* the window: deep water */
+[data-theme="aqua"] body { background: radial-gradient(130% 110% at 30% 0%, #0a6f86 0%, #034152 40%, #011820 100%); }
+
+/* THE BAR: a glossy aqua band, a wet highlight across its upper edge, deep teal below where the words sit */
+[data-theme="aqua"] header {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, .10) 18%, transparent 24%),
+    linear-gradient(180deg, #0e8aa3 0%, #06566a 40%, #033846 100%);
+  border-bottom-color: var(--rim);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 4px 18px rgba(0, 60, 80, .6), 0 1px 0 rgba(63, 224, 245, .6);
+}
+/* the sigil becomes a water bubble: a clear sphere with a highlight and an aqua core */
+[data-theme="aqua"] header h1::before {
+  border-color: rgba(200, 250, 255, .9);
+  background: radial-gradient(circle at 35% 30%, #ffffff 0 14%, rgba(255, 255, 255, .25) 26%, transparent 40%), radial-gradient(circle at 50% 60%, #3fe0f5 0%, #0a8fa8 55%, #034152 100%);
+  box-shadow: 0 0 10px rgba(63, 224, 245, .8), inset 0 -2px 3px rgba(0, 40, 60, .5);
+}
+[data-theme="aqua"] header h1 { color: #ffffff; text-shadow: 0 1px 2px rgba(0, 30, 40, .8), 0 0 14px rgba(63, 224, 245, .5); }
+[data-theme="aqua"] header label, [data-theme="aqua"] header #status { color: #d6f8fd; }
+
+/* BUTTONS AND MENU NAMES: aqua gel pills: a wet white highlight on the upper half, a bright aqua lower half, a dark rim; dark ink for the words */
+[data-theme="aqua"] button, [data-theme="aqua"] .more > summary {
+  background: linear-gradient(180deg, #f1feff 0%, #b9f4fc 46%, #4fd7ed 50%, #7fe8f7 82%, #b4f6ff 100%);
+  border-color: #0a7d95; border-radius: 999px; color: var(--gel-text);
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 4px rgba(0, 120, 150, .35), 0 1px 3px rgba(0, 30, 40, .5);
+}
+[data-theme="aqua"] button:hover:not([disabled]), [data-theme="aqua"] .more > summary:hover {
+  border-color: #ffffff; color: #00252f; background: linear-gradient(180deg, #ffffff 0%, #d2f9ff 46%, #6ae4f5 50%, #9ef0fb 82%, #d0faff 100%);
+  box-shadow: inset 0 1px 0 #ffffff, 0 0 10px rgba(63, 224, 245, .8);
+}
+[data-theme="aqua"] button:active:not([disabled]) { background: linear-gradient(180deg, #7fe8f7 0%, #3fd0e8 50%, #9ef0fb 100%); }
+[data-theme="aqua"] .more[open] > summary { border-color: #ffffff; color: #00252f; box-shadow: inset 0 1px 0 #ffffff, 0 0 8px rgba(63, 224, 245, .85); }
+/* the window buttons stay glyphs on the bar, in white */
+[data-theme="aqua"] #winctl button { background: transparent; box-shadow: none; border-color: transparent; border-radius: 0; }
+[data-theme="aqua"] #win-min:hover, [data-theme="aqua"] #win-max:hover { background: rgba(63, 224, 245, .30); box-shadow: none; }
+/* the camera dock's buttons are words on the water, not pills */
+[data-theme="aqua"] #camera [role="toolbar"] button { background: transparent; box-shadow: none; border-color: transparent; color: var(--text); }
+[data-theme="aqua"] #camera [role="toolbar"] button:hover:not([disabled]) { background: rgba(63, 224, 245, .18); color: #ffffff; }
+[data-theme="aqua"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="aqua"] #camera [role="toolbar"] button.on {
+  color: var(--gel-text); background: linear-gradient(180deg, #e6fdff 0%, #9ff0fb 48%, #3fd0e8 52%, #8ceaf8 100%); box-shadow: inset 0 1px 0 #fff;
+}
+
+/* FIELDS: rounded wells of deep water, a soft wet edge; an aqua glow when focused */
+[data-theme="aqua"] input[type="number"], [data-theme="aqua"] input[type="text"], [data-theme="aqua"] input:not([type]), [data-theme="aqua"] textarea,
+[data-theme="aqua"] select, [data-theme="aqua"] .picker select, [data-theme="aqua"] header input, [data-theme="aqua"] header select, [data-theme="aqua"] .save-piece input {
+  background: linear-gradient(180deg, #011d26 0%, #02303c 100%); border-color: rgba(120, 230, 245, .55); border-radius: 10px; color: var(--text);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, .45), 0 1px 0 rgba(160, 245, 255, .18);
+}
+[data-theme="aqua"] input:focus, [data-theme="aqua"] select:focus, [data-theme="aqua"] textarea:focus { border-color: var(--accent); box-shadow: inset 0 2px 4px rgba(0, 0, 0, .45), 0 0 10px rgba(63, 224, 245, .7); }
+[data-theme="aqua"] option { background: #022a35; color: var(--text); }
+[data-theme="aqua"] input[type="checkbox"], [data-theme="aqua"] input[type="radio"], [data-theme="aqua"] input[type="range"] { accent-color: #3fe0f5; }
+
+/* THE LEFT PANE: a rounded slab of water-glass: deep teal, a broad wet highlight across its top, an aqua rim, light from below */
+[data-theme="aqua"] #left {
+  background:
+    radial-gradient(120% 34px at 50% 0%, rgba(255, 255, 255, .26), transparent 100%),
+    linear-gradient(180deg, rgba(10, 110, 135, .90) 0%, rgba(4, 64, 80, .93) 26%, rgba(2, 40, 52, .95) 100%);
+  border-color: var(--rim); border-radius: 18px;
+  backdrop-filter: blur(14px) saturate(170%); -webkit-backdrop-filter: blur(14px) saturate(170%);
+  box-shadow: inset 0 1px 0 var(--wet), inset 0 -18px 30px rgba(63, 224, 245, .12), 0 0 0 1px rgba(0, 30, 40, .6), 0 18px 50px rgba(0, 40, 60, .6), 0 0 34px rgba(63, 224, 245, .25);
+}
+[data-theme="aqua"] #palette, [data-theme="aqua"] #side { background: transparent; }
+[data-theme="aqua"] #side { border-top-color: rgba(120, 235, 250, .35); }
+[data-theme="aqua"] #side > section { border-bottom-color: rgba(120, 235, 250, .25); }
+[data-theme="aqua"] h3 { color: #c9f6fc; }
+[data-theme="aqua"] h3::after { background: linear-gradient(90deg, rgba(63, 224, 245, .95), rgba(63, 224, 245, .2) 60%, transparent); }
+
+/* THE MENUS: a rounded water-glass pane dropping from the bar */
+[data-theme="aqua"] .more-menu {
+  background:
+    radial-gradient(110% 30px at 50% 0%, rgba(255, 255, 255, .22), transparent 100%),
+    linear-gradient(180deg, rgba(8, 96, 118, .96) 0%, rgba(3, 52, 66, .97) 30%, rgba(2, 36, 46, .98) 100%);
+  border-color: var(--rim); border-radius: 18px;
+  backdrop-filter: blur(16px) saturate(170%); -webkit-backdrop-filter: blur(16px) saturate(170%);
+  box-shadow: inset 0 1px 0 var(--wet), 0 22px 54px rgba(0, 20, 30, .75);
+}
+[data-theme="aqua"] .more-menu hr { border-top-color: rgba(120, 235, 250, .35); }
+[data-theme="aqua"] .pieces-menu .piece-row:hover { background: rgba(63, 224, 245, .14); }
+
+/* the strips under the bar */
+[data-theme="aqua"] .bar, [data-theme="aqua"] #banner .brush-strip { background: linear-gradient(180deg, #0a6f86, #033846); }
+
+/* THE CAMERA DOCK: a long rounded water-glass bar */
+[data-theme="aqua"] #camera [role="toolbar"] {
+  background: radial-gradient(100% 18px at 50% 0%, rgba(255, 255, 255, .20), transparent 100%), linear-gradient(180deg, rgba(6, 82, 100, .95), rgba(2, 40, 52, .96));
+  border-color: var(--rim); border-radius: 999px;
+  backdrop-filter: blur(12px) saturate(170%); -webkit-backdrop-filter: blur(12px) saturate(170%);
+  box-shadow: inset 0 1px 0 var(--wet), 0 10px 30px rgba(0, 30, 40, .65), 0 0 22px rgba(63, 224, 245, .22);
+}
+[data-theme="aqua"] #camera p { color: #e6fbfe; text-shadow: none; background: rgba(2, 40, 52, .92); border-radius: 999px; box-shadow: 0 0 0 5px rgba(2, 40, 52, .92), 0 0 0 6px rgba(120, 235, 250, .35); }
+
+/* THE 3D VIEW: water. The sky, the fog, the road's edges and ties and the ground grid are this skin's 3D tokens (above); the WebGL view draws them
+   itself (D381), so the stand-in overlays of D379 are gone. */
+/* SOFT CAUSTIC LIGHT: sun through moving water. Wide, blurred patches of brighter water (no lines anywhere: each is a radial gradient fading to nothing,
+   and the layer is blurred again), drifting slowly in two directions. It is drawn on #preview::after, the inert overlay app/index.html already lays
+   over the WebGL canvas (positioned there, pointer-events none, under every meaning layer at z-index 3 to 6), so the skin sets no box; lighten blend.
+   A mask fades it out down the view, so it lights the sky and the upper water and
+   is gone by 60% of the height: off the road surface wherever the road sits low (the default views); a road high in the frame (looking down from above)
+   can still catch the faintest edge of it. Still under prefers-reduced-motion. */
+[data-theme="aqua"] #preview::after {
+  mix-blend-mode: lighten;
+  background:
+    radial-gradient(22% 14% at 20% 18%, rgba(70, 200, 215, .55), transparent 100%),
+    radial-gradient(18% 11% at 46% 8%, rgba(90, 220, 235, .50), transparent 100%),
+    radial-gradient(26% 15% at 74% 22%, rgba(60, 190, 205, .48), transparent 100%),
+    radial-gradient(16% 10% at 90% 6%, rgba(90, 220, 235, .45), transparent 100%),
+    radial-gradient(20% 12% at 8% 40%, rgba(50, 170, 185, .40), transparent 100%),
+    radial-gradient(24% 13% at 58% 36%, rgba(50, 170, 185, .38), transparent 100%);
+  background-size: 140% 140%, 130% 130%, 150% 150%, 120% 120%, 140% 140%, 135% 135%;
+  filter: blur(14px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 28%, transparent 60%); mask-image: linear-gradient(180deg, #000 0%, #000 28%, transparent 60%);
+  animation: aqua-caustics 46s ease-in-out infinite alternate;
+}
+@keyframes aqua-caustics {
+  0%   { background-position: 0% 0%, 100% 0%, 30% 20%, 80% 10%, 10% 60%, 60% 40%; }
+  50%  { background-position: 40% 30%, 60% 40%, 70% 0%, 20% 40%, 50% 20%, 20% 70%; }
+  100% { background-position: 80% 10%, 20% 20%, 10% 50%, 60% 0%, 90% 40%, 50% 10%; }
+}
+@media (prefers-reduced-motion: reduce) { [data-theme="aqua"] #preview::after { animation: none; } }
+[data-theme="aqua"] .preview-hud { color: #e6fbfe !important; text-shadow: 0 0 6px #000; }
+
+/* the dialogs and the onboarding card: rounded water-glass */
+[data-theme="aqua"] .ask-veil { background: rgba(1, 30, 40, .60); backdrop-filter: blur(6px) saturate(150%); }
+[data-theme="aqua"] .ask-card {
+  background: radial-gradient(110% 40px at 50% 0%, rgba(255, 255, 255, .22), transparent 100%), linear-gradient(180deg, #06566a, #022a35 40%);
+  border-color: var(--rim); border-top-color: var(--accent); border-radius: 18px;
+  box-shadow: inset 0 1px 0 var(--wet), 0 24px 70px rgba(0, 20, 30, .8), 0 0 40px rgba(63, 224, 245, .25);
+}
+[data-theme="aqua"] .guide-card {
+  background: radial-gradient(110% 22px at 50% 0%, rgba(255, 255, 255, .16), transparent 100%), linear-gradient(180deg, rgba(5, 70, 88, .97) 0%, rgba(3, 48, 62, .97) 30%, rgba(2, 36, 46, .98) 100%) !important;
+  border-radius: 18px !important; color: var(--text) !important;
+  box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 0 var(--wet), 0 18px 50px rgba(0, 20, 30, .7), 0 0 28px rgba(63, 224, 245, .22) !important;
+}
+[data-theme="aqua"] .guide-card .guide-count { opacity: .85 !important; }   /* its own CSS dims it to .6; on the water it needs .85 to read */
+/* "look here": the guide's outline follows the accent (the librarian's ruling on B's UNCLEAR six, plan :2362) */
+[data-theme="aqua"] .guide-target { outline-color: var(--accent) !important; }
+
+/* lists, selection, scrollbars */
+[data-theme="aqua"] .track li.selected { background: linear-gradient(90deg, rgba(63, 224, 245, .40), rgba(63, 224, 245, .08)); color: #ffffff; border-radius: 999px; }
+[data-theme="aqua"] ::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #b9f4fc, #3fd0e8); border-radius: 8px; }
+[data-theme="aqua"] ::selection { background: rgba(63, 224, 245, .45); color: #ffffff; }
+@supports (appearance: base-select) {
+  [data-theme="aqua"] header select::picker(select) { background: linear-gradient(180deg, #06566a, #022a35 40%); border-color: var(--rim); border-top-color: var(--accent); border-radius: 14px; }
+}
