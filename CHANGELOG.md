@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-17
+
 ### Added
 - **A skin for each melody.** The builder now looks like the melody it is playing: the same melody that is picked at random each time the builder starts also picks the window's skin, so one glance tells you which one is on. Skyline is a bright, light sky with glossy pill buttons and frosted white panels; Aurora is a night of deep indigo glass with green and violet curtains of light drifting behind the track (they stand still if Windows is set to reduce motion). Aqua is water: aqua gel buttons, rounded teal panes like water glass, and soft caustic light drifting over the track (still when Windows reduces motion); Glass is crystal: frosted, faceted panes and ice-chip details. A skin changes only colour, glass, gloss, glow and the shapes of buttons; every button, field and panel keeps its place and size, and a test refuses any skin rule that could move one. The 3D view's sky, fog, road lines and grid take the skin's colours too. The road surface itself keeps today's violet, fogged toward each skin; only its edges, ties, grid, the sky and the fog are themed. (`app/themes/`, `app/lib/theme.js`.)
 
