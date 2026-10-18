@@ -20,6 +20,8 @@
 //  13  (D356) a part that fails to load says why in its menu: "This menu could not be built: <reason>", never a silent placeholder (app/core/buildmenu.js answered with a
 //      module that throws, through DevTools' Fetch domain); the other menus still work
 //  15  (D382) the sound slider in Settings shows 45 on a fresh start with nothing saved, and a saved volume (0.6) shows as saved, 60
+//  16  (D394) Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody's two files; after a reload, that look and that melody;
+//      SIGIL's tooltip says its melody is still picked at random
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -261,4 +263,38 @@ test('row 15: Settings ▸ Sound: the volume slider shows 45 on a fresh start, a
   assert.equal(await ev("return document.getElementById('sound-volume').value;"), '60', 'a saved 0.6 is kept: 60');
   assert.equal(await ev("return localStorage.getItem('t180.sound.volume');"), '0.6', 'and not rewritten');
   assert.deepEqual(errors, []);
+});
+
+test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody\'s two files; it survives a reload as that look and melody; SIGIL says its melody stays random', { skip }, async () => {
+  const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
+  try {
+    await load();
+    await open('m-settings');
+    const shownS = await shown('m-settings');
+    for (const t of ['Music', 'Aqua', 'Skyline', 'Glass', 'Aurora', 'SIGIL']) assert.ok(shownS.includes(t), `Settings ▸ Theme holds ${t}: ${shownS.join(' | ')}`);
+    assert.equal(await ticked('m-settings', 'Music'), true, 'nothing saved: Music, today\'s random pick');
+    const now = await ev("return document.documentElement.getAttribute('data-theme');");
+    const target = now === 'glass' ? 'aurora' : 'glass', label = target === 'glass' ? 'Glass' : 'Aurora';
+    await ev("document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); return true;");   // the sound starts on a press (app/sound.js)
+    for (let i = 0; i < 50 && !urls.some((u) => /sounds\/loop_closed\.wav$/.test(u)); i++) await sleep(100);
+    assert.ok(urls.some((u) => /sounds\/loop_closed\.wav$/.test(u)), 'the sound started and fetched its files');
+    urls.length = 0;
+    await clickText('m-settings', label);
+    assert.equal(await ev("return document.documentElement.getAttribute('data-theme');"), target, 'the look switches at once');
+    assert.equal(await ticked('m-settings', label), true); assert.equal(await ticked('m-settings', 'Music'), false, 'a choice of one');
+    for (let i = 0; i < 50 && !urls.some((u) => u.endsWith(`sounds/undo_${target}.wav`)); i++) await sleep(100);
+    assert.deepEqual(urls.filter((u) => /\/sounds\//.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort(), [`place_${target}.wav`, `undo_${target}.wav`], 'and the melody follows: only its two files are fetched');
+    assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), JSON.stringify(target), 'saved as t180.settings.theme');
+    urls.length = 0;
+    await load({ clear: false });
+    assert.equal(await ev("return document.documentElement.getAttribute('data-theme');"), target, 'after a reload: the saved look');
+    await ev("document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); return true;");
+    for (let i = 0; i < 50 && !urls.some((u) => /sounds\/undo_\w+\.wav$/.test(u)); i++) await sleep(100);
+    assert.deepEqual(urls.filter((u) => /sounds\/(place|undo)_/.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort(), [`place_${target}.wav`, `undo_${target}.wav`], 'and its own melody');
+    await open('m-settings');
+    assert.match(await ev("return [...document.querySelectorAll('#m-settings label')].find((x) => x.textContent.trim() === 'SIGIL').title;"), /melody[^.]*random/, 'SIGIL says its melody is still picked at random');
+    await clickText('m-settings', 'SIGIL');
+    assert.equal(await ev("return document.documentElement.hasAttribute('data-theme');"), false, 'SIGIL: no data-theme');
+    assert.deepEqual(errors, []);
+  } finally { onEvent = null; await send('Network.disable'); }
 });

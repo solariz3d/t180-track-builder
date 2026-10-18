@@ -12,7 +12,13 @@ const MUTATIONS = [
   { id: 'T1 any name sets a skin', file: 'lib/theme.js', from: "if (typeof melody === 'string' && THEMES.includes(melody))", to: "if (typeof melody === 'string')", caughtBy: 'each melody sets its own skin' },
   { id: 'T2 the head rounds the pick', file: 'index.html', from: 'names[Math.floor(r * names.length)]', to: 'names[Math.round(r * (names.length - 1))]', caughtBy: 'the page sets the skin in its head' },
   { id: 'T3 the head names the melodies in another order', file: 'index.html', from: "names = ['aqua', 'skyline', 'glass', 'aurora']", to: "names = ['skyline', 'aqua', 'glass', 'aurora']", caughtBy: 'the page sets the skin in its head' },
-  { id: 'T4 the boot does not follow the player', file: 'index.html', from: 'applyTheme(document, sound.melody)', to: 'applyTheme(document, null)', caughtBy: 'the page sets the skin in its head' },
+  // AMENDED (D394): the rule changed by name: the boot sets the skin through theme.js skinFor (a saved sigil shows SIGIL over the melody), so the patch that
+  // stops it following the player is made on that call; the same mutant, the same catching row
+  { id: 'T4 the boot does not follow the player', file: 'index.html', from: 'TH0.skinFor(window.__t180Theme, sound.melody)', to: 'TH0.skinFor(window.__t180Theme, null)', caughtBy: 'the page sets the skin in its head' },
+  // D394: Settings ▸ Theme, read by the head and resolved by skinFor
+  { id: 'T14 the head ignores a saved theme', file: 'index.html', from: 'if (names.indexOf(theme) >= 0) r = ', to: 'if (false) r = ', caughtBy: 'D394: the head reads the saved theme' },
+  { id: 'T15 the head takes any saved text as a theme', file: 'index.html', from: "if (saved === 'sigil' || names.indexOf(saved) >= 0) theme = saved;", to: "theme = saved || 'music';", caughtBy: 'D394: the head reads the saved theme' },
+  { id: 'T16 sigil shows a skin', file: 'lib/theme.js', from: "if (choice === 'sigil') return null;", to: '', caughtBy: 'D394: Settings ▸ Theme has six choices' },
   { id: 'T5 a skin change keeps the old colours', file: 'lib/tokens.js', from: 'refresh() { cache.clear(); version++;', to: 'refresh() { version++;', caughtBy: 'the reader reads again' },
   { id: 'T6 the reader watches the wrong attribute', file: 'lib/tokens.js', from: "attributeFilter: ['data-theme']", to: "attributeFilter: ['class']", caughtBy: 'the reader reads again' },
   { id: 'T7 a translucent token comes back opaque', file: 'lib/tokens.js', from: 'c.rgba[3] === 1 ? hexOf(c)', to: 'true ? hexOf(c)', caughtBy: 'the reader understands every colour form' },

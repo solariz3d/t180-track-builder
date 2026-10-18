@@ -6,6 +6,8 @@
 //   4  on(key) hears each change of that key once, not a set to the same value, not another key; the function it returns stops it
 //   5  an unknown key, or a value that is not a boolean, a finite number or a string, is refused by name
 //   6  two copies of the module (app/lib/cjs.js loads a fresh copy per call) share one instance: a set through one is read, and heard, through the other
+//   7  (D394) theme takes one of its six names (music, aqua, skyline, glass, aurora, sigil); any other value is refused by name, and a saved name nothing knows
+//      reads as the fallback
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -26,7 +28,8 @@ test('row 1: a setting survives a reload, saved as t180.settings.<key> in JSON, 
   assert.deepEqual([...store.m.keys()].sort(), ['t180.coreLook', 't180.settings.csp', 't180.settings.gridStep', 't180.settings.mirrorOnInsert', 't180.settings.turnClimbAs', 't180.sound.muted']);
   assert.equal(store.getItem('t180.sound.muted'), '1'); assert.equal(store.getItem('t180.coreLook'), 'solid');
   // AMENDED (D365): the rule changed by name: a seventh setting, author (Settings ▸ Author name), joins the six
-  assert.deepEqual([...S.KEYS].sort(), ['author', 'colourByGrip', 'csp', 'dragHandles', 'gridStep', 'mirrorOnInsert', 'turnClimbAs']);
+  // AMENDED (D394): the rule changed by name: an eighth setting, theme (Settings ▸ Theme), joins them; row 7 pins its values
+  assert.deepEqual([...S.KEYS].sort(), ['author', 'colourByGrip', 'csp', 'dragHandles', 'gridStep', 'mirrorOnInsert', 'theme', 'turnClimbAs']);
 });
 
 test('row 2: nothing saved, or saved text that is not JSON, gives the fallback', () => {
@@ -78,4 +81,20 @@ test('row 6: two copies of the module share one instance: a set through one is r
   one.set('colourByGrip', true);
   assert.equal(two.get('colourByGrip', false), true); assert.deepEqual(heard, [true]);
   assert.equal(store.getItem('t180.settings.colourByGrip'), 'true');
+});
+
+test('row 7 (D394): theme takes one of its six names, saved and read back; any other value is refused by name; a saved name nothing knows gives the fallback', () => {
+  const store = memStore(), s = S.createSettings(store);
+  assert.deepEqual([...S.CHOICES.theme], ['music', 'aqua', 'skyline', 'glass', 'aurora', 'sigil']);
+  for (const v of S.CHOICES.theme) {
+    s.set('theme', v);
+    assert.equal(S.createSettings(store).get('theme', 'music'), v, `${v} survives a reload`);
+    assert.equal(store.getItem('t180.settings.theme'), JSON.stringify(v));
+  }
+  for (const bad of ['zzz', '', 'Aqua', 'random', true, 3]) assert.throws(() => s.set('theme', bad), /SETTINGS_VALUE: "theme" is one of music, aqua, skyline, glass, aurora, sigil/, String(bad));
+  assert.equal(s.get('theme', 'music'), 'sigil', 'a refused value changes nothing');
+  for (const text of ['"neon"', '42', 'true', 'null', '{"a":1}']) {
+    store.setItem('t180.settings.theme', text);
+    assert.equal(S.createSettings(store).get('theme', 'music'), 'music', `saved ${text}: the fallback`);
+  }
 });

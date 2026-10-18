@@ -7,15 +7,17 @@
 //   set(key, value)      saves it (a boolean, a finite number or a string) and tells every on(key) listener when it changed
 //   on(key, fn)          fn(value, key) after each change of `key`; returns the function that stops it
 //   createSettings(store) a settings object over `store` ({ getItem, setItem }, or null): the tests' way in; the exports above are one shared instance
-//   KEYS, PREFIX
+//   KEYS, PREFIX, CHOICES  CHOICES (D394): the keys that take one of a fixed set of names (theme: app/lib/theme.js CHOICES, held equal by app/test/theme.test.js)
 //
 // A STORE THAT FAILS (a private window, a blocked or full storage): every read and write is caught, the value is kept for the session in memory, and
-// nothing throws. AN UNKNOWN KEY OR VALUE throws at once, by name: a misspelt key would otherwise save a value nothing reads.
+// nothing throws. AN UNKNOWN KEY OR VALUE throws at once, by name: a misspelt key would otherwise save a value nothing reads. A key in CHOICES takes only its
+// names; a saved name it does not know reads as the fallback.
 // ONE INSTANCE FOR THE PAGE: app/lib/cjs.js builds a fresh module graph on every loadCjs call, so the page, the core panel and the menus each get their own
 // copy of this file. The shared instance therefore lives on globalThis, and every copy's get/set/on reach the same values and the same listeners.
 'use strict';
 
-const KEYS = Object.freeze(['turnClimbAs', 'dragHandles', 'colourByGrip', 'gridStep', 'mirrorOnInsert', 'csp', 'author']);   // D365: author, the name an export writes (app/menubar/items.js authorName)
+const KEYS = Object.freeze(['turnClimbAs', 'dragHandles', 'colourByGrip', 'gridStep', 'mirrorOnInsert', 'csp', 'author', 'theme']);   // D365: author, the name an export writes (app/menubar/items.js authorName); D394: theme, Settings ▸ Theme
+const CHOICES = Object.freeze({ theme: Object.freeze(['music', 'aqua', 'skyline', 'glass', 'aurora', 'sigil']) });
 const PREFIX = 't180.settings.';
 const SHARED = '__t180Settings';
 
@@ -29,12 +31,14 @@ function createSettings(store) {
     if (mem.has(key)) return mem.get(key);
     const raw = read(key);
     if (raw === null || raw === undefined) return fallback;
-    try { return JSON.parse(raw); } catch (e) { return fallback; }
+    let v; try { v = JSON.parse(raw); } catch (e) { return fallback; }
+    return CHOICES[key] && !CHOICES[key].includes(v) ? fallback : v;
   }
   function set(key, value) {
     known(key);
     const ok = typeof value === 'boolean' || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
     if (!ok) throw new Error(`SETTINGS_VALUE: "${key}" takes a boolean, a finite number or a string, got ${value === null ? 'null' : typeof value}`);
+    if (CHOICES[key] && !CHOICES[key].includes(value)) throw new Error(`SETTINGS_VALUE: "${key}" is one of ${CHOICES[key].join(', ')}, got ${JSON.stringify(value)}`);
     const before = get(key, undefined);
     mem.set(key, value); write(key, JSON.stringify(value));
     if (before !== value) for (const fn of [...(listeners.get(key) || [])]) fn(value, key);
@@ -63,5 +67,5 @@ module.exports = {
   get: (key, fallback) => shared().get(key, fallback),
   set: (key, value) => shared().set(key, value),
   on: (key, fn) => shared().on(key, fn),
-  createSettings, KEYS, PREFIX,
+  createSettings, KEYS, PREFIX, CHOICES,
 };

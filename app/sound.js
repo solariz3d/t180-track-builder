@@ -13,7 +13,9 @@
 //                                                      the ear of the turn; bank plays an arpeggio; width also sets the tick's stereo WIDTH, mono at
 //                                                      1 m to full stereo at 50 m. One tick a frame at most, each choking the last (tickPlan).
 //   a piece is placed                                  the next of 64 steps of this launch's melody: a chord with a melody note on top. Four melodies
-//                                                      (MELODIES, D375), one picked at random each time the builder starts, never saved. The step
+//                                                      (MELODIES, D375), one picked at random each time the builder starts, unless Settings ▸ Theme
+//                                                      names a theme: then that theme's own melody plays (D394; the setting is saved, app/settings.js
+//                                                      theme, and the page's head turns it into the pick). The player saves nothing itself. The step
 //                                                      is the piece count, so the tune moves one step per piece at any pace (stepOf).
 //   a step is undone                                   the step being taken back, softer and darker: undo walks the same melody backwards.
 //   the loop is closed                                 one gesture: a Rhodes roll, a synth lead answering, a landing chord and crash, one high note ringing.
@@ -348,43 +350,68 @@ function createEngine(ctx, { random = Math.random, melody = MELODY_NAMES[0] } = 
     const need = samplesFor(melody), missing = need.filter((s) => !buffers[s]); if (missing.length) throw new Error(`sound: the samples are missing ${missing.join(', ')}`);
     samples = Object.fromEntries(need.map((s) => [s, buffers[s]]));
   }
-  return { master, dryBus, melody, tick, step, loopClosed, useSamples, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
+  /** D394 (Settings ▸ Theme): play `name` from the next place or undo. Nothing is built and nothing is stopped, so a voice already sounding rings out in the
+   *  same graph and reverb. While samples play, `buffers` must hold the new melody's files (samplesFor); on the synth none are needed. A refused switch
+   *  changes nothing. */
+  function setMelody(name, buffers) {
+    if (!MELODY_NAMES.includes(name)) throw new Error(`sound: no melody named ${name} (the four: ${MELODY_NAMES.join(', ')})`);
+    if (samples || buffers !== undefined) {
+      if (!buffers || typeof buffers !== 'object') throw new Error(`sound: switching to ${name} while samples play needs its samples, got ${buffers}`);
+      const need = samplesFor(name), missing = need.filter((k) => !buffers[k]); if (missing.length) throw new Error(`sound: the samples are missing ${missing.join(', ')}`);
+      samples = Object.fromEntries(need.map((k) => [k, buffers[k]]));
+    }
+    melody = name;
+  }
+  return { master, dryBus, get melody() { return melody; }, tick, step, loopClosed, useSamples, setMelody, setLevel(v) { master.gain.value = v; dryBus.gain.value = v; } };
 }
 
 /**
  * The player. `win` is the window (AudioContext, localStorage, document). Returns
- * { handle(prev, next), setMuted(b), setVolume(v), muted, volume, started, melody, unmount() }.
+ * { handle(prev, next), setMuted(b), setVolume(v), setMelody(name), muted, volume, started, melody, unmount() }.
  * `pick` (D375) draws the launch's melody, once, as the player is made (one launch of the builder): a number from 0 up to 1, Math.random in the app;
- * the melody is not saved, so the next launch draws again.
+ * the player saves no melody, so the next launch draws again (D394: the page's head turns a saved Settings ▸ Theme into the pick).
+ * setMelody(name) (D394) switches the melody while the builder is open: before audio starts, at once; on the synth, at once, its files then fetched; while
+ * samples play, the new melody's two files are fetched (the tick and the loop close are in already), the old melody plays until they are decoded, and
+ * then the engine switches (createEngine setMelody: nothing is cut). `melody` is the one playing. Of two choices made before the first one's files are
+ * in, only the last is made; a failed load is logged and the old melody plays on.
  */
 function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { /* nowhere to log */ } }, engineFor = createEngine, base = 'sounds/', pick = Math.random } = {}) {
   const r = typeof pick === 'function' ? pick() : NaN;
   if (typeof r !== 'number' || !(r >= 0 && r < 1)) throw new Error(`sound: a melody pick is a number from 0 up to 1, got ${r}`);
-  const melody = MELODY_NAMES[Math.floor(r * MELODY_NAMES.length)];
+  let melody = MELODY_NAMES[Math.floor(r * MELODY_NAMES.length)], wanted = melody;   // the melody playing, and the last one asked for (D394)
   const store = (() => { try { return win.localStorage || null; } catch (e) { return null; } })();
   const read = (k) => { try { return store ? store.getItem(k) : null; } catch (e) { return null; } };
   const write = (k, v) => { try { if (store) store.setItem(k, String(v)); } catch (e) { /* a private window: the session keeps it */ } };
   let muted = read(KEYS.muted) === '1';
   const v0 = Number(read(KEYS.volume)); let volume = read(KEYS.volume) !== null && Number.isFinite(v0) ? clamp(v0, 0, 1) : 0.45; // D382: the default, 25% under the old 0.6; a saved volume is kept as saved
-  let ctx = null, engine = null, lastTick = -Infinity;
+  let ctx = null, engine = null, lastTick = -Infinity, samplesIn = false;   // samplesIn: the engine plays the recorded files, not its synth
+  const files = {}, decoded = {};   // D394: each file's fetch (once, unless it failed) and each one decoded, so a switch fetches only what it lacks
   const Ctx = win.AudioContext || win.webkitAudioContext;
   const level = () => (muted ? 0 : volume);
   const start = () => {
     if (ctx || !Ctx) return;
     try { ctx = new Ctx(); engine = engineFor(ctx, { melody }); engine.setLevel(level()); } catch (e) { ctx = null; engine = null; log(`sound: no audio here (${e && e.message})`); return; }
-    loadSamples();
+    loadFor(melody);
   };
-  // D349: the four samples, fetched from `base` and decoded once, as audio starts; the engine plays its synth until they are in, and keeps it if they fail
-  const loadSamples = () => {
-    const c = ctx, e = engine, fail = (why) => log(`sound: the samples did not load (${why}); the synth voices play instead`);
+  // D349: the four samples, fetched from `base` and decoded once, as audio starts; the engine plays its synth until they are in, and keeps it if they fail.
+  // D394: the same for a switch (setMelody): melody m's files, those not already in, and once they are, the engine is handed them, unless a later choice
+  // has been made since (`wanted`)
+  const loadFor = (m) => {
+    const c = ctx, e = engine, need = samplesFor(m);   // D388: only the files this melody plays, so a missing file of another melody costs nothing
+    const fail = (why) => (melody === m ? log(`sound: the samples did not load (${why}); the synth voices play instead`) : log(`sound: the ${m} melody's samples did not load (${why}); ${melody} plays on`));
+    const done = () => {
+      if (engine !== e || wanted !== m) return;
+      const set = Object.fromEntries(need.map((k) => [k, decoded[k]]));
+      guard('the melody switch', () => { if (melody === m) e.useSamples(set); else e.setMelody(m, set); melody = m; samplesIn = true; });
+    };
+    if (need.every((k) => decoded[k])) { done(); return; }   // all in already: the switch is at once
     const get = typeof win.fetch === 'function' ? win.fetch.bind(win) : null;
     if (!get) { fail('no fetch in this window'); return; }
-    Promise.all(samplesFor(melody).map((s) => get(`${base}${s}.wav`)   // D388: only the files this launch's melody plays, so a missing file of another melody costs nothing
-      .then((r) => { if (!r || !r.ok) throw new Error(`${s}.wav answered ${r ? r.status : 'nothing'}`); return r.arrayBuffer(); })
+    const fileOf = (k) => files[k] || (files[k] = get(`${base}${k}.wav`)
+      .then((r) => { if (!r || !r.ok) throw new Error(`${k}.wav answered ${r ? r.status : 'nothing'}`); return r.arrayBuffer(); })
       .then((a) => c.decodeAudioData(a))
-      .then((b) => [s, b])))
-      .then((pairs) => { if (engine === e) e.useSamples(Object.fromEntries(pairs)); })
-      .catch((err) => fail(err && err.message));
+      .then((b) => { decoded[k] = b; return b; }, (err) => { delete files[k]; throw err; }));   // a failed file is fetched again by the next choice that needs it
+    Promise.all(need.map(fileOf)).then(done).catch((err) => fail(err && err.message));
   };
   const live = () => !!engine && !muted;
   const guard = (what, fn) => { try { fn(); return true; } catch (e) { log(`sound: ${what} could not play (${e && e.message})`); return false; } };
@@ -418,6 +445,15 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
     get volume() { return volume; },
     get started() { return !!engine; },
     get melody() { return melody; },
+    /** D394 (Settings ▸ Theme): switch the melody while the builder is open; see the player's comment above. A name not of the four is refused. */
+    setMelody(name) {
+      if (!MELODY_NAMES.includes(name)) throw new Error(`sound: no melody named ${name} (the four: ${MELODY_NAMES.join(', ')})`);
+      wanted = name;
+      if (name === melody) return;
+      if (!engine) { melody = name; return; }   // before audio starts: the engine is built with it, and the first press fetches its files
+      if (!samplesIn && guard('the melody switch', () => engine.setMelody(name))) melody = name;   // on the synth: at once
+      loadFor(name);
+    },
     unmount() { if (doc && doc.removeEventListener) { doc.removeEventListener('pointerdown', onGesture, true); doc.removeEventListener('keydown', onGesture, true); doc.removeEventListener('t180:handle-step', onStep); } },
   };
 }

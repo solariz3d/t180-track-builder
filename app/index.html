@@ -6,8 +6,17 @@
 <title>T-180 Track Builder</title>
 <script>/* D381, A SKIN PER MELODY: the launch's melody pick is drawn here, before the first paint, and names the skin (<html data-theme>, app/themes/<name>.css).
    The player takes the same number (createSound's pick, below), so the skin and the melody agree; the boot then sets the skin from sound.melody
-   (app/lib/theme.js). The names are app/sound.js MELODY_NAMES in their order (app/test/theme.test.js holds the two equal). */
-(function () { var names = ['aqua', 'skyline', 'glass', 'aurora'], r = Math.random(); window.__t180MelodyPick = r; document.documentElement.setAttribute('data-theme', names[Math.floor(r * names.length)]); })();</script>
+   (app/lib/theme.js). The names are app/sound.js MELODY_NAMES in their order (app/test/theme.test.js holds the two equal).
+   D394, SETTINGS ▸ THEME: the saved choice (t180.settings.theme, app/settings.js) is read here, before settings.js loads. A fixed theme sets the pick inside its
+   own quarter, so its skin and its own melody agree; sigil keeps the random pick (SIGIL has no melody of its own) and removes the skin; music, nothing saved,
+   or saved text that cannot be read is today's random pick. Nothing here may throw before the first paint. */
+(function () {
+  var names = ['aqua', 'skyline', 'glass', 'aurora'], r = Math.random(), theme = 'music', root = document.documentElement;
+  try { var saved = JSON.parse(window.localStorage.getItem('t180.settings.theme')); if (saved === 'sigil' || names.indexOf(saved) >= 0) theme = saved; } catch (e) { /* unreadable: music */ }
+  if (names.indexOf(theme) >= 0) r = (names.indexOf(theme) + 0.5) / names.length;
+  window.__t180MelodyPick = r; window.__t180Theme = theme;
+  if (theme === 'sigil') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', names[Math.floor(r * names.length)]);
+})();</script>
 <style>
   /* SIGIL (2026-10-14): elegant minimalism with an esoteric-techno feel. Black and bone, hairline borders, ONE accent (pale ultraviolet); the warning
      colours stay their own hues so a red still reads as a red. Display type is Bahnschrift (on every Windows, already the dashboard's), numbers are
@@ -406,10 +415,12 @@
       document.addEventListener('t180:input-late', (e) => { if (e.detail) inputLog.add(e.detail); });
     } catch (e) { console.error(`late-input log not wired: ${e && e.message}`); }
     // THE SOUNDS (app/sound.js): place, undo and loop closed are read off the shell's state; the drag tick comes from the handles. Mute and volume in the ⋯ menu
+    let soundNow = null;   // D394: the player, for Settings ▸ Theme below (null when the sound could not start)
     try {
       // D381: the player draws its melody from the number the head drew, and the skin follows the melody it picked (app/lib/theme.js)
       const sound = (await loadCjs('app/sound.js', get)).createSound(window, { base: 'sounds/', pick: () => (typeof window.__t180MelodyPick === 'number' ? window.__t180MelodyPick : Math.random()) });
-      (await loadCjs('app/lib/theme.js', get)).applyTheme(document, sound.melody);
+      // D394: a saved Settings ▸ Theme of sigil shows SIGIL over the melody; music shows the melody's skin, a fixed theme its own (the head set both)
+      const TH0 = await loadCjs('app/lib/theme.js', get); TH0.applyTheme(document, TH0.skinFor(window.__t180Theme, sound.melody)); soundNow = sound;
       let before = shell.getState(); shell.subscribe((st) => { const p = before; before = st; sound.handle(p, st); });
       const mute = $('sound-mute'), vol = $('sound-volume');
       mute.checked = sound.muted; vol.value = String(Math.round(sound.volume * 100));
@@ -506,6 +517,14 @@
         resetGuide: () => { FR.firstRun(FR.webStore(window)).forget(); status.textContent = 'The guide will open by itself at the next start.'; } };
       const { acFolder, acAllow } = MI.acNodes($('more-install')), soundRow = $('sound-row'), authorRow = MI.authorField(document, settings);   // D365
       $('m-settings-slot').append(...[acFolder, acAllow].filter(Boolean));   // in Settings from the start, not only once Settings has been opened
+      // D394: Settings ▸ Theme, live. The look changes at once (app/lib/tokens.js redraws on data-theme); a fixed theme's own melody follows as soon as its two
+      // files are in, the old one playing until then (app/sound.js setMelody); music and sigil keep the melody playing, and call off a switch still loading, so
+      // music's skin is the melody that goes on playing
+      const THm = await loadCjs('app/lib/theme.js', get);
+      settings.on('theme', (v) => {
+        if (soundNow) { try { soundNow.setMelody(THm.THEMES.includes(v) ? v : soundNow.melody); } catch (e) { console.error(`the theme's melody could not start: ${e && e.message}`); } }
+        THm.applyTheme(document, THm.skinFor(v, soundNow ? soundNow.melody : document.documentElement.getAttribute('data-theme')));
+      });
       MB.mountBar(document, [
         { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport'), $('open'), $('versions')] },
         { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: some(selection, 'The selection\'s entries')(c) }) },

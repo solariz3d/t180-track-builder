@@ -4,7 +4,7 @@
 //   fileItems(ctx, { developer })        the slot under File's own controls: Developer ▸ (A's trackmenu.developerItems: Open example…) when there is any
 //   editItems(ctx, { selection })        Undo, Redo, then the selection's entries (C's piecesui.items, which bring their own Selection heading), when there are any
 //   viewItems(ctx)                       Drag handles and Colour by grip (saved settings), Show the guide
-//   settingsItems(ctx, { soundRow, acFolder, acAllow })   sound, how the turn and climb are read, the grid step, mirror on insert, the checker's wall
+//   settingsItems(ctx, { soundRow, acFolder, acAllow })   sound, the theme (D394), how the turn and climb are read, the grid step, mirror on insert, the checker's wall
 //                                        raycasting, the Assetto Corsa folder and launch permission, Reset the guide
 //   authorName(settings)                 D365: the saved author name, trimmed, at most 64 characters; '' for none (then the export writes t180-track-builder)
 //   authorField(doc, settings)           D365: Settings ▸ Author name, a text field that saves what is typed (trimmed, at most 64)
@@ -12,11 +12,11 @@
 //   DEFAULTS                             each saved setting's value when none is saved: today's defaults in app/core/panel.js, piecesui.js and validate-ui
 'use strict';
 
-const DEFAULTS = Object.freeze({ turnClimbAs: 'corner', dragHandles: true, colourByGrip: false, gridStep: 90, mirrorOnInsert: false, csp: true });
+const DEFAULTS = Object.freeze({ turnClimbAs: 'corner', dragHandles: true, colourByGrip: false, gridStep: 90, mirrorOnInsert: false, csp: true, theme: 'music' });
 const val = (ctx, key) => ctx.settings.get(key, DEFAULTS[key]);
 const tick = (label, key, title) => ({ label, title, checked: (ctx) => val(ctx, key) === true, toggle: (on, ctx) => ctx.settings.set(key, on) });
 /** a choice of one, as ticks: picking one sets it; unticking the one that is set keeps it (the menu is rebuilt and shows it ticked again) */
-const choice = (key, options) => options.map(([value, label]) => ({ label, checked: (ctx) => val(ctx, key) === value, toggle: (on, ctx) => { if (on) ctx.settings.set(key, value); } }));
+const choice = (key, options) => options.map(([value, label, title]) => ({ label, title, checked: (ctx) => val(ctx, key) === value, toggle: (on, ctx) => { if (on) ctx.settings.set(key, value); } }));
 
 function fileItems(ctx, { developer = [] } = {}) {
   return developer.length ? [{ separator: true }, { section: 'Developer' }, ...developer] : [];
@@ -59,6 +59,10 @@ function authorField(doc, settings) {
 function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, authorRow = null } = {}) {
   return [
     { section: 'Sound' }, ...(soundRow ? [{ node: soundRow }] : []),
+    // D394: each theme is a look with its own melody; the look changes at once and the melody as soon as its two files are in (app/index.html, app/sound.js)
+    { section: 'Theme' }, ...choice('theme', [['music', 'Music', 'the melody picked at random each start chooses the look'],
+      ...[['aqua', 'Aqua'], ['skyline', 'Skyline'], ['glass', 'Glass'], ['aurora', 'Aurora']].map(([v, l]) => [v, l, `${l}'s look and its own melody, every start; the melody changes a moment after the look, once its files are in`]),
+      ['sigil', 'SIGIL', 'the black-and-bone look; it has no melody of its own, so the melody is still picked at random each start']]),
     { section: 'Turn & climb read as' }, ...choice('turnClimbAs', [['corner', 'corner °, ends straight'], ['rate', 'rate °/100 m']]),
     { section: 'Grid step (Turn to grid)' }, ...choice('gridStep', [[90, '90°'], [45, '45°'], [15, '15°']]),
     { section: 'Pieces' }, tick('Mirror on insert', 'mirrorOnInsert', 'add saved pieces as their left/right mirror image'),

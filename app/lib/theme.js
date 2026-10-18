@@ -5,8 +5,12 @@
 //
 //   THEMES                     the four skins, by the melodies' names (app/test/theme.test.js holds them equal to sound.js MELODY_NAMES)
 //   applyTheme(doc, melody)    -> the skin set: the melody's name, or 'sigil' (data-theme removed)
+//   CHOICES                    (D394) Settings ▸ Theme: music (the launch's random melody picks the skin, as before), each of the four (its skin and its own
+//                              melody), sigil (SIGIL's look; it has no melody of its own, so the melody stays random). The head script reads the saved one
+//   skinFor(choice, melody)    -> the skin a choice shows over the playing melody: a fixed theme its own, sigil none (null), music or anything else the melody's
 'use strict';
 const THEMES = Object.freeze(['aqua', 'skyline', 'glass', 'aurora']);
+const CHOICES = Object.freeze(['music', ...THEMES, 'sigil']);
 
 function applyTheme(doc, melody) {
   const root = doc && doc.documentElement;
@@ -16,4 +20,9 @@ function applyTheme(doc, melody) {
   return 'sigil';
 }
 
-module.exports = { THEMES, applyTheme };
+function skinFor(choice, melody) {
+  if (choice === 'sigil') return null;
+  return THEMES.includes(choice) ? choice : melody;
+}
+
+module.exports = { THEMES, CHOICES, applyTheme, skinFor };
