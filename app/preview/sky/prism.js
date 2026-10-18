@@ -48,7 +48,7 @@ vec3 skyPattern(vec3 dir, float t) {
   float h = dir.y, e = max(h, 0.0);
   vec3 col = mix(uSkyB, uSky, smoothstep(0.06, 0.45, e));
   col = mix(col, uSkyA, smoothstep(0.35, 1.0, e));
-  if (h < 0.0) col = mix(uSkyB, uSky, 0.4 * smoothstep(0.0, -0.6, h));
+  if (h < 0.0) col = mix(uSkyB, uSky, 0.4 * smoothstep(0.0, 0.6, -h));
   if (h > 0.17) col += uSkyC * prism_stars(dir, t) * smoothstep(0.17, 0.40, h);   // the air takes the stars near the horizon
   // the moon: about 30 degrees up, a quarter round to the left of straight ahead at the start
   vec3 moonDir = normalize(vec3(-0.557, 0.50, -0.663));
