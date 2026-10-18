@@ -122,14 +122,14 @@ test('row 7: two engines given the same seeded random build the same reverbs and
 });
 
 // the player, with a recording engine and a fake fetch
-function player({ fetchImpl, decode, noFetch = false } = {}) {
+function player({ fetchImpl, decode, noFetch = false, pick } = {}) {   // pick (D388): the launch's melody draw, as createSound takes it; none, Math.random as before
   const listeners = {}, calls = [], logs = [], fetched = [];
   class Ctx { constructor() { this.currentTime = 0; } decodeAudioData(a) { return decode ? decode(a) : Promise.resolve({ decoded: a.name }); } }
   const win = { AudioContext: Ctx, localStorage: { getItem: () => null, setItem() {} },
     document: { addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); }, removeEventListener() {} } };
   if (!noFetch) win.fetch = (url) => { fetched.push(url); return fetchImpl ? fetchImpl(url) : Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve({ name: url }) }); };
   const engineFor = () => ({ tick: (p) => calls.push(['tick', p.midi]), step: (i, soft) => calls.push([soft ? 'undo' : 'place', i]), loopClosed: () => calls.push(['loopClosed']), setLevel() {}, useSamples: (b) => calls.push(['useSamples', b]) });
-  const s = createSound(win, { engineFor, base: 'sounds/', log: (m) => logs.push(m) });
+  const s = createSound(win, { engineFor, base: 'sounds/', log: (m) => logs.push(m), ...(pick ? { pick } : {}) });
   const fire = (t, detail) => (listeners[t] || []).slice().forEach((f) => f({ type: t, detail }));
   return { s, calls, logs, fetched, fire };
 }
@@ -139,13 +139,14 @@ test('row 4: the four files are fetched and decoded once, at the first gesture, 
   const P = player();
   assert.deepEqual(P.fetched, [], 'nothing is fetched before the first press');
   P.fire('pointerdown'); P.fire('keydown'); P.fire('pointerdown');
-  assert.deepEqual(P.fetched, SLOTS.map((s) => `sounds/${s}.wav`), 'the four, once, from base');
+  // AMENDED (D388): only the picked melody's files are fetched (D386 finding 1); row 12 pins the list for each of the four picks
+  assert.deepEqual(P.fetched, PICKED(P.s.melody).map((s) => `sounds/${s}.wav`), 'the four, once, from base');
   P.fire('t180:handle-step', { kind: 'length', value: 100 });
   assert.deepEqual(P.calls.map((c) => c[0]), ['tick'], 'a tick before the samples are in: the engine plays it (its synth)');
   await settle(); await settle();
   const use = P.calls.find((c) => c[0] === 'useSamples');
   assert.ok(use, 'once decoded, the engine is handed the samples');
-  assert.deepEqual(Object.fromEntries(Object.entries(use[1]).map(([k, v]) => [k, v.decoded])), Object.fromEntries(SLOTS.map((s) => [s, `sounds/${s}.wav`])), 'each slot its own decoded file');
+  assert.deepEqual(Object.fromEntries(Object.entries(use[1]).map(([k, v]) => [k, v.decoded])), Object.fromEntries(PICKED(P.s.melody).map((s) => [s, `sounds/${s}.wav`])), 'each slot its own decoded file');   // AMENDED (D388): only the picked melody's files are fetched (D386 finding 1)
   assert.deepEqual(P.logs, [], 'nothing to log');
 });
 
@@ -184,7 +185,9 @@ test('row 6: the four files are the batch-8 WAVs byte for byte, and useSamples r
   assert.deepEqual(shipped, Object.keys(SHA).sort(), 'every WAV in app/sounds has its hash here');
   for (const s of shipped) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', 'sounds', `${s}.wav`))).digest('hex'), SHA[s], `${s}.wav`);
   assert.deepEqual([...SAMPLES.slots], SLOTS);
-  const e = createEngine(fakeCtx()), b = fakeBuffers(); delete b.undo_glass;   // AMENDED (D377): undo_occult is gone; the rule is the same
+  // AMENDED (D388): only the picked melody's files are fetched (D386 finding 1), so an engine needs only its own melody's: the one deleted is now that engine's own
+  // (glass, on a glass engine; on the default aqua engine undo_glass is not needed). The rule is the same: a set missing one it needs is refused, by name
+  const e = createEngine(fakeCtx(), { melody: 'glass' }), b = fakeBuffers(); delete b.undo_glass;   // AMENDED (D377): undo_occult is gone; the rule is the same
   assert.throws(() => e.useSamples(b), /undo_glass/, 'a set with one missing is refused, naming it');
   assert.throws(() => e.useSamples(null), /samples/);
 });
@@ -219,7 +222,8 @@ test('row 9: every melody\'s place and undo slot resolves to a file that is ship
   assert.deepEqual([...SAMPLES.slots].sort(), [...new Set(Object.values(SAMPLES.file))].sort(), 'the player loads exactly the files the slots name');
   assert.ok(SAMPLES.slots.every((f) => shipped.has(f)), 'every one is shipped');
   const P = player(); P.fire('pointerdown');
-  assert.deepEqual(P.fetched, SAMPLES.slots.map((f) => `sounds/${f}.wav`), 'each file once');
+  // AMENDED (D388): only the picked melody's files are fetched (D386 finding 1); the slots above still name every file shipped, and row 12 pins the list per pick
+  assert.deepEqual(P.fetched, PICKED(P.s.melody).map((f) => `sounds/${f}.wav`), 'each file once');
 });
 
 // D375 drop-in: batch 10, each melody's own instrument (Yearning WurlyKeys, Shoegaze Pads Pluck, Light occult Vintage Bells, Afterglow D_Pluck)
@@ -247,5 +251,38 @@ test('row 11: a place plays every note at its level lifted by the step\'s swell,
       assert.equal(got.length, 6, `${m} step ${i} ${kind}: six notes`);
       got.forEach((g, n) => near(g, base[kind][n] * SAMPLES.gain[file] * lift, `${m} step ${i} ${kind} note ${n}`));
     }
+  }
+});
+
+// D388 (A's catch-up review, exo_memory/handback/p-d386-review6-A_2026-10-18.md finding 1; ruled at plan_t180_handoff_2026-10-15.md:2558-2562): a launch plays ONE
+// melody, so it fetches only the tick, the loop close and that melody's place and undo files, and the engine needs only those. Before, all ten were fetched and
+// useSamples refused the set if any was missing, so a 404 on a melody that was NOT picked put every sound back on the synth
+const PICKED = (m) => ['drag_tick', 'loop_closed', `place_${m}`, `undo_${m}`];
+test('row 12 (D388): each launch fetches exactly the tick, the loop close and its picked melody\'s two files, and the engine is handed exactly those', async () => {
+  for (const [i, m] of MEL.entries()) {
+    const P = player({ pick: () => (i + 0.5) / MEL.length });
+    assert.equal(P.s.melody, m, `pick ${i}: ${m}`);
+    P.fire('pointerdown'); await settle(); await settle();
+    assert.deepEqual(P.fetched, PICKED(m).map((f) => `sounds/${f}.wav`), `${m}: these four files, in this order, once`);
+    const use = P.calls.find((c) => c[0] === 'useSamples');
+    assert.ok(use, `${m}: the engine is handed the samples`);
+    assert.deepEqual(Object.keys(use[1]), PICKED(m), `${m}: exactly those four`);
+  }
+});
+test('row 13 (D388): a 404 on a melody\'s file that was NOT picked changes nothing: the picked melody\'s samples play, and nothing is logged', async () => {
+  const P = player({ pick: () => 0, fetchImpl: (url) => Promise.resolve({ ok: !url.includes('glass'), status: url.includes('glass') ? 404 : 200, arrayBuffer: () => Promise.resolve({ name: url }) }) });
+  assert.equal(P.s.melody, 'aqua');
+  P.fire('pointerdown'); await settle(); await settle(); await settle();
+  assert.ok(P.calls.some((c) => c[0] === 'useSamples'), 'the samples are used: the tick, the loop close and Aqua play recorded');
+  assert.deepEqual(P.logs, [], 'nothing failed that this launch needs');
+});
+test('row 14 (D388): the engine needs only its own melody\'s files: four are enough, and one of those four missing is refused by name', () => {
+  for (const m of MEL) {
+    const e = createEngine(fakeCtx(), { melody: m }), four = Object.fromEntries(PICKED(m).map((s) => [s, { slot: s, duration: 1 }]));
+    assert.doesNotThrow(() => e.useSamples(four), `${m}: its four are a whole set`);
+    const ctx = fakeCtx(), e2 = createEngine(ctx, { melody: m }); e2.useSamples(four);
+    assert.deepEqual(during(ctx, () => e2.step(0, false)).sources.map((s) => s.slot), Array(6).fill(`place_${m}`), `${m}: and its place plays recorded`);
+    const short = { ...four }; delete short[`undo_${m}`];
+    assert.throws(() => createEngine(fakeCtx(), { melody: m }).useSamples(short), new RegExp(`undo_${m}`), `${m}: missing its own undo is refused, naming it`);
   }
 });
