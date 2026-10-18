@@ -5,6 +5,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **A left edge field beside the right one.** Under More shape, the edge field is now called **left edge °** and sits beside **right edge °**. Each shows its own side of the road at the open end, so you can see both sides of an edge that differs left to right. Before, the right edge field showed nothing there.
+
+### Changed
+- **A corner carries to the next piece.** When the turn and climb are read as corners (the default), the degrees you typed for the piece you just placed stay in the turn and climb fields. Press Extend again and you get the same corner again, each still ending straight. Before, the fields went blank after every Extend, so the next piece came out straight unless you typed the corner again. To go straight now, clear the field or type 0, which works as it did before. Undo still puts back the undone piece's own numbers, and opening or starting a track leaves the fields blank. Only Extend carries a corner: Jump, Level, To floor, Turn by, Turn to grid and Sharp leave the fields blank as before. With the turn read as a rate, nothing changes.
+- **Typing one edge changes only that side.** Before, typing the edge angle on its own set both sides to it. Now a left edge typed on its own changes only the left side, and the right side keeps the value it had at the open end. To make both sides the same, type the same number in both fields. A right edge typed on its own changes only the right side, as before. Tracks you have already made are unchanged.
+
 ## [0.4.3] - 2026-10-17
 
 ### Added
