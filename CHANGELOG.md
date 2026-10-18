@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **A new icon and a new name in the title bar.** The icon is now one closed circuit that crosses itself on a bridge, a figure-eight tilted as if banked, with the car as a blue dot, on a light tile in Skyline's colours. It is the same in every skin. The tile has a thin grey-blue rim, because Skyline's light tile on a light Windows taskbar was almost the same colour and its edge vanished. The icon file now carries 16, 24, 32, 48 and 256 pixel sizes, so Windows draws each size from its own image. In the title bar the name is now "T-180", a thin rule, then "TRACK BUILDER" in a dimmer tone, in the current skin's colours. The window title is still "T-180 Track Builder". (`src-tauri/icons/`, `app/index.html`.) Test: `test/icons.test.js`.
+
 ## [0.4.5] - 2026-10-18
 
 ### Fixed
