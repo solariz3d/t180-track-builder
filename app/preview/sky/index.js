@@ -1,5 +1,6 @@
 // sky/index.js: the skin skies (D384), drawn by the WebGL view as a sky at infinity, so it stays put in the world as the camera turns.
-// A skin names its sky with the token --sky-style (app/themes/*.css); 'none' (SIGIL, Glass) draws no sky pass, only today's clear colour.
+// A skin names its sky with the token --sky-style (app/themes/*.css); 'none' (SIGIL, since D384 widened the one skin without a sky) draws no sky pass,
+// only today's clear colour.
 //
 // THE CONTRACT for a style module, app/preview/sky/<style>.js:
 //   module.exports = { source() }      source() returns GLSL ES 1.0 that defines
@@ -10,14 +11,14 @@
 //   The pass declares these uniforms before the module's source, for it to read:
 //     uniform vec3 uSky;                       the skin's --sky (today's clear colour)
 //     uniform vec3 uSkyA, uSkyB, uSkyC;        the skin's --sky-a, --sky-b, --sky-c, each falling back to --sky
-//   The source may define helpers of its own; prefix their names with the style (sun_, caustics_, aurora_), so two never clash.
+//   The source may define helpers of its own; prefix their names with the style (sun_, prism_, caustics_, aurora_), so two never clash.
 //   A module that cannot build its sky throws from source(): the renderer compiles a style when setTheme names it, so it fails loudly there.
 'use strict';
 
-const STYLES = Object.freeze(['none', 'sun', 'caustics', 'aurora']);
+const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora']);
 // each required by name, written out: the page's loader (app/lib/cjs.js) fetches only the requires it can read in the source. Requiring a module costs
 // nothing until its source() is called, so a stub that is not built yet throws only when a skin names it.
-const MODULES = { sun: require('./sun.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js') };
+const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js') };
 
 /** The GLSL of a style's skyPattern, or null for 'none'; an unknown style throws. */
 function patternSource(style) {

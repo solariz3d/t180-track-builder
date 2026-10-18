@@ -13,6 +13,9 @@
   --ink: #04101a; --on-ink: #eaf6ff; --on-ink-strong: #ffffff; --veil: #071725; --veil-rule: rgba(190, 235, 255, .22);
   --guide-bg: rgba(10, 30, 46, .96); --guide-text: #f0f9ff; --guide-label: #a9c9dd;
   --sky: color(srgb 0.024 0.07 0.1); --fog: color(srgb 0.07 0.13 0.18); --road-edge: color(srgb 0.8 0.93 1); --road-tie: color(srgb 0.03 0.08 0.12); --ground-grid: color(srgb 0.2 0.36 0.46);
+  /* D384 widened (pane B): the sky at infinity behind the track (app/preview/sky/prism.js), a cold clear night: the zenith near black, the horizon held near
+     the fog, the stars' and the moon's cold white. Until D384 Glass drew no sky (none). */
+  --sky-style: prism; --sky-a: color(srgb 0.008 0.022 0.04); --sky-b: color(srgb 0.07 0.125 0.17); --sky-c: color(srgb 0.84 0.92 1);
 }
 
 /* the window: a deep cold blue behind everything */
