@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The sounds start a little quieter: the default volume is 45 instead of 60, a quarter lower.** Lower, not quiet. This changes only the starting level, used when no volume has been saved. If you have already moved the volume slider (Settings ▸ Sound), your saved level is kept exactly as it was, so the change reaches new installs and anyone who never touched the slider; to get the new level, move the slider to 45. (`app/sound.js`.) Tests: `app/test/sound.test.js` (nothing saved plays at 0.45; a saved volume is kept; a saved value that is not a number falls back to 0.45), and `app/test/menubar-page.test.js` row 15 (the slider shows 45 on a fresh start and 60 for a saved 0.6). Two older rows that checked the old default of 0.6 now check 0.45.
+
 ## [0.4.2] - 2026-10-17
 
 ### Changed

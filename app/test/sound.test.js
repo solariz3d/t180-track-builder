@@ -150,7 +150,7 @@ test('the player: nothing before the first press; after it, place, undo and the 
   const F = fakeWindow(), s = createSound(F.win, { engineFor: F.engineFor, log: () => {} });
   const d1 = doc(1), d2 = doc(2), d3 = doc(3);
   assert.equal(s.handle(S(H([d1], d2)), S(H([d1, d2], d3))), null, 'before any press: silent'); assert.equal(s.started, false);
-  F.fire('pointerdown'); assert.equal(s.started, true); assert.deepEqual(F.calls[0], ['level', 0.6]);
+  F.fire('pointerdown'); assert.equal(s.started, true); assert.deepEqual(F.calls[0], ['level', 0.45]); // D382: the default volume is 0.45 (was 0.6)
   assert.equal(s.handle(S(H([d1], d2)), S(H([d1, d2], d3))), 'place');
   assert.equal(s.handle(S(H([d1, d2], d3)), S(H([d1], d2, [d3]))), 'undo');
   assert.equal(s.handle(S(H([d1, d2], d3)), S(H([d1, d2, d3], doc(3, true)))), 'loopClosed');
@@ -179,7 +179,17 @@ test('mute and volume: remembered, clamped, reach the engine, and a bad volume i
   s.setMuted(false); assert.deepEqual(F.calls.at(-1), ['level', 1]);
   assert.throws(() => s.setVolume('loud'), /a volume is 0 to 1/);
   const again = createSound(fakeWindow({ stored: { ...F.store } }).win, { log: () => {} }); assert.equal(again.volume, 1); assert.equal(again.muted, false);
-  assert.equal(createSound(fakeWindow({ stored: { [KEYS.volume]: 'abc' } }).win, { log: () => {} }).volume, 0.6, 'an unreadable stored volume: the default');
+  assert.equal(createSound(fakeWindow({ stored: { [KEYS.volume]: 'abc' } }).win, { log: () => {} }).volume, 0.45, 'an unreadable stored volume: the default (D382: 0.45, was 0.6)');
+});
+
+// D382 (the keeper: "the volume should be lowered a bit standard, not to where its quiet"): the default is 25% lower, 0.6 to 0.45. Only the default moves:
+// a saved volume is kept as it is, 0.6 included (moving saved levels is the keeper's call)
+test('the default volume: nothing saved plays at 0.45; a saved volume, 0.6 included, is kept as saved; a saved value that is not a number falls back to 0.45', () => {
+  const F = fakeWindow(), s = createSound(F.win, { engineFor: F.engineFor, log: () => {} });
+  assert.equal(s.volume, 0.45, 'nothing saved: 0.45'); F.fire('pointerdown'); assert.deepEqual(F.calls[0], ['level', 0.45], 'and the engine starts at it');
+  assert.equal(F.store[KEYS.volume], undefined, 'the default is not written until the slider moves');
+  for (const v of ['0.6', '0.3', '1', '0']) assert.equal(createSound(fakeWindow({ stored: { [KEYS.volume]: v } }).win, { log: () => {} }).volume, Number(v), `saved ${v}: kept`);
+  for (const v of ['abc', 'NaN', 'Infinity', 'loud']) assert.equal(createSound(fakeWindow({ stored: { [KEYS.volume]: v } }).win, { log: () => {} }).volume, 0.45, `saved ${JSON.stringify(v)}: 0.45`);
 });
 
 test('a window with no audio still mounts and stays silent; an engine that throws is logged, not thrown', () => {

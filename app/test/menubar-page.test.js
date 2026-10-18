@@ -19,6 +19,7 @@
 //  12  (with the Track part) a menu panel gives its controls back when the menu closes: Start & grid… open, the menu closed, and its controls are gone
 //  13  (D356) a part that fails to load says why in its menu: "This menu could not be built: <reason>", never a silent placeholder (app/core/buildmenu.js answered with a
 //      module that throws, through DevTools' Fetch domain); the other menus still work
+//  15  (D382) the sound slider in Settings shows 45 on a fresh start with nothing saved, and a saved volume (0.6) shows as saved, 60
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -248,5 +249,16 @@ test('row 14: File holds Export layouts…, its modules load on the page, and of
   const said = await ev("document.getElementById('exportlayouts').click(); for (let i = 0; i < 50 && !/layouts/.test(document.getElementById('status').textContent); i++) await new Promise((r) => setTimeout(r, 50)); return document.getElementById('status').textContent;");
   assert.doesNotMatch(said, /could not start/, `the layouts export loaded: ${said}`);
   assert.match(said, /^export layouts failed: .*not running inside the app/, said);
+  assert.deepEqual(errors, []);
+});
+
+test('row 15: Settings ▸ Sound: the volume slider shows 45 on a fresh start, and a saved volume shows as saved', { skip }, async () => {
+  await load();
+  assert.equal(await ev("return localStorage.getItem('t180.sound.volume');"), null, 'nothing saved');
+  assert.equal(await ev("return document.getElementById('sound-volume').value;"), '45', 'a fresh start: 45');
+  await ev("localStorage.setItem('t180.sound.volume', '0.6'); return true;");
+  await load({ clear: false });
+  assert.equal(await ev("return document.getElementById('sound-volume').value;"), '60', 'a saved 0.6 is kept: 60');
+  assert.equal(await ev("return localStorage.getItem('t180.sound.volume');"), '0.6', 'and not rewritten');
   assert.deepEqual(errors, []);
 });
