@@ -204,6 +204,29 @@ test('the label box holds only an opaque background and its text: no border, squ
   P.panel.unmount();
 });
 
+// D381 (pane B): a skin per melody. The label box takes the skin's --ink and --on-ink-strong, still OPAQUE whatever alpha a skin writes, and a skin change
+// recolours the boxes the layer already made
+test('a skin change recolours the label boxes already made, and their background stays opaque', async () => {
+  const P = await mountPanel(), { toPath } = require('../../src/core/adapter.js');
+  let track = null, view = null;
+  P.doc.addEventListener('t180:track-request', (e) => e.detail.reply(track));
+  P.doc.addEventListener('t180:view', (e) => e.detail.reply(view));
+  P.shell.extend({ length: 200 });
+  const d = P.shell.getState().history.present, tp = toPath(d, { step: 2 }), h = tp.path.head;
+  track = { path: tp.path, segments: tp.segments };
+  view = { pose: { eye: [h.pos[0], h.pos[1] + 900, h.pos[2] - 1], target: h.pos, up: [0, 0, 1], fov: Math.PI / 3 }, mode: 'overhead', head: { pos: h.pos, T: h.T } };
+  P.tick();
+  const box = () => P.stage.all().find((e) => e.children.length === 0 && e.textContent === P.panel.labels.labels()[0].text && e.style.cssText);
+  assert.match(box().style.cssText, /background:#0b0d11;/, 'SIGIL: today\'s colour');
+  // the page turns to a skin whose ink is translucent: the reader on this window (app/lib/tokens.js) reads it, and the box stays opaque
+  const skin = { '--ink': 'rgba(248, 250, 255, 0.5)', '--on-ink-strong': '#0b2747' };
+  P.win.document = { documentElement: {} }; P.win.getComputedStyle = () => ({ getPropertyValue: (k) => skin[k] || '' });
+  require('../lib/tokens.js').tokensOf(P.win).refresh();
+  assert.equal(box().style.background, '#f8faff', 'the skin\'s ink, made opaque'); assert.equal(box().style.color, '#0b2747');
+  assert.equal(box().style.boxShadow, '0 0 0 2px #f8faff', 'the ring outside the box is the same colour');
+  P.panel.unmount();
+});
+
 test('the shell\'s readouts are A\'s, once per document; the ghost\'s strings are the placed piece\'s strings', async () => {
   const s = await createCoreShell({ brushFn: null });
   for (const o of [{ length: 100 }, { length: 150, targets: { kh: Math.PI / 2 / 150 } }, { length: 60, targets: { kh: 0.01, kv: 0.002, phi: -0.2 } }]) {

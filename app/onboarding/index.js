@@ -19,13 +19,13 @@ const { firstRun, webStore } = require('./firstrun.js');
 const CSS = `
 .guide-card { position: absolute; right: 12px; top: 12px; z-index: 5; width: 340px; max-width: calc(100% - 24px); box-sizing: border-box;
   padding: 10px 12px; border-radius: 8px; pointer-events: auto;
-  background: rgba(20, 22, 28, 0.94); color: #e8eaee; font: 13px/1.4 system-ui, sans-serif; box-shadow: 0 4px 18px rgba(0,0,0,.45); }
+  background: var(--guide-bg, rgba(20, 22, 28, 0.94)); color: var(--guide-text, #e8eaee); font: 13px/1.4 system-ui, sans-serif; box-shadow: 0 4px 18px rgba(0,0,0,.45); }
 .guide-card h3 { margin: 0 0 4px; font-size: 14px; } .guide-card p { margin: 0 0 8px; }
 .guide-card .guide-count { float: right; opacity: .6; font-size: 12px; }
 .guide-card .guide-row { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .guide-card button { font: inherit; padding: 3px 10px; }
 .guide-open { position: absolute; right: 12px; top: 12px; z-index: 5; pointer-events: auto; }
-.guide-target { outline: 2px solid #ffb31a !important; outline-offset: -2px; }`;
+.guide-target { outline: 2px solid var(--accent, #ffb31a) !important; outline-offset: -2px; }`;
 
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 

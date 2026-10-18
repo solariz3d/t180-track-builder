@@ -9,6 +9,7 @@
 'use strict';
 
 const M = require('../camera/math.js');
+const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
 
 function selectionLines(track, ids, pose, W, H) {
   if (!track || !track.path || !Array.isArray(track.segments) || !ids || !ids.length || !pose || !(W > 0 && H > 0)) return [];
@@ -30,6 +31,7 @@ function selectionLines(track, ids, pose, W, H) {
 }
 
 function mount(stage, shell, win) {
+  const T = tokensOf(win);
   const doc = stage.ownerDocument, canvas = doc.createElement('canvas');
   canvas.setAttribute('aria-label', 'selected pieces');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5';
@@ -49,11 +51,11 @@ function mount(stage, shell, win) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     if (!drawn.length) return;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    for (const [w, colour] of [[9, '#0b0d11'], [4.5, '#ffb020']]) {
+    for (const [w, colour] of [[9, T.css('--ink', '#0b0d11')], [4.5, '#ffb020']]) {
       ctx.lineWidth = w; ctx.strokeStyle = colour;
       for (const l of drawn) { ctx.beginPath(); l.points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); }
     }
-    ctx.fillStyle = '#ffb020'; ctx.strokeStyle = '#0b0d11'; ctx.lineWidth = 2;
+    ctx.fillStyle = '#ffb020'; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.lineWidth = 2;
     const first = drawn[0].points[0], lastLine = drawn[drawn.length - 1], last = lastLine.points[lastLine.points.length - 1];
     for (const p of [first, last]) { ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   };

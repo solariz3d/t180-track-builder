@@ -12,6 +12,7 @@
 //   mount(stage, shell, win)                -> { drawn(), unmount() }
 'use strict';
 const M = require('../camera/math.js');
+const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
 const { T180 } = require('../../src/markers/layout.js');
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
@@ -47,6 +48,7 @@ function marks(info) {
 const COLOUR = { line: '#ffffff', grid: '#5fd3ff', pit: '#d6dbe3', hotlap: '#ff9a2e', lane: '#a8b0bd', bad: '#ff4d4d' };
 
 function mount(stage, shell, win) {
+  const T = tokensOf(win);
   const doc = stage.ownerDocument, canvas = doc.createElement('canvas');
   canvas.setAttribute('aria-label', 'start and grid');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3';
@@ -77,18 +79,18 @@ function mount(stage, shell, win) {
         ctx.strokeStyle = it.bad ? COLOUR.bad : COLOUR.lane; ctx.lineWidth = 3; let run = [], drew = [];
         const flush = () => { if (run.length > 1) { ctx.beginPath(); run.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); drew = drew.concat(run); } run = []; };
         for (const q of it.path) { const p = scr(q); if (p) run.push(p); else flush(); } flush();
-        if (it.label && drew.length) { const p = drew[Math.floor(drew.length / 2)], tw = ctx.measureText(it.label).width + 8; ctx.fillStyle = '#0b0d11'; ctx.fillRect(p.x - tw / 2, p.y - 8, tw, 16); ctx.fillStyle = COLOUR.lane; ctx.fillText(it.label, p.x, p.y + 0.5); }
+        if (it.label && drew.length) { const p = drew[Math.floor(drew.length / 2)], tw = ctx.measureText(it.label).width + 8; ctx.fillStyle = T.css('--ink', '#0b0d11'); ctx.fillRect(p.x - tw / 2, p.y - 8, tw, 16); ctx.fillStyle = COLOUR.lane; ctx.fillText(it.label, p.x, p.y + 0.5); }
         if (drew.length) drawn.push({ kind: it.kind, label: it.label, bad: it.bad, points: drew });
         continue;
       }
       const pts = (it.line || it.corners).map(scr); if (pts.some((p) => !p)) continue;
       const col = it.bad ? COLOUR.bad : COLOUR[it.kind];
       ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); if (it.corners) ctx.closePath();
-      ctx.lineWidth = it.kind === 'line' ? 6 : 4; ctx.strokeStyle = '#0b0d11'; ctx.stroke();
+      ctx.lineWidth = it.kind === 'line' ? 6 : 4; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.stroke();
       ctx.lineWidth = it.kind === 'line' ? 3 : 2; ctx.strokeStyle = col; ctx.stroke();
       const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length, cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
       const tw = ctx.measureText(it.label).width + 8;
-      ctx.fillStyle = '#0b0d11'; ctx.fillRect(cx - tw / 2, cy - 8, tw, 16); ctx.fillStyle = col; ctx.fillText(it.label, cx, cy + 0.5);
+      ctx.fillStyle = T.css('--ink', '#0b0d11'); ctx.fillRect(cx - tw / 2, cy - 8, tw, 16); ctx.fillStyle = col; ctx.fillText(it.label, cx, cy + 0.5);
       drawn.push({ kind: it.kind, label: it.label, bad: it.bad, points: pts });
     }
   };

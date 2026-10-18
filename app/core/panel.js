@@ -242,7 +242,7 @@ function mount(root, shell, mountOpts = {}) {
   const RO = ['length', 'turn', 'climb', 'bank', 'cup', 'edge', 'start', 'tube', 'corner', 'climbCorner', 'gravity'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
   const roName = (k) => (k === 'length' ? 'length' : k === 'cup' ? 'cup from → to' : k === 'edge' ? 'edge from → to' : k === 'start' ? 'edge start from → to' : k === 'tube' ? 'tube from → to'
     : k === 'corner' ? 'corner' : k === 'climbCorner' ? 'climb corner' : k === 'gravity' ? 'bank to gravity from → to' : `${k} change`);
-  const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:#eef1f6' },
+  const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:var(--on-ink, #eef1f6)' },
     ...RO.flatMap((k) => [el('span', { text: roName(k), style: 'color:var(--dim);font-weight:600' }), roCells[k]]));
   const readout = () => {
     let f = null, why = '';

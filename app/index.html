@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>T-180 Track Builder</title>
+<script>/* D381, A SKIN PER MELODY: the launch's melody pick is drawn here, before the first paint, and names the skin (<html data-theme>, app/themes/<name>.css).
+   The player takes the same number (createSound's pick, below), so the skin and the melody agree; the boot then sets the skin from sound.melody
+   (app/lib/theme.js). The names are app/sound.js MELODY_NAMES in their order (app/test/theme.test.js holds the two equal). */
+(function () { var names = ['aqua', 'skyline', 'glass', 'aurora'], r = Math.random(); window.__t180MelodyPick = r; document.documentElement.setAttribute('data-theme', names[Math.floor(r * names.length)]); })();</script>
 <style>
   /* SIGIL (2026-10-14): elegant minimalism with an esoteric-techno feel. Black and bone, hairline borders, ONE accent (pale ultraviolet); the warning
      colours stay their own hues so a red still reads as a red. Display type is Bahnschrift (on every Windows, already the dashboard's), numbers are
@@ -12,6 +16,11 @@
     --bg: #060606; --panel: #0b0b0a; --raise: #121211; --line: #24221f; --hair: rgba(235, 230, 220, .14);
     --text: #ebe6dc; --dim: #8a847a; --accent: #b9a8ff; --accent-dim: rgba(185, 168, 255, .16);
     --mine: #d9a55a; --bad: #e0573f; --warn: #e3b448; --ok: #8fc9a2;
+    /* D381: the colours the canvas layers, the overlays and the 3D view draw with (app/lib/tokens.js reads them); SIGIL's are exactly the literals
+       those files held, so SIGIL draws as before. A skin (app/themes/<name>.css) sets them under [data-theme="<name>"]. */
+    --ink: #0b0d11; --on-ink: #eef1f6; --on-ink-strong: #ffffff; --veil: #0b0d11; --veil-rule: rgba(255, 255, 255, .14);
+    --guide-bg: rgba(20, 22, 28, .94); --guide-text: #e8eaee; --guide-label: #9fb4d0;
+    --sky: color(srgb 0.024 0.023 0.021); --fog: color(srgb 0.07 0.08 0.1); --road-edge: color(srgb 0.93 0.93 0.88); --road-tie: color(srgb 0.06 0.07 0.09); --ground-grid: color(srgb 0.2 0.23 0.28);
     --display: Bahnschrift, "DIN Alternate", "Segoe UI", system-ui, sans-serif;
     --body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
@@ -196,6 +205,9 @@
   .reds li { margin: 3px 0; }
   .reds .src { color: var(--dim); }
 </style>
+<!-- D381: the skins, one per melody; each is scoped to its own [data-theme] and does nothing until the head script above names it -->
+<link rel="stylesheet" href="themes/skyline.css">
+<link rel="stylesheet" href="themes/aurora.css">
 </head>
 <body>
 <header data-tauri-drag-region>
@@ -393,7 +405,9 @@
     } catch (e) { console.error(`late-input log not wired: ${e && e.message}`); }
     // THE SOUNDS (app/sound.js): place, undo and loop closed are read off the shell's state; the drag tick comes from the handles. Mute and volume in the ⋯ menu
     try {
-      const sound = (await loadCjs('app/sound.js', get)).createSound(window, { base: 'sounds/' });
+      // D381: the player draws its melody from the number the head drew, and the skin follows the melody it picked (app/lib/theme.js)
+      const sound = (await loadCjs('app/sound.js', get)).createSound(window, { base: 'sounds/', pick: () => (typeof window.__t180MelodyPick === 'number' ? window.__t180MelodyPick : Math.random()) });
+      (await loadCjs('app/lib/theme.js', get)).applyTheme(document, sound.melody);
       let before = shell.getState(); shell.subscribe((st) => { const p = before; before = st; sound.handle(p, st); });
       const mute = $('sound-mute'), vol = $('sound-volume');
       mute.checked = sound.muted; vol.value = String(Math.round(sound.volume * 100));

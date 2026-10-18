@@ -9,6 +9,7 @@
 //   mount(stage, shell, win)               -> { lines(), setVisible(on), visible(), unmount() }
 'use strict';
 const SL = require('./selectionlayer.js');
+const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
 const GV = require('./gripvals.js');   // D263: the core's document.js needs node's fs and the UI must load in the webview loader without it
 
 const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
@@ -26,6 +27,7 @@ function gripLines(track, doc, pose, W, H) {
 }
 
 function mount(stage, shell, win) {
+  const T = tokensOf(win);
   const doc = stage.ownerDocument, canvas = doc.createElement('canvas');
   canvas.setAttribute('aria-label', 'grip colours');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3';
@@ -43,15 +45,15 @@ function mount(stage, shell, win) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
     if (!on) return;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    for (const [w, pick] of [[10, () => '#0b0d11'], [6, (l) => l.colour]]) {
+    for (const [w, pick] of [[10, () => T.css('--ink', '#0b0d11')], [6, (l) => l.colour]]) {
       ctx.lineWidth = w;
       for (const l of drawn) { ctx.strokeStyle = pick(l); ctx.beginPath(); l.points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); }
     }
     // the key: blue 50% to white 100% to orange 150%
     ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif'; ctx.textBaseline = 'middle';
     const kx = 12, ky = H - 26, kw = 150; for (let i = 0; i < kw; i++) { ctx.fillStyle = gripColour(GV.GRIP_MIN + ((GV.GRIP_MAX - GV.GRIP_MIN) * i) / (kw - 1)); ctx.fillRect(kx + i, ky, 1, 8); }
-    ctx.strokeStyle = '#0b0d11'; ctx.lineWidth = 1; ctx.strokeRect(kx - 0.5, ky - 0.5, kw + 1, 9);
-    ctx.fillStyle = '#0b0d11'; ctx.fillRect(kx - 2, ky - 20, 168, 14); ctx.fillStyle = '#eef1f6'; ctx.fillText('grip: 50%     100%     150%', kx, ky - 13);
+    ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.lineWidth = 1; ctx.strokeRect(kx - 0.5, ky - 0.5, kw + 1, 9);
+    ctx.fillStyle = T.css('--ink', '#0b0d11'); ctx.fillRect(kx - 2, ky - 20, 168, 14); ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.fillText('grip: 50%     100%     150%', kx, ky - 13);
   };
   raf = win.requestAnimationFrame(frame);
   return { lines: () => drawn.slice(), setVisible(v) { on = !!v; }, visible: () => on, unmount() { win.cancelAnimationFrame(raf); canvas.remove(); } };
