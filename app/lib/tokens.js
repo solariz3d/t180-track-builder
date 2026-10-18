@@ -5,12 +5,13 @@
 // SIGIL's :root (app/index.html) holds exactly those literals, so SIGIL draws as it did before D381.
 //
 //   tokensOf(win)                  -> the window's one reader (kept on the window: each loadCjs builds a fresh module graph, as the settings store does)
-//   createTokens(win, { log })     -> { css, rgba, floats, alpha, solid, refresh, onChange, version }
+//   createTokens(win, { log })     -> { css, rgba, floats, alpha, solid, word, refresh, onChange, version }
 //     css(name, fallback)          -> '#rrggbb' for an opaque colour, 'rgba(r, g, b, a)' otherwise (a canvas or a style takes either)
 //     rgba(name, fallback)         -> [r, g, b, a], r g b 0..255, a 0..1
 //     floats(name, fallback)       -> [r, g, b] 0..1 for WebGL (a token written color(srgb r g b) gives its floats exactly); fallback is the float array
 //     alpha(name, a, fallback)     -> 'rgba(r, g, b, a)': the token at a site's own alpha (a translucent backing)
 //     solid(name, fallback)        -> '#rrggbb' with any alpha the skin gave dropped (a box that must stay opaque)
+//     word(name, fallback)         -> a token that is a word (D384: --sky-style), unquoted; the fallback word when the page has none
 // A token the reader cannot understand is reported once (console.error) and today's colour is drawn; a missing token is today's colour, silently.
 'use strict';
 
@@ -84,6 +85,13 @@ function createTokens(win, { log = null } = {}) {
     floats(name, fallback) { const c = read(name, fallback); return c ? [...c.floats] : [...fallback]; },
     alpha(name, a, fallback) { const c = read(name, fallback) || fb(name, fallback); return `rgba(${c.rgba.slice(0, 3).map(Math.round).join(', ')}, ${a})`; },
     solid(name, fallback) { return hexOf(read(name, fallback) || fb(name, fallback)); },
+    /** D384: a token that is a word, not a colour (--sky-style): its value without quotes or spaces, or the fallback when the page has none. */
+    word(name, fallback) {
+      if (typeof fallback !== 'string') throw new Error(`tokens: ${name} needs today's word as its fallback`);
+      const k = 'word:' + name;
+      if (!cache.has(k)) cache.set(k, raw(name).replace(/^(["'])(.*)\1$/, '$2').trim());
+      return cache.get(k) || fallback;
+    },
     refresh() { cache.clear(); version++; for (const f of listeners.slice()) { try { f(); } catch (e) { say(`tokens: a listener failed on a skin change (${e && e.message})`); } } },
     onChange(f) { listeners.push(f); return () => { const i = listeners.indexOf(f); if (i >= 0) listeners.splice(i, 1); }; },
     get version() { return version; },

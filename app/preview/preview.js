@@ -106,6 +106,10 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const renderer = createRenderer(gl), model = createTrackModel(), rig = createRig();
   // D381: the 3D view's sky, fog, road lines and grid are the skin's (app/lib/tokens.js); read again when <html data-theme> changes, drawn on the next frame
   const tokens = tokensOf(win), skin = () => renderer.setTheme(themeFrom(tokens)), unskin = tokens.onChange(skin); skin();
+  // D384: the skin's sky drifts in time, and holds still at t = 0 under prefers-reduced-motion (read each frame, so a change in the system setting is seen)
+  let still = null;
+  try { still = typeof win.matchMedia === 'function' ? win.matchMedia('(prefers-reduced-motion: reduce)') : null; } catch (e) { still = null; }
+  const skyTime = (t) => (still && still.matches ? 0 : t / 1000);
   let track = null, err = null, raf = 0, prev = 0, shownPose = null;
   const held = new Map();   // the keys down, in the order pressed: physical key (e.code) → its action, fixed at key-down
   let takeover = false;     // a movement key went down in a follow view: the next frame takes the view over into free (once)
@@ -337,7 +341,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
       renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: plan && plan.over.length ? plan.over : null, depthLines: plan ? plan.depth : null,
-        look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null });
+        look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, time: skyTime(t) });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
     if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? (sigil ? 'sigil look' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}${lateShown && t < lateShown.until ? ` · ${lateShown.rec.type === 'keyup' ? 'key-up' : 'key-down'} ${lateShown.rec.code} came ${(lateShown.rec.lateMs / 1000).toFixed(1)} s late (${lateShown.rec.cause})` : ''}`;
