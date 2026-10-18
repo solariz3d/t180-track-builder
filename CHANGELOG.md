@@ -16,6 +16,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 - **Error text in the Aqua skin is easier to read.** It was drawn in the same red as the default look, which is too dark on Aqua's teal panels (as low as 2.8 to 1 against the background). Aqua now uses a lighter shade of the same red, at least 4.5 to 1 on every panel colour it sits on. It still means an error. (`app/themes/aqua.css`.) Test: `app/test/sky-caustics-aurora.test.js`.
+- **One missing sound file no longer silences the recorded sounds.** Each time it starts, the builder picks one melody and now loads only the four sound files that launch plays: the drag tick, the loop close, and that melody's place and undo sounds. Before, it loaded all ten. If any one of them failed to load, even a file of a melody that was not playing, every sound fell back to the plainer built-in voices: the tick, the loop close and the melody itself. A file of the melody that is playing that fails to load still falls back the same way. The other six files are also no longer read at every start.
 
 ## [0.4.3] - 2026-10-17
 
