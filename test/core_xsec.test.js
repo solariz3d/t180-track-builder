@@ -29,8 +29,8 @@ test('SCHEMA: new documents are t180b.core/4; /1, /2 and /3 text still loads; a 
   assert.strictEqual(D.SCHEMA, 't180b.core/4'); assert.strictEqual(JSON.parse(text).schema, 't180b.core/4');
   assert.ok(!/"(e|s|t)":\[/.test(text), 'a cup piece writes no edge or tube channel');
   for (const old of ['t180b.core/3', 't180b.core/2']) assert.strictEqual(D.serialize(D.parse(text.replace('t180b.core/4', old))), text, `${old} loads and saves as the same /4 text (only the schema string differs)`);
-  // core/5 is the split-edge version (er, 2026-10-12): the next one is the unknown newer file
-  assert.throws(() => D.parse(text.replace('t180b.core/4', 't180b.core/6')), /a newer file needs a newer builder/);
+  // core/5 is the split-edge version (er, 2026-10-12) and core/6 the negative edge (D406): the next one is the unknown newer file
+  assert.throws(() => D.parse(text.replace('t180b.core/4', 't180b.core/7')), /a newer file needs a newer builder/);
 });
 test('SCHEMA: an edge piece and a tube piece write their channels, read back with their flags, and save to the same text (round trip)', () => {
   let d = extend(start(), { length: 200, targets: { e: 15, s: 0.7 } }); d = extend(d, { length: 100, targets: { t: 200 } });
@@ -41,7 +41,7 @@ test('SCHEMA: an edge piece and a tube piece write their channels, read back wit
 });
 test('DOMAIN (E2, V4, T1, T3): a hand-built document with e < 0, s outside [0.5, 0.95], a total past the cap, a closed tube with an edge, or a tube held in the slot is refused by name', () => {
   const base = extend(start(), { length: 200, targets: { e: 15 } }), p = last(base), i = 1;
-  throwsCode(() => D.checkDoc(withChannel(base, i, 'e', fill(p, -1))), 'BAD_EDGE', /0 or more/);
+  throwsCode(() => D.checkDoc(withChannel(base, i, 'e', fill(p, -200))), 'BAD_EDGE', /floor/);   // D406: below 0 is allowed down to the floor (core_edgeneg.test.js)
   throwsCode(() => D.checkDoc(withChannel(base, i, 's', fill(p, 0.4))), 'BAD_EDGE', /0\.5 to 0\.95/);   // KE2-3
   throwsCode(() => D.checkDoc(withChannel(base, i, 's', fill(p, 0.97))), 'BAD_EDGE', /0\.5 to 0\.95/);
   throwsCode(() => D.checkDoc(withChannel(base, i, 'e', fill(p, 140))), 'BAD_EDGE', /past 150/);   // a bowl 15.5 + e 140
@@ -100,7 +100,7 @@ test('A TUBE JOINT: a tube after another kind starts at the edge that piece rend
 
 // ── extend ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 test('EXTEND: e, s and t targets are range-checked by name; an e target on a plain track makes an edge piece; the edge continues while active and turns off with e = 0', () => {
-  throwsCode(() => extend(start(), { length: 50, targets: { e: -1 } }), 'BAD_EDGE'); throwsCode(() => extend(start(), { length: 50, targets: { s: 0.3 } }), 'BAD_EDGE');
+  throwsCode(() => extend(start(), { length: 50, targets: { e: -200 } }), 'BAD_EDGE', /floor/);   // D406: -1 is a lip now; the floor refuses throwsCode(() => extend(start(), { length: 50, targets: { s: 0.3 } }), 'BAD_EDGE');
   throwsCode(() => extend(start(), { length: 50, targets: { t: 400 } }), 'BAD_TUBE'); throwsCode(() => extend(start(), { length: 50, targets: { e: 200 } }), 'BAD_EDGE', /past/);
   throwsCode(() => extend(extend(start(), { length: 60, targets: { c: 140 } }), { length: 50, targets: { e: 30 } }), 'BAD_EDGE', /past/);   // a bowl 140 + e 30: the cap leaves 10
   let d = extend(start(), { length: 200, targets: { e: 15 } }); assert.ok(last(d).edge && D.pieceEnd(last(d)).e.v === 15);

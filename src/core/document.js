@@ -31,13 +31,20 @@ const SCHEMA = 't180b.core/4', OLD_SCHEMAS = Object.freeze(['t180b.core/1', 't18
 const CHANNELS = Object.freeze(['kh', 'kv', 'phi', 'w', 'r', 'h', 'l', 'c', 'e', 's', 't', 'er']);
 // the channels a piece carries only when its flag is set (cup: c; edge: e and s; tube: t), and what an unflagged piece reads for each
 const OPTIONAL = Object.freeze({ c: 'cup', e: 'edge', s: 'edge', t: 'tube', er: 'edge' });
-// e: the extra edge angle ψ added over the outer zone, degrees, >= 0 (e < 0, a lip, is not in this version). s: where the outer zone starts, a share of the half-width.
+// e: the extra edge angle ψ added over the outer zone, degrees; below 0 (D406) the zone turns DOWN against the profile, to flat and past it (a lip), as far as
+// EDGE_FLOOR below. s: where the outer zone starts, a share of the half-width.
 // t: the tube's sweep, degrees; 360 closes the section into a cylinder. The tube's edge angle is t/2.
 // er (the keeper, 2026-10-12: "lower the angle on one side and increase the banking of the edge on the other … the inside of the right turn will be turned
-// down so the inside isnt banked in a way that would mess up an inside line"): the RIGHT side's edge angle, degrees >= 0; e is then the LEFT side's. Every
+// down so the inside isnt banked in a way that would mess up an inside line"): the RIGHT side's edge angle, degrees, as e is; e is then the LEFT side's. Every
 // edge piece carries it; a piece whose er equals its e is symmetric, exactly as before, and its text carries no er (so every file made before reads and
 // saves byte for byte as it did). A file with a piece whose sides differ is written as core/5, so a builder that predates er refuses it by name instead of
 // silently making it symmetric (seal V3's reason). The edge START s stays one value for both sides.
+// D406 (the keeper, 2026-10-18: "it should be able to go into the negatives, meaning the track curves down tweaking the banking on one side to be closer to
+// flat or even past it"): EDGE_FLOOR is the least TOTAL edge angle a side may reach, the profile's own angle at the rim (c on a cup, t/2 on a tube, the
+// family's on a legacy road) plus e or er: 30° past flat, a lip. The geometry itself would allow 90°: past that the outer zone runs back under the road
+// (its lateral step is the cosine of its angle), so -30 is the ruling's own limit on how far a rim may drop, not where the section breaks, and it may move.
+// A file with a negative edge on any piece is written as core/6, so a builder that predates D406 refuses it by name instead of meeting values it never allowed.
+const EDGE_FLOOR = -30;
 const EDGE_EPS = 1e-9, S_MIN = 0.5, S_MAX = 0.95, S_DEFAULT = 0.64, TUBE_MAX = 360, TUBE_EDGE_MAX = 180;
 const OPT_DEFAULT = Object.freeze({ c: 0, e: 0, s: S_DEFAULT, t: 0, er: 0 });
 // c is the cross-section's edge angle ψ at u = ±w/2, in DEGREES, in [0, CUP_MAX]. 150: the bowl's two walls touch at 159.681° (the D190 seal, V2)
@@ -369,18 +376,23 @@ function checkTube(P, at) {
   if (t.every((v, i) => v > tubeSlotMinDeg(w[i]) + 1e-6 && v < TUBE_MAX - 1e-6)) throw new CoreError('BAD_TUBE', `${at}: a tube held at ${Math.min(...t).toFixed(2)}° to ${Math.max(...t).toFixed(2)}° leaves a slot under ${MACH6.downforceRay.aheadM} m between its tips, which the car's downforce ray falls through (a sweep below ${tubeSlotMinDeg(Math.max(...w)).toFixed(1)}° is open, 360° is closed; pass through the band, do not stay in it)`);
 }
 /**
- * The edge's own domain (D225, seal V4 and E2): e >= 0, s in [0.5, 0.95], and the total edge angle (the middle profile's edge angle plus e) within the cap: CUP_MAX = 150 on a legacy
- * or cup piece, 180 on an open tube (t/2 + e), each bound on the CONTROL POINTS by the convex hull (ref 03 §1b). A closed tube takes no edge: the edge is moot there.
+ * The edge's own domain (D225, seal V4 and E2): s in [0.5, 0.95], and each side's total edge angle (the middle profile's edge angle plus e or er) within the cap: CUP_MAX = 150 on a legacy
+ * or cup piece, 180 on an open tube (t/2 + e), and at or above EDGE_FLOOR (D406), each bound on the CONTROL POINTS by the convex hull (ref 03 §1b). A closed tube takes
+ * no edge: the edge is moot there.
  */
 function checkEdge(P, at) {
   // the larger side binds every cap below: each side's total edge angle must fit, and that is the larger one's
   const s = P.channels.s, er = P.channels.er || P.channels.e, e = P.channels.e.map((v, i) => Math.max(v, er[i]));
-  if (er.some((v) => v < -EDGE_EPS)) throw new CoreError('BAD_EDGE', `${at}: the right edge angle er must be 0 or more, but a control point is ${Math.min(...er)}° (an outer zone that flattens, a lip, is not in this version)`);
-  if (P.channels.e.some((v) => v < -EDGE_EPS)) throw new CoreError('BAD_EDGE', `${at}: the edge angle e must be 0 or more, but a control point is ${Math.min(...P.channels.e)}° (an outer zone that flattens, a lip, is not in this version)`);
+  // and each side on its own keeps to the floor (D406): the profile's angle at the rim plus that side's, at every control point. A legacy road's angle grows
+  // with its width and rise, so its least is at their least
+  const rim = P.tube ? P.channels.t.map((v) => v / 2) : P.cup ? P.channels.c : P.channels.e.map(() => legacyEdgeDeg(P.family, Math.min(...P.channels.w), Math.min(...P.channels.r)));
+  for (const [side, vs] of [['edge angle e', P.channels.e], ['right edge angle er', er]]) vs.forEach((v, i) => {
+    if (rim[i] + v < EDGE_FLOOR - EDGE_EPS) throw new CoreError('BAD_EDGE', `${at}: the ${side} takes the rim to ${+(rim[i] + v).toFixed(6)}° at a control point (the profile's ${+rim[i].toFixed(6)}° plus ${v}°), under the floor of ${EDGE_FLOOR}° (30° past flat, a lip)`);
+  });
   if (s.some((v) => v < S_MIN - EDGE_EPS || v > S_MAX + EDGE_EPS)) throw new CoreError('BAD_EDGE', `${at}: the edge start s must stay within ${S_MIN} to ${S_MAX} of the half-width, but a control point is ${Math.min(...s)} to ${Math.max(...s)}`);
   if (P.tube) {
     const t = P.channels.t;
-    if (t.some((v) => v >= TUBE_MAX - 1e-9) && e.some((v) => v > EDGE_EPS)) throw new CoreError('BAD_TUBE', `${at}: a tube that closes (a sweep of ${TUBE_MAX}°) takes no edge: with the section closed the edge curve has no edge to act on`);
+    if (t.some((v) => v >= TUBE_MAX - 1e-9) && P.channels.e.concat(er).some((v) => Math.abs(v) > EDGE_EPS)) throw new CoreError('BAD_TUBE', `${at}: a tube that closes (a sweep of ${TUBE_MAX}°) takes no edge: with the section closed the edge curve has no edge to act on`);
     t.forEach((v, i) => { if (v / 2 + e[i] > TUBE_EDGE_MAX + EDGE_EPS) throw new CoreError('BAD_EDGE', `${at}: the tube's edge angle t/2 plus e is ${v / 2 + e[i]}° at a control point, past ${TUBE_EDGE_MAX}° (the walls of a tube with an edge would touch)`); });
   } else if (P.cup) {
     P.channels.c.forEach((v, i) => { if (v + e[i] > CUP_MAX + EDGE_EPS) throw new CoreError('BAD_EDGE', `${at}: the cup's edge angle c plus e is ${v + e[i]}° at a control point, past ${CUP_MAX}° (the walls of a ${CUP_MAX}°+ bowl touch)`); });
@@ -444,9 +456,12 @@ const pieceText = (P) => (P.type === 'flight'
 /** An edge piece whose two sides differ (er is not e): only such a piece writes er, and a document with one is written as core/5. */
 const isSplit = (P) => !!(P.type === 'road' && P.edge && P.channels.er && P.channels.er.some((v, i) => v !== P.channels.e[i]));
 const SCHEMA_SPLIT = 't180b.core/5';
+/** An edge piece with a side below 0 (D406): a document with one is written as core/6, which also carries a split. */
+const isNegEdge = (P) => !!(P.type === 'road' && P.edge && (P.channels.e.some((v) => v < 0) || (P.channels.er || []).some((v) => v < 0)));
+const SCHEMA_NEG = 't180b.core/6';
 function serialize(doc) {
   checkDoc(doc);
-  const head = [`  "schema": ${JSON.stringify(doc.pieces.some(isSplit) ? SCHEMA_SPLIT : doc.schema)}`, `  "generator": ${JSON.stringify(GENERATOR)}`, `  "name": ${JSON.stringify(doc.name)}`, `  "closed": ${doc.closed}`,
+  const head = [`  "schema": ${JSON.stringify(doc.pieces.some(isNegEdge) ? SCHEMA_NEG : doc.pieces.some(isSplit) ? SCHEMA_SPLIT : doc.schema)}`, `  "generator": ${JSON.stringify(GENERATOR)}`, `  "name": ${JSON.stringify(doc.name)}`, `  "closed": ${doc.closed}`,
     `  "start": ${JSON.stringify({ pos: doc.start.pos, heading: doc.start.heading, pitch: doc.start.pitch })}`, `  "nextId": ${doc.nextId}`,
     ...(doc.spawns !== undefined ? [`  "spawns": ${JSON.stringify(normSpawns(doc.spawns))}`] : []),
     ...(doc.pitLane !== undefined ? [`  "pitLane": ${JSON.stringify(normPitLane(doc.pitLane))}`] : [])];
@@ -469,7 +484,7 @@ function parseChannel(P, ch, upgrade) {
 /** Parse a document; every number is quantised as it enters, so a hand-edited value finer than its quantum is snapped. */
 function parse(text) {
   let o; try { o = JSON.parse(text); } catch (e) { throw new CoreError('BAD_JSON', e.message); }
-  if (!o || (o.schema !== SCHEMA && o.schema !== SCHEMA_SPLIT && !OLD_SCHEMAS.includes(o.schema))) throw new CoreError('BAD_DOC', `schema must be ${SCHEMA} (or an older ${OLD_SCHEMAS.join(', ')}), got ${o && o.schema} (a newer file needs a newer builder)`);
+  if (!o || (o.schema !== SCHEMA && o.schema !== SCHEMA_SPLIT && o.schema !== SCHEMA_NEG && !OLD_SCHEMAS.includes(o.schema))) throw new CoreError('BAD_DOC', `schema must be ${SCHEMA} (or an older ${OLD_SCHEMAS.join(', ')}), got ${o && o.schema} (a newer file needs a newer builder)`);
   const upgrade = o.schema === 't180b.core/1';   // a core/1 file has no offsets: they are zero, one per control point; core/1 and /2 have no cup: legacy pieces
   const read = (o.pieces || []).map((P) => (P && P.type === 'flight'
     ? (P.gap !== undefined || P.drop !== undefined || P.land !== undefined ? { id: P.id, type: 'flight', old: { gap: q(P.gap, DEC.m), drop: q(P.drop, DEC.m), land: q(P.land, DEC.rad) } } : { ...flightPiece(P), id: P.id })
@@ -657,7 +672,7 @@ function refineKnots(doc, pieceId, a, b, maxSpan) {
 module.exports = {
   boehm, insertKnot, insertKnots, refineKnots,
   fromPositionFit,
-  SCHEMA, SCHEMA_SPLIT, isSplit, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
+  SCHEMA, SCHEMA_SPLIT, isSplit, SCHEMA_NEG, isNegEdge, EDGE_FLOOR, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
   checkSpawns, normSpawns, setSpawns, SPAWN_COUNT_MAX, SPAWN_GAP_MAX, checkPitLane, normPitLane, setPitLane, PIT_DEFAULT, PIT_BOXES_MAX,
   createDoc, roadPiece, flightPiece, GRIP_MIN, GRIP_MAX, GRIP_DEFAULT, gripOf, checkGrip, withGrip, setGrip, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,

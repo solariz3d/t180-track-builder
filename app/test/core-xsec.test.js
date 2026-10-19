@@ -13,7 +13,7 @@
 //      ring past a target (D190 V5), so a panel that shows the typed value instead of the document's is caught;
 //   3. headState() adds the same document values for the head, so the fields read back what was placed;
 //   4. it refuses with A's CONTRACT names (p-xsec-A-contract_2026-10-03.md), as CoreErrors: BAD_TUBE for a held sweep in the slot
-//      (348.732°, 360°) on a 31 m road (E's T1 iii) or outside [0, 360]; BAD_EDGE for e < 0 or s outside [0.5, 0.95]; BAD_TARGET for c and t
+//      (348.732°, 360°) on a 31 m road (E's T1 iii) or outside [0, 360]; BAD_EDGE for e < -30 (D406's floor) or s outside [0.5, 0.95]; BAD_TARGET for c and t
 //      together. Only the names and these simple bounds are the stub's: the real guards (the cap on the total, t1m(w)) are A's.
 // The real shell's own headState (no stub) is tested separately: on a core without the channels it reads the seal's defaults.
 'use strict';
@@ -89,7 +89,7 @@ function stubXsec(real) {
     if (t !== undefined && 'c' in targets) throw new D.CoreError('BAD_TARGET', 'a piece is a cup or a tube, not both (stub)');
     if (t !== undefined && (t < 0 || t > 360)) throw new D.CoreError('BAD_TUBE', `the sweep must be 0 to 360°, got ${t} (stub)`);
     if (t !== undefined && t > 348.732 && t < 360 && Math.abs(w - 31) < 0.5) throw new D.CoreError('BAD_TUBE', `a sweep of ${t}° on a ${w} m road leaves a slot narrower than the downforce ray (stub)`);
-    if (e !== undefined && e < 0) throw new D.CoreError('BAD_EDGE', `the edge angle must be ≥ 0, got ${e} (stub)`);
+    if (e !== undefined && e < -30) throw new D.CoreError('BAD_EDGE', `the edge angle is under the floor of -30°, got ${e} (stub)`);   // D406: below 0 is allowed
     if (sl !== undefined && !(sl >= 0.5 && sl <= 0.95)) throw new D.CoreError('BAD_EDGE', `the edge start must be 0.5 to 0.95, got ${sl} (stub)`);
   };
   // (the real extend redraws the panel before it returns, so the piece's record is taken from `pending` the first time its id is seen)
@@ -227,7 +227,7 @@ test('xsec panel: a core refusal is shown by its name (BAD_TUBE, BAD_EDGE: A\'s 
   const cases = [
     ['BAD_TUBE', (p) => { p.type('width m', 31); p.type('tube sweep °', 352); }],   // held in the slot (T1 iii)
     ['BAD_TUBE', (p) => { p.type('tube sweep °', 400); }],                          // outside [0, 360]
-    ['BAD_EDGE', (p) => { p.type('left edge °', -5); }],                           // e < 0
+    ['BAD_EDGE', (p) => { p.type('left edge °', -35); }],                          // e under the floor (D406: -5 is a lip now)
     ['BAD_EDGE', (p) => { p.type('edge start', 0.3); }],                            // s below 0.5
   ];
   for (const [name, set] of cases) {
@@ -348,4 +348,14 @@ test('xsec the panel loads in the webview loader with no node built-in (D186)', 
   const P = await loadCjs('app/core/panel.js', async (p) => fs.readFileSync(path.join(REPO, p), 'utf8'));
   assert.equal(typeof P.extendOptions, 'function');
   assert.equal(P.extendOptions({ length: 10, edge: '5' }).targets[E], 5);
+});
+// D406 (the keeper, 2026-10-18: "it should be able to go into the negatives"): the two edge fields take a number below 0, which the core places (its floor is
+// the core's, against the profile under it: test/core_edgeneg.test.js)
+test('xsec panel: the left and right edge fields take a negative number, with no min, and Extend places it (D406)', async () => {
+  const p = await mountPanel();
+  for (const name of ['left edge °', 'right edge °']) assert.ok(!('min' in p.field(name).attrs), `the ${name} input has no min`);
+  p.type('length m', 200); p.type('right edge °', -20); p.button('Extend').onclick();
+  const h = p.shell.headState();
+  assert.ok(Math.abs(h.er + 20) < 1e-6, `the head's right edge is -20: ${h.er}`);
+  assert.equal(p.field('right edge °').value, '-20', 'and the field shows it');
 });

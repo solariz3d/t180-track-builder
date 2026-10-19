@@ -111,7 +111,7 @@ const heartlineOf = (P, x) => (P.tube ? (x.w / (2 * Math.PI)) * smooth((x.t - HE
  */
 function xsecSegments(P, n, at, join) {
   const s = (j) => (P.length * j) / n, E = Array.from({ length: n + 1 }, (_, j) => at(s(j))), edge = !!P.edge;
-  const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => Math.max(x.e, x.er))))) : 0;   // sized by the steeper side
+  const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => Math.max(Math.abs(x.e), Math.abs(x.er)))))) : 0;   // sized by the steeper side, a side that turns down (D406) by its size
   const own = (x) => { const b = baseProfileOf(P, x); return edge ? edgeProfile(b, x.e, x.s, nE, x.er) : b; };
   const Lm = join ? Math.min(MORPH_M, P.length) : 0, J = join ? normalize(join.profile) : null;
   const prof = E.map((x, j) => { const o = own(x); return J && s(j) < Lm - 1e-9 ? blend(J, normalize(o), smooth(s(j) / Lm)) : o; });
