@@ -22,6 +22,8 @@
 //  15  (D382) the sound slider in Settings shows 45 on a fresh start with nothing saved, and a saved volume (0.6) shows as saved, 60
 //  16  (D394) Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody's two files; after a reload, that look and that melody;
 //      SIGIL's tooltip says its melody is still picked at random
+//  17  (D396) the bar fits at every width the window allows, from tauri.conf.json's minWidth (900) up: at 900, 1100, 1280 and 1400 px nothing overflows, the
+//      window's own buttons (#winctl) are wholly inside the window, and every menu and Export to Assetto Corsa is on one line, left of them
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -297,4 +299,30 @@ test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and
     assert.equal(await ev("return document.documentElement.hasAttribute('data-theme');"), false, 'SIGIL: no data-theme');
     assert.deepEqual(errors, []);
   } finally { onEvent = null; await send('Network.disable'); }
+});
+
+test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px: no overflow, the window buttons wholly inside the window, every menu and Export on one line left of them', { skip }, async () => {
+  const minWidth = JSON.parse(fs.readFileSync(path.join(REPO, 'src-tauri', 'tauri.conf.json'), 'utf8')).app.windows[0].minWidth;
+  assert.equal(minWidth, 900, 'the narrowest window tauri.conf.json allows');
+  try {
+    for (const w of [minWidth, 1100, 1280, 1400]) {
+      await send('Emulation.setDeviceMetricsOverride', { width: w, height: 860, deviceScaleFactor: 1, mobile: false });
+      await load();
+      const m = await ev(`
+        const lines = (e) => { const r = document.createRange(); r.selectNodeContents(e); return new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size; };
+        const head = document.querySelector('header'), wb = document.getElementById('winctl').getBoundingClientRect();
+        const parts = [...document.querySelectorAll('header details > summary')].concat([...document.querySelectorAll('#install > button')]);
+        return { width: innerWidth, overflow: head.scrollWidth - head.clientWidth, win: { left: wb.left, right: wb.right, width: wb.width },
+          parts: parts.map((e) => { const b = e.getBoundingClientRect(); return { text: e.textContent.trim(), lines: lines(e), right: b.right, width: b.width }; }) };`);
+      assert.equal(m.width, w);
+      assert.ok(m.overflow <= 0, `at ${w} px the bar overflows by ${m.overflow} px`);
+      assert.ok(m.win.width >= 138 && m.win.left >= 0 && m.win.right <= w + 0.5, `at ${w} px the window buttons are not wholly inside the window: ${Math.round(m.win.left)} to ${Math.round(m.win.right)}`);
+      assert.equal(m.parts.length, 8, `seven menus and the Export button at ${w} px`);
+      for (const p of m.parts) {
+        assert.equal(p.lines, 1, `at ${w} px "${p.text}" is on one line`);
+        assert.ok(p.width > 0 && p.right <= m.win.left + 0.5, `at ${w} px "${p.text}" ends at ${Math.round(p.right)}, left of the window buttons (${Math.round(m.win.left)})`);
+      }
+    }
+    assert.deepEqual(errors, []);
+  } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
 });
