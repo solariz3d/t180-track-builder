@@ -1,5 +1,5 @@
 // texture-page.test.js: node --test app/test/texture-page.test.js
-// D399: EACH LOOK'S OWN TEXTURE, AND THE EMPTY BUILDER IN CHARACTERS, tested on the real page (app/index.html) in HEADLESS Chrome (never a window), served
+// D399: EACH LOOK'S OWN TEXTURE (and, since D409, NO PICTURE OVER THE EMPTY BUILDER), tested on the real page (app/index.html) in HEADLESS Chrome (never a window), served
 // from this checkout, each look chosen through Settings ▸ Theme's saved value (t180.settings.theme). Skipped, with the reason, where there is no Chrome
 // (CHROME_PATH or the usual place). Rows:
 //   1  each look's texture tile (app/themes/tex/<look>.png, through the --tex token) is the top background layer of the header, the left panel and an
@@ -7,9 +7,8 @@
 //   2  the texture costs no text its contrast: with a six-piece track placed, in the builder and with the File menu open, no text that reads at least
 //      4.5:1 (WCAG) with the texture switched off (--tex: none) reads under it with the texture on. The probe is E's D389/D397 one: each visible text's glyph
 //      boxes and colour, then the glyphs hidden and the surfaces shot again, the text against the 2nd and 98th percentile background pixel in its boxes
-//   3  the empty builder shows the track in characters (#empty-art) only while there are no pieces: shown at the start, hidden once a piece is placed,
-//      shown again when the last one is undone
-//   4  (A's review 12) the art sits in the free area right of the left panel: no overlap with #left at window widths 900, 1100 and 1400
+//   3  (D409) the empty builder shows no picture over the 3D view: with no pieces, in every look, there is no #empty-art and no <pre> in #stage.
+//      D399's track in characters stood still on the screen while the camera moved, which read as a fault (the keeper, 0.4.8); it is taken out, not moved
 //   5  (A's review 12) at display scales 1.25 and 1.5 each fine tile (SIGIL, Skyline, Glass, Aurora) is drawn one tile pixel per device pixel, so it lands
 //      unresampled (resampled, Aurora's dots smeared into uneven two-pixel smudges)
 'use strict';
@@ -139,38 +138,14 @@ test('row 2: the texture pushes no text under 4.5:1 in any look, in the builder 
   t.diagnostic(report.join('; '));
 });
 
-test('row 3: the empty builder shows the track in characters only while there are no pieces', { skip }, async () => {
-  for (const look of ['sigil', 'aurora']) {
+test('row 3 (D409): with no pieces, in every look, the empty builder shows no picture over the 3D view: no #empty-art and no <pre> in #stage', { skip }, async () => {
+  for (const look of LOOKS) {
     await load(look);
-    const shown = () => ev("const e = document.getElementById('empty-art'); if (!e) return 'missing'; const r = e.getBoundingClientRect(); return !e.hidden && getComputedStyle(e).display !== 'none' && r.width > 100 && r.height > 50;");
     assert.equal(await pieces(), 0, `${look}: a fresh start has no pieces`);
-    assert.equal(await shown(), true, `${look}: no pieces: the art is shown`);
-    const art = await ev("const e = document.getElementById('empty-art'), p = document.createElement('p'); p.style.color = 'var(--dim)'; document.body.append(p); const dim = getComputedStyle(p).color; p.remove(); return { hidden: e.getAttribute('aria-hidden'), events: getComputedStyle(e).pointerEvents, color: getComputedStyle(e).color, dim };");
-    assert.equal(art.hidden, 'true', `${look}: the art is decorative (aria-hidden)`); assert.equal(art.events, 'none', `${look}: it never takes a press`);
-    assert.equal(art.color, art.dim, `${look}: it is in the look's dim colour`);
-    await extend(1); await sleep(500);
-    assert.equal(await shown(), false, `${look}: one piece: the art is hidden`);
-    await undo(1); await sleep(500);
-    assert.equal(await pieces(), 0); assert.equal(await shown(), true, `${look}: the last piece undone: shown again`);
+    const got = await ev("return { art: !!document.getElementById('empty-art'), pre: document.querySelectorAll('#stage pre').length };");
+    assert.deepEqual(got, { art: false, pre: 0 }, `${look}: no picture in characters over the 3D view`);
+    assert.deepEqual(errors, [], `${look}: no page errors`);
   }
-});
-
-// D399 fixes (A's review 12): the art sits in the free area right of the left panel at every window width the app allows, and the fine tiles land one
-// tile pixel per device pixel at Windows' fractional display scales
-test('row 4: the empty builder\'s art never sits under the left panel: no overlap with #left at window widths 900, 1100 and 1400', { skip }, async (t) => {
-  await load('sigil');
-  const got = [];
-  try {
-    for (const w of [900, 1100, 1400]) {
-      await send('Emulation.setDeviceMetricsOverride', { width: w, height: 860, deviceScaleFactor: 1, mobile: false }); await sleep(400);
-      const r = await ev("const a = document.getElementById('empty-art').getBoundingClientRect(), l = document.getElementById('left').getBoundingClientRect(); return { art: [a.left, a.right, a.top, a.bottom].map(Math.round), left: [l.left, l.right, l.top, l.bottom].map(Math.round), inner: innerWidth };");
-      const overlap = Math.max(0, Math.min(r.art[1], r.left[1]) - Math.max(r.art[0], r.left[0])) * Math.max(0, Math.min(r.art[3], r.left[3]) - Math.max(r.art[2], r.left[2]));
-      got.push(`${w}: art x ${r.art[0]}-${r.art[1]}, #left x ${r.left[0]}-${r.left[1]}, overlap ${overlap} px²`);
-      assert.equal(overlap, 0, `window ${w}: the art (x ${r.art[0]}-${r.art[1]}) overlaps #left (x ${r.left[0]}-${r.left[1]}) by ${overlap} px²`);
-      assert.ok(r.art[1] <= r.inner, `window ${w}: the art ends inside the window (${r.art[1]} of ${r.inner})`);
-    }
-  } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
-  t.diagnostic(got.join('; '));
 });
 
 // the fine tiles' own sizes in pixels (scripts/texture_tiles.js); Aqua's soft noise has no pixel structure to keep and is sized in CSS px
