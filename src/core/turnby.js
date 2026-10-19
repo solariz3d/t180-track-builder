@@ -25,7 +25,7 @@
 'use strict';
 const D = require('./document.js');
 const { extend, bloss } = require('./extend.js');
-const { basis } = require('../../tools/piecewise.cjs');
+const { basisN } = require('../../tools/piecewise.cjs');
 
 const SEG_M = 2;               // the adapter's segment (toSegments segM): the heading is integrated on its ends
 const TURN_TOL = 1e-5;         // rad (0.00057°): the bar is 0.01°; kh's storage (1e-9 rad/m) leaves a floor near 1e-7 rad on a 750 m piece, so 1e-7 never met it
@@ -39,7 +39,7 @@ function turnWeights(P) {
   const w = new Float64Array(m);
   let prev = null;
   for (let j = 0; j <= n; j++) {
-    const s = (P.length * j) / n, b = basis(kv, Math.min(Math.max(s, 0), P.length)), cur = { s, first: b.first, N: Array.from(b.N) };
+    const s = (P.length * j) / n, b = basisN(kv, Math.min(Math.max(s, 0), P.length)), cur = { s, first: b.first, N: Array.from(b.N) };
     if (prev) { const h = cur.s - prev.s; for (let k = 0; k < 4; k++) { w[prev.first + k] += (h / 2) * prev.N[k]; w[cur.first + k] += (h / 2) * cur.N[k]; } }
     prev = cur;
   }
@@ -79,9 +79,25 @@ function symmetricEase(P, ch) {
 
 /** The piece whose channels in `aims` ({ kh: θ, kv: Δp }, rad) change the heading and the pitch by exactly those angles, each ending at rate 0. The two are solved
  *  apart: the heading is ∫kh and the pitch ∫kv on the same segments (adapter.js toSegments), and neither channel enters the other's integral. */
+/** D404: what a solve starts from does not depend on the angle aimed at: Extend's piece with the channels aimed at eased to 0 (the document and the fields without the angle), and the
+ *  heading weights of it (a basis evaluation every 2 m of the piece). A handle drag changes only the angle, so the last few are kept by document and fields (a frozen document, an
+ *  answer that did not throw): the next move starts from them. Nothing here is changed by a solve: the weights are read, and every document it makes is a new one. */
+const START = new WeakMap(), START_MAX = 4;
+function startOf(doc, opts, chs) {
+  let key = null; try { key = JSON.stringify([opts, chs]); } catch (e) { key = null; }
+  let memo = key === null || !Object.isFrozen(doc) ? null : START.get(doc);
+  if (memo && memo.has(key)) return memo.get(key);
+  const d0 = easedPiece(doc, opts, chs), P0 = headOf(d0), out = { d0, P0, w: turnWeights(P0), free: freeOf(P0.channels.kh.length) };
+  if (key !== null && Object.isFrozen(doc) && Object.isFrozen(d0)) {
+    if (!memo) START.set(doc, memo = new Map());
+    if (memo.size >= START_MAX) memo.delete(memo.keys().next().value);
+    memo.set(key, out);
+  }
+  return out;
+}
 function solve(doc, opts, aims) {
   for (const [ch, a] of Object.entries(aims)) if (!Number.isFinite(a)) throw new D.CoreError('BAD_TARGET', `${ch === 'kh' ? 'Turn by' : 'Climb by'} needs a finite angle, got ${a}`);
-  const chs = Object.keys(aims), d0 = easedPiece(doc, opts, chs), P0 = headOf(d0), w = turnWeights(P0), free = freeOf(P0.channels.kh.length), cs = {};
+  const chs = Object.keys(aims), { d0, P0, w, free } = startOf(doc, opts, chs), cs = {};
   for (const ch of chs) {
     const st = symmetricEase(P0, ch), t1 = st ? turnOf(w, st.shape) : 0;
     if (!st || !(Math.abs(t1) > 0)) return { doc: null, converged: false, short: true };
@@ -133,6 +149,22 @@ const extendClimbBy = (doc, opts, dp) => extendBy(doc, opts, { kv: dp });
 /** D331 B: Extend with the turn and the climb fields read as corners when opts.turnDeg / opts.climbDeg are given (those exact changes of heading and pitch,
  *  each ending at rate 0), else Extend as it always was. */
 function extendCorner(doc, opts = {}) {
+  // D404: the panel asks for the same piece three times for every move of a handle drag (the readout's numbers, the corner's, the ghost), and each is the solve below
+  // (about 2.5 ms on a 2,000 m piece). The last few answers for one document are kept by its fields, so the move costs one solve. A document is frozen and so is
+  // what this returns, and an answer that throws is never kept: the same call is the same document, or the same error.
+  let key = null; try { key = JSON.stringify(opts); } catch (e) { key = null; }
+  let memo = key === null ? null : MEMO.get(doc);
+  if (memo && memo.has(key)) return memo.get(key);
+  const out = cornerOf(doc, opts);
+  if (key !== null && Object.isFrozen(out) && Object.isFrozen(doc)) {
+    if (!memo) MEMO.set(doc, memo = new Map());
+    if (memo.size >= MEMO_MAX) memo.delete(memo.keys().next().value);
+    memo.set(key, out);
+  }
+  return out;
+}
+const MEMO = new WeakMap(), MEMO_MAX = 6;
+function cornerOf(doc, opts) {
   if (!('turnDeg' in opts) && !('climbDeg' in opts)) return extend(doc, opts);
   const { turnDeg, climbDeg, ...rest } = opts, aims = {};
   for (const [ch, k, v] of [['kh', 'turnDeg', turnDeg], ['kv', 'climbDeg', climbDeg]]) {

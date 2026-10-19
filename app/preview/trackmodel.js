@@ -47,6 +47,9 @@ const keyOf = (seg) => {
 };
 /** m between path stations: the export's (src/export/fromwords.js buildExport `step: 2`) and validation's. */
 const STEP = 2;
+/** D404: a CHEAP ghost (a handle being dragged) puts at most this many path stations on its new pieces, so the mesh it builds on every move of the pointer costs the same at
+ *  1,000 m as at 20,000 m; a ghost shorter than CHEAP_STATIONS x STEP (128 m) is built as it always was. The release builds the full ghost. */
+const CHEAP_STATIONS = 64, CHEAP_SUBSTEP = 4;   // and integrates them in steps of CHEAP_SUBSTEP m (the path's own is 0.25: Gauss-Legendre over a metre is exact to far below a millimetre)
 
 function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   const pathOpts = { step: STEP, ...po };
@@ -174,20 +177,24 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const segs = candidate && detail > 1 ? coarsen(all, detail) : cheap && Array.isArray(all) ? [...all.slice(0, keys.length), ...coarsenRun(all.slice(keys.length), CHEAP_FACTOR)] : all;
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
       const nk = segs.map(keyOf);
+      // D404: a cheap ghost whose new chords are COARSE (the shell's candidate(opts, { coarse }): longer than 2 m) puts at most CHEAP_STATIONS stations on them; one built from 2 m chords has
+      // a station at every chord end whatever the step, so it is built as it always was (and reuses the last one's chords, below)
+      const newSegs = cheap ? segs.slice(keys.length) : [], newLen = newSegs.reduce((a, g) => a + (g.length || 0), 0), step = newLen > CHEAP_STATIONS * STEP && newLen > 2.5 * newSegs.length ? newLen / CHEAP_STATIONS : STEP;
       if (nk.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
       // THE CHEAP GHOST REMEMBERS ITS LAST MESH (2026-10-14, stretching a long piece): a drag rebuilds the candidate on every move, but a length drag leaves most of its
       // segments exactly as they were, so a new piece whose segment key is the last cheap ghost's at the same index keeps its mesh and only moves (geom.reuseMesh, `from`:
       // the placed track is taken as it is). Valid only on the same placed path; any full ghost, update or change of detail forgets it.
-      const reuse = cheap && typeof geom.reuseMesh === 'function' && lastCheap && lastCheap.base === path && lastCheap.from === keys.length ? lastCheap : null;
-      const remember = (gm) => { lastCheap = cheap ? { base: path, from: keys.length, mesh: gm, nk } : null; return gm; };
+      const reuse = cheap && typeof geom.reuseMesh === 'function' && lastCheap && lastCheap.base === path && lastCheap.from === keys.length && lastCheap.step === step ? lastCheap : null;
+      const remember = (gm) => { lastCheap = cheap ? { base: path, from: keys.length, mesh: gm, nk, step } : null; return gm; };
       const meshNew = (p, build) => remember(reuse ? geom.reuseMesh(reuse.mesh, p, segs, nk.map((k, j) => j >= keys.length && k === reuse.nk[j]), { from: keys.length, grow: true }) : build());
-      if (!path) { const p = geom.buildPath(segs, { ...pathOpts, ...(candidate.start ? { start: candidate.start } : {}) }); return { batches: batchesOf(meshNew(p, () => geom.buildMesh(p, segs, meshOpts))), path: p, head: p.head, segments: segs }; }
+      if (!path) { const p = geom.buildPath(segs, { ...pathOpts, step, ...(step > STEP ? { substep: CHEAP_SUBSTEP } : {}), ...(candidate.start ? { start: candidate.start } : {}) }); return { batches: batchesOf(meshNew(p, () => geom.buildMesh(p, segs, meshOpts))), path: p, head: p.head, segments: segs }; }
       if (closed) throw new Error('ghost: a closed loop has no open end');
       // copies: extendPath only pops and pushes these arrays and never edits a sample, and of the blocks it changes only the
       // last one's sample count (so that block is copied); extendMesh only sets new pieces and seams
       const blocks = path.blocks.slice(); blocks[blocks.length - 1] = { ...blocks[blocks.length - 1] };
       const p = { ...path, samples: path.samples.slice(), starts: path.starts.slice(), segFirst: path.segFirst.slice(), segEnd: path.segEnd.slice(), blocks };
       const st = mesh._state, m = { ...mesh, _state: { ...st, pieces: st.pieces.slice(), seams: st.seams.slice() } };
+      p.step = step; if (step > STEP) p.substep = CHEAP_SUBSTEP;   // the ghost's own copy: the placed path keeps its stations (D404)
       geom.extendPath(p, segs);
       const gm = meshNew(p, () => geom.extendMesh(m, p, segs)), from = keys.length;
       return { batches: batchesOf(gm, from), path: p, head: p.head, segments: segs };   // D235: only the NEW pieces' batches are built (it built every batch and kept the new ones)
