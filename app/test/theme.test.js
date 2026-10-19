@@ -8,6 +8,8 @@
 //   · SIGIL's tokens ARE today's literals, so SIGIL draws exactly as before: the 3D view's calls are identical with and without the tokens
 //   · (D394) Settings ▸ Theme: the head reads the saved choice; a fixed theme sets its own skin and its own melody, music (or nothing saved, or saved text
 //     that is broken) keeps the random pick, sigil keeps the random melody under SIGIL; the head never throws
+//   · (D405) Skyline Night: a sixth look on Skyline's melody (the melodies stay four): its own skin, chosen by name or landed on by the random pick in the
+//     lower half of Skyline's quarter, and the boot keeps it over the player's skyline melody
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -65,13 +67,15 @@ test('the page sets the skin in its head, before the first paint, from the same 
     vm.runInNewContext(scripts[0], ctx);
     assert.equal(win.__t180MelodyPick, r, 'the head keeps the number for the player');
     const sound = SOUND.createSound({}, { pick: () => win.__t180MelodyPick, log: () => {} });
-    assert.equal(root.getAttribute('data-theme'), sound.melody, `r = ${r}: the head's skin is the player's melody`);
+    // AMENDED (D405): the rule changed by name: the head's skin is a LOOK, and Skyline Night is a look on Skyline's melody, so the skin's melody is the player's
+    assert.equal(TH.melodyOf(root.getAttribute('data-theme')), sound.melody, `r = ${r}: the head's skin is a look of the player's melody`);
   }
   // the boot hands that number to the player and sets the skin from sound.melody (the player's word is the last one)
   assert.match(HTML, /createSound\(window, \{[^}]*pick: \(\) => \(typeof window\.__t180MelodyPick === 'number' \? window\.__t180MelodyPick : Math\.random\(\)\)/);
   // AMENDED (D394): the rule changed by name: a saved Settings ▸ Theme of sigil shows SIGIL over the player's melody, so the boot sets the skin from the
   // saved choice and sound.melody together (theme.js skinFor); with no fixed theme saved (music), skinFor gives sound.melody, as before
-  assert.match(HTML, /applyTheme\(document, \w+\.skinFor\(window\.__t180Theme, sound\.melody\)\)/);
+  // AMENDED (D405): the boot also hands over the head's look (window.__t180Look), so a random start on Skyline Night is not turned back into Skyline
+  assert.match(HTML, /applyTheme\(document, \w+\.skinFor\(window\.__t180Theme, sound\.melody, window\.__t180Look\)\)/);
 });
 
 const SETTINGS = require(path.join(ADIR, 'settings.js'));
@@ -85,8 +89,9 @@ function runHead(r, win = {}) {
 }
 const savedTheme = (text) => ({ localStorage: { getItem: (k) => (k === 't180.settings.theme' ? text : null), setItem() {} } });
 
-test('D394: Settings ▸ Theme has six choices: music follows the melody, each of the four is its own skin, sigil is none', () => {
-  assert.deepEqual([...TH.CHOICES], ['music', ...SOUND.MELODY_NAMES, 'sigil']);
+// AMENDED (D405): the rule changed by name: seven choices, Skyline Night after Skyline
+test('D394: Settings ▸ Theme has seven choices: music follows the melody, each of the four is its own skin, Skyline Night is its own, sigil is none', () => {
+  assert.deepEqual([...TH.CHOICES], ['music', 'aqua', 'skyline', 'skyline-night', 'glass', 'aurora', 'sigil']);
   assert.deepEqual([...TH.CHOICES], [...SETTINGS.CHOICES.theme], 'the setting takes the same six names');
   for (const m of SOUND.MELODY_NAMES) {
     assert.equal(TH.skinFor('music', m), m, `music: the melody's skin (${m})`);
@@ -98,6 +103,8 @@ test('D394: Settings ▸ Theme has six choices: music follows the melody, each o
 
 test('D394: the head reads the saved theme: a fixed theme sets its own skin AND melody; music, nothing saved and broken saved text keep the random pick; sigil keeps the random melody under SIGIL', () => {
   const NAMES = SOUND.MELODY_NAMES;
+  // AMENDED (D405): the random pick's SKIN is a look: in the lower half of Skyline's quarter (r 0.25 to 0.375) it is Skyline Night, on Skyline's melody
+  const lookAt = (r) => { const m = NAMES[Math.floor(r * NAMES.length)]; return m === 'skyline' && r * NAMES.length - 1 < 0.5 ? 'skyline-night' : m; };
   for (const r of [0, 0.3, 0.6, 0.9999]) {
     const random = NAMES[Math.floor(r * NAMES.length)];
     for (const t of NAMES) {
@@ -109,12 +116,30 @@ test('D394: the head reads the saved theme: a fixed theme sets its own skin AND 
       ['a store that throws', { localStorage: { getItem() { throw new Error('SecurityError: blocked'); } } }],
       ['reading localStorage throws', Object.defineProperty({}, 'localStorage', { get() { throw new Error('SecurityError: no storage'); } })]]) {
       const x = runHead(r, win);
-      assert.equal(x.pick, r, `${why}: the random pick is kept`); assert.equal(x.melody, random, `${why}: the random melody`); assert.equal(x.skin, random, `${why}: its skin`);
+      assert.equal(x.pick, r, `${why}: the random pick is kept`); assert.equal(x.melody, random, `${why}: the random melody`); assert.equal(x.skin, lookAt(r), `${why}: its look`);
       assert.equal(x.theme, 'music', `${why}: read as music`);
     }
     const s = runHead(r, savedTheme('"sigil"'));
     assert.equal(s.skin, null, 'sigil: no data-theme (SIGIL)'); assert.equal(s.pick, r, 'sigil: the pick stays random'); assert.equal(s.melody, random); assert.equal(s.theme, 'sigil');
   }
+});
+
+test('D405: Skyline Night is a sixth look on Skyline\'s melody: its own skin, chosen by name or by the random pick, kept by the boot', () => {
+  assert.deepEqual([...TH.LOOKS], [...SOUND.MELODY_NAMES, 'skyline-night'], 'the four melodies\' looks and Skyline Night; the melodies stay four');
+  assert.equal(TH.melodyOf('skyline-night'), 'skyline'); for (const m of SOUND.MELODY_NAMES) assert.equal(TH.melodyOf(m), m);
+  for (const x of ['sigil', 'music', 'zzz', undefined, null, 'Skyline-Night']) assert.equal(TH.melodyOf(x), null, `${String(x)} is no look`);
+  const root = fakeRoot(); assert.equal(TH.applyTheme({ documentElement: root }, 'skyline-night'), 'skyline-night'); assert.equal(root.getAttribute('data-theme'), 'skyline-night');
+  for (const m of SOUND.MELODY_NAMES) assert.equal(TH.skinFor('skyline-night', m), 'skyline-night', `chosen by name, over ${m}`);
+  assert.equal(TH.skinFor('music', 'skyline', 'skyline-night'), 'skyline-night', 'a random start on Skyline Night keeps it over the skyline melody');
+  assert.equal(TH.skinFor('music', 'glass', 'skyline-night'), 'glass', 'a look that is not the melody\'s is not kept');
+  assert.equal(TH.skinFor('sigil', 'skyline', 'skyline-night'), null, 'sigil stays none'); assert.equal(TH.skinFor('skyline', 'skyline', 'skyline-night'), 'skyline', 'a fixed theme is its own');
+  assert.deepEqual([...SETTINGS.CHOICES.theme], [...TH.CHOICES], 'the setting takes it');
+  for (const r of [0, 0.3, 0.6, 0.9999]) { const x = runHead(r, savedTheme('"skyline-night"')); assert.deepEqual([x.skin, x.melody, x.theme], ['skyline-night', 'skyline', 'skyline-night'], `r = ${r}, saved skyline-night`); }
+  for (const [r, skin] of [[0.1, 'aqua'], [0.25, 'skyline-night'], [0.3, 'skyline-night'], [0.3749, 'skyline-night'], [0.375, 'skyline'], [0.4, 'skyline'], [0.6, 'glass']]) {
+    const x = runHead(r, {}); assert.equal(x.skin, skin, `r = ${r}, nothing saved: ${skin}`); assert.equal(x.melody, TH.melodyOf(skin), `r = ${r}: its melody`); assert.equal(x.pick, r, 'the pick is kept');
+  }
+  for (const r of [0.25, 0.3]) assert.equal(runHead(r, savedTheme('"skyline"')).skin, 'skyline', `r = ${r}, saved skyline: Skyline, never the night`);
+  assert.ok(HTML.includes('<link rel="stylesheet" href="themes/skyline-night.css">'), 'the page links its skin');
 });
 
 test('the reader understands every colour form a skin may write', () => {
@@ -204,12 +229,13 @@ test('SIGIL\'s 3D frame is the same, call for call, with its tokens applied; a s
   assert.throws(() => r2.setTheme({ sky: [1, 2] }), /three numbers from 0 to 1/);
 });
 
-test('a skin is styling only: no theme file sets a property that moves or sizes a box, and each skin the page links is a melody\'s', () => {
+// AMENDED (D405): the rule changed by name: a skin is named for a LOOK (Skyline Night is a look on Skyline's melody), not only for a melody
+test('a skin is styling only: no theme file sets a property that moves or sizes a box, and each skin the page links is a look\'s', () => {
   const dir = path.join(ADIR, 'themes'), files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.css')) : [];
   const BOX = /^(width|height|min-width|max-width|min-height|max-height|margin(-\w+)?|padding(-\w+)?|border(-top|-right|-bottom|-left)?|border(-top|-right|-bottom|-left)?-width|border-width|font(-\w+)?|letter-spacing|word-spacing|line-height|text-transform|white-space|top|left|right|bottom|inset(-\w+)?|position|display|flex(-\w+)?|grid(-\w+)?|gap|row-gap|column-gap|order|align-\w+|justify-\w+|place-\w+|float|box-sizing|transform|translate|rotate|scale|zoom|content|overflow(-\w+)?|writing-mode|direction)$/;
   for (const f of files) {
     const css = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''), name = f.slice(0, -4);
-    assert.ok(TH.THEMES.includes(name), `${f} is named for a melody`);
+    assert.ok(TH.LOOKS.includes(name), `${f} is named for a look`);
     for (const m of css.matchAll(/(?:^|[;{])\s*([a-z-]+)\s*:/g)) assert.ok(!BOX.test(m[1]), `${f} sets ${m[1]}, which can move or size a box`);
     for (const sel of css.replace(/@[^{]+\{/g, '').matchAll(/(^|\})\s*([^{}@]+)\{/g)) for (const one of sel[2].split(',')) if (!/^\s*(from|to|\d+%)/.test(one)) assert.match(one, new RegExp(`\\[data-theme="${name}"\\]`), `${f}: every rule is scoped to its own skin (${one.trim()})`);
     assert.ok(HTML.includes(`<link rel="stylesheet" href="themes/${f}">`), `the page links ${f}`);

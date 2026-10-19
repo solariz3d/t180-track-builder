@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Skyline Night, a dark Skyline.** Settings ▸ Theme has a new look after Skyline: the same frosted glass and glossy buttons, at night, with deep navy panels, a lit sky-blue accent, a warm city glow along the horizon where Skyline has its sun, and a few stars overhead. It plays Skyline's melody, so the melodies stay four. Random can land on it, both when the builder starts and when you choose Random, and a theme saved by an earlier version still loads as it did. Every text keeps a contrast of at least 4.5:1, and the warning colours keep their hue. (`app/themes/skyline-night.css`, `app/preview/sky/city.js`, `app/lib/theme.js`, `app/index.html`.)
+
 ### Changed
 - **Glass's night sky is crisp.** Its stars were soft blurs about five pixels across on a 2560 × 1440 screen, and the moon's edge faded over about sixteen, so the sky looked low resolution. Each star is now a point about one screen pixel across, each with its own brightness, and there are more of them, still sparse. The moon has a clean edge a pixel and a half wide. The thin band of coloured light low on the horizon is broken into fine filaments along its length. The sizes follow the screen's own pixels, so the stars stay sharp at any window size. Nothing moves across the sky, and the band near the horizon stays as quiet as before. (`app/preview/sky/prism.js`; the sky pass now tells a sky the size of one pixel, `app/preview/renderer.js`.) Test: `app/test/sky-prism-crisp.test.js`.
 

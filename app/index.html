@@ -9,13 +9,18 @@
    (app/lib/theme.js). The names are app/sound.js MELODY_NAMES in their order (app/test/theme.test.js holds the two equal).
    D394, SETTINGS ▸ THEME: the saved choice (t180.settings.theme, app/settings.js) is read here, before settings.js loads. A fixed theme sets the pick inside its
    own quarter, so its skin and its own melody agree; sigil keeps the random pick (SIGIL has no melody of its own) and removes the skin; music, nothing saved,
-   or saved text that cannot be read is today's random pick. Nothing here may throw before the first paint. */
+   or saved text that cannot be read is today's random pick. Nothing here may throw before the first paint.
+   D405, SKYLINE NIGHT: a look on Skyline's melody. Saved, it takes the pick into the lower half of Skyline's quarter; with music the lower half of that quarter
+   is the night too, so Random can land on it (one start in eight); window.__t180Look names the look for the boot. */
 (function () {
   var names = ['aqua', 'skyline', 'glass', 'aurora'], r = Math.random(), theme = 'music', root = document.documentElement;
-  try { var saved = JSON.parse(window.localStorage.getItem('t180.settings.theme')); if (saved === 'sigil' || names.indexOf(saved) >= 0) theme = saved; } catch (e) { /* unreadable: music */ }
+  try { var saved = JSON.parse(window.localStorage.getItem('t180.settings.theme')); if (saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved; } catch (e) { /* unreadable: music */ }
   if (names.indexOf(theme) >= 0) r = (names.indexOf(theme) + 0.5) / names.length;
-  window.__t180MelodyPick = r; window.__t180Theme = theme;
-  if (theme === 'sigil') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', names[Math.floor(r * names.length)]);
+  if (theme === 'skyline-night') r = (names.indexOf('skyline') + 0.25) / names.length;
+  var look = names[Math.floor(r * names.length)];
+  if (look === 'skyline' && theme !== 'skyline' && r * names.length - names.indexOf('skyline') < 0.5) look = 'skyline-night';
+  window.__t180MelodyPick = r; window.__t180Theme = theme; window.__t180Look = look;
+  if (theme === 'sigil') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', look);
 })();</script>
 <style>
   /* SIGIL (2026-10-14): elegant minimalism with an esoteric-techno feel. Black and bone, hairline borders, ONE accent (pale ultraviolet); the warning
@@ -248,6 +253,7 @@
 </style>
 <!-- D381: the skins, one per melody; each is scoped to its own [data-theme] and does nothing until the head script above names it -->
 <link rel="stylesheet" href="themes/skyline.css">
+<link rel="stylesheet" href="themes/skyline-night.css">
 <link rel="stylesheet" href="themes/aurora.css">
 <link rel="stylesheet" href="themes/aqua.css">
 <link rel="stylesheet" href="themes/glass.css">
@@ -476,7 +482,7 @@
       // D381: the player draws its melody from the number the head drew, and the skin follows the melody it picked (app/lib/theme.js)
       const sound = (await loadCjs('app/sound.js', get)).createSound(window, { base: 'sounds/', pick: () => (typeof window.__t180MelodyPick === 'number' ? window.__t180MelodyPick : Math.random()) });
       // D394: a saved Settings ▸ Theme of sigil shows SIGIL over the melody; music shows the melody's skin, a fixed theme its own (the head set both)
-      const TH0 = await loadCjs('app/lib/theme.js', get); TH0.applyTheme(document, TH0.skinFor(window.__t180Theme, sound.melody)); soundNow = sound;
+      const TH0 = await loadCjs('app/lib/theme.js', get); TH0.applyTheme(document, TH0.skinFor(window.__t180Theme, sound.melody, window.__t180Look)); soundNow = sound;
       let before = shell.getState(); shell.subscribe((st) => { const p = before; before = st; sound.handle(p, st); });
       const mute = $('sound-mute'), vol = $('sound-volume');
       mute.checked = sound.muted; vol.value = String(Math.round(sound.volume * 100));
@@ -578,8 +584,9 @@
       // D401: Random (saved as music) picks one of the other looks at once, and its melody follows as a fixed theme's does, so the choice visibly does something
       const THm = await loadCjs('app/lib/theme.js', get);
       const onTheme = (v) => {
-        const others = THm.THEMES.filter((t) => t !== document.documentElement.getAttribute('data-theme')), pick = v === 'music' ? others[Math.floor(Math.random() * others.length)] : null;
-        if (soundNow) { try { soundNow.setMelody(THm.THEMES.includes(v) ? v : pick || soundNow.melody); } catch (e) { console.error(`the theme's melody could not start: ${e && e.message}`); } }
+        // D405: Random picks among the looks (Skyline Night among them), and a look's melody is melodyOf (Skyline Night plays Skyline's)
+        const others = THm.LOOKS.filter((t) => t !== document.documentElement.getAttribute('data-theme')), pick = v === 'music' ? others[Math.floor(Math.random() * others.length)] : null;
+        if (soundNow) { try { soundNow.setMelody(THm.LOOKS.includes(v) ? THm.melodyOf(v) : pick ? THm.melodyOf(pick) : soundNow.melody); } catch (e) { console.error(`the theme's melody could not start: ${e && e.message}`); } }
         THm.applyTheme(document, THm.skinFor(v, pick || (soundNow ? soundNow.melody : document.documentElement.getAttribute('data-theme'))));
       };
       settings.on('theme', onTheme);

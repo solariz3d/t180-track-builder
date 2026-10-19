@@ -24,10 +24,10 @@
 //       sin(dot(dir, axis) * k)) is not refused.
 'use strict';
 
-const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora']);
+const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city']);   // D405: city, Skyline Night's
 // each required by name, written out: the page's loader (app/lib/cjs.js) fetches only the requires it can read in the source. Requiring a module costs
 // nothing until its source() is called, so a stub that is not built yet throws only when a skin names it.
-const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js') };
+const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js'), city: require('./city.js') };
 
 /** D391: every way a style's GLSL breaks the two rules above, as readable lines (empty: it keeps them). Comments are not code, so they are skipped. */
 function contractProblems(style, src) {
