@@ -11,7 +11,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), path = require('path'), os = require('os'), { spawn } = require('child_process');
-const { chromePath } = require('./soundrender.js');
+const { chromePath, launchChrome, connect } = require('./soundrender.js');
 const ADIR = process.env.APP_DIR || path.join(__dirname, '..');
 const R = require(path.join(ADIR, 'preview', 'renderer.js'));
 const SKY = require(path.join(ADIR, 'preview', 'sky', 'index.js'));
@@ -58,13 +58,9 @@ const pose = (pitchDeg) => { const p = pitchDeg * Math.PI / 180; return { eye: [
 let ch, ws, dir, ev;
 test.before(async () => {
   if (skip) return;
-  const port = 9300 + Math.floor(Math.random() * 600); dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180sky-'));
-  ch = spawn(CHROME, ['--headless=new', '--enable-unsafe-swiftshader', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', 'about:blank'], { stdio: 'ignore' });
-  let tgt; for (let i = 0; i < 100 && !tgt; i++) { await sleep(200); try { tgt = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === 'page'); } catch (e) { /* not up yet */ } }
-  if (!tgt) throw new Error(`headless Chrome did not answer on port ${port}`);
-  ws = new WebSocket(tgt.webSocketDebuggerUrl); await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error('the DevTools socket failed')); });
-  let id = 0; const pend = new Map(); ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } };
-  const send = (method, params = {}) => new Promise((r) => { const i = ++id; pend.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+  // D400: a free port, this Chrome's own (launchChrome checks the browser's pid), and a socket that rejects waiting sends when it closes
+  let tgt, send; ({ ch, dir, tgt } = await launchChrome(CHROME, ['--enable-unsafe-swiftshader'], 't180sky-'));
+  ({ ws, send } = await connect(tgt.webSocketDebuggerUrl));
   ev = async (expr) => { const d = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 500)}`); return d.result.result.value; };
   await ev(PAGE);
 });

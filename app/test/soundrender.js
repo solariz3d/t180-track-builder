@@ -2,6 +2,8 @@
 // Used by app/test/sound-bands.test.js and by hand: node app/test/soundrender.js OUTDIR writes each clip as a 16-bit stereo 48 kHz WAV.
 //
 //   chromePath()                    the Chrome to use (CHROME_PATH, else the usual Windows place), or null when there is none
+//   launchChrome(exe, args, prefix) -> { ch, dir, port, tgt }   (D400) headless Chrome on a free port, attached only if that port's browser is the one it started
+//   connect(url, onEvent)           -> { ws, send }   (D400) a DevTools socket whose waiting sends are rejected when it closes, so a lost browser fails fast
 //   renderClips(src, clips, o)     -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }; o.samples = a folder; o.seed (default SEED)
 //                                   of the four slot WAVs (app/sounds): the engine is handed them (useSamples) before each clip, as the app does once they load;
 //                                   o.melody (D375) = which of the engine's melodies place and undo play (the engine's first when none is given)
@@ -10,7 +12,7 @@
 //   lufs(clip)                      integrated loudness, ITU-R BS.1770-4 (K-weighting, 400 ms blocks with 75% overlap, gates at -70 LUFS and -10 LU)
 //   CLIPS                           the nine sounds as one hears them: a single tick, a drag on each handle, a place, four places, four undos, the loop close
 'use strict';
-const { spawn } = require('child_process'), fs = require('fs'), path = require('path'), os = require('os');
+const { spawn } = require('child_process'), fs = require('fs'), path = require('path'), os = require('os'), net = require('net');
 
 const CLIPS = Object.freeze({
   tick_single: [1.0, 'at(0.05, () => E.tick({ midi: M.MEL128[0] }));'],
@@ -33,20 +35,58 @@ function chromePath() {
 const SEED = 1;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// D400: THE CHROME A TEST TALKS TO IS THE ONE IT STARTED. A port drawn at random from 600 could be one another test's Chrome already held: the new Chrome
+// could not bind it, the test drove the OTHER browser, and when that test closed its Chrome the socket went with it and a reply never came, so a row hung
+// until a time limit cancelled it (sky-dither's 1-of-2 failure, reproduced with every port forced to one and the second copy 300 ms late: A's D398 review).
+/** A port the OS says is free now (listen on 0, read it, close), as scripts/prove_render.js takes one. */
+function freePort() { return new Promise((res, rej) => { const s = net.createServer(); s.once('error', rej); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); }); }
+/**
+ * A socket to a DevTools target: send(method, params) -> the reply by id; any other message goes to onEvent. When the socket closes, every send still
+ * waiting is rejected, and a later send is rejected at once, so a lost browser fails the row instead of hanging it.
+ */
+async function connect(url, onEvent = null) {
+  const ws = new WebSocket(url); await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error('the DevTools socket failed')); });
+  let id = 0, closed = false; const pend = new Map();
+  ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id).res(d); pend.delete(d.id); } else if (onEvent) onEvent(d); };
+  ws.onclose = () => { closed = true; for (const [i, p] of pend) p.rej(new Error(`the DevTools socket closed with no reply to ${p.method} (#${i})`)); pend.clear(); };
+  const send = (method, params = {}) => new Promise((res, rej) => {
+    if (closed) { rej(new Error(`the DevTools socket is closed: ${method} not sent`)); return; }
+    const i = ++id; pend.set(i, { res, rej, method }); ws.send(JSON.stringify({ id: i, method, params }));
+  });
+  return { ws, send };
+}
+/**
+ * Start headless Chrome on a free port with its own profile folder, and attach only if that port's browser is this Chrome: the browser names its own pid
+ * (SystemInfo.getProcessInfo, type "browser"), and it must be the pid spawned here, as prove_render.js's checkOwner refuses a port another process holds.
+ * -> { ch, dir, port, tgt } (tgt = its first page target). On any failure this Chrome is killed and the error thrown.
+ */
+async function launchChrome(exe, args, prefix) {
+  const port = await freePort(), dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const ch = spawn(exe, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', ...args, 'about:blank'], { stdio: 'ignore' });
+  try {
+    let ver; for (let i = 0; i < 100 && !ver; i++) { await sleep(200); try { ver = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); } catch (e) { /* not up yet */ } }
+    if (!ver) throw new Error(`headless Chrome did not answer on port ${port}`);
+    const b = await connect(ver.webSocketDebuggerUrl);
+    let owner; try { owner = ((await b.send('SystemInfo.getProcessInfo')).result.processInfo.find((p) => p.type === 'browser') || {}).id; } finally { b.ws.close(); }
+    if (owner !== ch.pid) throw new Error(`the DevTools port ${port} answers for pid ${owner}, not the Chrome this test started (pid ${ch.pid}): refusing to attach`);
+    let tgt; for (let i = 0; i < 50 && !tgt; i++) { try { tgt = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === 'page'); } catch (e) { /* not listed yet */ } if (!tgt) await sleep(200); }
+    if (!tgt) throw new Error(`headless Chrome on port ${port} has no page target`);
+    return { ch, dir, port, tgt };
+  } catch (e) {
+    ch.kill(); await sleep(300); try { fs.rmSync(dir, { recursive: true, force: true }); } catch (x) { /* Chrome may still hold it */ }
+    throw e;
+  }
+}
+
 /** Render each clip in an OfflineAudioContext (48 kHz stereo) in headless Chrome; the engine runs at level 1, as the sketch page and render-builder.js ran it. */
-async function renderClips(src, clips = CLIPS, { port = 9300 + Math.floor(Math.random() * 600), samples = null, seed = SEED, melody = null } = {}) {
+async function renderClips(src, clips = CLIPS, { samples = null, seed = SEED, melody = null } = {}) {
   if (melody !== null && typeof melody !== 'string') throw new Error(`soundrender: a melody is one of the engine's MELODY_NAMES, got ${melody}`);
   if (!Number.isInteger(seed) || seed < 0) throw new Error(`soundrender: a seed is a whole number 0 or more, got ${seed}`);
   const exe = chromePath(); if (!exe) throw new Error('soundrender: no Chrome found (set CHROME_PATH)');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180snd-test-'));
-  const ch = spawn(exe, ['--headless=new', `--remote-debugging-port=${port}`, '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${dir}`, '--no-first-run', 'about:blank'], { stdio: 'ignore' });
+  let ch, dir, tgt; try { ({ ch, dir, tgt } = await launchChrome(exe, ['--autoplay-policy=no-user-gesture-required'], 't180snd-test-')); } catch (e) { throw new Error(`soundrender: ${e.message}`); }
   let ws;
   try {
-    let tgt; for (let i = 0; i < 100 && !tgt; i++) { await sleep(200); try { tgt = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === 'page'); } catch (e) { /* not up yet */ } }
-    if (!tgt) throw new Error(`soundrender: headless Chrome did not answer on port ${port}`);
-    ws = new WebSocket(tgt.webSocketDebuggerUrl); await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error('soundrender: the DevTools socket failed')); });
-    let id = 0; const pend = new Map(); ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } };
-    const send = (method, params = {}) => new Promise((r) => { const i = ++id; pend.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+    let send; try { ({ ws, send } = await connect(tgt.webSocketDebuggerUrl)); } catch (e) { throw new Error(`soundrender: ${e.message}`); }
     const ev = async (e) => { const d = await send('Runtime.evaluate', { expression: e, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`soundrender: page error ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 400)}`); return d.result.result.value; };
     await ev(`window.__M = (() => { const module = { exports: {} }; ${src}\n; return module.exports; })(); window.__SAMP = null; true`);
     if (samples) {   // each slot's two channels go over in pieces, into one AudioBuffer per slot that every clip's context can play
@@ -123,7 +163,7 @@ function wav({ L, R, sampleRate }) {
   return b;
 }
 
-module.exports = { CLIPS, SEED, chromePath, renderClips, readWav, peakDb, lufs, kWeight, wav };
+module.exports = { CLIPS, SEED, chromePath, freePort, connect, launchChrome, renderClips, readWav, peakDb, lufs, kWeight, wav };
 
 if (require.main === module) {
   const out = process.argv[2]; if (!out) { console.error('usage: node app/test/soundrender.js OUTDIR [--synth]'); process.exit(1); }
