@@ -65,7 +65,8 @@ function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, 
     // itself (ctx.repickTheme, app/index.html), so the click picks a look on a fresh start too (A's read of D401, §8). Only when music was already SAVED: with nothing saved
     // (a fresh install) settings.set is a change, undefined to music, and its listener picks already; asking again picked twice, and 1 time in 3 came back to the start look
     { section: 'Theme' }, ...choice('theme', [['music', 'Random', 'a look and its own melody, picked at random each start, and picked again when you choose this'],
-      ...[['aqua', 'Aqua'], ['skyline', 'Skyline'], ['glass', 'Glass'], ['aurora', 'Aurora']].map(([v, l]) => [v, l, `${l}'s look and its own melody, every start; the melody changes a moment after the look, once its files are in`]),
+      ...[['aqua', 'Aqua'], ['skyline', 'Skyline'], ['glass', 'Glass'], ['aurora', 'Aurora']].map(([v, l]) => [v, l, `${l}'s look and its own melody, every start; the melody changes a moment after the look, once its files are in`])
+        .flatMap((it) => (it[0] === 'skyline' ? [it, ['skyline-night', 'Skyline Night', 'Skyline at night: navy glass, a city glow on the horizon and a few stars, with Skyline\'s melody']] : [it])),   // D405
       ['sigil', 'SIGIL', 'the black-and-bone look; it has no melody of its own, so the melody is still picked at random each start']])
       .map((it, i) => (i === 0 ? { ...it, toggle: (on, c) => { const was = c.settings.get('theme', undefined); c.settings.set('theme', 'music'); if (was === 'music' && typeof c.repickTheme === 'function') c.repickTheme(); } } : it)),
     { section: 'Turn & climb read as' }, ...choice('turnClimbAs', [['corner', 'corner °, ends straight'], ['rate', 'rate °/100 m']]),

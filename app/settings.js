@@ -17,7 +17,7 @@
 'use strict';
 
 const KEYS = Object.freeze(['turnClimbAs', 'dragHandles', 'colourByGrip', 'gridStep', 'mirrorOnInsert', 'csp', 'author', 'theme']);   // D365: author, the name an export writes (app/menubar/items.js authorName); D394: theme, Settings ▸ Theme
-const CHOICES = Object.freeze({ theme: Object.freeze(['music', 'aqua', 'skyline', 'glass', 'aurora', 'sigil']) });
+const CHOICES = Object.freeze({ theme: Object.freeze(['music', 'aqua', 'skyline', 'skyline-night', 'glass', 'aurora', 'sigil']) });   // D405: skyline-night, Skyline Night
 const PREFIX = 't180.settings.';
 const SHARED = '__t180Settings';
 

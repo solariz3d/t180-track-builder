@@ -83,15 +83,16 @@ test('row 6: two copies of the module share one instance: a set through one is r
   assert.equal(store.getItem('t180.settings.colourByGrip'), 'true');
 });
 
-test('row 7 (D394): theme takes one of its six names, saved and read back; any other value is refused by name; a saved name nothing knows gives the fallback', () => {
+// AMENDED (D405): the rule changed by name: a seventh name, skyline-night (Skyline Night)
+test('row 7 (D394): theme takes one of its seven names, saved and read back; any other value is refused by name; a saved name nothing knows gives the fallback', () => {
   const store = memStore(), s = S.createSettings(store);
-  assert.deepEqual([...S.CHOICES.theme], ['music', 'aqua', 'skyline', 'glass', 'aurora', 'sigil']);
+  assert.deepEqual([...S.CHOICES.theme], ['music', 'aqua', 'skyline', 'skyline-night', 'glass', 'aurora', 'sigil']);
   for (const v of S.CHOICES.theme) {
     s.set('theme', v);
     assert.equal(S.createSettings(store).get('theme', 'music'), v, `${v} survives a reload`);
     assert.equal(store.getItem('t180.settings.theme'), JSON.stringify(v));
   }
-  for (const bad of ['zzz', '', 'Aqua', 'random', true, 3]) assert.throws(() => s.set('theme', bad), /SETTINGS_VALUE: "theme" is one of music, aqua, skyline, glass, aurora, sigil/, String(bad));
+  for (const bad of ['zzz', '', 'Aqua', 'random', true, 3]) assert.throws(() => s.set('theme', bad), /SETTINGS_VALUE: "theme" is one of music, aqua, skyline, skyline-night, glass, aurora, sigil/, String(bad));
   assert.equal(s.get('theme', 'music'), 'sigil', 'a refused value changes nothing');
   for (const text of ['"neon"', '42', 'true', 'null', '{"a":1}']) {
     store.setItem('t180.settings.theme', text);
