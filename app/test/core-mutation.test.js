@@ -106,7 +106,8 @@ const MUTATIONS = [
     from: 'closed: !!d.closed, start: startOf(d),', to: 'closed: !!d.closed,', caughtBy: 'a lap that starts pitched' },
 ];
 
-function runMutant(m) {
+// D412: `extra` is IR.narrowArgs(caughtBy) for a run narrowed to the named test; empty, the run is whole, as before
+function runMutant(m, extra = []) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-mut-')), app = path.join(dir, 'app');
   try {
     for (const d of ['core', 'preview', 'camera', 'export', 'lib', 'testhook', 'validate-ui']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });
@@ -117,7 +118,7 @@ function runMutant(m) {
     const f = m.root === 'src' ? path.join(dir, 'src', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
     const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
-    const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), '--test-concurrency=4', ...TESTS.map((t) => path.join(app, 'test', t))],
+    const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), ...extra, '--test-concurrency=4', ...TESTS.map((t) => path.join(app, 'test', t))],
       { env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), encoding: 'utf8', timeout: 600000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
@@ -134,13 +135,24 @@ function runMutant(m) {
       const exits = IR.fileExitsIn(tap);
       if (!exits.length || TESTS.length > 1) throw new Error(IR.neverReported(crashed, exits, TESTS.length));
     }
-    return { applied, n, caught, failed: [...new Set(failed)] };
+    return { applied, n, caught, failed: [...new Set(failed)], ran: IR.ran(out), reported: IR.reported(out, m.caughtBy) };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-test('control: the unmutated temp copy passes every core-shell test', () => {
-  const r = runMutant({ id: 'control', file: 'core/panel.js', from: null, to: null, caughtBy: '(no test is named this)' });
+// D412: the caughtBy patterns whose mutants may run narrowed, filled by the control below. A pattern missing here (the control did not run, or
+// its narrowed control failed, ran no row, or never reported the named test) keeps its mutants whole
+const NARROW = new Map();
+test('control: the unmutated temp copy passes every core-shell test', (t) => {
+  const control = { id: 'control', file: 'core/panel.js', from: null, to: null, caughtBy: '(no test is named this)' };
+  const r = runMutant(control);
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
+  // D412: and narrowed once per distinct caughtBy; each must pass alone, or its mutants stay whole (said, not failed: whole is the safe reading)
+  for (const p of new Set(MUTATIONS.map((m) => m.caughtBy))) {
+    const n = runMutant({ ...control, caughtBy: p }, IR.narrowArgs(p));
+    NARROW.set(p, n.failed.length === 0 && n.ran.tests > 0 && n.reported);
+    if (!NARROW.get(p)) t.diagnostic(`D412 whole: "${p}" (narrowed control: ${n.failed.length} failing, ${n.ran.tests} rows ran, named test reported ${n.reported})`);
+    else if (n.ran.tests > 1 || n.ran.suites) t.diagnostic(`D412 wide: "${p}" runs ${n.ran.tests} rows${n.ran.suites ? ` and ${n.ran.suites} suite(s)` : ''}`);
+  }
 });
 // D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
 // it looks for '.test.js', which every dead file's own ✖ line contains, so a dead file's line must not count as the catch
@@ -172,8 +184,9 @@ test('a load throw in one file does not hide a crash after a failing row in anot
   assert.match(said, IR.NOT_TESTED_LOAD);
 });
 for (const m of MUTATIONS) {
-  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
-    const r = runMutant(m);
+  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, (t) => {
+    const r = IR.narrowedFirst(runMutant, m, NARROW.get(m.caughtBy) === true);   // D412: narrowed first; any miss is re-run whole, and that verdict stands
+    t.diagnostic(`D412 path: ${r.narrowed ? 'narrowed' : 'whole'}`);   // which run gave the verdict: a duration cannot tell a slow narrowed run from a re-run
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" occurs ${r.n} times in app/${m.file}`);
     assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);
   });

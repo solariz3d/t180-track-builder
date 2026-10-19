@@ -113,3 +113,65 @@ test('neverReported names every file that ended on its own and the file count, b
   assert.equal(IR.neverReported([], [], 2), 'the named test never reported: the mutant was NOT TESTED');
   assert.doesNotMatch(IR.neverReported(), IR.NOT_TESTED_LOAD);
 });
+// D412: a mutant runs NARROWED to its named test first (--test-name-pattern); a catch there stands, anything else is re-run whole and the
+// whole run's verdict stands, so narrowing can only make a catch faster, never change a verdict
+function narrowRun(file, caughtBy) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-inner-narrow-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'n.test.js'), file);
+    const r = spawnSync(process.execPath, ['--test', ...IR.narrowArgs(caughtBy), '--test-concurrency=1', path.join(dir, 'n.test.js')],
+      { cwd: dir, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), encoding: 'utf8', timeout: 60000 });
+    if (r.error) throw r.error;
+    return IR.ran((r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+test('narrowArgs runs only the test whose name holds caughtBy, read literally: regex characters in the name are escaped (D412)', () => {
+  const file = "const test = require('node:test');\n" +
+    "test('D242: after a 30°/100m turn, Straight (1)', () => {});\ntest('D242: after a 30°/100m turn, Straight [2]', () => {});\ntest('aXb', () => {});\ntest('a.b', () => {});\n";
+  assert.deepEqual(narrowRun(file, 'Straight (1)'), { tests: 1, suites: 0 });
+  assert.deepEqual(narrowRun(file, 'Straight [2]'), { tests: 1, suites: 0 });
+  assert.deepEqual(narrowRun(file, 'a.b'), { tests: 1, suites: 0 }, 'a dot matched any character');
+  assert.deepEqual(narrowRun(file, 'D242: after a 30°/100m turn'), { tests: 2, suites: 0 }, 'a shared prefix narrows to every test that holds it');
+  assert.deepEqual(narrowRun(file, 'no test is named this'), { tests: 0, suites: 0 }, 'a file with no match is reported as one passing test of its own');
+  const suite = "const { describe, it } = require('node:test');\ndescribe('a block named alike', () => { it('one', () => {}); it('two', () => {}); });\n";
+  // the block closes with a top-level row of its own, so it reads as 1 row; suites > 0 is what tells a block from a test
+  assert.deepEqual(narrowRun(suite, 'a block named alike'), { tests: 1, suites: 1 }, 'a pattern that names a describe block runs the block, and shows as a suite');
+});
+test('ran counts the top-level rows that ran: not a file\'s own row, not the failing-tests recap; no summary reads suites null (D412)', () => {
+  const out = '✔ a row (1.2ms)\n✖ the named row (3ms)\n✔ C:\\x\\b.test.js (40ms)\n  ✔ a subtest (1ms)\nℹ tests 4\nℹ suites 0\n\n✖ failing tests:\n\n✖ the named row (3ms)\n';
+  assert.deepEqual(IR.ran(out), { tests: 2, suites: 0 });
+  assert.deepEqual(IR.ran(''), { tests: 0, suites: null });
+});
+test('narrowedFirst: a narrowed catch stands, and the whole run is never started (D412)', () => {
+  const calls = [];
+  const r = IR.narrowedFirst((m, extra) => { calls.push(extra.length ? 'narrowed' : 'whole'); return { applied: true, caught: true, failed: ['x'] }; }, { from: 'a', caughtBy: 'x' }, true);
+  assert.deepEqual(calls, ['narrowed']);
+  assert.equal(r.caught, true);
+  assert.equal(r.narrowed, true);
+});
+test('narrowedFirst: a narrowed miss is re-run whole, and the whole run\'s verdict stands, caught or not (D412)', () => {
+  for (const whole of [true, false]) {
+    const calls = [];
+    const r = IR.narrowedFirst((m, extra) => { calls.push(extra.length ? 'narrowed' : 'whole'); return extra.length ? { applied: true, caught: false, failed: [] } : { applied: true, caught: whole, failed: [] }; },
+      { from: 'a', caughtBy: 'x' }, true);
+    assert.deepEqual(calls, ['narrowed', 'whole']);
+    assert.equal(r.caught, whole);
+    assert.equal(r.narrowed, false);
+  }
+});
+test('narrowedFirst: a narrowed run that throws (NOT TESTED) is no verdict; the whole run decides, and its throw still throws (D412)', () => {
+  const calls = [];
+  const run = (m, extra) => { calls.push(extra.length ? 'narrowed' : 'whole'); throw new Error(extra.length ? 'narrowed: NOT TESTED' : 'whole: NOT TESTED'); };
+  assert.throws(() => IR.narrowedFirst(run, { from: 'a', caughtBy: 'x' }, true), /^Error: whole: NOT TESTED$/);
+  assert.deepEqual(calls, ['narrowed', 'whole']);
+});
+test('narrowedFirst runs whole only: a pattern whose narrowed control failed, a control, and a mutant that did not apply when narrowed (D412)', () => {
+  const seen = (m, ok, narrowedResult = { applied: true, caught: true, failed: ['x'] }) => {
+    const calls = [];
+    IR.narrowedFirst((mm, extra) => { calls.push(extra.length ? 'narrowed' : 'whole'); return extra.length ? narrowedResult : { applied: true, caught: true, failed: [] }; }, m, ok);
+    return calls;
+  };
+  assert.deepEqual(seen({ from: 'a', caughtBy: 'x' }, false), ['whole']);
+  assert.deepEqual(seen({ from: null, caughtBy: 'x' }, true), ['whole']);
+  assert.deepEqual(seen({ from: 'a', caughtBy: 'x' }, true, { applied: false, caught: true, failed: ['x'] }), ['narrowed', 'whole']);
+});
