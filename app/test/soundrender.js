@@ -62,7 +62,9 @@ async function connect(url, onEvent = null) {
  */
 async function launchChrome(exe, args, prefix) {
   const port = await freePort(), dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const ch = spawn(exe, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', ...args, 'about:blank'], { stdio: 'ignore' });
+  // --mute-audio (D410, the standing rule of 2026-10-19): a headless page test must never play the builder's sounds on the user's speakers; the clips
+  // here render in an OfflineAudioContext, which muting does not touch
+  const ch = spawn(exe, ['--headless=new', '--mute-audio', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', ...args, 'about:blank'], { stdio: 'ignore' });
   try {
     let ver; for (let i = 0; i < 100 && !ver; i++) { await sleep(200); try { ver = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); } catch (e) { /* not up yet */ } }
     if (!ver) throw new Error(`headless Chrome did not answer on port ${port}`);

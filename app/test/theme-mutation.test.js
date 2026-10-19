@@ -1,5 +1,6 @@
 // theme-mutation.test.js: node --test app/test/theme-mutation.test.js
 // D381 part 2a (pane B): the skin pick and the token reader, mutated; D384 part 1 (pane B): the sky pass too (S1-S13, run against sky.test.js).
+// D410 (pane B): Glass's crisp sky (P1-P4, run against sky-prism-crisp.test.js; P2-P4 skip where there is no Chrome, as that file's rows do).
 // Each mutation copies app/ (all but its tests, plus theme.test.js and sky.test.js with its fixture), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED theme.test.js there. "Applied" means the patch text was
 // found exactly once; "caught" means the named test FAILED on the mutant. A CONTROL runs the unmutated copy first. The originals are never touched.
 'use strict';
@@ -46,14 +47,20 @@ const MUTATIONS = [
   { id: 'S15 the registry leaves prism out (D384 widened)', test: 'sky.test.js', file: 'preview/sky/index.js', from: "['none', 'sun', 'prism', 'caustics', 'aurora']", to: "['none', 'sun', 'caustics', 'aurora']", caughtBy: 'Glass names the prism sky' },
   // D398: the sky pass's one-step dither (the banding itself is measured in headless Chrome by sky-dither.test.js, which this harness does not copy)
   { id: 'S16 the sky pass does not dither (D398)', test: 'sky.test.js', file: 'preview/renderer.js', from: 'clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0)', to: 'c', caughtBy: 'D398: the shared sky pass dithers' },
+  // D410: Glass's sky is crisp (app/test/sky-prism-crisp.test.js; rows 1, 2 and 5 draw in headless Chrome, so those mutants need it)
+  { id: 'P1 the sky pass sends no uPx', test: 'sky-prism-crisp.test.js', file: 'preview/renderer.js', from: "px: u('uPx')", to: 'px: null', caughtBy: 'row 3' },
+  { id: 'P2 the moon\'s limb fades over 0.020 rad again', test: 'sky-prism-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'float lw = 1.5 * prism_px();', to: 'float lw = 0.010;', caughtBy: 'row 2' },
+  { id: 'P3 a star is the old gaussian', test: 'sky-prism-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'max(0.0, 1.0 - length(dd) / (1.25 * prism_px()))', to: 'exp(-dot(dd, dd) / (2.0 * 0.0020 * 0.0020))', caughtBy: 'row 1' },
+  { id: 'P4 the band has no filaments', test: 'sky-prism-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: '(0.6 + 0.4 * toward) * fil;', to: '(0.6 + 0.4 * toward);', caughtBy: 'row 5' },
 ];
+const HAS_CHROME = !!require('./soundrender.js').chromePath();
 
 function runMutant(m) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-theme-mut-')), app = path.join(dir, 'app');
   try {
     fs.cpSync(path.join(ROOT, 'app'), app, { recursive: true, filter: (s) => path.relative(path.join(ROOT, 'app'), s) !== 'test' });
     fs.mkdirSync(path.join(app, 'test'));
-    for (const n of ['theme.test.js', 'sky.test.js', 'sky-fixture.js', 'sky-none-cbd7a40.json']) fs.copyFileSync(path.join(__dirname, n), path.join(app, 'test', n));
+    for (const n of ['theme.test.js', 'sky.test.js', 'sky-fixture.js', 'sky-none-cbd7a40.json', 'sky-prism-crisp.test.js', 'soundrender.js']) fs.copyFileSync(path.join(__dirname, n), path.join(app, 'test', n));
     for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
     const f = path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
@@ -75,8 +82,13 @@ test('control: the unmutated copy passes sky.test.js', () => {
   const r = runMutant({ id: 'control', test: 'sky.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
   assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
 });
+test('control: the unmutated copy passes sky-prism-crisp.test.js (D410)', () => {
+  const r = runMutant({ id: 'control', test: 'sky-prism-crisp.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
+  assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
+});
 for (const m of MUTATIONS) {
-  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
+  const skip = m.chrome && !HAS_CHROME ? 'no Chrome here (set CHROME_PATH): the row that catches this mutant draws in headless Chrome' : false;
+  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, { skip }, () => {
     const r = runMutant(m);
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" occurs ${r.n} times in app/${m.file}`);
     assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);
