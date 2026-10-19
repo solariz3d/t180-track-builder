@@ -8,6 +8,9 @@ All notable changes to this project are recorded here. The format follows
 ### Removed
 - **The track drawn in characters is gone from the empty builder.** 0.4.8 showed a picture of a track, made of characters, over the 3D view whenever the track had no pieces. It was fixed to the screen, so when the camera moved it stayed where it was, and it looked like something wrong with the view rather than a picture. It is taken out in every look, not moved elsewhere; an empty builder now shows only the 3D view. (`app/index.html`.) Test: `app/test/texture-page.test.js` row 3.
 
+### Fixed
+- **The camera label no longer names a look you are not in.** Until a picture is chosen for the road, the 3D view draws the road in one plain dark surface, and the label at the top left of the view called that "sigil look". Since SIGIL became one of the five looks, the label read as if the builder were in SIGIL while it was in Skyline or any other. It now says "plain road", which is what it is describing; with a picture chosen it still says "AC look". (`app/preview/preview.js`.) Test: `app/test/preview.test.js`, "D409: the camera HUD names the plain surface".
+
 ## [0.4.8] - 2026-10-19
 
 ### Added
