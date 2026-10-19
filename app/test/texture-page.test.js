@@ -14,6 +14,8 @@
 //   6  (D409, E's D405 shot check) no label in the 3D view sits under a panel: with six pieces placed and the chase camera, the camera label (.preview-hud)
 //      and the piece's readout box ([aria-label="piece readouts"]) overlap neither the top readout ([aria-label="piece values"]) nor the camera and grid
 //      bars (#camera's toolbars) by a pixel, in all five looks, at windows 1400 x 860 and 2560 x 1440 (E measured 2,058 and 10,944 px² at 1400)
+//   7  (D417) Extend is reachable without scrolling: the panel's first actions row is Extend, Straight, Undo, Redo, Extend sits above "Extend at the head",
+//      and each of the four is on the panel once, in every look
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -226,4 +228,24 @@ test('row 6 (D409): no label in the 3D view sits under the top readout or the ca
       }
     }
   } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); t.diagnostic(got.join('; ')); }
+});
+
+// D417 (the keeper's screenshot, 16:02): Extend is reachable without scrolling. The panel's FIRST actions row reads Extend, Straight, Undo, Redo, in that
+// order, and Extend sits above the "Extend at the head" heading; each button is on the panel once
+const ACTIONS = `const pal = document.getElementById('palette'), first = pal.querySelector('.actions');
+  const head = [...pal.querySelectorAll('h3')].find((h) => h.textContent.trim() === 'Extend at the head');
+  const names = (n) => [...n.querySelectorAll('button')].map((b) => b.textContent.trim());
+  const ext = [...pal.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'Extend');
+  const count = (t) => [...pal.querySelectorAll('button')].filter((b) => b.textContent.trim() === t).length;
+  return { first: first ? names(first) : [], extendTop: ext.length ? ext[0].getBoundingClientRect().top : null, headTop: head ? head.getBoundingClientRect().top : null,
+    counts: ['Extend', 'Straight', 'Undo', 'Redo'].map(count) };`;
+test('row 7 (D417): the first actions row is Extend, Straight, Undo, Redo, and Extend sits above "Extend at the head", in every look', { skip }, async () => {
+  for (const look of LOOKS) {
+    await load(look);
+    const a = await ev(ACTIONS);
+    assert.deepEqual(a.first, ['Extend', 'Straight', 'Undo', 'Redo'], `${look}: the first actions row`);
+    assert.ok(a.headTop !== null && a.extendTop !== null && a.extendTop < a.headTop, `${look}: Extend (top ${a.extendTop}) above "Extend at the head" (top ${a.headTop})`);
+    assert.deepEqual(a.counts, [1, 1, 1, 1], `${look}: each of the four is on the panel once`);
+    assert.deepEqual(errors, [], `${look}: no page errors`);
+  }
 });
