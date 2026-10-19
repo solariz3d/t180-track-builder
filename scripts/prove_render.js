@@ -188,7 +188,7 @@ async function run(o) {
   await preparePort(o);
   fs.mkdirSync(o.out, { recursive: true });
   const restoreAutosave = guardAutosave(o.appData || appDataDir(), o.out);
-  const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${o.port}`, WEBVIEW2_USER_DATA_FOLDER: profileDir(o.out) };
+  const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${o.port} --mute-audio`, WEBVIEW2_USER_DATA_FOLDER: profileDir(o.out) };
   const app = spawn(o.exe, [], { env, stdio: 'ignore', windowsHide: false });
   const kill = () => { if (app.exitCode === null) spawnSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); };
   const hard = setTimeout(() => { kill(); process.stderr.write(`prove_render: hard timeout ${o.timeout} s, killed PID ${app.pid}\n`); process.exit(2); }, o.timeout * 1000);
@@ -296,7 +296,7 @@ async function runFlow(o) {
   await preparePort(o);
   fs.mkdirSync(o.out, { recursive: true });
   const restoreAutosave = guardAutosave(o.appData || appDataDir(), o.out);
-  const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${o.port}`, WEBVIEW2_USER_DATA_FOLDER: profileDir(o.out), ...(o.exportSeam ? { T180_TEST_EXPORT_FOLDER: path.resolve(exportDir) } : {}) };
+  const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${o.port} --mute-audio`, WEBVIEW2_USER_DATA_FOLDER: profileDir(o.out), ...(o.exportSeam ? { T180_TEST_EXPORT_FOLDER: path.resolve(exportDir) } : {}) };
   const app = spawn(o.exe, [], { env, stdio: 'ignore', windowsHide: false });
   const kill = () => { if (app.exitCode === null) spawnSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); };
   const hard = setTimeout(() => { kill(); process.stderr.write(`prove_render: hard timeout ${o.timeout} s, killed PID ${app.pid}\n`); process.exit(2); }, o.timeout * 1000);
