@@ -141,8 +141,9 @@ test('a load throw in a run of one file reads NOT CAUGHT as before, never NOT TE
   assert.match(said, IR.NOT_CAUGHT_LOAD);
 });
 for (const m of MUTATIONS) {
-  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
+  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, (t) => {
     const r = IR.narrowedFirst(runMutant, m, NARROW.get(narrowKey(m)) === true);   // D412: narrowed first; any miss is re-run whole, and that verdict stands
+    t.diagnostic(`D412 path: ${r.narrowed ? 'narrowed' : 'whole'}`);   // which run gave the verdict: a duration cannot tell a slow narrowed run from a re-run
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" occurs ${r.n} times in ${m.file}`);
     assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);
   });
