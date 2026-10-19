@@ -59,8 +59,9 @@ function authorField(doc, settings) {
 function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, authorRow = null } = {}) {
   return [
     { section: 'Sound' }, ...(soundRow ? [{ node: soundRow }] : []),
-    // D394: each theme is a look with its own melody; the look changes at once and the melody as soon as its two files are in (app/index.html, app/sound.js)
-    { section: 'Theme' }, ...choice('theme', [['music', 'Music', 'the melody picked at random each start chooses the look'],
+    // D394: each theme is a look with its own melody; the look changes at once and the melody as soon as its two files are in (app/index.html, app/sound.js).
+    // D401: the first is Random (it was called Music; it is still saved as music, so a setting saved before reads the same)
+    { section: 'Theme' }, ...choice('theme', [['music', 'Random', 'a look and its own melody, picked at random each start, and picked again when you choose this'],
       ...[['aqua', 'Aqua'], ['skyline', 'Skyline'], ['glass', 'Glass'], ['aurora', 'Aurora']].map(([v, l]) => [v, l, `${l}'s look and its own melody, every start; the melody changes a moment after the look, once its files are in`]),
       ['sigil', 'SIGIL', 'the black-and-bone look; it has no melody of its own, so the melody is still picked at random each start']]),
     { section: 'Turn & climb read as' }, ...choice('turnClimbAs', [['corner', 'corner °, ends straight'], ['rate', 'rate °/100 m']]),
