@@ -238,8 +238,8 @@ slower than that (an ordinary piece is up to about 2,000 m); only a single huge 
   `adapter.toSegments segMFor`, the track model's cheap ghost); the piece is solved once a move (`turnby.extendCorner` and its start are remembered by document and fields), the least-squares
   fit shares its normal system across channels (`document.js fitSystem`) and the basis is evaluated without its derivatives and by binary search (`piecewise.cjs basisN`). What is placed, what is
   exported and the full ghost built when the handle is let go are byte for byte what they were (`app/test/drag-ghost.test.js` row 3 and 5 hold a hash of each, taken at 0.4.7).
-- **Smooth up to about 2,000 m a piece, and 5,000 m still above 90 frames a second; a 10,000 m piece drags at about 30 a second and a 20,000 m piece at about 14: expected to feel heavy, not to stall.**
-  What still grows with the length is the piece's own channel fit (one solve a move, about 0.3 ms per 500 m) and the readout.
+- **Measured after (2026-10-19, the same machine, both heavy-run slots held, p95 of the frames that did work):** a 1,000 m drag 3.5 to 4 ms in every look, 2,000 m 3.8 to 4.8 ms, 5,000 m 4.8, 10,000 m 6.2, 20,000 m 8.2: **smooth at a 165 Hz display (6.06 ms) up to about 10,000 m a piece, and a single 20 km piece still drags above 100 frames a second.**
+  What still grows with the length is the piece's own channel fit (one solve a move) and the readout; the 20 km piece's 8 ms is the first place a drag would miss 165 Hz, and the first thing to work on if it matters.
 - **A new previewer lap:** measure first (a drag of the biggest ordinary piece, `app/test/drag-frame.test.js`'s way), and say in its hand-back what its frames cost against 6.9 ms.
 
 ## 10. First milestones: prove the risky parts first
