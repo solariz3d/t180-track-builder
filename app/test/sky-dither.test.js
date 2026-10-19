@@ -6,6 +6,7 @@
 //      for every style (before the dither: 26 to 174 px, so the gradient showed as steps)
 //   2  the quiet band: every pixel from -10 to 10 degrees of elevation, all the way round, stays within 1.30:1 (WCAG) of the skin's --fog, the dither included
 //      (D384 widened, D391's measure)
+//   3  the pattern keeps all 16 levels on a tall canvas: a 4 x 4 block at pixel rows 2400 and 4320 holds 16 different values (A's review 11, finding 1)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -92,4 +93,23 @@ test('row 2: the quiet band keeps its rule with the dither: every pixel from -10
     assert.ok(worst <= 1.30, `${style}: the band reaches ${worst.toFixed(3)}:1 of --fog (Y ${lo.toFixed(5)} .. ${hi.toFixed(5)} against ${fog.toFixed(5)})`);
   }
   t.diagnostic(`the band's largest ratio to --fog: ${JSON.stringify(got)}`);
+});
+
+// D398 follow-up (A's review 11, finding 1): the pattern is computed from the pixel's own row, so on a tall canvas it must keep all 16 of its levels. The
+// pass's own helpers (everything in skyFS from pass_bayer2 up to main) are compiled on their own and read back over a 4 x 4 block of pixels at rows 2400
+// and 4320 (a 4K canvas): each block must hold 16 different levels. A form that squares the row (0.75 y^2) runs out of float32 precision above about 2,364 px
+test('row 3: the dither pattern keeps all 16 levels on a tall canvas, at pixel rows 2400 and 4320', { skip }, async (t) => {
+  const pass = R.skyFS(''), helpers = pass.slice(pass.indexOf('float pass_bayer2'), pass.indexOf('void main()'));
+  assert.ok(/float pass_bayer4\(vec2 a\)/.test(helpers), 'the pass\'s pattern helpers are found in skyFS');
+  const levels = await ev(`(() => {
+    const H = 4328, cv = document.createElement('canvas'); cv.width = 4; cv.height = H; const gl = cv.getContext('webgl', { antialias: false });
+    const sh = (ty, s) => { const o = gl.createShader(ty); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error('compile: ' + gl.getShaderInfoLog(o)); return o; };
+    const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, 'attribute vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }'));
+    gl.attachShader(p, sh(gl.FRAGMENT_SHADER, 'precision highp float;\\n' + ${JSON.stringify(helpers)} + '\\nvoid main(){ gl_FragColor = vec4(vec3(pass_bayer4(gl_FragCoord.xy)), 1.0); }'));
+    gl.linkProgram(p); gl.useProgram(p); const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const a = gl.getAttribLocation(p, 'aPos'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0); gl.viewport(0, 0, 4, H); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    const out = {}; for (const y0 of [0, 2400, 4320]) { const px = new Uint8Array(4 * 4 * 4); gl.readPixels(0, y0, 4, 4, gl.RGBA, gl.UNSIGNED_BYTE, px); const v = new Set(); for (let i = 0; i < 64; i += 4) v.add(px[i]); out[y0] = [...v].sort((u, w) => u - w); }
+    return out; })()`);
+  t.diagnostic(`levels in a 4 x 4 block (of 255): ${JSON.stringify(levels)}`);
+  for (const y of ['0', '2400', '4320']) assert.equal(levels[y].length, 16, `rows ${y}..${+y + 3}: 16 levels, got ${levels[y].length} (${levels[y].join(' ')})`);
 });

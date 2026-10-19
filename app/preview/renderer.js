@@ -86,6 +86,9 @@ void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = 
 // ran up to 174 px); the pass adds a 4x4 ordered (Bayer) offset on the pixel, half a step either way of one 8-bit step, so the steps break into a
 // screen too fine to see. It is a fix, not a look: the quiet band near the horizon moves by at most 0.009 of its ratio to the fog
 // (app/test/sky-dither.test.js). The pattern is the pass's own (pass_bayer2/4), so every style gets it and none carries a copy.
+// The index is built from small whole numbers only (each pixel's x and y mod 4: pass_bayer2 is the 2x2 index 0, 2, 3, 1, and the 4x4 is four times the
+// low bits' index plus the high bits'), because a form with the row squared lost levels in float32 above about 2,364 px (A's review 11); and it is
+// centred, (k + 0.5) / 16 for k = 0..15, so the offset runs from -15/32 to +15/32 of a step and averages zero.
 const SKY_VS = `
 attribute vec2 aPos;
 uniform vec3 uFwd; uniform vec3 uRight; uniform vec3 uUp;
@@ -100,8 +103,8 @@ precision mediump float;
 varying vec3 vRay;
 uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime;
 ${pattern}
-float pass_bayer2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-float pass_bayer4(vec2 a){ return pass_bayer2(0.5 * a) * 0.25 + pass_bayer2(a); }
+float pass_bayer2(vec2 p){ return 2.0 * mod(p.x + p.y, 2.0) + p.y; }
+float pass_bayer4(vec2 a){ vec2 p = mod(floor(a), 4.0), lo = mod(p, 2.0); return (4.0 * pass_bayer2(lo) + pass_bayer2(floor(p * 0.5)) + 0.5) / 16.0; }
 void main(){ vec3 c = clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0); gl_FragColor = vec4(clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0), 1.0); }`;
 const SKY_STRIP = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 /** The inverse of a column-major 4×4 (cofactors); a singular matrix throws. */
