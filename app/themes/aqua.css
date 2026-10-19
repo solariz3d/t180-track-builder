@@ -6,6 +6,7 @@
    canvas hue) keep their hues; only --bad is lighter here (D384), so an error reads on these teal panes. Fonts: the page's own (Windows). */
 
 [data-theme="aqua"] {
+  --tex: url(tex/aqua.png) 0 0 / 256px 256px repeat;   /* D399: this look's texture (index.html, --tex): a soft fluid noise; app/themes/tex/aqua.png, scripts/texture_tiles.js */
   --bg: #022a35; --panel: #033846; --raise: #054556; --line: #1b8ea6; --hair: rgba(140, 240, 255, .40);
   /* D384 (A's review 6, finding 2): SIGIL's --bad #e0573f read 3.38:1 on --panel, 4.05 on --bg and 2.81 on --raise here. The same red, lighter: hue 8.8
      degrees (SIGIL's 8.9), saturation 0.73 (0.72), lightness 0.725 (0.56); 5.56:1 on --panel, 6.65 on --bg, 4.62 on --raise. It still means error. */
@@ -28,7 +29,7 @@
 
 /* THE BAR: a glossy aqua band, a wet highlight across its upper edge, deep teal below where the words sit */
 [data-theme="aqua"] header {
-  background:
+  background: var(--tex),
     linear-gradient(180deg, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, .10) 18%, transparent 24%),
     linear-gradient(180deg, #0e8aa3 0%, #06566a 40%, #033846 100%);
   border-bottom-color: var(--rim);
@@ -77,7 +78,7 @@
 
 /* THE LEFT PANE: a rounded slab of water-glass: deep teal, a broad wet highlight across its top, an aqua rim, light from below */
 [data-theme="aqua"] #left {
-  background:
+  background: var(--tex),
     radial-gradient(120% 34px at 50% 0%, rgba(255, 255, 255, .26), transparent 100%),
     linear-gradient(180deg, rgba(10, 110, 135, .90) 0%, rgba(4, 64, 80, .93) 26%, rgba(2, 40, 52, .95) 100%);
   border-color: var(--rim); border-radius: 18px;
@@ -92,7 +93,7 @@
 
 /* THE MENUS: a rounded water-glass pane dropping from the bar */
 [data-theme="aqua"] .more-menu {
-  background:
+  background: var(--tex),
     radial-gradient(110% 30px at 50% 0%, rgba(255, 255, 255, .22), transparent 100%),
     linear-gradient(180deg, rgba(8, 96, 118, .96) 0%, rgba(3, 52, 66, .97) 30%, rgba(2, 36, 46, .98) 100%);
   border-color: var(--rim); border-radius: 18px;

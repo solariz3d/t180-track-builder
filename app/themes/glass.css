@@ -5,6 +5,7 @@
    (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every canvas hue) are not redefined. Fonts: the page's own (Windows). */
 
 [data-theme="glass"] {
+  --tex: url(tex/glass.png) 0 0 / 8px 300px repeat-x;   /* D399: this look's texture (index.html, --tex): an ordered (Bayer) dither that thins from the top of each surface; app/themes/tex/glass.png, scripts/texture_tiles.js */
   --bg: #06111b; --panel: #0a1824; --raise: #0f2232; --line: #2b5672; --hair: rgba(190, 230, 255, .34);
   --text: #f0f9ff; --dim: #a9c9dd; --accent: #8fe6ff; --accent-dim: rgba(143, 230, 255, .22);
   --frost: rgba(205, 238, 255, .14); --frost-edge: rgba(205, 240, 255, .58); --sheen: rgba(255, 255, 255, .55); --deep: rgba(4, 14, 24, .80);
@@ -23,7 +24,7 @@
 
 /* THE BAR: a frosted ice slab, lit from above, its bottom edge a bright cut */
 [data-theme="glass"] header {
-  background: linear-gradient(180deg, rgba(225, 246, 255, .14) 0%, rgba(150, 205, 235, .05) 40%, rgba(6, 20, 32, .96) 100%), var(--panel);
+  background: var(--tex), linear-gradient(180deg, rgba(225, 246, 255, .14) 0%, rgba(150, 205, 235, .05) 40%, rgba(6, 20, 32, .96) 100%), var(--panel);
   border-bottom-color: var(--frost-edge);
   box-shadow: inset 0 1px 0 var(--sheen), inset 0 -1px 0 rgba(0, 0, 0, .35), 0 6px 24px rgba(0, 40, 70, .55);
 }
@@ -61,7 +62,7 @@
 
 /* THE LEFT PANE: a frosted crystal slab floating over the track, one corner cut (the facet), a cold sheen across its face */
 [data-theme="glass"] #left {
-  background: linear-gradient(155deg, rgba(215, 242, 255, .12) 0%, rgba(110, 175, 215, .06) 18%, rgba(6, 22, 36, .88) 42%, rgba(4, 14, 24, .92) 100%);
+  background: var(--tex), linear-gradient(155deg, rgba(215, 242, 255, .12) 0%, rgba(110, 175, 215, .06) 18%, rgba(6, 22, 36, .88) 42%, rgba(4, 14, 24, .92) 100%);
   border-color: var(--frost-edge); border-radius: 0;
   backdrop-filter: blur(18px) saturate(160%) brightness(1.08); -webkit-backdrop-filter: blur(18px) saturate(160%) brightness(1.08);
   box-shadow: inset 0 1px 0 var(--sheen), inset 1px 0 0 rgba(255, 255, 255, .22), 0 0 0 1px rgba(0, 10, 20, .5), 0 22px 60px rgba(0, 30, 60, .65), 0 0 40px rgba(110, 200, 255, .12);
@@ -76,7 +77,7 @@
 
 /* THE MENUS: a crystal pane dropping from the bar, cut at the lower corner */
 [data-theme="glass"] .more-menu {
-  background: linear-gradient(165deg, rgba(220, 244, 255, .12) 0%, rgba(20, 52, 76, .80) 22%, rgba(5, 18, 30, .96) 60%), rgba(4, 14, 24, .9);
+  background: var(--tex), linear-gradient(165deg, rgba(220, 244, 255, .12) 0%, rgba(20, 52, 76, .80) 22%, rgba(5, 18, 30, .96) 60%), rgba(4, 14, 24, .9);
   border-color: var(--frost-edge); border-radius: 0;
   backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
   box-shadow: inset 0 1px 0 var(--sheen), 0 24px 60px rgba(0, 10, 20, .75);   /* a dark drop only: a cyan glow round the menu lit the text beside it */

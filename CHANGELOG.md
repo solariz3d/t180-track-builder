@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Each look has a texture of its own, and the empty builder shows a track in characters.** The title bar, the left panel and the menus now carry a fine texture under their text, different for each look and in none of its colours: SIGIL a film grain, Skyline a paper grain, Glass an ordered dot screen that thins from the top, Aqua a soft fluid pattern, Aurora a dot matrix. It follows Settings ▸ Theme, and with Music it follows the melody's look. The 3D view is never textured, and each texture is light enough that no text reads less clearly than before: every text that met the 4.5:1 contrast guideline still does, in all five looks, with a menu open or not. When the track has no pieces, the empty view shows a track drawn in characters, in the look's dim text colour; it goes away with the first piece. Each texture is one small image, drawn once. (`app/index.html`, `app/themes/`, `app/themes/tex/`, made by `scripts/texture_tiles.js`; the picture by `scripts/empty_art.js`.) Test: `app/test/texture-page.test.js`.
+
 ## [0.4.7] - 2026-10-18
 
 ### Fixed
