@@ -113,7 +113,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   let track = null, err = null, raf = 0, prev = 0, shownPose = null;
   const held = new Map();   // the keys down, in the order pressed: physical key (e.code) → its action, fixed at key-down
   let takeover = false;     // a movement key went down in a follow view: the next frame takes the view over into free (once)
-  let ghost = null, grid = null, gridFor = null, start = null, proposalShown = null;
+  let ghost = null, ghostJob = null, grid = null, gridFor = null, start = null, proposalShown = null;
   // D237: the 3D grid and the symmetry guides. `gMode` 'legacy' is the old { ground: true } grid at y = 0; the plan is rebuilt only when its inputs change, never per frame.
   if (gridMode !== null && !GRID_MODES.includes(gridMode)) throw new Error(`preview: unknown gridMode ${gridMode}`);
   let gMode = gridMode || (ground ? 'legacy' : 'off'), gMirror = 'off', gCentre = null, plan = null, planDeps = null;
@@ -158,7 +158,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const refresh = (st) => {
     start = st.resolved && st.resolved.start ? st.resolved.start : null;   // where the first piece starts (the equation core's doc.start)
     if (st.brush) { clearFull(); model.setDetail(DRAG_DETAIL); } else if (model.detail > 1) scheduleFull();   // dragging: coarse now; not dragging but still coarse: full detail soon
-    try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; } catch (e) { err = e.message; return; }
+    try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; if (track.how !== 'same' && track.how !== 'kept') ghostJob = null; } catch (e) { err = e.message; return; }   // D407: and the exact ghost being built for the old head goes with it
     // D242: a close PROPOSAL (the core shell's closeProposal, for the document on screen) is the ghost: the pieces it moves, see-through over the placed ones
     // D240: a middle DELETE's preview (the core shell's deleteProposal) is shown the same way: the track as it would be, see-through over the placed one
     const propOf = (p) => (p && st.history && p.base === st.history.present ? p : null), prop = propOf(st.closeProposal) || propOf(st.deleteProposal);
@@ -302,11 +302,20 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease); win.addEventListener('mousedown', onAnyDown, true); win.addEventListener('pointerdown', onAnyDown, true); win.addEventListener('pointerup', onAnyUp, true);
   canvas.addEventListener('contextmenu', noMenu); canvas.addEventListener('wheel', onWheel, { passive: false }); win.addEventListener('contextmenu', onMenu, true);
 
+  const GHOST_SLICE_MS = 2.5;   // D407: how long one frame may spend building the exact ghost (the bar is 6.0 ms a frame at 165 Hz; drawing and the handles take the rest)
+  function stepGhostJob() {
+    const job = ghostJob, t0 = clockNow();
+    try {
+      let r; do r = job.it.next(); while (!r.done && t0 !== null && clockNow() - t0 < GHOST_SLICE_MS);   // no clock: one step a frame
+      if (r.done) { ghost = r.value; ghostJob = null; }
+    } catch (e) { ghostJob = null; ghost = null; }   // the geometry failed part way (the candidate was checked in showGhost): as a showGhost that throws, the ghost goes
+  }
   function frame(t) {
     raf = win.requestAnimationFrame(frame);
     const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0, elapsed = prev ? t - prev : 0; prev = t;
     frameTimes.push(t); while (frameTimes.length && frameTimes[0] < t - 10000) frameDropped = frameTimes.shift();   // D340: the last 10 s of frame times, for checkLate
     if (heldNetMs > 0 && expectRepeat && held.size) { quietMs += elapsed; if (quietMs > heldNetMs) { held.clear(); down.clear(); shortcutDown.clear(); expectRepeat = false; boost = false; ctrlFly = null; } }   // D336: the net (above onKey)
+    if (ghostJob) stepGhostJob();   // D407: the exact ghost, a slice of it this frame
     const sprint = boost ? boostAt(boostT) : 1; boostT = boost ? boostT + dt : 0;   // the speed THIS frame, then one more frame of Shift held
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {
@@ -373,8 +382,19 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
      * head until clearGhost(), a new showGhost(), or any change to the placed track. Throws if the candidate does not
      * extend the placed track. Returns the number of batches shown.
      */
-    showGhost(candidate, opts) { ghost = model.ghostFor(candidate, opts); if (candidate && candidate.jump) ghost.jump = true; return ghost.batches.length; },   // D243: a candidate JUMP says so, so the drag handles stay off it
-    clearGhost() { ghost = null; },
+    /**
+     * D407: opts.sliced builds the EXACT ghost a few milliseconds a frame instead of at once (the release of a handle: 60 ms at 1,000 m, 2 s at 20 km, the main thread held): the ghost on show stays
+     * until the exact one is whole, then it is swapped in (the same mesh to the byte as ghostFor would have made). Any new showGhost, clearGhost or change to the placed track drops the build under way.
+     */
+    showGhost(candidate, opts) {
+      if (opts && opts.sliced && !(candidate && candidate.jump)) {
+        const it = model.ghostSteps(candidate, opts), r = it.next();   // the first step now: the candidate is checked there, so one that cannot be a ghost throws to the caller as before
+        if (r.done) { ghostJob = null; ghost = r.value; return ghost.batches.length; }
+        ghostJob = { it, candidate }; return ghost ? ghost.batches.length : 0;
+      }
+      ghostJob = null; ghost = model.ghostFor(candidate, opts); if (candidate && candidate.jump) ghost.jump = true; return ghost.batches.length;
+    },   // D243: a candidate JUMP says so, so the drag handles stay off it
+    clearGhost() { ghost = null; ghostJob = null; },
     /** D244, the drag handles: the ghost of the next piece as { samples, s0 }: the path's samples (the placed track's, then the new piece's) and the s where the new piece starts (the placed track's end). Null when there is no ghost, or it is a close or delete PREVIEW (those are not Extend's). */
     ghostInfo() { if (!ghost || ghost.proposal || !ghost.path) return null; const tp = track && track.path; return { samples: ghost.path.samples, segments: ghost.segments, jump: !!ghost.jump, s0: tp && tp.samples.length ? tp.samples[tp.samples.length - 1].s : 0 }; },
     /**

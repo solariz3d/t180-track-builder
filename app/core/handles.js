@@ -212,8 +212,8 @@ function mount(stage, win, host) {
   stage.append(canvas);
   let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0, pre = null, onKeyDown = null, lastClick = null;   // lastClick: { id, t } the last press-and-release on a handle that changed nothing (the first half of a double-click)   // pre: { kind, from, to } the last drag that moved a value (the double-click's "before the drag")
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  const layout = () => {
-    model = host.model(); const pose = host.pose(), W = stage.clientWidth, H = stage.clientHeight;
+  const layout = (m = host.model(), pose = host.pose()) => {
+    model = m; const W = stage.clientWidth, H = stage.clientHeight;
     if (!model || !pose || !(W > 0 && H > 0)) { drawn = []; return; }
     const VP = M.viewProj(pose, W / H);
     drawn = placeHandles(model).map((h) => ({ ...h, screen: screenAxis(VP, W, H, h.pos, h.axis) }));
@@ -243,10 +243,22 @@ function mount(stage, win, host) {
       }
     }
   };
+  // D407: THE LAYOUT IS DONE WHEN SOMETHING IT READS CHANGED, not every frame (it ran on every frame, the model, every handle placed and drawn: about a third of an idle frame's script, the measurement of
+  // 2026-10-19). What a frame draws follows from the model's numbers (the ghost's stations, the fields' values and widths, the mode), the camera, the stage's size, and the hover and drag; when all of
+  // them are what they were, the canvas already shows it.
+  let lastKey = null;
+  const frameKey = (m, pose) => {
+    const W = stage.clientWidth, H = stage.clientHeight, k = [W, H, win.devicePixelRatio || 1, pose ? JSON.stringify(pose) : null, hover ? hover.id : null, drag ? `${drag.h.id}:${drag.value}` : null, pre ? `${pre.kind}:${pre.from}:${pre.to}` : null, T.css('--ink', '#0b0d11')];
+    if (m) { k.push(m.mode, m.samples, m.s0, m.s1, m.halfTarget, m.free, m.info, m.kinds.join(',')); for (const kind of m.kinds) { const c = m.ctx(kind); k.push(m.base(kind), c && c.half, c && c.free); } }
+    return k;
+  };
+  const sameKey = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   const frame = () => {
     raf = win.requestAnimationFrame(frame);
     if (!canvas.isConnected && stage.isConnected !== false) stage.append(canvas);   // the preview's mount clears #preview after the panel mounted
-    layout(); draw();
+    const m = host.model(), pose = host.pose(), k = frameKey(m, pose);
+    if (sameKey(k, lastKey)) return;
+    lastKey = k; layout(m, pose); draw();
   };
   // D335: each pointer step adds to two sums of pixels along the handle's axis AS IT IS NOW (the road rolls under the pointer, so the axis the mark moves on turns: measured against the
   // axis at the grab the bank stalled near 165 degrees and would have gone back). `pxFine` is the raw pixels (Shift: one is a step); `px` is the pixels weighted by the pointer's speed

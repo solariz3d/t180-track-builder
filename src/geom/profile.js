@@ -65,6 +65,19 @@ function sealed(P) {
   if (Object.isFrozen(P) && Object.isFrozen(P.u) && Object.isFrozen(P.psi)) return P;
   return Object.freeze({ ...P, u: Object.freeze(P.u.slice()), psi: Object.freeze(P.psi.slice()) });
 }
+/**
+ * D407: normalize + sealed, remembered BY CONTENT. The mesher normalised the piece's profile afresh for every chord (a new, unfrozen object, so every offsetAt ran the slow unfrozen sum:
+ * 25% of the full ghost, the measurement of 2026-10-19). The same knots, angles, font and material give the same frozen normalised profile (validated once, on the first), so its
+ * running sums are made once. A profile that normalize() refuses is refused every time. At most SEALED_MAX are kept, the oldest dropped first.
+ */
+const SEALED = new Map(), SEALED_MAX = 64;
+function sealedNormal(profile) {
+  if (!profile || !Array.isArray(profile.u) || !Array.isArray(profile.psi)) return sealed(normalize(profile));
+  const k = (profile.font || 'custom') + '|' + (profile.material || 'ROAD') + '|' + numKey(profile.u) + '|' + numKey(profile.psi);
+  let r = SEALED.get(k);
+  if (!r) { r = sealed(normalize(profile)); if (SEALED.size >= SEALED_MAX) SEALED.delete(SEALED.keys().next().value); SEALED.set(k, r); }
+  return r;
+}
 /** Offset [X, Y] of the surface point at u, exactly (piecewise closed form). */
 function offsetAt(P, u) {
   if (u === 0) return [0, 0];
@@ -87,6 +100,7 @@ function normalAt(P, u) { const p = psiAt(P, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0
  * points (so profiles meshed together share a vertex count); otherwise the fewest that satisfy both limits.
  */
 function samplesAcross(P, { maxAcross = 1, maxSeam = Math.PI / 180, count } = {}) {
+  samplesAcross.runs++;
   const fine = []; const N = 4000, u0 = P.u[0], u1 = P.u[P.u.length - 1];
   for (let i = 0; i <= N; i++) fine.push(u0 + (u1 - u0) * i / N);
   const m = [0]; for (let i = 1; i <= N; i++) { const du = fine[i] - fine[i - 1], dpsi = Math.abs(psiAt(P, fine[i]) - psiAt(P, fine[i - 1])); m.push(m[i - 1] + du / maxAcross + dpsi / maxSeam); }
@@ -97,6 +111,24 @@ function samplesAcross(P, { maxAcross = 1, maxSeam = Math.PI / 180, count } = {}
   out[0] = u0; out[K - 1] = u1;
   return { u: out, need };
 }
+samplesAcross.runs = 0;   // how many times the 4,000-sample walk has run (the work counted by app/test/release-ghost.test.js)
+/**
+ * D407: samplesAcross, remembered BY CONTENT. A piece's cross-section is nearly one thing for all of its 2 m chords (500 chords in a 1,000 m ghost, 5 different cross-sections among them,
+ * each chord running the walk above again: 45% of the full ghost's cost, the measurement of 2026-10-19), and the walk is a function of the knots, the angles and the limits alone, so the
+ * answer is kept under exactly those numbers (a -0 is told from a 0): an edited profile is a different key, and nothing can change under the cache. At most SAMPLES_MAX answers are kept
+ * (the oldest dropped first). samplesAcrossFor hands back the caller's own copy; samplesShared (the mesher's) hands back the one kept answer, its array FROZEN, so the same chords share one
+ * samples array and the mesher can tell it by identity.
+ */
+const SAMPLES = new Map(), SAMPLES_MAX = 64;
+function numKey(a) { let s = ''; for (let i = 0; i < a.length; i++) s += (Object.is(a[i], -0) ? '-0' : a[i]) + ','; return s; }
+function samplesShared(P, lim = {}) {
+  const k = lim.maxAcross + '|' + lim.maxSeam + '|' + lim.count + '|' + numKey(P.u) + '|' + numKey(P.psi);
+  let r = SAMPLES.get(k);
+  if (!r) { const w = samplesAcross(P, lim); r = { u: Object.freeze(w.u), need: w.need }; if (SAMPLES.size >= SAMPLES_MAX) SAMPLES.delete(SAMPLES.keys().next().value); SAMPLES.set(k, r); }
+  return r;
+}
+/** The answer as the caller's own copy. */
+function samplesAcrossFor(P, lim = {}) { const r = samplesShared(P, lim); return { u: r.u.slice(), need: r.need }; }
 /**
  * How wide the cross-section stands across the road (m): the spread of X, the offset along L, over every knot. A wall
  * past vertical folds back, so this is the extreme X, not the edges'. The build view is framed on it (app/camera).
@@ -235,4 +267,4 @@ function jointSteps(segments, closed) {
   return out;
 }
 
-module.exports = { normalize, sealed, psiAt, offsetAt, normalAt, samplesAcross, maxPsi, spanOf, blend, blendSamples, commonFractions, usOf, smoothstep, atSegment, readAt, readsBlend, stepBetween, jointSteps };
+module.exports = { normalize, sealed, psiAt, offsetAt, normalAt, samplesAcross, samplesAcrossFor, samplesShared, sealedNormal, maxPsi, spanOf, blend, blendSamples, commonFractions, usOf, smoothstep, atSegment, readAt, readsBlend, stepBetween, jointSteps };

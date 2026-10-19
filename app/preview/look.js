@@ -40,14 +40,22 @@ function linesFor(b) {
   const hit = lineMemo.get(b.positions); if (hit) return hit;
   const K = b.cols, R = b.rowS.length, P = b.positions, N = b.normals;
   let kc = 0; for (let k = 1; k < K; k++) if (Math.abs(b.us[k]) < Math.abs(b.us[kc])) kc = k;
+  // D407: written straight into the typed arrays (it built them by spreading three-number arrays into plain ones: 19 ms for a 2,000 m ghost's first frame, the measurement of 2026-10-19);
+  // the same doubles in the same order, rounded to float32 as before, so every line is the same to the byte
   const v = (r, k) => { const i = (r * K + k) * 3; return [P[i] + N[i] * LIFT, P[i + 1] + N[i + 1] * LIFT, P[i + 2] + N[i + 2] * LIFT]; };
-  const edges = [], ties = [];
-  for (let r = 0; r + 1 < R; r++) for (const k of [0, kc, K - 1]) edges.push(...v(r, k), ...v(r + 1, k));
+  const put = (A, o, p) => { A[o] = p[0]; A[o + 1] = p[1]; A[o + 2] = p[2]; };
+  const edges = new Float32Array(Math.max(0, R - 1) * 3 * 6);
+  let o = 0;
+  for (let r = 0; r + 1 < R; r++) for (const k of [0, kc, K - 1]) { put(edges, o, v(r, k)); put(edges, o + 3, v(r + 1, k)); o += 6; }
+  const tieRows = [];
   for (let r = 0; r < R; r++) {
     if (!(r === 0 || Math.floor(b.rowS[r] / TIE_M) !== Math.floor(b.rowS[r - 1] / TIE_M))) continue;
-    for (let k = 0; k + 1 < K; k++) ties.push(...v(r, k), ...v(r, k + 1));
+    tieRows.push(r);
   }
-  const out = { edges: new Float32Array(edges), ties: new Float32Array(ties), centre: kc };
+  const ties = new Float32Array(tieRows.length * Math.max(0, K - 1) * 6);
+  o = 0;
+  for (const r of tieRows) for (let k = 0; k + 1 < K; k++) { put(ties, o, v(r, k)); put(ties, o + 3, v(r, k + 1)); o += 6; }
+  const out = { edges, ties, centre: kc };
   lineMemo.set(b.positions, out);
   return out;
 }
