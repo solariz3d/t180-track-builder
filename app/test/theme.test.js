@@ -92,7 +92,7 @@ const savedTheme = (text) => ({ localStorage: { getItem: (k) => (k === 't180.set
 // AMENDED (D405): the rule changed by name: seven choices, Skyline Night after Skyline
 test('D394: Settings ▸ Theme has seven choices: music follows the melody, each of the four is its own skin, Skyline Night is its own, sigil is none', () => {
   assert.deepEqual([...TH.CHOICES], ['music', 'aqua', 'skyline', 'skyline-night', 'glass', 'aurora', 'sigil']);
-  assert.deepEqual([...TH.CHOICES], [...SETTINGS.CHOICES.theme], 'the setting takes the same six names');
+  assert.deepEqual([...TH.CHOICES], [...SETTINGS.CHOICES.theme], 'the setting takes the same seven names');
   for (const m of SOUND.MELODY_NAMES) {
     assert.equal(TH.skinFor('music', m), m, `music: the melody's skin (${m})`);
     for (const t of SOUND.MELODY_NAMES) assert.equal(TH.skinFor(t, m), t, `${t} over ${m}: ${t}'s skin`);
