@@ -12,6 +12,7 @@
 //      equal what the 0.4.7 builder writes; a fit between two positive edges never rings below 0 (so it stays core/4)
 //   5b a fit down to an edge of 0 never rings below 0, though the raw fit ends a hair under it (the shape of core_piece.test.js row 8b)
 //   5c a side brought back from below 0 to 0 by a numeric transition lands at 0 with slope 0 (E's review §4)
+//   5d a negative side that only carries on while the floor rises under it is lifted to the floor, not refused (E's short read §3)
 //   6  the edge is sampled by the steeper side counted by its size: an edge of -60° gets as many samples as one of +60° (on a cup of 60°)
 //   7  the piece after a negative edge continues each side from it with no step at the joint, and stays an edge piece
 //   8  the panel: a typed negative edge reaches the core as that target, on its side only
@@ -120,6 +121,19 @@ test('row 5c: a side brought back from below 0 to 0 by a numeric transition shor
     assert.equal(end[ch].v, 0, `${ch} ends at 0`); assert.equal(end[ch].m, 0, `${ch} ends with slope 0`);
   }
   assert.ok(!extend(d, { length: 100 }).pieces[3].edge, 'the next piece is no edge piece');
+});
+
+test('row 5d: a negative side that only carries on while the floor rises under it (a cup narrowing to 0) is lifted to the floor, not refused', () => {
+  // E's D406 short read §3 (exo_memory/handback/p-d406-shortread-E_2026-10-19.md, probe6): c1ddce4's ceiling (the higher asked value) sat under the rising floor
+  let d = extend(D.createDoc('t'), { length: 200, family: 'bowl', first: { c: 15.5 } });
+  d = extend(d, { length: 100, transition: { e: 40, er: 40 }, targets: { e: -45, er: -45 } });
+  d = extend(d, { length: 100, transition: { c: 60 }, targets: { c: 0 } });
+  const P = d.pieces[d.pieces.length - 1];
+  for (const ch of ['e', 'er']) {
+    const totals = P.channels[ch].map((v, i) => P.channels.c[i] + v);
+    assert.ok(totals.every((t) => t >= D.EDGE_FLOOR - 1e-9), `${ch}: every total at or above the floor: ${totals}`);
+    near(P.channels[ch][P.channels[ch].length - 1], D.EDGE_FLOOR, 1e-9, `${ch} ends lifted to the floor over a flat cup`);
+  }
 });
 
 test('row 6: the edge is sampled by the steeper side counted by its size: -60° gets as many samples as +60°', () => {

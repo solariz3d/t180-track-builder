@@ -164,9 +164,10 @@ function extend(doc, opts = {}) {
       // never under the floor. The asked values, not the fitted end: a fit to a target of 0 can end a hair under it (-0.0069 measured), which must still clamp to 0
       // and the mirror of that above (E's D406 review §4): a side asked only at or below 0, with some of it below, rings no higher than the higher of its two asked
       // values, so a side brought back up to 0 lands at 0 and ends flat (a numeric transition rang -45.5 -> 0 up to +8.28 and ended at +0.67). A side asked above 0
-      // keeps the cap, so its bytes do not move
+      // keeps the cap, so its bytes do not move. The ceiling never falls under the floor (E's D406 short read §3): a side that only carries on while the floor rises
+      // under it (a cup narrowing under e -45) is lifted to the floor, as the low end always did, not refused
       const lo = Math.min(0, C[ch][0], given(targets[ch]) ? targets[ch] : 0), top = Math.max(C[ch][0], given(targets[ch]) ? targets[ch] : C[ch][0]);
-      const hi = (i) => (lo < 0 && top <= 0 ? top : Math.max(0, cap(i)));
+      const hi = (i) => (lo < 0 && top <= 0 ? Math.max(top, floor(i)) : Math.max(0, cap(i)));
       C[ch] = C[ch].map((x, i) => Math.min(hi(i), Math.max(Math.max(lo, floor(i)), x)));
       const ne = C[ch].length; if (C[ch][ne - 1] <= 1e-3) C[ch][ne - 2] = C[ch][ne - 1];   // an edge that ends at 0 ends flat, so the piece after it starts clean
     }
