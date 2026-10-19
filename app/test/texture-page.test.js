@@ -9,6 +9,9 @@
 //      boxes and colour, then the glyphs hidden and the surfaces shot again, the text against the 2nd and 98th percentile background pixel in its boxes
 //   3  the empty builder shows the track in characters (#empty-art) only while there are no pieces: shown at the start, hidden once a piece is placed,
 //      shown again when the last one is undone
+//   4  (A's review 12) the art sits in the free area right of the left panel: no overlap with #left at window widths 900, 1100 and 1400
+//   5  (A's review 12) at display scales 1.25 and 1.5 each fine tile (SIGIL, Skyline, Glass, Aurora) is drawn one tile pixel per device pixel, so it lands
+//      unresampled (resampled, Aurora's dots smeared into uneven two-pixel smudges)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -150,4 +153,43 @@ test('row 3: the empty builder shows the track in characters only while there ar
     await undo(1); await sleep(500);
     assert.equal(await pieces(), 0); assert.equal(await shown(), true, `${look}: the last piece undone: shown again`);
   }
+});
+
+// D399 fixes (A's review 12): the art sits in the free area right of the left panel at every window width the app allows, and the fine tiles land one
+// tile pixel per device pixel at Windows' fractional display scales
+test('row 4: the empty builder\'s art never sits under the left panel: no overlap with #left at window widths 900, 1100 and 1400', { skip }, async (t) => {
+  await load('sigil');
+  const got = [];
+  try {
+    for (const w of [900, 1100, 1400]) {
+      await send('Emulation.setDeviceMetricsOverride', { width: w, height: 860, deviceScaleFactor: 1, mobile: false }); await sleep(400);
+      const r = await ev("const a = document.getElementById('empty-art').getBoundingClientRect(), l = document.getElementById('left').getBoundingClientRect(); return { art: [a.left, a.right, a.top, a.bottom].map(Math.round), left: [l.left, l.right, l.top, l.bottom].map(Math.round), inner: innerWidth };");
+      const overlap = Math.max(0, Math.min(r.art[1], r.left[1]) - Math.max(r.art[0], r.left[0])) * Math.max(0, Math.min(r.art[3], r.left[3]) - Math.max(r.art[2], r.left[2]));
+      got.push(`${w}: art x ${r.art[0]}-${r.art[1]}, #left x ${r.left[0]}-${r.left[1]}, overlap ${overlap} px²`);
+      assert.equal(overlap, 0, `window ${w}: the art (x ${r.art[0]}-${r.art[1]}) overlaps #left (x ${r.left[0]}-${r.left[1]}) by ${overlap} px²`);
+      assert.ok(r.art[1] <= r.inner, `window ${w}: the art ends inside the window (${r.art[1]} of ${r.inner})`);
+    }
+  } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
+  t.diagnostic(got.join('; '));
+});
+
+// the fine tiles' own sizes in pixels (scripts/texture_tiles.js); Aqua's soft noise has no pixel structure to keep and is sized in CSS px
+const FINE = { sigil: [128, 128], skyline: [128, 128], glass: [8, 300], aurora: [3, 3] };
+test('row 5: at display scales 1.25 and 1.5, each fine tile is drawn one tile pixel per device pixel (its size times the pixel ratio is its own size)', { skip }, async (t) => {
+  const got = [];
+  try {
+    for (const scale of [1.25, 1.5]) {
+      await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: scale, mobile: false });
+      for (const [look, [w, h]] of Object.entries(FINE)) {
+        await load(look);
+        await ev("document.getElementById('m-file').open = true; await new Promise((r) => setTimeout(r, 150)); return true;");
+        const sizes = await ev(`const one = (el) => getComputedStyle(el).backgroundSize.split(',')[0].trim().split(/\\s+/).map(parseFloat).map((v) => +(v * devicePixelRatio).toFixed(3));
+          return { dpr: devicePixelRatio, header: one(document.querySelector('header')), left: one(document.getElementById('left')), menu: one(document.querySelector('#m-file .more-menu')) };`);
+        await ev("document.getElementById('m-file').open = false; return true;");
+        got.push(`${scale} ${look}: ${JSON.stringify(sizes)}`);
+        for (const s of ['header', 'left', 'menu']) assert.deepEqual(sizes[s], [w, h], `${look} at ${scale}: the ${s}'s tile covers ${sizes[s].join(' x ')} device px, not its own ${w} x ${h}`);
+      }
+    }
+  } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
+  t.diagnostic(got.join('; '));
 });

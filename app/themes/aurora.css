@@ -5,7 +5,7 @@
    The drift stops for anyone who asks the system for reduced motion. */
 
 [data-theme="aurora"] {
-  --tex: url(tex/aurora.png) 0 0 / 3px 3px repeat;   /* D399: this look's texture (index.html, --tex): a dot matrix, one dot every 3 px; app/themes/tex/aurora.png, scripts/texture_tiles.js */
+  --tex: url(tex/aurora.png) 0 0 / calc(3 * var(--dpx)) calc(3 * var(--dpx)) repeat;   /* D399: this look's texture (index.html, --tex): a dot matrix, one dot every 3 px; app/themes/tex/aurora.png, scripts/texture_tiles.js */
   --bg: #04050d; --panel: #080a1a; --raise: #0e1130; --line: #252a5c; --hair: rgba(150, 200, 255, .18);
   --text: #eaf6ff; --dim: #b6c4e4; --accent: #6ff5c0; --accent-dim: rgba(111, 245, 192, .16);
   --mine: #d9a55a; --bad: #ef6a52; --warn: #e3b448; --ok: #8fc9a2;
@@ -66,7 +66,7 @@
 /* THE LEFT PANEL: a pane of night glass with a slow curtain of light in its top */
 [data-theme="aurora"] #left {
   background: var(--tex), radial-gradient(70% 220px at 20% 0%, rgba(111, 245, 192, .2), transparent 70%), radial-gradient(60% 200px at 85% 0%, rgba(160, 120, 255, .3), transparent 70%), var(--night-glass);
-  background-size: 3px 3px, 140% 100%, 140% 100%, 100% 100%; animation: aurora-breathe 18s ease-in-out infinite;   /* D399: the tile's size first */
+  background-size: calc(3 * var(--dpx)) calc(3 * var(--dpx)), 140% 100%, 140% 100%, 100% 100%; animation: aurora-breathe 18s ease-in-out infinite;   /* D399: the tile's size first */
   border-color: rgba(150, 200, 255, .2); border-radius: 16px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, .55), 0 0 34px rgba(110, 80, 255, .22), inset 0 1px 0 rgba(111, 245, 192, .22);
   backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);

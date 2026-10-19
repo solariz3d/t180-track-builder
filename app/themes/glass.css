@@ -5,7 +5,7 @@
    (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every canvas hue) are not redefined. Fonts: the page's own (Windows). */
 
 [data-theme="glass"] {
-  --tex: url(tex/glass.png) 0 0 / 8px 300px repeat-x;   /* D399: this look's texture (index.html, --tex): an ordered (Bayer) dither that thins from the top of each surface; app/themes/tex/glass.png, scripts/texture_tiles.js */
+  --tex: url(tex/glass.png) 0 0 / calc(8 * var(--dpx)) calc(300 * var(--dpx)) repeat-x;   /* D399: this look's texture (index.html, --tex): an ordered (Bayer) dither that thins from the top of each surface; app/themes/tex/glass.png, scripts/texture_tiles.js */
   --bg: #06111b; --panel: #0a1824; --raise: #0f2232; --line: #2b5672; --hair: rgba(190, 230, 255, .34);
   --text: #f0f9ff; --dim: #a9c9dd; --accent: #8fe6ff; --accent-dim: rgba(143, 230, 255, .22);
   --frost: rgba(205, 238, 255, .14); --frost-edge: rgba(205, 240, 255, .58); --sheen: rgba(255, 255, 255, .55); --deep: rgba(4, 14, 24, .80);
