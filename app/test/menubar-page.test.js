@@ -27,6 +27,8 @@
 //      menu and Export to Assetto Corsa is on one line, left of them; the same at 125% scaling, where a window can be 979.2 or 1279.2 px wide (A's review 10)
 //  18  (D401) Settings ▸ Theme's first choice and default is Random (it was Music); choosing it while open picks another look at once and that look's melody
 //      follows; it is still saved as music, and a saved music loads as Random
+//  19  (D401, A's read §8) on a fresh start, nothing saved and Random already ticked, a click on Random picks another look at once and its melody follows,
+//      and again on the next click; Random stays ticked and the theme is saved as music
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -390,6 +392,34 @@ test('row 18 (D401): Settings ▸ Theme starts with Random, not Music, and it is
     assert.ok(['aqua', 'skyline', 'glass', 'aurora'].includes(await look()), 'a saved music starts on a random look');
     await open('m-settings');
     assert.equal(await ticked('m-settings', 'Random'), true, 'a saved music is shown as Random');
+    assert.deepEqual(errors, []);
+  } finally { onEvent = null; await send('Network.disable'); }
+});
+test('row 19 (D401, A\'s read §8): a fresh start, Random already ticked: one click on Random picks another look and its melody, and so does the next', { skip }, async () => {
+  const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
+  const look = () => ev("return document.documentElement.getAttribute('data-theme');");
+  const fetched = async (name) => { for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/' + name)); i++) await sleep(100); };
+  try {
+    await load();
+    assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), null, 'nothing saved');
+    await ev("document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); return true;");   // the sound starts on a press (app/sound.js)
+    await fetched('loop_closed.wav');
+    await open('m-settings');
+    assert.equal(await ticked('m-settings', 'Random'), true, 'Random is ticked, as on every fresh start');
+    let before = await look();
+    for (const n of [1, 2]) {
+      const had = urls.slice();   // a look whose two files this load already fetched keeps them (app/sound.js), so it is not fetched again
+      await clickText('m-settings', 'Random');
+      const picked = await look();
+      assert.notEqual(picked, before, `click ${n} on a ticked Random picks another look: still ${picked}`);
+      assert.ok(['aqua', 'skyline', 'glass', 'aurora'].includes(picked), `click ${n}: one of the four looks with a melody: ${picked}`);
+      const before2 = had.some((u) => u.endsWith('sounds/undo_' + picked + '.wav'));
+      if (!before2) await fetched('undo_' + picked + '.wav');
+      assert.ok(urls.some((u) => u.endsWith('sounds/undo_' + picked + '.wav')), `click ${n}: ${picked}'s melody follows (its files ${before2 ? 'were in already' : 'are fetched'})`);
+      assert.equal(await ticked('m-settings', 'Random'), true, `click ${n}: Random stays ticked`);
+      before = picked;
+    }
+    assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), JSON.stringify('music'), 'saved as music');
     assert.deepEqual(errors, []);
   } finally { onEvent = null; await send('Network.disable'); }
 });
