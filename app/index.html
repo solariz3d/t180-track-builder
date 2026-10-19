@@ -111,6 +111,12 @@
      the window buttons (as a flex row, the note's whole one-line text counted toward the box's minimum width and pushed the bar 108 px past 1400) */
   header #install { flex: 0 1 auto; display: grid; grid-template-columns: auto minmax(0, max-content); align-items: center; column-gap: 8px; }
   header #install > button { white-space: nowrap; flex: none; }
+  /* D396: THE BAR FITS DOWN TO tauri.conf.json's minWidth (900). At 1400 it needs 1279 px, so below that the title gives way, never a menu, Export or the window's
+     own buttons (#winctl, which an overflowing bar pushed out of the window first): under 1280 "TRACK BUILDER" folds away and the track name may narrow to 64 px;
+     under 1100 the gaps and the menu names' padding tighten; under 980 "T-180" folds too, and the sigil dot stays. The full name is the window's title */
+  @media (max-width: 1279px) { header h1 .wm-rest { display: none; } header #name { flex: 0 1 121px; min-width: 64px; } }
+  @media (max-width: 1099px) { header { gap: 4px; } header h1 { margin-right: 6px; } header .more > summary { padding: 5px 7px; } }
+  @media (max-width: 979px) { header h1 .wm-name { display: none; } }
   /* D355: THE BRUSH STRIP under the bar (C's panel builds it as .brush-strip and shows it only while the brush is on; the page moves it into the banner row): its
      fields run along one row, in the page's raised panel colour with a hairline under it, as the recovery bar is laid out */
   #banner .brush-strip { padding: 6px 12px; background: var(--raise); border-bottom: 1px solid var(--line); }
