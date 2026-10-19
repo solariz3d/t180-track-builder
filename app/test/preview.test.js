@@ -709,8 +709,21 @@ test('D257: Ctrl+Z still leaves the camera where it started (and still undoes): 
 // 2026-10-14, Sigil: until a picture is chosen for the road, the preview wears one dark surface; a chosen picture brings the set back.
 test('the surface: asphalt or solid draws the sigil surface, an image draws the set, and no kind keeps the set', () => {
   const hud = { textContent: '' }, x = livePreview({ hud });
-  x.p.setTextureSet(null, 'asphalt'); x.win.step(); assert.equal(x.p.surface, 'sigil'); assert.ok(/sigil look/.test(hud.textContent), hud.textContent);
+  // D409: the HUD names this surface "plain road" (it said "sigil look", which since 0.4.6 reads as the page's SIGIL look; the next test pins that)
+  x.p.setTextureSet(null, 'asphalt'); x.win.step(); assert.equal(x.p.surface, 'sigil'); assert.ok(/plain road/.test(hud.textContent), hud.textContent);
   x.p.setTextureSet(null, 'solid'); assert.equal(x.p.surface, 'sigil');
   x.p.setTextureSet(null, 'image'); x.win.step(); assert.equal(x.p.surface, 'textures'); assert.ok(/AC look/.test(hud.textContent), hud.textContent);
   x.p.setTextureSet(null); assert.equal(x.p.surface, 'textures', 'an old caller with no kind is not switched to sigil');
+});
+// D409 (the keeper's 0.4.8 screenshot: "FREE VIEW · SIGIL LOOK (L)" under Skyline): the plain surface is the ROAD's, drawn in every page look, so the HUD names
+// the road and never a page look; the flag itself follows the road surface chosen, not the page's look
+test('D409: the camera HUD names the plain surface as the road\'s, never "sigil", for asphalt and solid alike', () => {
+  const hud = { textContent: '' }, x = livePreview({ hud });
+  for (const kind of ['asphalt', 'solid']) {
+    x.p.setTextureSet(null, kind); x.win.step();
+    assert.equal(x.p.surface, 'sigil', `${kind}: the plain surface is drawn`);
+    assert.ok(!/sigil/i.test(hud.textContent), `${kind}: the HUD names no page look: ${hud.textContent}`);
+    assert.ok(/plain road \(L\)/.test(hud.textContent), `${kind}: the HUD says what is drawn: ${hud.textContent}`);
+  }
+  x.p.setTextureSet(null, 'image'); x.win.step(); assert.ok(/AC look \(L\)/.test(hud.textContent), `a chosen picture: ${hud.textContent}`);
 });

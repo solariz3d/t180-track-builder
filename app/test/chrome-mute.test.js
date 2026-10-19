@@ -1,0 +1,59 @@
+// chrome-mute.test.js: node --test app/test/chrome-mute.test.js
+// D409: EVERY BROWSER A TEST OR A SCRIPT LAUNCHES IS MUTED. A timing run played the builder's sounds aloud on the speakers (2026-10-19), because the
+// headless Chrome the tests start, like any Chrome, plays what the page plays. --mute-audio silences the browser's output; an OfflineAudioContext
+// (soundrender.js renderClips) renders into a buffer and is not affected. Rows:
+//   1  every launch site in app/, scripts/ and test/ (a line that hands a browser --remote-debugging-port: a spawned Chrome, or WebView2's
+//      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) passes --mute-audio on that same line; the scan must find the known sites (the shared launchChrome,
+//      texture-page's own spawn and prove_render's two app launches), so a scan that finds nothing cannot pass
+//   2  (the librarian, 07:05) the shared launcher itself: a Chrome started by soundrender.js launchChrome, with the caller's own arguments, was spawned
+//      with --mute-audio (its ChildProcess spawnargs, the command line it was started with). Skipped where there is no Chrome
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs'), path = require('path');
+const { chromePath, launchChrome } = require('./soundrender.js');
+const CHROME = chromePath();
+
+const REPO = path.join(__dirname, '..', '..');
+const DIRS = ['app', 'scripts', 'test'];
+
+function walk(dir, out) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p, out); else if (/\.(c|m)?js$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
+
+/** each code line (not a // comment line) that hands a browser a DevTools port: { file, line, text } */
+function launchSites() {
+  const sites = [];
+  for (const d of DIRS) for (const f of walk(path.join(REPO, d), [])) {
+    if (f === __filename) continue;
+    fs.readFileSync(f, 'utf8').split(/\r?\n/).forEach((text, i) => {
+      if (/^\s*(\/\/|\*|\/\*)/.test(text)) return;
+      if (/--remote-debugging-port=/.test(text)) sites.push({ file: path.relative(REPO, f).replace(/\\/g, '/'), line: i + 1, text });
+    });
+  }
+  return sites;
+}
+
+test('row 1: every browser launch site in app/, scripts/ and test/ passes --mute-audio', () => {
+  const sites = launchSites();
+  const files = [...new Set(sites.map((s) => s.file))].sort();
+  for (const f of ['app/test/soundrender.js', 'app/test/texture-page.test.js', 'scripts/prove_render.js']) assert.ok(files.includes(f), `the scan finds the launch site in ${f} (found: ${files.join(', ') || 'none'})`);
+  assert.ok(sites.length >= 4, `the scan finds at least the four known launch sites (${sites.length})`);
+  const loud = sites.filter((s) => !/--mute-audio/.test(s.text)).map((s) => `${s.file}:${s.line}`);
+  assert.deepEqual(loud, [], 'launch sites without --mute-audio');
+});
+
+test('row 2: a Chrome started by the shared launchChrome is spawned with --mute-audio, beside the caller\'s own arguments', { skip: CHROME ? false : 'no Chrome here (set CHROME_PATH)' }, async () => {
+  const { ch, dir } = await launchChrome(CHROME, ['--window-size=800,600'], 't180mute-');
+  try {
+    assert.ok(ch.spawnargs.includes('--window-size=800,600'), `the caller's argument is passed: ${ch.spawnargs.join(' ')}`);
+    assert.ok(ch.spawnargs.includes('--mute-audio'), `spawned without --mute-audio: ${ch.spawnargs.join(' ')}`);
+  } finally {
+    ch.kill(); await new Promise((r) => setTimeout(r, 300)); try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ }
+  }
+});

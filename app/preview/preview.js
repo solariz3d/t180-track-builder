@@ -344,7 +344,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, time: skyTime(t) });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
-    if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? (sigil ? 'sigil look' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}${lateShown && t < lateShown.until ? ` · ${lateShown.rec.type === 'keyup' ? 'key-up' : 'key-down'} ${lateShown.rec.code} came ${(lateShown.rec.lateMs / 1000).toFixed(1)} s late (${lateShown.rec.cause})` : ''}`;
+    if (hud) hud.textContent = `${rig.mode} view · ${look === 'ac' ? (sigil ? 'plain road' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}${lateShown && t < lateShown.until ? ` · ${lateShown.rec.type === 'keyup' ? 'key-up' : 'key-down'} ${lateShown.rec.code} came ${(lateShown.rec.lateMs / 1000).toFixed(1)} s late (${lateShown.rec.cause})` : ''}`;
   }
   raf = win.requestAnimationFrame(frame);
   said();
