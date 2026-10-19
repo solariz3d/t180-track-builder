@@ -30,6 +30,8 @@ const MUTATIONS = [
   { id: 'R15 the road bleeds through the label', file: 'core/labels.js', from: 'background:${bg};', to: "background:${T.alpha('--ink', 0.94, '#0b0d11')};", caughtBy: 'the label box holds only' },
   { id: 'R16 the label box has a border and round corners again', file: 'core/labels.js', from: 'border:0;border-radius:0;', to: 'border:1px solid #3a4250;border-radius:4px;', caughtBy: 'the label box holds only' },
   { id: "R17 the head's fallback place may cover the head", file: 'core/labels.js', from: 'for (const avoid of [keep, core])', to: 'for (const avoid of [null])', caughtBy: "the layout: the head's own label is never culled" },
+  // D409: the page's panels over the view are a keep-out (E's D405 shot check)
+  { id: 'R18 a label may be placed under a panel', file: 'core/labels.js', from: 'if (panels.some((p) => hits(rect, p))) continue;', to: '', caughtBy: 'the layout: no label is placed under a panel' },
   { id: 'R12 no ring clears a large head keep-out', file: 'core/labels.js', from: 'if (view.head) { const d = Math.hypot(it.x - view.head.x, it.y - view.head.y); gaps.push(view.head.r + d + 12, 2 * view.head.r + d + 12); }', to: '', caughtBy: 'the layout: a label anchored on a large head keep-out' },
   { id: 'R9 the panel readout waits for the next state change', file: 'core/panel.js', from: 'readout();   // first, and synchronously', to: '//', caughtBy: 'the panel shows the ghost' },
   { id: 'R10 the ghost readout is the LAST placed piece, not the candidate', file: 'core/coreshell.js', from: 'candidateReadout: (opts) => RD.candidateReadout(doc(), opts),', to: "candidateReadout: (opts) => RD.pieceReadout(doc(), doc().pieces.length - 1),", caughtBy: 'the panel shows the ghost' },

@@ -204,7 +204,8 @@
   #camera [role="toolbar"] button[aria-pressed="true"], #camera [role="toolbar"] button.on { color: var(--accent); box-shadow: 0 -1px 0 var(--accent) inset; }
   /* the depth behind the track: a soft vignette over the view (the road keeps its own lighting) */
   #preview::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 55% 38%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
-  .preview-hud { z-index: 2; left: 346px !important; top: 14px; bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; letter-spacing: .14em; text-transform: uppercase; }
+  /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
+  .preview-hud { z-index: 2; left: 346px !important; top: 84px; bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; letter-spacing: .14em; text-transform: uppercase; }
   #camera p { margin: 0; color: var(--dim); font-size: 11px; letter-spacing: .04em; text-shadow: 0 0 6px #000; }
   /* The side sections never scroll sideways (seen at the default window size once E's 480 px load graph showed): what a
      panel puts here is held to the column's width. Canvases, images and tables shrink to fit, long words break, and the
