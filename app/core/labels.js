@@ -50,10 +50,12 @@ const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && 
  * above its anchor, then below, then to the sides, then farther out; the first place that is inside the view, clear of the head's
  * keep-out square and clear of every label already placed is taken. A label with none is culled, EXCEPT the head's own (an item
  * with `head: true`), which is never culled (headPlace). Returns { drawn, culled }.
+ * D409: `view.panels` = [{ x, y, w, h }], the page's panels over the view (the top readout, the camera and grid bars; mount reads
+ * them): a label is never placed under one (E's D405 shot check: the head's box sat 10,944 px² under the grid bar, only "100.00" showing).
  */
 const OFFSETS = [[0, -1], [0, 1], [1, 0], [-1, 0], [1, -1], [-1, -1], [1, 1], [-1, 1]];
 function layout(items, view) {
-  const drawn = [], culled = [];
+  const drawn = [], culled = [], panels = Array.isArray(view.panels) ? view.panels : [];
   const keep = view.head ? { x: view.head.x - view.head.r, y: view.head.y - view.head.r, w: 2 * view.head.r, h: 2 * view.head.r } : null;
   for (const it of items.slice().sort((a, b) => a.priority - b.priority)) {
     let placed = null;
@@ -66,6 +68,7 @@ function layout(items, view) {
         const x = it.x - it.w / 2 + dx * (it.w / 2 + gap), y = it.y - it.h / 2 + dy * (it.h / 2 + gap), rect = { x, y, w: it.w, h: it.h };
         if (x < 0 || y < 0 || x + it.w > view.width || y + it.h > view.height) continue;
         if (keep && hits(rect, keep)) continue;
+        if (panels.some((p) => hits(rect, p))) continue;
         if (drawn.some((d) => hits(rect, d.rect))) continue;
         placed = rect; break;
       }
@@ -94,7 +97,11 @@ function headPlace(it, view, keep) {
   const d2 = (s) => (s.x + w / 2 - it.x) ** 2 + (s.y + h / 2 - it.y) ** 2;
   spots.sort((a, b) => d2(a) - d2(b));
   const core = view.head ? { x: view.head.x - 7, y: view.head.y - 7, w: 14, h: 14 } : null;
-  for (const avoid of [keep, core]) for (const s of spots) { const r = { x: s.x, y: s.y, w, h }; if (!avoid || !hits(r, avoid)) return r; }
+  // D409: with panels over the view (view.panels), a first pass also keeps clear of them; a view the panels leave no room in falls back to the pass without
+  const panels = Array.isArray(view.panels) ? view.panels : [];
+  for (const strict of panels.length ? [true, false] : [false]) {
+    for (const avoid of [keep, core]) for (const s of spots) { const r = { x: s.x, y: s.y, w, h }; if ((!avoid || !hits(r, avoid)) && !(strict && panels.some((p) => hits(r, p)))) return r; }
+  }
   return { x: Math.max(0, Math.min(W - w, it.x - w / 2)), y: Math.max(0, Math.min(H - h, it.y - h / 2)), w, h };
 }
 
@@ -134,6 +141,25 @@ function mount(stage, shell, win) {
   layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden';
   stage.append(layer);
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
+  // D409: the page's panels over the view, in css px of the stage and 6 px wider each way: the top readout (app/core/valuesoverlay.js) and the camera and
+  // grid bars (app/camera/index.js, in #camera beside the stage). None on a page without them. They show, hide and resize, so they are read again, but at
+  // most every 200 ms: reading boxes forces a layout, and a drag redraws every frame (D404's frame budget)
+  const PANELS = '[aria-label="piece values"], #camera [role="toolbar"]';
+  let panelsAt = -Infinity, panelsNow = [];
+  const panelsOf = () => {
+    const t = win.performance && typeof win.performance.now === 'function' ? win.performance.now() : Date.now();
+    if (t - panelsAt < 200) return panelsNow;
+    panelsAt = t; panelsNow = readPanels(); return panelsNow;
+  };
+  const readPanels = () => {
+    if (typeof doc.querySelectorAll !== 'function' || typeof stage.getBoundingClientRect !== 'function') return [];
+    const s = stage.getBoundingClientRect(), out = [];
+    for (const e of doc.querySelectorAll(PANELS)) {
+      const b = e.getBoundingClientRect();
+      if (b.width > 0 && b.height > 0) out.push({ x: b.left - s.left - 6, y: b.top - s.top - 6, w: b.width + 12, h: b.height + 12 });
+    }
+    return out;
+  };
   let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true, gripView = false;
   // D242: the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
   let pointer = null, pickedFor = null, hoverId = null;
@@ -209,7 +235,7 @@ function mount(stage, shell, win) {
         const text = labelText(r, gripView).join('\n'), size = sizeOf(text);
         items.push({ piece: r.id, text, x: p.x, y: p.y, w: size.w, h: size.h, head: isHead, priority: isHead ? -1 : head ? Math.hypot(p.x - head.x, p.y - head.y) : 0 });
       });
-      placed = layout(items, { width: W, height: H, head });
+      placed = layout(items, { width: W, height: H, head, panels: items.length ? panelsOf() : [] });
     }
     placed.drawn.forEach((d, i) => { const e = box(i); if (e.textContent !== d.text) e.textContent = d.text; e.style.left = `${Math.round(d.rect.x)}px`; e.style.top = `${Math.round(d.rect.y)}px`; e.style.display = ''; });
     for (let i = placed.drawn.length; i < pool.length; i++) pool[i].style.display = 'none';

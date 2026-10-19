@@ -11,6 +11,9 @@
 //      D399's track in characters stood still on the screen while the camera moved, which read as a fault (the keeper, 0.4.8); it is taken out, not moved
 //   5  (A's review 12) at display scales 1.25 and 1.5 each fine tile (SIGIL, Skyline, Glass, Aurora) is drawn one tile pixel per device pixel, so it lands
 //      unresampled (resampled, Aurora's dots smeared into uneven two-pixel smudges)
+//   6  (D409, E's D405 shot check) no label in the 3D view sits under a panel: with six pieces placed and the chase camera, the camera label (.preview-hud)
+//      and the piece's readout box ([aria-label="piece readouts"]) overlap neither the top readout ([aria-label="piece values"]) nor the camera and grid
+//      bars (#camera's toolbars) by a pixel, in all five looks, at windows 1400 x 860 and 2560 x 1440 (E measured 2,058 and 10,944 px² at 1400)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -192,4 +195,35 @@ test('row 6 (D405): Skyline Night: every enabled text is 4.5:1 or more on its ow
   }
   t.diagnostic(report.join('; '));
   assert.deepEqual(under, [], 'Skyline Night: texts under 4.5:1 on their own pixels');
+});
+
+const OVERLAPS = `const r = (e) => { const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
+  const seen = (e) => { const s = getComputedStyle(e), b = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && b.width > 0 && b.height > 0; };
+  const hud = [...document.querySelectorAll('.preview-hud')].filter(seen).map((e) => ({ name: 'camera label "' + e.textContent.slice(0, 24) + '"', ...r(e) }));
+  const boxes = [...document.querySelectorAll('[aria-label="piece readouts"] > div')].filter(seen).map((e) => ({ name: 'readout box "' + e.textContent.split('\\n')[0] + '"', ...r(e) }));
+  const panels = [...document.querySelectorAll('[aria-label="piece values"], #camera [role="toolbar"]')].filter(seen).map((e) => ({ name: e.getAttribute('aria-label'), ...r(e) }));
+  const over = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const hits = []; for (const l of [...hud, ...boxes]) for (const p of panels) { const a = Math.round(over(l, p)); if (a > 0) hits.push(l.name + ' under ' + p.name + ': ' + a + ' px²'); }
+  return { hud: hud.length, boxes: boxes.length, panels: panels.map((p) => p.name), hits };`;
+test('row 6 (D409): no label in the 3D view sits under the top readout or the camera and grid bars, in every look, at 1400 x 860 and 2560 x 1440', { skip }, async (t) => {
+  const got = [];
+  try {
+    for (const [w, h] of [[1400, 860], [2560, 1440]]) {
+      await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+      for (const look of LOOKS) {
+        await load(look);
+        await ev("const lab = [...document.querySelectorAll('#palette *')].find((e) => e.childNodes.length && e.firstChild.nodeType === 3 && e.firstChild.textContent.trim() === 'turn °'); const i = lab && (lab.querySelector('input') || lab.parentElement.querySelector('input:not([type=checkbox])')); if (i) { i.value = '30'; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); } return !!i;");
+        await extend(6);
+        await ev("document.dispatchEvent(new CustomEvent('t180-camera', { detail: { mode: 'chase' } })); return true;"); await sleep(1800);
+        assert.equal(await pieces(), 6, `${look} at ${w}: six pieces placed`);
+        const o = await ev(OVERLAPS);
+        got.push(`${w} ${look}: ${o.hits.length ? o.hits.join('; ') : 'clear'}`);
+        assert.equal(o.hud, 1, `${look} at ${w}: the camera label is shown`);
+        assert.ok(o.boxes >= 1, `${look} at ${w}: the head piece's readout box is shown`);
+        assert.ok(o.panels.includes('piece values') && o.panels.includes('Camera') && o.panels.includes('Grid and symmetry'), `${look} at ${w}: the panels are shown (${o.panels.join(', ')})`);
+        assert.deepEqual(o.hits, [], `${look} at ${w}: labels under a panel`);
+        assert.deepEqual(errors, [], `${look} at ${w}: no page errors`);
+      }
+    }
+  } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); t.diagnostic(got.join('; ')); }
 });

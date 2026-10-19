@@ -138,6 +138,21 @@ test('the layout: the head\'s own label is never culled, even where no ring arou
   assert.ok(both.drawn.some((x) => x.piece === 'head'), 'the head\'s label is drawn beside another');
 });
 
+// D409 (E's D405 shot check): the head's label sat under the grid bar, all but its top line hidden. The page's panels over the view are a keep-out
+// like the head's: a label is never placed under one, and the head's own label, which is never culled, finds a place clear of them too
+test('the layout: no label is placed under a panel over the view, the head\'s own label included', () => {
+  const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const bar = { x: 100, y: 250, w: 400, h: 50 }, top = { x: 150, y: 0, w: 300, h: 60 };
+  const view = { width: 600, height: 300, head: { x: 300, y: 240, r: 20 }, panels: [bar, top] };
+  // anchored just above the bar: a label below its anchor, or straddling it, would sit under the bar
+  const r = LB.layout([{ piece: 'head', text: 'head', x: 300, y: 262, w: 290, h: 47, priority: -1, head: true }, { piece: 'b', text: 'b', x: 300, y: 30, w: 120, h: 40, priority: 2 }], view);
+  assert.ok(r.drawn.some((d) => d.piece === 'head'), 'the head\'s label is drawn');
+  for (const d of r.drawn) for (const p of view.panels) assert.ok(!hits(d.rect, p), `${d.piece} at ${JSON.stringify(d.rect)} is under a panel ${JSON.stringify(p)}`);
+  // a view with no panels given is laid out as before
+  const before = LB.layout([{ piece: 'head', text: 'head', x: 300, y: 262, w: 290, h: 47, priority: -1, head: true }], { width: 600, height: 300, head: view.head });
+  assert.equal(before.drawn.length, 1, 'no panels: the head\'s label is still drawn');
+});
+
 // R11's own test since D187: the head's piece now gets a label however little of it is in view, so only a piece that is NOT the
 // head's shows whether a label slides along its piece to the part that is on screen
 // D242 (amended by name): piece labels are on HOVER only, so this piece is hovered (the preview's pick answers a station in it) to be labelled at all
