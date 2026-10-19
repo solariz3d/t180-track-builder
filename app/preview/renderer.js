@@ -82,6 +82,10 @@ void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = 
 // drawn after the clear and before everything else, without depth: each pixel's ray is the camera's ROTATION only (skyBasis, from the inverse of the
 // view-projection with the eye at the origin), so turning moves the sky across the screen and moving or zooming does not. The pattern is the skin's style
 // (app/preview/sky/<style>.js: vec3 skyPattern(vec3 dir, float t)); 'none' draws no pass, which is today's frame call for call.
+// D398: the pass breaks its own 8-bit banding. A long, slow gradient written to 8 bits per channel shows as steps (down a column of open sky, one colour
+// ran up to 174 px); the pass adds a 4x4 ordered (Bayer) offset on the pixel, half a step either way of one 8-bit step, so the steps break into a
+// screen too fine to see. It is a fix, not a look: the quiet band near the horizon moves by at most 0.009 of its ratio to the fog
+// (app/test/sky-dither.test.js). The pattern is the pass's own (pass_bayer2/4), so every style gets it and none carries a copy.
 const SKY_VS = `
 attribute vec2 aPos;
 uniform vec3 uFwd; uniform vec3 uRight; uniform vec3 uUp;
@@ -96,7 +100,9 @@ precision mediump float;
 varying vec3 vRay;
 uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime;
 ${pattern}
-void main(){ gl_FragColor = vec4(clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0), 1.0); }`;
+float pass_bayer2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+float pass_bayer4(vec2 a){ return pass_bayer2(0.5 * a) * 0.25 + pass_bayer2(a); }
+void main(){ vec3 c = clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0); gl_FragColor = vec4(clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0), 1.0); }`;
 const SKY_STRIP = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 /** The inverse of a column-major 4×4 (cofactors); a singular matrix throws. */
 function invert4(m) {

@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **The skies no longer show steps in their gradients.** A sky's long, slow fades were drawn with 256 levels per colour, so they showed as faint bands: down one column of open sky the same colour could run for up to 174 pixels before stepping to the next. The sky is now drawn with a very fine, fixed pattern that moves each pixel by less than one of those levels, which breaks the steps up into something too small to see; the longest run of one colour is now a few pixels. It is a fix, not a new look: the colours are the same, and near the horizon each sky still fades to its fog as before. It applies to every sky, since it is added where all of them are drawn. (`app/preview/renderer.js`.) Tests: `app/test/sky-dither.test.js`, `app/test/sky.test.js`.
+
 ## [0.4.6] - 2026-10-18
 
 ### Added
