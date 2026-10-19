@@ -5,6 +5,7 @@
    The drift stops for anyone who asks the system for reduced motion. */
 
 [data-theme="aurora"] {
+  --tex: url(tex/aurora.png) 0 0 / calc(3 * var(--dpx)) calc(3 * var(--dpx)) repeat;   /* D399: this look's texture (index.html, --tex): a dot matrix, one dot every 3 px; app/themes/tex/aurora.png, scripts/texture_tiles.js */
   --bg: #04050d; --panel: #080a1a; --raise: #0e1130; --line: #252a5c; --hair: rgba(150, 200, 255, .18);
   --text: #eaf6ff; --dim: #b6c4e4; --accent: #6ff5c0; --accent-dim: rgba(111, 245, 192, .16);
   --mine: #d9a55a; --bad: #ef6a52; --warn: #e3b448; --ok: #8fc9a2;
@@ -20,7 +21,7 @@
   color-scheme: dark;
 }
 
-@keyframes aurora-breathe { 0%, 100% { background-position: 0 0, 0 0, 0 0; } 50% { background-position: 30% 0, 70% 0, 0 0; } }
+@keyframes aurora-breathe { 0%, 100% { background-position: 0 0, 0 0, 0 0, 0 0; } 50% { background-position: 0 0, 30% 0, 70% 0, 0 0; } }   /* D399: the tile (first) stays still */
 
 [data-theme="aurora"], [data-theme="aurora"] body { background: radial-gradient(140% 90% at 50% -10%, #12164a 0%, #070920 45%, #03040b 100%); }
 [data-theme="aurora"] ::selection { background: rgba(160, 120, 255, .35); }
@@ -28,7 +29,7 @@
 
 /* THE TOP BAR: night, with the light along its lower edge */
 [data-theme="aurora"] header {
-  background: radial-gradient(40% 160% at 22% 0%, rgba(80, 255, 175, .22), transparent 70%), radial-gradient(40% 160% at 70% 0%, rgba(170, 110, 255, .26), transparent 70%), linear-gradient(180deg, #070818 0%, #0b0e2a 100%);
+  background: var(--tex), radial-gradient(40% 160% at 22% 0%, rgba(80, 255, 175, .22), transparent 70%), radial-gradient(40% 160% at 70% 0%, rgba(170, 110, 255, .26), transparent 70%), linear-gradient(180deg, #070818 0%, #0b0e2a 100%);
   border-bottom-color: rgba(111, 245, 192, .45); box-shadow: 0 1px 0 rgba(184, 146, 255, .35), 0 8px 28px rgba(110, 80, 255, .28), 0 2px 12px rgba(111, 245, 192, .18);
 }
 [data-theme="aurora"] header h1 { color: #dffcf0; text-shadow: 0 0 10px var(--green-glow), 0 0 22px var(--violet-glow); }
@@ -47,7 +48,7 @@
 [data-theme="aurora"] #win-close:hover { background: #b0303a; box-shadow: none; }
 
 /* the menus: deep glass with a violet rim */
-[data-theme="aurora"] .more-menu { background: linear-gradient(180deg, rgba(14, 18, 52, .94), rgba(6, 8, 24, .96)); border-color: rgba(184, 146, 255, .45); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .6), 0 0 30px rgba(120, 90, 255, .25), inset 0 1px 0 rgba(111, 245, 192, .18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="aurora"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(14, 18, 52, .94), rgba(6, 8, 24, .96)); border-color: rgba(184, 146, 255, .45); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .6), 0 0 30px rgba(120, 90, 255, .25), inset 0 1px 0 rgba(111, 245, 192, .18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="aurora"] .more-menu button { border-radius: 8px; }
 [data-theme="aurora"] .more-menu hr { border-top-color: rgba(184, 146, 255, .3); }
 [data-theme="aurora"] .pieces-menu .piece-row:hover { background: rgba(111, 245, 192, .07); }
@@ -64,8 +65,8 @@
 
 /* THE LEFT PANEL: a pane of night glass with a slow curtain of light in its top */
 [data-theme="aurora"] #left {
-  background: radial-gradient(70% 220px at 20% 0%, rgba(111, 245, 192, .2), transparent 70%), radial-gradient(60% 200px at 85% 0%, rgba(160, 120, 255, .3), transparent 70%), var(--night-glass);
-  background-size: 140% 100%, 140% 100%, 100% 100%; animation: aurora-breathe 18s ease-in-out infinite;
+  background: var(--tex), radial-gradient(70% 220px at 20% 0%, rgba(111, 245, 192, .2), transparent 70%), radial-gradient(60% 200px at 85% 0%, rgba(160, 120, 255, .3), transparent 70%), var(--night-glass);
+  background-size: calc(3 * var(--dpx)) calc(3 * var(--dpx)), 140% 100%, 140% 100%, 100% 100%; animation: aurora-breathe 18s ease-in-out infinite;   /* D399: the tile's size first */
   border-color: rgba(150, 200, 255, .2); border-radius: 16px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, .55), 0 0 34px rgba(110, 80, 255, .22), inset 0 1px 0 rgba(111, 245, 192, .22);
   backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
