@@ -104,5 +104,30 @@ const STANDIN_AFTER_FAIL = "{ const T = process.getBuiltinModule('node:test'); T
 // either NOT TESTED message: which one shows depends on whether the failed row's report reached the parent before the death (E's two timings)
 const NOT_TESTED_ANY = /^(the named test never reported( \(native crash .+\))?|native crash (3221225477|SIGSEGV) in .+): the mutant was NOT TESTED$/;
 
+// D412: NARROWED FIRST. A mutant's verdict reads one named test (caughtBy), but its inner run ran every test of its files (core-mutation: 76, ~21 s;
+// exo_memory/handback/p-d412-part2a-O_2026-10-19.md in the lighthouse repo). A harness now runs the mutant narrowed to that test first; a catch there
+// stands, and anything else (not caught, NOT APPLIED, a NOT TESTED throw) is re-run whole, whose verdict stands. So narrowing only makes a catch faster.
+// A pattern is narrowed only when the harness's control, run narrowed to it, passed and ran a test (the harness decides and passes `narrowable`).
+// - narrowArgs(caughtBy): the --test-name-pattern argument, caughtBy read literally (regex characters escaped), as the harnesses' includes() reads it.
+// - ran(out): { tests, suites } that a spec run really ran: its top-level ✔/✖ rows, not counting a file's own row nor the failing-tests recap.
+//   Not the summary's "ℹ tests": a file in which the pattern matches nothing is reported as ONE passing test, named by its path (node 24).
+// - narrowedFirst(run, m, narrowable): run(m, extraArgs) is the harness's runMutant; the result carries `narrowed`.
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const narrowArgs = (caughtBy) => [`--test-name-pattern=${escapeRegex(caughtBy)}`];
+function ran(out) {
+  const L = String(out).split(/\r?\n/), cut = L.findIndex((l) => /^✖ failing tests:/.test(l));
+  const rows = (cut < 0 ? L : L.slice(0, cut)).map((l) => /^[✔✖] (.+?) \([\d.]+ms\)/.exec(l)).filter((m) => m && !/\.test\.[cm]?js$/.test(m[1]));
+  const s = /ℹ suites (\d+)/.exec(String(out));
+  return { tests: rows.length, suites: s ? Number(s[1]) : null };
+}
+function narrowedFirst(run, m, narrowable) {
+  if (m.from !== null && narrowable) {
+    let r = null;
+    // a narrowed run that throws (NOT TESTED) is no verdict either way: the whole run below reads it again, and throws again if it is real
+    try { r = run(m, narrowArgs(m.caughtBy)); } catch (_) { r = null; }
+    if (r && r.applied && r.caught) return { ...r, narrowed: true };
+  }
+  return { ...run(m, []), narrowed: false };
+}
 module.exports = { reporterArgs, crashes, crashesIn, notTested, failures, STANDIN, NOT_TESTED, reading, reported, fileExitsIn, neverReported, STANDIN_AFTER_FAIL, NOT_TESTED_ANY,
-  LOAD_THROW, STANDIN_LOAD_THEN_CRASH, NOT_TESTED_LOAD, NOT_CAUGHT_LOAD };
+  LOAD_THROW, STANDIN_LOAD_THEN_CRASH, NOT_TESTED_LOAD, NOT_CAUGHT_LOAD, narrowArgs, ran, narrowedFirst };
