@@ -317,14 +317,10 @@ function fits(m, w) {
 // a second headless Chrome for row 17, started at a device scale of 1.25: only a browser started that way lays a frame out on whole device pixels, so a
 // 979 px frame is 979.2 CSS px wide; DevTools' Emulation at 1.25 keeps it at 979 (measured, D396). Its own page errors are kept apart from the main ones
 async function scaledChrome(scale) {
-  const port = 9300 + Math.floor(Math.random() * 600), udir = fs.mkdtempSync(path.join(os.tmpdir(), 't180menu-scaled-')), errs = [];
-  const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${udir}`, '--no-first-run', '--window-size=1400,860', `--force-device-scale-factor=${scale}`, 'about:blank'], { stdio: 'ignore' });
-  let tgt; for (let i = 0; i < 100 && !tgt; i++) { await sleep(200); try { tgt = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch (e) { /* not up yet */ } }
-  if (!tgt) { proc.kill(); throw new Error(`headless Chrome at scale ${scale} did not answer on port ${port}`); }
-  const sock = new WebSocket(tgt.webSocketDebuggerUrl); await new Promise((r, j) => { sock.onopen = r; sock.onerror = () => j(new Error('the scaled DevTools socket failed')); });
-  let n = 0; const pend = new Map();
-  sock.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } else if (d.method === 'Runtime.exceptionThrown') errs.push(d.params.exceptionDetails.text); };
-  const call = (method, params = {}) => new Promise((r) => { const i = ++n; pend.set(i, r); sock.send(JSON.stringify({ id: i, method, params })); });
+  // D400: a free port, this Chrome's own (launchChrome checks the browser's pid), and a socket that rejects waiting sends when it closes
+  const errs = []; let proc, udir, tgt;
+  try { ({ ch: proc, dir: udir, tgt } = await launchChrome(CHROME, ['--window-size=1400,860', `--force-device-scale-factor=${scale}`], 't180menu-scaled-')); } catch (e) { throw new Error(`headless Chrome at scale ${scale}: ${e.message}`); }
+  let sock, call; try { ({ ws: sock, send: call } = await connect(tgt.webSocketDebuggerUrl, (d) => { if (d.method === 'Runtime.exceptionThrown') errs.push(d.params.exceptionDetails.text); })); } catch (e) { proc.kill(); throw new Error(`the scaled DevTools socket failed: ${e.message}`); }
   const run = async (expr) => { const d = await call('Runtime.evaluate', { expression: `(async () => { ${expr} })()`, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`scaled page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d)}`); return d.result.result.value; };
   await call('Runtime.enable'); await call('Page.enable');
   const close = async () => { try { sock.close(); } catch (e) { /* closing */ } proc.kill(); await sleep(300); try { fs.rmSync(udir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } };
