@@ -118,7 +118,11 @@ function sameBatches(a, b) {
 test('ghost: the ghost of a segment tail equals what placing it builds, and the placed track is untouched by the ghost', () => {
   const all = words(8), tm = TM.createTrackModel(), before = tm.update({ segments: all.slice(0, 6), closed: false });
   const keep = before.batches.map((b) => [b.positions, Array.from(b.model)]);
+  const pathWas = { n: before.path.samples.length, L: before.path.lengthM, end: before.path.samples[before.path.samples.length - 1] };
   const g = tm.ghostFor({ segments: all.slice(0, 7) });
+  // D407 (amended, by A): a placement now TAKES the ghost's path and mesh, so placing after the ghost no longer shows a ghost that grew the live path; the rule this test states, the
+  // placed track untouched by the ghost, is checked on the path itself (B10 in mutation.test.js was caught by the placement below, and is caught here now)
+  assert.deepEqual({ n: before.path.samples.length, L: before.path.lengthM, end: before.path.samples[before.path.samples.length - 1] }, pathWas, 'the placed path is untouched by the ghost');
   assert.ok(g.batches.length > 0 && g.batches.every((b) => b.piece === 6), 'only the new piece (and its seam)');
   assert.deepEqual(before.batches.map((b) => [b.positions, Array.from(b.model)]), keep, 'the live batches are the same objects, unmoved');
   const placed = tm.update({ segments: all.slice(0, 7), closed: false });

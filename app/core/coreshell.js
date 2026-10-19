@@ -186,15 +186,30 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   let currentJob = null;   // D240 follow-up: the overlap check running for the preview on screen: { entry, job }
   /** spawnsInfo's answer for document d (memoised by spawnsInfo; `auto` as it normalises it). */
   let spawnsMemo = null;
+  // D407: the automatic start's path, GROWN when a piece is added (a placement built the whole track's path again, 13 ms on a 12-piece track with a 1,000 m piece, the measurement of 2026-10-19).
+  // An open track whose segments begin with the last one's (the very same objects) at the same start is that path, copied and extended (geom's extendPath gives what buildPath gives, to the bit);
+  // anything else is built in full. The path handed out is never grown in place (the copy is), so an answer already given does not change under its reader.
+  let spawnPathMemo = null;
+  function spawnPath(segs, closed, start) {
+    const G = require('../../src/geom/index.js'), sk = start ? JSON.stringify(start) : null, was = spawnPathMemo;
+    let p0 = null;
+    if (was && !closed && !was.closed && was.sk === sk && segs.length > was.segs.length && was.segs.every((g, j) => g === segs[j])) {
+      const p = was.path, blocks = p.blocks.slice(); blocks[blocks.length - 1] = { ...blocks[blocks.length - 1] };
+      p0 = G.extendPath({ ...p, samples: p.samples.slice(), starts: p.starts.slice(), segFirst: p.segFirst.slice(), segEnd: p.segEnd.slice(), blocks }, segs);
+    } else if (was && was.closed === closed && was.sk === sk && was.segs.length === segs.length && was.segs.every((g, j) => g === segs[j])) p0 = was.path;
+    else p0 = G.buildPath(segs, { step: 2, closed, ...(start ? { start } : {}) });
+    spawnPathMemo = { segs, closed, sk, path: p0 };
+    return p0;
+  }
   function spawnsInfoOf(d, auto) {
     const segs = st.resolved.segments;
     try {
       let layout, path, firstLength;
-      if (d.spawns) ({ layout, path, firstLength } = spawnsLayout(d, segs, st.resolved.lift, st.resolved.start, { open: !d.closed }));
+      if (d.spawns) ({ layout, path, firstLength } = spawnsLayout(d, segs, st.resolved.lift, st.resolved.start, { open: !d.closed, base: spawnPath(segs, !!d.closed, st.resolved.start) }));
       else {   // the automatic start, with a pit lane to show: the same placement the export makes
-        const { buildPath } = require('../../src/geom/index.js'), p0 = buildPath(segs, { step: 2, closed: !!d.closed, ...(st.resolved.start ? { start: st.resolved.start } : {}) });
+        const p0 = spawnPath(segs, !!d.closed, st.resolved.start);
         path = st.resolved.lift ? st.resolved.lift(p0) : p0;
-        try { layout = startLayout(segs, st.resolved.lift, st.resolved.start, { open: !d.closed }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; layout = null; }
+        try { layout = startLayout(segs, st.resolved.lift, st.resolved.start, { open: !d.closed, base: p0 }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; layout = null; }
       }
       // the pit lane: built as the export builds it (src/geom/pitlane.js); a lane that cannot be built says why, in the export's words
       let lane = null, laneError = null;
@@ -1144,11 +1159,11 @@ function straightPieces(doc) { return doc.pieces.map((P, i) => (P.type === 'road
  * along it) and the grid's size; the export then places every marker on the real road and runs its own checks on them, unchanged.
  */
 const STRAIGHT_K = 1 / 5000, STRAIGHT_ROLL = 0.5 * Math.PI / 180;
-function startLayout(segments, lift, start, { open = false } = {}) {   // open (D243a): the test export of an unfinished track lays its grid on an OPEN path
+function startLayout(segments, lift, start, { open = false, base = null } = {}) {   // open (D243a): the test export of an unfinished track lays its grid on an OPEN path; base (D407): that path, already built
   const { buildPath } = require('../../src/geom/index.js'), Markers = require('../../src/markers/layout.js');
   const nearly = (g) => g.kind === 'road' && [g.k0, g.k1, g.kp0, g.kp1].every((x) => Math.abs(x) <= STRAIGHT_K) && [g.roll0, g.roll1].every((x) => Math.abs(x) <= STRAIGHT_ROLL);
   const marked = segments.map((g) => (nearly(g) ? { ...g, word: 'straight', k0: 0, k1: 0, kp0: 0, kp1: 0, roll0: 0, roll1: 0 } : g));
-  const p = buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) });
+  const p = base || buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) });
   return Markers.defaultLayout(lift ? lift(p) : p, marked, open ? { firstPiece: true } : {});   // D284: on an open track the line stays on its straight's first piece as pieces are added
 }
 
@@ -1160,12 +1175,12 @@ function startLayout(segments, lift, start, { open = false } = {}) {   // open (
  * on the centreline, 16 m behind the last grid slot); the hotlap is the doc's piece and distance, or the automatic design-speed run-up when not placed.
  * Returns { layout, path, firstLength }.
  */
-function spawnsLayout(doc, segments, lift, start, { open = false } = {}) {
+function spawnsLayout(doc, segments, lift, start, { open = false, base = null } = {}) {
   const { buildPath } = require('../../src/geom/index.js'), Markers = require('../../src/markers/layout.js'), { segStarts } = require('../../src/markers/place.js');
   const sp = doc.spawns, first = doc.pieces[0];
   if (!sp) throw Object.assign(new Error('spawnsLayout: the track has no spawns'), { code: 'NO_SPAWNS' });
   if (!first || first.type !== 'road') throw Object.assign(new Error('the start line goes on the first piece, and the track has no first road piece'), { code: 'NO_START_STRAIGHT' });
-  const p0 = buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) }), path = lift ? lift(p0) : p0;
+  const p0 = base || buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) }), path = lift ? lift(p0) : p0;
   const firstLength = segments.filter((g) => g.id === first.id).reduce((a, g) => a + g.length, 0);
   const line = { word: first.id, along: Math.min(Math.max(sp.line.along, 0), firstLength) };
   const grid = { pattern: '2-staggered', count: sp.grid.count, poleBackM: sp.grid.poleBackM !== undefined ? sp.grid.poleBackM : Markers.DEFAULTS.poleBackM, rowGapM: sp.grid.rowGapM, colGapM: sp.grid.colGapM, edits: {} };
