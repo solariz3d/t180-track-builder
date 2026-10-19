@@ -6,7 +6,7 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Fixed
-- **The title bar fits a narrow window, and the window's own buttons stay in it.** Below about 1280 pixels wide the bar ran past the window's right edge, and the first thing it pushed out was the minimise, maximise and close buttons, though the window can be made as narrow as 900. Now, as the window narrows, the name gives way first: under 1280 "TRACK BUILDER" folds away and the track name box may narrow, under 1100 the gaps and the menu names tighten, and under 980 "T-180" folds too, leaving the round mark. The menus, Export to Assetto Corsa and the three window buttons stay whole at every width from 900 up. The full name is still the window's title. (`app/index.html`.) Test: `app/test/menubar-page.test.js` row 17.
+- **The title bar fits a narrow window, and the window's own buttons stay in it.** Below about 1280 pixels wide the bar ran past the window's right edge, and the first thing it pushed out was the minimise, maximise and close buttons, though the window can be made as narrow as 900. Now, as the window narrows, the name gives way first: under 1320 "TRACK BUILDER" folds away and the track name box may narrow, under 1100 the gaps and the menu names tighten, and under 1000 "T-180" folds too, leaving the round mark. The menus, Export to Assetto Corsa and the three window buttons stay whole at every width from 900 up, and so does an empty stretch of the bar at least 24 pixels wide to drag the window by. This holds at 125% display scaling too, where a window can be a fraction of a pixel wide. The full name is still the window's title. (`app/index.html`.) Test: `app/test/menubar-page.test.js` row 17.
 
 ## [0.4.6] - 2026-10-18
 

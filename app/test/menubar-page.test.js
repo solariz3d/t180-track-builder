@@ -22,8 +22,9 @@
 //  15  (D382) the sound slider in Settings shows 45 on a fresh start with nothing saved, and a saved volume (0.6) shows as saved, 60
 //  16  (D394) Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody's two files; after a reload, that look and that melody;
 //      SIGIL's tooltip says its melody is still picked at random
-//  17  (D396) the bar fits at every width the window allows, from tauri.conf.json's minWidth (900) up: at 900, 1100, 1280 and 1400 px nothing overflows, the
-//      window's own buttons (#winctl) are wholly inside the window, and every menu and Export to Assetto Corsa is on one line, left of them
+//  17  (D396) the bar fits at every width the window allows, from tauri.conf.json's minWidth (900) up: at 900, 1100, 1280 and 1400 px and on both sides of
+//      each fold nothing overflows, the window's own buttons (#winctl) are wholly inside the window, the empty grab strip (.drag) is at least 24 px, and every
+//      menu and Export to Assetto Corsa is on one line, left of them; the same at 125% scaling, where a window can be 979.2 or 1279.2 px wide (A's review 10)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -301,28 +302,67 @@ test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and
   } finally { onEvent = null; await send('Network.disable'); }
 });
 
-test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px: no overflow, the window buttons wholly inside the window, every menu and Export on one line left of them', { skip }, async () => {
+// what row 17 reads in a page (or a frame's page): its width, the bar's overflow, the window buttons, the grab strip (.drag), the h1 and every menu name and Export
+const BAR = (d) => `const d = ${d}, lines = (e) => { const r = d.createRange(); r.selectNodeContents(e); return new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size; };
+  const head = d.querySelector('header'), wb = d.getElementById('winctl').getBoundingClientRect(), box = (s) => d.querySelector(s).getBoundingClientRect().width;
+  const parts = [...d.querySelectorAll('header details > summary')].concat([...d.querySelectorAll('#install > button')]);
+  return { width: d.documentElement.getBoundingClientRect().width, overflow: head.scrollWidth - head.clientWidth, win: { left: wb.left, right: wb.right, width: wb.width },
+    drag: box('header .drag'), h1: box('header h1'), name: box('#name'),
+    parts: parts.map((e) => { const b = e.getBoundingClientRect(); return { text: e.textContent.trim(), lines: lines(e), right: b.right, width: b.width }; }) };`;
+function fits(m, w) {
+  assert.ok(m.overflow <= 0, `at ${w} px the bar overflows by ${m.overflow} px`);
+  assert.ok(m.win.width >= 138 && m.win.left >= 0 && m.win.right <= m.width + 0.5, `at ${w} px the window buttons are not wholly inside the window: ${Math.round(m.win.left)} to ${Math.round(m.win.right)}`);
+  assert.ok(m.drag >= 24, `at ${w} px the bar's empty grab strip (.drag) is ${m.drag.toFixed(1)} px, under 24: the frameless window has almost nothing to drag by`);
+  assert.equal(m.parts.length, 8, `seven menus and the Export button at ${w} px`);
+  for (const p of m.parts) {
+    assert.equal(p.lines, 1, `at ${w} px "${p.text}" is on one line`);
+    assert.ok(p.width > 0 && p.right <= m.win.left + 0.5, `at ${w} px "${p.text}" ends at ${Math.round(p.right)}, left of the window buttons (${Math.round(m.win.left)})`);
+  }
+}
+// a second headless Chrome for row 17, started at a device scale of 1.25: only a browser started that way lays a frame out on whole device pixels, so a
+// 979 px frame is 979.2 CSS px wide; DevTools' Emulation at 1.25 keeps it at 979 (measured, D396). Its own page errors are kept apart from the main ones
+async function scaledChrome(scale) {
+  const port = 9300 + Math.floor(Math.random() * 600), udir = fs.mkdtempSync(path.join(os.tmpdir(), 't180menu-scaled-')), errs = [];
+  const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${udir}`, '--no-first-run', '--window-size=1400,860', `--force-device-scale-factor=${scale}`, 'about:blank'], { stdio: 'ignore' });
+  let tgt; for (let i = 0; i < 100 && !tgt; i++) { await sleep(200); try { tgt = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch (e) { /* not up yet */ } }
+  if (!tgt) { proc.kill(); throw new Error(`headless Chrome at scale ${scale} did not answer on port ${port}`); }
+  const sock = new WebSocket(tgt.webSocketDebuggerUrl); await new Promise((r, j) => { sock.onopen = r; sock.onerror = () => j(new Error('the scaled DevTools socket failed')); });
+  let n = 0; const pend = new Map();
+  sock.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } else if (d.method === 'Runtime.exceptionThrown') errs.push(d.params.exceptionDetails.text); };
+  const call = (method, params = {}) => new Promise((r) => { const i = ++n; pend.set(i, r); sock.send(JSON.stringify({ id: i, method, params })); });
+  const run = async (expr) => { const d = await call('Runtime.evaluate', { expression: `(async () => { ${expr} })()`, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`scaled page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d)}`); return d.result.result.value; };
+  await call('Runtime.enable'); await call('Page.enable');
+  const close = async () => { try { sock.close(); } catch (e) { /* closing */ } proc.kill(); await sleep(300); try { fs.rmSync(udir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } };
+  return { call, run, errs, close };
+}
+test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sides of each fold: no overflow, the window buttons wholly inside the window, a grab strip of at least 24 px, every menu and Export on one line left of them; at 125% scaling too, where a window can be a fraction of a pixel wide', { skip }, async () => {
   const minWidth = JSON.parse(fs.readFileSync(path.join(REPO, 'src-tauri', 'tauri.conf.json'), 'utf8')).app.windows[0].minWidth;
   assert.equal(minWidth, 900, 'the narrowest window tauri.conf.json allows');
+  const at = {};
   try {
-    for (const w of [minWidth, 1100, 1280, 1400]) {
+    for (const w of [minWidth, 979, 980, 999, 1000, 1099, 1100, 1279, 1280, 1319, 1320, 1400]) {
       await send('Emulation.setDeviceMetricsOverride', { width: w, height: 860, deviceScaleFactor: 1, mobile: false });
       await load();
-      const m = await ev(`
-        const lines = (e) => { const r = document.createRange(); r.selectNodeContents(e); return new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size; };
-        const head = document.querySelector('header'), wb = document.getElementById('winctl').getBoundingClientRect();
-        const parts = [...document.querySelectorAll('header details > summary')].concat([...document.querySelectorAll('#install > button')]);
-        return { width: innerWidth, overflow: head.scrollWidth - head.clientWidth, win: { left: wb.left, right: wb.right, width: wb.width },
-          parts: parts.map((e) => { const b = e.getBoundingClientRect(); return { text: e.textContent.trim(), lines: lines(e), right: b.right, width: b.width }; }) };`);
+      const m = await ev(BAR('document'));
       assert.equal(m.width, w);
-      assert.ok(m.overflow <= 0, `at ${w} px the bar overflows by ${m.overflow} px`);
-      assert.ok(m.win.width >= 138 && m.win.left >= 0 && m.win.right <= w + 0.5, `at ${w} px the window buttons are not wholly inside the window: ${Math.round(m.win.left)} to ${Math.round(m.win.right)}`);
-      assert.equal(m.parts.length, 8, `seven menus and the Export button at ${w} px`);
-      for (const p of m.parts) {
-        assert.equal(p.lines, 1, `at ${w} px "${p.text}" is on one line`);
-        assert.ok(p.width > 0 && p.right <= m.win.left + 0.5, `at ${w} px "${p.text}" ends at ${Math.round(p.right)}, left of the window buttons (${Math.round(m.win.left)})`);
-      }
+      fits(m, w); at[w] = m;
     }
+    // at 125% a window 1599 device pixels wide is 1279.2 CSS px: (max-width: 1279px) and (min-width: 1280px) both miss it. The page is put in a frame of each
+    // width below a fold, which lands on whole device pixels (979.2, 999.2, ...); it must fit as at the whole width below, folded the same
+    const sc = await scaledChrome(1.25);
+    try {
+      for (const w of [979, 999, 1099, 1279, 1319]) {
+        await sc.call('Page.navigate', { url: base.replace('index.html', 'lib/cjs.js') }); await sleep(300);
+        await sc.run(`localStorage.clear(); document.documentElement.innerHTML = '<body style="margin:0"><iframe id="f" src="/app/index.html" style="display:block;width:${w}px;height:860px;border:0"></iframe></body>'; return true;`);
+        let ready = false; for (let i = 0; i < 150 && !ready; i++) { await sleep(200); ready = await sc.run("const d = document.getElementById('f').contentDocument; return !!d && d.documentElement.dataset.menubar === 'ready';"); }
+        assert.ok(ready, `the page in a ${w} px frame at 125% mounted its menus (page errors: ${sc.errs.join(' | ') || 'none'})`);
+        const m = await sc.run(BAR("document.getElementById('f').contentDocument"));
+        assert.ok(m.width > w && m.width < w + 1, `a ${w} px frame at 125% is a fraction of a pixel wider (${m.width})`);
+        fits(m, m.width.toFixed(2));
+        assert.equal(Math.round(m.h1), Math.round(at[w].h1), `at ${m.width.toFixed(2)} px the title folds as at ${w} px (h1 ${Math.round(m.h1)} px, not ${Math.round(at[w].h1)})`);
+      }
+      assert.deepEqual(sc.errs, [], 'no page errors at 125%');
+    } finally { await sc.close(); }
     assert.deepEqual(errors, []);
   } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
 });
