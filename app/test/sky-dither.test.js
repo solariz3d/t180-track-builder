@@ -5,7 +5,8 @@
 //   1  banding: down each column of open sky, looking level and looking up 50 degrees, the longest run of one identical 8-bit colour is at most 12 px
 //      for every style (before the dither: 26 to 174 px, so the gradient showed as steps)
 //   2  the quiet band: every pixel from -10 to 10 degrees of elevation, all the way round, stays within 1.30:1 (WCAG) of the skin's --fog, the dither included
-//      (D384 widened, D391's measure)
+//      (D384 widened, D391's measure). The band is drawn with a vertex pair per column, so it really goes round: a control sky white over half the circle
+//      shows white in about half its columns (A's review of D403, §6: drawn as one quad, every column saw azimuth 0)
 //   3  the pattern keeps all 16 levels on a tall canvas: a 4 x 4 block at pixel rows 2400 and 4320 holds 16 different values (A's review 11, finding 1)
 'use strict';
 const test = require('node:test');
@@ -40,10 +41,13 @@ window.__sky = (vs, fs, latlongVs, col) => {
   const use = (p) => { gl.useProgram(p); const a = gl.getAttribLocation(p, 'aPos'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
     const U = (n) => gl.getUniformLocation(p, n); gl.uniform3fv(U('uSky'), col.sky); gl.uniform3fv(U('uSkyA'), col.a); gl.uniform3fv(U('uSkyB'), col.b); gl.uniform3fv(U('uSkyC'), col.c); gl.uniform1f(U('uTime'), 0); return U; };
   const read = (w, h) => { const px = new Uint8Array(w * h * 4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+  // the band's strip: a vertex pair (bottom, top) at each of the 1401 column edges, so each column carries its own azimuth (a quad has one, see row 2)
+  const strip = []; for (let i = 0; i <= 1400; i++) { const x = -1 + 2 * i / 1400; strip.push(x, -1, x, 1); }
+  const bandBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bandBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(strip), gl.STATIC_DRAW);
   const pass = prog(vs), band = prog(latlongVs);
   return {
-    view(B) { const U = use(pass); gl.uniform3fv(U('uFwd'), B.fwd); gl.uniform3fv(U('uRight'), B.right); gl.uniform3fv(U('uUp'), B.up); gl.viewport(0, 0, 1400, 860); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return read(1400, 860); },
-    band() { use(band); gl.viewport(0, 0, 1400, 80); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return read(1400, 80); },
+    view(B) { gl.bindBuffer(gl.ARRAY_BUFFER, buf); const U = use(pass); gl.uniform3fv(U('uFwd'), B.fwd); gl.uniform3fv(U('uRight'), B.right); gl.uniform3fv(U('uUp'), B.up); gl.viewport(0, 0, 1400, 860); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return read(1400, 860); },
+    band() { gl.bindBuffer(gl.ARRAY_BUFFER, bandBuf); use(band); gl.viewport(0, 0, 1400, 80); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 2 * 1401); return read(1400, 80); },
   };
 };
 // the longest run of one identical colour down every 4th column, GL rows y0..y1 (row 0 is the bottom)
@@ -79,8 +83,16 @@ test('row 1: no style\'s sky shows 8-bit steps: down each column of open sky, le
   for (const [style, [lv, up]] of Object.entries(runs)) assert.ok(lv <= 12 && up <= 12, `${style}: the longest flat run is ${lv} px looking level and ${up} px looking up (all: ${JSON.stringify(runs)})`);
 });
 
+// A's review of D403, §6 (the librarian's ruling, 2026-10-18 21:53): the band was drawn as one four-vertex quad, whose two columns of vertices sit at
+// azimuth 0 and 360, the same direction, so every column saw azimuth 0 and "all the way round" was not what row 2 checked. A control sky that is the
+// skin's own fog over the half of the circle nearest azimuth 0 and white over the far half must therefore show white in about half the band's columns
+const controlSky = (fog) => `vec3 skyPattern(vec3 dir, float t){ return abs(atan(dir.z, dir.x)) > 1.5707963 ? vec3(1.0) : vec3(${fog.map((v) => v.toFixed(6)).join(', ')}); }`;
 test('row 2: the quiet band keeps its rule with the dither: every pixel from -10 to 10 degrees, all the way round, within 1.30:1 of --fog', { skip }, async (t) => {
-  const got = {};
+  const got = {}, col = colours('skyline');
+  const ctl = await ev(`(() => { const px = window.__sky(${JSON.stringify(R.SKY_VS)}, ${JSON.stringify(R.skyFS(controlSky(col.fog)))}, ${JSON.stringify(LATLONG_VS)}, ${JSON.stringify(col)}).band();
+    let n = 0; for (let x = 0; x < 1400; x++) { let white = false; for (let y = 0; y < 80; y++) { const k = (y * 1400 + x) * 4; if (px[k] > 250 && px[k + 1] > 250 && px[k + 2] > 250) white = true; } if (white) n++; } return n; })()`);
+  t.diagnostic(`the control sky (white beyond 90 degrees of azimuth 0): white in ${ctl} of the band's 1400 columns`);
+  assert.ok(ctl >= 650 && ctl <= 750, `the band must look all the way round: a control sky white over half the circle shows white in ${ctl} of 1400 columns (about 700 wanted)`);
   for (const style of Object.keys(STYLES)) {
     const px = await ev(`(() => Array.from(${sky(style)}.band()))()`), fog = Y(colours(STYLES[style]).fog);
     let lo = 1, hi = 0; for (let k = 0; k < px.length; k += 4) { const y = Y([px[k] / 255, px[k + 1] / 255, px[k + 2] / 255]); lo = Math.min(lo, y); hi = Math.max(hi, y); }
