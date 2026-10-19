@@ -283,7 +283,7 @@ function mount(root, shell, mountOpts = {}) {
     hintNow();   // D242: the straight hint follows the turn field and its box
     readout();   // first, and synchronously: the numbers follow the fields with no timer and no frame wait
     let why = null;
-    try { send('t180-ghost', { candidate: shell.candidate(previewLength(opts())), cheap: scrubbing, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }
+    try { send('t180-ghost', { candidate: shell.candidate(previewLength(opts()), { coarse: scrubbing }), cheap: scrubbing, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }
     if (why) { send('t180-ghost-clear'); msg.textContent = `no preview of this piece: ${why}`; msg.className = 'message'; }
   };
   // the ghost follows the fields as they change, not only a fresh hover (a pointer resting on the button fires no new mouseenter,

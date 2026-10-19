@@ -213,12 +213,12 @@ function growFlightBlock(g, gi, p0, R0, step, isLast, work) {
 }
 
 /** Grow segment g (index gi) as a block, in local coordinates, from pitch p0 and local frame R0. */
-function growBlock(g, gi, p0, R0, step, isLast, work) {
+function growBlock(g, gi, p0, R0, step, isLast, work, substep = SUB) {
   if (g.to) return growFlightBlock(g, gi, p0, R0, step, isLast, work);
   const L = g.length, k0 = num(g.k0), k1 = num(g.k1), q0 = num(g.kp0), q1 = num(g.kp1);
   const thAt = (u) => k0 * u + (k1 - k0) * u * u / (2 * L), pAt = (u) => p0 + q0 * u + (q1 - q0) * u * u / (2 * L);
   let x = [0, 0, 0], T = tangent(0, p0), R = R0.slice();
-  const n = Math.max(1, Math.ceil(L / SUB)), h = L / n, sub_ = [{ u: 0, x, T, R }];
+  const n = Math.max(1, Math.ceil(L / substep)), h = L / n, sub_ = [{ u: 0, x, T, R }];
   for (let i = 0; i < n; i++) {
     const a = i * h, b = (i === n - 1) ? L : a + h;
     let dx = [0, 0, 0];
@@ -286,7 +286,7 @@ function resize(arr, a, b, n) {
  */
 function growInto(path, segments, from, to, inp, work) {
   for (let gi = from; gi < to; gi++) {
-    const blk = growBlock(segments[gi], gi, inp.p0, inp.R0, path.step, gi === segments.length - 1, work);
+    const blk = growBlock(segments[gi], gi, inp.p0, inp.R0, path.step, gi === segments.length - 1, work, path.substep);   // D404: path.substep is only ever set on a preview ghost's own path
     blk.pl = inp.pl;
     path.blocks[gi] = blk; path.segFirst[gi] = path.samples.length; path.starts[gi] = worldStart(blk);
     for (const r of blk.recs) path.samples.push(new SampleView(r, blk));
@@ -303,7 +303,7 @@ function finish(path, segments, work) {
 }
 
 /**
- * buildPath(segments, { step = 0.5, closed = false, start }).
+ * buildPath(segments, { step = 0.5, closed = false, start, substep }). `substep` (D404, the drag's ghost only): the largest internal integration step in metres, 0.25 by default.
  * Stations every `step` metres, plus every segment boundary. On a closed loop the end must meet the start in position
  * (within `closeTol`, default 1e-3 m) and tangent, or it throws: closing the loop is the document's connector's job
  * (ARCHITECTURE §2), not the geometry's.
@@ -313,7 +313,7 @@ function buildPath(segments, opts = {}) {
   const step = opts.step === undefined ? 0.5 : opts.step;
   if (!(step > 0)) throw new Error('buildPath: step must be positive');
   const closed = !!opts.closed, start = { pos: [0, 0, 0], theta: 0, p: 0, ...(opts.start || {}) };
-  const work = { n: 0 }, path = { lengthM: 0, closed, twist: 0, samples: [], step, starts: [], segFirst: [], segEnd: [], blocks: [] };
+  const work = { n: 0 }, path = { lengthM: 0, closed, twist: 0, samples: [], step, ...(opts.substep > 0 ? { substep: opts.substep } : {}), starts: [], segFirst: [], segEnd: [], blocks: [] };
   growInto(path, segments, 0, segments.length, firstOf(start), work);
   finish(path, segments, work);
   if (closed) {

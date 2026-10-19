@@ -68,6 +68,7 @@ const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain
 const overlapPlacesText = (ck, segs, o) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs, o).flatMap((g) => g.places) });   // D248: "N places", merged as the red list shows them
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
+const GHOST_CHORDS = 48, GHOST_TURN = 0.03, GHOST_PROBES = 16;   // D404: the drag's ghost: at most 48 chords, none turning the heading by more than 0.03 rad (1.7 degrees), the curvature read at 17 stations
 const PC = require('../../src/core/piece.js');   // D240: saved pieces (save a run, put one at the head, mirror it, delete pieces)
 // A's offset channels h and l (the chair's ruling 1, D186): offsetPath(doc, segments, path) lifts a path and recomputes its frame.
 // Not at 17c2301; when the adapter exports it, the shell hands it on as `resolved.lift`, so the preview and the export
@@ -284,7 +285,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // the keeper, 2026-10-12: "a solid lag when putting the pieces down". Every commit converted EVERY piece again (about 90 ms on a 9-piece
   // track); the cache returns an unchanged piece's last segments, so a placement converts only what changed (adapter.js toSegments `cache`)
   const segCache = new WeakMap();
-  const segmentsOf = (d) => (d.pieces.length ? toSegments(d, { cache: segCache }) : []);
+  const segmentsOf = (d, more) => (d.pieces.length ? toSegments(d, { cache: segCache, ...more }) : []);
+  // D404 (the keeper: "even turning a 1000m straight isnt smooth and laggy as hell"): while a handle is DRAGGED the ghost of the next piece is rebuilt on every move, and a
+  // piece is cut into chords of 2 m, so its cost grew with its length (1,000 m: 20 ms a move; 5,000 m: 100 ms). The ghost's piece is now cut into at most GHOST_CHORDS chords
+  // (never shorter than the 2 m it always was, and never so long that the heading turns more than GHOST_TURN radians in one), so a drag costs about the same at 1,000 m as
+  // at 20,000 m; the piece that is placed, the export and the full ghost built when the drag stops are cut as before. A drag is a preview, and the release is exact.
+  const ghostSegM = (P) => {
+    let kmax = 0; for (let j = 0; j <= GHOST_PROBES; j++) { const v = D.valuesAt(P, (P.length * j) / GHOST_PROBES); kmax = Math.max(kmax, Math.abs(v.kh), Math.abs(v.kv)); }
+    return Math.max(2, Math.min(P.length / GHOST_CHORDS, kmax > 0 ? GHOST_TURN / kmax : Infinity));
+  };
   // THE START POSE travels with the segments (found by test 1, D186): the geometry's shape depends on the start PITCH, so a path
   // grown from the origin at pitch 0 is not the document's lap. A real track opened as an example starts where its first station is.
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
@@ -437,7 +446,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return wasClosed && st.history.present !== d ? set(ok('removed the last piece: the loop is open again (Ctrl+Z puts the closed lap back)')) : r;
     },
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
-    candidate: (opts) => { const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) }; },
+    candidate: (opts, { coarse = false } = {}) => {
+      if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts); return { segments: segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }), closed: false, start: startOf(dc) }; }   // D404: the drag's ghost
+      const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) };
+    },
     /** The ghost's readout: what extend(opts) would place, before it is placed (A: the same numbers as after). Throws on bad fields. */
     candidateReadout: (opts) => RD.candidateReadout(doc(), opts),
     /** D331 A: what easing the ghost's piece out would add (readout.js candidateCorner), apart from candidateReadout, whose numbers are the placed piece's. Through the
