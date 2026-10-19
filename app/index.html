@@ -197,10 +197,6 @@
   #palette { padding: 10px; }
   #stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
   #preview { position: relative; min-height: 0; overflow: hidden; }
-  /* D399: the empty builder's track in characters: in the look's dim colour, above the 3D view and under everything else, never in the way */
-  /* centred on the free area right of the left panel's 320 px column (A's review 12: centred on the window, a quarter of it hid behind the panel at 900 px) */
-  #empty-art { position: absolute; z-index: 2; left: calc(50% + 160px); top: 22%; transform: translateX(-50%); margin: 0; font: 11px/12px var(--mono); color: var(--dim); pointer-events: none; user-select: none; white-space: pre; }
-  #empty-art[hidden] { display: none; }
   #camera { position: absolute; z-index: 9; left: 346px; right: 16px; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
   #camera > * { pointer-events: auto; }
   #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
@@ -296,27 +292,6 @@
 <main id="stage">
   <div id="preview"><div class="placeholder">Loading the preview…</div></div>
   <div id="camera"></div>
-  <!-- D399: the empty builder's picture, a track in characters (scripts/empty_art.js), shown only while there are no pieces (the boot, below) -->
-  <pre id="empty-art" aria-hidden="true" hidden>                               /-------------
-                         //////             ------\\\\\
-                      ////     //-----------          \\\\\\\
-                   ////    /////           ------\\\\\      \\\\\\
-                ////   /////                         \\\\\\\\    \\\\\
-            /////   ////                                    \\\\\    \\\
-          ///    ////                                           \\\\   \||
-       ////   ////                                                 \\|   |
-     ||/   ////                                                      |   |
-    ||   ///                                                        |==  |
-    |   ||                                                        //| ===|
-    |   |                                                       ///   /||
-    ||  |\\                                                  ////   ///
-     \\   \\\\\                                           ////   ////
-      \\\\    \\\\\\                                   ////   ////
-         \\\\\     \\\\\\\\                        /////   ////
-             \\\\\\       \\\\\------          /////    ////
-                  \\\\\\\\          ----------//     ////
-                          \\\\\------           //////
-                                    -----------//</pre>
   <div id="guide" style="position: absolute; inset: 0; pointer-events: none; z-index: 5;"></div>
 </main>
 <script src="lib/cjs.js"></script>
@@ -461,9 +436,6 @@
     };
     const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
-    // D399: the empty builder's picture (#empty-art) shows only while the track has no pieces
-    const art = $('empty-art'), showArt = (st) => { art.hidden = !(st && st.history && st.history.present && st.history.present.pieces.length === 0); };
-    shell.subscribe(showArt); showArt(shell.getState());
     // D340, THE LATE-INPUT LOG: each key event the preview handled late ('t180:input-late', app/preview/preview.js checkLate) is appended to input-late.log in
     // the app's data folder (src-tauri/src/lib.rs append_input_log, off the main thread, size-capped), buffered and written later, never on the key's path
     try {
