@@ -10,6 +10,7 @@
 //   · D384 widened: Glass names the new 'prism' sky (a registered style the page's loader loads); SIGIL alone names none
 //   · D391: every style keeps the two GLSL rules (no smoothstep with literal edge0 >= edge1, no sin hash), and the check is not vacuous
 //   · D393: A's probe forms pin the rules' edges (the hash by its fract(sin( shape, exponent literals judged, a sine wave of a dot product kept)
+//   · D398: the shared pass dithers every style by one 8-bit step (its banding is measured in app/test/sky-dither.test.js, in headless Chrome)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -169,4 +170,13 @@ test('D393: A\'s probe forms: the dot-less and the via-variable sin hash and exp
   for (const good of ['float w = sin(dot(dir, vec3(0.0, 1.0, 0.0)) * 3.0);', 'smoothstep(1e-2, 1e-1, x)', 'smoothstep(hi, lo, x)']) {
     assert.deepEqual(SKY.contractProblems('t', good), [], `kept: ${good}`);
   }
+});
+
+test('D398: the shared sky pass dithers every style by one 8-bit step (an ordered 4x4 pattern on the pixel), and its own code keeps the GLSL rules', () => {
+  for (const style of SKY.STYLES.filter((s) => s !== 'none')) {
+    const fs = R.skyFS(SKY.patternSource(style)), main = fs.slice(fs.indexOf('void main()'));
+    assert.match(main, /\(\s*pass_bayer4\(gl_FragCoord\.xy\)\s*-\s*0\.5\s*\)\s*\/\s*255\.0/, `${style}: main() adds the pattern's offset, half a step either way of one 8-bit step`);
+    assert.match(fs, /float pass_bayer4\(vec2 a\)/, `${style}: the pattern is the pass's own, not a style's`);
+  }
+  assert.deepEqual(SKY.contractProblems('pass', R.skyFS('')), [], 'the pass\'s own code breaks neither GLSL rule');
 });
