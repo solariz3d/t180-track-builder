@@ -5,10 +5,14 @@
 //   1  every launch site in app/, scripts/ and test/ (a line that hands a browser --remote-debugging-port: a spawned Chrome, or WebView2's
 //      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) passes --mute-audio on that same line; the scan must find the known sites (the shared launchChrome,
 //      texture-page's own spawn and prove_render's two app launches), so a scan that finds nothing cannot pass
+//   2  (the librarian, 07:05) the shared launcher itself: a Chrome started by soundrender.js launchChrome, with the caller's own arguments, was spawned
+//      with --mute-audio (its ChildProcess spawnargs, the command line it was started with). Skipped where there is no Chrome
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), path = require('path');
+const { chromePath, launchChrome } = require('./soundrender.js');
+const CHROME = chromePath();
 
 const REPO = path.join(__dirname, '..', '..');
 const DIRS = ['app', 'scripts', 'test'];
@@ -44,3 +48,12 @@ test('row 1: every browser launch site in app/, scripts/ and test/ passes --mute
   assert.deepEqual(loud, [], 'launch sites without --mute-audio');
 });
 
+test('row 2: a Chrome started by the shared launchChrome is spawned with --mute-audio, beside the caller\'s own arguments', { skip: CHROME ? false : 'no Chrome here (set CHROME_PATH)' }, async () => {
+  const { ch, dir } = await launchChrome(CHROME, ['--window-size=800,600'], 't180mute-');
+  try {
+    assert.ok(ch.spawnargs.includes('--window-size=800,600'), `the caller's argument is passed: ${ch.spawnargs.join(' ')}`);
+    assert.ok(ch.spawnargs.includes('--mute-audio'), `spawned without --mute-audio: ${ch.spawnargs.join(' ')}`);
+  } finally {
+    ch.kill(); await new Promise((r) => setTimeout(r, 300)); try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ }
+  }
+});
