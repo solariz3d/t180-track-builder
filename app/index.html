@@ -574,13 +574,18 @@
       const { acFolder, acAllow } = MI.acNodes($('more-install')), soundRow = $('sound-row'), authorRow = MI.authorField(document, settings);   // D365
       $('m-settings-slot').append(...[acFolder, acAllow].filter(Boolean));   // in Settings from the start, not only once Settings has been opened
       // D394: Settings ▸ Theme, live. The look changes at once (app/lib/tokens.js redraws on data-theme); a fixed theme's own melody follows as soon as its two
-      // files are in, the old one playing until then (app/sound.js setMelody); music and sigil keep the melody playing, and call off a switch still loading, so
-      // music's skin is the melody that goes on playing
+      // files are in, the old one playing until then (app/sound.js setMelody); sigil keeps the melody playing, and calls off a switch still loading.
+      // D401: Random (saved as music) picks one of the other looks at once, and its melody follows as a fixed theme's does, so the choice visibly does something
       const THm = await loadCjs('app/lib/theme.js', get);
-      settings.on('theme', (v) => {
-        if (soundNow) { try { soundNow.setMelody(THm.THEMES.includes(v) ? v : soundNow.melody); } catch (e) { console.error(`the theme's melody could not start: ${e && e.message}`); } }
-        THm.applyTheme(document, THm.skinFor(v, soundNow ? soundNow.melody : document.documentElement.getAttribute('data-theme')));
-      });
+      const onTheme = (v) => {
+        const others = THm.THEMES.filter((t) => t !== document.documentElement.getAttribute('data-theme')), pick = v === 'music' ? others[Math.floor(Math.random() * others.length)] : null;
+        if (soundNow) { try { soundNow.setMelody(THm.THEMES.includes(v) ? v : pick || soundNow.melody); } catch (e) { console.error(`the theme's melody could not start: ${e && e.message}`); } }
+        THm.applyTheme(document, THm.skinFor(v, pick || (soundNow ? soundNow.melody : document.documentElement.getAttribute('data-theme'))));
+      };
+      settings.on('theme', onTheme);
+      // and a click on Random while it is already the choice (every fresh start: it is the default) picks again, though the saved value does not change
+      // (settings.set tells its listeners only on a change; A's read of D401, §8). app/menubar/items.js calls this from the Random item
+      ctx.repickTheme = () => onTheme('music');
       MB.mountBar(document, [
         { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport'), $('open'), $('versions')] },
         { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: some(selection, 'The selection\'s entries')(c) }) },
