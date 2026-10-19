@@ -9,7 +9,7 @@
 //   1  a 1,000 m turn dragged: p95 of the work frames' script time <= 6.9 ms in every look (before D404: 20 ms median, 25 to 30 at the 95th percentile)
 //   2  a 2,000 m turn dragged: p95 <= 6.9 ms in every look (before: 40 ms median)
 //   3  a 1,000 m and a 2,000 m piece stretched by its length handle: p95 <= 6.9 ms (before: 9 and 19 ms)
-//   4  past the ordinary range the drag adapts and does not stall: a 20,000 m turn's p95 stays under 150 ms (before: 650 ms), at no fewer than 5 rebuilds a second
+//   4  past the ordinary range the drag adapts and does not stall: a 20,000 m turn's p95 stays under 40 ms (before: 650 ms; now about 8), at no fewer than 20 rebuilds a second
 //   5  the release is the exact road: during the drag the ghost has a few hundred path stations, and the moment the pointer is let go it has a station every 2 m again
 'use strict';
 const test = require('node:test');
@@ -124,8 +124,8 @@ test('row 3: a 1,000 m and a 2,000 m piece stretched by its length handle: p95 w
   t.diagnostic(`p95 ms by length: ${JSON.stringify(got)}`);
 });
 
-test('row 4: past the ordinary range the drag adapts and does not stall: a 20,000 m turn\'s p95 stays under 150 ms, at 5 or more rebuilds a second', { skip }, async (t) => {
-  const v = await within('aqua', 20000, 'turn', 150, 5);
+test('row 4: past the ordinary range the drag adapts and does not stall: a 20,000 m turn\'s p95 stays under 40 ms, at 20 or more rebuilds a second', { skip }, async (t) => {
+  const v = await within('aqua', 20000, 'turn', 40, 20);
   t.diagnostic(`20,000 m: p95 ${v.runs.map((r) => r.p95.toFixed(0)).join(' / ')} ms, ${v.runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
   assert.ok(v.ok, `a 20,000 m turn drag: p95 ${v.runs.map((r) => r.p95.toFixed(0)).join(' / ')} ms, ${v.runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
 });

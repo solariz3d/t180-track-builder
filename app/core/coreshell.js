@@ -446,7 +446,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return wasClosed && st.history.present !== d ? set(ok('removed the last piece: the loop is open again (Ctrl+Z puts the closed lap back)')) : r;
     },
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
-    candidate: (opts, { coarse = false } = {}) => { const n0 = doc().pieces.length; const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d, coarse ? { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) } : undefined), closed: false, start: startOf(d) }; },
+    candidate: (opts, { coarse = false } = {}) => {
+      if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts); return { segments: segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }), closed: false, start: startOf(dc) }; }   // D404: the drag's ghost
+      const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) };
+    },
     /** The ghost's readout: what extend(opts) would place, before it is placed (A: the same numbers as after). Throws on bad fields. */
     candidateReadout: (opts) => RD.candidateReadout(doc(), opts),
     /** D331 A: what easing the ghost's piece out would add (readout.js candidateCorner), apart from candidateReadout, whose numbers are the placed piece's. Through the
