@@ -1,7 +1,7 @@
 // adapter.js: the core's document → the SAME path samples src/geom builds (the spec's GO §6), so the preview, cameras,
 // mesh, validation and export are reused unchanged.
 //
-//   toSegments(doc, { segM = 2, designKmh, cupRuns = true, cache }) -> src/geom segments (each carries its profile; a cup's, and a legacy segment whose
+//   toSegments(doc, { segM = 2, segMFor, designKmh, cupRuns = true, cache }) -> src/geom segments (each carries its profile; a cup's, and a legacy segment whose
 //                                               width or r changes (D196, a CHORD, `chord: true`), also a blend: see legacySeg). `cache`, a WeakMap
 //                                               the caller keeps (the window's shell, so placing a piece does not rebuild every piece before it):
 //                                               a piece whose own object, neighbours, seam role and incoming state are all what they were last
@@ -266,7 +266,7 @@ function deepFreeze(v) {
   return v;
 }
 
-function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns = true, cache = null } = {}) {
+function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpeedKmh, cupRuns = true, cache = null } = {}) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
   if (!(segM > 0)) throw new D.CoreError('BAD_STEP', `segM must be positive, got ${segM}`);
@@ -276,7 +276,11 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), firstRoad = roadIdx[0], lastRoad = roadIdx[roadIdx.length - 1];
   const seam = doc.closed && roadIdx.length > 1 && !!doc.pieces[firstRoad].cup !== !!doc.pieces[lastRoad].cup && cupRuns;
   const chan = (P, s) => D.valuesAt(P, s);
-  const nOf = (P) => Math.max(1, Math.ceil(P.length / segM - 1e-9));
+  // D404: `segMFor(P, i)` may give one piece its own chord length (the preview's ghost while a handle is dragged: a piece of 1,000 m is 500 chords of 2 m, and every
+  // move of the pointer rebuilds all of them). Absent, or answering undefined, a piece is cut by segM, exactly as before: nothing that is placed or exported passes it.
+  const at0 = segMFor ? new Map(doc.pieces.map((P, i) => [P, i])) : null;
+  const mOf = (P) => { const m = segMFor ? segMFor(P, at0.get(P)) : undefined; return m === undefined ? segM : m; };
+  const nOf = (P) => Math.max(1, Math.ceil(P.length / mOf(P) - 1e-9));
   const legacyAt = (P, j) => { const n = nOf(P), s0 = (P.length * j) / n, s1 = (P.length * (j + 1)) / n; return legacySeg(P.family, chan(P, s0), chan(P, s1), chan(P, (s0 + s1) / 2), s1 - s0); };
   const legacyFirst = (P) => legacyAt(P, 0).start;   // the first row of the piece's first segment
   const legacyLast = (P) => legacyAt(P, nOf(P) - 1).end;   // and the last row of its last
@@ -288,7 +292,7 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
       lastProfile = null; lastLegacy = false; lastKind = null; lastPlain = null;   // the landing's cross-section starts afresh: nothing morphs across the air
       return;
     }
-    const n = Math.max(1, Math.ceil(P.length / segM - 1e-9)), at = (s) => D.valuesAt(P, s);
+    const n = nOf(P), at = (s) => D.valuesAt(P, s);
     let a = at(0);
     if (pi === 0 || doc.pieces[pi - 1].type === 'flight') roll = a.phi;
     const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // D225: a tube, an edge, or a cup entering from a tube is built by xsecSegments
@@ -322,7 +326,7 @@ function toSegments(doc, { segM = 2, designKmh = MACH6.designSpeedKmh, cupRuns =
     const P = doc.pieces[pi], nextP = doc.pieces[pi + 1];
     const tailTo = P.type === 'road' && P.cup && cupRuns && nextP && nextP.type === 'road' && !nextP.cup && !nextP.tube && !nextP.edge ? nextP : null;
     return [pi === 0, pi ? doc.pieces[pi - 1].type : null, tailTo, seam, seam && pi === firstRoad, seam && pi === lastRoad,
-      seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, segM, designKmh, cupRuns];
+      seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, mOf(P), tailTo ? mOf(tailTo) : null, seam ? mOf(doc.pieces[firstRoad]) : null, seam ? mOf(doc.pieces[lastRoad]) : null, designKmh, cupRuns];   // the chord length of every piece this one's segments read (a tail fade, the lap seam) is an input too
   };
   doc.pieces.forEach((P, pi) => {
     if (!cache) { piece(P, pi); return; }

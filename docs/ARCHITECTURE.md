@@ -224,6 +224,24 @@ renderer. Reuse blackbox's `kn5.js`, `kn5tex.js`, renderer, `collider.js`, `road
 - **Native Rust side:** file IO, launching AC, and the final kn5 write.
 - **Blackbox becomes the test lab:** drive the built track, drop the replay in, and see the loads on your own geometry.
 
+## 9b. The previewer's frame bar (keeper, 2026-10-18, D404)
+
+**The rule, in the keeper's words:** "I always want it as smooth as the user's refresh rate, maybe except under absolute crazy strenuous circumstances, but mostly solid at all times, it's a previewer."
+The frame budget is 1000 / the display's refresh rate in Hz: **6.06 ms at the keeper's 165 Hz display (the bar, tested as 6.0)**, 6.9 ms at 144 Hz (the floor for a machine of that kind), 4.2 at 240. A previewer lap does not land if it drags, orbits or edits an ordinary track
+slower than that (an ordinary piece is up to about 2,000 m); only a single huge piece (20 km) may drop below it, and then it drops detail, never stalls.
+- **How it is held:** `app/test/drag-frame.test.js` drags the turn and length handles of a 1,000 m and a 2,000 m piece in every look on the real page, in headless Chrome, and asserts the 95th
+  percentile of the frames in which the page did work is within 6.0 ms (the keeper's 165 Hz display); a 20,000 m drag must stay under 150 ms. Run it under the heavy-run lock, with nothing else timing.
+- **Where a drag's time goes (measured 2026-10-19, RTX 5080, Ryzen 7 9850X3D, 165 Hz display):** on the main thread, in script, building the ghost of the next piece; the compositor and the GPU
+  (the frosted blur, Paint, Raster) were never the cause (the blur costs the GPU about 0.2 to 0.4 ms a frame, off the main thread; switched off, the drag cost the same). It was never a regression
+  either: 0.3.6 to 0.4.7 were all as slow, 17 to 20 ms a move at 1,000 m, growing with the piece's length (40 ms at 2,000 m, 100 ms at 5,000 m, 600 ms at 20,000 m).
+- **How a drag is kept cheap now (D404):** while a handle is held the ghost is built from at most 48 chords and 64 path stations however long the piece is (`shell.candidate(opts, { coarse })`,
+  `adapter.toSegments segMFor`, the track model's cheap ghost); the piece is solved once a move (`turnby.extendCorner` and its start are remembered by document and fields), the least-squares
+  fit shares its normal system across channels (`document.js fitSystem`) and the basis is evaluated without its derivatives and by binary search (`piecewise.cjs basisN`). What is placed, what is
+  exported and the full ghost built when the handle is let go are byte for byte what they were (`app/test/drag-ghost.test.js` row 3 and 5 hold a hash of each, taken at 0.4.7).
+- **Measured after (2026-10-19, the same machine, both heavy-run slots held, p95 of the frames that did work):** a 1,000 m drag 3.5 to 4 ms in every look, 2,000 m 3.8 to 4.8 ms, 5,000 m 4.8, 10,000 m 6.2, 20,000 m 8.2: **smooth at a 165 Hz display (6.06 ms) up to about 10,000 m a piece, and a single 20 km piece still drags above 100 frames a second.**
+  What still grows with the length is the piece's own channel fit (one solve a move) and the readout; the 20 km piece's 8 ms is the first place a drag would miss 165 Hz, and the first thing to work on if it matters.
+- **A new previewer lap:** measure first (a drag of the biggest ordinary piece, `app/test/drag-frame.test.js`'s way), and say in its hand-back what its frames cost against 6.0 ms (6.9 ms on a 144 Hz machine).
+
 ## 10. First milestones: prove the risky parts first
 1. **The platform test.** Hand-write, with a tiny script, a 500 m track: a half-pipe section, a wall-ride above 90°,
    and one small jump, as a kn5 with markers and the soft-collision block.

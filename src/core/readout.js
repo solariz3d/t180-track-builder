@@ -40,7 +40,7 @@ function channelIntegral(P, ch, a = 0, b = P.length) {
     const lo = Math.max(a, t[j]), hi = Math.min(b, t[j + 1]);
     if (!(hi > lo)) continue;
     const half = (hi - lo) / 2, mid = (hi + lo) / 2;
-    for (const [x, w] of GL3) sum += w * half * D.channelAt(P, ch, mid + half * x).v;
+    for (const [x, w] of GL3) sum += w * half * D.channelValue(P, ch, mid + half * x);
   }
   return sum;
 }
@@ -59,7 +59,7 @@ function channelIntegral(P, ch, a = 0, b = P.length) {
 // null when the piece neither turns nor ends a corner. Straight is |κh| < 1e-9 rad/m (κh is stored to 1e-9), found on a 0.25 m scan.
 const STRAIGHT = 1e-9, SCAN_M = 0.25, AT_START_M = 20;
 const isRoad = (P) => P && P.type !== 'flight';
-const khAt = (P, s, ch = 'kh') => D.channelAt(P, ch, s).v;   // (the climb's corner reads kv the same way: ch)
+const khAt = (P, s, ch = 'kh') => D.channelValue(P, ch, s);   // (the climb's corner reads kv the same way: ch)
 // THE SPANS. κh is a cubic B-spline: on knot span k (between [0, ...knots, L][k] and [k + 1]) it is a blend of control points k..k + 3 alone, and it lies
 // inside their hull. So a span whose four are all 0 is straight throughout, one whose four are all non-zero and of one sign is straight nowhere, and only a
 // span with mixed control points is scanned (SCAN_M steps). (A full read of ELYSIUM's 42 labels: 344 ms scanning every metre, against 177 ms before the corner.)
