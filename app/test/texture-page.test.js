@@ -16,6 +16,8 @@
 //      bars (#camera's toolbars) by a pixel, in all five looks, at windows 1400 x 860 and 2560 x 1440 (E measured 2,058 and 10,944 px² at 1400)
 //   7  (D417) Extend is reachable without scrolling: the panel's first actions row is Extend, Straight, Undo, Redo, Extend sits above "Extend at the head",
 //      and each of the four is on the panel once, in every look
+//   8  (D405) Skyline Night: every enabled text reads 4.5:1 or more against its own pixels, in the builder and with the File menu open (a text outside the
+//      menu that the menu partly covers is left out, by name). It was titled row 6 beside D409's row 6 until D419
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -177,7 +179,7 @@ test('row 5: at display scales 1.25 and 1.5, each fine tile is drawn one tile pi
 // D405: Skyline Night is a new look, so it is held to the whole rule, not only to "the texture pushes nothing under": every enabled text on the page reads
 // at 4.5:1 or more against its own pixels (the probe above, the texture on), in the builder with a track placed and with the File menu open. Skyline's
 // figure is reported beside it, not asserted (it is not this lap's look)
-test('row 6 (D405): Skyline Night: every enabled text is 4.5:1 or more on its own pixels, in the builder and with the File menu open', { skip }, async (t) => {
+test('row 8 (D405): Skyline Night: every enabled text is 4.5:1 or more on its own pixels, in the builder and with the File menu open', { skip }, async (t) => {
   const report = [], under = [];
   for (const look of ['skyline-night', 'skyline']) {
     await load(look);
