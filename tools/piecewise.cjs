@@ -189,6 +189,25 @@ function basis(U, s) {
   return { first, N, D1, D2 };
 }
 
+/**
+ * D404: the same four basis values and first index as basis(U, s), WITHOUT the derivatives and by a binary search for the span (basis walks the knots from the
+ * start). The very same arithmetic in the very same order, so every N is the same double: app/test/ or test/core_basis.test.js holds the two equal. Most callers
+ * (a channel's value, the least-squares fit, the heading weights) read nothing else, and a 2,000 m piece asks 1,000 times a move of a drag.
+ */
+function basisN(U, s) {
+  const p = 3, nCP = U.length - 1 - p;
+  let k;
+  if (s >= U[nCP]) k = nCP - 1; else { let lo = p, hi = nCP - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (s >= U[mid]) lo = mid; else hi = mid - 1; } k = lo; }
+  const frac = (num, den) => (den > 0 ? num / den : 0);
+  let prev = [1];
+  for (let d = 1; d <= p; d++) {
+    const cur = new Array(d + 1);
+    for (let j = 0; j <= d; j++) { const i = k - d + j; cur[j] = frac(s - U[i], U[i + d] - U[i]) * (j >= 1 ? prev[j - 1] : 0) + frac(U[i + d + 1] - s, U[i + d + 1] - U[i + 1]) * (j <= d - 1 ? prev[j] : 0); }
+    prev = cur;
+  }
+  return { first: k - p, N: prev };
+}
+
 // ── 4–5. the constrained least squares: banded normal equations, joints and closure by a Schur complement ────────────
 /** Banded Cholesky of a symmetric positive definite matrix given as lower bands B[i][j] = M(i, i − j), j ≤ bw. */
 function bandChol(B, bw) {
@@ -361,7 +380,7 @@ function summarise(t, tol) {
     bankWithin5: +(ok.filter((e) => e.bank <= 5 * DEG).length / ok.length).toFixed(4), bankP95Deg: +(pct(ok.map((e) => e.bank), 0.95) / DEG).toFixed(2), iterations: t.iterations, capped: t.capped };
 }
 
-module.exports = { roadTris, rayIndex, crossSection, meshCentreline, splitPoints, piecesOf, knotsOf, basis, bandChol, denseSolve, fitSystem, evalPiece, rmf, fitTrack, jumpChecks, summarise };
+module.exports = { roadTris, rayIndex, crossSection, meshCentreline, splitPoints, piecesOf, knotsOf, basis, basisN, bandChol, denseSolve, fitSystem, evalPiece, rmf, fitTrack, jumpChecks, summarise };
 
 if (require.main === module) {
   const args = process.argv.slice(2), flag = (k, d) => { const i = args.indexOf(k); return i < 0 ? d : args[i + 1]; };

@@ -15,7 +15,7 @@
 // "ref NN §k" is the skill's shelf, .claude/skills/track-equations/references/NN_*.md.
 'use strict';
 
-const { basis, bandChol } = require('../../tools/piecewise.cjs');
+const { basis, basisN, bandChol } = require('../../tools/piecewise.cjs');
 
 // core/2 (D186) adds the OFFSET channels h and l; a core/1 file is read and upgraded with both at zero (parse).
 // core/3 (D190) adds the CUP channel c (degrees). A /1 or /2 road piece loads as a LEGACY piece: its cross-section is the old
@@ -58,9 +58,26 @@ const deepFreeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o
 
 /** The clamped knot vector of a piece (ref 03 §1). */
 const knotVector = (P) => [0, 0, 0, 0, ...P.knots, P.length, P.length, P.length, P.length];
+/** D404: the knot vector for a reader that only reads it (the basis): kept for a piece that is frozen, with its knots (a document's are), so 100 readings of one piece
+ *  build one array. knotVector itself still makes a fresh array every time, for the callers that are free to change what they are given. */
+const KV = new WeakMap();
+function knotVectorOf(P) {
+  if (!Object.isFrozen(P) || !Object.isFrozen(P.knots)) return knotVector(P);
+  let k = KV.get(P); if (!k) KV.set(P, k = Object.freeze(knotVector(P)));
+  return k;
+}
 /** Evenly spaced interior knots, one span per ≤ knotM metres (at least one span). */
 function evenKnots(L, knotM = KNOT_M) { const m = Math.max(1, Math.ceil(L / knotM - 1e-9)), out = []; for (let j = 1; j < m; j++) out.push((j * L) / m); return out; }
 
+/** D404: a channel's VALUE at s, exactly channelAt(P, ch, s).v (the same basis values, summed in the same order) without the two derivatives. */
+function channelValue(P, ch, s) {
+  const c = P.channels[ch];
+  if (c === undefined && OPTIONAL[ch] && !P[OPTIONAL[ch]]) return OPT_DEFAULT[ch];
+  const b = basisN(knotVectorOf(P), Math.min(Math.max(s, 0), P.length));
+  let v = 0;
+  for (let a = 0; a < 4; a++) v += c[b.first + a] * b.N[a];
+  return v;
+}
 /** One channel of a road piece at s ∈ [0, length]: its value and first two derivatives (ref 03 §1, WIKI-BSPLINE). */
 function channelAt(P, ch, s) {
   const c = P.channels[ch];
@@ -79,7 +96,7 @@ function valuesAt(P, s) {
   for (const ch of CHANNELS) {
     const c = P.channels[ch];
     if (c === undefined && OPTIONAL[ch] && !P[OPTIONAL[ch]]) { out[ch] = OPT_DEFAULT[ch]; continue; }
-    if (!b) b = basis(knotVector(P), Math.min(Math.max(s, 0), P.length));
+    if (!b) b = basisN(knotVectorOf(P), Math.min(Math.max(s, 0), P.length));
     let v = 0; for (let a = 0; a < 4; a++) v += c[b.first + a] * b.N[a];
     out[ch] = v;
   }
@@ -150,25 +167,42 @@ const afterFlight = (e, F) => ({ ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h
  * channel starts at value v and slope m (ref 09 §1) when `start` is given. Banded normal equations, solved by the
  * repository's banded Cholesky (tools/piecewise.cjs). Samples: 8 per span and both ends.
  */
-function fitChannel(f, L, knots, start) {
+/** D404: the part of a least-squares fit that does not depend on the function fitted: the sample stations, the basis at each, the banded normal matrix and its Cholesky factor. A piece fits
+ *  eleven channels over the same knots, and an Extend ghost is rebuilt on every move of a handle drag, so the same system was built eleven times a move (about 70% of the fit). It is
+ *  built by the very same loops in the very same order as before, so every control point is the same double; kept for the knots it was built for (checked by value), a few at a time. */
+const FITS = new WeakMap();
+function fitSystem(knots, L, held) {
+  const key = L + ':' + held; let byKey = FITS.get(knots);
+  const hit = byKey && byKey.get(key);
+  if (hit && hit.kn.length === knots.length && hit.kn.every((k, i) => k === knots[i])) return hit;
   const U = [0, 0, 0, 0, ...knots, L, L, L, L], n = knots.length + 4, spans = [0, ...knots, L];
   const ss = []; for (let j = 0; j + 1 < spans.length; j++) for (let k = 0; k < 8; k++) ss.push(spans[j] + ((spans[j + 1] - spans[j]) * k) / 8); ss.push(L);
-  const held = start ? 2 : 0, P = new Array(n).fill(0);
-  if (start) { P[0] = start.v; P[1] = start.v + (start.m * (knots.length ? knots[0] : L)) / 3; }
-  const m = n - held;
-  if (m === 0) return P;
-  const B = Array.from({ length: m }, () => new Float64Array(4)), rhs = new Float64Array(m);
-  for (const s of ss) {
-    const b = basis(U, s); let y = f(s);
-    for (let a = 0; a < 4; a++) { const i = b.first + a; if (i < held) y -= P[i] * b.N[a]; }
+  const m = n - held, bs = ss.map((s) => basisN(U, s)), B = Array.from({ length: m }, () => new Float64Array(4));
+  for (const b of bs) {
     for (let a = 0; a < 4; a++) {
       const i = b.first + a - held; if (i < 0) continue;
-      rhs[i] += b.N[a] * y;
       for (let c = 0; c <= a; c++) { const j = b.first + c - held; if (j < 0) continue; B[i][i - j] += b.N[a] * b.N[c]; }
     }
   }
   for (let i = 0; i < m; i++) B[i][0] += 1e-12;
-  const x = bandChol(B.map((r) => Array.from(r)), 3)(Array.from(rhs));
+  const sys = { kn: knots.slice(), n, m, ss, bs, solve: bandChol(B.map((r) => Array.from(r)), 3) };
+  if (!byKey) FITS.set(knots, byKey = new Map());
+  if (byKey.size >= 4) byKey.delete(byKey.keys().next().value);
+  byKey.set(key, sys);
+  return sys;
+}
+function fitChannel(f, L, knots, start) {
+  const held = start ? 2 : 0, n = knots.length + 4, P = new Array(n).fill(0);
+  if (start) { P[0] = start.v; P[1] = start.v + (start.m * (knots.length ? knots[0] : L)) / 3; }
+  const m = n - held;
+  if (m === 0) return P;
+  const { ss, bs, solve } = fitSystem(knots, L, held), rhs = new Float64Array(m);
+  for (let q = 0; q < ss.length; q++) {
+    const b = bs[q]; let y = f(ss[q]);
+    for (let a = 0; a < 4; a++) { const i = b.first + a; if (i < held) y -= P[i] * b.N[a]; }
+    for (let a = 0; a < 4; a++) { const i = b.first + a - held; if (i < 0) continue; rhs[i] += b.N[a] * y; }
+  }
+  const x = solve(Array.from(rhs));
   for (let i = 0; i < m; i++) P[held + i] = x[i];
   return P;
 }
@@ -660,6 +694,6 @@ module.exports = {
   SCHEMA, SCHEMA_SPLIT, isSplit, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
   checkSpawns, normSpawns, setSpawns, SPAWN_COUNT_MAX, SPAWN_GAP_MAX, checkPitLane, normPitLane, setPitLane, PIT_DEFAULT, PIT_BOXES_MAX,
-  createDoc, roadPiece, flightPiece, GRIP_MIN, GRIP_MAX, GRIP_DEFAULT, gripOf, checkGrip, withGrip, setGrip, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
+  channelValue, createDoc, roadPiece, flightPiece, GRIP_MIN, GRIP_MAX, GRIP_DEFAULT, gripOf, checkGrip, withGrip, setGrip, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };
