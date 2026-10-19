@@ -101,7 +101,7 @@ precision highp float;
 precision mediump float;
 #endif
 varying vec3 vRay;
-uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime;
+uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime; uniform float uPx;
 ${pattern}
 float pass_bayer2(vec2 p){ return 2.0 * mod(p.x + p.y, 2.0) + p.y; }
 float pass_bayer4(vec2 a){ vec2 p = mod(floor(a), 4.0), lo = mod(p, 2.0); return (4.0 * pass_bayer2(lo) + pass_bayer2(floor(p * 0.5)) + 0.5) / 16.0; }
@@ -358,13 +358,15 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     }
     if (!blending) gl.disable(gl.BLEND);
   }
-  function drawSky(B, time) {
+  // D410: uPx, the angle one device pixel spans at the middle of the view (2 |up| / height: up is the half-height ray offset at unit forward), so a
+  // style can draw a point or an edge a pixel wide at any window size (prism's stars and moon limb)
+  function drawSky(B, time, height) {
     const sp = skyProg, s = clear, a = skyA || clear, b = skyB || clear, c = skyC || clear;
     if (!skyBuf) { skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.bufferData(gl.ARRAY_BUFFER, SKY_STRIP, gl.STATIC_DRAW); uploads++; }
     gl.useProgram(sp.p);
     gl.uniform3f(sp.fwd, B.fwd[0], B.fwd[1], B.fwd[2]); gl.uniform3f(sp.right, B.right[0], B.right[1], B.right[2]); gl.uniform3f(sp.up, B.up[0], B.up[1], B.up[2]);
     gl.uniform3f(sp.sky, s[0], s[1], s[2]); gl.uniform3f(sp.a, a[0], a[1], a[2]); gl.uniform3f(sp.b, b[0], b[1], b[2]); gl.uniform3f(sp.c, c[0], c[1], c[2]);
-    gl.uniform1f(sp.time, time);
+    gl.uniform1f(sp.time, time); gl.uniform1f(sp.px, 2 * Math.hypot(B.up[0], B.up[1], B.up[2]) / height);
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
     gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.enableVertexAttribArray(sp.pos); gl.vertexAttribPointer(sp.pos, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -384,7 +386,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
         const src = SKY.patternSource(t.skyStyle), next = src ? program(SKY_VS, skyFS(src)) : null;
         if (next) {
           const u = (n) => gl.getUniformLocation(next.p, n);
-          Object.assign(next, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime') });
+          Object.assign(next, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime'), px: u('uPx') });
         }
         if (skyProg) gl.deleteProgram(skyProg.p);
         skyProg = next; skyStyle = t.skyStyle;
@@ -402,7 +404,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
       const time = extras.time === undefined ? 0 : extras.time;
       if (!Number.isFinite(time)) throw new Error(`renderer: the sky's time is a number of seconds, got ${String(time)}`);
-      if (skyProg) drawSky(skyBasis(pose, width / height), time);
+      if (skyProg) drawSky(skyBasis(pose, width / height), time, height);
       const vp = new Float32Array(M.viewProj(pose, width / height));
       if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, gridColour, 1); }
       let chunks;

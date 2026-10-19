@@ -1,9 +1,12 @@
 // sky/prism.js: the 'prism' sky (D384 widened), Glass's cold clear night, the quietest of the skies. The contract is in app/preview/sky/index.js.
 // By elevation: the horizon (--sky-b, held near the skin's fog for the first ten degrees) darkening through the skin's sky (--sky) to the zenith (--sky-a).
-// A sparse field of fine stars (--sky-c) with a faint twinkle, fading out toward the horizon as real stars do through the air. A pale, cold moon with a soft
-// limb, a faint face and a halo. Low on the horizon, a thin soft band of light split into a faint spectrum, as if refracted through glass, brightest toward
-// the moon and its strength wandering slowly round. Every edge is soft (a star is a small gaussian, the moon's limb fades over about twelve pixels), and
-// nothing moves across the sky: the twinkle changes a star's brightness in place, and the band's strength wanders round over many minutes.
+// A sparse field of pin-point stars (--sky-c), each about one device pixel across and each its own brightness, with a faint twinkle, fading out toward
+// the horizon as real stars do through the air. A pale, cold moon with a crisp limb, a faint face and a halo. Low on the horizon, a thin band of light
+// split into a faint spectrum, as if refracted through glass, brightest toward the moon, its strength wandering slowly round and broken along its length
+// into fine filaments. D410 (the user: "way too low res and blurry"): the stars were small gaussians about 5.4 px across at half their peak at 2560 x 1440,
+// and the limb's ramp spanned about 27 px (about 16 from 10 % to 90 %), so the sky read as low resolution. Sizes are now in device pixels, from the pass's uPx (the angle of one device pixel; see
+// app/preview/sky/index.js): a star is a cone 1.25 px in radius (anti-aliased, about 1.2 px across at half its peak) and the limb a 1.5 px ramp, at any
+// window size. Nothing moves across the sky: the twinkle changes a star's brightness in place, and the band's strength wanders round over many minutes.
 'use strict';
 
 const SOURCE = `
@@ -21,15 +24,17 @@ vec3 prism_face(float face, vec2 uv) {
   if (face < 4.5) return vec3(uv.x, uv.y, 1.0);
   return vec3(uv.x, uv.y, -1.0);
 }
+// the angle of one device pixel (the pass's uPx); a pass that sends none (a test page of its own) gets a pixel of a 2560 x 1440 screen at 60 degrees
+float prism_px() { return uPx > 0.0 ? uPx : 0.0008; }
 // the stars: one chance of a star per cell of a grid on each cube face, set in the middle half of its cell; each pixel sums the stars of the four cells
-// nearest it (its own and the three on the side it is nearer): a star in any other cell is at least three quarters of a cell away, under a thousandth of
-// its peak in the middle of a face and a little more toward a face's corners, where cells are smaller (at most 8 of 255 against summing all nine)
+// nearest it (its own and the three on the side it is nearer). A star is a cone 1.25 px in radius, so it reaches past its own cell only when a quarter
+// cell is under 1.25 px (a window under about 600 px tall), and the four cells still hold it then
 float prism_stars(vec3 d, float t) {
   vec3 a = abs(d); vec2 uv; float face;
   if (a.x >= a.y && a.x >= a.z) { uv = d.zy / a.x; face = d.x > 0.0 ? 0.0 : 1.0; }
   else if (a.y >= a.z) { uv = d.xz / a.y; face = d.y > 0.0 ? 2.0 : 3.0; }
   else { uv = d.xy / a.z; face = d.z > 0.0 ? 4.0 : 5.0; }
-  float N = 120.0;
+  float N = 180.0;
   vec2 g = (uv * 0.5 + 0.5) * N, c = floor(g) + step(0.5, fract(g)) - 1.0;
   float s = 0.0;
   for (int i = 0; i <= 1; i++) for (int j = 0; j <= 1; j++) {
@@ -38,9 +43,9 @@ float prism_stars(vec3 d, float t) {
     if (prism_hash(vec3(cc, face)) > 0.035) continue;                             // sparse
     float h1 = prism_hash(vec3(cc, face + 7.0)), h2 = prism_hash(vec3(cc, face + 13.0)), h3 = prism_hash(vec3(cc, face + 19.0));
     vec3 sd = normalize(prism_face(face, (cc + 0.25 + 0.5 * vec2(h1, h2)) / N * 2.0 - 1.0)), dd = d - sd;
-    float b = h3 * h3 * h3, sig = 0.0020 + 0.0012 * b;                            // many faint, a few bright and a little wider
+    float b = h3 * h3 * h3;                                                        // many faint, a few bright
     float tw = 1.0 - 0.18 * (0.5 + 0.5 * sin(t * (0.7 + 1.6 * h1) + 6.2832 * h2)); // the twinkle: brightness only, in place
-    s += (0.08 + 0.18 * b) * tw * exp(-dot(dd, dd) / (2.0 * sig * sig));
+    s += (0.10 + 0.40 * b) * tw * max(0.0, 1.0 - length(dd) / (1.25 * prism_px()));   // a point: a cone 1.25 device px in radius
   }
   return s;
 }
@@ -54,21 +59,25 @@ vec3 skyPattern(vec3 dir, float t) {
   vec3 moonDir = normalize(vec3(-0.557, 0.50, -0.663));
   float ma = length(dir - moonDir), R0 = 0.024;
   col += uSkyC * (0.10 * exp(-ma / 0.06) + 0.035 * exp(-ma / 0.35));
-  if (ma < R0 + 0.010) {   // the disc and its soft limb (its face is worked out only here)
+  float lw = 1.5 * prism_px();   // the limb: a ramp 1.5 device px wide
+  if (ma < R0 + lw) {   // the disc (its face is worked out only here)
     vec3 mu = normalize(cross(moonDir, vec3(0.0, 1.0, 0.0))), mv = cross(mu, moonDir);
     vec2 mp = vec2(dot(dir - moonDir, mu), dot(dir - moonDir, mv)) / R0;
     float faceShade = 0.86 - 0.16 * smoothstep(0.45, 0.75, prism_noise(mp * 1.7 + 3.1));
     vec3 moonCol = mix(uSkyC, vec3(0.78, 0.85, 0.92), 0.4) * 0.62 * faceShade;
-    col = mix(col, moonCol, 1.0 - smoothstep(R0 - 0.010, R0 + 0.010, ma));
+    col = mix(col, moonCol, clamp((R0 - ma) / lw + 0.5, 0.0, 1.0));
   }
-  // the prismatic band: a thin soft band low on the horizon, the spectrum across its height (red at its top), brightest toward the moon
+  // the prismatic band: a thin band low on the horizon, the spectrum across its height (red at its top), brightest toward the moon, broken along its length
+  // into fine filaments (two scales of noise read round a circle, so there is no seam where the azimuth wraps; about 1.3 and 0.4 degrees, standing still)
   float x = clamp((h - 0.050) / 0.040 * 0.5 + 0.5, 0.0, 1.0);
   float env = exp(-(h - 0.050) * (h - 0.050) / (2.0 * 0.024 * 0.024));
   vec3 spec = 0.5 + 0.5 * cos(6.2832 * (vec3(0.0, 0.33, 0.67) - (1.0 - x) * 0.85));
   float az = atan(dir.z, dir.x);
   float along = 0.5 + 0.5 * sin(az * 2.0 + 1.1 + 0.9 * sin(az * 3.0 - t * 0.005) + t * 0.004);
   float toward = pow(max(dot(normalize(dir.xz + vec2(1e-5)), normalize(moonDir.xz)), 0.0), 2.0);
-  col += spec * env * (0.020 + 0.030 * along) * (0.6 + 0.4 * toward);
+  vec2 ring = normalize(dir.xz + vec2(1e-5));
+  float fil = 0.30 + 0.15 * prism_noise(ring * 45.0 + 11.0) + 0.85 * prism_noise(ring * 130.0 + 29.0);   // at most 1.30, as before
+  col += spec * env * (0.020 + 0.030 * along) * (0.6 + 0.4 * toward) * fil;
   return col;
 }`;
 

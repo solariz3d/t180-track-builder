@@ -11,6 +11,8 @@
 //   The pass declares these uniforms before the module's source, for it to read:
 //     uniform vec3 uSky;                       the skin's --sky (today's clear colour)
 //     uniform vec3 uSkyA, uSkyB, uSkyC;        the skin's --sky-a, --sky-b, --sky-c, each falling back to --sky
+//     uniform float uPx;                       D410: the angle, in radians, one device pixel spans at the middle of the view (2 |up| / height), for a
+//                                              point or an edge drawn a pixel wide at any window size; a page that draws a style itself may leave it 0
 //   The source may define helpers of its own; prefix their names with the style (sun_, prism_, caustics_, aurora_), so two never clash.
 //   A module that cannot build its sky throws from source(): the renderer compiles a style when setTheme names it, so it fails loudly there.
 //   TWO GLSL RULES (D391; made exact in D393 from A's review 7), checked on every source by contractProblems below, so a style breaking one is refused.

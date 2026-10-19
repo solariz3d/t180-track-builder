@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **Glass's night sky is crisp.** Its stars were soft blurs about five pixels across on a 2560 × 1440 screen, and the moon's edge faded over about sixteen, so the sky looked low resolution. Each star is now a point about one screen pixel across, each with its own brightness, and there are more of them, still sparse. The moon has a clean edge a pixel and a half wide. The thin band of coloured light low on the horizon is broken into fine filaments along its length. The sizes follow the screen's own pixels, so the stars stay sharp at any window size. Nothing moves across the sky, and the band near the horizon stays as quiet as before. (`app/preview/sky/prism.js`; the sky pass now tells a sky the size of one pixel, `app/preview/renderer.js`.) Test: `app/test/sky-prism-crisp.test.js`.
+
 ## [0.4.8] - 2026-10-19
 
 ### Added
