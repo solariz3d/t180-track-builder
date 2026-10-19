@@ -69,7 +69,8 @@ const MUTATIONS = [
   { id: 'S3 the straight hint never shows', file: 'app/core/panel.js', from: "&& !atStart.turn.checked ? `turn 0 eases", to: "&& false ? `turn 0 eases", tests: [DISPLAY], caughtBy: 'D242: after a 30°/100m turn, Straight' },
 ];
 
-function runMutant(m) {
+// D412: `extra` is IR.narrowArgs(caughtBy) for a run narrowed to the named test; empty, the run is whole, as before
+function runMutant(m, extra = []) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-close-mut-'));
   try {
     for (const d of fs.readdirSync(path.join(ROOT, 'app'), { withFileTypes: true })) {
@@ -82,7 +83,7 @@ function runMutant(m) {
     const f = path.join(dir, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
     const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
-    const r = spawnSync(process.execPath, ['--max-old-space-size=4096', '--test', ...IR.reporterArgs(tap), '--test-concurrency=1', ...m.tests.map((t) => path.join(dir, t))],
+    const r = spawnSync(process.execPath, ['--max-old-space-size=4096', '--test', ...IR.reporterArgs(tap), ...extra, '--test-concurrency=1', ...m.tests.map((t) => path.join(dir, t))],
       { cwd: dir, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), encoding: 'utf8', timeout: 900000, maxBuffer: 1 << 28 });   // a failing mutant can print whole documents
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
@@ -99,13 +100,24 @@ function runMutant(m) {
       const exits = IR.fileExitsIn(tap);
       if (!exits.length || m.tests.length > 1) throw new Error(IR.neverReported(crashed, exits, m.tests.length));
     }
-    return { applied, n, caught, failed: [...new Set(failed)] };
+    return { applied, n, caught, failed: [...new Set(failed)], ran: IR.ran(out), reported: IR.reported(out, m.caughtBy) };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-test('control: the unmutated temp copy passes every test file the mutants use', () => {
+// D412: the (caughtBy, test files) pairs whose mutants may run narrowed, filled by the control below. Each mutant names its own files, so the
+// narrowed control runs on the mutant's files. A pair missing here (the control did not run, or its narrowed control failed, ran no row, or
+// never reported the named test) keeps its mutants whole
+const NARROW = new Map(), narrowKey = (m) => `${m.caughtBy}\u0000${m.tests.join('|')}`;
+test('control: the unmutated temp copy passes every test file the mutants use', (t) => {
   const r = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: [LOCAL, PREVIEW, GROUPS, DISPLAY, BEST, WORKER, FIN], caughtBy: '(no test is named this)' });   // D357: FIN too (N1, N2), so a catch there is never a row that fails unmutated
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
+  // D412: and narrowed once per distinct pair; each must pass alone, or its mutants stay whole (said, not failed: whole is the safe reading)
+  for (const m of new Map(MUTATIONS.map((x) => [narrowKey(x), x])).values()) {
+    const n = runMutant({ id: 'control', file: 'app/core/panel.js', from: null, to: null, tests: m.tests, caughtBy: m.caughtBy }, IR.narrowArgs(m.caughtBy));
+    NARROW.set(narrowKey(m), n.failed.length === 0 && n.ran.tests > 0 && n.reported);
+    if (!NARROW.get(narrowKey(m))) t.diagnostic(`D412 whole: "${m.caughtBy}" on ${m.tests.join(', ')} (narrowed control: ${n.failed.length} failing, ${n.ran.tests} rows ran, named test reported ${n.reported})`);
+    else if (n.ran.tests > 1 || n.ran.suites) t.diagnostic(`D412 wide: "${m.caughtBy}" on ${m.tests.join(', ')} runs ${n.ran.tests} rows${n.ran.suites ? ` and ${n.ran.suites} suite(s)` : ''}`);
+  }
 });
 // D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
 // it looks for '.test.js', which every dead file's own ✖ line contains, so a dead file's line must not count as the catch
@@ -129,8 +141,9 @@ test('a load throw in a run of one file reads NOT CAUGHT as before, never NOT TE
   assert.match(said, IR.NOT_CAUGHT_LOAD);
 });
 for (const m of MUTATIONS) {
-  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
-    const r = runMutant(m);
+  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, (t) => {
+    const r = IR.narrowedFirst(runMutant, m, NARROW.get(narrowKey(m)) === true);   // D412: narrowed first; any miss is re-run whole, and that verdict stands
+    t.diagnostic(`D412 path: ${r.narrowed ? 'narrowed' : 'whole'}`);   // which run gave the verdict: a duration cannot tell a slow narrowed run from a re-run
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" occurs ${r.n} times in ${m.file}`);
     assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);
   });
