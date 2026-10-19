@@ -308,7 +308,8 @@ function* buildMeshSteps(path, segments, opts = {}) {
 /**
  * extendMeshSteps(prev, path, segments): extendMesh as a generator (D407). It does the same work in the same order (each new piece, then each seam, then the assembly) and yields after
  * every piece and every seam, so a caller that must not hold the page for 50 ms (the full ghost built when a handle is let go) can run it in slices; the value it returns is extendMesh's.
- * extendMesh below is this generator run to the end, so there is one code path and the mesh is the same to the byte.
+ * It is the same steps as extendMesh below, one piece and one seam at a time (extendMesh keeps its own body, the lines the mutation harnesses anchor on); app/test/release-ghost.test.js
+ * row 5 holds the two to the byte.
  */
 function* extendMeshSteps(prev, path, segments) {
   const st = prev._state;
@@ -323,9 +324,15 @@ function* extendMeshSteps(prev, path, segments) {
 }
 /** extendMesh(prev, path, segments): new pieces after extendPath. Only the new pieces and the seam onto them are made. */
 function extendMesh(prev, path, segments) {
-  const it = extendMeshSteps(prev, path, segments); let r = it.next();
-  while (!r.done) r = it.next();
-  return r.value;
+  const st = prev._state;
+  if (st.closed || path.closed) throw new Error('extendMesh: a closed loop has no open end; rebuild it');
+  if (segments.length <= st.nseg) throw new Error('extendMesh: no new segments');
+  st.workC = { n: 0 };
+  const from = st.nseg;
+  meshRange(st, path, segments, from, segments.length);
+  seamsAround(st, segments.map((_, g) => g).slice(from));
+  st.nseg = segments.length; st.work = st.workC.n;
+  return assemble(st);
 }
 
 /**
