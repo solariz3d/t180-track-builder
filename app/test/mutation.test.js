@@ -164,7 +164,8 @@ const MUTATIONS = [
   { id: "D9 the arrow keys stop turning while a movement key is held", file: 'preview/preview.js', from: "if (a.turn) rig.free.look(", to: "if (a.turn && ![...held.values()].some((b) => b.fly)) rig.free.look(", caughtBy: "the arrow (look) keys are not movement keys" },
 ];
 
-function runMutant(m) {
+// D412: `extra` is IR.narrowArgs(caughtBy) for a run narrowed to the named test; empty, the run is whole, as before
+function runMutant(m, extra = []) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-app-mut-')), app = path.join(dir, 'app');
   try {
     for (const d of ['camera', 'preview', 'testhook', 'texmaker', 'lib']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });   // D381: preview.js requires app/lib/tokens.js; the whole of app/lib, so a later require of theme.js or cjs.js finds it too
@@ -176,7 +177,7 @@ function runMutant(m) {
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
     const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
     const files = [path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(__dirname, 'aclook.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')];   // D354: the run's test files, counted by the D353 check
-    const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), '--test-concurrency=4', ...files],
+    const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), ...extra, '--test-concurrency=4', ...files],
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), APP_DIR: app, SCRIPTS_DIR: path.join(dir, 'scripts') }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
@@ -194,15 +195,26 @@ function runMutant(m) {
       const exits = IR.fileExitsIn(tap);
       if (!exits.length || files.length > 1) throw new Error(IR.neverReported(crashed, exits, files.length));
     }
-    return { applied, caught, failed: [...new Set(failed)] };
+    return { applied, caught, failed: [...new Set(failed)], ran: IR.ran(out), reported: IR.reported(out, m.caughtBy) };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 // THE CONTROL: the same temp copy with NO mutation must pass every test. A copy missing a file would fail everything,
 // and every mutant would then look "caught"; this is the check that the catches mean something.
-test('control: the unmutated temp copy passes every test the mutants are run against', () => {
-  const r = runMutant({ id: 'control', file: 'preview/look.js', from: null, to: null, caughtBy: '(no test is named this)' });
+// D412: the caughtBy patterns whose mutants may run narrowed, filled by the control below. A pattern missing here (the control did not run, or
+// its narrowed control failed, ran no row, or never reported the named test) keeps its mutants whole
+const NARROW = new Map();
+test('control: the unmutated temp copy passes every test the mutants are run against', (t) => {
+  const control = { id: 'control', file: 'preview/look.js', from: null, to: null, caughtBy: '(no test is named this)' };
+  const r = runMutant(control);
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
+  // D412: and narrowed once per distinct caughtBy; each must pass alone, or its mutants stay whole (said, not failed: whole is the safe reading)
+  for (const p of new Set(MUTATIONS.map((m) => m.caughtBy))) {
+    const n = runMutant({ ...control, caughtBy: p }, IR.narrowArgs(p));
+    NARROW.set(p, n.failed.length === 0 && n.ran.tests > 0 && n.reported);
+    if (!NARROW.get(p)) t.diagnostic(`D412 whole: "${p}" (narrowed control: ${n.failed.length} failing, ${n.ran.tests} rows ran, named test reported ${n.reported})`);
+    else if (n.ran.tests > 1 || n.ran.suites) t.diagnostic(`D412 wide: "${p}" runs ${n.ran.tests} rows${n.ran.suites ? ` and ${n.ran.suites} suite(s)` : ''}`);
+  }
 });
 // D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
 // it looks for '.test.js', which every dead file's own ✖ line contains, so a dead file's line must not count as the catch
@@ -228,7 +240,7 @@ test('a load throw in a run of several files reads NOT TESTED and names the file
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
-    const r = runMutant(m);
+    const r = IR.narrowedFirst(runMutant, m, NARROW.get(m.caughtBy) === true);   // D412: narrowed first; any miss is re-run whole, and that verdict stands
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" is not in app/${m.file}`);
     assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);
   });
