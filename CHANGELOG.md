@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **The left and right edges can go below zero.** A negative edge turns that side's outer stretch of road down instead of up: toward flat, and past it into a lip. On a banked turn this flattens the inside without unbanking the whole road. Each side can drop to 30° past flat at its very edge (the edge angle plus the road's own curve there); a value past that is refused by name, and the edge fields take negative numbers. A track with a negative edge is saved in a newer file version, so an older builder says it needs a newer one instead of opening it wrongly; every track saved before opens and saves exactly as it did. (`src/core/document.js`, `src/core/extend.js`, `src/core/adapter.js`, `app/core/panel.js`.) Test: `test/core_edgeneg.test.js`.
+
 ## [0.4.7] - 2026-10-18
 
 ### Fixed

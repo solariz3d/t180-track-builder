@@ -91,8 +91,9 @@ function extend(doc, opts = {}) {
   if (first && first.c !== undefined && !(Number.isFinite(first.c) && first.c >= 0 && first.c <= D.CUP_MAX)) throw new D.CoreError('BAD_CUP', 'the first piece cup must be from 0 to ' + D.CUP_MAX + ' degrees, got ' + first.c);
   const given = (v) => v !== undefined && v !== null;
   for (const [where, o] of [['target', targets], ['first-piece', first || {}]]) {
-    if (given(o.e) && !(Number.isFinite(o.e) && o.e >= 0)) throw new D.CoreError('BAD_EDGE', `the ${where} edge angle e must be 0 or more degrees, got ${o.e}`);
-    if (given(o.er) && !(Number.isFinite(o.er) && o.er >= 0)) throw new D.CoreError('BAD_EDGE', `the ${where} right edge angle er must be 0 or more degrees, got ${o.er}`);
+    // an edge may be below 0 (D406: the zone turns down); how far is the floor's, against the profile it sits on, below
+    if (given(o.e) && !Number.isFinite(o.e)) throw new D.CoreError('BAD_EDGE', `the ${where} edge angle e must be a number of degrees, got ${o.e}`);
+    if (given(o.er) && !Number.isFinite(o.er)) throw new D.CoreError('BAD_EDGE', `the ${where} right edge angle er must be a number of degrees, got ${o.er}`);
     if (given(o.s) && !(Number.isFinite(o.s) && o.s >= D.S_MIN && o.s <= D.S_MAX)) throw new D.CoreError('BAD_EDGE', `the ${where} edge start s must be from ${D.S_MIN} to ${D.S_MAX} of the half-width, got ${o.s}`);
     if (given(o.t) && !(Number.isFinite(o.t) && o.t >= 0 && o.t <= D.TUBE_MAX)) throw new D.CoreError('BAD_TUBE', `the ${where} tube sweep t must be from 0 to ${D.TUBE_MAX} degrees, got ${o.t}`);
     if (given(o.c) && given(o.t)) throw new D.CoreError('BAD_TARGET', `a piece is a cup or a tube, not both: the ${where} gives a cup c and a tube sweep t`);
@@ -146,14 +147,23 @@ function extend(doc, opts = {}) {
   if (edge) {
     const C = piece.channels, legacyMid = !cup && !tube ? D.legacyEdgeDeg(fam, Math.max(...C.w), Math.max(...C.r)) : 0;
     const cap = (i) => (tube ? D.TUBE_EDGE_MAX - C.t[i] / 2 : cup ? D.CUP_MAX - C.c[i] : D.CUP_MAX - legacyMid);   // the total edge angle's cap, per control point (the convex hull, ref 03 §1b)
+    // and its floor (D406, document.js EDGE_FLOOR): the least a side may add to the profile's own rim angle there (a legacy road's least is at its least width and rise)
+    const legacyLeast = !cup && !tube ? D.legacyEdgeDeg(fam, Math.min(...C.w), Math.min(...C.r)) : 0;
+    const floor = (i) => D.EDGE_FLOOR - (tube ? C.t[i] / 2 : cup ? C.c[i] : legacyLeast);
     // a TARGET the cap cannot hold is refused by name (only the fit's ringing is clamped, below): the typed e, or the at-start first.e, against what the total cap leaves there
     const what = tube ? 'tube (180°, t/2 + e)' : 'cup/bowl (150°, c + e)';
     if (given(targets.e) && targets.e > cap(C.e.length - 1) + 1e-6) throw new D.CoreError('BAD_EDGE', `the edge target ${targets.e}° is past what the ${what} cap leaves at the end of this piece (${Math.max(0, cap(C.e.length - 1)).toFixed(3)}°)`);
     if (!from0 && given(f0.e) && f0.e > cap(0) + 1e-6) throw new D.CoreError('BAD_EDGE', `the first piece's edge ${f0.e}° is past what the ${what} cap leaves at its start (${Math.max(0, cap(0)).toFixed(3)}°)`);
     if (given(targets.er) && targets.er > cap(C.er.length - 1) + 1e-6) throw new D.CoreError('BAD_EDGE', `the right edge target ${targets.er}° is past what the ${what} cap leaves at the end of this piece (${Math.max(0, cap(C.er.length - 1)).toFixed(3)}°)`);
     if (!from0 && given(f0.er) && f0.er > cap(0) + 1e-6) throw new D.CoreError('BAD_EDGE', `the first piece's right edge ${f0.er}° is past what the ${what} cap leaves at its start (${Math.max(0, cap(0)).toFixed(3)}°)`);
+    const under = (side, v, i, where) => { if (given(v) && v < floor(i) - 1e-6) throw new D.CoreError('BAD_EDGE', `the ${side} ${v}° ${where} takes the rim to ${+(v - floor(i) + D.EDGE_FLOOR).toFixed(6)}°, under the floor of ${D.EDGE_FLOOR}° (30° past flat, a lip): the least it may be there is ${+floor(i).toFixed(6)}°`); };
+    under('edge target', targets.e, C.e.length - 1, 'at the end of this piece'); under('right edge target', targets.er, C.er.length - 1, 'at the end of this piece');
+    if (!from0) { under("first piece's edge", f0.e, 0, 'at its start'); under("first piece's right edge", f0.er, 0, 'at its start'); }
     for (const ch of ['e', 'er']) {
-      C[ch] = C[ch].map((x, i) => Math.min(Math.max(0, cap(i)), Math.max(0, x)));   // the fit's ringing never leaves [0, cap]
+      // the fit's ringing never leaves [0, cap], as before, unless the side is asked below 0 (D406): then it may ring down to the lower of the value it starts at and its target,
+      // never under the floor. The asked values, not the fitted end: a fit to a target of 0 can end a hair under it (-0.0069 measured), which must still clamp to 0
+      const lo = Math.min(0, C[ch][0], given(targets[ch]) ? targets[ch] : 0);
+      C[ch] = C[ch].map((x, i) => Math.min(Math.max(0, cap(i)), Math.max(Math.max(lo, floor(i)), x)));
       const ne = C[ch].length; if (C[ch][ne - 1] <= 1e-3) C[ch][ne - 2] = C[ch][ne - 1];   // an edge that ends at 0 ends flat, so the piece after it starts clean
     }
     C.s = C.s.map((x) => Math.min(D.S_MAX, Math.max(D.S_MIN, x)));

@@ -51,7 +51,7 @@ test('row 3: the piece after a split piece continues each side on its own, with 
 
 test('row 4: a right edge past the cap is refused by name, as the edge angle is', () => {
   assert.throws(() => extend(cupTrack(), { length: 200, targets: { e: 0, er: 145 } }), (e) => e.code === 'BAD_EDGE' && /right edge/.test(e.message));
-  assert.throws(() => extend(cupTrack(), { length: 200, targets: { er: -1 } }), (e) => e.code === 'BAD_EDGE');
+  assert.throws(() => extend(cupTrack(), { length: 200, targets: { er: -200 } }), (e) => e.code === 'BAD_EDGE' && /floor/.test(e.message));   // D406: -1 is allowed now
 });
 
 test('row 5: a core/4 edge file reads with its right side equal to its left', () => {
