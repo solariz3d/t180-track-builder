@@ -44,6 +44,9 @@ const OPTIONAL = Object.freeze({ c: 'cup', e: 'edge', s: 'edge', t: 'tube', er: 
 // family's on a legacy road) plus e or er: 30° past flat, a lip. The geometry itself would allow 90°: past that the outer zone runs back under the road
 // (its lateral step is the cosine of its angle), so -30 is the ruling's own limit on how far a rim may drop, not where the section breaks, and it may move.
 // A file with a negative edge on any piece is written as core/6, so a builder that predates D406 refuses it by name instead of meeting values it never allowed.
+// The floor is checked at the RIM. Inside the outer zone the angle can dip a little under it: on cups and legacy roads the rim is the least (to 0.09°), but on an
+// open tube, whose own angle rises to the rim while the edge term's slope is 0 there, the least reaches -32.74° (t 300, s 0.5; E's D406 review §1, probe1). The
+// section does not cross itself there, far from the 90° where the step reverses, so this is named here and not checked.
 const EDGE_FLOOR = -30;
 const EDGE_EPS = 1e-9, S_MIN = 0.5, S_MAX = 0.95, S_DEFAULT = 0.64, TUBE_MAX = 360, TUBE_EDGE_MAX = 180;
 const OPT_DEFAULT = Object.freeze({ c: 0, e: 0, s: S_DEFAULT, t: 0, er: 0 });
