@@ -33,7 +33,22 @@
     --display: Bahnschrift, "DIN Alternate", "Segoe UI", system-ui, sans-serif;
     --body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+    /* D399: each look's own texture, the top background layer of the header, the left panel and the menus (never the 3D view): one tile, drawn by
+       scripts/texture_tiles.js. SIGIL's is a fine film grain; a skin sets its own --tex under [data-theme]. Its strengths keep every text where it reads
+       today: none goes under 4.5:1 (app/test/texture-page.test.js). A fine tile is sized in DEVICE pixels (--dpx), so at Windows' fractional display
+       scales it lands one tile pixel per device pixel; sized in CSS px it was resampled, and Aurora's dots smeared into uneven smudges (A's review 12) */
+    --dpx: 1px;
+    --tex: url(themes/tex/sigil.png) 0 0 / calc(128 * var(--dpx)) calc(128 * var(--dpx)) repeat;
   }
+  /* D399: --dpx is one device pixel, in CSS px, at each of Windows' display scales (each range is centred on one scale) */
+  @media (min-resolution: 1.125dppx) { :root { --dpx: calc(1px / 1.25); } }
+  @media (min-resolution: 1.375dppx) { :root { --dpx: calc(1px / 1.5); } }
+  @media (min-resolution: 1.625dppx) { :root { --dpx: calc(1px / 1.75); } }
+  @media (min-resolution: 1.875dppx) { :root { --dpx: calc(1px / 2); } }
+  @media (min-resolution: 2.125dppx) { :root { --dpx: calc(1px / 2.25); } }
+  @media (min-resolution: 2.375dppx) { :root { --dpx: calc(1px / 2.5); } }
+  @media (min-resolution: 2.75dppx) { :root { --dpx: calc(1px / 3); } }
+  @media (min-resolution: 3.25dppx) { :root { --dpx: calc(1px / 3.5); } }
   * { box-sizing: border-box; }
   /* The page never scrolls: the grid fills the window exactly, and each side panel scrolls inside itself. (At the
      default 1400×860 window the page used to scroll: grid rows sized to content push the body past the window.) */
@@ -45,7 +60,7 @@
      raycasting, the load graph) and the other side sections sit under the builder's controls in the left column (#left);
      a third column for them took 300 px from the preview to hold one short panel (the keeper, 2026-10-03). */
   body { display: grid; grid-template-columns: 320px minmax(0, 1fr); grid-template-rows: 44px auto minmax(0, 1fr); height: 100vh; }
-  header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; }
+  header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--tex), var(--panel); min-width: 0; }
   header h1 { font: 300 13px var(--display); margin: 0 14px 0 2px; letter-spacing: .42em; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
   header h1::before { content: ""; width: 14px; height: 14px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 16%, transparent 18%); flex: none; }
   /* D395, THE WORDMARK: the sigil dot leads (each skin draws its own), "T-180" in the text colour, a hairline rule, then the rest dimmed; tokens only, so it follows the theme.
@@ -96,7 +111,7 @@
   .more > summary { list-style: none; cursor: pointer; background: transparent; border: 1px solid var(--hair); border-radius: 2px; padding: 5px 10px; }
   .more > summary::-webkit-details-marker { display: none; }
   .more[open] > summary { border-color: var(--accent); }
-  .more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; min-width: 260px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; min-width: 260px; background: var(--tex), var(--panel); border: 1px solid var(--line); border-radius: 6px; }
   .more-menu > span { display: flex; flex-direction: column; gap: 6px; }
   .pieces-menu .more-menu { width: 420px; max-height: 70vh; overflow-y: auto; }   /* D269: the saved pieces, a bin under the top bar (D355: it opens leftwards, as every menu at the top right does) */
   /* D355: THE MENUS (app/menubar/menubar.js), each the same <details class="more"> + .more-menu as Pieces ▾. Inside one: a heading is the page's h3, a hairline
@@ -176,12 +191,16 @@
      bar, a dock along the bottom), so the track is the page and the tools sit on it. Same panels, same order, nothing moved in the DOM. */
   #stage { grid-column: 1 / -1; }
   #left #palette, #left #side { background: transparent; }
-  #left { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; background: rgba(8, 8, 7, .84); border: 1px solid var(--hair);
+  #left { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; background: var(--tex), rgba(8, 8, 7, .84); border: 1px solid var(--hair);
     grid-column: 1; position: relative; z-index: 10; margin: 12px 0 12px 12px; align-self: start; max-height: calc(100% - 24px); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }   /* SIGIL: floats over the preview */
   #palette, #side { flex: none; background: var(--panel); }
   #palette { padding: 10px; }
   #stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
   #preview { position: relative; min-height: 0; overflow: hidden; }
+  /* D399: the empty builder's track in characters: in the look's dim colour, above the 3D view and under everything else, never in the way */
+  /* centred on the free area right of the left panel's 320 px column (A's review 12: centred on the window, a quarter of it hid behind the panel at 900 px) */
+  #empty-art { position: absolute; z-index: 2; left: calc(50% + 160px); top: 22%; transform: translateX(-50%); margin: 0; font: 11px/12px var(--mono); color: var(--dim); pointer-events: none; user-select: none; white-space: pre; }
+  #empty-art[hidden] { display: none; }
   #camera { position: absolute; z-index: 9; left: 346px; right: 16px; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
   #camera > * { pointer-events: auto; }
   #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
@@ -277,6 +296,27 @@
 <main id="stage">
   <div id="preview"><div class="placeholder">Loading the preview…</div></div>
   <div id="camera"></div>
+  <!-- D399: the empty builder's picture, a track in characters (scripts/empty_art.js), shown only while there are no pieces (the boot, below) -->
+  <pre id="empty-art" aria-hidden="true" hidden>                               /-------------
+                         //////             ------\\\\\
+                      ////     //-----------          \\\\\\\
+                   ////    /////           ------\\\\\      \\\\\\
+                ////   /////                         \\\\\\\\    \\\\\
+            /////   ////                                    \\\\\    \\\
+          ///    ////                                           \\\\   \||
+       ////   ////                                                 \\|   |
+     ||/   ////                                                      |   |
+    ||   ///                                                        |==  |
+    |   ||                                                        //| ===|
+    |   |                                                       ///   /||
+    ||  |\\                                                  ////   ///
+     \\   \\\\\                                           ////   ////
+      \\\\    \\\\\\                                   ////   ////
+         \\\\\     \\\\\\\\                        /////   ////
+             \\\\\\       \\\\\------          /////    ////
+                  \\\\\\\\          ----------//     ////
+                          \\\\\------           //////
+                                    -----------//</pre>
   <div id="guide" style="position: absolute; inset: 0; pointer-events: none; z-index: 5;"></div>
 </main>
 <script src="lib/cjs.js"></script>
@@ -421,6 +461,9 @@
     };
     const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
+    // D399: the empty builder's picture (#empty-art) shows only while the track has no pieces
+    const art = $('empty-art'), showArt = (st) => { art.hidden = !(st && st.history && st.history.present && st.history.present.pieces.length === 0); };
+    shell.subscribe(showArt); showArt(shell.getState());
     // D340, THE LATE-INPUT LOG: each key event the preview handled late ('t180:input-late', app/preview/preview.js checkLate) is appended to input-late.log in
     // the app's data folder (src-tauri/src/lib.rs append_input_log, off the main thread, size-capped), buffered and written later, never on the key's path
     try {
