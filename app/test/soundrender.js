@@ -2,7 +2,8 @@
 // Used by app/test/sound-bands.test.js and by hand: node app/test/soundrender.js OUTDIR writes each clip as a 16-bit stereo 48 kHz WAV.
 //
 //   chromePath()                    the Chrome to use (CHROME_PATH, else the usual Windows place), or null when there is none
-//   launchChrome(exe, args, prefix) -> { ch, dir, port, tgt }   (D400) headless Chrome on a free port, attached only if that port's browser is the one it started
+//   launchChrome(exe, args, prefix) -> { ch, dir, port, tgt }   (D400) headless Chrome on a free port, attached only if that port's browser is the one it started;
+//                                   always muted (D409: --mute-audio, so a test never plays the builder's sounds aloud; an OfflineAudioContext still renders)
 //   connect(url, onEvent)           -> { ws, send }   (D400) a DevTools socket whose waiting sends are rejected when it closes, so a lost browser fails fast
 //   renderClips(src, clips, o)     -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }; o.samples = a folder; o.seed (default SEED)
 //                                   of the four slot WAVs (app/sounds): the engine is handed them (useSamples) before each clip, as the app does once they load;
@@ -62,7 +63,7 @@ async function connect(url, onEvent = null) {
  */
 async function launchChrome(exe, args, prefix) {
   const port = await freePort(), dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const ch = spawn(exe, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', ...args, 'about:blank'], { stdio: 'ignore' });
+  const ch = spawn(exe, ['--headless=new', '--mute-audio', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', ...args, 'about:blank'], { stdio: 'ignore' });
   try {
     let ver; for (let i = 0; i < 100 && !ver; i++) { await sleep(200); try { ver = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); } catch (e) { /* not up yet */ } }
     if (!ver) throw new Error(`headless Chrome did not answer on port ${port}`);
