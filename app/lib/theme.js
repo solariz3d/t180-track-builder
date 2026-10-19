@@ -8,21 +8,28 @@
 //   CHOICES                    (D394) Settings ▸ Theme: music (the launch's random melody picks the skin, as before), each of the four (its skin and its own
 //                              melody), sigil (SIGIL's look; it has no melody of its own, so the melody stays random). The head script reads the saved one
 //   skinFor(choice, melody)    -> the skin a choice shows over the playing melody: a fixed theme its own, sigil none (null), music or anything else the melody's
+//   LOOKS, melodyOf(look)      (D405) the looks: the four melodies' skins and Skyline Night, a night look on Skyline's melody (the melodies stay four). melodyOf
+//                              names a look's melody (null for anything that is not a look). A look is a skin: applyTheme and skinFor take any of them, and
+//                              skinFor(music, melody, look) keeps the head's look when its melody is the one playing, so a random start on the night stays night
 'use strict';
 const THEMES = Object.freeze(['aqua', 'skyline', 'glass', 'aurora']);
-const CHOICES = Object.freeze(['music', ...THEMES, 'sigil']);
+const NIGHT = Object.freeze({ 'skyline-night': 'skyline' });   // D405: a look on another look's melody
+const LOOKS = Object.freeze([...THEMES, ...Object.keys(NIGHT)]);
+const melodyOf = (look) => (typeof look === 'string' ? (NIGHT[look] || (THEMES.includes(look) ? look : null)) : null);
+const CHOICES = Object.freeze(['music', 'aqua', 'skyline', 'skyline-night', 'glass', 'aurora', 'sigil']);
 
 function applyTheme(doc, melody) {
   const root = doc && doc.documentElement;
   if (!root) throw new Error('theme: applyTheme needs a document');
-  if (typeof melody === 'string' && THEMES.includes(melody)) { root.setAttribute('data-theme', melody); return melody; }
+  if (typeof melody === 'string' && LOOKS.includes(melody)) { root.setAttribute('data-theme', melody); return melody; }
   root.removeAttribute('data-theme');
   return 'sigil';
 }
 
-function skinFor(choice, melody) {
+function skinFor(choice, melody, look) {
   if (choice === 'sigil') return null;
-  return THEMES.includes(choice) ? choice : melody;
+  if (LOOKS.includes(choice)) return choice;
+  return melodyOf(look) !== null && melodyOf(look) === melody ? look : melody;
 }
 
-module.exports = { THEMES, CHOICES, applyTheme, skinFor };
+module.exports = { THEMES, LOOKS, melodyOf, CHOICES, applyTheme, skinFor };

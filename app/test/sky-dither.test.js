@@ -19,7 +19,7 @@ const SKY = require(path.join(ADIR, 'preview', 'sky', 'index.js'));
 
 const CHROME = chromePath();
 const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the sky is drawn in headless Chrome';
-const STYLES = { sun: 'skyline', prism: 'glass', caustics: 'aqua', aurora: 'aurora' };
+const STYLES = { sun: 'skyline', prism: 'glass', caustics: 'aqua', aurora: 'aurora', city: 'skyline-night' };   // D405: Skyline Night's city sky joins every row
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** A skin's sky colours from its CSS: --sky, --fog, and --sky-a/b/c each falling back to --sky (as themeFrom does). */
 function colours(skin) {
