@@ -46,7 +46,7 @@
 // s0 the segment's offset into its word, so one transition may span several segments. `blend: null` means no ramp, and
 // the geometry then adds none of its own; only a segment WITHOUT the field falls back to `profileIn` / inheritance.
 'use strict';
-const { normalize, offsetAt, normalAt, samplesAcross, blend, blendSamples, usOf, smoothstep } = require('./profile.js');
+const { normalize, offsetAt, normalAt, samplesAcross, samplesShared, sealedNormal, blend, blendSamples, usOf, smoothstep } = require('./profile.js');
 const { _vec: { add, sub, mul, dot, len } } = require('./path.js');
 const { selfCheck, asFolds } = require('./bvh.js');
 
@@ -73,7 +73,22 @@ function vertex(sm, P, u) {
   const q = add(mul(sm.L, X), mul(sm.U, Y));
   return { p: add(sm.pos, q), n: add(mul(sm.L, nl), mul(sm.U, nu)), q };
 }
-function rowWith(sm, P, Us) { return Us.map((u) => vertex(sm, P, u)); }
+// D407: a frozen (sealed) profile's cross-section at the samples Us is the same numbers for every chord of a piece, only the frame (sm) differs, and offsetAt/normalAt were run again for every
+// vertex of every chord (a third of the full ghost's cost, the measurement of 2026-10-19). They are worked out once per profile object and samples and kept (at most SHAPES_MAX samples per profile);
+// the vertex arithmetic below is vertex()'s, in the same order, so every double is the same. An unfrozen profile (a ramp's blend) is not kept.
+const SHAPES = new WeakMap(), SHAPES_MAX = 8;
+function shapeOf(P, Us) {
+  let m = SHAPES.get(P); if (!m) SHAPES.set(P, m = new Map());
+  let k = Us; if (!Object.isFrozen(Us)) { k = ''; for (let i = 0; i < Us.length; i++) k += (Object.is(Us[i], -0) ? '-0' : Us[i]) + ','; }   // the mesher's shared (frozen) samples array is its own key
+  let s = m.get(k);
+  if (!s) { s = { X: [], Y: [], nl: [], nu: [] }; for (const u of Us) { const [X, Y] = offsetAt(P, u), [nl, nu] = normalAt(P, u); s.X.push(X); s.Y.push(Y); s.nl.push(nl); s.nu.push(nu); } if (m.size >= SHAPES_MAX) m.delete(m.keys().next().value); m.set(k, s); }
+  return s;
+}
+function rowWith(sm, P, Us) {
+  if (!(Object.isFrozen(P) && Object.isFrozen(P.u) && Object.isFrozen(P.psi))) return Us.map((u) => vertex(sm, P, u));
+  const s = shapeOf(P, Us);
+  return Us.map((u, k) => { const q = add(mul(sm.L, s.X[k]), mul(sm.U, s.Y[k])); return { p: add(sm.pos, q), n: add(mul(sm.L, s.nl[k]), mul(sm.U, s.nu[k])), q }; });
+}
 // A KEPT ROW (2026-10-15, memory headroom): the boundary rows every piece keeps for its seams (pc.first, pc.last) are PACKED, a Float64Array of six numbers a
 // vertex, p then n (a seam reads nothing else; q is only the fold check's, inside meshPiece). As { p, n, q } objects they were about 160 bytes a vertex inside
 // V8's 4 GB pointer cage: 2.67 million of them, ~430 MB of the page's ~780 MB at rest, on ELYSIUM (24 km). An ArrayBuffer's data lives outside the cage, and
@@ -131,7 +146,7 @@ function pieceSamples(path, g) {
  * `work` counts vertex evaluations + chord-check iterations.
  */
 function meshPiece(g, seg, S, o, work) {
-  const P = normalize(seg.profile), rampM = seg.rampM === undefined ? o.rampM : seg.rampM;
+  const P = sealedNormal(seg.profile), rampM = seg.rampM === undefined ? o.rampM : seg.rampM;
   if (seg.blend) {
     const b = seg.blend;
     if (!b.from || !(Number.isFinite(b.s0) && b.s0 >= 0) || !(Number.isFinite(b.length) && b.length > 0))
@@ -142,7 +157,7 @@ function meshPiece(g, seg, S, o, work) {
   const A = ramp ? normalize(ramp.from) : null;
   // a ramp: one vertex count for the whole piece, at matched fractions of the width; otherwise the font's own samples
   const fr = A ? (Array.isArray(seg.fractions) && seg.fractions.length >= 2 ? seg.fractions : blendSamples(A, P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross })) : null;   // seg.fractions (D225): the piece's shared row grid, so neighbouring chord segments make the same rows
-  const Us = A ? usOf(P, fr) : samplesAcross(P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross }).u, K = Us.length;
+  const Us = A ? usOf(P, fr) : samplesShared(P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross }).u, K = Us.length;   // D407: one walk per cross-section, not one per chord
   if (K > MAXV / 2) throw new Error(`buildMesh: piece ${g}: ${K} vertices across one row leaves no room for two rows`);
   const shapeAt = (sm) => {                   // the cross-section at a sample: the font, or the blend on the ramp
     if (!A) return { P, Us };
@@ -263,11 +278,17 @@ function seamsAround(st, gs) {
 const SPARE = Object.freeze(['first', 'last', 'ends', 'handles']);
 const dropSpare = (pc) => { if (pc) for (const k of SPARE) delete pc[k]; };
 function buildMesh(path, segments, opts = {}) {
+  const it = buildMeshSteps(path, segments, opts); let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
+}
+/** buildMesh as a generator (D407): a yield after each piece and each seam (the whole-track self check, opt-in, is one step); buildMesh is this run to the end, so the mesh is the same to the byte. */
+function* buildMeshSteps(path, segments, opts = {}) {
   const st = { o: options(opts), pieces: [], seams: [], workC: { n: 0 }, nseg: segments.length, closed: !!path.closed };
   const n = segments.length, joint = path.closed && n > 1;
-  if (!opts.lean) { meshRange(st, path, segments, 0, n); seamsAround(st, segments.map((_, g) => g)); }
+  if (!opts.lean) { for (let g = 0; g < n; g++) { meshRange(st, path, segments, g, g + 1); yield; } for (let g = 0; g < n; g++) { seamsAround(st, [g]); yield; } }
   else for (let g = 0; g < n; g++) {
-    meshRange(st, path, segments, g, g + 1); seamsAround(st, [g]);
+    meshRange(st, path, segments, g, g + 1); seamsAround(st, [g]); yield;
     if (g > 0 && !(joint && g - 1 === 0)) dropSpare(st.pieces[g - 1]);   // a closed loop's first piece keeps its rows for the joint below
   }
   if (joint) {                                             // a closed loop also joins its last piece to its first
@@ -284,17 +305,27 @@ function buildMesh(path, segments, opts = {}) {
   return out;
 }
 
-/** extendMesh(prev, path, segments): new pieces after extendPath. Only the new pieces and the seam onto them are made. */
-function extendMesh(prev, path, segments) {
+/**
+ * extendMeshSteps(prev, path, segments): extendMesh as a generator (D407). It does the same work in the same order (each new piece, then each seam, then the assembly) and yields after
+ * every piece and every seam, so a caller that must not hold the page for 50 ms (the full ghost built when a handle is let go) can run it in slices; the value it returns is extendMesh's.
+ * extendMesh below is this generator run to the end, so there is one code path and the mesh is the same to the byte.
+ */
+function* extendMeshSteps(prev, path, segments) {
   const st = prev._state;
   if (st.closed || path.closed) throw new Error('extendMesh: a closed loop has no open end; rebuild it');
   if (segments.length <= st.nseg) throw new Error('extendMesh: no new segments');
   st.workC = { n: 0 };
   const from = st.nseg;
-  meshRange(st, path, segments, from, segments.length);
-  seamsAround(st, segments.map((_, g) => g).slice(from));
+  for (let g = from; g < segments.length; g++) { meshRange(st, path, segments, g, g + 1); yield; }
+  for (let g = from; g < segments.length; g++) { seamsAround(st, [g]); yield; }
   st.nseg = segments.length; st.work = st.workC.n;
   return assemble(st);
+}
+/** extendMesh(prev, path, segments): new pieces after extendPath. Only the new pieces and the seam onto them are made. */
+function extendMesh(prev, path, segments) {
+  const it = extendMeshSteps(prev, path, segments); let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
 }
 
 /**
@@ -372,4 +403,4 @@ function reuseMesh(prev, path, segments, same, { from = 0, grow = from > 0 } = {
   st.work = st.workC.n;
   return assemble(st);
 }
-module.exports = { buildMesh, extendMesh, sculptMesh, reuseMesh, vertex, rowVertices, profiles, toLocal };
+module.exports = { buildMesh, buildMeshSteps, extendMesh, extendMeshSteps, sculptMesh, reuseMesh, vertex, rowVertices, profiles, toLocal };

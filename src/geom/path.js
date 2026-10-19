@@ -285,6 +285,12 @@ function resize(arr, a, b, n) {
  * input of block `to`.
  */
 function growInto(path, segments, from, to, inp, work) {
+  const it = growIntoSteps(path, segments, from, to, inp, work); let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
+}
+/** growInto as a generator (D407): the same blocks in the same order, a yield after each, so the exact ghost's path can be grown a slice a frame. growInto is this run to the end. */
+function* growIntoSteps(path, segments, from, to, inp, work) {
   for (let gi = from; gi < to; gi++) {
     const blk = growBlock(segments[gi], gi, inp.p0, inp.R0, path.step, gi === segments.length - 1, work, path.substep);   // D404: path.substep is only ever set on a preview ghost's own path
     blk.pl = inp.pl;
@@ -292,6 +298,7 @@ function growInto(path, segments, from, to, inp, work) {
     for (const r of blk.recs) path.samples.push(new SampleView(r, blk));
     path.segEnd[gi] = new SampleView(blk.endRec, blk);
     inp = nextOf(blk, gi + 1);
+    yield;
   }
   return inp;
 }
@@ -309,12 +316,18 @@ function finish(path, segments, work) {
  * (ARCHITECTURE §2), not the geometry's.
  */
 function buildPath(segments, opts = {}) {
+  const it = buildPathSteps(segments, opts); let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
+}
+/** buildPath as a generator (D407): a yield after each block; buildPath is this run to the end, so the path is the same to the bit. */
+function* buildPathSteps(segments, opts = {}) {
   checkSegments(segments);
   const step = opts.step === undefined ? 0.5 : opts.step;
   if (!(step > 0)) throw new Error('buildPath: step must be positive');
   const closed = !!opts.closed, start = { pos: [0, 0, 0], theta: 0, p: 0, ...(opts.start || {}) };
   const work = { n: 0 }, path = { lengthM: 0, closed, twist: 0, samples: [], step, ...(opts.substep > 0 ? { substep: opts.substep } : {}), starts: [], segFirst: [], segEnd: [], blocks: [] };
-  growInto(path, segments, 0, segments.length, firstOf(start), work);
+  yield* growIntoSteps(path, segments, 0, segments.length, firstOf(start), work);
   finish(path, segments, work);
   if (closed) {
     // the loop must meet itself in position and tangent; the closing is the document's connector's job (ARCHITECTURE §2).
@@ -333,6 +346,12 @@ function buildPath(segments, opts = {}) {
  * `path.work` becomes the work this call did (substeps + samples), for the cost measure.
  */
 function extendPath(path, segments, fromSeg) {
+  const it = extendPathSteps(path, segments, fromSeg); let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
+}
+/** extendPath as a generator (D407): it yields after each new block and returns what extendPath returns; extendPath is this run to the end, so the path is the same to the bit. */
+function* extendPathSteps(path, segments, fromSeg) {
   if (path.closed) throw new Error('extendPath: a closed loop has no open end; rebuild it');
   const from = fromSeg === undefined ? path._nseg : fromSeg;
   if (from !== path._nseg) throw new Error(`extendPath: the path ends after segment ${path._nseg - 1}, cannot grow from ${from}`);
@@ -341,7 +360,7 @@ function extendPath(path, segments, fromSeg) {
   path.samples.pop();                               // the old open end is re-emitted as the new segment's start (the seam)
   const last = path.blocks[from - 1]; last.n--;
   const work = { n: 0 };
-  growInto(path, segments, from, segments.length, nextOf(last, from), work);
+  yield* growIntoSteps(path, segments, from, segments.length, nextOf(last, from), work);
   return finish(path, segments, work);
 }
 
@@ -402,4 +421,4 @@ function headCamera(head, { back = 15, up = 6 } = {}) {
   return { eye: add(sub(head.pos, mul(head.T, back)), mul(head.U, up)), look: head.T.slice(), up: head.U.slice(), target: add(head.pos, mul(head.T, back)) };
 }
 
-module.exports = { buildPath, extendPath, rebuildPathFrom, buildHead, headCamera, doubleReflect, tangent, rotate, angleAbout, flightLength, _vec: { add, sub, mul, dot, cross, len, unit } };
+module.exports = { buildPath, buildPathSteps, extendPath, extendPathSteps, rebuildPathFrom, buildHead, headCamera, doubleReflect, tangent, rotate, angleAbout, flightLength, _vec: { add, sub, mul, dot, cross, len, unit } };

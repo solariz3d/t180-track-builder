@@ -44,6 +44,15 @@ const DEG = Math.PI / 180;
 function profileAt(family, w, r) {
   if (!Object.prototype.hasOwnProperty.call(FLOORS, family)) throw new D.CoreError('BAD_FAMILY', `family "${family}"`);
   if (!(w > 0)) throw new D.CoreError('BAD_WIDTH', `the road's width must be positive, got ${w} m`);
+  // D407: one FROZEN profile per family, width and rate (a -0 rate told from a 0), kept: a 2,000 m ghost asked for 3,000 of them, mostly the same, each built and then frozen again (a
+  // quarter of the candidate's cost, the measurement of 2026-10-19). The numbers are made by the same code as before; nothing changes a profile after it is made (every segment is frozen)
+  const key = family + '|' + w + '|' + (Object.is(r, -0) ? '-0' : r);
+  let hit = PROFILES.get(key);
+  if (!hit) { hit = deepFreeze(profileMade(family, w, r)); if (PROFILES.size >= PROFILES_MAX) PROFILES.delete(PROFILES.keys().next().value); PROFILES.set(key, hit); }
+  return hit;
+}
+const PROFILES = new Map(), PROFILES_MAX = 256;
+function profileMade(family, w, r) {
   const F = FLOORS[family], quarter = w / 8, deg = []; let prev = 0;
   F.forEach((target, i) => { prev += Math.min(target - (i ? F[i - 1] : 0), Math.max(0, r) * quarter); deg.push(prev); });
   const side = AT.map((f, i) => [(f * w) / 2, deg[i] * DEG]);

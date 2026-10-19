@@ -279,11 +279,13 @@ function mount(root, shell, mountOpts = {}) {
   // nothing of the last cheap ghost could be reused (app/preview/trackmodel.js). While the LENGTH handle is dragged the preview is built at the nearest whole 2 m,
   // so the chords stay 2 m and only the end is new. The field, the readout and the piece placed keep the exact value; the release builds the exact ghost.
   const previewLength = (o) => (scrubbing && scrubKind === 'length' && o.length > 2 ? { ...o, length: Math.round(o.length / 2) * 2 } : o);
+  let releasing = false;   // D407: true while a drag's LAST position is typed in, just before end(): its ghost(RELEASE) builds the exact ghost, so the cheap one between is not built
   const ghost = () => {
+    if (releasing) return;
     hintNow();   // D242: the straight hint follows the turn field and its box
     readout();   // first, and synchronously: the numbers follow the fields with no timer and no frame wait
     let why = null;
-    try { send('t180-ghost', { candidate: shell.candidate(previewLength(opts()), { coarse: scrubbing }), cheap: scrubbing, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }
+    try { send('t180-ghost', { candidate: shell.candidate(previewLength(opts()), { coarse: scrubbing }), cheap: scrubbing, sliced: !scrubbing, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }   // D407: every ghost but a drag's (a field typed, a hover, the release) is built a slice a frame by the preview (sliced)
     if (why) { send('t180-ghost-clear'); msg.textContent = `no preview of this piece: ${why}`; msg.className = 'message'; }
   };
   // the ghost follows the fields as they change, not only a fresh hover (a pointer resting on the button fires no new mouseenter,
@@ -460,13 +462,13 @@ function mount(root, shell, mountOpts = {}) {
     },
     pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; },
     begin: (h) => { if (LAND_FIELD[h.kind]) { shell.beginLanding(); landDrag = !!shell.getState().landingDrag; return; } const m = sculptModel(); if (!m) { scrubbing = true; scrubKind = h.kind; } if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
-    apply: (h, value) => {
+    apply: (h, value, mods, final) => {
       if (LAND_FIELD[h.kind]) { if (landDrag) shell.landingTo({ [LAND_FIELD[h.kind]]: value }); return; }
       if (sculptDrag) { const delta = value - sculptDrag.base; shell.sculptTo(h.kind === 'bank' ? delta * HD.DEG : delta); return; }
       if (shell.getState().sculpt) return;
-      const f = HANDLE_FIELD[h.kind]; f.value = h.kind === 'bank' ? show(HD.wrapTurn(value)) : String(value); if (f.oninput) f.oninput();   // typed: the field's own handler follows it (D259: the bank within one turn)
+      const f = HANDLE_FIELD[h.kind]; f.value = h.kind === 'bank' ? show(HD.wrapTurn(value)) : String(value); if (f.oninput) { releasing = !!final && scrubbing; try { f.oninput(); } finally { releasing = false; } }   // typed: the field's own handler follows it (D259: the bank within one turn)
     },
-    end: () => { if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } if (scrubbing) { scrubbing = false; scrubKind = null; ghost(); } },   // the release: the full ghost
+    end: () => { if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } if (scrubbing) { scrubbing = false; scrubKind = null; ghost(); } },   // the release: the full ghost (built a slice a frame by the preview: D407)
   };
   sculptOn.onchange = () => {
     shell.setSculpt(sculptOn.checked);

@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Letting go of a handle on a long piece no longer freezes the builder, and typing a number into the panel is quicker.** When a handle was let go, the preview built the exact piece at once, in about 60 ms for a 1,000 m piece, 280 ms at 5,000 m and a full second at 20 km, and the window froze for that time. Each number typed into a field cost about 13 ms the same way. The preview now builds the exact piece a few milliseconds a frame, keeping the drag's preview on show until the exact one is ready, and the work itself is about a third of what it was. The mesh, the road lines and what is placed and exported are the same to the byte. Placing a piece is quicker too: it takes the preview's work instead of building the piece again (a 1,000 m piece went from about 110 ms to about 20, a 2,000 m one from 200 to 30); that is still more than a frame, and the next thing to speed up.
+
 ## [0.4.8] - 2026-10-19
 
 ### Added

@@ -240,6 +240,17 @@ slower than that (an ordinary piece is up to about 2,000 m); only a single huge 
   exported and the full ghost built when the handle is let go are byte for byte what they were (`app/test/drag-ghost.test.js` row 3 and 5 hold a hash of each, taken at 0.4.7).
 - **Measured after (2026-10-19, the same machine, both heavy-run slots held, p95 of the frames that did work):** a 1,000 m drag 3.5 to 4 ms in every look, 2,000 m 3.8 to 4.8 ms, 5,000 m 4.8, 10,000 m 6.2, 20,000 m 8.2: **smooth at a 165 Hz display (6.06 ms) up to about 10,000 m a piece, and a single 20 km piece still drags above 100 frames a second.**
   What still grows with the length is the piece's own channel fit (one solve a move) and the readout; the 20 km piece's 8 ms is the first place a drag would miss 165 Hz, and the first thing to work on if it matters.
+- **Letting go, typing and hovering (D407):** the exact ghost (the one shown when a handle is let go, a field is typed in or Extend is hovered) is no longer built inside the event. The
+  preview builds it a slice a frame (`preview.showGhost(c, { sliced })`, at most 2.5 ms a frame, `GHOST_SLICE_MS`) from the track model's `ghostSteps`, a generator over the same work in the same order as
+  `ghostFor` (geom's `buildPathSteps`, `extendPathSteps`, `buildMeshSteps`, `extendMeshSteps`; each plain function is its generator run to the end), and the ghost on show stays until the exact one is
+  whole, so nothing blinks. The work itself is about a third of what it was: a piece's cross-section is walked and sealed once, not once per 2 m chord (`profile.js samplesShared`, `sealedNormal`; `mesh.js shapeOf`),
+  the adapter keeps one frozen `profileAt` per family, width and rate, and the road lines are written straight into their arrays (`look.js linesFor`). The mesh, the path and the lines are byte for
+  byte what 0.4.8 made (`app/test/release-ghost.test.js`); `app/test/release-frame.test.js` holds the bar on the real page.
+- **Placing a piece (D407):** the placement of the piece whose full ghost is on show TAKES the ghost's path and mesh (`trackmodel.update`, `lastFull`: the very same segment objects, the same placed
+  path and mesh, no offsets to lift; the ghost grew copies, so the old track stays whole for the undo without copying), the start's marks grow their path instead of building the whole track's
+  again (`coreshell spawnPath`, and `startLayout`/`spawnsLayout` take it as `base`), and the drag handles lay out and draw only when something they read changed (`handles.js frameKey`).
+  **Still over the bar, the next things to work on:** placing a 1,000 m piece costs about 20 ms in the click (2,000 m about 30): the start's marks (`spawnsInfo`'s layout and checks, 5 to 8 ms), the
+  next ghost's candidate, and the renderer's first draw of the new road (its textures and line chunks); and the candidate's own segments (`toSegments`, about 4 ms at 1,000 m and 7 at 2,000).
 - **A new previewer lap:** measure first (a drag of the biggest ordinary piece, `app/test/drag-frame.test.js`'s way), and say in its hand-back what its frames cost against 6.0 ms (6.9 ms on a 144 Hz machine).
 
 ## 10. First milestones: prove the risky parts first
