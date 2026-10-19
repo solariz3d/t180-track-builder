@@ -27,8 +27,11 @@
 //      menu and Export to Assetto Corsa is on one line, left of them; the same at 125% scaling, where a window can be 979.2 or 1279.2 px wide (A's review 10)
 //  18  (D401) Settings ▸ Theme's first choice and default is Random (it was Music); choosing it while open picks another look at once and that look's melody
 //      follows; it is still saved as music, and a saved music loads as Random
+//  18b (D401, B's D408 probe) row 18 with Math.random pinned: at 0.4 the start look is Random's pick, so its files are in and none is fetched again; at 0.6 they are fetched
 //  19  (D401, A's read §8) on a fresh start, nothing saved and Random already ticked, a click on Random picks another look at once and its melody follows,
 //      and again on the next click; Random stays ticked and the theme is saved as music
+//  19b (D401) that first click on a fresh install picks ONCE: with Math.random pinned at 0.4 the start is Skyline and one pick is Glass (a second pick, which the first click
+//      made when nothing was saved yet, lands back on Skyline)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -61,14 +64,17 @@ test.before(async () => {
 test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } if (ch) ch.kill(); if (srv) srv.close(); await sleep(300); try { dir && fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } });
 
 /** a fresh page: optionally with localStorage cleared first (same origin) or refused outright, then wait until the menus are mounted */
-async function load({ clear = true, blocked = false } = {}) {
+async function load({ clear = true, blocked = false, random = null } = {}) {
   errors = [];
-  let script = null;
+  let script = null, pin = null;
   if (blocked) script = (await send('Page.addScriptToEvaluateOnNewDocument', { source: "Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });" })).result.identifier;
+  // random: Math.random pinned to that number in the page about to load (B's D408 probe), so a test can choose the start look and Random's pick
+  if (random !== null) pin = (await send('Page.addScriptToEvaluateOnNewDocument', { source: `Math.random = () => ${Number(random)};` })).result.identifier;
   if (clear && !blocked) { await send('Page.navigate', { url: base.replace('index.html', 'lib/cjs.js') }); await sleep(300); await ev('localStorage.clear(); return true;'); }
   await send('Page.navigate', { url: base });
   for (let i = 0; i < 150; i++) { await sleep(200); try { if (await ev("return document.documentElement.dataset.menubar === 'ready';")) break; } catch (e) { /* loading */ } }
   if (script) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script });
+  if (pin) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: pin });
   assert.equal(await ev("return document.documentElement.dataset.menubar || 'not mounted';"), 'ready', `the menus mounted (page errors: ${errors.join(' | ') || 'none'})`);
 }
 // opens a menu afresh (closed first if it is open: a tick keeps its menu open, and a second click on the name would close it), so its entries are rebuilt
@@ -362,13 +368,16 @@ test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sid
   } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
 });
 
-test('row 18 (D401): Settings ▸ Theme starts with Random, not Music, and it is the default; choosing it picks another look at once and that look\'s melody follows; a saved music loads as Random', { skip }, async () => {
+// row 18's walk, as a function so row 18b can run it with Math.random pinned: Random first and the default, Glass, then Random picks another look and its melody follows.
+// The melody check is row 19's rule (B's D408 hand-back): a look whose two files this load already fetched keeps them (app/sound.js), so it is fetched only when they were not in
+async function randomAfterGlass({ random = null } = {}) {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
   const look = () => ev("return document.documentElement.getAttribute('data-theme');");
   const soundFiles = () => urls.filter((u) => /sounds\/(place|undo)_/.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort();
   const fetched = async (name) => { for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/' + name)); i++) await sleep(100); };
   try {
-    await load();
+    await load({ random });
+    const start = await ev("return document.documentElement.getAttribute('data-theme');");
     await open('m-settings');
     const labels = await ev("return [...document.querySelectorAll('#m-settings label')].map((x) => x.textContent.trim());");
     assert.ok(!labels.includes('Music'), `no theme is called Music: ${labels.join(' | ')}`);
@@ -379,13 +388,14 @@ test('row 18 (D401): Settings ▸ Theme starts with Random, not Music, and it is
     await ev("document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); return true;");   // the sound starts on a press (app/sound.js)
     await fetched('loop_closed.wav'); assert.ok(urls.some((u) => /sounds\/loop_closed\.wav$/.test(u)), 'the sound started and fetched its files');
     await clickText('m-settings', 'Glass'); assert.equal(await look(), 'glass'); await fetched('undo_glass.wav');
-    urls.length = 0;
+    const had = urls.slice(); urls.length = 0;
     await clickText('m-settings', 'Random');
     const picked = await look();
     assert.ok(['aqua', 'skyline', 'aurora'].includes(picked), `choosing Random picks another look at once: ${picked}, after Glass`);
     assert.equal(await ticked('m-settings', 'Random'), true); assert.equal(await ticked('m-settings', 'Glass'), false, 'a choice of one');
-    await fetched('undo_' + picked + '.wav');
-    assert.deepEqual(soundFiles(), ['place_' + picked + '.wav', 'undo_' + picked + '.wav'], picked + '\'s melody follows: only its two files are fetched');
+    const cached = had.some((u) => u.endsWith('sounds/undo_' + picked + '.wav'));
+    if (!cached) await fetched('undo_' + picked + '.wav');
+    assert.deepEqual(soundFiles(), cached ? [] : ['place_' + picked + '.wav', 'undo_' + picked + '.wav'], cached ? `${picked}'s files were in already (the start's look): none fetched again` : `${picked}'s melody follows: only its two files are fetched`);
     assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), JSON.stringify('music'), 'saved under its old value, music, so saves from before and after read alike');
     await ev("localStorage.setItem('t180.settings.theme', JSON.stringify('music')); return true;");   // as 0.4.6 and 0.4.7 saved it
     await load({ clear: false });
@@ -393,7 +403,17 @@ test('row 18 (D401): Settings ▸ Theme starts with Random, not Music, and it is
     await open('m-settings');
     assert.equal(await ticked('m-settings', 'Random'), true, 'a saved music is shown as Random');
     assert.deepEqual(errors, []);
+    return { start, picked, cached };
   } finally { onEvent = null; await send('Network.disable'); }
+}
+test('row 18 (D401): Settings ▸ Theme starts with Random, not Music, and it is the default; choosing it picks another look at once and that look\'s melody follows; a saved music loads as Random', { skip }, async () => {
+  await randomAfterGlass();
+});
+test('row 18b (D401, B\'s D408 probe): the same with Math.random pinned, so both branches run every time: at 0.4 the start look is the pick (its files already in), at 0.6 it is not', { skip }, async () => {
+  const a = await randomAfterGlass({ random: 0.4 });
+  assert.deepEqual([a.start, a.picked, a.cached], ['skyline', 'skyline', true], 'at 0.4: starts on Skyline, Random after Glass picks Skyline, whose files are in');
+  const b = await randomAfterGlass({ random: 0.6 });
+  assert.deepEqual([b.start, b.picked, b.cached], ['glass', 'skyline', false], 'at 0.6: starts on Glass, Random after Glass picks Skyline, fetched');
 });
 test('row 19 (D401, A\'s read §8): a fresh start, Random already ticked: one click on Random picks another look and its melody, and so does the next', { skip }, async () => {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
@@ -422,4 +442,19 @@ test('row 19 (D401, A\'s read §8): a fresh start, Random already ticked: one cl
     assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), JSON.stringify('music'), 'saved as music');
     assert.deepEqual(errors, []);
   } finally { onEvent = null; await send('Network.disable'); }
+});
+test('row 19b (D401): on a fresh install the first click on the ticked Random picks once, not twice: with Math.random at 0.4, Skyline becomes Glass', { skip }, async () => {
+  // nothing saved, so settings.set('theme', 'music') is a change (undefined to music) and tells its listener, which picks; a second pick asked for by the item itself
+  // excluded only the first pick, so it could land back on the start look (menubar-page run 4 of 5, 2026-10-19: "still skyline")
+  await load({ random: 0.4 });
+  const look = () => ev("return document.documentElement.getAttribute('data-theme');");
+  assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), null, 'nothing saved');
+  assert.equal(await look(), 'skyline', 'at 0.4 the start look is Skyline');
+  await open('m-settings');
+  assert.equal(await ticked('m-settings', 'Random'), true);
+  await clickText('m-settings', 'Random');
+  assert.equal(await look(), 'glass', 'one pick from Skyline at 0.4 is Glass; Skyline again is a second pick');
+  await clickText('m-settings', 'Random');
+  assert.equal(await look(), 'skyline', 'the next click, the theme now saved as music, picks once from Glass: Skyline');
+  assert.deepEqual(errors, []);
 });
