@@ -182,8 +182,9 @@ test('a load throw in one file does not hide a crash after a failing row in anot
   assert.match(said, IR.NOT_TESTED_LOAD);
 });
 for (const m of MUTATIONS) {
-  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, () => {
+  test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, (t) => {
     const r = IR.narrowedFirst(runMutant, m, NARROW.get(m.caughtBy) === true);   // D412: narrowed first; any miss is re-run whole, and that verdict stands
+    t.diagnostic(`D412 path: ${r.narrowed ? 'narrowed' : 'whole'}`);   // which run gave the verdict: a duration cannot tell a slow narrowed run from a re-run
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" occurs ${r.n} times in app/${m.file}`);
     assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);
   });
