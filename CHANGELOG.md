@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Removed
+- **The track drawn in characters is gone from the empty builder.** 0.4.8 showed a picture of a track, made of characters, over the 3D view whenever the track had no pieces. It was fixed to the screen, so when the camera moved it stayed where it was, and it looked like something wrong with the view rather than a picture. It is taken out in every look, not moved elsewhere; an empty builder now shows only the 3D view. (`app/index.html`.) Test: `app/test/texture-page.test.js` row 3.
+
 ## [0.4.8] - 2026-10-19
 
 ### Added
