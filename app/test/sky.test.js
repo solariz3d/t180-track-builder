@@ -80,7 +80,8 @@ test('an unknown sky style fails loudly, at setTheme and in the registry; a styl
   assert.throws(() => r.setTheme({ skyStyle: 'clouds' }), /no style named "clouds"/);
   assert.throws(() => r.setTheme({ skyStyle: 3 }), /no style named 3/);
   assert.throws(() => SKY.patternSource('Sun'), /no style named "Sun"/);
-  assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'prism', 'caustics', 'aurora']);
+  // AMENDED (D405): the rule changed by name: a sixth style, city (Skyline Night's)
+  assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'prism', 'caustics', 'aurora', 'city']);
   assert.equal(SKY.patternSource('none'), null);
   assert.match(SKY.patternSource('sun'), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/);
 });
@@ -90,7 +91,7 @@ test('the page\'s own loader (app/lib/cjs.js, which follows only written-out req
   const Rp = await loadCjs('app/preview/renderer.js', async (p) => fs.readFileSync(path.join(REPO, p), 'utf8'));
   const r = Rp.createRenderer(recordingGL().gl);
   r.setTheme({ skyStyle: 'sun' }); r.setTheme({ skyStyle: 'prism' });
-  for (const s of ['caustics', 'aurora']) {
+  for (const s of ['caustics', 'aurora', 'city']) {
     try { r.setTheme({ skyStyle: s }); } catch (e) { assert.match(e.message, /not built yet/, `${s}: loaded, and either built or saying it is not (not "could not be loaded")`); }
   }
 });
@@ -110,6 +111,14 @@ test('the skin names its sky with --sky-style, and its sky colours with --sky-a/
   // the screen-pinned haze is gone; the rule that stays only keeps the base's dark lens vignette off a light sky, as D379 did
   const after = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/#preview::after\s*\{([^}]*)\}/g)].map((m) => m[1].trim());
   assert.deepEqual(after, ['background: none;'], 'Skyline\'s screen-pinned sky overlay is gone: its view overlay draws nothing');
+});
+
+test('D405: Skyline Night names the city sky, a built style that keeps the GLSL rules', () => {
+  assert.match(SKY.patternSource('city'), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/, 'city is built');
+  assert.deepEqual(SKY.contractProblems('city', SKY.patternSource('city')), [], 'city keeps the D391 rules');
+  const r = R.createRenderer(recordingGL().gl); r.setTheme({ skyStyle: 'city' });
+  const css = fs.readFileSync(path.join(ADIR, 'themes', 'skyline-night.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(css, /\[data-theme="skyline-night"\]\s*\{[^}]*--sky-style:\s*city;/, 'Skyline Night names the city');
 });
 
 test('Glass names the prism sky, a built style; SIGIL alone names none', () => {

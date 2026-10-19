@@ -7,6 +7,7 @@
 //   aqua     soft fluid noise 0.08: smooth, domain-warped value noise that wraps at the tile's edges, white where high   256 x 256, repeated
 //            (0.10 pushed two texts under 4.5:1 and 0.09 sat on 4.50; 0.08 is the highest strength with room, D399)
 //   aurora   dot matrix 0.10: a 1 px white dot every 3 px                                                                3 x 3, repeated
+//   skyline-night  (D405) Skyline's paper grain with every speck's colour flipped, so the specks seen on its navy panels are the light ones   128 x 128
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const OUT = path.join(__dirname, '..', 'app', 'themes', 'tex');
@@ -23,7 +24,7 @@ function tile(w, h, paint) {
   const px = Buffer.alloc(w * h * 4), put = (x, y, white, a) => { const i = 4 * (y * w + x), v = white ? 255 : 0; px[i] = px[i + 1] = px[i + 2] = v; px[i + 3] = Math.round(255 * Math.max(0, Math.min(1, a))); };
   paint(put); return png(w, h, px);
 }
-const grain = (s, cell) => tile(128, 128, (put) => { const r = rng(397); for (let y = 0; y < 128; y += cell) for (let x = 0; x < 128; x += cell) { const v = r() * 2 - 1; for (let j = 0; j < cell; j++) for (let i = 0; i < cell; i++) put(x + i, y + j, v > 0, Math.abs(v) * s); } });
+const grain = (s, cell, flip = false) => tile(128, 128, (put) => { const r = rng(397); for (let y = 0; y < 128; y += cell) for (let x = 0; x < 128; x += cell) { const v = r() * 2 - 1; for (let j = 0; j < cell; j++) for (let i = 0; i < cell; i++) put(x + i, y + j, flip ? v < 0 : v > 0, Math.abs(v) * s); } });
 const B8 = (() => { let b = [[0]]; for (let n = 1; n < 8; n *= 2) { const nb = []; for (let y = 0; y < 2 * n; y++) { nb.push([]); for (let x = 0; x < 2 * n; x++) nb[y].push(4 * b[y % n][x % n] + [[0, 2], [3, 1]][Math.floor(y / n)][Math.floor(x / n)]); } b = nb; } return b.map((r) => r.map((v) => (v + 0.5) / 64)); })();
 const dither = (s) => tile(8, 300, (put) => { for (let y = 0; y < 300; y++) { const t = (1 - y / 300) * 0.85 + 0.08; for (let x = 0; x < 8; x++) if (B8[y % 8][x] < t) put(x, y, true, s); } });
 function fluid(s) {
@@ -39,5 +40,5 @@ function fluid(s) {
 const dots = (s) => tile(3, 3, (put) => put(1, 1, true, s));
 
 fs.mkdirSync(OUT, { recursive: true });
-const TILES = { sigil: grain(0.06, 1), skyline: grain(0.05, 2), glass: dither(0.08), aqua: fluid(0.08), aurora: dots(0.10) };
+const TILES = { sigil: grain(0.06, 1), skyline: grain(0.05, 2), glass: dither(0.08), aqua: fluid(0.08), aurora: dots(0.10), 'skyline-night': grain(0.05, 2, true) };
 for (const [look, buf] of Object.entries(TILES)) { fs.writeFileSync(path.join(OUT, `${look}.png`), buf); console.log(`${look}.png ${buf.length} bytes`); }

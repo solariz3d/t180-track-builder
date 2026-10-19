@@ -1,0 +1,85 @@
+/* SKYLINE NIGHT (D405, pane E): Skyline after dark, a sixth look on Skyline's melody. The same Frutiger Aero manner as Skyline (frosted glass, glossy pills),
+   at night: deep navy glass, a lit sky-blue accent, a warm city glow along the horizon and a few stars (app/preview/sky/city.js). Styling only: no box
+   property (width, height, margin, padding, border width, font, letter-spacing, position) is set here, so every element keeps its place (app/test/theme.test.js
+   reads this file for them). The warning hues keep their hue: they are SIGIL's own, which already read on a dark surface. */
+
+[data-theme="skyline-night"] {
+  --tex: url(tex/skyline-night.png) 0 0 / calc(128 * var(--dpx)) calc(128 * var(--dpx)) repeat;   /* Skyline's paper grain (2 px cells) with every speck's colour flipped: on the navy panels the light specks are the ones seen; app/themes/tex/skyline-night.png, scripts/texture_tiles.js */
+  --bg: #08142c; --panel: #0e1d3b; --raise: #15294d; --line: #2c4a78; --hair: rgba(150, 200, 255, .22);
+  --text: #e8f2ff; --dim: #a9c3e6; --accent: #7cc8ff; --accent-dim: rgba(124, 200, 255, .18);
+  --mine: #d9a55a; --bad: #e0573f; --warn: #e3b448; --ok: #8fc9a2;
+  /* the canvas layers and the 3D view (app/lib/tokens.js) */
+  --ink: #06122a; --on-ink: #e8f2ff; --on-ink-strong: #ffffff; --veil: #06122a; --veil-rule: rgba(150, 200, 255, .2);
+  --guide-bg: rgba(10, 24, 52, .94); --guide-text: #e8f2ff; --guide-label: #9fd4ff;
+  --sky: color(srgb 0.06 0.09 0.2); --fog: color(srgb 0.34 0.25 0.26); --road-edge: color(srgb 0.92 0.95 1); --road-tie: color(srgb 0.03 0.07 0.16); --ground-grid: color(srgb 0.22 0.32 0.52);
+  /* the sky at infinity behind the track (app/preview/sky/city.js): a deep zenith, the city's warm glow on the horizon, the stars' white */
+  --sky-style: city; --sky-a: color(srgb 0.02 0.035 0.1); --sky-b: color(srgb 0.42 0.27 0.2); --sky-c: color(srgb 0.92 0.95 1);
+  --glass: rgba(14, 30, 62, .82); --glow: rgba(110, 190, 255, .45);
+  --pill: linear-gradient(180deg, #2a4a7e 0%, #1c3766 49%, #142b55 51%, #1a3460 100%);
+  --pill-on: linear-gradient(180deg, #9ad8ff 0%, #66bdf5 49%, #3f9be0 51%, #55aeea 100%);
+  color-scheme: dark;
+}
+
+[data-theme="skyline-night"], [data-theme="skyline-night"] body { background: linear-gradient(180deg, #040b1f 0%, #0b1a3a 50%, #2a2235 85%, #4a3328 100%); }
+[data-theme="skyline-night"] ::-webkit-scrollbar-thumb { background: linear-gradient(90deg, #2c4f86, #3c67a8); border-radius: 4px; }
+
+/* THE TOP BAR: a glossy navy band, the upper half catching the city's light */
+[data-theme="skyline-night"] header { background: var(--tex), linear-gradient(180deg, #1f3a68 0%, #16305b 48%, #0f2448 52%, #142a52 100%); border-bottom-color: #2f5590; box-shadow: 0 2px 14px rgba(0, 10, 40, .5); }
+[data-theme="skyline-night"] header h1 { color: var(--accent); text-shadow: 0 0 8px rgba(124, 200, 255, .35); }
+[data-theme="skyline-night"] header h1::before { border-color: #5aaef0; background: radial-gradient(circle at 35% 30%, #ffffff 0 18%, #8fd0ff 40%, #1d4f9a 100%); box-shadow: 0 0 8px var(--glow); }
+[data-theme="skyline-night"] header input, [data-theme="skyline-night"] header select { background: linear-gradient(180deg, #0b1a36, #102347); border-color: #34598f; border-radius: 12px; color: var(--text); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .4); }
+
+/* buttons and menu names: glossy navy pills */
+[data-theme="skyline-night"] button, [data-theme="skyline-night"] .more > summary { color: var(--text); border-color: #3a64a0; border-radius: 13px; background: var(--pill); box-shadow: 0 1px 2px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(170, 215, 255, .25); }
+[data-theme="skyline-night"] button:hover:not([disabled]), [data-theme="skyline-night"] .more > summary:hover { color: var(--accent); border-color: #5aaef0; background: linear-gradient(180deg, #33578f 0%, #24437a 49%, #1a3768 51%, #213f72 100%); box-shadow: 0 0 10px var(--glow), inset 0 1px 0 rgba(170, 215, 255, .3); }
+[data-theme="skyline-night"] button:active:not([disabled]) { background: linear-gradient(180deg, #0f2245, #1a3462); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .5); }
+[data-theme="skyline-night"] .more[open] > summary, [data-theme="skyline-night"] header #install > button { color: #04203f; border-color: #7cc8ff; text-shadow: 0 1px 0 rgba(255, 255, 255, .35); background: var(--pill-on); box-shadow: 0 0 12px var(--glow), inset 0 1px 0 rgba(255, 255, 255, .55); }
+[data-theme="skyline-night"] #winctl button { border-radius: 0; background: transparent; box-shadow: none; border-color: transparent; }
+[data-theme="skyline-night"] #win-min:hover, [data-theme="skyline-night"] #win-max:hover { background: rgba(124, 200, 255, .14); box-shadow: none; }
+[data-theme="skyline-night"] #win-close:hover { background: #c42b3a; box-shadow: none; }
+
+/* the menus: navy frosted panes */
+[data-theme="skyline-night"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(18, 36, 72, .97), rgba(11, 25, 54, .95)); border-color: #2f5590; border-radius: 14px; box-shadow: 0 14px 40px rgba(0, 8, 30, .6), inset 0 1px 0 rgba(170, 215, 255, .2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="skyline-night"] .more-menu button { border-radius: 9px; }
+[data-theme="skyline-night"] .pieces-menu .piece-row:hover { background: rgba(124, 200, 255, .1); }
+
+/* fields */
+[data-theme="skyline-night"] input[type="number"], [data-theme="skyline-night"] input[type="text"], [data-theme="skyline-night"] input:not([type]), [data-theme="skyline-night"] textarea,
+[data-theme="skyline-night"] .save-piece input, [data-theme="skyline-night"] .picker select, [data-theme="skyline-night"] select { background: #0b1a36; color: var(--text); border-color: #34598f; border-radius: 7px; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .4); }
+[data-theme="skyline-night"] input:focus, [data-theme="skyline-night"] select:focus, [data-theme="skyline-night"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 200, 255, .22); }
+[data-theme="skyline-night"] option { background: #0e1d3b; color: var(--text); }
+[data-theme="skyline-night"] option:checked { background: #1d3a6b; color: var(--text); }
+@supports (appearance: base-select) {
+  [data-theme="skyline-night"] header select::picker(select) { background: #0e1d3b; border-color: #2f5590; border-top-color: var(--accent); border-radius: 12px; box-shadow: 0 14px 40px rgba(0, 8, 30, .6); }
+  [data-theme="skyline-night"] header select option { color: var(--text); }
+  [data-theme="skyline-night"] header select option:checked { color: var(--accent); }
+}
+
+/* THE LEFT PANEL: a pane of navy glass in the night, a faint sheen across its top */
+[data-theme="skyline-night"] #left {
+  background: var(--tex), linear-gradient(180deg, rgba(120, 180, 255, .12) 0, rgba(120, 180, 255, 0) 120px), var(--glass);
+  border-color: rgba(120, 180, 255, .35); border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(0, 8, 30, .55), inset 0 1px 0 rgba(170, 215, 255, .25), inset 0 0 0 1px rgba(90, 150, 230, .2);
+  backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+[data-theme="skyline-night"] #palette, [data-theme="skyline-night"] #side { background: transparent; }
+[data-theme="skyline-night"] #side, [data-theme="skyline-night"] #side > section { border-color: rgba(120, 180, 255, .18); }
+[data-theme="skyline-night"] h3 { color: var(--accent); }
+[data-theme="skyline-night"] h3::after { background: linear-gradient(90deg, rgba(124, 200, 255, .55), rgba(124, 200, 255, 0)); }
+[data-theme="skyline-night"] #left .readout { color: var(--text) !important; }
+[data-theme="skyline-night"] .track li.selected { background: linear-gradient(90deg, rgba(124, 200, 255, .22), rgba(124, 200, 255, .06)); color: var(--accent); }
+[data-theme="skyline-night"] .bar, [data-theme="skyline-night"] #banner .brush-strip { background: linear-gradient(180deg, #16305b, #0e2146); }
+
+/* THE CAMERA DOCK: navy frosted pills along the bottom; its key hints each on a frosted backing */
+[data-theme="skyline-night"] #camera [role="toolbar"] { background: var(--glass); border-color: rgba(120, 180, 255, .35); border-radius: 18px; box-shadow: 0 8px 26px rgba(0, 8, 30, .5), inset 0 1px 0 rgba(170, 215, 255, .2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="skyline-night"] #camera [role="toolbar"] button { background: transparent; box-shadow: none; border-color: transparent; color: var(--text); }
+[data-theme="skyline-night"] #camera [role="toolbar"] button:hover:not([disabled]) { background: rgba(124, 200, 255, .12); }
+[data-theme="skyline-night"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="skyline-night"] #camera [role="toolbar"] button.on { color: #04203f; background: var(--pill-on); box-shadow: 0 0 10px var(--glow); text-shadow: none; }
+[data-theme="skyline-night"] #camera p { color: var(--text) !important; background: rgba(10, 24, 52, .82); border-radius: 9px; text-shadow: none; box-shadow: 0 2px 10px rgba(0, 8, 30, .45); }
+[data-theme="skyline-night"] .preview-hud { color: var(--text) !important; background: rgba(10, 24, 52, .78) !important; border-radius: 6px; }
+
+/* the guide card and the question in the page, as navy panes */
+[data-theme="skyline-night"] .guide-card { border-radius: 14px; box-shadow: 0 14px 40px rgba(0, 8, 30, .6), inset 0 1px 0 rgba(170, 215, 255, .2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+[data-theme="skyline-night"] .guide-card .guide-count { opacity: 1; color: var(--dim); }
+[data-theme="skyline-night"] .ask-veil { background: rgba(4, 12, 32, .55); }
+[data-theme="skyline-night"] .ask-card { background: linear-gradient(180deg, #16305b, #0e1d3b); border-radius: 16px; box-shadow: 0 18px 60px rgba(0, 8, 30, .7); }

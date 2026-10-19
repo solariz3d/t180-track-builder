@@ -22,7 +22,7 @@ const { decode } = require('./png.js');
 const REPO = path.join(__dirname, '..', '..');
 const CHROME = chromePath();
 const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the textures are tested in headless Chrome';
-const LOOKS = ['sigil', 'aqua', 'skyline', 'glass', 'aurora'];
+const LOOKS = ['sigil', 'aqua', 'skyline', 'glass', 'aurora', 'skyline-night'];   // D405: Skyline Night joins every row
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.css': 'text/css' };
 
@@ -37,7 +37,7 @@ test.before(async () => {
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${srv.address().port}/app/index.html`;
   const port = 9300 + Math.floor(Math.random() * 600); dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180tex-'));
-  ch = spawn(CHROME, ['--headless=new', '--hide-scrollbars', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', '--window-size=1400,860', 'about:blank'], { stdio: 'ignore' });
+  ch = spawn(CHROME, ['--headless=new', '--mute-audio', '--hide-scrollbars', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', '--window-size=1400,860', 'about:blank'], { stdio: 'ignore' });
   let tgt; for (let i = 0; i < 100 && !tgt; i++) { await sleep(200); try { tgt = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === 'page'); } catch (e) { /* not up yet */ } }
   if (!tgt) throw new Error(`headless Chrome did not answer on port ${port}`);
   ws = new WebSocket(tgt.webSocketDebuggerUrl); await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error('the DevTools socket failed')); });
@@ -174,7 +174,7 @@ test('row 4: the empty builder\'s art never sits under the left panel: no overla
 });
 
 // the fine tiles' own sizes in pixels (scripts/texture_tiles.js); Aqua's soft noise has no pixel structure to keep and is sized in CSS px
-const FINE = { sigil: [128, 128], skyline: [128, 128], glass: [8, 300], aurora: [3, 3] };
+const FINE = { sigil: [128, 128], skyline: [128, 128], glass: [8, 300], aurora: [3, 3], 'skyline-night': [128, 128] };
 test('row 5: at display scales 1.25 and 1.5, each fine tile is drawn one tile pixel per device pixel (its size times the pixel ratio is its own size)', { skip }, async (t) => {
   const got = [];
   try {
@@ -192,4 +192,29 @@ test('row 5: at display scales 1.25 and 1.5, each fine tile is drawn one tile pi
     }
   } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); }
   t.diagnostic(got.join('; '));
+});
+
+// D405: Skyline Night is a new look, so it is held to the whole rule, not only to "the texture pushes nothing under": every enabled text on the page reads
+// at 4.5:1 or more against its own pixels (the probe above, the texture on), in the builder with a track placed and with the File menu open. Skyline's
+// figure is reported beside it, not asserted (it is not this lap's look)
+test('row 6 (D405): Skyline Night: every enabled text is 4.5:1 or more on its own pixels, in the builder and with the File menu open', { skip }, async (t) => {
+  const report = [], under = [];
+  for (const look of ['skyline-night', 'skyline']) {
+    await load(look);
+    await ev("const lab = [...document.querySelectorAll('#palette *')].find((e) => e.childNodes.length && e.firstChild.nodeType === 3 && e.firstChild.textContent.trim() === 'turn °'); const i = lab && (lab.querySelector('input') || lab.parentElement.querySelector('input:not([type=checkbox])')); if (i) { i.value = '30'; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); } return true;");
+    await extend(6); await sleep(1200);
+    for (const state of ['builder', 'file']) {
+      if (state === 'file') { await ev("document.getElementById('m-file').open = true; return true;"); await sleep(250); }
+      // with the menu open, a text OUTSIDE it that the menu partly covers is sampled over its whole box, the covered part being the menu's pixels, not its own
+      // background: it is left out and named (the probe keeps any text seen at all, and the open File menu half covers the readout's 'turn' label)
+      const covered = state !== 'file' ? [] : await ev("const m = document.querySelector('#m-file .more-menu').getBoundingClientRect(), out = []; for (const e of document.body.querySelectorAll('*')) { if (e.closest('#m-file')) continue; const own = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()); if (!own) continue; const b = e.getBoundingClientRect(); if (b.right > m.left && b.left < m.right && b.bottom > m.top && b.top < m.bottom) out.push(e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '|' + [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim().slice(0, 40)); } return out;");
+      const on = await contrasts(); let n = 0; const low = [], skipped = [];
+      for (const [k, list] of on) { if (covered.includes(k)) { skipped.push(k.split('|')[1]); continue; } list.forEach((w) => { n++; if (w < 4.5) low.push(`${k.split('|')[1]} ${w.toFixed(2)}`); }); }
+      report.push(`${look} ${state}: ${n} texts, ${low.length} under 4.5:1${low.length ? ' (' + low.join(', ') + ')' : ''}${skipped.length ? ', left out as partly under the menu: ' + skipped.join(', ') : ''}`);
+      if (look === 'skyline-night') { assert.ok(n > 20, `${look} ${state}: the probe found the page's texts (${n})`); under.push(...low.map((x) => `${state}: ${x}`)); }
+      if (state === 'file') await ev("document.getElementById('m-file').open = false; return true;");
+    }
+  }
+  t.diagnostic(report.join('; '));
+  assert.deepEqual(under, [], 'Skyline Night: texts under 4.5:1 on their own pixels');
 });
