@@ -162,8 +162,12 @@ function extend(doc, opts = {}) {
     for (const ch of ['e', 'er']) {
       // the fit's ringing never leaves [0, cap], as before, unless the side is asked below 0 (D406): then it may ring down to the lower of the value it starts at and its target,
       // never under the floor. The asked values, not the fitted end: a fit to a target of 0 can end a hair under it (-0.0069 measured), which must still clamp to 0
-      const lo = Math.min(0, C[ch][0], given(targets[ch]) ? targets[ch] : 0);
-      C[ch] = C[ch].map((x, i) => Math.min(Math.max(0, cap(i)), Math.max(Math.max(lo, floor(i)), x)));
+      // and the mirror of that above (E's D406 review §4): a side asked only at or below 0, with some of it below, rings no higher than the higher of its two asked
+      // values, so a side brought back up to 0 lands at 0 and ends flat (a numeric transition rang -45.5 -> 0 up to +8.28 and ended at +0.67). A side asked above 0
+      // keeps the cap, so its bytes do not move
+      const lo = Math.min(0, C[ch][0], given(targets[ch]) ? targets[ch] : 0), top = Math.max(C[ch][0], given(targets[ch]) ? targets[ch] : C[ch][0]);
+      const hi = (i) => (lo < 0 && top <= 0 ? top : Math.max(0, cap(i)));
+      C[ch] = C[ch].map((x, i) => Math.min(hi(i), Math.max(Math.max(lo, floor(i)), x)));
       const ne = C[ch].length; if (C[ch][ne - 1] <= 1e-3) C[ch][ne - 2] = C[ch][ne - 1];   // an edge that ends at 0 ends flat, so the piece after it starts clean
     }
     C.s = C.s.map((x) => Math.min(D.S_MAX, Math.max(D.S_MIN, x)));

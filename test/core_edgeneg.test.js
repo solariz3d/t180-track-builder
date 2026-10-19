@@ -11,6 +11,7 @@
 //   5  every file made before reads and saves byte for byte: the fixtures and core/4 and core/5 documents (edge, split, cup, tube) written by this builder
 //      equal what the 0.4.7 builder writes; a fit between two positive edges never rings below 0 (so it stays core/4)
 //   5b a fit down to an edge of 0 never rings below 0, though the raw fit ends a hair under it (the shape of core_piece.test.js row 8b)
+//   5c a side brought back from below 0 to 0 by a numeric transition lands at 0 with slope 0 (E's review §4)
 //   6  the edge is sampled by the steeper side counted by its size: an edge of -60° gets as many samples as one of +60° (on a cup of 60°)
 //   7  the piece after a negative edge continues each side from it with no step at the joint, and stays an edge piece
 //   8  the panel: a typed negative edge reaches the core as that target, on its side only
@@ -106,6 +107,19 @@ test('row 5b: a fit down to an edge of 0 never rings below it, though the fit it
   for (const ch of ['e', 'er']) assert.ok(d.pieces[1].channels[ch].every((v) => v >= 0), `${ch}: ${d.pieces[1].channels[ch]}`);
   assert.equal(schemaOf(d), 't180b.core/4');
   assert.ok(!extend(d, { length: 100 }).pieces[2].edge, 'the next piece is no edge piece');
+});
+
+test('row 5c: a side brought back from below 0 to 0 by a numeric transition shorter than the piece lands at 0 with slope 0, never ringing above it', () => {
+  // E's D406 review §4 (exo_memory/handback/p-d406-review-E_2026-10-19.md, probe5): -45.5 -> 0 over a 40 m transition on a 60 m piece rang to +8.277 and ended at +0.670
+  let d = extend(D.createDoc('t'), { length: 200, family: 'bowl', first: { c: 15.5 } });
+  d = extend(d, { length: 100, transition: { e: 40, er: 40 }, targets: { e: -45.5, er: -45.5 } });
+  d = extend(d, { length: 60, transition: 40, targets: { e: 0, er: 0 } });
+  const P = d.pieces[d.pieces.length - 1], end = D.pieceEnd(P);
+  for (const ch of ['e', 'er']) {
+    assert.ok(P.channels[ch].every((v) => v <= 0), `${ch} never above 0: ${P.channels[ch]}`);
+    assert.equal(end[ch].v, 0, `${ch} ends at 0`); assert.equal(end[ch].m, 0, `${ch} ends with slope 0`);
+  }
+  assert.ok(!extend(d, { length: 100 }).pieces[3].edge, 'the next piece is no edge piece');
 });
 
 test('row 6: the edge is sampled by the steeper side counted by its size: -60° gets as many samples as +60°', () => {
