@@ -6,9 +6,9 @@
 // 1 ms: the frames a pointer move made the page rebuild the ghost in. The bar is the display's refresh rate: 144 Hz is 6.9 ms (165 Hz, this machine's display, is 6.06 ms).
 // Skipped, with the reason, where there is no Chrome (CHROME_PATH or the usual place). Each case is run again, up to twice, if it misses the bar, so a seat running something else
 // beside it does not fail the row (a case passes when any of its runs does; the figures of every run are in the message). Rows:
-//   1  a 1,000 m turn dragged: p95 of the work frames' script time <= 6.9 ms in every look (before D404: 20 ms median, 25 to 30 at the 95th percentile)
-//   2  a 2,000 m turn dragged: p95 <= 6.9 ms in every look (before: 40 ms median)
-//   3  a 1,000 m and a 2,000 m piece stretched by its length handle: p95 <= 6.9 ms (before: 9 and 19 ms)
+//   1  a 1,000 m turn dragged: p95 of the work frames' script time <= 6.0 ms in every look (before D404: 20 ms median, 25 to 30 at the 95th percentile)
+//   2  a 2,000 m turn dragged: p95 <= 6.0 ms in every look (before: 40 ms median)
+//   3  a 1,000 m and a 2,000 m piece stretched by its length handle: p95 <= 6.0 ms (before: 9 and 19 ms)
 //   4  past the ordinary range the drag adapts and does not stall: a 20,000 m turn's p95 stays under 40 ms (before: 650 ms; now about 8), at no fewer than 20 rebuilds a second
 //   5  the release is the exact road: during the drag the ghost has a few hundred path stations, and the moment the pointer is let go it has a station every 2 m again
 'use strict';
@@ -23,7 +23,7 @@ const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the drag is tim
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.css': 'text/css' };
 const LOOKS = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'];
-const BUDGET_144 = 6.9;      // ms: one frame at 144 Hz
+const BUDGET = 6.0;          // ms: the keeper's display is 165 Hz (6.06 ms a frame); 6.9 ms is one frame at 144 Hz, the floor for a machine of that kind (the librarian's ruling, D404, 2026-10-19)
 const RUNS = 2;              // a case is run again once if it misses
 const DRAG_MS = 3000;
 
@@ -106,21 +106,21 @@ async function within(look, length, kind, bar, rateMin = 0) {
 }
 const said = (look, length, kind, bar, v) => `${look}, a ${length} m ${kind} drag: p95 ${v.runs.map((r) => r.p95.toFixed(1)).join(' / ')} ms (median ${v.runs.map((r) => r.median.toFixed(1)).join(' / ')}), over ${bar} ms`;
 
-test('row 1: a 1,000 m turn dragged in every look: the work frames\' p95 is within one frame at 144 Hz (6.9 ms)', { skip }, async (t) => {
+test('row 1: a 1,000 m turn dragged in every look: the work frames\' p95 is within one frame at 165 Hz (6.0 ms)', { skip }, async (t) => {
   const got = {};
-  for (const look of LOOKS) { const v = await within(look, 1000, 'turn', BUDGET_144); got[look] = v.runs.map((r) => +r.p95.toFixed(1)); assert.ok(v.ok, said(look, 1000, 'turn', BUDGET_144, v)); }
+  for (const look of LOOKS) { const v = await within(look, 1000, 'turn', BUDGET); got[look] = v.runs.map((r) => +r.p95.toFixed(1)); assert.ok(v.ok, said(look, 1000, 'turn', BUDGET, v)); }
   t.diagnostic(`p95 ms by look: ${JSON.stringify(got)}`); assert.deepEqual(errors, []);
 });
 
-test('row 2: a 2,000 m turn dragged in every look: p95 within one frame at 144 Hz', { skip }, async (t) => {
+test('row 2: a 2,000 m turn dragged in every look: p95 within one frame at 165 Hz (6.0 ms)', { skip }, async (t) => {
   const got = {};
-  for (const look of LOOKS) { const v = await within(look, 2000, 'turn', BUDGET_144); got[look] = v.runs.map((r) => +r.p95.toFixed(1)); assert.ok(v.ok, said(look, 2000, 'turn', BUDGET_144, v)); }
+  for (const look of LOOKS) { const v = await within(look, 2000, 'turn', BUDGET); got[look] = v.runs.map((r) => +r.p95.toFixed(1)); assert.ok(v.ok, said(look, 2000, 'turn', BUDGET, v)); }
   t.diagnostic(`p95 ms by look: ${JSON.stringify(got)}`); assert.deepEqual(errors, []);
 });
 
-test('row 3: a 1,000 m and a 2,000 m piece stretched by its length handle: p95 within one frame at 144 Hz', { skip }, async (t) => {
+test('row 3: a 1,000 m and a 2,000 m piece stretched by its length handle: p95 within one frame at 165 Hz (6.0 ms)', { skip }, async (t) => {
   const got = {};
-  for (const L of [1000, 2000]) { const v = await within('aqua', L, 'stretch', BUDGET_144); got[L] = v.runs.map((r) => +r.p95.toFixed(1)); assert.ok(v.ok, said('aqua', L, 'stretch', BUDGET_144, v)); }
+  for (const L of [1000, 2000]) { const v = await within('aqua', L, 'stretch', BUDGET); got[L] = v.runs.map((r) => +r.p95.toFixed(1)); assert.ok(v.ok, said('aqua', L, 'stretch', BUDGET, v)); }
   t.diagnostic(`p95 ms by length: ${JSON.stringify(got)}`);
 });
 
