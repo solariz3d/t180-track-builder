@@ -61,9 +61,12 @@ function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, 
     { section: 'Sound' }, ...(soundRow ? [{ node: soundRow }] : []),
     // D394: each theme is a look with its own melody; the look changes at once and the melody as soon as its two files are in (app/index.html, app/sound.js).
     // D401: the first is Random (it was called Music; it is still saved as music, so a setting saved before reads the same)
+    // A click on Random while it is ticked unticks its box (toggle false) and the saved value does not change, so no listener runs: it asks for a new pick
+    // itself (ctx.repickTheme, app/index.html), so the click picks a look on a fresh start too (A's read of D401, §8)
     { section: 'Theme' }, ...choice('theme', [['music', 'Random', 'a look and its own melody, picked at random each start, and picked again when you choose this'],
       ...[['aqua', 'Aqua'], ['skyline', 'Skyline'], ['glass', 'Glass'], ['aurora', 'Aurora']].map(([v, l]) => [v, l, `${l}'s look and its own melody, every start; the melody changes a moment after the look, once its files are in`]),
-      ['sigil', 'SIGIL', 'the black-and-bone look; it has no melody of its own, so the melody is still picked at random each start']]),
+      ['sigil', 'SIGIL', 'the black-and-bone look; it has no melody of its own, so the melody is still picked at random each start']])
+      .map((it, i) => (i === 0 ? { ...it, toggle: (on, c) => { c.settings.set('theme', 'music'); if (!on && typeof c.repickTheme === 'function') c.repickTheme(); } } : it)),
     { section: 'Turn & climb read as' }, ...choice('turnClimbAs', [['corner', 'corner °, ends straight'], ['rate', 'rate °/100 m']]),
     { section: 'Grid step (Turn to grid)' }, ...choice('gridStep', [[90, '90°'], [45, '45°'], [15, '15°']]),
     { section: 'Pieces' }, tick('Mirror on insert', 'mirrorOnInsert', 'add saved pieces as their left/right mirror image'),

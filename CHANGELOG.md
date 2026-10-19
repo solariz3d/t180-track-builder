@@ -6,7 +6,7 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Changed
-- **Settings ▸ Theme starts with Random, which used to be called Music.** A melody is not a look, so the name said nothing about what the choice does. Random is still first and still the default: each start picks a look and its own melody at random. Choosing it while the builder is open now picks another look straight away, and its melody follows, where before the click left everything as it was. A Theme saved by an earlier version still loads, and Music saved before is read as Random. (`app/menubar/items.js`, `app/index.html`.) Test: `app/test/menubar-page.test.js` row 18.
+- **Settings ▸ Theme starts with Random, which used to be called Music.** A melody is not a look, so the name said nothing about what the choice does. Random is still first and still the default: each start picks a look and its own melody at random. Choosing it while the builder is open now picks another look straight away, and its melody follows, even when it is already the choice (as on every fresh start), and again on each click, where before the click left everything as it was. A Theme saved by an earlier version still loads, and Music saved before is read as Random. (`app/menubar/items.js`, `app/index.html`.) Test: `app/test/menubar-page.test.js` row 18.
 
 ## [0.4.7] - 2026-10-18
 
