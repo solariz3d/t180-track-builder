@@ -10,6 +10,9 @@
 //   4  the cheap ghost: its path has at most 64 stations (plus its chords) on a 5,000 m piece, it is a ghost of the same piece (end where the full one's is), the placed path and mesh are
 //      untouched, a full ghost after it is the full ghost, and the handles sit where the full ghost's would put them
 //   5  the maths under it, and the documents it makes: a placed track and three corner solves hash to what c2d7cb5 made (the fit shares its system across channels, the solve its start); the maths under it: basisN is basis (the same doubles), channelValue is channelAt(...).v, extendCorner answers the same fields with the same object and a changed field with a new one
+//   6  (E's review §0, §1e) a kept answer is never handed back across a non-finite number: on one document, kh null is accepted and kept, and kh NaN after it is refused
+//      (BAD_TARGET) as on a fresh document, through extendCorner (its memo) and through Turn by alone (solve's start memo); Infinity and -Infinity likewise
+//   7  (E's review §1b) a document frozen at the top only, its pieces array still open, keeps no answer: an edit in place is answered afresh
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -117,4 +120,28 @@ test('row 5: the documents are byte for byte what they were: pieces placed and c
   const a = TB.extendCorner(doc, { length: 400, turnDeg: 45 }), b = TB.extendCorner(doc, { length: 400, turnDeg: 45 }), c = TB.extendCorner(doc, { length: 400, turnDeg: 46 });
   assert.equal(a, b, 'the same document and fields are one answer'); assert.notEqual(a, c); assert.notEqual(a.pieces.at(-1).channels.kh.join(), c.pieces.at(-1).channels.kh.join());
   assert.throws(() => TB.extendCorner(doc, { length: 5, turnDeg: 900 }), /TURN_TOO_SHORT|short/i); assert.throws(() => TB.extendCorner(doc, { length: 5, turnDeg: 900 }), /TURN_TOO_SHORT|short/i, 'an answer that throws is not kept: it throws again');
+});
+test('row 6 (E\'s review §0): a kept answer is never handed back across a non-finite number: kh null kept, then kh NaN, Infinity or -Infinity refused by name, as on a fresh document', async () => {
+  const fresh = async () => (await bowl()).exportDoc();
+  for (const bad of [NaN, Infinity, -Infinity]) {
+    const doc = await fresh();
+    assert.equal(TB.extendCorner(doc, { length: 400, targets: { kh: null } }).pieces.length, 2, 'kh null is no target: accepted');
+    assert.throws(() => TB.extendCorner(doc, { length: 400, targets: { kh: bad } }), (e) => e.code === 'BAD_TARGET', `extendCorner, kh ${bad} after kh null on the same document`);
+    const other = await fresh();
+    assert.throws(() => TB.extendCorner(other, { length: 400, targets: { kh: bad } }), (e) => e.code === 'BAD_TARGET', `extendCorner, kh ${bad} on a fresh document (control)`);
+    const d2 = await fresh();
+    assert.equal(TB.extendTurnBy(d2, { length: 400, targets: { w: null } }, 0.5).pieces.length, 2, 'Turn by with w null: accepted');
+    assert.throws(() => TB.extendTurnBy(d2, { length: 400, targets: { w: bad } }, 0.5), (e) => e.code === 'BAD_TARGET', `Turn by, w ${bad} after w null on the same document (solve's start memo)`);
+  }
+});
+
+test('row 7 (E\'s review §1b): a document frozen at the top only, its pieces array open, keeps no answer, so an edit in place is answered afresh', async () => {
+  const doc = (await bowl()).exportDoc(), top = Object.freeze({ ...doc, pieces: [...doc.pieces] });
+  const a = TB.extendCorner(top, { length: 400, turnDeg: 30 });
+  top.pieces.push(a.pieces.at(-1));   // the same object, edited in place
+  // what that content is worth afresh, the answer the edited document is owed: a frozen copy of it is refused (its last piece repeats an id)
+  const copy = Object.freeze({ ...top, pieces: Object.freeze([...top.pieces]) });
+  assert.throws(() => TB.extendCorner(copy, { length: 400, turnDeg: 30 }), (e) => e.code === 'BAD_DOC', 'a frozen copy of the edited content is refused');
+  assert.throws(() => TB.extendCorner(top, { length: 400, turnDeg: 30 }), (e) => e.code === 'BAD_DOC', 'the edited document is answered afresh, as its copy is, not with the answer kept before the edit');
+  assert.equal(TB.extendCorner(doc, { length: 400, turnDeg: 30 }), TB.extendCorner(doc, { length: 400, turnDeg: 30 }), 'a document frozen all the way down still keeps its answer (control)');
 });

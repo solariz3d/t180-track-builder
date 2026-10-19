@@ -83,12 +83,17 @@ function symmetricEase(P, ch) {
  *  heading weights of it (a basis evaluation every 2 m of the piece). A handle drag changes only the angle, so the last few are kept by document and fields (a frozen document, an
  *  answer that did not throw): the next move starts from them. Nothing here is changed by a solve: the weights are read, and every document it makes is a new one. */
 const START = new WeakMap(), START_MAX = 4;
+/** The key both memos keep answers by: the fields as JSON, with a non-finite number written apart (JSON writes NaN, Infinity and null all as null, so a NaN target
+ *  came back with the answer kept for a null one, where a fresh document refuses it; E's review of D404, §0). null when the fields cannot be written. */
+const memoKey = (v) => { try { return JSON.stringify(v, (k, x) => (typeof x === 'number' && !Number.isFinite(x) ? `\u0000${x}` : x)); } catch (e) { return null; } };
+/** A document whose answers may be kept: frozen, and its pieces array too (one frozen at the top only can be edited in place; E's review of D404, §1b). */
+const keepable = (doc) => Object.isFrozen(doc) && Object.isFrozen(doc.pieces);
 function startOf(doc, opts, chs) {
-  let key = null; try { key = JSON.stringify([opts, chs]); } catch (e) { key = null; }
-  let memo = key === null || !Object.isFrozen(doc) ? null : START.get(doc);
+  const key = memoKey([opts, chs]);
+  let memo = key === null || !keepable(doc) ? null : START.get(doc);
   if (memo && memo.has(key)) return memo.get(key);
   const d0 = easedPiece(doc, opts, chs), P0 = headOf(d0), out = { d0, P0, w: turnWeights(P0), free: freeOf(P0.channels.kh.length) };
-  if (key !== null && Object.isFrozen(doc) && Object.isFrozen(d0)) {
+  if (key !== null && keepable(doc) && Object.isFrozen(d0)) {
     if (!memo) START.set(doc, memo = new Map());
     if (memo.size >= START_MAX) memo.delete(memo.keys().next().value);
     memo.set(key, out);
@@ -152,11 +157,11 @@ function extendCorner(doc, opts = {}) {
   // D404: the panel asks for the same piece three times for every move of a handle drag (the readout's numbers, the corner's, the ghost), and each is the solve below
   // (about 2.5 ms on a 2,000 m piece). The last few answers for one document are kept by its fields, so the move costs one solve. A document is frozen and so is
   // what this returns, and an answer that throws is never kept: the same call is the same document, or the same error.
-  let key = null; try { key = JSON.stringify(opts); } catch (e) { key = null; }
-  let memo = key === null ? null : MEMO.get(doc);
+  const key = memoKey(opts);
+  let memo = key === null || !keepable(doc) ? null : MEMO.get(doc);
   if (memo && memo.has(key)) return memo.get(key);
   const out = cornerOf(doc, opts);
-  if (key !== null && Object.isFrozen(out) && Object.isFrozen(doc)) {
+  if (key !== null && Object.isFrozen(out) && keepable(doc)) {
     if (!memo) MEMO.set(doc, memo = new Map());
     if (memo.size >= MEMO_MAX) memo.delete(memo.keys().next().value);
     memo.set(key, out);
