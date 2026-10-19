@@ -279,7 +279,7 @@ test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and
     await load();
     await open('m-settings');
     const shownS = await shown('m-settings');
-    for (const t of ['Random', 'Aqua', 'Skyline', 'Glass', 'Aurora', 'SIGIL']) assert.ok(shownS.includes(t), `Settings ▸ Theme holds ${t}: ${shownS.join(' | ')}`);
+    for (const t of ['Random', 'Aqua', 'Skyline', 'Skyline Night', 'Glass', 'Aurora', 'SIGIL']) assert.ok(shownS.includes(t), `Settings ▸ Theme holds ${t}: ${shownS.join(' | ')}`);
     assert.equal(await ticked('m-settings', 'Random'), true, 'nothing saved: Random, today\'s random pick');   // D401: Music is called Random
     const now = await ev("return document.documentElement.getAttribute('data-theme');");
     const target = now === 'glass' ? 'aurora' : 'glass', label = target === 'glass' ? 'Glass' : 'Aurora';
@@ -391,15 +391,17 @@ async function randomAfterGlass({ random = null } = {}) {
     const had = urls.slice(); urls.length = 0;
     await clickText('m-settings', 'Random');
     const picked = await look();
-    assert.ok(['aqua', 'skyline', 'aurora'].includes(picked), `choosing Random picks another look at once: ${picked}, after Glass`);
+    // AMENDED (D405): the rule changed by name: Random may land on Skyline Night too, which plays Skyline's melody (its files are skyline's)
+    assert.ok(['aqua', 'skyline', 'aurora', 'skyline-night'].includes(picked), `choosing Random picks another look at once: ${picked}, after Glass`);
+    const tune = picked === 'skyline-night' ? 'skyline' : picked;
     assert.equal(await ticked('m-settings', 'Random'), true); assert.equal(await ticked('m-settings', 'Glass'), false, 'a choice of one');
-    const cached = had.some((u) => u.endsWith('sounds/undo_' + picked + '.wav'));
-    if (!cached) await fetched('undo_' + picked + '.wav');
-    assert.deepEqual(soundFiles(), cached ? [] : ['place_' + picked + '.wav', 'undo_' + picked + '.wav'], cached ? `${picked}'s files were in already (the start's look): none fetched again` : `${picked}'s melody follows: only its two files are fetched`);
+    const cached = had.some((u) => u.endsWith('sounds/undo_' + tune + '.wav'));
+    if (!cached) await fetched('undo_' + tune + '.wav');
+    assert.deepEqual(soundFiles(), cached ? [] : ['place_' + tune + '.wav', 'undo_' + tune + '.wav'], cached ? `${picked}'s files were in already (the start's look): none fetched again` : `${picked}'s melody follows: only its two files are fetched`);
     assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), JSON.stringify('music'), 'saved under its old value, music, so saves from before and after read alike');
     await ev("localStorage.setItem('t180.settings.theme', JSON.stringify('music')); return true;");   // as 0.4.6 and 0.4.7 saved it
     await load({ clear: false });
-    assert.ok(['aqua', 'skyline', 'glass', 'aurora'].includes(await look()), 'a saved music starts on a random look');
+    assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night'].includes(await look()), 'a saved music starts on a random look');   // AMENDED (D405): or Skyline Night
     await open('m-settings');
     assert.equal(await ticked('m-settings', 'Random'), true, 'a saved music is shown as Random');
     assert.deepEqual(errors, []);
@@ -413,7 +415,8 @@ test('row 18b (D401, B\'s D408 probe): the same with Math.random pinned, so both
   const a = await randomAfterGlass({ random: 0.4 });
   assert.deepEqual([a.start, a.picked, a.cached], ['skyline', 'skyline', true], 'at 0.4: starts on Skyline, Random after Glass picks Skyline, whose files are in');
   const b = await randomAfterGlass({ random: 0.6 });
-  assert.deepEqual([b.start, b.picked, b.cached], ['glass', 'skyline', false], 'at 0.6: starts on Glass, Random after Glass picks Skyline, fetched');
+  // AMENDED (D405): the rule changed by name: after Glass, Random picks from four looks, Skyline Night last (aqua, skyline, aurora, skyline-night), so 0.6 is Aurora
+  assert.deepEqual([b.start, b.picked, b.cached], ['glass', 'aurora', false], 'at 0.6: starts on Glass, Random after Glass picks Aurora, fetched');
 });
 test('row 19 (D401, A\'s read §8): a fresh start, Random already ticked: one click on Random picks another look and its melody, and so does the next', { skip }, async () => {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
@@ -432,10 +435,11 @@ test('row 19 (D401, A\'s read §8): a fresh start, Random already ticked: one cl
       await clickText('m-settings', 'Random');
       const picked = await look();
       assert.notEqual(picked, before, `click ${n} on a ticked Random picks another look: still ${picked}`);
-      assert.ok(['aqua', 'skyline', 'glass', 'aurora'].includes(picked), `click ${n}: one of the four looks with a melody: ${picked}`);
-      const before2 = had.some((u) => u.endsWith('sounds/undo_' + picked + '.wav'));
-      if (!before2) await fetched('undo_' + picked + '.wav');
-      assert.ok(urls.some((u) => u.endsWith('sounds/undo_' + picked + '.wav')), `click ${n}: ${picked}'s melody follows (its files ${before2 ? 'were in already' : 'are fetched'})`);
+      // AMENDED (D405): or Skyline Night, on Skyline's melody (its files are skyline's)
+      assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night'].includes(picked), `click ${n}: one of the five looks: ${picked}`);
+      const tune = picked === 'skyline-night' ? 'skyline' : picked, before2 = had.some((u) => u.endsWith('sounds/undo_' + tune + '.wav'));
+      if (!before2) await fetched('undo_' + tune + '.wav');
+      assert.ok(urls.some((u) => u.endsWith('sounds/undo_' + tune + '.wav')), `click ${n}: ${picked}'s melody follows (its files ${before2 ? 'were in already' : 'are fetched'})`);
       assert.equal(await ticked('m-settings', 'Random'), true, `click ${n}: Random stays ticked`);
       before = picked;
     }
