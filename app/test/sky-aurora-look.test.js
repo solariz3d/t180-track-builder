@@ -8,9 +8,13 @@
 //      HEM_CONTRAST (0.6) below the brightest (median over the stretches), on the hem's brightest stretch in each column, stars left out (before D403: 0.45)
 //   3  several curtains at different depths: down some column of the sky there are three separate lit stretches (today's two curtains show two)
 //   4  motion: slow and alive: the hem's ray pattern moves along azimuth by under 0.0044 rad/s (a 60-degree view in four minutes), it keeps its shape while
-//      it moves (so the speed means something), and nothing pulses or flashes (no column changes by more than 15% in a second)
+//      it moves (so the speed means something), and nothing pulses or flashes (no column changes by more than 15% in a second); and the folds and the hem's sway
+//      (read on the near curtain alone, its rays held still) move at under 0.0047 rad/s: at the narrowest window, 900 px,
+//      the default lens shows 65 degrees (B's review of D403), which that speed takes four minutes to cross
 //   5  a corona: looking up there is one point overhead where rays converge: round it the brightness is a fan of at least 6 rays, and it is brighter than the sky
 //      beside it
+//   6  the corona's centre is soft, not a moire: on rings round its point C, out to 0.03 rad, the brightness holds no ray contrast finer than the default view
+//      can show (angular harmonics whose period round the ring is under two pixels of the 60-degree, 816 px view): at most ALIAS (2%) rms of the ring's mean
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -25,8 +29,11 @@ const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the sky is draw
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HEM_CONTRAST = 0.6;       // row 2: today's hem (before D403) measures 0.45; at 0.6 the dimmest column is 40% of the brightest, which reads as a gap between rays
 const MAX_SPEED = 0.0044;       // row 4: rad/s; a 60-degree (1.047 rad) view in 240 s
-const MAX_PULSE = 0.15;         // row 4: relative brightness change in one second, the bound the stars' twinkle already keeps (before D403 the rays reach 0.25)
-const LIVE = 0.1;               // row 4: two minutes on, the hem has changed by at least this (rms, against the curtain brightness); the build measures 0.38
+const MAX_PULSE = 0.15;         // row 4: relative brightness change in one second, the bound the stars' twinkle already keeps (before D403, at c2d7cb5, this row reads 0.152)
+const MAX_FOLD = 0.0047;        // row 4: rad/s; the 900 px window's 65-degree (1.134 rad) view in 240 s (B's review of D403)
+const PX = (Math.PI / 3) / 816; // row 6: one pixel of the default view (60 degrees over 816 px), in rad
+const ALIAS = 0.02;             // row 6: the rms of the ray contrast above that view's Nyquist limit, against the ring's mean brightness
+const LIVE = 0.1;              // row 4: two minutes on, the hem has changed by at least this (rms, against the curtain brightness); the build measures 0.38
 const W = 1400;                 // columns round the sky, 0.257 degrees each
 
 function colours() {
@@ -71,6 +78,16 @@ test.before(async () => {
   ev = async (expr) => { const d = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 500)}`); return d.result.result.value; };
   await ev(PAGE);
   await ev(`window.S = window.__aur(${JSON.stringify(R.skyFS(SKY.patternSource('aurora')))}, ${JSON.stringify(colours())}); true`);
+  // row 6 reads the sky without its stars: they are pixel-sized by design (bounded by their own twinkle rule), and one near the corona would read as fine rays
+  const noStars = SKY.patternSource('aurora').replace(/aurora_stars\(dir, t\)/g, '0.0');
+  if (noStars.split('0.0 * smoothstep(0.17, 0.35, el)').length !== 2) throw new Error('row 6: the stars term (aurora_stars(dir, t) * smoothstep(0.17, 0.35, el)) is not found once in aurora.js');
+  await ev(`window.S0 = window.__aur(${JSON.stringify(R.skyFS(noStars))}, ${JSON.stringify(colours())}); true`);
+  // row 4's ribbon: the near curtain alone, its rays held at their mean, no stars, no other curtains, no corona, so what moves is only the ribbon's folds and
+  // its hem's sway. Each line is found once or the row fails loudly
+  const RIBBON = [[/float r = aurora_rays\([^;]*\);/, 'float r = 0.5;'], [/vec3 m = aurora_curtain\(([^;]*), 0\.7\);/, 'vec3 m = vec3(0.0);'],
+    [/vec3 f = aurora_curtain\(([^;]*), 0\.4\);/, 'vec3 f = vec3(0.0);'], [/vec3 cor = aurora_corona\(dir, t\) \* low;/, 'vec3 cor = vec3(0.0);']];
+  const ribbon = RIBBON.reduce((src, [re, to]) => { if ((src.match(new RegExp(re.source, 'g')) || []).length !== 1) throw new Error(`row 4: ${re} is not found once in aurora.js`); return src.replace(re, to); }, noStars);
+  await ev(`window.S1 = window.__aur(${JSON.stringify(R.skyFS(ribbon))}, ${JSON.stringify(colours())}); true`);
 });
 test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } if (ch) ch.kill(); await sleep(300); try { dir && fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } });
 
@@ -132,6 +149,21 @@ test('row 4: motion is slow and alive: the hem pattern drifts under 0.0044 rad/s
   assert.ok(worst.speed <= MAX_SPEED, `the hem pattern drifts ${worst.speed.toFixed(5)} rad/s, over ${MAX_SPEED}`);
   assert.ok(worst.corr >= 0.5, `the pattern at the best shift correlates only ${worst.corr.toFixed(3)} over 5 s: it is changing, not drifting`);
   assert.ok(worst.pulse <= MAX_PULSE, `a column changes ${(worst.pulse * 100).toFixed(1)}% in one second, over ${MAX_PULSE * 100}%`);
+  // the folds and the hem's sway (B's review of D403, the four-minute rule at the 900 px window), on the near curtain's ribbon alone (S1: its rays held at their
+  // mean, no stars, no other curtains, no corona), 11 to 50 degrees. The fold brightens the ribbon by cos(2 az + w t), so the ribbon's brightness summed
+  // over elevation carries the fold as its 2nd harmonic; the hem's sway is the 3rd harmonic of the hem edge's elevation (per column, the row where the
+  // brightness rises fastest). Each harmonic's phase speed over 10 s, from six times 100 s apart, at most MAX_FOLD
+  const phase = (p, k) => { let re = 0, im = 0; for (let x = 0; x < W; x++) { const ph = 2 * Math.PI * k * x / W; re += p[x] * Math.cos(ph); im -= p[x] * Math.sin(ph); } return Math.atan2(im, re); };
+  const ribbonAt = async (tt) => { const H = 160, px = await ev(`window.S1.lat(${tt}, ${11 * DEG}, ${50 * DEG}, ${H})`), sum = new Float64Array(W), edge = new Float64Array(W);
+    for (let x = 0; x < W; x++) { let best = -1, at = 0; for (let y = 0; y < H; y++) { const v = Yof(px, (y * W + x) * 4); sum[x] += v; if (y >= 2 && y < H - 2) { const g = Yof(px, ((y + 2) * W + x) * 4) - Yof(px, ((y - 2) * W + x) * 4); if (g > best) { best = g; at = y; } } } edge[x] = at; }
+    return [phase(sum, 2), phase(edge, 3)]; };
+  let fold = 0; const sp = [];
+  for (const t0 of [0, 100, 200, 300, 400, 500]) {
+    const h0 = await ribbonAt(t0), h1 = await ribbonAt(t0 + 10);
+    [['fold', 2], ['sway', 3]].forEach(([n, k], i) => { let d = h1[i] - h0[i]; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; const v = Math.abs(d) / (k * 10); sp.push(`t${t0} ${n} ${v.toFixed(5)}`); fold = Math.max(fold, v); });
+  }
+  t.diagnostic(`the ribbon's folds and hem sway move at ${fold.toFixed(5)} rad/s at most (${sp.join(', ')})`);
+  assert.ok(fold <= MAX_FOLD, `the ribbon's folds or hem sway move at ${fold.toFixed(5)} rad/s, over ${MAX_FOLD}: they would cross a 900 px window's view in ${(1.134 / fold).toFixed(0)} s`);
 });
 
 test('row 5: a corona: overhead there is a point where rays converge: a fan of at least 6 rays round it, brighter than the sky beside it', { skip }, async (t) => {
@@ -150,4 +182,33 @@ test('row 5: a corona: overhead there is a point where rays converge: a fan of a
   assert.ok(peaks >= 6, `the ring round the brightest overhead point holds ${peaks} rays, under 6`);
   assert.ok(best > 0.02, `the overhead peak is Y ${best.toFixed(4)}: no corona`);
   assert.ok(hi >= 1.5 * lo, `the ring round it runs only Y ${lo.toFixed(4)}..${hi.toFixed(4)}: its rays are not seen`);
+});
+
+// D403 follow-up (B's review, note 1; the librarian's ruling): the corona's fan kept its full ray contrast all the way to its point, so its finest rays (59 round
+// the point) fell under two pixels apart within about 19 px of it and aliased into a moire that read as a hard pinpoint. On rings round C (aurora.js's fixed
+// point, read from its source) at 0.003 to 0.03 rad, 1400 samples each, the ring's angular harmonics whose period round the ring is under two pixels of the
+// default view (k > rho * 2 pi / (2 PX)) together hold at most ALIAS of the ring's mean brightness (rms), at t = 0 and t = 500
+test('row 6: the corona\'s centre is soft: round its point the brightness holds no ray contrast finer than the default view can show (at most 2% rms)', { skip }, async (t) => {
+  const m = /vec3 C = (?:normalize\()?vec3\(([^)]*)\)/.exec(SKY.patternSource('aurora')); assert.ok(m, 'aurora.js names its corona point C');
+  const c0 = m[1].split(',').map(Number), n0 = Math.hypot(...c0), C = c0.map((v) => v / n0);
+  const e = [C[2], 0, -C[0]], ne = Math.hypot(...e), E1 = e.map((v) => v / ne), E2 = [C[1] * E1[2] - C[2] * E1[1], C[2] * E1[0] - C[0] * E1[2], C[0] * E1[1] - C[1] * E1[0]];
+  // the measure: the rms of the ring's harmonics above the view's Nyquist limit, against the ring's mean. The pass's own 8-bit output already holds some there
+  // (its quantisation and its dither, about 2.4% on a flat night), so a flat control sky of the ring's own mean colour is read the same way, and ALIAS is the
+  // allowance over that floor
+  const above = (y, rad) => { const mean = y.reduce((s, v) => s + v, 0) / W, kmax = Math.floor(rad * 2 * Math.PI / (2 * PX)); let pow = 0;
+    for (let k = kmax + 1; k < W / 2; k++) { let re = 0, im = 0; for (let x = 0; x < W; x++) { const ph = 2 * Math.PI * k * x / W; re += y[x] * Math.cos(ph); im -= y[x] * Math.sin(ph); } const amp = 2 * Math.hypot(re, im) / W; pow += amp * amp / 2; }
+    return Math.sqrt(pow) / mean; };
+  const ringY = async (name, tt, rad) => { const r = await ev(`window.${name}.ring(${tt}, ${JSON.stringify(C)}, ${JSON.stringify(E1)}, ${JSON.stringify(E2)}, ${Math.tan(rad)})`), y = [], rgb = [0, 0, 0];
+    for (let x = 0; x < W; x++) { y.push(Yof(r, x * 4)); for (let j = 0; j < 3; j++) rgb[j] += r[x * 4 + j] / 255 / W; } return { y, rgb }; };
+  const rings = [], mean = [0, 0, 0];
+  for (const tt of [0, 500]) for (let i = 1; i <= 10; i++) { const rad = 0.003 * i, g = await ringY('S0', tt, rad); rings.push({ tt, rad, y: g.y }); for (let j = 0; j < 3; j++) mean[j] += g.rgb[j] / 20; }
+  // one flat control (one more GL context, not twenty), at the rings' mean colour
+  await ev(`window.F = window.__aur(${JSON.stringify(R.skyFS('vec3 skyPattern(vec3 dir, float t){ return uSky; }'))}, ${JSON.stringify({ sky: mean, a: mean, b: mean, c: mean })}); true`);
+  let worst = { a: -1, rad: 0, tt: 0 }; const rows = [];
+  for (const { tt, rad, y } of rings) {
+    const floor = above((await ringY('F', tt, rad)).y, rad), a = above(y, rad) - floor;
+    rows.push(`t${tt} ${rad.toFixed(3)}: ${(a * 100).toFixed(2)}% (floor ${(floor * 100).toFixed(2)}%)`); if (a > worst.a) worst = { a, rad, tt };
+  }
+  t.diagnostic(`ray contrast above the view's Nyquist limit over the 8-bit floor, rms of the ring's mean: ${rows.join(', ')}`);
+  assert.ok(worst.a <= ALIAS, `${worst.rad.toFixed(3)} rad from the corona's point (t = ${worst.tt}) the rays finer than two pixels hold ${(worst.a * 100).toFixed(2)}% of the brightness over the 8-bit floor, over ${ALIAS * 100}%: a moire`);
 });

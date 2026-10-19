@@ -7,8 +7,8 @@
 // Quiet behind the work: under about 10 degrees of elevation, where the road sits against the sky, there are no curtains and no stars, and the night
 // pales only to the skin's --fog at the horizon (uSkyC is the skin's fog colour, so the far road fogs into the sky it meets).
 // Every edge is a smooth falloff, and the stars are points sized in device pixels (D416: a cone 1.25 px in radius, from the pass's uPx, so a star is
-// about a pixel across at any window size and pixel density; they were gaussians in grid cells, a median 2.2 px across at half their peak at 2560 x 1440, measured by app/test/sky-crisp.test.js). The motion is slow: the folds travel at under 0.004 rad/s and
-// the hems at under 0.006 rad/s, the rays drift at under 0.001 rad/s (and breathe over four minutes or more, changing by at most 15% of the curtain's brightness in a second), so nothing crosses the view in under four
+// about a pixel across at any window size and pixel density; they were gaussians in grid cells, a median 2.2 px across at half their peak at 2560 x 1440, measured by app/test/sky-crisp.test.js). The motion is slow: the folds and the hems' sway are seen to travel at
+// 0.0042 rad/s at most (until the D403 follow-up, at up to 0.0069, which crossed a 900 px window's 65-degree view in under three minutes), the rays drift at under 0.001 rad/s (and breathe over four minutes or more, changing by at most 15% of the curtain's brightness in a second), so nothing crosses the view in under four
 // minutes; the twinkle changes brightness in place by at most 15%.
 // Everything round the sky is a function of whole multiples of the azimuth (sin(k az), k an integer), so the curtains close with no seam; the corona's fan is
 // whole multiples of its own angle. The curtains are gone well before the zenith, where the corona is.
@@ -47,14 +47,14 @@ float aurora_rays(float x, float t, float ph, vec3 k) {
   return smoothstep(0.1, 0.9, 0.2 * p + 0.3 * a + 0.3 * b + 0.2 * c);
 }
 vec3 aurora_curtain(float az, float el, float t, float ph, float base, float tall, vec3 k, float gain) {
-  float x = az + 0.16 * sin(az * 2.0 + ph + t * 0.012) + 0.06 * sin(az * 5.0 - ph + t * 0.02);   // the folds (travel under 0.004 rad/s)
-  float hem = base + 0.03 * sin(x * 3.0 + ph * 1.3 + t * 0.017) + 0.012 * sin(x * 8.0 - t * 0.03);  // the lower edge, swaying
+  float x = az + 0.16 * sin(az * 2.0 + ph + t * 0.008) + 0.06 * sin(az * 5.0 - ph + t * 0.02);   // the folds (travel at 0.004 rad/s)
+  float hem = base + 0.03 * sin(x * 3.0 + ph * 1.3 + t * 0.009) + 0.012 * sin(x * 8.0 - t * 0.03);  // the lower edge, swaying (0.003 and 0.00375 rad/s; carried by the folds it is seen at up to 0.0042)
   float h = el - hem, hp = max(h, 0.0);
   float r = aurora_rays(az + 0.1 * (x - az), t, ph, k);                                            // the rays follow the folds only part way, so they drift slower than the ribbon
   float tl = tall * (0.45 + 1.1 * r);                                                              // a strong ray stands taller
   float rise = smoothstep(-0.012, 0.004, h);                                                       // the hem: sharp
   float body = rise * (0.65 * exp(-hp / 0.016) * (0.3 + 0.7 * r) + 0.35 * exp(-hp / tl) * (0.1 + 0.9 * r));   // the hem a line that never quite breaks, then the rays climbing from it
-  float fold = 0.75 + 0.25 * cos(az * 2.0 + ph + t * 0.012);                                       // brighter where the ribbon bunches
+  float fold = 0.75 + 0.25 * cos(az * 2.0 + ph + t * 0.008);                                       // brighter where the ribbon bunches (with the fold)
   float span = 0.45 + 0.55 * pow(0.5 + 0.5 * sin(az + ph + t * 0.004), 1.5);                       // strongest round one side of the sky, never gone
   float z = hp / tl;
   vec3 red = vec3(uSkyB.b, 0.5 * uSkyB.g, 0.9 * uSkyB.r);                                         // the violet token turned toward red-pink
@@ -66,12 +66,21 @@ vec3 aurora_curtain(float az, float el, float t, float ph, float base, float tal
 }
 vec3 aurora_corona(vec3 dir, float t) {
   // overhead, rays fan out from one point (the curtains seen from beneath run to it): C, with E1 and E2 across it, are fixed unit vectors
-  vec3 C = vec3(0.145, 0.906, -0.397), E1 = vec3(0.939, 0.0, 0.343), E2 = vec3(0.311, -0.423, -0.851);
+  // C is normalised: written to three places it is 0.99974 long, so 1 - dot(dir, C)^2 never fell under 0.00053 and rho never under 0.023 at C itself,
+  // where the fan's rays were still half on and ran into the point (the D403 follow-up's row 6)
+  vec3 C = normalize(vec3(0.145, 0.906, -0.397)), E1 = vec3(0.939, 0.0, 0.343), E2 = vec3(0.311, -0.423, -0.851);
   float rho = sqrt(max(1.0 - dot(dir, C) * dot(dir, C), 0.0)) * step(0.0, dot(dir, C));      // sine of the angle from C, 0 on the far side of the sky
   float th = atan(dot(dir, E2), dot(dir, E1));
   float a = 0.5 + 0.5 * sin(th * 13.0 + t * 0.015 + 2.0 * sin(th * 5.0 + t * 0.007));
   float b = 0.5 + 0.5 * sin(th * 31.0 - t * 0.022);
   float c = 0.5 + 0.5 * sin(th * 59.0 + t * 0.03 + 1.3);
+  // near C a ray scale of k rays round the point falls under two pixels apart (at rho = px k / pi), where it would alias into a moire that reads as a hard
+  // pinpoint (B's review of D403); so each scale fades to its mean from one to two times that radius. px is a conservative pixel, 0.002 rad (the default
+  // 60-degree lens on 520 rows); a's fastest is 13 + 2 * 5 = 23 rays, its own wobble included. With all three at their mean the fan is its mean, 0.6
+  float px = 0.002;
+  a = mix(0.5, a, smoothstep(1.0, 2.0, rho * 3.14159265 / (px * 23.0)));
+  b = mix(0.5, b, smoothstep(1.0, 2.0, rho * 3.14159265 / (px * 31.0)));
+  c = mix(0.5, c, smoothstep(1.0, 2.0, rho * 3.14159265 / (px * 59.0)));
   float fan = 0.2 + 0.8 * smoothstep(0.1, 0.9, 0.45 * a + 0.35 * b + 0.2 * c);
   float reach = exp(-rho / 0.3) * (1.0 - smoothstep(0.45, 0.66, rho)) * (0.4 + 0.6 * smoothstep(0.0, 0.2, rho));   // brightest near C, gone before it is low in the sky
   vec3 hue = mix(uSkyA, uSkyB, smoothstep(0.2, 0.6, rho));
