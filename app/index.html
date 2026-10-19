@@ -35,9 +35,20 @@
     --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
     /* D399: each look's own texture, the top background layer of the header, the left panel and the menus (never the 3D view): one tile, drawn by
        scripts/texture_tiles.js. SIGIL's is a fine film grain; a skin sets its own --tex under [data-theme]. Its strengths keep every text where it reads
-       today: none goes under 4.5:1 (app/test/texture-page.test.js) */
-    --tex: url(themes/tex/sigil.png) 0 0 / 128px 128px repeat;
+       today: none goes under 4.5:1 (app/test/texture-page.test.js). A fine tile is sized in DEVICE pixels (--dpx), so at Windows' fractional display
+       scales it lands one tile pixel per device pixel; sized in CSS px it was resampled, and Aurora's dots smeared into uneven smudges (A's review 12) */
+    --dpx: 1px;
+    --tex: url(themes/tex/sigil.png) 0 0 / calc(128 * var(--dpx)) calc(128 * var(--dpx)) repeat;
   }
+  /* D399: --dpx is one device pixel, in CSS px, at each of Windows' display scales (each range is centred on one scale) */
+  @media (min-resolution: 1.125dppx) { :root { --dpx: calc(1px / 1.25); } }
+  @media (min-resolution: 1.375dppx) { :root { --dpx: calc(1px / 1.5); } }
+  @media (min-resolution: 1.625dppx) { :root { --dpx: calc(1px / 1.75); } }
+  @media (min-resolution: 1.875dppx) { :root { --dpx: calc(1px / 2); } }
+  @media (min-resolution: 2.125dppx) { :root { --dpx: calc(1px / 2.25); } }
+  @media (min-resolution: 2.375dppx) { :root { --dpx: calc(1px / 2.5); } }
+  @media (min-resolution: 2.75dppx) { :root { --dpx: calc(1px / 3); } }
+  @media (min-resolution: 3.25dppx) { :root { --dpx: calc(1px / 3.5); } }
   * { box-sizing: border-box; }
   /* The page never scrolls: the grid fills the window exactly, and each side panel scrolls inside itself. (At the
      default 1400×860 window the page used to scroll: grid rows sized to content push the body past the window.) */
@@ -187,7 +198,8 @@
   #stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
   #preview { position: relative; min-height: 0; overflow: hidden; }
   /* D399: the empty builder's track in characters: in the look's dim colour, above the 3D view and under everything else, never in the way */
-  #empty-art { position: absolute; z-index: 2; left: 50%; top: 22%; transform: translateX(-50%); margin: 0; font: 11px/12px var(--mono); color: var(--dim); pointer-events: none; user-select: none; white-space: pre; }
+  /* centred on the free area right of the left panel's 320 px column (A's review 12: centred on the window, a quarter of it hid behind the panel at 900 px) */
+  #empty-art { position: absolute; z-index: 2; left: calc(50% + 160px); top: 22%; transform: translateX(-50%); margin: 0; font: 11px/12px var(--mono); color: var(--dim); pointer-events: none; user-select: none; white-space: pre; }
   #empty-art[hidden] { display: none; }
   #camera { position: absolute; z-index: 9; left: 346px; right: 16px; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
   #camera > * { pointer-events: auto; }

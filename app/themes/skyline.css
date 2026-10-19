@@ -4,7 +4,7 @@
    them). Windows fonts only (the page's own). The warning hues keep their hue and are deepened only so they read on a light surface. */
 
 [data-theme="skyline"] {
-  --tex: url(tex/skyline.png) 0 0 / 128px 128px repeat;   /* D399: this look's texture (index.html, --tex): a paper grain (2 px cells), its dark specks the ones seen on the light panels; app/themes/tex/skyline.png, scripts/texture_tiles.js */
+  --tex: url(tex/skyline.png) 0 0 / calc(128 * var(--dpx)) calc(128 * var(--dpx)) repeat;   /* D399: this look's texture (index.html, --tex): a paper grain (2 px cells), its dark specks the ones seen on the light panels; app/themes/tex/skyline.png, scripts/texture_tiles.js */
   --bg: #eef6ff; --panel: #ffffff; --raise: #e3f0ff; --line: #b6d2ef; --hair: rgba(28, 92, 168, .26);
   --text: #0b2747; --dim: #33506f; --accent: #0757b3; --accent-dim: rgba(7, 87, 179, .14);
   --mine: #7a4f08; --bad: #a32b19; --warn: #735300; --ok: #1f6643;
