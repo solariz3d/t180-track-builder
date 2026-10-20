@@ -27,7 +27,7 @@ const { close, closeWindow, residual } = require('../../src/core/close.js');
 const { finishToStart, isNear } = require('../../src/core/finish.js');
 const { createCheckJob } = require('../validate-ui/checkjob.js');
 
-function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null } = {}) {
+function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null } = {}) {
   // D350: frozen all through, as the core's own documents are. The close worker receives a postMessage copy, which is not frozen, so the memos that serve only a
   // frozen document (close.js residual, and caches keyed on its frozen pieces) never applied there: on a 25 km track the worker's press took 24.5 s of CPU against
   // 18 s on the parsed save. Nothing the press runs writes to its document (every module on its path is strict, so a write would throw). The shell's document is
@@ -36,7 +36,7 @@ function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = f
   if (best) return runCloseBest({ doc, edited, openReds });
   const fin = finish ? finishToStart(doc) : null;
   const res = fin ? { converged: true, doc: fin.doc, report: `Finish to start: ${fin.plan.report}`, window: { pieces: fin.window, text: fin.plan.windowText || `the new road (${fin.window.length} piece${fin.window.length === 1 ? '' : 's'}, ${fin.plan.lengthM} m)` } }
-    : whole ? close(doc, { edited }) : close(doc, { window: closeWindow(doc, { fraction, last }) });
+    : whole ? close(doc, { edited }) : close(doc, { window: Array.isArray(window) ? window : closeWindow(doc, { fraction, last }) });   // D421: a window given (a route tool's release) is used as it is
   if (!res.converged) return { converged: false, report: res.report, doc: null, window: null, displacement: null };
   return { converged: true, report: res.report, doc: res.doc, window: res.window, displacement: displacementOf(doc, res.doc) };
 }
