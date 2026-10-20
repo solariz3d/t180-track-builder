@@ -676,7 +676,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const h = D.dragTo(st.history, d);
         // D244b: a Sculpt step keeps the same pieces in the same places, so the piece the handles are on stays selected (a selection otherwise belongs to the document it was made on)
         const keep = b.sculpt && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {};
-        return set({ history: h, ...r, ...keep, brush: { ...b, delta, raw: delta0, rUsed: used, ...(b.tool ? { changedPieces: (res.changed || []).map((c) => c.piece) } : {}) }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
+        return set({ history: h, ...r, ...keep, brush: { ...b, delta, rUsed: used, ...(b.tool ? { changedPieces: (res.changed || []).map((c) => c.piece) } : {}) }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
       });
     },
     endBrush() {
@@ -690,13 +690,13 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return attempt(() => set({ history: D.endDrag(st.history), brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }));
     },
     /** One brush stroke with no drag (keys, tests): one undo step. */
-    /** D421: the radius changed during an open drag (the wheel, [ and ]): the brush re-runs from the SAME base with the new r and the last delta, so nothing accumulates. */
+    /** D421: the radius changed during an open drag (the wheel, [ and ]): it sets the drag's r and takes NO step itself. The page drives the re-run with its brushTo in the same
+     *  frame (B's page; P's review item 8), which applies the whole delta to the SAME base at the new r, so nothing accumulates and a frame steps once. */
     brushRadius(r) {
       const b = st.brush; if (!b) return set({ message: 'no brush drag is open' });
       if (b.closing) return set({ message: 'the lap is being closed again after this drag: a moment' });
       if (!(Number(r) > 0)) return set({ message: `the brush radius must be more than 0 m (got ${r})` });
-      set({ brush: { ...b, r: Number(r) } });
-      return b.raw === undefined ? st : api.brushTo(b.raw);
+      return set({ brush: { ...b, r: Number(r) }, message: null });
     },
     /** D421: Esc drops an open drag: the document as it was when the drag began, and no undo step; a re-close still running is dropped with it. */
     cancelBrush() {

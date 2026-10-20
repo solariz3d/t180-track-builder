@@ -11,7 +11,7 @@
 //   5  its release: endBrush only starts the job (nothing committed yet); the job lands the re-closed lap as ONE undo step; every piece outside the window is the very same object
 //   6  the order: the window close first; refused, the whole-lap close with the window protected; refused again, the drag is dropped whole, named, and the track is as it was
 //   7  the window is the selected RUN: sculptInfo gives from/to and the handles' piece is the run's middle road piece; beginSculpt brushes the run, and nothing outside it changes
-//   8  a radius change mid-drag re-runs from the same base: the result is what a drag at the new radius and the same delta gives, with no accumulation
+//   8  a radius change mid-drag sets the radius and takes no step itself (B's page drives the re-run, P's review item 8); the page's next brushTo re-runs from the same base: the result is a drag at the new radius and that delta, with no accumulation
 //   9  Esc (cancelBrush) drops an open drag: the very same document, no undo step
 //  10  Stretch hands the core one factor for the whole run (stretch per piece, L1 = L0 * f), keepRate when asked; refused by name until the core has stretch
 'use strict';
@@ -132,9 +132,11 @@ test('row 7: the window is the selected RUN: sculptInfo gives from/to and the mi
   for (const i of [0, 4, 5]) assert.equal(d.pieces[i], before.pieces[i], `piece ${i} is outside the run: the very same object`);
 });
 
-test('row 8: a radius change mid-drag re-runs from the same base: the result is a drag at the new radius and the same delta, with no accumulation', async () => {
+test('row 8: a radius change mid-drag takes no step itself, and the next brushTo of the page re-runs from the same base at the new radius, with no accumulation', async () => {
   const s = await lap();
-  s.beginBrush({ tool: 'twist', s0: 450, r: 60 }); s.brushTo(0.1); s.brushTo(0.2); s.brushRadius(140); const got = s.getState().history.present;
+  s.beginBrush({ tool: 'twist', s0: 450, r: 60 }); s.brushTo(0.1); s.brushTo(0.2); const was = s.getState().history.present;
+  s.brushRadius(140); assert.equal(s.getState().history.present, was, 'brushRadius alone takes no step (the page drives the re-run)');
+  s.brushTo(0.2); const got = s.getState().history.present;
   assert.equal(s.getState().brush.r, 140);
   const t = await lap(); t.beginBrush({ tool: 'twist', s0: 450, r: 140 }); t.brushTo(0.2); const want = t.getState().history.present;
   assert.deepEqual(JSON.parse(JSON.stringify(got.pieces)), JSON.parse(JSON.stringify(want.pieces)), 'the same document as a fresh drag at r = 140');
@@ -152,6 +154,9 @@ test('row 9: Esc (cancelBrush) drops an open drag: the very same document, and n
 test('row 10: Stretch hands the core ONE factor for the whole run, keepRate when asked; refused by name until the core has stretch', async () => {
   const calls = [];
   const stretchFn = (doc, i, L1, opts) => { calls.push({ i, L0: doc.pieces[i].length, L1, keepRate: !!(opts && opts.keepRate) }); return { doc }; };
+  // B's page sends Stretch as { tool: 'stretch', mode: 'rate', channel: 'length' } (P's review item 8): the tool decides
+  const b0 = await lap({ stretchFn: (doc) => ({ doc }) }); b0.beginBrush({ tool: 'stretch', mode: 'rate', channel: 'length', piece: 1 });
+  assert.deepEqual([b0.getState().brush.mode, b0.getState().brush.channel, b0.getState().brush.family], ['stretch', null, 'route'], b0.getState().message); b0.cancelBrush();
   const s = await lap({ stretchFn }); s.setSculpt(true); s.selectPiece(1); s.selectPiece(2, { extend: true });
   const d0 = s.getState().history.present, L = d0.pieces[1].length + d0.pieces[2].length;
   s.beginSculpt({ tool: 'stretch', keepRate: true }); assert.ok(s.getState().brush, s.getState().message); s.sculptTo(50);
