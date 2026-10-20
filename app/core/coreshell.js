@@ -360,14 +360,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return sculpt(b.base, { channel: b.channel, ...at });
   };
 
-  // D421: STRETCH, a route tool on a length: every road piece of the window (one piece, or the selected run) by ONE factor, so the run grows by `delta` metres (design §3.2;
-  // the core's stretch keeps the bend unless keepRate, and re-derives the joint after each piece). The pieces it reaches are what the release re-closes around.
+  // D421: STRETCH, a route tool on a length: the window's road (one piece, or the selected run) made `delta` metres longer by C's core in ONE call (src/core/sculpt.js
+  // stretch(doc, which, L1, { keepRate }): which is a piece index or { from, to }, L1 the road's new length; one factor for the whole run, the bend kept by its area-keeping
+  // factor unless keepRate, the joints rebuilt; p-d421-sculptcore-C_2026-10-20.md). The pieces it changed are what the release re-closes around.
   const stretched = (b, delta) => {
-    const L = b.pieces.reduce((a, i) => a + b.base.pieces[i].length, 0), f = (L + delta) / L;
-    if (!(f > 0)) throw new D.CoreError('BAD_STRETCH', `Stretch: the run is ${L.toFixed(1)} m; it cannot be made ${(L + delta).toFixed(1)} m long`);
-    let d = b.base;
-    for (const i of b.pieces) { const res = stretchFn(d, i, d.pieces[i].length * f, { keepRate: !!b.keepRate }); d = res && res.doc ? res.doc : res; }
-    return { doc: d, changed: b.pieces.map((piece) => ({ piece })) };
+    const L = b.pieces.reduce((a, i) => a + b.base.pieces[i].length, 0);
+    if (!(L + delta > 0)) throw new D.CoreError('BAD_STRETCH', `Stretch: the run is ${L.toFixed(1)} m; it cannot be made ${(L + delta).toFixed(1)} m long`);
+    const which = b.span.from === b.span.to ? b.span.from : { from: b.span.from, to: b.span.to };
+    const res = stretchFn(b.base, which, L + delta, { keepRate: !!b.keepRate });
+    return { doc: res.doc, changed: (res.pieces || b.pieces).map((piece) => ({ piece })) };
   };
   // D421: SMOOTH, one channel's Laplacian relax under the window (design §3.7), the drag's delta its strength; the core returns a document or { doc, changed, note }
   const smoothed = (b, lambda) => { const res = smoothFn(b.base, coreChannel(b.channel), b.s0, b.r, lambda); return res && res.doc ? res : { doc: res, changed: [] }; };
@@ -458,7 +459,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const mode = T.mode === 'smooth' ? 'smooth' : T.mode;
     return attempt(() => set({
       history: D.beginDrag(st.history),
-      brush: { mode, channel: ch, s0: w.s0, r: w.r, sharp: !!(sharp && brushFn), base, delta: 0, tool, family, pieces: w.pieces, keepRate: !!keepRate, baseHistory: st.history, ...(closedRoute ? { closedBase: d } : {}), ...guard },
+      brush: { mode, channel: ch, s0: w.s0, r: w.r, sharp: !!(sharp && brushFn), base, delta: 0, tool, family, pieces: w.pieces, span: run || (Number.isInteger(piece) ? { from: piece, to: piece } : null), keepRate: !!keepRate, baseHistory: st.history, ...(closedRoute ? { closedBase: d } : {}), ...guard },
       lastToolChannel: T.mode === 'smooth' || !ch ? st.lastToolChannel : ch,
       message: null,
     }));

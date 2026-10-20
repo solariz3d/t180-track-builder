@@ -13,7 +13,9 @@
 //   7  the window is the selected RUN: sculptInfo gives from/to and the handles' piece is the run's middle road piece; beginSculpt brushes the run, and nothing outside it changes
 //   8  a radius change mid-drag sets the radius and takes no step itself (B's page drives the re-run, P's review item 8); the page's next brushTo re-runs from the same base: the result is a drag at the new radius and that delta, with no accumulation
 //   9  Esc (cancelBrush) drops an open drag: the very same document, no undo step
-//  10  Stretch hands the core one factor for the whole run (stretch per piece, L1 = L0 * f), keepRate when asked; refused by name until the core has stretch
+//  10  Stretch hands the core the whole run in ONE call (C's seam, 5b1c49a: stretch(doc, { from, to }, L1, { keepRate }), L1 the run's new road length), keepRate when asked; refused by name with no stretch
+//  14  with C's real core: Stretch lengthens the run by exactly the drag's metres, the document stays valid (C1 joints, checkDoc), one undo step
+//  15  with C's real core: Smooth after a Bend relaxes the turn channel under the window, one undo step
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -153,15 +155,14 @@ test('row 9: Esc (cancelBrush) drops an open drag: the very same document, and n
 
 test('row 10: Stretch hands the core ONE factor for the whole run, keepRate when asked; refused by name until the core has stretch', async () => {
   const calls = [];
-  const stretchFn = (doc, i, L1, opts) => { calls.push({ i, L0: doc.pieces[i].length, L1, keepRate: !!(opts && opts.keepRate) }); return { doc }; };
+  const stretchFn = (doc, which, L1, opts) => { calls.push({ which, L1, keepRate: !!(opts && opts.keepRate) }); return { doc, pieces: [], factor: 1, lengthChange: 0, reclose: false }; };
   // B's page sends Stretch as { tool: 'stretch', mode: 'rate', channel: 'length' } (P's review item 8): the tool decides
   const b0 = await lap({ stretchFn: (doc) => ({ doc }) }); b0.beginBrush({ tool: 'stretch', mode: 'rate', channel: 'length', piece: 1 });
   assert.deepEqual([b0.getState().brush.mode, b0.getState().brush.channel, b0.getState().brush.family], ['stretch', null, 'route'], b0.getState().message); b0.cancelBrush();
   const s = await lap({ stretchFn }); s.setSculpt(true); s.selectPiece(1); s.selectPiece(2, { extend: true });
   const d0 = s.getState().history.present, L = d0.pieces[1].length + d0.pieces[2].length;
   s.beginSculpt({ tool: 'stretch', keepRate: true }); assert.ok(s.getState().brush, s.getState().message); s.sculptTo(50);
-  assert.deepEqual(calls.map((c) => c.i), [1, 2]); const f = (L + 50) / L;
-  for (const c of calls) { assert.ok(Math.abs(c.L1 - c.L0 * f) < 1e-9, 'one factor'); assert.equal(c.keepRate, true); }
+  assert.equal(calls.length, 1, 'ONE call for the run'); assert.deepEqual(calls[0].which, { from: 1, to: 2 }); assert.ok(Math.abs(calls[0].L1 - (L + 50)) < 1e-9, 'L1 is the new length of the run'); assert.equal(calls[0].keepRate, true);
   s.endSculpt();
   const t = await lap({ stretchFn: null }); t.selectPiece(1); t.beginSculpt({ tool: 'stretch' }); t.setSculpt(true); t.beginSculpt({ tool: 'stretch' });
   assert.equal(t.getState().brush, null); assert.match(t.getState().message, /^NOT_YET: /);
@@ -196,4 +197,26 @@ test('row 13: B\'s page: beginSculpt({ channel, from, to }) brushes the run with
   s.beginSculpt({ channel: 'kh', from: 1, to: 3 }); assert.equal(s.getState().brush, null); assert.match(s.getState().message, /^SCULPT_CHANNEL: /);
   s.beginSculpt({ channel: 'phi', from: 3, to: 99 }); assert.equal(s.getState().brush, null); assert.match(s.getState().message, /^SCULPT_PIECE: /);
   s.beginSculpt({ tool: 'bend', from: 1, to: 3 }); assert.deepEqual([s.getState().brush.tool, s.getState().brush.family], ['bend', 'route'], 'with a tool, the tool decides');
+});
+
+test("row 14: with the real core of C, Stretch lengthens the run by exactly the metres of the drag, the document stays valid, one undo step", async () => {
+  const D = require('../../src/core/document.js');
+  const s = await lap(); s.setSculpt(true); s.selectPiece(1); s.selectPiece(2, { extend: true });
+  const before = s.getState().history.present, n0 = s.getState().history.past.length, roadLen = (d) => d.pieces.reduce((a, P) => a + (P.type === 'road' ? P.length : 0), 0);
+  s.beginSculpt({ tool: 'stretch' }); assert.ok(s.getState().brush, s.getState().message); s.sculptTo(50); s.endSculpt();
+  const d = s.getState().history.present; assert.notEqual(d, before, s.getState().message);
+  assert.ok(Math.abs(roadLen(d) - roadLen(before) - 50) < 1e-3, `the road is 50 m longer (${roadLen(d) - roadLen(before)})`);
+  assert.doesNotThrow(() => D.checkDoc(d), 'the joints are C1: checkDoc passes'); assert.equal(s.getState().history.past.length, n0 + 1, 'one undo step');
+  for (const i of [0, 4, 5]) assert.equal(d.pieces[i].length, before.pieces[i].length, `piece ${i} keeps its length`);
+});
+
+test("row 15: with the real core of C, Smooth after a Bend relaxes the turn channel under the window, one undo step", async () => {
+  const s = await lap();
+  s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(2e-3); s.endBrush(); const bent = s.getState().history.present, n0 = s.getState().history.past.length;
+  // a smooth WIDER than the bump: at the bump's own radius the window's held outer control points leave it one to move (C's smooth, by design)
+  s.beginBrush({ tool: 'smooth', s0: 450, r: 300 }); assert.equal(s.getState().brush.channel, 'kh', s.getState().message); s.brushTo(1); s.endBrush();
+  const d = s.getState().history.present; assert.notEqual(d, bent, s.getState().message); assert.equal(s.getState().history.past.length, n0 + 1, 'one undo step');
+  const kh = (doc) => doc.pieces.flatMap((P) => (P.type === 'road' ? P.channels.kh : []));
+  const rough = (a) => a.slice(1, -1).reduce((m, v, i) => m + Math.abs(a[i] - 2 * v + a[i + 2]), 0);
+  assert.ok(rough(kh(d)) < rough(kh(bent)), `the turn is smoother: ${rough(kh(d))} < ${rough(kh(bent))}`);
 });
