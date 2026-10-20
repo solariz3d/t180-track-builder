@@ -4,7 +4,7 @@
 // Rows:
 //   1  each style builds: the registry returns GLSL that defines vec3 skyPattern(vec3 dir, float t) (red while the module was a stub)
 //   2  each source keeps to the contract: helpers named with the style's prefix, reads only the uniforms the pass declares (uSky, uSkyA, uSkyB,
-//      uSkyC), declares no uniform, precision or #version of its own, and loops only to a constant bound (GLSL ES 1.0)
+//      uSkyC, and uPx since D410), declares no uniform, precision or #version of its own, and loops only to a constant bound (GLSL ES 1.0)
 //   3  each skin names its style with --sky-style and sets every colour that style reads (one left unset would quietly fall back to --sky)
 //   4  the screen-pinned layers are gone: neither skin draws on #preview::after (the sky moved into the world)
 //   4b each skin's --sky-c is its --fog (D384 widened: under 10 degrees the sky pales only to the fog, so the far road fogs into the sky it meets)
@@ -18,7 +18,8 @@ const fs = require('fs'), path = require('path');
 const APP = path.join(__dirname, '..');
 const SKY = require(path.join(APP, 'preview', 'sky', 'index.js'));
 const SKINS = { caustics: 'aqua', aurora: 'aurora' };
-const PASS_UNIFORMS = ['uSky', 'uSkyA', 'uSkyB', 'uSkyC'];
+// AMENDED (D416): the pass has declared uPx since D410 (the angle of one device pixel), and D416 sizes Aqua's motes and Aurora's stars with it
+const PASS_UNIFORMS = ['uSky', 'uSkyA', 'uSkyB', 'uSkyC', 'uPx'];
 const TOKEN_OF = { uSkyA: '--sky-a', uSkyB: '--sky-b', uSkyC: '--sky-c' };
 
 const strip = (src) => src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');

@@ -5,7 +5,8 @@
 // Quiet behind the work: under about 10 degrees of elevation, where the road sits against the sky, the sea stays between the skin's --sky and its
 // --fog (uSkyC is the skin's fog colour, so the far road fogs into the sea it meets), and nothing moves there.
 // Every edge is a smooth falloff (no line anywhere), and the motion is slow: nothing crosses the view in under about two minutes (the speeds are
-// stated term by term below; the ripples change shape in place faster than they travel). Faint motes hang in the sea above 10 degrees.
+// stated term by term below; the ripples change shape in place faster than they travel). Faint motes hang in the sea above 10 degrees, each a point sized in device pixels (D416:
+// a cone 1.25 px in radius, from the pass's uPx; they were gaussians in grid cells, a median 4.7 px across at half their peak at 2560 x 1440, measured by app/test/sky-crisp.test.js).
 // Colours: uSky the deep sea (--sky), uSkyA the sky seen through the window (--sky-a), uSkyB the lit sea under the surface (--sky-b), uSkyC the
 // sea at the horizon, the skin's fog (--sky-c).
 // (The word for it is "sea" here: the builder's own files keep clear of the word for the removed flow simulation, D238; core-readout-display.test.js.)
@@ -22,15 +23,22 @@ float caustics_net(vec2 p, float t) {
   return pow(1.0 - v * v, 10.0);
 }
 float caustics_hash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }   // sin-free, as prism_hash (D391)
+// the angle of one device pixel HERE: the pass's uPx (at the middle of the view; a page that sends none gets a pixel of a 2560 x 1440 screen at 60
+// degrees) times cos^1.5 of the angle off the view's axis (vRay is the unit forward plus the screen offset, so dot(vRay, vRay) = 1 / cos^2). A flat
+// screen spreads an angle over 1 / cos^2 as many pixels outward from its middle and 1 / cos across, so a star sized in uPx alone grew to about 2.4 px
+// at a 2560 x 1440 corner; at cos^1.5 its spot covers the same area of screen everywhere (about 1.6 px by 1.0 at a corner), never under a pixel (D416)
+float caustics_px() { return (uPx > 0.0 ? uPx : 0.0008) * pow(dot(vRay, vRay), -0.75); }
 float caustics_motes(vec3 dir, float t) {
-  // specks drifting in the sea, soft and dim: one candidate per cell of a 3D grid through the sky sphere, about one cell in 30 holding one, kept
-  // off the cell's faces; the whole field turns slowly round the vertical (0.003 rad/s: about eight minutes to cross the view)
+  // specks drifting in the sea, dim: one candidate per cell of a 3D grid through the sky sphere, about one cell in 30 holding one, drawn round its own
+  // direction and only when that lands in the middle of its cell (so none is cut at a cell's face); the whole field turns slowly round the vertical
+  // (0.003 rad/s: about eight minutes to cross the view)
   float a = t * 0.003, ca = cos(a), sa = sin(a);
-  vec3 p = vec3(ca * dir.x - sa * dir.z, dir.y, sa * dir.x + ca * dir.z) * 70.0, c = floor(p), f = p - c;
+  vec3 rd = vec3(ca * dir.x - sa * dir.z, dir.y, sa * dir.x + ca * dir.z), p = rd * 70.0, c = floor(p);
   float h = caustics_hash(c);
   if (h < 0.966) return 0.0;
-  vec3 d = f - (0.4 + 0.2 * vec3(caustics_hash(c + 1.7), caustics_hash(c + 3.1), caustics_hash(c + 5.3)));
-  return exp(-dot(d, d) / (2.0 * 0.12 * 0.12)) * (0.4 + 0.6 * (h - 0.966) / 0.034);
+  vec3 sd = normalize(c + 0.4 + 0.2 * vec3(caustics_hash(c + 1.7), caustics_hash(c + 3.1), caustics_hash(c + 5.3))), q = sd * 70.0 - c;
+  if (any(lessThan(q, vec3(0.2))) || any(greaterThan(q, vec3(0.8)))) return 0.0;
+  return max(0.0, 1.0 - length(rd - sd) / (1.25 * caustics_px())) * 6.0 * (0.4 + 0.6 * (h - 0.966) / 0.034);   // a point: a cone 1.25 device px in radius, 6 times as strong, so it carries most of the soft mote's light (D416)
 }
 vec3 skyPattern(vec3 dir, float t) {
   float y = clamp(dir.y, -1.0, 1.0), el = asin(y), az = atan(dir.z, dir.x);
