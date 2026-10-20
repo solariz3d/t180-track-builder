@@ -9,7 +9,8 @@
 //   3  Smooth's channel is the last tool's; a channel given wins; with none it is refused by name
 //   4  a route tool on a CLOSED lap is never closed per step: the lap is open during the drag
 //   5  its release: endBrush only starts the job (nothing committed yet); the job lands the re-closed lap as ONE undo step; every piece outside the window is the very same object
-//   6  the order: the window close first; refused, the whole-lap close with the window protected; refused again, the drag is dropped whole, named, and the track is as it was
+//   6  the order: the window close first; refused, the window widened by a piece each side (P's item 8); refused, the whole-lap close with the window protected; refused again, the drag is dropped whole, named
+//  16-20  P's review section 2: Stretch takes the piece under s0 (1); a stale re-close clears its brush (2); a no-change release runs no close (4); D335 per window (5); the widened try (8)
 //   7  the window is the selected RUN: sculptInfo gives from/to and the handles' piece is the run's middle road piece; beginSculpt brushes the run, and nothing outside it changes
 //   8  a radius change mid-drag sets the radius and takes no step itself (B's page drives the re-run, P's review item 8); the page's next brushTo re-runs from the same base: the result is a drag at the new radius and that delta, with no accumulation
 //   9  Esc (cancelBrush) drops an open drag: the very same document, no undo step
@@ -40,7 +41,8 @@ function fakeRunner(answer) {
   return { calls, start(args) { calls.push(args); const n = calls.length; return { promise: Promise.resolve(answer(args, n)), cancel() {} }; } };
 }
 const CJ = require('../core/closejob.js');
-const realClose = (args) => ({ out: CJ.runClose(args), ms: 0 });
+/** The real close, answered as the close worker answers (closeworker.js): a refusal is { refused }, never a throw out of start(). */
+const realClose = (args) => { try { return { out: CJ.runClose(args), ms: 0 }; } catch (e) { if (e && e.name === 'CoreError') return { refused: { code: e.code || null, message: e.message } }; throw e; } };
 
 test('row 1: every tool resolves to its mode, channel and family; an unknown tool is refused by name and opens nothing', async () => {
   const want = {
@@ -109,10 +111,10 @@ test('row 5: the release only STARTS the job; the job lands the re-closed lap as
 
 test('row 6: the window close first; refused, the whole-lap close with the window protected; refused again, the drag is dropped whole and named', async () => {
   // refused, then converged: the second job is the whole lap with the window protected
-  const r1 = fakeRunner((args, n) => (n === 1 ? { refused: { code: 'CLOSE_WINDOW', message: 'close: can\'t close using only the window' } } : realClose(args)));
+  const r1 = fakeRunner((args, n) => (n < 3 ? { refused: { code: 'CLOSE_WINDOW', message: 'close: can\'t close using only the window' } } : realClose(args)));   // item 8: the window, the widened window, then the whole lap
   const s = await closedLap({ closeRunner: r1 });
   s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(5e-4); s.endBrush(); const a = await s.brushRelease();
-  assert.equal(r1.calls.length, 2); assert.ok(Array.isArray(r1.calls[0].window)); assert.equal(r1.calls[1].whole, true); assert.deepEqual(r1.calls[1].edited, r1.calls[0].window, 'the window is protected');
+  assert.equal(r1.calls.length, 3); assert.ok(Array.isArray(r1.calls[0].window)); assert.ok(Array.isArray(r1.calls[1].window)); assert.equal(r1.calls[2].whole, true); assert.deepEqual(r1.calls[2].edited, r1.calls[0].window, 'the window is protected');
   assert.equal(a.history.present.closed, true, a.message);
   // refused twice: the drag is dropped whole, by name, and the track is the very one from before the drag
   const r2 = fakeRunner(() => ({ refused: { code: 'CLOSE_WINDOW', message: 'no' } }));
@@ -219,4 +221,57 @@ test("row 15: with the real core of C, Smooth after a Bend relaxes the turn chan
   const kh = (doc) => doc.pieces.flatMap((P) => (P.type === 'road' ? P.channels.kh : []));
   const rough = (a) => a.slice(1, -1).reduce((m, v, i) => m + Math.abs(a[i] - 2 * v + a[i + 2]), 0);
   assert.ok(rough(kh(d)) < rough(kh(bent)), `the turn is smoother: ${rough(kh(d))} < ${rough(kh(bent))}`);
+});
+
+// P's review of the shell (p-d421-review-P_2026-10-20.md section 2), items 1, 2, 4, 5 and 8
+test("row 16: Stretch with no piece and no run takes the road piece under s0 (B's strip sends neither)", async () => {
+  const D = require('../../src/core/document.js');
+  const s = await lap(), before = s.getState().history.present, off = SC.pieceOffsets(before);
+  s.beginBrush({ tool: 'stretch', mode: 'rate', channel: 'length', s0: off[2] + 30, r: 60 });
+  assert.ok(s.getState().brush, s.getState().message); assert.deepEqual(s.getState().brush.span, { from: 2, to: 2 }, 'the piece under s0');
+  s.brushTo(20); s.endBrush(); const d = s.getState().history.present;
+  assert.ok(Math.abs(d.pieces[2].length - before.pieces[2].length - 20) < 1e-3, 'that piece is 20 m longer'); assert.doesNotThrow(() => D.checkDoc(d));
+});
+
+test('row 17: a re-close that outlives its document leaves no brush open: a new document during the release, and every tool still opens', async () => {
+  const pending = [];
+  const closeRunner = { start(args) { let res; const promise = new Promise((r) => { res = r; }); pending.push(() => res(realClose(args))); return { promise, cancel() {} }; } };
+  const s = await closedLap({ closeRunner });
+  s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(5e-4); s.endBrush(); assert.equal(s.getState().brush.closing, true);
+  s.newDoc('fresh');   // the history replaced wholesale while the re-close works
+  pending.shift()(); await s.brushRelease();
+  assert.equal(s.getState().brush, null, 'the stale re-close cleared its brush'); assert.equal(s.getState().history.present.pieces.length, 0, 'the new document stands');
+  s.extend({ length: 300, family: 'bowl' }); s.beginBrush({ tool: 'twist', s0: 100, r: 60 }); assert.ok(s.getState().brush, s.getState().message);
+});
+
+test('row 18: a release with no change restores the lap as it was and runs no close', async () => {
+  for (const step of [null, 0]) {
+    const closeRunner = fakeRunner(realClose);
+    const s = await closedLap({ closeRunner }), before = s.getState().history.present, n0 = s.getState().history.past.length;
+    s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); if (step !== null) s.brushTo(step); s.endBrush();
+    assert.equal(s.getState().brush, null, `step ${step}: no job left open`); assert.equal(closeRunner.calls.length, 0, `step ${step}: no close was run`);
+    assert.equal(s.getState().history.present, before, `step ${step}: the very lap from before`); assert.equal(s.getState().history.past.length, n0, `step ${step}: no undo step`);
+  }
+});
+
+test('row 19: a handle on a two- or three-piece run lands the value asked where the handles read it, as exactly as D335 lands one piece (D335 per window)', async () => {
+  // measured (d335-run.*.json): before item 5 a two-piece run landed 0.1 of 0.2 (read at its middle piece's middle); read at the run's centre it lands 0.2; without the ratio there a
+  // three-piece run lands 0.199957, so the bar is D335's own exactness, 1e-5, not a looser one that would pass with no ratio at all
+  for (const [from, to] of [[1, 2], [1, 3]]) {
+    const s = await lap(); s.setSculpt(true); s.selectPiece(from); s.selectPiece(to, { extend: true });
+    const v0 = s.sculptInfo().values.phi;
+    s.beginSculpt({ channel: 'phi', from, to }); s.sculptTo(0.2); s.endSculpt();
+    const got = (s.sculptInfo().values.phi - v0) * Math.PI / 180;
+    assert.ok(Math.abs(got - 0.2) < 1e-5, `run ${from}-${to}: the handle asked 0.2 rad and reads ${got}`);
+  }
+});
+
+test('row 20: the release tries the window, then the window widened by one piece each side, then the whole lap with the window protected', async () => {
+  const r = fakeRunner((args, n) => (n < 3 ? { refused: { code: 'CLOSE_WINDOW', message: 'no' } } : realClose(args)));
+  const s = await closedLap({ closeRunner: r });
+  s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(5e-4); s.endBrush(); const a = await s.brushRelease();
+  assert.equal(r.calls.length, 3); const w = r.calls[0].window, wide = r.calls[1].window;
+  assert.deepEqual(wide, [...new Set([Math.max(0, Math.min(...w) - 1), ...w, Math.min(a.history.present.pieces.length - 1, Math.max(...w) + 1)])].sort((x, y) => x - y), 'one more piece each side');
+  assert.equal(r.calls[2].whole, true); assert.deepEqual(r.calls[2].edited, w, 'the whole lap protects the window the drag changed');
+  assert.equal(a.history.present.closed, true, a.message);
 });
