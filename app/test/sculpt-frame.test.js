@@ -131,7 +131,8 @@ const key = async (k, code, vk) => { await send('Input.dispatchKeyEvent', { type
 const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1) + 0.5))]; };
 
 // THE TOOLS: the Sculpt mode's digit (D421 part 3) and, for a page without the mode, the old brush strip's mode and channel; `ch` is the brush channel a pointer pixel is scaled by (panel.js PER_PX)
-const TOOLS = { grab: { digit: '1', mode: 'local', channel: 'height', ch: 'height' }, bend: { digit: '3', mode: 'rate', channel: 'kh', ch: 'kh' }, twist: { digit: '5', mode: 'rate', channel: 'phi', ch: 'phi' } };
+// `axis`: the pointer axis the tool reads in the Sculpt mode (B's page, p-d421-sculptmode-B_2026-10-20.md §5: Bend reads x, left is more; the rest read y, up is more); the old brush strip reads y for every channel
+const TOOLS = { grab: { digit: '1', mode: 'local', channel: 'height', ch: 'height' }, bend: { digit: '3', mode: 'rate', channel: 'kh', ch: 'kh', axis: 'x' }, twist: { digit: '5', mode: 'rate', channel: 'phi', ch: 'phi' } };
 async function sculptTool(tool, r) {
   const T = TOOLS[tool];
   const old = await ev("return !!document.querySelector('input[aria-label=\"brush on\"]');");
@@ -171,12 +172,12 @@ async function sculptDrag(look, track, tool, r, s, amp, afterMs = 1500) {
   await mouse('mouseMoved', hit.x, hit.y); await sleep(100);
   await ev('window.__ft.frames.clear(); window.__ft.ev.length = 0; window.__ft.long.length = 0; window.__ft.on = true; return true;');
   await mouse('mousePressed', hit.x, hit.y, { button: 'left', buttons: 1, clickCount: 1 });
-  const t0 = Date.now(); let y = hit.y;
-  while (Date.now() - t0 < DRAG_MS) { y = Math.round(hit.y - Math.sin(((Date.now() - t0) / 1000) * Math.PI * 0.75) * amp); await mouse('mouseMoved', hit.x, y, { buttons: 1 }); await sleep(8); }
+  const onX = how === 'sculpt mode' && TOOLS[tool].axis === 'x', t0 = Date.now(); let x = hit.x, y = hit.y;
+  while (Date.now() - t0 < DRAG_MS) { const d = Math.round(Math.sin(((Date.now() - t0) / 1000) * Math.PI * 0.75) * amp); if (onX) x = hit.x - d; else y = hit.y - d; await mouse('mouseMoved', x, y, { buttons: 1 }); await sleep(8); }
   await sleep(150);   // the last move's frame is done
   const drag = await ev('const f = [...window.__ft.frames.entries()].map(([ts, x]) => [ts, x.ms]), e = window.__ft.ev.slice(), l = window.__ft.long.slice(); window.__ft.frames.clear(); window.__ft.ev.length = 0; window.__ft.long.length = 0; return { f, e, l };');
-  const lastY = y, top = await ev("return document.getElementById('preview').getBoundingClientRect().top;");
-  await mouse('mouseReleased', hit.x, lastY, { button: 'left', buttons: 0, clickCount: 1 });
+  const lastX = x, lastY = y, box = await ev("const r = document.getElementById('preview').getBoundingClientRect(); return [r.left, r.top];");
+  await mouse('mouseReleased', lastX, lastY, { button: 'left', buttons: 0, clickCount: 1 });
   const tUp = Date.now(); let road = null, wholeAt = null;
   while (Date.now() - tUp < afterMs) { await sleep(100); road = await roadNow(); if (wholeAt === null && road && road.whole && (!/closed|tube/.test(track) || road.closed)) wholeAt = Date.now() - tUp; }
   const after = await ev('window.__ft.on = false; return { f: [...window.__ft.frames.entries()].map(([ts, x]) => [ts, x.ms]), e: window.__ft.ev.slice(), l: window.__ft.long.slice() };');
@@ -184,7 +185,7 @@ async function sculptDrag(look, track, tool, r, s, amp, afterMs = 1500) {
   const fr = drag.f.sort((a, b) => a[0] - b[0]), cost = fr.map(([ts, ms], i) => ms + drag.e.filter(([, a]) => a >= ts && (i + 1 >= fr.length || a < fr[i + 1][0])).reduce((x, [, , d]) => x + d, 0));
   const work = cost.filter((m) => m > 1), up = after.e.find((e) => e[0] === 'pointerup');
   const longest = Math.max(0, ...cost, ...drag.l.map((x) => x[1]), ...after.f.map((x) => x[1]), ...after.l.map((x) => x[1]), up ? up[2] : 0);
-  const delta = ((hit.y - top) - (lastY - top));   // the panel's brushTo: (press y - last y) in the stage's px, times PER_PX of the channel
+  const delta = onX ? ((hit.x - box[0]) - (lastX - box[0])) : ((hit.y - box[1]) - (lastY - box[1]));   // the panel's brushTo: (press - last) in the stage's px on the tool's axis (left / up is more), times PER_PX of the channel
   return { how, s0: hit.s, r, tool, work, p95: work.length ? pct(work, 0.95) : 0, median: work.length ? pct(work, 0.5) : 0, handler: up ? up[2] : null, longest, wholeAt, road, delta, saved: await ev('return window.__saved;'), errors: errors.slice() };
 }
 async function within(fn, ok) { const runs = []; for (let i = 0; i < RUNS; i++) { const r = await fn(); runs.push(r); if (ok(r)) return { ok: true, runs }; } return { ok: false, runs }; }
