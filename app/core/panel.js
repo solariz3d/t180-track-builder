@@ -642,7 +642,17 @@ function mount(root, shell, mountOpts = {}) {
   const moreTools = el('details', { class: 'sculpt-more' }, el('summary', { text: 'more ▾', style: 'cursor:pointer' }),
     el('div', { class: 'pickers' }, field('exact size (may nudge ≤ 0.1 mm outside)', sharp), field('other tool', otherTool), field('Edge changes', edgeSide), field('Smooth smooths', smoothCh)));
   const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools), sculptHint, valueLine);
+  // SMOOTH'S RADIUS (O's measurement, p-d421-shell-O_2026-10-20.md addendum: at a bump's own radius Smooth moves ONE control point, nothing to see; 10 at r 160, 29 at r 300):
+  // picking Smooth puts 3x the last tool's radius in the field, so the smooth reaches past the bump it is taking out and scales with it (a fixed 300 m would swallow a
+  // 60 m bump's neighbours and fall short of a 500 m bend); leaving Smooth puts the other tools' radius back. The field only: an open drag keeps its r
+  let smoothing = false, toolsR = null;
+  const syncRadius = () => {
+    const now = toolNow().key === 'smooth'; if (now === smoothing) return;
+    smoothing = now;
+    if (now) { toolsR = radiusNow(); radius.value = String(3 * toolsR); } else if (toolsR !== null) radius.value = String(toolsR);
+  };
   const showTool = () => {
+    syncRadius();
     const si = shell.getState().sculpt ? shell.sculptInfo() : null;
     sculptHint.textContent = `${toolNow().label}: ${toolNow().hint}. ${si ? `Handles on ${si.id}; one drag is one undo step.` : 'Click a piece to put the handles on it (Shift-click for a run).'}`;
   };
