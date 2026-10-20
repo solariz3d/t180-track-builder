@@ -180,3 +180,15 @@ test('row 12: runClose closes with the window it is given, not the default trail
   assert.deepEqual(out.window.pieces, [1, 2, 3, 4, 5], 'the window given');
   assert.equal(out.doc.pieces[0], open.pieces[0], 'a piece outside it is the very same object');
 });
+
+test('row 13: B\'s page: beginSculpt({ channel, from, to }) brushes the run with the shape guard on, and with a tool the tool\'s; a bad run or a steering channel is refused by name', async () => {
+  const s = await lap(); s.setSculpt(true); const before = s.getState().history.present;
+  s.beginSculpt({ channel: 'phi', from: 1, to: 3 }); const b = s.getState().brush; assert.ok(b, s.getState().message); assert.equal(b.sculpt, true, 'a shape channel on a run keeps the D244b guard');
+  const off = SC.pieceOffsets(before), lo = off[1], hi = off[3] + before.pieces[3].length;
+  assert.ok(Math.abs(b.s0 - (lo + hi) / 2) < 1e-9 && Math.abs(b.r - (hi - lo) / 2) < 1e-9, 'the window is the run');
+  s.sculptTo(0.1); s.endSculpt(); const d = s.getState().history.present; assert.equal(s.getState().message, null, s.getState().message);
+  for (const i of [0, 4, 5]) assert.equal(d.pieces[i], before.pieces[i], `piece ${i} is outside the run: the very same object`);
+  s.beginSculpt({ channel: 'kh', from: 1, to: 3 }); assert.equal(s.getState().brush, null); assert.match(s.getState().message, /^SCULPT_CHANNEL: /);
+  s.beginSculpt({ channel: 'phi', from: 3, to: 99 }); assert.equal(s.getState().brush, null); assert.match(s.getState().message, /^SCULPT_PIECE: /);
+  s.beginSculpt({ tool: 'bend', from: 1, to: 3 }); assert.deepEqual([s.getState().brush.tool, s.getState().brush.family], ['bend', 'route'], 'with a tool, the tool decides');
+});

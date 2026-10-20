@@ -475,9 +475,18 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      */
     sculptChannels: () => SCULPT_CHANNELS.slice(),
     setSculpt(on) { if (st.brush) return set({ message: 'finish the brush drag first' }); return set({ sculpt: !!on, message: null }); },
-    beginSculpt({ channel, piece, sharp = false, tool, keepRate = false } = {}) {
+    beginSculpt({ channel, piece, sharp = false, tool, keepRate = false, from, to } = {}) {
       if (!st.sculpt) return set({ message: 'SCULPT_OFF: turn Sculpt on first' });
       const d = doc(); let i = piece;
+      // D421: a RUN given as from..to (B's page, the handles on a run): the run is the window; a tool's family sets the guard, and with no tool it is a shape channel's, guarded as D244b
+      if (Number.isInteger(from) && Number.isInteger(to) && from !== to) {
+        if (from < 0 || to >= d.pieces.length || from > to) return set({ message: `SCULPT_PIECE: pieces ${from} to ${to} are not a run of this track` });
+        if (tool !== undefined) return api.beginBrush({ tool, run: { from, to }, sharp, keepRate });
+        if (!SCULPT_CHANNELS.includes(channel)) return set({ message: `SCULPT_CHANNEL: Sculpt offers only the shape channels (${SCULPT_CHANNELS.join(', ')}); "${channel}" would move the track after it. Turn Sculpt off to use it` });
+        const w = toolWindow(d, { run: { from, to } }); if (w.message) return set({ message: w.message });
+        if (st.brush) return set({ message: 'a brush drag is already open' });
+        return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode: 'rate', channel, s0: w.s0, r: w.r, sharp: !!(sharp && brushFn), base: d, delta: 0, pieces: w.pieces, baseHistory: st.history, sculpt: true, baseResolved: st.resolved, sculptPiece: undefined }, message: null }));
+      }
       // D421: with a tool, the window may be the selected RUN (design §3.6): the run, centred on its middle, as wide as it; the selection's longWay rule already keeps it inside the lap
       if (tool !== undefined && i === undefined) {
         const s = st.selection; if (!s || s.base !== d) return set({ message: 'select a piece or a run first: click it on the track' });
