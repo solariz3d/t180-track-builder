@@ -1,6 +1,6 @@
 // theme-mutation.test.js: node --test app/test/theme-mutation.test.js
 // D381 part 2a (pane B): the skin pick and the token reader, mutated; D384 part 1 (pane B): the sky pass too (S1-S13, run against sky.test.js).
-// D410 (pane B): Glass's crisp sky (P1-P4, run against sky-prism-crisp.test.js; P2-P4 skip where there is no Chrome, as that file's rows do).
+// D410 (pane B): Glass's crisp sky (P1-P4, run against sky-crisp.test.js; P2-P4 skip where there is no Chrome, as that file's rows do).
 // D416 (pane B): every night sky at the screen's own pixels (P5-P12; that file is sky-crisp.test.js now, every night style's rows at DPR 1 and 1.5).
 // Each mutation copies app/ (all but its tests, plus theme.test.js and sky.test.js with its fixture), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED theme.test.js there. "Applied" means the patch text was
 // found exactly once; "caught" means the named test FAILED on the mutant. A CONTROL runs the unmutated copy first. The originals are never touched.
