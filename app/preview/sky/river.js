@@ -34,13 +34,13 @@ vec3 river_face(float face, vec2 uv) {
 // screen spreads an angle over 1 / cos^2 as many pixels outward from its middle and 1 / cos across, so a star sized in uPx alone grew to about 2.4 px
 // at a 2560 x 1440 corner; at cos^1.5 its spot covers the same area of screen everywhere (about 1.6 px by 1.0 at a corner), never under a pixel (D416)
 float river_px() { return (uPx > 0.0 ? uPx : 0.0008) * pow(dot(vRay, vRay), -0.75); }
-// the river's density at a direction: 1 on the great circle's line, falling off over about 15 degrees each side, clumped along it and cut by dark lanes
+// the river's density at a direction: 1 on the great circle's line, falling off over about 15 degrees each side, clumped along it and cut by faint dark lanes (0.35 deep: at 0.85 they read as smudges, D416)
 float river_density(vec3 d) {
   float b = dot(d, normalize(vec3(-0.370, -0.563, -0.739)));                     // the sine of the angle from the river's plane
   float core = exp(-b * b / (2.0 * 0.13 * 0.13));
   float clump = 0.45 + 0.55 * river_noise(d * 5.0 + 3.0);
   float lane = smoothstep(0.52, 0.70, river_noise(d * 11.0 + 17.0)) * exp(-b * b / (2.0 * 0.05 * 0.05));
-  return core * clump * (1.0 - 0.85 * lane);
+  return core * clump * (1.0 - 0.35 * lane);
 }
 // one field of stars: one chance per cell of a grid of N on each cube face (the chance 'chance', 0..1), set in the middle half of its cell; each
 // pixel sums the stars of the four cells nearest it. A star is a cone 1.25 px in radius, so it reaches past its own cell only when a quarter cell is
