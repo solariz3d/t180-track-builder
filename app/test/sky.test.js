@@ -7,7 +7,8 @@
 //   · an unknown style fails loudly, at setTheme and through the registry
 //   · the skin names its sky with --sky-style (and --sky-a/b/c, falling back to --sky); Skyline's is 'sun', and its screen-pinned overlay is gone
 //   · the drift stops under prefers-reduced-motion: the preview hands the pass t = 0
-//   · D384 widened: Glass names the new 'prism' sky (a registered style the page's loader loads); SIGIL alone names none
+//   · D384 widened: Glass names the new 'prism' sky (a registered style the page's loader loads); SIGIL alone names none. D416: Glass names the
+//     'river' sky instead, and the prism stays a built style
 //   · D391: every style keeps the two GLSL rules (no smoothstep with literal edge0 >= edge1, no sin hash), and the check is not vacuous
 //   · D393: A's probe forms pin the rules' edges (the hash by its fract(sin( shape, exponent literals judged, a sine wave of a dot product kept)
 //   · D398: the shared pass dithers every style by one 8-bit step (its banding is measured in app/test/sky-dither.test.js, in headless Chrome)
@@ -80,8 +81,8 @@ test('an unknown sky style fails loudly, at setTheme and in the registry; a styl
   assert.throws(() => r.setTheme({ skyStyle: 'clouds' }), /no style named "clouds"/);
   assert.throws(() => r.setTheme({ skyStyle: 3 }), /no style named 3/);
   assert.throws(() => SKY.patternSource('Sun'), /no style named "Sun"/);
-  // AMENDED (D405): the rule changed by name: a sixth style, city (Skyline Night's)
-  assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'prism', 'caustics', 'aurora', 'city']);
+  // AMENDED (D405): the rule changed by name: a sixth style, city (Skyline Night's). AMENDED (D416): a seventh, river (Glass's new sky)
+  assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']);
   assert.equal(SKY.patternSource('none'), null);
   assert.match(SKY.patternSource('sun'), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/);
 });
@@ -91,7 +92,7 @@ test('the page\'s own loader (app/lib/cjs.js, which follows only written-out req
   const Rp = await loadCjs('app/preview/renderer.js', async (p) => fs.readFileSync(path.join(REPO, p), 'utf8'));
   const r = Rp.createRenderer(recordingGL().gl);
   r.setTheme({ skyStyle: 'sun' }); r.setTheme({ skyStyle: 'prism' });
-  for (const s of ['caustics', 'aurora', 'city']) {
+  for (const s of ['caustics', 'aurora', 'city', 'river']) {
     try { r.setTheme({ skyStyle: s }); } catch (e) { assert.match(e.message, /not built yet/, `${s}: loaded, and either built or saying it is not (not "could not be loaded")`); }
   }
 });
@@ -121,12 +122,14 @@ test('D405: Skyline Night names the city sky, a built style that keeps the GLSL 
   assert.match(css, /\[data-theme="skyline-night"\]\s*\{[^}]*--sky-style:\s*city;/, 'Skyline Night names the city');
 });
 
-test('Glass names the prism sky, a built style; SIGIL alone names none', () => {
-  assert.match(SKY.patternSource('prism'), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/, 'prism is built');
-  const r = R.createRenderer(recordingGL().gl); r.setTheme({ skyStyle: 'prism' });
+// AMENDED (D416): the rule changed by name: Glass names its new sky, the river; the prism (its sky from D384 widened to D416) stays a built style
+test('Glass names the river sky, a built style that keeps the GLSL rules; the prism stays built; SIGIL alone names none', () => {
+  for (const s of ['river', 'prism']) assert.match(SKY.patternSource(s), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/, `${s} is built`);
+  assert.deepEqual(SKY.contractProblems('river', SKY.patternSource('river')), [], 'river keeps the D391 rules');
+  const r = R.createRenderer(recordingGL().gl); r.setTheme({ skyStyle: 'river' }); r.setTheme({ skyStyle: 'prism' });
   const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
   const glass = strip(fs.readFileSync(path.join(ADIR, 'themes', 'glass.css'), 'utf8'));
-  assert.match(glass, /\[data-theme="glass"\]\s*\{[^}]*--sky-style:\s*prism;/, 'Glass names the prism');
+  assert.match(glass, /\[data-theme="glass"\]\s*\{[^}]*--sky-style:\s*river;/, 'Glass names the river');
   // SIGIL is the page with no skin: the page's own style sets no --sky-style, so the renderer's 'none' holds
   const html = strip(fs.readFileSync(path.join(ADIR, 'index.html'), 'utf8'));
   assert.doesNotMatch(html, /--sky-style/, 'the base page (SIGIL) names no sky');
