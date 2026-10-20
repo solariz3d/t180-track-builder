@@ -123,10 +123,12 @@ test('row 5: the panel coalesces pointer moves to ONE brushTo per animation fram
   const real = await createCoreShell({ brushFn: null }); real.extend({ length: 300 }); real.extend({ length: 100 });
   const calls = []; const shell = Object.assign(Object.create(real), { brushTo(d) { calls.push(d); return real.brushTo(d); } });
   const root = doc.createElement('div'); require('../core/panel.js').mount(root, shell);
-  const by = (label) => root.all().find((e) => e.attrs['aria-label'] === label); by('brush on').checked = true; by('brush mode').value = 'rate'; by('brush channel').value = 'phi';
+  // AMENDED D421 part 3 (the brush's "on" box, mode and channel are gone): Sculpt, the Twist tool (the bank, as before); the brush opens on the first move past 5 px, not on the press
+  const by = (label) => root.all().find((e) => e.attrs['aria-label'] === label); real.setSculpt(true); by('sculpt tool').value = 'twist';
   const ev = (y) => ({ button: 0, clientX: 10, clientY: y, preventDefault() {} }), at = (type, e) => (stage.listeners[type] || []).forEach((f) => f(e));
-  at('pointerdown', ev(300)); assert.ok(real.getState().brush, 'the drag is open');
+  at('pointerdown', ev(300)); assert.equal(real.getState().brush, null, 'a press alone opens nothing (it may be a click)');
   for (const y of [295, 290, 280, 270]) at('pointermove', ev(y));
+  assert.ok(real.getState().brush, 'the drag is open');
   assert.equal(calls.length, 0, 'four moves in one frame: nothing has run yet'); tick(); assert.equal(calls.length, 1, 'one brushTo for the frame'); assert.equal(calls[0], (300 - 270) * 0.002, 'with the LATEST position');
   tick(); assert.equal(calls.length, 1, 'no waiting position, no step');
   at('pointermove', ev(250)); at('pointermove', ev(240)); at('pointerup', ev(240));

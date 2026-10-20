@@ -27,6 +27,25 @@ function keyAction({ key, ctrlKey, metaKey, shiftKey, inField, inText }) {
   return null;
 }
 
+/**
+ * D421 part 3, SCULPT'S KEYS (design §5, the user's GO of 2026-10-20 14:53): Tab toggles Sculpt mode (Blender's Tab; Build ▸ Sculpt mode is the same switch), Esc drops an open brush drag, [ and ] narrow
+ * and widen the radius, and 1-9 pick the tool (1 Grab, 2 Stretch, 3 Bend, 4 Climb, 5 Twist, 6 Width, 7 Cup, 8 Edge, 9 Smooth). No letters (above: the cameras use them),
+ * and never with Ctrl, Alt or Shift held (Shift+Tab moves the focus back). IN A FIELD every one of them is the field's: a digit or a bracket is typed, Tab moves to the
+ * next field, Esc is the field's own. (The plan names keys.js's inText for Tab; inField is the stricter reading: a number field's Tab is how the Extend fields are walked.)
+ * Kept apart from keyAction, which app/shell.js re-exports to the piece builder, whose own binding knows none of these. Pure: tested headless.
+ *   -> 'toggleSculpt' | 'dropDrag' | 'radiusDown' | 'radiusUp' | { tool: 1..9 } | null
+ */
+function sculptKey({ key, ctrlKey, metaKey, altKey, shiftKey, inField }) {
+  if (ctrlKey || metaKey || altKey || shiftKey || inField) return null;
+  const k = String(key || '');
+  if (k === 'Tab') return 'toggleSculpt';
+  if (k === 'Escape') return 'dropDrag';
+  if (k === '[') return 'radiusDown';
+  if (k === ']') return 'radiusUp';
+  if (/^[1-9]$/.test(k)) return { tool: Number(k) };
+  return null;
+}
+
 // A field whose own Ctrl+Z means "undo my typing": text-like inputs (an input with no type is a text input) and text areas.
 const TEXT_ENTRY = 'textarea, input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]';
 
@@ -42,12 +61,27 @@ function panelHandled(doc) {
 }
 
 /**
+ * D421 part 3: what a Sculpt key does on the page. Tab is the shell's switch (setSculpt: refused mid-drag, "finish the brush drag first"). The others are the
+ * panel's (it holds the tool, the radius and the pointer drag): asked with 't180-sculpt-key' { detail: { act, handled() } }. A key is taken from the page (its
+ * default prevented) only when something used it: Esc with no drag open, or a digit in Build, stays the page's. Returns whether it was used.
+ */
+function sculptKeyOnPage(doc, shell, act) {
+  if (act === 'toggleSculpt') { if (typeof shell.setSculpt !== 'function') return false; shell.setSculpt(!shell.getState().sculpt); return true; }
+  let handled = false;
+  try { const win = doc.defaultView; if (win && win.CustomEvent && typeof doc.dispatchEvent === 'function') doc.dispatchEvent(new win.CustomEvent('t180-sculpt-key', { detail: { act, handled: () => { handled = true; } } })); } catch (e) { handled = false; }
+  return handled;
+}
+
+/**
  * Bind the keys on the equation page: `doc` is the page's document, `shell` the core shell (app/core/coreshell.js), `save` the Save
- * button's own path (the name field is the page's). Undo, redo and Ctrl+Backspace (removeHead) go to the shell. Returns the unbind.
+ * button's own path (the name field is the page's). Undo, redo and Ctrl+Backspace (removeHead) go to the shell; Sculpt's keys as sculptKeyOnPage says. Returns the unbind.
  */
 function bindKeys(doc, shell, { save }) {
   const onKey = (e) => {
     const t = e.target, is = (sel) => !!t && typeof t.matches === 'function' && t.matches(sel);
+    const inField = is('input, select, textarea') || !!(t && t.isContentEditable);
+    const sk = sculptKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, inField });
+    if (sk) { if (sculptKeyOnPage(doc, shell, sk)) e.preventDefault(); return; }
     const act = keyAction({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, inField: is('input, select, textarea'), inText: is(TEXT_ENTRY) || !!(t && t.isContentEditable) });
     if (!act) return;
     e.preventDefault();
@@ -58,4 +92,4 @@ function bindKeys(doc, shell, { save }) {
   return () => doc.removeEventListener('keydown', onKey);
 }
 
-module.exports = { keyAction, bindKeys };
+module.exports = { keyAction, sculptKey, bindKeys };

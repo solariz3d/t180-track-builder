@@ -4,7 +4,7 @@
 // TWO PLACES, one machinery:
 //   EXTEND (D244): small marks with a double arrow on the GHOST of the piece Extend would add: length, width, bank, cup, turn and climb, each that has sides on BOTH sides. A drag sets
 //        the matching Extend field as if it were typed (the field's own handler runs, so the ghost, the readout and the cup-or-tube rule follow); nothing reaches Undo until Extend.
-//   SCULPT (D244b): the same marks on the ONE selected placed piece (bank, cup, width, both edges). A drag reshapes that piece in place (shell.beginSculpt / sculptTo / endSculpt: the
+//   SCULPT (D244b; D421 part 3: a selected RUN, its marks on the run's middle piece and its drag over the whole run, shell.sculptInfo from/to): the same marks on the selected placed piece (bank, cup, width, both edges). A drag reshapes it in place (shell.beginSculpt / sculptTo / endSculpt: the
 //        shape channels only, the centreline guarded), and is ONE undo step.
 //
 // The numbers are all here, pure and tested (app/test/handles.test.js):

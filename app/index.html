@@ -141,7 +141,7 @@
   @media (width < 1320px) { header h1 .wm-rest { display: none; } header #name { flex: 0 1 121px; min-width: 64px; } }
   @media (width < 1100px) { header { gap: 4px; } header h1 { margin-right: 6px; } header .more > summary { padding: 5px 7px; } }
   @media (width < 1000px) { header h1 .wm-name { display: none; } header #name { min-width: 48px; } }
-  /* D355: THE BRUSH STRIP under the bar (C's panel builds it as .brush-strip and shows it only while the brush is on; the page moves it into the banner row): its
+  /* D355: THE BRUSH STRIP under the bar (C's panel builds it as .brush-strip; D421 part 3: it is the Sculpt strip now, shown only in Sculpt; the page moves it into the banner row): its
      fields run along one row, in the page's raised panel colour with a hairline under it, as the recovery bar is laid out */
   #banner .brush-strip { padding: 6px 12px; background: var(--raise); border-bottom: 1px solid var(--line); }
   #banner .brush-strip .pickers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
@@ -277,7 +277,7 @@
     <div class="menu-slot" id="m-file-slot"></div>
   </div></details>
   <details id="m-edit" class="more"><summary title="undo, redo, and what to do with the selected pieces">Edit ▾</summary><div class="more-menu"><div class="menu-slot" id="m-edit-slot"></div></div></details>
-  <details id="m-build" class="more"><summary title="pieces with a purpose: straight, level, to the floor, turns, a sharp corner, a jump; the brush; close the loop">Build ▾</summary><div class="more-menu"><div class="menu-slot" id="m-build-slot"></div></div></details>
+  <details id="m-build" class="more"><summary title="pieces with a purpose: straight, level, to the floor, turns, a sharp corner, a jump; close the loop; Sculpt mode (Tab), in which they wait">Build ▾</summary><div class="more-menu"><div class="menu-slot" id="m-build-slot"></div></div></details>
   <details id="m-track" class="more"><summary title="the whole track: start and grid, pit lane, road surface">Track ▾</summary><div class="more-menu"><div class="menu-slot" id="m-track-slot"></div></div></details>
   <details id="pieces" class="more pieces-menu"><summary title="your saved pieces: click one to add it at the head of the track; also mirrored, rename, delete">Pieces ▾</summary><div class="more-menu" id="pieces-bin"></div></details>
   <details id="m-view" class="more"><summary title="what the view shows: the drag handles, the track coloured by grip, the guide">View ▾</summary><div class="more-menu"><div class="menu-slot" id="m-view-slot"></div></div></details>
@@ -511,7 +511,7 @@
     // the panels that read only the shared path (preview, camera, validation) are reused unchanged; the core's own controls take the
     // left column. Share codes, Install to AC / See it in Assetto and the guide are carried from the piece builder (D239).
     await panels.mountPanel($('palette'), 'equation track', () => loadCjs('app/core/index.js', get), shell);
-    { const strip = document.querySelector('#palette .brush-strip'); if (strip) brushSlot.append(strip); }   // D355: C's brush strip goes under the bar; a panel without one leaves the slot empty
+    { const strip = document.querySelector('#palette .brush-strip'); if (strip) brushSlot.append(strip); }   // D355: C's brush strip (D421: the Sculpt strip) goes under the bar; a panel without one leaves the slot empty
     for (const [dir, id] of [['preview', 'preview'], ['camera', 'camera'], ['validate-ui', 'validation']]) {
       await panels.mountPanel($(id), dir, () => loadCjs(`app/${dir}/index.js`, get), shell);
     }

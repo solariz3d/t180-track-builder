@@ -6,7 +6,9 @@
 //   1   Build lists its items in the brief's order, in contract M's shapes
 //   2   a command moved to Build still does what its button did: Straight, Level, To floor and Jump each place their piece (one undo step each)
 //   3   a "…" item opens a popover holding today's fields and button (the panel's own field style); its button works from there; closing it puts them back
-//   4   Brush: the item says whether the brush is on and turns it on and off; the brush strip (mode, what, radius, sharp) shows only while it is on
+//   4   (AMENDED D421 part 3: was "Brush: the item says whether the brush is on and turns it on and off; the brush strip shows only while it is on"; the plan removes
+//       the item and the strip) Sculpt mode, the first item, says whether Sculpt is on and turns it on and off; the Sculpt strip (tool, radius, sharp under "more")
+//       shows only in Sculpt, and in Sculpt Build's commands that place or close are disabled with the reason "in Sculpt"
 //   5   Close the loop from Build starts the close as the button did (the line says so); on a closed loop it is disabled and does nothing
 //   6   the left side keeps the brief's list, "More shape" folded, and nothing else shows there; the moved controls are still in the panel (held, out of sight)
 //   7   the selection box shows only with a selection (and while a delete it started is previewed)
@@ -111,14 +113,14 @@ const pieces = (P) => P.shell.getState().history.present.pieces.length;
 
 test('row 1: Build lists its items in the brief\'s order, in contract M\'s shapes', async () => {
   const P = await mountPanel(), list = P.build();
-  assert.deepEqual(list.filter((i) => i.label).map((i) => i.label), ['Straight', 'Level', 'To floor', 'Turn by…', 'Turn to grid…', 'Sharp corner…', 'Jump', 'Brush', 'Close the loop']);
+  // AMENDED D421 part 3: no "Brush" between Jump and Close the loop (the plan removes it), and Sculpt mode first (the switch that replaced it: the bar had no room)
+  assert.deepEqual(list.filter((i) => i.label).map((i) => i.label), ['Sculpt mode', 'Straight', 'Level', 'To floor', 'Turn by…', 'Turn to grid…', 'Sharp corner…', 'Jump', 'Close the loop']);
   for (const i of list) {
     const shape = i.section !== undefined ? 'section' : i.separator ? 'separator' : typeof i.run === 'function' ? 'run' : typeof i.toggle === 'function' ? 'toggle' : typeof i.panel === 'function' ? 'panel' : 'none';
     assert.notEqual(shape, 'none', `an item of no known shape: ${JSON.stringify(i)}`);
     if (shape === 'toggle') assert.equal(typeof i.checked, 'boolean');
   }
   assert.deepEqual(['Turn by…', 'Turn to grid…', 'Sharp corner…'].map((l) => typeof P.item(list, l).panel), ['function', 'function', 'function'], 'each … opens a popover');
-  assert.equal(typeof P.item(list, 'Brush').toggle, 'function');
   P.panel.unmount();
   assert.deepEqual(BM.items({ doc: P.doc }), [], 'no panel mounted: Build has nothing to offer (the bar shows it empty, never a dead command)');
 });
@@ -156,16 +158,22 @@ test('row 3: a "…" item opens a popover with today\'s fields and button in the
   P.panel.unmount();
 });
 
-test('row 4: Brush says whether the brush is on and turns it on and off; the brush strip (mode, what, radius, sharp) shows only while it is on', async () => {
-  const P = await mountPanel(), strip = P.byLabel('brush strip');
-  assert.ok(strip, 'there is a brush strip');
-  for (const l of ['brush mode', 'brush channel', 'sharp brush']) assert.ok(strip.all().some((e) => e.attrs['aria-label'] === l), `the strip holds ${l}`);
+// AMENDED D421 part 3 (the rule changed by name: the plan removes Build's "Brush" item and the brush strip's on box, mode and channel; Sculpt is a mode now)
+test('row 4: Sculpt mode turns Sculpt on and off; the Sculpt strip (tool, radius, sharp) shows only in Sculpt, and in Sculpt Build\'s commands that place or close are disabled "in Sculpt"', async () => {
+  const P = await mountPanel(), strip = P.byLabel('sculpt strip');
+  assert.ok(strip, 'there is a Sculpt strip');
+  for (const l of ['sculpt tool', 'sharp brush']) assert.ok(strip.all().some((e) => e.attrs['aria-label'] === l), `the strip holds ${l}`);
   assert.ok(strip.all().some((e) => e.tagName === 'SPAN' && e.textContent === 'radius m'), 'the strip holds the radius');
-  assert.equal(P.item(P.build(), 'Brush').checked, false); assert.ok(P.hiddenEl(strip), 'off: no strip');
-  P.item(P.build(), 'Brush').toggle();
-  assert.equal(P.byLabel('brush on').checked, true, 'the brush is armed'); assert.equal(P.item(P.build(), 'Brush').checked, true); assert.ok(!P.hiddenEl(strip), 'on: the strip shows');
-  P.item(P.build(), 'Brush').toggle();
-  assert.equal(P.byLabel('brush on').checked, false); assert.ok(P.hiddenEl(strip), 'off again: the strip goes');
+  for (const l of ['brush on', 'brush mode', 'brush channel', 'sculpt on']) assert.ok(!P.byLabel(l), `the old ${l} control is gone`);
+  assert.ok(P.hiddenEl(strip), 'Build: no strip');
+  const commands = () => P.build().filter((i) => i.label && i.label !== 'Sculpt mode');
+  assert.ok(commands().every((i) => !i.disabled), 'Build: every command is offered'); assert.equal(P.item(P.build(), 'Sculpt mode').checked, false);
+  P.item(P.build(), 'Sculpt mode').toggle(true);
+  assert.equal(P.shell.getState().sculpt, true, 'the item turns Sculpt on'); assert.equal(P.item(P.build(), 'Sculpt mode').checked, true);
+  assert.ok(!P.hiddenEl(strip), 'Sculpt: the strip shows');
+  for (const i of commands()) assert.deepEqual([i.label, i.disabled, i.title], [i.label, true, 'in Sculpt'], `${i.label} waits in Sculpt`);
+  P.item(P.build(), 'Sculpt mode').toggle(false);
+  assert.equal(P.shell.getState().sculpt, false); assert.ok(P.hiddenEl(strip), 'Build again: the strip goes');
   P.panel.unmount();
 });
 

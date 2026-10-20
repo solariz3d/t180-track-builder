@@ -413,21 +413,26 @@ test('the cup cell follows the cup field inside its input handler, and a cup the
   P.panel.unmount();
 });
 
+// AMENDED D421 part 3: the brush's channel select is gone (the plan removes it; Sculpt's tools are named by the hand). The brush's channel list is now Smooth's, in the
+  // Sculpt strip, and the Cup tool is the cup's drag; the title is kept, since core-mutation's U8 names this test
 test('the brush\'s channel list gains cup (channel c), with a drag rate in degrees', async () => {
   const P = await mountPanel();
-  const sel = P.root.all().find((e) => e.attrs['aria-label'] === 'brush channel'), mode = P.root.all().find((e) => e.attrs['aria-label'] === 'brush mode');
-  mode.value = 'rate'; mode.onchange();
+  const sel = P.root.all().find((e) => e.attrs['aria-label'] === 'smooth channel'), tools = P.root.all().find((e) => e.attrs['aria-label'] === 'sculpt tool');
+  assert.ok(tools.children.some((o) => o.value === 'cup' && o.textContent === '7 Cup'), 'the Cup tool, key 7');
   const opt = sel.children.find((o) => o.value === 'c');
-  assert.ok(opt, `a cup channel in the rate brush's list (got ${sel.children.map((o) => o.value).join(', ')})`);
+  assert.ok(opt, `a cup channel in the brush's list (got ${sel.children.map((o) => o.value).join(', ')})`);
   assert.equal(opt.textContent, 'cup');
   const { PER_PX } = require('../core/panel.js'); assert.ok(PER_PX.c > 0 && PER_PX.c < 1, 'degrees per pixel of drag');
   P.panel.unmount();
 });
 
+// AMENDED D421 part 3: as the row above, Smooth's channel list; the Edge tool's "which edge" and the Tube sweep tool under "more" are their drags. The old last check
+  // ("not in the local brush") went with the mode select: there is no local brush list any more
 test('the brush\'s channel list offers the cross-section channels e, s and t (D225), each with a drag rate', async () => {
   const P = await mountPanel();
-  const sel = P.root.all().find((e) => e.attrs['aria-label'] === 'brush channel'), mode = P.root.all().find((e) => e.attrs['aria-label'] === 'brush mode');
-  mode.value = 'rate'; mode.onchange();
+  const sel = P.root.all().find((e) => e.attrs['aria-label'] === 'smooth channel');
+  assert.deepEqual(P.root.all().find((e) => e.attrs['aria-label'] === 'which edge').children.map((o) => o.value), ['edge', 'edge-right', 'edge-start'], 'the Edge tool changes the left edge, the right or the edge start');
+  assert.ok(P.root.all().find((e) => e.attrs['aria-label'] === 'other sculpt tool').children.some((o) => o.value === 'sweep'), 'Tube sweep is a tool under more');
   const { PER_PX } = require('../core/panel.js');
   for (const [ch, name] of [['e', 'edge angle'], ['s', 'edge start'], ['t', 'tube sweep']]) {
     const opt = sel.children.find((o) => o.value === ch);
@@ -435,8 +440,6 @@ test('the brush\'s channel list offers the cross-section channels e, s and t (D2
     assert.equal(opt.textContent, name);
     assert.ok(PER_PX[ch] > 0, `a drag rate for ${ch}`);
   }
-  mode.value = 'local'; mode.onchange();
-  assert.ok(!sel.children.some((o) => ['e', 's', 't'].includes(o.value)), 'not in the local brush (height / sideways only)');
   P.panel.unmount();
 });
 

@@ -3,9 +3,9 @@
 //
 //   EXTEND at the build head: keep going (no handle), or turn / climb / bank / cup / width targets over a length. Hovering the button
 //          shows the ghost (the preview's 't180-ghost' candidate), so what a click adds is seen before it is added.
-//   BRUSH on the preview: arm it, then drag on the track. The pick is the preview's ('t180-pick'); the drag's vertical distance is
-//          the change at the brush's centre; one drag is one undo step. The local height/lateral brush (E) is the default when
-//          it is in the build; the rate brush (one channel) is the explicit second mode.
+//   SCULPT on the preview (D421 part 3; the brush, D186, became its tools): in Sculpt mode (Build ▸ Sculpt mode, or Tab) a drag on the track is the tool
+//          picked in the Sculpt strip (Grab, Stretch, Bend, Climb, Twist, Width, Cup, Edge, Smooth; Wall rise and Tube sweep under "more ▾"). The pick is the
+//          preview's ('t180-pick'); the drag's distance is the change at the brush's centre; one drag is one undo step; the wheel or [ ] change the radius.
 //   CLOSE as one click.
 //   THE READOUT (L130): beside Extend's fields, the piece they describe, BEFORE it is placed: its length and the change it makes
 //          in turn, climb and bank (A's src/core/readout.js, candidateReadout), redrawn inside every field's input handler; and on
@@ -31,8 +31,9 @@ const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
-const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, e: 0.2, er: 0.2, s: 0.002, t: 0.5, height: 0.03, lateral: 0.03 });
-const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', e: 'edge angle', er: 'right edge', s: 'edge start', t: 'tube sweep', height: 'height', lateral: 'sideways' });
+// (D421 part 3: length is Stretch's, metres of piece a pixel; smooth is Smooth's strength a pixel)
+const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, e: 0.2, er: 0.2, s: 0.002, t: 0.5, height: 0.03, lateral: 0.03, length: 0.5, smooth: 0.004 });
+const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', e: 'edge angle', er: 'right edge', s: 'edge start', t: 'tube sweep', height: 'height', lateral: 'sideways', length: 'length' });
 const DEG = Math.PI / 180;
 
 /**
@@ -317,7 +318,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   doc.addEventListener('t180-undo-guard', onUndoGuard);
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
-    onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: ghost, onmouseleave: () => { if (!handlesOn.checked || sculptOn.checked) send('t180-ghost-clear'); } });   // with the drag handles on, the ghost stays up: its handles are what you drag
+    onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: ghost, onmouseleave: () => { if (!handlesOn.checked || shell.getState().sculpt) send('t180-ghost-clear'); } });   // with the drag handles on, the ghost stays up: its handles are what you drag
   // D242 item 6, STRAIGHT IN ONE CLICK (the keeper: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
   // "at start" box is ticked. This button extends with turn 0 and climb 0, both reached within the first AT_START_M metres and held there, then puts the boxes back
   // as they were (they are a kept preference, not this button's to change)
@@ -369,39 +370,111 @@ function mount(root, shell, mountOpts = {}) {
   const turnStartTitle = atStart.turn.getAttribute('title');
   const hintNow = () => { const typed = asTyped('turn'); const hint = typed !== '' && Number(typed) === 0 && Number(cornerMode() ? show(shell.headState().kh * 100 / DEG) : shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; atStart.turn.setAttribute('title', hint ? `${turnStartTitle} ${hint}` : turnStartTitle); };
 
-  // BRUSH
-  const mode = el('select', { 'aria-label': 'brush mode' }), channel = el('select', { 'aria-label': 'brush channel' }), radius = num(60, 10, 'brush radius, m');
-  const armed = el('input', { type: 'checkbox', 'aria-label': 'brush on' });
-  // SHARP (E's opt-in, the chair's ruling 2): its spill is declared right here, in the words of E's own SHARP_NOTE
+  // SCULPT (D421 part 3, design §3 and §5, the user's GO 2026-10-20 14:53). Sculpt is a MODE (st.sculpt), set by Build ▸ Sculpt mode (app/core/buildmenu.js) or by Tab; it replaced
+  // the brush's "on" box, its mode and channel selects and D244b's "sculpt (shape only)" box. In Sculpt a press on the road and a drag is the chosen TOOL, named by what the hand does.
+  // The shell resolves a tool to its mode, channel and family (beginBrush's `tool`, pane O, D421 part 2); `mode` and `channel` go beside it as today's brush names them.
+  // A press that moves no more than CLICK_PX is a click, not a drag: no brush opens, so it leaves no step and says nothing, and it selects (app/core/piecesui.js asks
+  // brushedPress()). The brush opens when the press first moves past it, centred where the press was.
+  const ROUTE_CH = new Set(['kh', 'kv', 'length']), LOCAL_CH = new Set(['height', 'lateral']);
+  const familyWords = (ch) => (ROUTE_CH.has(ch) ? 'moves the road after it' : LOCAL_CH.has(ch) ? 'the road after it stays where it is' : 'the road itself does not move');
+  // one row a tool, in the order of the keys 1-9 (app/core/keys.js sculptKey); `axis`: the pointer's direction a drag reads (y: up is more; x: left is more)
+  const TOOLS = Object.freeze([
+    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'drag up or down to lift or sink the road under the brush (Alt at the press: left or right to move it sideways); the road after it stays where it is' }),
+    Object.freeze({ key: 'stretch', label: 'Stretch', tool: 'stretch', channel: 'length', axis: 'y', hint: 'drag up to make the piece under the brush longer, down to shorten it, keeping its bend (Alt at the press: keeping its rate); moves the road after it' }),
+    Object.freeze({ key: 'bend', label: 'Bend', tool: 'bend', channel: 'kh', axis: 'x', hint: 'drag left or right to turn the road harder or straighter here; moves the road after it' }),
+    Object.freeze({ key: 'climb', label: 'Climb', tool: 'climb', channel: 'kv', axis: 'y', hint: 'drag up or down to tilt the road here; for a hill that stays put, use Grab; moves the road after it' }),
+    Object.freeze({ key: 'twist', label: 'Twist', tool: 'twist', channel: 'phi', axis: 'y', hint: 'drag up or down to bank the road here; the road itself does not move' }),
+    Object.freeze({ key: 'width', label: 'Width', tool: 'width', channel: 'w', axis: 'y', hint: 'drag up to widen the road here, down to narrow it; the road itself does not move' }),
+    Object.freeze({ key: 'cup', label: 'Cup', tool: 'cup', channel: 'c', axis: 'y', hint: 'drag up to turn the road\'s edges up here, down to flatten them; the road itself does not move' }),
+    Object.freeze({ key: 'edge', label: 'Edge', tool: 'edge', channel: 'e', axis: 'y', hint: 'drag up or down to change the edge here (which edge: more ▾); the road itself does not move' }),
+    Object.freeze({ key: 'smooth', label: 'Smooth', tool: 'smooth', channel: null, axis: 'y', hint: null }),
+  ]);
+  // under "more ▾": the two tools used less (design §3.5), the edge a drag changes, and the channel Smooth smooths
+  const MORE_TOOLS = Object.freeze({
+    wall: Object.freeze({ key: 'wall', label: 'Wall rise', tool: 'wall', channel: 'r', axis: 'y', hint: 'drag up or down to raise or lower the wall here; the road itself does not move' }),
+    sweep: Object.freeze({ key: 'sweep', label: 'Tube sweep', tool: 'sweep', channel: 't', axis: 'y', hint: 'drag up or down to close the tube more or open it here; the road itself does not move' }),
+  });
+  const EDGE_SIDE = Object.freeze({ edge: 'e', 'edge-right': 'er', 'edge-start': 's' });
+  const SMOOTH_CH = Object.freeze(['kh', 'kv', 'height', 'lateral', 'phi', 'w', 'c', 'e', 'er', 's', 'r', 't']);
+  const toolSel = el('select', { 'aria-label': 'sculpt tool', title: 'what a drag on the road does (keys 1-9; Tab switches Build and Sculpt)' });
+  toolSel.replaceChildren(...TOOLS.map((x, i) => new win.Option(`${i + 1} ${x.label}`, x.key))); toolSel.value = 'grab';
+  const otherTool = el('select', { 'aria-label': 'other sculpt tool', title: 'a tool used less: picking one here takes the place of the tool above until a tool is picked there again' });
+  otherTool.replaceChildren(new win.Option('none', ''), ...Object.values(MORE_TOOLS).map((x) => new win.Option(x.label, x.key))); otherTool.value = '';
+  const edgeSide = el('select', { 'aria-label': 'which edge', title: 'the edge the Edge tool changes' });
+  edgeSide.replaceChildren(new win.Option('left edge', 'edge'), new win.Option('right edge', 'edge-right'), new win.Option('edge start', 'edge-start')); edgeSide.value = 'edge';
+  const smoothCh = el('select', { 'aria-label': 'smooth channel', title: 'what Smooth smooths: the channel of the last tool used, unless you pick another here' });
+  smoothCh.replaceChildren(...SMOOTH_CH.map((c) => new win.Option(CHANNEL_NAMES[c], c))); smoothCh.value = 'phi';
+  const radius = num(60, 10, 'brush radius, m');
+  const radiusNow = () => { const v = Number(radius.value); return radius.value !== '' && v > 0 ? v : 60; };   // an emptied field: the default, not a refusal
+  // SHARP (E's opt-in, the chair's ruling 2): its spill is declared right here, in the words of E's own SHARP_NOTE. D421: "exact size", under "more ▾"
   const sharp = el('input', { type: 'checkbox', 'aria-label': 'sharp brush', title: 'Sharp brush: acts at exactly the size you set by adding finer control points first. It can nudge the track just outside the brush by up to 0.1 mm. Leave it off for an exactly local edit.' });
-  // D244b SCULPT: while it is on, the brush is the value brush on the SHAPE channels only (turn and climb are not offered); the shell refuses anything else by name
-  const sculptOn = el('input', { type: 'checkbox', 'aria-label': 'sculpt on', title: 'Sculpt: reshape a piece that is already placed (bank, cup, width, edge, wall rise, tube sweep) without moving the rest of the track. Select ONE piece, then drag its handles or use the brush. Turn and climb are not offered; the centreline is checked on every step' });
-  const handlesOn = el('input', { type: 'checkbox', 'aria-label': 'drag handles', title: 'drag handles: marks on the ghost of the piece Extend would add (and on the piece you are sculpting); drag one to change its value, Shift for fine steps, Ctrl to snap to round numbers. Off: the ghost shows only while the pointer is on Extend' });
+  const handlesOn = el('input', { type: 'checkbox', 'aria-label': 'drag handles', title: 'drag handles: marks on the ghost of the piece Extend would add (and in Sculpt on the selected run\'s middle piece); drag one to change its value, Shift for fine steps, Ctrl to snap to round numbers. Off: the ghost shows only while the pointer is on Extend' });
   handlesOn.checked = true;
-  const channelsFor = (m) => (sculptOn.checked ? shell.sculptChannels() : m === 'local' ? ['height', 'lateral'] : ['kv', 'kh', 'phi', 'w', 'r', 'c', 'e', 's', 't', 'er']);
-  const fillChannels = () => { channel.replaceChildren(...channelsFor(mode.value).map((c) => new win.Option(CHANNEL_NAMES[c], c))); };
-  mode.replaceChildren(...shell.brushModes().map((m) => new win.Option(m === 'local' ? 'height / sideways (local)' : 'rate (one channel)', m)));
-  mode.onchange = fillChannels; fillChannels();
+  /** The tool a drag is now: { key, label, tool, channel, axis, hint, side? }. */
+  const toolNow = () => {
+    if (otherTool.value && MORE_TOOLS[otherTool.value]) return MORE_TOOLS[otherTool.value];
+    const x = TOOLS.find((y) => y.key === toolSel.value) || TOOLS[0];
+    if (x.key === 'edge') { const side = EDGE_SIDE[edgeSide.value] ? edgeSide.value : 'edge'; return { ...x, tool: side, channel: EDGE_SIDE[side] }; }
+    if (x.key === 'smooth') { const ch = SMOOTH_CH.includes(smoothCh.value) ? smoothCh.value : 'phi'; return { ...x, channel: ch, hint: `drag up to smooth the ${CHANNEL_NAMES[ch]} under the brush (which: more ▾); ${familyWords(ch)}` }; }
+    return x;
+  };
   const stage = doc.getElementById('preview');
   values = stage ? VO.mount(stage, win) : null;
-  let drag = null;
+  const CLICK_PX = 5;   // as app/core/piecesui.js: more than this between press and release is a drag
+  const KNOT_M = 20;    // one knot span (src/core/document.js KNOT_M): what a wheel notch or [ ] changes the radius by
+  let drag = null, brushedPress = false, liveTool = null;
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const down = (e) => {
-    if (!armed.checked || e.button !== 0) return;
-    const [x, y] = rel(e); let hit = null; send('t180-pick', { x, y, reply: (h) => { hit = h; } });
+    brushedPress = false;
+    if (!shell.getState().sculpt || e.button !== 0 || drag || shell.getState().brush) return;
+    const [x, y] = rel(e);
+    if (handles && HD.hitTest(handles.handles(), x, y)) return;   // a handle under the pointer: the handle's drag, not the tool's
+    let hit = null; send('t180-pick', { x, y, reply: (h) => { hit = h; } });
     if (!hit) return;
-    shell.beginBrush({ mode: mode.value, channel: channel.value, s0: hit.s, r: Number(radius.value), sharp: sharp.checked });
-    if (!shell.getState().brush) return;
-    drag = { y, per: PER_PX[channel.value] }; e.preventDefault();
+    const base = toolNow(), T = base.side && e.altKey ? { ...base, ...base.side } : base;
+    drag = { x, y, s0: hit.s, T, keepRate: T.key === 'stretch' && !!e.altKey, axis: T.axis, per: PER_PX[T.key === 'smooth' ? 'smooth' : T.channel], smooth: T.key === 'smooth', delta: 0, open: false }; e.preventDefault();
     if (stage.setPointerCapture && e.pointerId !== undefined) stage.setPointerCapture(e.pointerId);
   };
+  /** The press became a drag: the brush opens on the document as it is now. False (and no drag) when the shell refuses it; its message says why. */
+  const openBrush = () => {
+    const T = drag.T;
+    shell.beginBrush({ tool: T.tool, mode: LOCAL_CH.has(T.channel) ? 'local' : 'rate', channel: T.channel, s0: drag.s0, r: radiusNow(), sharp: sharp.checked, ...(drag.keepRate ? { keepRate: true } : {}) });
+    if (!shell.getState().brush) { drag = null; return false; }
+    if (T.key !== 'smooth' && SMOOTH_CH.includes(T.channel)) smoothCh.value = T.channel;   // Smooth smooths the last tool's channel (design §3.7)
+    liveTool = T; drag.open = true; brushedPress = true;
+    return true;
+  };
+  const deltaAt = (x, y) => { const v = (drag.axis === 'x' ? drag.x - x : drag.y - y) * drag.per; return drag.smooth ? Math.max(0, v) : v; };
   // D235 (nothing coalesced the pointer moves: each one ran a whole brush step, and a closed tube's takes seconds, so the moves queued behind it): at most ONE brushTo per
-  // animation frame, with the LATEST position; the release applies the last position that is still waiting, then ends the drag.
-  let waitingY = null, frame = 0;
-  const flush = () => { frame = 0; if (!drag || waitingY === null) return; const y = waitingY; waitingY = null; shell.brushTo((drag.y - y) * drag.per); };
-  const move = (e) => { if (!drag) return; const [, y] = rel(e); waitingY = y; if (!frame) frame = win.requestAnimationFrame(flush); };
-  const up = () => { if (!drag) return; if (frame) { win.cancelAnimationFrame(frame); frame = 0; } if (waitingY !== null) { const y = waitingY; waitingY = null; shell.brushTo((drag.y - y) * drag.per); } drag = null; shell.endBrush(); };
-  if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); }
+  // animation frame, with the LATEST position; the release applies the last position that is still waiting, then ends the drag. D421: a radius change (the wheel, [ ]) during
+  // the drag goes into the same frame: the new r first (shell.brushRadius, pane O: the brush state's r, re-run from the same base), then the one brushTo
+  let waiting = null, waitingR = null, frame = 0;
+  const step = () => {
+    if (waitingR !== null) { const r = waitingR; waitingR = null; if (typeof shell.brushRadius === 'function') shell.brushRadius(r); }
+    if (waiting !== null) { const [x, y] = waiting; waiting = null; drag.delta = deltaAt(x, y); }
+    shell.brushTo(drag.delta);
+  };
+  const flush = () => { frame = 0; if (!drag || !drag.open || (waiting === null && waitingR === null)) return; step(); };
+  const move = (e) => {
+    if (!drag) return;
+    const [x, y] = rel(e);
+    if (!drag.open && (Math.hypot(x - drag.x, y - drag.y) <= CLICK_PX || !openBrush())) return;
+    waiting = [x, y]; if (!frame) frame = win.requestAnimationFrame(flush);
+  };
+  const up = () => {
+    if (!drag) return;
+    if (!drag.open) { drag = null; return; }   // a click: nothing opened, nothing to end (it selects)
+    if (frame) { win.cancelAnimationFrame(frame); frame = 0; }
+    if (waiting !== null || waitingR !== null) step();
+    drag = null; liveTool = null; shell.endBrush();
+  };
+  /** The radius field to `r` (one knot span at least); during an open drag it is also the drag's, in the next frame. */
+  const setRadius = (r) => { const v = Math.max(KNOT_M, Math.round(r)); radius.value = String(v); if (drag && drag.open) { waitingR = v; if (!frame) frame = win.requestAnimationFrame(flush); } return v; };
+  // the wheel during a drag: one knot span a notch, up wider (Blender's proportional editing; Maya's B-drag). Caught before it reaches the camera (capture, and not passed on)
+  const wheel = (e) => { if (!drag || !drag.open) return; e.preventDefault(); if (e.stopPropagation) e.stopPropagation(); setRadius(radiusNow() + (e.deltaY < 0 ? KNOT_M : -KNOT_M)); };
+  // Esc: the open drag dropped whole, the track as it was before the press (the shell's cancelBrush when it has one; else the whole delta back to 0, which endDrag records as no step)
+  const dropBrush = () => { if (typeof shell.cancelBrush === 'function') shell.cancelBrush(); else { shell.brushTo(0); shell.endBrush(); } };
+  if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); stage.addEventListener('wheel', wheel, { capture: true, passive: false }); }
 
   // DRAG HANDLES (D244) and SCULPT (D244b). The overlay (app/core/handles.js) asks this host what to draw and what a drag means. EXTEND: the handles are on the ghost of the piece the fields describe, and a
   // drag types its value into the matching field (the field's own handler runs, so the ghost, the readout and the cup-or-tube rule follow; nothing is a document edit until Extend). SCULPT: the handles are on
@@ -461,7 +534,7 @@ function mount(root, shell, mountOpts = {}) {
       return { ...G, mode: 'extend+landing', kinds: [...L.kinds, ...G.kinds], free: L.free, base: (k) => (LAND_FIELD[k] ? L.base(k) : G.base(k)), ctx: (k) => (LAND_FIELD[k] ? L.ctx(k) : G.ctx(k)) };
     },
     pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; },
-    begin: (h) => { if (LAND_FIELD[h.kind]) { shell.beginLanding(); landDrag = !!shell.getState().landingDrag; return; } const m = sculptModel(); if (!m) { scrubbing = true; scrubKind = h.kind; } if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
+    begin: (h) => { if (LAND_FIELD[h.kind]) { shell.beginLanding(); landDrag = !!shell.getState().landingDrag; return; } const m = sculptModel(); if (!m) { scrubbing = true; scrubKind = h.kind; } if (m) { shell.beginSculpt({ channel: SCULPT_CH[h.kind], piece: m.info.index, ...(Number.isInteger(m.info.from) && Number.isInteger(m.info.to) ? { from: m.info.from, to: m.info.to } : {}) }); sculptDrag = shell.getState().brush ? { kind: h.kind, base: m.base(h.kind) } : null; } },
     apply: (h, value, mods, final) => {
       if (LAND_FIELD[h.kind]) { if (landDrag) shell.landingTo({ [LAND_FIELD[h.kind]]: value }); return; }
       if (sculptDrag) { const delta = value - sculptDrag.base; shell.sculptTo(h.kind === 'bank' ? delta * HD.DEG : delta); return; }
@@ -470,12 +543,21 @@ function mount(root, shell, mountOpts = {}) {
     },
     end: () => { if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } if (scrubbing) { scrubbing = false; scrubKind = null; ghost(); } },   // the release: the full ghost (built a slice a frame by the preview: D407)
   };
-  sculptOn.onchange = () => {
-    shell.setSculpt(sculptOn.checked);
-    if (sculptOn.checked) { send('t180-ghost-clear'); mode.value = 'rate'; mode.disabled = true; } else { mode.disabled = false; triedDoc = null; }
-    fillChannels();
+  handlesOn.onchange = () => { triedDoc = null; if (!handlesOn.checked && !shell.getState().sculpt) send('t180-ghost-clear'); };
+  // Sculpt's keys (app/core/keys.js sculptKey): Esc drops an open drag (the tool's or a handle's); in Sculpt [ ] the radius and 1-9 the tool. Tab is the shell's own switch
+  const onSculptKey = (e) => {
+    const k = e.detail; if (!k || typeof k.handled !== 'function') return;
+    if (k.act === 'dropDrag') {
+      if (drag) { const open = drag.open; if (frame) { win.cancelAnimationFrame(frame); frame = 0; } waiting = null; waitingR = null; drag = null; liveTool = null; brushedPress = true; if (open) dropBrush(); k.handled(); return; }
+      if (sculptDrag && shell.getState().brush) { sculptDrag = null; dropBrush(); k.handled(); }   // the handle's overlay goes on until its release, which then does nothing
+      return;
+    }
+    if (!shell.getState().sculpt) return;
+    if (k.act === 'radiusDown' || k.act === 'radiusUp') { setRadius(radiusNow() + (k.act === 'radiusUp' ? KNOT_M : -KNOT_M)); k.handled(); return; }
+    const x = k.act && TOOLS[k.act.tool - 1]; if (!x) return;
+    toolSel.value = x.key; otherTool.value = ''; showTool(); k.handled();
   };
-  handlesOn.onchange = () => { triedDoc = null; if (!handlesOn.checked && !sculptOn.checked) send('t180-ghost-clear'); };
+  doc.addEventListener('t180-sculpt-key', onSculptKey);
 
   // JUMP, THE KEEPER'S WAY (D258; the core is src/core/jump.js, E's). The Jump button sits beside Extend: it places the piece the fields describe exactly as Extend would (the take-off: the climb is the
   // fields' own), then a free flight to a default landing (a 60 m straight, 40 m ahead, the same height, lined up). While the landing is the head it is moved by the four handles on it (forward, sideways,
@@ -533,7 +615,7 @@ function mount(root, shell, mountOpts = {}) {
   // spawnsui / pitui and its own file boxes when a panel opens and unmounts them when it closes; this panel no longer makes them (two live copies would each follow the shell)
 
   const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
-  const pieces = PU.mount({ root, stage, shell, win, el, armed: () => armed.checked, send, settings: S });
+  const pieces = PU.mount({ root, stage, shell, win, el, armed: () => brushedPress, send, settings: S });
   // D269: the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
   const bin = doc.getElementById ? doc.getElementById('pieces-bin') : null; if (bin) bin.replaceChildren(...pieces.nodes.library.slice(1));
   // D355 part 2, THE SLIM LEFT SIDE (the keeper: "we can try it, but keep it the same aesthetic as we have it now"; plan_t180_handoff :1382-1387). The commands moved to
@@ -550,11 +632,30 @@ function mount(root, shell, mountOpts = {}) {
     el('div', { class: 'actions' }, jumpBtn, levelBtn, floorBtn, closeBtn));   // Build's commands (their buttons, so a click is what it always was)
   /** A popover's mountFn: today's fields and button into `box`; the function returned puts them back. */
   const lend = (name, box) => { const n = LENT[name]; if (!n) throw new Error(`BAD_LEND: no fields named ${name}`); box.append(n); return () => { if (n.parent !== held && n.parentNode !== held) held.append(n); }; };
-  // THE BRUSH STRIP: mode, what, radius and sharp (and Sculpt, the brush's shape-only kind), shown only while the brush is on. It sits at the top of this column until the bar
-  // has a place for it under the menus (exposed as brushStrip)
-  const brushStrip = el('div', { 'aria-label': 'brush strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('on', armed), field('mode', mode), field('what', channel), field('radius m', radius), field('sharp (may nudge ≤ 0.1 mm outside)', sharp), field('sculpt (shape only)', sculptOn)), sculptHint);
-  const showStrip = () => { brushStrip.style.display = armed.checked || sculptOn.checked ? '' : 'none'; };
-  armed.onchange = showStrip;
+  // THE SCULPT STRIP (D421 part 3; it replaced the brush strip): the tool, the radius, "more ▾", the tool's one-line hint and, during a drag, the change at the centre and the
+  // widening note. Shown only in Sculpt. Its class stays brush-strip: the page moves it under the bar (app/index.html) and lays it out. Exposed as sculptStrip
+  const valueLine = el('p', { class: 'message', 'aria-label': 'sculpt value', style: 'font-size:12px;margin:2px 0' });
+  const moreTools = el('details', { class: 'sculpt-more' }, el('summary', { text: 'more ▾', style: 'cursor:pointer' }),
+    el('div', { class: 'pickers' }, field('exact size (may nudge ≤ 0.1 mm outside)', sharp), field('other tool', otherTool), field('Edge changes', edgeSide), field('Smooth smooths', smoothCh)));
+  const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools), sculptHint, valueLine);
+  const showTool = () => {
+    const si = shell.getState().sculpt ? shell.sculptInfo() : null;
+    sculptHint.textContent = `${toolNow().label}: ${toolNow().hint}. ${si ? `Handles on ${si.id}; one drag is one undo step.` : 'Click a piece to put the handles on it (Shift-click for a run).'}`;
+  };
+  toolSel.onchange = () => { otherTool.value = ''; showTool(); };
+  otherTool.onchange = edgeSide.onchange = smoothCh.onchange = showTool;
+  // the change a drag has made at its centre, in the channel's own unit (the shell holds the delta it applied), and Smooth's strength
+  const UNIT = { kh: [100 / DEG, '°/100 m'], kv: [100 / DEG, '°/100 m'], phi: [1 / DEG, '°'], w: [1, 'm'], r: [1, 'm'], c: [1, '°'], e: [1, '°'], er: [1, '°'], s: [1, ''], t: [1, '°'], height: [1, 'm'], lateral: [1, 'm'], length: [1, 'm'] };
+  const valueWords = (b, T) => {
+    if (!b || !T || !Number.isFinite(b.delta)) return '';
+    if (T.key === 'smooth') return `smoothing the ${CHANNEL_NAMES[T.channel]}, strength ${b.delta.toFixed(2)}`;
+    const [k, unit] = UNIT[T.channel] || [1, ''], v = b.delta * k;
+    return `${CHANNEL_NAMES[T.channel]} ${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}${unit ? ` ${unit}` : ''} at the centre`;
+  };
+  // C's leftover, in P's words (p-d421-review-P_2026-10-20.md §0): a sweep step on a CLOSED tube reaches the core's validator (src/core/document.js, "the tube sweep must stay within
+  // 0 to 360°"), which reads as a fault; the Tube sweep tool says what it is instead
+  const TUBE_SHUT = 'Sculpt can\'t change the sweep of a closed tube: at 360° it is already shut, and a little less would leave a slit between its tips that the car falls through, so open it in Build instead.';
+  const plainMessage = (m) => (m && /BAD_TUBE/.test(m) && /must stay within 0 to 360/.test(m) && toolNow().key === 'sweep' ? TUBE_SHUT : m);
   // "More shape", folded: the channels used less often, each with its "at start" box, and the notes that explain them
   const moreShape = el('details', { class: 'more-shape' }, el('summary', { text: 'More shape', style: 'cursor:pointer;margin:6px 0' }),
     el('div', { class: 'pickers' }, fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
@@ -565,7 +666,7 @@ function mount(root, shell, mountOpts = {}) {
   root.replaceChildren(
     el('h3', { text: 'Equation track' }), info,
     el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
-    brushStrip,
+    sculptStrip,
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, fieldAt('bank °', bank, 'bank')),
     moreShape, roBox,
     jumpNote, landingBox,
@@ -580,9 +681,10 @@ function mount(root, shell, mountOpts = {}) {
     const d = shell.getState().history.present;
     e.detail.reply({ straight: () => straightBtn.onclick(), level: () => levelBtn.onclick(), toFloor: () => floorBtn.onclick(), jump: () => { if (!jumpBtn.disabled) jumpHere(); },
       close: () => { if (!closeBtn.disabled) closeBtn.onclick(); }, canClose: !closeBtn.disabled, closed: !!d.closed,
-      brushOn: !!armed.checked, toggleBrush: () => { armed.checked = !armed.checked; showStrip(); }, lend });
+      sculpt: !!shell.getState().sculpt, setSculpt: (on) => shell.setSculpt(!!on), lend });
   };
   doc.addEventListener('t180:build-request', onBuildRequest);
+  let wasSculpt = false;
   let shownFor = null, lentFrom = null;   // lentFrom: the selected piece whose values the fields hold (2026-10-15)
   const draw = (st) => {
     showHeading();   // the end heading line (Turn to grid)
@@ -614,17 +716,17 @@ function mount(root, shell, mountOpts = {}) {
       lentFrom = one;
     } else if (!sel && lentFrom) { showHead(); lentFrom = null; readout(); }
     info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
-    extendBtn.disabled = jumpBtn.disabled = !!d.closed; closeBtn.disabled = !!d.closed || !d.pieces.length;
+    extendBtn.disabled = jumpBtn.disabled = !!d.closed || !!st.sculpt; straightBtn.disabled = !!st.sculpt; closeBtn.disabled = !!d.closed || !d.pieces.length;
     drawProposal();
-    msg.textContent = st.message || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
+    msg.textContent = plainMessage(st.message) || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
     readout();   // the track changed, so the piece the fields would add changed
     hintNow(); fillLanding();
     if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // D267: a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)
-    // D244b: the Sculpt switch follows the shell, and says what to do next
-    sculptOn.checked = !!st.sculpt;
-    const si = st.sculpt ? shell.sculptInfo() : null;
-    showStrip(); showSel(st);   // D355: the brush strip while the brush (or Sculpt) is on; the selection box only with a selection
-    sculptHint.textContent = !st.sculpt ? '' : si ?`Sculpting ${si.id}: drag its handles (bank, width${si.hasCup ? ', cup' : ''}) or use the brush; one drag is one undo step. The route never moves.` : 'Select ONE piece: click it on the track. Only its shape (bank, cup, width, edge, wall rise, tube sweep) can change; turn and climb are not offered, and the centreline is checked on every step.';
+    // D421 part 3: the Sculpt strip only in Sculpt; entering Sculpt takes Extend's ghost away (its handles are off in Sculpt: ghostModel); the selection box only with a selection
+    if (!!st.sculpt !== wasSculpt) { wasSculpt = !!st.sculpt; if (wasSculpt) send('t180-ghost-clear'); else triedDoc = null; }
+    sculptStrip.style.display = st.sculpt ? '' : 'none'; showSel(st);
+    if (st.sculpt) showTool();
+    valueLine.textContent = st.sculpt && st.brush && liveTool ? [valueWords(st.brush, liveTool), Number.isFinite(st.brush.rUsed) && st.brush.rUsed > st.brush.r + 1e-9 ? `brush widened to ${st.brush.rUsed.toFixed(0)} m (asked ${st.brush.r.toFixed(0)} m)` : ''].filter(Boolean).join(' · ') : '';
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
@@ -649,7 +751,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, brushStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

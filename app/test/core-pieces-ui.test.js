@@ -355,7 +355,13 @@ test('row 10: the panel: a click selects the piece under it and a shift-click th
   P1.click(400, { shiftKey: true }); assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [0, 1], 'the run from the first to the one clicked'); assert.match(P1.text('selection'), /^Selected: p1 to p2 \(2 pieces\)/);
   P1.click(400); assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [1, 1], 'a plain click replaces it'); const kept = shell.getState().selection;
   P1.T.s = 700; P1.pointer('pointerdown', 50, 50); P1.pointer('pointerup', 80, 50); assert.equal(shell.getState().selection, kept, 'a drag (the camera\'s) selects nothing');
-  const armed = P1.input('brush on'); armed.checked = true; P1.click(100); assert.equal(shell.getState().selection, kept, 'with the brush armed the click is the brush\'s'); armed.checked = false;
+  // AMENDED D421 part 3 (was: "with the brush armed the click is the brush's"; the plan removes the "brush on" box): in Sculpt a press that MOVES is the tool's drag and
+  // selects nothing, and a press that does not move is a click, opens no brush and selects
+  shell.setSculpt(true); P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').value = 'twist';
+  const steps0 = shell.getState().history.past.length; P1.T.s = 100; P1.pointer('pointerdown', 50, 50); P1.pointer('pointermove', 50, 20); P1.pointer('pointerup', 50, 20);
+  assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to, shell.getState().history.past.length], [1, 1, steps0 + 1], `Sculpt: the drag was the tool's (one step) and the selection stayed (${shell.getState().message})`);
+  P1.click(100); assert.deepEqual([shell.selectionInfo().from, shell.getState().history.past.length, shell.getState().brush], [0, steps0 + 1, null], 'Sculpt: a click selects, and opens no brush');
+  shell.undo(); shell.setSculpt(false);
   P1.click(null); assert.equal(shell.getState().selection, null, 'a click on nothing clears the selection'); P1.click(100);
   // Save as piece: the name box, the button, the list
   P1.click(400); P1.click(550, { shiftKey: true }); assert.equal(P1.button('Save as piece').disabled, false);
@@ -514,17 +520,17 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   P1.panel.unmount();
 });
 
-test('row 11b: no ghost, no handles; a press ON a handle is the handle\'s and the armed brush and the camera keep a press anywhere else; the cup\'s handles go with the cup field; the switch turns them off', async () => {
+// AMENDED D421 part 3: the brush is Sculpt's (no "brush on" box), so in Build a press is never a brush: on a handle it is the handle's, anywhere else the camera's
+test('row 11b: no ghost, no handles; a press ON a handle is the handle\'s and the camera keeps a press anywhere else (in Build no press is a brush); the cup\'s handles go with the cup field; the switch turns them off', async () => {
   const P1 = await handlePanel(), { shell, S } = P1;
   assert.equal(P1.panel.handles.handles().length, 10);
   S.hide = true; P1.frame(); assert.deepEqual(P1.panel.handles.handles(), [], 'the preview has no ghost: no handles');
   S.hide = false; P1.frame(); assert.equal(P1.panel.handles.handles().length, 10);
-  // a press ON a handle with the brush armed is the handle's (no brush opens); a press elsewhere with it armed is the brush's
-  const armed = P1.input('brush on'); armed.checked = true; const h = handleOf(P1, 'length:0'); P1.T.s = 100;
-  for (const [aria, v] of [['brush mode', 'rate'], ['brush channel', 'phi']]) P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === aria).value = v;   // (the fake select has no value of its own)
-  const on = fire(P1, 'pointerdown', h.screen.x, h.screen.y); assert.equal(on.stopped, true); assert.equal(shell.getState().brush, null, 'on a handle: not the brush\'s'); fire(P1, 'pointerup', h.screen.x, h.screen.y);
-  const lenField = fieldOf(P1, 'length m'); dragBy(P1, 'length:0', 50); assert.equal(lenField.value, '121', 'a whole drag on a handle with the brush armed edits the field'); assert.equal(shell.getState().brush, null); assert.ok(!shell.getState().lastStep || !/brush/.test(shell.getState().lastStep.op), 'and no brush stroke ran');
-  const off = fire(P1, 'pointerdown', 5, 5); assert.equal(off.stopped, false); assert.ok(shell.getState().brush, 'elsewhere: the brush opens'); fire(P1, 'pointerup', 5, 5); armed.checked = false;
+  // a press ON a handle is the handle's (no brush opens); a press elsewhere is not a brush either in Build
+  const h = handleOf(P1, 'length:0'); P1.T.s = 100;
+  const on = fire(P1, 'pointerdown', h.screen.x, h.screen.y); assert.equal(on.stopped, true); assert.equal(shell.getState().brush, null, 'on a handle: not a brush'); fire(P1, 'pointerup', h.screen.x, h.screen.y);
+  const lenField = fieldOf(P1, 'length m'); dragBy(P1, 'length:0', 50); assert.equal(lenField.value, '121', 'a whole drag on a handle edits the field'); assert.equal(shell.getState().brush, null); assert.ok(!shell.getState().lastStep || !/brush/.test(shell.getState().lastStep.op), 'and no brush stroke ran');
+  const off = fire(P1, 'pointerdown', 5, 5); assert.equal(off.stopped, false); fire(P1, 'pointermove', 5, 60); assert.equal(shell.getState().brush, null, 'elsewhere in Build: no brush, the press is the camera\'s'); fire(P1, 'pointerup', 5, 60);
   // cup or tube: a tube in use takes the cup's handles away (its field is disabled)
   const tube = fieldOf(P1, 'tube sweep °'); tube.value = '200'; tube.oninput(); P1.frame(); assert.equal(fieldOf(P1, 'cup °').disabled, true); assert.ok(!P1.panel.handles.handles().some((x) => x.kind === 'cup'), 'no cup handles while a tube is being made'); assert.equal(P1.panel.handles.handles().length, 8);
   // the switch: off clears the ghost and the handles; the Extend button's mouse-leave then clears as it always did
@@ -540,14 +546,15 @@ test('row 11c: the preview mounts AFTER the panel, so the first ask for the ghos
   P1.panel.unmount();
 });
 
-test('row 12: Sculpt through the panel: only the shape channels; ONE selected piece gets its handles; a drag reshapes that piece, is ONE undo step and the centreline does not move; Undo gives it back', async () => {
-  const P1 = await handlePanel(), { shell } = P1, sw = P1.input('sculpt on');
-  const options = () => P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'brush channel').children.map((o) => o.value);
-  assert.ok(options().includes('kh') && options().includes('kv'), 'control: with Sculpt off the brush offers turn and climb');
-  sw.checked = true; sw.onchange(); P1.frame(); assert.equal(shell.getState().sculpt, true);
-  assert.deepEqual(options().sort(), ['c', 'e', 'er', 'phi', 'r', 's', 't', 'w'], 'Sculpt on: the shape channels only (er, the right edge: 2026-10-12)'); assert.equal(P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'brush mode').disabled, true);
-  assert.deepEqual(P1.panel.handles.handles(), [], 'Sculpt on, nothing selected: no handles (and the Extend ghost is not drawn for them)'); assert.match(P1.text('sculpt hint'), /^Select ONE piece/);
-  P1.click(400); P1.frame(); P1.frame(); assert.equal(shell.sculptInfo().index, 1); assert.match(P1.text('sculpt hint'), /^Sculpting p2: drag its handles \(bank, width\)/);
+// AMENDED D421 part 3 (the rule changed by name: Sculpt is a MODE, set by the top bar's Build | Sculpt or Tab, not a box beside the brush, and its strip offers the
+// tools by what the hand does, not the channels; which channels a tool may change is the shell's, by family, pane O's part 2)
+test('row 12: Sculpt through the panel: the strip offers the tools; ONE selected piece gets its handles; a drag reshapes that piece, is ONE undo step and the centreline does not move; Undo gives it back', async () => {
+  const P1 = await handlePanel(), { shell } = P1;
+  const tools = () => P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').children.map((o) => o.value);
+  shell.setSculpt(true); P1.frame(); assert.equal(shell.getState().sculpt, true);
+  assert.deepEqual(tools(), ['grab', 'stretch', 'bend', 'climb', 'twist', 'width', 'cup', 'edge', 'smooth'], 'the tools, in the order of the keys 1-9');
+  assert.deepEqual(P1.panel.handles.handles(), [], 'Sculpt on, nothing selected: no handles (and the Extend ghost is not drawn for them)'); assert.match(P1.text('sculpt hint'), /Click a piece to put the handles on it/);
+  P1.click(400); P1.frame(); P1.frame(); assert.equal(shell.sculptInfo().index, 1); assert.match(P1.text('sculpt hint'), /Handles on p2/);
   assert.deepEqual(P1.panel.handles.handles().map((h) => h.id), ['bank:1', 'bank:-1', 'width:1', 'width:-1'], 'the legacy piece has no cup, so no cup handles; both sides of the rest');
   // drag the left edge up
   const d0 = shell.getState().history.present, past0 = shell.getState().history.past.length, snap = CLN.snapshot(shell.getState().resolved), phi0 = shell.sculptInfo().values.phi;
@@ -559,8 +566,8 @@ test('row 12: Sculpt through the panel: only the shape channels; ONE selected pi
   // a width drag from the right edge, outward, widens it; then Undo twice gives the original back
   const w0 = shell.sculptInfo().values.w; dragBy(P1, 'width:-1', 20); P1.frame(); assert.ok(shell.sculptInfo().values.w > w0 + 0.5, `width grew: ${w0} to ${shell.sculptInfo().values.w}`);
   assert.equal(CLN.pathMoved(snap, shell.getState().resolved), null); shell.undo(); shell.undo(); assert.equal(shell.getState().history.present, d0, 'Undo gives back the very same document');
-  // turn off: the shell and the brush go back
-  sw.checked = false; sw.onchange(); P1.frame(); assert.equal(shell.getState().sculpt, false); assert.ok(options().includes('kh'), 'the turn brush is offered again'); assert.deepEqual(P1.panel.handles.handles().length > 0, true, 'the Extend handles are back');
+  // back to Build: the Extend handles come back
+  shell.setSculpt(false); P1.frame(); assert.equal(shell.getState().sculpt, false); assert.deepEqual(P1.panel.handles.handles().length > 0, true, 'the Extend handles are back');
   P1.panel.unmount();
 });
 
@@ -688,7 +695,7 @@ test('row 14e (D278): a hover on Jump shows the jump ghost with no Extend handle
   P1.button('Jump').onmouseenter(); settle(); assert.deepEqual(idsOf(), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'a jump\'s ghost carries none of Extend\'s handles');
   P1.button('Jump').onmouseleave(); settle(); assert.equal(idsOf().length, 14, 'the Extend handles come back with the ghost gone');
   // sculpt: the landing is not a sculpt target; the handles are the selected piece\'s or none
-  P1.input('sculpt on').checked = true; P1.input('sculpt on').onchange(); settle(); assert.ok(!idsOf().some((i) => i.startsWith('land')), 'no landing arrows while sculpting');
+  shell.setSculpt(true); settle(); assert.ok(!idsOf().some((i) => i.startsWith('land')), 'no landing arrows while sculpting');   // AMENDED D421 part 3: the mode, not the removed "sculpt on" box
   P1.panel.unmount();
 });
 
@@ -980,7 +987,7 @@ function followMark(P1, id, n, step, dt, extra = {}) {
   return out;
 }
 async function sculptPanel() {
-  const P1 = await handlePanel(), sw = P1.input('sculpt on'); sw.checked = true; sw.onchange(); P1.frame(); P1.click(400); P1.frame(); P1.frame(); return P1;
+  const P1 = await handlePanel(); P1.shell.setSculpt(true); P1.frame(); P1.click(400); P1.frame(); P1.frame(); return P1;   // AMENDED D421 part 3: the mode, not the removed "sculpt on" box
 }
 test('row 16 (D335): a steady bank drag on a placed piece\'s sculpt mark, the pointer following the mark as the road rolls, rises all the way, lands on 180 and never goes back (the axis fixed at the grab stalled it near 165)', async () => {
   const P1 = await sculptPanel(), v = followMark(P1, 'bank:1', 400, 1, 1);   // 400 px at 1 px a millisecond: a fast, steady hand
