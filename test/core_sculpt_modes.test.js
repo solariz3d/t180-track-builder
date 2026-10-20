@@ -133,3 +133,47 @@ test('the brush always reports the radius it used (the default widens, and says 
   assert.ok(res.radiusUsed > 5); assert.match(res.note, /widened from 5 m/);
   assert.equal(S.brush(OPEN, { mode: 'value', channel: 'w', s0: 2050, r: 100, delta: 1 }).radiusUsed, 100);
 });
+// ── D421 (the user, 2026-10-20 01:32: "brush mode froze the program"): THE BRUSH STEP FITS A FRAME. A drag reruns the brush on its base document at every
+// step; the hill and the swerve find their peak by reading the channel every 0.25 m over the window, and each reading used to segment the WHOLE track again
+// (pieceOffsets through toSegments, uncached): 962 segmentations a step, 3.4 s on a 2 km track and 21 s on 10 km at the default 60 m radius (C's D421 hand-back §1)
+const { extend: EXT } = require('../src/core/extend.js');
+const FRAME_MS = 6.9;   // one frame at 144 Hz (the preview-at-refresh-rate rule)
+// the row's bar is three frames: measured alone a warm step is about 2 ms on 10 km, but with 18 test files running beside it 10.7 to 11.4 ms (C's D421 run), and a
+// row that fails whenever a suite shares the machine teaches people to ignore it. Three frames still catches the freeze (seconds) and a brush with no segment cache (88 ms)
+const STEP_BAR_MS = 3 * FRAME_MS;
+const longTrack = (n) => { let d = extend0(); for (let i = 0; i < n; i++) d = EXT(d, { length: 200, transition: 40, targets: { kh: (i % 2 ? -1 : 1) / 400 } }); return d; };
+const extend0 = () => EXT(D.createDoc('d421'), { length: 200, family: 'bowl' });
+const msOf = (f) => { const t = process.hrtime.bigint(); f(); return Number(process.hrtime.bigint() - t) / 1e6; };
+test('D421a: a hill and a swerve brush step fits three frames (one alone) on a 2 km and a 10 km track (warm), and the first, cold step stays under 100 ms', () => {
+  for (const [name, n] of [['2 km', 9], ['10 km', 49]]) for (const mode of ['hill', 'swerve']) {
+    const doc = longTrack(n);
+    assert.ok(Object.isFrozen(doc.pieces[0]), 'control: the core returns frozen pieces, as the shell holds them');
+    const s0 = doc.pieces.length * 100, runs = [];
+    for (let run = 0; run < 3; run++) {   // a case passes when any of its runs does, so a seat running beside it does not fail the row
+      const base = run ? longTrack(n) : doc;   // pieces the brush has never seen: the first step is cold
+      const cold = msOf(() => S.brush(base, { mode, s0, r: 60, delta: 1 }));
+      if (cold >= 1000) { runs.push({ cold: +cold.toFixed(0), warm: 'not run: a cold step of a second or more is no seat\'s noise' }); break; }
+      const warm = [2, 3, 4].map((k) => msOf(() => S.brush(base, { mode, s0, r: 60, delta: k }))).sort((a, b) => a - b)[1];
+      runs.push({ cold: +cold.toFixed(1), warm: +warm.toFixed(2) });
+      if (cold < 100 && warm <= STEP_BAR_MS) break;
+    }
+    assert.ok(runs.some((x) => x.cold < 100 && x.warm <= STEP_BAR_MS), `${name} ${mode} at r 60: a step must fit ${STEP_BAR_MS.toFixed(1)} ms warm (three frames at 144 Hz) and 100 ms cold; runs ${JSON.stringify(runs)}`);
+  }
+});
+test('D421b: the peak scan finds the same peak as reading the whole track again at every 0.25 m, so the brushed document is bit for bit the same', () => {
+  const offsOld = (d) => { const len = new Map(); for (const g of toSegmentsUncached(d)) len.set(g.id, (len.get(g.id) || 0) + g.length); let o = 0; return d.pieces.map((P) => { const x = o; o += len.get(P.id) || 0; return x; }); };
+  const valueOld = (d, ch, s) => { const off = offsOld(d); let p = -1; d.pieces.forEach((P, i) => { if (P.type === 'road' && s >= off[i] && s <= off[i] + P.length) p = i; }); if (p < 0) throw new D.CoreError('BAD_BRUSH', 'no road'); return D.channelAt(d.pieces[p], ch, s - off[p]).v; };
+  const doc = longTrack(3);
+  for (const [mode, ch] of [['hill', 'h'], ['swerve', 'l']]) for (const [s0, r] of [[400, 60], [200, 20], [799, 90]]) {   // 200 and 799: the window over a joint, and at the end of the track
+    const unit = S.sculpt(doc, { channel: ch, s0, r, delta: 1 }), ru = unit.radiusUsed;
+    let got = 0; for (let s = Math.max(0, s0 - ru); s <= s0 + ru; s += 0.25) { let v; try { v = valueOld(unit.doc, ch, s) - valueOld(doc, ch, s); } catch (e) { continue; } if (Math.abs(v) > Math.abs(got)) got = v; }
+    const want = S.sculpt(doc, { channel: ch, s0, r, delta: 3 / got }).doc, res = S.brush(doc, { mode, s0, r, delta: 3 });
+    assert.deepEqual(res.doc, want, `${mode} at ${s0} m, r ${r}: the same document as the per-sample scan gives`);
+    assert.deepEqual(S.pieceOffsets(res.doc), offsOld(res.doc), `${mode} at ${s0} m: the offsets of the brushed document are the uncached ones`);
+  }
+  // an unfrozen document (one read from a file, say) is converted afresh, never from the cache: its pieces could be written in place
+  // (piece 0 is a straight with every channel constant, so stretching its knots with its length keeps every joint C1)
+  const loose = JSON.parse(JSON.stringify(doc)); S.pieceOffsets(loose); const P0 = loose.pieces[0]; P0.knots = P0.knots.map((k) => k * 1.25); P0.length *= 1.25;
+  assert.deepEqual(S.pieceOffsets(loose), offsOld(loose), 'a piece written in place after a first read: the offsets follow it');
+});
+const toSegmentsUncached = (d) => require('../src/core/adapter.js').toSegments(d);
