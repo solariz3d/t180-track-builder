@@ -13,7 +13,10 @@
 //     uniform vec3 uSkyA, uSkyB, uSkyC;        the skin's --sky-a, --sky-b, --sky-c, each falling back to --sky
 //     uniform float uPx;                       D410: the angle, in radians, one device pixel spans at the middle of the view (2 |up| / height), for a
 //                                              point or an edge drawn a pixel wide at any window size; a page that draws a style itself may leave it 0
-//   The source may define helpers of its own; prefix their names with the style (sun_, prism_, caustics_, aurora_), so two never clash.
+//   and its varying:
+//     varying vec3 vRay;                       D416: the pixel's ray before normalising, the unit forward plus the screen offset, so 1 / dot(vRay, vRay) is
+//                                              cos^2 of the angle off the view's axis (the night styles size a point by uPx * pow(dot(vRay, vRay), -0.75))
+//   The source may define helpers of its own; prefix their names with the style (sun_, prism_, caustics_, aurora_, city_, river_), so two never clash.
 //   A module that cannot build its sky throws from source(): the renderer compiles a style when setTheme names it, so it fails loudly there.
 //   TWO GLSL RULES (D391; made exact in D393 from A's review 7), checked on every source by contractProblems below, so a style breaking one is refused.
 //   Exactly what the check refuses (comments are skipped):
@@ -24,10 +27,10 @@
 //       sin(dot(dir, axis) * k)) is not refused.
 'use strict';
 
-const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city']);   // D405: city, Skyline Night's
+const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']);   // D405: city, Skyline Night's; D416: river, Glass's (prism stays a style)
 // each required by name, written out: the page's loader (app/lib/cjs.js) fetches only the requires it can read in the source. Requiring a module costs
 // nothing until its source() is called, so a stub that is not built yet throws only when a skin names it.
-const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js'), city: require('./city.js') };
+const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js'), city: require('./city.js'), river: require('./river.js') };
 
 /** D391: every way a style's GLSL breaks the two rules above, as readable lines (empty: it keeps them). Comments are not code, so they are skipped. */
 function contractProblems(style, src) {
