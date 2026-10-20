@@ -174,7 +174,9 @@ function mount(stage, win, shell, host) {
   const onMove = (e) => {
     const [x, y] = rel(e);
     if (drag) { waiting = { x, y }; if (!frameReq) frameReq = win.requestAnimationFrame(flush); return; }
-    const h = host.yieldTo && host.yieldTo(x, y) ? null : hitAt(x, y);
+    // D421 part 5: a sculpt drag owns the pointer, so no mark can be grabbed and none is looked for (spawnsInfo builds the whole lap's path for each new track: the drag's every step)
+    if (state().brush) { if (hovering) { stage.style.cursor = ''; hovering = false; } return; }
+    const h =host.yieldTo && host.yieldTo(x, y) ? null : hitAt(x, y);
     if (h) { stage.style.cursor = 'grab'; hovering = true; } else if (hovering) { stage.style.cursor = ''; hovering = false; }
   };
   const onUp = (e) => {

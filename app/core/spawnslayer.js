@@ -54,16 +54,18 @@ function mount(stage, shell, win) {
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3';
   stage.append(canvas);
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
-  let raf = 0, sized = '', drawn = [], items = [], forDoc = null, forResolved = null;
+  let raf = 0, sized = '', drawn = [], items = [], forDoc = null, forResolved = null, stale = false;
+  // D421 part 5 (C's profile, p-d421-freeze-C_2026-10-20.md §5: 778 ms of a 16-step drag on 10 km): spawnsInfo builds the whole lap's path, so a change only marks the marks
+  // stale and the next frame asks; while a sculpt drag is open (st.brush) they stay those of the track as the drag began, and the frame after the release asks, not the pointer-up
   const refresh = (st) => {
     if (st.history.present === forDoc && st.resolved === forResolved) return;
-    forDoc = st.history.present; forResolved = st.resolved;
-    const d = st.history.present;
-    items = marks(shell.spawnsInfo({ auto: true }));   // D285: the automatic start too, so there is a line, a pack and a hotlap to grab (app/core/spawndrag.js)
+    forDoc = st.history.present; forResolved = st.resolved; stale = true;
   };
+  const restale = () => { if (!stale || shell.getState().brush) return; stale = false; items = marks(shell.spawnsInfo({ auto: true })); };   // D285: the automatic start too, so there is a line, a pack and a hotlap to grab (app/core/spawndrag.js)
   const unsub = shell.subscribe(refresh); refresh(shell.getState());
   const frame = () => {
     raf = win.requestAnimationFrame(frame);
+    restale();
     if (!canvas.isConnected && stage.isConnected !== false) stage.append(canvas);   // the preview's mount clears #preview after the panel mounted
     const W = stage.clientWidth, H = stage.clientHeight, ctx = canvas.getContext ? canvas.getContext('2d') : null; if (!ctx) return;
     const dpr = win.devicePixelRatio || 1, key = `${W}x${H}@${dpr}`;
@@ -95,7 +97,7 @@ function mount(stage, shell, win) {
     }
   };
   raf = win.requestAnimationFrame(frame);
-  return { drawn: () => drawn.slice(), items: () => items.slice(), unmount() { unsub(); win.cancelAnimationFrame(raf); canvas.remove(); } };
+  return { drawn: () => drawn.slice(), items: () => { restale(); return items.slice(); }, unmount() { unsub(); win.cancelAnimationFrame(raf); canvas.remove(); } };
 }
 
 module.exports = { slotCorners, marks, mount };

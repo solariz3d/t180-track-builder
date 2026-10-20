@@ -160,7 +160,7 @@ function mount(stage, shell, win) {
     }
     return out;
   };
-  let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true, gripView = false;
+  let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true, gripView = false, heldReads = null;
   // D242: the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
   let pointer = null, pickedFor = null, hoverId = null;
   const onPointer = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; pointer = { x: e.clientX - r.left, y: e.clientY - r.top }; };
@@ -203,7 +203,9 @@ function mount(stage, shell, win) {
       // keyed by the SEGMENTS, which are a new array on every change: the preview extends its path object IN PLACE, so keyed by
       // the path the anchors stayed the first piece's forever (found in the real window, L130: 1 label for 5 pieces)
       if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; pickedFor = undefined; }   // D242: a new track: the piece under a still pointer is asked again
-      const reads = shell.pieceReadouts ? shell.pieceReadouts() : [], VP = M.viewProj(view.pose, W / H);
+      // D421 part 5 (C's profile, p-d421-freeze-C_2026-10-20.md §5: 485 ms of a 16-step drag on 10 km): while a sculpt drag is open (st.brush) the labels keep the readouts of the track as
+      // the drag began (the strip shows the value being dragged); the first frame after the release reads the let-go track
+      const reads = st.brush && heldReads ? heldReads : (heldReads = shell.pieceReadouts ? shell.pieceReadouts() : []), VP = M.viewProj(view.pose, W / H);
       const toScreen = (p) => { const c = M.apply(VP, p); return c[3] > 0 ? { x: (c[0] / c[3] * 0.5 + 0.5) * W, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * H, z: c[2] / c[3] } : null; };
       // the head's keep-out: its marker (look.js headMarker: max(3 m, 2% of the camera's distance)) projected, and never under 24 px
       let head = null, hp = null;
