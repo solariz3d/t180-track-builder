@@ -1,4 +1,5 @@
-// sky/prism.js: the 'prism' sky (D384 widened), Glass's cold clear night, the quietest of the skies. The contract is in app/preview/sky/index.js.
+// sky/prism.js: the 'prism' sky (D384 widened), a cold clear night, the quietest of the skies; Glass's until D416 (Glass now names the river,
+// sky/river.js), and still a style. The contract is in app/preview/sky/index.js.
 // By elevation: the horizon (--sky-b, held near the skin's fog for the first ten degrees) darkening through the skin's sky (--sky) to the zenith (--sky-a).
 // A sparse field of pin-point stars (--sky-c), each about one device pixel across and each its own brightness, with a faint twinkle, fading out toward
 // the horizon as real stars do through the air. A pale, cold moon with a crisp limb, a faint face and a halo. Low on the horizon, a thin band of light
@@ -24,8 +25,11 @@ vec3 prism_face(float face, vec2 uv) {
   if (face < 4.5) return vec3(uv.x, uv.y, 1.0);
   return vec3(uv.x, uv.y, -1.0);
 }
-// the angle of one device pixel (the pass's uPx); a pass that sends none (a test page of its own) gets a pixel of a 2560 x 1440 screen at 60 degrees
-float prism_px() { return uPx > 0.0 ? uPx : 0.0008; }
+// the angle of one device pixel HERE: the pass's uPx (at the middle of the view; a page that sends none gets a pixel of a 2560 x 1440 screen at 60
+// degrees) times cos^1.5 of the angle off the view's axis (vRay is the unit forward plus the screen offset, so dot(vRay, vRay) = 1 / cos^2). A flat
+// screen spreads an angle over 1 / cos^2 as many pixels outward from its middle and 1 / cos across, so a star sized in uPx alone grew to about 2.4 px
+// at a 2560 x 1440 corner; at cos^1.5 its spot covers the same area of screen everywhere (about 1.6 px by 1.0 at a corner), never under a pixel (D416)
+float prism_px() { return (uPx > 0.0 ? uPx : 0.0008) * pow(dot(vRay, vRay), -0.75); }
 // the stars: one chance of a star per cell of a grid on each cube face, set in the middle half of its cell; each pixel sums the stars of the four cells
 // nearest it (its own and the three on the side it is nearer). A star is a cone 1.25 px in radius, so it reaches past its own cell only when a quarter
 // cell is under 1.25 px (a window under about 600 px tall), and the four cells still hold it then

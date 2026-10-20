@@ -1,6 +1,7 @@
 // theme-mutation.test.js: node --test app/test/theme-mutation.test.js
 // D381 part 2a (pane B): the skin pick and the token reader, mutated; D384 part 1 (pane B): the sky pass too (S1-S13, run against sky.test.js).
 // D410 (pane B): Glass's crisp sky (P1-P4, run against sky-prism-crisp.test.js; P2-P4 skip where there is no Chrome, as that file's rows do).
+// D416 (pane B): every night sky at the screen's own pixels (P5-P12; that file is sky-crisp.test.js now, every night style's rows at DPR 1 and 1.5).
 // Each mutation copies app/ (all but its tests, plus theme.test.js and sky.test.js with its fixture), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED theme.test.js there. "Applied" means the patch text was
 // found exactly once; "caught" means the named test FAILED on the mutant. A CONTROL runs the unmutated copy first. The originals are never touched.
 'use strict';
@@ -49,17 +50,26 @@ const MUTATIONS = [
   { id: 'S11 reduced motion still drifts', test: 'sky.test.js', file: 'preview/preview.js', from: '(still && still.matches ? 0 : t / 1000)', to: '(t / 1000)', caughtBy: 'the drift stops under prefers-reduced-motion' },
   { id: 'S12 the preview hands the sky no time', test: 'sky.test.js', file: 'preview/preview.js', from: ', time: skyTime(t) });', to: ' });', caughtBy: 'the drift stops under prefers-reduced-motion' },
   { id: 'S13 Skyline names no sky', test: 'sky.test.js', file: 'themes/skyline.css', from: '--sky-style: sun;', to: '', caughtBy: 'the skin names its sky' },
-  { id: 'S14 Glass names no sky (D384 widened)', test: 'sky.test.js', file: 'themes/glass.css', from: '--sky-style: prism;', to: '', caughtBy: 'Glass names the prism sky' },
+  { id: 'S14 Glass names no sky (D384 widened; D416: the river)', test: 'sky.test.js', file: 'themes/glass.css', from: '--sky-style: river;', to: '', caughtBy: 'Glass names the river sky' },
   // CHANGED D405: the registry has city too; the anchor follows the line
-  { id: 'S15 the registry leaves prism out (D384 widened)', test: 'sky.test.js', file: 'preview/sky/index.js', from: "['none', 'sun', 'prism', 'caustics', 'aurora', 'city']", to: "['none', 'sun', 'caustics', 'aurora', 'city']", caughtBy: 'Glass names the prism sky' },
+  { id: 'S15 the registry leaves prism out (D384 widened)', test: 'sky.test.js', file: 'preview/sky/index.js', from: "['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']", to: "['none', 'sun', 'caustics', 'aurora', 'city', 'river']", caughtBy: 'Glass names the river sky' },
   // D398: the sky pass's one-step dither (the banding itself is measured in headless Chrome by sky-dither.test.js, which this harness does not copy)
   { id: 'S16 the sky pass does not dither (D398)', test: 'sky.test.js', file: 'preview/renderer.js', from: 'clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0)', to: 'c', caughtBy: 'D398: the shared sky pass dithers' },
   { id: 'S17 Skyline Night names no sky (D405)', test: 'sky.test.js', file: 'themes/skyline-night.css', from: '--sky-style: city;', to: '', caughtBy: 'D405: Skyline Night names the city sky' },
-  // D410: Glass's sky is crisp (app/test/sky-prism-crisp.test.js; rows 1, 2 and 5 draw in headless Chrome, so those mutants need it)
-  { id: 'P1 the sky pass sends no uPx', test: 'sky-prism-crisp.test.js', file: 'preview/renderer.js', from: "px: u('uPx')", to: 'px: null', caughtBy: 'row 3' },
-  { id: 'P2 the moon\'s limb fades over 0.020 rad again', test: 'sky-prism-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'float lw = 1.5 * prism_px();', to: 'float lw = 0.010;', caughtBy: 'row 2' },
-  { id: 'P3 a star is the old gaussian', test: 'sky-prism-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'max(0.0, 1.0 - length(dd) / (1.25 * prism_px()))', to: 'exp(-dot(dd, dd) / (2.0 * 0.0020 * 0.0020))', caughtBy: 'row 1' },
-  { id: 'P4 the band has no filaments', test: 'sky-prism-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: '(0.6 + 0.4 * toward) * fil;', to: '(0.6 + 0.4 * toward);', caughtBy: 'row 5' },
+  // D410: Glass's sky is crisp (app/test/sky-crisp.test.js since D416, sky-prism-crisp.test.js before; rows 1, 2, 4, 5 and 6 draw in headless Chrome, so those mutants need it)
+  { id: 'P1 the sky pass sends no uPx', test: 'sky-crisp.test.js', file: 'preview/renderer.js', from: "px: u('uPx')", to: 'px: null', caughtBy: 'row 3' },
+  { id: 'P2 the moon\'s limb fades over 0.020 rad again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'float lw = 1.5 * prism_px();', to: 'float lw = 0.010;', caughtBy: 'row 2' },
+  { id: 'P3 a star is the old gaussian', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'max(0.0, 1.0 - length(dd) / (1.25 * prism_px()))', to: 'exp(-dot(dd, dd) / (2.0 * 0.0020 * 0.0020))', caughtBy: 'row 1 (prism)' },
+  { id: 'P4 the band has no filaments', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: '(0.6 + 0.4 * toward) * fil;', to: '(0.6 + 0.4 * toward);', caughtBy: 'row 5' },
+  // D416: every night sky at the screen's own pixels, one mutant per new row
+  { id: 'P5 an aurora star is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/aurora.js', from: 'max(0.0, 1.0 - length(dir - sd) / (1.25 * aurora_px()))', to: 'exp(-dot(dir - sd, dir - sd) * 180.0 * 180.0 / (2.0 * 0.13 * 0.13))', caughtBy: 'row 1 (aurora)' },
+  { id: 'P6 a city star is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/city.js', from: 'max(0.0, 1.0 - length(dir - sd) / (1.25 * city_px()))', to: 'exp(-dot(dir - sd, dir - sd) * 150.0 * 150.0 / (2.0 * 0.13 * 0.13))', caughtBy: 'row 1 (city)' },
+  { id: 'P7 a mote is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/caustics.js', from: 'max(0.0, 1.0 - length(rd - sd) / (1.25 * caustics_px()))', to: 'exp(-dot(rd - sd, rd - sd) * 70.0 * 70.0 / (2.0 * 0.12 * 0.12))', caughtBy: 'row 1 (caustics)' },
+  { id: 'P8 a river star is a fixed angle, not a device pixel', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/river.js', from: 'float river_px() { return (uPx > 0.0 ? uPx : 0.0008) * pow(dot(vRay, vRay), -0.75); }', to: 'float river_px() { return 0.0008; }', caughtBy: 'row 1 (river)' },
+  { id: 'P9 the river\'s stars are a tenth as bright', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/river.js', from: 'return col + uSkyC * stars * up;', to: 'return col + uSkyC * stars * up * 0.1;', caughtBy: 'row 6' },
+  { id: 'P10 the prism limb is a fixed angle, not device pixels', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'float lw = 1.5 * prism_px();', to: 'float lw = 1.5 * 0.0008;', caughtBy: 'row 2' },
+  { id: 'P11 Glass names the prism again', test: 'sky.test.js', file: 'themes/glass.css', from: '--sky-style: river;', to: '--sky-style: prism;', caughtBy: 'Glass names the river sky' },
+  { id: 'P12 a river star is sized by the middle pixel everywhere, so it grows toward the screen\'s edges', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/river.js', from: 'return (uPx > 0.0 ? uPx : 0.0008) * pow(dot(vRay, vRay), -0.75);', to: 'return uPx > 0.0 ? uPx : 0.0008;', caughtBy: 'row 1 (river)' },
 ];
 const HAS_CHROME = !!require('./soundrender.js').chromePath();
 
@@ -68,7 +78,7 @@ function runMutant(m) {
   try {
     fs.cpSync(path.join(ROOT, 'app'), app, { recursive: true, filter: (s) => path.relative(path.join(ROOT, 'app'), s) !== 'test' });
     fs.mkdirSync(path.join(app, 'test'));
-    for (const n of ['theme.test.js', 'sky.test.js', 'sky-fixture.js', 'sky-none-cbd7a40.json', 'sky-prism-crisp.test.js', 'soundrender.js']) fs.copyFileSync(path.join(__dirname, n), path.join(app, 'test', n));
+    for (const n of ['theme.test.js', 'sky.test.js', 'sky-fixture.js', 'sky-none-cbd7a40.json', 'sky-crisp.test.js', 'soundrender.js']) fs.copyFileSync(path.join(__dirname, n), path.join(app, 'test', n));
     for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
     const f = path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
@@ -90,8 +100,8 @@ test('control: the unmutated copy passes sky.test.js', () => {
   const r = runMutant({ id: 'control', test: 'sky.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
   assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
 });
-test('control: the unmutated copy passes sky-prism-crisp.test.js (D410)', () => {
-  const r = runMutant({ id: 'control', test: 'sky-prism-crisp.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
+test('control: the unmutated copy passes sky-crisp.test.js (D410, D416)', () => {
+  const r = runMutant({ id: 'control', test: 'sky-crisp.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
   assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
 });
 for (const m of MUTATIONS) {
