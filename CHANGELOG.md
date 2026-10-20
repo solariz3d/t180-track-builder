@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **A brush drag draws only the stretch it is changing.** While the brush was dragged, every step rebuilt the preview of the whole track at a coarser detail, and a closed lap was rebuilt in full each time: about 25 ms a step on a 12-piece track and 60 to 120 ms on a long lap, measured in node. Now the placed road stays as it is during the drag. The stretch under the brush is drawn from a few dozen longer chords instead of thousands of 2 m ones, and when a bend or a climb moves the road after it, that road is moved as one piece instead of being built again. On a closed lap the lap is drawn open while the drag lasts, with a line across the gap. The exact road is built in the frame after you let go, never while the pointer is released, and the drag's last picture stays on screen until it is ready, so nothing blinks. Nothing exported changes: the export and the checks read the exact track, as before. (`app/preview/trackmodel.js`, `app/preview/coarse.js`, `app/preview/preview.js`.) Tests: `app/test/sculpt-drag-model.test.js`, `app/test/preview-speed.test.js` row 4, and `app/test/sculpt-frame.test.js` rows 1 to 4 for the frame times.
+
 ### Fixed
 - **The brush no longer freezes the builder.** Dragging with the brush on (its height or sideways mode, the one it starts in) froze the whole window for seconds at every step: about 3.5 seconds a step on a 2 km track and 21 seconds on 10 km. To find how high to make the hill, the brush read the road every quarter metre across its width, and each reading measured the whole track again from the start. It now measures the track once per step and reuses what has not changed. The longest pause while dragging went from about 3 seconds to under a tenth of a second on a 2 km track, and from 11 seconds to about a quarter of a second on 10 km. The track the brush makes is exactly the same as before.
 

@@ -64,6 +64,7 @@ function coarsen(segments, factor = FACTOR) {
       const blend = g.blend || { from: g.profile, s0: 1, length: 1 };
       c = { ...g, blend, fractions: gridOf(blend.from, g.profile, factor) };
     } else return g;
+    if (Object.isFrozen(g)) Object.freeze(c);   // D421 (A's §1.3): a coarse copy of a frozen segment is frozen too, so trackmodel.js keys it once (its key memo holds frozen segments only)
     m.set(g, c); return c;
   });
 }
@@ -134,4 +135,71 @@ function coarsenRun(segments, factor = CHEAP_FACTOR, { cap = 24 } = {}) {
   });
 }
 
-module.exports = { coarsen, coarsenRun, FACTOR, CHEAP_FACTOR };
+/**
+ * D421 part 4, the SCULPT drag's chord ghost (design §4.3 step 1, D404's method on a placed stretch): the window's 2 m chords MERGED into a few dozen longer ones, so its
+ * ghost is meshed from about the same number of chords however long the window is. Consecutive road chords of one piece merge while the merged one turns the heading by
+ * at most `maxTurn` rad, the pitch by at most `maxTurn`, rolls by at most `maxRoll` and is at most `maxLen` m long; its heading and pitch rates run linearly from the
+ * first chord's start to the last one's end, and its roll from the first's to the last's, as one geometry segment does. The cross-section merges EXACTLY when the chords
+ * share one profile with no blend, or one blend run (the same `from`, profile and length, each chord's s0 where the last one ended: the weight is a function of the run's
+ * own distance); a chain of per-chord blends (a width or rise being brushed, each chord blending from the one before) merges into one blend from the first's start to the
+ * last's end, an approximation of the shape between the chord ends. Anything else (a gap, another piece, a ramp's entry) starts a new chord. The preview only: the
+ * release builds the exact road from the shell's own segments, and nothing here reaches the export.
+ */
+const DEFAULT_MERGE = Object.freeze({ maxTurn: 0.03, maxRoll: 0.05, maxLen: Infinity });
+const startProfile = (g) => (g.blend && g.blend.s0 === 0 && Math.abs(g.blend.length - g.length) < 1e-9 ? g.blend.from : g.profile);
+// profiles and row grids are compared by VALUE (canon: one object per value rounded to 1e-9), since the shell builds a brushed piece's chords afresh each step
+const sameP = (p, q) => p === q || (!!p && !!q && canon(p) === canon(q));
+const sameGrid = (f, g) => f === g || (Array.isArray(f) && Array.isArray(g) && canonGrid(f) === canonGrid(g));
+function mergeable(a, b) {
+  if (!a || !b || a.kind !== 'road' || b.kind !== 'road' || a.id !== b.id || a.part !== b.part || a.word !== b.word) return null;
+  if ((a.heartline || 0) !== (b.heartline || 0) || b.profileIn !== undefined || a.profileIn !== undefined || !sameGrid(a.fractions, b.fractions)) return null;
+  if (!a.blend && !b.blend) return sameP(a.profile, b.profile) ? 'same' : null;
+  if (a.blend && b.blend && sameP(a.blend.from, b.blend.from) && sameP(a.profile, b.profile) && a.blend.length === b.blend.length && Math.abs(b.blend.s0 - (a.blend.s0 + a.length)) < 1e-9) return 'run';
+  if (b.blend && b.blend.s0 === 0 && Math.abs(b.blend.length - b.length) < 1e-9 && sameP(b.blend.from, a.profile)) return 'chain';
+  return null;
+}
+function mergeChords(segments, opts = {}) {
+  if (!Array.isArray(segments)) return segments;
+  const { maxTurn, maxRoll, maxLen } = { ...DEFAULT_MERGE, ...opts }, out = [];
+  let cur = null, first = null, turn = 0, pitch = 0, chained = false;
+  const flush = () => {
+    if (!cur) return;
+    if (cur.length === first.length && cur.last === first) out.push(first);
+    else {
+      const g = cur.last, m = { ...first, length: cur.length, k1: g.k1, kp1: g.kp1, roll1: g.roll1 };
+      if (chained) m.profile = g.profile, m.blend = { from: startProfile(first), s0: 0, length: cur.length };
+      out.push(m);
+    }
+    cur = null; first = null; chained = false;
+  };
+  for (const g of segments) {
+    const dTurn = Math.abs(((g.k0 || 0) + (g.k1 || 0)) / 2 * g.length), dPitch = Math.abs(((g.kp0 || 0) + (g.kp1 || 0)) / 2 * g.length);
+    const how = cur ? mergeable(cur.last, g) : null;   // one way of merging a chord (same, run or chain), never two: a run's start profile is not its from
+    if (how && (!cur.how || cur.how === how) && cur.length + g.length <= maxLen && turn + dTurn <= maxTurn && pitch + dPitch <= maxTurn && Math.abs((g.roll1 || 0) - (first.roll0 || 0)) <= maxRoll) {
+      cur.length += g.length; cur.last = g; cur.how = how; turn += dTurn; pitch += dPitch; if (how === 'chain') chained = true;
+      continue;
+    }
+    flush();
+    if (!g || g.kind !== 'road') { out.push(g); continue; }
+    cur = { length: g.length, last: g }; first = g; turn = dTurn; pitch = dPitch;
+  }
+  flush();
+  return out;
+}
+
+/**
+ * D421 part 4: two segments that would build the same road (their route numbers, their cross-section by value, their row grid and blend), though they are different
+ * objects: the shell converts a brushed PIECE again whole on every step, so the chords of it that the brush did not reach come back equal but new. The drag's frame
+ * trims those off its window (trackmodel.js dragFrame), so the window is what the brush changed, not the whole piece.
+ */
+const ROUTE = ['kind', 'id', 'part', 'word', 'length', 'k0', 'k1', 'kp0', 'kp1', 'roll0', 'roll1', 'heartline', 'speed', 'rampM'];
+function sameSegment(a, b) {
+  if (a === b) return true;
+  if (!a || !b || a.kind === 'gap' || b.kind === 'gap') return false;
+  for (const k of ROUTE) if (a[k] !== b[k]) return false;
+  if (!sameP(a.profile, b.profile) || !sameGrid(a.fractions, b.fractions) || (a.profileIn === undefined) !== (b.profileIn === undefined) || (a.profileIn !== undefined && !sameP(a.profileIn, b.profileIn))) return false;
+  if (!a.blend || !b.blend) return !a.blend && !b.blend && (a.blend === undefined) === (b.blend === undefined);
+  return sameP(a.blend.from, b.blend.from) && a.blend.s0 === b.blend.s0 && a.blend.length === b.blend.length;
+}
+
+module.exports = { coarsen, coarsenRun, mergeChords, sameSegment, FACTOR, CHEAP_FACTOR };

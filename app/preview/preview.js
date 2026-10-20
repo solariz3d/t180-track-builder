@@ -51,7 +51,6 @@ const { gridLines, headMarker } = require('./look.js');
 const { guidePlan, MODES: GRID_MODES, MIRRORS } = require('./guides.js');
 const { resolveLook } = require('./aclook.js');
 const { flowCell } = require('../../src/texture/flow.js');
-const { FACTOR: DRAG_DETAIL } = require('./coarse.js');
 const { previewTextures } = require('../../src/texture/set.js');
 const { normalize, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
@@ -131,9 +130,12 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const lookFor = (scene) => { if (resolvedFor !== scene.materials) { resolved = sigil ? SIGIL_LOOK : resolveLook(scene, set, images); resolvedFor = scene.materials; } return resolved; };
   // D228: a textured EQUATION-CORE cell's coordinates run on the path's own arc length (src/texture/flow.js), the same coordinates the export writes.
   // Batches whose uvs are unchanged keep the very same array (the renderer keeps a GPU buffer per array), so an edit re-uploads only the new pieces.
-  let flowMemo = new WeakMap(), flowSet = null, flowTrack = null, flowOut = null;
+  let flowMemo = new WeakMap(), flowSet = null, flowTrack = null, flowOut = null, dragFor = null, dragFlow = null, dragOut = null;
   const batchesFor = (tr) => {
     if (!tr || !tr.batches) return [];
+    // D421 part 4: a sculpt drag's frame is the placed batches with its window hidden and the road after it moved (trackmodel.js dragFrame); the textured copy of the
+    // placed batches goes through the same composition, once per frame the drag changes
+    if (tr.drag) { const fb = batchesFor(tr.drag.base); if (dragFor !== tr || dragFlow !== fb) { dragOut = fb === tr.drag.base.batches ? tr.batches : tr.drag.compose(fb); dragFor = tr; dragFlow = fb; } return dragOut; }
     if (!set || look !== 'ac' || !tr.mesh) return tr.batches;
     if (flowTrack === tr.batches && flowSet === set) return flowOut;
     if (flowSet !== set) flowMemo = new WeakMap();
@@ -155,10 +157,21 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const FULL_AFTER_MS = 250; let fullTimer = 0;
   const clearFull = () => { if (fullTimer) { (win.clearTimeout || clearTimeout)(fullTimer); fullTimer = 0; } };
   const scheduleFull = () => { clearFull(); fullTimer = (win.setTimeout || setTimeout)(() => { fullTimer = 0; model.setDetail(1); refresh(shell.getState()); }, FULL_AFTER_MS); if (fullTimer && fullTimer.unref) fullTimer.unref(); };
+  // D421 part 4 (CHANGED from D235's coarse rebuild while dragging): while a brush drag is open the model draws the drag's FRAME from the placed track (trackmodel.js
+  // dragFrame: the window as a chord ghost, the road after it moved as one piece, nothing placed rebuilt), and when the drag ends the exact road is built in the NEXT
+  // animation frame, never in the pointer-up handler; the drag's last frame stays on show until then, so nothing blinks. A model that cannot draw a step that way (no
+  // full-detail track to start from, a close or a new start) builds it as before.
+  let exactDue = null;   // the state whose exact build the next frame does
   const refresh = (st) => {
+    if (!st.brush && track && track.how === 'drag') { exactDue = st; return; }   // the release: the exact road in the next frame
+    exactDue = null;
+    refreshNow(st);
+  };
+  const refreshNow = (st) => {
     start = st.resolved && st.resolved.start ? st.resolved.start : null;   // where the first piece starts (the equation core's doc.start)
-    if (st.brush) { clearFull(); model.setDetail(DRAG_DETAIL); } else if (model.detail > 1) scheduleFull();   // dragging: coarse now; not dragging but still coarse: full detail soon
-    try { track = model.update(st.resolved); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; if (track.how !== 'same' && track.how !== 'kept') ghostJob = null; } catch (e) { err = e.message; return; }   // D407: and the exact ghost being built for the old head goes with it
+    if (!st.brush && model.detail > 1) scheduleFull();   // still coarse (a detail set by a caller): full detail soon
+    try { track = model.update(st.resolved, st.brush ? { drag: st.brush } : undefined); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; if (track.how !== 'same' && track.how !== 'kept') ghostJob = null; } catch (e) { err = e.message; return; }   // D407: and the exact ghost being built for the old head goes with it
+    if (track.how === 'drag') return;   // a drag's frame moves nothing the shared track's readers keep: they hear the exact road when the drag ends
     // D242: a close PROPOSAL (the core shell's closeProposal, for the document on screen) is the ghost: the pieces it moves, see-through over the placed ones
     // D240: a middle DELETE's preview (the core shell's deleteProposal) is shown the same way: the track as it would be, see-through over the placed one
     const propOf = (p) => (p && st.history && p.base === st.history.present ? p : null), prop = propOf(st.closeProposal) || propOf(st.deleteProposal);
@@ -316,6 +329,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     frameTimes.push(t); while (frameTimes.length && frameTimes[0] < t - 10000) frameDropped = frameTimes.shift();   // D340: the last 10 s of frame times, for checkLate
     if (heldNetMs > 0 && expectRepeat && held.size) { quietMs += elapsed; if (quietMs > heldNetMs) { held.clear(); down.clear(); shortcutDown.clear(); expectRepeat = false; boost = false; ctrlFly = null; } }   // D336: the net (above onKey)
     if (ghostJob) stepGhostJob();   // D407: the exact ghost, a slice of it this frame
+    if (exactDue) { const s = exactDue; exactDue = null; refreshNow(s); }   // D421 part 4: the exact road after a sculpt drag, in a frame of its own
     const sprint = boost ? boostAt(boostT) : 1; boostT = boost ? boostT + dt : 0;   // the speed THIS frame, then one more frame of Shift held
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {
@@ -349,7 +363,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       }
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: plan && plan.over.length ? plan.over : null, depthLines: plan ? plan.depth : null,
+      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track), depthLines: plan ? plan.depth : null,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, time: skyTime(t) });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
@@ -420,6 +434,15 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       renderer.dispose();
     },
   };
+}
+
+/** The lines drawn over the track: the guides' (the mirror ghost) and, while a sculpt drag leaves a closed lap open, the line across its gap (D421 part 4). Null when none. */
+const overMemo = new WeakMap();
+function overlayOf(plan, track) {
+  const over = plan && plan.over.length ? plan.over : null, gap = track && track.drag && track.drag.gap;
+  if (!gap) return over;
+  let m = overMemo.get(gap); if (!m || m.over !== over) { m = { over, list: [...(over || []), gap] }; overMemo.set(gap, m); }
+  return m.list;
 }
 
 /**
