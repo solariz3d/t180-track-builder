@@ -654,7 +654,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   // C's leftover, in P's words (p-d421-review-P_2026-10-20.md §0): a sweep step on a CLOSED tube reaches the core's validator (src/core/document.js, "the tube sweep must stay within
   // 0 to 360°"), which reads as a fault; the Tube sweep tool says what it is instead
-  const TUBE_SHUT = 'Sculpt can\'t change the sweep of a closed tube: at 360° it is already shut, and a little less would leave a slit between its tips that the car falls through, so open it in Build instead.';
+  const TUBE_SHUT = 'Sculpt can\'t change the sweep of a closed tube: at 360° it is already shut, and a little less would leave a slit between its tips that the car falls through.';
   const plainMessage = (m) => (m && /BAD_TUBE/.test(m) && /must stay within 0 to 360/.test(m) && toolNow().key === 'sweep' ? TUBE_SHUT : m);
   // "More shape", folded: the channels used less often, each with its "at start" box, and the notes that explain them
   const moreShape = el('details', { class: 'more-shape' }, el('summary', { text: 'More shape', style: 'cursor:pointer;margin:6px 0' }),
