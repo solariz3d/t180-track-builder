@@ -38,9 +38,15 @@ function brushControls(c, t, { s0, r, delta }) {
   return { ctrl, changed };
 }
 
+// D421: the adapter's per-piece segment cache (toSegments `cache`, exact: test/core_segcache.test.js), so offsets cost only the pieces that changed. A drag reruns the
+// brush on the SAME base document at every step, and the brushed document shares every untouched piece with it. The cache keys a piece by its identity, so it
+// is used only on a document whose pieces are frozen (every document the core returns, frozen all the way down); an unfrozen one, read from a file say, could
+// be written in place, and is converted afresh.
+const SEG_CACHE = new WeakMap();
 /** Where each piece starts along the adapter's path (the s a user picks on the preview): the sum of its segments' lengths. */
 function pieceOffsets(doc) {
-  const len = new Map(); for (const g of toSegments(doc)) len.set(g.id, (len.get(g.id) || 0) + g.length);
+  const cache = doc.pieces.every(Object.isFrozen) ? SEG_CACHE : null;
+  const len = new Map(); for (const g of toSegments(doc, { cache })) len.set(g.id, (len.get(g.id) || 0) + g.length);
   let off = 0; return doc.pieces.map((P) => { const o = off; off += len.get(P.id) || 0; return o; });
 }
 
@@ -55,9 +61,9 @@ function spanUnder(doc, off, lo, hi) {
   return m;
 }
 
-/** A channel's value at lap distance s (the road piece holding s; ref 03 §1 through document.js channelAt). */
-function valueAt(doc, ch, s) {
-  const off = pieceOffsets(doc); let p = -1;
+/** A channel's value at lap distance s (the road piece holding s; ref 03 §1 through document.js channelAt). `off`: the document's pieceOffsets, when the caller has them. */
+function valueAt(doc, ch, s, off = pieceOffsets(doc)) {
+  let p = -1;
   doc.pieces.forEach((P, i) => { if (P.type === 'road' && s >= off[i] && s <= off[i] + P.length) p = i; });
   if (p < 0) throw new D.CoreError('BAD_BRUSH', `brush: no road at ${s} m`);
   return D.channelAt(doc.pieces[p], ch, s - off[p]).v;
@@ -170,7 +176,9 @@ function brush(doc, { mode = 'hill', channel, s0, r, delta, sharp = false } = {}
   let d = delta;
   if (mode === 'hill' || mode === 'swerve') {
     const unit = sculpt(doc, { channel: ch, s0, r, delta: 1 }), ru = unit.radiusUsed;
-    let got = 0; for (let s = Math.max(0, s0 - ru); s <= s0 + ru; s += 0.25) { let v; try { v = valueAt(unit.doc, ch, s) - valueAt(doc, ch, s); } catch (e) { continue; } if (Math.abs(v) > Math.abs(got)) got = v; }
+    // D421: each document's offsets once, not at every reading (each reading segmented the whole track: 3.4 s a step on 2 km, 21 s on 10 km)
+    const offU = pieceOffsets(unit.doc), off0 = pieceOffsets(doc);
+    let got = 0; for (let s = Math.max(0, s0 - ru); s <= s0 + ru; s += 0.25) { let v; try { v = valueAt(unit.doc, ch, s, offU) - valueAt(doc, ch, s, off0); } catch (e) { continue; } if (Math.abs(v) > Math.abs(got)) got = v; }
     if (!(Math.abs(got) > 1e-6)) throw new D.CoreError('BAD_BRUSH', `brush: a ${mode} at ${s0} m moves no control point (${unit.note || 'a joint the window only half covers'})`);
     d = delta / got;
   }

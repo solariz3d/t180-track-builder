@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **The brush no longer freezes the builder.** Dragging with the brush on (its height or sideways mode, the one it starts in) froze the whole window for seconds at every step: about 3.5 seconds a step on a 2 km track and 21 seconds on 10 km. To find how high to make the hill, the brush read the road every quarter metre across its width, and each reading measured the whole track again from the start. It now measures the track once per step and reuses what has not changed. The longest pause while dragging went from about 3 seconds to under a tenth of a second on a 2 km track, and from 11 seconds to about a quarter of a second on 10 km. The track the brush makes is exactly the same as before.
+
 ## [0.4.9] - 2026-10-20
 
 ### Added
