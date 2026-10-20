@@ -1002,3 +1002,19 @@ test('row 16b (D335): a slow bank drag on a sculpt mark is 0.01 degree a pixel w
   assert.ok(v.every((x, i) => i === 0 || x >= v[i - 1] - 1e-12), 'and it never goes back');
   P1.panel.unmount();
 });
+
+// D421 part 3 (P's review 5): the closed-tube sweep refusal in plain words. The panel replaces src/core/document.js:412's "must stay within 0 to 360" by matching its
+// text, so a rename there would silently bring back the words that read as a fault; this row holds the coupling (nobody sees it until a closed tube is on the table)
+test('row 21: in Sculpt, a Tube sweep drag on a closed tube is refused in plain words: "Sculpt can\'t change the sweep of a closed tube…", not the core\'s', async () => {
+  const P1 = await mountPanel(), { shell } = P1, { extendOptions } = require('../core/panel.js');
+  const L0 = shell.getState().resolved.segments.reduce((a, g) => a + g.length, 0);
+  shell.extend(extendOptions({ length: 200, tube: 360 })); shell.extend(extendOptions({ length: 200, tube: 360 }));   // the first ramps up to 360; the second is shut all along
+  assert.equal(shell.getState().message, null, 'a closed tube at the head');
+  shell.setSculpt(true); P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'other sculpt tool').value = 'sweep';
+  const d0 = shell.getState().history.present; P1.T.s = L0 + 300; P1.pointer('pointerdown', 50, 50); P1.pointer('pointermove', 50, 20); P1.pointer('pointerup', 50, 20);
+  const said = P1.all().find((e) => e.attrs.role === 'status').textContent;
+  assert.match(shell.getState().message || '', /BAD_TUBE[^]*must stay within 0 to 360/, `the core refused the step with document.js:412's words: ${shell.getState().message}`);
+  assert.match(said, /^Sculpt can't change the sweep of a closed tube: at 360° it is already shut/, `the message line: ${said}`);
+  assert.equal(shell.getState().history.present, d0, 'and the tube is as it was');
+  P1.panel.unmount();
+});

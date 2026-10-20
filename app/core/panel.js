@@ -318,7 +318,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   doc.addEventListener('t180-undo-guard', onUndoGuard);
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
-    onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: ghost, onmouseleave: () => { if (!handlesOn.checked || shell.getState().sculpt) send('t180-ghost-clear'); } });   // with the drag handles on, the ghost stays up: its handles are what you drag
+    onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: () => { if (!shell.getState().sculpt) ghost(); }, onmouseleave: () => { if (!handlesOn.checked || shell.getState().sculpt) send('t180-ghost-clear'); } });   // with the drag handles on, the ghost stays up: its handles are what you drag
   // D242 item 6, STRAIGHT IN ONE CLICK (the keeper: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
   // "at start" box is ticked. This button extends with turn 0 and climb 0, both reached within the first AT_START_M metres and held there, then puts the boxes back
   // as they were (they are a kept preference, not this button's to change)
@@ -420,15 +420,14 @@ function mount(root, shell, mountOpts = {}) {
   };
   const stage = doc.getElementById('preview');
   values = stage ? VO.mount(stage, win) : null;
-  const CLICK_PX = 5;   // as app/core/piecesui.js: more than this between press and release is a drag
-  const KNOT_M = 20;    // one knot span (src/core/document.js KNOT_M): what a wheel notch or [ ] changes the radius by
+  const CLICK_PX = PU.CLICK_PX;   // app/core/piecesui.js's: more than this between press and release is a drag
+  const KNOT_M = AT_START_M;      // one knot span (src/core/document.js KNOT_M, as AT_START_M above): what a wheel notch or [ ] changes the radius by
   let drag = null, brushedPress = false, liveTool = null;
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const down = (e) => {
     brushedPress = false;
     if (!shell.getState().sculpt || e.button !== 0 || drag || shell.getState().brush) return;
-    const [x, y] = rel(e);
-    if (handles && HD.hitTest(handles.handles(), x, y)) return;   // a handle under the pointer: the handle's drag, not the tool's
+    const [x, y] = rel(e);   // (a press on a handle never gets here: handles.js takes it in the capture phase and stops it)
     let hit = null; send('t180-pick', { x, y, reply: (h) => { hit = h; } });
     if (!hit) return;
     const base = toolNow(), T = base.side && e.altKey ? { ...base, ...base.side } : base;
@@ -471,7 +470,8 @@ function mount(root, shell, mountOpts = {}) {
   /** The radius field to `r` (one knot span at least); during an open drag it is also the drag's, in the next frame. */
   const setRadius = (r) => { const v = Math.max(KNOT_M, Math.round(r)); radius.value = String(v); if (drag && drag.open) { waitingR = v; if (!frame) frame = win.requestAnimationFrame(flush); } return v; };
   // the wheel during a drag: one knot span a notch, up wider (Blender's proportional editing; Maya's B-drag). Caught before it reaches the camera (capture, and not passed on)
-  const wheel = (e) => { if (!drag || !drag.open) return; e.preventDefault(); if (e.stopPropagation) e.stopPropagation(); setRadius(radiusNow() + (e.deltaY < 0 ? KNOT_M : -KNOT_M)); };
+  // nor the handles' own capture listener on this same stage, registered after this one (handles.js onWheel): so stopImmediatePropagation, the form handles.js uses (P's review 1)
+  const wheel = (e) => { if (!drag || !drag.open) return; e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); setRadius(radiusNow() + (e.deltaY < 0 ? KNOT_M : -KNOT_M)); };
   // Esc: the open drag dropped whole, the track as it was before the press (the shell's cancelBrush when it has one; else the whole delta back to 0, which endDrag records as no step)
   const dropBrush = () => { if (typeof shell.cancelBrush === 'function') shell.cancelBrush(); else { shell.brushTo(0); shell.endBrush(); } };
   if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); stage.addEventListener('wheel', wheel, { capture: true, passive: false }); }
@@ -549,7 +549,9 @@ function mount(root, shell, mountOpts = {}) {
     const k = e.detail; if (!k || typeof k.handled !== 'function') return;
     if (k.act === 'dropDrag') {
       if (drag) { const open = drag.open; if (frame) { win.cancelAnimationFrame(frame); frame = 0; } waiting = null; waitingR = null; drag = null; liveTool = null; brushedPress = true; if (open) dropBrush(); k.handled(); return; }
-      if (sculptDrag && shell.getState().brush) { sculptDrag = null; dropBrush(); k.handled(); }   // the handle's overlay goes on until its release, which then does nothing
+      if (sculptDrag && shell.getState().brush) { sculptDrag = null; dropBrush(); k.handled(); return; }   // the handle's overlay goes on until its release, which then does nothing
+      // a route tool's re-close still running after the release (pane O: st.brush.closing): Esc drops it, as cancelBrush does (P's review §2 item 3)
+      const b = shell.getState().brush; if (b && b.closing && typeof shell.cancelBrush === 'function') { shell.cancelBrush(); k.handled(); }
       return;
     }
     if (!shell.getState().sculpt) return;
@@ -634,7 +636,9 @@ function mount(root, shell, mountOpts = {}) {
   const lend = (name, box) => { const n = LENT[name]; if (!n) throw new Error(`BAD_LEND: no fields named ${name}`); box.append(n); return () => { if (n.parent !== held && n.parentNode !== held) held.append(n); }; };
   // THE SCULPT STRIP (D421 part 3; it replaced the brush strip): the tool, the radius, "more ▾", the tool's one-line hint and, during a drag, the change at the centre and the
   // widening note. Shown only in Sculpt. Its class stays brush-strip: the page moves it under the bar (app/index.html) and lays it out. Exposed as sculptStrip
-  const valueLine = el('p', { class: 'message', 'aria-label': 'sculpt value', style: 'font-size:12px;margin:2px 0' });
+  // its HEIGHT IS FIXED, one line, empty or not: it gains its text as a drag opens, and a line that grew then pushed the stage down under the held pointer (19.39 px: every
+  // delta gained that, and the road jumped as the drag began; A's sculpt-frame row 5, p-d421-sculptframe-A_2026-10-20.md §6). Never wraps: a long note is cut, its whole text the tooltip
+  const valueLine = el('p', { class: 'message', 'aria-label': 'sculpt value', style: 'font-size:12px;margin:2px 0;height:1.4em;line-height:1.4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' });
   const moreTools = el('details', { class: 'sculpt-more' }, el('summary', { text: 'more ▾', style: 'cursor:pointer' }),
     el('div', { class: 'pickers' }, field('exact size (may nudge ≤ 0.1 mm outside)', sharp), field('other tool', otherTool), field('Edge changes', edgeSide), field('Smooth smooths', smoothCh)));
   const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools), sculptHint, valueLine);
@@ -655,7 +659,8 @@ function mount(root, shell, mountOpts = {}) {
   // C's leftover, in P's words (p-d421-review-P_2026-10-20.md §0): a sweep step on a CLOSED tube reaches the core's validator (src/core/document.js, "the tube sweep must stay within
   // 0 to 360°"), which reads as a fault; the Tube sweep tool says what it is instead
   const TUBE_SHUT = 'Sculpt can\'t change the sweep of a closed tube: at 360° it is already shut, and a little less would leave a slit between its tips that the car falls through.';
-  const plainMessage = (m) => (m && /BAD_TUBE/.test(m) && /must stay within 0 to 360/.test(m) && toolNow().key === 'sweep' ? TUBE_SHUT : m);
+  // (the words are src/core/document.js:412's alone, which only a sweep step reaches: extend.js and adapter.js say "must be from 0 to 360 degrees")
+  const plainMessage = (m) => (m && /BAD_TUBE/.test(m) && /must stay within 0 to 360/.test(m) ? TUBE_SHUT : m);
   // "More shape", folded: the channels used less often, each with its "at start" box, and the notes that explain them
   const moreShape = el('details', { class: 'more-shape' }, el('summary', { text: 'More shape', style: 'cursor:pointer;margin:6px 0' }),
     el('div', { class: 'pickers' }, fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
@@ -727,6 +732,7 @@ function mount(root, shell, mountOpts = {}) {
     sculptStrip.style.display = st.sculpt ? '' : 'none'; showSel(st);
     if (st.sculpt) showTool();
     valueLine.textContent = st.sculpt && st.brush && liveTool ? [valueWords(st.brush, liveTool), Number.isFinite(st.brush.rUsed) && st.brush.rUsed > st.brush.r + 1e-9 ? `brush widened to ${st.brush.rUsed.toFixed(0)} m (asked ${st.brush.r.toFixed(0)} m)` : ''].filter(Boolean).join(' · ') : '';
+    valueLine.title = valueLine.textContent;
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
