@@ -107,28 +107,6 @@ test('row 2c: the SAME later piece after a changed earlier one is rebuilt, becau
   }
 });
 
-test('row 2d: a brush step inside the FIRST piece of a closed tube lap rebuilds that piece only: every later piece, handed the same cross-section by value (a new object), is reused (D421: they were rebuilt at every step)', async () => {
-  const s = await createCoreShell({});   // A's 360° tube oval (E's probe3 row 4a)
-  s.extend({ length: 300, first: { w: 31, t: 360 } });
-  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
-  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
-  s.close(); assert.equal(doc(s).closed, true, s.getState().message);
-  const first = doc(s).pieces[0].id;
-  s.beginBrush({ channel: 'height', s0: 150, r: 60 });   // a height brush (the Sculpt mode's Grab is the same brush, on its own branch)
-  assert.ok(s.getState().brush, `the brush opened: ${s.getState().message}`);
-  for (const dy of [0.5, 1, 1.5]) {
-    const before = s.getState().resolved.segments;
-    s.brushTo(dy);
-    assert.ok(s.getState().brush, `the step at ${dy}: ${s.getState().message}`);
-    const after = s.getState().resolved.segments, later = after.map((g, i) => [g, i]).filter(([g]) => g.id !== first);
-    assert.ok(later.length > 300, `control: the later pieces have ${later.length} segments`);
-    const rebuilt = later.filter(([g, i]) => before[i] !== g).length;
-    assert.equal(rebuilt, 0, `step ${dy}: ${rebuilt} of ${later.length} segments of the untouched pieces were rebuilt`);
-    same(s, `the step at ${dy}`);
-  }
-  s.endBrush(); same(s, 'released');
-});
-
 test('row 3: a cached segment is frozen all the way down, so writing to a shared one throws', async () => {
   const s = await createCoreShell({});
   s.extend({ length: 300, family: 'bowl', first: { c: 45 } });

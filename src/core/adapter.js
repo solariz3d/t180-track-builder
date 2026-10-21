@@ -275,21 +275,6 @@ function deepFreeze(v) {
   return v;
 }
 
-// D421 (a tube drag step rebuilt every piece after the brushed one, at every step): the cross-sections carried in from the piece before (inputsOf's lastProfile
-// and lastPlain) are keyed by VALUE. A rebuilt piece hands on a new object even when its last row is unchanged, and keyed by identity that missed for the
-// next piece, whose own last row was then new too, and so on to the lap's end. `piece` reads a carried cross-section only for its numbers and strings, so
-// equal values give the same segments, bit for bit.
-const BY_VALUE = new Set([10, 13]);
-/** Equal all the way down: numbers by Object.is (−0 is not 0), arrays and plain objects key by key; anything else by identity. */
-function sameValue(a, b) {
-  if (Object.is(a, b)) return true;
-  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
-  const pa = Object.getPrototypeOf(a), pb = Object.getPrototypeOf(b);
-  if (pa !== pb || !(pa === Object.prototype || pa === Array.prototype)) return false;
-  const ka = Object.keys(a), kb = Object.keys(b);
-  return ka.length === kb.length && ka.every((x, i) => x === kb[i] && sameValue(a[x], b[x]));
-}
-
 function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpeedKmh, cupRuns = true, cache = null } = {}) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
@@ -355,7 +340,7 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
   doc.pieces.forEach((P, pi) => {
     if (!cache) { piece(P, pi); return; }
     const k = inputsOf(pi), hit = cache.get(P);
-    if (hit && hit.k.length === k.length && hit.k.every((x, i) => Object.is(x, k[i]) || (BY_VALUE.has(i) && sameValue(x, k[i])))) {
+    if (hit && hit.k.length === k.length && hit.k.every((x, i) => Object.is(x, k[i]))) {
       for (const g of hit.out) segs.push(g);
       ({ pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain } = hit.st);
       return;

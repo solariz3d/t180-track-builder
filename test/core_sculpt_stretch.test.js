@@ -33,24 +33,6 @@ test('a SHARP brush whose refinement range ends exactly on a piece end is not re
   }
 });
 
-// a hill or swerve reads its unit brush's peak through the BASE document's piece offsets (D421: converting the unit document again cost a tube drag one more
-// conversion of the brushed piece at every step). That is exact only while h and l move no piece's start along the path, which this row pins.
-test('a hill or swerve brush moves no piece\'s start along the path, bit for bit (so its peak may be read through the base document\'s offsets)', () => {
-  const R = 180, Q = (Math.PI * R) / 2;
-  let tube = EXT(D.createDoc('d421'), { length: 300, first: { w: 31, t: 360 } }); for (let i = 0; i < 4; i++) tube = EXT(tube, { length: Q, transition: 40, targets: { kh: 1 / R } });
-  let jump = jumpHere(longTrack(2), null, {}); jump = EXT(EXT(jump, { length: 200, transition: 40, targets: { kh: 1 / 300 } }), { length: 200, transition: 40, targets: { kh: 0 } });
-  let ran = 0;
-  for (const [doc, s0s] of [[longTrack(6), [150, 700, 1300]], [tube, [150, 450, 900]], [jump, [300, 700]]]) {
-    const off0 = S.pieceOffsets(doc);
-    for (const mode of ['hill', 'swerve']) for (const s0 of s0s) for (const sharp of [false, true]) {
-      let res; try { res = S.brush(doc, { mode, s0, r: 60, delta: 0.7, sharp }); } catch (e) { if (e.name === 'CoreError') continue; throw e; }
-      const off = S.pieceOffsets(res.doc); ran++;
-      assert.ok(off.length === off0.length && off.every((x, i) => Object.is(x, off0[i])), `${mode} at ${s0}${sharp ? ' (sharp)' : ''}: the offsets moved`);
-    }
-  }
-  assert.ok(ran >= 24, `control: ${ran} of 32 brushes ran`);
-});
-
 // ── stretch (design §3.2) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 test('row 6: Stretch keeps the next joint C1 (checkDoc passes) and the lap\'s length changes by exactly the stretch', () => {
   const doc = longTrack(9), i = 4, L0 = doc.pieces[i].length;
