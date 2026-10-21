@@ -30,6 +30,7 @@ function thin(fr, factor) {
   if (!out) {
     out = []; for (let i = 0; i < fr.length; i += factor) out.push(fr[i]);
     if (out[out.length - 1] !== fr[fr.length - 1]) out.push(fr[fr.length - 1]);
+    Object.freeze(out);   // D421c: a thinned grid never changes; frozen, a ramp's blended cross-sections over it are kept (mesh.js rampShape)
     m.set(fr, out);
   }
   return out;
@@ -127,7 +128,7 @@ function coarsenRun(segments, factor = CHEAP_FACTOR, { cap = 24 } = {}) {
   for (const g of need) for (const P of g.blend ? [g.blend.from, g.profile] : [g.profile]) { const c = canon(P), k = profileKey(c); if (!distinct.has(k)) distinct.set(k, c); }
   const key = `${factor}|${cap}|${[...distinct.keys()].sort().join('#')}`;
   let fr = runMemo.get(key);
-  if (!fr) { fr = commonFractions([...distinct.values()], { maxAcross: factor, maxSeam: factor * DEG, cap }); runMemo.set(key, fr); if (runMemo.size > 16) runMemo.delete(runMemo.keys().next().value); }
+  if (!fr) { fr = Object.freeze(commonFractions([...distinct.values()], { maxAcross: factor, maxSeam: factor * DEG, cap })); runMemo.set(key, fr); if (runMemo.size > 16) runMemo.delete(runMemo.keys().next().value); }
   return segments.map((g) => {
     if (!plain(g)) return Array.isArray(g && g.fractions) ? thinSeg(canonSeg(g), factor) : coarsen([g], factor)[0];
     const P = canon(g.profile);
