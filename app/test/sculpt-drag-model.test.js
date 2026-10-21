@@ -152,7 +152,8 @@ test('row 7: the renderer draws a moved batch (xform) from its baked chunk under
     return { gl, drawn, uploads: () => uploads }; };
   const worldOf = (d) => { const out = []; for (const i of d.idx) { const p = [d.pos[i * 3], d.pos[i * 3 + 1], d.pos[i * 3 + 2]], M = d.model; out.push([0, 1, 2].map((c) => p[0] * M[c] + p[1] * M[4 + c] + p[2] * M[8 + c] + M[12 + c])); } return out; };
   const s = await openTrack(), base = createTrackModel().update(s.getState().resolved), pose = { eye: [0, 300, -300], target: [0, 0, 400], up: [0, 1, 0], fov: 1 };
-  const half = Math.floor(base.batches.length / 2), move = (th, dx) => [Math.cos(th), 0, -Math.sin(th), 0, 0, 1, 0, 0, Math.sin(th), 0, Math.cos(th), 0, dx, 0, 3, 1];
+  // the moved road begins mid-chunk (not on a chunk boundary), as the road after a window does: a chunk must never hold both
+  const half = Math.floor(base.batches.length / 2) + 7, move = (th, dx) => [Math.cos(th), 0, -Math.sin(th), 0, 0, 1, 0, 0, Math.sin(th), 0, Math.cos(th), 0, dx, 0, 3, 1];
   const withMove = (X) => base.batches.map((b, k) => (k >= half ? { ...b, xform: X } : b)), baked = (X) => base.batches.map((b, k) => (k >= half ? { ...b, model: mul4(b.model, X) } : b));
   const A = fake(), r = createRenderer(A.gl, { chunkVertices: 4000 });
   r.draw(withMove(move(0.01, 1)), pose, { width: 800, height: 600 }, { look: 'words', lines: false }); const after1 = A.uploads();
