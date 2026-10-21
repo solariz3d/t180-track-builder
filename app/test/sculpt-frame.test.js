@@ -120,11 +120,13 @@ async function load(look, track) {
   await ev('window.__saved = null; return true;');
 }
 /** the road on show (the preview's own path): its stations' largest gap, closed or not, the pieces, and whether it is whole (a station every 2 m, and the coarse detail gone where the preview says) */
+// and not the DRAG's road (D421c, E's p-d421c-p2-E_2026-10-21.md §5): while the release is built (and a closed lap re-closed), the reply is the road from before the drag, how 'drag',
+// closed with a station every 2 m, so without this the row read "whole" about 110 ms after the release, before the exact road was in
 const roadNow = () => ev(`let t = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { t = x; } } }));
   if (!t || !t.path || !t.path.samples || !t.path.samples.length) return null;
   const s = t.path.samples; let gap = 0; for (let i = 1; i < s.length; i++) gap = Math.max(gap, s[i].s - s[i - 1].s);
   const ids = new Set((t.segments || []).map((g) => g.id)), pieces = ids.size;
-  return { stations: s.length, gap, closed: !!t.closed, pieces, detail: t.detail === undefined ? null : t.detail, whole: gap <= 2 + 1e-6 && (t.detail === undefined || t.detail === 1) };`);
+  return { stations: s.length, gap, closed: !!t.closed, pieces, detail: t.detail === undefined ? null : t.detail, how: t.how === undefined ? null : t.how, whole: gap <= 2 + 1e-6 && (t.detail === undefined || t.detail === 1) && t.how !== 'drag' };`);
 
 const mouse = (type, x, y, extra = {}) => send('Input.dispatchMouseEvent', { type, x, y, button: extra.button || 'none', buttons: extra.buttons || 0, clickCount: extra.clickCount || 0 });
 const key = async (k, code, vk) => { await send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); };
