@@ -261,10 +261,14 @@ function mount(root, shell, mountOpts = {}) {
     : k === 'corner' ? 'corner' : k === 'climbCorner' ? 'climb corner' : k === 'gravity' ? 'bank to gravity from → to' : `${k} change`);
   const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:var(--on-ink, #eef1f6)' },
     ...RO.flatMap((k) => [el('span', { text: roName(k), style: 'color:var(--dim);font-weight:600' }), roCells[k]]));
+  // D421c part 1: IN SCULPT the readout is not computed: every brush step is a new document (draw, below), and Extend's candidateReadout and candidateCorner cost
+  // 2.3-3.4 ms of each step's frame (A's profile, sculpt-frame rows 2 and 3) for a piece Extend cannot add in Sculpt. The cells show '—' with the reason, as on a
+  // closed loop; leaving Sculpt is a new state, so draw reads them again then
   const readout = () => {
     let f = null, why = '';
     try {
-      if (shell.getState().history.present.closed) why = 'the loop is closed';
+      if (shell.getState().sculpt) why = 'in Sculpt';
+      else if (shell.getState().history.present.closed) why = 'the loop is closed';
       else { const r = shell.candidateReadout(opts()); f = { ...LB.formatReadout(r), cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`,
         // the cross-section cells read the DOCUMENT (the core's readout), never the typed field (E's seal E7, KE7-1)
         edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup),
