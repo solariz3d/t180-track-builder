@@ -31,7 +31,7 @@
 
 const G = require('../../src/geom/index.js');
 const { batchesOf } = require('./batches.js');
-const { coarsen, coarsenRun, CHEAP_FACTOR } = require('./coarse.js');
+const { coarsen, coarsenRun, mergeChords, sameSegment, CHEAP_FACTOR } = require('./coarse.js');
 const { worldBounds, linesFor } = require('./look.js');
 
 const { keyOf: hashOf } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
@@ -50,6 +50,25 @@ const STEP = 2;
 /** D404: a CHEAP ghost (a handle being dragged) puts at most this many path stations on its new pieces, so the mesh it builds on every move of the pointer costs the same at
  *  1,000 m as at 20,000 m; a ghost shorter than CHEAP_STATIONS x STEP (128 m) is built as it always was. The release builds the full ghost. */
 const CHEAP_STATIONS = 64, CHEAP_SUBSTEP = 4;   // and integrates them in steps of CHEAP_SUBSTEP m (the path's own is 0.25: Gauss-Legendre over a metre is exact to far below a millimetre)
+/** D421 part 4: a SCULPT drag's window is drawn from about DRAG_CHORDS merged chords (coarse.js mergeChords, D404's GHOST_TURN for the heading), none shorter than DRAG_MIN_M unless the
+ *  heading, pitch or roll cap ends it sooner, however long the window is (a short window of a tube, whose rows are heavy, was 61 chords of 2 m: 14 ms a step, probe2 of 2026-10-20). */
+const DRAG_CHORDS = 24, DRAG_MIN_M = 8, DRAG_TURN = 0.03, DRAG_ROLL = 0.05;
+const RIGID_EPS = 1e-9;   // m and rad: a window end that moved less than this leaves the road after it where it is
+
+// D421 part 4: the rigid move of the road after a sculpted window, as the row-vector matrix a batch's node matrix is multiplied by (world = local · M, mesh.js matrixOf)
+const headingFrame = (sm) => { const T = sm.T, th = Math.atan2(T[0], T[2]), L = [Math.cos(th), 0, -Math.sin(th)]; return { o: sm.pos, T, L, U: [T[1] * L[2] - T[2] * L[1], T[2] * L[0] - T[0] * L[2], T[0] * L[1] - T[1] * L[0]] }; };
+function rigidMove(from, to) {
+  // R maps the old frame's axes onto the new one's: R = Σ new_a ⊗ old_a over a = T, L, U; t = to.o − R · from.o
+  const R = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (const a of ['T', 'L', 'U']) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R[i * 3 + j] += to[a][i] * from[a][j];
+  const t = [0, 1, 2].map((i) => to.o[i] - (R[i * 3] * from.o[0] + R[i * 3 + 1] * from.o[1] + R[i * 3 + 2] * from.o[2]));
+  // row-vector form: p' = p · X with X's top-left block Rᵀ and its last row t
+  return [R[0], R[3], R[6], 0, R[1], R[4], R[7], 0, R[2], R[5], R[8], 0, t[0], t[1], t[2], 1];
+}
+const movePoint = (X, p) => [0, 1, 2].map((c) => p[0] * X[c] + p[1] * X[4 + c] + p[2] * X[8 + c] + X[12 + c]);
+const isIdentity = (X) => { const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; return X.every((v, k) => Math.abs(v - I[k]) < RIGID_EPS); };
+// a path sample as a plain object (a SampleView's fields are getters, which a spread does not copy), with its s and segment index replaced
+const plainSample = (x, s, seg) => ({ s, seg, pos: x.pos, T: x.T, L: x.L, U: x.U, kvec: x.kvec, roll: x.roll, bankG: x.bankG, grade: x.grade, _R: x._R, _x: x._x });
 
 function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   const pathOpts = { step: STEP, ...po };
@@ -120,8 +139,104 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     return (lift ? lift(ad.p) : ad.p) === ad.p;   // no offsets anywhere: the ghost was not lifted, and neither is this
   };
   const unionBounds = (a, b) => (!a ? b : !b ? a : { min: a.min.map((v, d) => Math.min(v, b.min[d])), max: a.max.map((v, d) => Math.max(v, b.max[d])) });
+  // D421 part 4, THE SCULPT DRAG'S FRAME (design §4.3, the degrade ladder). While a brush drag is open nothing placed is rebuilt: the model keeps the path and mesh of the
+  // document the drag began on (the full detail, as it was), and each step is drawn from them:
+  //   the WINDOW (the segments the step changed, found by identity against that base, and for a hill or swerve the span [s0 − r, s0 + r] its lift reaches) is hidden
+  //     and drawn instead as a CHORD GHOST: its segments merged into at most DRAG_CHORDS chords (coarse.js mergeChords), the cheap ghost's row grid (coarsenRun), a path
+  //     grown from the base path's own frame at the window's start, lifted by the document's own lift;
+  //   the road AFTER the window, when the step moved the window's end (a route tool: a bend, a climb, a stretch), is moved as one rigid body, one matrix per batch, no
+  //     rebuild (the D236 placement); on a CLOSED lap that leaves the lap open while the drag lasts, and the gap from its new end to its start is returned as a line;
+  //   every other batch is the placed one, untouched.
+  // Nothing here closes the lap, checks overlaps, or builds the whole track's segments: the shell gives the step's segments (its cache converts the changed pieces only)
+  // and the release builds the exact road from them with update(), as before. The base's state is not changed, so that update diffs against the document the drag began on.
+  let dragShown = null;   // the last drag frame: { resolved, out }
+  // the segments a drag's steps have been found equal (by value) to the base's: new segment -> the base index it equals. The shell's cache hands the same objects back on every step for
+  // the pieces it did not convert again, so after the first step the trim is a lookup, not a comparison of a tube's profile number by number (4.75 ms a step on the 360 deg oval)
+  let equalFor = null, equalOf = new WeakMap();
+  const sameAt = (g, base, j) => { if (g === base[j]) return true; if (equalFor !== base) { equalFor = base; equalOf = new WeakMap(); } if (equalOf.get(g) === j) return true; if (!sameSegment(g, base[j])) return false; equalOf.set(g, j); return true; };
+  function dragFrame(resolved, b) {
+    const base = lastResolved;
+    if (!base || !last || !path || !mesh || !mesh._state || detail !== 1 || builtDetail !== 1 || !Array.isArray(resolved.segments) || !Array.isArray(base.segments)) return null;
+    if (resolved === base) return { ...last, how: 'same' };
+    if (dragShown && dragShown.resolved === resolved) return dragShown.out;
+    // a close or a new start is not a brush step; a closed lap OPENED for the drag is (the shell's route tools re-close it on release, D421 part 2): it is drawn open, from the closed lap's own path
+    if ((!!resolved.closed && !base.closed) || JSON.stringify(resolved.start || null) !== JSON.stringify(base.start || null)) return null;
+    const lapClosed = !!base.closed;
+    const segs = resolved.segments, bs = base.segments, n = segs.length, m = bs.length;
+    let a = 0; while (a < n && a < m && segs[a] === bs[a]) a++;
+    let e = 0; while (e < n - a && e < m - a && segs[n - 1 - e] === bs[m - 1 - e]) e++;
+    let bB = m - e;
+    // the chords of a brushed piece the brush did not reach come back from the shell equal but new: trimmed off both ends, so the window is what changed
+    while (a < bB && a < n - e && sameAt(segs[a], bs, a)) a++;
+    while (bB > a && n - e > a && sameAt(segs[n - e - 1], bs, bB - 1)) { bB--; e++; }
+    // the lift (Grab's hill and swerve) changes the road inside [s0 − r, s0 + r] only, and is a new function on every step whatever it holds: the window covers that span
+    const liftFn = typeof resolved.lift === 'function' ? resolved.lift : null;   // (named apart from update()'s own line, which a mutation harness anchors on)
+    if (liftFn && Number.isFinite(b && b.s0)) {
+      const r = Number.isFinite(b.rUsed) ? b.rUsed : b.r, s1 = b.s0 - r, s2 = b.s0 + r;
+      if (!(r >= 0) || (lapClosed && (s1 < 0 || s2 > path.lengthM))) return null;   // a window across a closed lap's start: drawn the old way
+      const segAt = (s) => { let lo = 0, hi = m - 1; while (lo < hi) { const md = (lo + hi + 1) >> 1; if (path.starts[md].s <= s) lo = md; else hi = md - 1; } return lo; };
+      const la = segAt(Math.max(0, s1)), lb = Math.min(m, segAt(Math.min(path.lengthM, s2)) + 1);
+      // the span joins what the segments changed; when nothing did (a hill moves no chord), the window is the span alone, not the span and wherever the trim stopped
+      if (m === n) { if (a >= bB) { a = la; bB = lb; } else { a = Math.min(a, la); bB = Math.max(bB, lb); } }
+    }
+    const bN = bB + (n - m);
+    if (a >= bB && a >= bN) return { ...last, how: 'same' };
+    if (!(bN > a) || segs.slice(a, bN).some((g) => !g)) return null;
+    // the ghost of the window, from the base path's frame at its start (everything before a is the very same, so it starts there)
+    const wsegs = segs.slice(a, bN), wlen = wsegs.reduce((acc, g) => acc + (g.length || 0), 0), f0 = path.samples[path.segFirst[a]];
+    const start = { pos: f0.pos.slice(), theta: Math.atan2(f0.T[0], f0.T[2]), p: Math.asin(Math.max(-1, Math.min(1, f0.T[1]))) };
+    const gsegs = coarsenRun(mergeChords(wsegs, { maxTurn: DRAG_TURN, maxRoll: DRAG_ROLL, maxLen: Math.max(DRAG_MIN_M, wlen / DRAG_CHORDS) }), CHEAP_FACTOR);
+    const gp0 = geom.buildPath(gsegs, { step: 1e6, substep: CHEAP_SUBSTEP, start });
+    let gp = gp0;
+    if (liftFn) {
+      // the document's own lift, on the ghost's samples: each is handed over with its s along the track and the index of the shell's segment under it, then given its own back
+      const sA = path.starts[a].s, at = [sA]; for (let j = a; j < bN; j++) at.push(at[at.length - 1] + segs[j].length);
+      const segOf = (s) => { let lo = 0, hi = bN - a - 1; while (lo < hi) { const md = (lo + hi + 1) >> 1; if (at[md] <= s) lo = md; else hi = md - 1; } return a + lo; };
+      const fake = { ...gp0, samples: gp0.samples.map((x) => plainSample(x, sA + x.s, segOf(sA + x.s))), segEnd: gp0.segEnd.map((x) => plainSample(x, sA + x.s, segOf(sA + x.s - 1e-9))) };
+      const L = liftFn(fake);
+      gp = { ...gp0, samples: L.samples.map((y, i) => ({ ...y, s: gp0.samples[i].s, seg: gp0.samples[i].seg })), segEnd: L.segEnd.map((y, i) => ({ ...y, s: gp0.segEnd[i].s, seg: gp0.segEnd[i].seg })) };
+    }
+    const gm = geom.buildMesh(gp, gsegs, meshOpts), names = new Map(mesh.scene.materials.map((mt, i) => [mt.name, i]));
+    const ghostBatches = batchesOf(gm).map((gb) => { const mi = names.get(gm.scene.materials[gb.materialIndex].name); return { ...gb, key: `drag:${gb.key}`, materialIndex: mi === undefined ? 0 : mi }; });
+    // the road after the window: where the window now ends, from the step's own segments (integrated as the cheap ghost's are), against where it ended
+    const routeSame = bN === bB && wsegs.every((g, k) => { const o = bs[a + k]; return o && g.kind === o.kind && g.length === o.length && g.k0 === o.k0 && g.k1 === o.k1 && g.kp0 === o.kp0 && g.kp1 === o.kp1; });
+    let X = null, gap = null;
+    if (!routeSame && (bB < m || lapClosed)) {
+      const ep = geom.buildPath(wsegs, { step: 1e6, substep: CHEAP_SUBSTEP, start }), now = ep.samples[ep.samples.length - 1], was = path.segEnd[bB - 1];
+      const mv = rigidMove(headingFrame(was), headingFrame(now));
+      if (!isIdentity(mv)) X = mv;
+    }
+    if (X && lapClosed) {
+      // drawn open: the lap's end, moved with the road after the window, and a line from there to its start
+      const end = movePoint(X, path.segEnd[m - 1].pos), s0p = path.samples[0].pos;
+      gap = { positions: new Float32Array([...end, ...s0p]), colour: [1, 0.55, 0.15], alpha: 1, metres: Math.hypot(end[0] - s0p[0], end[1] - s0p[1], end[2] - s0p[2]) };
+    }
+    const closedLap = lapClosed, moved = !!X, cells = mesh.cells;
+    // the same composition for any list in the placed batches' order (the preview's textured copy of them included): the window and its two seams hidden, the road after it moved, the ghost added.
+    // A batch's segment is its CELL's, by position (the cells and the scene's nodes are in one order, batches.js): a batch's own `piece` is read by the cell's name, which every chord of a word shares
+    const compose = (list) => {
+      const out = [];
+      for (let k = 0; k < list.length; k++) {
+        const bt = list[k], c = cells[k], g = c ? c.piece : bt.piece, seam = c ? !!c.seam : bt.seam;
+        if (g >= a && g < bB) continue;
+        if (seam && (g === a || g === bB || (moved && closedLap && g === 0))) continue;
+        out.push(moved && g >= bB ? { ...bt, xform: X } : bt);   // the placed matrix kept, the move beside it: the renderer draws the baked chunk under it (renderer.js chunkModel)
+      }
+      for (const gb of ghostBatches) out.push(gb);
+      return out;
+    };
+    const out = { ...last, how: 'drag', batches: compose(last.batches), segments: resolved.segments, g: null, fromS: null, drag: { base: last, compose, gap, window: { from: a, to: bB, toNew: bN }, moved, move: X, chords: gsegs.length } };
+    dragShown = { resolved, out };
+    return out;
+  }
   const tm = {
-    update(resolved) {
+    /**
+     * update(resolved, { drag }) with `drag` the shell's open brush (state.brush, D421 part 4): the drag's frame (dragFrame above), nothing placed rebuilt; how 'drag', and
+     * `drag` on the result: { base (the placed track's own result), compose(list), gap (a closed lap's open end, a line) | null, window, moved, move (the matrix the road after the window is moved by) | null, chords }.
+     */
+    update(resolved, opts) {
+      if (opts && opts.drag && resolved) { const f = dragFrame(resolved, opts.drag); if (f) return f; }
+      dragShown = null;
       if (!resolved) { if (!last) throw new Error('trackModel: no resolved document yet'); return { ...last, how: 'kept', stale: true }; }
       // the very same document as the last build (a state change that is not an edit: a message, a brush ending): nothing to build, a closed loop included
       if (last && resolved === lastResolved && !detailMoved) return { ...last, how: 'same' };

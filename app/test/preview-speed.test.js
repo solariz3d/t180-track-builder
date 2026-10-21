@@ -5,7 +5,7 @@
 //   2  the track model: a coarse detail meshes far fewer vertices; the detail back to 1 equals a fresh full build; the real segments are returned; the very same document
 //      builds nothing again (a closed loop used to rebuild in full on every state change); a change of detail on an open track is a full rebuild
 //   3  batchesOf(mesh, from) is batchesOf(mesh) filtered to the new pieces, and the ghost uses it
-//   4  the preview: a brush drag makes the model coarse, full detail comes back ONCE, shortly after the drag ends, unless another drag starts first
+//   4  the preview (CHANGED D421): a brush drag keeps full detail and draws the drag's frame; the release's exact build runs in the next animation frame, once
 //   5  the panel: pointer moves are coalesced to one brushTo per animation frame (the latest position), and the release applies the last one still waiting
 'use strict';
 const test = require('node:test');
@@ -79,22 +79,25 @@ test('row 3: batchesOf(mesh, from) is the batches of the pieces from there on, e
   const g = tm.ghostFor(cand); assert.ok(g.batches.length > 0 && g.batches.every((b) => b.piece >= tr.segments.length), 'the ghost has the new piece\'s batches and the seam onto it, and nothing of the placed track');
 });
 
-test('row 4: a brush drag makes the preview coarse; full detail comes back ONCE, shortly after the drag ends, and not if another drag starts first', async () => {
-  const s = await tubeShell(), timers = new Map(); let nextId = 1; const cleared = [];
-  const win = { devicePixelRatio: 1, document: { hidden: false, activeElement: null, body: {}, addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
-    setTimeout: (f, ms) => { const id = nextId++; timers.set(id, { f, ms }); return id; }, clearTimeout: (id) => { cleared.push(id); timers.delete(id); } };
+// CHANGED D421 (part 4, the degrade ladder; design exo_memory/loop/design_d421_sculpt_P_2026-10-20.md §4.3): the rule this row held, "a brush drag makes the preview COARSE and full detail
+// comes back 250 ms after it ends" (D235), is replaced. A drag now draws its FRAME from the placed track at full detail (trackmodel.js dragFrame: nothing placed rebuilt), and the release's
+// exact build runs in the NEXT animation frame, not in the state change that ended the drag and not on a timer; the drag's last frame stays on show until then.
+test('row 4: a brush drag keeps full detail and draws the drag\'s frame (nothing placed rebuilt); the release\'s exact build runs in the next animation frame, once, and is the full build', async () => {
+  const s = await tubeShell(), timers = new Map(); let nextId = 1, rafs = [];
+  const win = { devicePixelRatio: 1, document: { hidden: false, activeElement: null, body: {}, addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: (f) => { rafs.push(f); return rafs.length; }, cancelAnimationFrame() {},
+    setTimeout: (f, ms) => { const id = nextId++; timers.set(id, { f, ms }); return id; }, clearTimeout: (id) => { timers.delete(id); } };
   const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0 }, { get: (t, k) => (k in t ? t[k] : () => {}) });
   const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
-  const p = P.createPreview({ canvas, shell: s, win }), v = () => p.view(), vertsNow = () => verts(v().track.batches);
-  assert.equal(v().detail, 1); const vFull = vertsNow();
-  s.beginBrush({ mode: 'rate', channel: 'phi', s0: 100, r: 60 }); s.brushTo(0.01);
-  assert.equal(v().detail, FACTOR, 'dragging: coarse'); assert.ok(vertsNow() < 0.35 * vFull, `${vertsNow()} against ${vFull}`); assert.equal(timers.size, 0, 'no full rebuild is scheduled while dragging');
-  s.brushTo(0.02); assert.equal(v().detail, FACTOR);
-  s.endBrush(); assert.equal(v().detail, FACTOR, 'the drag ended: still coarse, a moment'); assert.equal(timers.size, 1, 'one full rebuild scheduled'); const [[id, t]] = [...timers]; assert.equal(t.ms, 250);
-  // another drag starts before it fires: the timer is cancelled and the preview stays coarse
-  s.beginBrush({ mode: 'rate', channel: 'phi', s0: 100, r: 60 }); assert.ok(cleared.includes(id), 'the pending full rebuild was cancelled'); assert.equal(timers.size, 0); s.brushTo(0.03); s.endBrush(); assert.equal(timers.size, 1);
-  const [[id2, t2]] = [...timers]; timers.delete(id2); t2.f();   // the timer fires
-  assert.equal(v().detail, 1, 'full detail is back'); assert.equal(vertsNow(), verts(createTrackModel().update(s.getState().resolved).batches), 'and it is exactly the full build of the dragged track'); assert.equal(timers.size, 0, 'once');
+  const p = P.createPreview({ canvas, shell: s, win }), v = () => p.view(), frame = () => { const run = rafs; rafs = []; for (const f of run) f(16); };
+  const placed = v().track, calls = [], real = p.model.update.bind(p.model); p.model.update = (r, o) => { const out = real(r, o); calls.push(out.how); return out; };
+  s.beginBrush({ mode: 'rate', channel: 'phi', s0: 100, r: 60 }); s.brushTo(0.01); s.brushTo(0.02);
+  assert.equal(v().detail, 1, 'dragging: full detail, not coarse'); assert.equal(v().track.how, 'drag', 'the drag\'s frame is on show');
+  assert.equal(v().track.mesh, placed.mesh, 'nothing placed was rebuilt'); assert.ok(calls.every((h) => h === 'drag' || h === 'same'), `drag frames only: ${calls.join(', ')}`); assert.equal(timers.size, 0, 'no rebuild is put on a timer');
+  calls.length = 0; s.endBrush();
+  assert.deepEqual(calls, [], 'the state change that ended the drag built nothing'); assert.equal(v().track.how, 'drag', 'the drag\'s last frame is still on show');
+  frame(); assert.equal(calls.length, 1, `the next frame built the exact road, once: ${calls.join(', ')}`); assert.notEqual(v().track.how, 'drag');
+  assert.equal(verts(v().track.batches), verts(createTrackModel().update(s.getState().resolved).batches), 'and it is exactly the full build of the dragged track');
+  frame(); assert.equal(calls.length, 1, 'once'); assert.equal(timers.size, 0);
   p.dispose();
 });
 
