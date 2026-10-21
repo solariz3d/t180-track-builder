@@ -141,6 +141,24 @@ function pieceSamples(path, g) {
   const own = path.samples.slice(a, b).filter((sm) => sm.seg === g && sm.s < path.segEnd[g].s - 1e-9);
   return [...own, path.segEnd[g]];
 }
+// D421c: A RAMP'S CROSS-SECTION AT A WEIGHT, kept. On a ramp every row blends its own cross-section and reads it vertex by vertex (offsetAt, normalAt); a sculpt drag's ghost meshes
+// the same window with the same ramps and stations on every step (row 4a: most of its frame). For a ramp whose from-profile, profile and row grid are all frozen (they cannot change),
+// the blend at a weight is made once and kept, frozen, so the row takes rowWith's frozen path (shapeOf: vertex()'s arithmetic in the same order, every double the same, D407).
+// Anything not frozen is blended afresh every time, as before. The newest RAMP_MAX weights a ramp are kept.
+const RAMPS = new WeakMap(), RAMP_MAX = 64;
+function rampShape(from, P, fr, w, A) {
+  if (!(Object.isFrozen(from) && Object.isFrozen(P) && Array.isArray(fr) && Object.isFrozen(fr))) { const Pw = normalize(blend(A, P, w)); return { P: Pw, Us: usOf(Pw, fr) }; }
+  let a = RAMPS.get(from); if (!a) RAMPS.set(from, (a = new WeakMap()));
+  let b = a.get(P); if (!b) a.set(P, (b = new WeakMap()));
+  let c = b.get(fr); if (!c) b.set(fr, (c = new Map()));
+  let r = c.get(w);
+  if (!r) {
+    const Pw = normalize(blend(A, P, w)), Us = usOf(Pw, fr);
+    r = Object.freeze({ P: Object.freeze({ ...Pw, u: Object.freeze(Pw.u), psi: Object.freeze(Pw.psi) }), Us: Object.freeze(Us) });
+    if (c.size >= RAMP_MAX) c.delete(c.keys().next().value); c.set(w, r);
+  }
+  return r;
+}
 /**
  * Mesh one road piece from its own samples alone: vertices, folds, stations, cells (local arrays + placement frame).
  * `work` counts vertex evaluations + chord-check iterations.
@@ -163,7 +181,7 @@ function meshPiece(g, seg, S, o, work) {
     if (!A) return { P, Us };
     const w = smoothstep((ramp.s0 + sm.s - S[0].s) / ramp.length);
     if (w >= 1) return { P, Us };
-    const Pw = normalize(blend(A, P, w)); return { P: Pw, Us: usOf(Pw, fr) };
+    return rampShape(ramp.from, P, fr, w, A);
   };
   const shapes = S.map(shapeAt);
   const V = S.map((sm, i) => { work.n += K; return rowWith(sm, shapes[i].P, shapes[i].Us); });
@@ -410,4 +428,36 @@ function reuseMesh(prev, path, segments, same, { from = 0, grow = from > 0 } = {
   st.work = st.workC.n;
   return assemble(st);
 }
-module.exports = { buildMesh, buildMeshSteps, extendMesh, extendMeshSteps, sculptMesh, reuseMesh, vertex, rowVertices, profiles, toLocal };
+/**
+ * reuseMeshSteps(prev, path, segments, same, opts): reuseMesh as a generator (D421c, as extendMeshSteps is for extendMesh, D407). The same work in the same order, with a yield after each
+ * piece that is meshed again (a kept piece is O(1) and yields nothing) and after each seam that is made, so a caller that must not hold the page while a closed lap is meshed again (a
+ * whole-lap re-close moves every piece: about 120 ms on a 10 km lap) can run it in slices; the value it returns is reuseMesh's, to the byte (app/test/sculpt-release.test.js holds the two
+ * equal). reuseMesh keeps its own body, the lines the mutation harnesses anchor on.
+ */
+function* reuseMeshSteps(prev, path, segments, same, { from = 0, grow = from > 0 } = {}) {
+  const old = prev._state, n = segments.length;
+  if (!Array.isArray(same) || same.length !== n) throw new Error('reuseMesh: needs a same[] flag for each segment');
+  if (!grow ? old.nseg !== n : (old.closed || from > old.nseg || from > n)) throw new Error('reuseMesh: needs a mesh of the same number of segments (or, with from, an open one at least from long)');
+  const closed = !!path.closed;
+  const st = { o: old.o, pieces: new Array(n), seams: new Array(n).fill(null), workC: { n: 0 }, nseg: n, closed, reused: 0 }, moved = new Array(n).fill(false);
+  for (let j = 0; j < n; j++) {
+    const seg = segments[j];
+    if (j < from) { st.pieces[j] = old.pieces[j]; continue; }
+    if (seg.kind === 'gap') { st.pieces[j] = null; continue; }
+    const eff = effective(segments, j, st.o, closed), prior = old.pieces[j], f0 = path.samples[path.segFirst[j]];
+    const dependsOnPrev = seg.profileIn === undefined && seg.blend === undefined, before = j > 0 ? j - 1 : closed ? n - 1 : -1;
+    const kept = prior && same[j] && (!dependsOnPrev || before < 0 || same[before]) && Math.abs(prior.p0 - pitchOf(f0)) < 1e-12 && Math.abs(prior.b0 - f0.bankG) < 1e-12;
+    if (kept) { st.pieces[j] = { ...prior, F: frameOf(f0), firstS: f0, lastS: path.segEnd[j], stale: { first: true, last: true } }; moved[j] = true; st.reused++; continue; }
+    st.pieces[j] = meshPiece(j, eff, pieceSamples(path, j), st.o, st.workC); yield;
+  }
+  for (let g = 1; g < n; g++) {
+    const A = st.pieces[g - 1], B = st.pieces[g];
+    if (g < from) { st.seams[g] = old.seams[g]; continue; }
+    if (moved[g - 1] && moved[g] && old.pieces[g - 1] && old.pieces[g]) { st.seams[g] = old.seams[g] ? { ...old.seams[g], F: B.F } : null; continue; }
+    st.seams[g] = A && B ? meshSeam(A, B, st.workC) : null; yield;
+  }
+  if (closed && n > 1) { const A = st.pieces[n - 1], B = st.pieces[0]; st.seams[0] = A && B ? meshSeam(A, B, st.workC) : null; }
+  st.work = st.workC.n;
+  return assemble(st);
+}
+module.exports = { buildMesh, buildMeshSteps, extendMesh, extendMeshSteps, sculptMesh, reuseMesh, reuseMeshSteps, vertex, rowVertices, profiles, toLocal };

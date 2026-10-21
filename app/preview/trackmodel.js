@@ -116,20 +116,27 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   let builtDetail = 1;   // the detail the current mesh was made at
   /** How many leading segments of the track as it was are unchanged in the new one (0: no prefix to keep). */
   const grownFrom = (was, nk, lk) => { let g = 0; while (g < was.keys.length && g < nk.length && was.keys[g] === nk[g] && was.liftKeys[g] === lk[g]) g++; return g === was.keys.length ? g : 0; };
-  function full(segs, isClosed, lift, nk) {
+  // D421c: the full rebuild as a generator (the release after a whole-lap re-close meshes a 10 km lap again: about 200 ms in one frame). It runs the very calls full() ran, as their
+  // steps (buildPathSteps, reuseMeshSteps, buildMeshSteps: each its plain twin run to the end, to the byte), and changes the model's state only at its end, so a caller may run it
+  // a few milliseconds a frame (the preview after a sculpt release) with the track as it was still on show; update() runs it to the end at once, as before.
+  const stepsOr = (steps, plain) => (typeof geom[steps] === 'function' ? geom[steps] : function* (...args) { return geom[plain](...args); });
+  function* fullSteps(segs, isClosed, lift, nk) {
     const was = { mesh, keys, liftKeys, closed, detail: builtDetail };   // the track as it was, for a close that only ADDS road (below)
-    path = geom.buildPath(segs, { ...pathOpts, closed: isClosed, ...(startOpt ? { start: startOpt } : {}) }); shown = lift ? lift(path) : path;
-    liftKeys = segs.map((_, j) => liftOf(path, shown, j));
-    const ms = meshSegs(segs, liftKeys), slot = isClosed ? slots.get(detail) : null;
-    if (slot && typeof geom.reuseMesh === 'function' && slot.mesh && slot.keys.length === segs.length) mesh = geom.reuseMesh(slot.mesh, shown, ms, segs.map((_, j) => nk[j] === slot.keys[j] && liftKeys[j] === slot.liftKeys[j]));
+    const p = yield* stepsOr('buildPathSteps', 'buildPath')(segs, { ...pathOpts, closed: isClosed, ...(startOpt ? { start: startOpt } : {}) }), sh = lift ? lift(p) : p;
+    const lk = segs.map((_, j) => liftOf(p, sh, j));
+    const ms = meshSegs(segs, lk), slot = isClosed ? slots.get(detail) : null;
+    let m;
+    if (slot && typeof geom.reuseMesh === 'function' && slot.mesh && slot.keys.length === segs.length) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(slot.mesh, sh, ms, segs.map((_, j) => nk[j] === slot.keys[j] && lk[j] === slot.liftKeys[j]));
     // AN OPEN TRACK CLOSED BY ADDING ROAD (2026-10-15, Finish to start on the keeper's 24 km ELYSIUM: Apply rebuilt every piece, 6.5 s with the window frozen):
     // every placed piece is the same and lies where it lay, so its mesh is kept and only the new road and the closing joint are made (geom.reuseMesh, grow)
-    else if (isClosed && !was.closed && was.mesh && was.mesh._state && was.detail === detail && typeof geom.reuseMesh === 'function' && grownFrom(was, nk, liftKeys) > 0) mesh = geom.reuseMesh(was.mesh, shown, ms, segs.map((_, j) => j < was.keys.length && nk[j] === was.keys[j] && liftKeys[j] === was.liftKeys[j]), { grow: true });
-    else mesh = geom.buildMesh(shown, ms, meshOpts);
+    else if (isClosed && !was.closed && was.mesh && was.mesh._state && was.detail === detail && typeof geom.reuseMesh === 'function' && grownFrom(was, nk, lk) > 0) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(was.mesh, sh, ms, segs.map((_, j) => j < was.keys.length && nk[j] === was.keys[j] && lk[j] === was.liftKeys[j]), { grow: true });
+    else m = yield* stepsOr('buildMeshSteps', 'buildMesh')(sh, ms, meshOpts);
+    path = p; shown = sh; liftKeys = lk; mesh = m;
     builtDetail = detail;
     if (isClosed) slots.set(detail, { keys: nk, liftKeys, mesh }); else slots.clear();
     return 'full';
   }
+
   // D407: a full ghost's road lines, made a batch at a time (look.js linesFor keeps them by the batch's positions), so the first frame that draws the ghost does not make them all at once (8 to 19 ms at 2,000 m)
   function* warmLines(bs) { for (const b of bs) { linesFor(b); yield; } }
   const adoptable = (segs, lift) => {
@@ -234,7 +241,9 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
      * update(resolved, { drag }) with `drag` the shell's open brush (state.brush, D421 part 4): the drag's frame (dragFrame above), nothing placed rebuilt; how 'drag', and
      * `drag` on the result: { base (the placed track's own result), compose(list), gap (a closed lap's open end, a line) | null, window, moved, move (the matrix the road after the window is moved by) | null, chords }.
      */
-    update(resolved, opts) {
+    update(resolved, opts) { const it = tm.updateSteps(resolved, opts); let r = it.next(); while (!r.done) r = it.next(); return r.value; },
+    /** D421c: update() as a generator: it yields only inside a full rebuild (fullSteps), so the preview can build a lap after a whole-lap re-close a slice at a time; run to the end, it is update(). */
+    *updateSteps(resolved, opts) {
       if (opts && opts.drag && resolved) { const f = dragFrame(resolved, opts.drag); if (f) return f; }
       dragShown = null;
       if (!resolved) { if (!last) throw new Error('trackModel: no resolved document yet'); return { ...last, how: 'kept', stale: true }; }
@@ -262,7 +271,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
           return last;
         }
       }
-      if (!path || isClosed || closed || startMoved || detailMoved) how = full(segs, isClosed, lift, nk);
+      if (!path || isClosed || closed || startMoved || detailMoved) how = yield* fullSteps(segs, isClosed, lift, nk);
       else if (g === keys.length && g === nk.length) {
         const { lk, a } = relift();
         if (a === lk.length && a === liftKeys.length) how = 'same';
@@ -291,7 +300,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         const cut = { ...mesh, _state: { ...old, pieces: old.pieces.slice(0, n), seams: old.seams.slice(0, n), nseg: n } };
         mesh = geom.reuseMesh(cut, shown, meshSegs(segs, lk), segs.map((_, j) => nk[j] === keys[j] && lk[j] === liftKeys[j]));
         liftKeys = lk; how = 'full';
-      } else how = full(segs, isClosed, lift, nk);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
+      } else how = yield* fullSteps(segs, isClosed, lift, nk);   // a removal: the incremental calls only grow or rewrite a track, so rebuild it
       keys = nk; closed = isClosed;
       // an adopted ghost: the placed batches as they were, then the ghost's (batchesOf in one order: the old pieces' nodes are the same, the new pieces and the seam onto them are the ghost's), and the box of both
       const batches = how === 'same' && last ? last.batches : adopted ? last.batches.concat(adopted.bs) : batchesOf(mesh);

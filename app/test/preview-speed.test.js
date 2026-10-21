@@ -90,6 +90,8 @@ test('row 4: a brush drag keeps full detail and draws the drag\'s frame (nothing
   const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
   const p = P.createPreview({ canvas, shell: s, win }), v = () => p.view(), frame = () => { const run = rafs; rafs = []; for (const f of run) f(16); };
   const placed = v().track, calls = [], real = p.model.update.bind(p.model); p.model.update = (r, o) => { const out = real(r, o); calls.push(out.how); return out; };
+  // CHANGED D421c: the release builds through updateSteps (update()'s own work, run a slice at a time when the window has a clock; this test's has none, so all in one frame): counted the same way
+  const realSteps = p.model.updateSteps.bind(p.model); p.model.updateSteps = function* (r, o) { const out = yield* realSteps(r, o); calls.push(out.how); return out; };
   s.beginBrush({ mode: 'rate', channel: 'phi', s0: 100, r: 60 }); s.brushTo(0.01); s.brushTo(0.02);
   assert.equal(v().detail, 1, 'dragging: full detail, not coarse'); assert.equal(v().track.how, 'drag', 'the drag\'s frame is on show');
   assert.equal(v().track.mesh, placed.mesh, 'nothing placed was rebuilt'); assert.ok(calls.every((h) => h === 'drag' || h === 'same'), `drag frames only: ${calls.join(', ')}`); assert.equal(timers.size, 0, 'no rebuild is put on a timer');

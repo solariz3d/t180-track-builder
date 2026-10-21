@@ -47,7 +47,7 @@ const { createRig, KEYS, sampleAt } = require('../camera/cameras.js');
 const { createTrackModel } = require('./trackmodel.js');
 const { createRenderer, themeFrom } = require('./renderer.js');
 const { tokensOf } = require('../lib/tokens.js');
-const { gridLines, headMarker } = require('./look.js');
+const { gridLines, headMarker, linesFor, tangentsFor } = require('./look.js');
 const { guidePlan, MODES: GRID_MODES, MIRRORS } = require('./guides.js');
 const { resolveLook } = require('./aclook.js');
 const { flowCell } = require('../../src/texture/flow.js');
@@ -162,15 +162,42 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // animation frame, never in the pointer-up handler; the drag's last frame stays on show until then, so nothing blinks. A model that cannot draw a step that way (no
   // full-detail track to start from, a close or a new start) builds it as before.
   let exactDue = null;   // the state whose exact build the next frame does
+  // D421c: that build A SLICE AT A TIME (a whole-lap re-close after a sculpt release meshes a 10 km lap again: about 200 ms, which held one frame). The model's update as steps
+  // (trackmodel.js updateSteps: the very work update() does, the model's state changed only at its end), then the new batches' road lines and tangents made ahead (look.js keeps
+  // them by the batch's arrays, so the frame that first draws the road does not make them all), EXACT_SLICE_MS a frame, the drag's last frame on show meanwhile. A new drag
+  // arriving first finishes it at once; any other state change waits for it. With no clock (a test's window) it is all done in one frame, as before.
+  const EXACT_SLICE_MS = 3;
+  let exactJob = null;   // { st, it, built, list, k }
+  function stepExact(all = false) {
+    const job = exactJob, t0 = all ? null : clockNow();
+    for (;;) {
+      if (!job.built) {
+        let r; try { r = job.it.next(); } catch (e) { exactJob = null; refreshNow(job.st); return; }   // the geometry failed part way: as update() failing, the state is built (and fails) the plain way, its error shown
+        if (r.done) { job.built = r.value; job.list = r.value.batches || []; }
+      }
+      else if (job.k < job.list.length) { const b = job.list[job.k++]; linesFor(b); if (b.uvs && b.normals && b.indices) tangentsFor(b); }
+      else {
+        exactJob = null;
+        // a state that changed while this was built (an undo, an edit just after a release) supersedes it: it is not published, and the newer state gets its own sliced build
+        // from the one just made (P's D421c review, item 3: it was published first and the newer state built whole in one frame)
+        if (exactDue && exactDue !== job.st) { const n = exactDue; exactDue = null; startExact(n); return; }
+        exactDue = null; refreshNow(job.st, job.built); return;
+      }
+      if (t0 !== null && clockNow() - t0 >= EXACT_SLICE_MS) return;
+    }
+  }
+  // a sliced build of state st, begun now (its first slice this frame)
+  function startExact(st) { try { exactJob = { st, it: model.updateSteps(st.resolved), built: null, list: null, k: 0 }; } catch (e) { exactJob = null; refreshNow(st); return; } stepExact(); }
   const refresh = (st) => {
+    if (exactJob) { if (!st.brush) { exactDue = st; return; } while (exactJob) stepExact(true); }   // a new drag: the exact road first (and any build chained after it), then its frame
     if (!st.brush && track && track.how === 'drag') { exactDue = st; return; }   // the release: the exact road in the next frame
     exactDue = null;
     refreshNow(st);
   };
-  const refreshNow = (st) => {
+  const refreshNow = (st, built = null) => {
     start = st.resolved && st.resolved.start ? st.resolved.start : null;   // where the first piece starts (the equation core's doc.start)
     if (!st.brush && model.detail > 1) scheduleFull();   // still coarse (a detail set by a caller): full detail soon
-    try { track = model.update(st.resolved, st.brush ? { drag: st.brush } : undefined); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; if (track.how !== 'same' && track.how !== 'kept') ghostJob = null; } catch (e) { err = e.message; return; }   // D407: and the exact ghost being built for the old head goes with it
+    try { track = built || model.update(st.resolved, st.brush ? { drag: st.brush } : undefined); err = track.stale ? st.resolveError : null; if (track.how !== 'same' && track.how !== 'kept') ghost = null; if (track.how !== 'same' && track.how !== 'kept') ghostJob = null; } catch (e) { err = e.message; return; }   // D407: and the exact ghost being built for the old head goes with it
     if (track.how === 'drag') return;   // a drag's frame moves nothing the shared track's readers keep: they hear the exact road when the drag ends
     // D242: a close PROPOSAL (the core shell's closeProposal, for the document on screen) is the ghost: the pieces it moves, see-through over the placed ones
     // D240: a middle DELETE's preview (the core shell's deleteProposal) is shown the same way: the track as it would be, see-through over the placed one
@@ -329,7 +356,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     frameTimes.push(t); while (frameTimes.length && frameTimes[0] < t - 10000) frameDropped = frameTimes.shift();   // D340: the last 10 s of frame times, for checkLate
     if (heldNetMs > 0 && expectRepeat && held.size) { quietMs += elapsed; if (quietMs > heldNetMs) { held.clear(); down.clear(); shortcutDown.clear(); expectRepeat = false; boost = false; ctrlFly = null; } }   // D336: the net (above onKey)
     if (ghostJob) stepGhostJob();   // D407: the exact ghost, a slice of it this frame
-    if (exactDue) { const s = exactDue; exactDue = null; refreshNow(s); }   // D421 part 4: the exact road after a sculpt drag, in a frame of its own
+    if (exactJob) stepExact();   // D421c: the exact road after a sculpt drag, a slice of it this frame
+    else if (exactDue) { const s = exactDue; exactDue = null; startExact(s); }   // D421 part 4: the exact road after a sculpt drag, from the frame after the release
     const sprint = boost ? boostAt(boostT) : 1; boostT = boost ? boostT + dt : 0;   // the speed THIS frame, then one more frame of Shift held
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {
@@ -426,7 +454,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     pick(x, y) { return shownPose && track && track.path ? pickAt(track.path, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
     dispose() {
-      win.cancelAnimationFrame(raf); clearFull(); unsub(); unskin(); if (layer) layer.dispose();
+      win.cancelAnimationFrame(raf); clearFull(); exactJob = null; exactDue = null; unsub(); unskin(); if (layer) layer.dispose();
       win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
       if (win.document) win.document.removeEventListener('visibilitychange', onVis);
       canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease); win.removeEventListener('mousedown', onAnyDown, true); win.removeEventListener('pointerdown', onAnyDown, true); win.removeEventListener('pointerup', onAnyUp, true);
