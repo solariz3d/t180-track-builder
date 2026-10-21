@@ -102,6 +102,18 @@ function trailingStraightFrom(P, ch = 'kh') {
   }
   return 0;
 }
+// D421c: a FROZEN piece's whole-piece reads, kept with it (a document's pieces are deep-frozen, so these cannot change; knotVectorOf keeps its knot vector so, D404): its whole
+// integral of a channel and where it was last straight before its end. A corner walks back over every turning piece before it, so the labels read every earlier piece again for
+// each piece: after a whole-lap re-close nothing is quite straight (the close gives each piece about 1e-6 rad/m of turn), and row 3's re-close frame spent 49 ms on it.
+// The same function on the same piece gives the same number, so a kept read is the read, to the bit; an unfrozen piece is read afresh every time.
+const WHOLE = new WeakMap();
+function keptOf(P, ch) {
+  if (!Object.isFrozen(P) || !Object.isFrozen(P.knots) || !Object.isFrozen(P.channels) || !Object.isFrozen(P.channels[ch])) return null;
+  let w = WHOLE.get(P); if (!w) WHOLE.set(P, (w = {}));
+  return w;
+}
+const integralWhole = (P, ch) => { const w = keptOf(P, ch); if (!w) return channelIntegral(P, ch); const k = 'I' + ch; return k in w ? w[k] : (w[k] = channelIntegral(P, ch)); };
+const lastStraightFromEnd = (P, ch) => { const w = keptOf(P, ch); if (!w) return lastStraight(P, P.length, ch); const k = 'S' + ch; return k in w ? w[k] : (w[k] = lastStraight(P, P.length, ch)); };
 /** The corner of channel ch (kh the turn, kv the climb) that piece i belongs to: { deg, fromId, endsPer100m }, or null (see THE CORNER above). */
 function cornerOf(doc, i, ch) {
   const P = doc.pieces[i];
@@ -111,9 +123,9 @@ function cornerOf(doc, i, ch) {
   if (end === 0 && Math.abs(khAt(P, 0, ch)) < STRAIGHT) return null;   // straight from its start to its end
   // back to where the road was last straight, from inside piece i (before its turning end) and on into earlier pieces
   let j = i, s0 = lastStraight(P, end, ch);
-  while (s0 === null) { if (j === 0 || !isRoad(doc.pieces[j - 1])) { s0 = 0; break; } j--; s0 = lastStraight(doc.pieces[j], doc.pieces[j].length, ch); }
+  while (s0 === null) { if (j === 0 || !isRoad(doc.pieces[j - 1])) { s0 = 0; break; } j--; s0 = lastStraightFromEnd(doc.pieces[j], ch); }
   let turn = channelIntegral(doc.pieces[j], ch, s0, j === i ? P.length : doc.pieces[j].length);
-  for (let k = j + 1; k <= i; k++) turn += channelIntegral(doc.pieces[k], ch);
+  for (let k = j + 1; k <= i; k++) turn += integralWhole(doc.pieces[k], ch);
   const kEnd = khAt(P, P.length, ch), ends = Math.abs(kEnd) >= STRAIGHT;
   return { deg: turn * DEG, fromId: doc.pieces[j].id, endsPer100m: ends ? kEnd * DEG * 100 : null };
 }
@@ -191,7 +203,7 @@ function posesOf(doc) {
   for (const P of doc.pieces) {
     out.push({ theta, p });
     if (P.type === 'flight') { theta += P.heading; p = P.pitch; continue; }
-    theta += channelIntegral(P, 'kh'); p += channelIntegral(P, 'kv');
+    theta += integralWhole(P, 'kh'); p += integralWhole(P, 'kv');
   }
   return out;
 }

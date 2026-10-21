@@ -10,6 +10,7 @@
 //   6  the shell's pieceReadouts: one answer per document, carried across a Grab, equal to the fresh readouts
 //   7  a flight is always read again (its readout reads the road before it and the whole track)
 //   8  a corner reads the id, the knots and the channel of each of its pieces: a new id or moved knots read it again, though the pitch is the same
+//   9  a frozen piece keeps its whole-piece reads (its whole integral, where it was last straight): the same numbers as reading it afresh; an unfrozen piece is read afresh
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -146,4 +147,27 @@ test('row 8: a corner whose pieces read differently is read again though the pit
   assert.equal(n2.poses[4].p, w2.poses[4].p, 'level: the same pitch');
   assert.deepStrictEqual(n2.reads, fresh(moved), 'every readout is the fresh one');
   assert.notEqual(n2.reads[4].corner.turnDeg, w2.reads[4].corner.turnDeg, 'the moved knots turn the corner differently');
+});
+
+test('row 9: a frozen piece\'s kept whole-piece reads are the reads: a frozen lap reads as its unfrozen copy (read afresh), turn and climb kept apart; an unfrozen piece changed in place reads its change', async () => {
+  const s = await shellOf((x) => { open12(x); x.close(); }), d = docOf(s);
+  assert.ok(Object.isFrozen(d.pieces[3]) && Object.isFrozen(d.pieces[3].channels.kh), 'a document\'s pieces are frozen');
+  const thaw = (v) => (Array.isArray(v) ? v.map(thaw) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, thaw(x)])) : v);
+  const loose = thaw(d);
+  assert.ok(!Object.isFrozen(loose.pieces[3]), 'the copy is not frozen');
+  const a = RD.pieceReadouts(d).reads, b = RD.pieceReadouts(loose).reads, c = RD.pieceReadouts(d).reads;
+  assert.deepStrictEqual(a, b, 'the frozen lap (its reads kept) reads as the unfrozen copy (read afresh every time)');
+  assert.deepStrictEqual(c, b, 'and again, from what was kept');
+  assert.ok(a.some((r) => r.corner) && a.some((r) => r.climbCorner) && a.some((r, i) => r.corner && r.climbCorner && r.corner.turnDeg !== r.climbCorner.climbDeg), 'the lap turns and climbs, by different amounts');
+  // a corner that begins in the middle of a piece walked back into: a straight 300 m whose end a Bend turned, then a turning piece; its kept last-straight is the
+  // middle of the 300 m (where it was last straight before its END), not its start
+  const m = await shellOf((x) => { x.extend({ length: 300 }); x.extend({ length: 200, transition: 40, targets: { kh: 0.004 } }); x.extend({ length: 200, transition: 40, targets: { kh: 0 } }); x.sculptOnce({ mode: 'rate', channel: 'kh', s0: 285, r: 60, delta: 0.002 }); });
+  const md = docOf(m), mr = RD.pieceReadouts(md).reads;
+  assert.equal(mr[1].corner.fromId, md.pieces[0].id, 'piece 1\'s corner walks back into the 300 m');
+  assert.deepStrictEqual(mr, RD.pieceReadouts(thaw(md)).reads, 'kept or read afresh, the same corners');
+  assert.deepStrictEqual(RD.pieceReadouts(md).reads, RD.pieceReadouts(thaw(md)).reads, 'and from what was kept');
+  // an unfrozen piece changed in place: nothing kept for it, so the change is read
+  const before = RD.pieceReadouts(loose).reads[6].corner.turnDeg;
+  loose.pieces[5].channels.kh = loose.pieces[5].channels.kh.map((v, j, all) => (j < 2 || j >= all.length - 2 ? v : v * 1.5));
+  assert.notEqual(RD.pieceReadouts(loose).reads[6].corner.turnDeg, before, 'piece 5\'s turn changed in place: piece 6\'s corner reads it');
 });
