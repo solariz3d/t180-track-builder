@@ -57,6 +57,13 @@ test('row 1: mergeChords makes a piece\'s 2 m chords a few long ones, within the
   const mg = C.mergeChords(withGap); assert.ok(mg.includes(gap), 'a gap is kept as it is'); assert.ok(mg.indexOf(gap) > 0 && mg.indexOf(gap) < mg.length - 1, 'and nothing merges across it');
   assert.equal(C.mergeChords([]).length, 0, 'empty in, empty out'); assert.equal(C.sameSegment(segs[3], { ...segs[3] }), true, 'an equal copy is the same segment');
   assert.equal(C.sameSegment(segs[3], { ...segs[3], k1: segs[3].k1 + 1e-6 }), false, 'a changed rate is not');
+  // a row grid compared by value, remembered per pair of frozen grids: the answer is the same the second time, and a grid that differs by one number is never the same
+  const grid = (k) => Object.freeze(Array.from({ length: 392 }, (_, i) => (i === 200 ? k : i / 391)));
+  const g1 = grid(200 / 391), g1b = grid(200 / 391), g2 = grid(0.5000001), withGrid = (fr) => Object.freeze({ ...segs[3], fractions: fr });
+  for (let rep = 0; rep < 2; rep++) {
+    assert.equal(C.sameSegment(withGrid(g1), withGrid(g1b)), true, `equal grids, two arrays, are the same segment (time ${rep + 1})`);
+    assert.equal(C.sameSegment(withGrid(g1), withGrid(g2)), false, `a grid that differs by one number is not (time ${rep + 1})`);
+  }
 });
 
 test('row 2: a drag step builds nothing placed: how "drag", the placed path and mesh the very ones, every other batch the placed one, the window a few dozen chords; the release equals a fresh build', async () => {

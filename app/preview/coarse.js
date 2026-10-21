@@ -151,7 +151,18 @@ const startProfile = (g) => (g.blend && g.blend.s0 === 0 && Math.abs(g.blend.len
 // first the exact numbers (the chords the brush did not reach come back bit for bit: a tube's profile is hundreds of numbers, and hashing each fresh one cost 5 ms a step on the 280° oval)
 const sameList = (x, y) => { if (x === y) return true; if (!x || !y || x.length !== y.length) return false; for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false; return true; };
 const sameP = (p, q) => p === q || (!!p && !!q && ((p.font === q.font && p.material === q.material && sameList(p.u, q.u) && sameList(p.psi, q.psi)) || canon(p) === canon(q)));
-const sameGrid = (f, g) => f === g || (Array.isArray(f) && Array.isArray(g) && (sameList(f, g) || canonGrid(f) === canonGrid(g)));
+// a pair of row grids is compared once and remembered: a tube's chords share a handful of grids of hundreds of numbers each, and the trim met each pair hundreds of times a step
+// (748 chords and 6 grids on the 360° oval: most of its 4.7 ms trim). A frozen grid cannot change, so its answer holds; any other pair is compared every time, as before.
+const gridPairs = new WeakMap();
+const sameGridOnce = (f, g) => sameList(f, g) || canonGrid(f) === canonGrid(g);
+const sameGrid = (f, g) => {
+  if (f === g) return true;
+  if (!Array.isArray(f) || !Array.isArray(g)) return false;
+  if (!Object.isFrozen(f) || !Object.isFrozen(g)) return sameGridOnce(f, g);
+  let m = gridPairs.get(f); if (!m) gridPairs.set(f, (m = new WeakMap()));
+  let r = m.get(g); if (r === undefined) { r = sameGridOnce(f, g); m.set(g, r); }
+  return r;
+};
 function mergeable(a, b) {
   if (!a || !b || a.kind !== 'road' || b.kind !== 'road' || a.id !== b.id || a.part !== b.part || a.word !== b.word) return null;
   if ((a.heartline || 0) !== (b.heartline || 0) || b.profileIn !== undefined || a.profileIn !== undefined || !sameGrid(a.fractions, b.fractions)) return null;

@@ -150,6 +150,10 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // Nothing here closes the lap, checks overlaps, or builds the whole track's segments: the shell gives the step's segments (its cache converts the changed pieces only)
   // and the release builds the exact road from them with update(), as before. The base's state is not changed, so that update diffs against the document the drag began on.
   let dragShown = null;   // the last drag frame: { resolved, out }
+  // the segments a drag's steps have been found equal (by value) to the base's: new segment -> the base index it equals. The shell's cache hands the same objects back on every step for
+  // the pieces it did not convert again, so after the first step the trim is a lookup, not a comparison of a tube's profile number by number (4.75 ms a step on the 360 deg oval)
+  let equalFor = null, equalOf = new WeakMap();
+  const sameAt = (g, base, j) => { if (g === base[j]) return true; if (equalFor !== base) { equalFor = base; equalOf = new WeakMap(); } if (equalOf.get(g) === j) return true; if (!sameSegment(g, base[j])) return false; equalOf.set(g, j); return true; };
   function dragFrame(resolved, b) {
     const base = lastResolved;
     if (!base || !last || !path || !mesh || !mesh._state || detail !== 1 || builtDetail !== 1 || !Array.isArray(resolved.segments) || !Array.isArray(base.segments)) return null;
@@ -163,8 +167,8 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     let e = 0; while (e < n - a && e < m - a && segs[n - 1 - e] === bs[m - 1 - e]) e++;
     let bB = m - e;
     // the chords of a brushed piece the brush did not reach come back from the shell equal but new: trimmed off both ends, so the window is what changed
-    while (a < bB && a < n - e && sameSegment(segs[a], bs[a])) a++;
-    while (bB > a && n - e > a && sameSegment(segs[n - e - 1], bs[bB - 1])) { bB--; e++; }
+    while (a < bB && a < n - e && sameAt(segs[a], bs, a)) a++;
+    while (bB > a && n - e > a && sameAt(segs[n - e - 1], bs, bB - 1)) { bB--; e++; }
     // the lift (Grab's hill and swerve) changes the road inside [s0 − r, s0 + r] only, and is a new function on every step whatever it holds: the window covers that span
     const liftFn = typeof resolved.lift === 'function' ? resolved.lift : null;   // (named apart from update()'s own line, which a mutation harness anchors on)
     if (liftFn && Number.isFinite(b && b.s0)) {
