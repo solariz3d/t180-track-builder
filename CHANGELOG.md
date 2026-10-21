@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- **A sculpt drag no longer pays for the labels and the start marks at every step.** While a brush drag was open, every step made the piece labels read every piece again, and the start line and grid marks (and the hover test that looks for them under the pointer) rebuild the whole lap's path: on a 10 km track that was about 1.3 seconds of a 16-step drag (D421, C's profile). Now, while the drag is open, the labels and the marks stay as they were when it began, and they catch up in the frame after you let go, not inside the release itself. Nothing changes outside a drag.
 - **The brush no longer freezes the builder.** Dragging with the brush on (its height or sideways mode, the one it starts in) froze the whole window for seconds at every step: about 3.5 seconds a step on a 2 km track and 21 seconds on 10 km. To find how high to make the hill, the brush read the road every quarter metre across its width, and each reading measured the whole track again from the start. It now measures the track once per step and reuses what has not changed. The longest pause while dragging went from about 3 seconds to under a tenth of a second on a 2 km track, and from 11 seconds to about a quarter of a second on 10 km. The track the brush makes is exactly the same as before.
 
 ## [0.4.9] - 2026-10-20
