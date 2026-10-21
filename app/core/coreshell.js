@@ -406,13 +406,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     set({ brush: { ...b, closing: true }, message: null });
     const closes = (r) => !!(r && r.out && r.out.converged && r.out.doc);
     const stillOurs = () => releaseJob === entry && st.brush && st.brush.closing && st.history.present === open;
-    // P's review item 8: a second, cheap try with the window grown by one road piece each side keeps "only the window's pieces move" true more often before the whole lap moves
-    const lo = Math.max(0, Math.min(...win) - 1), hi = Math.min(open.pieces.length - 1, Math.max(...win) + 1);
-    const wide = [...new Set([lo, ...win, hi])].filter((i) => open.pieces[i] && open.pieces[i].type === 'road').sort((x, y) => x - y);
-    const tryWide = (r1) => (wide.length > win.length ? runCloseJob({ doc: open, window: wide }) : Promise.resolve(r1));
-    const whole = (r1, r2) => runCloseJob({ doc: open, whole: true, edited: win }).then((r3) => (closes(r3) || r3.cancelled ? r3 : { failed: [r1, r2, r3] }));
-    entry.promise = runCloseJob({ doc: open, window: win })
-      .then((r1) => (closes(r1) || r1.cancelled || !stillOurs() ? r1 : tryWide(r1).then((r2) => (closes(r2) || r2.cancelled || !stillOurs() ? r2 : whole(r1, r2)))))
+    // D421c (the librarian's ruling on O's window measure, exo_memory/handback/p-d421c-window-O_2026-10-20.md): the closing equations hold the lap's SEAM joint, which only the
+    // two road pieces beside the start line can move, so a window away from the seam is refused however wide (+1 to +8 each side all refused on sculpt-frame row 3's lap, ~90 ms a
+    // try; it replaced P's item 8, the window grown by one piece each side). The tries: the window; the window and the lap's last road piece; and the first too; then the whole lap.
+    // A try that is the one before it (the window already holds that piece) is not run again.
+    const road = open.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), lastR = road[road.length - 1], firstR = road[0];
+    const withSeam = (...more) => [...new Set([...win, ...more])].sort((x, y) => x - y);
+    const tries = [win, withSeam(lastR), withSeam(lastR, firstR)].filter((w, k, all) => !k || w.length !== all[k - 1].length);
+    const whole = (rs) => runCloseJob({ doc: open, whole: true, edited: win }).then((r) => (closes(r) || r.cancelled ? r : { failed: [...rs, r] }));
+    const attempt = (k, rs) => (k === tries.length ? whole(rs) : runCloseJob({ doc: open, window: tries[k] }).then((r) => (closes(r) || r.cancelled || !stillOurs() ? r : attempt(k + 1, [...rs, r]))));
+    entry.promise = attempt(0, [])
       .then((r) => {
         if (r.cancelled || !stillOurs()) {   // dropped (Esc), or the document replaced meanwhile
           if (releaseJob !== entry) return st;   // Esc: cancelBrush has already cleared it
