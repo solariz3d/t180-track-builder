@@ -91,12 +91,16 @@ test('row 3: a route step on an OPEN track moves the road after the window as on
 });
 
 test('row 4: a route step on a CLOSED lap leaves it open while the drag lasts: the joint\'s seam hidden, the gap a line from the moved end to the start', async () => {
-  const s = await closedTrack(), tm = createTrackModel(), base = tm.update(s.getState().resolved), d = s.getState().history.present;
+  const s = await closedTrack(), d = s.getState().history.present;
   const st0 = s.getState().resolved;
   // the step the release re-closes: a heading brush on the first straight, the shell's own segments for it with no per-step close (D421 part 2 removes that)
   const P = d.pieces[0], bent = { ...d, pieces: [{ ...P, channels: { ...P.channels, kh: P.channels.kh.map((v, i, a) => (i > 2 && i < a.length - 3 ? v + 0.0006 : v)) } }, ...d.pieces.slice(1)] };
   const { toSegments } = require('../../src/core/adapter.js');
-  const segs = toSegments(bent), resolved = Object.freeze({ ...st0, segments: Object.freeze(segs.map((g, j) => (j >= segs.length - 600 && st0.segments[j] && C.sameSegment(g, st0.segments[j]) ? st0.segments[j] : g))) });
+  const segs = toSegments(bent);
+  // both forms of a step: the lap still marked closed (a shell that re-closes per step) and the lap OPENED for the drag (D421 part 2's route tools re-close on release only)
+  for (const closed of [true, false]) {
+  const tm = createTrackModel(), base = tm.update(s.getState().resolved);
+  const resolved = Object.freeze({ ...st0, closed, segments: Object.freeze(segs.map((g, j) => (j >= segs.length - 600 && st0.segments[j] && C.sameSegment(g, st0.segments[j]) ? st0.segments[j] : g))) });
   const fr = tm.update(resolved, { drag: { mode: 'rate', channel: 'kh', s0: P.length / 2, r: P.length / 2 } });
   assert.equal(fr.how, 'drag'); assert.equal(fr.drag.moved, true, 'the road after the window moved');
   assert.ok(fr.drag.gap && fr.drag.gap.metres > 0.5, `the lap is drawn open: a gap of ${fr.drag.gap && fr.drag.gap.metres} m`);
@@ -105,6 +109,7 @@ test('row 4: a route step on a CLOSED lap leaves it open while the drag lasts: t
   const joint = base.mesh.cells.findIndex((c) => c.seam && c.piece === 0);
   if (joint >= 0) assert.ok(!fr.batches.includes(base.batches[joint]), 'the joint\'s seam is hidden');
   assert.equal(fr.path, base.path, 'nothing closed: the placed path is the one on show');
+  }
 });
 
 test('row 5: a hill (Grab, the lift): the window is the brush\'s span, and the ghost stands on the hill', async () => {

@@ -148,8 +148,10 @@ function coarsenRun(segments, factor = CHEAP_FACTOR, { cap = 24 } = {}) {
 const DEFAULT_MERGE = Object.freeze({ maxTurn: 0.03, maxRoll: 0.05, maxLen: Infinity });
 const startProfile = (g) => (g.blend && g.blend.s0 === 0 && Math.abs(g.blend.length - g.length) < 1e-9 ? g.blend.from : g.profile);
 // profiles and row grids are compared by VALUE (canon: one object per value rounded to 1e-9), since the shell builds a brushed piece's chords afresh each step
-const sameP = (p, q) => p === q || (!!p && !!q && canon(p) === canon(q));
-const sameGrid = (f, g) => f === g || (Array.isArray(f) && Array.isArray(g) && canonGrid(f) === canonGrid(g));
+// first the exact numbers (the chords the brush did not reach come back bit for bit: a tube's profile is hundreds of numbers, and hashing each fresh one cost 5 ms a step on the 280° oval)
+const sameList = (x, y) => { if (x === y) return true; if (!x || !y || x.length !== y.length) return false; for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false; return true; };
+const sameP = (p, q) => p === q || (!!p && !!q && ((p.font === q.font && p.material === q.material && sameList(p.u, q.u) && sameList(p.psi, q.psi)) || canon(p) === canon(q)));
+const sameGrid = (f, g) => f === g || (Array.isArray(f) && Array.isArray(g) && (sameList(f, g) || canonGrid(f) === canonGrid(g)));
 function mergeable(a, b) {
   if (!a || !b || a.kind !== 'road' || b.kind !== 'road' || a.id !== b.id || a.part !== b.part || a.word !== b.word) return null;
   if ((a.heartline || 0) !== (b.heartline || 0) || b.profileIn !== undefined || a.profileIn !== undefined || !sameGrid(a.fractions, b.fractions)) return null;

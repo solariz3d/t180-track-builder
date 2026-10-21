@@ -156,7 +156,9 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     if (!base || !last || !path || !mesh || !mesh._state || detail !== 1 || builtDetail !== 1 || !Array.isArray(resolved.segments) || !Array.isArray(base.segments)) return null;
     if (resolved === base) return { ...last, how: 'same' };
     if (dragShown && dragShown.resolved === resolved) return dragShown.out;
-    if (!!resolved.closed !== !!base.closed || JSON.stringify(resolved.start || null) !== JSON.stringify(base.start || null)) return null;   // a close, an open or a new start is not a brush step
+    // a close or a new start is not a brush step; a closed lap OPENED for the drag is (the shell's route tools re-close it on release, D421 part 2): it is drawn open, from the closed lap's own path
+    if ((!!resolved.closed && !base.closed) || JSON.stringify(resolved.start || null) !== JSON.stringify(base.start || null)) return null;
+    const lapClosed = !!base.closed;
     const segs = resolved.segments, bs = base.segments, n = segs.length, m = bs.length;
     let a = 0; while (a < n && a < m && segs[a] === bs[a]) a++;
     let e = 0; while (e < n - a && e < m - a && segs[n - 1 - e] === bs[m - 1 - e]) e++;
@@ -168,7 +170,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     const liftFn = typeof resolved.lift === 'function' ? resolved.lift : null;   // (named apart from update()'s own line, which a mutation harness anchors on)
     if (liftFn && Number.isFinite(b && b.s0)) {
       const r = Number.isFinite(b.rUsed) ? b.rUsed : b.r, s1 = b.s0 - r, s2 = b.s0 + r;
-      if (!(r >= 0) || (resolved.closed && (s1 < 0 || s2 > path.lengthM))) return null;   // a window across a closed lap's start: drawn the old way
+      if (!(r >= 0) || (lapClosed && (s1 < 0 || s2 > path.lengthM))) return null;   // a window across a closed lap's start: drawn the old way
       const segAt = (s) => { let lo = 0, hi = m - 1; while (lo < hi) { const md = (lo + hi + 1) >> 1; if (path.starts[md].s <= s) lo = md; else hi = md - 1; } return lo; };
       const la = segAt(Math.max(0, s1)), lb = Math.min(m, segAt(Math.min(path.lengthM, s2)) + 1);
       // the span joins what the segments changed; when nothing did (a hill moves no chord), the window is the span alone, not the span and wherever the trim stopped
@@ -196,17 +198,17 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     // the road after the window: where the window now ends, from the step's own segments (integrated as the cheap ghost's are), against where it ended
     const routeSame = bN === bB && wsegs.every((g, k) => { const o = bs[a + k]; return o && g.kind === o.kind && g.length === o.length && g.k0 === o.k0 && g.k1 === o.k1 && g.kp0 === o.kp0 && g.kp1 === o.kp1; });
     let X = null, gap = null;
-    if (!routeSame && (bB < m || resolved.closed)) {
+    if (!routeSame && (bB < m || lapClosed)) {
       const ep = geom.buildPath(wsegs, { step: 1e6, substep: CHEAP_SUBSTEP, start }), now = ep.samples[ep.samples.length - 1], was = path.segEnd[bB - 1];
       const mv = rigidMove(headingFrame(was), headingFrame(now));
       if (!isIdentity(mv)) X = mv;
     }
-    if (X && resolved.closed) {
+    if (X && lapClosed) {
       // drawn open: the lap's end, moved with the road after the window, and a line from there to its start
       const end = movePoint(X, path.segEnd[m - 1].pos), s0p = path.samples[0].pos;
       gap = { positions: new Float32Array([...end, ...s0p]), colour: [1, 0.55, 0.15], alpha: 1, metres: Math.hypot(end[0] - s0p[0], end[1] - s0p[1], end[2] - s0p[2]) };
     }
-    const closedLap = !!resolved.closed, moved = !!X, cells = mesh.cells;
+    const closedLap = lapClosed, moved = !!X, cells = mesh.cells;
     // the same composition for any list in the placed batches' order (the preview's textured copy of them included): the window and its two seams hidden, the road after it moved, the ghost added.
     // A batch's segment is its CELL's, by position (the cells and the scene's nodes are in one order, batches.js): a batch's own `piece` is read by the cell's name, which every chord of a word shares
     const compose = (list) => {
