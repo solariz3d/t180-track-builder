@@ -7,6 +7,9 @@
 //                                               a piece whose own object, neighbours, seam role and incoming state are all what they were last
 //                                               time returns its last segments (FROZEN, shared between documents) instead of building them again.
 //                                               The result equals the uncached one exactly (test/core_segcache.test.js); without `cache`, unchanged.
+//                                               D421c: a NEW piece object that differs from the one last cached for its id only in the lift channels h
+//                                               and l (a Grab's step), with the same inputs, reuses that piece's segments: no segment reads h or l
+//                                               (test/core_segcache_lift.test.js).
 //   toPath(doc, { step = 0.5, segM = 2, designKmh }) -> { segments, path }; path = buildPath(segments, { step, closed, start }),
 //                                               samples { s, seg, pos, T, L, U, kvec, roll, bankG, grade }
 //   profileAt(family, w, r)                    the LEGACY cross-section at a station (ref 09 §3), unchanged since D186
@@ -280,6 +283,21 @@ function deepFreeze(v) {
 // next piece, whose own last row was then new too, and so on to the lap's end. `piece` reads a carried cross-section only for its numbers and strings, so
 // equal values give the same segments, bit for bit.
 const BY_VALUE = new Set([10, 13]);
+// D421c (O): the LIFT channels, height and lateral. No segment reads them (the lift does: offsetPath, after the path is built), so a piece that differs from the
+// one last cached for its id in these alone has that piece's segments, number for number. A Grab drag makes exactly such pieces at every step (measured on
+// sculpt-frame row 2: 3 pieces a step, every segment identical, about 1.5 ms). The piece last cached for each id is kept beside the cache (LAST_BY_ID, per cache).
+const LIFT = new Set(['h', 'l']), LAST_BY_ID = new WeakMap();
+/** The same piece but for its lift channels: every field equal by value, and every channel but h and l. */
+function sameButLift(A, B) {
+  const ka = Object.keys(A), kb = Object.keys(B);
+  if (ka.length !== kb.length || !ka.every((x, i) => x === kb[i])) return false;
+  for (const x of ka) {
+    if (x !== 'channels') { if (!sameValue(A[x], B[x])) return false; continue; }
+    const ca = Object.keys(A.channels), cb = Object.keys(B.channels);
+    if (ca.length !== cb.length || !ca.every((c, i) => c === cb[i] && (LIFT.has(c) || sameValue(A.channels[c], B.channels[c])))) return false;
+  }
+  return true;
+}
 /** Equal all the way down: numbers by Object.is (−0 is not 0), arrays and plain objects key by key; anything else by identity. */
 function sameValue(a, b) {
   if (Object.is(a, b)) return true;
@@ -354,8 +372,12 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
   };
   doc.pieces.forEach((P, pi) => {
     if (!cache) { piece(P, pi); return; }
-    const k = inputsOf(pi), hit = cache.get(P);
-    if (hit && hit.k.length === k.length && hit.k.every((x, i) => Object.is(x, k[i]) || (BY_VALUE.has(i) && sameValue(x, k[i])))) {
+    const k = inputsOf(pi), same = (h) => h && h.k.length === k.length && h.k.every((x, i) => Object.is(x, k[i]) || (BY_VALUE.has(i) && sameValue(x, k[i])));
+    let byId = LAST_BY_ID.get(cache); if (!byId) LAST_BY_ID.set(cache, (byId = new Map()));
+    let hit = cache.get(P);
+    if (!same(hit)) { const last = byId.get(P.id), h = last && last !== P && cache.get(last); hit = same(h) && sameButLift(last, P) ? h : null; if (hit) cache.set(P, hit); }
+    if (hit) {
+      byId.set(P.id, P);
       for (const g of hit.out) segs.push(g);
       ({ pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain } = hit.st);
       return;
@@ -364,7 +386,7 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
     piece(P, pi);
     const out = segs.slice(from);
     out.forEach(deepFreeze);   // shared by every later document that reuses them: a reader that writes to one throws instead of changing another's
-    cache.set(P, { k, out, st: { pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain } });
+    cache.set(P, { k, out, st: { pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain } }); byId.set(P.id, P);
   });
   return segs;
 }
