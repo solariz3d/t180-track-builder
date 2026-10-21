@@ -187,14 +187,28 @@ function blendSamples(A, B, { maxAcross = 1, maxSeam = Math.PI / 180 } = {}) {
  * `list`, so one fraction array serves every segment of the piece and the rows two neighbouring segments share are the same cross-section at the same fractions
  * (the mesh then emits no seam zip between them). The list is subsampled to at most `cap` profiles, keeping the first and last.
  */
+// D421 (a tube drag step spent most of its time here): psiAt read through plain arrays, so the many profile shapes the mesh hands psiAt do not slow this loop
+// (the same steps and arithmetic as psiAt, so the same value)
+const psiOf = (U, S, u) => {
+  if (u <= U[0]) return S[0]; if (u >= U[U.length - 1]) return S[S.length - 1];
+  let lo = 1, hi = U.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (U[m] < u) lo = m + 1; else hi = m; }
+  const i = lo, t = (u - U[i - 1]) / (U[i] - U[i - 1]); return S[i - 1] + (S[i] - S[i - 1]) * t;
+};
+const sameArray = (a, b) => a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
 function commonFractions(list, { maxAcross = 1, maxSeam = Math.PI / 180, cap = 40 } = {}) {
   const step = Math.max(1, Math.ceil(list.length / cap)), ps = list.filter((_, i) => i % step === 0 || i === list.length - 1).map((p) => normalize(p));
   const Es = ps.map(edgesOf), R = Math.max(...Es.map((e) => -e[0])), Lw = Math.max(...Es.map((e) => e[1]));
   const f0 = R > 0 ? -1 : 0, f1 = Lw > 0 ? 1 : 0, N = 4000, fine = []; for (let i = 0; i <= N; i++) fine.push(f0 + (f1 - f0) * i / N);
+  // the turning term is a largest |Δψ| over the profiles, so a profile equal to another (u and ψ, every element) adds nothing and is read once; and the ψ a
+  // profile has at fine[i] is the one the next step starts from, so each is read once (D421: the same values, read about forty times fewer)
+  const us = [], ss = [], es = [];
+  ps.forEach((p, k) => { if (!us.some((u, j) => sameArray(u, p.u) && sameArray(ss[j], p.psi))) { us.push(p.u); ss.push(p.psi); es.push(Es[k]); } });
+  const n = us.length, at = new Float64Array(n);
+  for (let k = 0; k < n; k++) at[k] = psiOf(us[k], ss[k], uAt(es[k], fine[0]));
   const m = [0];
   for (let i = 1; i <= N; i++) {
     const a = fine[i - 1], b = fine[i], side = (a + b) / 2 < 0 ? R : Lw;
-    let d = 0; for (let k = 0; k < ps.length; k++) d = Math.max(d, Math.abs(psiAt(ps[k], uAt(Es[k], b)) - psiAt(ps[k], uAt(Es[k], a))));
+    let d = 0; for (let k = 0; k < n; k++) { const v = psiOf(us[k], ss[k], uAt(es[k], b)); d = Math.max(d, Math.abs(v - at[k])); at[k] = v; }
     m.push(m[i - 1] + (b - a) * side / maxAcross + d / maxSeam);
   }
   const K = Math.max(2, Math.ceil(m[N]) + 1), out = []; let j = 0;

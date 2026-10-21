@@ -195,8 +195,11 @@ function brush(doc, { mode = 'hill', channel, s0, r, delta, sharp = false } = {}
   let d = delta;
   if (mode === 'hill' || mode === 'swerve') {
     const unit = sculpt(doc, { channel: ch, s0, r, delta: 1 }), ru = unit.radiusUsed;
-    // D421: each document's offsets once, not at every reading (each reading segmented the whole track: 3.4 s a step on 2 km, 21 s on 10 km)
-    const offU = pieceOffsets(unit.doc), off0 = pieceOffsets(doc);
+    // D421: each document's offsets once, not at every reading (each reading segmented the whole track: 3.4 s a step on 2 km, 21 s on 10 km). And the unit
+    // document's are the base's: h and l (the only channels a hill or a swerve moves) change no segment's length (a road segment's is its share of the piece's
+    // length, a gap's follows the pitch, which only kv moves), so converting the unit document again only rebuilt the brushed pieces for the same numbers
+    // (a tube drag paid it at every step; test/core_sculpt_stretch.test.js pins the offsets)
+    const off0 = pieceOffsets(doc), offU = off0;
     let got = 0; for (let s = Math.max(0, s0 - ru); s <= s0 + ru; s += 0.25) { let v; try { v = valueAt(unit.doc, ch, s, offU) - valueAt(doc, ch, s, off0); } catch (e) { continue; } if (Math.abs(v) > Math.abs(got)) got = v; }
     if (!(Math.abs(got) > 1e-6)) throw new D.CoreError('BAD_BRUSH', `brush: a ${mode} at ${s0} m moves no control point (${unit.note || 'a joint the window only half covers'})`);
     d = delta / got;
