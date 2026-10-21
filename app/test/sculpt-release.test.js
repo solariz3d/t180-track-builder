@@ -86,16 +86,19 @@ test('row 3: the preview builds the release over several frames with the drag\'s
   assert.equal(v().track.how, 'drag', 'control: a second release, its build under way');
   s.beginBrush({ mode: 'rate', channel: 'w', s0, r: 120 }); s.brushTo(0.5);
   assert.equal(v().track.how, 'drag', 'the new drag\'s frame'); assert.ok(v().track.drag && v().track.drag.base, 'drawn from a finished base');
+  // and the build it finished does not land later, over the drag: frames pass with the drag still open, and every one shows the drag's frame
+  for (let i = 0; i < 1500; i++) { s.brushTo(0.5 + (i % 50) / 100); frame();   // longer than any build here takes, so a build left running would land inside it
+    assert.equal(v().track.how, 'drag', `frame ${i + 1} of the new drag shows the drag's frame`); }
   s.endBrush(); for (let i = 0; i < 2000 && v().track.how === 'drag'; i++) frame();
   assert.notEqual(v().track.how, 'drag'); p.dispose(); assert.ok(d);
 });
 
 test('row 4: a ramp\'s blended cross-section is kept for frozen inputs and is the very mesh unfrozen inputs give; a changed from-profile is never served a kept shape', async () => {
-  // a cup piece with a ramp of its own (each chord blends, the shell's segments deep-frozen), and the same segments as plain unfrozen copies
+  // a tube whose sweep ramps (each chord blends over the piece's frozen row grid: what the memo keeps; a cup has no grid of its own and never reaches it), and the same segments unfrozen
   const s = await createCoreShell({ autosaveMs: 0 });
-  s.extend({ length: 200, family: 'bowl', first: { c: 10 } }); s.extend({ length: 200, transition: 120, targets: { c: 50 } });
-  const r = s.getState().resolved, segs = r.segments, ramped = segs.filter((g) => g.blend && g.blend.length > g.length);
-  assert.ok(ramped.length > 10 && Object.isFrozen(segs[0]), `control: ${ramped.length} chords on a ramp of their own, the shell's segments frozen`);
+  s.extend({ length: 200, first: { w: 31, t: 200 } }); s.extend({ length: 200, transition: 120, targets: { t: 300 } });
+  const r = s.getState().resolved, segs = r.segments, ramped = segs.filter((g) => g.blend && Object.isFrozen(g.blend.from) && Array.isArray(g.fractions) && Object.isFrozen(g.fractions));
+  assert.ok(ramped.length > 10 && Object.isFrozen(segs[0]), `control: ${ramped.length} chords whose ramp the memo keeps (from-profile and row grid frozen), the shell's segments frozen`);
   const thaw = (g) => JSON.parse(JSON.stringify(g)), loose = segs.map(thaw);
   const path = G.buildPath(segs, { step: 2, start: r.start });
   const once = meshHash(G.buildMesh(path, segs)), twice = meshHash(G.buildMesh(path, segs)), plain = meshHash(G.buildMesh(path, loose));
