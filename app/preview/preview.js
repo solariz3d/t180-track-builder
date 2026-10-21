@@ -176,12 +176,20 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
         if (r.done) { job.built = r.value; job.list = r.value.batches || []; }
       }
       else if (job.k < job.list.length) { const b = job.list[job.k++]; linesFor(b); if (b.uvs && b.normals && b.indices) tangentsFor(b); }
-      else { exactJob = null; refreshNow(job.st, job.built); if (exactDue && exactDue !== job.st) { const n = exactDue; exactDue = null; refreshNow(n); } else exactDue = null; return; }
+      else {
+        exactJob = null;
+        // a state that changed while this was built (an undo, an edit just after a release) supersedes it: it is not published, and the newer state gets its own sliced build
+        // from the one just made (P's D421c review, item 3: it was published first and the newer state built whole in one frame)
+        if (exactDue && exactDue !== job.st) { const n = exactDue; exactDue = null; startExact(n); return; }
+        exactDue = null; refreshNow(job.st, job.built); return;
+      }
       if (t0 !== null && clockNow() - t0 >= EXACT_SLICE_MS) return;
     }
   }
+  // a sliced build of state st, begun now (its first slice this frame)
+  function startExact(st) { try { exactJob = { st, it: model.updateSteps(st.resolved), built: null, list: null, k: 0 }; } catch (e) { exactJob = null; refreshNow(st); return; } stepExact(); }
   const refresh = (st) => {
-    if (exactJob) { if (!st.brush) { exactDue = st; return; } stepExact(true); }   // a new drag: the exact road first, then its frame
+    if (exactJob) { if (!st.brush) { exactDue = st; return; } while (exactJob) stepExact(true); }   // a new drag: the exact road first (and any build chained after it), then its frame
     if (!st.brush && track && track.how === 'drag') { exactDue = st; return; }   // the release: the exact road in the next frame
     exactDue = null;
     refreshNow(st);
@@ -349,7 +357,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (heldNetMs > 0 && expectRepeat && held.size) { quietMs += elapsed; if (quietMs > heldNetMs) { held.clear(); down.clear(); shortcutDown.clear(); expectRepeat = false; boost = false; ctrlFly = null; } }   // D336: the net (above onKey)
     if (ghostJob) stepGhostJob();   // D407: the exact ghost, a slice of it this frame
     if (exactJob) stepExact();   // D421c: the exact road after a sculpt drag, a slice of it this frame
-    else if (exactDue) { const s = exactDue; exactDue = null; try { exactJob = { st: s, it: model.updateSteps(s.resolved), built: null, list: null, k: 0 }; } catch (e) { exactJob = null; refreshNow(s); } if (exactJob) stepExact(); }   // D421 part 4: the exact road after a sculpt drag, from the frame after the release
+    else if (exactDue) { const s = exactDue; exactDue = null; startExact(s); }   // D421 part 4: the exact road after a sculpt drag, from the frame after the release
     const sprint = boost ? boostAt(boostT) : 1; boostT = boost ? boostT + dt : 0;   // the speed THIS frame, then one more frame of Shift held
     if (takeover) { if (rig.mode === 'free') takeover = false; else { const c0 = ctx(); if (c0) { rig.setMode('free', c0); said(); takeover = false; } } }   // the first move from a view takes it over, ONCE: C and B after it stay
     if (rig.mode === 'free') {

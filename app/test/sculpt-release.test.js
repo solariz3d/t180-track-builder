@@ -7,6 +7,7 @@
 //   3  the preview: after a closed-lap release the exact road is built over several frames with the drag's last frame on show until it is whole, and it is what a plain update builds;
 //      a new drag before it is whole finishes it first
 //   4  a ramp's blended cross-section is kept for frozen inputs (src/geom/mesh.js rampShape) and is the very mesh unfrozen inputs give; a changed from-profile is never served a kept shape
+//   5  a state change during the sliced build (an undo just after a release) gets a sliced build of its own, and the state it replaced never reaches the readers
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -108,4 +109,28 @@ test('row 4: a ramp\'s blended cross-section is kept for frozen inputs and is th
   const other = segs.map((g) => (g.blend ? Object.freeze({ ...g, blend: Object.freeze({ ...g.blend, from: Object.freeze({ ...g.blend.from, psi: Object.freeze(g.blend.from.psi.map((x) => x * 1.1)) }) }) }) : g));
   const changed = meshHash(G.buildMesh(path, other)), changedPlain = meshHash(G.buildMesh(path, other.map(thaw)));
   assert.notEqual(changed, once, 'control: a different ramp is a different mesh'); assert.equal(changed, changedPlain, 'and it is the one unfrozen inputs give');
+});
+
+test('row 5: a state change during the sliced build (an undo just after a release) gets a sliced build of its own, and the state it replaced never reaches the readers', async () => {
+  const Pv = require('../preview/preview.js');
+  const s = await lap(), s0 = 300 + Math.PI * R + 150;
+  let now = 0, rafs = []; const heard = [];
+  const win = { devicePixelRatio: 1, document: { hidden: false, activeElement: null, body: {}, addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: (f) => { rafs.push(f); return rafs.length; }, cancelAnimationFrame() {},
+    setTimeout, clearTimeout, performance: { now: () => now } };
+  const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0 }, { get: (t, k) => (k in t ? t[k] : () => {}) });
+  const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
+  const p = Pv.createPreview({ canvas, shell: s, win, onTrack: (t) => heard.push(t) }), v = () => p.view();
+  const real = p.model.updateSteps.bind(p.model); p.model.updateSteps = function* (...a) { const it = real(...a); let r = it.next(); while (!r.done) { now += 1; yield r.value; r = it.next(); } return r.value; };
+  let whole = 0; const plain = p.model.update.bind(p.model); p.model.update = (r, o) => { const out = plain(r, o); if (!(o && o.drag) && out.how === 'full') whole++; return out; };
+  const frame = () => { const run2 = rafs; rafs = []; for (const f of run2) f(16); };
+  s.beginBrush({ mode: 'rate', channel: 'w', s0, r: 120 }); s.brushTo(1); s.brushTo(2); s.endBrush();
+  frame(); assert.equal(v().track.how, 'drag', 'control: the release\'s build under way');
+  heard.length = 0; whole = 0;
+  const before = s.getState().history.present; s.undo(); assert.notEqual(s.getState().history.present, before, `control: the undo ran (${s.getState().message})`);
+  for (let i = 0; i < 4000 && v().track.how === 'drag'; i++) frame();
+  assert.notEqual(v().track.how, 'drag', 'the road is whole again');
+  assert.equal(whole, 0, 'nothing was built whole in one frame: the undone road had a sliced build of its own');
+  assert.equal(heard.length, 1, `the readers heard the road once (${heard.length}), the undone one, not first the release it replaced`);
+  const want = createTrackModel(); assert.equal(meshHash(v().track.mesh), meshHash(want.update(s.getState().resolved).mesh), 'and it is what a plain update of the undone document builds, to the byte');
+  p.dispose();
 });
