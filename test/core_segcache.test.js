@@ -97,14 +97,53 @@ test('row 2b: each fixture grown piece by piece through ONE cache, then shrunk b
 });
 
 test('row 2c: the SAME later piece after a changed earlier one is rebuilt, because what it morphs from changed (the cache keys the incoming cross-section, not only the piece)', async () => {
-  const lead = async (family) => { const s = await createCoreShell({}); s.extend({ length: 300, family }); return doc(s).pieces[0]; };
+  // D421 (C): this row was WRONG and never tested what it names. Its leads were 'halfpipe' (not a family: the name is 'half-pipe', so making the lead threw
+  // and was skipped), 'flat' (a fresh lead of flat's own width, refused at the joint, skipped) and 'bowl' (the lead the document already had). So the cache was
+  // only ever asked about the lead it already held, and a key that compared the carried cross-section by its keys alone passed (C's mutant A3). Now:
+  // (a) every family, as the SAME lead piece with only its family changed (so the joint holds), each one counted as run; and (b) the case where the carried
+  // numbers reach the follower: a tube made by Extend's targets straight after a legacy lead (it morphs out of the lead's last row, u and ψ), the lead's end
+  // width one quantum apart, which the joint allows (a family change at that joint is refused, and within one kind a follower does not read the numbers).
   const s = await createCoreShell({}); s.extend({ length: 300, family: 'bowl' }); s.extend({ length: 300, first: { w: 40, t: 360 } });
   const d = doc(s), tube = d.pieces[1], cache = new WeakMap();
   assert.ok(isDeepStrictEqual(AD.toSegments(d, { cache }), AD.toSegments(d)), 'bowl, then the tube');
-  for (const family of ['halfpipe', 'flat', 'bowl']) {
-    let other; try { other = { ...d, pieces: [{ ...(await lead(family)), id: d.pieces[0].id }, tube] }; D.checkDoc(other); } catch (e) { continue; }
-    assert.ok(isDeepStrictEqual(AD.toSegments(other, { cache }), AD.toSegments(other)), `${family}, then the very same tube object`);
+  let ran = 0;
+  for (const family of D.FAMILIES) {
+    const other = { ...d, pieces: [{ ...d.pieces[0], family }, tube] }; D.checkDoc(other);
+    assert.ok(isDeepStrictEqual(AD.toSegments(other, { cache }), AD.toSegments(other)), `${family}, then the very same later piece`);
+    ran++;
   }
+  assert.equal(ran, 3, 'every family reached the cache');
+  const t = await createCoreShell({}); t.extend({ length: 300, family: 'bowl' }); t.extend({ length: 300, transition: 40, targets: { t: 120 } });
+  const e = doc(t), lead = e.pieces[0], into = e.pieces[1], w = lead.channels.w, ofInto = (segs) => segs.filter((g) => g.id === into.id);
+  assert.equal(D.kindOf(into), 'tube', 'control: the follower is a tube entering from a legacy piece');
+  const wider = { ...e, pieces: [{ ...lead, channels: { ...lead.channels, w: [...w.slice(0, -1), +(w.at(-1) + 10 ** -D.DEC.w).toFixed(D.DEC.w)] } }, into] };
+  D.checkDoc(wider);
+  const fresh = AD.toSegments(wider), tcache = new WeakMap();
+  assert.ok(!isDeepStrictEqual(ofInto(fresh), ofInto(AD.toSegments(e))), 'control: a lead one width-quantum wider changes the tube that morphs out of it');
+  assert.ok(isDeepStrictEqual(AD.toSegments(e, { cache: tcache }), AD.toSegments(e)), 'the bowl, then the tube');
+  assert.ok(isDeepStrictEqual(AD.toSegments(wider, { cache: tcache }), fresh), 'the wider lead, then the very same tube object');
+});
+
+test('row 2d: a brush step inside the FIRST piece of a closed tube lap rebuilds that piece only: every later piece, handed the same cross-section by value (a new object), is reused (D421: they were rebuilt at every step)', async () => {
+  const s = await createCoreShell({});   // A's 360° tube oval (E's probe3 row 4a)
+  s.extend({ length: 300, first: { w: 31, t: 360 } });
+  for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } });
+  s.extend({ length: 60, transition: 40, targets: { kh: 0 } });
+  s.close(); assert.equal(doc(s).closed, true, s.getState().message);
+  const first = doc(s).pieces[0].id;
+  s.beginBrush({ channel: 'height', s0: 150, r: 60 });   // a height brush (the Sculpt mode's Grab is the same brush, on its own branch)
+  assert.ok(s.getState().brush, `the brush opened: ${s.getState().message}`);
+  for (const dy of [0.5, 1, 1.5]) {
+    const before = s.getState().resolved.segments;
+    s.brushTo(dy);
+    assert.ok(s.getState().brush, `the step at ${dy}: ${s.getState().message}`);
+    const after = s.getState().resolved.segments, later = after.map((g, i) => [g, i]).filter(([g]) => g.id !== first);
+    assert.ok(later.length > 300, `control: the later pieces have ${later.length} segments`);
+    const rebuilt = later.filter(([g, i]) => before[i] !== g).length;
+    assert.equal(rebuilt, 0, `step ${dy}: ${rebuilt} of ${later.length} segments of the untouched pieces were rebuilt`);
+    same(s, `the step at ${dy}`);
+  }
+  s.endBrush(); same(s, 'released');
 });
 
 test('row 3: a cached segment is frozen all the way down, so writing to a shared one throws', async () => {

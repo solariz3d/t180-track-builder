@@ -187,8 +187,20 @@ function blendSamples(A, B, { maxAcross = 1, maxSeam = Math.PI / 180 } = {}) {
  * `list`, so one fraction array serves every segment of the piece and the rows two neighbouring segments share are the same cross-section at the same fractions
  * (the mesh then emits no seam zip between them). The list is subsampled to at most `cap` profiles, keeping the first and last.
  */
+// D421 (O's shell cut): the answer is a pure function of the subsampled, normalised profiles' u and psi and of maxAcross and maxSeam, and a sculpt step on a tube
+// converts the same profiles again and again (20 Grab steps on a tube lap: 842 ms of a 1,551 ms profile was this function's own time). Kept by VALUE, exactly: the key holds every number
+// as its shortest exact text (-0 apart), and each caller gets its own copy. Exact (test/core_stepcache.test.js).
+const FRACTIONS = new Map(), FRACTIONS_MAX = 64;
+const keyNum = (x) => (Object.is(x, -0) ? '-0' : String(x));
 function commonFractions(list, { maxAcross = 1, maxSeam = Math.PI / 180, cap = 40 } = {}) {
   const step = Math.max(1, Math.ceil(list.length / cap)), ps = list.filter((_, i) => i % step === 0 || i === list.length - 1).map((p) => normalize(p));
+  const key = [keyNum(maxAcross), keyNum(maxSeam), ...ps.map((p) => `${p.u.map(keyNum).join(',')};${p.psi.map(keyNum).join(',')}`)].join('|');
+  const hit = FRACTIONS.get(key); if (hit) return hit.slice();
+  const out = fractionsOf(ps, maxAcross, maxSeam);
+  FRACTIONS.set(key, out); if (FRACTIONS.size > FRACTIONS_MAX) FRACTIONS.delete(FRACTIONS.keys().next().value);
+  return out.slice();
+}
+function fractionsOf(ps, maxAcross, maxSeam) {
   const Es = ps.map(edgesOf), R = Math.max(...Es.map((e) => -e[0])), Lw = Math.max(...Es.map((e) => e[1]));
   const f0 = R > 0 ? -1 : 0, f1 = Lw > 0 ? 1 : 0, N = 4000, fine = []; for (let i = 0; i <= N; i++) fine.push(f0 + (f1 - f0) * i / N);
   const m = [0];
