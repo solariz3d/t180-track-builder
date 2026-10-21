@@ -162,7 +162,8 @@ function groupBatches(batches, keyOf, maxV = CHUNK_V) {
   const out = []; let cur = null;
   for (const b of batches) {
     const k = keyOf(b), nv = b.positions.length / 3;
-    if (!cur || cur.key !== k || cur.nv + nv > maxV) { cur = { key: k, list: [], nv: 0 }; out.push(cur); }
+    const moved = !!b.xform;   // D421 part 4: a batch MOVED as one piece (its xform) is never merged with one that is not, so the chunk keeps its baked arrays and is drawn under the move
+    if (!cur || cur.key !== k || cur.moved !== moved || cur.nv + nv > maxV) { cur = { key: k, moved, list: [], nv: 0 }; out.push(cur); }
     cur.list.push(b); cur.nv += nv;
   }
   return out;
@@ -196,6 +197,10 @@ function chunkLines(c) {
   }
   return c.lines;
 }
+// D421 part 4 (a sculpt drag moves the road after the brushed stretch as one piece, app/preview/trackmodel.js): a batch may carry `xform`, a rigid move of the whole road after
+// the window (row-vector, world = local · model · xform). Its chunk is baked with the batch's own placed matrix as always, so it is reused from one step to the next, and only
+// the matrix it is drawn under changes: re-baking every chunk of a 10 km lap's moved road on every step was most of a drag frame (2026-10-20, a page profile of D421 row 3)
+const chunkModel = (c) => (c.list && c.list[0] && c.list[0].xform) || c.model;
 const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.73, 0.66, 1.0] });   // 2026-10-14, Sigil: the accent violet (#b9a8ff); was sky blue, which tinted the whole view
 const GHOST_ALPHA = 0.42;
 // D179, the usability pass (p-d179-lookpass-C §1): the ties are one near-black line per station; from overhead or far
@@ -321,7 +326,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       bufferFor(b.uvs, gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.uv, 2, gl.FLOAT, false, 0, 0);
       bufferFor(chunkTangents(b), gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.tan, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.indices, gl.ELEMENT_ARRAY_BUFFER);
-      gl.uniformMatrix4fv(pr.model, false, b.model);
+      gl.uniformMatrix4fv(pr.model, false, chunkModel(b));
       gl.drawElements(gl.TRIANGLES, b.indices.length, gl.UNSIGNED_SHORT, 0); draws++; acDraws++;
       gl.disableVertexAttribArray(pr.nrm); gl.disableVertexAttribArray(pr.uv); gl.disableVertexAttribArray(pr.tan);
     }
@@ -335,7 +340,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       bufferFor(b.positions, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.pos, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.normals, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.nrm, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.indices, gl.ELEMENT_ARRAY_BUFFER);
-      gl.uniformMatrix4fv(surf.model, false, b.model);
+      gl.uniformMatrix4fv(surf.model, false, chunkModel(b));
       const c = tint || b.colour; gl.uniform3f(surf.colour, c[0], c[1], c[2]);
       gl.drawElements(gl.TRIANGLES, b.indices.length, gl.UNSIGNED_SHORT, 0); draws++;
     }
@@ -354,6 +359,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     if (!blending) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
     for (const c of chunks) {
       const L = chunkLines(c); if (!L) continue;
+      const IDENTITY = chunkModel(c);   // D421 part 4: the chunk's own matrix (the identity, or a moved road's xform); named so, the line below keeps the words a mutation harness anchors on (L17)
       drawLines(L.edges, IDENTITY, edge, alpha); drawLines(L.ties, IDENTITY, tie, alpha, TIE_FADE);
     }
     if (!blending) gl.disable(gl.BLEND);

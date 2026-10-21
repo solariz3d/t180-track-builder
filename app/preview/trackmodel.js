@@ -65,7 +65,6 @@ function rigidMove(from, to) {
   // row-vector form: p' = p · X with X's top-left block Rᵀ and its last row t
   return [R[0], R[3], R[6], 0, R[1], R[4], R[7], 0, R[2], R[5], R[8], 0, t[0], t[1], t[2], 1];
 }
-const mul4 = (A, B) => { const C = new Array(16); for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) C[r * 4 + c] = A[r * 4] * B[c] + A[r * 4 + 1] * B[4 + c] + A[r * 4 + 2] * B[8 + c] + A[r * 4 + 3] * B[12 + c]; return C; };
 const movePoint = (X, p) => [0, 1, 2].map((c) => p[0] * X[c] + p[1] * X[4 + c] + p[2] * X[8 + c] + X[12 + c]);
 const isIdentity = (X) => { const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; return X.every((v, k) => Math.abs(v - I[k]) < RIGID_EPS); };
 // a path sample as a plain object (a SampleView's fields are getters, which a spread does not copy), with its s and segment index replaced
@@ -217,7 +216,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         const bt = list[k], c = cells[k], g = c ? c.piece : bt.piece, seam = c ? !!c.seam : bt.seam;
         if (g >= a && g < bB) continue;
         if (seam && (g === a || g === bB || (moved && closedLap && g === 0))) continue;
-        out.push(moved && g >= bB ? { ...bt, model: mul4(bt.model, X) } : bt);
+        out.push(moved && g >= bB ? { ...bt, xform: X } : bt);   // the placed matrix kept, the move beside it: the renderer draws the baked chunk under it (renderer.js chunkModel)
       }
       for (const gb of ghostBatches) out.push(gb);
       return out;

@@ -8,6 +8,8 @@
 //   3  a route step on an OPEN track moves the road after the window as one piece: its batches carry the placed vertex arrays and lie within 2 cm of an exact build's
 //   4  a route step on a CLOSED lap leaves it open while the drag lasts: the joint's seam is hidden and the gap from the moved end to the start is a line of that length
 //   5  a hill (Grab, the lift): the window is the brush's span, and the ghost stands on the hill (its road is lifted where the exact build's is)
+//   6  coarsen keeps a frozen segment frozen (A's D421 §1.3), so the track model keys its coarse copy once
+//   7  the renderer draws a moved batch (xform) from its baked chunk under the move: a new move uploads nothing, and the picture is the moved matrices'
 // The preview's side (a drag never rebuilds, the release in the next animation frame) is app/test/preview-speed.test.js row 4.
 'use strict';
 const test = require('node:test');
@@ -28,7 +30,9 @@ async function closedTrack() {
   assert.equal(s.getState().history.present.closed, true, s.getState().message); return s;
 }
 const mid = (d, i) => d.pieces.slice(0, i).reduce((a, P) => a + P.length, 0) + d.pieces[i].length / 2;
-const world = (bt, k, M = bt.model) => { const p = [bt.positions[k * 3], bt.positions[k * 3 + 1], bt.positions[k * 3 + 2]]; return [0, 1, 2].map((c) => p[0] * M[c] + p[1] * M[4 + c] + p[2] * M[8 + c] + M[12 + c]); };
+const mul4 = (A, B) => { const C = new Array(16); for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) C[r * 4 + c] = A[r * 4] * B[c] + A[r * 4 + 1] * B[4 + c] + A[r * 4 + 2] * B[8 + c] + A[r * 4 + 3] * B[12 + c]; return C; };
+/** a vertex of a batch in the world: local · model, then the batch's rigid move when it has one (xform, the road after a sculpted window: renderer.js chunkModel) */
+const world = (bt, k, M = bt.xform ? mul4(bt.model, bt.xform) : bt.model) => { const p = [bt.positions[k * 3], bt.positions[k * 3 + 1], bt.positions[k * 3 + 2]]; return [0, 1, 2].map((c) => p[0] * M[c] + p[1] * M[4 + c] + p[2] * M[8 + c] + M[12 + c]); };
 const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
 /** the placed batch of segment g, found by its CELL (by position: batches.js keeps the cells' order) */
 const batchOf = (res, g) => { const k = res.mesh.cells.findIndex((c) => c.piece === g && !c.seam); return k < 0 ? null : res.batches[k]; };
@@ -82,7 +86,7 @@ test('row 3: a route step on an OPEN track moves the road after the window as on
   let worst = 0, n = 0;
   for (const off of [2, 40, 200]) {
     const was = batchOf(base, w.to + off), want = batchOf(ex, w.toNew + off); if (!was || !want) continue;
-    const got = fr.batches.find((b) => b.positions === was.positions); assert.ok(got, `segment ${w.to + off}: drawn from its placed arrays`); assert.notEqual(got.model, was.model, 'and moved');
+    const got = fr.batches.find((b) => b.positions === was.positions); assert.ok(got, `segment ${w.to + off}: drawn from its placed arrays`); assert.equal(got.model, was.model, 'its placed matrix kept'); assert.ok(got.xform, 'and the move beside it');
     for (const k of [0, (was.positions.length / 6) | 0, was.positions.length / 3 - 1]) { worst = Math.max(worst, dist(world(got, k), world(want, k))); n++; }
   }
   assert.ok(n >= 6 && worst < 0.02, `the moved road lies within ${worst.toExponential(2)} m of the exact build (${n} vertices)`);
@@ -135,4 +139,29 @@ test('row 6: coarsen keeps a frozen segment frozen (A\'s D421 §1.3), so the tra
   assert.equal(Object.isFrozen(cl), false, 'the coarse copy of an unfrozen one is not');
   assert.equal(C.coarsen([frozen], 6)[0], cf, 'and it is the same object on the next call');
   if (withGrid) assert.equal(Object.isFrozen(C.coarsen([withGrid], 6)[0]), Object.isFrozen(withGrid), 'a shell segment with a grid keeps its frozenness');
+});
+test('row 7: the renderer draws a moved batch (xform) from its baked chunk under the move: a new move uploads nothing, and the picture is the one the moved matrices give', async () => {
+  const { createRenderer } = require('../preview/renderer.js');
+  // a fake GL that keeps the arrays it is given, and for each draw the first vertex array pointed at since the last one (the positions: the renderer points them first) and its matrix
+  const fake = () => { const data = new Map(), bound = {}, drawn = []; let id = 0, uploads = 0, model = null, ptrs = [];
+    const gl = { VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4, ARRAY_BUFFER: 5, ELEMENT_ARRAY_BUFFER: 6, STATIC_DRAW: 7, COLOR_BUFFER_BIT: 8, DEPTH_BUFFER_BIT: 16, DEPTH_TEST: 9, CULL_FACE: 10, TRIANGLES: 11, FLOAT: 12, UNSIGNED_SHORT: 13, BLEND: 14, LINES: 15, SRC_ALPHA: 17, ONE_MINUS_SRC_ALPHA: 18,
+      depthMask() {}, blendFunc() {}, disableVertexAttribArray() {}, createShader: () => ({ id: ++id }), shaderSource() {}, compileShader() {}, getShaderParameter: () => true, getShaderInfoLog: () => '', createProgram: () => ({ id: ++id }), attachShader() {}, linkProgram() {}, getProgramParameter: () => true, getProgramInfoLog: () => '',
+      getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport() {}, clearColor() {}, clear() {}, enable() {}, disable() {}, uniform3f() {}, uniform1f() {}, uniform2f() {}, enableVertexAttribArray() {}, vertexAttribPointer() { ptrs.push(data.get(bound[5])); },
+      uniformMatrix4fv(loc, t, m) { if (loc === 'uModel') model = Array.from(m); }, createBuffer: () => ({ id: ++id }), bindBuffer(t, b) { bound[t] = b; }, bufferData(t, arr) { data.set(bound[t], arr); uploads++; }, deleteBuffer() {}, deleteProgram() {},
+      drawElements(mode, count) { drawn.push({ pos: ptrs[0], idx: data.get(bound[6]), model }); ptrs = []; }, drawArrays() {} };
+    return { gl, drawn, uploads: () => uploads }; };
+  const worldOf = (d) => { const out = []; for (const i of d.idx) { const p = [d.pos[i * 3], d.pos[i * 3 + 1], d.pos[i * 3 + 2]], M = d.model; out.push([0, 1, 2].map((c) => p[0] * M[c] + p[1] * M[4 + c] + p[2] * M[8 + c] + M[12 + c])); } return out; };
+  const s = await openTrack(), base = createTrackModel().update(s.getState().resolved), pose = { eye: [0, 300, -300], target: [0, 0, 400], up: [0, 1, 0], fov: 1 };
+  const half = Math.floor(base.batches.length / 2), move = (th, dx) => [Math.cos(th), 0, -Math.sin(th), 0, 0, 1, 0, 0, Math.sin(th), 0, Math.cos(th), 0, dx, 0, 3, 1];
+  const withMove = (X) => base.batches.map((b, k) => (k >= half ? { ...b, xform: X } : b)), baked = (X) => base.batches.map((b, k) => (k >= half ? { ...b, model: mul4(b.model, X) } : b));
+  const A = fake(), r = createRenderer(A.gl, { chunkVertices: 4000 });
+  r.draw(withMove(move(0.01, 1)), pose, { width: 800, height: 600 }, { look: 'words', lines: false }); const after1 = A.uploads();
+  A.drawn.length = 0; r.draw(withMove(move(0.03, 4)), pose, { width: 800, height: 600 }, { look: 'words', lines: false });
+  assert.equal(A.uploads(), after1, 'a new move of the same batches uploads nothing: the baked chunks are drawn under it');
+  const B = fake(); createRenderer(B.gl, { chunkVertices: 4000 }).draw(baked(move(0.03, 4)), pose, { width: 800, height: 600 }, { look: 'words', lines: false });
+  const a = A.drawn.flatMap(worldOf), b = B.drawn.flatMap(worldOf);
+  assert.equal(a.length, b.length, 'as many triangle corners as the moved matrices draw');
+  let worst = 0; for (let i = 0; i < a.length; i++) worst = Math.max(worst, dist(a[i], b[i]));
+  assert.ok(worst < 1e-3, `every corner where the moved matrices put it (worst ${worst.toExponential(2)} m)`);
+  assert.ok(A.drawn.some((d) => d.model[12] === 4), 'control: some chunk was drawn under the move');
 });
