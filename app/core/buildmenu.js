@@ -20,22 +20,29 @@ function ask(ctx = {}) {
   return got;
 }
 
+// D421 part 3 (design §5, the user's call 4): SCULPT MODE is the first item, a tick, since a Build | Sculpt switch in the top bar does not fit (app/test/menubar-page.test.js
+// rows 8 and 17 measured it: 87 px over at 900 px, 16 px at 1400; the plan's fallback). It sets the shell's st.sculpt and nothing else (mid-drag the shell refuses: "finish
+// the brush drag first"); Tab does the same. It replaced the "Brush" toggle that stood before Close the loop. IN SCULPT every command that places or closes is disabled,
+// its reason "in Sculpt" in the tooltip.
+const IN_SCULPT = 'in Sculpt';
 function items(ctx) {
   const b = ask(ctx);
   if (!b) return [];
+  const s = !!b.sculpt, off = s ? { disabled: true, title: IN_SCULPT } : {};
   return [
-    { label: 'Straight', run: b.straight },
-    { label: 'Level', run: b.level },
-    { label: 'To floor', run: b.toFloor },
+    { label: 'Sculpt mode', checked: s, toggle: (on) => b.setSculpt(on), title: 'Sculpt: reshape the road you have placed, with the tools in the strip under the bar (Tab switches too)' },
     { separator: true },
-    { label: 'Turn by…', panel: (box) => b.lend('turnBy', box) },
-    { label: 'Turn to grid…', panel: (box) => b.lend('grid', box) },
-    { label: 'Sharp corner…', panel: (box) => b.lend('sharp', box) },
+    { label: 'Straight', run: b.straight, ...off },
+    { label: 'Level', run: b.level, ...off },
+    { label: 'To floor', run: b.toFloor, ...off },
     { separator: true },
-    { label: 'Jump', run: b.jump, disabled: b.closed },
-    { label: 'Brush', checked: b.brushOn, toggle: b.toggleBrush },
+    { label: 'Turn by…', panel: (box) => b.lend('turnBy', box), ...off },
+    { label: 'Turn to grid…', panel: (box) => b.lend('grid', box), ...off },
+    { label: 'Sharp corner…', panel: (box) => b.lend('sharp', box), ...off },
     { separator: true },
-    { label: 'Close the loop', run: b.close, disabled: !b.canClose },
+    { label: 'Jump', run: b.jump, disabled: b.closed, ...off },
+    { separator: true },
+    { label: 'Close the loop', run: b.close, disabled: !b.canClose, ...off },
   ];
 }
 

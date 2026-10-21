@@ -84,3 +84,17 @@ test('the Undo and Redo buttons name their keys in their tooltips', () => {
   assert.match(src, /text: 'Undo', title: 'Undo \(Ctrl\+Z\)[^']*'/);
   assert.match(src, /text: 'Redo', title: 'Redo \(Ctrl\+Y or Ctrl\+Shift\+Z\)'/);
 });
+
+// D421 part 3 (design §5): Tab switches Build | Sculpt, but never from a field: in the track name or the share code box Tab is the browser's (to the next field),
+// and in a number field too (the plan names keys.js's inText; inField is the stricter reading, so the Extend fields can still be walked with Tab)
+test('Tab in a text field (or any field) leaves Sculpt as it was and stays the browser\'s; outside a field it switches the mode', async () => {
+  for (const target of [el('input'), el('input', 'text'), el('textarea'), el('input', 'number'), el('select')]) {
+    const { s, P } = await twoPieces();
+    const e = P.press('Tab', {}, target);
+    assert.deepEqual([e.prevented, !!s.getState().sculpt], [false, false], `Tab in ${target.tagName} ${target.type}`);
+  }
+  const { s, P } = await twoPieces();
+  assert.deepEqual([P.press('Tab', {}, BODY).prevented, !!s.getState().sculpt], [true, true], 'Tab outside a field: Sculpt');
+  assert.equal(P.press('Tab', { shiftKey: true }, BODY).prevented, false, 'Shift+Tab is the browser\'s (the focus back)');
+  assert.deepEqual([P.press('Tab', {}, BODY).prevented, !!s.getState().sculpt], [true, false], 'Tab again: Build');
+});

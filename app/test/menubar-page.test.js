@@ -15,7 +15,8 @@
 //   9  Settings ▸ Wall raycasting and the checker's own CSP box follow each other both ways, and the choice survives a reload
 //  10  (with the Track part) the road surface has one controller: no #textures section in the left column, one road-surface picker on the page, and the
 //      asphalt announced before the Track menu is ever opened
-//  11  (with the Build part) Build ▸ Brush shows the brush strip under the bar, not in the left column; it stays there across an edit; Brush again hides it
+//  11  (AMENDED D421 part 3: was "Build ▸ Brush shows the brush strip ..."; the plan removes Build ▸ Brush) Build ▸ Sculpt mode shows the Sculpt strip under the
+//      bar, not in the left column; it stays there across an edit; Sculpt mode again hides it
 //  12  (with the Track part) a menu panel gives its controls back when the menu closes: Start & grid… open, the menu closed, and its controls are gone
 //  13  (D356) a part that fails to load says why in its menu: "This menu could not be built: <reason>", never a silent placeholder (app/core/buildmenu.js answered with a
 //      module that throws, through DevTools' Fetch domain); the other menus still work
@@ -209,17 +210,18 @@ test('row 10: with the Track part, the road surface has one controller, alive be
   assert.equal(await ev("return !!document.querySelector('#m-track .menu-panel:not([hidden]) select');"), true, 'the picker shows in the panel');
 });
 
-test('row 11: with the Build part, Build ▸ Brush shows the brush strip under the bar, keeps it there across an edit, and hides it again', { skip }, async (t) => {
+test('row 11: Build ▸ Sculpt mode shows the Sculpt strip under the bar, keeps it there across an edit, and hides it again', { skip }, async (t) => {
   await load();
   if (!(await ev("return !!document.querySelector('.brush-strip');"))) return t.skip('the brush strip (the Build part, D355 part 2) is not in this tree');
   const where = () => ev("const s = document.querySelector('.brush-strip'), b = s.getBoundingClientRect(); return { inBanner: !!s.closest('#banner'), inLeft: !!s.closest('#left'), shown: s.offsetParent !== null && b.height > 0, top: Math.round(b.top), headBottom: Math.round(document.querySelector('header').getBoundingClientRect().bottom) };");
   let w = await where(); assert.equal(w.inBanner, true, 'the strip is in the row under the bar'); assert.equal(w.inLeft, false); assert.equal(w.shown, false, 'hidden while the brush is off');
-  await open('m-build'); await clickText('m-build', 'Brush');
-  w = await where(); assert.equal(w.shown, true, 'Build ▸ Brush shows it'); assert.ok(w.top >= w.headBottom, `under the bar (${w.top} >= ${w.headBottom})`);
-  await ev("[...document.querySelectorAll('#palette button')].find((b) => b.textContent === 'Extend').click(); await new Promise((r) => setTimeout(r, 100)); return true;");
+  await ev("[...document.querySelectorAll('#palette button')].find((b) => b.textContent === 'Extend').click(); await new Promise((r) => setTimeout(r, 100)); return true;");   // a piece, so Undo below is an edit
+  await open('m-build'); await clickText('m-build', 'Sculpt mode'); assert.equal(await ticked('m-build', 'Sculpt mode'), true, 'the item is ticked');
+  w = await where(); assert.equal(w.shown, true, 'Sculpt shows it'); assert.ok(w.top >= w.headBottom, `under the bar (${w.top} >= ${w.headBottom})`);
+  await ev("[...document.querySelectorAll('#palette button')].find((b) => b.textContent === 'Undo').click(); await new Promise((r) => setTimeout(r, 100)); return true;");
   w = await where(); assert.equal(w.inBanner, true, 'an edit (the banner is redrawn) keeps it there'); assert.equal(w.shown, true);
-  await open('m-build'); await clickText('m-build', 'Brush');
-  w = await where(); assert.equal(w.shown, false, 'Brush again hides it');
+  await open('m-build'); await clickText('m-build', 'Sculpt mode');
+  w = await where(); assert.equal(w.shown, false, 'Sculpt mode again hides it');
 });
 
 test('row 12: with the Track part, a menu panel gives its controls back when the menu closes', { skip }, async (t) => {
