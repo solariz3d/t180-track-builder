@@ -43,6 +43,11 @@ function brushControls(c, t, { s0, r, delta }) {
 // is used only on a document whose pieces are frozen (every document the core returns, frozen all the way down); an unfrozen one, read from a file say, could
 // be written in place, and is converted afresh.
 const SEG_CACHE = new WeakMap();
+// D421 (O's shell cut): a hill's or swerve's peak ratio (below, in brush) is a pure function of the document, the channel, s0 and r, and a drag asks it of the SAME
+// base at every step (on a 10 km Grab, about half the step: the window read was 217 of 419 ms over 40 steps, profiled). Kept per document, under the rule SEG_CACHE keeps: only a
+// document frozen with every piece frozen, which cannot be written in place. Exact (test/core_stepcache.test.js); a refusal is never kept.
+const RATIO_CACHE = new WeakMap(), RATIO_MAX = 16;
+const keyNum = (x) => (Object.is(x, -0) ? '-0' : String(x));   // String(x) is a double's shortest exact text; only -0 shares it
 /** Where each piece starts along the adapter's path (the s a user picks on the preview): the sum of its segments' lengths. */
 function pieceOffsets(doc) {
   const cache = doc.pieces.every(Object.isFrozen) ? SEG_CACHE : null;
@@ -194,12 +199,18 @@ function brush(doc, { mode = 'hill', channel, s0, r, delta, sharp = false } = {}
   // largest change over the window used is read (every 0.25 m), and Δ is scaled by that (a ratio, E's rule; ref 10 §4).
   let d = delta;
   if (mode === 'hill' || mode === 'swerve') {
+    const kept = Object.isFrozen(doc) && doc.pieces.every(Object.isFrozen) ? (RATIO_CACHE.get(doc) || RATIO_CACHE.set(doc, new Map()).get(doc)) : null;
+    const key = `${ch}|${keyNum(s0)}|${keyNum(r)}`;
+    if (kept && kept.has(key)) d = delta / kept.get(key);
+    else {
     const unit = sculpt(doc, { channel: ch, s0, r, delta: 1 }), ru = unit.radiusUsed;
     // D421: each document's offsets once, not at every reading (each reading segmented the whole track: 3.4 s a step on 2 km, 21 s on 10 km)
     const offU = pieceOffsets(unit.doc), off0 = pieceOffsets(doc);
     let got = 0; for (let s = Math.max(0, s0 - ru); s <= s0 + ru; s += 0.25) { let v; try { v = valueAt(unit.doc, ch, s, offU) - valueAt(doc, ch, s, off0); } catch (e) { continue; } if (Math.abs(v) > Math.abs(got)) got = v; }
     if (!(Math.abs(got) > 1e-6)) throw new D.CoreError('BAD_BRUSH', `brush: a ${mode} at ${s0} m moves no control point (${unit.note || 'a joint the window only half covers'})`);
     d = delta / got;
+    if (kept) { kept.set(key, got); if (kept.size > RATIO_MAX) kept.delete(kept.keys().next().value); }
+    }
   }
   const res0 = sculpt(doc, { channel: ch, s0, r, delta: d }), res = sharp ? { ...res0, note: SHARP_NOTE, sharp: SHARP_BOUND } : res0;
   if (mode !== 'rate' || !doc.closed || !res.changed.length) return { ...res, mode };

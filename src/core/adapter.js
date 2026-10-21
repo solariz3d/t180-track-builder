@@ -399,14 +399,18 @@ const vcross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], 
  */
 function offsetPath(doc, segments, path) {
   const pieces = new Map(doc.pieces.map((P) => [P.id, P]));
-  const any = doc.pieces.some((P) => P.type === 'road' && D.OFFSETS.some((ch) => P.channels[ch].some((v) => v !== 0)));
+  // D421 (A's profile, p-d421-subscribers-A_2026-10-20.md §3: this lift was 383 ms of a 3 s height drag): a road piece whose h and l control points are ALL zero has value and both
+  // derivatives zero at every s, so every sample on it came back as the very same object, after two channel evaluations each. Such a piece is now skipped without them: the same
+  // answer, bit for bit (test/core_offset_lift.test.js compares with the old lift), and the cost falls to the samples of the pieces that carry an offset.
+  const offsetOn = new Set(doc.pieces.filter((P) => P.type === 'road' && D.OFFSETS.some((ch) => P.channels[ch].some((v) => v !== 0))).map((P) => P.id));
+  const any = offsetOn.size > 0;
   if (!any) return path;
   const segStart = [], pieceStart = new Map(); let acc = 0;
   segments.forEach((g, i) => { segStart.push(acc); if (!pieceStart.has(g.id)) pieceStart.set(g.id, acc); acc += g.length; });
   const UP = [0, 1, 0];
   const lift = (x) => {
     const g = segments[x.seg], P = pieces.get(g.id);
-    if (!P || P.type !== 'road' || g.kind !== 'road') return x;
+    if (!P || P.type !== 'road' || g.kind !== 'road' || !offsetOn.has(P.id)) return x;
     const s = Math.min(Math.max(x.s - pieceStart.get(g.id), 0), P.length), h = D.channelAt(P, 'h', s), l = D.channelAt(P, 'l', s);
     if (!(h.v || h.d1 || h.d2 || l.v || l.d1 || l.d2)) return x;
     const T = x.T, K = x.kvec, th = Math.atan2(T[0], T[2]), u = x.s - segStart[x.seg];
