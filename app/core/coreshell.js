@@ -321,7 +321,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     }
   };
   const jumpFor = (extendOpts) => { noCorner(extendOpts, 'Jump'); return JU.jumpHere(doc(), extendOpts || null); };
-  let reads = [], readsFor = null;
+  let reads = null;   // the last pieceReadouts answer, { doc, reads, poses } (src/core/readout.js pieceReadouts)
   // the keeper, 2026-10-12: "a solid lag when putting the pieces down". Every commit converted EVERY piece again (about 90 ms on a 9-piece
   // track); the cache returns an unchanged piece's last segments, so a placement converts only what changed (adapter.js toSegments `cache`)
   const segCache = new WeakMap();
@@ -647,17 +647,14 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
     // 2026-10-14 (ELYSIUM: ~260 ms of every placed piece on the window's thread, every one of the 43 labels read again): a ROAD piece's readout reads
-    // the start and the pieces up to it alone (src/core/readout.js: the piece, and the pose entering it from every earlier piece), so while the
-    // start and every piece up to it are the very objects they were, it is the readout it was. A flight's reads the whole document: read again.
+    // its own piece, the pose entering it and its corners alone, so a piece whose object, entering pose and corners are the ones it had keeps its readout.
+    // D421c (row 3's re-close frame, 85-91 ms of it here): the readouts are read all at once (src/core/readout.js pieceReadouts: the document checked once,
+    // the pose carried on), and the carry is by POSE, not by the pieces before it, so a Grab's window no longer reads every piece after it again.
+    // (A history read back from its file gives each step its own start object: the poses compare by value, so that carries too.)
     pieceReadouts() {
       const d = doc();
-      if (readsFor !== d) {
-        // the start compared by VALUE: a history read back from its file (unpackHistory) gives each step its own start object, the same pose
-        const was = readsFor, old = reads; let same = !!was && (was.start === d.start || JSON.stringify(was.start) === JSON.stringify(d.start));
-        reads = d.pieces.map((P, i) => { if (same && was.pieces[i] !== P) same = false; return same && P.type === 'road' && old[i] ? old[i] : RD.pieceReadout(d, i); });
-        readsFor = d;
-      }
-      return reads;
+      if (!reads || reads.doc !== d) reads = RD.pieceReadouts(d, reads);
+      return reads.reads;
     },
 
     /**

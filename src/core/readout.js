@@ -183,7 +183,53 @@ function pieceReadout(doc, i) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no pieces to read');
   if (!Number.isInteger(i) || i < 0 || i >= doc.pieces.length) throw new D.CoreError('BAD_INDEX', `piece ${i} does not exist: the track has ${doc.pieces.length} (0 to ${doc.pieces.length - 1})`);
-  const P = doc.pieces[i], pose = poseBefore(doc, i);
+  return readoutAt(doc, i, poseBefore(doc, i));
+}
+/** The pose entering EVERY piece, in poseBefore's own order of sums, so poses[i] is poseBefore(doc, i) to the bit. */
+function posesOf(doc) {
+  const out = []; let theta = doc.start.heading, p = doc.start.pitch;
+  for (const P of doc.pieces) {
+    out.push({ theta, p });
+    if (P.type === 'flight') { theta += P.heading; p = P.pitch; continue; }
+    theta += channelIntegral(P, 'kh'); p += channelIntegral(P, 'kv');
+  }
+  return out;
+}
+// whether a carried road readout's corner on channel ch (kh the turn, kv the climb) still reads what it read: cornerOf walks back from piece i to the piece the corner
+// begins on (fromId), reading of each its id, its length, its knots and that one channel (a Grab's new piece has the same turn, to the bit), and of the piece before
+// the first only whether it is a road (a flight or the track's start begins a corner); a null corner reads piece i alone, which is the very piece it was
+const sameArr = (a, b) => a === b || (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, j) => Object.is(x, b[j])));
+const readsAlike = (P, W, ch) => P === W || (!!P && !!W && P.type === 'road' && W.type === 'road' && P.id === W.id && Object.is(P.length, W.length) && sameArr(P.knots, W.knots) && sameArr(P.channels[ch], W.channels[ch]));
+const cornerHolds = (c, ch, i, doc, was) => {
+  if (!c) return true;
+  const k = doc.pieces.findIndex((P) => P.id === c.fromId);
+  if (k < 0 || k > i) return false;
+  if (k > 0 && isRoad(doc.pieces[k - 1]) !== isRoad(was.pieces[k - 1])) return false;
+  for (let j = k; j <= i; j++) if (!readsAlike(doc.pieces[j], was.pieces[j], ch)) return false;
+  return true;
+};
+/**
+ * D421c: EVERY piece's readout at once, each pieceReadout(doc, i)'s to the bit: the document checked once and the pose carried on, where pieceReadout checks the
+ * whole document and sums the pose from the start for each piece (a 50-piece lap: 50 checks and 1,225 pose sums; 85-91 ms of row 3's re-close frame, the labels').
+ * `prev` is an earlier answer ({ doc, reads, poses }): a ROAD piece keeps its readout (the very object) when it is the very piece it was, at the same place, entering
+ * at the same pitch (and the same heading when it has offsets, whose lifted turn reads it), and its corners read the very pieces they read. A road readout reads
+ * nothing else: its own piece, the pose entering it, and its corners (above). A flight's reads the whole track, so it is always read again.
+ * Returns { doc, reads, poses }. Throws what pieceReadout throws for a bad document, when there is a piece to read.
+ */
+function pieceReadouts(doc, prev = null) {
+  const poses = posesOf(doc), was = prev && prev.doc && Array.isArray(prev.reads) && Array.isArray(prev.poses) ? prev : null;
+  let checked = false;
+  const reads = doc.pieces.map((P, i) => {
+    const old = was && was.doc.pieces[i] === P && P.type === 'road' ? was.reads[i] : null, op = old && was.poses[i];
+    if (old && op && op.p === poses[i].p && (old.offsets === null || op.theta === poses[i].theta) && cornerHolds(old.corner, 'kh', i, doc, was.doc) && cornerHolds(old.climbCorner, 'kv', i, doc, was.doc)) return old;
+    if (!checked) { D.checkDoc(doc); checked = true; }
+    return readoutAt(doc, i, poses[i]);
+  });
+  return { doc, reads, poses };
+}
+/** The readout of piece i of a CHECKED document, entering at `pose` (poseBefore's). */
+function readoutAt(doc, i, pose) {
+  const P = doc.pieces[i];
   if (P.type === 'flight') {
     let bank = 0, cupEnd = 0, edgeEnd = 0, sliceEnd = D.S_DEFAULT, tubeEnd = 0; for (let j = i - 1; j >= 0; j--) if (doc.pieces[j].type === 'road') { const Pj = doc.pieces[j], e = D.pieceEnd(Pj); bank = e.phi.v; cupEnd = e.c.v; edgeEnd = e.e.v; sliceEnd = e.s.v; tubeEnd = Pj.tube ? e.t.v : 0; break; }
     const lengthM = toSegments(doc).filter((g) => g.id === P.id).reduce((a, g) => a + g.length, 0);
@@ -223,4 +269,4 @@ function candidateCorner(doc, opts) {
   return cornerNext(d, d.pieces.length - 1);
 }
 
-module.exports = { pieceReadout, candidateReadout, candidateCorner, cornerNext, channelIntegral };
+module.exports = { pieceReadout, pieceReadouts, candidateReadout, candidateCorner, cornerNext, channelIntegral };
