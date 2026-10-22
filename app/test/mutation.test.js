@@ -63,7 +63,9 @@ const MUTATIONS = [
   { id: 'B3 the shader key strength drifts from look.js', file: 'preview/renderer.js',
     from: '${LIGHT.keyK.toFixed(6)} * max(dot(n, key), 0.0)', to: '0.5 * max(dot(n, key), 0.0)', caughtBy: 'light: the fragment shader carries' },
   { id: 'B4 the edge lines one vertex in from the edges', file: 'preview/look.js',
-    from: 'for (const k of [0, kc, K - 1])', to: 'for (const k of [1, kc, K - 2])', caughtBy: 'edge lines: through the two edge vertices' },
+    from: 'for (const k of [0, -1, K - 1])', to: 'for (const k of [1, -1, K - 2])', caughtBy: 'edge lines: through the two edge vertices' },   // CHANGED D433b: the anchor follows the source (the centre is -1, at u = 0); the same mutant
+  { id: 'B4b the centre line at the vertex left of u = 0, not at u = 0 (D433b)', file: 'preview/look.js',
+    from: 'k0 = k; t = -b.us[k] / (b.us[k + 1] - b.us[k]); break;', to: 'k0 = k; t = 0; break;', caughtBy: 'edge lines: through the two edge vertices' },
   { id: 'B5 the lines not lifted off the surface (they would z-fight)', file: 'preview/look.js',
     from: 'return [P[i] + N[i] * LIFT, P[i + 1] + N[i + 1] * LIFT, P[i + 2] + N[i + 2] * LIFT];', to: 'return [P[i], P[i + 1], P[i + 2]];', caughtBy: 'edge lines: through the two edge vertices' },
   { id: 'B6 no ties across the road', file: 'preview/look.js',
