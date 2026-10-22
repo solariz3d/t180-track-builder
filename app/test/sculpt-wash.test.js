@@ -1,9 +1,9 @@
 // sculpt-wash.test.js: node --test app/test/sculpt-wash.test.js
 // D425 part 3 (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §1 cue 4, §3's E rows): WHAT A SCULPT TOOL MOVES, drawn by the preview. A route tool (Stretch, Bend,
-// Climb) moves all the road after its window: on hover that road is washed in the tool's colour, during the drag the moved batches carry a TINT the renderer draws as one more blended
-// pass of the same chunk (no geometry added), and on a closed lap the last and first road pieces are hatched in the marker orange. In node, with the real shell. Rows:
+// Climb) moves all the road after its window: on hover that road is washed in the tool's colour, during the drag the moved batches carry a TINT the renderer draws their edge lines in
+// (no draw or geometry added), and on a closed lap the last and first road pieces are hatched in the marker orange. In node, with the real shell. Rows:
 //   1  a route step tints exactly the moved batches, in the tool's colour, with the placed arrays (Bend violet, Stretch white); a shape step (Twist) tints nothing
-//   2  the renderer draws each tinted chunk once more in its tint at 0.18 from the same buffers (no upload), and nothing else twice
+//   2  the renderer draws each tinted chunk's edge lines in its tint, every other line as before, with no draw and no upload added (CHANGED D425, see the row)
 //   3  hover: a route tool's wash is a line across the road at every station past the window's end and nowhere before it; a shape or local tool has none; the same hover builds nothing again
 //   4  a closed lap: the hover hatches the last and first road pieces (every other station); during a drag that opened the lap the last piece's hatch is drawn under the drag's move
 'use strict';
@@ -50,28 +50,34 @@ test('row 1: a route step tints exactly the moved batches in the tool\'s colour 
   assert.equal(fr.how, 'drag'); assert.equal(fr.batches.filter((b) => b.tint).length, 0, 'Twist moves nothing after its window: nothing is tinted');
 });
 
-test('row 2: the renderer draws each tinted chunk once more in its tint at 0.18 from the same buffers, and nothing else twice', async () => {
-  const { createRenderer } = require('../preview/renderer.js');
-  const fake = () => { const data = new Map(), bound = {}, drawn = []; let id = 0, uploads = 0, ptrs = [], colour = null, alpha = null;
-    const gl = { VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4, ARRAY_BUFFER: 5, ELEMENT_ARRAY_BUFFER: 6, STATIC_DRAW: 7, COLOR_BUFFER_BIT: 8, DEPTH_BUFFER_BIT: 16, DEPTH_TEST: 9, CULL_FACE: 10, TRIANGLES: 11, FLOAT: 12, UNSIGNED_SHORT: 13, BLEND: 14, LINES: 15, SRC_ALPHA: 17, ONE_MINUS_SRC_ALPHA: 18, POLYGON_OFFSET_FILL: 19,
-      depthMask() {}, blendFunc() {}, polygonOffset() {}, disableVertexAttribArray() {}, createShader: () => ({ id: ++id }), shaderSource() {}, compileShader() {}, getShaderParameter: () => true, getShaderInfoLog: () => '', createProgram: () => ({ id: ++id }), attachShader() {}, linkProgram() {}, getProgramParameter: () => true, getProgramInfoLog: () => '',
-      getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport() {}, clearColor() {}, clear() {}, enable() {}, disable() {}, uniform3f(loc, a, b, c) { if (loc === 'uColour') colour = [a, b, c]; }, uniform1f(loc, v) { if (loc === 'uAlpha') alpha = v; }, uniform2f() {}, enableVertexAttribArray() {}, vertexAttribPointer() { ptrs.push(data.get(bound[5])); },
+// CHANGED D425 (this lap, before landing): the wash was a second blended pass of each moved chunk's surfaces; it cost row 3 of sculpt-frame about 0.5-0.8 ms a frame, so it is now the
+// colour of the moved road's edge lines, the uniform each chunk's lines set already. The rule this row holds is the same: the moved road is shown in the tool's colour, nothing is added
+test('row 2: the renderer draws each tinted chunk\'s edge lines in its tint and every other line as before, with no draw and no upload added', async () => {
+  const { createRenderer, COLOURS } = require('../preview/renderer.js');
+  const fake = () => { const data = new Map(), bound = {}, lines = []; let id = 0, uploads = 0, draws = 0, colour = null;
+    const gl = { VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4, ARRAY_BUFFER: 5, ELEMENT_ARRAY_BUFFER: 6, STATIC_DRAW: 7, COLOR_BUFFER_BIT: 8, DEPTH_BUFFER_BIT: 16, DEPTH_TEST: 9, CULL_FACE: 10, TRIANGLES: 11, FLOAT: 12, UNSIGNED_SHORT: 13, BLEND: 14, LINES: 15, SRC_ALPHA: 17, ONE_MINUS_SRC_ALPHA: 18,
+      depthMask() {}, blendFunc() {}, disableVertexAttribArray() {}, createShader: () => ({ id: ++id }), shaderSource() {}, compileShader() {}, getShaderParameter: () => true, getShaderInfoLog: () => '', createProgram: () => ({ id: ++id }), attachShader() {}, linkProgram() {}, getProgramParameter: () => true, getProgramInfoLog: () => '',
+      getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport() {}, clearColor() {}, clear() {}, enable() {}, disable() {}, uniform3f(loc, a, b, c) { if (loc === 'uColour') colour = [a, b, c]; }, uniform1f() {}, uniform2f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
       uniformMatrix4fv() {}, createBuffer: () => ({ id: ++id }), bindBuffer(t, b) { bound[t] = b; }, bufferData(t, arr) { data.set(bound[t], arr); uploads++; }, deleteBuffer() {}, deleteProgram() {},
-      drawElements() { drawn.push({ pos: ptrs[0], colour, alpha }); ptrs = []; }, drawArrays() {} };
-    return { gl, drawn, uploads: () => uploads }; };
+      drawElements() { draws++; }, drawArrays() { draws++; lines.push({ arr: data.get(bound[5]), colour }); } };
+    return { gl, lines, uploads: () => uploads, draws: () => draws }; };
   const s = await openTrack(), tm = createTrackModel(); tm.update(s.getState().resolved);
   const fr = drag(s, tm, { tool: 'bend', s0: 500, r: 100 }, [2e-4, 4e-4]), pose = { eye: [0, 300, -300], target: [0, 0, 400], up: [0, 1, 0], fov: 1 };
   const plain = fr.batches.map((b) => { if (!b.tint) return b; const { tint, ...rest } = b; return rest; });
-  const A = fake(); createRenderer(A.gl, { chunkVertices: 4000 }).draw(plain, pose, { width: 800, height: 600 }, { look: 'words', lines: false });
-  const B = fake(); createRenderer(B.gl, { chunkVertices: 4000 }).draw(fr.batches, pose, { width: 800, height: 600 }, { look: 'words', lines: false });
-  assert.equal(B.drawn.slice(0, A.drawn.length).map((d) => d.alpha).join(), A.drawn.map((d) => d.alpha).join(), 'the road is drawn as without the tint first');
-  const extra = B.drawn.slice(A.drawn.length);
-  assert.ok(extra.length > 0, 'the tinted chunks are drawn once more');
-  assert.ok(extra.every((d) => d.alpha === 0.18 && d.colour.every((v, i) => Math.abs(v - WASH.kh[i]) < 1e-12)), 'each in the tint at 0.18');
-  const bPos = new Set(B.drawn.slice(0, A.drawn.length).map((d) => d.pos));
-  assert.ok(extra.every((d) => bPos.has(d.pos)), 'from the very chunks drawn already');
-  assert.equal(new Set(extra.map((d) => d.pos)).size, extra.length, 'each tinted chunk once');
-  assert.equal(B.uploads(), A.uploads(), 'no buffer more is uploaded for the wash');
+  const A = fake(); createRenderer(A.gl, { chunkVertices: 4000 }).draw(plain, pose, { width: 800, height: 600 }, { look: 'words' });
+  const B = fake(); createRenderer(B.gl, { chunkVertices: 4000 }).draw(fr.batches, pose, { width: 800, height: 600 }, { look: 'words' });
+  assert.equal(B.draws(), A.draws(), 'as many draws with the tint as without'); assert.equal(B.uploads(), A.uploads(), 'no buffer more is uploaded');
+  assert.equal(B.lines.length, A.lines.length);
+  const same = (c, d) => c.every((v, i) => Math.abs(v - d[i]) < 1e-12);
+  let tinted = 0;
+  for (let i = 0; i < A.lines.length; i++) {
+    const a = A.lines[i], b = B.lines[i];
+    if (same(b.colour, a.colour)) continue;
+    assert.ok(same(a.colour, COLOURS.edge) && same(b.colour, WASH.kh), `line list ${i}: only an edge list changes colour, from the edge colour to the tint`);
+    tinted++;
+  }
+  assert.ok(tinted > 0, 'the moved road\'s edges are drawn in the tint');
+  assert.ok(tinted <= fr.batches.filter((b) => b.tint).length, 'no more tinted edge lists than moved batches');
 });
 
 test('row 3: hover: a route tool\'s wash is a line across the road at every station past the window\'s end; a shape or local tool has none; the same hover builds nothing again', async () => {
