@@ -6,7 +6,8 @@
 //          rays = { red }          the 'downforce-ray-gap' ranges the validator finds with the road mesh and NO folds
 'use strict';
 
-const OVERLAP = new Set(['self-intersection', 'stacked-within-2m', 'downforce-ray-gap']);
+// D432: 'stacked-within-2m' left this set when it stopped being red (src/validate/index.js reports it in info): two passes closer than 2 m that do not meet are not an overlap
+const OVERLAP = new Set(['self-intersection', 'downforce-ray-gap']);
 const uu = (x) => (x.u == null ? -Infinity : x.u);
 const order = (a, b) => (a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : a.s0 - b.s0 || uu(a) - uu(b));
 

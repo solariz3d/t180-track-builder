@@ -26,6 +26,18 @@ const { toSegments } = AD;
 const { close, closeWindow, residual } = require('../../src/core/close.js');
 const { finishToStart, isNear } = require('../../src/core/finish.js');
 const { createCheckJob } = require('../validate-ui/checkjob.js');
+const G = require('../../src/geom/index.js');
+const { resolveDoc } = require('./overlapjob.js');
+/**
+ * D432: THE CLOSED LAP'S OWN MESH, SELF-CHECKED. The live checker builds no mesh, and the 2 m stack, which it used to read as a red, is information since D432
+ * (roads may be closer than 2 m when they do not clip). So the candidate a press would pick is meshed (lean, as the overlap check meshes it) and self-checked
+ * (src/geom/bvh.js): any place where the road meets itself refuses it, as a red it adds. Returns the intersections' s, sorted.
+ */
+function clipsOf(d) {
+  const r = resolveDoc(d), p0 = G.buildPath(r.segments, { step: 2, closed: !!d.closed, start: r.start }), p = typeof r.lift === 'function' ? r.lift(p0) : p0;
+  const mesh = G.buildMesh(p, r.segments, { lean: true });
+  return G.selfCheck(mesh, { closed: !!p.closed, lengthM: p.lengthM }).intersections.map((x) => x.s).sort((a, b) => a - b);
+}
 
 function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null } = {}) {
   // D350: frozen all through, as the core's own documents are. The close worker receives a postMessage copy, which is not frozen, so the memos that serve only a
@@ -91,6 +103,10 @@ function runCloseBest({ doc, edited = null, openReds = null, exhaustive = false 
     t.lap = c.lap && { ok: c.lap.ok, reason: c.lap.reason, where: (c.lap.where || []).slice(0, 3) };
     if (c.lap && c.lap.ok === true && c.reds.length && !open) { const t1 = Date.now(); open = redsOf({ ...doc, closed: false }, job); phases.openCheckMs = Date.now() - t1; }
     t.newReds = !c.reds.length ? [] : open ? c.reds.filter((x) => !open.reds.some((o) => o.reason === x.reason && Math.abs(o.s - x.s) <= RED_NEAR_M)) : c.reds;
+    if (c.lap && c.lap.ok === true && !t.newReds.length) {   // D432: the pick is meshed and self-checked before it is taken (clipsOf above); where the road meets itself, that is the red it adds
+      const t2 = Date.now(), at = clipsOf(t.doc); t.selfCheckMs = Date.now() - t2; phases.selfCheckMs = (phases.selfCheckMs || 0) + t.selfCheckMs;
+      t.newReds = at.map((s) => ({ reason: 'self-intersection', s }));
+    }
     if (c.lap && c.lap.ok === true && !t.newReds.length) return true;
     t.miss = c.lap && c.lap.ok !== true ? `the lap does not prove${c.lap.where && c.lap.where.length ? ` (${c.lap.where[0].reason || 'it fails'} at ${((c.lap.where[0].s || 0) / 1000).toFixed(2)} km)` : c.lap.reason ? ` (${c.lap.reason})` : ''}`
       : `it adds ${t.newReds.length} red${t.newReds.length === 1 ? '' : 's'} (${t.newReds[0].reason} at ${(t.newReds[0].s / 1000).toFixed(2)} km)`;
@@ -162,4 +178,4 @@ function relink(base, doc) {
   return deepFreeze(out);
 }
 
-module.exports = { runClose, runCloseBest, byOrder, displacementOf, relink };
+module.exports = { runClose, runCloseBest, byOrder, displacementOf, relink, clipsOf };

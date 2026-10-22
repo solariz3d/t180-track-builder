@@ -2,13 +2,14 @@
 // proposes for A: "exportTrack would pass the lane to placeAll ({ lane }) and add its mesh to the scene".
 //
 //   laneForExport(mainPath, mainSegments, mainMesh, pitLane, { selfCheck, mesh })
-//     -> { lane, mesh, red: [{ reason, s0, s1, detail, source }] }     lane: src/geom/pitlane.js buildPitLane's result
+//     -> { lane, mesh, red: [{ reason, s0, s1, detail, source }], info: [the same shape] }     lane: src/geom/pitlane.js buildPitLane's result
+//        info (D432): the lane stacked within 2 m of the road without meeting it, which is not red
 //   withLane(scene, laneMesh) -> scene with the lane's cells appended, their materials matched to the scene's BY NAME
 //
 // SELF-CHECK, ON unless the export turned it off: the lane's own mesh gets buildMesh's selfCheck (a lane that crosses
 // itself), and the lane against the road gets src/geom/pitlane.js laneCheck (the self-check's own triangle and
 // stacked tests; only the two join zones, where the lane shares the road's edge line by design, are exempt). Every
-// finding is a red range, as the road's own self-intersections are.
+// meeting is a red range, as the road's own self-intersections are; a stack (closer than 2 m, not meeting) is info (D432).
 'use strict';
 const { buildMesh } = require('../geom/index.js');
 const { buildPitLane, laneCheck } = require('../geom/pitlane.js');
@@ -20,20 +21,22 @@ const { MACH6 } = require('../validate/limits.js');
 function laneForExport(mainPath, mainSegments, mainMesh, pitLane, { selfCheck = true, mesh: meshOpts = {} } = {}) {
   const lane = buildPitLane(mainPath, mainSegments, pitLane);
   const mesh = buildMesh(lane.path, lane.segments, { ...meshOpts, selfCheck });
-  const red = [];
+  const red = [], info = [];
   if (selfCheck) {
     for (const x of mesh.selfCheck.intersections) red.push({ reason: 'self-intersection', s0: x.s, s1: x.sOther, detail: `the pit lane meets itself (${x.cell} and ${x.other}, lane s)`, source: 'ARCHITECTURE.md:58' });
     const c = laneCheck(mainMesh, mesh, lane);
     for (const x of c.intersections) red.push({ reason: 'self-intersection', s0: x.sMain, s1: x.sMain, detail: `the pit lane (${x.cell}, lane s ${x.sLane.toFixed(1)}) meets the road (${x.other})`, source: 'ARCHITECTURE.md:58' });
+    // D432: the lane closer than 2 m to the road, without meeting it, is INFORMATION, not red ("the tracks can be under 2m apart as long as the geometry isnt
+    // clipping into eachother", the user, 2026-10-22); the lane meeting the road is red above, as self-intersection
     const stacked = new Map(); for (const x of c.stacked) if (!stacked.has(x.other)) stacked.set(x.other, x);
-    for (const x of stacked.values()) red.push({ reason: 'stacked', s0: x.sMain, s1: x.sMain, detail: `the pit lane (${x.cell}) is stacked ${x.gap.toFixed(2)} m from the road (${x.other})`, source: 'ARCHITECTURE.md:85' });
+    for (const x of stacked.values()) info.push({ reason: 'stacked', s0: x.sMain, s1: x.sMain, detail: `the pit lane (${x.cell}) is stacked ${x.gap.toFixed(2)} m from the road (${x.other})`, source: 'ARCHITECTURE.md:85' });
   }
   for (const f of mesh.folds.filter((x) => x.margin !== null)) red.push({ reason: 'fold', s0: f.s, s1: f.s, detail: `the pit lane folds (lane s ${f.s.toFixed(1)}, u ${f.u.toFixed(2)})`, source: 'ARCHITECTURE.md:57' });
   // D279: the infill between the road's edge and the lane's inner edge, then the downforce ray over road + lane + infill across the lane's span
   const fill = infill(mainPath, mainSegments, mainMesh, mesh, lane, pitLane, mesh.scene.root.children[0].children[0].material);
   const withFill = { ...mesh, scene: { ...mesh.scene, root: { ...mesh.scene.root, children: [...mesh.scene.root.children, fill] } } };
   if (selfCheck) red.push(...spanGaps(mainPath, mainMesh, withFill, lane));
-  return { lane, mesh: withFill, red };
+  return { lane, mesh: withFill, red, info };
 }
 
 /* D279 INFILL (the keeper, 2026-10-09 16:27: "the pit lane arc that is made, i wonder if the inside could just be filled in so there is no gap between the

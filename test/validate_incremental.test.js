@@ -89,13 +89,18 @@ test('a gap in the road well before the head stays red through two appends in a 
   assert.deepStrictEqual(v2, validate(b.path, b.segs), 'after one append');
   assert.deepStrictEqual(v3, validate(c.path, c.segs), 'after the second append');
 });
-test('a new piece laid 1.5 m over the old road turns the OLD road red too, exactly as a full validate does', () => {
+// AMENDED (D432): the 2 m stack is information since D432, and a piece lying ON the old road is red as self-intersection (the clip test). The row's rule is the
+// same (what a new piece does to OLD stations is found incrementally exactly as a full validate finds it); it is held for both now: 1.5 m over (info), and on it (red)
+test('a new piece laid over the old road marks the OLD road too, exactly as a full validate does: 1.5 m over in info, lying on it red', () => {
   // the append jumps back over the start (a hole too, which is fine: the point is the stack on OLD stations)
-  const pieces = [[X.seg({ speed: 60 }), straightPiece(60)], [X.seg({ id: 'over', speed: 60 }), (at) => X.straight(40, { seg: at.seg, s0: at.s0, start: [0, 1.5, 0] })]];
-  const { inc, full, fromS } = appendAndCompare(pieces);
-  const st = inc.red.filter((x) => x.reason === 'stacked-within-2m');
-  assert.ok(st.some((x) => x.s0 < fromS), 'an old station is red');
-  assert.deepStrictEqual(inc, full);
+  const over = (h) => [[X.seg({ speed: 60 }), straightPiece(60)], [X.seg({ id: 'over', speed: 60 }), (at) => X.straight(40, { seg: at.seg, s0: at.s0, start: [0, h, 0] })]];
+  const a = appendAndCompare(over(1.5));
+  assert.ok(a.inc.info.filter((x) => x.reason === 'stacked-within-2m').some((x) => x.s0 < a.fromS), 'an old station is in info');
+  assert.ok(!a.inc.red.some((x) => x.reason === 'stacked-within-2m' || x.reason === 'self-intersection'), '1.5 m over does not clip');
+  assert.deepStrictEqual(a.inc, a.full);
+  const b = appendAndCompare(over(0));
+  assert.ok(b.inc.red.filter((x) => x.reason === 'self-intersection').some((x) => x.s0 < b.fromS), 'lying on it: an old station is red');
+  assert.deepStrictEqual(b.inc, b.full);
 });
 
 test('append with the lap sim as the speed model (no design speeds): equals a full validate', () => {
@@ -137,15 +142,17 @@ test('revalidate without a previous result is a full validate', () => {
   assert.deepStrictEqual(revalidate(null, path, segs, 0), validate(path, segs));
 });
 
-test('an EDIT of the head piece (not only an append): a stack the old piece made is dropped, as in a full validate', () => {
-  // before: 60 m of road, then a head piece laid 1.5 m over it (stacked). After: the head piece replaced by one 5 m up.
+// AMENDED (D432): the head piece now lies ON the old road (a clip, red as self-intersection) rather than 1.5 m over it (information since D432), so the row
+// still drops a RED the old piece made, as a full validate does
+test('an EDIT of the head piece (not only an append): a clip the old piece made is dropped, as in a full validate', () => {
+  // before: 60 m of road, then a head piece laid on it (a clip). After: the head piece replaced by one 5 m up.
   const base = [X.seg({ speed: 60 }), straightPiece(60)];
-  const before = grow([base, [X.seg({ id: 'h', speed: 60 }), (at) => X.straight(40, { seg: at.seg, s0: at.s0, start: [0, 1.5, 0] })]]);
+  const before = grow([base, [X.seg({ id: 'h', speed: 60 }), (at) => X.straight(40, { seg: at.seg, s0: at.s0, start: [0, 0, 0] })]]);
   const after = grow([base, [X.seg({ id: 'h', speed: 60 }), (at) => X.straight(40, { seg: at.seg, s0: at.s0, start: [0, 5, 0] })]]);
   const prev = validate(before.path, before.segs);
-  assert.ok(prev.red.some((x) => x.reason === 'stacked-within-2m'), 'the old head piece was stacked');
+  assert.ok(prev.red.some((x) => x.reason === 'self-intersection'), 'the old head piece clipped');
   const inc = revalidate(prev, after.path, after.segs, 60), full = validate(after.path, after.segs);
-  assert.ok(!full.red.some((x) => x.reason === 'stacked-within-2m'));
+  assert.ok(!full.red.some((x) => x.reason === 'self-intersection'));
   assert.deepStrictEqual(inc, full);
 });
 

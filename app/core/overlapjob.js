@@ -21,7 +21,7 @@ const lapSummary = (lap) => ({ ok: lap.ok, reason: lap.reason || null, first: la
 /**
  * D242: THE OVERLAP CHECK of a proposed (closed) track: its mesh with the self-check, then the validator with the built road for the downforce ray,
  * the same checks the export runs (src/export/fromwords.js buildFromSegments). Returns { overlaps (the road running into itself: self-intersection,
- * stacked, a downforce ray that meets another road), others (every other red), amber (count), lap (the lap proof's verdict) }.
+ * a downforce ray that meets another road; D432: two passes closer than 2 m that do not meet are not an overlap), others (every other red), amber (count), lap (the lap proof's verdict) }.
  */
 /** D256: a set design speed pins it; none (the app: there is no slider) checks at FULL speed, as the panel and the export do. */
 /**

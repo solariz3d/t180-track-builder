@@ -54,11 +54,15 @@ test('Sharp at 45°, 135°, 180° and −90° (R 22, width 24): each exact withi
   }
 });
 
-test('the minimum radius is the geometry\'s: width 45 refuses R 24 (stacked) and names the tightest, which is green, and 0.2 m under it is refused; nothing changes', () => {
-  const b = base(45), e = refusal(() => SH.extendSharp(b, {}, { angle: 90 * DEG, R: 24 }));
-  assert.ok(e && e.code === 'SHARP_TOO_TIGHT', `refused: ${e && e.code}`);
+// AMENDED (D432, the librarian's ruling 2026-10-22 10:5x): this row pinned the 2 m stack ("width 45 refuses R 24 (stacked)"), which is information since D432. At
+// width 45 the corner's mesh has no intersection and no fold from R 22.6 to 26 (E's sharpcheck.js, p-d432-E-build), so the limit is now the geometry's own: the
+// FOLD at the inner edge, the tightest 22.2 m on this build (measured), refused at R 22 with the fold named
+test('the minimum radius is the geometry\'s: width 45 refuses R 22 (the fold) and names the tightest, which is green, and 0.2 m under it is refused; nothing changes', () => {
+  const b = base(45), e = refusal(() => SH.extendSharp(b, {}, { angle: 90 * DEG, R: 22 }));
+  assert.ok(e && e.code === 'SHARP_TOO_TIGHT' && e.faults.red.includes('fold'), `refused for the fold: ${e && e.message}`);
   assert.match(e.message, new RegExp(`tightest at this width: ${e.needR.toFixed(1)} m`));
-  assert.ok(e.needR > 24 && e.needR <= 24.5, `tightest ${e.needR} m (B measured 24.25 on the broad build)`);
+  assert.ok(e.needR > 22 && e.needR <= 22.5, `tightest ${e.needR} m (the fold, under half the width)`);
+  assert.equal(refusal(() => SH.extendSharp(b, {}, { angle: 90 * DEG, R: 24 })), null, 'R 24, refused for the 2 m stack before D432, is legal: nothing clips');
   assert.equal(b.pieces.length, 1, 'the document is untouched');
   assert.equal(SH.extendSharp(b, {}, { angle: 90 * DEG, R: e.needR }).pieces.length, 3, 'the tightest named works');
   assert.equal(refusal(() => SH.extendSharp(b, {}, { angle: 90 * DEG, R: e.needR - 0.2 })).code, 'SHARP_TOO_TIGHT', 'and is the edge');

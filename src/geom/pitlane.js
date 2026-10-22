@@ -131,7 +131,7 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
 /**
  * The lane's mesh against the main road's, with the self-check's own tests (bvh.js triTri and segTri, on the finished
  * float32 mesh): every lane triangle against every main triangle it could meet, and every lane vertex's normal segment
- * (stackedM each way) against the main road. EXEMPT, and only this: a lane triangle of the DIVERGE (MERGE) part against
+ * (stackedM each way) against the main road (D432: `stacked` is a measure the export reports as info, not red; `intersections` are red). EXEMPT, and only this: a lane triangle of the DIVERGE (MERGE) part against
  * a main triangle within exemptM of that part's span of main road, where the two share their edge line by design.
  * Everything else is tested, including the diverge against any OTHER pass of the main road (a bridge overhead).
  */

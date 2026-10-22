@@ -208,7 +208,7 @@ function ranges(list, step) {
 //                           surface point within 2 m of its own: a SPATIAL reach of r_i + r_j + 2 m around it (r the
 //                           station's half-section, at most 15.9 m for the built-in words, the bowl; so ≤ 33.8 m), at
 //                           ANY s, since a new piece can land on road laid kilometres earlier. A hit marks both stations,
-//                           so an old road that a new piece lands on turns red too; an old station whose deepest stack
+//                           so an old road that a new piece lands on is reported too (in info since D432); an old station whose deepest stack
 //                           was on a changed one is re-derived. The work is the stations near the changed ones, not the
 //                           track (stacked() below)
 //   · jumps                 recomputed whole: a jump's landing depends on road up to its landing search after its flight
@@ -394,8 +394,13 @@ function core(path, segments, opts, from, carried, upto) {
     if (q.rate > ROLL_RED_DEG_M) red.push({ s: q.s, u: null, reason: 'roll-rate', worst: q.rate });
     else if (q.rate > ROLL_AMBER_DEG_M) rollAmber.push({ s: q.s, u: null, reason: 'roll-rate', worst: q.rate });
   }
-  for (const e of raw.stacked.values()) red.push({ s: e.s, u: e.u, reason: 'stacked-within-2m', worst: e.worst });
-  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = raw.pts.filter((p) => p.kind === 'info');
+  // D432: two passes closer than car.stackedM are INFORMATION, not red. The user, 2026-10-22: "the tracks can be under 2m apart as long as the geometry
+  // isnt clipping into eachother". Geometry that clips is red as self-intersection (the mesh's folds, above); the stack is still found and reported in info
+  const stackedInfo = [...raw.stacked.values()].map((e) => ({ s: e.s, u: e.u, reason: 'stacked-within-2m', worst: e.worst }));
+  // where the stack CLIPS (stacked() below, the gap along the normal changes sign or is zero), it is red as self-intersection, but only where no mesh's folds were
+  // given: with them, the mesh's own self-check (bvh.js) is the authority and has already said where the road meets itself
+  if (!Array.isArray(opts.folds)) for (const e of raw.stacked.values()) if (e.clip) red.push({ s: e.s, u: e.u, reason: 'self-intersection', worst: null });
+  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = [...raw.pts.filter((p) => p.kind === 'info'), ...stackedInfo];
   const lines = raw.lines.slice().sort((a, b) => a.i - b.i).map((l) => l.line);   // station order, u order within
 
   // ── jumps (ARCHITECTURE.md:72-80) ──
@@ -556,6 +561,7 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
 }
 
 /**
+ * D432: what this finds is INFORMATION (the result's info), not red: two passes may be closer than 2 m as long as they do not clip.
  * Drivable surfaces stacked within `car.stackedM` (ARCHITECTURE.md:85): surface points of two passes of the road closer
  * than that. Points on the same pass (within `minSeparationM` of s, default 25 m, inferred: well beyond any cross-section
  * and any radius a T-180 drives, FINDINGS.md:39 "about 33–50 m radius at the tightest") are not a stack.
@@ -578,6 +584,7 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
  * surface point of the track (the point grid this replaced was 95% of a full validate at 40 km: 3.1 of 3.3 s).
  */
 const SLACK = 1e-4;   // m: a pair whose bounds clear the stack distance by less than this is measured anyway
+const CLIP_EPS = 0.02;   // m (D432): a gap along the normal within this of zero is one road lying on the other (inferred: well under any road's thickness or a car's)
 function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new Set(), end = S.length) {
   const cell = car.stackedM, sep = opts.minSeparationM || 25, L = path.lengthM || (S[S.length - 1].s - S[0].s), n = S.length;
   // the lateral points of each segment's profile, with their (X, Y) and the largest |(X, Y)|, once per segment
@@ -621,12 +628,46 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     q = us.map((u, k) => { const [X, Y] = xy[k]; return { q: add(pos, add(mul(l, X), mul(w, Y))), s: S[i].s, u, i }; });
     ptsCache.set(i, q); return q;
   };
-  // one entry per station: its deepest overlap, the smaller u on a tie, so the answer never depends on visiting order
-  const mark = (pt, worst, partner) => {
+  // one entry per station: its deepest overlap, the smaller u on a tie, so the answer never depends on visiting order; `clip` (D432) is kept if any pair clipped
+  const mark = (pt, worst, partner, clip = false) => {
     if (pt.i >= end) return;   // a pending station keeps no finding: it is checked in full when the window ends
     const k = pt.i, e = out.get(k);
-    if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner });
+    if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner, clip: clip || !!(e && e.clip) });
+    else if (clip && !e.clip) out.set(k, { ...e, clip: true });
   };
+  // D432, THE CLIP TEST without a mesh (the live checker and every check that runs validate without the mesh's folds have no self-intersection test, so the stack
+  // was their only sign of one road on another). For a pair of stations the stack measures, each point of one is taken over the other's surface: its nearest
+  // point there, when it lies within half a station step along the road and not beyond the road's edges; the gap along that surface's normal is then signed.
+  // The two roads CLIP where that gap changes sign (one passes through the other) or is within CLIP_EPS of zero (one lies on the other). The normal is the
+  // road's own (T × the cross-section's direction at that point), so a cup or a wall is judged against its own surface, not the station's plane.
+  const geomCache = new Map();
+  const geomOf = (i) => {
+    let g = geomCache.get(i);
+    if (g) return g;
+    const Q = ptsOf(i), T = S[i].T, m = Q.length, nrm = [], acr = [];
+    for (let k = 0; k < m; k++) {
+      const c = sub(Q[Math.min(m - 1, k + 1)].q, Q[Math.max(0, k - 1)].q), cl = len(c) || 1, cu = mul(c, 1 / cl);
+      const nn = [T[1] * cu[2] - T[2] * cu[1], T[2] * cu[0] - T[0] * cu[2], T[0] * cu[1] - T[1] * cu[0]], nl = len(nn) || 1;
+      acr.push(cu); nrm.push(mul(nn, 1 / nl));
+    }
+    const hs = 0.5 * Math.max(i + 1 < n ? S[i + 1].s - S[i].s : 0, i > 0 ? S[i].s - S[i - 1].s : 0) + CLIP_EPS;
+    g = { Q, nrm, acr, T, hs }; geomCache.set(i, g); return g;
+  };
+  /** station j's points over station i's surface, by the sign of their gap along its normal */
+  const sides = (i, j) => {
+    const A = geomOf(i), last = A.Q.length - 1; let pos = false, neg = false, zero = false;
+    for (const o of ptsOf(j)) {
+      let best = -1, bd = Infinity;
+      for (let k = 0; k <= last; k++) { const d = len(sub(o.q, A.Q[k].q)); if (d < bd) { bd = d; best = k; } }
+      if (!(bd < cell)) continue;
+      const v = sub(o.q, A.Q[best].q);
+      if (Math.abs(dot(v, A.T)) > A.hs) continue;                                                    // not over this station's stretch of road
+      const lat = dot(v, A.acr[best]); if ((best === 0 && lat < -CLIP_EPS) || (best === last && lat > CLIP_EPS)) continue;   // beyond the road's edge
+      const g = dot(v, A.nrm[best]); if (g > CLIP_EPS) pos = true; else if (g < -CLIP_EPS) neg = true; else zero = true;
+    }
+    return { pos, neg, zero };
+  };
+  const clips = (i, j) => { const a = sides(i, j), b = sides(j, i); return (a.pos && a.neg) || a.zero || (b.pos && b.neg) || b.zero; };
   const lim = cell + SLACK;
   for (let i = 0; i < n; i++) {
     if (!qd[i]) continue;   // not a road station, or not queried
@@ -648,11 +689,14 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
         const c = dot(A.T, Bj.T), sin = Math.sqrt(Math.max(0, 1 - c * c));
         if (Math.abs(A.T[0] * dx + A.T[1] * dy + A.T[2] * dz) - rj * sin >= lim) continue;
         if (Math.abs(Bj.T[0] * dx + Bj.T[1] * dy + Bj.T[2] * dz) - ri * sin >= lim) continue;
+        let deep = null;
         for (const pt of ptsOf(i)) for (const o of ptsOf(j)) {
           const dist = len(sub(o.q, pt.q));
           if (dist >= cell) continue;
           mark(pt, cell - dist, o.i); mark(o, cell - dist, pt.i);
+          if (!deep || dist < deep.dist) deep = { pt, o, dist };
         }
+        if (deep && clips(i, j)) { mark(deep.pt, cell - deep.dist, deep.o.i, true); mark(deep.o, cell - deep.dist, deep.pt.i, true); }   // D432
       }
     }
   }
