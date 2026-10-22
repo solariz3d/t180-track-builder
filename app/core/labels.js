@@ -126,6 +126,17 @@ function anchorsOf(track) {
   return out;
 }
 
+// D428 (P's review item 6): ONE PICK PER POINTER POSITION for the page. The labels and Sculpt's hover (app/core/panel.js) both want the road under the pointer, and each sent its own
+// 't180-pick', which projects every station of the track (5,001 on 10 km): two full projections a move. Both ask here; the first to ask for a position picks, the other reads it.
+// Keyed by the pointer EVENT the position came from, so a new move picks again whatever its position, as the labels' own pick always did
+const lastPick = new WeakMap();
+/** The preview's pick at stage px (x, y) of the pointer event key, asked once per event per page: { s, ... } or null. */
+function sharedPick(doc, win, x, y, key) {
+  const was = lastPick.get(doc); if (was && was.key === key && key !== undefined && was.x === x && was.y === y) return was.hit;
+  let hit = null; doc.dispatchEvent(new win.CustomEvent('t180-pick', { detail: { x, y, reply: (h) => { hit = h; } } }));
+  lastPick.set(doc, { key, x, y, hit }); return hit;
+}
+
 /** The id of the piece the track is on at s (segments in the track's order; a closed lap's s past its end wraps). */
 function pieceAt(segments, s) {
   if (!Array.isArray(segments) || !segments.length || !Number.isFinite(s)) return null;
@@ -163,7 +174,7 @@ function mount(stage, shell, win) {
   let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true, gripView = false, heldReads = null;
   // D242: the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
   let pointer = null, pickedFor = null, hoverId = null;
-  const onPointer = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; pointer = { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const onPointer = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; pointer = { x: e.clientX - r.left, y: e.clientY - r.top, e }; };   // (e: the event, the key of the shared pick)
   const onLeave = () => { pointer = null; };
   stage.addEventListener('pointermove', onPointer); stage.addEventListener('pointerleave', onLeave);
   const pool = [];
@@ -220,7 +231,7 @@ function mount(stage, shell, win) {
         }
       }
       const headId = st.history.present.pieces.length ? st.history.present.pieces[st.history.present.pieces.length - 1].id : null;
-      if (pointer !== pickedFor) { pickedFor = pointer; hoverId = null; if (pointer) { let hit = null; doc.dispatchEvent(new win.CustomEvent('t180-pick', { detail: { x: pointer.x, y: pointer.y, reply: (h) => { hit = h; } } })); hoverId = hit && Number.isFinite(hit.s) ? pieceAt(track.segments, hit.s) : null; } }
+      if (pointer !== pickedFor) { pickedFor = pointer; hoverId = null; if (pointer) { const hit = sharedPick(doc, win, pointer.x, pointer.y, pointer.e); hoverId = hit && Number.isFinite(hit.s) ? pieceAt(track.segments, hit.s) : null; } }
       const items = [];
       reads.forEach((r) => {
         if (!r || r.type !== 'road') return;                      // a flight has no label
@@ -255,4 +266,4 @@ function mount(stage, shell, win) {
   };
 }
 
-module.exports = { formatReadout, labelText, fmtDeg, fmtM, layout, anchorsOf, pieceAt, mount };
+module.exports = { formatReadout, labelText, fmtDeg, fmtM, layout, anchorsOf, pieceAt, sharedPick, mount };
