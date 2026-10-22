@@ -28,6 +28,20 @@ const EDGE_SEAM_TOL = 0.01;   // D225: an edge turned off by extend ends within 
 const SEAM_MAX_M = 1e-3;   // D190 round 3: a lap seam steps at most 1 mm on the curve
 
 const TAU = 2 * Math.PI;
+// D431 (the user, TEST 10: "a bump as the gen came out a bit higher than the end of the track"; "fix the close loop generation itself to be more accurate and
+// smooth"): A WINDOWED CLOSE TAKES THE SMALLEST CHANGE TO THE ROAD, not to the control points. Its step was least-norm in the control points, each counted once,
+// and at a joint the piece after takes its first two points from the piece before (parameters), so a joint's points drive two pieces' worth of curve at the price
+// of one and the step loaded the correction onto them: on TEST 10's finish the climb rate spiked at both joints of the new road (-0.58 | -0.58, -1.19 against
+// -0.30 either side: a crest) and the turn rate with it. A windowed close (Finish to start, the seam tries, D242's window) now measures a change by what it
+// does to each channel's curve along the road, ∫ (Δ channel)² + ℓ²(Δ channel')² ds over the window's pieces (the B-spline Gram matrices, through the joints' links), plus
+// GRAM_EPS of the plain norm so it is never singular. The rows it must meet are the same, so the lap closes to the same bars; only which closing change is
+// taken differs. A metric of smoothness instead (second differences) was measured and refused: it removed the spikes by bending the finish's straights, up
+// to 28 m sideways (exo_memory/handback/p-d431-O_2026-10-22.md §4). The whole-lap close (no window) is unchanged. test/core_close_joint.test.js.
+// The measure also counts the change's SLOPE along the road, over GRAM_ELL_M: ∫ (Δ)² + ℓ²(Δ')² ds. Without it the step met the seam's value-and-slope rows with a
+// zig-zag in the last knots, which barely changes the curve and so costs almost nothing (TEST 10's seam: kv -1.19, -1.68, -0.84, -2.57, 0). ℓ = 50 m (chosen
+// from a sweep, 0 to 100 m, on TEST 10 and a 212 m climb: 10 m left a seam spike of 0.53°/100 m, 20 m 0.11; at 50 m no spike past 0.05 anywhere and the
+// finish's straights within 0.1 and 0.8 m of where they were; 100 m bends the long straight 2 m further).
+const GRAM_STEP_M = 2, GRAM_EPS = 1e-9, GRAM_ELL_M = 50;
 /**
  * D239 (pane C): the step's linear solve, with the one way it can fail named. A SINGULAR closure system (a lap of straights: no channel
  * can bend the track round to meet its start) used to escape as the solver's plain Error, which the app's shell does not catch, so the
@@ -107,6 +121,45 @@ function parameters(doc, edited, free = null) {
     });
   }
   return { cols, expand };
+}
+/**
+ * D431: the windowed close's metric over the FREE columns, W = ∫ (aᵀa + ℓ²a'ᵀa') ds + GRAM_EPS·I per channel, a(s) the row of each column's share in the channel's value
+ * at s (its B-spline basis through expand, so a joint's linked points count for both pieces they shape), sampled every GRAM_STEP_M along each road piece a free
+ * column reaches. W couples only the columns of one channel, so it is kept as one Cholesky factor per channel. Returns winvRow(row) = W⁻¹·row over all N
+ * columns (a fixed column: 0).
+ */
+function gramMetric(doc, expand, cols) {
+  const N = cols.length, byCh = new Map();
+  cols.forEach((c, k) => { if (!c.fixed) { if (!byCh.has(c.ch)) byCh.set(c.ch, []); byCh.get(c.ch).push(k); } });
+  const blocks = [];
+  for (const [ch, ks] of byCh) {
+    const at = new Map(ks.map((k, j) => [k, j])), n = ks.length, W = Array.from({ length: n }, (_, i) => { const r = new Float64Array(n); r[i] = GRAM_EPS; return r; });
+    doc.pieces.forEach((P, p) => {
+      const e = P.type === 'road' && expand[ch] && expand[ch][p];
+      if (!e || !e.some((terms) => terms.some(([c]) => at.has(c)))) return;
+      const U = D.knotVector(P), m = Math.max(2, Math.ceil(P.length / GRAM_STEP_M)), w = P.length / m;
+      for (let q = 0; q < m; q++) {
+        const b = basis(U, (P.length * (q + 0.5)) / m), row = new Map(), drow = new Map();
+        for (let a = 0; a < 4; a++) { const i = b.first + a; if (!e[i]) continue; for (const [c, k] of e[i]) if (at.has(c)) { row.set(at.get(c), (row.get(at.get(c)) || 0) + k * b.N[a]); drow.set(at.get(c), (drow.get(at.get(c)) || 0) + k * b.D1[a]); } }
+        const ent = [...row]; for (const [x, vx] of ent) for (const [y, vy] of ent) W[x][y] += w * vx * vy;
+        const dent = [...drow]; for (const [x, vx] of dent) for (const [y, vy] of dent) W[x][y] += w * GRAM_ELL_M * GRAM_ELL_M * vx * vy;
+      }
+    });
+    const L = Array.from({ length: n }, () => new Float64Array(n));   // W = LLᵀ: W is symmetric positive definite (a Gram matrix plus GRAM_EPS·I)
+    for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) {
+      let s = W[i][j]; for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
+      if (i === j) { if (!(s > 0)) throw new D.CoreError('CLOSE_SINGULAR', 'close: the window\'s metric is not positive definite'); L[i][i] = Math.sqrt(s); } else L[i][j] = s / L[j][j];
+    }
+    blocks.push({ ks, L, n });
+  }
+  return (row) => {
+    const out = new Float64Array(N);
+    for (const { ks, L, n } of blocks) {
+      const y = new Float64Array(n); for (let i = 0; i < n; i++) { let s = row[ks[i]]; for (let k = 0; k < i; k++) s -= L[i][k] * y[k]; y[i] = s / L[i][i]; }
+      for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let k = i + 1; k < n; k++) s -= L[k][i] * out[ks[k]]; out[ks[i]] = s / L[i][i]; }
+    }
+    return out;
+  };
 }
 /** The document with every channel rebuilt from the parameter vector x (joints follow; nothing quantised). `keep` (D242, a local close): pieces returned
  *  AS THEY ARE, the very same objects, because no free column reaches them, so they stay bit-identical rather than recomputed from their own values. */
@@ -253,6 +306,7 @@ function close(doc, opts = {}) {
   const edited = local ? new Set() : new Set(opts.edited || [roadIdx[roadIdx.length - 1]]), wEdit = opts.wEdit || 1e6, tolM = opts.tolM || 1e-3, maxIter = opts.maxIter || 30;
   const { cols, expand } = parameters(doc, edited, free), N = cols.length, winv = cols.map((c) => (c.fixed ? 0 : c.edited ? 1 / wEdit : 1));
   const keep = local ? keptPieces(doc, expand, cols) : null;   // the pieces no free column reaches: returned as the very same objects
+  const winvRow = local ? gramMetric(doc, expand, cols) : null;   // D431: a windowed close takes the smallest change to the road (gramMetric); the whole lap keeps the plain metric
   const refuse = (why) => new D.CoreError('CLOSE_WINDOW', `close: can't close using only ${win.text}: ${why}. Widen the window or reshape the end`);
   const solve = (M, rhs) => { try { return solveOrRefuse(M, rhs); } catch (e) { if (local && e.code === 'CLOSE_SINGULAR') throw refuse('the closing equations cannot be met by moving only these pieces'); throw e; } };
   let x = Float64Array.from(cols, (c) => doc.pieces[c.p].channels[c.ch][c.i]);
@@ -280,10 +334,11 @@ function close(doc, opts = {}) {
     for (const ch of valueChannels(seamOf(doc))) J.push(valueRow(ch, 'value'));
     if (held) { const row = new Float64Array(N), Pi = held.end === 'last' ? roadIdx[roadIdx.length - 1] : roadIdx[0], ii = held.end === 'last' ? doc.pieces[Pi].channels.c.length - 1 : 0; for (const [c, coef] of expand.c[Pi][ii]) row[c] += coef; J.push(row); }
     for (const ch of D.CHANNELS) { if (!seamJoined(ch, seamOf(doc))) continue; J.push(valueRow(ch, 'slope')); }
-    // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹ r (ref 04 §3)
-    const M = J.map((a) => J.map((b) => { let s = 0; for (let k = 0; k < N; k++) s += a[k] * winv[k] * b[k]; return s; }));
+    // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹ r (ref 04 §3); W diagonal (winv) for the whole lap, the window's Gram metric for a windowed close (D431)
+    const WJ = J.map((row) => (winvRow ? winvRow(row) : row.map((v, k) => winv[k] * v)));
+    const M = J.map((a) => WJ.map((b) => { let s = 0; for (let k = 0; k < N; k++) s += a[k] * b[k]; return s; }));
     const y = solve(M, m.r.map((v) => -v)), delta = new Float64Array(N);
-    J.forEach((row, i) => { for (let k = 0; k < N; k++) delta[k] += winv[k] * row[k] * y[i]; });
+    WJ.forEach((row, i) => { for (let k = 0; k < N; k++) delta[k] += row[k] * y[i]; });
     let alpha = 1, xn, wn, mn;                                  // halve the step while it makes things worse (E's rule, not a formula)
     for (let hh = 0; hh < 12; hh++, alpha /= 2) { xn = x.map((v, k) => v + alpha * delta[k]); wn = apply(doc, expand, xn, false, keep); mn = residual(wn, { cache }); if (merit(mn) < merit(m)) break; }
     x = xn; work = wn; m = mn;

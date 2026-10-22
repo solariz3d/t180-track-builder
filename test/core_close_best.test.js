@@ -6,7 +6,7 @@
 //   3  new road only when no bend proves: a far end gets Finish, and every other route was refused or failed; a near one does not, though Finish closed it
 //   4  none proves: no document, and one line that says nothing changed and why, with the closest way's reason
 //   5  a bend that would reshape the track (move it further than the gap plus 10 m) is not eligible, and new road is laid instead
-//   6  the reported save (fixtures-d337, uncommitted: a private track; skipped with the reason when absent): one press bends its last 2 pieces by up to 4.0 m
+//   6  the reported save (fixtures-d337, uncommitted: a private track; skipped with the reason when absent): one press bends its last 2 pieces by up to 4.4 m (4.0 before D431)
 //   7  the pick is the least-moving way that proves (every way that moves the track less was refused or shown to fail)
 //   8  the order itself (closejob.js byOrder): no new road first, even against no movement at all; then the least movement; within a millimetre, the route order
 //   9  (D343) the near bend first: when it proves, no other route runs
@@ -113,10 +113,13 @@ test('row 8: the order: no new road first (even when the new road moves nothing)
 });
 
 const FX = path.join(__dirname, '..', 'fixtures-d337', 'pre-close.t180track');
-test('row 6: the reported near-closed save: one press bends its last 2 pieces by up to 4.0 m, with no new road, and the lap proves', { skip: fs.existsSync(FX) ? false : 'fixtures-d337/pre-close.t180track is not here (a private track, kept off the repository)' }, () => {
+test('row 6: the reported near-closed save: one press bends its last 2 pieces by up to 4.4 m, with no new road, and the lap proves', { skip: fs.existsSync(FX) ? false : 'fixtures-d337/pre-close.t180track is not here (a private track, kept off the repository)' }, () => {
   const base = D.parse(fs.readFileSync(FX, 'utf8')), r = CJ.runCloseBest({ doc: base });
   assert.equal(r.route, 'near', r.report);
-  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.0 m');
+  // AMENDED (D431, seat O): 4.4 m, was 4.0. Since D431 a windowed close takes the smallest change to the road's rates (close.js gramMetric) instead of to its
+  // control points: on this save it removes a crest in the climb rate at p45|p46 (kv 0.02, -2.04, -4.00, -0.55 became -1.70, -1.75, -1.81, -1.34) and moves the two
+  // pieces up to 4.40 m instead of 3.99 m, inside the 6.0 m core_finish row 15 derives (exo_memory/handback/p-d431-O_2026-10-22_evidence/d337.js). The rule is unchanged.
+  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.4 m');
   assert.equal(r.doc.pieces.length, base.pieces.length);
   assert.equal(routeOf(r, 'near').lapOk, true, 'the lap proves'); assert.equal(routeOf(r, 'near').newReds, 0, 'and adds no red');
 });
@@ -162,7 +165,7 @@ test('row 12: the reported save: one press, with the reds the live checker found
   const openReds = own(load + " process.stdout.write(JSON.stringify(require('./app/validate-ui/checkjob.js').createCheckJob().run({ doc: { ...base, closed: false }, csp: true }).result.red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 }))));");
   const r = own(load + ` const reds = ${JSON.stringify(openReds)}, CJ = require('./app/core/closejob.js'), c0 = process.cpuUsage(), h0 = process.threadCpuUsage(), t0 = Date.now(), r = CJ.runCloseBest({ doc: base, openReds: reds }), ms = Date.now() - t0, h = process.threadCpuUsage(h0), c = process.cpuUsage(c0);`
     + " process.stdout.write(JSON.stringify({ report: r.report, routes: r.tried.map((t) => t.route), phases: r.phases, ms, cpuMs: (c.user + c.system) / 1000, mainMs: (h.user + h.system) / 1000, doc: D.serialize(r.doc) }));");
-  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.0 m'); assert.deepEqual(r.routes, ['near']); assert.equal(r.phases.openCheckMs, null, 'the given reds: no open check');
+  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.4 m'); assert.deepEqual(r.routes, ['near']);   // AMENDED (D431): 4.4 m, was 4.0 (row 6 says why) assert.equal(r.phases.openCheckMs, null, 'the given reds: no open check');
   t.diagnostic(`main thread ${Math.round(r.mainMs)} ms CPU, process ${Math.round(r.cpuMs)} ms CPU, ${r.ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs}`);
   assert.ok(r.mainMs < 30000, `one press used ${Math.round(r.mainMs)} ms of its main thread's CPU (${Math.round(r.cpuMs)} ms with the collector's threads, ${r.ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs})`);
   const self = CJ.runCloseBest({ doc: D.parse(fs.readFileSync(FX12, 'utf8')) });
@@ -202,7 +205,7 @@ test('row 14: the reported save: the worker\'s press on a structuredClone, with 
   const parsed = workerPress(FX12, { clone: false, openReds: reds }), cloned = workerPress(FX12, { clone: true, openReds: reds });
   const hash = (x) => require('crypto').createHash('sha256').update(x).digest('hex').slice(0, 12);
   t.diagnostic(`main thread: clone ${Math.round(cloned.mainMs)} ms, parsed ${Math.round(parsed.mainMs)} ms; residual on an unfrozen document ${cloned.unfrozen} of ${cloned.calls}; closed sha256 ${hash(cloned.closed)}`);
-  assert.equal(cloned.report, 'closed: bent the last 2 pieces (508 m) by up to 4.0 m'); assert.deepEqual(cloned.routes, ['near']);
+  assert.equal(cloned.report, 'closed: bent the last 2 pieces (508 m) by up to 4.4 m');   // AMENDED (D431): 4.4 m, was 4.0 (row 6 says why) assert.deepEqual(cloned.routes, ['near']);
   assert.equal(cloned.report, parsed.report); assert.equal(hash(cloned.closed), hash(parsed.closed), 'the same closed track');
   assert.equal(cloned.unfrozen, 0, `${cloned.unfrozen} of ${cloned.calls} residuals were on an unfrozen document: the memo cannot serve them`);
 });
