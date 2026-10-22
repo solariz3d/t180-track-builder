@@ -450,7 +450,7 @@ function mount(root, shell, mountOpts = {}) {
     const [x, y] = rel(e); hover = { x, y, alt: !!e.altKey, e };
   };
   const hoverStation = () => {
-    if (hover && hover.s0 === undefined) { const hit = LB.sharedPick(doc, win, hover.x, hover.y, hover.e); hover.s0 = hit && Number.isFinite(hit.s) ? hit.s : null; }
+    if (hover && hover.s0 === undefined) { const tr = askOf('t180:track-request'), hit = LB.sharedPick(doc, win, hover.x, hover.y, hover.e, tr ? tr.segments : undefined); hover.s0 = hit && Number.isFinite(hit.s) ? hit.s : null; }
     return hover ? hover.s0 : null;
   };
   const onAltKey = (e) => { if (hover && e && e.key === 'Alt') hover.alt = e.type === 'keydown'; };

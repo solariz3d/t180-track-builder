@@ -128,13 +128,14 @@ function anchorsOf(track) {
 
 // D428 (P's review item 6): ONE PICK PER POINTER POSITION for the page. The labels and Sculpt's hover (app/core/panel.js) both want the road under the pointer, and each sent its own
 // 't180-pick', which projects every station of the track (5,001 on 10 km): two full projections a move. Both ask here; the first to ask for a position picks, the other reads it.
-// Keyed by the pointer EVENT the position came from, so a new move picks again whatever its position, as the labels' own pick always did
+// Keyed by the pointer EVENT the position came from, so a new move picks again whatever its position, as the labels' own pick always did; and by the TRACK it was picked on (its segments,
+// which are new whenever the road changes), so a still pointer over a new track picks again (D242's rule, which the event key alone broke: sculpt-subscribers row 4, found at local-0.4.14)
 const lastPick = new WeakMap();
-/** The preview's pick at stage px (x, y) of the pointer event key, asked once per event per page: { s, ... } or null. */
-function sharedPick(doc, win, x, y, key) {
-  const was = lastPick.get(doc); if (was && was.key === key && key !== undefined && was.x === x && was.y === y) return was.hit;
+/** The preview's pick at stage px (x, y) of the pointer event key on the track whose segments are gen, asked once per event and track per page: { s, ... } or null. */
+function sharedPick(doc, win, x, y, key, gen) {
+  const was = lastPick.get(doc); if (was && was.key === key && key !== undefined && was.gen === gen && was.x === x && was.y === y) return was.hit;
   let hit = null; doc.dispatchEvent(new win.CustomEvent('t180-pick', { detail: { x, y, reply: (h) => { hit = h; } } }));
-  lastPick.set(doc, { key, x, y, hit }); return hit;
+  lastPick.set(doc, { key, gen, x, y, hit }); return hit;
 }
 
 /** The id of the piece the track is on at s (segments in the track's order; a closed lap's s past its end wraps). */
@@ -232,7 +233,7 @@ function mount(stage, shell, win) {
       }
       const headId = st.history.present.pieces.length ? st.history.present.pieces[st.history.present.pieces.length - 1].id : null;
       // D429: not while a sculpt drag is open: each step's new segments reset pickedFor, and the pick scans the whole path (64-141 ms a drag on 10 km); the hover stays as the drag began
-      if (pointer !== pickedFor && !st.brush) { pickedFor = pointer; hoverId = null; if (pointer) { const hit = sharedPick(doc, win, pointer.x, pointer.y, pointer.e); hoverId = hit && Number.isFinite(hit.s) ? pieceAt(track.segments, hit.s) : null; } }
+      if (pointer !== pickedFor && !st.brush) { pickedFor = pointer; hoverId = null; if (pointer) { const hit = sharedPick(doc, win, pointer.x, pointer.y, pointer.e, track.segments); hoverId = hit && Number.isFinite(hit.s) ? pieceAt(track.segments, hit.s) : null; } }
       const items = [];
       reads.forEach((r) => {
         if (!r || r.type !== 'road') return;                      // a flight has no label
