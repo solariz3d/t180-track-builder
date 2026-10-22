@@ -12,6 +12,7 @@
 //   6  the same lane with the other pass at its height: red, as self-intersection
 //   7  without a mesh (the live checker's way): the clip test separates near (1.5 and 0.3 m) from touching, lying on, and pitching through
 //   8  Close's own self-check (clipsOf): a road lying on itself has intersections, a plain one none
+//   9  D432c: a road grazing the other's edge strip clips in the mesh (red with folds) where the mesh-free clip test cannot see it
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -106,4 +107,20 @@ test('row 8: Close\'s own self-check (app/core/closejob.js clipsOf): a document 
   const at = clipsOf(coil);
   assert.ok(at.length > 0 && at.every(Number.isFinite), `the coil meets itself: ${at.length} places`);
   assert.deepStrictEqual(clipsOf(plain), [], 'a quarter-circle road does not');
+});
+
+// D432c: A CLIP ONLY THE MESH SEES. The clip test signs points of one road over the other's surface, so a crossing confined to a road's LAST lateral metre (the other
+// road grazing its edge strip between the edge point and the next point in, which lies beyond the other road's edge) has no sampled point on either side and is not
+// seen; the mesh's triangles do meet there. This is why Close keeps its own mesh self-check behind the clip test (app/core/closejob.js clipsOf). Found by E's
+// sagscan.js: the crossing fixture with the lead bending down then up over 10 m each (pitch rate 0.01 /m) under a tail bending up, the upper pass at h = -1.5.
+const graze = () => { const s = F.crossing(-1.5, { lead: 80 }), lead = s[0], tail = s[s.length - 1];
+  return [{ ...lead, length: 60 }, { ...lead, id: 'crest', length: 10, kp0: 0.01, kp1: 0.01 }, { ...lead, id: 'dip', length: 10, kp0: -0.01, kp1: -0.01 }, ...s.slice(1, -1), { ...tail, kp0: 0.01, kp1: 0.01 }]; };
+
+test('row 9: a road grazing the other\'s edge strip clips in the mesh (red with the mesh\'s folds) where the mesh-free clip test cannot see it', () => {
+  const segs = graze(), p = G.buildPath(segs, { step: 2 }), m = G.buildMesh(p, segs, { selfCheck: true });
+  const x = m.selfCheck.intersections;
+  assert.ok(x.length > 0 && x.every((y) => Math.abs(Math.abs(y.u) - HALF) < 1e-6), `the mesh meets itself at the lead's edge (u = ±${HALF}): ${JSON.stringify(x.map((y) => [y.s, y.u]))}`);
+  assert.ok(validate(p, segs, { csp: true, fullSpeed: true, folds: m.folds }).red.some((r) => r.reason === 'self-intersection'), 'with the mesh\'s folds (export, overlap check), it is red');
+  // the clip test's blind spot, pinned so a change to it is seen: if the clip test learns to see an edge graze, this line changes with it
+  assert.deepStrictEqual(meshFree(segs), [], 'the mesh-free clip test does not see it');
 });
