@@ -6,7 +6,7 @@
 // store of a 2560 x 1440 css view at DPR 1 (2560 x 1440 device px) AND at DPR 1.5 (3840 x 2160, a scaled monitor), so "native" is proved at two pixel
 // densities. Skipped where there is no Chrome. The looks: Glass's river of stars (river, D416), the prism sky (D410's Glass sky, still a style), Aurora's
 // curtains (aurora), Skyline Night's city (city) and Aqua's sea, whose stars are its motes (caustics). Rows:
-//   1  the stars are points, per style, at both densities: over every star found in the open sky (12 degrees up and higher, away from the moon, and
+//   1  (AMENDED D429: Aurora's measured with its curtains' colours zeroed, see the row) the stars are points, per style, at both densities: over every star found in the open sky (12 degrees up and higher, away from the moon, and
 //      for the sea under Snell's window), the median width at half its peak is at most 1.5 px and the 90th percentile at most 1.8 px. Measured from
 //      the star's second moments over 13 x 13 px less its sky (a plane through the window's rim, so a sloped sky is not read as width), the measure
 //      that is fair to a point between pixels, and only on stars with no
@@ -50,7 +50,7 @@ const POSE = poseAt(40);
 const LOOKS = {
   river: { theme: 'glass', pitch: 40, el: [0.21, 1.6], name: "Glass's river of stars" },
   prism: { theme: 'glass', pitch: 40, el: [0.21, 1.6], moon: true, name: 'the prism sky' },
-  aurora: { theme: 'aurora', pitch: 40, el: [0.21, 1.6], name: "Aurora's sky" },
+  aurora: { theme: 'aurora', pitch: 40, el: [0.21, 1.6], name: "Aurora's sky", starsOnly: true },
   city: { theme: 'skyline-night', pitch: 40, el: [0.21, 1.6], name: "Skyline Night's city sky" },
   caustics: { theme: 'aqua', pitch: 20, el: [0.21, 0.55], name: "Aqua's sea (its motes)" },
 };
@@ -153,10 +153,10 @@ test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } i
 const pct = (a, q) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
 
 /** draw a style at one density, from a pose; the view stays on the page (window.__L) until the next draw */
-async function draw(style, den, pose, shot) {
+async function draw(style, den, pose, shot, starsOnly = false) {
   assert.ok(SKY.STYLES.includes(style), `${style} is a registered sky style (the styles: ${SKY.STYLES.join(', ')})`);
   const { width: W, height: H } = den, B = R.skyBasis(pose, W / H), px = 2 * Math.hypot(...B.up) / H;
-  const v = await ev(`window.__render(${JSON.stringify(R.SKY_VS)}, ${JSON.stringify(R.skyFS(SKY.patternSource(style)))}, ${JSON.stringify(colours(LOOKS[style].theme))}, ${JSON.stringify(B)}, ${px}, ${W}, ${H}, ${!!shot})`);
+  const v = await ev(`window.__render(${JSON.stringify(R.SKY_VS)}, ${JSON.stringify(R.skyFS(SKY.patternSource(style)))}, ${JSON.stringify(starsOnly ? { ...colours(LOOKS[style].theme), a: [0, 0, 0], b: [0, 0, 0] } : colours(LOOKS[style].theme))}, ${JSON.stringify(B)}, ${px}, ${W}, ${H}, ${!!shot})`);
   if (shot) {   // fetched in slices: a whole full-size PNG in one reply (over about 4 MB, Aurora's at DPR 1) closes the DevTools socket
     let url = ''; for (let i = 0; i < v.shot; i += 1e6) url += await ev(`window.__shot.slice(${i}, ${i + 1e6})`);
     fs.writeFileSync(path.join(process.env.SKY_SHOT_DIR, `${style}-up-${process.env.SKY_SHOT_LABEL || 'now'}.png`), Buffer.from(url.split(',')[1], 'base64'));
@@ -165,10 +165,10 @@ async function draw(style, den, pose, shot) {
 }
 // each style's stars (and the prism's limb) at each density, drawn once and kept for every row that reads them
 const seen = new Map();
-async function look(style, den) {
-  const k = `${style}@${den.dpr}`;
+async function look(style, den, starsOnly = false) {
+  const k = `${style}@${den.dpr}${starsOnly ? ':stars' : ''}`;
   if (seen.has(k)) return seen.get(k);
-  const L = LOOKS[style], v = await draw(style, den, poseAt(L.pitch), den.dpr === 1 && !!process.env.SKY_SHOT_DIR);
+  const L = LOOKS[style], v = await draw(style, den, poseAt(L.pitch), den.dpr === 1 && !!process.env.SKY_SHOT_DIR && !starsOnly, starsOnly);
   const moon = L.moon ? pixelOf(v.B, MOON, v.W, v.H) : [0, 0], moonR = L.moon ? 0.024 / v.px : 0;
   const stars = await ev(`window.__stars(${moon[0]}, ${moon[1]}, ${moonR}, ${L.el[0]}, ${L.el[1]})`);
   const limb = L.moon ? await ev(`window.__limb(${moon[0]}, ${moon[1]}, ${moonR}, 24)`) : null;
@@ -176,10 +176,13 @@ async function look(style, den) {
   seen.set(k, r); return r;
 }
 
+// AMENDED (D429): a style with `starsOnly` (Aurora) has row 1 measure its stars with the curtains' and corona's colours (--sky-a, --sky-b) zeroed. D403's
+// curtains have fine rays, and the star finder took about 2,400 ray peaks for stars (3,655 found, p90 5.69 px); with the curtains zeroed it finds
+// 1,251 stars, p90 1.19 px. The stars are added over the sky whatever it holds, so their width is the same; row 6 still sees them over the curtains
 for (const style of Object.keys(LOOKS)) {
   test(`row 1 (${style}): ${LOOKS[style].name}: the stars are points, median width at half peak at most 1.5 px and 90th percentile at most 1.8 px, at DPR 1 and DPR 1.5`, { skip }, async (t) => {
     for (const den of DENS) {
-      const { stars } = await look(style, den), f = stars.measured.map((s) => s.fwhm);
+      const { stars } = await look(style, den, !!LOOKS[style].starsOnly), f = stars.measured.map((s) => s.fwhm);
       t.diagnostic(`DPR ${den.dpr} (${den.width} x ${den.height}): ${stars.found} stars found, ${f.length} lone; width at half peak median ${pct(f, 0.5).toFixed(2)} px, p90 ${pct(f, 0.9).toFixed(2)} px`);
       assert.ok(f.length >= 20, `DPR ${den.dpr} (${den.width} x ${den.height}): enough lone stars in the view to measure: ${f.length} of ${stars.found} found`);
       const med = pct(f, 0.5), p90 = pct(f, 0.9);
