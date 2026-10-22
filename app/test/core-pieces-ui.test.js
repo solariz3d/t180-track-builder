@@ -934,6 +934,30 @@ test('row 18b: a length drag previews whole 2 m, and the release previews the ex
   P1.panel.unmount();
 });
 
+// D426 (the user, 2026-10-21 20:41, in 0.4.12-dev, on TEST 10: "within the preview, the ghost of the next piece disapears ... when i saved it, the ghost came back"). With no ghost on
+// show, the drag handles ask the preview for one again every RETRY_FRAMES (panel.js ghostModel), and each ask began the sliced exact build (D407) over from its first step. A ghost whose build
+// needs more than those frames (his 1,500 m, 100 m wide bowl: 3,002 steps, about 82 ms at 2.5 ms a frame) was begun again before it was whole, for ever. The real panel and the real preview
+// (app/preview/index.js) on the fake page: with no clock the preview builds one step a frame, so a 100 m ghost needs about 200 frames.
+test('row 18c: a ghost whose sliced build needs more frames than the retry is still shown: the handles do not ask again while the preview is building one (D426)', async () => {
+  const P1 = await mountPanel(), { doc, shell } = P1;
+  fieldOf(P1, 'length m').value = '100';   // (as handlePanel: the fake DOM does not turn the value attribute into the value)
+  const make = doc.createElement;   // the preview's canvas: a fake WebGL context, as the headless rows of app/test/cheap-ghost.test.js
+  const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0 }, { get: (t, k) => (k in t ? t[k] : () => ({})) });
+  doc.createElement = (t) => { const e = make(t); if (t === 'canvas') Object.assign(e, { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl }); return e; };
+  P1.win.devicePixelRatio = 1; P1.win.addEventListener = () => {}; P1.win.removeEventListener = () => {}; doc.hidden = false;
+  const mounted = require('../preview/index.js').mount(P1.stage, shell);
+  const ghostNow = () => { let g = null; doc.dispatchEvent(new P1.win.CustomEvent('t180:ghost-request', { detail: { reply: (x) => { g = x; } } })); return g; };
+  const until = (n) => { for (let i = 0; i < n; i++) { if (ghostNow()) return i; P1.frame(); } return null; };
+  const at = until(1500);
+  assert.notEqual(at, null, 'the ghost of the next piece arrives (it was begun again every 30 frames and never did)');
+  assert.ok(at > 60, `control: the build took more frames than the retry (${at})`);
+  // the user's way: Extend, and the ghost of the piece after it comes back too
+  P1.button('Extend').onclick(); P1.frame();
+  assert.equal(shell.getState().history.present.pieces.length, 6);
+  assert.notEqual(until(1500), null, 'after Extend the next ghost arrives');
+  mounted.unmount(); P1.panel.unmount();
+});
+
 // 2026-10-15, the keeper: "when clicking a previous placed part of the track, while its highlighted, make the values change to it, so you can mimic certain
 // values within a new piece you place down". A SINGLE selected road piece lends its end values (and its length) to the Extend fields; Extend then places a
 // piece like it. A run of several pieces lends nothing (which one would it be). Clearing the selection, or any new document, shows the head again.

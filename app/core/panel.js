@@ -496,7 +496,9 @@ function mount(root, shell, mountOpts = {}) {
     let info = askOf('t180:ghost-request');
     if (info && info.jump) return null;   // the ghost on screen is a JUMP's (the Add-jump control): not Extend's, so no Extend handles on it
     // no ghost: ask for it once per document, and again about every half second (the preview mounts AFTER this panel, so the first ask can go to nobody; a ghost that cannot be built is not rebuilt every frame)
-    if (!info) { sinceTry++; if (triedDoc !== d || sinceTry >= RETRY_FRAMES) { triedDoc = d; sinceTry = 0; ghost(); info = askOf('t180:ghost-request'); } }
+    // D426: but not again while the preview is still BUILDING the one asked for (a sliced exact ghost, D407): each ask began it over, so a ghost needing more than RETRY_FRAMES of slices (the
+    // user's TEST 10: 1,500 m of 100 m wide bowl, 3,002 steps) never arrived. A preview that does not answer is not building
+    if (!info) { sinceTry++; if (triedDoc !== d || (sinceTry >= RETRY_FRAMES && askOf('t180:ghost-building') !== true)) { triedDoc = d; sinceTry = 0; ghost(); info = askOf('t180:ghost-request'); } }
     if (!info || !info.samples.length) return null;
     const s1 = info.samples[info.samples.length - 1].s; if (!(s1 - info.s0 > 0.5)) return null;
     // the road's half-width at a share of the piece: from the head's width to the field's, read when asked (a press must not see the width of the frame before)
