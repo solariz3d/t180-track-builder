@@ -56,6 +56,54 @@ test('checkDoc REFUSES a hand-built document with a broken joint, by the name JO
   }
 });
 
+// D429 (A's trace of sculpt-frame row 3, exo_memory/handback/p-d429-row3-A_2026-10-22.md): checkDoc remembers a frozen road piece that passed after the same piece before it, since a drag
+// step checks its document three times; these rows hold that a remembered piece is still refused wherever its checks would now read something else
+const ice = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) ice(o[k]); } return o; };
+const handPiece = (id, ch) => ({ id, type: 'road', length: 40, family: 'bowl', knots: [20], channels: { kh: [0, 0, 0, 0, 0], kv: [0, 0, 0, 0, 0], phi: [0, 0, 0, 0, 0], w: [31, 31, 31, 31, 31], r: [3, 3, 3, 3, 3], h: [0, 0, 0, 0, 0], l: [0, 0, 0, 0, 0], ...ch } });
+const handDoc = (pieces) => ({ schema: D.SCHEMA, generator: 'x', name: 'hand', closed: false, start: { pos: [0, 0, 0], heading: 0, pitch: 0 }, nextId: 9, pieces });
+
+test('a frozen piece that passed after one piece is still refused (JOINT) after a different piece it does not join', () => {
+  const p2 = ice(handPiece('p2', {}));
+  assert.doesNotThrow(() => D.checkDoc(ice(handDoc([ice(handPiece('p1', {})), p2]))), 'p2 joins p1');
+  assert.throws(() => D.checkDoc(ice(handDoc([ice(handPiece('p1', { kh: [0.01, 0.01, 0.01, 0.01, 0.01] })), p2]))), (e) => e.code === 'JOINT', 'the same p2 after a piece ending at κh 0.01');
+});
+
+test('a piece that is not frozen is checked again every time: changed after a pass, it is refused', () => {
+  const p2 = handPiece('p2', {}), doc = handDoc([ice(handPiece('p1', {})), p2]);
+  assert.doesNotThrow(() => D.checkDoc(doc));
+  p2.channels.kh = [0.01, 0.01, 0.01, 0.01, 0.01];
+  assert.throws(() => D.checkDoc(doc), (e) => e.code === 'JOINT', 'a κh step written into the piece after it passed');
+  p2.channels.kh = [0, 0, 0, 0, 0]; p2.length = -1;
+  assert.throws(() => D.checkDoc(doc), (e) => e.code === 'BAD_DOC' && /length must be positive/.test(e.message), 'a length made negative after it passed');
+});
+
+test('a piece frozen only at the top is checked again: its channels changed after a pass, it is refused', () => {
+  const p2 = Object.freeze(handPiece('p2', {})), doc = handDoc([ice(handPiece('p1', {})), p2]);
+  assert.doesNotThrow(() => D.checkDoc(doc));
+  p2.channels.kh = [0.01, 0.01, 0.01, 0.01, 0.01];
+  assert.throws(() => D.checkDoc(doc), (e) => e.code === 'JOINT', 'a κh step written into the unfrozen channels after the piece passed');
+});
+
+test('a frozen piece after a piece that is not frozen is checked again: the piece before it changed after a pass, it is refused', () => {
+  const p1 = handPiece('p1', {}), doc = handDoc([p1, ice(handPiece('p2', {}))]);
+  assert.doesNotThrow(() => D.checkDoc(doc));
+  p1.channels.kh = [0.01, 0.01, 0.01, 0.01, 0.01];
+  assert.throws(() => D.checkDoc(doc), (e) => e.code === 'JOINT', 'the piece before now ends at κh 0.01');
+});
+
+test('a frozen piece that passed as a joint is still refused (LANDING) as the landing of a flight from the same piece', () => {
+  const turn = { kh: [0.01, 0.01, 0.01, 0.01, 0.01] }, p1 = ice(handPiece('p1', turn)), p2 = ice(handPiece('p2', turn));
+  assert.doesNotThrow(() => D.checkDoc(ice(handDoc([p1, p2]))), 'p2 joins p1 at κh 0.01');
+  const f = ice(D.flightPiece({ id: 'p3', forward: 20, up: -1, pitch: -2 * DEG }));
+  assert.throws(() => D.checkDoc(ice(handDoc([p1, f, p2]))), (e) => e.code === 'LANDING', 'p2 lands from a flight at κh 0.01, not level');
+});
+
+test('a frozen piece that passed as a landing is still refused (JOINT) straight after the same take-off piece', () => {
+  const p1 = ice(handPiece('p1', { kh: [0.01, 0.01, 0.01, 0.01, 0.01] })), p2 = ice(handPiece('p2', {})), f = ice(D.flightPiece({ id: 'p3', forward: 20, up: -1, pitch: -2 * DEG }));
+  assert.doesNotThrow(() => D.checkDoc(ice(handDoc([p1, f, p2]))), 'p2 lands level from the flight');
+  assert.throws(() => D.checkDoc(ice(handDoc([p1, p2]))), (e) => e.code === 'JOINT', 'p2 straight after p1, which ends at κh 0.01');
+});
+
 // CHANGED D258 (the free jump): the road after a flight starts level at the FLIGHT's bank (the landing's own), the rest carried as a default
 test('a flight must follow road; the road after it starts level (κh = κv = 0) at the flight\'s bank, the rest carried', () => {
   const d0 = D.createDoc('f');

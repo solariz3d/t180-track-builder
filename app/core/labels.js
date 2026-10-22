@@ -231,7 +231,8 @@ function mount(stage, shell, win) {
         }
       }
       const headId = st.history.present.pieces.length ? st.history.present.pieces[st.history.present.pieces.length - 1].id : null;
-      if (pointer !== pickedFor) { pickedFor = pointer; hoverId = null; if (pointer) { const hit = sharedPick(doc, win, pointer.x, pointer.y, pointer.e); hoverId = hit && Number.isFinite(hit.s) ? pieceAt(track.segments, hit.s) : null; } }
+      // D429: not while a sculpt drag is open: each step's new segments reset pickedFor, and the pick scans the whole path (64-141 ms a drag on 10 km); the hover stays as the drag began
+      if (pointer !== pickedFor && !st.brush) { pickedFor = pointer; hoverId = null; if (pointer) { const hit = sharedPick(doc, win, pointer.x, pointer.y, pointer.e); hoverId = hit && Number.isFinite(hit.s) ? pieceAt(track.segments, hit.s) : null; } }
       const items = [];
       reads.forEach((r) => {
         if (!r || r.type !== 'road') return;                      // a flight has no label

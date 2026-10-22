@@ -438,6 +438,11 @@ function checkEdge(P, at) {
     if (mid > CUP_MAX + EDGE_EPS) throw new CoreError('BAD_EDGE', `${at}: the road's edge angle plus e reaches ${mid.toFixed(3)}°, past ${CUP_MAX}° (the walls of a ${CUP_MAX}°+ bowl touch)`);
   }
 }
+// D429: A ROAD PIECE ALREADY CHECKED IS NOT CHECKED AGAIN. A drag step checks its document three times (made, toSegments, dragTo) and every piece each time, though only the
+// pieces in the brush's window are new objects. A road piece's checks below read only the piece, the piece before it and whether a flight came between, so a piece that
+// passed them after the same piece, both frozen all the way down (they cannot have changed since), passes again; ids, flights, nextId and the rest still run every time
+const DEEP = new WeakSet(), ROAD_OK = new WeakMap(), FIRST = {};
+const deepFrozen = (o) => { if (!o || typeof o !== 'object' || DEEP.has(o)) return true; if (!Object.isFrozen(o)) return false; for (const k of Object.keys(o)) if (!deepFrozen(o[k])) return false; DEEP.add(o); return true; };
 function checkDoc(doc) {
   const bad = (msg) => { throw new CoreError('BAD_DOC', msg); };
   if (!doc || doc.schema !== SCHEMA) bad(`schema must be ${SCHEMA}, got ${doc && doc.schema}`);
@@ -462,6 +467,7 @@ function checkDoc(doc) {
       flight = P; return;
     }
     if (P.type !== 'road') bad(`${at}: type must be road or flight, got ${P.type}`);
+    if (!flight && ROAD_OK.get(P) === (prev || FIRST)) { prev = P; return; }
     if (P.grip !== undefined) checkGrip(P.grip, `${at}: grip`);   // D261
     if (!(P.length > 0)) bad(`${at}: length must be positive`);
     if (!FAMILIES.includes(P.family)) bad(`${at}: family "${P.family}"`);
@@ -480,6 +486,7 @@ function checkDoc(doc) {
     } else if (prev) {
       const p = jointProblem(pieceEnd(prev), P, kindOf(prev)); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint is C1 in every channel, ref 09 §1)`);
     }
+    if (!flight && deepFrozen(P) && (!prev || deepFrozen(prev))) ROAD_OK.set(P, prev || FIRST);
     prev = P; flight = null;
   });
   if (doc.nextId <= doc.pieces.reduce((a, P) => Math.max(a, Number(String(P.id).replace(/^p/, '')) || 0), 0)) bad('nextId must exceed every piece id');
