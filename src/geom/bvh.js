@@ -1,6 +1,6 @@
 // bvh.js: the whole-surface checks that no single piece can see (docs/ARCHITECTURE.md §3 `:58`, §4 `:84-85`).
 //
-//   selfCheck(mesh, { closed, lengthM, minSeparationM = 25, stackedM = 2, stacked = true })   stacked: false skips the stacked rays (`stacked` comes back empty)
+//   selfCheck(mesh, { closed, lengthM, minSeparationM = 25, stackedM = 2 })
 //     -> { intersections: [{ s, u, cell, other, sOther, uOther, pairs }],
 //          stacked:       [{ s, u, cell, other, sOther, gap, vertices }],
 //          stats: { triangles, vertices, nodes, triTests, rayTests } }
@@ -186,8 +186,8 @@ function selfCheck(mesh, opts = {}) {
       keep(groups, kx, { s: S.s[x[1]], u: S.u[x[1]], cell: x[0], other: y[0], sOther: S.s[y[1]], uOther: S.u[y[1]] });
     });
   }
-  // stacked: a segment along each vertex normal, `reach` each way (D432: `stacked: false` skips it, for a caller that reads only the intersections, as Close does)
-  for (let i = 0; opts.stacked !== false && i < S.s.length; i++) {
+  // stacked: a segment along each vertex normal, `reach` each way
+  for (let i = 0; i < S.s.length; i++) {
     const p = P(S, i), n = [S.nrm[i * 3], S.nrm[i * 3 + 1], S.nrm[i * 3 + 2]], nl = Math.sqrt(dot(n, n)); if (!(nl > 0)) continue;
     const q0 = p.map((x, d) => x - n[d] / nl * reach), q1 = p.map((x, d) => x + n[d] / nl * reach);
     const lo = q0.map((x, d) => Math.min(x, q1[d])), hi = q0.map((x, d) => Math.max(x, q1[d]));

@@ -11,8 +11,8 @@
 //   5  a pit lane 1.5 m under the road's other pass, not touching (the export's lane check): no stacked red; the stack is information
 //   6  the same lane with the other pass at its height: red, as self-intersection
 //   7  without a mesh (the live checker's way): the clip test separates near (1.5 and 0.3 m) from touching, lying on, and pitching through
-//   8  Close's own self-check (clipsOf): a road lying on itself has intersections, a plain one none
-//   9  D432c: a road grazing the other's edge strip clips in the mesh (red with folds) where the mesh-free clip test cannot see it
+//   8  (AMENDED D432d) Close, with no mesh of its own, refuses a road lying on itself through the checker's clip test, and changes nothing
+//   9  D432c/d: a road grazing the other's edge strip clips in the mesh (red with folds), and the mesh-free clip test sees it too (D432d)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -99,28 +99,32 @@ test('row 7: without a mesh, the clip test: 1.5 and 0.3 m apart (side by side, o
   }
 });
 
-test('row 8: Close\'s own self-check (app/core/closejob.js clipsOf): a document whose road lies on itself has intersections; a plain one has none', () => {
-  const { clipsOf } = require('../app/core/closejob.js'), D = require('../src/core/document.js'), { extend } = require('../src/core/extend.js');
-  const R = 180, Q = (Math.PI * R) / 2;   // two flat circles, one on the other (core_close_best row 4's coil)
+// AMENDED (D432d, the librarian's ruling 2026-10-22 12:5x): this row tested Close's own mesh self-check (closejob.js clipsOf), which is removed: the clip test sees
+// the edge graze it was kept for (row 9), and the export and the overlap check keep the mesh as the final authority (rows 3, 4 and 9). It now holds that Close,
+// with no mesh of its own, refuses a road that lies on itself through the checker's clip test, and changes nothing
+test('row 8: Close refuses a road that lies on itself through the checker\'s clip test alone (no mesh of its own), and changes nothing', () => {
+  const { runCloseBest } = require('../app/core/closejob.js'), D = require('../src/core/document.js'), { extend } = require('../src/core/extend.js');
+  const R = 180, Q = (Math.PI * R) / 2;   // two flat circles, one on the other, then 60 m (core_close_best row 4's coil)
   let coil = extend(D.createDoc('coil'), { length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) coil = extend(coil, { length: Q, transition: 40, targets: { kh: 1 / R } });
-  let plain = extend(D.createDoc('plain'), { length: 300, family: 'bowl' }); for (let i = 0; i < 2; i++) plain = extend(plain, { length: Q, transition: 40, targets: { kh: 1 / R } });
-  const at = clipsOf(coil);
-  assert.ok(at.length > 0 && at.every(Number.isFinite), `the coil meets itself: ${at.length} places`);
-  assert.deepStrictEqual(clipsOf(plain), [], 'a quarter-circle road does not');
+  coil = extend(coil, { length: 60, transition: 40, targets: { kh: 0 } });
+  const r = runCloseBest({ doc: coil });
+  assert.equal(r.converged, false, r.report); assert.equal(r.doc, null);
+  assert.ok(r.tried.some((t) => /self-intersection/.test(t.miss || '')), `a way of closing it was refused for the road meeting itself: ${JSON.stringify(r.tried.map((t) => t.miss))}`);
 });
 
-// D432c: A CLIP ONLY THE MESH SEES. The clip test signs points of one road over the other's surface, so a crossing confined to a road's LAST lateral metre (the other
-// road grazing its edge strip between the edge point and the next point in, which lies beyond the other road's edge) has no sampled point on either side and is not
-// seen; the mesh's triangles do meet there. This is why Close keeps its own mesh self-check behind the clip test (app/core/closejob.js clipsOf). Found by E's
-// sagscan.js: the crossing fixture with the lead bending down then up over 10 m each (pitch rate 0.01 /m) under a tail bending up, the upper pass at h = -1.5.
+// D432c: A CLIP ONLY THE MESH SAW. Two roads whose edge strips cross each other BETWEEN stations: every sampled point of one lies on one side of the other, or beyond
+// its edge, so no sign change was seen at 2 m stations (at 0.25 m it was); the mesh's triangles do meet there. Found by E's sagscan.js: the crossing fixture with the
+// lead bending down then up over 10 m each (pitch rate 0.01 /m) under a tail bending up, the upper pass at h = -1.5. D432d: the clip test now also signs the rows
+// linearly between a station and its neighbours, as the mesh's triangles run between its rows, so it sees it.
 const graze = () => { const s = F.crossing(-1.5, { lead: 80 }), lead = s[0], tail = s[s.length - 1];
   return [{ ...lead, length: 60 }, { ...lead, id: 'crest', length: 10, kp0: 0.01, kp1: 0.01 }, { ...lead, id: 'dip', length: 10, kp0: -0.01, kp1: -0.01 }, ...s.slice(1, -1), { ...tail, kp0: 0.01, kp1: 0.01 }]; };
 
-test('row 9: a road grazing the other\'s edge strip clips in the mesh (red with the mesh\'s folds) where the mesh-free clip test cannot see it', () => {
+test('row 9: a road grazing the other\'s edge strip clips in the mesh (red with the mesh\'s folds), and the mesh-free clip test sees it too', () => {
   const segs = graze(), p = G.buildPath(segs, { step: 2 }), m = G.buildMesh(p, segs, { selfCheck: true });
   const x = m.selfCheck.intersections;
   assert.ok(x.length > 0 && x.every((y) => Math.abs(Math.abs(y.u) - HALF) < 1e-6), `the mesh meets itself at the lead's edge (u = ±${HALF}): ${JSON.stringify(x.map((y) => [y.s, y.u]))}`);
   assert.ok(validate(p, segs, { csp: true, fullSpeed: true, folds: m.folds }).red.some((r) => r.reason === 'self-intersection'), 'with the mesh\'s folds (export, overlap check), it is red');
-  // the clip test's blind spot, pinned so a change to it is seen: if the clip test learns to see an edge graze, this line changes with it
-  assert.deepStrictEqual(meshFree(segs), [], 'the mesh-free clip test does not see it');
+  // AMENDED (D432d, the librarian's ruling 2026-10-22 12:5x): this line pinned the clip test's blind spot (it did not see the graze); the clip test now signs the
+  // rows between stations too, so the graze is red without a mesh
+  assert.ok(meshFree(segs).includes('self-intersection'), `the mesh-free clip test sees it: ${JSON.stringify(meshFree(segs))}`);
 });

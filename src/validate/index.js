@@ -653,10 +653,10 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     const hs = 0.5 * Math.max(i + 1 < n ? S[i + 1].s - S[i].s : 0, i > 0 ? S[i].s - S[i - 1].s : 0) + CLIP_EPS;
     g = { Q, nrm, acr, T, hs }; geomCache.set(i, g); return g;
   };
-  /** station j's points over station i's surface, by the sign of their gap along its normal */
-  const sides = (i, j) => {
+  /** a row of another road's points (a station's, or one between two stations) over station i's surface, by the sign of their gap along its normal */
+  const sides = (i, Bq) => {
     const A = geomOf(i), last = A.Q.length - 1; let pos = false, neg = false, zero = false;
-    for (const o of ptsOf(j)) {
+    for (const o of Bq) {
       let best = -1, bd = Infinity;
       for (let k = 0; k <= last; k++) { const d = len(sub(o.q, A.Q[k].q)); if (d < bd) { bd = d; best = k; } }
       if (!(bd < cell)) continue;
@@ -667,7 +667,24 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     }
     return { pos, neg, zero };
   };
-  const clips = (i, j) => { const a = sides(i, j), b = sides(j, i); return (a.pos && a.neg) || a.zero || (b.pos && b.neg) || b.zero; };
+  // D432d, ALONG THE ROAD: two roads whose edge strips cross between stations show one sign at every station, so each station is signed together with the rows
+  // linearly between it and its neighbours (at a quarter, a half and three quarters of the way, as the mesh's own triangles run between its rows): a sign change
+  // among them is the road passing through the other between stations
+  const rowsOf = (j) => {
+    const rows = [ptsOf(j)];
+    for (const k of [j - 1, j + 1]) {
+      if (k < 0 || k >= n || !isRoad(k)) continue;
+      const A0 = ptsOf(j), B0 = ptsOf(k); if (A0.length !== B0.length) continue;
+      for (const t of [0.25, 0.5, 0.75]) rows.push(A0.map((p, m) => ({ q: add(p.q, mul(sub(B0[m].q, p.q), t)) })));
+    }
+    return rows;
+  };
+  const around = (i, j) => {
+    const r = { pos: false, neg: false, zero: false };
+    for (const row of rowsOf(j)) { const x = sides(i, row); r.pos = r.pos || x.pos; r.neg = r.neg || x.neg; r.zero = r.zero || x.zero; }
+    return r;
+  };
+  const clips = (i, j) => { const a = around(i, j), b = around(j, i); return (a.pos && a.neg) || a.zero || (b.pos && b.neg) || b.zero; };
   const lim = cell + SLACK;
   for (let i = 0; i < n; i++) {
     if (!qd[i]) continue;   // not a road station, or not queried
