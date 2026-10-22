@@ -434,20 +434,27 @@ function mount(root, shell, mountOpts = {}) {
   // D425 part 4 (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §1, §3): THE HOVER. In Sculpt with no drag open the pointer over the road is picked on every move (as the
   // labels pick it), and the station, the radius and the tool go to the page's layers through 't180:sculpt-hover' (app/core/selectionlayer.js draws the reach, handles.js the glyph). The radius
   // is read when asked, so [ ] resize the reach under the pointer. A press clears it in the handler that opens the drag, so the drag's first frame draws the drag's own cues; leaving the stage clears it
+  // D428 (P's review items 4-6): a move keeps only the pointer; the station is picked when a layer first asks, through the pick the labels share (labels.js sharedPick), so a move costs one
+  // pick, not two. The reach stays across the press until the brush takes over (openBrush clears it), so nothing blinks between the press and the first step; and Alt is read from the key
+  // as well as the pointer, so pressing it with the pointer still turns the glyph
   let hover = null;
   const hoverAt = (e) => {
     const st = shell.getState(); if (!st.sculpt || drag || st.brush) { hover = null; return; }
-    const [x, y] = rel(e); let hit = null; send('t180-pick', { x, y, reply: (h) => { hit = h; } });
-    hover = hit && Number.isFinite(hit.s) ? { s0: hit.s, alt: !!e.altKey } : null;
+    const [x, y] = rel(e); hover = { x, y, alt: !!e.altKey, e };
   };
-  const sculptHover = () => { const st = shell.getState(); if (!hover || !st.sculpt || drag || st.brush) return null; const T = toolNow(); return { s0: hover.s0, r: radiusNow(), tool: T.key, channel: T.channel, alt: hover.alt && !!T.side }; };
+  const hoverStation = () => {
+    if (hover && hover.s0 === undefined) { const hit = LB.sharedPick(doc, win, hover.x, hover.y, hover.e); hover.s0 = hit && Number.isFinite(hit.s) ? hit.s : null; }
+    return hover ? hover.s0 : null;
+  };
+  const onAltKey = (e) => { if (hover && e && e.key === 'Alt') hover.alt = e.type === 'keydown'; };
+  doc.addEventListener('keydown', onAltKey); doc.addEventListener('keyup', onAltKey);
+  const sculptHover = () => { const st = shell.getState(); if (!hover || !st.sculpt || (drag && drag.open) || st.brush || hoverStation() === null) return null; const T = toolNow(); return { s0: hover.s0, r: radiusNow(), tool: T.key, channel: T.channel, alt: hover.alt && !!T.side }; };
   const onSculptHover = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(sculptHover()); };
   doc.addEventListener('t180:sculpt-hover', onSculptHover);
   const leave = () => { hover = null; };
   const down = (e) => {
     brushedPress = false;
     if (!shell.getState().sculpt || e.button !== 0 || drag || shell.getState().brush) return;
-    hover = null;
     const [x, y] = rel(e);   // (a press on a handle never gets here: handles.js takes it in the capture phase and stops it)
     let hit = null; send('t180-pick', { x, y, reply: (h) => { hit = h; } });
     if (!hit) return;
@@ -461,7 +468,7 @@ function mount(root, shell, mountOpts = {}) {
     shell.beginBrush({ tool: T.tool, mode: LOCAL_CH.has(T.channel) ? 'local' : 'rate', channel: T.channel, s0: drag.s0, r: radiusNow(), sharp: sharp.checked, ...(drag.keepRate ? { keepRate: true } : {}) });
     if (!shell.getState().brush) { drag = null; return false; }
     if (T.key !== 'smooth' && SMOOTH_CH.includes(T.channel)) smoothCh.value = T.channel;   // Smooth smooths the last tool's channel (design §3.7)
-    liveTool = T; drag.open = true; brushedPress = true;
+    liveTool = T; drag.open = true; brushedPress = true; hover = null;   // D428: the brush's own cues take over from the hover's
     return true;
   };
   const deltaAt = (x, y) => { const v = (drag.axis === 'x' ? drag.x - x : drag.y - y) * drag.per; return drag.smooth ? Math.max(0, v) : v; };
@@ -835,7 +842,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); doc.removeEventListener('keydown', onAltKey); doc.removeEventListener('keyup', onAltKey); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };
