@@ -60,7 +60,11 @@ test('row 3: a window that cannot close the loop is REFUSED BY NAME (CLOSE_WINDO
 });
 
 test('row 4: a local close may not push the window past the roll-rate bar (1.2144°/m over 20 m): refused by name', () => {
-  const d = bankedStart(1.0);   // the start banks 57°, the end is level: the last 200 m alone would roll 2.343°/m to meet it (lprobe3)
+  // AMENDED (D431, seat O): the start banked 2.0 rad (115°), was 1.0 (57°). The 57° start rolled 2.343°/m only because the window's close piled the roll into a
+  // few knots; since D431 it takes the smallest change to the road (close.js gramMetric) and rolls the same 57° at 0.976°/m, under the bar, so it closes
+  // (core_close_joint.test.js row 4). The rule this row holds is unchanged: a roll past the bar is refused by name. 2.0 rad rolls 4.687°/m before D431 and
+  // 1.952°/m after, refused either way (exo_memory/handback/p-d431-O_2026-10-22_evidence/row4-roll.js)
+  const d = bankedStart(2.0);
   assert.throws(() => C.close(d, { window: C.closeWindow(d, { last: true }) }), (e) => e.name === 'CoreError' && e.code === 'CLOSE_WINDOW' && /roll too fast/.test(e.message), 'refused by name');
 });
 
