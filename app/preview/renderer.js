@@ -203,6 +203,7 @@ function chunkLines(c) {
 const chunkModel = (c) => (c.list && c.list[0] && c.list[0].xform) || c.model;
 const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.73, 0.66, 1.0] });   // 2026-10-14, Sigil: the accent violet (#b9a8ff); was sky blue, which tinted the whole view
 const GHOST_ALPHA = 0.42;
+const WASH_ALPHA = 0.18;   // D425: the wash over the road a sculpt drag moves (P's design §1 cue 4)
 // D179, the usability pass (p-d179-lookpass-C §1): the ties are one near-black line per station; from overhead or far
 // away they outnumber the pixels and hatch the lit road dark (measured: 42–51% of the overhead's drawn pixels near-black),
 // so they fade out between 60 and 250 m (the edges stay). And the canvas is cleared darker than the FOG colour: surfaces
@@ -421,6 +422,14 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       } else { chunks = chunksOf(batches, colourKey, 'colour'); drawSurfaces(chunks, vp, 1, null); }
       chunkCount = chunks.length;
       if (extras.lines !== false) drawRoadLines(chunks, vp, 1);
+      // D425: THE WASH of what a sculpt drag moves: a chunk whose batches carry `tint` (trackmodel.js dragFrame) is drawn once more over itself, blended, in that colour at WASH_ALPHA,
+      // from its own buffers under its own matrix (one colour uniform for the chunk, no geometry added). Pulled a hair toward the eye so it never fights the surface it covers
+      const washed = chunks.filter((c) => c.list && c.list[0] && c.list[0].tint);
+      if (washed.length) {
+        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -1);
+        for (const c of washed) drawSurfaces([c], vp, WASH_ALPHA, c.list[0].tint);
+        gl.disable(gl.POLYGON_OFFSET_FILL); gl.depthMask(true); gl.disable(gl.BLEND);
+      }
       if (extras.ghost && extras.ghost.length) {       // see-through, over the placed track, without writing depth
         const ghost = chunksOf(extras.ghost, () => 'ghost', 'ghost');
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
@@ -438,7 +447,11 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       // the OVERLAY (D237: the mirror ghost), world line pairs drawn over everything, each with its own colour
       if (extras.overlay && extras.overlay.length) {
         gl.disable(gl.DEPTH_TEST); use(line, vp); gl.enableVertexAttribArray(line.pos);
-        for (const o of extras.overlay) drawLines(o.positions, IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);
+        for (const o of extras.overlay) {
+          if (o.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }   // D425: the sculpt wash and hatch are see-through (`blend`); the guides' entries are drawn as before
+          drawLines(o.positions, o.model || IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);   // D425: `model`, a line list moved with the road it lies on
+          if (o.blend) gl.disable(gl.BLEND);
+        }
         gl.enable(gl.DEPTH_TEST);
       }
       for (const [arr, e] of buffers) if (e.gen !== gen) { gl.deleteBuffer(e.buf); buffers.delete(arr); }   // no longer drawn
