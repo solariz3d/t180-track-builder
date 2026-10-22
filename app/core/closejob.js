@@ -36,7 +36,7 @@ const { resolveDoc } = require('./overlapjob.js');
 function clipsOf(d) {
   const r = resolveDoc(d), p0 = G.buildPath(r.segments, { step: 2, closed: !!d.closed, start: r.start }), p = typeof r.lift === 'function' ? r.lift(p0) : p0;
   const mesh = G.buildMesh(p, r.segments, { lean: true });
-  return G.selfCheck(mesh, { closed: !!p.closed, lengthM: p.lengthM }).intersections.map((x) => x.s).sort((a, b) => a - b);
+  return G.selfCheck(mesh, { closed: !!p.closed, lengthM: p.lengthM, stacked: false }).intersections.map((x) => x.s).sort((a, b) => a - b);
 }
 
 function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null } = {}) {
@@ -103,7 +103,10 @@ function runCloseBest({ doc, edited = null, openReds = null, exhaustive = false 
     t.lap = c.lap && { ok: c.lap.ok, reason: c.lap.reason, where: (c.lap.where || []).slice(0, 3) };
     if (c.lap && c.lap.ok === true && c.reds.length && !open) { const t1 = Date.now(); open = redsOf({ ...doc, closed: false }, job); phases.openCheckMs = Date.now() - t1; }
     t.newReds = !c.reds.length ? [] : open ? c.reds.filter((x) => !open.reds.some((o) => o.reason === x.reason && Math.abs(o.s - x.s) <= RED_NEAR_M)) : c.reds;
-    if (c.lap && c.lap.ok === true && !t.newReds.length) {   // D432: the pick is meshed and self-checked before it is taken (clipsOf above); where the road meets itself, that is the red it adds
+    // D432: the pick is meshed and self-checked before it is taken (clipsOf above); where the road meets itself, that is the red it adds. A close that moved nothing
+    // (no piece more than 1 mm) and laid no road is the open track's own road joined at the start, which the live checker's clip test has just checked, so it is
+    // not meshed again (on a 25 km lap the mesh and its self-check are about 23 s, measured)
+    if (c.lap && c.lap.ok === true && !t.newReds.length && (t.newPieces > 0 || t.maxMoveM > 1e-3)) {
       const t2 = Date.now(), at = clipsOf(t.doc); t.selfCheckMs = Date.now() - t2; phases.selfCheckMs = (phases.selfCheckMs || 0) + t.selfCheckMs;
       t.newReds = at.map((s) => ({ reason: 'self-intersection', s }));
     }
