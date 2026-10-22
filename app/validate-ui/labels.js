@@ -20,6 +20,7 @@ function reasonText(reason, car = MACH6) {
     fold: 'the surface folds over itself here (too tight for its width)',
     'self-intersection': 'the road passes through itself here',
     'stacked-within-2m': `two roads are stacked less than ${car.stackedM} m apart here`,
+    'low-overhead': `another road passes less than ${car.overheadM} m over this one here: a car would hit it (a warning)`,   // D435
     'wall-ride-from-wall-object': 'a wall-ride is built on a wall object',
     'steep-without-raycast': `a surface is steeper than ${car.steepDeg}°, which needs CSP's wall raycasting`,
     'load-above-proven': `the load is over ${car.provenG} g, more than any track has proven`,

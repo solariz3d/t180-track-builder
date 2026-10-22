@@ -128,3 +128,27 @@ test('row 9: a road grazing the other\'s edge strip clips in the mesh (red with 
   // rows between stations too, so the graze is red without a mesh
   assert.ok(meshFree(segs).includes('self-intersection'), `the mesh-free clip test sees it: ${JSON.stringify(meshFree(segs))}`);
 });
+
+// D435: LESS THAN 1 M OF ROOM OVERHEAD is amber, 'low-overhead' ("i think 1m is good": the answer to how little room over a road should warn). A road that passes over
+// another without clipping is information (D432), but a car on the lower road would hit the upper one when the room between them is less than a car's height. The
+// room is the gap along the lower road's normal to the other road's surface over it, as the clip test measures it. Clipping stays red. Checked with the mesh's
+// folds (the export's way) and without (the checker's way).
+const overheadOf = (segs) => {
+  const p = G.buildPath(segs, { step: 2 }), m = G.buildMesh(p, segs, { selfCheck: true });
+  return [validate(p, segs, { csp: true, fullSpeed: true, folds: m.folds }), validate(p, segs, { csp: true, fullSpeed: true })];
+};
+test('row 10: one road 0.8 m over another: amber, low-overhead, and not red', () => {
+  for (const v of overheadOf(F.crossing(0.8))) {
+    assert.ok(v.amber.some((x) => x.reason === 'low-overhead'), `amber: ${JSON.stringify(v.amber.map((x) => x.reason))}`);
+    assert.ok(!v.red.some((x) => x.reason === 'self-intersection' || x.reason === 'stacked-within-2m'), 'not red');
+  }
+});
+test('row 11: one road 1.2 m over another: no low-overhead amber', () => {
+  for (const v of overheadOf(F.crossing(1.2))) assert.ok(!v.amber.some((x) => x.reason === 'low-overhead'), JSON.stringify(v.amber.map((x) => x.reason)));
+});
+test('row 12: roads that meet (the crossing at 0 m): red, as self-intersection, and not the low-overhead amber', () => {
+  for (const v of overheadOf(F.crossing(0))) {
+    assert.ok(v.red.some((x) => x.reason === 'self-intersection'), 'red');
+    assert.ok(!v.amber.some((x) => x.reason === 'low-overhead'), 'not amber');
+  }
+});

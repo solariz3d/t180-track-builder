@@ -93,6 +93,7 @@ const SRC = Object.freeze({
   fold: 'ARCHITECTURE.md:57, :84; FINDINGS.md:110 (flipped road pieces)',
   'self-intersection': 'ARCHITECTURE.md:58, :84',
   'stacked-within-2m': 'ARCHITECTURE.md:85',
+  'low-overhead': 'ARCHITECTURE.md:85 (D435: less than 1 m of room under another road)',
   'wall-ride-from-wall-object': 'ARCHITECTURE.md:86',
   'steep-without-raycast': 'ARCHITECTURE.md:87 (community-reported)',
   'load-above-proven': 'FINDINGS.md:105, :112-113',
@@ -400,7 +401,9 @@ function core(path, segments, opts, from, carried, upto) {
   // where the stack CLIPS (stacked() below, the gap along the normal changes sign or is zero), it is red as self-intersection, but only where no mesh's folds were
   // given: with them, the mesh's own self-check (bvh.js) is the authority and has already said where the road meets itself
   if (!Array.isArray(opts.folds)) for (const e of raw.stacked.values()) if (e.clip) red.push({ s: e.s, u: e.u, reason: 'self-intersection', worst: null });
-  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = [...raw.pts.filter((p) => p.kind === 'info'), ...stackedInfo];
+  // D435: less than car.overheadM of room under another road (the gap along this road's normal) is AMBER, 'low-overhead', worst the room in metres; a clip is red above
+  const overheadAmber = [...raw.stacked.values()].filter((e) => !e.clip && e.low < car.overheadM).map((e) => ({ s: e.s, u: e.u, reason: 'low-overhead', worst: e.low }));
+  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...overheadAmber,...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = [...raw.pts.filter((p) => p.kind === 'info'), ...stackedInfo];
   const lines = raw.lines.slice().sort((a, b) => a.i - b.i).map((l) => l.line);   // station order, u order within
 
   // ── jumps (ARCHITECTURE.md:72-80) ──
@@ -629,11 +632,12 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     ptsCache.set(i, q); return q;
   };
   // one entry per station: its deepest overlap, the smaller u on a tie, so the answer never depends on visiting order; `clip` (D432) is kept if any pair clipped
-  const mark = (pt, worst, partner, clip = false) => {
+  const mark = (pt, worst, partner, clip = false, low = Infinity) => {
     if (pt.i >= end) return;   // a pending station keeps no finding: it is checked in full when the window ends
     const k = pt.i, e = out.get(k);
-    if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner, clip: clip || !!(e && e.clip) });
-    else if (clip && !e.clip) out.set(k, { ...e, clip: true });
+    const lo = Math.min(low, e && e.low !== undefined ? e.low : Infinity);   // D435: the least room overhead any pair left this station
+    if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner, clip: clip || !!(e && e.clip), low: lo });
+    else if ((clip && !e.clip) || lo < e.low) out.set(k, { ...e, clip: clip || e.clip, low: lo });
   };
   // D432, THE CLIP TEST without a mesh (the live checker and every check that runs validate without the mesh's folds have no self-intersection test, so the stack
   // was their only sign of one road on another). For a pair of stations the stack measures, each point of one is taken over the other's surface: its nearest
@@ -655,7 +659,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   };
   /** a row of another road's points (a station's, or one between two stations) over station i's surface, by the sign of their gap along its normal */
   const sides = (i, Bq) => {
-    const A = geomOf(i), last = A.Q.length - 1; let pos = false, neg = false, zero = false;
+    const A = geomOf(i), last = A.Q.length - 1; let pos = false, neg = false, zero = false, room = Infinity;   // room (D435): the least gap above this road
     for (const o of Bq) {
       let best = -1, bd = Infinity;
       for (let k = 0; k <= last; k++) { const d = len(sub(o.q, A.Q[k].q)); if (d < bd) { bd = d; best = k; } }
@@ -663,9 +667,9 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
       const v = sub(o.q, A.Q[best].q);
       if (Math.abs(dot(v, A.T)) > A.hs) continue;                                                    // not over this station's stretch of road
       const lat = dot(v, A.acr[best]); if ((best === 0 && lat < -CLIP_EPS) || (best === last && lat > CLIP_EPS)) continue;   // beyond the road's edge
-      const g = dot(v, A.nrm[best]); if (g > CLIP_EPS) pos = true; else if (g < -CLIP_EPS) neg = true; else zero = true;
+      const g = dot(v, A.nrm[best]); if (g > CLIP_EPS) { pos = true; room = Math.min(room, g); } else if (g < -CLIP_EPS) neg = true; else zero = true;
     }
-    return { pos, neg, zero };
+    return { pos, neg, zero, room };
   };
   // D432d, ALONG THE ROAD: two roads whose edge strips cross between stations show one sign at every station, so each station is signed together with the rows
   // linearly between it and its neighbours (at a quarter, a half and three quarters of the way, as the mesh's own triangles run between its rows): a sign change
@@ -680,11 +684,16 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     return rows;
   };
   const around = (i, j) => {
-    const r = { pos: false, neg: false, zero: false };
-    for (const row of rowsOf(j)) { const x = sides(i, row); r.pos = r.pos || x.pos; r.neg = r.neg || x.neg; r.zero = r.zero || x.zero; }
+    const r = { pos: false, neg: false, zero: false, room: Infinity };
+    for (const row of rowsOf(j)) { const x = sides(i, row); r.pos = r.pos || x.pos; r.neg = r.neg || x.neg; r.zero = r.zero || x.zero; r.room = Math.min(r.room, x.room); }
     return r;
   };
-  const clips = (i, j) => { const a = around(i, j), b = around(j, i); return (a.pos && a.neg) || a.zero || (b.pos && b.neg) || b.zero; };
+  // the pair's verdict: whether the two roads clip, and (D435) the room each has under the other: the least gap ALONG ITS OWN NORMAL to the other's surface over it
+  // (the "up" of a car on it), Infinity where the other road is not over it
+  const verdictOf = (i, j) => {
+    const a = around(i, j), b = around(j, i);
+    return { clip: (a.pos && a.neg) || a.zero || (b.pos && b.neg) || b.zero, roomI: a.room, roomJ: b.room };
+  };
   const lim = cell + SLACK;
   for (let i = 0; i < n; i++) {
     if (!qd[i]) continue;   // not a road station, or not queried
@@ -713,7 +722,10 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
           mark(pt, cell - dist, o.i); mark(o, cell - dist, pt.i);
           if (!deep || dist < deep.dist) deep = { pt, o, dist };
         }
-        if (deep && clips(i, j)) { mark(deep.pt, cell - deep.dist, deep.o.i, true); mark(deep.o, cell - deep.dist, deep.pt.i, true); }   // D432
+        if (deep) {   // D432 the clip, D435 the room overhead: each station keeps the least room any pair left it
+          const v = verdictOf(i, j);
+          if (v.clip || v.roomI < Infinity || v.roomJ < Infinity) { mark(deep.pt, cell - deep.dist, deep.o.i, v.clip, v.roomI); mark(deep.o, cell - deep.dist, deep.pt.i, v.clip, v.roomJ); }
+        }
       }
     }
   }

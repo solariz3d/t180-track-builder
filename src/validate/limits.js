@@ -44,6 +44,9 @@ const MACH6 = Object.freeze({
   // tracks can be under 2m apart as long as the geometry isnt clipping into eachother". Geometry that clips is red as self-intersection; a stack that
   // does not clip is still measured (src/validate/index.js stacked) and reported in the result's info, with this distance.
   stackedM: 2,
+  // D435, the user (2026-10-22 15:34, asked how little room under another road should warn): "i think 1m is good". A road with another passing over it, without
+  // clipping, closer than this along its normal is AMBER ('low-overhead'): a car on it would hit the road above. It does not block an export.
+  overheadM: 1,
   // ARCHITECTURE.md:87 "surfaces above ~50° without CSP's wall raycasting (vanilla AC tyres ignore steep surfaces;
   // community-reported)" (RED only when the export does not target CSP).
   steepDeg: 50,
