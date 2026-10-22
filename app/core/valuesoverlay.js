@@ -5,6 +5,8 @@
 //
 //   SPOT_CSS                    where it sits: the ONE constant to change if the keeper meant another spot (inferred from "a better spot to be seen")
 //   entries(f, widthText)       -> [{ key, label, value }]   f = labels.formatReadout(r) ({ length, turn, climb, bank }), widthText the width as shown ("31 m")
+//   sculptEntries(s)            -> [{ key, label, value }]   D425 part 4, IN SCULPT (P's design §1 cue 5): s = { tool, name, value, radius, moves }, the tool, its value at the centre under
+//                                                            the channel's name, the radius and what moves ("road after" / "stays"); the panel's own words, nothing computed here
 //   mount(stage, win)           -> { set(entries | null), entries(), visible(), unmount() }
 'use strict';
 
@@ -15,6 +17,12 @@ function entries(f, widthText) {
   if (!f) return null;
   const all = { ...f, width: widthText };
   return KEYS.filter(([k]) => all[k] !== undefined && all[k] !== null && all[k] !== '').map(([key, label]) => ({ key, label, value: String(all[key]) }));
+}
+
+function sculptEntries(s) {
+  if (!s || !s.tool) return null;
+  return [{ key: 'tool', label: 'tool', value: String(s.tool) }, { key: 'value', label: s.name ? String(s.name) : 'value', value: s.value ? String(s.value) : '—' },
+    { key: 'radius', label: 'radius', value: s.radius ? String(s.radius) : '—' }, { key: 'moves', label: 'moves', value: s.moves ? String(s.moves) : '—' }];
 }
 
 function mount(stage, win) {
@@ -45,4 +53,4 @@ function mount(stage, win) {
   return { set, entries: () => (shown ? shown.slice() : null), visible: () => !!shown, layer, unmount() { layer.remove(); } };
 }
 
-module.exports = { entries, mount, SPOT_CSS };
+module.exports = { entries, sculptEntries, mount, SPOT_CSS };
