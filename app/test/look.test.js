@@ -4,7 +4,7 @@
 //     exactly that sum; a floor and a vertical wall differ by at least 0.15, and so do a bank facing the key light and one
 //     facing away, so one colour reads as different surfaces. The fragment shader carries the same constants.
 //   · EDGE LINES: the edge lines run through the profile's two EDGE vertices (u min and u max) and the centre line through
-//     the vertex nearest u = 0, each lifted 3 cm along its normal; in world space an edge vertex lies within 1e-4 m (+ the
+//     u = 0 (D433b; it was the vertex nearest u = 0), each lifted 3 cm along its normal; in world space an edge vertex lies within 1e-4 m (+ the
 //     lift) of the geometry's own surface at that u. A tie crosses the road at least every 10 m.
 //   · OVERHEAD FIT: with the track's box and the view's aspect, every vertex of every batch projects inside the view
 //     (|x|, |y| ≤ 1, in front of the camera, before the far plane), for a wide and a tall view; the head is in frame.
@@ -68,8 +68,10 @@ test('edge lines: through the two edge vertices and the centre vertex, lifted 3 
   const near = (a, c) => Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]) < 1e-6;
   const first = (j) => Array.from(L.edges.slice(j * 6, j * 6 + 3));
   assert.ok(near(first(0), vtx(0, 0)) && near(first(2), vtx(0, K - 1)), 'edges at k = 0 and k = K − 1');
-  assert.equal(Math.abs(b.us[L.centre]), Math.min(...b.us.map(Math.abs)));
-  assert.ok(near(first(1), vtx(0, L.centre)), 'the centre line at the vertex nearest u = 0');
+  // CHANGED D433b: the centre line is at u = 0, lerped between the two vertices either side of it (it was the vertex nearest u = 0, up to 0.095 m off the middle)
+  const { k0, t } = L.centre, a = vtx(0, k0), c = vtx(0, k0 + 1);
+  assert.ok(b.us[k0] <= 0 && b.us[k0 + 1] > 0 && Math.abs(b.us[k0] + (b.us[k0 + 1] - b.us[k0]) * t) < 1e-12, 'the centre\'s u is 0, between two vertices');
+  assert.ok(near(first(1), a.map((x, d) => x + (c[d] - x) * t)), 'the centre line at u = 0');
   // world: the edge vertex sits on the surface the geometry defines at u = u_min, lifted along its normal
   const pc = m._state.pieces[2], sm = p.samples.find((s) => s.seg === 2 && Math.abs(s.s - b.rowS[0]) < 1e-9);
   for (const [k, u] of [[0, pc.Us[0]], [K - 1, pc.Us[K - 1]]]) {
