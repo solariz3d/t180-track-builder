@@ -28,12 +28,14 @@ const SPD = require('./spawndrag.js');
 const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // D285: and dragged there
 const VO = require('./valuesoverlay.js');   // D267: the values of the piece being edited, large over the 3D view   // D258: the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
+const SL = require('./selectionlayer.js');   // D425 part 4: pieceSpan, the piece under a station (Stretch's glyph stands at its far joint)
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
 // (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
 // (D421 part 3: length is Stretch's, metres of piece a pixel; smooth is Smooth's strength a pixel)
 const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, e: 0.2, er: 0.2, s: 0.002, t: 0.5, height: 0.03, lateral: 0.03, length: 0.5, smooth: 0.004 });
-const CHANNEL_NAMES = Object.freeze({ kh: 'turn rate', kv: 'climb rate', phi: 'bank', w: 'width', r: 'wall rise', c: 'cup', e: 'edge angle', er: 'right edge', s: 'edge start', t: 'tube sweep', height: 'height', lateral: 'sideways', length: 'length' });
+// D425 part 4: one name per channel, read from handles.js BRUSH_CHANNELS, which the glyph on the road reads too (so the road and the strip say the same word)
+const CHANNEL_NAMES = Object.freeze(Object.fromEntries(Object.entries(HD.BRUSH_CHANNELS).map(([c, x]) => [c, x.label])));
 const DEG = Math.PI / 180;
 
 /**
@@ -254,6 +256,7 @@ function mount(root, shell, mountOpts = {}) {
   // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
   // the typed target, which the core's fit may ring past and its guard may refuse (E's seal row 7)
   let values = null;   // D267: the values of the piece being edited, large over the 3D view (app/core/valuesoverlay.js); mounted where the stage is found, below
+  let sculptShown = null;   // D425 part 4: the text of the Sculpt cells the overlay shows now (in Sculpt the overlay is the brush's: showSculptValues)
   // D331 (ledger D332): 'corner' (the turn since the road was last straight; whether this piece ends turning, and what easing it out would then add) and
   // 'gravity' (the bank against gravity, from → to: the road's real tilt, where the bank field reads in the flipped form past an inversion)
   const RO = ['length', 'turn', 'climb', 'bank', 'cup', 'edge', 'start', 'tube', 'corner', 'climbCorner', 'gravity'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
@@ -275,7 +278,7 @@ function mount(root, shell, mountOpts = {}) {
         climbCorner: fmtClimbCorner(r), corner: fmtCorner(r, 'corner' in r && r.corner && r.corner.endsTurningDegPer100m !== null ? shell.candidateCorner(opts()) : null), gravity: pairOf(r, ['gravityBankFromDeg', 'gravityBankToDeg'], LB.fmtDeg) }; }
     } catch (e) { why = e.message; }
     for (const k of RO) roCells[k].textContent = f ? f[k] : '—';
-    if (values) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // D267: the same numbers, large over the 3D view
+    if (values && !shell.getState().sculpt) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // D267: the same numbers, large over the 3D view
     roBox.title = why;
   };
   let scrubbing = false;   // D266 item 2: an Extend handle is being dragged: the ghost is built CHEAP until the release (handlesHost.end builds the full one)
@@ -428,9 +431,23 @@ function mount(root, shell, mountOpts = {}) {
   const KNOT_M = AT_START_M;      // one knot span (src/core/document.js KNOT_M, as AT_START_M above): what a wheel notch or [ ] changes the radius by
   let drag = null, brushedPress = false, liveTool = null;
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // D425 part 4 (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §1, §3): THE HOVER. In Sculpt with no drag open the pointer over the road is picked on every move (as the
+  // labels pick it), and the station, the radius and the tool go to the page's layers through 't180:sculpt-hover' (app/core/selectionlayer.js draws the reach, handles.js the glyph). The radius
+  // is read when asked, so [ ] resize the reach under the pointer. A press clears it in the handler that opens the drag, so the drag's first frame draws the drag's own cues; leaving the stage clears it
+  let hover = null;
+  const hoverAt = (e) => {
+    const st = shell.getState(); if (!st.sculpt || drag || st.brush) { hover = null; return; }
+    const [x, y] = rel(e); let hit = null; send('t180-pick', { x, y, reply: (h) => { hit = h; } });
+    hover = hit && Number.isFinite(hit.s) ? { s0: hit.s, alt: !!e.altKey } : null;
+  };
+  const sculptHover = () => { const st = shell.getState(); if (!hover || !st.sculpt || drag || st.brush) return null; const T = toolNow(); return { s0: hover.s0, r: radiusNow(), tool: T.key, channel: T.channel, alt: hover.alt && !!T.side }; };
+  const onSculptHover = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(sculptHover()); };
+  doc.addEventListener('t180:sculpt-hover', onSculptHover);
+  const leave = () => { hover = null; };
   const down = (e) => {
     brushedPress = false;
     if (!shell.getState().sculpt || e.button !== 0 || drag || shell.getState().brush) return;
+    hover = null;
     const [x, y] = rel(e);   // (a press on a handle never gets here: handles.js takes it in the capture phase and stops it)
     let hit = null; send('t180-pick', { x, y, reply: (h) => { hit = h; } });
     if (!hit) return;
@@ -459,7 +476,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   const flush = () => { frame = 0; if (!drag || !drag.open || (waiting === null && waitingR === null)) return; step(); };
   const move = (e) => {
-    if (!drag) return;
+    if (!drag) { hoverAt(e); return; }
     const [x, y] = rel(e);
     if (!drag.open && (Math.hypot(x - drag.x, y - drag.y) <= CLICK_PX || !openBrush())) return;
     waiting = [x, y]; if (!frame) frame = win.requestAnimationFrame(flush);
@@ -472,13 +489,13 @@ function mount(root, shell, mountOpts = {}) {
     drag = null; liveTool = null; shell.endBrush();
   };
   /** The radius field to `r` (one knot span at least); during an open drag it is also the drag's, in the next frame. */
-  const setRadius = (r) => { const v = Math.max(KNOT_M, Math.round(r)); radius.value = String(v); if (drag && drag.open) { waitingR = v; if (!frame) frame = win.requestAnimationFrame(flush); } return v; };
+  const setRadius = (r) => { const v = Math.max(KNOT_M, Math.round(r)); radius.value = String(v); if (drag && drag.open) { waitingR = v; if (!frame) frame = win.requestAnimationFrame(flush); } showSculptValues(shell.getState()); return v; };
   // the wheel during a drag: one knot span a notch, up wider (Blender's proportional editing; Maya's B-drag). Caught before it reaches the camera (capture, and not passed on)
   // nor the handles' own capture listener on this same stage, registered after this one (handles.js onWheel): so stopImmediatePropagation, the form handles.js uses (P's review 1)
   const wheel = (e) => { if (!drag || !drag.open) return; e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); setRadius(radiusNow() + (e.deltaY < 0 ? KNOT_M : -KNOT_M)); };
   // Esc: the open drag dropped whole, the track as it was before the press (the shell's cancelBrush when it has one; else the whole delta back to 0, which endDrag records as no step)
   const dropBrush = () => { if (typeof shell.cancelBrush === 'function') shell.cancelBrush(); else { shell.brushTo(0); shell.endBrush(); } };
-  if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); stage.addEventListener('wheel', wheel, { capture: true, passive: false }); }
+  if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); stage.addEventListener('pointerleave', leave); stage.addEventListener('wheel', wheel, { capture: true, passive: false }); }
 
   // DRAG HANDLES (D244) and SCULPT (D244b). The overlay (app/core/handles.js) asks this host what to draw and what a drag means. EXTEND: the handles are on the ghost of the piece the fields describe, and a
   // drag types its value into the matching field (the field's own handler runs, so the ghost, the readout and the cup-or-tube rule follow; nothing is a document edit until Extend). SCULPT: the handles are on
@@ -532,9 +549,32 @@ function mount(root, shell, mountOpts = {}) {
     return { mode: 'landing', samples: [], s0: 0, s1: 1, half: () => 0, kinds: HD.LANDING_ORDER, free, base: (k) => L.pose[LAND_FIELD[k]], ctx: () => ({}) };
   };
   let landDrag = false;
+  // D425 part 4 (design §1 cues 2 and 3, §3): THE BRUSH GLYPH's model, handles.js's kinds 'brush-*': on hover at the station picked, during the tool's drag at the station it opened at (the page's
+  // track stands still during a drag, app/preview/preview.js, so the glyph does too); Grab with Alt (held on hover, or at the press) is its other axis, sideways. The drag's value as the strip
+  // says it, and on hover the family's line. Where it stands is kept for the track, the station and the tool, so a still pointer finds nothing again
+  const NO_SAMPLES = Object.freeze([]);
+  const brushKindOf = (T, alt) => (T.key === 'grab' && alt ? 'brush-side' : `brush-${T.key}`);
+  let glyphAt = null;
+  const brushModel = () => {
+    const st = shell.getState(); if (!st.sculpt) return null;
+    const open = drag && drag.open && st.brush && liveTool ? drag : null, h = open ? null : sculptHover(); if (!open && !h) return null;
+    const T = open ? liveTool : toolNow(), s = open ? drag.s0 : h.s0, kind = brushKindOf(T, open ? T.channel === 'lateral' : h.alt);
+    if (!HD.KINDS[kind]) return null;
+    const tr = askOf('t180:track-request'); if (!tr || !tr.path || !Array.isArray(tr.path.samples) || !tr.path.samples.length || !Array.isArray(tr.segments)) return null;
+    if (!glyphAt || glyphAt.tr !== tr.path || glyphAt.s !== s || glyphAt.key !== T.key) {
+      const span = SL.pieceSpan(tr, s), ps = span ? shell.pieceState(span.id) : null;
+      glyphAt = { tr: tr.path, s, key: T.key, at: T.key === 'stretch' && span ? span.s0 + span.r : s, half: ps && ps.w > 0 ? ps.w / 2 : 0 };   // Stretch: at the piece's far joint, where Build's length mark sits
+    }
+    const side = T.key === 'edge' ? (T.channel === 'er' ? { sides: [-1] } : T.channel === 's' ? { lat: 0.75 } : {}) : {};   // Edge: the mark on the edge "Edge changes" names
+    const brush = { samples: tr.path.samples, s: glyphAt.at, half: glyphAt.half, ...side, colour: T.key === 'smooth' && HD.BRUSH_CHANNELS[T.channel] ? HD.BRUSH_CHANNELS[T.channel].colour : undefined,
+      open: !!open, text: open ? roadWords(st.brush, T) : '', note: open ? '' : familyWords(T.channel) };
+    return { mode: 'brush', samples: NO_SAMPLES, s0: 0, s1: 0, half: () => 0, kinds: [kind], brush, base: () => 0, ctx: () => ({}) };
+  };
+  // the glyph beside the selected run's handles: each kind answers for itself, as the landing's beside Extend's (D278)
+  const withGlyph = (S) => { const B = brushModel(); if (!B) return S; if (!S) return B; return { ...S, mode: 'sculpt+brush', kinds: [...S.kinds, ...B.kinds], brush: B.brush, base: (k) => (HD.KINDS[k].brush ? 0 : S.base(k)), ctx: (k) => (HD.KINDS[k].brush ? {} : S.ctx(k)) }; };
   const handlesHost = {
     model: () => {
-      const L = landingModel(); if (!L) return sculptModel() || ghostModel();
+      const L = landingModel(); if (!L) return withGlyph(sculptModel()) || ghostModel();
       const G = ghostModel(); if (!G) return L;   // no Extend ghost (a jump's ghost is on screen, or none can be built yet): the landing's four alone
       // D278: the Extend ghost's model with the landing's four added; each kind answers for itself (a landing handle's value is the landing's, an Extend handle's is its field's)
       return { ...G, mode: 'extend+landing', kinds: [...L.kinds, ...G.kinds], free: L.free, base: (k) => (LAND_FIELD[k] ? L.base(k) : G.base(k)), ctx: (k) => (LAND_FIELD[k] ? L.ctx(k) : G.ctx(k)) };
@@ -661,16 +701,38 @@ function mount(root, shell, mountOpts = {}) {
     syncRadius();
     const si = shell.getState().sculpt ? shell.sculptInfo() : null;
     sculptHint.textContent = `${toolNow().label}: ${toolNow().hint}. ${si ? `Handles on ${si.id}; one drag is one undo step.` : 'Click a piece to put the handles on it (Shift-click for a run).'}`;
+    showSculptValues(shell.getState());
   };
   toolSel.onchange = () => { otherTool.value = ''; showTool(); };
   otherTool.onchange = edgeSide.onchange = smoothCh.onchange = showTool;
   // the change a drag has made at its centre, in the channel's own unit (the shell holds the delta it applied), and Smooth's strength
-  const UNIT = { kh: [100 / DEG, '°/100 m'], kv: [100 / DEG, '°/100 m'], phi: [1 / DEG, '°'], w: [1, 'm'], r: [1, 'm'], c: [1, '°'], e: [1, '°'], er: [1, '°'], s: [1, ''], t: [1, '°'], height: [1, 'm'], lateral: [1, 'm'], length: [1, 'm'] };
-  const valueWords = (b, T) => {
+  // (D425 part 4: the units are handles.js BRUSH_CHANNELS', read by the glyph too; roadWords is what the glyph says, valueWords the strip's "at the centre")
+  const roadWords = (b, T) => {
     if (!b || !T || !Number.isFinite(b.delta)) return '';
     if (T.key === 'smooth') return `smoothing the ${CHANNEL_NAMES[T.channel]}, strength ${b.delta.toFixed(2)}`;
-    const [k, unit] = UNIT[T.channel] || [1, ''], v = b.delta * k;
-    return `${CHANNEL_NAMES[T.channel]} ${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}${unit ? ` ${unit}` : ''} at the centre`;
+    return HD.brushFormat(T.channel, b.delta);
+  };
+  const valueWords = (b, T) => { const v = roadWords(b, T); return v && T.key !== 'smooth' ? `${v} at the centre` : v; };
+  // D425 part 4 (design §1 cue 5 (ii)): THE VALUE LINE, in this order: the tool's word for the way the drag goes, the value at the centre, the widened note, the pieces in the window and, on a
+  // closed lap under a route tool, the two the release may also move (the lap's last road piece and its first: the seam tries, app/core/coreshell.js)
+  const valueLineOf = (st, T) => {
+    const b = st.brush, K = HD.KINDS[brushKindOf(T, T.channel === 'lateral')], d = b.delta;
+    const way = K && Number.isFinite(d) && d !== 0 ? (d > 0 ? K.words[0] : K.words[1] || '') : '';
+    const widened = Number.isFinite(b.rUsed) && b.rUsed > b.r + 1e-9 ? `brush widened to ${b.rUsed.toFixed(0)} m (asked ${b.r.toFixed(0)} m)` : '';
+    const doc0 = b.closedBase || st.history.present, idOf = (i) => (doc0.pieces[i] ? doc0.pieces[i].id : String(i));
+    const ps = Array.isArray(b.pieces) && b.pieces.length ? b.pieces : null, lo = ps ? Math.min(...ps) : 0, hi = ps ? Math.max(...ps) : 0;
+    const roads = b.closedBase ? b.closedBase.pieces.map((p, i) => (p.type === 'road' ? i : -1)).filter((i) => i >= 0) : [];
+    return [way, valueWords(b, T), widened, ps ? (lo === hi ? `piece ${idOf(lo)}` : `pieces ${idOf(lo)}–${idOf(hi)}`) : '', roads.length ? `release may move ${idOf(roads[roads.length - 1])}, ${idOf(roads[0])}` : ''].filter(Boolean).join(' · ');
+  };
+  // D425 part 4 (design §1 cue 5 (iii)): THE BIG VALUES OVERLAY IN SCULPT, four cells: the tool, its value at the centre under the channel's name, the radius and what moves; set only when the text changed
+  const numberOf = (ch, delta) => { const t = HD.brushFormat(ch, delta), C = HD.BRUSH_CHANNELS[ch]; return t && C ? t.slice(C.label.length + 1) : ''; };
+  const showSculptValues = (st) => {
+    if (!values || !st || !st.sculpt) return;
+    const T = liveTool || toolNow(), b = st.brush && liveTool ? st.brush : null, r = b ? (Number.isFinite(b.rUsed) ? b.rUsed : b.r) : radiusNow();
+    const list = VO.sculptEntries({ tool: T.label, name: T.key === 'smooth' ? 'strength' : CHANNEL_NAMES[T.channel], value: b && Number.isFinite(b.delta) ? (T.key === 'smooth' ? b.delta.toFixed(2) : numberOf(T.channel, b.delta)) : '',
+      radius: `${Number(r).toFixed(0)} m`, moves: ROUTE_CH.has(T.channel) ? 'road after' : 'stays' });
+    const key = JSON.stringify(list); if (key === sculptShown) return;
+    sculptShown = key; values.set(list);
   };
   // C's leftover, in P's words (p-d421-review-P_2026-10-20.md §0): a sweep step on a CLOSED tube reaches the core's validator (src/core/document.js, "the tube sweep must stay within
   // 0 to 360°"), which reads as a fault; the Tube sweep tool says what it is instead
@@ -744,10 +806,10 @@ function mount(root, shell, mountOpts = {}) {
     hintNow(); fillLanding();
     if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // D267: a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)
     // D421 part 3: the Sculpt strip only in Sculpt; entering Sculpt takes Extend's ghost away (its handles are off in Sculpt: ghostModel); the selection box only with a selection
-    if (!!st.sculpt !== wasSculpt) { wasSculpt = !!st.sculpt; if (wasSculpt) send('t180-ghost-clear'); else triedDoc = null; }
+    if (!!st.sculpt !== wasSculpt) { wasSculpt = !!st.sculpt; sculptShown = null; if (wasSculpt) send('t180-ghost-clear'); else { triedDoc = null; hover = null; } }
     sculptStrip.style.display = st.sculpt ? '' : 'none'; showSel(st);
     if (st.sculpt) showTool();
-    valueLine.textContent = st.sculpt && st.brush && liveTool ? [valueWords(st.brush, liveTool), Number.isFinite(st.brush.rUsed) && st.brush.rUsed > st.brush.r + 1e-9 ? `brush widened to ${st.brush.rUsed.toFixed(0)} m (asked ${st.brush.r.toFixed(0)} m)` : ''].filter(Boolean).join(' · ') : '';
+    valueLine.textContent = st.sculpt && st.brush && liveTool ? valueLineOf(st, liveTool) : '';
     valueLine.title = valueLine.textContent;
   };
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
@@ -773,7 +835,7 @@ function mount(root, shell, mountOpts = {}) {
   const offSettings = Object.entries(SETTINGS).map(([k, apply]) => { apply(S.get(k, undefined)); return S.on(k, apply); });
   const unsub = shell.subscribe(draw); draw(shell.getState());
   // options(): the options Extend, the ghost and the readout use right now (fields left as shown send no target)
-  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
+  return { labels, handles, flights, pieces, gripLayer, spawnsLayer, spawnDrag, values, sculptStrip, lend, options: opts, unmount() { unsub(); doc.removeEventListener('t180:build-request', onBuildRequest); doc.removeEventListener('t180-sculpt-key', onSculptKey); doc.removeEventListener('t180:sculpt-hover', onSculptHover); for (const off of offSettings) if (typeof off === 'function') off(); if (spawnDrag) spawnDrag.unmount(); if (spawnsLayer) spawnsLayer.unmount(); if (values) values.unmount(); if (gripLayer) gripLayer.unmount(); if (flights) flights.unmount(); doc.removeEventListener('t180:handles-request', onHandlesRequest); if (handles) handles.unmount(); doc.removeEventListener('t180-undo-guard', onUndoGuard); pieces.unmount(); if (frame) win.cancelAnimationFrame(frame); if (labels) labels.unmount(); if (stage) { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); stage.removeEventListener('pointerleave', leave); stage.removeEventListener('wheel', wheel, { capture: true }); } root.replaceChildren(); } };
 }
 
 module.exports = { mount, extendOptions, PER_PX };

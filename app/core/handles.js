@@ -15,6 +15,7 @@
 //   targetFor(kind, base, d, ctx, mods) -> the new absolute value, in the Extend field's own unit (m, or degrees), clamped, rounded, with Shift (fine) and Ctrl (snap)
 //   hitTest(list, x, y, r)         -> the nearest handle within r px, or null
 //   mount(stage, win, host)        the overlay canvas: draws the handles every animation frame, hover shows the name and value, a drag calls host.apply
+//   brushFormat(channel, delta)    D425 part 4: a Sculpt brush's change at its centre, as the strip and the glyph both say it ("turn rate +0.12 °/100 m")
 'use strict';
 
 const M = require('../camera/math.js');
@@ -62,8 +63,45 @@ const LANDING = Object.freeze({
   landup: Object.freeze({ label: 'height', unit: 'm', colour: '#ffd23d', free: true, axis: 'U', frame: 'U0', lead: 'U0', leadM: 6, zero: true, perPx: 0.05, min: -500, max: 500, step: 0.01, snap: 0.5 }),
   landturn: Object.freeze({ label: 'heading', unit: '°', colour: '#b968ff', free: true, axis: 'L', frame: 'L1', lead: 'T1', leadM: 15, zero: true, perPx: 0.1, min: -180, max: 180, step: 0.01, snap: 5 }),
 });
+// D425 part 4 (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §1-§5): THE SCULPT BRUSH'S CHANNELS, the one place the strip (app/core/panel.js, its names and units)
+// and the glyph read: one name per channel, so the road and the strip say the same word; the unit, and the factor from the shell's delta to it; and the colour of Build's handle for the same thing
+// (Smooth's glyph takes the colour of the channel it smooths)
+const BRUSH_CHANNELS = Object.freeze({
+  kh: Object.freeze({ label: 'turn rate', unit: '°/100 m', k: 100 / DEG, colour: '#b968ff' }),
+  kv: Object.freeze({ label: 'climb rate', unit: '°/100 m', k: 100 / DEG, colour: '#ffd23d' }),
+  phi: Object.freeze({ label: 'bank', unit: '°', k: 1 / DEG, colour: '#4d86ff' }),
+  w: Object.freeze({ label: 'width', unit: 'm', k: 1, colour: '#ff5a5a' }),
+  r: Object.freeze({ label: 'wall rise', unit: 'm', k: 1, colour: '#ff5a5a' }),
+  c: Object.freeze({ label: 'cup', unit: '°', k: 1, colour: '#3ddc6e' }),
+  e: Object.freeze({ label: 'edge angle', unit: '°', k: 1, colour: '#3ddc6e' }),
+  er: Object.freeze({ label: 'right edge', unit: '°', k: 1, colour: '#3ddc6e' }),
+  s: Object.freeze({ label: 'edge start', unit: '', k: 1, colour: '#3ddc6e' }),
+  t: Object.freeze({ label: 'tube sweep', unit: '°', k: 1, colour: '#3ddc6e' }),
+  height: Object.freeze({ label: 'height', unit: 'm', k: 1, colour: '#ffffff' }),
+  lateral: Object.freeze({ label: 'sideways', unit: 'm', k: 1, colour: '#ffb020' }),
+  length: Object.freeze({ label: 'length', unit: 'm', k: 1, colour: '#ffffff' }),
+});
+// D425 part 4: THE BRUSH GLYPH, one Build mark at the brush's centre in the tool's colour (Build's for the same thing, design §5; two marks for Width, Cup and Wall rise, at the edges as
+// Build's are), its arrow the POINTER's direction the drag reads (`screen`: 'y' up and down, 'x' left and right). `brush: true`: placed from model.brush (the station hovered, or the
+// station a drag opened at) and NEVER hit, so a press anywhere in the band is the tool as before (design §1.2). `hollow`: a Sculpt-only kind, no Build handle of its own. `words`: [the way
+// that adds, the way that takes away] (Smooth: one, its drag is clamped at 0); `tag`: the Alt note beside the words; `alt`: the kind Alt turns it into
+const brushKind = (o) => Object.freeze({ brush: true, lat: 0, axis: 'U', sides: Object.freeze([0]), screen: 'y', hollow: false, ...o });
+const BRUSH_KINDS = Object.freeze({
+  'brush-grab': brushKind({ label: 'height', colour: '#ffffff', words: Object.freeze(['lift', 'sink']), tag: 'Alt ↔', alt: 'brush-side' }),
+  'brush-side': brushKind({ label: 'sideways', colour: '#ffb020', screen: 'x', words: Object.freeze(['left', 'right']) }),
+  'brush-stretch': brushKind({ label: 'length', colour: '#ffffff', words: Object.freeze(['longer', 'shorter']), tag: 'Alt: keep rate' }),
+  'brush-bend': brushKind({ label: 'turn rate', colour: '#b968ff', screen: 'x', words: Object.freeze(['left', 'right']) }),
+  'brush-climb': brushKind({ label: 'climb rate', colour: '#ffd23d', words: Object.freeze(['tilt up', 'tilt down']) }),
+  'brush-twist': brushKind({ label: 'bank', colour: '#4d86ff', words: Object.freeze(['bank more', 'bank less']) }),
+  'brush-width': brushKind({ label: 'width', colour: '#ff5a5a', lat: 1, sides: Object.freeze([1, -1]), words: Object.freeze(['wider', 'narrower']) }),
+  'brush-cup': brushKind({ label: 'cup', colour: '#3ddc6e', lat: 0.3, sides: Object.freeze([1, -1]), words: Object.freeze(['edges up', 'flatter']) }),
+  'brush-edge': brushKind({ label: 'edge', colour: '#3ddc6e', hollow: true, lat: 1, sides: Object.freeze([1]), words: Object.freeze(['more', 'less']) }),
+  'brush-smooth': brushKind({ label: 'smooth', colour: '#ffffff', hollow: true, words: Object.freeze(['smoother']) }),
+  'brush-wall': brushKind({ label: 'wall rise', colour: '#ff5a5a', hollow: true, lat: 1, sides: Object.freeze([1, -1]), words: Object.freeze(['higher', 'lower']) }),
+  'brush-sweep': brushKind({ label: 'tube sweep', colour: '#3ddc6e', hollow: true, lat: 1, sides: Object.freeze([1]), words: Object.freeze(['close more', 'open more']) }),
+});
 const ORDER = Object.freeze(['length', 'width', 'bank', 'cup', 'turn', 'climb']);
-const KINDS = Object.freeze({ ...EXTEND_KINDS, ...LANDING });
+const KINDS = Object.freeze({ ...EXTEND_KINDS, ...LANDING, ...BRUSH_KINDS });
 const LANDING_ORDER = Object.freeze(['landfwd', 'landleft', 'landup', 'landturn']);
 // D330 (2026-10-15, reported: scrubbing a turn from a 1000 m straight jumped 0.08 instead of 0.01, so every handle has to be precisely scrubbable): the PRECISE
 // gesture. While this modifier is held one pixel of drag is exactly one step (0.01), with no hold, for every handle: every value is reachable. It is ONE constant, so the gesture can be changed in one place
@@ -102,6 +140,13 @@ function placeHandles(model) {
   const out = [];
   for (const kind of model.kinds) {
     const K = KINDS[kind]; if (!K) continue;
+    if (K.brush) {   // D425 part 4: the glyph, at the brush's station (model.brush = { samples, s, half, sides?, lat? }), standing on the road; never hit (hitTest skips `brush`)
+      const B = model.brush; if (!B) continue;
+      const m = sampleNear(B.samples, B.s); if (!m) continue;
+      const lat = Number.isFinite(B.lat) ? B.lat : K.lat;
+      for (const side of B.sides || K.sides) out.push({ id: `${kind}:${side}`, kind, side, pos: add(m.pos, m.L, lat * (B.half || 0) * side), axis: [m.U[0] || 0, m.U[1] || 0, m.U[2] || 0], brush: true });
+      continue;
+    }
     if (K.free) {   // D258: at the landing's start, in the take-off's heading frame (model.free = { pos, T0, L0, U0, T1, L1 })
       const F = model.free; if (!F || !F.pos || !F[K.frame]) continue;
       const pos = K.lead && F[K.lead] ? add(F.pos, F[K.lead], K.leadM) : F.pos.slice(), dir = F[K.frame];
@@ -178,7 +223,7 @@ function resetValue(kind, pre) { const K = KINDS[kind]; if (!K) throw new Error(
 
 function hitTest(list, x, y, r = HIT_PX) {
   let best = null, bd = Infinity;
-  for (const h of list) { if (!h.screen) continue; const d = (h.screen.x - x) ** 2 + (h.screen.y - y) ** 2; if (d <= r * r && d < bd) { bd = d; best = h; } }
+  for (const h of list) { if (!h.screen || h.brush) continue; const d = (h.screen.x - x) ** 2 + (h.screen.y - y) ** 2; if (d <= r * r && d < bd) { bd = d; best = h; } }
   return best;
 }
 
@@ -189,9 +234,21 @@ function format(kind, value) {
   const v = kind === 'bank' ? wrapTurn(Number(value)) : Number(value);
   return `${K.label} ${v.toFixed(2)}${K.unit === 'm' ? ' m' : K.unit}`;   // two decimals (2026-10-15: every number reads to 0.00)
 }
+/** D425 part 4: a brush's change at its centre in its channel's own unit, signed: "turn rate +0.12 °/100 m", "bank −12.00 °", "edge start +0.05"; '' for no channel or no number. */
+function brushFormat(channel, delta) {
+  const C = BRUSH_CHANNELS[channel]; if (!C || !Number.isFinite(delta)) return '';
+  const v = delta * C.k;
+  return `${C.label} ${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}${C.unit ? ` ${C.unit}` : ''}`;
+}
 /** D259: a bank in degrees kept within ONE turn, its sign kept: 370 -> 10, -370 -> -10, 300 stays 300, 360 -> 0; no "-0". */
 function wrapTurn(x) { const w = x % 360; return Object.is(w, -0) ? 0 : w; }
 
+/** D425 part 4: the glyph's hover words, the way that adds first: "lift ↑ / ↓ sink · Alt ↔", "left ← / → right", "smoother ↑". */
+function brushWords(kind) {
+  const K = BRUSH_KINDS[kind]; if (!K) return '';
+  const adds = K.screen === 'x' ? '←' : '↑', takes = K.screen === 'x' ? '→' : '↓';
+  return `${K.words[0]} ${adds}${K.words[1] ? ` / ${takes} ${K.words[1]}` : ''}${K.tag ? ` · ${K.tag}` : ''}`;
+}
 /** The pointer cursor for a handle: the way a drag runs on screen. */
 function cursorFor(axis) { return !axis || axis.len < EDGE_ON_PX_PER_M ? 'move' : Math.abs(axis.dx) >= Math.abs(axis.dy) ? 'ew-resize' : 'ns-resize'; }
 
@@ -223,8 +280,10 @@ function mount(stage, win, host) {
     const W = stage.clientWidth, H = stage.clientHeight, dpr = win.devicePixelRatio || 1, key = `${W}x${H}@${dpr}`;
     if (key !== sized) { canvas.width = Math.max(1, Math.round(W * dpr)); canvas.height = Math.max(1, Math.round(H * dpr)); sized = key; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    const boxed = new Set();
     for (const h of drawn) {
       const s = h.screen; if (!s) continue;
+      if (h.brush) { drawBrush(ctx, h, W, H, boxed); continue; }
       const K = KINDS[h.kind], on = (drag && drag.h.id === h.id) || (!drag && hover && hover.id === h.id), size = on ? 8 : 6;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       // the double arrow: along the way a drag runs on screen
@@ -243,13 +302,33 @@ function mount(stage, win, host) {
       }
     }
   };
+  // D425 part 4: THE BRUSH GLYPH. Build's mark and double arrow, the arrow along the pointer's own axis (the drag reads the pointer, not the road), hollow for a Sculpt-only kind; one box a
+  // kind beside it: during the tool's drag the value (model.brush.text, the strip's own words), on hover the words for each way, the Alt tag and the family's line (model.brush.note)
+  const drawBrush = (ctx, h, W, H, boxed) => {
+    const s = h.screen, K = KINDS[h.kind], B = model.brush || {}, colour = B.colour || K.colour, ink = T.css('--ink', '#0b0d11'), size = 7, reach = 22;
+    const ang = K.screen === 'x' ? 0 : -Math.PI / 2, ux = Math.cos(ang), uy = Math.sin(ang), heads = K.words.length > 1 ? [-1, 1] : [1];
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const [w, c] of [[5, ink], [2.2, colour]]) {
+      ctx.lineWidth = w; ctx.strokeStyle = c; ctx.beginPath();
+      for (const sg of heads) { const ex = s.x + ux * reach * sg, ey = s.y + uy * reach * sg; ctx.moveTo(s.x + ux * (size + 2) * sg, s.y + uy * (size + 2) * sg); ctx.lineTo(ex, ey); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 + -uy * 4) * sg, ey - (uy * 5 + ux * 4) * sg); ctx.moveTo(ex, ey); ctx.lineTo(ex - (ux * 5 - -uy * 4) * sg, ey - (uy * 5 - ux * 4) * sg); }
+      ctx.stroke();
+    }
+    ctx.fillStyle = K.hollow ? ink : colour; ctx.strokeStyle = K.hollow ? colour : ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
+    if (boxed.has(h.kind)) return; boxed.add(h.kind);
+    const lines = B.open ? [B.text || ''] : [brushWords(h.kind), B.note || ''];
+    const shown = lines.filter(Boolean); if (!shown.length) return;
+    ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
+    const w = Math.max(...shown.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * shown.length, bx = clamp(s.x + 30, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 4);
+    ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);
+    ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; shown.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));
+  };
   // D407: THE LAYOUT IS DONE WHEN SOMETHING IT READS CHANGED, not every frame (it ran on every frame, the model, every handle placed and drawn: about a third of an idle frame's script, the measurement of
   // 2026-10-19). What a frame draws follows from the model's numbers (the ghost's stations, the fields' values and widths, the mode), the camera, the stage's size, and the hover and drag; when all of
   // them are what they were, the canvas already shows it.
   let lastKey = null;
   const frameKey = (m, pose) => {
     const W = stage.clientWidth, H = stage.clientHeight, k = [W, H, win.devicePixelRatio || 1, pose ? JSON.stringify(pose) : null, hover ? hover.id : null, drag ? `${drag.h.id}:${drag.value}` : null, pre ? `${pre.kind}:${pre.from}:${pre.to}` : null, T.css('--ink', '#0b0d11')];
-    if (m) { k.push(m.mode, m.samples, m.s0, m.s1, m.halfTarget, m.free, m.info, m.kinds.join(',')); for (const kind of m.kinds) { const c = m.ctx(kind); k.push(m.base(kind), c && c.half, c && c.free); } }
+    if (m) { k.push(m.mode, m.samples, m.s0, m.s1, m.halfTarget, m.free, m.info, m.kinds.join(',')); if (m.brush) { const B = m.brush; k.push(B.samples, B.s, B.half, B.lat, B.sides ? B.sides.join(',') : null, B.colour, B.open, B.text, B.note); } for (const kind of m.kinds) { const c = m.ctx(kind); k.push(m.base(kind), c && c.half, c && c.free); } }
     return k;
   };
   const sameKey = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -399,4 +478,4 @@ function mount(stage, win, host) {
   };
 }
 
-module.exports = { wrapTurn, KINDS, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
