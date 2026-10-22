@@ -206,7 +206,12 @@ function mount(root, shell, mountOpts = {}) {
     if (HEAD[mine][0].value !== shown[mine]) { other.value = shown[ko]; other.disabled = true; other.setAttribute('title', ONE_OF); }
     else { other.disabled = false; other.setAttribute('title', baseTitle[ko]); }
   };
-  const asTyped = (k) => (HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
+  // D430 (the user, 2026-10-22: "if one is blank auto set it to 0"): a field the user EMPTIED (blank where it showed a value) is 0, for the fields where 0 is a value.
+  // Not the length and width (0 is refused by the core), the right edge (blank follows the left edge, rightTarget below) or the grip (blank: the head's, gripOpt);
+  // as corners the turn and climb show blank at rest (showTurnHead), so a blank there is untouched and still continues
+  const ZERO_WHEN_EMPTIED = new Set(['turn', 'climb', 'bank', 'cup', 'edge', 'tube']);
+  const emptied = (k) => ZERO_WHEN_EMPTIED.has(k) && HEAD[k][0].value === '' && shown[k] !== '';
+  const asTyped = (k) => (emptied(k) ? '0' : HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
   // D259 (the keeper, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank keeps
   // within ONE turn and keeps its sign, shown AND applied (HD.wrapTurn: 370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40): the field shows it (HEAD above), a drag
   // writes it, and a typed value is sent wrapped and otherwise as typed (absolute, as the core keeps its winding; extendOptions unchanged). No nearest-equivalent rewrite.
@@ -316,6 +321,8 @@ function mount(root, shell, mountOpts = {}) {
   const baselineOf = (f) => (f === len ? appliedLen : applied[Object.keys(HEAD).find((k) => HEAD[k][0] === f)]);
   const unapplied = (f) => !!f && FIELDS.includes(f) && !f.disabled && f.value !== baselineOf(f);
   for (const f of FIELDS) { const prev = f.oninput; f.oninput = f.onchange = (e) => { lastTouched = f; return prev ? prev(e) : undefined; }; }
+  // D430: an emptied field shows the 0 it sends once the change is committed (on change, not while typing, so clearing a box to type a new number is not interrupted)
+  for (const k of ZERO_WHEN_EMPTIED) { const f = HEAD[k][0], prev = f.onchange; f.onchange = (e) => { if (emptied(k)) f.value = '0'; return prev(e); }; }
   const onUndoGuard = (e) => {
     const f = [doc.activeElement, lastTouched].find(unapplied);
     if (!f) return;

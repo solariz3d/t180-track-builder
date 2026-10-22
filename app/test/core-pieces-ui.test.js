@@ -958,6 +958,47 @@ test('row 18c: a ghost whose sliced build needs more frames than the retry is st
   mounted.unmount(); P1.panel.unmount();
 });
 
+// D430 (the user, 2026-10-22: "if a part of the equation is blank, it doesnt count as 0. if one is blank auto set it to 0"). Each field shows the head's value; a field
+// the user EMPTIES counts as 0 (and the box shows 0 once the change is committed), for every field where 0 is a value. A field left as shown still continues
+const headOf = (shell) => { const h = shell.headState(); return { turn: h.kh * 100 / DEG, climb: h.kv * 100 / DEG, bank: h.phi / DEG, cup: h.c }; };
+const typeInto = (P1, label, v) => { const f = fieldOf(P1, label); f.value = String(v); f.oninput(); return f; };
+const extendNow = (P1) => { P1.frame(); P1.button('Extend').onclick(); P1.frame(); };
+test('row 22 (D430): an EMPTIED turn, climb, bank or cup is 0, not the head\'s value: the new piece eases to 0, and the box shows 0 once the change is committed', async () => {
+  const P1 = await handlePanel(), { shell } = P1;
+  typeInto(P1, 'turn °/100m', 10); typeInto(P1, 'climb °/100m', 2); typeInto(P1, 'bank °', 20); typeInto(P1, 'cup °', 30); extendNow(P1);
+  const was = headOf(shell);
+  assert.deepEqual([was.turn, was.climb, was.bank, was.cup].map((x) => Math.round(x * 10) / 10), [10, 2, 20, 30], 'control: the head turns, climbs, banks and cups (the core\'s fit lands within 0.05)');
+  assert.equal(fieldOf(P1, 'turn °/100m').value, '10', 'control: the field shows the head');
+  const turnF = typeInto(P1, 'turn °/100m', ''); turnF.onchange();
+  assert.equal(turnF.value, '0', 'the emptied turn box shows 0 once the change is committed');
+  for (const label of ['climb °/100m', 'bank °', 'cup °']) assert.equal(typeInto(P1, label, '').value, '', `${label}: an empty box is not rewritten while it is typed in`);
+  extendNow(P1);
+  const now = headOf(shell);
+  for (const k of ['turn', 'climb', 'bank', 'cup']) assert.ok(Math.abs(now[k]) < 0.01 * Math.abs(was[k]), `${k} emptied eases to 0, not the head's ${was[k]}: ${now[k]}`);
+  P1.panel.unmount();
+});
+test('row 22b (D430): a field left as shown still continues the head; an emptied width keeps its old meaning (blank: the head\'s; 0 is no width)', async () => {
+  const P1 = await handlePanel(), { shell } = P1;
+  typeInto(P1, 'turn °/100m', 10); typeInto(P1, 'bank °', 20); typeInto(P1, 'width m', 30); extendNow(P1);
+  const n = shell.getState().history.present.pieces.length;
+  typeInto(P1, 'width m', ''); extendNow(P1);
+  assert.equal(shell.getState().history.present.pieces.length, n + 1, 'the Extend placed a piece');
+  const now = headOf(shell);
+  assert.ok(Math.abs(now.turn - 10) < 0.1 && Math.abs(now.bank - 20) < 0.1, `untouched turn and bank continue (within the core's fit), not 0: ${now.turn}, ${now.bank}`);
+  assert.ok(Math.abs(shell.headState().w - 30) < 1e-6, `an emptied width continues: ${shell.headState().w}`);
+  P1.panel.unmount();
+});
+test('row 22c (D430): as a corner the turn and climb fields rest blank, so a blank there is untouched: the track keeps turning, it does not ease to straight', async () => {
+  const P1 = await handlePanel({ turnAsRate: false }), { shell } = P1, turnAs = P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as');
+  turnAs.value = 'rate'; turnAs.onchange(); typeInto(P1, 'turn °/100m', 10); extendNow(P1);
+  turnAs.value = 'corner'; turnAs.onchange(); P1.frame();
+  assert.equal(fieldOf(P1, 'turn °').value, '', 'control: as a corner the field rests blank');
+  const f = typeInto(P1, 'turn °', ''); f.onchange(); assert.equal(f.value, '', 'a blank corner field is not rewritten to 0');
+  extendNow(P1);
+  assert.ok(Math.abs(headOf(shell).turn - 10) < 0.1, `the track keeps turning (within the core's fit), not straight: ${headOf(shell).turn}`);
+  P1.panel.unmount();
+});
+
 // 2026-10-15, the keeper: "when clicking a previous placed part of the track, while its highlighted, make the values change to it, so you can mimic certain
 // values within a new piece you place down". A SINGLE selected road piece lends its end values (and its length) to the Extend fields; Extend then places a
 // piece like it. A run of several pieces lends nothing (which one would it be). Clearing the selection, or any new document, shows the head again.
