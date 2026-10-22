@@ -122,7 +122,7 @@ function mount(stage, shell, win) {
     banded = band && !span && pose && track ? bandOf(track, band, pose, W, H) : [];
     reach = span && pose && track ? spanOf(track, band, pose, W, H) : [];
     marked = band && pose && track ? marksOf(track, band, pose, W, H) : [];
-    const BAND = T.css('--sculpt-band', '#4dd2ff'), A = b ? 0.55 : 0.28;   // the reach's cyan (design §6, the user's call: kept); on hover at half the drag's alpha
+    const BAND = T.css('--sculpt-band', '#4dd2ff'), A = b ? 0.55 : 0.28;   // the reach's cyan (design section 6; violet was the other choice); on hover at half the drag's alpha
     const ctx = canvas.getContext ? canvas.getContext('2d') : null;
     if (!ctx) return;
     const dpr = win.devicePixelRatio || 1, key = `${W}x${H}@${dpr}`;
