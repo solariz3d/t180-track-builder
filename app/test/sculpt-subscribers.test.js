@@ -113,6 +113,20 @@ test('row 2b: the start\'s hover (app/core/spawndrag.js) does not ask for spawns
   hov.unmount();
 });
 
+// D429 (A's trace of sculpt-frame row 3, exo_memory/handback/p-d429-row3-A_2026-10-22.md): every brush step makes new segments, which reset the labels' hover, so the labels asked the
+// preview for the piece under a still pointer (a scan of the whole path) on almost every frame of a drag, 64-141 ms a drag on 10 km
+test('row 4: the labels do not ask the preview for the piece under the pointer while a sculpt drag is open, and ask once for the let-go track', async () => {
+  const T = await page(); let picks = 0;
+  T.doc.addEventListener('t180-pick', (e) => { picks++; e.detail.reply(null); });
+  for (const f of (T.stage.listeners.pointermove || []).slice()) f({ clientX: 400, clientY: 300 });
+  T.tick(); assert.equal(picks, 1, 'a still pointer outside a drag is asked once');
+  T.real.beginBrush({ mode: 'local', channel: 'height', s0: 150, r: 120 }); assert.ok(T.real.getState().brush, T.real.getState().message);
+  for (let k = 1; k <= 6; k++) { T.real.brushTo(0.5 * k); T.tick(); }
+  assert.equal(picks, 1, 'the labels asked for the piece under the pointer during the drag');
+  T.real.endBrush(); T.tick();
+  assert.equal(picks, 2, 'the frame after the release asks once, for the let-go track');
+});
+
 test('row 3: outside a drag nothing waits: a placement shows in both layers in the very next frame', async () => {
   const T = await page(), a = { r: T.n.pieceReadouts, s: T.n.spawnsInfo };
   T.real.extend({ length: 150, transition: 40, targets: { kh: 1 / 300 } }); T.tick();
