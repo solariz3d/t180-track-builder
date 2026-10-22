@@ -44,7 +44,7 @@
 'use strict';
 
 const { createRig, KEYS, sampleAt } = require('../camera/cameras.js');
-const { createTrackModel } = require('./trackmodel.js');
+const { createTrackModel, washOf } = require('./trackmodel.js');
 const { createRenderer, themeFrom } = require('./renderer.js');
 const { tokensOf } = require('../lib/tokens.js');
 const { gridLines, headMarker, linesFor, tangentsFor } = require('./look.js');
@@ -98,7 +98,7 @@ function swallowsKeys(t) { return !!t && typeof t.matches === 'function' && t.ma
 // D336: how long a held key may go with no keydown at all, while one should be repeating, before it is let go. Windows' slowest key-repeat waits 1 s before the
 // first repeat and then repeats every 400 ms, so 1.5 s never drops a key really held there; a lost key-up then stops within 1.5 s instead of never.
 const HELD_NET_MS = 1500;
-function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false, gridMode = null, layer = null, onGuides = null, heldNetMs = HELD_NET_MS, onInputLate = null }) {
+function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack = null, flySpeed = 30, turnSpeed = 1.6, ground = false, gridMode = null, layer = null, onGuides = null, heldNetMs = HELD_NET_MS, onInputLate = null, hover = null }) {
   if (!canvas || !shell || !win) throw new Error('preview: needs { canvas, shell, win }');
   const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
   if (!gl) throw new Error('preview: WebGL is not available in this window');
@@ -350,6 +350,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       if (r.done) { ghost = r.value; ghostJob = null; }
     } catch (e) { ghostJob = null; ghost = null; }   // the geometry failed part way (the candidate was checked in showGhost): as a showGhost that throws, the ghost goes
   }
+  // D425: the page's Sculpt hover ({ s0, r, tool, channel? } or null), asked once a frame only in Sculpt with no drag open (`hover`, the mount's ask of 't180:sculpt-hover')
+  const hoverNow = () => { if (!hover) return null; const st = shell.getState(); if (!st.sculpt || st.brush) return null; try { return hover(); } catch (x) { console.warn(`preview: the sculpt hover failed: ${x && x.message || x}`); return null; } };   // a failing answer costs the cue, never the frame
   function frame(t) {
     raf = win.requestAnimationFrame(frame);
     const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0, elapsed = prev ? t - prev : 0; prev = t;
@@ -391,7 +393,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       }
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track), depthLines: plan ? plan.depth : null,
+      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track, sculptCues(track, hoverNow())), depthLines: plan ? plan.depth : null,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, time: skyTime(t) });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
@@ -437,6 +439,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       ghostJob = null; ghost = model.ghostFor(candidate, opts); if (candidate && candidate.jump) ghost.jump = true; return ghost.batches.length;
     },   // D243: a candidate JUMP says so, so the drag handles stay off it
     clearGhost() { ghost = null; ghostJob = null; },
+    /** D426: true while an exact ghost is being built a slice a frame (showGhost's opts.sliced) and is not whole yet: a caller that sees no ghost must not ask again meanwhile, or the build begins over. */
+    ghostBuilding() { return !!ghostJob; },
     /** D244, the drag handles: the ghost of the next piece as { samples, s0 }: the path's samples (the placed track's, then the new piece's) and the s where the new piece starts (the placed track's end). Null when there is no ghost, or it is a close or delete PREVIEW (those are not Extend's). */
     ghostInfo() { if (!ghost || ghost.proposal || !ghost.path) return null; const tp = track && track.path; return { samples: ghost.path.samples, segments: ghost.segments, jump: !!ghost.jump, s0: tp && tp.samples.length ? tp.samples[tp.samples.length - 1].s : 0 }; },
     /**
@@ -464,13 +468,83 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   };
 }
 
-/** The lines drawn over the track: the guides' (the mirror ghost) and, while a sculpt drag leaves a closed lap open, the line across its gap (D421 part 4). Null when none. */
+/** The lines drawn over the track: the guides' (the mirror ghost), while a sculpt drag leaves a closed lap open the line across its gap (D421 part 4), and the sculpt cues (D425, `cues`). Null when none. */
 const overMemo = new WeakMap();
-function overlayOf(plan, track) {
+function overlayOf(plan, track, cues = null) {
   const over = plan && plan.over.length ? plan.over : null, gap = track && track.drag && track.drag.gap;
-  if (!gap) return over;
-  let m = overMemo.get(gap); if (!m || m.over !== over) { m = { over, list: [...(over || []), gap] }; overMemo.set(gap, m); }
+  if (!gap && !cues) return over;
+  const key = gap || cues;
+  let m = overMemo.get(key); if (!m || m.over !== over || m.cues !== cues) { m = { over, cues, list: [...(over || []), ...(cues || []), ...(gap ? [gap] : [])] }; overMemo.set(key, m); }
   return m.list;
+}
+
+// D425 (P's design, p-d425-sculpt-cues-P_2026-10-21.md §1 cue 4 and §3's E rows): WHAT A ROUTE TOOL MOVES, on the road. A route tool (Stretch, Bend, Climb, or Smooth on a rate) moves
+// all the road after its window, so on HOVER (the page's `t180:sculpt-hover` answer: { s0, r, tool, channel? }, no drag open) that road is washed in the tool's colour: a line across the
+// road at every station past the window's end, at WASH_ALPHA. On a CLOSED lap the release may also move the last road piece, then the first (coreshell.js, the seam tries), so those
+// are HATCHED in the marker orange, a line at every other station, the first lighter. During the DRAG the moved road's wash is the renderer's tint (trackmodel.js compose), and the
+// hatch of the last piece, built once from the placed path, is drawn under the drag's move (its `model`), so a step adds no line list. Lines are read from the shared path's stations.
+const WASH_ALPHA = 0.18, HATCH = Object.freeze([1, 0.55, 0.15]), HATCH_ALPHA = 0.6, HATCH_FIRST_ALPHA = 0.3, LINE_LIFT = 0.05;
+const halfMemo = new WeakMap();
+const halfWidth = (g) => { if (!g || !g.profile) return 0; if (!Object.isFrozen(g)) return spanOf(readAt(g, 0)) / 2; if (!halfMemo.has(g)) halfMemo.set(g, spanOf(readAt(g, 0)) / 2); return halfMemo.get(g); };
+/** Lines across the road at the path's stations of segments [ja, jb) with s >= sFrom, every `every`-th one: GL LINES pairs (a Float32Array), or null when there is none. */
+function acrossLines(path, segments, ja, jb, sFrom = -Infinity, every = 1) {
+  const out = [];
+  for (let j = ja; j < jb; j++) {
+    const hw = halfWidth(segments[j]); if (!(hw > 0)) continue;
+    const i1 = j + 1 < path.segFirst.length ? path.segFirst[j + 1] : path.samples.length;
+    for (let i = path.segFirst[j]; i < i1; i++) {
+      const x = path.samples[i]; if (!(x.s >= sFrom) || (every > 1 && i % every)) continue;
+      for (const k of [1, -1]) for (let d = 0; d < 3; d++) out.push(x.pos[d] + k * hw * x.L[d] + LINE_LIFT * x.U[d]);
+    }
+  }
+  return out.length ? Float32Array.from(out) : null;
+}
+/** The segments [from, to) of the first and the last road piece (by the segments' piece id). */
+function seamSpans(segments) {
+  const n = segments.length; if (!n) return null;
+  let f = 1; while (f < n && segments[f].id === segments[0].id) f++;
+  let l = n - 1; while (l > 0 && segments[l - 1].id === segments[n - 1].id) l--;
+  return { first: [0, f], last: [l, n] };
+}
+const hatchMemo = new WeakMap();   // path -> { segments, first, last } (the hatch lines, built once for a path)
+function hatchOf(path, segments) {
+  let h = hatchMemo.get(path);
+  if (!h || h.segments !== segments) {
+    const sp = seamSpans(segments);
+    h = { segments, first: sp ? acrossLines(path, segments, sp.first[0], sp.first[1], -Infinity, 2) : null, last: sp && sp.last[0] > sp.first[0] ? acrossLines(path, segments, sp.last[0], sp.last[1], -Infinity, 2) : null, firstTo: sp ? sp.first[1] : 0 };
+    hatchMemo.set(path, h);
+  }
+  return h;
+}
+/** Where a route tool's window ends on this path, for a hover { s0, r, tool }: the piece under s0 for Stretch, s0 + r otherwise; null when there is none. */
+function windowEnd(path, segments, h) {
+  if (!Number.isFinite(h.s0)) return null;
+  if (h.tool !== 'stretch') return Number.isFinite(h.r) && h.r >= 0 ? h.s0 + h.r : null;
+  let j = 0; while (j + 1 < path.starts.length && path.starts[j + 1].s <= h.s0) j++;
+  const id = segments[j] && segments[j].id; if (id === undefined) return null;
+  while (j + 1 < segments.length && segments[j + 1].id === id) j++;
+  return path.starts[j].s + segments[j].length;
+}
+const cueMemo = new WeakMap();   // path -> the last hover's { key, list }
+/** The sculpt cues for this frame: an overlay list, or null. `h` is the page's hover (or null); the drag's own come from track.drag. */
+function sculptCues(track, h) {
+  if (!track || !track.path || !Array.isArray(track.segments)) return null;
+  if (track.drag) {
+    const d = track.drag; if (!d.gap || !d.move || !d.base || !d.base.path) return null;   // the hatch only where a closed lap was opened by the move
+    let c = cueMemo.get(d); if (c) return c;
+    const H = hatchOf(d.base.path, d.base.segments), list = [];
+    if (H.last) list.push({ positions: H.last, colour: HATCH, alpha: HATCH_ALPHA, blend: true, model: d.move });
+    if (H.first && d.window.from >= H.firstTo) list.push({ positions: H.first, colour: HATCH, alpha: HATCH_FIRST_ALPHA, blend: true });
+    c = list.length ? list : null; cueMemo.set(d, c); return c;
+  }
+  const colour = h ? washOf(h) : null; if (!colour) return null;
+  const path = track.path, segs = track.segments, sEnd = windowEnd(path, segs, h); if (sEnd === null) return null;
+  const closed = !!path.closed, key = `${sEnd}|${colour.join(',')}|${closed}`, was = cueMemo.get(path);
+  if (was && was.key === key && was.segments === segs) return was.list;
+  const list = [], wash = sEnd < path.lengthM ? acrossLines(path, segs, 0, segs.length, sEnd) : null;
+  if (wash) list.push({ positions: wash, colour, alpha: WASH_ALPHA, blend: true });
+  if (closed) { const H = hatchOf(path, segs); if (H.last) list.push({ positions: H.last, colour: HATCH, alpha: HATCH_ALPHA, blend: true }); if (H.first) list.push({ positions: H.first, colour: HATCH, alpha: HATCH_FIRST_ALPHA, blend: true }); }
+  const out = list.length ? list : null; cueMemo.set(path, { key, segments: segs, list: out }); return out;
 }
 
 /**
@@ -553,4 +627,4 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, startHead };
+module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, startHead, sculptCues };

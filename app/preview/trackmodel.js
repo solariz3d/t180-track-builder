@@ -53,6 +53,11 @@ const CHEAP_STATIONS = 64, CHEAP_SUBSTEP = 4;   // and integrates them in steps 
 /** D421 part 4: a SCULPT drag's window is drawn from about DRAG_CHORDS merged chords (coarse.js mergeChords, D404's GHOST_TURN for the heading), none shorter than DRAG_MIN_M unless the
  *  heading, pitch or roll cap ends it sooner, however long the window is (a short window of a tube, whose rows are heavy, was 61 chords of 2 m: 14 ms a step, probe2 of 2026-10-20). */
 const DRAG_CHORDS = 24, DRAG_MIN_M = 8, DRAG_TURN = 0.03, DRAG_ROLL = 0.05;
+/** D425 (P's design §1 cue 4, §5): WHAT MOVES is washed in the tool's colour, Build's handle colour for the same channel (app/core/handles.js): white for a length (Stretch), violet for the
+ *  turn rate (Bend, or Smooth on it), yellow for the climb rate (Climb, or Smooth on it). Only a route tool moves the road after its window. */
+const WASH = Object.freeze({ length: Object.freeze([1, 1, 1]), kh: Object.freeze([0.725, 0.408, 1]), kv: Object.freeze([1, 0.824, 0.239]) });
+/** The wash of a brush (state.brush, or the page's hover { tool, channel }): its colour, or null for a tool that moves nothing after its window. */
+const washOf = (b) => (!b ? null : b.mode === 'stretch' || b.tool === 'stretch' ? WASH.length : b.channel === 'kh' || b.tool === 'bend' ? WASH.kh : b.channel === 'kv' || b.tool === 'climb' ? WASH.kv : null);
 const RIGID_EPS = 1e-9;   // m and rad: a window end that moved less than this leaves the road after it where it is
 
 // D421 part 4: the rigid move of the road after a sculpted window, as the row-vector matrix a batch's node matrix is multiplied by (world = local · M, mesh.js matrixOf)
@@ -218,7 +223,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const end = movePoint(X, path.segEnd[m - 1].pos), s0p = path.samples[0].pos;
       gap = { positions: new Float32Array([...end, ...s0p]), colour: [1, 0.55, 0.15], alpha: 1, metres: Math.hypot(end[0] - s0p[0], end[1] - s0p[1], end[2] - s0p[2]) };
     }
-    const closedLap = lapClosed, moved = !!X, cells = mesh.cells;
+    const closedLap = lapClosed, moved = !!X, cells = mesh.cells, tint = moved ? washOf(b) : null;
     // the same composition for any list in the placed batches' order (the preview's textured copy of them included): the window and its two seams hidden, the road after it moved, the ghost added.
     // A batch's segment is its CELL's, by position (the cells and the scene's nodes are in one order, batches.js): a batch's own `piece` is read by the cell's name, which every chord of a word shares
     const compose = (list) => {
@@ -227,7 +232,8 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         const bt = list[k], c = cells[k], g = c ? c.piece : bt.piece, seam = c ? !!c.seam : bt.seam;
         if (g >= a && g < bB) continue;
         if (seam && (g === a || g === bB || (moved && closedLap && g === 0))) continue;
-        out.push(moved && g >= bB ? { ...bt, xform: X } : bt);   // the placed matrix kept, the move beside it: the renderer draws the baked chunk under it (renderer.js chunkModel)
+        out.push(moved && g >= bB ? { ...bt, xform: X, ...(tint ? { tint } : {}) } : bt);   // the placed matrix kept, the move beside it: the renderer draws the baked chunk under it (renderer.js chunkModel)
+        // D425: and washes it in the tool's colour (`tint`, one uniform for the chunk in the renderer): the road that moves is shown moving, with no geometry added
       }
       for (const gb of ghostBatches) out.push(gb);
       return out;
@@ -374,4 +380,4 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   return tm;
 }
 
-module.exports = { createTrackModel, STEP };
+module.exports = { createTrackModel, STEP, WASH, washOf };

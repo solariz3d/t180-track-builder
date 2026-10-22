@@ -360,7 +360,11 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     for (const c of chunks) {
       const L = chunkLines(c); if (!L) continue;
       const IDENTITY = chunkModel(c);   // D421 part 4: the chunk's own matrix (the identity, or a moved road's xform); named so, the line below keeps the words a mutation harness anchors on (L17)
-      drawLines(L.edges, IDENTITY, edge, alpha); drawLines(L.ties, IDENTITY, tie, alpha, TIE_FADE);
+      // D425: THE WASH of what a sculpt drag moves: a chunk whose batches carry `tint` (trackmodel.js dragFrame) has its edge lines drawn in that colour, the uniform each chunk sets
+      // already: no draw, no geometry and no upload added (a second blended pass of the moved road's surfaces cost row 3 about 0.5-0.8 ms a frame in headless Chrome, 2026-10-22)
+      const tint = c.list && c.list[0] && c.list[0].tint;
+      drawLines(L.edges, IDENTITY, tint || edge, alpha);
+      drawLines(L.ties, IDENTITY, tie, alpha, TIE_FADE);
     }
     if (!blending) gl.disable(gl.BLEND);
   }
@@ -438,7 +442,11 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       // the OVERLAY (D237: the mirror ghost), world line pairs drawn over everything, each with its own colour
       if (extras.overlay && extras.overlay.length) {
         gl.disable(gl.DEPTH_TEST); use(line, vp); gl.enableVertexAttribArray(line.pos);
-        for (const o of extras.overlay) drawLines(o.positions, IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);
+        for (const o of extras.overlay) {
+          if (o.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }   // D425: the sculpt wash and hatch are see-through (`blend`); the guides' entries are drawn as before
+          drawLines(o.positions, o.model || IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);   // D425: `model`, a line list moved with the road it lies on
+          if (o.blend) gl.disable(gl.BLEND);
+        }
         gl.enable(gl.DEPTH_TEST);
       }
       for (const [arr, e] of buffers) if (e.gen !== gen) { gl.deleteBuffer(e.buf); buffers.delete(arr); }   // no longer drawn

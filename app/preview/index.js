@@ -27,6 +27,9 @@
 // And for the READOUT labels (L130, app/core/labels.js), answered read-only from the preview's own view():
 //   't180:view'           { detail: { reply(v) } }        { pose, mode, head } (head: the placed track's build head, or null)
 //   't180:ghost-request'  { detail: { reply(g) } }        D244, for the drag handles (and D243, the flights): the ghost of the next piece as { samples, segments, jump, s0 } (jump: it is an Add-jump candidate), or null when none shows (preview.ghostInfo)
+//   't180:ghost-building' { detail: { reply(b) } }        D426: true while an exact ghost is still being built a slice a frame (preview.ghostBuilding), so the handles do not ask for it again meanwhile
+// And ASKED of the panel (D425, the Sculpt cues), once a frame in Sculpt with no drag open:
+//   't180:sculpt-hover'   { detail: { reply(h) } }        h = { s0, r, tool, channel? } (the brush under the pointer: its station, radius and tool) or null
 //
 // A MOUNT THAT FAILS says why, twice: the reason is left visible in the panel ("The preview could not start: …"), and
 // mount throws a PreviewMountError with the same message, for the page to show where it likes (A's display half).
@@ -54,11 +57,13 @@ function mount(root, shell) {
   // the layer is made AFTER the preview starts (a window with no WebGL fails with that reason, before any DOM is added), and the preview is handed a handle that forwards to it
   const layer = { update: (f) => { if (real) real.update(f); }, dispose: () => { if (real) real.dispose(); } };
   const publish = (t) => doc.dispatchEvent(new win.CustomEvent('t180:track', { detail: t }));
+  // D425: the Sculpt hover, asked of the panel (its answer to 't180:sculpt-hover', { reply }), for the wash of what a route tool moves
+  const hoverAsk = () => { let got = null; doc.dispatchEvent(new win.CustomEvent('t180:sculpt-hover', { detail: { reply: (h) => { got = h; } } })); return got; };
   const publishGuides = (s) => doc.dispatchEvent(new win.CustomEvent('t180:guides-state', { detail: s }));
   try {
     // gridMode 'auto' (D237): the ground grid while the track is flat, the 3D lattice once it has height; the buttons in the camera panel turn it off
     // D340: each late key event (preview.js checkLate) is raised as 't180:input-late', which the page appends to input-late.log (app/core/inputlog.js)
-    p = createPreview({ canvas, shell, win, hud, onMode: announce, onTrack: publish, gridMode: 'auto', layer, onGuides: publishGuides, onInputLate: (r) => doc.dispatchEvent(new win.CustomEvent('t180:input-late', { detail: r })) });
+    p = createPreview({ canvas, shell, win, hud, onMode: announce, onTrack: publish, gridMode: 'auto', layer, onGuides: publishGuides, onInputLate: (r) => doc.dispatchEvent(new win.CustomEvent('t180:input-late', { detail: r })), hover: hoverAsk });
     real = createGuidesLayer({ root, win, onCentre: (c) => { p.setGuides({ centre: c }); } });
   } catch (e) {
     if (p) p.dispose();   // the preview came up and the layer did not: do not leave its frame loop running under the message
@@ -80,6 +85,7 @@ function mount(root, shell) {
   const pickNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.pick(e.detail.x, e.detail.y)); };
   const trackNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.track()); };
   const ghostNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.ghostInfo()); };
+  const buildingNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.ghostBuilding()); };
   const setGuides = (e) => { if (!e.detail) return; try { p.setGuides(e.detail); } catch (err) { if (typeof e.detail.reply === 'function') e.detail.reply({ error: err.message }); } };
   const guidesNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.guides()); };
   doc.addEventListener('t180:guides', setGuides);
@@ -87,6 +93,7 @@ function mount(root, shell) {
   doc.addEventListener('t180:textures', textures);
   doc.addEventListener('t180:track-request', trackNow);
   doc.addEventListener('t180:ghost-request', ghostNow);
+  doc.addEventListener('t180:ghost-building', buildingNow);
   doc.addEventListener('t180-camera', ask);
   doc.addEventListener('t180-probe', answer);
   doc.addEventListener('t180-ghost', showGhost);
@@ -96,7 +103,7 @@ function mount(root, shell) {
   // D242: a click on a red in a list moves the camera there ('t180-camera-focus', { s }: metres along the placed track)
   const focusNow = (e) => { if (e.detail && Number.isFinite(e.detail.s)) p.focus(e.detail.s); };
   doc.addEventListener('t180-camera-focus', focusNow);
-  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
+  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180:ghost-building', buildingNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };
