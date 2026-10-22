@@ -4,7 +4,7 @@
 //   LIGHT, shade(n)          the lighting: one key light low and to the side, a weak fill from the other side, ambient.
 //                            The GLSL in renderer.js is generated from these same numbers, so the test of shade() is a
 //                            test of what the shader computes.
-//   linesFor(batch)          road lines in the batch's own frame: the two EDGES and the CENTRE along the road, and a TIE
+//   linesFor(batch)          road lines in the batch's own frame: the two EDGES and the CENTRE (at u = 0) along the road, and a TIE
 //                            across the road every TIE_M metres (a tie shows banking and the profile's shape).
 //   localBounds(batch)       the axis-aligned box of a batch's vertices in its own frame (memoised per array)
 //   worldBounds(batches)     the world box of every batch: each local box's 8 corners through its model matrix. It
@@ -40,13 +40,18 @@ function linesFor(b) {
   const hit = lineMemo.get(b.positions); if (hit) return hit;
   const K = b.cols, R = b.rowS.length, P = b.positions, N = b.normals;
   let kc = 0; for (let k = 1; k < K; k++) if (Math.abs(b.us[k]) < Math.abs(b.us[kc])) kc = k;
+  // D433b: the centre line at u = 0 itself, between the two row vertices either side of it (the mesher puts no vertex at u = 0, so the nearest one sat up to 0.095 m off the
+  // middle and stepped at the joints); a row with no vertex either side of 0 keeps the nearest
+  let k0 = kc, t = 0; for (let k = 0; k + 1 < K; k++) if (b.us[k] <= 0 && b.us[k + 1] > 0) { k0 = k; t = -b.us[k] / (b.us[k + 1] - b.us[k]); break; }
   // D407: written straight into the typed arrays (it built them by spreading three-number arrays into plain ones: 19 ms for a 2,000 m ghost's first frame, the measurement of 2026-10-19);
   // the same doubles in the same order, rounded to float32 as before, so every line is the same to the byte
   const v = (r, k) => { const i = (r * K + k) * 3; return [P[i] + N[i] * LIFT, P[i + 1] + N[i + 1] * LIFT, P[i + 2] + N[i + 2] * LIFT]; };
   const put = (A, o, p) => { A[o] = p[0]; A[o + 1] = p[1]; A[o + 2] = p[2]; };
+  // the lifted point at u = 0: positions and normals lerped by u, so the lift is the lerped normal's
+  const mid = (r) => { if (t === 0) return v(r, k0); const a = v(r, k0), c = v(r, k0 + 1); return [a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t]; };
   const edges = new Float32Array(Math.max(0, R - 1) * 3 * 6);
   let o = 0;
-  for (let r = 0; r + 1 < R; r++) for (const k of [0, kc, K - 1]) { put(edges, o, v(r, k)); put(edges, o + 3, v(r + 1, k)); o += 6; }
+  for (let r = 0; r + 1 < R; r++) for (const k of [0, -1, K - 1]) { put(edges, o, k < 0 ? mid(r) : v(r, k)); put(edges, o + 3, k < 0 ? mid(r + 1) : v(r + 1, k)); o += 6; }
   const tieRows = [];
   for (let r = 0; r < R; r++) {
     if (!(r === 0 || Math.floor(b.rowS[r] / TIE_M) !== Math.floor(b.rowS[r - 1] / TIE_M))) continue;
@@ -55,7 +60,7 @@ function linesFor(b) {
   const ties = new Float32Array(tieRows.length * Math.max(0, K - 1) * 6);
   o = 0;
   for (const r of tieRows) for (let k = 0; k + 1 < K; k++) { put(ties, o, v(r, k)); put(ties, o + 3, v(r, k + 1)); o += 6; }
-  const out = { edges, ties, centre: kc };
+  const out = { edges, ties, centre: { k0, t } };
   lineMemo.set(b.positions, out);
   return out;
 }
