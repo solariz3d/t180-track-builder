@@ -499,7 +499,10 @@ test('a CHANGED value is a target in the core\'s units; a value typed back to ex
   P.type('bank °', -7.5); assert.ok(Math.abs(P.opts().targets.phi + 7.5 * DEGt) < 1e-15, 'bank: ° to rad');
   P.type('width m', 28); assert.equal(P.opts().targets.w, 28, 'width: m');
   P.type('cup °', 90); assert.equal(P.opts().targets.c, 90, 'cup: degrees, as typed');
-  P.type('bank °', ''); assert.equal(P.opts().targets.phi, undefined, 'a cleared field is blank: continue');
+  // AMENDED D430 (the user, 2026-10-22: "if one is blank auto set it to 0"): this line held that a cleared field is blank and continues (D193). The rule changed: a field
+  // the user empties is 0 (core-pieces-ui.test.js rows 22-22c); a field left as shown still sends no target (the typed-back-to-20 line above)
+  P.type('bank °', ''); assert.equal(P.opts().targets.phi, 0, 'a cleared field is 0, not continue');
+  P.type('turn °/100m', ''); assert.equal(P.opts().targets.kh, 0, 'a cleared turn is 0, not the head\'s 20');
   P.panel.unmount();
 });
 
