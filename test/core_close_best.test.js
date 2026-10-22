@@ -165,7 +165,8 @@ test('row 12: the reported save: one press, with the reds the live checker found
   const openReds = own(load + " process.stdout.write(JSON.stringify(require('./app/validate-ui/checkjob.js').createCheckJob().run({ doc: { ...base, closed: false }, csp: true }).result.red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 }))));");
   const r = own(load + ` const reds = ${JSON.stringify(openReds)}, CJ = require('./app/core/closejob.js'), c0 = process.cpuUsage(), h0 = process.threadCpuUsage(), t0 = Date.now(), r = CJ.runCloseBest({ doc: base, openReds: reds }), ms = Date.now() - t0, h = process.threadCpuUsage(h0), c = process.cpuUsage(c0);`
     + " process.stdout.write(JSON.stringify({ report: r.report, routes: r.tried.map((t) => t.route), phases: r.phases, ms, cpuMs: (c.user + c.system) / 1000, mainMs: (h.user + h.system) / 1000, doc: D.serialize(r.doc) }));");
-  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.4 m'); assert.deepEqual(r.routes, ['near']);   // AMENDED (D431): 4.4 m, was 4.0 (row 6 says why) assert.equal(r.phases.openCheckMs, null, 'the given reds: no open check');
+  // AMENDED (D431): 4.4 m, was 4.0 (row 6 says why)
+  assert.equal(r.report, 'closed: bent the last 2 pieces (508 m) by up to 4.4 m'); assert.deepEqual(r.routes, ['near']); assert.equal(r.phases.openCheckMs, null, 'the given reds: no open check');
   t.diagnostic(`main thread ${Math.round(r.mainMs)} ms CPU, process ${Math.round(r.cpuMs)} ms CPU, ${r.ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs}`);
   assert.ok(r.mainMs < 30000, `one press used ${Math.round(r.mainMs)} ms of its main thread's CPU (${Math.round(r.cpuMs)} ms with the collector's threads, ${r.ms} ms wall; routes ${r.phases.routesMs}, checks ${r.phases.checksMs})`);
   const self = CJ.runCloseBest({ doc: D.parse(fs.readFileSync(FX12, 'utf8')) });
@@ -205,7 +206,8 @@ test('row 14: the reported save: the worker\'s press on a structuredClone, with 
   const parsed = workerPress(FX12, { clone: false, openReds: reds }), cloned = workerPress(FX12, { clone: true, openReds: reds });
   const hash = (x) => require('crypto').createHash('sha256').update(x).digest('hex').slice(0, 12);
   t.diagnostic(`main thread: clone ${Math.round(cloned.mainMs)} ms, parsed ${Math.round(parsed.mainMs)} ms; residual on an unfrozen document ${cloned.unfrozen} of ${cloned.calls}; closed sha256 ${hash(cloned.closed)}`);
-  assert.equal(cloned.report, 'closed: bent the last 2 pieces (508 m) by up to 4.4 m');   // AMENDED (D431): 4.4 m, was 4.0 (row 6 says why) assert.deepEqual(cloned.routes, ['near']);
+  // AMENDED (D431): 4.4 m, was 4.0 (row 6 says why)
+  assert.equal(cloned.report, 'closed: bent the last 2 pieces (508 m) by up to 4.4 m'); assert.deepEqual(cloned.routes, ['near']);
   assert.equal(cloned.report, parsed.report); assert.equal(hash(cloned.closed), hash(parsed.closed), 'the same closed track');
   assert.equal(cloned.unfrozen, 0, `${cloned.unfrozen} of ${cloned.calls} residuals were on an unfrozen document: the memo cannot serve them`);
 });
