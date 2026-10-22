@@ -58,8 +58,9 @@ vec3 skyPattern(vec3 dir, float t) {
   vec2 q = dir.xz / max(1.0 + y, 0.05);
   float r = length(q);
   float net = caustics_net(q * 22.0, t);
-  float win = 1.0 - smoothstep(0.405, 0.47, r);
-  float rim = exp(-pow((r - 0.43) / 0.05, 2.0));
+  float up = step(0.0, y);                                                       // the map folds the nadir onto r = 0 too (dir.xz -> 0 looking down), so the window lives in the upper half only (D427)
+  float win = (1.0 - smoothstep(0.405, 0.47, r)) * up;
+  float rim = exp(-pow((r - 0.43) / 0.05, 2.0)) * up;
   vec3 seen = mix(uSkyB, uSkyA, 0.5 + 0.3 * (1.0 - r / 0.47)) * (0.88 + 0.2 * net);
   col = mix(col, seen, win);
   col += uSkyA * 0.42 * rim * net;
