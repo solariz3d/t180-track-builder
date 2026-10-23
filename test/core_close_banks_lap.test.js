@@ -12,6 +12,12 @@
 //   4  the NEAR path (an end already at the start, which today banked nothing): the same lap reopened at its seam closes banked
 //   5  the road a pit lane runs beside is not banked
 //   6  the bank lands in Close's ONE undo step: one undo gives back the open lap
+//   7  a LOOP is not banked, even one that turns (finish.js bankLap, called on a lap closed by close(): this loop is not a lap the press proves at speed): its
+//      bank channel comes out byte for byte; a level curve on the same lap is banked. (TEST TRACK 10's copy has a loop whose exit stores a bank of 0 while
+//      turning at a pitch of −90° to −15°: before the level rule it was banked by 54°)
+//   8  a TUBE is not banked (bankLap on a lap closed by close(): a lap through a tube corner the press does not prove at speed): every tube piece keeps its
+//      bank channel byte for byte; a level curve before it is banked
+//   9  a straight next to a curve keeps the bank it was laid with (its joints stay pinned, D447 (d)): on the lap of row 1, its two straights byte for byte
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -89,6 +95,35 @@ test('row 5: the road a pit lane runs beside is not banked', () => {
   const r = CJ.runCloseBest({ doc: open }); assert.equal(r.converged, true, r.report);
   for (const i of [0, 1]) assert.deepEqual(r.doc.pieces[i].channels.phi, open.pieces[i].channels.phi, `${open.pieces[i].id}, beside the pit lane, keeps its bank`);
   assert.ok(r.doc.pieces[8].channels.phi.some((x, j) => x !== open.pieces[8].channels.phi[j]), 'control: a curve away from the lane is banked');
+});
+
+test('row 7: a loop is not banked, even one that turns; a level curve on the same lap is', () => {
+  const F = require('../src/core/finish.js'), { close } = require('../src/core/close.js'), { extendTurnBy: turn } = require('../src/core/turnby.js');
+  let d = D.createDoc('looped'); d = extend(d, { length: 100, family: 'bowl' }); d = turn(d, { length: Q }, 90 * DEG); d = extend(d, { length: 100 });
+  d = turn(d, { length: 700, climbDeg: 360 }, 30 * DEG); d = extend(d, { length: 100 }); d = turn(d, { length: Q }, 60 * DEG); d = extend(d, { length: 200 });
+  d = turn(d, { length: Q }, 90 * DEG); d = extend(d, { length: 100 }); d = turn(d, { length: Q }, 90 * DEG);
+  const c = close(d, { edited: [d.pieces.length - 1] }); assert.equal(c.converged, true, c.report);
+  const LOOP = 3; assert.ok(c.doc.pieces[LOOP].channels.kh.some((k) => Math.abs(k) > 1 / 600), 'control: the loop turns');
+  const b = F.bankLap(c.doc);
+  assert.deepEqual(b.pieces[LOOP].channels.phi, c.doc.pieces[LOOP].channels.phi, 'the loop keeps its bank channel byte for byte');
+  assert.ok(b.pieces[1].channels.phi.some((x, j) => Math.abs(x - c.doc.pieces[1].channels.phi[j]) > 30 * DEG), 'control: the level curve before it is banked');
+});
+
+test('row 8: a tube is not banked; a level curve on the same lap is', () => {
+  const F = require('../src/core/finish.js'), { close } = require('../src/core/close.js');
+  let d = D.createDoc('tubed'); d = extend(d, { length: 100, family: 'bowl' }); d = extendTurnBy(d, { length: Q }, 90 * DEG); d = extend(d, { length: 100 });
+  d = extend(d, { length: Q / 2, targets: { kh: 1 / 300 } }); d = extendTurnBy(d, { length: Q / 2 }, 67.5 * DEG);
+  d = extend(d, { length: 100, targets: { t: 240 } }); d = extendTurnBy(d, { length: Q }, 90 * DEG); d = extend(d, { length: 200, targets: { c: 10 } }); d = extendTurnBy(d, { length: Q }, 90 * DEG);
+  const c = close(d, { edited: [d.pieces.length - 1] }); assert.equal(c.converged, true, c.report);
+  const tubes = c.doc.pieces.map((P, i) => i).filter((i) => c.doc.pieces[i].tube); assert.ok(tubes.some((i) => c.doc.pieces[i].channels.kh.some((k) => Math.abs(k) > 1 / 600)), 'control: a tube that turns');
+  const b = F.bankLap(c.doc);
+  for (const i of tubes) assert.deepEqual(b.pieces[i].channels.phi, c.doc.pieces[i].channels.phi, `${c.doc.pieces[i].id}, a tube, keeps its bank channel`);
+  assert.ok(b.pieces[1].channels.phi.some((x, j) => Math.abs(x - c.doc.pieces[1].channels.phi[j]) > 30 * DEG), 'control: the level curve before it is banked');
+});
+
+test('row 9: a straight next to a curve keeps the bank it was laid with', () => {
+  const r = closed(), open = lap(); assert.equal(r.converged, true, r.report);
+  for (const i of [0, 2]) assert.deepEqual(r.doc.pieces[i].channels.phi, open.pieces[i].channels.phi, `${open.pieces[i].id}, a straight between curves`);
 });
 
 test('row 6: the bank lands in Close\'s one undo step', async () => {

@@ -308,14 +308,16 @@ function bankRollPeak(doc, window) {
  * section of the track itself, it is the closed loop generator gaining the nuance"; plan_d447): THE CLOSED LAP BANKED, not only the road Finish adds. Every
  * UPRIGHT road piece of a closed lap (every bank point within ROLL_FREE of the start's) is banked by BANK_SHARE of the balance bank at the design speed, through
  * bankPlan: its rate (BANK_ROLL) and acceleration (BANK_ACCEL) limits, C1 at every joint, and the share scaled down while the lap rolls past the amber.
- * Not banked: a piece he banked or rolled himself (a bank point past ROLL_FREE: his bank stays byte for byte, and the joints into it keep it), a tube, a piece
- * that is not road, and the road a pit lane runs beside (its leave anchor's piece to its rejoin's). Finish's own banked pieces are not upright, so they stay as
+ * Not banked: a piece he banked or rolled himself (a bank point past ROLL_FREE: his bank stays byte for byte, and the joints into it keep it), a piece that is
+ * not LEVEL (the road's up within LEVEL_DEG of the world's at every station: a loop, its way in and out, a steep ramp; measured on TEST TRACK 10's copy, the
+ * loop's exit stores a bank of 0 at a pitch of −90° to −15° and was banked by 54° before this), a tube, a piece that is not road, and the road a pit lane runs
+ * beside (its leave anchor's piece to its rejoin's). Finish's own banked pieces are not upright, so they stay as
  * Finish banked them. JOINTS (D447 (d), O's call): where two upright pieces that both curve meet, the joint is not pinned, so a curve laid as several pieces
  * banks as one; a joint next to a straight, a piece not banked, or the start line (the seam: p1 and the last piece keep the start's bank there) stays pinned.
  * The bank rolls the road about its centre line, so the closed lap stays closed. A backstop: if the banked lap would lean out of a curve (closerLoad, the
  * horizontal turn) at more stations than the lap as closed, the lap is returned as closed. Returns the document (the same object when nothing is banked).
  */
-const CURVED_KH = 1 / 600;
+const CURVED_KH = 1 / 600, LEVEL_DEG = 30;
 function pitPieces(doc) {
   const lane = doc.pitLane, at = (a) => (a ? doc.pieces.findIndex((P) => P.id === a.word) : -1); if (!lane) return new Set();
   const a = at(lane.leave), b = at(lane.rejoin), out = new Set(); if (a < 0 || b < 0) return out;
@@ -324,8 +326,10 @@ function pitPieces(doc) {
 }
 function bankLap(doc) {
   if (!doc.closed || !doc.pieces.length || doc.pieces[0].type !== 'road') return doc;
-  const upright = D.valuesAt(doc.pieces[0], 0).phi, lane = pitPieces(doc);
-  const lap = []; doc.pieces.forEach((P, p) => { if (P.type === 'road' && !P.tube && !lane.has(p) && P.channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE)) lap.push(p); });
+  const upright = D.valuesAt(doc.pieces[0], 0).phi, lane = pitPieces(doc), { segments, path } = toPath(doc, { step: 5 }), lowUp = new Map();
+  for (const q of path.samples) { const id = segments[q.seg].id; lowUp.set(id, Math.min(lowUp.has(id) ? lowUp.get(id) : 1, q.U[1])); }
+  const level = (P) => lowUp.has(P.id) && lowUp.get(P.id) >= Math.cos(LEVEL_DEG * DEG);
+  const lap = []; doc.pieces.forEach((P, p) => { if (P.type === 'road' && !P.tube && !lane.has(p) && P.channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE) && level(P)) lap.push(p); });
   if (!lap.length) return doc;
   const uprightSet = new Set(lap), curved = (p) => doc.pieces[p].channels.kh.some((k) => Math.abs(k) > CURVED_KH);
   const relax = (p) => p > 0 && uprightSet.has(p - 1) && uprightSet.has(p) && curved(p - 1) && curved(p);
