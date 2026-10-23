@@ -23,6 +23,8 @@
 //   5  turn 210, tail 300, roll 30: the roll straight laid first is not bent by the close (it was: 41 stations leaning out, to −26.3°, 5.07 g, P §2 (b))
 //   6  turn 180, tail 1,200, roll 10: the closer that banks its turns is taken (a roll-last close kept its turns on the end's bank, unbanked: 10.89 g, P §2 (c))
 //   7  turn 180, tail 1,200, roll 30: the same (9.16 g)
+//   8  the other side of that choice: an end banked 54° the way the closer turns (core_finish row 12's lap) is closed rolled LAST, its turns leaning on the end's own
+//      bank (5.55 g, against 8.08 rolled first), and the bank adds nothing on top of it (D434's upright rule): 0 out, under SIDE_BANKED_G
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -125,6 +127,14 @@ function leansIn(turnDeg, tailM, rollDeg) {
 test('row 5: P\'s turn 210, tail 300, roll 30: the roll straight laid first is not bent into a lean the wrong way', () => leansIn(210, 300, 30));
 test('row 6: P\'s turn 180, tail 1,200, roll 10: the closer that banks its turns is the one taken', () => leansIn(180, 1200, 10));
 test('row 7: P\'s turn 180, tail 1,200, roll 30: the closer that banks its turns is the one taken', () => leansIn(180, 1200, 30));
+test('row 8: an end banked the way the closer turns is closed rolled last, on its own bank and with nothing banked on top', () => {
+  let d = D.createDoc('banked'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 500 }, -150 * DEG); d = extend(d, { length: 200 });
+  d = extend(d, { length: 200, transition: 100, targets: { phi: 54 * DEG } }); d = extend(d, { length: 100, targets: { kv: 0 } });
+  const r = F.finishToStart(d), L = lean(r.doc, d.pieces.length);
+  assert.equal(r.plan.rollFirst, false, `rolled last: ${r.plan.report}`);
+  assert.equal(L.out, 0, `no curved station of the closer leans out (${L.out} of ${L.n})`);
+  assert.ok(L.lat < SIDE_BANKED_G, `the peak side load at the design speed, ${L.lat.toFixed(2)} g, is under ${SIDE_BANKED_G} g`);
+});
 
 test('row 4: a straight gets none: a finish that is only a straight keeps the laid bank', () => {
   let d = D.createDoc('straight');
