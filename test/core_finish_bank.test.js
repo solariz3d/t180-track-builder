@@ -20,6 +20,8 @@
 // over 1,500 m, then a tail rolling and cupping to 35°). The bar on each: no curved station of the closer leans out by more than 5°, and its peak side load at the
 // design speed is under SIDE_BANKED_G, 6 g: over every banked closer measured (4.02–5.11 g: his two tracks, core_finish_joints rows 5–7, and these laps rolled
 // first) and under every unbanked one (9.16–10.89 g, these laps closed roll-last).
+// The bar separates only over the laps measured here: P's sweep has a banked closer over it (turn 180, tail 700, roll 54: LSL 1,243 m rolled first, 0 out,
+// 6.17 g; its short turns never reach the share between the pinned ends; exo_memory/handback/p-d439-review-P_2026-10-23.md §2.3). No row uses that lap.
 //   5  turn 210, tail 300, roll 30: the roll straight laid first is not bent by the close (it was: 41 stations leaning out, to −26.3°, 5.07 g, P §2 (b))
 //   6  turn 180, tail 1,200, roll 10: the closer that banks its turns is taken (a roll-last close kept its turns on the end's bank, unbanked: 10.89 g, P §2 (c))
 //   7  turn 180, tail 1,200, roll 30: the same (9.16 g)

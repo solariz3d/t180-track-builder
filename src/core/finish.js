@@ -441,10 +441,14 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   for (const mode of roll0 ? ['last', 'first'] : ['last']) {
     let roll = roll0;
     for (let round = 0; ; round++) {
-      const out = search(mode, roll);
+      // D440 (h) (P's review of D439 §2.4): a refusal in the SECOND order keeps the closer the first order found. inferred unreachable today (the roll laid
+      // first is long enough for its own roll, D438, and the lengthening converges in a round or two), so no row; it guards a later change
+      let out;
+      try { out = search(mode, roll); } catch (err) { if (err.name === 'CoreError' && found.length) break; throw err; }
       if (out.fail && out.fail.out && (!leanOut || out.fail.out.out < leanOut.out)) leanOut = out.fail.out;
       if (out.passed && out.passed.length) { found.push(...out.passed); break; }
       if (out.tooFast) {
+        if (round >= ROLL_ROUNDS && found.length) break;   // D440 (h)
         if (round >= ROLL_ROUNDS) throw new D.CoreError('FINISH_ROLL', `the roll upright onto the start still reads ${out.tooFast.toFixed(3)}°/m (the amber bar is ${ROLL_AMBER_DEG_M}) at ${roll.lengthM} m after ${round + 1} lengthenings`);
         roll = { bank, lengthM: Math.ceil(roll.lengthM * (out.tooFast / ROLL_AMBER_DEG_M) * ROLL_LENGTHEN) };
         continue;
