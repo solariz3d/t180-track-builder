@@ -13,7 +13,8 @@
 //                                    (src-tauri/src/lib.rs install_with_retire: { files, retired, retire_error }); the message then says so and where, and a
 //                                    move that failed is said too. Nothing moved: the message is as it was
 // THE BUILD (D239): `build(opts)` is the open track's own export, the core shell's buildExport (app/core/coreshell.js), the SAME call
-// the Export button makes, so what is installed is what Export writes, byte for byte; getDoc() gives the name it installs under.
+// the Export button makes, so what is installed is what Export writes, byte for byte; getDoc() gives the name it installs under. It may return a promise
+// (D437b: buildExportAsync, the export in its own process); a refusal is a rejected ExportError then, and is said the same way.
 // THE NAME. Every folder the builder writes is t180b_<track name> (src/export/fromwords.js folderName): the prefix is
 // added automatically, and the message says so, so a user who names a track "monza" is told it installs as t180b_monza
 // and can never overwrite ks_monza.
@@ -43,10 +44,10 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
       const refused = (e) => { if (e.name !== 'ExportError') throw e; return { ok: false, message: e.message, reds: e.code === 'RED' ? e.red : null }; };
       const textures = getTextures();
       let out;
-      try { out = build(test ? { textures, test: true } : { textures }); } catch (e) {
+      try { out = await build(test ? { textures, test: true } : { textures }); } catch (e) {
         if (test || e.name !== 'ExportError' || e.code !== 'OPEN_LOOP') return refused(e);
         test = true;
-        try { out = build({ textures, test: true }); } catch (e2) { return refused(e2); }
+        try { out = await build({ textures, test: true }); } catch (e2) { return refused(e2); }
       }
       const names = [], retired = [], retireErrors = [];
       for (const f of out.folders) {

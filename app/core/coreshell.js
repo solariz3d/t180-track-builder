@@ -9,6 +9,8 @@
 //   shell.close()
 //   await shell.exportTo(dir)   shell.openExample(fitText, readText, name)   await shell.save(name)   await shell.open(name)
 //   shell.buildExport(opts)   shell.exportDoc()   shell.commitDoc(doc)                       (D239: install and share codes use them)
+//   await shell.buildExportAsync(opts)   the same export, run in its own process when the page has one (D437b: exporter.runSegmentsAsync); Export and Install use it
+//   shell.exportArgs(opts)   the export's arguments [segments, meta, opts], writing nothing (D437b: both builds start from it)
 //   shell.restore()   await shell.discardRecovery()   await shell.flushAutosave()   await shell.cleanExit()   (D239: autosave)
 //   (D272: save also writes the undo history beside the track, open reads it back: see UNDO_CAP below)
 //   await shell.backupNow(reason)   await shell.listVersions()   await shell.openVersion(file)   (D239 amendment: previous versions;
@@ -1134,6 +1136,22 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      */
     buildExport(opts = {}) {
       if (!exporter) throw exportError('NO_EXPORTER', 'export is not available here');
+      return exporter.runSegments(...api.exportArgs(opts));
+    },
+    /**
+     * D437b (the user's white window, 2026-10-22: the export ran out of memory on the page's own thread and took the page with it): buildExport's export, run by
+     * exporter.runSegmentsAsync in a process of its own when the page can give it one (app/export/exportrunner.js), so a failure there ends with a message and the page
+     * stays drawn; on the page where it cannot. The track is read NOW, when it is asked for: an edit made while it runs is not in it. The core's offset lift goes as
+     * the document it lifts by (meta.liftDoc), because a function cannot cross into another process. Rejects with an ExportError, as buildExport throws one
+     */
+    async buildExportAsync(opts = {}) {
+      if (!exporter) throw exportError('NO_EXPORTER', 'export is not available here');
+      const [segments, meta, o] = api.exportArgs(opts);
+      if (typeof exporter.runSegmentsAsync !== 'function') return exporter.runSegments(segments, meta, o);
+      return exporter.runSegmentsAsync(segments, meta.liftPath ? { ...meta, liftDoc: doc() } : meta, o);
+    },
+    /** The export's arguments for exporter.runSegments, [segments, meta, opts], from the open track as it is now; it throws the refusals above. Nothing is written. */
+    exportArgs(opts = {}) {
       // D243a: opts.test is the TEST export of an unfinished OPEN track (the page's own button, never the default): it is written open, its grid laid on
       // the open path, its reds listed as warnings. A CLOSED track is refused it by name: the lap would be built open, with the end wall at its seam
       if (opts.test && doc().closed) throw exportError('TEST_CLOSED', 'this track is closed: use Export (the test export is for an unfinished, open track)');
@@ -1144,7 +1162,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       else try { markers = startLayout(st.resolved.segments, st.resolved.lift, st.resolved.start, { open: !!opts.test }); } catch (e) { if (e.code !== 'NO_START_STRAIGHT') throw e; throw exportError('NO_START_STRAIGHT', `not exported: ${e.message}`); }
       const pit = laneRoad(doc());
       if (pit) markers = withPitBoxes(markers, doc().pitLane);
-      return exporter.runSegments(st.resolved.segments, { name: api.exportDoc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start, ...(pit ? { pitLane: pit } : {}) }, { ...opts, markers });
+      return [st.resolved.segments, { name: api.exportDoc().name, description: 'Built from equations by t180-track-builder.', via: 'src/core/adapter.js toSegments', liftPath: st.resolved.lift, start: st.resolved.start, ...(pit ? { pitLane: pit } : {}) }, { ...opts, markers }];
     },
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
     async exportTo(dir, opts = {}) {
@@ -1160,7 +1178,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const stop = async (patch) => { const message = patch.message + await tidy(); return set({ ...patch, message, exportRefusal: message }); };
       try {
       let out;
-      try { out = api.buildExport(opts); } catch (e) {
+      set({ message: 'exporting…' });   // D437b: the export runs on its own now, and the page stays usable while it does
+      try { out = await api.buildExportAsync(opts); } catch (e) {
         if (e.name !== 'ExportError') throw e;
         // D242: a red refusal names EVERY red in plain words, grouped, with where (the message was the export's own, every reason by its id: the keeper read
         // "downforce-ray-gap" first and nothing about 28 more that all said the road runs into itself)

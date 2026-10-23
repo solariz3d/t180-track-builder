@@ -6,6 +6,10 @@
 //   exporter.checkTarget(dir)  -> { ok } | { ok: false, code, reason }
 //   exporter.run(doc, { variant })  -> { result, folders: [{ folder, files: [{ path, bytes }] }] }   (throws ExportError)
 //   exporter.runSegments(segments, { name, description?, via? }, { variant })   the same, for the equation core (D186)
+//   await exporter.runSegmentsAsync(segments, meta, opts)   the same answer, the export run IN A PROCESS OF ITS OWN (D437b, app/export/exportrunner.js) when
+//     the page can give it one, so an export that runs out of memory ends with a message naming the stage and the page stays drawn; on the page
+//     (runSegments) where it cannot (node, the tests). It rejects with an ExportError: the export's own refusal as it is, or EXPORT_FAILED (it threw)
+//     or EXPORT_LOST (its process died: "the export ran out of memory building the pit-lane check"), each saying nothing was written
 //
 // THE SELF-INTERSECTION CHECK IS ALWAYS ON. run() passes exportTrack no `selfCheck`, so its default (on) always holds,
 // and there is no way to turn it off from the app: a false red is settled in the geometry, never by loosening the check
@@ -26,6 +30,7 @@
 
 const { loadCjs } = require('../lib/cjs.js');
 const { createShim } = require('./node-shim.js');
+const EJ = require('./exportjob.js');
 
 const OUT = '/export';
 
@@ -85,11 +90,44 @@ async function removeEmptyNote(storage, t) {
  * write it; none, a blank name, or a function that throws gives today's author (src/export/fromwords.js authorOf). An opts.author given to
  * run/runSegments wins.
  */
-async function makeExporter(get, { author = null } = {}) {
+/**
+ * D437b: `runner` is the export's own process (app/export/exportrunner.js createExportRunner); left out, a page that has a document and Web Workers
+ * makes one the first time it exports (the files it boots with are the ones this exporter loaded), and null exports on the page. A function is called
+ * once, with sources() -> { worker, files }, and returns the runner (app/test/export-isolated-page.test.js wraps the worker's text this way).
+ */
+async function makeExporter(get, { author = null, runner: given } = {}) {
   const shim = createShim();
-  const fromwords = await loadCjs('src/export/fromwords.js', get, { builtins: shim.builtins, globals: { Buffer: shim.Buffer } });
+  const files = new Map();   // D437b: every file the exporter's modules were read from, for the export's own process (it cannot fetch them)
+  const keep = (p) => Promise.resolve(get(p)).then((t) => { files.set(p, t); return t; });
+  const fromwords = await loadCjs('src/export/fromwords.js', keep, { builtins: shim.builtins, globals: { Buffer: shim.Buffer } });
+  let runner = given, booted = null;
+  const bootFiles = () => booted || (booted = (async () => {
+    await loadCjs('src/core/adapter.js', keep, { builtins: shim.builtins, globals: { Buffer: shim.Buffer } });   // the core's lift (exportjob.js runJob)
+    for (const p of ['app/lib/cjs.js', 'app/export/node-shim.js', 'app/export/exportjob.js']) await keep(p);
+    return { worker: await get('app/export/exportworker.js'), files: Object.fromEntries(files) };
+  })());
+  const runnerNow = () => {
+    if (typeof runner === 'function') runner = runner(bootFiles);
+    if (runner !== undefined) return runner;
+    runner = null;
+    if (typeof document !== 'undefined' && document && typeof Worker === 'function') {
+      try { runner = require('./exportrunner.js').createExportRunner({ document, sources: bootFiles }); } catch (e) { runner = null; }
+    }
+    return runner;
+  };
+  const lose = (code, words, extra) => new fromwords.ExportError(code, `${words}. Nothing was written; the track is as it was`, extra);
+  // an answer from the export's own process, back into what runSegments would have returned or thrown
+  const settle = (a) => {
+    if (a.out) return a.out;
+    const e = a.error || {}, extra = {};
+    if (Array.isArray(e.red)) extra.red = e.red;
+    if (e.markerChecks) extra.markerChecks = e.markerChecks;
+    if (e.name === 'ExportError') throw new fromwords.ExportError(e.code, String(e.message).replace(`${e.code}: `, ''), extra);   // the export's own refusal, as it was
+    if (/allocation failed|out of memory/i.test(e.message || '')) throw lose('EXPORT_LOST', `the export ran out of memory ${e.stage} (${e.message})`);
+    throw lose('EXPORT_FAILED', `the export failed ${e.stage}: ${e.message}`);
+  };
   const authorNow = (given) => { if (given !== undefined) return given; if (typeof author !== 'function') return undefined; try { return author(); } catch (e) { return undefined; } };
-  return {
+  const ex = {
     checkTarget,
     resolveTarget,
     removeEmptyNote,
@@ -108,7 +146,23 @@ async function makeExporter(get, { author = null } = {}) {
       const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, author: authorNow(a), ...(test ? { test: true } : {}) });
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
+    // D437b: runSegments in the export's own process. The job is packed NOW, from the arguments as they are, before anything is awaited
+    async runSegmentsAsync(segments, meta, opts = {}) {
+      const r = runnerNow();
+      // on the page, an exporter made from this one with a runSegments of its own ({ ...ex, runSegments }: the tests' stand-in for a red) is honoured
+      if (!r) return (this && typeof this.runSegments === 'function' ? this : ex).runSegments(segments, meta, opts);
+      const { liftDoc, ...m } = meta || {};
+      const job = EJ.packJob(segments, { ...m, liftDoc }, { ...opts, author: authorNow(opts.author) });
+      let a;
+      try { a = await r.start({ job }).promise; } catch (e) {
+        if (e && e.lost) throw lose('EXPORT_LOST', e.stage === EJ.STARTING ? 'the export could not run: its process stopped before it started' : `the export ran out of memory ${e.stage}: its process stopped`);
+        if (e && e.cancelled) throw lose('EXPORT_CANCELLED', 'the export was cancelled');
+        throw lose('EXPORT_FAILED', `the export could not run: ${String((e && e.message) || e)}`);
+      }
+      return settle(a);
+    },
   };
+  return ex;
 }
 
 module.exports = { checkTarget, makeExporter };
