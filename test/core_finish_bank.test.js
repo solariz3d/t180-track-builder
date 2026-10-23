@@ -25,6 +25,11 @@
 //   7  turn 180, tail 1,200, roll 30: the same (9.16 g)
 //   8  the other side of that choice: an end banked 54° the way the closer turns (core_finish row 12's lap) is closed rolled LAST, its turns leaning on the end's own
 //      bank (5.55 g, against 8.08 rolled first), and the bank adds nothing on top of it (D434's upright rule): 0 out, under SIDE_BANKED_G
+//   9  D440 (O's D439 §5): a lap whose own turn is tight (180° over 400 m, R 127 m, then a 1,200 m tail rolling 10°): never a closer that leans out. At D439 the
+//      roll-last closer was taken leaning out at 1,171 of 1,172 curved stations, 9.22 g, against a roll-first one-turn route at R 126 m (~9.5 g). Its side
+//      load is not barred here: no ranking of the routes by it was built (exo_memory/handback/p-d440-O_2026-10-23.md §2)
+//  10  his two tracks keep D439's routes (the chair's D440 brief: "his two tracks must keep their D439 figures"): TEST TRACK 10 RSL at R 300, 206 m rolled first,
+//      3,990 m; TEST 10 LSR at R 300, 2,584 m. (Taking the lowest side load of EVERY route that passes chose R 900 for both, 11,426 and 10,413 m.)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -110,14 +115,14 @@ test('row 3: a closer with only gentle curves is banked by its share and no more
 });
 
 const SIDE_BANKED_G = 6;
-function pLap(turnDeg, tailM, rollDeg) {
+function pLap(turnDeg, tailM, rollDeg, turnM = 1500) {
   let d = D.createDoc(`P ${turnDeg}/${tailM}/${rollDeg}`);
   d = extend(d, { length: 1000, family: 'bowl', first: { c: 10 } });
-  d = extendTurnBy(d, { length: 1500, targets: { kv: 0 } }, (turnDeg * Math.PI) / 180);
+  d = extendTurnBy(d, { length: turnM, targets: { kv: 0 } }, (turnDeg * Math.PI) / 180);
   return extend(d, { length: tailM, targets: { c: 35, phi: (rollDeg * Math.PI) / 180 } });
 }
-function leansIn(turnDeg, tailM, rollDeg) {
-  const open = pLap(turnDeg, tailM, rollDeg), r = F.finishToStart(open), n0 = open.pieces.length, what = `turn ${turnDeg}, tail ${tailM}, roll ${rollDeg}`;
+function leansIn(turnDeg, tailM, rollDeg, turnM) {
+  const open = pLap(turnDeg, tailM, rollDeg, turnM), r = F.finishToStart(open), n0 = open.pieces.length, what = `turn ${turnDeg}, tail ${tailM}, roll ${rollDeg}`;
   assert.equal(r.doc.closed, true, `${what}: ${r.plan.report}`);
   open.pieces.forEach((P, i) => assert.equal(r.doc.pieces[i], P, `${what}: piece ${i} is the user's own, untouched`));
   const L = lean(r.doc, n0);
@@ -127,6 +132,17 @@ function leansIn(turnDeg, tailM, rollDeg) {
 test('row 5: P\'s turn 210, tail 300, roll 30: the roll straight laid first is not bent into a lean the wrong way', () => leansIn(210, 300, 30));
 test('row 6: P\'s turn 180, tail 1,200, roll 10: the closer that banks its turns is the one taken', () => leansIn(180, 1200, 10));
 test('row 7: P\'s turn 180, tail 1,200, roll 30: the closer that banks its turns is the one taken', () => leansIn(180, 1200, 30));
+test('row 9: a lap whose own turn is tight (180° over 400 m): never a closer that leans out', () => {
+  const open = pLap(180, 1200, 10, 400), r = F.finishToStart(open), L = lean(r.doc, open.pieces.length);
+  assert.equal(r.doc.closed, true, r.plan.report);
+  assert.equal(L.out, 0, `no curved station of the closer leans out (${L.out} of ${L.n} out; ${r.plan.report})`);
+});
+test('row 10: his two tracks keep the routes D439 gave them', { skip: privateRow('testtrack10-open.t180track', 'TEST TRACK 10') || privateRow('test10-open.t180track', 'TEST 10') }, () => {
+  for (const [file, word, len, rollFirst] of [['testtrack10-open.t180track', 'RSL', 3990, true], ['test10-open.t180track', 'LSR', 2584, false]]) {
+    const { plan } = F.finishToStart(openOf(file));
+    assert.deepEqual([plan.word, Math.round(plan.radiusM), plan.lengthM, plan.rollFirst], [word, 300, len, rollFirst], `${file}: ${plan.report}`);
+  }
+});
 test('row 8: an end banked the way the closer turns is closed rolled last, on its own bank and with nothing banked on top', () => {
   let d = D.createDoc('banked'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 500 }, -150 * DEG); d = extend(d, { length: 200 });
   d = extend(d, { length: 200, transition: 100, targets: { phi: 54 * DEG } }); d = extend(d, { length: 100, targets: { kv: 0 } });
