@@ -114,11 +114,11 @@ test('D446: on a closed lap the same pass is measured round the seam: a slit AT 
 });
 
 /** The curled bowl (D446): a square inward spiral of bowl road whose 5th leg runs beside its 1st, their centre lines one road width apart, the 5th banked 0.3 rad so its lip leans toward the 1st's: the lips come within 0.5 m (measured), as TEST 10 banked's within 0.64 m. */
-function curledBowl() {
+function curledBowl(apart = 0) {
   const D = require('../src/core/document.js'), { extend } = require('../src/core/extend.js'), { WIDTHS } = require('../src/geom/fonts.js');
   const R = 60, q = R * Math.PI / 2, turn = (d) => extend(extend(d, { length: q, transition: q, targets: { kh: -1 / R } }), { length: q, transition: q, targets: { kh: 0 } });
   let d = extend(D.createDoc('curled bowl'), { length: 300, family: 'bowl' });
-  for (const L of [200, 150, 200 - WIDTHS.bowl]) d = extend(turn(d), { length: L });
+  for (const L of [200, 150, 200 - WIDTHS.bowl - apart]) d = extend(turn(d), { length: L });   // apart: m more between the two centre lines (row 15)
   return extend(turn(d), { length: 150, transition: 40, targets: { phi: -0.3 } });
 }
 test('D446: validate on a built curled bowl, two passes whose lips come within 1 m: no downforce-ray-gap red; a near-touch, in plain words, with its source', () => {
@@ -132,4 +132,21 @@ test('D446: validate on a built curled bowl, two passes whose lips come within 1
   assert.ok(t.some((x) => x.s0 > 100 && x.s0 < 300), `on the first leg: ${JSON.stringify(t)}`);
   assert.match(SRC['near-touch'], /ARCHITECTURE.md:85/);
   assert.match(L.reasonText('near-touch'), /two parts of the road come within 1 m of each other edge to edge/);
+});
+
+// Row 15 (D446, the chair's addition): the near-touch is only for edges within MACH6.nearEdgeM. An edge whose probe meets another pass is always within
+// about 1.17 m of it (the probe is at most 1 m out in the edge's plane and the ray reaches 0.6 m below it: sqrt(1 + 0.6^2)), so the filter's range is
+// 1 to 1.17 m, and an edge farther off never reaches it. This curled bowl, its centre lines 0.6 m farther apart than row 14's, puts the closest approach there.
+function nearTouchesOf(doc) {
+  const G = require('../src/geom/index.js'), OJ = require('../app/core/overlapjob.js'), { walkScene, isDrivable } = require('../src/export/markers.js');
+  const r = OJ.resolveDoc(doc), p0 = G.buildPath(r.segments, { step: 2, closed: false, start: r.start }), p = r.lift ? r.lift(p0) : p0;
+  const mesh = G.buildMesh(p, r.segments, { selfCheck: true }), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
+  const near = []; rayGaps(roadMesh, p.samples, RAY, { near });
+  return { near, v: validate(p, r.segments, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, fullSpeed: true }) };
+}
+test('D446: another pass whose edge comes no closer than about 1.1 m is NOT a near-touch: only edges within 1 m are', () => {
+  const { near, v } = nearTouchesOf(curledBowl(0.6));
+  assert.ok(near.length > 0 && near.every((x) => x.edgeM > MACH6.nearEdgeM && x.edgeM < 1.2), `control: the probe met the other pass, every edge over 1 m from it: ${JSON.stringify(near.map((x) => [x.s, +x.edgeM.toFixed(3)]))}`);
+  assert.deepStrictEqual(v.info.filter((x) => x.reason === 'near-touch'), [], 'no near-touch');
+  assert.deepStrictEqual(v.red.filter((x) => x.reason === 'downforce-ray-gap'), [], 'and no gap');
 });
