@@ -239,10 +239,12 @@ function banked(doc, plan, minus = null) {
 /**
  * D438 (the user, 2026-10-22: "how the banking and cupping connects to the end of the track doesnt work right"): THE CUP COMES HOME OVER THE CLOSER. The new
  * road carried the end's cup to the start line and left the seam's cup row to pull it to p1's in the last 30–40 m (37.3° → 10° on TEST TRACK 10, 0.54–1.38 °/m,
- * where his own road never changes its cup faster than 0.021 °/m). Here the laid route's cup is moved by Δ·σ³(10 − 15σ + 6σ²) (smootherstep: no slope and no
- * slope change at either end) along the window, σ by each control point's Greville position over the window's length, Δ = p1's first cup less the laid end's:
- * the cup then reaches p1's at the start line, at a peak rate of 1.875·Δ/length, so the seam row has nothing left to do and the bank's return at the seam is no
- * longer on top of it. Only when every road piece of the window and p1 are cup pieces (a cup meets a legacy piece by its rendered edge, close.js heldCup).
+ * where his own road never changes its cup faster than CUP_RATE_DEG_M, 0.021 °/m). Here the laid route's cup is moved by Δ·σ along the window (LINEAR, the
+ * slowest a closer of that length allows), σ by each control point's Greville position over the window's length, Δ = p1's first cup less the laid end's: the
+ * cup then reaches p1's at the start line, so the seam row has nothing left to do and the bank's return at the seam is no longer on top of it. (A smootherstep
+ * ease was built first: its peak, 1.875·Δ/length, went over 0.021 on 14 of P's 45 short closers, exo_memory/handback/p-d438-review-P_2026-10-22.md §2 (a); the
+ * joints read within 0.2 °/100 m of it.) Where even Δ/length is over CUP_RATE_DEG_M the closer is too short to do better: the cup still comes home, and
+ * finishToStart's report states the rate (cupPeak). Only when every road piece of the window and p1 are cup pieces (a cup meets a legacy piece by its rendered edge, close.js heldCup).
  * A joint keeps the slope rule (a later piece's second point by the link rule), as bankPlan's does.
  */
 function cupHome(laid, window) {
@@ -251,11 +253,18 @@ function cupHome(laid, window) {
   const last = laid.pieces[road[road.length - 1]], delta = F.channels.c[0] - D.pieceEnd(last).c.v;
   if (!(Math.abs(delta) > 1e-9)) return laid;
   let s0 = 0; const startOf = new Map(); laid.pieces.forEach((P, p) => { startOf.set(p, s0); s0 += P.length || 0; });
-  const a = startOf.get(road[0]), z = startOf.get(road[road.length - 1]) + last.length, ease = (x) => { const q = Math.max(0, Math.min(1, x)); return q * q * q * (10 - 15 * q + 6 * q * q); };
+  const a = startOf.get(road[0]), z = startOf.get(road[road.length - 1]) + last.length, ease = (x) => Math.max(0, Math.min(1, x));
   const cs = new Map(road.map((p) => { const P = laid.pieces[p], U = D.knotVector(P); return [p, P.channels.c.map((c, i) => (p === road[0] && i < 2 ? c : c + delta * ease((startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3 - a) / (z - a))))]; }));
   road.forEach((p, j) => { if (j > 0 && road[j - 1] === p - 1) { const A = cs.get(p - 1), B = cs.get(p), Pa = laid.pieces[p - 1], Pb = laid.pieces[p], na = A.length;
     const hA = Pa.length - (Pa.knots.length ? Pa.knots[Pa.knots.length - 1] : 0), hB = Pb.knots.length ? Pb.knots[0] : Pb.length; B[0] = A[na - 1]; B[1] = B[0] + (hB / hA) * (A[na - 1] - A[na - 2]); } });
   return D.checkDoc({ ...laid, pieces: laid.pieces.map((P, p) => (cs.has(p) ? { ...P, channels: { ...P.channels, c: cs.get(p) } } : P)) });
+}
+/** D438: the fastest the cup changes (°/m, read every metre) on the cup pieces from index `from` on; 0 when none is a cup piece. */
+const CUP_RATE_DEG_M = 0.021;
+function cupPeak(doc, from) {
+  let worst = 0;
+  for (const P of doc.pieces.slice(from)) { if (P.type !== 'road' || !P.cup) continue; let prev = D.valuesAt(P, 0).c; for (let s = 1; s <= P.length; s++) { const c = D.valuesAt(P, Math.min(s, P.length)).c; worst = Math.max(worst, Math.abs(c - prev)); prev = c; } }
+  return worst;
 }
 /** The worst roll rate on the window's pieces, read as the checker reads it (validate's rollRates, its 20 m chord). */
 function bankRollPeak(doc, window) {
@@ -310,7 +319,10 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   const flip = residual(doc).flip, half = flip ? Math.PI : 0;
   const b0 = D.valuesAt(doc.pieces[0], 0).phi, b1 = D.valuesAt(last, last.length).phi, bank = b0 + half + TAU * Math.round((b1 - b0 - half) / TAU), rollRad = Math.abs(bank - b1);
   // D438: and long enough that its roll fits BANK_ACCEL (bankPlan): a roll of θ from rest to rest needs at least 2·√(θ/A) at an acceleration A; ROLL_ACCEL_FIT
-  // over that leaves room for the pinned ends (TEST TRACK 10: 54° on 87 m stepped 33.6 °/100 m under the outer wheels at both of its ends)
+  // over that leaves room for the pinned ends (TEST TRACK 10: 54° on 87 m stepped 33.6 °/100 m under the outer wheels at both of its ends).
+  // 1.5 is a MARGIN SET BY THE SHAPE OF THE BLOSS BLEND (P, exo_memory/handback/p-d438-review-P_2026-10-22.md §1.1), not a fit to one track: extend lays the roll
+  // as bloss(u) = u²(3 − 2u) (extend.js channelFn), whose acceleration peaks at both ends at 6θ/L²; at L = 1.5·2·√(θ/A) = 3√(θ/A) that is (2/3)·A for every θ.
+  // A change to channelFn's blend moves this margin.
   const roll0 = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil(Math.max((rollRad / ROLL_RATE) * rollGuess, ROLL_ACCEL_FIT * 2 * Math.sqrt(rollRad / BANK_ACCEL))) } : null;
   const gap = Math.hypot(doc.start.pos[0] - e.p[0], doc.start.pos[1] - e.y, doc.start.pos[2] - e.p[1]);
   const deg = (a) => Math.round((a / DEG) * 10) / 10, f0 = fwd(th0);
@@ -373,10 +385,12 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
         if (++left >= GATE_TRIES) break;
         continue;
       }
-      const added = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + P.length, 0);
+      const added = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + P.length, 0), cupRate = cupPeak(res.doc, doc.pieces.length);
+      // D438: the closer too short to bring the cup home at his own road's fastest says so, and at what rate (it is already the slowest the closer allows: cupHome)
+      const cupNote = cupRate > CUP_RATE_DEG_M ? `; the cup comes home at ${cupRate.toFixed(3)}°/m, faster than ${CUP_RATE_DEG_M}°/m: the new road is too short to bring it home slower` : '';
       const rolled = roll ? (first ? `, after ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright first` : `, then ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright onto the start`) : '';
-      const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}`;
-      return { result: { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollFirst: !!first, rollPeakDegM: Math.round(peak * 1000) / 1000, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: Math.round(added), report }) } };
+      const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}${cupNote}`;
+      return { result: { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollFirst: !!first, rollPeakDegM: Math.round(peak * 1000) / 1000, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: Math.round(added), cupRateDegM: Math.round(cupRate * 10000) / 10000, report }) } };
     }
     return { fail: { tried: all.length, best, worstRoad } };
   };

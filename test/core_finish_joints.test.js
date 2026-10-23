@@ -14,6 +14,10 @@
 //   4  TEST 10: the same
 //   5  a track built here (public, so the rows run without the private fixtures, and the mutation harnesses can name them): a cup laid at 10°, a half turn, then
 //      300 m rolling 40° and cupping to 35°; its closer rolls upright first, banks its turns, and brings the cup home: rows 1 and 3's bars on it
+//   6  a SHORT closer built here, P's lap (exo_memory/handback/p-d438-review-P_2026-10-22.md §2 (a)): cup 10°, a 150° turn over 1,500 m, then 300 m rolling 54° and
+//      cupping to 35°: its cup comes home no faster than 0.021 °/m (smootherstep's peak, 1.875·Δ/length, read 0.0217 there)
+//   7  the FALLBACK: a closer too short for 0.021 (the tail cups to 120°, Δ = 110°): the cup still comes home, at no more than 1.5·Δ/length (the slowest the
+//      closer allows, linear, with the first piece's joint points held), and the report and the plan state the rate, as read on the closed lap
 // "Every closer joint" includes its first, where the closer meets the user's own last piece (TEST TRACK 10's p40|p41: Finish's roll straight starting).
 'use strict';
 const test = require('node:test');
@@ -80,11 +84,11 @@ test('row 2: TEST 10: every closer joint and the seam step no more than his own 
 test('row 3: TEST TRACK 10: the closer brings the cup home over its length, no faster than his own road changes it', { skip: privateRow('testtrack10-open.t180track', 'TEST TRACK 10') }, () => cupHome(openOf('testtrack10-open.t180track'), 'TEST TRACK 10'));
 test('row 4: TEST 10: the closer brings the cup home over its length, no faster than his own road changes it', { skip: privateRow('test10-open.t180track', 'TEST 10') }, () => cupHome(openOf('test10-open.t180track'), 'TEST 10'));
 
-function builtHere() {
+function builtHere({ turnDeg = 180, tailM = 300, rollDeg = 40, cupTo = 35 } = {}) {
   let d = D.createDoc('rolled cup');
   d = extend(d, { length: 1000, family: 'bowl', first: { c: 10 } });
-  d = extendTurnBy(d, { length: 1500, targets: { kv: 0 } }, Math.PI);
-  return extend(d, { length: 300, targets: { c: 35, phi: (40 * Math.PI) / 180 } });
+  d = extendTurnBy(d, { length: 1500, targets: { kv: 0 } }, (turnDeg * Math.PI) / 180);
+  return extend(d, { length: tailM, targets: { c: cupTo, phi: (rollDeg * Math.PI) / 180 } });
 }
 test('row 5: a track built here: its closer rolls upright, steps no more than the bar at every joint and the seam, and brings the cup home slowly', () => {
   const open = builtHere(), { r, doc, n0 } = closer(open, 'the rolled cup');
@@ -94,4 +98,18 @@ test('row 5: a track built here: its closer rolls upright, steps no more than th
   assert.equal(r.plan.rollFirst, true, `the closer rolls upright first (${r.plan.report})`);
   stepsUnderBar(open, 'the rolled cup');
   cupHome(open, 'the rolled cup');
+});
+test('row 6: a short closer (P\'s turn 150, tail 300, roll 54) brings the cup home no faster than his own road changes it', () => {
+  cupHome(builtHere({ turnDeg: 150, tailM: 300, rollDeg: 54 }), 'the short closer');
+});
+test('row 7: a closer too short for his rate brings the cup home at the slowest rate it allows, and the report says the rate', () => {
+  const open = builtHere({ cupTo: 120 }), { r, doc, n0 } = closer(open, 'the steep cup'), first = doc.pieces[0], last = doc.pieces.at(-1);
+  const L = doc.pieces.slice(n0).reduce((a, P) => a + P.length, 0), delta = Math.abs(first.channels.c[0] - D.pieceEnd(open.pieces.at(-1)).c.v);
+  let worst = 0; for (const P of doc.pieces.slice(n0)) { let prev = D.valuesAt(P, 0).c; for (let s = 1; s <= P.length; s++) { const c = D.valuesAt(P, Math.min(s, P.length)).c; worst = Math.max(worst, Math.abs(c - prev)); prev = c; } }
+  assert.ok(delta / L > CUP_RATE, `control: the closer is too short for ${CUP_RATE} °/m (Δ ${delta.toFixed(1)}° over ${L.toFixed(0)} m)`);
+  assert.ok(worst <= 1.5 * (delta / L), `the cup comes home at ${worst.toFixed(4)} °/m, within 1.5 × the slowest the closer allows, ${(delta / L).toFixed(4)}`);
+  assert.ok(Math.abs(D.pieceEnd(last).c.v - first.channels.c[0]) < 1e-6, 'the cup meets p1\'s at the seam');
+  const said = r.plan.report.match(/the cup comes home at ([\d.]+)°\/m/);
+  assert.ok(said, `the report states the rate: ${r.plan.report}`);
+  assert.ok(Math.abs(Number(said[1]) - worst) < 1e-3 && Math.abs(r.plan.cupRateDegM - worst) < 1e-4, `the stated rate (${said[1]}, plan ${r.plan.cupRateDegM}) is the one read on the lap, ${worst.toFixed(4)}`);
 });
