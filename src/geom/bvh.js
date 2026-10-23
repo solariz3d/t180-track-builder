@@ -19,7 +19,8 @@
 // Coplanar triangles (every vertex within `EPS_PLANE` of the other's plane: two roads crossing at one height ARE
 // coplanar) are tested in 2D: an edge pair crosses, or a vertex lies inside the other triangle. Touching counts.
 //
-// STACKED (§4 `:85`, "drivable surfaces stacked within about 2 m"): from every surface vertex, a segment along its
+// STACKED (§4 `:85`, "drivable surfaces stacked within about 2 m"; a measure, not a red, since D432: its consumers turn only `intersections`
+// into reds, through asFolds; two passes that do not meet may be closer than 2 m): from every surface vertex, a segment along its
 // normal to `stackedM` on both sides; a triangle of another pass crossing it is a stack, with gap = the distance along
 // the normal. Every road mesh is drivable (walls are road, §4 `:86`). Sampled at the vertices, so between vertices
 // (at most `maxAcross` = 1 m across and `maxStep` = 4 m along, mesh.js) a stack narrower than that could be missed.

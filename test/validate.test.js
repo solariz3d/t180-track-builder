@@ -154,12 +154,17 @@ test('steep-without-raycast: above 50° is red only for a non-CSP export; 49° i
   assert.ok(!validate(p, [X.seg({ speed: 30, profile: prof(89) })]).red.some((x) => x.reason === 'steep-without-raycast'));
 });
 
-test('stacked-within-2m: a second pass 1.5 m above the first is red; 2.5 m above is not; one pass is never stacked', () => {
+// AMENDED (D432): this row pinned the 2 m stack as RED. The rule changed (two passes may be closer than 2 m as long as they do not clip): the stack is now
+// information (info), and a pass that lies ON the other is red, as self-intersection (the clip test in stacked()). The measure itself is unchanged.
+test('stacked-within-2m: a second pass 1.5 m above the first is information, not red; 2.5 m above is neither; one pass is never stacked; a pass ON the first clips (red)', () => {
   const two = (h) => { const a = X.straight(40, { seg: 0 }), b = X.straight(40, { seg: 1, start: [0, h, 0], s0: 100 }); return X.pathOf([...a, ...b]); };
   const g = [X.seg({ speed: 30 }), X.seg({ id: 'b', speed: 30 })];
-  assert.ok(validate(two(1.5), g).red.some((x) => x.reason === 'stacked-within-2m'));
-  assert.ok(!validate(two(2.5), g).red.some((x) => x.reason === 'stacked-within-2m'));
-  assert.ok(!validate(X.pathOf(X.leftTurn(35, Math.PI)), [X.seg({ speed: 30 })]).red.some((x) => x.reason === 'stacked-within-2m'), 'a tight turn is one pass');
+  const at15 = validate(two(1.5), g);
+  assert.ok(at15.info.some((x) => x.reason === 'stacked-within-2m'), 'the stack is still found');
+  assert.ok(!at15.red.some((x) => x.reason === 'stacked-within-2m' || x.reason === 'self-intersection'), 'and is not red: the passes do not clip');
+  assert.ok(!validate(two(2.5), g).info.some((x) => x.reason === 'stacked-within-2m'));
+  assert.ok(!validate(X.pathOf(X.leftTurn(35, Math.PI)), [X.seg({ speed: 30 })]).info.some((x) => x.reason === 'stacked-within-2m'), 'a tight turn is one pass');
+  assert.ok(validate(two(0), g).red.some((x) => x.reason === 'self-intersection'), 'a second pass lying on the first clips: red');
 });
 
 test('seam-past-envelope is AMBER past 5.9° between neighbouring stations (FINDINGS.md:24), quiet at 5°', () => {

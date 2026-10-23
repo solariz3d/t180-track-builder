@@ -40,8 +40,13 @@ const MACH6 = Object.freeze({
   // sharper than any proven track's p90: AMBER (FINDINGS.md:110-111 calls such seams red but "inferred, not yet observed
   // failing"; ARCHITECTURE.md:81-87, the master, leaves them off the red list).
   seamP90Deg: 5.9,
-  // ARCHITECTURE.md:85 "drivable surfaces stacked within about 2 m" (RED).
+  // ARCHITECTURE.md:85 "drivable surfaces stacked within about 2 m": INFORMATION since D432, not red. The user, 2026-10-22: "the reds are bullshit, the
+  // tracks can be under 2m apart as long as the geometry isnt clipping into eachother". Geometry that clips is red as self-intersection; a stack that
+  // does not clip is still measured (src/validate/index.js stacked) and reported in the result's info, with this distance.
   stackedM: 2,
+  // D435, the user (2026-10-22 15:34, asked how little room under another road should warn): "i think 1m is good". A road with another passing over it, without
+  // clipping, closer than this along its normal is AMBER ('low-overhead'): a car on it would hit the road above. It does not block an export.
+  overheadM: 1,
   // ARCHITECTURE.md:87 "surfaces above ~50° without CSP's wall raycasting (vanilla AC tyres ignore steep surfaces;
   // community-reported)" (RED only when the export does not target CSP).
   steepDeg: 50,

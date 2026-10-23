@@ -10,8 +10,8 @@
 //                                                  wrong, and knotM ≤ ramp draws it right). opts are extend's for the other channels (width, climb, bank…).
 //   tightestSharp(doc, opts, { angle, ramp })        the smallest radius (m, to 0.1 m) at which the corner stays GREEN for the head's width and cross-section.
 //
-// THE MINIMUM RADIUS is the geometry's, not a cap (B §2 L4/L5): the validator at full speed reds the fold (1 − κ·o ≤ 0 at the inner edge) and surfaces stacked
-// within 2 m, and ambers a normal load past the proven 90 g. Sharp refuses a radius at which any red or amber falls on the corner (SHARP_TOO_TIGHT), naming the
+// THE MINIMUM RADIUS is the geometry's, not a cap (B §2 L4/L5): the validator at full speed reds the fold (1 − κ·o ≤ 0 at the inner edge) and road that runs into
+// itself (since D432 the clip test; surfaces merely within 2 m are information), and ambers a normal load past the proven 90 g. Sharp refuses a radius at which any red or amber falls on the corner (SHARP_TOO_TIGHT), naming the
 // tightest that stays green ("tightest at this width: 15.0 m"), and changes nothing. It is judged on a PROBE: a straight with the head's cross-section, the
 // corner, and a straight after it, so it is a property of the width and cross-section (and cheap on a long track); what the corner does to the REST of the
 // track (running over another part of it) is the validator's to show, as for any piece.

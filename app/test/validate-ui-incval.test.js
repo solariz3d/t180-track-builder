@@ -189,7 +189,9 @@ test('a drag held OPEN on a mid-track word: every tick is windowed and exact whe
     assert.ok(windowed >= 3, `seed ${seed}: only ${windowed} of 4 ticks were windowed`);
   }
 });
-test('never a stale "clean": a settled station stacked on road that the drag moved shows RED during the drag, and the moved road shows PENDING', async () => {
+// AMENDED (D432): the 2 m stack is information since D432 and only a CLIP is red (the clip test in src/validate/index.js stacked(), which this live checker
+// runs, having no mesh). The rule is the same, held for what is red now: a settled station that CLIPS road the drag moved shows RED during the drag
+test('never a stale "clean": a settled station clipping road that the drag moved shows RED during the drag, and the moved road shows PENDING', async () => {
   // the tight left spiral stacks on itself; dragging an early word swings the whole tail over the road before it
   const { shell, ctl } = await rig({ share: true });
   shell.setPicker('dir', 'L');
@@ -198,8 +200,8 @@ test('never a stale "clean": a settled station stacked on road that the drag mov
   shell.beginDrag(); shell.dragTo(w.id, { handles: { length: w.handles.length * 1.3 } });
   assert.strictEqual(checkState(shell, ctl, 'the spiral, w2 dragged'), 'windowed');
   const S = ctl.state.path.samples, pend = ctl.state.result.pendingFrom, end = S.findIndex((p) => p.s >= pend - 1e-9);
-  const onMoved = [...ctl.state.result._raw.stacked.values()].filter((e) => e.i < end && e.p >= end);
-  assert.ok(onMoved.length > 0, 'a settled station is stacked on a partner in the pending stretch: that pair was measured, not deferred');
+  const onMoved = [...ctl.state.result._raw.stacked.values()].filter((e) => e.i < end && e.p >= end && e.clip);
+  assert.ok(onMoved.length > 0, 'a settled station clips a partner in the pending stretch: that pair was measured, not deferred');
   for (const e of onMoved) assert.strictEqual(Array.from(ctl.state.map.stations[e.i].levels).every((v) => v === LEVEL.RED), true, `station ${e.i} (s ${e.s}) shows red`);
   shell.endDrag();
   assert.strictEqual(checkState(shell, ctl, 'the spiral, drag ended'), 'full');

@@ -36,10 +36,12 @@ test('length (a tight word): the shortest clean length, and one millimetre short
   assert.ok(b.handles.length.min < b.handles.length.value);
 });
 
-test('curvature (turn): swinging a tight word past its bound lays the track over itself (stacked), one quantum on', () => {
+// AMENDED (D432): the bound ended at the 2 m stack, which is information since D432; it now ends where the road actually runs into itself (self-intersection,
+// the clip test in src/validate/index.js stacked()), a little further on (measured: 3.7695 rad, was 3.7578 at the stack)
+test('curvature (turn): swinging a tight word past its bound lays the track into itself (self-intersection), one quantum on', () => {
   const d = doc([['straight'], ['tight'], ['straight']]);
   const b = handleBounds(d, 'w2', { handles: ['turn'], step: 2 });
-  assert.deepStrictEqual(edgeHolds(d, 'w2', 'turn', b, 'max', { step: 2 }).reasons, ['stacked-within-2m']);
+  assert.deepStrictEqual(edgeHolds(d, 'w2', 'turn', b, 'max', { step: 2 }).reasons, ['self-intersection']);
   edgeHolds(d, 'w2', 'turn', b, 'min', { step: 2 });
 });
 
@@ -71,10 +73,12 @@ test('bank on a CSP export has no red limit: the bound is the document range, an
   assert.strictEqual(b.handles.roll1.above.kind, 'range');
 });
 
-test('width (a wall-ride): widened past its bound, the two sides of the U-turn stack; at the bound it is clean', () => {
+// AMENDED (D432): the bound ended at the 2 m stack, which is information since D432; it now ends where the two sides of the U-turn meet (self-intersection,
+// the clip test), wider than before (measured: 44.59 m, was 39.93 at the stack)
+test('width (a wall-ride): widened past its bound, the two sides of the U-turn meet; at the bound it is clean', () => {
   const d = doc([['straight'], ['wall-ride'], ['straight']]);
   const b = handleBounds(d, 'w2', { handles: ['width'], step: 2 });
-  assert.deepStrictEqual(edgeHolds(d, 'w2', 'width', b, 'max', { step: 2 }).reasons, ['stacked-within-2m']);
+  assert.deepStrictEqual(edgeHolds(d, 'w2', 'width', b, 'max', { step: 2 }).reasons, ['self-intersection']);
 });
 
 test('wall height (a wall-ride): raised past its bound it turns red; at the bound it is clean', () => {
