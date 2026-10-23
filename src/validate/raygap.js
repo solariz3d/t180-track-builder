@@ -108,7 +108,7 @@ function rayGaps(meshes, stations, ray, opts = {}) {
   const WELD = 0.005;
   const lapM = Number.isFinite(opts.lapM) && opts.lapM > 0 ? opts.lapM : null, near = Array.isArray(opts.near) ? opts.near : null;
   /** How far apart two stations are along the road: round a closed lap when its length is given. */
-  const alongM = (a, b) => { const d = Math.abs(a - b); return lapM === null ? d : Math.min(d, Math.abs(lapM - (d % lapM))); };
+  const alongM = (a, b) => { const d = Math.abs(a - b); return lapM === null ? d : Math.min(d, lapM - d); };   // s 0 and s = lapM are one place (P's D446 review: d % lapM read them a lap apart)
   let nIdx = 0, nPos = 0; for (const m of meshes) { nIdx += m.indices.length; nPos += m.positions.length / 3; }
   // the weld: a vertex is the FIRST earlier vertex within WELD, searched bucket by bucket (i, j, k from −1 to 1) and in each bucket in the order added
   const P = new Float64Array(nPos * 3), buckets = tripleIndex(Math.max(16, nPos)), next = new Int32Array(nPos).fill(-1);

@@ -150,3 +150,39 @@ test('D446: another pass whose edge comes no closer than about 1.1 m is NOT a ne
   assert.deepStrictEqual(v.info.filter((x) => x.reason === 'near-touch'), [], 'no near-touch');
   assert.deepStrictEqual(v.red.filter((x) => x.reason === 'downforce-ray-gap'), [], 'and no gap');
 });
+
+// Row 16 (D446, P's review): a closed lap's first and last samples sit at one place (s 0 and s = the lap's length), and the same pass must read them so.
+// The construction is P's (lighthouse exo_memory/handback/p-d446-review-P_2026-10-23.md, its scratchpad seam446.js), copied: a bowl road closed by
+// finishToStart, and a REAL 0.3 m slit at the seam (the mesh's vertices on the plane through s 0 unwelded on the side before it and moved 0.3 m back).
+// Mid-lap the same slit reads widthM 0.5 (the first probe past 0.3 m); at the seam it must too, and no edge there is another pass.
+function seamSlitLap() {
+  const D = require('../src/core/document.js'), { extend } = require('../src/core/extend.js'), { extendTurnBy } = require('../src/core/turnby.js'), F = require('../src/core/finish.js');
+  const G = require('../src/geom/index.js'), OJ = require('../app/core/overlapjob.js'), { walkScene, isDrivable } = require('../src/export/markers.js');
+  let d = D.createDoc('seam'); d = extend(d, { length: 800, family: 'bowl', first: { c: 10 } }); d = extendTurnBy(d, { length: 600, targets: { kv: 0 } }, Math.PI); d = extend(d, { length: 600, targets: { c: 35 } });
+  const doc = F.finishToStart(d).doc, q = OJ.resolveDoc(doc), p0 = G.buildPath(q.segments, { step: 2, closed: !!doc.closed, start: q.start }), p = q.lift ? q.lift(p0) : p0;
+  const mesh = G.buildMesh(p, q.segments, { selfCheck: true }), st = p.samples[0], Tt = st.T, along = (v) => (v[0] - st.pos[0]) * Tt[0] + (v[1] - st.pos[1]) * Tt[1] + (v[2] - st.pos[2]) * Tt[2];
+  let moved = 0;
+  const road = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length).map((m) => {
+    const P = Array.from(m.positions), I = Array.from(m.indices), map = new Map(), vtx = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+    for (let t = 0; t + 2 < I.length; t += 3) {
+      const a = vtx(I[t]), b = vtx(I[t + 1]), c = vtx(I[t + 2]), cen = [0, 1, 2].map((k) => (a[k] + b[k] + c[k]) / 3);
+      if (Math.hypot(cen[0] - st.pos[0], cen[2] - st.pos[2]) > 40 || along(cen) >= 0) continue;   // near the seam, before its plane, only
+      for (const k of [0, 1, 2]) {
+        const v = vtx(I[t + k]); if (Math.abs(along(v)) >= 1e-3) continue;
+        let j = map.get(I[t + k]); if (j === undefined) { j = P.length / 3; P.push(v[0] - 0.3 * Tt[0], v[1] - 0.3 * Tt[1], v[2] - 0.3 * Tt[2]); map.set(I[t + k], j); moved++; }
+        I[t + k] = j;
+      }
+    }
+    return { ...m, positions: Float32Array.from(P), indices: Uint32Array.from(I) };
+  });
+  return { p, segments: q.segments, folds: mesh.folds, road, moved };
+}
+test('D446: on a built closed lap a 0.3 m slit AT the seam reads as mid-lap: every gap edge at most 0.5 m wide, and no near-touch', () => {
+  const L = seamSlitLap();
+  assert.ok(L.p.closed && L.moved > 0, `control: a closed lap, and the slit made (${L.moved} vertices moved)`);
+  const v = validate(L.p, L.segments, { csp: true, softCollision: true, folds: L.folds, roadMesh: L.road, fullSpeed: true });
+  const gaps = v.red.filter((x) => x.reason === 'downforce-ray-gap');
+  assert.ok(gaps.length > 0, 'the slit is red');
+  assert.ok(gaps.every((x) => x.worst <= 0.5), `every gap edge at most 0.5 m wide: ${JSON.stringify(gaps.map((x) => [x.s0, x.s1, x.worst]))}`);
+  assert.deepStrictEqual(v.info.filter((x) => x.reason === 'near-touch'), [], 'no near-touch at the seam');
+});

@@ -60,7 +60,8 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
       // D250: the line says where it went (the whole folder) and that exporting again updates that same folder
       const where = names.map((n) => `${root}\\content\\tracks\\${n}`).join(', ');
       // D250 item 2: a jump the car may fly past is installed, and said (the keeper tunes jumps by driving them); the export's other warnings stay where they were
-      const jumps = ((out.result && out.result.warnings) || []).filter((w) => /^jump: /.test(w));
+      // D446: and two parts of the road whose edges come within 1 m (validate's near-touch), said where the export's outcome is read
+      const jumps = ((out.result && out.result.warnings) || []).filter((w) => /^(jump|near-touch): /.test(w));
       // D264: the test export says what it is, and how many reds it carries (the exporter's own TEST EXPORT warning)
       const unfinished = test ? `; this track is not closed, so it was exported as an unfinished TEST: the road ends in a run-off and a wall; reds are listed as warnings${((out.result && out.result.warnings) || []).filter((w) => /^TEST EXPORT/.test(w)).map((w) => ` (${w})`).join('')}` : '';
       // D372: Assetto Corsa keeps a ghost and the CMRT HUD its laps by the track's NAME, so after a change of shape they were moved aside; never silent, either way

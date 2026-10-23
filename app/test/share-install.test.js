@@ -134,6 +134,15 @@ test('D250: a jump the car may fly past is INSTALLED, and the message says so in
   assert.ok(!/jump:/.test(plain.message), 'control: no jump, no jump line');
 });
 
+test('D446: two parts of the road within 1 m edge to edge (the near-touch warning of the export) ride in the install message; an amber still does not', async () => {
+  const native = fakeNative(); native.root = 'G:/games/assettocorsa';
+  const nearLine = 'near-touch: two parts of the road come within 0.63 m of each other edge to edge, at 2.57 km, 2.93 km (information: it does not stop the export)';
+  const build = () => ({ result: { warnings: ['amber: roll-rate at s 1.0–2.0 m', nearLine] }, folders: [{ folder: 't180b_near', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] });
+  const r = await createInstaller({ build, native, getDoc: () => ({ ...D.createDoc('x'), name: 'Near' }), getTextures: () => null }).install();
+  assert.strictEqual(r.ok, true, r.message); assert.strictEqual(native.installs.length, 1, 'it is installed');
+  assert.ok(r.message.includes(nearLine), r.message); assert.ok(!r.message.includes('roll-rate'), 'the amber stays out');
+});
+
 test('an unnamed track is not installed: the user is asked to name it, and nothing is written', async () => {
   const native = fakeNative(); native.root = 'G:/games/assettocorsa';
   const exporter = await makeExporter(get);
