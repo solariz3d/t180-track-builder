@@ -146,8 +146,19 @@ test('row 11: F.roadHold is the own test of the lap proof: the same place on the
 // when no road the car can stay on exists from where the track ends (here it has dropped 148 m and points down 18 degrees), Finish says so by name, with where and how hard, and what to
 // do, instead of closing the loop into a lap the checker fails (the old answer on this track: a closed loop the car leaves at 2.2 km)
 test('row 13: an end Finish cannot close onto a road the car stays on is refused by name, with where the car leaves the road and what to change', () => {
-  let d = D.createDoc('dropped'); d = extend(d, { length: 300 }); d = extendTurnBy(d, { length: 400 }, 90 * DEG); d = extend(d, { length: 600, transition: 300, targets: { kv: -0.001 } }); d = extend(d, { length: 100, targets: { kv: 0 } });
+  // AMENDED (D434, seat O; the librarian's ruling (b), librarian/2026-10-18.md 20:44): the drop is kv −0.0015, was −0.001. Since D434 Finish banks the curves it lays, and
+  // at −0.001 its new road now holds the car (finish.js roadHold 2.31 g), so it closes. Finish gates only the road it lays (ruled: a whole-lap gate would stop it closing
+  // any lap with a red in the user's own road), so that lap closes although the checker fails it on the user's own drop; the assertion after this one holds that.
+  // −0.0015 is refused before and after D434 (exo_memory/handback/p-d434-O_2026-10-22_evidence/row13.js)
+  const dropped = (kv) => { let d = D.createDoc('dropped'); d = extend(d, { length: 300 }); d = extendTurnBy(d, { length: 400 }, 90 * DEG); d = extend(d, { length: 600, transition: 300, targets: { kv } }); return extend(d, { length: 100, targets: { kv: 0 } }); };
+  const d = dropped(-0.0015);
   assert.throws(() => F.finishToStart(d), (e) => e.name === 'CoreError' && e.code === 'FINISH_LEAVES_ROAD' && /the car would leave the road at [0-9]+[.][0-9][0-9] km [(]a load of -?[0-9]+ g/.test(e.message) && /[0-9.]+ m below it/.test(e.message) && /level and straighten the last pieces/.test(e.message), 'refused by name');
+  // D434: at −0.001 Finish closes (the road it lays holds the car), and the checker names where the car leaves: about 1,206 m, on the user's own 600 m drop
+  // (700–1,300 m), not on the new road (from 1,400 m)
+  const shallow = dropped(-0.001), r = F.finishToStart(shallow), lap = lapOf(r.doc), first = (lap.where || [])[0];
+  assert.equal(r.doc.closed, true, r.plan.report);
+  assert.equal(lap.ok, false, 'the checker fails the lap');
+  assert.ok(first && first.reason === 'leaves-surface' && first.s >= 1190 && first.s <= 1220, `the checker names the car leaving the surface at about 1,206 m: ${JSON.stringify(first)}`);
 });
 
 

@@ -167,6 +167,144 @@ function roadHold(doc, from) {
   return { worst, at };
 }
 
+/** D439: the peak side load (g) at the design speed on the pieces from index `from` on of a closed document: the validator's f = v²κ⃗ + g·ŷ across the road (the
+ *  centreline, every station on road), as core_finish_bank's lean() reads it. */
+function sideLoad(doc, from) {
+  const { segments, path } = toPath(doc, { step: 2 }), ids = new Set(doc.pieces.slice(from).map((P) => P.id)), v = V_DESIGN;
+  let worst = 0;
+  for (const q of path.samples) { const g = segments[q.seg]; if (g.kind === 'gap' || !ids.has(g.id)) continue; const k = q.kvec; worst = Math.max(worst, Math.abs((v * v * k[0] * q.L[0] + (v * v * k[1] + G) * q.L[1] + v * v * k[2] * q.L[2]) / G)); }
+  return worst;
+}
+
+// D434 (the user, 2026-10-22, TEST TRACK 10: "there needs to be a nuance for banking in large curves like that to support the car better"; the librarian's ruling,
+// plan_d434 "Part 2 ruled"): THE FINISH BANKS THE CURVES IT MAKES. Its turns were laid flat: on TEST TRACK 10 the closer leaned −0.9° on average, 453 curved stations
+// leaning out, and the side load at the design speed reached 10.68 g. Each new piece is banked by BANK_SHARE of the balance bank at the validator's design speed,
+// −atan(v²·k/g) (the sign measured in the normal and the flipped frame, exo_memory/handback/p-d434-O_2026-10-22.md §2; 0.75 leaned TEST TRACK 10's closer as the
+// user's own hand bank before it does, 53.8° against 53.2°), so a gentle curve gets its small share and a straight none. The bank follows the curvature, so it
+// eases in with the curve, and it is RATE-LIMITED: at 460 km/h the balance bank is steepest near a straight (atan's slope is largest at 0), so a curve that eases
+// out in a knot or two would roll the road several degrees a metre (TEST TRACK 10's last turn into the seam: 2.19°/m at 0.75). The bank's control points along the
+// window, in lap order through the joints, are pinned to the laid bank at every joint (each piece's first two and last two points), and then limited, forward and
+// backward, to BANK_ROLL of the amber per metre of their Greville spacing; a cubic B-spline's slope is bounded by its control polygon's, so the bank's own roll is
+// too. A later piece's second point is set by the joint's slope rule, so every joint stays C1. It is sized from the CLOSED route's curvature: bank by the laid
+// route's, close, swap that bank for the closed route's, close again (the bank row). Bank rolls the road about its centreline and does not move it, so the closure
+// is the same. A backstop: if the road still rolls past the amber on the window, the share is scaled down.
+const BANK_SHARE = 0.75, BANK_TRIES = 3, BANK_ROLL = 0.9, V_DESIGN = MACH6.designSpeedKmh / 3.6;
+// D438 (the user, 2026-10-22 21:33: "where the pieces connect there is too big of a bump"; plan_d438 "Part 2 ruled"): the rate limit bounded how fast the bank
+// turned but not how suddenly that rate started, so at each pinned joint the roll rate jumped from 0 to the cap in one knot, felt 8.4 m out as a step in the
+// surface's vertical curvature (95.9 °/100 m at TEST TRACK 10's p41|p42, against 21.7 at his own joints' 90th percentile). BANK_ACCEL bounds the change of the
+// control polygon's slope per metre (rad/m²): at a C1 joint the outer-wheel step is about 8.4 m · 2·BANK_ACCEL, so 21.7 °/100 m (0.00379 /m) allows 2.26e-4.
+// It acts on the added bank, like the rate limit: the pins already keep it off any roll the route lays (a roll straight is not banked), so bounding the total
+// instead changed nothing on any track measured, and was removed (D438 J3/J10, exo_memory/handback/p-d438-build-O_2026-10-22.md §4).
+const BANK_ACCEL = 2e-4, BANK_SWEEPS = 400, ROLL_ACCEL_FIT = 1.5;
+const bankOf = (k, share) => -share * Math.atan((V_DESIGN * V_DESIGN * k) / G);
+/**
+ * The bank to add to each control point of each road piece of `window` ([p] → array, 0 outside), from kFrom's curvature: pinned at the window's ends, rate-limited.
+ * Only a piece laid UPRIGHT is banked: its laid bank within ROLL_FREE of `upright` (the bank the lap closes to, the start's, finishToStart's `bank`). A turn laid on
+ * the user's own bank (a roll laid LAST, after the turns) keeps it: the bank is a lean into the curve against gravity, and rolling the road upright inside the turn
+ * is what finish.js never does (lay: "a roll is never laid in a turn"); such a route is judged as it was laid, and the roll-first order banks its upright turns.
+ */
+function bankPlan(kFrom, window, share, uprightSet) {
+  const road = window.filter((p) => kFrom.pieces[p].type === 'road'), rate = (BANK_ROLL * ROLL_AMBER_DEG_M * Math.PI) / 180, seq = [];
+  let s0 = 0; const startOf = new Map(); kFrom.pieces.forEach((P, p) => { startOf.set(p, s0); s0 += P.length || 0; });
+  road.forEach((p, j) => {
+    const P = kFrom.pieces[p], U = D.knotVector(P), n = P.channels.kh.length, linked = j > 0 && road[j - 1] === p - 1;
+    const up = uprightSet.has(p);
+    // pinned: each piece's first two and last two points keep the laid bank (the ruling: meet the laid bank at EVERY joint, so a straight between turns gets none)
+    for (let i = linked ? 1 : 0; i < n; i++) { const pinned = i < 2 || i > n - 3; seq.push({ p, i, s: startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3, t: up && !pinned ? bankOf(P.channels.kh[i], share) : 0, pinned }); }
+  });
+  // the pinned points stay where they are in both passes (a pass that moved them would undo the pin: the close would then meet the seam's bank row in one knot)
+  for (let k = 1; k < seq.length; k++) { if (seq[k].pinned) continue; const d = rate * (seq[k].s - seq[k - 1].s); seq[k].t = Math.max(seq[k - 1].t - d, Math.min(seq[k - 1].t + d, seq[k].t)); }
+  for (let k = seq.length - 2; k >= 0; k--) { if (seq[k].pinned) continue; const d = rate * (seq[k + 1].s - seq[k].s); seq[k].t = Math.max(seq[k + 1].t - d, Math.min(seq[k + 1].t + d, seq[k].t)); }
+  // D438: THE ROLL'S ACCELERATION. Each three neighbours' slope change, |(b₊ − b)/d₁ − (b − b₋)/d₀| ≤ BANK_ACCEL·(d₀ + d₁)/2, and each span's rate above, are
+  // convex sets; the free points are projected onto each in turn, sweep after sweep (alternating projections), the pins never moved. Where the pins themselves
+  // break a bound (two pinned spans meeting) nothing can move and it is left as laid.
+  for (let sweep = 0; sweep < BANK_SWEEPS; sweep++) {
+    let worst = 0;
+    for (let k = 1; k + 1 < seq.length; k++) {
+      const a = seq[k - 1], m = seq[k], c = seq[k + 1], d0 = m.s - a.s, d1 = c.s - m.s; if (!(d0 > 0 && d1 > 0)) continue;
+      const g = (c.t - m.t) / d1 - (m.t - a.t) / d0, lim = (BANK_ACCEL * (d0 + d1)) / 2, over = Math.abs(g) - lim;
+      if (over <= 0) continue;
+      const co = [[a, 1 / d0], [m, -1 / d0 - 1 / d1], [c, 1 / d1]].filter(([x]) => !x.pinned), nn = co.reduce((q, [, w]) => q + w * w, 0); if (!nn) continue;
+      worst = Math.max(worst, over); const f = (Math.sign(g) * over) / nn; for (const [x, w] of co) x.t -= f * w;
+    }
+    for (let k = 1; k < seq.length; k++) {
+      const a = seq[k - 1], c = seq[k], over = Math.abs(c.t - a.t) - rate * (c.s - a.s); if (over <= 1e-12) continue;
+      const free = [a, c].filter((x) => !x.pinned); if (!free.length) continue;
+      const sg = Math.sign(c.t - a.t); worst = Math.max(worst, over / (c.s - a.s));
+      if (free.length === 2) { a.t += (sg * over) / 2; c.t -= (sg * over) / 2; } else if (free[0] === c) c.t -= sg * over; else a.t += sg * over;
+    }
+    if (worst < 1e-9) break;
+  }
+  const plan = new Map(road.map((p) => [p, new Array(kFrom.pieces[p].channels.kh.length).fill(0)]));
+  for (const x of seq) plan.get(x.p)[x.i] = x.t;
+  road.forEach((p, j) => { if (j > 0 && road[j - 1] === p - 1) { const A = plan.get(p - 1), B = plan.get(p), Pa = kFrom.pieces[p - 1], Pb = kFrom.pieces[p], na = A.length;
+    const hA = Pa.length - (Pa.knots.length ? Pa.knots[Pa.knots.length - 1] : 0), hB = Pb.knots.length ? Pb.knots[0] : Pb.length; B[0] = A[na - 1]; B[1] = B[0] + (hB / hA) * (A[na - 1] - A[na - 2]); } });
+  return plan;
+}
+/** doc with plan added to each planned piece's bank, less (when given) the plan `minus` added before. */
+function banked(doc, plan, minus = null) {
+  return D.checkDoc({ ...doc, pieces: doc.pieces.map((P, p) => (!plan.has(p) ? P : { ...P, channels: { ...P.channels, phi: P.channels.phi.map((ph, i) => ph + plan.get(p)[i] - (minus ? minus.get(p)[i] : 0)) } })) });
+}
+/**
+ * D438 (the user, 2026-10-22: "how the banking and cupping connects to the end of the track doesnt work right"): THE CUP COMES HOME OVER THE CLOSER. The new
+ * road carried the end's cup to the start line and left the seam's cup row to pull it to p1's in the last 30–40 m (37.3° → 10° on TEST TRACK 10, 0.54–1.38 °/m,
+ * where his own road never changes its cup faster than CUP_RATE_DEG_M, 0.021 °/m). Here the laid route's cup is moved by Δ·σ along the window (LINEAR, the
+ * slowest a closer of that length allows), σ by each control point's Greville position over the window's length, Δ = p1's first cup less the laid end's: the
+ * cup then reaches p1's at the start line, so the seam row has nothing left to do and the bank's return at the seam is no longer on top of it. (A smootherstep
+ * ease was built first: its peak, 1.875·Δ/length, went over 0.021 on 14 of P's 45 short closers, exo_memory/handback/p-d438-review-P_2026-10-22.md §2 (a); the
+ * joints read within 0.2 °/100 m of it.) Where even Δ/length is over CUP_RATE_DEG_M the closer is too short to do better: the cup still comes home, and
+ * finishToStart's report states the rate (cupPeak). Only when every road piece of the window and p1 are cup pieces (a cup meets a legacy piece by its rendered edge, close.js heldCup).
+ * A joint keeps the slope rule (a later piece's second point by the link rule), as bankPlan's does.
+ */
+function cupHome(laid, window) {
+  const road = window.filter((p) => laid.pieces[p].type === 'road'), F = laid.pieces[0];
+  if (!road.length || !F.cup || !road.every((p) => laid.pieces[p].cup)) return laid;
+  const last = laid.pieces[road[road.length - 1]], delta = F.channels.c[0] - D.pieceEnd(last).c.v;
+  if (!(Math.abs(delta) > 1e-9)) return laid;
+  let s0 = 0; const startOf = new Map(); laid.pieces.forEach((P, p) => { startOf.set(p, s0); s0 += P.length || 0; });
+  // D439 (d) (P's review of D438 (a) §5): σ = (ξ − ξ₁)/(z − ξ₁), from the first piece's SECOND Greville abscissa ξ₁ (the last point held for his last joint) to
+  // the last piece's SECOND-TO-LAST one z (the first of the two points that sit at p1's cup, so where p1 starts flat the seam's C1 row has nothing to do). Every
+  // span between then runs at Δ/(z − ξ₁), and the held points lie on the line (σ ≤ 0 or ≥ 1 there). Measured from the window's start, the third point already
+  // carried Δ·ξ₂/L while the first two were held, so the first free span ran at 1.5 × Δ/L and the lap read 1.27–1.30 × (three laps with Δ/L under 0.021
+  // printed the fallback note); ended at the start line, the seam row flattened the last span and the one before ran at 1.53 × (row 7's lap).
+  const U0 = D.knotVector(laid.pieces[road[0]]), a = startOf.get(road[0]) + (U0[2] + U0[3] + U0[4]) / 3, UL = D.knotVector(last), nl = last.channels.c.length, z = startOf.get(road[road.length - 1]) + (UL[nl - 1] + UL[nl] + UL[nl + 1]) / 3, ease = (x) => Math.max(0, Math.min(1, x));
+  const cs = new Map(road.map((p) => { const P = laid.pieces[p], U = D.knotVector(P); return [p, P.channels.c.map((c, i) => (p === road[0] && i < 2 ? c : c + delta * ease((startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3 - a) / (z - a))))]; }));
+  // the joint slope rule GUARDS C1 BY CONSTRUCTION: under the linear ease it rewrites each joint's two points with the values they already have (a linear
+  // function sampled at the Greville abscissae is reproduced exactly), and it keeps every joint C1 should the ease ever stop being linear (D438 J8, ruled keep)
+  road.forEach((p, j) => { if (j > 0 && road[j - 1] === p - 1) { const A = cs.get(p - 1), B = cs.get(p), Pa = laid.pieces[p - 1], Pb = laid.pieces[p], na = A.length;
+    const hA = Pa.length - (Pa.knots.length ? Pa.knots[Pa.knots.length - 1] : 0), hB = Pb.knots.length ? Pb.knots[0] : Pb.length; B[0] = A[na - 1]; B[1] = B[0] + (hB / hA) * (A[na - 1] - A[na - 2]); } });
+  return D.checkDoc({ ...laid, pieces: laid.pieces.map((P, p) => (cs.has(p) ? { ...P, channels: { ...P.channels, c: cs.get(p) } } : P)) });
+}
+/** D438: the fastest the cup changes (°/m, read every metre) on the cup pieces from index `from` on; 0 when none is a cup piece. */
+const CUP_RATE_DEG_M = 0.021;
+function cupPeak(doc, from) {
+  let worst = 0;
+  for (const P of doc.pieces.slice(from)) { if (P.type !== 'road' || !P.cup) continue; let prev = D.valuesAt(P, 0).c; for (let s = 1; s <= P.length; s++) { const c = D.valuesAt(P, Math.min(s, P.length)).c; worst = Math.max(worst, Math.abs(c - prev)); prev = c; } }
+  return worst;
+}
+/** The worst roll rate on the window's pieces, read as the checker reads it (validate's rollRates, its 20 m chord). */
+function bankRollPeak(doc, window) {
+  const { segments, path } = toPath(doc, { step: 2 }), S = path.samples, ids = new Set(window.map((p) => doc.pieces[p].id));
+  return V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', !!doc.closed, path.lengthM).filter((q) => ids.has(segments[S[q.i].seg].id)).reduce((m, q) => Math.max(m, q.rate), 0);
+}
+/** D434: the laid route banked and closed, the bank sized from the closed route (above); the share scaled down while the window rolls past the amber. */
+function closeBanked(laid, window, upright) {
+  const flatPeak = bankRollPeak(laid, window);   // a roll the laid route already has (a roll straight) is not the bank's to cure
+  // which pieces are laid upright is judged ONCE, on the laid route (the closed one already carries the first pass's bank)
+  const uprightSet = new Set(window.filter((p) => laid.pieces[p].type === 'road' && laid.pieces[p].channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE)));
+  let share = BANK_SHARE, res = null;
+  for (let t = 0; t < BANK_TRIES; t++) {
+    const plan1 = bankPlan(laid, window, share, uprightSet), first = close(banked(laid, plan1), { window });
+    if (!first.converged) return first;
+    res = close(banked({ ...first.doc, closed: false }, bankPlan(first.doc, window, share, uprightSet), plan1), { window });
+    if (!res.converged) return res;
+    const peak = bankRollPeak(res.doc, window);
+    if (peak <= Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6)) return res;
+    share *= (Math.max(ROLL_AMBER_DEG_M, flatPeak) / peak) * 0.97;
+  }
+  return close(laid, { window });   // the bank could not be kept under the amber: the turns as laid
+}
+
 /** D357: the laid road closed AS IT IS, when it already meets the start within Close's bars (THE END STRAIGHT BEHIND THE START); else null. */
 function metAsLaid(laid) {
   const shut = { ...laid, closed: true };
@@ -196,7 +334,12 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   // is the start's plus 180° in that form (its turns are NOT mirrored: lay)
   const flip = residual(doc).flip, half = flip ? Math.PI : 0;
   const b0 = D.valuesAt(doc.pieces[0], 0).phi, b1 = D.valuesAt(last, last.length).phi, bank = b0 + half + TAU * Math.round((b1 - b0 - half) / TAU), rollRad = Math.abs(bank - b1);
-  const roll0 = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil((rollRad / ROLL_RATE) * rollGuess) } : null;
+  // D438: and long enough that its roll fits BANK_ACCEL (bankPlan): a roll of θ from rest to rest needs at least 2·√(θ/A) at an acceleration A; ROLL_ACCEL_FIT
+  // over that leaves room for the pinned ends (TEST TRACK 10: 54° on 87 m stepped 33.6 °/100 m under the outer wheels at both of its ends).
+  // 1.5 is a MARGIN SET BY THE SHAPE OF THE BLOSS BLEND (P, exo_memory/handback/p-d438-review-P_2026-10-22.md §1.1), not a fit to one track: extend lays the roll
+  // as bloss(u) = u²(3 − 2u) (extend.js channelFn), whose acceleration peaks at both ends at 6θ/L²; at L = 1.5·2·√(θ/A) = 3√(θ/A) that is (2/3)·A for every θ.
+  // A change to channelFn's blend moves this margin.
+  const roll0 = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil(Math.max((rollRad / ROLL_RATE) * rollGuess, ROLL_ACCEL_FIT * 2 * Math.sqrt(rollRad / BANK_ACCEL))) } : null;
   const gap = Math.hypot(doc.start.pos[0] - e.p[0], doc.start.pos[1] - e.y, doc.start.pos[2] - e.p[1]);
   const deg = (a) => Math.round((a / DEG) * 10) / 10, f0 = fwd(th0);
   const rs = residual(doc);
@@ -244,10 +387,17 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
       } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
       const window = []; for (let i = doc.pieces.length; i < laid.pieces.length; i++) window.push(i);
       if (!window.length) continue;
+      // D439 (P's review of D438 §2 (b)): with the roll laid FIRST, Close, the bank and the cup work on the pieces after its roll straight. Closed with them, the
+      // straight was bent into a curve (to R 326 m) while it still rolled, and a rolling piece is never banked (bankPlan's upright rule), so its roll leaned the
+      // wrong way through the bend: 41 stations out, to −26.3°, 5.07 g on P's turn 210 / tail 300 / roll 30. Left as laid it stays straight; the pieces after
+      // it close the lap. (window, all the new road, is still what the plan reports and the shell outlines, and what the cup comes home over (cupHome): the cup
+      // does not move the centreline, and over the whole new road it is slowest, D439 (d).)
+      const shut = first ? window.slice(1) : window;
+      if (!shut.length) continue;
       let res;
       // D357: what Close refuses is taken AS LAID when it already meets the start (metAsLaid: a lone straight it cannot bend). (A windowed Close never returns
       // unconverged: it refuses by name, close.js D242)
-      try { res = close(laid, { window }); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
+      try { laid = cupHome(laid, window); res = closeBanked(laid, shut, bank); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
       if (!res.converged) { best = best || res.report; continue; }
       const peak = roll ? rollPeak(res.doc, doc.pieces.length) : 0;
       if (peak > ROLL_AMBER_DEG_M) return { tooFast: peak };   // the roll reads too fast as the checker reads it: lengthen it and search again
@@ -258,19 +408,26 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
         if (++left >= GATE_TRIES) break;
         continue;
       }
-      const added = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + P.length, 0);
+      const added = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + P.length, 0), cupRate = cupPeak(res.doc, doc.pieces.length);
+      // D438: the closer too short to bring the cup home at his own road's fastest says so, and at what rate (it is already the slowest the closer allows: cupHome)
+      const cupNote = cupRate > CUP_RATE_DEG_M ? `; the cup comes home at ${cupRate.toFixed(3)}°/m, faster than ${CUP_RATE_DEG_M}°/m: the new road is too short to bring it home slower` : '';
       const rolled = roll ? (first ? `, after ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright first` : `, then ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright onto the start`) : '';
-      const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}`;
-      return { result: { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollFirst: !!first, rollPeakDegM: Math.round(peak * 1000) / 1000, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: Math.round(added), report }) } };
+      const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}${cupNote}`;
+      return { result: { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollFirst: !!first, rollPeakDegM: Math.round(peak * 1000) / 1000, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: Math.round(added), cupRateDegM: Math.round(cupRate * 10000) / 10000, report }) } };
     }
     return { fail: { tried: all.length, best, worstRoad } };
   };
   let fail = null;
+  // D439 (P's review of D438 §2 (c)): when a roll is owed, BOTH orders are searched and the closer with the lower peak side load at the design speed is taken
+  // (sideLoad). Laid last, the roll leaves the turns on the end's bank, which the bank never touches (bankPlan's upright rule): on P's turn 180 / tail 1,200 /
+  // roll 10 and 30 that closer was taken first and carried 10.89 and 9.16 g, against 4.68 and 4.65 rolled first. But where the end is banked the way the turns
+  // go, the end's own bank is the better lean: core_finish row 12's lap carries 5.55 g rolled last against 8.08 rolled first. A tie keeps the order below.
+  const found = [];
   for (const mode of roll0 ? ['last', 'first'] : ['last']) {
     let roll = roll0;
     for (let round = 0; ; round++) {
       const out = search(mode, roll);
-      if (out.result) return out.result;
+      if (out.result) { found.push({ result: out.result, side: sideLoad(out.result.doc, doc.pieces.length) }); break; }
       if (out.tooFast) {
         if (round >= ROLL_ROUNDS) throw new D.CoreError('FINISH_ROLL', `the roll upright onto the start still reads ${out.tooFast.toFixed(3)}°/m (the amber bar is ${ROLL_AMBER_DEG_M}) at ${roll.lengthM} m after ${round + 1} lengthenings`);
         roll = { bank, lengthM: Math.ceil(roll.lengthM * (out.tooFast / ROLL_AMBER_DEG_M) * ROLL_LENGTHEN) };
@@ -281,6 +438,7 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
       break;
     }
   }
+  if (found.length) return found.reduce((a, b) => (b.side < a.side ? b : a)).result;
   const rollText = roll0 ? ` and must roll ${Math.round(rollRad / DEG)}° to meet it (${roll0.lengthM} m of straight)` : '';
   if (fail.worstRoad) {
     const pitch = e.pitch / DEG, dy = doc.start.pos[1] - e.y;
