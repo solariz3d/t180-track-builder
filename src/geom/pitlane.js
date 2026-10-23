@@ -12,14 +12,16 @@
 //   g(s)  = the gap from that edge to the lane's inner edge: 0 at the leave, easing out over divergeM of main road to
 //           offsetM, offsetM along the run, easing back to 0 over mergeM. The ease is profile.js smoothstep, the one the
 //           font ramps use: zero slope at both ends, so the lane's inner edge leaves the road's edge TANGENTIALLY.
-//   φ(s)  = the lane's TILT about the road's T: the road's edge angle ψe(s) at the joins, easing to 0 with the gap
-//           (φ = ψe·(1 − g/offsetM)), so the lane runs level beside the road and leaves it in the edge's own plane
-//   A(s)  = the edge's outward tangent tilted by φ: σ·L·cos φ + U·sin φ (the road's own across-direction there, at φ = ψe)
+//   φ(s)  = the lane's TILT about the road's T: 0, leave to rejoin (D438), so the lane lies level in the road's own
+//           across-plane (it follows the road's bank and grade) at the height of the edge it leaves from
+//   A(s)  = the edge's outward across-direction tilted by φ: σ·L·cos φ + U·sin φ (= σ·L at φ = 0)
 //   inner = e + A·g,  centre = e + A·(g + width/2)      σ = +1 on the left (+u), −1 on the right
-// JOINS WITH NO STEP, AND G1. At the leave and the rejoin g = 0 and g' = 0, so the lane's inner edge IS the road's edge
-// (same point) and runs along it (same tangent: inner' = e' + A'g + Ag' = e'). There φ = ψe, so the lane's rows lie along
-// the road's own surface tangent at its edge and its normal is the road's there (profile.js normalAt): across that shared
-// edge the surface continues in the same plane, whatever the edge's tilt.
+// JOINS WITH NO STEP. At the leave and the rejoin g = 0 and g' = 0, so the lane's inner edge IS the road's edge (same
+// point) and runs along it (same tangent: inner' = e' + A'g + Ag' = e').
+// D438 (2026-10-22, on TEST TRACK 10: the lane "flips up towards the beginning and end, it should be smooth even"): this
+// was G1 across that edge, φ = ψe·(1 − g/offsetM), the lane leaving in the edge's own plane. Off a 30° edge (a cup 10°,
+// edge 20°) that lifted the lane's outer edge 4.2 m at both joins and laid it back level over the diverge and merge. Now
+// the lane is even; across the shared edge line the cross-slope steps from the edge's ψe to 0, the road's own lip.
 // D182 (pane C): this was "the lane is flat, and the edge must be flat (≤ 1°)". The measured fonts (src/geom/fonts.js) rise
 // from the centre, 15.5° at the bowl's edge and 30.6° at the half-pipe's, so no lane could leave a default road. Now an
 // edge is refused only past JOIN_MAX (35°, the reader's own lip: a fold sharper than 35° in a metre is an edge, not road,
@@ -92,7 +94,7 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
     const T = unit(lerp(a.T, b.T, t)), L = unit(lerp(a.L, b.L, t)), U = unit(lerp(a.U, b.U, t)), pos = lerp(a.pos, b.pos, t);
     const kv = lerp(a.kvec, b.kvec, t);
     const [X, Y] = Prof.offsetAt(P, uE), edge = add(pos, add(mul(L, X), mul(U, Y))), g = gapAt(s), psiEdge = Prof.psiAt(P, uE);
-    const phi = psiEdge * (lane.offsetM > 0 ? 1 - Math.min(1, g / lane.offsetM) : 1), c = Math.cos(phi), sn = Math.sin(phi);
+    const phi = 0, c = Math.cos(phi), sn = Math.sin(phi);   // D438: level in the road's own across-plane, leave to rejoin (it was psiEdge · (1 − g/offsetM): tilted to the edge at the joins)
     const A = add(mul(L, sg * c), mul(U, sn)), Ll = add(mul(L, c), mul(U, sg * sn)), Ul = add(mul(U, c), mul(L, -sg * sn));   // the lane's across (+u = L side) and up
     return { s, T, L, U, pos, kvec: kv, edge, psiEdge, phi, Ll, Ul, g, inner: add(edge, mul(A, g)), centre: add(edge, mul(A, g + w / 2)) };
   }
