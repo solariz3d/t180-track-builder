@@ -167,6 +167,71 @@ function roadHold(doc, from) {
   return { worst, at };
 }
 
+// D434 (the user, 2026-10-22, TEST TRACK 10: "there needs to be a nuance for banking in large curves like that to support the car better"; the librarian's ruling,
+// plan_d434 "Part 2 ruled"): THE FINISH BANKS THE CURVES IT MAKES. Its turns were laid flat: on TEST TRACK 10 the closer leaned −0.9° on average, 453 curved stations
+// leaning out, and the side load at the design speed reached 10.68 g. Each new piece is banked by BANK_SHARE of the balance bank at the validator's design speed,
+// −atan(v²·k/g) (the sign measured in the normal and the flipped frame, exo_memory/handback/p-d434-O_2026-10-22.md §2; 0.75 leaned TEST TRACK 10's closer as the
+// user's own hand bank before it does, 53.8° against 53.2°), so a gentle curve gets its small share and a straight none. The bank follows the curvature, so it
+// eases in with the curve, and it is RATE-LIMITED: at 460 km/h the balance bank is steepest near a straight (atan's slope is largest at 0), so a curve that eases
+// out in a knot or two would roll the road several degrees a metre (TEST TRACK 10's last turn into the seam: 2.19°/m at 0.75). The bank's control points along the
+// window, in lap order through the joints, are pinned to the laid bank at every joint (each piece's first two and last two points), and then limited, forward and
+// backward, to BANK_ROLL of the amber per metre of their Greville spacing; a cubic B-spline's slope is bounded by its control polygon's, so the bank's own roll is
+// too. A later piece's second point is set by the joint's slope rule, so every joint stays C1. It is sized from the CLOSED route's curvature: bank by the laid
+// route's, close, swap that bank for the closed route's, close again (the bank row). Bank rolls the road about its centreline and does not move it, so the closure
+// is the same. A backstop: if the road still rolls past the amber on the window, the share is scaled down.
+const BANK_SHARE = 0.75, BANK_TRIES = 3, BANK_ROLL = 0.9, V_DESIGN = MACH6.designSpeedKmh / 3.6;
+const bankOf = (k, share) => -share * Math.atan((V_DESIGN * V_DESIGN * k) / G);
+/**
+ * The bank to add to each control point of each road piece of `window` ([p] → array, 0 outside), from kFrom's curvature: pinned at the window's ends, rate-limited.
+ * Only a piece laid UPRIGHT is banked: its laid bank within ROLL_FREE of `upright` (the bank the lap closes to, the start's, finishToStart's `bank`). A turn laid on
+ * the user's own bank (a roll laid LAST, after the turns) keeps it: the bank is a lean into the curve against gravity, and rolling the road upright inside the turn
+ * is what finish.js never does (lay: "a roll is never laid in a turn"); such a route is judged as it was laid, and the roll-first order banks its upright turns.
+ */
+function bankPlan(kFrom, window, share, uprightSet) {
+  const road = window.filter((p) => kFrom.pieces[p].type === 'road'), rate = (BANK_ROLL * ROLL_AMBER_DEG_M * Math.PI) / 180, seq = [];
+  let s0 = 0; const startOf = new Map(); kFrom.pieces.forEach((P, p) => { startOf.set(p, s0); s0 += P.length || 0; });
+  road.forEach((p, j) => {
+    const P = kFrom.pieces[p], U = D.knotVector(P), n = P.channels.kh.length, linked = j > 0 && road[j - 1] === p - 1;
+    const up = uprightSet.has(p);
+    // pinned: each piece's first two and last two points keep the laid bank (the ruling: meet the laid bank at EVERY joint, so a straight between turns gets none)
+    for (let i = linked ? 1 : 0; i < n; i++) { const pinned = i < 2 || i > n - 3; seq.push({ p, i, s: startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3, t: up && !pinned ? bankOf(P.channels.kh[i], share) : 0, pinned }); }
+  });
+  // the pinned points stay where they are in both passes (a pass that moved them would undo the pin: the close would then meet the seam's bank row in one knot)
+  for (let k = 1; k < seq.length; k++) { if (seq[k].pinned) continue; const d = rate * (seq[k].s - seq[k - 1].s); seq[k].t = Math.max(seq[k - 1].t - d, Math.min(seq[k - 1].t + d, seq[k].t)); }
+  for (let k = seq.length - 2; k >= 0; k--) { if (seq[k].pinned) continue; const d = rate * (seq[k + 1].s - seq[k].s); seq[k].t = Math.max(seq[k + 1].t - d, Math.min(seq[k + 1].t + d, seq[k].t)); }
+  const plan = new Map(road.map((p) => [p, new Array(kFrom.pieces[p].channels.kh.length).fill(0)]));
+  for (const x of seq) plan.get(x.p)[x.i] = x.t;
+  road.forEach((p, j) => { if (j > 0 && road[j - 1] === p - 1) { const A = plan.get(p - 1), B = plan.get(p), Pa = kFrom.pieces[p - 1], Pb = kFrom.pieces[p], na = A.length;
+    const hA = Pa.length - (Pa.knots.length ? Pa.knots[Pa.knots.length - 1] : 0), hB = Pb.knots.length ? Pb.knots[0] : Pb.length; B[0] = A[na - 1]; B[1] = B[0] + (hB / hA) * (A[na - 1] - A[na - 2]); } });
+  return plan;
+}
+/** doc with plan added to each planned piece's bank, less (when given) the plan `minus` added before. */
+function banked(doc, plan, minus = null) {
+  return D.checkDoc({ ...doc, pieces: doc.pieces.map((P, p) => (!plan.has(p) ? P : { ...P, channels: { ...P.channels, phi: P.channels.phi.map((ph, i) => ph + plan.get(p)[i] - (minus ? minus.get(p)[i] : 0)) } })) });
+}
+/** The worst roll rate on the window's pieces, read as the checker reads it (validate's rollRates, its 20 m chord). */
+function bankRollPeak(doc, window) {
+  const { segments, path } = toPath(doc, { step: 2 }), S = path.samples, ids = new Set(window.map((p) => doc.pieces[p].id));
+  return V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', !!doc.closed, path.lengthM).filter((q) => ids.has(segments[S[q.i].seg].id)).reduce((m, q) => Math.max(m, q.rate), 0);
+}
+/** D434: the laid route banked and closed, the bank sized from the closed route (above); the share scaled down while the window rolls past the amber. */
+function closeBanked(laid, window, upright) {
+  const flatPeak = bankRollPeak(laid, window);   // a roll the laid route already has (a roll straight) is not the bank's to cure
+  // which pieces are laid upright is judged ONCE, on the laid route (the closed one already carries the first pass's bank)
+  const uprightSet = new Set(window.filter((p) => laid.pieces[p].type === 'road' && laid.pieces[p].channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE)));
+  let share = BANK_SHARE, res = null;
+  for (let t = 0; t < BANK_TRIES; t++) {
+    const plan1 = bankPlan(laid, window, share, uprightSet), first = close(banked(laid, plan1), { window });
+    if (!first.converged) return first;
+    res = close(banked({ ...first.doc, closed: false }, bankPlan(first.doc, window, share, uprightSet), plan1), { window });
+    if (!res.converged) return res;
+    const peak = bankRollPeak(res.doc, window);
+    if (peak <= Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6)) return res;
+    share *= (Math.max(ROLL_AMBER_DEG_M, flatPeak) / peak) * 0.97;
+  }
+  return close(laid, { window });   // the bank could not be kept under the amber: the turns as laid
+}
+
 /** D357: the laid road closed AS IT IS, when it already meets the start within Close's bars (THE END STRAIGHT BEHIND THE START); else null. */
 function metAsLaid(laid) {
   const shut = { ...laid, closed: true };
@@ -247,7 +312,7 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
       let res;
       // D357: what Close refuses is taken AS LAID when it already meets the start (metAsLaid: a lone straight it cannot bend). (A windowed Close never returns
       // unconverged: it refuses by name, close.js D242)
-      try { res = close(laid, { window }); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
+      try { res = closeBanked(laid, window, bank); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
       if (!res.converged) { best = best || res.report; continue; }
       const peak = roll ? rollPeak(res.doc, doc.pieces.length) : 0;
       if (peak > ROLL_AMBER_DEG_M) return { tooFast: peak };   // the roll reads too fast as the checker reads it: lengthen it and search again
