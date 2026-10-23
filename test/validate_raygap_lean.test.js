@@ -139,10 +139,24 @@ function coil(turns = 8) {
   return extend(d, { length: 60, transition: 40, targets: { kh: 0 } });
 }
 
-test('row 1b: on built roads (an open coil that runs into itself, a closed lap, a tube) rayGaps is the first form, gap for gap', () => {
+// AMENDED (D446): road beyond an edge now counts only on the SAME PASS (src/validate/raygap.js SAME_PASS_M), so on the coil, whose two circles lie on one another,
+// the first form's gaps whose probe met only the OTHER circle (4 of 97, about 1,130 m on along the road) are no longer gaps: each is reported in opts.near instead.
+// The closed lap and the tube, which have no second pass within reach, are still the first form gap for gap; on the coil no gap is new, and a gap whose nearest
+// probe met the other circle is now found at the next probe out, so its widthM may be larger.
+test('row 1b: on built roads (an open coil that runs into itself, a closed lap, a tube) rayGaps is the first form, gap for gap, except where the probe met only another pass (D446)', () => {
   const lap = close(coil(4), { edited: [0] }).doc;
   const tube = extend(extend(D.createDoc('t'), { length: 200, family: 'bowl' }), { length: 400, targets: { t: 360 } });
-  for (const [name, doc] of [['coil', coil(8)], ['closed lap', lap], ['tube', tube]]) { const r = roadOf(doc); same(r.meshes, r.samples, name); }
+  for (const [name, doc] of [['closed lap', lap], ['tube', tube]]) { const r = roadOf(doc); same(r.meshes, r.samples, name); }
+  const r = roadOf(coil(8)), a = REFERENCE(r.meshes, r.samples, RAY), near = [], b = rayGaps(r.meshes, r.samples, RAY, { near });
+  const key = (g) => `${g.s}|${g.u}`, inA = new Set(a.map(key)), inB = new Set(b.map(key)), byKey = new Map(near.map((x) => [key(x), x]));
+  // an edge whose NEAREST probe met the other circle and a farther one its own road is still a gap, now at the farther probe: its width can only grow
+  const where = (g) => ({ s: g.s, u: g.u, at: g.at }), aKept = a.filter((g) => inB.has(key(g)));
+  assert.deepEqual(b.map(where), aKept.map(where), 'coil: every gap now is one of the first form, in its order and at its place');
+  assert.ok(b.every((g, k) => g.widthM >= aKept[k].widthM), 'coil: no gap is narrower than in the first form');
+  assert.ok(b.every((g) => inA.has(key(g))), 'coil: no new gap');
+  const gone = a.filter((g) => !inB.has(key(g)));
+  assert.ok(gone.length > 0 && gone.length < a.length, `control: the coil has gaps on its own pass and edges that meet the other circle (${gone.length} of ${a.length})`);
+  for (const g of gone) { const x = byKey.get(key(g)); assert.ok(x && Math.abs(x.otherS - x.s) > 300, `coil: the first form's gap at s ${g.s} met another pass: ${JSON.stringify(x)}`); }
 });
 
 test('row 2: the check\'s lean mesh gives the check on buildMesh\'s own self-checked mesh, on a coil that overlaps itself; its two parts are the one-piece check', () => {

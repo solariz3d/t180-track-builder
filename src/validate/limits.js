@@ -47,6 +47,9 @@ const MACH6 = Object.freeze({
   // D435, the user (2026-10-22 15:34, asked how little room under another road should warn): "i think 1m is good". A road with another passing over it, without
   // clipping, closer than this along its normal is AMBER ('low-overhead'): a car on it would hit the road above. It does not block an export.
   overheadM: 1,
+  // D446 (the librarian's ruling on E's hand-back, 2026-10-23): two passes of the road whose edges come within this distance, side by side, are INFORMATION
+  // ('near-touch'), never red: the downforce-ray check no longer reads the other pass as road beyond a gap (src/validate/raygap.js). Within the ray's reach, 1 m.
+  nearEdgeM: 1,
   // ARCHITECTURE.md:87 "surfaces above ~50° without CSP's wall raycasting (vanilla AC tyres ignore steep surfaces;
   // community-reported)" (RED only when the export does not target CSP).
   steepDeg: 50,

@@ -28,6 +28,17 @@
 //     slit between two pieces, a missing triangle or a pit lane that stops short of the road are.
 // Each gap is reported at the nearest path station: { s, u, widthM, at } (widthM: the first probe distance that found
 // road, an upper bound on the gap's width at that edge; at: the edge's midpoint in world space).
+//
+// D446 (a track, TEST 10 banked, refused on export with two of these at s 2574 and 2928 of one piece): road beyond an edge
+// counts only when it is the SAME PASS, the road resuming. There the probe past one edge of a banked piece that curls back on
+// itself found the OTHER pass's lip, 355 m on along the lap and 0.64 m away, and read the space between the two edges as a slit.
+// Nothing is lost under the car there: past either edge it is off the road whether or not the other pass is beside it. So a hit
+// counts only when its triangle's nearest station lies within SAME_PASS_M of the edge's own station along the lap, or within the
+// road's width there if that is more (twice the edge's distance from the centre line), measured round a closed lap (opts.lapM)
+// so its seam is one pass. A slit, a missing triangle, a tear along the road and a pit lane short of the road all resume within a
+// few metres of the edge's station; another pass of the lap is hundreds of metres on. A hit on another pass is not a gap: it is
+// reported in opts.near (when given) as { s, u, otherS, edgeM }, edgeM the distance from the edge's midpoint to that pass's road,
+// which validate() reports as information ('near-touch'), never red.
 'use strict';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], add = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
@@ -36,11 +47,31 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const unit = (a) => { const l = len(a); return l > 0 ? [a[0] / l, a[1] / l, a[2] / l] : a; };
 const PROBES = [0.1, 0.25, 0.5];   // plus the ray's reach, from the car's limits
 const FACING = Math.cos(45 * Math.PI / 180);
+const SAME_PASS_M = 30;   // D446: road found past an edge is the same pass when its station is this close along the lap (or the road's width, if more)
+
+/** The distance from point p to triangle (a, b, c): Ericson, Real-Time Collision Detection §5.1.5, the closest point by Voronoi region. */
+function pointTriangle(p, a, b, c) {
+  const ab = sub(b, a), ac = sub(c, a), ap = sub(p, a), d1 = dot(ab, ap), d2 = dot(ac, ap);
+  if (d1 <= 0 && d2 <= 0) return len(ap);
+  const bp = sub(p, b), d3 = dot(ab, bp), d4 = dot(ac, bp);
+  if (d3 >= 0 && d4 <= d3) return len(bp);
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) return len(sub(p, add(a, ab, d1 / (d1 - d3))));
+  const cp = sub(p, c), d5 = dot(ab, cp), d6 = dot(ac, cp);
+  if (d6 >= 0 && d5 <= d6) return len(cp);
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) return len(sub(p, add(a, ac, d2 / (d2 - d6))));
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return len(sub(p, add(b, sub(c, b), (d4 - d3) / ((d4 - d3) + (d5 - d6)))));
+  const den = 1 / (va + vb + vc), v = vb * den, w = vc * den;
+  return len(sub(p, add(add(a, ab, v), ac, w)));
+}
 
 /**
- * rayGaps(meshes, stations, ray): meshes = [{ positions (world, flat), indices }] of the drivable physics road;
- * stations = the path's samples ({ s, pos, L, T }); ray = MACH6.downforceRay. Returns [{ s, u, widthM, at }], one per gap
- * edge, in s order.
+ * rayGaps(meshes, stations, ray, opts): meshes = [{ positions (world, flat), indices }] of the drivable physics road;
+ * stations = the path's samples ({ s, pos, L, T }); ray = MACH6.downforceRay; opts.lapM = a closed lap's length (s is then
+ * measured round it), opts.near = an array that receives the edges whose probe met another pass (D446). Returns
+ * [{ s, u, widthM, at }], one per gap edge, in s order.
  */
 // D266 (the keeper's 6 × 1000 m tube crashed the page on Close): the same check in TYPED ARRAYS. The first form kept a JS array per vertex, per triangle and
 // per normal, an object per edge and string keys for every bucket ("x,y,z", "a,b"): 1.47 GB of JavaScript heap on a 2.4-million-triangle tube, where a
@@ -73,8 +104,11 @@ function tripleIndex(cap) {
   };
 }
 
-function rayGaps(meshes, stations, ray) {
+function rayGaps(meshes, stations, ray, opts = {}) {
   const WELD = 0.005;
+  const lapM = Number.isFinite(opts.lapM) && opts.lapM > 0 ? opts.lapM : null, near = Array.isArray(opts.near) ? opts.near : null;
+  /** How far apart two stations are along the road: round a closed lap when its length is given. */
+  const alongM = (a, b) => { const d = Math.abs(a - b); return lapM === null ? d : Math.min(d, lapM - d); };   // s 0 and s = lapM are one place (P's D446 review: d % lapM read them a lap apart)
   let nIdx = 0, nPos = 0; for (const m of meshes) { nIdx += m.indices.length; nPos += m.positions.length / 3; }
   // the weld: a vertex is the FIRST earlier vertex within WELD, searched bucket by bucket (i, j, k from −1 to 1) and in each bucket in the order added
   const P = new Float64Array(nPos * 3), buckets = tripleIndex(Math.max(16, nPos)), next = new Int32Array(nPos).fill(-1);
@@ -137,8 +171,18 @@ function rayGaps(meshes, stations, ray) {
       const c = cellIx.get(x, y, z); cellTri[start[c] + at[c]++] = i;
     }
   }
-  /** Does the car's ray at q (cast from upM above q along up, lengthM downward) hit a road triangle other than skip? */
-  const overRoad = (q, up, skip, along) => {
+  /**
+   * Does the car's ray at q (cast from upM above q along up, lengthM downward) hit a road triangle other than skip, ON THE SAME PASS as station st (D446:
+   * within `bound` of it along the lap)? A hit on another pass does not count; the first is kept in `other` for the near-touch.
+   */
+  let other = null;
+  const passOf = new Map();   // a hit triangle's nearest station, by its centroid, met once each
+  const samePass = (i, st, bound) => {
+    let k = passOf.get(i);
+    if (k === undefined) { const a = pt(T[i * 3]), b = pt(T[i * 3 + 1]), c = pt(T[i * 3 + 2]); k = nearest([(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3]); passOf.set(i, k); }
+    return k < 0 || alongM(stations[k].s, st.s) <= bound;   // no station near it: counted, as before
+  };
+  const overRoad = (q, up, skip, along, st, bound) => {
     const o = add(q, up, ray.upM), d = up.map((x) => -x), L = ray.lengthM, seen = new Set();
     for (let k = 0; k <= Math.ceil(L / CS) + 1; k++) {
       const c0 = add(o, d, Math.min(L, k * CS)).map((v) => Math.floor(v / CS));
@@ -152,11 +196,22 @@ function rayGaps(meshes, stations, ray) {
           if (Math.abs(det) < 1e-12) continue;   // the ray runs along the triangle: no hit
           const inv = 1 / det, tv = sub(o, P0), u = dot(tv, pv) * inv; if (u < 0 || u > 1) continue;
           const qv = cross(tv, e1), v = dot(d, qv) * inv; if (v < 0 || u + v > 1) continue;
-          const h = dot(e2, qv) * inv; if (h > 0 && h <= L) return true;
+          const h = dot(e2, qv) * inv; if (!(h > 0 && h <= L)) continue;
+          if (samePass(i, st, bound)) return true;
+          if (!other) other = i;   // another pass of the lap: not road beyond a gap (D446)
         }
       }
     }
     return false;
+  };
+  /** D446: the least distance from point m to the road of ANOTHER pass than station st's, over the grid cells within one cell of m (the closest approach, edge to that road). */
+  const closestOther = (m, st, bound) => {
+    const c0 = m.map((v) => Math.floor(v / CS)); let best = Infinity;
+    for (let x = c0[0] - 1; x <= c0[0] + 1; x++) for (let y = c0[1] - 1; y <= c0[1] + 1; y++) for (let z = c0[2] - 1; z <= c0[2] + 1; z++) {
+      const c = cellIx.get(x, y, z); if (c < 0) continue;
+      for (let r = start[c]; r < start[c + 1]; r++) { const i = cellTri[r]; if (samePass(i, st, bound)) continue; const d = pointTriangle(m, pt(T[i * 3]), pt(T[i * 3 + 1]), pt(T[i * 3 + 2])); if (d < best) best = d; }
+    }
+    return best;
   };
   const reach = [...PROBES, ray.aheadM];
   // the nearest station, by a coarse grid on the stations
@@ -173,11 +228,16 @@ function rayGaps(meshes, stations, ray) {
     const i = nearest(mid), st = i >= 0 ? stations[i] : null;
     if (!st || Math.abs(dot(Ne, st.T)) > FACING) continue;   // not a surface the car rides (see above)
     let across = unit(cross(Ne, sub(B, A))); if (dot(sub(C, mid), across) > 0) across = across.map((x) => -x);   // away from its own triangle
-    const w = reach.find((d) => overRoad(add(mid, across, d), Ne, ti, st.T));
-    if (w === undefined) continue;
-    out.push({ s: st.s, u: dot(sub(mid, st.pos), st.L), widthM: w, at: mid });
+    const u = dot(sub(mid, st.pos), st.L), bound = Math.max(SAME_PASS_M, 2 * Math.abs(u));
+    other = null;
+    const w = reach.find((d) => overRoad(add(mid, across, d), Ne, ti, st.T, st, bound));
+    if (w === undefined) {
+      if (near && other !== null) near.push({ s: st.s, u, otherS: stations[passOf.get(other)].s, edgeM: closestOther(mid, st, bound) });
+      continue;
+    }
+    out.push({ s: st.s, u, widthM: w, at: mid });
   }
   return out.sort((a, b) => a.s - b.s);
 }
 
-module.exports = { rayGaps, PROBES };
+module.exports = { rayGaps, PROBES, SAME_PASS_M };
