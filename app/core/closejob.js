@@ -24,7 +24,7 @@
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 const { close, closeWindow, residual } = require('../../src/core/close.js');
-const { finishToStart, isNear } = require('../../src/core/finish.js');
+const { finishToStart, isNear, bankLap } = require('../../src/core/finish.js');
 const { createCheckJob } = require('../validate-ui/checkjob.js');
 
 function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null } = {}) {
@@ -77,6 +77,9 @@ function runCloseBest({ doc, edited = null, openReds = null, exhaustive = false 
     let res; const t0 = Date.now(), done = (x) => { x.ms = Date.now() - t0; phases.routesMs += x.ms; tried.push(x); return x; };
     try { res = R.run(); } catch (e) { if (!e || e.name !== 'CoreError') throw e; return done({ route: R.route, refused: e.message }); }
     if (!res || !res.converged) return done({ route: R.route, refused: (res && res.report) || 'it did not close' });
+    // D447 (the user: "closing a loop should bank"): every route's closed lap is banked before it is ranked and checked, so the lap the press proves and lands is
+    // the banked one, in the same one result (one undo step). bankLap rolls the road about its centre line: nothing moves, so the displacement is the close's own
+    res = { ...res, doc: bankLap(res.doc) };
     const displacement = displacementOf(doc, res.doc), maxMoveM = displacement.reduce((m, x) => Math.max(m, x.maxM), 0);
     const newRoadM = res.doc.pieces.slice(doc.pieces.length).reduce((t, P) => t + (P.length || 0), 0), newPieces = res.doc.pieces.length - doc.pieces.length;
     if (newPieces === 0 && maxMoveM > moveCap) return done({ route: R.route, refused: `it would move the track up to ${fmtM(maxMoveM)}, past the ${fmtM(moveCap)} a close may move it`, maxMoveM });
