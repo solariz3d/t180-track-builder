@@ -24,7 +24,7 @@
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 const { close, closeWindow, residual } = require('../../src/core/close.js');
-const { finishToStart, isNear, bankLap } = require('../../src/core/finish.js');
+const { finishToStart, isNear, bankLapWith } = require('../../src/core/finish.js');
 const { createCheckJob } = require('../validate-ui/checkjob.js');
 
 function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null } = {}) {
@@ -79,11 +79,15 @@ function runCloseBest({ doc, edited = null, openReds = null, exhaustive = false 
     if (!res || !res.converged) return done({ route: R.route, refused: (res && res.report) || 'it did not close' });
     // D447 (the user: "closing a loop should bank"): every route's closed lap is banked before it is ranked and checked, so the lap the press proves and lands is
     // the banked one, in the same one result (one undo step). bankLap rolls the road about its centre line: nothing moves, so the displacement is the close's own
-    res = { ...res, doc: bankLap(res.doc) };
+    // P's review finding 1 (b): what the bank held back is said, in the press's words (bankNote)
+    const B = bankLapWith(res.doc), names = (ids) => ids.join(', ');
+    const bankNote = [B.eased.length ? `the bank eases to none where the turn changes direction faster than the road can roll (${names(B.eased)})` : null,
+      B.withheld.length ? `no bank on ${names(B.withheld)}: banked, it would lean out of its turn` : null].filter(Boolean).join('; ');
+    res = { ...res, doc: B.doc, bankNote };
     const displacement = displacementOf(doc, res.doc), maxMoveM = displacement.reduce((m, x) => Math.max(m, x.maxM), 0);
     const newRoadM = res.doc.pieces.slice(doc.pieces.length).reduce((t, P) => t + (P.length || 0), 0), newPieces = res.doc.pieces.length - doc.pieces.length;
     if (newPieces === 0 && maxMoveM > moveCap) return done({ route: R.route, refused: `it would move the track up to ${fmtM(maxMoveM)}, past the ${fmtM(moveCap)} a close may move it`, maxMoveM });
-    return done({ route: R.route, doc: res.doc, report: res.report, window: res.window, plan: res.plan, displacement, maxMoveM, newRoadM, newPieces, rank });
+    return done({ route: R.route, doc: res.doc, report: res.report, window: res.window, plan: res.plan, displacement, maxMoveM, newRoadM, newPieces, rank, bankNote: res.bankNote });
   };
   // the open track's reds: GIVEN by the page when its live checker already checked this very track (D343: a fresh check was 64 s of a 25 km press), else checked
   // here, once, and only when a closed lap that proves has a red at all
@@ -99,7 +103,7 @@ function runCloseBest({ doc, edited = null, openReds = null, exhaustive = false 
       : `it adds ${t.newReds.length} red${t.newReds.length === 1 ? '' : 's'} (${t.newReds[0].reason} at ${(t.newReds[0].s / 1000).toFixed(2)} km)`;
     return false;
   };
-  const picked = (t) => ({ converged: true, report: wordsOf(doc, t), doc: t.doc, window: windowOf(doc, t), displacement: t.displacement, route: t.route, tried: summary(tried), phases });
+  const picked = (t) => ({ converged: true, report: wordsOf(doc, t) + (t.bankNote ? `; ${t.bankNote}` : ''), doc: t.doc, window: windowOf(doc, t), displacement: t.displacement, route: t.route, tried: summary(tried), phases });
   // THE NEAR BEND FIRST (D343). When the end is already at the start, the bend is the shortest stretch that closes, and it heads the order on every track measured
   // (no road, and no route moved less by a millimetre: test/core_close_best.test.js compares the pick with the exhaustive order's). So it is closed and checked
   // on its own, and when it proves the other routes are never run. `exhaustive` runs them all first, as D339 did

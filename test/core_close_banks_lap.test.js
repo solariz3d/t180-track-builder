@@ -18,6 +18,13 @@
 //   8  a TUBE is not banked (bankLap on a lap closed by close(): a lap through a tube corner the press does not prove at speed): every tube piece keeps its
 //      bank channel byte for byte; a level curve before it is banked
 //   9  a straight next to a curve keeps the bank it was laid with (its joints stay pinned, D447 (d)): on the lap of row 1, its two straights byte for byte
+//  10  P's review of D447, finding 1 (lighthouse 5596ecd0; plan_d447 "P's D447 review ruled"): a turn that FLIPS faster than the bank can roll. P's lap
+//      (probe447c.js): a left turn that ends still turning (extend to kh +1/300), then a Sharp corner turning right (sharp.js, ramps of 4 m): the turn rate goes
+//      +1/300 → −1/150 in 4 m. Before, the bank lagged the flip, 43 stations leaned out to −58°, and the backstop landed the WHOLE lap flat with no word. Now:
+//      the press proves; no curved station leans out by more than 5°; every curve of HIS (Finish's own closer has its own rows) leans in by at least MEAN_LEAN
+//      on average outside FLIP_ZONE of the flip (2 × the distance the bank needs to roll the share at R 300 at BANK_ROLL × the amber; a flip is a change of
+//      direction within one turning stretch, not across a straight); and the press's report says where the bank was eased for the flip
+//  11  the same on P's s5 (probe447b.js): extend's 20 m transition from kh +1/300 to −1/300 inside one piece
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -124,6 +131,47 @@ test('row 8: a tube is not banked; a level curve on the same lap is', () => {
 test('row 9: a straight next to a curve keeps the bank it was laid with', () => {
   const r = closed(), open = lap(); assert.equal(r.converged, true, r.report);
   for (const i of [0, 2]) assert.deepEqual(r.doc.pieces[i].channels.phi, open.pieces[i].channels.phi, `${open.pieces[i].id}, a straight between curves`);
+});
+
+const ROLL_DEG_M = 0.9 * require('../src/validate/index.js').ROLL_AMBER_DEG_M, SHARE_R300 = 0.75 * Math.atan(((460 / 3.6) ** 2 / 300) / 9.80665) / DEG;
+const FLIP_ZONE = 2 * (SHARE_R300 / ROLL_DEG_M);
+/** The lap's s (m) wherever the stored turn rate kh changes sign between two turning stations (|kh| > 1/600 m) no more than 30 m apart (not across a straight). */
+function flips(doc) {
+  const out = []; let s0 = 0, last = 0, lastS = -Infinity;
+  for (const P of doc.pieces) { if (P.type === 'road') for (let s = 0; s <= P.length; s += 2) { const k = D.valuesAt(P, Math.min(s, P.length)).kh; if (Math.abs(k) > 1 / 600) { const sg = Math.sign(k); if (last && sg !== last && s0 + s - lastS <= 30) out.push(s0 + s); last = sg; lastS = s0 + s; } } s0 += P.length || 0; }
+  return out;
+}
+function flipLap(open, what) {
+  const r = CJ.runCloseBest({ doc: open });
+  assert.equal(r.converged, true, `${what}: the press proves (${r.report})`);
+  const fl = flips(r.doc); assert.ok(fl.length > 0, `control, ${what}: the closed lap has a flip`);
+  const { segments, path } = AD.toPath(r.doc, { step: 2 }), per = new Map(), his = new Set(open.pieces.map((P) => P.id)); let out = 0, worst = 90;
+  for (const q of path.samples) {
+    const g = segments[q.seg], k = q.kvec, kh = Math.hypot(k[0], k[2]); if (g.kind === 'gap' || kh < 1 / 600) continue;
+    const l = Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) / DEG; if (l < -5) out++; worst = Math.min(worst, l);
+    // the bar on the curves is on HIS pieces: Finish's own closer is banked by D434's rule (core_finish_bank), pinned at its joints and the seam
+    if (!his.has(g.id) || fl.some((f) => Math.abs(q.s - f) < FLIP_ZONE)) continue;
+    if (!per.has(g.id)) per.set(g.id, []); per.get(g.id).push(l);
+  }
+  assert.equal(out, 0, `${what}: no curved station leans out (worst ${worst.toFixed(1)}°)`);
+  for (const [id, xs] of per) if (xs.length >= 10) { const m = xs.reduce((a, b) => a + b, 0) / xs.length; assert.ok(m >= MEAN_LEAN, `${what}: ${id} away from the flip leans in by ${m.toFixed(1)}° on average`); }
+  assert.match(r.report, /bank/i, `${what}: the report says where the bank was eased or withheld: ${r.report}`);
+  return r;
+}
+const T90 = (d) => extendTurnBy(d, { length: Q }, 90 * DEG), S = (d, L) => extend(d, { length: L });
+test('row 10: a Sharp corner right after a turn that ends still turning: the curves stay banked, none leans out, and the report says where the bank eased', () => {
+  const { extendSharp } = require('../src/core/sharp.js');
+  let d = D.createDoc('probe'); d = extend(d, { length: 100, family: 'bowl' }); d = T90(d); d = S(d, 700); d = T90(d); d = S(d, 100);
+  d = extend(d, { length: 300, targets: { kh: 1 / 300 } }); d = extendSharp(d, {}, { angle: -60 * DEG, R: 150, ramp: 4 }); d = extend(d, { length: 150 });
+  d = S(d, 100); d = T90(d); d = S(d, 100); d = T90(d); d = S(d, 400);
+  flipLap(d, 'the sharp after a turn');
+});
+test('row 11: a turn that flips over extend\'s 20 m transition: the same', () => {
+  const lat = 240, adv = 560, b = 100, c = 100, e = 100, a = e + lat, f = b + c + adv - 100;
+  let d = D.createDoc('probe'); d = extend(d, { length: 100, family: 'bowl' }); d = T90(d); d = S(d, a); d = T90(d); d = S(d, b);
+  d = extend(d, { length: 300, targets: { kh: 1 / 300 }, transition: 20 }); d = extend(d, { length: 300, targets: { kh: -1 / 300 }, transition: 20 }); d = extend(d, { length: 150, targets: { kh: 0 }, transition: 20 });
+  d = S(d, c); d = T90(d); d = S(d, e); d = T90(d); d = S(d, f);
+  flipLap(d, 'the 20 m flip');
 });
 
 test('row 6: the bank lands in Close\'s one undo step', async () => {
