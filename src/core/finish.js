@@ -168,12 +168,25 @@ function roadHold(doc, from) {
 }
 
 /** D439: the peak side load (g) at the design speed on the pieces from index `from` on of a closed document: the validator's f = v²κ⃗ + g·ŷ across the road (the
- *  centreline, every station on road), as core_finish_bank's lean() reads it. */
-function sideLoad(doc, from) {
+ *  centreline, every station on road), as core_finish_bank's lean() reads it. D440: and how many of its CURVED stations lean OUT of the curve by more than
+ *  LEAN_OUT_DEG (core_finish_bank's lean(), the bar D434 ruled: "no curved station leaning out by more than 5°"), of how many.
+ *  D443 (plan_d438 "D443 ruled from O's side"): the lean is read against the HORIZONTAL turn, asin(U·κ̂h), κh = κ less its world-up part, and a station is curved
+ *  where |κh| > 1/600 m. Read over the 3-D κ, a crest under a bend tilts κ̂ downward and reads as a lean OUT where the road leans INTO its turn: on P's five
+ *  pitched laps every station so counted leaned in by +10.6° to +24.7°, and rule 1 took roads up to 3.2× longer (exo_memory/handback/p-d443-O_2026-10-23.md).
+ *  Whether a crest alone could count is a COUNT, not a bound (D444, P's review of D443 §1.2): on a closed lap roadHold reads the ghost lap's speed, not the
+ *  design speed, so crests tighter than R 1,665 m do hold (one of R 555 m held at 0.9 g). On 141 closed laps (P's tight 108, pitched 16 and steep 17) the
+ *  stations with |κ| over 1/600 m but |κh| under it were 1–27 on 33 laps, and the horizontal lean read none of them out. */
+const LEAN_OUT_DEG = 5;
+function closerLoad(doc, from) {
   const { segments, path } = toPath(doc, { step: 2 }), ids = new Set(doc.pieces.slice(from).map((P) => P.id)), v = V_DESIGN;
-  let worst = 0;
-  for (const q of path.samples) { const g = segments[q.seg]; if (g.kind === 'gap' || !ids.has(g.id)) continue; const k = q.kvec; worst = Math.max(worst, Math.abs((v * v * k[0] * q.L[0] + (v * v * k[1] + G) * q.L[1] + v * v * k[2] * q.L[2]) / G)); }
-  return worst;
+  let side = 0, out = 0, curved = 0;
+  for (const q of path.samples) {
+    const g = segments[q.seg]; if (g.kind === 'gap' || !ids.has(g.id)) continue; const k = q.kvec;
+    side = Math.max(side, Math.abs((v * v * k[0] * q.L[0] + (v * v * k[1] + G) * q.L[1] + v * v * k[2] * q.L[2]) / G));
+    const kh = Math.hypot(k[0], k[2]); if (kh < 1 / 600) continue;   // the horizontal turn (D443)
+    curved++; if (Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) < -LEAN_OUT_DEG * DEG) out++;
+  }
+  return { side, out, curved };
 }
 
 // D434 (the user, 2026-10-22, TEST TRACK 10: "there needs to be a nuance for banking in large curves like that to support the car better"; the librarian's ruling,
@@ -369,7 +382,12 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
     const back = laidRoll ? laidRoll.lengthM : 0, p0 = [doc.start.pos[0] - back * f0[0], doc.start.pos[2] - back * f0[1]];
     // the radii in the order given (the gentler first), and at each radius the shortest route first
     const all = [...oneTurnRoutes(e1.p, e1.th, p0, th0), ...radii.flatMap((R) => routes(e1.p, e1.th, p0, th0, R).sort((a, b) => a.lengthM - b.lengthM))];   // the one-turn routes first (2026-10-15)
-    let best = null, left = 0, worstRoad = null;
+    // D440 (O's D439 §5): a route that leans out is never taken; the search goes on to the next (`out`, the least of them, is kept for the refusal). On a lap
+    // whose own turn is tight, roll-last closed leaning out at 1,171 of 1,172 curved stations (9.22 g) and was taken for its lower side load. Of the routes
+    // that pass, the first in the order they have always been tried is still taken: ranking them by side load was measured three ways and each broke a rule
+    // already held (exo_memory/handback/p-d440-O_2026-10-23.md §2: R 900 detours of 10–11 km on his two tracks; core_finish row 6's one-turn finish; row 12's
+    // compact roll-last road).
+    let best = null, left = 0, worstRoad = null, out = null;
     for (const r0 of all) {
       let laid, r = r0;
       try {
@@ -408,27 +426,35 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
         if (++left >= GATE_TRIES) break;
         continue;
       }
+      const load = closerLoad(res.doc, doc.pieces.length);
+      if (load.out > 0) { if (!out || load.out < out.out) out = { ...load, word: r.word, radiusM: r.radiusM }; continue; }
       const added = res.doc.pieces.slice(doc.pieces.length).reduce((a, P) => a + P.length, 0), cupRate = cupPeak(res.doc, doc.pieces.length);
       // D438: the closer too short to bring the cup home at his own road's fastest says so, and at what rate (it is already the slowest the closer allows: cupHome)
       const cupNote = cupRate > CUP_RATE_DEG_M ? `; the cup comes home at ${cupRate.toFixed(3)}°/m, faster than ${CUP_RATE_DEG_M}°/m: the new road is too short to bring it home slower` : '';
       const rolled = roll ? (first ? `, after ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright first` : `, then ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright onto the start`) : '';
       const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}${cupNote}`;
-      return { result: { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollFirst: !!first, rollPeakDegM: Math.round(peak * 1000) / 1000, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: Math.round(added), cupRateDegM: Math.round(cupRate * 10000) / 10000, report }) } };
+      const cand = ({ side: load.side, result: { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollFirst: !!first, rollPeakDegM: Math.round(peak * 1000) / 1000, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: Math.round(added), cupRateDegM: Math.round(cupRate * 10000) / 10000, report }) } });
+      return { passed: [cand] };
     }
-    return { fail: { tried: all.length, best, worstRoad } };
+    return { passed: [], fail: { tried: all.length, best, worstRoad, out } };
   };
   let fail = null;
   // D439 (P's review of D438 §2 (c)): when a roll is owed, BOTH orders are searched and the closer with the lower peak side load at the design speed is taken
-  // (sideLoad). Laid last, the roll leaves the turns on the end's bank, which the bank never touches (bankPlan's upright rule): on P's turn 180 / tail 1,200 /
+  // (closerLoad). Laid last, the roll leaves the turns on the end's bank, which the bank never touches (bankPlan's upright rule): on P's turn 180 / tail 1,200 /
   // roll 10 and 30 that closer was taken first and carried 10.89 and 9.16 g, against 4.68 and 4.65 rolled first. But where the end is banked the way the turns
   // go, the end's own bank is the better lean: core_finish row 12's lap carries 5.55 g rolled last against 8.08 rolled first. A tie keeps the order below.
-  const found = [];
+  const found = []; let leanOut = null;
   for (const mode of roll0 ? ['last', 'first'] : ['last']) {
     let roll = roll0;
     for (let round = 0; ; round++) {
-      const out = search(mode, roll);
-      if (out.result) { found.push({ result: out.result, side: sideLoad(out.result.doc, doc.pieces.length) }); break; }
+      // D440 (h) (P's review of D439 §2.4): a refusal in the SECOND order keeps the closer the first order found. inferred unreachable today (the roll laid
+      // first is long enough for its own roll, D438, and the lengthening converges in a round or two), so no row; it guards a later change
+      let out;
+      try { out = search(mode, roll); } catch (err) { if (err.name === 'CoreError' && found.length) break; throw err; }
+      if (out.fail && out.fail.out && (!leanOut || out.fail.out.out < leanOut.out)) leanOut = out.fail.out;
+      if (out.passed && out.passed.length) { found.push(...out.passed); break; }
       if (out.tooFast) {
+        if (round >= ROLL_ROUNDS && found.length) break;   // D440 (h)
         if (round >= ROLL_ROUNDS) throw new D.CoreError('FINISH_ROLL', `the roll upright onto the start still reads ${out.tooFast.toFixed(3)}°/m (the amber bar is ${ROLL_AMBER_DEG_M}) at ${roll.lengthM} m after ${round + 1} lengthenings`);
         roll = { bank, lengthM: Math.ceil(roll.lengthM * (out.tooFast / ROLL_AMBER_DEG_M) * ROLL_LENGTHEN) };
         continue;
@@ -439,6 +465,8 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
     }
   }
   if (found.length) return found.reduce((a, b) => (b.side < a.side ? b : a)).result;
+  // D440: never a closer that leans out. Every route that closed and held the car leaned the road out of a curve somewhere: refused by name, with the least of them
+  if (leanOut) throw new D.CoreError('FINISH_LEANS_OUT', `no finish both closes and leans into its curves from here: every road that closes and keeps the car on it leans out of a curve, the least ${leanOut.out} of its ${leanOut.curved} curved stations by more than ${LEAN_OUT_DEG}° (${leanOut.word} at R ${Math.round(leanOut.radiusM)} m). Extend toward the start, or bank the end the way the road must turn, and finish again`);
   const rollText = roll0 ? ` and must roll ${Math.round(rollRad / DEG)}° to meet it (${roll0.lengthM} m of straight)` : '';
   if (fail.worstRoad) {
     const pitch = e.pitch / DEG, dy = doc.start.pos[1] - e.y;
