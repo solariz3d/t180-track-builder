@@ -16,8 +16,11 @@
 //      300 m rolling 40° and cupping to 35°; its closer rolls upright first, banks its turns, and brings the cup home: rows 1 and 3's bars on it
 //   6  a SHORT closer built here, P's lap (exo_memory/handback/p-d438-review-P_2026-10-22.md §2 (a)): cup 10°, a 150° turn over 1,500 m, then 300 m rolling 54° and
 //      cupping to 35°: its cup comes home no faster than 0.021 °/m (smootherstep's peak, 1.875·Δ/length, read 0.0217 there)
-//   7  the FALLBACK: a closer too short for 0.021 (the tail cups to 120°, Δ = 110°): the cup still comes home, at no more than 1.5·Δ/length (the slowest the
-//      closer allows, linear, with the first piece's joint points held), and the report and the plan state the rate, as read on the closed lap
+//   7  the FALLBACK: a closer too short for 0.021 (the tail cups to 120°, Δ = 110°): the cup still comes home, at no more than 1.05·Δ/length (the slowest the
+//      closer allows: linear from the first piece's second Greville abscissa, D439 (d); it read 1.28 × with σ measured from the window's start), and the report
+//      and the plan state the rate, as read on the closed lap
+//   8  no false fallback: on P's three laps whose Δ/length is under 0.021 (turn 180, tail 700, roll 54 / 90 / 150; Δ/L 0.0187–0.0201 at D438 (a)), the cup comes
+//      home under 0.021 and the report carries no cup note (they printed "too short" at 1.28 × Δ/L, P §5)
 // "Every closer joint" includes its first, where the closer meets the user's own last piece (TEST TRACK 10's p40|p41: Finish's roll straight starting).
 'use strict';
 const test = require('node:test');
@@ -107,9 +110,18 @@ test('row 7: a closer too short for his rate brings the cup home at the slowest 
   const L = doc.pieces.slice(n0).reduce((a, P) => a + P.length, 0), delta = Math.abs(first.channels.c[0] - D.pieceEnd(open.pieces.at(-1)).c.v);
   let worst = 0; for (const P of doc.pieces.slice(n0)) { let prev = D.valuesAt(P, 0).c; for (let s = 1; s <= P.length; s++) { const c = D.valuesAt(P, Math.min(s, P.length)).c; worst = Math.max(worst, Math.abs(c - prev)); prev = c; } }
   assert.ok(delta / L > CUP_RATE, `control: the closer is too short for ${CUP_RATE} °/m (Δ ${delta.toFixed(1)}° over ${L.toFixed(0)} m)`);
-  assert.ok(worst <= 1.5 * (delta / L), `the cup comes home at ${worst.toFixed(4)} °/m, within 1.5 × the slowest the closer allows, ${(delta / L).toFixed(4)}`);
+  assert.ok(worst <= 1.05 * (delta / L), `the cup comes home at ${worst.toFixed(4)} °/m, within 1.05 × the slowest the closer allows, ${(delta / L).toFixed(4)}`);
   assert.ok(Math.abs(D.pieceEnd(last).c.v - first.channels.c[0]) < 1e-6, 'the cup meets p1\'s at the seam');
   const said = r.plan.report.match(/the cup comes home at ([\d.]+)°\/m/);
   assert.ok(said, `the report states the rate: ${r.plan.report}`);
   assert.ok(Math.abs(Number(said[1]) - worst) < 1e-3 && Math.abs(r.plan.cupRateDegM - worst) < 1e-4, `the stated rate (${said[1]}, plan ${r.plan.cupRateDegM}) is the one read on the lap, ${worst.toFixed(4)}`);
+});
+test('row 8: a closer long enough for his rate brings the cup home under it and says nothing of a fallback (P\'s three laps)', () => {
+  for (const rollDeg of [54, 90, 150]) {
+    const open = builtHere({ turnDeg: 180, tailM: 700, rollDeg }), { r, doc, n0 } = closer(open, `turn 180, tail 700, roll ${rollDeg}`), what = `roll ${rollDeg} (${r.plan.report})`;
+    const L = doc.pieces.slice(n0).reduce((a, P) => a + P.length, 0), delta = Math.abs(doc.pieces[0].channels.c[0] - D.pieceEnd(open.pieces.at(-1)).c.v);
+    assert.ok(delta / L <= CUP_RATE, `control, ${what}: Δ/length ${(delta / L).toFixed(4)} is within ${CUP_RATE}`);
+    assert.ok(r.plan.cupRateDegM <= CUP_RATE, `${what}: the cup comes home at ${r.plan.cupRateDegM} °/m, within ${CUP_RATE}`);
+    assert.doesNotMatch(r.plan.report, /the cup comes home at/, `${what}: no fallback note`);
+  }
 });

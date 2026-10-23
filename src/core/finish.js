@@ -262,7 +262,12 @@ function cupHome(laid, window) {
   const last = laid.pieces[road[road.length - 1]], delta = F.channels.c[0] - D.pieceEnd(last).c.v;
   if (!(Math.abs(delta) > 1e-9)) return laid;
   let s0 = 0; const startOf = new Map(); laid.pieces.forEach((P, p) => { startOf.set(p, s0); s0 += P.length || 0; });
-  const a = startOf.get(road[0]), z = startOf.get(road[road.length - 1]) + last.length, ease = (x) => Math.max(0, Math.min(1, x));
+  // D439 (d) (P's review of D438 (a) §5): σ = (ξ − ξ₁)/(z − ξ₁), from the first piece's SECOND Greville abscissa ξ₁ (the last point held for his last joint) to
+  // the last piece's SECOND-TO-LAST one z (the first of the two points that sit at p1's cup, so where p1 starts flat the seam's C1 row has nothing to do). Every
+  // span between then runs at Δ/(z − ξ₁), and the held points lie on the line (σ ≤ 0 or ≥ 1 there). Measured from the window's start, the third point already
+  // carried Δ·ξ₂/L while the first two were held, so the first free span ran at 1.5 × Δ/L and the lap read 1.27–1.30 × (three laps with Δ/L under 0.021
+  // printed the fallback note); ended at the start line, the seam row flattened the last span and the one before ran at 1.53 × (row 7's lap).
+  const U0 = D.knotVector(laid.pieces[road[0]]), a = startOf.get(road[0]) + (U0[2] + U0[3] + U0[4]) / 3, UL = D.knotVector(last), nl = last.channels.c.length, z = startOf.get(road[road.length - 1]) + (UL[nl - 1] + UL[nl] + UL[nl + 1]) / 3, ease = (x) => Math.max(0, Math.min(1, x));
   const cs = new Map(road.map((p) => { const P = laid.pieces[p], U = D.knotVector(P); return [p, P.channels.c.map((c, i) => (p === road[0] && i < 2 ? c : c + delta * ease((startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3 - a) / (z - a))))]; }));
   // the joint slope rule GUARDS C1 BY CONSTRUCTION: under the linear ease it rewrites each joint's two points with the values they already have (a linear
   // function sampled at the Greville abscissae is reproduced exactly), and it keeps every joint C1 should the ease ever stop being linear (D438 J8, ruled keep)
@@ -385,13 +390,14 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
       // D439 (P's review of D438 §2 (b)): with the roll laid FIRST, Close, the bank and the cup work on the pieces after its roll straight. Closed with them, the
       // straight was bent into a curve (to R 326 m) while it still rolled, and a rolling piece is never banked (bankPlan's upright rule), so its roll leaned the
       // wrong way through the bend: 41 stations out, to −26.3°, 5.07 g on P's turn 210 / tail 300 / roll 30. Left as laid it stays straight; the pieces after
-      // it close the lap. (window, all the new road, is still what the plan reports and the shell outlines.)
+      // it close the lap. (window, all the new road, is still what the plan reports and the shell outlines, and what the cup comes home over (cupHome): the cup
+      // does not move the centreline, and over the whole new road it is slowest, D439 (d).)
       const shut = first ? window.slice(1) : window;
       if (!shut.length) continue;
       let res;
       // D357: what Close refuses is taken AS LAID when it already meets the start (metAsLaid: a lone straight it cannot bend). (A windowed Close never returns
       // unconverged: it refuses by name, close.js D242)
-      try { laid = cupHome(laid, shut); res = closeBanked(laid, shut, bank); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
+      try { laid = cupHome(laid, window); res = closeBanked(laid, shut, bank); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
       if (!res.converged) { best = best || res.report; continue; }
       const peak = roll ? rollPeak(res.doc, doc.pieces.length) : 0;
       if (peak > ROLL_AMBER_DEG_M) return { tooFast: peak };   // the roll reads too fast as the checker reads it: lengthen it and search again
