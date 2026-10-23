@@ -67,7 +67,11 @@ function digestOf(out) {
   return `sha256 ${h.digest('hex').slice(0, 16)} files ${n}`;
 }
 // b6969da's bytes for the two exports, from row 1 run there (node --test --test-name-pattern="row 1" app/test/export-isolated.test.js, PRINT_D437B=1)
-const PIN = { lap: 'sha256 00588932b76e738a files 10', open: 'sha256 a257c20e84e68897 files 11' };
+// local-0.4.15 (seat A, D441 landing): the lap pin moved from b6969da's 00588932b76e738a to 36ba2c6869a3d1d0 because D438 (9233a93,
+// src/geom/pitlane.js, the pit lane level from leave to rejoin) changes the lap's pit lane; pitlane.js put back to 9861c69's gives 00588932
+// again, so the isolation did not move it. The open TEST export has no pit lane and is unchanged. The row titles still say b6969da's;
+// they are left as they are because the mutation harness names its rows by them.
+const PIN = { lap: 'sha256 36ba2c6869a3d1d0 files 10', open: 'sha256 a257c20e84e68897 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });
