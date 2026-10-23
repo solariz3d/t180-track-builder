@@ -255,6 +255,8 @@ function cupHome(laid, window) {
   let s0 = 0; const startOf = new Map(); laid.pieces.forEach((P, p) => { startOf.set(p, s0); s0 += P.length || 0; });
   const a = startOf.get(road[0]), z = startOf.get(road[road.length - 1]) + last.length, ease = (x) => Math.max(0, Math.min(1, x));
   const cs = new Map(road.map((p) => { const P = laid.pieces[p], U = D.knotVector(P); return [p, P.channels.c.map((c, i) => (p === road[0] && i < 2 ? c : c + delta * ease((startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3 - a) / (z - a))))]; }));
+  // the joint slope rule GUARDS C1 BY CONSTRUCTION: under the linear ease it rewrites each joint's two points with the values they already have (a linear
+  // function sampled at the Greville abscissae is reproduced exactly), and it keeps every joint C1 should the ease ever stop being linear (D438 J8, ruled keep)
   road.forEach((p, j) => { if (j > 0 && road[j - 1] === p - 1) { const A = cs.get(p - 1), B = cs.get(p), Pa = laid.pieces[p - 1], Pb = laid.pieces[p], na = A.length;
     const hA = Pa.length - (Pa.knots.length ? Pa.knots[Pa.knots.length - 1] : 0), hB = Pb.knots.length ? Pb.knots[0] : Pb.length; B[0] = A[na - 1]; B[1] = B[0] + (hB / hA) * (A[na - 1] - A[na - 2]); } });
   return D.checkDoc({ ...laid, pieces: laid.pieces.map((P, p) => (cs.has(p) ? { ...P, channels: { ...P.channels, c: cs.get(p) } } : P)) });
