@@ -13,7 +13,8 @@
 //   3  a closer with only gentle curves (one 180° turn at R ≈ 2,000 m) is banked by its share and no more: its steepest bank well under TEST 10's tight closer's
 // And in rows 1–3, THE SHARE: on each turn the closer lays upright (the same bank at both ends), at every control point where the rate limit is not binding (both
 // steps beside it under 0.8 of the cap), the bank is −0.75·atan(v²·k/g) of the FINAL curvature to 1e-6 rad (measured 1e-9: share-residual.js; a bank sized from
-// the laid route misses by up to 0.93 rad on TEST TRACK 10, and an unlimited one that the backstop scales down by 0.65)
+// the laid route misses by up to 0.93 rad on TEST TRACK 10, and an unlimited one that the backstop scales down by 0.65). D438: and where the roll's acceleration
+// limit is not binding either (each slope change beside it under 0.8 of BANK_ACCEL); the share check is amended by name at its line, the share unchanged.
 //   4  a straight gets none: a lap that ends on its start line behind the start finishes with a straight, and its bank is the laid bank
 'use strict';
 const test = require('node:test');
@@ -28,7 +29,7 @@ const { extend } = require('../src/core/extend.js');
 const { extendTurnBy } = require('../src/core/turnby.js');
 const F = require('../src/core/finish.js');
 
-const v = MACH6.designSpeedKmh / 3.6, DEG = Math.PI / 180;
+const v = MACH6.designSpeedKmh / 3.6, DEG = Math.PI / 180, ACCEL = 2e-4;   // ACCEL: finish.js BANK_ACCEL (D438)
 /** Over the pieces from index `from` of a closed document: curved stations, those leaning out by more than 5°, the mean lean, the peak side load at the design speed. */
 function lean(doc, from) {
   const { segments, path: p } = AD.toPath(doc, { step: 2 }), ids = new Set(doc.pieces.slice(from).map((P) => P.id));
@@ -64,6 +65,10 @@ function banked(open, what, flatLatG) {
     for (let i = 2; i < ph.length - 2; i++) {
       const t = (j) => ph[j] - ph[0];
       if (Math.abs(t(i) - t(i - 1)) > cap * (g(i) - g(i - 1)) || Math.abs(t(i + 1) - t(i)) > cap * (g(i + 1) - g(i))) continue;
+      // AMENDED by D438 (plan_d438 "Part 2 ruled": a second limiter, on the roll's acceleration, finish.js BANK_ACCEL): a point the acceleration limit holds back
+      // from its share is not read either: the slope change at i − 1, i and i + 1 all under 0.8 of BANK_ACCEL·(d₀ + d₁)/2. The share itself is unchanged.
+      const acc = (j) => j < 1 || j > ph.length - 2 ? 0 : Math.abs((ph[j + 1] - ph[j]) / (g(j + 1) - g(j)) - (ph[j] - ph[j - 1]) / (g(j) - g(j - 1))) / ((ACCEL * (g(j + 1) - g(j - 1))) / 2);
+      if (acc(i - 1) > 0.8 || acc(i) > 0.8 || acc(i + 1) > 0.8) continue;
       const want = -0.75 * Math.atan((v * v * kh[i]) / G); read++;
       assert.ok(Math.abs(t(i) - want) < 1e-6, `${what}: ${P.id} point ${i}: bank ${(t(i) / DEG).toFixed(3)}° is the share of its final curvature, ${(want / DEG).toFixed(3)}°`);
     }
