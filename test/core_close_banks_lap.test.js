@@ -111,8 +111,10 @@ test('row 7: a loop is not banked, even one that turns; a level curve on the sam
   d = turn(d, { length: Q }, 90 * DEG); d = extend(d, { length: 100 }); d = turn(d, { length: Q }, 90 * DEG);
   const c = close(d, { edited: [d.pieces.length - 1] }); assert.equal(c.converged, true, c.report);
   const LOOP = 3; assert.ok(c.doc.pieces[LOOP].channels.kh.some((k) => Math.abs(k) > 1 / 600), 'control: the loop turns');
-  const b = F.bankLap(c.doc);
+  const w = F.bankLapWith(c.doc), b = w.doc;
   assert.deepEqual(b.pieces[LOOP].channels.phi, c.doc.pieces[LOOP].channels.phi, 'the loop keeps its bank channel byte for byte');
+  // the LEVEL rule keeps it out, not the per-piece withhold (finding 1): a loop banked and then withheld for leaning out would also come out byte-equal
+  assert.ok(!w.withheld.includes(c.doc.pieces[LOOP].id), `the loop was never banked (withheld: ${w.withheld.join(', ') || 'none'})`);
   assert.ok(b.pieces[1].channels.phi.some((x, j) => Math.abs(x - c.doc.pieces[1].channels.phi[j]) > 30 * DEG), 'control: the level curve before it is banked');
 });
 
