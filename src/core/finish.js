@@ -184,7 +184,8 @@ const BANK_SHARE = 0.75, BANK_TRIES = 3, BANK_ROLL = 0.9, V_DESIGN = MACH6.desig
 // turned but not how suddenly that rate started, so at each pinned joint the roll rate jumped from 0 to the cap in one knot, felt 8.4 m out as a step in the
 // surface's vertical curvature (95.9 °/100 m at TEST TRACK 10's p41|p42, against 21.7 at his own joints' 90th percentile). BANK_ACCEL bounds the change of the
 // control polygon's slope per metre (rad/m²): at a C1 joint the outer-wheel step is about 8.4 m · 2·BANK_ACCEL, so 21.7 °/100 m (0.00379 /m) allows 2.26e-4.
-// It acts on the TOTAL bank (laid plus added), so a ramp is never stacked on a roll the route already lays (the roll straight).
+// It acts on the added bank, like the rate limit: the pins already keep it off any roll the route lays (a roll straight is not banked), so bounding the total
+// instead changed nothing on any track measured, and was removed (D438 J3/J10, exo_memory/handback/p-d438-build-O_2026-10-22.md §4).
 const BANK_ACCEL = 2e-4, BANK_SWEEPS = 400, ROLL_ACCEL_FIT = 1.5;
 const bankOf = (k, share) => -share * Math.atan((V_DESIGN * V_DESIGN * k) / G);
 /**
@@ -193,37 +194,34 @@ const bankOf = (k, share) => -share * Math.atan((V_DESIGN * V_DESIGN * k) / G);
  * the user's own bank (a roll laid LAST, after the turns) keeps it: the bank is a lean into the curve against gravity, and rolling the road upright inside the turn
  * is what finish.js never does (lay: "a roll is never laid in a turn"); such a route is judged as it was laid, and the roll-first order banks its upright turns.
  */
-function bankPlan(kFrom, window, share, uprightSet, laid) {
+function bankPlan(kFrom, window, share, uprightSet) {
   const road = window.filter((p) => kFrom.pieces[p].type === 'road'), rate = (BANK_ROLL * ROLL_AMBER_DEG_M * Math.PI) / 180, seq = [];
   let s0 = 0; const startOf = new Map(); kFrom.pieces.forEach((P, p) => { startOf.set(p, s0); s0 += P.length || 0; });
   road.forEach((p, j) => {
     const P = kFrom.pieces[p], U = D.knotVector(P), n = P.channels.kh.length, linked = j > 0 && road[j - 1] === p - 1;
     const up = uprightSet.has(p);
     // pinned: each piece's first two and last two points keep the laid bank (the ruling: meet the laid bank at EVERY joint, so a straight between turns gets none)
-    for (let i = linked ? 1 : 0; i < n; i++) { const pinned = i < 2 || i > n - 3; seq.push({ p, i, s: startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3, l: laid.pieces[p].channels.phi[i], t: up && !pinned ? bankOf(P.channels.kh[i], share) : 0, pinned }); }
+    for (let i = linked ? 1 : 0; i < n; i++) { const pinned = i < 2 || i > n - 3; seq.push({ p, i, s: startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3, t: up && !pinned ? bankOf(P.channels.kh[i], share) : 0, pinned }); }
   });
-  // the pinned points stay where they are in both passes (a pass that moved them would undo the pin: the close would then meet the seam's bank row in one knot).
-  // D438: the passes limit the TOTAL bank b = l + t; a span the route already rolls faster than the cap (the laid roll straight) keeps its own rate as its bound
-  const cap = (a, b) => Math.max(rate * (b.s - a.s), Math.abs(b.l - a.l));
-  for (let k = 1; k < seq.length; k++) { if (seq[k].pinned) continue; const d = cap(seq[k - 1], seq[k]), b0 = seq[k - 1].l + seq[k - 1].t; seq[k].t = Math.max(b0 - d, Math.min(b0 + d, seq[k].l + seq[k].t)) - seq[k].l; }
-  for (let k = seq.length - 2; k >= 0; k--) { if (seq[k].pinned) continue; const d = cap(seq[k], seq[k + 1]), b0 = seq[k + 1].l + seq[k + 1].t; seq[k].t = Math.max(b0 - d, Math.min(b0 + d, seq[k].l + seq[k].t)) - seq[k].l; }
+  // the pinned points stay where they are in both passes (a pass that moved them would undo the pin: the close would then meet the seam's bank row in one knot)
+  for (let k = 1; k < seq.length; k++) { if (seq[k].pinned) continue; const d = rate * (seq[k].s - seq[k - 1].s); seq[k].t = Math.max(seq[k - 1].t - d, Math.min(seq[k - 1].t + d, seq[k].t)); }
+  for (let k = seq.length - 2; k >= 0; k--) { if (seq[k].pinned) continue; const d = rate * (seq[k + 1].s - seq[k].s); seq[k].t = Math.max(seq[k + 1].t - d, Math.min(seq[k + 1].t + d, seq[k].t)); }
   // D438: THE ROLL'S ACCELERATION. Each three neighbours' slope change, |(b₊ − b)/d₁ − (b − b₋)/d₀| ≤ BANK_ACCEL·(d₀ + d₁)/2, and each span's rate above, are
   // convex sets; the free points are projected onto each in turn, sweep after sweep (alternating projections), the pins never moved. Where the pins themselves
   // break a bound (two pinned spans meeting) nothing can move and it is left as laid.
-  const bOf = (x) => x.l + x.t;
   for (let sweep = 0; sweep < BANK_SWEEPS; sweep++) {
     let worst = 0;
     for (let k = 1; k + 1 < seq.length; k++) {
       const a = seq[k - 1], m = seq[k], c = seq[k + 1], d0 = m.s - a.s, d1 = c.s - m.s; if (!(d0 > 0 && d1 > 0)) continue;
-      const g = (bOf(c) - bOf(m)) / d1 - (bOf(m) - bOf(a)) / d0, lim = (BANK_ACCEL * (d0 + d1)) / 2, over = Math.abs(g) - lim;
+      const g = (c.t - m.t) / d1 - (m.t - a.t) / d0, lim = (BANK_ACCEL * (d0 + d1)) / 2, over = Math.abs(g) - lim;
       if (over <= 0) continue;
       const co = [[a, 1 / d0], [m, -1 / d0 - 1 / d1], [c, 1 / d1]].filter(([x]) => !x.pinned), nn = co.reduce((q, [, w]) => q + w * w, 0); if (!nn) continue;
       worst = Math.max(worst, over); const f = (Math.sign(g) * over) / nn; for (const [x, w] of co) x.t -= f * w;
     }
     for (let k = 1; k < seq.length; k++) {
-      const a = seq[k - 1], c = seq[k], over = Math.abs(bOf(c) - bOf(a)) - cap(a, c); if (over <= 1e-12) continue;
+      const a = seq[k - 1], c = seq[k], over = Math.abs(c.t - a.t) - rate * (c.s - a.s); if (over <= 1e-12) continue;
       const free = [a, c].filter((x) => !x.pinned); if (!free.length) continue;
-      const sg = Math.sign(bOf(c) - bOf(a)); worst = Math.max(worst, over / (c.s - a.s));
+      const sg = Math.sign(c.t - a.t); worst = Math.max(worst, over / (c.s - a.s));
       if (free.length === 2) { a.t += (sg * over) / 2; c.t -= (sg * over) / 2; } else if (free[0] === c) c.t -= sg * over; else a.t += sg * over;
     }
     if (worst < 1e-9) break;
@@ -271,9 +269,9 @@ function closeBanked(laid, window, upright) {
   const uprightSet = new Set(window.filter((p) => laid.pieces[p].type === 'road' && laid.pieces[p].channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE)));
   let share = BANK_SHARE, res = null;
   for (let t = 0; t < BANK_TRIES; t++) {
-    const plan1 = bankPlan(laid, window, share, uprightSet, laid), first = close(banked(laid, plan1), { window });
+    const plan1 = bankPlan(laid, window, share, uprightSet), first = close(banked(laid, plan1), { window });
     if (!first.converged) return first;
-    res = close(banked({ ...first.doc, closed: false }, bankPlan(first.doc, window, share, uprightSet, laid), plan1), { window });
+    res = close(banked({ ...first.doc, closed: false }, bankPlan(first.doc, window, share, uprightSet), plan1), { window });
     if (!res.converged) return res;
     const peak = bankRollPeak(res.doc, window);
     if (peak <= Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6)) return res;
