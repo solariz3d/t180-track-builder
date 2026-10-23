@@ -205,6 +205,9 @@ function buildExport(doc, opts = {}) {
  */
 function buildFromSegments(segs, meta = {}, opts = {}) {
   const o = { step: 2, csp: true, ...LAYOUT, ...opts };
+  // D437b: opts.onStage(words) is told each stage as the export reaches it ("building the pit-lane check"), so an export that runs in its own process
+  // (app/export/exportrunner.js) can say where it was when that process died. It reads nothing and changes nothing
+  const stage = typeof o.onStage === 'function' ? o.onStage : () => {};
   const author = authorOf(o.author);   // D365: checked first, so a bad name refuses before any of the work
   const doc = { name: meta.name, pitLane: meta.pitLane || null }, via = meta.via || 'segments';
   if (!Array.isArray(segs) || !segs.some((g) => g.kind === 'road')) throw new ExportError('EMPTY_DOC', 'the document resolves to no road');
@@ -212,17 +215,20 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // meta.start (D186): where the lap starts and its heading and PITCH ({ pos, theta, p }, src/geom buildPath's start); a word
   // document resolves from the origin, level, so it has none. The geometry's shape depends on the start pitch.
   const test = o.test === true;   // D243a: the TEST export of an unfinished track (above), only when asked for
+  stage('building the road\'s path');
   try { p = buildPath(segs, { step: o.step, closed: !test, ...(meta.start ? { start: meta.start } : {}) }); } catch (e) { throw new ExportError('NOT_CLOSED', e.message); }
   // meta.liftPath (D186): a source whose segments do not carry the whole road (the equation core's offsets, A's adapter offsetPath)
   // lifts the path here, before the mesh, validation, markers and the AI line read it
   if (typeof meta.liftPath === 'function') p = meta.liftPath(p);
   const selfCheck = o.selfCheck !== false;
+  stage('building the mesh and checking it for self-intersection');
   const mesh = buildMesh(p, segs, { ...(o.mesh || {}), selfCheck });
   const warnings = [];
   if (!selfCheck) warnings.push('self-intersection NOT checked: selfCheck is false (ARCHITECTURE.md:58, :84)');
 
   // validation first: a red refuses, amber warns
   // the built physics road, in world space, for the downforce-ray gap check (src/validate/raygap.js; R1)
+  stage('validating the lap');
   const roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
   // D256 fullSpeed: a closed lap on its ghost lap (as before); the TEST export's OPEN path at the lap sim's cap, so its lift-off is listed
   const v = validate(p, segs, { csp: o.csp, softCollision: true, folds: mesh.folds, roadMesh, fullSpeed: true });
@@ -230,6 +236,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // the pit lane (D174): built beside the road, self-checked against it with the same tests; its findings are red
   let pit = null;
   if (doc.pitLane) {
+    stage('building the pit-lane check');
     try { pit = PitLane.laneForExport(p, segs, mesh, doc.pitLane, { selfCheck, mesh: o.mesh }); } catch (e) { if (e.name === 'PitLaneError') throw new ExportError('PIT_LANE', e.message); throw e; }
     red.push(...pit.red);
   }
@@ -250,6 +257,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
 
   // markers, from the words
   // the markers (§5c): the layout given, or the default one; a red check refuses, an amber warns
+  stage('placing the markers');
   let layout;
   try { layout = o.markers || Markers.defaultLayout(p, segs, { count: o.grid, pits: o.pits, height: o.height }); } catch (e) {
     if (e.code === 'NO_START_STRAIGHT' || e.code === 'BAD_LAYOUT') throw new ExportError(e.code, e.message);
@@ -273,6 +281,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // D230: every core road cell gets an underside skin that casts shadows, and a closed tube's inside is dark (src/export/underskin.js); a word document's scene comes back as it is
   // D261: a piece whose grip is not 100 drives on its own surface: its road cells are named 1GRIPnnn_… (src/export/gripkeys.js), after the skins take their names from 1ROAD_
   // D279: the pit lane wears the road's floor (src/export/pitlane.js withLaneFloor), right after the road's cells take theirs
+  stage('texturing the road');
   const textured = withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null);
   const laned = pit ? PitLane.withLaneFloor(textured, pit.lane, segs, o.textures || null) : textured;
   // D279 follow-up: the painted pit boxes wear the road under them, its material and its texture coordinates (src/export/pitboxes.js)
@@ -303,13 +312,16 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // diffuse textures first, as AC needs (src/export/acready.js: without these the car fell through and the road was black)
   // D260: then the road and its underside skin joined into chunks (acready.js mergeForAc): the same triangles, a few dozen draw calls instead of one per 2 m
   // cell. `mergeMeshes: false` writes the unmerged meshes, for a before/after comparison only
+  stage('writing the kn5');
   const welded = weldSeams(flattenForAc(scene));
   const kn5 = Buffer.from(writeKn5(ensureDiffuse(o.mergeMeshes === false ? welded : mergeForAc(welded))));
+  stage('reading the kn5 back');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-')), tf = path.join(tmp, 'readback.kn5');
   let back;
   try { fs.writeFileSync(tf, kn5); back = readKn5(tf); } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 
   // the AI line
+  stage('making the AI line');
   const speeds = segs.filter((g) => g.kind === 'road').map((g) => g.speed);
   const speedKmh = o.aiSpeedKmh !== undefined ? o.aiSpeedKmh : speeds.every((x) => Number.isFinite(x) && x > 0) ? Math.min(...speeds) * 3.6 : undefined;
   const { dsn, secs } = aiInput(segs, p);
@@ -377,7 +389,9 @@ function exportSegments(segs, meta, { outDir, variant = 'block', t180 = true, ..
   if (!outDir) throw new ExportError('NO_OUT_DIR', 'exportSegments needs an outDir');
   if (!VARIANTS[variant]) throw new ExportError('BAD_VARIANT', `variant "${variant}" is not block, noblock or both`);
   if (!t180 && variant !== 'block') throw new ExportError('BAD_VARIANT', `variant "${variant}" is the T-180 soft-road control; it needs "T-180 track" on`);
-  return writeExport(buildFromSegments(segs, meta, opts), { outDir, variant, t180 });
+  const b = buildFromSegments(segs, meta, opts);
+  if (typeof opts.onStage === 'function') opts.onStage('writing the track\'s files');   // D437b
+  return writeExport(b, { outDir, variant, t180 });
 }
 
 function writeExport(b, { outDir, variant, t180 }) {

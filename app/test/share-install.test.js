@@ -270,7 +270,8 @@ test('D252 follow-up: once Export to Assetto Corsa has found and remembered AC, 
     const native = fakeNative(), found = 'G:/SteamLibrary/steamapps/common/assettocorsa';
     native.findAcRoot = async () => ({ remembered: native.root, found: native.root ? null : found });
     native.getAcRoot = async () => { if (!native.root) native.root = found; return native.root; };   // get_ac_root finds and remembers (ac.rs root_or_find)
-    const shell = { buildExport: () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
+    // D437b amended BY NAME: Export to Assetto Corsa builds through shell.buildExportAsync now (the export in its own process); the stand-in was buildExport
+    const shell = { buildExportAsync: async () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
     const root = new fake.Element('div'), more = new fake.Element('div'), card = new fake.Element('div');
     const m = mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more, card });
     await m.card; assert.match(card.textContent, /Assetto Corsa found at/, 'control: the card is up');
@@ -282,7 +283,8 @@ test('D252 follow-up: a long install note is cut to its box with the whole text 
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
   try {
     const native = fakeNative(); native.root = 'G:/' + 'a-very-long-folder-name/'.repeat(6) + 'assettocorsa';
-    const shell = { buildExport: () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
+    // D437b amended BY NAME: the stand-in shell builds through buildExportAsync, as app/install/index.js now calls it (was buildExport)
+    const shell = { buildExportAsync: async () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
     const root = new fake.Element('div'); mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more: new fake.Element('div') });
     await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
     const note = [...root.walk()].find((e) => e.className === 't-install-note');
