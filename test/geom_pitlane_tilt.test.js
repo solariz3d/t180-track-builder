@@ -1,8 +1,11 @@
 // geom_pitlane_tilt.test.js: node --test --test-concurrency=4 test/geom_pitlane_tilt.test.js. A pit lane leaving a MEASURED
 // font's tilted edge (D182: src/geom/fonts.js; the bowl's edge turns 15.5° from the centre's normal, the half-pipe's 30.6°).
 // Stated before the test: at both joins the lane's inner edge IS the road's edge (≤ 1e-9 m) and runs along it (tangent within
-// 1e-5 rad over 1e-4 m), and the lane's up is the road's surface normal at that edge (≤ 1e-9); along the run the lane lies
-// level in the road's frame (its up is the road's U, ≤ 1e-9); an edge past 35° is refused by name (PIT_JOIN_NOT_FLAT).
+// 1e-5 rad over 1e-4 m); along the run the lane lies level in the road's frame (its up is the road's U, ≤ 1e-9); an edge past
+// 35° is refused by name (PIT_JOIN_NOT_FLAT).
+// AMENDED (D438, 2026-10-22, the rule changed: the lane "flips up towards the beginning and end, it should be smooth even"): this file held that the
+// lane's up IS the road's surface normal at its edge at both joins (G1 across the edge, D182). Now the lane lies level in the road's frame from leave
+// to rejoin, so at the joins its up is the road's U too (≤ 1e-9). The no-step, along-the-edge and level-run checks are kept as they were.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -26,7 +29,7 @@ function straight(profile) {
 const SPEC = (side) => ({ ...LANE, side, leave: { word: 'w1', along: 100 }, rejoin: { word: 'w1', along: 500 } });
 
 for (const [font, side] of [['bowl', 'R'], ['half-pipe', 'L']]) {
-  test(`a lane off the measured ${font}'s ${side === 'L' ? 'left' : 'right'} edge: G1 and no step at both joins, level along the run`, () => {
+  test(`a lane off the measured ${font}'s ${side === 'L' ? 'left' : 'right'} edge: no step at both joins, level from leave to rejoin (AMENDED D438: was G1, the edge's normal at the joins)`, () => {
     const prof = fontProfile(font, { width: 31 }), P = Prof.normalize(prof), { segs, path: p } = straight(prof);
     const lane = buildPitLane(p, segs, SPEC(side)), h = 1e-4, uE = side === 'L' ? P.u[P.u.length - 1] : P.u[0];
     assert.ok(Math.abs(Prof.psiAt(P, uE)) > 10 * Math.PI / 180, 'the edge should be tilted, or this tests nothing');
@@ -34,8 +37,8 @@ for (const [font, side] of [['bowl', 'R'], ['half-pipe', 'L']]) {
       const a = lane.at(s), b = lane.at(s + dir * h);
       assert.ok(len(sub(a.inner, a.edge)) <= 1e-9, `inner vs edge at s ${s}`);
       assert.ok(ang(sub(b.inner, a.inner), sub(b.edge, a.edge)) <= 1e-5, `tangent at s ${s}`);
-      const [nl, nu] = Prof.normalAt(P, uE), n = [0, 1, 2].map((k) => a.L[k] * nl + a.U[k] * nu);
-      assert.ok(len(sub(a.Ul, n)) <= 1e-9, `the lane's up is the road's normal at its edge (s ${s}): ${len(sub(a.Ul, n))}`);
+      // AMENDED (D438): was `a.Ul` = the road's surface normal at its edge (Prof.normalAt); now the lane is level in the road's frame at the join too
+      assert.ok(len(sub(a.Ul, a.U)) <= 1e-9 && Math.abs(a.phi) <= 1e-12, `the lane's up is the road's U at the join, level (s ${s}): ${len(sub(a.Ul, a.U))}`);
     }
     const mid = lane.at((lane.parts.run[0] + lane.parts.run[1]) / 2);
     assert.ok(len(sub(mid.Ul, mid.U)) <= 1e-9 && Math.abs(mid.phi) <= 1e-12, 'along the run the lane is level in the road frame');
@@ -54,7 +57,9 @@ test('a lane is refused off an edge steeper than 35° (the reader\'s lip), and t
 // tight banked to -30°. Stated before the run: G1 and the edge's normal at both joins, and the lane mesh's join rows lie in
 // the road's tangent plane AT THE EDGE (≤ 1e-4 m, float32) with their normals the edge's (≤ 1e-5 rad), as geom-pitlane's
 // no-step test asks of a flat edge.
-test('a lane off a 33 m bowl, rejoining in a tight banked -30°: G1, and the mesh join rows in the edge\'s own plane', () => {
+// AMENDED (D438): the lane's up at the joins is the ROAD's U (level in the road's frame, banked with it), not the edge's normal; the no-step and
+// along-the-edge check is kept, and the join rows are checked against the lane's own plane through the edge, as before (j.Ul is now the road's U).
+test('a lane off a 33 m bowl, rejoining in a tight banked -30°: no step, level in the road\'s banked frame at both joins, and the mesh join rows in that plane (AMENDED D438: was G1, the edge\'s own plane)', () => {
   const bowl = fontProfile('bowl', { width: 33 }), P = Prof.normalize(bowl), R = 102, turn = 88 * Math.PI / 180;
   const segs = [{ id: 'w1', word: 'straight', kind: 'road', length: 300, k0: 0, k1: 0, roll0: 0, roll1: 0, profile: bowl },
     { id: 'w2', word: 'tight', kind: 'road', length: R * turn, k0: 1 / R, k1: 1 / R, roll0: 0, roll1: -30 * Math.PI / 180, profile: bowl }];
@@ -62,8 +67,8 @@ test('a lane off a 33 m bowl, rejoining in a tight banked -30°: G1, and the mes
   const uE = P.u[0], h = 1e-4;
   for (const [s, dir] of [[lane.joins.leave.s, 1], [lane.joins.rejoin.s, -1]]) {
     const a = lane.at(s), b = lane.at(s + dir * h), [nl, nu] = Prof.normalAt(P, uE), n = [0, 1, 2].map((k) => a.L[k] * nl + a.U[k] * nu);
-    assert.ok(len(sub(a.inner, a.edge)) <= 1e-9 && ang(sub(b.inner, a.inner), sub(b.edge, a.edge)) <= 1e-5, `G1 at s ${s}`);
-    assert.ok(len(sub(a.Ul, n)) <= 1e-9, `the lane's up is the road's normal at its edge (s ${s})`);
+    assert.ok(len(sub(a.inner, a.edge)) <= 1e-9 && ang(sub(b.inner, a.inner), sub(b.edge, a.edge)) <= 1e-5, `no step, and along the edge, at s ${s}`);
+    assert.ok(len(sub(a.Ul, a.U)) <= 1e-9, `the lane's up is the road's U at the join (s ${s}; AMENDED D438: was the edge's normal ${len(sub(n, a.U)).toFixed(3)} away)`);
   }
   const mesh = G.buildMesh(lane.path, lane.segments), pieces = mesh._state.pieces;
   for (const [pc, row, s] of [[pieces[0], 0, lane.joins.leave.s], [pieces[2], 'last', lane.joins.rejoin.s]]) {
