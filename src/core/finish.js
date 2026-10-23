@@ -168,8 +168,12 @@ function roadHold(doc, from) {
 }
 
 /** D439: the peak side load (g) at the design speed on the pieces from index `from` on of a closed document: the validator's f = v²κ⃗ + g·ŷ across the road (the
- *  centreline, every station on road), as core_finish_bank's lean() reads it. D440: and how many of its CURVED stations (|κ| > 1/600 m) lean OUT of the curve by
- *  more than LEAN_OUT_DEG, asin(U·κ̂) (core_finish_bank's lean(), the bar D434 ruled: "no curved station leaning out by more than 5°"), of how many. */
+ *  centreline, every station on road), as core_finish_bank's lean() reads it. D440: and how many of its CURVED stations lean OUT of the curve by more than
+ *  LEAN_OUT_DEG (core_finish_bank's lean(), the bar D434 ruled: "no curved station leaning out by more than 5°"), of how many.
+ *  D443 (plan_d438 "D443 ruled from O's side"): the lean is read against the HORIZONTAL turn, asin(U·κ̂h), κh = κ less its world-up part, and a station is curved
+ *  where |κh| > 1/600 m. Read over the 3-D κ, a crest under a bend tilts κ̂ downward and reads as a lean OUT where the road leans INTO its turn: on P's five
+ *  pitched laps every station so counted leaned in by +10.6° to +24.7°, and rule 1 took roads up to 3.2× longer (exo_memory/handback/p-d443-O_2026-10-23.md).
+ *  A crest is unreachable as the ONLY cause (roadHold refuses crests under R 1,665 m first); under a bend it was not. */
 const LEAN_OUT_DEG = 5;
 function closerLoad(doc, from) {
   const { segments, path } = toPath(doc, { step: 2 }), ids = new Set(doc.pieces.slice(from).map((P) => P.id)), v = V_DESIGN;
@@ -177,8 +181,8 @@ function closerLoad(doc, from) {
   for (const q of path.samples) {
     const g = segments[q.seg]; if (g.kind === 'gap' || !ids.has(g.id)) continue; const k = q.kvec;
     side = Math.max(side, Math.abs((v * v * k[0] * q.L[0] + (v * v * k[1] + G) * q.L[1] + v * v * k[2] * q.L[2]) / G));
-    const km = Math.hypot(k[0], k[1], k[2]); if (km < 1 / 600) continue;
-    curved++; if (Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[1] * k[1] + q.U[2] * k[2]) / km))) < -LEAN_OUT_DEG * DEG) out++;
+    const kh = Math.hypot(k[0], k[2]); if (kh < 1 / 600) continue;   // the horizontal turn (D443)
+    curved++; if (Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) < -LEAN_OUT_DEG * DEG) out++;
   }
   return { side, out, curved };
 }

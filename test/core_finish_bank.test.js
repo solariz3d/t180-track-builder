@@ -32,6 +32,10 @@
 //      load is not barred here: no ranking of the routes by it was built (exo_memory/handback/p-d440-O_2026-10-23.md §2)
 //  10  his two tracks keep D439's routes (the chair's D440 brief: "his two tracks must keep their D439 figures"): TEST TRACK 10 RSL at R 300, 206 m rolled first,
 //      3,990 m; TEST 10 LSR at R 300, 2,584 m. (Taking the lowest side load of EVERY route that passes chose R 900 for both, 11,426 and 10,413 m.)
+//  11  D443 (plan_d438 "D443 ruled from O's side"): a crest under a bend is not a lean out. P's pitched lap (cup 10°, a 180° turn over 1,500 m, 300 m pitched by
+//      kv −0.0006, 100 m back to level, a 600 m tail rolling 10°): its short closer LSL 1,120 m leans INTO its turn at every curved station, but read over the 3-D
+//      curvature two stations of its crest read −7.1° and rule 1 took RSR 3,309 m. The lean is read against the HORIZONTAL turn (κ less its world-up part,
+//      curved where |κh| > 1/600 m), here and in finish.js closerLoad
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -46,14 +50,15 @@ const { extendTurnBy } = require('../src/core/turnby.js');
 const F = require('../src/core/finish.js');
 
 const v = MACH6.designSpeedKmh / 3.6, DEG = Math.PI / 180, ACCEL = 2e-4;   // ACCEL: finish.js BANK_ACCEL (D438)
-/** Over the pieces from index `from` of a closed document: curved stations, those leaning out by more than 5°, the mean lean, the peak side load at the design speed. */
+/** Over the pieces from index `from` of a closed document: curved stations, those leaning out by more than 5°, the mean lean, the peak side load at the design speed.
+ *  D443: the lean is read against the HORIZONTAL turn (κ less its world-up part; curved where |κh| > 1/600 m), as finish.js closerLoad reads it (row 11). */
 function lean(doc, from) {
   const { segments, path: p } = AD.toPath(doc, { step: 2 }), ids = new Set(doc.pieces.slice(from).map((P) => P.id));
   let n = 0, out = 0, sum = 0, lat = 0;
   for (const q of p.samples) {
     if (!ids.has(segments[q.seg].id)) continue;
-    const k = q.kvec, km = Math.hypot(...k); if (km < 1 / 600) continue;
-    const l = Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[1] * k[1] + q.U[2] * k[2]) / km))) / DEG;
+    const k = q.kvec, kh = Math.hypot(k[0], k[2]); if (kh < 1 / 600) continue;
+    const l = Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) / DEG;
     const f = [v * v * k[0], v * v * k[1] + G, v * v * k[2]];
     n++; sum += l; if (l < -5) out++; lat = Math.max(lat, Math.abs((f[0] * q.L[0] + f[1] * q.L[1] + f[2] * q.L[2]) / G));
   }
@@ -144,6 +149,13 @@ test('row 10: his two tracks keep the routes D439 gave them', { skip: privateRow
     const { plan } = F.finishToStart(openOf(file));
     assert.deepEqual([plan.word, Math.round(plan.radiusM), plan.lengthM, plan.rollFirst], [word, 300, len, rollFirst], `${file}: ${plan.report}`);
   }
+});
+test('row 11: a crest under a bend is not a lean out: P\'s pitched lap takes its short closer, leaning into its turn', () => {
+  let d = D.createDoc('pitched'); d = extend(d, { length: 1000, family: 'bowl', first: { c: 10 } }); d = extendTurnBy(d, { length: 1500, targets: { kv: 0 } }, Math.PI);
+  d = extend(d, { length: 300, targets: { kv: -0.0006 } }); d = extend(d, { length: 100, targets: { kv: 0 } });
+  const open = extend(d, { length: 600, targets: { c: 35, phi: 10 * DEG } }), r = F.finishToStart(open), L = lean(r.doc, open.pieces.length);
+  assert.deepEqual([r.plan.word, r.plan.lengthM], ['LSL', 1120], `the short closer: ${r.plan.report}`);
+  assert.equal(L.out, 0, `no curved station of the closer leans out of its turn (${L.out} of ${L.n})`);
 });
 test('row 8: an end banked the way the closer turns is closed rolled last, on its own bank and with nothing banked on top', () => {
   let d = D.createDoc('banked'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 500 }, -150 * DEG); d = extend(d, { length: 200 });
