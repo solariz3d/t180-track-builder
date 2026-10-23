@@ -23,7 +23,7 @@ function laneForExport(mainPath, mainSegments, mainMesh, pitLane, { selfCheck = 
   const red = [];
   if (selfCheck) {
     for (const x of mesh.selfCheck.intersections) red.push({ reason: 'self-intersection', s0: x.s, s1: x.sOther, detail: `the pit lane meets itself (${x.cell} and ${x.other}, lane s)`, source: 'ARCHITECTURE.md:58' });
-    const c = laneCheck(mainMesh, mesh, lane);
+    const c = laneCheck(mainMesh, mesh, lane, { main: mainMesh.selfCheck && mainMesh.selfCheck.main });   // D437a: the main mesh's soup and BVH, built once, by its own self-check
     for (const x of c.intersections) red.push({ reason: 'self-intersection', s0: x.sMain, s1: x.sMain, detail: `the pit lane (${x.cell}, lane s ${x.sLane.toFixed(1)}) meets the road (${x.other})`, source: 'ARCHITECTURE.md:58' });
     const stacked = new Map(); for (const x of c.stacked) if (!stacked.has(x.other)) stacked.set(x.other, x);
     for (const x of stacked.values()) red.push({ reason: 'stacked', s0: x.sMain, s1: x.sMain, detail: `the pit lane (${x.cell}) is stacked ${x.gap.toFixed(2)} m from the road (${x.other})`, source: 'ARCHITECTURE.md:85' });

@@ -4,7 +4,7 @@
 //   buildPitLane(mainPath, mainSegments, pitLane, { stepM = 1 })
 //     -> { path, segments, joins: { leave: { s, sLane }, rejoin: { s, sLane } }, parts: { diverge, run, merge },
 //          at(s) -> { inner, centre, edge, L, U, g } }            at(s): the lane at MAIN-road s, exactly, for checks
-//   laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5 }) -> { intersections, stacked, stats }
+//   laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5, main }) -> { intersections, stacked, stats }   main (D437a): the main mesh's { soup, bvh }, from its self-check
 //
 // SHAPE. The lane is built in the MAIN road's own coordinates, so it follows every word it runs beside. At main s:
 //   e(s)  = the main road's surface point at its lane-side EDGE (the profile the mesh builds there: the font, or the font
@@ -135,8 +135,9 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
  * a main triangle within exemptM of that part's span of main road, where the two share their edge line by design.
  * Everything else is tested, including the diverge against any OTHER pass of the main road (a bridge overhead).
  */
-function laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5 } = {}) {
-  const A = soup(mainMesh), Bm = build(A), Ls = soup(laneMesh);
+function laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5, main = null } = {}) {
+  // D437a: `main` is the main mesh's { soup, bvh } as its own self-check built them (src/geom/bvh.js selfCheck's `main`); given, they are used, not built again
+  const A = main && main.soup ? main.soup : soup(mainMesh), Bm = main && main.bvh ? main.bvh : build(A), Ls = soup(laneMesh);
   const bL = lane.path.segEnd[0].s, bR = lane.path.segEnd[1].s;          // lane s where the diverge ends and the merge starts
   const zone = (sl) => (sl <= bL + 1e-9 ? lane.parts.diverge : sl >= bR - 1e-9 ? lane.parts.merge : null);
   const exempt = (sLaneMax, sLaneMin, m0, m1) => {

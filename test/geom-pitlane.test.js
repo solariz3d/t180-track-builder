@@ -117,3 +117,15 @@ test('a lane is refused by name: a missing anchor, backwards, too short for its 
   const r = D.resolve(d), p = G.buildPath(r.segments, { step: 0.5 });
   assert.throws(() => buildPitLane(p, r.segments, d.pitLane), (e) => e.code === 'PIT_JOIN_NOT_FLAT');
 });
+
+// D437a: the main mesh's soup and BVH are built ONCE per export (the self-check's, src/geom/bvh.js selfCheck `main`) and handed to laneCheck, which built them a second
+// time (10 s and about 1 GB of heap on the user's 27.6 km lap, P's D437 hand-back). Given them, it finds exactly what it finds building its own.
+test('laneCheck given the main mesh\'s soup and BVH (the self-check\'s, built once) finds exactly what it finds building its own, with and without the join exemption', () => {
+  const { path, segs, lane } = track(THROUGH_TURN);
+  const main = G.buildMesh(path, segs, { selfCheck: true }), lm = G.buildMesh(lane.path, lane.segments);
+  assert.ok(main.selfCheck.main && main.selfCheck.main.soup && main.selfCheck.main.bvh, 'the self-check hands back the soup and BVH it built');
+  for (const o of [{}, { exemptM: -1e9 }]) {
+    const own = laneCheck(main, lm, lane, o), given = laneCheck(main, lm, lane, { ...o, main: main.selfCheck.main });
+    assert.deepStrictEqual(given, own, JSON.stringify(o));
+  }
+});

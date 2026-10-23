@@ -33,74 +33,106 @@ const EPS_PLANE = 1e-4;   // m: float32 vertices of a 100 m cell are good to ~1e
 const EPS_BARY = 1e-9;
 
 // ── the triangle soup ──
+// D437a: COUNTED, THEN FILLED. The soup was built in plain JS arrays by push and copied into typed arrays at the end, holding every vertex twice inside V8's heap
+// (378 B a vertex, measured on a 20 km straight; on the user's 27.6 km lap with a pit lane, built twice, the export ran out of heap here). One pass now counts the
+// vertices and indices, and the arrays are typed from the start, filled by index (their ArrayBuffers live outside the heap). Same values, same shape; vCell and
+// triCell are typed too (Int32Array), and every reader only indexes them.
 function soup(mesh) {
   const st = mesh._state; if (!st) throw new Error('selfCheck: needs a mesh from buildMesh/extendMesh/sculptMesh');
-  const pos = [], nrm = [], sv = [], uv = [], vCell = [], tris = [], triCell = [], cells = [];
-  const add = (arr, M, s, u, name) => {
-    const base = pos.length / 3, ci = cells.push(name) - 1;
-    for (let i = 0; i < arr.positions.length / 3; i++) {
-      const x = arr.positions[i * 3], y = arr.positions[i * 3 + 1], z = arr.positions[i * 3 + 2];
-      pos.push(x * M[0] + y * M[4] + z * M[8] + M[12], x * M[1] + y * M[5] + z * M[9] + M[13], x * M[2] + y * M[6] + z * M[10] + M[14]);
+  const kids = mesh.scene.root.children;
+  if (kids.length !== mesh.cells.length) throw new Error(`selfCheck: ${kids.length} scene nodes but ${mesh.cells.length} cell records`);
+  let nv = 0, ni = 0;
+  for (const kid of kids) { const g = kid.children[0]; nv += g.positions.length / 3; ni += g.indices.length; }
+  const pos = new Float64Array(nv * 3), nrm = new Float64Array(nv * 3), sv = new Float64Array(nv), uv = new Float64Array(nv), vCell = new Int32Array(nv);
+  const tris = new Uint32Array(ni), triCell = new Int32Array(ni / 3), cells = [];
+  let v = 0, ti = 0;   // the next vertex and the next index to fill
+  const add = (arr, M, name) => {   // the cell's vertices, normals and triangles; its s and u are written by the caller, without a closure a vertex (a double returned through one is boxed)
+    const base = v, ci = cells.push(name) - 1;
+    for (let i = 0; i < arr.positions.length / 3; i++, v++) {
+      const x = arr.positions[i * 3], y = arr.positions[i * 3 + 1], z = arr.positions[i * 3 + 2], o = v * 3;
+      pos[o] = x * M[0] + y * M[4] + z * M[8] + M[12]; pos[o + 1] = x * M[1] + y * M[5] + z * M[9] + M[13]; pos[o + 2] = x * M[2] + y * M[6] + z * M[10] + M[14];
       const a = arr.normals[i * 3], b = arr.normals[i * 3 + 1], c = arr.normals[i * 3 + 2];
-      nrm.push(a * M[0] + b * M[4] + c * M[8], a * M[1] + b * M[5] + c * M[9], a * M[2] + b * M[6] + c * M[10]);
-      sv.push(s(i)); uv.push(u(i)); vCell.push(ci);
+      nrm[o] = a * M[0] + b * M[4] + c * M[8]; nrm[o + 1] = a * M[1] + b * M[5] + c * M[9]; nrm[o + 2] = a * M[2] + b * M[6] + c * M[10];
+      vCell[v] = ci;
     }
-    for (let t = 0; t < arr.indices.length; t++) tris.push(base + arr.indices[t]);
-    for (let t = 0; t < arr.indices.length / 3; t++) triCell.push(ci);
+    for (let t = 0; t < arr.indices.length; t++) tris[ti + t] = base + arr.indices[t];
+    for (let t = 0; t < arr.indices.length / 3; t++) triCell[ti / 3 + t] = ci;
+    ti += arr.indices.length;
+    return base;
   };
   // Each scene node is paired with its cell record BY POSITION (mesh.js assemble pushes them in the same order), never
   // by name: two pieces may share a name (a word's parts did, before names carried the part), and a lookup by name then
   // gives a triangle ANOTHER piece's s, which makes neighbours in one pass look far apart and "meet" (D170 addendum).
-  const kids = mesh.scene.root.children;
-  if (kids.length !== mesh.cells.length) throw new Error(`selfCheck: ${kids.length} scene nodes but ${mesh.cells.length} cell records`);
   for (let k = 0; k < kids.length; k++) {
     const node = kids[k], m = node.children[0], M = node.matrix, rec = mesh.cells[k];
     if (rec.name !== m.name) throw new Error(`selfCheck: scene node ${k} is ${m.name} but its cell record is ${rec.name}`);
     const pc = st.pieces[rec.piece];
     if (rec.seam) {
       const g = rec.piece, sm = st.seams[g], A = st.pieces[g > 0 ? g - 1 : st.pieces.length - 1], Ka = A.K;   // on a closed loop seam 0 joins the last piece
-      add(m, M, () => sm.s, (i) => (i < Ka ? A.Us[i] : pc.Us[i - Ka]), m.name);
+      const v0 = add(m, M, m.name); for (let i = 0; i < m.positions.length / 3; i++) { sv[v0 + i] = sm.s; uv[v0 + i] = i < Ka ? A.Us[i] : pc.Us[i - Ka]; }
     } else {
       const c = pc.cells[Number(m.name.slice(m.name.lastIndexOf('_') + 1))], K = pc.K;
-      add(m, M, (i) => c.rowS[Math.floor(i / K)], (i) => pc.Us[i % K], m.name);
+      const v0 = add(m, M, m.name); for (let i = 0; i < m.positions.length / 3; i++) { sv[v0 + i] = c.rowS[Math.floor(i / K)]; uv[v0 + i] = pc.Us[i % K]; }
     }
   }
-  return { pos: Float64Array.from(pos), nrm: Float64Array.from(nrm), s: Float64Array.from(sv), u: Float64Array.from(uv), vCell, tris: Uint32Array.from(tris), triCell, cells };
+  return { pos, nrm, s: sv, u: uv, vCell, tris, triCell, cells };
 }
 
 // ── the BVH ──
 function build(S) {
   const T = S.tris.length / 3, box = new Float64Array(T * 6), cen = new Float64Array(T * 3), s0 = new Float64Array(T), s1 = new Float64Array(T);
   for (let t = 0; t < T; t++) {
-    let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], a = Infinity, b = -Infinity;
-    for (let v = 0; v < 3; v++) { const i = S.tris[t * 3 + v]; for (let d = 0; d < 3; d++) { const x = S.pos[i * 3 + d]; if (x < lo[d]) lo[d] = x; if (x > hi[d]) hi[d] = x; } a = Math.min(a, S.s[i]); b = Math.max(b, S.s[i]); }
-    for (let d = 0; d < 3; d++) { box[t * 6 + d] = lo[d]; box[t * 6 + 3 + d] = hi[d]; cen[t * 3 + d] = (lo[d] + hi[d]) / 2; }
+    // D437a: the triangle's box written straight into `box` (two small arrays a triangle were 3 million arrays of garbage on a 27.6 km lap)
+    let a = Infinity, b = -Infinity; const o6 = t * 6;
+    for (let d = 0; d < 3; d++) { box[o6 + d] = Infinity; box[o6 + 3 + d] = -Infinity; }
+    for (let v = 0; v < 3; v++) { const i = S.tris[t * 3 + v]; for (let d = 0; d < 3; d++) { const x = S.pos[i * 3 + d]; if (x < box[o6 + d]) box[o6 + d] = x; if (x > box[o6 + 3 + d]) box[o6 + 3 + d] = x; } a = Math.min(a, S.s[i]); b = Math.max(b, S.s[i]); }
+    for (let d = 0; d < 3; d++) cen[t * 3 + d] = (box[o6 + d] + box[o6 + 3 + d]) / 2;
     s0[t] = a; s1[t] = b;
   }
-  const order = Uint32Array.from({ length: T }, (_, i) => i), nodes = [];
+  // D437a: THE NODES IN TYPED ARRAYS (they were JS objects: 114 B a triangle kept in the heap, 2 million of them on the user's 27.6 km lap, and at the room the page
+  // leaves an export that build ran out of memory). A leaf holds 2 to 4 triangles (a node splits above 4, into halves of at least 2), so there are fewer nodes than
+  // triangles; the split sorts the order array in place (sortBy below, stable, as the copy sorted before was), by the same rule, so the tree is the same tree
+  const order = new Uint32Array(T), cap = Math.max(1, T), scratch = new Uint32Array(T); for (let i = 0; i < T; i++) order[i] = i;
+  // the sort: a typed array's own sort with a comparator copies into the heap, so a stable bottom-up merge sort of order[from, to) by cen[·*3 + ax], in place through
+  // one scratch buffer for the whole build (stable, as the sort it replaces was: equal keys keep their order)
+  const sortBy = (from, to, ax) => {
+    let src = order, dst = scratch;
+    for (let w = 1; w < to - from; w *= 2) {
+      for (let a = from; a < to; a += 2 * w) {
+        const m = Math.min(a + w, to), e = Math.min(a + 2 * w, to); let i = a, j = m, k = a;
+        while (i < m && j < e) dst[k++] = cen[src[j] * 3 + ax] < cen[src[i] * 3 + ax] ? src[j++] : src[i++];
+        while (i < m) dst[k++] = src[i++]; while (j < e) dst[k++] = src[j++];
+      }
+      const t = src; src = dst; dst = t;
+    }
+    if (src !== order) order.set(src.subarray(from, to), from);
+  };
+  const nlo = new Float64Array(cap * 3), nhi = new Float64Array(cap * 3), nfrom = new Int32Array(cap), nto = new Int32Array(cap), nleft = new Int32Array(cap), nright = new Int32Array(cap);
+  let N = 0;
   const make = (from, to) => {
-    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-    for (let k = from; k < to; k++) { const t = order[k]; for (let d = 0; d < 3; d++) { lo[d] = Math.min(lo[d], box[t * 6 + d]); hi[d] = Math.max(hi[d], box[t * 6 + 3 + d]); } }
-    const n = { lo, hi, from, to, left: -1, right: -1 }, id = nodes.push(n) - 1;
+    const id = N++, b = id * 3;
+    for (let d = 0; d < 3; d++) { nlo[b + d] = Infinity; nhi[b + d] = -Infinity; }
+    for (let k = from; k < to; k++) { const t = order[k]; for (let d = 0; d < 3; d++) { nlo[b + d] = Math.min(nlo[b + d], box[t * 6 + d]); nhi[b + d] = Math.max(nhi[b + d], box[t * 6 + 3 + d]); } }
+    nfrom[id] = from; nto[id] = to; nleft[id] = -1; nright[id] = -1;
     if (to - from > 4) {
-      let ax = 0; for (let d = 1; d < 3; d++) if (hi[d] - lo[d] > hi[ax] - lo[ax]) ax = d;
-      const part = Array.from(order.subarray(from, to)).sort((x, y) => cen[x * 3 + ax] - cen[y * 3 + ax]);
-      order.set(part, from); const mid = (from + to) >> 1;
-      n.left = make(from, mid); n.right = make(mid, to);
+      let ax = 0; for (let d = 1; d < 3; d++) if (nhi[b + d] - nlo[b + d] > nhi[b + ax] - nlo[b + ax]) ax = d;
+      sortBy(from, to, ax);
+      const mid = (from + to) >> 1;
+      const l = make(from, mid), r = make(mid, to); nleft[id] = l; nright[id] = r;
     }
     return id;
   };
   if (T) make(0, T);
-  return { box, s0, s1, order, nodes, T };
+  return { box, s0, s1, order, nlo, nhi, nfrom, nto, nleft, nright, N, T };
 }
-const overlaps = (n, lo, hi) => n.lo[0] <= hi[0] && n.hi[0] >= lo[0] && n.lo[1] <= hi[1] && n.hi[1] >= lo[1] && n.lo[2] <= hi[2] && n.hi[2] >= lo[2];
 /** Every triangle whose box meets [lo, hi]. */
 function query(B, lo, hi, visit) {
   if (!B.T) return;
-  const stack = [0];
+  const stack = [0], n = { left: -1, right: -1, from: 0, to: 0 };   // the node popped, read out of B's typed arrays into one object, used again for every node
   while (stack.length) {
-    const n = B.nodes[stack.pop()];
-    if (!overlaps(n, lo, hi)) continue;
+    const id = stack.pop(), b = id * 3;
+    if (!(B.nlo[b] <= hi[0] && B.nhi[b] >= lo[0] && B.nlo[b + 1] <= hi[1] && B.nhi[b + 1] >= lo[1] && B.nlo[b + 2] <= hi[2] && B.nhi[b + 2] >= lo[2])) continue;
+    n.left = B.nleft[id]; n.right = B.nright[id]; n.from = B.nfrom[id]; n.to = B.nto[id];
     if (n.left < 0) { for (let k = n.from; k < n.to; k++) visit(B.order[k]); } else { stack.push(n.left, n.right); }
   }
 }
@@ -165,7 +197,7 @@ function selfCheck(mesh, opts = {}) {
   const closed = !!opts.closed, L = opts.lengthM || 0, sep = opts.minSeparationM === undefined ? 25 : opts.minSeparationM;
   const reach = opts.stackedM === undefined ? 2 : opts.stackedM;
   const trace = opts.trace || null; if (trace) { trace.pairs = []; trace.stacked = new Map(); }
-  const S = soup(mesh), B = build(S), stats = { triangles: B.T, vertices: S.s.length, nodes: B.nodes.length, triTests: 0, rayTests: 0 };
+  const S = soup(mesh), B = build(S), stats = { triangles: B.T, vertices: S.s.length, nodes: B.N, triTests: 0, rayTests: 0 };
   const tv = (t) => [P(S, S.tris[t * 3]), P(S, S.tris[t * 3 + 1]), P(S, S.tris[t * 3 + 2])];
   const groups = new Map(), sgroups = new Map();
   const keep = (map, key, rec) => { const g = map.get(key); if (!g) map.set(key, { ...rec, n: 1 }); else { g.n++; if (rec.s < g.s) Object.assign(g, rec, { n: g.n }); } };
@@ -208,7 +240,11 @@ function selfCheck(mesh, opts = {}) {
   const intersections = [...groups.values()].map(({ n, ...r }) => ({ ...r, pairs: n })).sort((a, b) => a.s - b.s || a.u - b.u);
   const stacked = [...sgroups.values()].sort((a, b) => a.s - b.s || a.u - b.u);
   if (trace) trace.soup = S;
-  return { intersections, stacked, stats };
+  // D437a: the soup and BVH ride along as `main` (NOT enumerable, so a result compares and serialises as before), for a caller that tests something else against
+  // this mesh: the export's pit-lane check (src/geom/pitlane.js laneCheck) built both a second time, 10 s and about 1 GB of heap on a 27.6 km lap
+  const out = { intersections, stacked, stats };
+  Object.defineProperty(out, 'main', { value: { soup: S, bvh: B }, enumerable: false });
+  return out;
 }
 /** The self-intersections as folds[] entries (docs/INTERFACES.md §2: `margin: null, other: <cell name>`), both sides. */
 function asFolds(res) {
