@@ -4,7 +4,7 @@
 // leaned −0.9° on average with 453 curved stations leaning out, and the side load at the design speed reached 10.68 g. The ruling (plan_d434 "Part 2 ruled"): each
 // piece the closer makes is banked by −0.75·atan(v²·k/g), v the validator's design speed, sized from the CLOSED route's curvature, easing in with the curve and
 // meeting the laid bank at every joint; roll under the amber; the cup as built. GEOMETRY tier.
-// The bars, on the closer's curved stations (|k| > 1/600 m, as the librarian's lean.js): the lean into the curve, asin(U·k̂); the side load at the design speed on the
+// The bars, on the closer's curved stations (|κh| > 1/600 m, κh the HORIZONTAL curvature, κ less its world-up part, D443): the lean into the curve, asin(U·κ̂h); the side load at the design speed on the
 // centreline, the validator's formula (src/validate/index.js:11) f = v²κ⃗ + g·ŷ across the road, in g. Rows:
 //   1  TEST TRACK 10 (its open lap, a private track kept off the repository; skipped by name when absent): the closer leans into its curves (no station leaning out
 //      by more than 5°), its peak side load at the design speed is below the flat closer's 10.68 g, the lap closes within 1 mm, its roll stays under the amber,
@@ -36,6 +36,9 @@
 //      kv −0.0006, 100 m back to level, a 600 m tail rolling 10°): its short closer LSL 1,120 m leans INTO its turn at every curved station, but read over the 3-D
 //      curvature two stations of its crest read −7.1° and rule 1 took RSR 3,309 m. The lean is read against the HORIZONTAL turn (κ less its world-up part,
 //      curved where |κh| > 1/600 m), here and in finish.js closerLoad
+//  12  D444 (P's review of D443 §1.5): FINISH_LEANS_OUT is reached. P's steep lap (cup 10°, a 180° turn over 1,500 m, 300 m pitched by kv −0.003 to −34.4°, 100 m
+//      back to level, a 600 m tail rolling 10°; the end 431 m below the start): every road that closes and holds leans out (roll first leaves the road, roll last
+//      keeps the end's 10° against its turns), so Finish refuses by name, with the least of them as "N of its M curved stations … (WORD at R … m)"
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -156,6 +159,18 @@ test('row 11: a crest under a bend is not a lean out: P\'s pitched lap takes its
   const open = extend(d, { length: 600, targets: { c: 35, phi: 10 * DEG } }), r = F.finishToStart(open), L = lean(r.doc, open.pieces.length);
   assert.deepEqual([r.plan.word, r.plan.lengthM], ['LSL', 1120], `the short closer: ${r.plan.report}`);
   assert.equal(L.out, 0, `no curved station of the closer leans out of its turn (${L.out} of ${L.n})`);
+});
+test('row 12: where every road that closes leans out, Finish refuses by name and says the least of them', () => {
+  let d = D.createDoc('steep'); d = extend(d, { length: 1000, family: 'bowl', first: { c: 10 } }); d = extendTurnBy(d, { length: 1500, targets: { kv: 0 } }, Math.PI);
+  d = extend(d, { length: 300, targets: { kv: -0.003 } }); d = extend(d, { length: 100, targets: { kv: 0 } });
+  const open = extend(d, { length: 600, targets: { c: 35, phi: 10 * DEG } });
+  assert.throws(() => F.finishToStart(open), (err) => {
+    assert.equal(err.code, 'FINISH_LEANS_OUT', err.message);
+    const m = err.message.match(/the least (\d+) of its (\d+) curved stations by more than 5° \((CS|SC|[LR]S[LR]) at R (\d+) m\)/);
+    assert.ok(m, `the message names the least: ${err.message}`);
+    assert.ok(Number(m[1]) > 0 && Number(m[1]) <= Number(m[2]), `N of M: ${m[1]} of ${m[2]}`);
+    return true;
+  });
 });
 test('row 8: an end banked the way the closer turns is closed rolled last, on its own bank and with nothing banked on top', () => {
   let d = D.createDoc('banked'); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: 500 }, -150 * DEG); d = extend(d, { length: 200 });

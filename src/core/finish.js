@@ -173,7 +173,9 @@ function roadHold(doc, from) {
  *  D443 (plan_d438 "D443 ruled from O's side"): the lean is read against the HORIZONTAL turn, asin(U·κ̂h), κh = κ less its world-up part, and a station is curved
  *  where |κh| > 1/600 m. Read over the 3-D κ, a crest under a bend tilts κ̂ downward and reads as a lean OUT where the road leans INTO its turn: on P's five
  *  pitched laps every station so counted leaned in by +10.6° to +24.7°, and rule 1 took roads up to 3.2× longer (exo_memory/handback/p-d443-O_2026-10-23.md).
- *  A crest is unreachable as the ONLY cause (roadHold refuses crests under R 1,665 m first); under a bend it was not. */
+ *  Whether a crest alone could count is a COUNT, not a bound (D444, P's review of D443 §1.2): on a closed lap roadHold reads the ghost lap's speed, not the
+ *  design speed, so crests tighter than R 1,665 m do hold (one of R 555 m held at 0.9 g). On 141 closed laps (P's tight 108, pitched 16 and steep 17) the
+ *  stations with |κ| over 1/600 m but |κh| under it were 1–27 on 33 laps, and the horizontal lean read none of them out. */
 const LEAN_OUT_DEG = 5;
 function closerLoad(doc, from) {
   const { segments, path } = toPath(doc, { step: 2 }), ids = new Set(doc.pieces.slice(from).map((P) => P.id)), v = V_DESIGN;
