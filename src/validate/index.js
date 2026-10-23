@@ -94,6 +94,7 @@ const SRC = Object.freeze({
   'self-intersection': 'ARCHITECTURE.md:58, :84',
   'stacked-within-2m': 'ARCHITECTURE.md:85',
   'low-overhead': 'ARCHITECTURE.md:85 (D435: less than 1 m of room under another road)',
+  'near-touch': 'ARCHITECTURE.md:85 (D446: two passes whose edges come within 1 m, side by side; information)',
   'wall-ride-from-wall-object': 'ARCHITECTURE.md:86',
   'steep-without-raycast': 'ARCHITECTURE.md:87 (community-reported)',
   'load-above-proven': 'FINDINGS.md:105, :112-113',
@@ -181,6 +182,20 @@ function speedProfile(path, segments, car, opts) {
 }
 
 /** Group point findings into ranges along s: same reason, consecutive stations. */
+/**
+ * D446: the edges whose downforce-ray probe met another pass of the road (src/validate/raygap.js opts.near), within car.nearEdgeM, as INFORMATION 'near-touch':
+ * one finding per place (edges within ranges()'s merge distance of each other), worst = the CLOSEST edge there in metres (ranges() keeps the largest worst,
+ * which for a distance would be the farthest), u at that edge.
+ */
+function nearTouches(list, car, step, live) {
+  const out = [];
+  for (const e of list.filter((x) => x.s != null && x.edgeM <= car.nearEdgeM && live(x.s)).sort((a, b) => a.s - b.s)) {
+    const last = out[out.length - 1];
+    if (last && e.s - last.s1 <= step * 1.5 + 1e-9) { last.s1 = e.s; if (e.edgeM < last.worst) { last.worst = e.edgeM; last.u = e.u; } } else out.push({ s: e.s, s1: e.s, u: e.u, reason: 'near-touch', worst: e.edgeM });
+  }
+  return out;
+}
+
 function ranges(list, step) {
   const out = [];
   // a total order (reason, s, u), so the ranges do not depend on the order findings were produced in
@@ -381,8 +396,10 @@ function core(path, segments, opts, from, carried, upto) {
     for (const f of opts.folds) if (end === n || f.s < S[end].s) red.push({ s: f.s, u: f.u == null ? null : f.u, reason: f.other ? 'self-intersection' : 'fold', worst: f.margin == null ? null : -f.margin });
   } else notChecked.push('self-intersection: needs buildMesh folds[] (a BVH between cells, ARCHITECTURE.md:58); pass opts.folds');
   // gaps in the PHYSICS road the downforce ray can fall into (raygap.js): needs the built road, which the export has
+  // D446: measured round a closed lap, and an edge whose probe met only ANOTHER pass is no gap; it is kept as a near-touch, reported in info below
+  const nearRaw = [];
   if (Array.isArray(opts.roadMesh)) {
-    for (const g of rayGaps(opts.roadMesh, S, car.downforceRay)) if (g.s != null && (end === n || g.s < S[end].s)) red.push({ s: g.s, u: g.u, reason: 'downforce-ray-gap', worst: g.widthM });
+    for (const g of rayGaps(opts.roadMesh, S, car.downforceRay, { lapM: path.closed ? (path.lengthM || (S[n - 1].s - S[0].s)) : null, near: nearRaw })) if (g.s != null && (end === n || g.s < S[end].s)) red.push({ s: g.s, u: g.u, reason: 'downforce-ray-gap', worst: g.widthM });
   } else notChecked.push('downforce-ray-gap: needs the built physics road (src/validate/raygap.js); pass opts.roadMesh');
   for (const p of raw.pts) if (p.kind === 'red') red.push(p);
   for (const r of raw.segReds) red.push(r);
@@ -403,7 +420,7 @@ function core(path, segments, opts, from, carried, upto) {
   if (!Array.isArray(opts.folds)) for (const e of raw.stacked.values()) if (e.clip) red.push({ s: e.s, u: e.u, reason: 'self-intersection', worst: null });
   // D435: less than car.overheadM of room under another road (the gap along this road's normal) is AMBER, 'low-overhead', worst the room in metres; a clip is red above
   const overheadAmber = [...raw.stacked.values()].filter((e) => !e.clip && e.low < car.overheadM).map((e) => ({ s: e.s, u: e.u, reason: 'low-overhead', worst: e.low }));
-  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...overheadAmber,...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = [...raw.pts.filter((p) => p.kind === 'info'), ...stackedInfo];
+  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...overheadAmber,...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = [...raw.pts.filter((p) => p.kind === 'info'), ...stackedInfo, ...nearTouches(nearRaw, car, step, (s) => end === n || s < S[end].s)];
   const lines = raw.lines.slice().sort((a, b) => a.i - b.i).map((l) => l.line);   // station order, u order within
 
   // ── jumps (ARCHITECTURE.md:72-80) ──

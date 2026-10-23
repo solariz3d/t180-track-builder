@@ -251,6 +251,9 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // "jump: " so the install message can carry the jump warnings alone (app/install/install.js). A missed landing is said once, from its amber range;
   // the lap proof adds only what no amber says (a landing too deep below the take-off to reach)
   for (const a of v.amber) warnings.push(a.reason === 'landing-misses-zone' ? jumpWarning(a) : `amber: ${rangeText(a)}`);
+  // D446: two passes' edges side by side within 1 m (src/validate/raygap.js, validate's info 'near-touch'): said once, in plain words, and never blocking
+  const touches = (v.info || []).filter((x) => x.reason === 'near-touch');
+  if (touches.length) warnings.push(`near-touch: two parts of the road come within ${Math.min(...touches.map((x) => x.worst)).toFixed(2)} m of each other edge to edge, at ${touches.map((x) => `${(x.s0 / 1000).toFixed(2)} km`).join(', ')} (information: it does not stop the export)`);
   for (const w of (v.lap && v.lap.warn) || []) if (w.reason === 'landing-unreachable') warnings.push(`jump: this jump may land too deep below its take-off to be reached, at s ${w.s.toFixed(0)} m; tune it by driving it in AC`);
   if (v.lap && v.lap.ok === null) warnings.push(`lap proof not run: ${v.lap.reason}`);
   for (const n of v.notChecked || []) warnings.push(`not checked by validation: ${n}`);

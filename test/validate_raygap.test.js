@@ -82,3 +82,54 @@ test('two pieces whose shared row lies 0.2 mm apart ACROSS a 5 mm rounding bound
   // the first weld rounded each vertex to one bucket: 30.0024 and 30.0026 round to different buckets (6000.48, 6000.52) (doc-e2e's loop)
   assert.deepStrictEqual(rayGaps([strip(-5, 5, 0, 30.0024), strip(-5, 5, 30.0026, 60)], stations(60), RAY), []);
 });
+
+// ── D446: road beyond an edge counts only on the SAME PASS (a track, TEST 10 banked: a banked piece curled back on itself, its two edges 0.64 m apart,
+// read as two ray gaps 355 m apart along the lap). Another pass beside the edge is not a gap; it is a near-touch, reported as information ──
+/** Pass B: a flat strip beside pass A, x ∈ [x0, x0 + 10], running back down z, with its own stations far on along the lap (s 400 on). */
+const passB = (x0, z1 = 60) => ({ mesh: strip(x0, x0 + 10, 0, z1), stations: Array.from({ length: z1 + 1 }, (_, k) => ({ s: 400 + k, pos: [x0 + 5, 0, z1 - k], L: [-1, 0, 0], T: [0, 0, -1] })) });
+
+test('D446: another pass 0.6 m beside an edge, 400 m on along the lap, is not a gap: the edge is a near-touch, 0.6 m from it', () => {
+  const B = passB(5.6), near = [];
+  const g = rayGaps([strip(-5, 5, 0, 60), B.mesh], [...stations(60), ...B.stations], RAY, { near });
+  assert.deepStrictEqual(g, [], JSON.stringify(g.slice(0, 3)));
+  assert.ok(near.length > 0, 'the near-touch is reported');
+  assert.ok(near.every((x) => Math.abs(x.edgeM - 0.6) < 1e-6 && Math.abs(x.otherS - x.s) > 300), JSON.stringify(near.slice(0, 3)));
+});
+
+/** A slit across the road at z 30–30.3 is found from BOTH its sides: an edge at z 30 (probing on) and one at z 30.3 (probing back). */
+const bothSides = (g) => g.some((x) => Math.abs(x.at[2] - 30) < 1e-6) && g.some((x) => Math.abs(x.at[2] - 30.3) < 1e-6);
+test('D446: a slit across the road is still a gap, from both its sides, with another pass beside it', () => {
+  const B = passB(5.6);
+  const g = rayGaps([strip(-5, 5, 0, 30), strip(-5, 5, 30.3, 60), B.mesh], [...stations(60), ...B.stations], RAY);
+  assert.ok(g.some((x) => Math.abs(x.s - 30) <= 1 && x.widthM <= 0.5), JSON.stringify(g.slice(0, 3)));
+  assert.ok(bothSides(g), `both sides: ${JSON.stringify(g.map((x) => x.at[2]))}`);
+});
+
+test('D446: on a closed lap the same pass is measured round the seam: a slit AT the seam is still a gap, from both its sides', () => {
+  // stations s = (z + 30.5) mod 61: the seam (s 60.5 back to 0.5) falls at z 30–31, where the slit is; along s without the lap the two sides are 60 m apart
+  const st = Array.from({ length: 61 }, (_, z) => ({ s: (z + 30.5) % 61, pos: [0, 0, z], L: [1, 0, 0], T: [0, 0, 1] }));
+  const meshes = [strip(-5, 5, 0, 30), strip(-5, 5, 30.3, 60)];
+  const g = rayGaps(meshes, st, RAY, { lapM: 61 });
+  assert.ok(bothSides(g), `both sides: ${JSON.stringify(g.map((x) => [x.s, x.at[2]]))}`);
+});
+
+/** The curled bowl (D446): a square inward spiral of bowl road whose 5th leg runs beside its 1st, their centre lines one road width apart, the 5th banked 0.3 rad so its lip leans toward the 1st's: the lips come within 0.5 m (measured), as TEST 10 banked's within 0.64 m. */
+function curledBowl() {
+  const D = require('../src/core/document.js'), { extend } = require('../src/core/extend.js'), { WIDTHS } = require('../src/geom/fonts.js');
+  const R = 60, q = R * Math.PI / 2, turn = (d) => extend(extend(d, { length: q, transition: q, targets: { kh: -1 / R } }), { length: q, transition: q, targets: { kh: 0 } });
+  let d = extend(D.createDoc('curled bowl'), { length: 300, family: 'bowl' });
+  for (const L of [200, 150, 200 - WIDTHS.bowl]) d = extend(turn(d), { length: L });
+  return extend(turn(d), { length: 150, transition: 40, targets: { phi: -0.3 } });
+}
+test('D446: validate on a built curled bowl, two passes whose lips come within 1 m: no downforce-ray-gap red; a near-touch, in plain words, with its source', () => {
+  const G = require('../src/geom/index.js'), OJ = require('../app/core/overlapjob.js'), { walkScene, isDrivable } = require('../src/export/markers.js');
+  const r = OJ.resolveDoc(curledBowl()), p0 = G.buildPath(r.segments, { step: 2, closed: false, start: r.start }), p = r.lift ? r.lift(p0) : p0;
+  const mesh = G.buildMesh(p, r.segments, { selfCheck: true }), roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
+  const v = validate(p, r.segments, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, fullSpeed: true });
+  assert.deepStrictEqual(v.red.filter((x) => x.reason === 'downforce-ray-gap'), [], 'the other pass is not a gap');
+  const t = v.info.filter((x) => x.reason === 'near-touch');
+  assert.ok(t.length > 0 && t.every((x) => x.worst > 0 && x.worst <= MACH6.nearEdgeM), JSON.stringify(t));
+  assert.ok(t.some((x) => x.s0 > 100 && x.s0 < 300), `on the first leg: ${JSON.stringify(t)}`);
+  assert.match(SRC['near-touch'], /ARCHITECTURE.md:85/);
+  assert.match(L.reasonText('near-touch'), /two parts of the road come within 1 m of each other edge to edge/);
+});
