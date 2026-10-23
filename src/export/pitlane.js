@@ -24,7 +24,7 @@ function laneForExport(mainPath, mainSegments, mainMesh, pitLane, { selfCheck = 
   const red = [], info = [];
   if (selfCheck) {
     for (const x of mesh.selfCheck.intersections) red.push({ reason: 'self-intersection', s0: x.s, s1: x.sOther, detail: `the pit lane meets itself (${x.cell} and ${x.other}, lane s)`, source: 'ARCHITECTURE.md:58' });
-    const c = laneCheck(mainMesh, mesh, lane);
+    const c = laneCheck(mainMesh, mesh, lane, { main: mainMesh.selfCheck && mainMesh.selfCheck.main });   // D437a: the main mesh's soup and BVH, built once, by its own self-check
     for (const x of c.intersections) red.push({ reason: 'self-intersection', s0: x.sMain, s1: x.sMain, detail: `the pit lane (${x.cell}, lane s ${x.sLane.toFixed(1)}) meets the road (${x.other})`, source: 'ARCHITECTURE.md:58' });
     // D432: the lane closer than 2 m to the road, without meeting it, is INFORMATION, not red ("the tracks can be under 2m apart as long as the geometry isnt
     // clipping into eachother", the user, 2026-10-22); the lane meeting the road is red above, as self-intersection
