@@ -16,6 +16,13 @@
 // the laid route misses by up to 0.93 rad on TEST TRACK 10, and an unlimited one that the backstop scales down by 0.65). D438: and where the roll's acceleration
 // limit is not binding either (each slope change beside it under 0.8 of BANK_ACCEL); the share check is amended by name at its line, the share unchanged.
 //   4  a straight gets none: a lap that ends on its start line behind the start finishes with a straight, and its bank is the laid bank
+// D439 (P's review of D438, exo_memory/handback/p-d438-review-P_2026-10-22.md §2 (b), (c); plan_d438 "P's review ruled"), on P's laps built here (cup 10°, a turn
+// over 1,500 m, then a tail rolling and cupping to 35°). The bar on each: no curved station of the closer leans out by more than 5°, and its peak side load at the
+// design speed is under SIDE_BANKED_G, 6 g: over every banked closer measured (4.02–5.11 g: his two tracks, core_finish_joints rows 5–7, and these laps rolled
+// first) and under every unbanked one (9.16–10.89 g, these laps closed roll-last).
+//   5  turn 210, tail 300, roll 30: the roll straight laid first is not bent by the close (it was: 41 stations leaning out, to −26.3°, 5.07 g, P §2 (b))
+//   6  turn 180, tail 1,200, roll 10: the closer that banks its turns is taken (a roll-last close kept its turns on the end's bank, unbanked: 10.89 g, P §2 (c))
+//   7  turn 180, tail 1,200, roll 30: the same (9.16 g)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -99,6 +106,25 @@ test('row 3: a closer with only gentle curves is banked by its share and no more
   if (test10Peak !== null) assert.ok(peak < 0.85 * test10Peak, `its steepest bank, ${peak.toFixed(1)}°, is well under TEST 10's tight closer's ${test10Peak.toFixed(1)}°`);
   assert.ok(peak < 50, `its steepest bank is ${peak.toFixed(1)}°`);
 });
+
+const SIDE_BANKED_G = 6;
+function pLap(turnDeg, tailM, rollDeg) {
+  let d = D.createDoc(`P ${turnDeg}/${tailM}/${rollDeg}`);
+  d = extend(d, { length: 1000, family: 'bowl', first: { c: 10 } });
+  d = extendTurnBy(d, { length: 1500, targets: { kv: 0 } }, (turnDeg * Math.PI) / 180);
+  return extend(d, { length: tailM, targets: { c: 35, phi: (rollDeg * Math.PI) / 180 } });
+}
+function leansIn(turnDeg, tailM, rollDeg) {
+  const open = pLap(turnDeg, tailM, rollDeg), r = F.finishToStart(open), n0 = open.pieces.length, what = `turn ${turnDeg}, tail ${tailM}, roll ${rollDeg}`;
+  assert.equal(r.doc.closed, true, `${what}: ${r.plan.report}`);
+  open.pieces.forEach((P, i) => assert.equal(r.doc.pieces[i], P, `${what}: piece ${i} is the user's own, untouched`));
+  const L = lean(r.doc, n0);
+  assert.equal(L.out, 0, `${what}: no curved station of the closer leans out (${L.out} of ${L.n} out; ${r.plan.report})`);
+  assert.ok(L.lat < SIDE_BANKED_G, `${what}: the peak side load at the design speed, ${L.lat.toFixed(2)} g, is a banked closer's, under ${SIDE_BANKED_G} g (${r.plan.report})`);
+}
+test('row 5: P\'s turn 210, tail 300, roll 30: the roll straight laid first is not bent into a lean the wrong way', () => leansIn(210, 300, 30));
+test('row 6: P\'s turn 180, tail 1,200, roll 10: the closer that banks its turns is the one taken', () => leansIn(180, 1200, 10));
+test('row 7: P\'s turn 180, tail 1,200, roll 30: the closer that banks its turns is the one taken', () => leansIn(180, 1200, 30));
 
 test('row 4: a straight gets none: a finish that is only a straight keeps the laid bank', () => {
   let d = D.createDoc('straight');

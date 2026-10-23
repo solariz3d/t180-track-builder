@@ -167,6 +167,15 @@ function roadHold(doc, from) {
   return { worst, at };
 }
 
+/** D439: the peak side load (g) at the design speed on the pieces from index `from` on of a closed document: the validator's f = v²κ⃗ + g·ŷ across the road (the
+ *  centreline, every station on road), as core_finish_bank's lean() reads it. */
+function sideLoad(doc, from) {
+  const { segments, path } = toPath(doc, { step: 2 }), ids = new Set(doc.pieces.slice(from).map((P) => P.id)), v = V_DESIGN;
+  let worst = 0;
+  for (const q of path.samples) { const g = segments[q.seg]; if (g.kind === 'gap' || !ids.has(g.id)) continue; const k = q.kvec; worst = Math.max(worst, Math.abs((v * v * k[0] * q.L[0] + (v * v * k[1] + G) * q.L[1] + v * v * k[2] * q.L[2]) / G)); }
+  return worst;
+}
+
 // D434 (the user, 2026-10-22, TEST TRACK 10: "there needs to be a nuance for banking in large curves like that to support the car better"; the librarian's ruling,
 // plan_d434 "Part 2 ruled"): THE FINISH BANKS THE CURVES IT MAKES. Its turns were laid flat: on TEST TRACK 10 the closer leaned −0.9° on average, 453 curved stations
 // leaning out, and the side load at the design speed reached 10.68 g. Each new piece is banked by BANK_SHARE of the balance bank at the validator's design speed,
@@ -373,10 +382,16 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
       } catch (err) { if (err.name !== 'CoreError') throw err; best = best || err.message; continue; }
       const window = []; for (let i = doc.pieces.length; i < laid.pieces.length; i++) window.push(i);
       if (!window.length) continue;
+      // D439 (P's review of D438 §2 (b)): with the roll laid FIRST, Close, the bank and the cup work on the pieces after its roll straight. Closed with them, the
+      // straight was bent into a curve (to R 326 m) while it still rolled, and a rolling piece is never banked (bankPlan's upright rule), so its roll leaned the
+      // wrong way through the bend: 41 stations out, to −26.3°, 5.07 g on P's turn 210 / tail 300 / roll 30. Left as laid it stays straight; the pieces after
+      // it close the lap. (window, all the new road, is still what the plan reports and the shell outlines.)
+      const shut = first ? window.slice(1) : window;
+      if (!shut.length) continue;
       let res;
       // D357: what Close refuses is taken AS LAID when it already meets the start (metAsLaid: a lone straight it cannot bend). (A windowed Close never returns
       // unconverged: it refuses by name, close.js D242)
-      try { laid = cupHome(laid, window); res = closeBanked(laid, window, bank); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
+      try { laid = cupHome(laid, shut); res = closeBanked(laid, shut, bank); } catch (err) { if (err.name !== 'CoreError') throw err; res = metAsLaid(laid); if (!res) { best = best || err.message; continue; } }
       if (!res.converged) { best = best || res.report; continue; }
       const peak = roll ? rollPeak(res.doc, doc.pieces.length) : 0;
       if (peak > ROLL_AMBER_DEG_M) return { tooFast: peak };   // the roll reads too fast as the checker reads it: lengthen it and search again
@@ -397,11 +412,16 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
     return { fail: { tried: all.length, best, worstRoad } };
   };
   let fail = null;
+  // D439 (P's review of D438 §2 (c)): when a roll is owed, BOTH orders are searched and the closer with the lower peak side load at the design speed is taken
+  // (sideLoad). Laid last, the roll leaves the turns on the end's bank, which the bank never touches (bankPlan's upright rule): on P's turn 180 / tail 1,200 /
+  // roll 10 and 30 that closer was taken first and carried 10.89 and 9.16 g, against 4.68 and 4.65 rolled first. But where the end is banked the way the turns
+  // go, the end's own bank is the better lean: core_finish row 12's lap carries 5.55 g rolled last against 8.08 rolled first. A tie keeps the order below.
+  const found = [];
   for (const mode of roll0 ? ['last', 'first'] : ['last']) {
     let roll = roll0;
     for (let round = 0; ; round++) {
       const out = search(mode, roll);
-      if (out.result) return out.result;
+      if (out.result) { found.push({ result: out.result, side: sideLoad(out.result.doc, doc.pieces.length) }); break; }
       if (out.tooFast) {
         if (round >= ROLL_ROUNDS) throw new D.CoreError('FINISH_ROLL', `the roll upright onto the start still reads ${out.tooFast.toFixed(3)}°/m (the amber bar is ${ROLL_AMBER_DEG_M}) at ${roll.lengthM} m after ${round + 1} lengthenings`);
         roll = { bank, lengthM: Math.ceil(roll.lengthM * (out.tooFast / ROLL_AMBER_DEG_M) * ROLL_LENGTHEN) };
@@ -412,6 +432,7 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
       break;
     }
   }
+  if (found.length) return found.reduce((a, b) => (b.side < a.side ? b : a)).result;
   const rollText = roll0 ? ` and must roll ${Math.round(rollRad / DEG)}° to meet it (${roll0.lengthM} m of straight)` : '';
   if (fail.worstRoad) {
     const pitch = e.pitch / DEG, dy = doc.start.pos[1] - e.y;
