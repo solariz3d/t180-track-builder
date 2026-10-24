@@ -155,11 +155,21 @@ function flipLap(open, what, { flip = true } = {}) {
     const l = Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) / DEG; if (l < -5) out++; worst = Math.min(worst, l);
     // THE CURVED RUN (P's second re-read, ruled item 4): consecutive curved stations turning one way, whatever pieces they are laid in; the bar is on the run
     const side = Math.sign(q.T[2] * k[0] - q.T[0] * k[2]);
-    if (!run || run.side !== side || q.s - run.last > 4) { run = { side, first: q.s, last: q.s, xs: [] }; runs.push(run); }
-    run.last = q.s;
+    if (!run || run.side !== side || q.s - run.last > 4) { run = { side, first: q.s, last: q.s, xs: [], all: [] }; runs.push(run); }
+    run.last = q.s; run.lastId = g.id; run.all.push(l);
     // on HIS pieces: Finish's own closer is banked by D434's rule (core_finish_bank), pinned at its joints and the seam
     if (his.has(g.id) && !nearFlip(q.s, fl)) run.xs.push(l);
   }
+  // D447 §10 (P's third re-read, ruled item 3): A MISSING BANK. Each curved run's EXIT, its last curved station, no more than 5° under the table taken at
+  // 2c13316, where the exits were right ("none leans out" and the mean bar away from a flip cannot see a corner rolled to none at its exit: 05cdb9d read −0.4° on
+  // every short transition's exit, where 2c13316 read 50–54°). Two kinds of entry are not 2c13316's: null, a run 2c13316 withheld flat (x58, x60, the R 1,200 and
+  // 3,000 links), held to EXIT_BANKED; 'eased', the first corner of x58–x72, whose flip the ruled bound (about 67 m) now pins where 2c13316's 60 m did not (its
+  // second corner came within 0.3° of leaning out there), so its exit eases to none by design and carries no exit bar. One-sided: a run banked MORE than at
+  // 2c13316 is not a missing bank (the links' first corner, 49° against 39–41°, where 2c13316 withheld the next corner)
+  const want = EXITS[what];
+  if (want) { const got = runs.map((x) => x.all[x.all.length - 1]); assert.equal(got.length, want.length, `${what}: ${want.length} curved runs as at 2c13316, not ${got.length}`);
+    got.forEach((e, i) => { if (want[i] === 'eased') return; if (want[i] === null) assert.ok(e >= EXIT_BANKED, `${what}: run ${i} (${runs[i].first.toFixed(0)}–${runs[i].last.toFixed(0)} m) leaves its turn banked: exit ${e.toFixed(1)}°, want ≥ ${EXIT_BANKED}°`);
+      else assert.ok(e >= want[i] - 5, `${what}: run ${i} (${runs[i].first.toFixed(0)}–${runs[i].last.toFixed(0)} m) exits at ${e.toFixed(1)}°, 2c13316 ${want[i]}°`); }); }
   assert.equal(out, 0, `${what}: no curved station leans out (worst ${worst.toFixed(1)}°)`);
   // the mean bar is on curved runs with at least FLIP_ZONE of curve OUTSIDE the flip zones: the bank needs about half of it to roll up and half to roll down
   // (to a straight's pin, which D447 (d) keeps), so a shorter stretch (a Sharp's arc and 40 m exit ramp, 30 m outside its flip zone) is held to "none leans out"
@@ -167,8 +177,68 @@ function flipLap(open, what, { flip = true } = {}) {
   for (const x of runs) if (2 * x.xs.length >= FLIP_ZONE) { const m = x.xs.reduce((a, b) => a + b, 0) / x.xs.length; assert.ok(m >= MEAN_LEAN, `${what}: the curve from ${x.first.toFixed(0)} to ${x.last.toFixed(0)} m leans in by ${m.toFixed(1)}° on average away from a flip`); }
   if (flip) assert.match(r.report, /bank/i, `${what}: the report says where the bank was eased or withheld: ${r.report}`);
   assert.doesNotMatch(r.report, /no bank on|no curve on the lap was banked/, `${what}: no piece is withheld: ${r.report}`);
-  return r;
+  return { ...r, runs };
 }
+/** Each curved run's exit lean (°) on the press's lap of rows 10–14 at 2c13316, by the label each row passes (exits.js, D447 §10). */
+const EXITS = {
+  'the sharp after a turn': [32.5, 32.5, 0, 0.1, 32.5, 32.5, 1, 10.7],
+  'the 20 m flip': [32.5, 32.5, -0.6, 50.9, 29.5, 36.9],
+  'Sharp ramp 40 m': [32.1, 32.1, 0, 8.8, 32.1, 32.1, 1.9, 9.9],
+  'Sharp ramp 100 m': [32.5, 32.5, 0, 26.8, 32.5, 32.5, 1.3, 7.1],
+  'a 40 m transition': [32.5, 32.5, -0.6, 50.9, 31, 34],
+  'a 50 m transition': [32.5, 32.5, -0.4, 50.9, 34, 32.5],
+  'a 60 m transition': [32.5, 32.5, -0.3, 50.9, 34, 18.2],
+  'a 70 m transition': [32.5, 32.5, 0.4, 50.9, 34, 9.5],
+  'a 80 m transition': [32.5, 32.5, 0.2, 50.9, 33.9, 26.5],
+  'a 100 m transition': [32.5, 32.5, 0, 50.9, 36.9, 23.6],
+  'e60 (Extend\'s default blend over a 60 m piece)': [32.5, 32.5, -0.3, 50.9, 34, 18.2],
+  'e80 (over an 80 m piece)': [32.5, 32.5, 0.2, 50.9, 33.9, 26.5],
+  'a 40 m straight': [32.5, 32.5, -0.6, 50.9, 26.5, 38.4],
+  'a 42 m straight': [32.5, 32.5, -0.3, 50.9, 26.5, 36.9],
+  'a 44 m straight': [32.5, 32.5, -0.3, 50.9, 26.5, 36.9],
+  'a 46 m straight': [32.5, 32.5, -0.4, 50.9, 26.5, 36.9],
+  'a 48 m straight': [32.5, 32.5, -0.4, 50.9, 26.5, 36.9],
+  'a 50 m straight': [32.5, 32.5, -0.4, 50.9, 26.5, 36.9],
+  'a 52 m straight': [32.5, 32.5, -0.5, 50.9, 26.5, 36.9],
+  'a 54 m straight': [32.5, 32.5, -0.5, 50.9, 26.5, 36.9],
+  'a 56 m straight': [32.5, 32.5, -0.5, 50.9, 26.5, 36.9],
+  'a 58 m straight': [32.5, 32.5, 'eased', null, 26.5, 36.9],
+  'a 60 m straight': [32.5, 32.5, 'eased', null, 26.5, 36.9],
+  'a 62 m straight': [32.5, 32.5, 'eased', 50.9, 26.5, 36.9],
+  'a 64 m straight': [32.5, 32.5, 'eased', 50.9, 26.5, 36.9],
+  'a 66 m straight': [32.5, 32.5, 'eased', 50.9, 26.5, 36.9],
+  'a 68 m straight': [32.5, 32.5, 'eased', 50.9, 26.5, 38.4],
+  'a 70 m straight': [32.5, 32.5, 'eased', 50.9, 26.5, 38.4],
+  'a 72 m straight': [32.5, 32.5, 'eased', 50.9, 26.5, 38.4],
+  'a 74 m straight': [32.5, 32.5, 51.6, 50.9, 25.1, 38.4],
+  'a 76 m straight': [32.5, 32.5, 52.2, 50.9, 25.1, 38.4],
+  'a 78 m straight': [32.5, 32.5, 52.4, 50.9, 25.1, 38.4],
+  'a 80 m straight': [32.5, 32.5, 52.6, 50.9, 25.1, 38.4],
+  'a 82 m straight': [32.5, 32.5, 49.8, 50.9, 25.1, 38.4],
+  'a 84 m straight': [32.5, 32.5, 49.8, 50.9, 25.1, 38.4],
+  'a 86 m straight': [32.5, 32.5, 49.7, 50.9, 25.1, 38.4],
+  'a 88 m straight': [32.5, 32.5, 49.6, 50.9, 25.1, 38.4],
+  'a 90 m straight': [32.5, 32.5, 50, 50.9, 25.1, 38.4],
+  'a 92 m straight': [32.5, 32.5, 50.7, 50.9, 25.1, 38.4],
+  'a 94 m straight': [32.5, 32.5, 51.1, 50.9, 25.1, 38.4],
+  'a 96 m straight': [32.5, 32.5, 51.6, 50.9, 25.1, 38.4],
+  'a 98 m straight': [32.5, 32.5, 52, 50.9, 25.1, 38.4],
+  'a 100 m straight': [32.5, 32.5, 52.2, 50.9, 25.1, 38.4],
+  'a 102 m straight': [32.5, 32.5, 49.3, 50.9, 25.1, 38.3],
+  'a 104 m straight': [32.5, 32.5, 49.3, 50.9, 25.1, 38.3],
+  'a 106 m straight': [32.5, 32.5, 49.3, 50.9, 25.1, 38.3],
+  'a 108 m straight': [32.5, 32.5, 49.5, 50.9, 23.6, 38.3],
+  'a 110 m straight': [32.5, 32.5, 50.1, 50.9, 23.6, 38.3],
+  'a 112 m straight': [32.5, 32.5, 50.7, 50.9, 23.6, 38.3],
+  'a 114 m straight': [32.5, 32.5, 51.2, 50.9, 23.6, 38.3],
+  'a 116 m straight': [32.5, 32.5, 51.7, 50.9, 23.6, 38.3],
+  'a 118 m straight': [32.5, 32.5, 52, 50.9, 23.6, 38.3],
+  'a 120 m straight': [32.5, 32.5, 52.2, 50.9, 23.6, 38.3],
+  'a link at R 1200': [32.5, 32.5, 39.2, null, 28, 35.5],
+  'a link at R 3000': [32.5, 32.5, 40.8, null, 28, 38.3],
+  'a link at R 10000': [32.5, 32.5, 52.5, 50.9, 26.5, 39.7],
+};
+const EXIT_BANKED = 45;
 const T90 = (d) => extendTurnBy(d, { length: Q }, 90 * DEG), S = (d, L) => extend(d, { length: L });
 test('row 10: a Sharp corner right after a turn that ends still turning: the curves stay banked, none leans out, and the report says where the bank eased', () => {
   const { extendSharp } = require('../src/core/sharp.js');
@@ -182,7 +252,11 @@ test('row 11: a turn that flips over extend\'s 20 m transition: the same', () =>
   let d = D.createDoc('probe'); d = extend(d, { length: 100, family: 'bowl' }); d = T90(d); d = S(d, a); d = T90(d); d = S(d, b);
   d = extend(d, { length: 300, targets: { kh: 1 / 300 }, transition: 20 }); d = extend(d, { length: 300, targets: { kh: -1 / 300 }, transition: 20 }); d = extend(d, { length: 150, targets: { kh: 0 }, transition: 20 });
   d = S(d, c); d = T90(d); d = S(d, e); d = T90(d); d = S(d, f);
-  flipLap(d, 'the 20 m flip');
+  // D447 §10 (P's third re-read, item 3; P's s5): the second corner LEAVES its turn banked: its run's last curved station, on the exit piece, ≥ EXIT_BANKED
+  // (2c13316 53.3° on the exit piece's mean; 05cdb9d −0.4°: the exit's ringing read as flips and pinned to none)
+  const exit = d.pieces[7].id, run = flipLap(d, 'the 20 m flip').runs.find((x) => x.lastId === exit);
+  assert.ok(run, `control: a curved run ends on the exit piece ${exit}`);
+  assert.ok(run.all[run.all.length - 1] >= EXIT_BANKED, `the second corner leaves its turn at ${run.all[run.all.length - 1].toFixed(1)}°, want ≥ ${EXIT_BANKED}°`);
 });
 
 // lat: the 50 m transition's lap is laid 20 m wider (260): at P's 240 its Finish route crosses itself and the press proves no route, on e8e34d0 (no bankLap) too
@@ -228,6 +302,29 @@ test('row 16: a curve unwinding over 250 m into a gentle opposite curve keeps it
   const runOut = open.pieces[6].id, r = flipLap(open, 'a long run-out', { flip: false });
   assert.doesNotMatch(r.report, new RegExp(`eases to none[^;]*\\b${runOut}\\b`), `the run-out ${runOut} is not eased to none: ${r.report}`);
 });
+// D447 §10 (P's third re-read, item 3; P's short140): ONE R 300 curve of 140 m laid with a 20 m transition between two straights, no opposite corner anywhere.
+// Its run banks ≥ 25° on average and leaves its turn ≥ EXIT_BANKED (2c13316 29.0° on the curve piece, 52.2° at its exit; 05cdb9d 8.4° and −0.4°)
+test('row 17: a short curve between two straights is banked, and leaves its turn banked', () => {
+  const open = sweepRect((d) => { d = extend(d, { length: 200, targets: { kh: 0 } }); d = extend(d, { length: 140, targets: { kh: 1 / 300 }, transition: 20 }); return extend(d, { length: 510, targets: { kh: 0 }, transition: 20 }); });
+  const curve = open.pieces[6].id, exit = open.pieces[7].id, { runs } = flipLap(open, 'a short curve', { flip: false });
+  const run = runs.find((x) => x.lastId === exit || x.lastId === curve); assert.ok(run, `control: a curved run ends on ${curve} or ${exit}`);
+  const mean = run.all.reduce((a, b) => a + b, 0) / run.all.length, last = run.all[run.all.length - 1];
+  assert.ok(mean >= 25, `the curve leans in by ${mean.toFixed(1)}° on average, want ≥ 25°`);
+  assert.ok(last >= EXIT_BANKED, `the curve leaves its turn at ${last.toFixed(1)}°, want ≥ ${EXIT_BANKED}°`);
+});
+// D447 §10 (P's third re-read, item 2): THE BOUND'S EDGE, on close()'s lap (close() on the last piece, then bankLapWith, as P's probe): an 80 m straight and a
+// 100 m link at R 10,000 between opposite R 300 corners, gaps just past the fall model's bound. Across a straight whose control points ring, the plan descends
+// at about 0.5 °/m, not the cap's 0.84, so with the withhold removed the second corner leaned out 5.1° and 6.1° (P §8.7). bankLap reads its own descent there
+// and pins the gap: nothing withheld, nothing leans out
+for (const [what, mid, lat] of [['an 80 m straight', (d) => extend(d, { length: 80, targets: { kh: 0 }, transition: 20 }), 240], ['a link at R 10000', (d) => extend(d, { length: 100, targets: { kh: 1 / 10000 }, transition: 20 }), 300]])
+  test(`row 18: ${what} between opposite corners, closed by close() and banked: nothing withheld, nothing leans out`, () => {
+    const F = require('../src/core/finish.js'), { close } = require('../src/core/close.js'), open = sweepRect(between(mid), lat);
+    const c = close(open, { edited: [open.pieces.length - 1] }); assert.equal(c.converged, true, c.report);
+    const w = F.bankLapWith(c.doc); assert.deepEqual(w.withheld, [], `${what}: no piece withheld`); assert.equal(w.none, null, `${what}: ${w.none}`);
+    const { segments, path } = AD.toPath(w.doc, { step: 2 }); let worst = 90;
+    for (const q of path.samples) { const k = q.kvec, kh = Math.hypot(k[0], k[2]); if (segments[q.seg].kind === 'gap' || kh < 1 / 600) continue; worst = Math.min(worst, Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) / DEG); }
+    assert.ok(worst >= -5, `${what}: no curved station leans out (worst ${worst.toFixed(1)}°)`);
+  });
 
 test('row 6: the bank lands in Close\'s one undo step', async () => {
   const { createCoreShell } = require('../app/core/coreshell.js');
