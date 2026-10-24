@@ -6,16 +6,20 @@
 //   THEMES                     the four skins, by the melodies' names (app/test/theme.test.js holds them equal to sound.js MELODY_NAMES)
 //   applyTheme(doc, melody)    -> the skin set: the melody's name, or 'sigil' (data-theme removed)
 //   CHOICES                    (D394) Settings ▸ Theme: music (the launch's random melody picks the skin, as before), each of the four (its skin and its own
-//                              melody), sigil (SIGIL's look; it has no melody of its own, so the melody stays random). The head script reads the saved one
+//                              melody), sigil (SIGIL's look and, since D402, its own melody, Obsidian: sound.js 'sigil'). The head script reads the saved one
 //   skinFor(choice, melody)    -> the skin a choice shows over the playing melody: a fixed theme its own, sigil none (null), music or anything else the melody's
 //   LOOKS, melodyOf(look)      (D405) the looks: the four melodies' skins and Skyline Night, a night look on Skyline's melody (the melodies stay four). melodyOf
 //                              names a look's melody (null for anything that is not a look). A look is a skin: applyTheme and skinFor take any of them, and
 //                              skinFor(music, melody, look) keeps the head's look when its melody is the one playing, so a random start on the night stays night
+//   PICKS                      (D402) what Random picks among: the looks and SIGIL, whose melody is 'sigil' (melodyOf('sigil') is 'sigil'; SIGIL is no skin, so
+//                              applyTheme('sigil') still removes data-theme)
 'use strict';
 const THEMES = Object.freeze(['aqua', 'skyline', 'glass', 'aurora']);
 const NIGHT = Object.freeze({ 'skyline-night': 'skyline' });   // D405: a look on another look's melody
 const LOOKS = Object.freeze([...THEMES, ...Object.keys(NIGHT)]);
-const melodyOf = (look) => (typeof look === 'string' ? (NIGHT[look] || (THEMES.includes(look) ? look : null)) : null);
+const SIGIL = 'sigil';   // D402: SIGIL's look (no data-theme) and its own melody, sound.js MELODY_NAMES' fifth
+const melodyOf = (look) => (typeof look === 'string' ? (NIGHT[look] || (THEMES.includes(look) || look === SIGIL ? look : null)) : null);
+const PICKS = Object.freeze([...LOOKS, SIGIL]);
 const CHOICES = Object.freeze(['music', 'aqua', 'skyline', 'skyline-night', 'glass', 'aurora', 'sigil']);
 
 function applyTheme(doc, melody) {
@@ -32,4 +36,4 @@ function skinFor(choice, melody, look) {
   return melodyOf(look) !== null && melodyOf(look) === melody ? look : melody;
 }
 
-module.exports = { THEMES, LOOKS, melodyOf, CHOICES, applyTheme, skinFor };
+module.exports = { THEMES, LOOKS, PICKS, melodyOf, CHOICES, applyTheme, skinFor };

@@ -25,7 +25,7 @@ const STEPS = MELODIES[MELODY_NAMES[0]].steps;
 // undo.wav stay in app/sounds (row 6 still checks them) but no slot plays them
 // AMENDED (D377): Aqua, Skyline and Glass (batch 11) and Aurora (batch 12) in place of batch 10's four, whose files are gone from app/sounds, as are
 // batch 8's place.wav and undo.wav
-const MEL = ['aqua', 'skyline', 'glass', 'aurora'];
+const MEL = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'];   // AMENDED (D402): SIGIL's own melody, Obsidian, is the fifth
 const SLOTS = ['drag_tick', 'loop_closed', ...MEL.flatMap((m) => [`place_${m}`, `undo_${m}`])];
 /** A fake AudioContext whose nodes and param calls are kept, so a test can ask which buffer each source played, at what rate, and what each gain did. */
 function fakeCtx() {
@@ -182,7 +182,9 @@ test('row 6: the four files are the batch-8 WAVs byte for byte, and useSamples r
     place_aqua: '5b8b211c557ff965f897d1c6e6c761b0e9cc0c370311c2459fcae71cd5c0e4b7', undo_aqua: 'd74353c720b0788d0917939dcbdb1114400f96336f7b3f77ec7ee40e79a622ef',
     place_skyline: '33f7aac3cbabf4b86a400b6087b39f3ec3546fafe2b931b47b8b09a2e013be93', undo_skyline: 'bbb4608845e8a373ff578b63090e2fcb861c7183276864ab7efd93db3caf9bec',
     place_glass: '96b5268d2ce972d05d9d625b52c86523500306f60411a64d6567d8bf26504b61', undo_glass: '1a1971604311bdad48f02a33104cf7c8b7f075c940a94a2e1c8206a9708d93c5',
-    place_aurora: '929e061648f00a5360db018742f35e0b33da43c506a579e2d6d4251d81e29cd7', undo_aurora: 'c91f9db343bfe20ed6ee453598fdf3637990b1ac4f918996cab7532797c3ff7b' };
+    place_aurora: '929e061648f00a5360db018742f35e0b33da43c506a579e2d6d4251d81e29cd7', undo_aurora: 'c91f9db343bfe20ed6ee453598fdf3637990b1ac4f918996cab7532797c3ff7b',
+    // AMENDED (D402): Obsidian's two, PL Phantoms [SD] (G:Consonance-tools9inst13_pick)
+    place_sigil: '35fe0fe5196be0a77a8114e86b60a58b2634ec45ed9acebfeb6d1b7ce3361843', undo_sigil: '8070c7e698b1a08bcabbc72d7ede78da10f14de68ff713bfdb5266c65ee77ddd' };
   // AMENDED (D375 drop-in): every WAV shipped in app/sounds, loaded or not, is checked, not only the loaded ones
   const shipped = fs.readdirSync(path.join(__dirname, '..', 'sounds')).filter((x) => x.endsWith('.wav')).map((x) => x.replace(/.wav$/, '')).sort();
   assert.deepEqual(shipped, Object.keys(SHA).sort(), 'every WAV in app/sounds has its hash here');
@@ -305,7 +307,8 @@ test('row 15 (D394): before audio starts, setMelody(name) sets the melody the en
   assert.deepEqual(P.fetched, PICKED('glass').map((f) => `sounds/${f}.wav`), 'and the first press fetches glass\'s files, once');
   assert.deepEqual(Object.keys(P.calls.find((c) => c[0] === 'useSamples')[1]), PICKED('glass'));
   assert.deepEqual(switches(P), [], 'nothing to switch');
-  for (const bad of ['zzz', 'Aqua', 'sigil', 'music', '', undefined, 3]) assert.throws(() => P.s.setMelody(bad), /sound: no melody named/, String(bad));
+  // AMENDED (D402): 'sigil' is a melody now (Obsidian), so it is no longer refused
+  for (const bad of ['zzz', 'Aqua', 'Sigil', 'music', '', undefined, 3]) assert.throws(() => P.s.setMelody(bad), /sound: no melody named/, String(bad));
   assert.equal(P.s.melody, 'glass', 'a refused name changes nothing');
 });
 

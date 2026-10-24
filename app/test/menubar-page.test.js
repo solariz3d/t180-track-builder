@@ -275,7 +275,7 @@ test('row 15: Settings ▸ Sound: the volume slider shows 45 on a fresh start, a
   assert.deepEqual(errors, []);
 });
 
-test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody\'s two files; it survives a reload as that look and melody; SIGIL says its melody stays random', { skip }, async () => {
+test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody\'s two files; it survives a reload as that look and melody; SIGIL plays its own, Obsidian (D402)', { skip }, async () => {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
   try {
     await load();
@@ -302,9 +302,14 @@ test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and
     for (let i = 0; i < 50 && !urls.some((u) => /sounds\/undo_\w+\.wav$/.test(u)); i++) await sleep(100);
     assert.deepEqual(urls.filter((u) => /sounds\/(place|undo)_/.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort(), [`place_${target}.wav`, `undo_${target}.wav`], 'and its own melody');
     await open('m-settings');
-    assert.match(await ev("return [...document.querySelectorAll('#m-settings label')].find((x) => x.textContent.trim() === 'SIGIL').title;"), /melody[^.]*random/, 'SIGIL says its melody is still picked at random');
+    // AMENDED (D402): the rule changed by name: SIGIL has its own melody, Obsidian, so its tooltip names it and choosing SIGIL plays it (its two files)
+    const sigilTip = await ev("return [...document.querySelectorAll('#m-settings label')].find((x) => x.textContent.trim() === 'SIGIL').title;");
+    assert.match(sigilTip, /Obsidian/, `SIGIL names its own melody: ${sigilTip}`); assert.doesNotMatch(sigilTip, /random/, 'and no longer says its melody is random');
+    urls.length = 0;
     await clickText('m-settings', 'SIGIL');
     assert.equal(await ev("return document.documentElement.hasAttribute('data-theme');"), false, 'SIGIL: no data-theme');
+    for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/undo_sigil.wav')); i++) await sleep(100);
+    assert.deepEqual(urls.filter((u) => /\/sounds\//.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort(), ['place_sigil.wav', 'undo_sigil.wav'], 'and Obsidian follows: only its two files are fetched');
     assert.deepEqual(errors, []);
   } finally { onEvent = null; await send('Network.disable'); }
 });
@@ -374,12 +379,13 @@ test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sid
 // The melody check is row 19's rule (B's D408 hand-back): a look whose two files this load already fetched keeps them (app/sound.js), so it is fetched only when they were not in
 async function randomAfterGlass({ random = null } = {}) {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
-  const look = () => ev("return document.documentElement.getAttribute('data-theme');");
+  // AMENDED (D402): no data-theme is SIGIL's look, which Random can land on now (app/lib/theme.js PICKS)
+  const look = () => ev("return document.documentElement.getAttribute('data-theme') || 'sigil';");
   const soundFiles = () => urls.filter((u) => /sounds\/(place|undo)_/.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort();
   const fetched = async (name) => { for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/' + name)); i++) await sleep(100); };
   try {
     await load({ random });
-    const start = await ev("return document.documentElement.getAttribute('data-theme');");
+    const start = await look();
     await open('m-settings');
     const labels = await ev("return [...document.querySelectorAll('#m-settings label')].map((x) => x.textContent.trim());");
     assert.ok(!labels.includes('Music'), `no theme is called Music: ${labels.join(' | ')}`);
@@ -394,7 +400,8 @@ async function randomAfterGlass({ random = null } = {}) {
     await clickText('m-settings', 'Random');
     const picked = await look();
     // AMENDED (D405): the rule changed by name: Random may land on Skyline Night too, which plays Skyline's melody (its files are skyline's)
-    assert.ok(['aqua', 'skyline', 'aurora', 'skyline-night'].includes(picked), `choosing Random picks another look at once: ${picked}, after Glass`);
+    // AMENDED (D402): or SIGIL, on its own melody
+    assert.ok(['aqua', 'skyline', 'aurora', 'skyline-night', 'sigil'].includes(picked), `choosing Random picks another look at once: ${picked}, after Glass`);
     const tune = picked === 'skyline-night' ? 'skyline' : picked;
     assert.equal(await ticked('m-settings', 'Random'), true); assert.equal(await ticked('m-settings', 'Glass'), false, 'a choice of one');
     const cached = had.some((u) => u.endsWith('sounds/undo_' + tune + '.wav'));
@@ -403,7 +410,7 @@ async function randomAfterGlass({ random = null } = {}) {
     assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), JSON.stringify('music'), 'saved under its old value, music, so saves from before and after read alike');
     await ev("localStorage.setItem('t180.settings.theme', JSON.stringify('music')); return true;");   // as 0.4.6 and 0.4.7 saved it
     await load({ clear: false });
-    assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night'].includes(await look()), 'a saved music starts on a random look');   // AMENDED (D405): or Skyline Night
+    assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night', 'sigil'].includes(await look()), 'a saved music starts on a random look');   // AMENDED (D405): or Skyline Night; AMENDED (D402): or SIGIL
     await open('m-settings');
     assert.equal(await ticked('m-settings', 'Random'), true, 'a saved music is shown as Random');
     assert.deepEqual(errors, []);
@@ -413,16 +420,18 @@ async function randomAfterGlass({ random = null } = {}) {
 test('row 18 (D401): Settings ▸ Theme starts with Random, not Music, and it is the default; choosing it picks another look at once and that look\'s melody follows; a saved music loads as Random', { skip }, async () => {
   await randomAfterGlass();
 });
-test('row 18b (D401, B\'s D408 probe): the same with Math.random pinned, so both branches run every time: at 0.4 the start look is the pick (its files already in), at 0.6 it is not', { skip }, async () => {
-  const a = await randomAfterGlass({ random: 0.4 });
-  assert.deepEqual([a.start, a.picked, a.cached], ['skyline', 'skyline', true], 'at 0.4: starts on Skyline, Random after Glass picks Skyline, whose files are in');
-  const b = await randomAfterGlass({ random: 0.6 });
+// AMENDED (D402): the rule changed by name: the head draws among five names (SIGIL's fifth last), and after Glass Random picks among aqua, skyline, aurora,
+// skyline-night and sigil; so the draw that starts on the look it then picks is 0.1 (Aqua), and one that does not is 0.5 (starts on Glass, picks Aurora)
+test('row 18b (D401, B\'s D408 probe): the same with Math.random pinned, so both branches run every time: at 0.1 the start look is the pick (its files already in), at 0.5 it is not', { skip }, async () => {
+  const a = await randomAfterGlass({ random: 0.1 });
+  assert.deepEqual([a.start, a.picked, a.cached], ['aqua', 'aqua', true], 'at 0.1: starts on Aqua, Random after Glass picks Aqua, whose files are in');
+  const b = await randomAfterGlass({ random: 0.5 });
   // AMENDED (D405): the rule changed by name: after Glass, Random picks from four looks, Skyline Night last (aqua, skyline, aurora, skyline-night), so 0.6 is Aurora
-  assert.deepEqual([b.start, b.picked, b.cached], ['glass', 'aurora', false], 'at 0.6: starts on Glass, Random after Glass picks Aurora, fetched');
+  assert.deepEqual([b.start, b.picked, b.cached], ['glass', 'aurora', false], 'at 0.5: starts on Glass, Random after Glass picks Aurora, fetched');
 });
 test('row 19 (D401, A\'s read §8): a fresh start, Random already ticked: one click on Random picks another look and its melody, and so does the next', { skip }, async () => {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
-  const look = () => ev("return document.documentElement.getAttribute('data-theme');");
+  const look = () => ev("return document.documentElement.getAttribute('data-theme') || 'sigil';");   // AMENDED (D402): no data-theme is SIGIL's look
   const fetched = async (name) => { for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/' + name)); i++) await sleep(100); };
   try {
     await load();
@@ -438,7 +447,8 @@ test('row 19 (D401, A\'s read §8): a fresh start, Random already ticked: one cl
       const picked = await look();
       assert.notEqual(picked, before, `click ${n} on a ticked Random picks another look: still ${picked}`);
       // AMENDED (D405): or Skyline Night, on Skyline's melody (its files are skyline's)
-      assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night'].includes(picked), `click ${n}: one of the five looks: ${picked}`);
+      // AMENDED (D402): or SIGIL, on its own melody
+      assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night', 'sigil'].includes(picked), `click ${n}: one of the six looks: ${picked}`);
       const tune = picked === 'skyline-night' ? 'skyline' : picked, before2 = had.some((u) => u.endsWith('sounds/undo_' + tune + '.wav'));
       if (!before2) await fetched('undo_' + tune + '.wav');
       assert.ok(urls.some((u) => u.endsWith('sounds/undo_' + tune + '.wav')), `click ${n}: ${picked}'s melody follows (its files ${before2 ? 'were in already' : 'are fetched'})`);
@@ -449,18 +459,20 @@ test('row 19 (D401, A\'s read §8): a fresh start, Random already ticked: one cl
     assert.deepEqual(errors, []);
   } finally { onEvent = null; await send('Network.disable'); }
 });
-test('row 19b (D401): on a fresh install the first click on the ticked Random picks once, not twice: with Math.random at 0.4, Skyline becomes Glass', { skip }, async () => {
+// AMENDED (D402): the rule changed by name: five names, so at 0.4 the start is Glass, and one pick from Glass (among aqua, skyline, aurora, skyline-night, sigil) is
+// Aurora; a second pick, from Aurora, would be Glass again, so the row still tells one pick from two
+test('row 19b (D401): on a fresh install the first click on the ticked Random picks once, not twice: with Math.random at 0.4, Glass becomes Aurora', { skip }, async () => {
   // nothing saved, so settings.set('theme', 'music') is a change (undefined to music) and tells its listener, which picks; a second pick asked for by the item itself
   // excluded only the first pick, so it could land back on the start look (menubar-page run 4 of 5, 2026-10-19: "still skyline")
   await load({ random: 0.4 });
   const look = () => ev("return document.documentElement.getAttribute('data-theme');");
   assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), null, 'nothing saved');
-  assert.equal(await look(), 'skyline', 'at 0.4 the start look is Skyline');
+  assert.equal(await look(), 'glass', 'at 0.4 the start look is Glass');
   await open('m-settings');
   assert.equal(await ticked('m-settings', 'Random'), true);
   await clickText('m-settings', 'Random');
-  assert.equal(await look(), 'glass', 'one pick from Skyline at 0.4 is Glass; Skyline again is a second pick');
+  assert.equal(await look(), 'aurora', 'one pick from Glass at 0.4 is Aurora; Glass again is a second pick');
   await clickText('m-settings', 'Random');
-  assert.equal(await look(), 'skyline', 'the next click, the theme now saved as music, picks once from Glass: Skyline');
+  assert.equal(await look(), 'glass', 'the next click, the theme now saved as music, picks once from Aurora: Glass');
   assert.deepEqual(errors, []);
 });

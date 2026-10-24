@@ -14,7 +14,8 @@ const MUTATIONS = [
   // CHANGED D405: applyTheme takes a look (LOOKS: the melodies' and Skyline Night); the anchor follows the line
   { id: 'T1 any name sets a skin', file: 'lib/theme.js', from: "if (typeof melody === 'string' && LOOKS.includes(melody))", to: "if (typeof melody === 'string')", caughtBy: 'each melody sets its own skin' },
   { id: 'T2 the head rounds the pick', file: 'index.html', from: 'names[Math.floor(r * names.length)]', to: 'names[Math.round(r * (names.length - 1))]', caughtBy: 'the page sets the skin in its head' },
-  { id: 'T3 the head names the melodies in another order', file: 'index.html', from: "names = ['aqua', 'skyline', 'glass', 'aurora']", to: "names = ['skyline', 'aqua', 'glass', 'aurora']", caughtBy: 'the page sets the skin in its head' },
+  // CHANGED D402: the anchor follows the code (the head names five, SIGIL's fifth)
+  { id: 'T3 the head names the melodies in another order', file: 'index.html', from: "names = ['aqua', 'skyline', 'glass', 'aurora', 'sigil']", to: "names = ['skyline', 'aqua', 'glass', 'aurora', 'sigil']", caughtBy: 'the page sets the skin in its head' },
   // AMENDED (D394): the rule changed by name: the boot sets the skin through theme.js skinFor (a saved sigil shows SIGIL over the melody), so the patch that
   // stops it following the player is made on that call; the same mutant, the same catching row
   // CHANGED D405: the boot also hands over the head's look; the anchor follows the line
@@ -24,7 +25,8 @@ const MUTATIONS = [
   // CHANGED D405: the head also takes skyline-night; the anchor follows the line
   { id: 'T15 the head takes any saved text as a theme', file: 'index.html', from: "if (saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved;", to: "theme = saved || 'music';", caughtBy: 'D394: the head reads the saved theme' },
   { id: 'T16 sigil shows a skin', file: 'lib/theme.js', from: "if (choice === 'sigil') return null;", to: '', caughtBy: 'D394: Settings ▸ Theme has seven choices' },   // CHANGED D405: the row's title says seven now
-  { id: 'T17 Skyline Night plays a melody of its own name', file: 'lib/theme.js', from: "(NIGHT[look] || (THEMES.includes(look) ? look : null))", to: "(THEMES.includes(look) || look in NIGHT ? look : null)", caughtBy: 'D405: Skyline Night is a sixth look' },
+  // CHANGED D402: the anchor follows the code (melodyOf names SIGIL's own melody too)
+  { id: 'T17 Skyline Night plays a melody of its own name', file: 'lib/theme.js', from: "(NIGHT[look] || (THEMES.includes(look) || look === SIGIL ? look : null))", to: "(THEMES.includes(look) || look === SIGIL || look in NIGHT ? look : null)", caughtBy: 'D405: Skyline Night is a sixth look' },
   { id: 'T18 the random start never lands on the night', file: 'index.html', from: "look === 'skyline' && theme !== 'skyline' && ", to: "false && ", caughtBy: 'D405: Skyline Night is a sixth look' },
   { id: 'T19 the boot turns a random night back into Skyline', file: 'lib/theme.js', from: 'return melodyOf(look) !== null && melodyOf(look) === melody ? look : melody;', to: 'return melody;', caughtBy: 'D405: Skyline Night is a sixth look' },
   { id: 'T5 a skin change keeps the old colours', file: 'lib/tokens.js', from: 'refresh() { cache.clear(); version++;', to: 'refresh() { version++;', caughtBy: 'the reader reads again' },
