@@ -25,6 +25,10 @@
 //      on average outside FLIP_ZONE of the flip (2 × the distance the bank needs to roll the share at R 300 at BANK_ROLL × the amber; a flip is a change of
 //      direction within one turning stretch, not across a straight); and the press's report says where the bank was eased for the flip
 //  11  the same on P's s5 (probe447b.js): extend's 20 m transition from kh +1/300 to −1/300 inside one piece
+//  12  P's re-read (lighthouse 75fa8491, §6.3; plan_d447 "P's re-read ruled" (a)): the flip as a SWEEP, through the press (probe447f.js's laps): transitions of
+//      40, 50, 60, 70, 80 and 100 m, Sharp ramps of 40 and 100 m, and e60 / e80 (Extend's default blend: a short piece turning the other way is a flip over its
+//      whole length). On every one, rows 10–11's bars and NO PIECE WITHHELD (before, a flip with one dead-band point between its signs was not seen, and the
+//      whole 300 m turn after it was withheld flat)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -137,12 +141,9 @@ test('row 9: a straight next to a curve keeps the bank it was laid with', () => 
 
 const ROLL_DEG_M = 0.9 * require('../src/validate/index.js').ROLL_AMBER_DEG_M, SHARE_R300 = 0.75 * Math.atan(((460 / 3.6) ** 2 / 300) / 9.80665) / DEG;
 const FLIP_ZONE = 2 * (SHARE_R300 / ROLL_DEG_M);
-/** The lap's s (m) wherever the stored turn rate kh changes sign between two turning stations (|kh| > 1/600 m) no more than 30 m apart (not across a straight). */
-function flips(doc) {
-  const out = []; let s0 = 0, last = 0, lastS = -Infinity;
-  for (const P of doc.pieces) { if (P.type === 'road') for (let s = 0; s <= P.length; s += 2) { const k = D.valuesAt(P, Math.min(s, P.length)).kh; if (Math.abs(k) > 1 / 600) { const sg = Math.sign(k); if (last && sg !== last && s0 + s - lastS <= 30) out.push(s0 + s); last = sg; lastS = s0 + s; } } s0 += P.length || 0; }
-  return out;
-}
+/** The lap's flips, as stretches [s0, s1] (m): finish.js flipsOf, the same function bankPlan pins by, so the rows and the plan cannot disagree (P's re-read). */
+const flips = (doc) => require('../src/core/finish.js').flipsOf(doc);
+const nearFlip = (s, fl) => fl.some(([a, b]) => s > a - FLIP_ZONE && s < b + FLIP_ZONE);
 function flipLap(open, what) {
   const r = CJ.runCloseBest({ doc: open });
   assert.equal(r.converged, true, `${what}: the press proves (${r.report})`);
@@ -152,11 +153,14 @@ function flipLap(open, what) {
     const g = segments[q.seg], k = q.kvec, kh = Math.hypot(k[0], k[2]); if (g.kind === 'gap' || kh < 1 / 600) continue;
     const l = Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) / DEG; if (l < -5) out++; worst = Math.min(worst, l);
     // the bar on the curves is on HIS pieces: Finish's own closer is banked by D434's rule (core_finish_bank), pinned at its joints and the seam
-    if (!his.has(g.id) || fl.some((f) => Math.abs(q.s - f) < FLIP_ZONE)) continue;
+    if (!his.has(g.id) || nearFlip(q.s, fl)) continue;
     if (!per.has(g.id)) per.set(g.id, []); per.get(g.id).push(l);
   }
   assert.equal(out, 0, `${what}: no curved station leans out (worst ${worst.toFixed(1)}°)`);
-  for (const [id, xs] of per) if (xs.length >= 10) { const m = xs.reduce((a, b) => a + b, 0) / xs.length; assert.ok(m >= MEAN_LEAN, `${what}: ${id} away from the flip leans in by ${m.toFixed(1)}° on average`); }
+  // the mean bar is on curves at least FLIP_ZONE long: a shorter piece next to a straight (a Sharp's 40 m exit ramp) carries the bank down to the straight's
+  // pin, which D447 (d) keeps, and cannot reach the share and come back within its own length; it is held to "none leans out" like every station
+  const lengthOf = new Map(r.doc.pieces.map((P) => [P.id, P.length]));
+  for (const [id, xs] of per) if (xs.length >= 10 && lengthOf.get(id) >= FLIP_ZONE) { const m = xs.reduce((a, b) => a + b, 0) / xs.length; assert.ok(m >= MEAN_LEAN, `${what}: ${id} away from the flip leans in by ${m.toFixed(1)}° on average`); }
   assert.match(r.report, /bank/i, `${what}: the report says where the bank was eased or withheld: ${r.report}`);
   return r;
 }
@@ -174,6 +178,22 @@ test('row 11: a turn that flips over extend\'s 20 m transition: the same', () =>
   d = extend(d, { length: 300, targets: { kh: 1 / 300 }, transition: 20 }); d = extend(d, { length: 300, targets: { kh: -1 / 300 }, transition: 20 }); d = extend(d, { length: 150, targets: { kh: 0 }, transition: 20 });
   d = S(d, c); d = T90(d); d = S(d, e); d = T90(d); d = S(d, f);
   flipLap(d, 'the 20 m flip');
+});
+
+// lat: the 50 m transition's lap is laid 20 m wider (260): at P's 240 its Finish route crosses itself and the press proves no route, on e8e34d0 (no bankLap) too
+const sweepRect = (mid, lat = 240) => { const adv = 560, b = 100, c = 100, e = 100, a = e + lat, f = b + c + adv - 100;
+  let d = D.createDoc('probe'); d = extend(d, { length: 100, family: 'bowl' }); d = T90(d); d = S(d, a); d = T90(d); d = S(d, b); d = mid(d); d = S(d, c); d = T90(d); d = S(d, e); d = T90(d); return S(d, f); };
+const sweepFlip = (tr) => (d) => { d = extend(d, { length: 300, targets: { kh: 1 / 300 }, transition: 20 }); d = extend(d, { length: 300, targets: { kh: -1 / 300 }, transition: tr }); return extend(d, { length: 150, targets: { kh: 0 }, transition: 20 }); };
+const sweepE = (L) => (d) => { d = extend(d, { length: 300, targets: { kh: 1 / 300 }, transition: 20 }); d = extend(d, { length: L, targets: { kh: -1 / 300 } }); d = extend(d, { length: 300 - L, targets: { kh: -1 / 300 } }); return extend(d, { length: 150, targets: { kh: 0 }, transition: 20 }); };
+const sweepSharp = (ramp) => { const { extendSharp } = require('../src/core/sharp.js');
+  let d = D.createDoc('probe'); d = extend(d, { length: 100, family: 'bowl' }); d = T90(d); d = S(d, 700); d = T90(d); d = S(d, 100);
+  d = extend(d, { length: 300, targets: { kh: 1 / 300 } }); d = extendSharp(d, {}, { angle: -60 * DEG, R: 150, ramp }); d = extend(d, { length: 150 });
+  d = S(d, 100); d = T90(d); d = S(d, 100); d = T90(d); return S(d, 400); };
+const SWEEP = [['Sharp ramp 40 m', () => sweepSharp(40)], ['Sharp ramp 100 m', () => sweepSharp(100)], ...[40, 50, 60, 70, 80, 100].map((tr) => [`a ${tr} m transition`, () => sweepRect(sweepFlip(tr), tr === 50 ? 260 : 240)]),
+  ['e60 (Extend\'s default blend over a 60 m piece)', () => sweepRect(sweepE(60))], ['e80 (over an 80 m piece)', () => sweepRect(sweepE(80))]];
+for (const [what, mk] of SWEEP) test(`row 12: a flip swept: ${what}: the curves stay banked, none leans out, no piece withheld`, () => {
+  const r = flipLap(mk(), what);
+  assert.doesNotMatch(r.report, /no bank on/, `${what}: no piece is withheld: ${r.report}`);
 });
 
 test('row 6: the bank lands in Close\'s one undo step', async () => {

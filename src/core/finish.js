@@ -216,8 +216,8 @@ const bankOf = (k, share) => -share * Math.atan((V_DESIGN * V_DESIGN * k) / G);
  * the user's own bank (a roll laid LAST, after the turns) keeps it: the bank is a lean into the curve against gravity, and rolling the road upright inside the turn
  * is what finish.js never does (lay: "a roll is never laid in a turn"); such a route is judged as it was laid, and the roll-first order banks its upright turns.
  */
-function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips = false } = {}) {
-  const road = window.filter((p) => kFrom.pieces[p].type === 'road'), rate = (BANK_ROLL * ROLL_AMBER_DEG_M * Math.PI) / 180, seq = [];
+function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips = false, rollScale = 1 } = {}) {
+  const road = window.filter((p) => kFrom.pieces[p].type === 'road'), rate = (rollScale * BANK_ROLL * ROLL_AMBER_DEG_M * Math.PI) / 180, seq = [];
   let s0 = 0; const startOf = new Map(); kFrom.pieces.forEach((P, p) => { startOf.set(p, s0); s0 += P.length || 0; });
   road.forEach((p, j) => {
     const P = kFrom.pieces[p], U = D.knotVector(P), n = P.channels.kh.length, linked = j > 0 && road[j - 1] === p - 1, nextLinked = road[j + 1] === p + 1;
@@ -233,10 +233,13 @@ function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips
   // down to none before the flip and rolls up again after it, inside BANK_ROLL and BANK_ACCEL, instead of lagging through it the wrong way (a Sharp corner after
   // a turn that ends still turning flips +1/300 to −1/150 in 4 m: the lagging bank leaned 43 stations out by up to 58°)
   const eased = new Set();
-  // (a change of direction across a straight is not a flip: more than FLIP_GAP_M without turning between them, and the straight's pins already do the work)
-  if (flips) { let last = -1; for (let k = 0; k < seq.length; k++) { if (!(Math.abs(seq[k].kh) > CURVED_KH)) continue;
-    if (last >= 0 && seq[k].s - seq[last].s <= FLIP_GAP_M && Math.sign(seq[k].kh) !== Math.sign(seq[last].kh)) for (let j = last; j <= k; j++) { seq[j].t = 0; seq[j].pinned = true; eased.add(seq[j].p); }
-    last = k; } }
+  // D447, P's re-read (lighthouse 75fa8491 §6.3): the flips are FOUND ON THE ROAD (flipsOf: the turn rate sampled every 2 m), not on these control points 20 m
+  // apart, where one point in the dead band between the two signs hid a flip of 40–100 m. Every point inside a flip's stretch, and the nearest on either side, is
+  // pinned (`flips` is that list of stretches, [s0, s1] in metres along the lap)
+  if (flips) for (const [a, b] of flips) {
+    let lo = -1, hi = -1; for (let k = 0; k < seq.length; k++) { if (seq[k].s < a) lo = k; else if (seq[k].s > b && hi < 0) hi = k; }
+    for (let k = Math.max(0, lo); k <= (hi < 0 ? seq.length - 1 : hi); k++) { seq[k].t = 0; seq[k].pinned = true; eased.add(seq[k].p); }
+  }
   // the pinned points stay where they are in both passes (a pass that moved them would undo the pin: the close would then meet the seam's bank row in one knot)
   for (let k = 1; k < seq.length; k++) { if (seq[k].pinned) continue; const d = rate * (seq[k].s - seq[k - 1].s); seq[k].t = Math.max(seq[k - 1].t - d, Math.min(seq[k - 1].t + d, seq[k].t)); }
   for (let k = seq.length - 2; k >= 0; k--) { if (seq[k].pinned) continue; const d = rate * (seq[k + 1].s - seq[k].s); seq[k].t = Math.max(seq[k + 1].t - d, Math.min(seq[k + 1].t + d, seq[k].t)); }
@@ -327,11 +330,28 @@ function bankRollPeak(doc, window) {
  * The bank rolls the road about its centre line, so the closed lap stays closed. A backstop: if the banked lap would lean out of a curve (closerLoad, the
  * horizontal turn) at more stations than the lap as closed, the lap is returned as closed. Returns the document (the same object when nothing is banked).
  */
-const CURVED_KH = 1 / 600, LEVEL_DEG = 30, WITHHOLD_ROUNDS = 3, FLIP_GAP_M = 30;
+const CURVED_KH = 1 / 600, LEVEL_DEG = 30, WITHHOLD_ROUNDS = 3, FLIP_STEP_M = 2, FLIP_STRAIGHT_M = 60;
 function pitPieces(doc) {
   const lane = doc.pitLane, at = (a) => (a ? doc.pieces.findIndex((P) => P.id === a.word) : -1); if (!lane) return new Set();
   const a = at(lane.leave), b = at(lane.rejoin), out = new Set(); if (a < 0 || b < 0) return out;
   for (let p = a; ; p = (p + 1) % doc.pieces.length) { out.add(p); if (p === b || out.size > doc.pieces.length) break; }
+  return out;
+}
+/**
+ * D447 (P's re-read): THE FLIPS of a lap, as stretches [s0, s1] in metres along it: the stored turn rate kh sampled every FLIP_STEP_M on every road piece; a flip
+ * runs from the last turning sample (|kh| > CURVED_KH) of one sign to the first of the other, when no straight run longer than FLIP_STRAIGHT_M lies between them
+ * (a longer one is a straight the bank comes down on anyway). bankPlan pins the bank at none across each; core_close_banks_lap reads its flip zones from this
+ * same function, so the plan and the rows cannot disagree. FLIP_STRAIGHT_M: the longest dead band of a flip in P's sweep is 38 m (kh +1/300 → −1/300 over
+ * 100 m), so 60 m.
+ */
+function flipsOf(doc) {
+  const out = []; let s0 = 0, last = 0, lastS = -Infinity;
+  for (const P of doc.pieces) {
+    if (P.type !== 'road') { last = 0; s0 += P.length || 0; continue; }
+    for (let s = 0; s <= P.length; s += FLIP_STEP_M) { const k = D.valuesAt(P, Math.min(s, P.length)).kh; if (!(Math.abs(k) > CURVED_KH)) continue;
+      const sg = Math.sign(k), at = s0 + s; if (last && sg !== last && at - lastS <= FLIP_STRAIGHT_M) out.push([lastS, at]); last = sg; lastS = at; }
+    s0 += P.length || 0;
+  }
   return out;
 }
 /** Per piece id, the curved stations (|κh| > 1/600 m) leaning out of the horizontal turn by more than LEAN_OUT_DEG (closerLoad's read). */
@@ -341,8 +361,9 @@ function leanOutPieces(doc) {
     if (Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) < -LEAN_OUT_DEG * DEG) out.set(g.id, (out.get(g.id) || 0) + 1); }
   return out;
 }
-/** bankLap with what it held back: { doc, eased (piece ids where the bank eased to none for a flip), withheld (piece ids left unbanked: they would lean out) }. */
-function bankLapWith(doc) { const r = bankLapRun(doc); return { doc: r.doc, eased: r.eased || [], withheld: r.withheld || [] }; }
+/** bankLap with what it held back: { doc, eased (piece ids where the bank eased to none for a flip), withheld (piece ids left unbanked: they would lean out),
+ *  none (when there were curves to bank and none was banked: why, in words; P's re-read (d)) }. */
+function bankLapWith(doc) { const r = bankLapRun(doc); return { doc: r.doc, eased: r.eased || [], withheld: r.withheld || [], none: r.none || null }; }
 function bankLap(doc) { return bankLapRun(doc).doc; }
 function bankLapRun(doc) {
   if (!doc.closed || !doc.pieces.length || doc.pieces[0].type !== 'road') return { doc };
@@ -353,27 +374,30 @@ function bankLapRun(doc) {
   if (!lap.length) return { doc };
   // a joint is relaxed (D447 (d)) between two pieces that both curve; a flip at or near it is pinned by bankPlan's flip rule (`flips`), not by the joint
   const curved = (p) => doc.pieces[p].channels.kh.some((k) => Math.abs(k) > CURVED_KH);
-  const outBefore = leanOutPieces(doc), withheld = [];
+  const outBefore = leanOutPieces(doc), withheld = [], flipList = flipsOf(doc);
   // PER PIECE, never the whole lap (P's review finding 1 (c)): a piece that would still lean out where the closed lap did not is left as closed and the rest is
   // banked again without it, up to WITHHOLD_ROUNDS times. (Before, one leaning station left the whole lap flat, and the press said nothing.)
   for (let round = 0; round <= WITHHOLD_ROUNDS; round++) {
-    const set = lap.filter((p) => !withheld.includes(doc.pieces[p].id)); if (!set.length) return { doc, withheld };
+    const set = lap.filter((p) => !withheld.includes(doc.pieces[p].id)); if (!set.length) return { doc, withheld, none: 'every curve it could bank would lean out of its turn' };
     const uprightSet = new Set(set), relax = (p) => p > 0 && uprightSet.has(p - 1) && uprightSet.has(p) && curved(p - 1) && curved(p);
     const flatPeak = bankRollPeak(doc, set);
-    let share = BANK_SHARE, res = null, plan = null;
+    // the share is scaled down while the lap rolls past the amber, as ruled; AND the roll's own rate (P's re-read, Sharp ramp 40 m: the bank's rate is capped at
+    // 0.84 °/m in its own channel, but on a tight turn the checker reads the road's roll at 0.966 °/m where it rolls up after a flip, and a smaller share does
+    // not slow a ramp that rides the cap: 0.966 → 0.959 → 0.948 over the three tries, and the WHOLE lap came back flat and silent)
+    let share = BANK_SHARE, rollScale = 1, res = null, plan = null;
     for (let t = 0; t < BANK_TRIES; t++) {
-      plan = bankPlan(doc, set, share, uprightSet, relax, { flips: true });
+      plan = bankPlan(doc, set, share, uprightSet, relax, { flips: flipList, rollScale });
       if ([...plan.values()].every((a) => a.every((x) => x === 0))) return { doc, withheld };
-      const cand = D.checkDoc(banked(doc, plan)), peak = bankRollPeak(cand, set);
-      if (peak <= Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6)) { res = cand; break; }
-      share *= (Math.max(ROLL_AMBER_DEG_M, flatPeak) / peak) * 0.97;
+      const cand = D.checkDoc(banked(doc, plan)), peak = bankRollPeak(cand, set), allowed = Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6);
+      if (peak <= allowed) { res = cand; break; }
+      share *= (Math.max(ROLL_AMBER_DEG_M, flatPeak) / peak) * 0.97; rollScale *= (allowed / peak) * 0.97;
     }
-    if (!res) return { doc, withheld };   // the bank could not be kept under the amber: the lap as closed
+    if (!res) return { doc, withheld, none: 'its roll would pass the amber' };   // the bank could not be kept under the amber: the lap as closed
     const outAfter = leanOutPieces(res), worse = set.filter((p) => (outAfter.get(doc.pieces[p].id) || 0) > (outBefore.get(doc.pieces[p].id) || 0)).map((p) => doc.pieces[p].id);
     if (!worse.length) return { doc: freeze(res), eased: [...plan.eased].map((p) => doc.pieces[p].id), withheld };
     withheld.push(...worse);
   }
-  return { doc, withheld };
+  return { doc, withheld, none: 'every curve it could bank would lean out of its turn' };
 }
 /** D434: the laid route banked and closed, the bank sized from the closed route (above); the share scaled down while the window rolls past the amber. */
 function closeBanked(laid, window, upright) {
@@ -550,4 +574,4 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   throw new D.CoreError('FINISH_NO_ROUTE', `no finish closes from here: the end is ${Math.round(gap)} m from the start${rollText}, and none of the ${fail.tried} routes tried (turn, straight, turn at radius ${radii.join(', ')} m) could be closed${fail.best ? ` (the first refusal: ${fail.best})` : ''}. Extend toward the start and try again`);
 }
 
-module.exports = { finishToStart, bankLap, bankLapWith, isNear, NEAR_M, roadHold, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };
+module.exports = { finishToStart, bankLap, bankLapWith, flipsOf, isNear, NEAR_M, roadHold, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };
