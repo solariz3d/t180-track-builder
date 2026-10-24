@@ -325,6 +325,18 @@ for (const [what, mid, lat] of [['an 80 m straight', (d) => extend(d, { length: 
     for (const q of path.samples) { const k = q.kvec, kh = Math.hypot(k[0], k[2]); if (segments[q.seg].kind === 'gap' || kh < 1 / 600) continue; worst = Math.min(worst, Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) / DEG); }
     assert.ok(worst >= -5, `${what}: no curved station leans out (worst ${worst.toFixed(1)}°)`);
   });
+// D451 (P's pre-landing review §9.4, Q8): THE ROLL AMBER on a banked lap. Sharp ramp 40's first try rolls past the amber (0.966 °/m against 0.934) and the
+// press keeps the second; no row read the roll, so a press that kept the first try (Q8) went unseen. The press's lap rolls, over his pieces, no faster than
+// the amber or the open lap's own roll there, whichever is more (bankLap's `allowed`)
+test('row 19: a banked lap rolls no faster than the amber over his pieces (Sharp ramp 40, whose first try does)', () => {
+  const V = require('../src/validate/index.js'), open = sweepSharp(40), ids = new Set(open.pieces.map((P) => P.id));
+  const rollPeak = (doc) => { const { segments, path } = AD.toPath(doc, { step: 2 }), S = path.samples;
+    return V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', !!doc.closed, path.lengthM).reduce((m, q) => (ids.has(segments[S[q.i].seg].id) ? Math.max(m, q.rate) : m), 0); };
+  const r = CJ.runCloseBest({ doc: open }); assert.equal(r.converged, true, r.report);
+  assert.doesNotMatch(r.report, /no curve on the lap was banked/, `control: the lap is banked: ${r.report}`);
+  const allowed = Math.max(V.ROLL_AMBER_DEG_M, rollPeak(open)), peak = rollPeak(r.doc);
+  assert.ok(peak <= allowed + 1e-9, `the banked lap rolls at ${peak.toFixed(4)} °/m over his pieces, past ${allowed.toFixed(4)}`);
+});
 
 test('row 6: the bank lands in Close\'s one undo step', async () => {
   const { createCoreShell } = require('../app/core/coreshell.js');
