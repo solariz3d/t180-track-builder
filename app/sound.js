@@ -46,7 +46,8 @@ const TINE = Object.freeze({ peak: 0.226 });
 // tik (the keeper's pick), measured through this engine at the old tick's gain, its file levelled to match (G:\Consonance-tools\b9\level_ticks.js)
 // D377: the keeper's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js, their files from page11\batch11) and Aurora of
 // batch 12 (mel12.js, page12\batch12), in place of batch 10's four, whose files are gone from app/sounds with batch 8's place.wav and undo.wav
-const MELODY_NAMES = Object.freeze(['aqua', 'skyline', 'glass', 'aurora']);
+// D402: SIGIL's own melody, Obsidian (G:Consonance-tools9mel13.js sigil1, the pick of three; its files from inst13_pick), fifth
+const MELODY_NAMES = Object.freeze(['aqua', 'skyline', 'glass', 'aurora', 'sigil']);
 const SAMPLES = Object.freeze({
   slots: Object.freeze(['drag_tick', 'loop_closed', ...MELODY_NAMES.flatMap((m) => [`place_${m}`, `undo_${m}`])]),
   file: Object.freeze({
@@ -55,6 +56,7 @@ const SAMPLES = Object.freeze({
     place_skyline: 'place_skyline', undo_skyline: 'undo_skyline',           // SY Runtheharm [GS]
     place_glass: 'place_glass', undo_glass: 'undo_glass',                   // SY VeloHarm [GS]
     place_aurora: 'place_aurora', undo_aurora: 'undo_aurora',               // SY Linear Arithmetic [FP]
+    place_sigil: 'place_sigil', undo_sigil: 'undo_sigil',                   // PL Phantoms [SD]
   }),
   ref: Object.freeze({ drag_tick: 84, ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 60], [`undo_${m}`, 60]])) }),
   gain: Object.freeze({ drag_tick: 1.852, loop_closed: 0.668, ...Object.fromEntries(MELODY_NAMES.flatMap((m) => [[`place_${m}`, 0.645], [`undo_${m}`, 0.596]])) }),
@@ -63,7 +65,7 @@ const SAMPLES = Object.freeze({
 });
 /** D388 (A's review, finding 1): the files ONE launch plays, in the order they are fetched: the tick, the loop close and the melody's place and undo. */
 const samplesFor = (melody) => {
-  if (!MELODY_NAMES.includes(melody)) throw new Error(`sound: no melody named ${melody} (the four: ${MELODY_NAMES.join(', ')})`);
+  if (!MELODY_NAMES.includes(melody)) throw new Error(`sound: no melody named ${melody} (the five: ${MELODY_NAMES.join(', ')})`);
   return ['drag_tick', 'loop_closed', SAMPLES.file[`place_${melody}`], SAMPLES.file[`undo_${melody}`]];
 };
 const rateOf =(file, midi) => (file in SAMPLES.ref ? Math.pow(2, (midi - SAMPLES.ref[file]) / 12) : 1);
@@ -130,8 +132,21 @@ const MELODIES = Object.freeze({
     [34, [48, 57, 62, 65], 77], [34, [48, 57, 62, 65], 77], [31, [50, 57, 58, 65], 72], [31, [50, 57, 58, 65], 74], [39, [51, 55, 58, 65], 82], [39, [51, 55, 58, 65], 82], [39, [49, 56, 60, 65], 84], [39, [49, 56, 60, 65], 80],
     [29, [48, 51, 53, 56], 80], [29, [48, 51, 53, 56], 79], [34, [48, 49, 53, 56], 75], [34, [48, 49, 53, 56], 75], [39, [49, 53, 55, 58], 70], [39, [49, 53, 55, 58], 72], [32, [48, 51, 56, 58], 80], [32, [48, 51, 56, 58], 80],
   ]),
+  // D402: SIGIL's melody, Obsidian (mel13.js sigil1, sha256 5ddb9ac1…): D minor with the Phrygian Eb, one four-step figure over moving chords
+  sigil: melody("Obsidian", [
+    [38, [48, 52, 53, 57], 69], [38, [48, 52, 53, 57], 69], [34, [50, 52, 53, 57], 74], [34, [50, 52, 53, 57], 72], [38, [48, 52, 53, 57], 69], [38, [48, 52, 53, 57], 69], [39, [50, 55, 57, 58], 74], 
+    [39, [50, 55, 57, 58], 72], [38, [48, 52, 53, 57], 69], [38, [48, 52, 53, 57], 69], [31, [48, 53, 57, 58], 74], [31, [48, 53, 57, 58], 72], [34, [50, 52, 53, 57], 69], [34, [50, 52, 53, 57], 69], 
+    [36, [50, 53, 55, 58], 77], [36, [50, 53, 55, 58], 74], [31, [48, 53, 55, 58], 70], [31, [48, 53, 55, 58], 70], [39, [50, 55, 57, 58], 74], [39, [50, 55, 57, 58], 72], [38, [48, 52, 53, 57], 69], 
+    [38, [48, 52, 53, 57], 69], [33, [48, 50, 52, 55], 76], [33, [48, 50, 52, 55], 74], [38, [48, 52, 53, 57], 69], [38, [48, 52, 53, 57], 69], [34, [50, 52, 53, 57], 74], [34, [50, 52, 53, 57], 72], 
+    [31, [48, 53, 57, 58], 69], [31, [48, 53, 57, 58], 69], [39, [50, 55, 57, 58], 79], [39, [50, 55, 57, 58], 77], [34, [50, 53, 57, 64], 72], [34, [50, 53, 57, 64], 72], [36, [50, 53, 55, 58], 77], 
+    [36, [50, 53, 55, 58], 74], [38, [52, 53, 57, 60], 74], [38, [52, 53, 57, 60], 74], [33, [50, 52, 55, 60], 79], [33, [50, 52, 55, 60], 76], [39, [50, 55, 57, 58], 74], [39, [50, 55, 57, 58], 74], 
+    [29, [53, 55, 57, 60], 79], [29, [53, 55, 57, 60], 77], [31, [53, 57, 58, 60], 72], [31, [53, 57, 58, 60], 72], [38, [50, 53, 57, 60], 77], [38, [50, 53, 57, 60], 76], [34, [50, 53, 57, 64], 74], 
+    [34, [50, 53, 57, 64], 74], [36, [50, 53, 58, 67], 79], [36, [50, 53, 58, 67], 77], [39, [50, 57, 58, 67], 74], [39, [50, 57, 58, 67], 74], [33, [50, 52, 60, 67], 81], [33, [50, 52, 60, 67], 79], 
+    [31, [48, 53, 57, 58], 69], [31, [48, 53, 57, 58], 69], [39, [50, 55, 57, 58], 74], [39, [50, 55, 57, 58], 72], [33, [50, 52, 55, 60], 69], [33, [50, 52, 55, 60], 69], [38, [48, 52, 53, 57], 74], 
+    [38, [48, 52, 53, 57], 74], 
+  ]),
 });
-if (Object.keys(MELODIES).join() !== MELODY_NAMES.join() || MELODY_NAMES.some((k) => MELODIES[k].steps.length !== 64)) throw new Error('sound: the melodies are not the four of 64 steps MELODY_NAMES names');
+if (Object.keys(MELODIES).join() !== MELODY_NAMES.join() || MELODY_NAMES.some((k) => MELODIES[k].steps.length !== 64)) throw new Error('sound: the melodies are not the five of 64 steps MELODY_NAMES names');
 /** The melody step a track with `pieces` pieces has just played on its last placement (0..63); the first piece is step 0. */
 const stepOf = (pieces) => (((pieces - 1) % 64) + 64) % 64;
 // THE PLACE SWELL (D377, the librarian's ruling on E's batch 11, the keeper can veto). The steps carry pitch only, so every place played at one level and a
@@ -204,7 +219,7 @@ function stepPlan(kind, prev, value, melAt = 0, single = false) {
 
 // `melody` (D375): which of MELODIES place and undo play, the first if none is given; the player passes the one its launch picked
 function createEngine(ctx, { random = Math.random, melody = MELODY_NAMES[0] } = {}) {   // `random`: where the noise of the reverbs and the crash comes from; a seeded one makes a render repeatable (app/test/soundrender.js)
-  if (!MELODY_NAMES.includes(melody)) throw new Error(`sound: no melody named ${melody} (the four: ${MELODY_NAMES.join(', ')})`);
+  if (!MELODY_NAMES.includes(melody)) throw new Error(`sound: no melody named ${melody} (the five: ${MELODY_NAMES.join(', ')})`);
   const master = ctx.createGain(), dryBus = ctx.createGain(), preBus = ctx.createGain(), out = ctx.createGain();
   master.connect(preBus); dryBus.connect(preBus);   // MASTER also feeds the echo; DRYBUS does not
   // the widener: L' = ½(1+W)L + ½(1−W)R and its mirror
@@ -354,7 +369,7 @@ function createEngine(ctx, { random = Math.random, melody = MELODY_NAMES[0] } = 
    *  same graph and reverb. While samples play, `buffers` must hold the new melody's files (samplesFor); on the synth none are needed. A refused switch
    *  changes nothing. */
   function setMelody(name, buffers) {
-    if (!MELODY_NAMES.includes(name)) throw new Error(`sound: no melody named ${name} (the four: ${MELODY_NAMES.join(', ')})`);
+    if (!MELODY_NAMES.includes(name)) throw new Error(`sound: no melody named ${name} (the five: ${MELODY_NAMES.join(', ')})`);
     if (samples || buffers !== undefined) {
       if (!buffers || typeof buffers !== 'object') throw new Error(`sound: switching to ${name} while samples play needs its samples, got ${buffers}`);
       const need = samplesFor(name), missing = need.filter((k) => !buffers[k]); if (missing.length) throw new Error(`sound: the samples are missing ${missing.join(', ')}`);
@@ -447,7 +462,7 @@ function createSound(win, { log = (m) => { try { console.warn(m); } catch (e) { 
     get melody() { return melody; },
     /** D394 (Settings ▸ Theme): switch the melody while the builder is open; see the player's comment above. A name not of the four is refused. */
     setMelody(name) {
-      if (!MELODY_NAMES.includes(name)) throw new Error(`sound: no melody named ${name} (the four: ${MELODY_NAMES.join(', ')})`);
+      if (!MELODY_NAMES.includes(name)) throw new Error(`sound: no melody named ${name} (the five: ${MELODY_NAMES.join(', ')})`);
       wanted = name;
       if (name === melody) return;
       if (!engine) { melody = name; return; }   // before audio starts: the engine is built with it, and the first press fetches its files

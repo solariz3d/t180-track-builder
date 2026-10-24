@@ -41,8 +41,10 @@ test('swellDb: a place rises from its floor at step 1 to its peak over steps 45 
 // D375: four melodies of 64 steps (G:\Consonance-tools\b9\mel9.js, batch 9: Yearning, Shoegaze, Light occult, Afterglow), each step today's shape
 // AMENDED (D377): the keeper's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js) and Aurora of batch 12 (mel12.js). The
 // names change; the rule (four melodies of 64 steps of this shape) does not
-test('the four melodies: 64 steps each of a bass, a chord of four and a melody note on top, each melody its own', () => {
-  assert.deepEqual([...MELODY_NAMES], ['aqua', 'skyline', 'glass', 'aurora']);
+// AMENDED (D402): the rule changed by name: SIGIL's own melody, Obsidian, is the fifth
+test('the five melodies: 64 steps each of a bass, a chord of four and a melody note on top, each melody its own', () => {
+  assert.deepEqual([...MELODY_NAMES], ['aqua', 'skyline', 'glass', 'aurora', 'sigil']);
+  assert.equal(MELODIES.sigil.title, 'Obsidian');
   assert.deepEqual(Object.keys(MELODIES), [...MELODY_NAMES]);
   for (const k of MELODY_NAMES) {
     const m = MELODIES[k];
@@ -52,12 +54,13 @@ test('the four melodies: 64 steps each of a bass, a chord of four and a melody n
     assert.equal(typeof m.title, 'string');
   }
   const tops = MELODY_NAMES.map((k) => MELODIES[k].steps.map((s) => s[2]).join(','));
-  assert.equal(new Set(tops).size, 4, 'four different tunes');
+  assert.equal(new Set(tops).size, 5, 'five different tunes');
 });
 
 // D375: one of the four is picked at each launch (the player's creation, once a page load), from `pick` (Math.random in the app), and never saved
-test('a launch picks one of the four melodies from its random draw, hands it to the engine, saves nothing, and refuses a draw outside 0..1', () => {
-  const got = [0, 0.26, 0.5, 0.99].map((r) => {
+// AMENDED (D402): five melodies, so the draws that land on each are fifths
+test('a launch picks one of the five melodies from its random draw, hands it to the engine, saves nothing, and refuses a draw outside 0..1', () => {
+  const got = [0, 0.26, 0.5, 0.7, 0.99].map((r) => {
     const F = fakeWindow(), seen = [];
     const s = createSound(F.win, { engineFor: (c, o) => { seen.push(o && o.melody); return F.engineFor(c); }, pick: () => r, log: () => {} });
     const before = s.melody; F.fire('pointerdown');
@@ -65,7 +68,7 @@ test('a launch picks one of the four melodies from its random draw, hands it to 
     assert.deepEqual(Object.keys(F.store), [], 'nothing is saved, so the next launch draws again');
     return before;
   });
-  assert.deepEqual(got, ['aqua', 'skyline', 'glass', 'aurora']);   // AMENDED (D377): the four's names
+  assert.deepEqual(got, ['aqua', 'skyline', 'glass', 'aurora', 'sigil']);   // AMENDED (D377): the four's names; AMENDED (D402): and SIGIL's, fifth
   let seed = 7; const seeded = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   const many = new Set(Array.from({ length: 40 }, () => createSound(fakeWindow().win, { pick: seeded, log: () => {} }).melody));
   assert.deepEqual([...many].sort(), [...MELODY_NAMES].sort(), 'over 40 seeded launches, every melody comes up');
