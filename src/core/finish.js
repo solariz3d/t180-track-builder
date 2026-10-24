@@ -354,46 +354,52 @@ function flipsOf(doc) {
   }
   return out;
 }
-/** Per piece id, the curved stations (|κh| > 1/600 m) leaning out of the horizontal turn by more than LEAN_OUT_DEG (closerLoad's read). */
-function leanOutPieces(doc) {
-  const { segments, path } = toPath(doc, { step: 2 }), out = new Map();
-  for (const q of path.samples) { const g = segments[q.seg]; if (g.kind === 'gap') continue; const k = q.kvec, kh = Math.hypot(k[0], k[2]); if (kh < 1 / 600) continue;
-    if (Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) < -LEAN_OUT_DEG * DEG) out.set(g.id, (out.get(g.id) || 0) + 1); }
-  return out;
-}
 /** bankLap with what it held back: { doc, eased (piece ids where the bank eased to none for a flip), withheld (piece ids left unbanked: they would lean out),
  *  none (when there were curves to bank and none was banked: why, in words; P's re-read (d)) }. */
 function bankLapWith(doc) { const r = bankLapRun(doc); return { doc: r.doc, eased: r.eased || [], withheld: r.withheld || [], none: r.none || null }; }
 function bankLap(doc) { return bankLapRun(doc).doc; }
+/** One path of a closed lap read for bankLap at once (D447, its cost): per piece id the least road-up (U·ŷ, the level rule), the curved stations leaning out
+ *  (leanOutPieces' read), and the roll rates as the checker reads them (validate's rollRates, its 20 m chord). One build of a 25 km path, not three. */
+function lapReads(doc) {
+  const { segments, path } = toPath(doc, { step: 2 }), S = path.samples, lowUp = new Map(), out = new Map();
+  for (const q of S) {
+    const g = segments[q.seg]; lowUp.set(g.id, Math.min(lowUp.has(g.id) ? lowUp.get(g.id) : 1, q.U[1])); if (g.kind === 'gap') continue;
+    const k = q.kvec, kh = Math.hypot(k[0], k[2]); if (kh < 1 / 600) continue;
+    if (Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) < -LEAN_OUT_DEG * DEG) out.set(g.id, (out.get(g.id) || 0) + 1);
+  }
+  const rates = V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', !!doc.closed, path.lengthM).map((q) => ({ id: segments[S[q.i].seg].id, rate: q.rate }));
+  return { lowUp, out, peak: (ids) => rates.reduce((m, q) => (ids.has(q.id) ? Math.max(m, q.rate) : m), 0) };
+}
 function bankLapRun(doc) {
   if (!doc.closed || !doc.pieces.length || doc.pieces[0].type !== 'road') return { doc };
-  const upright = D.valuesAt(doc.pieces[0], 0).phi, lane = pitPieces(doc), { segments, path } = toPath(doc, { step: 5 }), lowUp = new Map();
-  for (const q of path.samples) { const id = segments[q.seg].id; lowUp.set(id, Math.min(lowUp.has(id) ? lowUp.get(id) : 1, q.U[1])); }
-  const level = (P) => lowUp.has(P.id) && lowUp.get(P.id) >= Math.cos(LEVEL_DEG * DEG);
-  const lap = []; doc.pieces.forEach((P, p) => { if (P.type === 'road' && !P.tube && !lane.has(p) && P.channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE) && level(P)) lap.push(p); });
+  const upright = D.valuesAt(doc.pieces[0], 0).phi, lane = pitPieces(doc), curved = (p) => doc.pieces[p].channels.kh.some((k) => Math.abs(k) > CURVED_KH);
+  const flat = []; doc.pieces.forEach((P, p) => { if (P.type === 'road' && !P.tube && !lane.has(p) && P.channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE)) flat.push(p); });
+  // nothing on the lap is both upright and curved (every curve his own bank: TEST TRACK 10, ELYSIUM, the reported save): nothing to bank, and no path built
+  if (!flat.some(curved)) return { doc };
+  const reads = lapReads(doc), level = (P) => reads.lowUp.has(P.id) && reads.lowUp.get(P.id) >= Math.cos(LEVEL_DEG * DEG);
+  const lap = flat.filter((p) => level(doc.pieces[p]));
   if (!lap.length) return { doc };
   // a joint is relaxed (D447 (d)) between two pieces that both curve; a flip at or near it is pinned by bankPlan's flip rule (`flips`), not by the joint
-  const curved = (p) => doc.pieces[p].channels.kh.some((k) => Math.abs(k) > CURVED_KH);
-  const outBefore = leanOutPieces(doc), withheld = [], flipList = flipsOf(doc);
+  const outBefore = reads.out, withheld = [], flipList = flipsOf(doc);
   // PER PIECE, never the whole lap (P's review finding 1 (c)): a piece that would still lean out where the closed lap did not is left as closed and the rest is
   // banked again without it, up to WITHHOLD_ROUNDS times. (Before, one leaning station left the whole lap flat, and the press said nothing.)
   for (let round = 0; round <= WITHHOLD_ROUNDS; round++) {
     const set = lap.filter((p) => !withheld.includes(doc.pieces[p].id)); if (!set.length) return { doc, withheld, none: 'every curve it could bank would lean out of its turn' };
     const uprightSet = new Set(set), relax = (p) => p > 0 && uprightSet.has(p - 1) && uprightSet.has(p) && curved(p - 1) && curved(p);
-    const flatPeak = bankRollPeak(doc, set);
+    const flatPeak = reads.peak(new Set(set.map((p) => doc.pieces[p].id)));
     // the share is scaled down while the lap rolls past the amber, as ruled; AND the roll's own rate (P's re-read, Sharp ramp 40 m: the bank's rate is capped at
     // 0.84 °/m in its own channel, but on a tight turn the checker reads the road's roll at 0.966 °/m where it rolls up after a flip, and a smaller share does
     // not slow a ramp that rides the cap: 0.966 → 0.959 → 0.948 over the three tries, and the WHOLE lap came back flat and silent)
-    let share = BANK_SHARE, rollScale = 1, res = null, plan = null;
+    let share = BANK_SHARE, rollScale = 1, res = null, plan = null, outAfter = null;
     for (let t = 0; t < BANK_TRIES; t++) {
       plan = bankPlan(doc, set, share, uprightSet, relax, { flips: flipList, rollScale });
       if ([...plan.values()].every((a) => a.every((x) => x === 0))) return { doc, withheld };
-      const cand = D.checkDoc(banked(doc, plan)), peak = bankRollPeak(cand, set), allowed = Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6);
-      if (peak <= allowed) { res = cand; break; }
+      const cand = D.checkDoc(banked(doc, plan)), candReads = lapReads(cand), peak = candReads.peak(new Set(set.map((p) => doc.pieces[p].id))), allowed = Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6);
+      if (peak <= allowed) { res = cand; outAfter = candReads.out; break; }
       share *= (Math.max(ROLL_AMBER_DEG_M, flatPeak) / peak) * 0.97; rollScale *= (allowed / peak) * 0.97;
     }
     if (!res) return { doc, withheld, none: 'its roll would pass the amber' };   // the bank could not be kept under the amber: the lap as closed
-    const outAfter = leanOutPieces(res), worse = set.filter((p) => (outAfter.get(doc.pieces[p].id) || 0) > (outBefore.get(doc.pieces[p].id) || 0)).map((p) => doc.pieces[p].id);
+    const worse = set.filter((p) => (outAfter.get(doc.pieces[p].id) || 0) > (outBefore.get(doc.pieces[p].id) || 0)).map((p) => doc.pieces[p].id);
     if (!worse.length) return { doc: freeze(res), eased: [...plan.eased].map((p) => doc.pieces[p].id), withheld };
     withheld.push(...worse);
   }
