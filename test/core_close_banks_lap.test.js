@@ -204,6 +204,8 @@ for (const [what, mk] of SWEEP) test(`row 12: a flip swept: ${what}: the curves 
 // P's second re-read (lighthouse 8a06de5c §7.5; plan_d447 "P's second re-read ruled"): a TRUE STRAIGHT between two opposite R 300 corners, swept 40–120 m every
 // 2 m (at 2c13316, 58 and 60 m left the second corner withheld flat: the finder's fixed 60 m was not the bank's own roll-off distance); and a GENTLE LINK of
 // 100 m at R 1,200, 3,000 and 10,000 between them (the finder called a link under 1/600 straight while the plan banked it, R 1,200 by 40°). Laps of P's probe447g.js.
+// W1 (bankLap's per-piece withhold) is NOT reached by rows 13–15 at a838803: with the finder reading the bank's own roll-off distance, no lap of them leans out
+// without it (d447-mutants.js W1 survives every row; at 2c13316 it rescued the 58 and 60 m straights and the R 1,200 and 3,000 links by withholding a corner)
 const between = (mid) => (d) => { d = extend(d, { length: 300, targets: { kh: 1 / 300 }, transition: 20 }); d = mid(d); d = extend(d, { length: 300, targets: { kh: -1 / 300 }, transition: 20 }); return extend(d, { length: 150, targets: { kh: 0 }, transition: 20 }); };
 for (let Sm = 40; Sm <= 120; Sm += 2) test(`row 13: a straight of ${Sm} m between opposite corners: none leans out, no corner withheld`, () => {
   flipLap(sweepRect(between((d) => extend(d, { length: Sm, targets: { kh: 0 }, transition: 20 }))), `a ${Sm} m straight`, { flip: false });
