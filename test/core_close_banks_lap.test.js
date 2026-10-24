@@ -144,24 +144,29 @@ const FLIP_ZONE = 2 * (SHARE_R300 / ROLL_DEG_M);
 /** The lap's flips, as stretches [s0, s1] (m): finish.js flipsOf, the same function bankPlan pins by, so the rows and the plan cannot disagree (P's re-read). */
 const flips = (doc) => require('../src/core/finish.js').flipsOf(doc);
 const nearFlip = (s, fl) => fl.some(([a, b]) => s > a - FLIP_ZONE && s < b + FLIP_ZONE);
-function flipLap(open, what) {
+function flipLap(open, what, { flip = true } = {}) {
   const r = CJ.runCloseBest({ doc: open });
   assert.equal(r.converged, true, `${what}: the press proves (${r.report})`);
-  const fl = flips(r.doc); assert.ok(fl.length > 0, `control, ${what}: the closed lap has a flip`);
-  const { segments, path } = AD.toPath(r.doc, { step: 2 }), per = new Map(), his = new Set(open.pieces.map((P) => P.id)); let out = 0, worst = 90;
+  const fl = flips(r.doc); if (flip) assert.ok(fl.length > 0, `control, ${what}: the closed lap has a flip`);
+  const { segments, path } = AD.toPath(r.doc, { step: 2 }), his = new Set(open.pieces.map((P) => P.id)), runs = []; let out = 0, worst = 90, run = null;
   for (const q of path.samples) {
-    const g = segments[q.seg], k = q.kvec, kh = Math.hypot(k[0], k[2]); if (g.kind === 'gap' || kh < 1 / 600) continue;
+    const g = segments[q.seg], k = q.kvec, kh = Math.hypot(k[0], k[2]);
+    if (g.kind === 'gap' || kh < 1 / 600) { run = null; continue; }
     const l = Math.asin(Math.max(-1, Math.min(1, (q.U[0] * k[0] + q.U[2] * k[2]) / kh))) / DEG; if (l < -5) out++; worst = Math.min(worst, l);
-    // the bar on the curves is on HIS pieces: Finish's own closer is banked by D434's rule (core_finish_bank), pinned at its joints and the seam
-    if (!his.has(g.id) || nearFlip(q.s, fl)) continue;
-    if (!per.has(g.id)) per.set(g.id, []); per.get(g.id).push(l);
+    // THE CURVED RUN (P's second re-read, ruled item 4): consecutive curved stations turning one way, whatever pieces they are laid in; the bar is on the run
+    const side = Math.sign(q.T[2] * k[0] - q.T[0] * k[2]);
+    if (!run || run.side !== side || q.s - run.last > 4) { run = { side, first: q.s, last: q.s, xs: [] }; runs.push(run); }
+    run.last = q.s;
+    // on HIS pieces: Finish's own closer is banked by D434's rule (core_finish_bank), pinned at its joints and the seam
+    if (his.has(g.id) && !nearFlip(q.s, fl)) run.xs.push(l);
   }
   assert.equal(out, 0, `${what}: no curved station leans out (worst ${worst.toFixed(1)}°)`);
-  // the mean bar is on curves at least FLIP_ZONE long: a shorter piece next to a straight (a Sharp's 40 m exit ramp) carries the bank down to the straight's
-  // pin, which D447 (d) keeps, and cannot reach the share and come back within its own length; it is held to "none leans out" like every station
-  const lengthOf = new Map(r.doc.pieces.map((P) => [P.id, P.length]));
-  for (const [id, xs] of per) if (xs.length >= 10 && lengthOf.get(id) >= FLIP_ZONE) { const m = xs.reduce((a, b) => a + b, 0) / xs.length; assert.ok(m >= MEAN_LEAN, `${what}: ${id} away from the flip leans in by ${m.toFixed(1)}° on average`); }
-  assert.match(r.report, /bank/i, `${what}: the report says where the bank was eased or withheld: ${r.report}`);
+  // the mean bar is on curved runs with at least FLIP_ZONE of curve OUTSIDE the flip zones: the bank needs about half of it to roll up and half to roll down
+  // (to a straight's pin, which D447 (d) keeps), so a shorter stretch (a Sharp's arc and 40 m exit ramp, 30 m outside its flip zone) is held to "none leans out"
+  // like every station; a curve withheld flat reads 0° on any run long enough to be judged
+  for (const x of runs) if (2 * x.xs.length >= FLIP_ZONE) { const m = x.xs.reduce((a, b) => a + b, 0) / x.xs.length; assert.ok(m >= MEAN_LEAN, `${what}: the curve from ${x.first.toFixed(0)} to ${x.last.toFixed(0)} m leans in by ${m.toFixed(1)}° on average away from a flip`); }
+  if (flip) assert.match(r.report, /bank/i, `${what}: the report says where the bank was eased or withheld: ${r.report}`);
+  assert.doesNotMatch(r.report, /no bank on|no curve on the lap was banked/, `${what}: no piece is withheld: ${r.report}`);
   return r;
 }
 const T90 = (d) => extendTurnBy(d, { length: Q }, 90 * DEG), S = (d, L) => extend(d, { length: L });
@@ -194,6 +199,25 @@ const SWEEP = [['Sharp ramp 40 m', () => sweepSharp(40)], ['Sharp ramp 100 m', (
 for (const [what, mk] of SWEEP) test(`row 12: a flip swept: ${what}: the curves stay banked, none leans out, no piece withheld`, () => {
   const r = flipLap(mk(), what);
   assert.doesNotMatch(r.report, /no bank on/, `${what}: no piece is withheld: ${r.report}`);
+});
+
+// P's second re-read (lighthouse 8a06de5c §7.5; plan_d447 "P's second re-read ruled"): a TRUE STRAIGHT between two opposite R 300 corners, swept 40–120 m every
+// 2 m (at 2c13316, 58 and 60 m left the second corner withheld flat: the finder's fixed 60 m was not the bank's own roll-off distance); and a GENTLE LINK of
+// 100 m at R 1,200, 3,000 and 10,000 between them (the finder called a link under 1/600 straight while the plan banked it, R 1,200 by 40°). Laps of P's probe447g.js.
+const between = (mid) => (d) => { d = extend(d, { length: 300, targets: { kh: 1 / 300 }, transition: 20 }); d = mid(d); d = extend(d, { length: 300, targets: { kh: -1 / 300 }, transition: 20 }); return extend(d, { length: 150, targets: { kh: 0 }, transition: 20 }); };
+for (let Sm = 40; Sm <= 120; Sm += 2) test(`row 13: a straight of ${Sm} m between opposite corners: none leans out, no corner withheld`, () => {
+  flipLap(sweepRect(between((d) => extend(d, { length: Sm, targets: { kh: 0 }, transition: 20 }))), `a ${Sm} m straight`, { flip: false });
+});
+for (const R of [1200, 3000, 10000]) test(`row 14: a 100 m link at R ${R} between opposite corners: none leans out, no corner withheld`, () => {
+  flipLap(sweepRect(between((d) => extend(d, { length: 100, targets: { kh: 1 / R }, transition: 20 })), 300), `a link at R ${R}`, { flip: false });
+});
+// ruled item 4: a long curve laid as SHORT pieces is held to the mean bar as one curve (the bar is on the run): corner 2 of row 1's lap as four pieces of 118 m
+test('row 15: a 90° curve laid as four short pieces is banked as one curve, by the run', () => {
+  let d = D.createDoc('lap'); d = extend(d, { length: 100, family: 'bowl' }); d = extendTurnBy(d, { length: Q }, 90 * DEG); d = extend(d, { length: 100 });
+  for (let i = 0; i < 3; i++) d = extend(d, { length: Q / 4, targets: { kh: 1 / 300 }, transition: 20 });
+  d = extendTurnBy(d, { length: Q / 4 }, 22.5 * DEG); d = extend(d, { length: 100 }); d = extendTurnBy(d, { length: Q }, 90 * DEG); d = extend(d, { length: 100 }); d = extendTurnBy(d, { length: Q }, 90 * DEG);
+  assert.ok(d.pieces.slice(3, 7).every((P) => P.length < FLIP_ZONE), 'control: every piece of the curve is shorter than FLIP_ZONE');
+  flipLap(d, 'the curve in four pieces', { flip: false });
 });
 
 test('row 6: the bank lands in Close\'s one undo step', async () => {
