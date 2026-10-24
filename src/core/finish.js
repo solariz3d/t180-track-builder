@@ -238,7 +238,8 @@ function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips
   // pinned (`flips` is that list of stretches, [s0, s1] in metres along the lap)
   if (flips) for (const [a, b] of flips) {
     let lo = -1, hi = -1; for (let k = 0; k < seq.length; k++) { if (seq[k].s < a) lo = k; else if (seq[k].s > b && hi < 0) hi = k; }
-    for (let k = Math.max(0, lo); k <= (hi < 0 ? seq.length - 1 : hi); k++) { seq[k].t = 0; seq[k].pinned = true; eased.add(seq[k].p); }
+    // a piece is named as eased only where a pin takes away a bank the plan would have given (his own bank and a straight's plan none already: TEST 10's p10, p20)
+    for (let k = Math.max(0, lo); k <= (hi < 0 ? seq.length - 1 : hi); k++) { if (seq[k].t !== 0) eased.add(seq[k].p); seq[k].t = 0; seq[k].pinned = true; }
   }
   // the pinned points stay where they are in both passes (a pass that moved them would undo the pin: the close would then meet the seam's bank row in one knot)
   for (let k = 1; k < seq.length; k++) { if (seq[k].pinned) continue; const d = rate * (seq[k].s - seq[k - 1].s); seq[k].t = Math.max(seq[k - 1].t - d, Math.min(seq[k - 1].t + d, seq[k].t)); }
@@ -341,20 +342,25 @@ function pitPieces(doc) {
  * D447 (P's re-reads): THE FLIPS of a lap, as stretches [s0, s1] in metres along it, where the bank must come down to none and roll the other way. The stored
  * turn rate kh is sampled every FLIP_STEP_M on every road piece. A sample TURNS when the bank the plan would give it, the share's |bankOf(kh)|, is over
  * LEAN_OUT_DEG (P's second re-read: a link at R 1,200 is under 1/600 but banked 40°; a curve wider than about R 14 km is under 5° and cannot lean out). A flip runs
- * from the last turning sample of one sign to the first of the other when the gap is within the distance the bank needs to come down from that stretch's PEAK
- * share to LEAN_OUT_DEG at the plan's rate cap, (peak − LEAN_OUT_DEG) / rate, plus a sample at either end: 69 m after an R 300 corner (P measured the second corner
- * withheld after a 58 or 60 m straight, a gap of 62 m, and none after 62 m, a gap of 66 m). A jump ends a stretch. bankPlan pins the bank at none across each;
+ * from the last turning sample of one sign to the first of the other when the gap is within the distance the bank needs to come down to LEAN_OUT_DEG at the
+ * plan's rate cap, (held − LEAN_OUT_DEG) / rate, plus a sample at either end. HELD is the bank the plan can still hold at the last turning sample: the most of
+ * any earlier sample's share less the most the bank can fall since it, from rest at BANK_ACCEL up to the rate cap (fall). About 67 m after an R 300 corner with a
+ * 20 m transition (P measured the second corner withheld after a 58 or 60 m straight at 2c13316); a curve that unwinds over a long run-out has already brought
+ * its bank down (his TEST 10's p21|p22: the stretch's PEAK share, f2459fe's bound, pinned it and changed his lap by 23°). A jump ends a stretch. bankPlan pins the bank at none across each;
  * core_close_banks_lap reads its flip zones from this same function, so the plan and the rows cannot disagree. rollScale: the plan's rate cap as scaled (bankLap).
  */
 function flipsOf(doc, { rollScale = 1 } = {}) {
-  const rate = rollScale * BANK_ROLL * ROLL_AMBER_DEG_M, out = []; let s0 = 0, last = 0, lastS = -Infinity, peak = 0;
+  const rate = rollScale * BANK_ROLL * ROLL_AMBER_DEG_M, rRad = rate * DEG, out = []; let s0 = 0, last = 0, lastS = -Infinity, run = [];
+  // the most the bank can fall over x metres from rest, at BANK_ACCEL up to the rate cap (degrees)
+  const fall = (x) => (x <= rRad / BANK_ACCEL ? (BANK_ACCEL * x * x) / 2 : rRad * x - (rRad * rRad) / (2 * BANK_ACCEL)) / DEG;
+  const held = () => { let e = 0; for (let i = run.length - 1; i >= 0; i--) { const f = fall(lastS - run[i][0]); if (f >= 90) break; e = Math.max(e, run[i][1] - f); } return e; };
   for (const P of doc.pieces) {
-    if (P.type !== 'road') { last = 0; peak = 0; s0 += P.length || 0; continue; }
+    if (P.type !== 'road') { last = 0; run = []; s0 += P.length || 0; continue; }
     for (let s = 0; s <= P.length; s += FLIP_STEP_M) {
       const k = D.valuesAt(P, Math.min(s, P.length)).kh, bankDeg = Math.abs(bankOf(k, BANK_SHARE)) / DEG; if (!(bankDeg > LEAN_OUT_DEG)) continue;
       const sg = Math.sign(k), at = s0 + s;
-      if (last && sg !== last) { if (at - lastS <= (peak - LEAN_OUT_DEG) / rate + 2 * FLIP_STEP_M) out.push([lastS, at]); peak = 0; }
-      last = sg; lastS = at; peak = Math.max(peak, bankDeg);
+      if (last && sg !== last) { if (at - lastS <= (held() - LEAN_OUT_DEG) / rate + 2 * FLIP_STEP_M) out.push([lastS, at]); run = []; }
+      last = sg; lastS = at; run.push([at, bankDeg]);
     }
     s0 += P.length || 0;
   }

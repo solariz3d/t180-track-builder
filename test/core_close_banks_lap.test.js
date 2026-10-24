@@ -221,6 +221,13 @@ test('row 15: a 90° curve laid as four short pieces is banked as one curve, by 
   assert.ok(d.pieces.slice(3, 7).every((P) => P.length < FLIP_ZONE), 'control: every piece of the curve is shorter than FLIP_ZONE');
   flipLap(d, 'the curve in four pieces', { flip: false });
 });
+// D447 §9 (O): HIS TEST 10's p21|p22 (his saved lap reopened): a curve that unwinds over a long run-out into a gentle opposite curve. The bank follows the share
+// down the run-out, so it is not pinned to none there (at f2459fe the finder bounded the gap by the stretch's PEAK share and pinned it, changing his lap by 23°)
+test('row 16: a curve unwinding over 250 m into a gentle opposite curve keeps its bank: no flip pin, none leans out', () => {
+  const open = sweepRect((d) => { d = extend(d, { length: 200, targets: { kh: 1 / 1000 }, transition: 20 }); d = extend(d, { length: 300, targets: { kh: -1 / 5000 }, transition: 250 }); return extend(d, { length: 150, targets: { kh: 0 }, transition: 20 }); }, 300);
+  const runOut = open.pieces[6].id, r = flipLap(open, 'a long run-out', { flip: false });
+  assert.doesNotMatch(r.report, new RegExp(`eases to none[^;]*\\b${runOut}\\b`), `the run-out ${runOut} is not eased to none: ${r.report}`);
+});
 
 test('row 6: the bank lands in Close\'s one undo step', async () => {
   const { createCoreShell } = require('../app/core/coreshell.js');
