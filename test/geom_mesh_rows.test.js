@@ -50,11 +50,12 @@ function reuseCase() {
   return M.reuseMesh(a.mesh, path, segs, segs.map((x, j) => j < a.segs.length && key(x) === key(a.segs[j])));
 }
 const PINNED = {
-  open: 'b154a8e19c93c893fe060f8e65af8724953f0b8c970f35a03e4f869ad20936cf',
-  lap: '52f5fbf017ff47328be2a4e013bee2ec9f9cc27eda878f9aeed2956ab9e523fd',
+  // open, lap, reuse and lean RE-PINNED at D459 (2026-10-25): their laps carry a bank, cup or edge target, laid by the C2 quintic now (src/core/extend.js); tube is as it was
+  open: '9509ce2a65d4f3ddc5f760b9715e5f1347e095472254b2fad74381f3f1975d43',
+  lap: 'a860e9f6a23fe3bb2c1b508477c5d941ffabde9f638e7f889247539a927f5628',
   tube: '25882fc878244dd0078c3d1dbb83e6068cc31a09755f37397b0a990f3cbf3610',
-  reuse: '654e65786d0e3306ff5d349cdbb177a100892a5229c614d3c0be4c53a8e066f8',
-  lean: '52f5fbf017ff47328be2a4e013bee2ec9f9cc27eda878f9aeed2956ab9e523fd',
+  reuse: '3b016002665aeb40690c6b73d66c9670afb03d00675624ee58df6ff8f677df25',
+  lean: 'a860e9f6a23fe3bb2c1b508477c5d941ffabde9f638e7f889247539a927f5628',
 };
 test('row 1: the mesh is the same to the byte (scene arrays, matrices, cells, folds) for zipper seams, a closed lap\'s joint, a tube, a reuse with stale rows, and a lean build', () => {
   const got = {

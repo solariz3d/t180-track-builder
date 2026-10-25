@@ -65,9 +65,12 @@ function startRampM(length, knotM) { const K = D.evenKnots(length, knotM); retur
  * R and holds it exactly afterwards (the control points from ξ ≥ R/2 ARE the target).
  */
 const RAMP_KNOTS = 4;
-function rampKnots(length, ramps, knotM) {
-  const extra = []; for (const R of new Set(ramps)) for (let j = 1; j <= RAMP_KNOTS; j++) extra.push((R * j) / RAMP_KNOTS);
-  const gap = Math.min(...ramps) / (2 * RAMP_KNOTS), keep = D.evenKnots(length, knotM).filter((k) => extra.every((e) => Math.abs(e - k) > gap));
+/** D459: a C2 channel's short ramp is read at twice the subdivisions. With 4, the compressed quintic read at the Greville abscissae (ξ₃ at the ramp's end) and the zero-curvature
+ *  start (P₂ = P₀) left the whole change to one span: a 54° roll over 100 m read 1.62 °/m against 0.80 before; with 8 it reads the quintic's shape to a few tenths. */
+const RAMP_KNOTS_C2 = 8;
+function rampKnots(length, ramps, knotM, sub = RAMP_KNOTS) {
+  const extra = []; for (const R of new Set(ramps)) for (let j = 1; j <= sub; j++) extra.push((R * j) / sub);
+  const gap = Math.min(...ramps) / (2 * sub), keep = D.evenKnots(length, knotM).filter((k) => extra.every((e) => Math.abs(e - k) > gap));
   const all = [...extra, ...keep].filter((k) => k > 0.5 && k < length - 0.5).map((k) => +k.toFixed(4)).sort((a, b) => a - b);
   return all.filter((k, i) => i === 0 || k - all[i - 1] > 1e-6);
 }
@@ -76,9 +79,9 @@ function rampKnots(length, ramps, knotM) {
  * ideal ramp at the Greville abscissae, clamped into the range the start value, the target and those two points span (a no-op for a monotone ramp; the continued
  * slope of the joint may legitimately carry the first two points past the range and they are not touched).
  */
-function rampControl(piece, ch, from, target, R, held) {
+function rampControl(piece, ch, from, target, R, held, sub = RAMP_KNOTS) {
   const P = piece.channels[ch], U = D.knotVector(piece), free = held ? 2 : 0, dec = D.DEC[ch];
-  const f = channelFn(from, target, Math.max(R - (2 * R) / RAMP_KNOTS, R / RAMP_KNOTS), ch);
+  const f = channelFn(from, target, Math.max(R - (2 * R) / sub, R / sub), ch);
   let lo = Math.min(from.v, target), hi = Math.max(from.v, target); for (let i = 0; i < free; i++) { lo = Math.min(lo, P[i]); hi = Math.max(hi, P[i]); }
   for (let i = free; i < P.length; i++) {
     const xi = (U[i + 1] + U[i + 2] + U[i + 3]) / 3, v = Math.min(hi, Math.max(lo, f(xi)));
@@ -108,6 +111,33 @@ function c2Ends(piece, ch) {
   const det = J[0][0] * J[1][1] - J[0][1] * J[1][0]; if (!(Math.abs(det) > 1e-12)) return;
   const x = (-base[0] * J[1][1] + base[1] * J[0][1]) / det, y = (-base[1] * J[0][0] + base[0] * J[1][0]) / det;
   P[2] = Number((P[2] + x).toFixed(dec)) + 0; P[n - 3] = Number((P[n - 3] + y).toFixed(dec)) + 0;
+}
+
+/**
+ * D459: the least-squares fit of a cross-section ramp with its hold PINNED. document.js fitChannel holds the start pair only; the Bloss cubic needed nothing more (a
+ * cubic in s, it was fitted exactly, hold and all), but the fitted quintic rang in the hold and at the piece's end (0.02° on a 17° bank, 0.1° at the transition when
+ * the hold alone was overwritten). Here every control point whose Greville abscissa lies past the transition, and the last two, are set to the target, and the
+ * remaining free points are refitted to the ideal ramp by least squares with those held (the normal equations over samples every ~0.5 m; the basis values come
+ * from channelValue on one-hot control points). The ramp then reaches its target at the transition and holds it exactly, as the blend's own definition says.
+ */
+function fitWithHold(piece, ch, f, Lt, target) {
+  const C = piece.channels[ch], n = C.length, U = D.knotVector(piece), L = piece.length, dec = D.DEC[ch], t = Number(target.toFixed(dec)) + 0;
+  const pinned = new Set([0, 1, n - 2, n - 1]); for (let i = 2; i < n; i++) if ((U[i + 1] + U[i + 2] + U[i + 3]) / 3 >= Lt - 1e-9) pinned.add(i);
+  for (const i of pinned) if (i >= 2) C[i] = t;
+  const free = []; for (let i = 0; i < n; i++) if (!pinned.has(i)) free.push(i);
+  if (!free.length) return;
+  const S = []; const ds = Math.max(0.25, Math.min(0.5, L / 400)); for (let s = 0; s < L; s += ds) S.push(s); S.push(L);
+  const one = (i) => ({ ...piece, channels: { ...piece.channels, [ch]: C.map((_, k) => (k === i ? 1 : 0)) } });
+  const B = free.map((i) => { const Q = one(i); return S.map((s) => D.channelValue(Q, ch, s)); });
+  const held = { ...piece, channels: { ...piece.channels, [ch]: C.map((v, k) => (pinned.has(k) ? v : 0)) } }, rest = S.map((s, q) => f(s) - D.channelValue(held, ch, s));
+  const m = free.length, A = Array.from({ length: m }, () => new Float64Array(m + 1));
+  for (let a = 0; a < m; a++) { for (let b = 0; b < m; b++) { let v = 0; for (let q = 0; q < S.length; q++) v += B[a][q] * B[b][q]; A[a][b] = v; } let r = 0; for (let q = 0; q < S.length; q++) r += B[a][q] * rest[q]; A[a][m] = r; }
+  for (let c = 0; c < m; c++) {   // Gaussian elimination with partial pivoting (m is at most a few tens)
+    let p = c; for (let r = c + 1; r < m; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; if (p !== c) [A[c], A[p]] = [A[p], A[c]];
+    if (!(Math.abs(A[c][c]) > 1e-12)) return;   // a singular system: the fit as it was
+    for (let r = 0; r < m; r++) { if (r === c) continue; const k = A[r][c] / A[c][c]; if (k) for (let j = c; j <= m; j++) A[r][j] -= k * A[c][j]; }
+  }
+  free.forEach((i, a) => { C[i] = Number((A[a][m] / A[a][a]).toFixed(dec)) + 0; });
 }
 
 function extend(doc, opts = {}) {
@@ -166,11 +196,16 @@ function extend(doc, opts = {}) {
   if (from.tNext) from = { ...from, t: from.tNext };   // the tube this piece may start continues from tNext (endState reports t only at a tube head)
   const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch), ch)]));
   const c2Targets = [...C2_CHANNELS].filter((ch) => given(targets[ch]));
+  const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch)) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // D459: the short-ramp subdivisions, 8 when a cross-section channel ramps short
   // extra knots only where a ramp is short; D459: a piece with a bank, cup or edge target has at least three interior knots, so c2Ends has a free point at each end and one is left for the shape
-  const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM) : c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;
+  const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM, sub) : c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;
   const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube, grip: grip === undefined ? D.gripOf(last) : grip });
-  for (const ch of shortRamps) rampControl(piece, ch, from[ch], targets[ch], ramp[ch], held);   // not fitted: see rampControl
-  for (const ch of c2Targets) c2Ends(piece, ch);   // D459: zero curvature at both ends of a bank, cup or edge ramp (before the clamps below, which keep the last word)
+  for (const ch of shortRamps) rampControl(piece, ch, from[ch], targets[ch], ramp[ch], held, sub);   // not fitted: see rampControl
+  for (const ch of c2Targets) if (!shortRamps.includes(ch)) fitWithHold(piece, ch, channels[ch], Lof(ch), targets[ch]);   // D459: the fitted quintic, its hold and end pinned (fitWithHold)
+  // D459: the clamps below may move a channel's last two points ("an edge that ends at 0 ends flat"), so the ends are pinned to zero curvature AFTER them (c2Ends moves
+  // only P[2] and P[n − 3]) and the clamps run once more on what it moved: a point pushed past a cap or the floor is held there, and that one end stays C1 (a ramp from
+  // rest at the cap: P[2] = P[0], inside; a continued slope at the cap can go past it: rare, and the sweep says where)
+  const clamps = () => {
   if (cup) {
     const c = piece.channels.c = piece.channels.c.map((x) => Math.min(D.CUP_MAX, Math.max(0, x))), n = c.length;   // the fit's ringing never leaves [0, 150]
     // a cup that ends AT a limit ends flat, so the piece after it can continue C1 without a control point past the limit (its end slope was a rounding away from 0)
@@ -209,7 +244,11 @@ function extend(doc, opts = {}) {
     }
     C.s = C.s.map((x) => Math.min(D.S_MAX, Math.max(D.S_MIN, x)));
   }
+  };
+  clamps();
+  for (const ch of c2Targets) c2Ends(piece, ch);   // D459: zero curvature at both ends of a bank, cup or edge ramp
+  if (c2Targets.length) clamps();
   return D.appendPiece(doc, piece);
 }
 
-module.exports = { extend, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, startRampM, rampKnots, RAMP_KNOTS };
+module.exports = { extend, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };

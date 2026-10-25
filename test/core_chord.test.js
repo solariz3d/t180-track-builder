@@ -46,7 +46,9 @@ const GOLDEN_CASES = [
   [{ length: 80, family: 'flat', first: { w: 20 } }, { length: 60, transition: 20, targets: { kh: 0.01, phi: 0.2 } }],
   [{ length: 100, family: 'bowl', first: { w: 31 } }, { length: 100, transition: 40, targets: { r: 60 } }],
 ];
-const GOLDEN = ['faba667241f3eaf3', '2bb0422e0e0c7582', '0d7751f2f6e054f9', '756a4327f1ef626f'];   // sha256 (first 16) of JSON.stringify(toSegments) at b7c7676
+// sha256 (first 16) of JSON.stringify(toSegments) at b7c7676; cases 1 and 2 (a bank target in their words) RE-PINNED at D459 (2026-10-25): the bank is laid by the C2
+// quintic now (src/core/extend.js), so those two documents and their segments changed by design; cases 0 and 3 are b7c7676's bytes still
+const GOLDEN = ['faba667241f3eaf3', '0efd64f163e97415', '428cefd0ab5166b2', '756a4327f1ef626f'];
 GOLDEN_CASES.forEach((steps, i) => test(`1 · constant width and r (or an r that does not bind the cap): case ${i} draws exactly the segments it drew at b7c7676, byte for byte`, () => {
   const segs = A.toSegments(run(steps));
   assert.ok(segs.every((g) => !g.chord && g.blend === null), 'no chord, no blend');

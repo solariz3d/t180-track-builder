@@ -29,7 +29,7 @@ const GOLDEN_CASES = [
 ];
 // sha256 (first 16) of D.serialize at 4ccdd58; cases 1, 2 and 3 (a phi or c target) RE-PINNED at D459 (2026-10-25): the bank and the cup blend by the C2 quintic now
 // (extend.js smoother, c2Ends), so those three documents changed by design; cases 0, 4 and 5 (w, r, kh, kv only) are 4ccdd58's bytes still
-const GOLDEN = ['6fe0da0b925df898', 'f4eb934d1f8b515e', '67c3c1a469755488', '6d4ff902c7695e16', 'bd27d8e6adcffbbb', 'f4109c3835754b16'];
+const GOLDEN = ['6fe0da0b925df898', '5f3d402378472d63', 'c81bd9f10393fb8e', '22f9a9ab712685b9', 'bd27d8e6adcffbbb', 'f4109c3835754b16'];
 GOLDEN_CASES.forEach((steps, i) => test(`1 · a number (or no) transition is unchanged: case ${i} serialises exactly as it did at ${[1, 2, 3].includes(i) ? 'D459 (re-pinned: the quintic for phi and c)' : '4ccdd58'}`, () => {
   // D225: the schema string is /4 now; the GOLDEN digests were taken of /3 text, so the only difference allowed is that one string (seal E3c: a /3 document saved as /4 differs ONLY in the schema)
   const text = D.serialize(run(steps)); assert.ok(text.includes('"schema": "t180b.core/4"'));

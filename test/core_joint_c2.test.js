@@ -6,6 +6,9 @@
 // of Δφ'' is a vertical-curvature step of 8.4·Δφ'': on TEST 10 that is 15 °/100 m at every 30° bank onset (1.8 g at 300 km/h), 20 °/100 m where the 35° right
 // edge begins (2.5 g), and 10 °/100 m at the lap seam where the closer's 15° cup comes home over 40 m (1.2 g) — the figures of D436 §7 and D459 (jnt459c2.out,
 // kstep419.out), measured again here on public words laid the way his were. Rows:
+//   0  the instrument (src/core/continuity.js endDerivatives): its closed forms for a channel's value, slope and curvature at a piece's ends agree with
+//      document.js pieceEnd (value, slope) and with the four-point reading of valuesAt below (curvature) on every channel of a document laid from mixed words,
+//      and c2Breaks lists exactly the joints the four-point reading finds
 //   1  a 30° bank reached over 100 m (his p2): the roll's second derivative is continuous at the ramp's start and at its end. RED before: 0 -> 0.0178 deg/m²
 //      at the start and 0.0178 -> 0 at the end (6·30°/100² exactly); 15 °/100 m at the wheel line
 //   2  a 15° cup brought home to 0 over 40 m (the closer's fade at his seam): the cup's second derivative is continuous at both ends. RED before: 0.056 deg/m²
@@ -17,6 +20,9 @@
 //      its joint slope rule, but the stored spline bends over one span to meet the line, 0.00075 °/m² at the closer's first joint and 0.00092 at the seam on this
 //      lap (closeprobe-old.out); the quintic reads 0.00001–0.00002. The bar is tighter than rows 1–4's because the closer's rate cap, 0.021 °/m, bounds the
 //      linear fade's end bend to about 2 × 0.021 / 20 m = 0.002 °/m²: small, and under the wheels still a step
+//   8  the ramp's SHAPE is the quintic's: a 30° bank over 100 m follows 6u⁵ − 15u⁴ + 10u³ within 1.5% of the change at every half metre, and a 35° right edge
+//      over 50 m (three interior knots: a coarser fit) within 3%. The Bloss cubic is 5.2% off the quintic at u = ¼, and a ramp blended by the cubic and merely
+//      pinned C2 at its ends by c2Ends reads 2.2% off on the 100 m bank: caught here, not by rows 1–4 (the ends read C2 either way)
 //   7  through Close: the roll straight Finish lays is C2 where it meets the user's last piece (it is laid by extend, so it follows row 1). Its exit joint is
 //      bankLap's (finish.js bankPlan): the plan's own acceleration bound, BANK_ACCEL 2e-4 rad/m² = 0.0115 °/m², is what steps there, by the D447 ruling, not this lap's
 // The second derivative AT the end is read from document.js valuesAt by the one-sided four-point formula (2f₀ − 5f₁ + 4f₂ − f₃)/H², H = 0.5 m, which is exact for
@@ -31,6 +37,7 @@ const D = require(path.join(T, 'src/core/document.js'));
 const { extend } = require(path.join(T, 'src/core/extend.js'));
 const { extendTurnBy } = require(path.join(T, 'src/core/turnby.js'));
 const F = require(path.join(T, 'src/core/finish.js'));
+const Cn = require(path.join(T, 'src/core/continuity.js'));
 
 const DEG = Math.PI / 180, H = 0.5;
 const TOL_D2 = 1e-3;     // deg/m² (phi read in degrees): a Bloss ramp reads 18 to 84 times this on his words; a C2 ease reads 0 to rounding
@@ -54,6 +61,24 @@ const ramp = (ch, target, L, first) => {
 };
 const c2Step = (doc, k, ch) => { const [A, B] = joint(doc, k); return Math.abs(startOf(B, ch).d2 - endOf(A, ch).d2); };
 const c1Step = (doc, k, ch, A0, B0) => { const [A, B] = A0 ? [A0, B0] : joint(doc, k); const L = A.length; const va = at(A, ch, L), ma = (va - at(A, ch, L - H1)) / H1, vb = at(B, ch, 0), mb = (at(B, ch, H1) - vb) / H1; return { dv: Math.abs(vb - va), dm: Math.abs(mb - ma) }; };
+
+test("row 0: the instrument's closed forms agree with pieceEnd and with the four-point reading, channel by channel; c2Breaks finds the same joints", () => {
+  let d = extend(D.createDoc('i'), { length: 100, first: { e: 10 } });
+  d = extend(d, { length: 100, targets: { phi: 25 * DEG, w: 14, kh: 1 / 400 } }); d = extend(d, { length: 50, targets: { er: 30 } });
+  d = extend(d, { length: 100, transition: { w: 'start' }, targets: { w: 20, e: 0 } }); d = extend(d, { length: 80, targets: { kv: 1 / 3000, phi: 0 } });
+  let worst = 0, where = '';
+  for (const P of d.pieces) for (const ch of D.CHANNELS) {
+    const e = Cn.endDerivatives(P, ch), g = (s) => D.valuesAt(P, Math.max(0, Math.min(P.length, s)))[ch], L = P.length;
+    const ks = (2 * g(0) - 5 * g(H) + 4 * g(2 * H) - g(3 * H)) / (H * H), ke = (2 * g(L) - 5 * g(L - H) + 4 * g(L - 2 * H) - g(L - 3 * H)) / (H * H);
+    for (const [a, b, what] of [[e.start.k, ks, 'k(0)'], [e.end.k, ke, 'k(L)']]) if (Math.abs(a - b) > worst) { worst = Math.abs(a - b); where = `${P.id} ${ch} ${what}: ${a} vs ${b}`; }
+    const pe = D.pieceEnd(P)[ch]; if (pe && ch !== 'c' && ch !== 't') { assert.ok(Math.abs(e.end.v - pe.v) < 1e-12 && Math.abs(e.end.m - pe.m) < 1e-12, `${P.id} ${ch}: end value/slope ${e.end.v}, ${e.end.m} against pieceEnd's ${pe.v}, ${pe.m}`); }   // pieceEnd rewrites c and t for a legacy or tube piece (the rendered edge), by design
+  }
+  assert.ok(worst < 1e-9, `the closed-form curvature and the four-point reading differ by ${worst} at ${where}`);
+  // the same verdict two ways: the joints where a C2 channel's curvature steps, by the instrument and by the four-point reading (none here: this tree's ramps are C2)
+  const byFour = []; for (let k = 0; k + 1 < d.pieces.length; k++) for (const ch of Cn.C2_CHANNELS) { const s = Math.abs(startOf(d.pieces[k + 1], ch).d2 - endOf(d.pieces[k], ch).d2); if (s > Cn.TOL_K) byFour.push(`${d.pieces[k].id}|${d.pieces[k + 1].id} ${ch}`); }
+  assert.deepEqual(Cn.c2Breaks(d).map((e) => `${e.joint} ${e.ch}`), byFour);
+  assert.deepEqual(byFour, [], 'control: a lap laid from these words on this tree has no C2 break');
+});
 
 test('row 1: a bank reached over 100 m is C2 at the ramp\'s start and end (the roll\'s curvature along s does not step)', () => {
   const d = ramp('phi', 30 * DEG, 100);
@@ -125,4 +150,13 @@ test("row 7: through Close, Finish's roll straight is C2 where it meets the user
   assert.ok(roll >= n0, `control: the closer has a roll straight (${r.plan.report})`);
   const A = doc.pieces[roll - 1], B = doc.pieces[roll], s = Math.abs(startOf(B, 'phi').d2 - endOf(A, 'phi').d2);
   assert.ok(s <= TOL_D2, `${A.id}|${B.id}: the roll's second derivative steps by ${s.toFixed(4)} deg/m²; the bar is ${TOL_D2}`);
+});
+
+test("row 8: a ramp's shape is the C2 quintic's: a bank over 100 m within 1.5% of its change at every half metre, a right edge over 50 m within 3%", () => {
+  const { smoother } = require(path.join(T, 'src/core/extend.js'));
+  for (const [ch, target, L, bar] of [['phi', 30, 100, 0.015], ['er', 35, 50, 0.03]]) {
+    const d = ramp(ch, ch === 'phi' ? target * DEG : target, L), P = d.pieces[1];
+    let worst = 0, ws = 0; for (let s = 0; s <= L; s += 0.5) { const want = target * smoother(s / L), got = at(P, ch, s), e = Math.abs(got - want) / target; if (e > worst) { worst = e; ws = s; } }
+    assert.ok(worst <= bar, `${ch} ${target}° over ${L} m: ${(100 * worst).toFixed(2)}% off the quintic at s ${ws} (the bar is ${100 * bar}%)`);
+  }
 });

@@ -16,9 +16,9 @@ const MUTANTS = [
   //  the mutant 'the map is ignored' is equivalent, found in the first run and left out on purpose)
   { id: "R2 'start' is the whole piece, not the first span", pattern: '2/3', edits: [[X, "const R = v === 'start' ? startRampM(length, knotM) : v;", "const R = v === 'start' ? length : v;"]] },
   { id: 'R3 startRampM is a fixed 20 m even on a short piece', pattern: '4 ·', edits: [[X, 'return K.length ? K[0] : length; }', 'return 20; }']] },
-  { id: 'R4 the extra ramp knots are not added', pattern: '4 ·|2/3', edits: [[X, 'const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM) : undefined;', 'const knots = undefined;']] },
+  { id: 'R4 the extra ramp knots are not added', pattern: '4 ·|2/3', edits: [[X, 'rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM, sub)', 'undefined']] },
   { id: 'R5 the short-ramp channel is left as the least-squares fit (it rings)', pattern: '2/3', edits: [[X, 'for (const ch of shortRamps) rampControl(', 'for (const ch of []) rampControl(']] },
-  { id: 'R6 the ideal ramp is not compressed (the curve completes later than R)', pattern: '2/3', edits: [[X, 'Math.max(R - (2 * R) / RAMP_KNOTS, R / RAMP_KNOTS)', 'R']] },
+  { id: 'R6 the ideal ramp is not compressed (the curve completes later than R)', pattern: '2/3', edits: [[X, 'Math.max(R - (2 * R) / sub, R / sub)', 'R']] },
   { id: 'R7 the Greville abscissae are shifted (the hold is not exact and the ramp lags)', pattern: '2 ·|2/3', edits: [[X, 'const xi = (U[i + 1] + U[i + 2] + U[i + 3]) / 3', 'const xi = (U[i] + U[i + 1] + U[i + 2]) / 3']] },
   { id: "R8 the joint's first two control points are overwritten too (C1 lost)", pattern: '3 ·|5 ·', edits: [[X, 'const P = piece.channels[ch], U = D.knotVector(piece), free = held ? 2 : 0, dec', 'const P = piece.channels[ch], U = D.knotVector(piece), free = 0, dec']] },
   { id: 'R9 the range clamp is dropped (a continued slope can carry the ramp past its target)', pattern: '3 ·', edits: [[X, 'v = Math.min(hi, Math.max(lo, f(xi)));', 'v = f(xi);']] },
@@ -31,9 +31,11 @@ const MUTANTS = [
   { id: 'R16 the number path uses a different default (half the piece) for no transition', pattern: '1 ·', edits: [[X, ': transition === undefined ? length : transition);', ': transition === undefined ? length / 2 : transition);']] },
   { id: 'R17 the ramp control points are not rounded to the channel quantum (the document would not round-trip)', pattern: '5 ·', edits: [[X, 'P[i] = Number(v.toFixed(dec)) + 0;', 'P[i] = v;']] },
   // D459: the C2 quintic for the bank, the cup and the edges (test/core_joint_c2.test.js runs beside core_ramp's rows here)
-  { id: 'Q1 the cross-section channels blend by the cubic again (C1, not C2, at every bank, cup and edge joint)', pattern: 'row 1|row 3|row 4', edits: [[X, 'const blend = C2_CHANNELS.has(ch) ? smoother : bloss;', 'const blend = bloss;']] },
-  { id: 'Q2 the fitted ends are not pinned to zero curvature (the fit alone reads 0.0034 to 0.038 °/m² at a ramp's start)', pattern: 'row 1|row 2', edits: [[X, 'for (const ch of c2Targets) c2Ends(piece, ch);', 'for (const ch of []) c2Ends(piece, ch);']] },
+  { id: "Q1 the cross-section channels blend by the cubic again (c2Ends still pins the ends, so the joints read C2; the ramp's SHAPE is no longer the quintic's)", pattern: 'row 8', edits: [[X, 'const blend = C2_CHANNELS.has(ch) ? smoother : bloss;', 'const blend = bloss;']] },
+  { id: 'Q2 the fitted ends are not pinned to zero curvature (the fit alone reads 0.0034 to 0.038 °/m² at the start of a ramp)', pattern: 'row 1|row 2', edits: [[X, 'for (const ch of c2Targets) c2Ends(piece, ch);', 'for (const ch of []) c2Ends(piece, ch);']] },
   { id: 'Q3 the quintic blends the route channels too (the golden documents with kh, kv, w or r targets change)', pattern: '1 ·', edits: [[X, 'const blend = C2_CHANNELS.has(ch) ? smoother : bloss;', 'const blend = smoother;']] },
+  { id: 'Q6 continuity.js reads the start curvature over the wrong knot span (U[5] for U[4])', pattern: 'row 0', edits: [['core/continuity.js', 'k: (2 * (q1 - q0)) / U[4] }', 'k: (2 * (q1 - q0)) / U[5] }']] },
+  { id: 'Q7 continuity.js reads the end slope from the wrong points (the last three for the last two)', pattern: 'row 0', edits: [['core/continuity.js', 'const qe = (3 * (c[n - 1] - c[n - 2])) / (L - U[n - 1])', 'const qe = (3 * (c[n - 1] - c[n - 3])) / (L - U[n - 1])']] },
   { id: 'Q4 a piece with a cross-section target keeps its even knots (a 40 m piece has one interior knot: no free point for both ends, the cup fade stays C1)', pattern: 'row 2', edits: [[X, 'c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;', 'undefined;']] },
 ];
 
