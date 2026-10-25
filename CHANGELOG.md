@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **No more ridge across the road where one piece's cross-section meets another's.** Where two pieces met with a different number of points across the road, as happens where a cup deepens or an edge begins, the exported track stitched the two together by the order of their points instead of by where they sit across the road. On a cupped or edged road that stood a thin wall of road straight up out of the surface, across its width: up to 44 cm tall on one test lap. In the game it showed as a streaky ridge across the road and was felt as a bump. The stitch now joins points that sit side by side, so it lies in the road, and the export drops any part of a stitch that still faces along the road instead of up out of it. The builder's preview drew the same wall, which is why its centre line broke at that joint; the line is now continuous. Before writing a track, the export now checks the road it is about to write and refuses, in plain words, if any such wall is left, instead of letting you find it by driving into it. Re-export a track to get the smooth road in the game. The cause and the rule are in docs/SEAMS.md.
+
 ## [0.4.19] - 2026-10-25
 
 ### Added

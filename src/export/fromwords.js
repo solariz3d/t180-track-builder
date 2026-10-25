@@ -20,6 +20,8 @@
 //   PIT_LANE           the document's pit lane cannot be built (src/geom/pitlane.js names why); its crossings are RED
 //   BAD_SCENE          T1's validateScene refused the scene
 //   MARKERS            a §5c marker check is red (every problem is listed)
+//   FINS               D460: the fin guard (acready.js findFins) found road standing up out of the surface, or off it, where two pieces meet, in the
+//                      scene about to be written. A fault in the builder, never in the track: the zipper and the weld should make none (err.fins lists them)
 //   NOT_OURS           the target folder exists and was not written by this builder (no .t180b-builder.json)
 // AMBER EXPORTS, WITH A WARNING: every amber range, a lap that could not run (no speed model), each check validation
 // lists as not done, and duplicate mesh-node names (see below).
@@ -67,7 +69,7 @@ const Prof = require('../geom/profile.js');
 const { validate } = require('../validate/index.js');
 const { validateScene } = require('./scene.js');
 const { writeKn5 } = require('./kn5write.js');
-const { flattenForAc, ensureDiffuse, weldSeams, mergeForAc } = require('./acready.js');
+const { flattenForAc, ensureDiffuse, weldSeams, findFins, mergeForAc } = require('./acready.js');
 const { checkMarkers, walkScene, isDrivable } = require('./markers.js');
 const Markers = require('../markers/index.js');
 const trackfiles = require('./trackfiles.js');
@@ -317,6 +319,10 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // cell. `mergeMeshes: false` writes the unmerged meshes, for a before/after comparison only
   stage('writing the kn5');
   const welded = weldSeams(flattenForAc(scene));
+  // D460: the fin guard reads the mesh about to be written; a ray cast down cannot see a sheet standing up across the road, and the user would find one by
+  // driving into it (TEST 10, s 3,700). The zipper and the weld make none; this refuses if one ever gets through
+  const fins = findFins(welded);
+  if (fins.length) throw new ExportError('FINS', `the road would stand up in a thin wall where two pieces meet (${fins.map((x) => x.message).join('; ')}). That is a fault in the builder, not in your track, and nothing was written. Please report it.`, { fins });
   const kn5 = Buffer.from(writeKn5(ensureDiffuse(o.mergeMeshes === false ? welded : mergeForAc(welded))));
   stage('reading the kn5 back');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-')), tf = path.join(tmp, 'readback.kn5');

@@ -71,7 +71,10 @@ function digestOf(out) {
 // src/geom/pitlane.js, the pit lane level from leave to rejoin) changes the lap's pit lane; pitlane.js put back to 9861c69's gives 00588932
 // again, so the isolation did not move it. The open TEST export has no pit lane and is unchanged. The row titles still say b6969da's;
 // they are left as they are because the mutation harness names its rows by them.
-const PIN = { lap: 'sha256 36ba2c6869a3d1d0 files 10', open: 'sha256 a257c20e84e68897 files 11' };
+// D460 (pane C, d460-c): the lap pin moved from 36ba2c6869a3d1d0 (v0.4.19, 496c347, read there with PRINT_D437B=1) to 9f3a7040bf4356e9 because the seam
+// zipper pairs by lateral position (src/geom/mesh.js meshSeam) and the weld drops a standing seam triangle (src/export/acready.js); the lap's seams change
+// their index arrays only (cmpmesh.js in exo_memory/handback/p-d459-fins-C_2026-10-25_evidence). The open TEST export is unchanged.
+const PIN = { lap: 'sha256 9f3a7040bf4356e9 files 10', open: 'sha256 a257c20e84e68897 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

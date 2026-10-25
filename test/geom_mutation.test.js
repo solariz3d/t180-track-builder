@@ -74,6 +74,11 @@ const MUTATIONS = [
     from: 'const w = smoothstep((ramp.s0 + sm.s - S[0].s) / ramp.length);', to: 'const w = smoothstep((sm.s - S[0].s) / ramp.length);', caughtBy: 'document blend: a transition split across two segments' },
   { id: "M25 blend: null overridden by the geometry's own inheritance", file: 'mesh.js',
     from: "if (!seg || seg.kind === 'gap' || seg.profileIn !== undefined || seg.blend !== undefined) return seg;", to: "if (!seg || seg.kind === 'gap' || seg.profileIn !== undefined || seg.blend) return seg;", caughtBy: 'document blend: null means no ramp' },
+  // D460: the seam between unequal rows is zipped by where each vertex sits across the road, not by its index fraction (a fin up to 439 mm on TEST 10)
+  { id: 'M28 the seam is zipped by index fraction again (rows of different counts pair points metres apart: a fin)', file: 'mesh.js',
+    from: 'const ta = i < Ka - 1 ? ua[i + 1] : Infinity, tb = j < Kb - 1 ? ub[j + 1] : Infinity;', to: 'const ta = i < Ka - 1 ? (i + 1) / (Ka - 1) : Infinity, tb = j < Kb - 1 ? (j + 1) / (Kb - 1) : Infinity;', caughtBy: 'row 1: a seam between unequal rows on a cupped profile' },
+  { id: "M29 the seam pairs row A by row B's lateral samples (both walks read the later piece's)", file: 'mesh.js',
+    from: 'const ua = (A.ends && A.ends.last.Us) || A.Us,', to: 'const ua = (B.ends && B.ends.first.Us) || B.Us,', caughtBy: 'row 2: a seam between unequal rows on an edged profile' },
   // D177: rigid downstream edits (path.js: blocks, one placement chain, the unchanged tail re-placed; exact)
   { id: 'R1 the tail is always regrown (nothing is ever re-placed)', file: 'path.js',
     from: 'const same = (t) => t.p0 === inp.p0 && same3(t.R0, inp.R0);', to: 'const same = () => false;', caughtBy: "rigid: a straight's length edit on a 1° climb re-places" },
@@ -100,7 +105,7 @@ const MUTATIONS = [
 // by B in the D178 read and by me in D179) hid the named test's failing line, so the catch depended on the machine's load.
 // A run in which the named test gives NO verdict (its file ended before reporting it) is not counted either way: it is
 // repeated, at most twice, and every attempt is reported. Nothing here waits on time.
-const TEST_FILES = ['geom_path', 'geom_mesh', 'geom_grow', 'geom_sculpt', 'geom_bvh', 'geom_ramp', 'geom_loop'].map((n) => path.join(__dirname, `${n}.test.js`));
+const TEST_FILES = ['geom_path', 'geom_mesh', 'geom_grow', 'geom_sculpt', 'geom_bvh', 'geom_ramp', 'geom_loop', 'export_seam_fins'].map((n) => path.join(__dirname, `${n}.test.js`));
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function runOnce(geom, pattern) {
   const tap = path.join(path.dirname(geom), '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows

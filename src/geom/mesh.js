@@ -236,10 +236,14 @@ function meshSeam(A, B, work) {
     const row = i < Ka ? ra : rb, k = i < Ka ? i : i - Ka, pl = toLocal(F, rowP(row, k)), nl = dirLocal(F, rowN(row, k)); positions.set(pl, i * 3); normals.set(nl, i * 3);
     uvs[i * 2] = (i < Ka ? A.Us[i] : B.Us[i - Ka]) / 10; uvs[i * 2 + 1] = 0;
   }
-  // zipper: walk both rows by their fraction across; triangles wound as the strip quads (A, C, B) and (B, C, D)
+  // zipper: walk both rows by where each vertex sits across the road (its lateral parameter u, the Us its row was built from), so a triangle joins
+  // neighbours and lies in the surface; triangles wound as the strip quads (A, C, B) and (B, C, D). D460: by index fraction, rows of different counts
+  // on a cupped or edged profile paired points metres apart and the zipper stood up in the cross-section plane, a fin up to 439 mm tall (TEST 10)
+  const ua = (A.ends && A.ends.last.Us) || A.Us, ub = (B.ends && B.ends.first.Us) || B.Us;
+  if (ua.length !== Ka || ub.length !== Kb) throw new Error(`meshSeam: a boundary row has ${Ka} | ${Kb} vertices but ${ua.length} | ${ub.length} lateral samples`);
   const idx = []; let i = 0, j = 0;
   while (i < Ka - 1 || j < Kb - 1) {
-    const ta = i < Ka - 1 ? (i + 1) / (Ka - 1) : Infinity, tb = j < Kb - 1 ? (j + 1) / (Kb - 1) : Infinity;
+    const ta = i < Ka - 1 ? ua[i + 1] : Infinity, tb = j < Kb - 1 ? ub[j + 1] : Infinity;
     if (ta <= tb) { idx.push(i, Ka + j, i + 1); i++; } else { idx.push(i, Ka + j, Ka + j + 1); j++; }
   }
   return { positions, normals, uvs, indices: Uint16Array.from(idx), s: B.firstS.s, vertices: nv, F };

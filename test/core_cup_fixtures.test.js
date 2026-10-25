@@ -21,6 +21,11 @@
 // (src/export/acready.js mergeForAc), so the kn5 holds a few dozen meshes instead of one per 2 m. That changes the kn5 digest of the two CLOSED fixtures, F1 F2,
 // and NOTHING ELSE: their segs, path and mesh digests are the D230 record's, and the kn5's TRIANGLE SET (every triangle's world-space vertices as float32 bits,
 // winding kept, with its material) is equal before and after. test/fixtures/manifest.d260.json records F1 F2's kn5 digests before (D230) and after with the measure.
+// AMENDED BY NAME FOR D460 (the user, 2026-10-25: a bump driven into on TEST 10, and the preview's centre line broken at the same joint): the seam between two
+// pieces whose boundary rows differ is zipped by each vertex's lateral parameter u, not its index fraction (src/geom/mesh.js meshSeam), so the zipper lies in
+// the road instead of standing up as a fin. That changes the mesh digest of F1 F4 F6 F8 (and F1's kn5) and NOTHING ELSE: their segs and path are the last
+// records', and the measure (buildMesh's scene node by node, and F1's written scene) says only seam index arrays changed, each the same length.
+// test/fixtures/manifest.d460.json records the four fixtures' digests before (the last record each was amended by) and after, with the measure.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -49,6 +54,9 @@ const AMEND7 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.meshcap.json')
 // THE SECTOR GATES (2026-10-14): a closed lap's default layout gets AC_TIME_1 and AC_TIME_2 at a third and two thirds of the lap, so F1 F2's kn5 gain four markers and
 // nothing else changes; manifest.sectors.json records it
 const AMEND8 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.sectors.json'), 'utf8'));
+// D460 (the seam zipper pairs by lateral position): F1 F4 F6 F8's mesh, and F1's kn5, change; manifest.d460.json records it
+const AMEND9 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d460.json'), 'utf8'));
+const SEAM_CHANGED = ['F1-bowl-default-lap-closed', 'F4-halfpipe-width-31.5-to-12-along-s', 'F6-bowl-r-brushed', 'F8-mixed-families'];
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
   const man = JSON.parse(JSON.stringify(MANIFEST));
@@ -60,6 +68,7 @@ function amendedManifest() {
   for (const [k, v] of Object.entries(AMEND6.fixtures)) { const { kn5Bytes, ...digests } = v.after_d279; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D279
   for (const [k, v] of Object.entries(AMEND7.fixtures)) { const { kn5Bytes, ...digests } = v.after_meshcap; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // the mesh cap
   for (const [k, v] of Object.entries(AMEND8.fixtures)) { const { kn5Bytes, ...digests } = v.after_sectors; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // the sector gates
+  for (const [k, v] of Object.entries(AMEND9.fixtures)) { const { kn5Bytes, ...digests } = v.after_d460; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D460
   return man;
 }
 
@@ -86,6 +95,9 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d279.json'))), '544395e3d53eb61ee042d98a11e6c83134a67376dc2a9bd565393696149e131c');   // D279
   assert.deepEqual(Object.keys(AMEND6.fixtures), KN5_CHANGED);
   assert.deepEqual([...AMEND6.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !KN5_CHANGED.includes(k)).sort());
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d460.json'))), '32edb216ae7bf2c642fd2eed02305e96c4da2b4da54f0ba482d8d6a47fe0cee0');   // D460
+  assert.deepEqual(Object.keys(AMEND9.fixtures), SEAM_CHANGED);
+  assert.deepEqual([...AMEND9.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !SEAM_CHANGED.includes(k)).sort());
 });
 // CHANGED D258: F7 (the old jump, now a free flight to the end of its old ramp) differs in segs, path and mesh; the path is byte-identical in every OTHER fixture
 test('row 5a (amended D196, D222, D258): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, F7 in segs, path and mesh, and the three others are identical', () => {
@@ -93,7 +105,8 @@ test('row 5a (amended D196, D222, D258): against the SEAL\'s manifest (c964c2d) 
   assert.match(r.stdout, /\n6 of 9 differ\n?$/);
   for (const k of JUMP_CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in segs, path, mesh, meshParts\n`), `${k} should differ in segs, path, mesh, meshParts:\n${r.stdout}`);
   for (const k of CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in segs, mesh, meshParts\n`), `${k} should differ in segs, mesh, meshParts only:\n${r.stdout}`);
-  for (const k of KN5_CHANGED) assert.ok(r.stdout.includes(`${k}: DIFFERS in kn5\n`), `${k} should differ in kn5 only:\n${r.stdout}`);
+  // CHANGED D460: F1's lap seam is zipped by lateral position now, so F1 differs from the seal in its mesh as well as its kn5; F2 (whose seam rows are equal) in its kn5 only
+  for (const k of KN5_CHANGED) { const want = SEAM_CHANGED.includes(k) ? 'mesh, kn5' : 'kn5'; assert.ok(r.stdout.includes(`${k}: DIFFERS in ${want}\n`), `${k} should differ in ${want} only:\n${r.stdout}`); }
   for (const k of Object.keys(MANIFEST.fixtures).filter((n) => !CHANGED.includes(n) && !KN5_CHANGED.includes(n) && !JUMP_CHANGED.includes(n))) assert.ok(r.stdout.includes(`${k}: identical`), `${k} should be byte-identical to c964c2d`);
   assert.equal((r.stdout.match(/: identical/g) || []).length, 3, r.stdout);
   assert.equal((r.stdout.match(/DIFFERS in [^\n]*path/g) || []).length, 1, 'the geometry (path) changed outside F7');
@@ -213,5 +226,18 @@ test('D196 amendment record: every changed fixture keeps its path digest, its se
     assert.notEqual(v.after_d196.segs, v.before_c964c2d.segs); assert.notEqual(v.after_d196.mesh, v.before_c964c2d.mesh);
     assert.equal(v.measure.after.widthStepM, 0); assert.ok(v.measure.after.rowGapInsidePiecesMm <= 1, `${k}: ${v.measure.after.rowGapInsidePiecesMm} mm inside a piece`);
     assert.ok((v.measure.after.sameFamilyJointGapMm ?? v.measure.after.jointGapMm) <= 1, `${k}: a same-family joint steps more than 1 mm`);
+  }
+});
+test('D460 amendment record: only F1 F4 F6 F8 changed, only their mesh digest (and F1\'s kn5), "before" is the record each was last amended by, and the measure says only seam index arrays changed', () => {
+  assert.deepEqual(Object.keys(AMEND9.fixtures), SEAM_CHANGED);
+  for (const [k, v] of Object.entries(AMEND9.fixtures)) {
+    const prev = k === 'F1-bowl-default-lap-closed' ? AMEND8.fixtures[k].after_sectors : AMEND.fixtures[k].after_d196;   // the record each was last amended by
+    for (const d of Object.keys(prev)) assert.equal(v.before_d460[d], prev[d], `${k}: "before" is the last record's ${d}`);
+    for (const d of ['segs', 'path', 'meshParts']) assert.equal(v.after_d460[d], prev[d], `${k}: ${d} changed`);
+    assert.notEqual(v.after_d460.mesh, v.before_d460.mesh, `${k}: the mesh did not change`);
+    const m = v.measure;
+    assert.equal(m.buildMesh_scene.any_other_array_changed, 0, `${k}: an array that is not a seam's indices changed`);
+    assert.ok(m.buildMesh_scene.seam_index_arrays_changed_same_length > 0, `${k}: no seam's indices changed`);
+    if (prev.kn5) { assert.notEqual(v.after_d460.kn5, v.before_d460.kn5, `${k}: the kn5 did not change`); assert.equal(m.export_written_scene.any_other_array_changed, 0, `${k}: the written scene changed outside its seams`); }
   }
 });
