@@ -6,7 +6,7 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Changed
-- **An export's warnings are in plain words.** The message after File ▸ Export… used to show notes meant for the builders: source file names, design-document sections, a mesh-naming detail you could do nothing about. It now says what you can act on, for example that the track needs Custom Shaders Patch (CSP) and that Assetto Corsa without it can crash loading the track. The exported folder is the same as before.
+- **An export's warnings are in plain words.** The message after File ▸ Export… used to show notes meant for the builders: source file names, design-document sections, a mesh-naming detail you could do nothing about. It now says what you can act on, for example that the track needs Custom Shaders Patch (CSP) and that Assetto Corsa without it can crash loading the track. Export to Assetto Corsa says the same after it writes the track. The exported folder is the same as before.
 - **Sculpt's how-to line is no longer red.** The line under the tool strip that says what the tool does, and the value line beside it, were drawn in the colour the builder uses for errors. They are instructions, so they now use the normal text colour.
 
 ### Fixed
