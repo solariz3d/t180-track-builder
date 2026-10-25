@@ -2998,7 +2998,7 @@ dependencies = [
 
 [[package]]
 name = "t180-track-builder"
-version = "0.4.9"
+version = "0.4.19"
 dependencies = [
  "serde",
  "serde_json",
