@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **A warning where bank, cup and edge stack in a turn.** A turn that is banked, cupped and has its edge raised on the banked-up side can ride rough at speed: on a test track the car clipped the road and went unstable at high speed and load in such turns, and the same turns with the edges at 0 rode fine. The track checker now shows an amber line, "bank, cup and edge stack here and the turn may ride rough at speed", with the stretch it covers. It fires where the road's slope changes by more than 8° across the car's 2 m width on the raised side and all three are there; nothing is refused, capped or changed, and the edges work as before. It is a warning to use them with care.
+
 ## [0.4.19] - 2026-10-25
 
 ### Added

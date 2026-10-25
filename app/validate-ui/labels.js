@@ -20,6 +20,7 @@ function reasonText(reason, car = MACH6) {
     fold: 'the surface folds over itself here (too tight for its width)',
     'self-intersection': 'the road passes through itself here',
     'stacked-within-2m': `two roads are stacked less than ${car.stackedM} m apart here`,
+    'bank-cup-edge': 'bank, cup and edge stack here and the turn may ride rough at speed',   // D463
     'low-overhead': `another road passes less than ${car.overheadM} m over this one here: a car would hit it (a warning)`,   // D435
     'near-touch': `two parts of the road come within ${car.nearEdgeM} m of each other edge to edge here (information)`,   // D446
     'wall-ride-from-wall-object': 'a wall-ride is built on a wall object',
