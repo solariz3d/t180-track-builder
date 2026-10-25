@@ -119,8 +119,10 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // (geom.reuseMesh), so a brush that reaches 60 m of a 6 km loop meshes 60 m, both while dragging (coarse) and when full detail comes back (the pre-drag full mesh is still in its slot).
   const slots = new Map();
   let builtDetail = 1;   // the detail the current mesh was made at
-  /** How many leading segments of the track as it was are unchanged in the new one (0: no prefix to keep). */
-  const grownFrom = (was, nk, lk) => { let g = 0; while (g < was.keys.length && g < nk.length && was.keys[g] === nk[g] && was.liftKeys[g] === lk[g]) g++; return g === was.keys.length ? g : 0; };
+  /** How many segments of the track as it was are unchanged in the new one, at the same index (0: nothing to keep, or the new track is shorter). D453: not only an
+   *  unchanged PREFIX: a banking Close (D447) changes every placed curve's bank, so a prefix rule kept 0 of 950 placed segments, the straights too; reuseMesh keeps
+   *  each piece on its own flag (and its start's pitch and bank) and meshes the rest again, so a partial keep is as exact as a full one. */
+  const keptFrom = (was, nk, lk) => { if (was.keys.length > nk.length) return 0; let g = 0; for (let j = 0; j < was.keys.length; j++) if (was.keys[j] === nk[j] && was.liftKeys[j] === lk[j]) g++; return g; };
   // D421c: the full rebuild as a generator (the release after a whole-lap re-close meshes a 10 km lap again: about 200 ms in one frame). It runs the very calls full() ran, as their
   // steps (buildPathSteps, reuseMeshSteps, buildMeshSteps: each its plain twin run to the end, to the byte), and changes the model's state only at its end, so a caller may run it
   // a few milliseconds a frame (the preview after a sculpt release) with the track as it was still on show; update() runs it to the end at once, as before.
@@ -133,8 +135,9 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     let m;
     if (slot && typeof geom.reuseMesh === 'function' && slot.mesh && slot.keys.length === segs.length) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(slot.mesh, sh, ms, segs.map((_, j) => nk[j] === slot.keys[j] && lk[j] === slot.liftKeys[j]));
     // AN OPEN TRACK CLOSED BY ADDING ROAD (2026-10-15, Finish to start on the keeper's 24 km ELYSIUM: Apply rebuilt every piece, 6.5 s with the window frozen):
-    // every placed piece is the same and lies where it lay, so its mesh is kept and only the new road and the closing joint are made (geom.reuseMesh, grow)
-    else if (isClosed && !was.closed && was.mesh && was.mesh._state && was.detail === detail && typeof geom.reuseMesh === 'function' && grownFrom(was, nk, lk) > 0) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(was.mesh, sh, ms, segs.map((_, j) => j < was.keys.length && nk[j] === was.keys[j] && lk[j] === was.liftKeys[j]), { grow: true });
+    // every placed piece is the same and lies where it lay, so its mesh is kept and only the new road and the closing joint are made (geom.reuseMesh, grow);
+    // D453: a Close that also banks placed curves (D447) remakes those pieces and the seams beside them, and keeps the rest
+    else if (isClosed && !was.closed && was.mesh && was.mesh._state && was.detail === detail && typeof geom.reuseMesh === 'function' && keptFrom(was, nk, lk) > 0) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(was.mesh, sh, ms, segs.map((_, j) => j < was.keys.length && nk[j] === was.keys[j] && lk[j] === was.liftKeys[j]), { grow: true });
     else m = yield* stepsOr('buildMeshSteps', 'buildMesh')(sh, ms, meshOpts);
     path = p; shown = sh; liftKeys = lk; mesh = m;
     builtDetail = detail;
