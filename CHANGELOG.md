@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.19] - 2026-10-25
+
 ### Added
 - **SIGIL has a melody of its own, Obsidian.** Choosing Settings ▸ Theme ▸ SIGIL used to keep a melody picked at random, because SIGIL had none. It now plays Obsidian: a slow D minor tune with a dark flat second, one short figure repeating while the chords move under it, on a soft Phantoms pad (a new pair of place and undo sounds, levelled with the others). Random now picks among five looks and five melodies, SIGIL and Obsidian among them. A saved theme loads as before.
 - **A warning where a road passes less than 1 m over another.** Roads closer than 2 m are no longer red unless they run into each other, so a road could pass so low over another that a car on the lower one would hit it, with nothing said. Less than 1 m of room under another road is now a yellow warning, "another road passes less than 1 m over this one here". It warns; it does not stop an export. Road that runs into road is still red.
