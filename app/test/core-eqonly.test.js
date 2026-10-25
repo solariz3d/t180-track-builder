@@ -310,7 +310,9 @@ test('the guide\'s steps are the equation builder\'s: extend, brush, close, colo
   assert.deepEqual(STEPS.map((s) => s.id), ['extend', 'brush', 'close', 'colours', 'export', 'grid']);
   assert.ok(STEPS.every((s) => s.title && s.text && s.target));
   // (the grid step's "centre handle" is the symmetry guides' own, app/preview/guideslayer.js, not a piece builder's handle)
-  assert.ok(STEPS.every((s) => !/\b(words?|phrases?|connector|sculpt)\b/i.test(s.text)), 'none of the piece builder\'s wording is left');
+  // AMENDED D463 (E's stranger report §2 item 2): "sculpt" left this list. It was the piece builder's word; since D421 Sculpt mode is the equation
+  // builder's own, and step 2 now names it.
+  assert.ok(STEPS.every((s) => !/\b(words?|phrases?|connector)\b/i.test(s.text)), 'none of the piece builder\'s wording is left');
 });
 
 test(`extending ${EXTEND_AT_LEAST} pieces, a brush stroke and Close the loop complete their steps in the real core shell`, async () => {

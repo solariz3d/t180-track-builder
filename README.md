@@ -6,6 +6,9 @@ corkscrews and jumps. You shape the road piece by piece and export a track folde
 ksEditor. To drive a T-180 on them you need the T-180 cars from that repository. They are ordinary AC track folders, so any car
 can be put on them, but the walls, tubes and jumps are built for a T-180.
 
+**Requires Custom Shaders Patch (CSP).** The exported tracks use CSP's extended physics; plain Assetto Corsa can crash
+loading them.
+
 <!-- SCREENSHOT PLACEHOLDER: one screenshot of the builder with a track and the drag handles on the Extend ghost goes here. -->
 
 ## Made with AI, not made by AI
@@ -43,7 +46,10 @@ T-180 Track Builder is made by one person working with a team of AI coding agent
 Windows only. The installer installs for the current user, needs no administrator rights, and is not code-signed, so
 Windows SmartScreen warns about an unknown publisher the first time.
 
-**The current installer is 0.4.19** (2026-10-25), `T-180 Track Builder_0.4.19_x64-setup.exe`, from the
+**Requires Custom Shaders Patch (CSP)** in Assetto Corsa to drive the exported tracks: their surfaces use CSP's extended
+physics, and plain AC can crash loading them.
+
+**The current installer is 0.4.19** (2026-10-25), `T-180.Track.Builder_0.4.19_x64-setup.exe`, from the
 [v0.4.19 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.4.19). What changed since 0.2.2 is listed under
 `[0.4.19]`, `[0.4.9]`, `[0.4.8]`, `[0.4.7]`, `[0.4.6]`, `[0.4.5]`, `[0.4.4]`, `[0.4.3]`, `[0.4.2]`, `[0.4.1]`, `[0.4.0]`, `[0.3.6]`, `[0.3.5]`, `[0.3.4]`, `[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
 
@@ -58,16 +64,17 @@ Uninstalling leaves your tracks and settings in place (see *Where your files liv
 2. **Drag the handles.** The ghost carries handles: length and width at its near end, bank, cup, turn and climb along
    it. Drag one and the matching field changes; nothing is placed until you press Extend. Build a lap this way, one
    piece at a time.
-3. **Close the loop.** Press **Close the loop**. The builder bends the end of the track until it meets the start. By
-   default only the last ~20% of the lap's length may move; the choice beside the button also offers the last piece
-   only, the last ~40%, or the whole lap. You see the closed track as a ghost first, with how far each piece moves and
-   an overlap check, then **Apply** or **Cancel**.
+3. **Close the loop.** Choose **Build ▸ Close the loop**. It is one press: the builder tries every way it has of
+   meeting the start, keeps those that close with no new red, prefers one that adds no new road and then the one that
+   moves the road least, and applies it at once as one undo step. The message says what it did (for example *bent the
+   last 2 pieces (508 m) by up to 4.0 m*). The track as it was goes to its backups first. If no way closes it, nothing
+   changes and the message says why.
 4. **Save, then Export to Assetto Corsa.** Type a name and press **Save**. Then press **Export to Assetto Corsa**: the
    builder finds AC through Steam and writes the track into AC's `content\tracks` as `t180b_<name>`. (If AC is not
    in Steam, pick its folder, the one that holds `content\tracks`, when asked.) Start AC, or Content Manager (the
    common AC launcher), and pick the track.
 
-The first time the app starts, a six-step guide walks through Extend, the brush, Close the loop, the colours, Export,
+The first time the app starts, a six-step guide walks through Extend, Sculpt mode, Close the loop, the colours, Export,
 and the grid and mirror.
 
 ## What you can build
@@ -93,10 +100,20 @@ Each field has an **at start** tick: reach the value at the start of the piece i
 ## Editing
 
 - **Undo and Redo** cover every action (also Ctrl+Z, Ctrl+Y). Ctrl+Backspace removes the last piece.
-- **The brush.** Turn on the brush and drag on the placed track to change one channel there (turn, climb, bank, width,
-  wall rise, cup, edge, tube sweep, or a height or sideways offset), over a radius you set.
-- **Sculpt.** Turn on **sculpt (shape only)**, click one placed piece, and drag its handles to change its shape: bank,
-  width, cup, edge, wall rise or tube sweep. Sculpt never moves the road's line: a change that would move it is refused, and says so.
+- **Sculpt mode.** Press **Tab** (or choose **Build ▸ Sculpt mode**) to reshape the road you have placed; Tab again goes
+  back to building, and while you sculpt the commands that place or close road are off. Pick a tool with the keys
+  **1 to 9** (or in the strip under the bar) and drag on the road: 1 Grab, 2 Stretch, 3 Bend, 4 Climb, 5 Twist, 6 Width,
+  7 Cup, 8 Edge, 9 Smooth. **[** and **]** narrow and widen the brush, and so does the mouse wheel while you drag; **Esc**
+  drops a drag and puts the road back. Before you press, the road shows in cyan what the brush can reach.
+  - **Grab** lifts or sinks the road under the brush (with **Alt**, moves it sideways) and leaves the road after it where it was.
+  - **Bend, Climb and Stretch move the route**, so the road after them moves too (it is tinted while you aim). Stretch
+    makes a piece, or a run of pieces, longer or shorter and keeps its bend unless you ask it to keep the rate.
+  - **Twist, Width, Cup, Edge** (and wall rise and tube sweep) change only the road's shape and never move the line you drive along.
+  - **Smooth** irons a wobble out of one setting under the brush.
+  - On a closed lap, letting go of a tool that moves the route closes the lap again, first across the stretch you
+    brushed, then a piece wider each side, then the whole lap; if none closes it, the drag is undone and the builder
+    says why. The pieces next to the start line are hatched because they may move.
+  - The brush can act on a run of pieces you have selected instead of a radius.
 - **Select pieces.** Click a piece on the track; Shift-click another to select the run between them. On a closed lap a
   Shift-click goes the short way round, across the start line, when that run can be saved; otherwise it selects the run
   inside the lap and says why.
@@ -107,12 +124,18 @@ Each field has an **at start** tick: reach the value at the start of the piece i
   which moves everything after the gap, so the delete is shown as a preview first (what moves, an overlap check). Apply
   makes a backup, then deletes, as one undo step. A closed lap has no open end and refuses deletes;
   Ctrl+Backspace removes its last piece and opens the loop (Ctrl+Z puts it back).
-- **Backups.** Every Save keeps the version it replaces (the newest 20 per track). Close the loop's Apply and a middle
+- **Backups.** Every Save keeps the version it replaces (the newest 20 per track). Close the loop and a middle
   delete save a copy first, and refuse if that copy cannot be written. **Previous versions…** opens a backup as an
   unsaved copy.
 - **Autosave.** An unsaved track is autosaved. After a crash, the next start offers it back.
 - **Share codes.** A track can be copied as a text code and pasted back in.
 - **Road surface.** Asphalt by default, a solid colour, or your own picture.
+- **Pit lane.** **Track ▸ Pit lane…** adds a side road, off by default: it peels off the road's edge on the side you
+  choose, runs beside the road and comes back. You set where it leaves and rejoins, its gap from the road, its width,
+  the peel-off and merge lengths, and how many pit boxes stand on it and how far apart. The boxes are practice spawns,
+  so cars need not start on the racing road. Where the lane cannot be built (a join on an edge steeper than 35°, such
+  as a cup wall or a tube, or over a jump) the lane is kept and the panel says why; **Flatten road for pit** lowers the
+  cup, tube or edge beside the lane (Ctrl+Z puts them back). The lane and its boxes are exported with the track.
 - **Grid and symmetry.** The camera panel turns the grid on or off (a 3D lattice once the track leaves the ground) and
   shows a mirror guide.
 
@@ -164,6 +187,10 @@ The limits come from measurements of real T-180 tracks and replays, not guesses 
 | scroll wheel / Ctrl + wheel | zoom / the lens (field of view); a middle click resets the lens |
 | C / B | next camera view (Build, Overhead, Side, Chase, Free) / back to the Build view |
 | L | the AC look or a colour per piece |
+| Tab | Sculpt mode on or off |
+| 1 to 9 (in Sculpt) | pick a tool: Grab, Stretch, Bend, Climb, Twist, Width, Cup, Edge, Smooth |
+| [ / ] (in Sculpt), or the wheel while dragging | narrow / widen the brush |
+| Esc (during a Sculpt drag) | drop the drag and put the road back |
 | Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z) | undo, redo |
 | Ctrl+S | save |
 | Ctrl+Backspace | remove the last piece |
@@ -192,7 +219,7 @@ Exported tracks go into AC's own `content\tracks` folder (or the folder you pick
   real reach: that is what the warning above is for.
 - **One car's limits:** the checker judges every track against the Mach 6, the T-180 car whose limits were measured
   from replays. Other cars, T-180 or not, are not modelled; their own setups are not read.
-- **Not built:** scenery, terrain, props, race furniture (gantries, lights), a pit lane in this builder.
+- **Not built:** scenery, terrain, props, race furniture (gantries, lights).
 - **Windows only.**
 
 The plan is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The detailed item-by-item status of the older 0.2.2 release

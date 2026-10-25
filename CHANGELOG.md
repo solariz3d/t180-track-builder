@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The README, the first-start card and the guide say what a first-time user needs, and match 0.4.19.** A newcomer following them hit three walls. Nothing said the exported tracks need Custom Shaders Patch, though the export's own `surfaces.ini` warns that plain Assetto Corsa can crash loading it. The guide's step 2 sent them to Build ▸ Brush, which is gone. The README described a Close with a preview and Apply, a Sculpt that never moves the road, and no pit lane. Now the README's first screen and Install section, and the first-start Assetto Corsa card, say "Requires Custom Shaders Patch (CSP)". Guide step 2 reads "Press Tab (or Build ▸ Sculpt mode), pick a tool with 1–9, drag on the road", and step 1 is two sentences. The README describes one-press Close, Sculpt mode with its nine tools and keys (Bend, Climb and Stretch move the route), and the pit lane as it is. It drops "a pit lane" from "Not built" and names the installer as the release names it, `T-180.Track.Builder_0.4.19_x64-setup.exe`. A guide-text test no longer forbids the word "sculpt", which was the old piece builder's word and is now this builder's own mode. Tests: `app/test/core-eqonly.test.js`, `app/test/onboarding.test.js`, `app/test/share-install.test.js`.
+
 ## [0.4.19] - 2026-10-25
 
 ### Added
