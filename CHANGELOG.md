@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **Banks, cups and edges now arrive and leave smoothly.** A bank change, a cup from → to or an edge from → to used to reach its new value by a curve whose slope was zero at both ends but whose curvature was not, so under the wheels the road's vertical curvature stepped all at once where the ramp began and where it ended: on TEST 10 that was 15 °/100 m at every 30° bank joint (1.8 g at 300 km/h), 20 where the 35° right edge begins and 10 where the closer brought the cup home, the bump that stayed after the ridge was gone. The ramp is now a curve whose curvature is also zero at both ends, so a joint into or out of a ramp carries no step. Ends and lengths are the same; a ramp is a little steeper through its middle (1.875 times the average instead of 1.5), so a roll the builder sizes for the roll-rate warning comes out longer. Close brings the cup home the same way where the closer is long enough for it, and by the slowest straight fade where it is not, as before. Tracks already saved keep the ramps they were laid with until a piece is laid again.
+
 ## [0.4.19] - 2026-10-25
 
 ### Added

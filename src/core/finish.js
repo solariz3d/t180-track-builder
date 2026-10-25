@@ -17,7 +17,7 @@
 'use strict';
 const D = require('./document.js');
 const { toPath } = require('./adapter.js');
-const { extend } = require('./extend.js');
+const { extend, smoother } = require('./extend.js');
 const { extendTurnBy } = require('./turnby.js');
 const { close, residual } = require('./close.js');
 const V = require('../validate/index.js'), { ROLL_AMBER_DEG_M } = V, { MACH6, G } = require('../validate/limits.js');
@@ -30,9 +30,10 @@ const MIN_TURN = 0.5 * DEG, MIN_STRAIGHT_M = 10, MIN_TURN_M = 40;
 // 20 m); a route too short for that is not tried at all
 const ROLL_RATE = ROLL_AMBER_DEG_M * DEG, ROLL_FREE = 5 * DEG;
 // THE ROLL'S PEAK (2026-10-15, ELYSIUM: "the road rolls too fast" at the roll, 54° over 64 m): the roll eases in and out, so the rate the checker reads over its
-// 20 m chord PEAKS at about 1.45 to 1.5 times the average (angle / length), and a roll sized so its AVERAGE was amber read 1.13 to 1.27°/m, past the red bar. So the first
-// guess is the average at 1/1.5 of amber, and then the laid roll is MEASURED as the checker measures it (rollPeak) and lengthened until its worst station is under amber
-const ROLL_PEAK_OVER_MEAN = 1.5, ROLL_LENGTHEN = 1.03, ROLL_ROUNDS = 6;
+// 20 m chord PEAKS at about 1.45 to 1.5 times the average (angle / length) under the Bloss cubic, and a roll sized so its AVERAGE was amber read 1.13 to 1.27°/m, past the
+// red bar. D459: the bank is laid by extend's C2 quintic now (extend.js smoother), whose peak is 1.875 times the average. So the first guess is the average at 1/1.875 of
+// amber, and then the laid roll is MEASURED as the checker measures it (rollPeak) and lengthened until its worst station is under amber
+const ROLL_PEAK_OVER_MEAN = 1.875, ROLL_LENGTHEN = 1.03, ROLL_ROUNDS = 6;
 
 // THE CAR MUST STAY ON THE ROAD (2026-10-15, ELYSIUM's newest save: Close "closed" and the checker said "lap FAILS", the car leaving the surface at the new road). Finish judged a route
 // by whether Close converged, and Close converges onto roads the car cannot drive: on a road banked 54° the centripetal load of a turn on the wrong side of the bank pulls the car OFF the
@@ -280,9 +281,12 @@ function banked(doc, plan, minus = null) {
  * road carried the end's cup to the start line and left the seam's cup row to pull it to p1's in the last 30–40 m (37.3° → 10° on TEST TRACK 10, 0.54–1.38 °/m,
  * where his own road never changes its cup faster than CUP_RATE_DEG_M, 0.021 °/m). Here the laid route's cup is moved by Δ·σ along the window (LINEAR, the
  * slowest a closer of that length allows), σ by each control point's Greville position over the window's length, Δ = p1's first cup less the laid end's: the
- * cup then reaches p1's at the start line, so the seam row has nothing left to do and the bank's return at the seam is no longer on top of it. (A smootherstep
- * ease was built first: its peak, 1.875·Δ/length, went over 0.021 on 14 of P's 45 short closers, exo_memory/handback/p-d438-review-P_2026-10-22.md §2 (a); the
- * joints read within 0.2 °/100 m of it.) Where even Δ/length is over CUP_RATE_DEG_M the closer is too short to do better: the cup still comes home, and
+ * cup then reaches p1's at the start line, so the seam row has nothing left to do and the bank's return at the seam is no longer on top of it. D459 (the user,
+ * 2026-10-25, TEST 10: "there is still a bump its not smooth"): the ease is the C2 quintic 6σ⁵ − 15σ⁴ + 10σ³ (extend.js smoother) wherever its peak,
+ * 1.875·Δ/length, stays under CUP_RATE_DEG_M, so the cup's curvature along s is 0 at his last joint and at the start line and the seam carries no curvature
+ * step under the wheels; where the quintic would be too fast the ease is LINEAR, as D438 built it (a smootherstep ease was tried first and its peak went over
+ * 0.021 on 14 of P's 45 short closers, exo_memory/handback/p-d438-review-P_2026-10-22.md §2 (a); the joints read within 0.2 °/100 m of it), the slowest a closer
+ * of that length allows. Where even Δ/length is over CUP_RATE_DEG_M the closer is too short to do better: the cup still comes home, and
  * finishToStart's report states the rate (cupPeak). Only when every road piece of the window and p1 are cup pieces (a cup meets a legacy piece by its rendered edge, close.js heldCup).
  * A joint keeps the slope rule (a later piece's second point by the link rule), as bankPlan's does.
  */
@@ -297,10 +301,12 @@ function cupHome(laid, window) {
   // span between then runs at Δ/(z − ξ₁), and the held points lie on the line (σ ≤ 0 or ≥ 1 there). Measured from the window's start, the third point already
   // carried Δ·ξ₂/L while the first two were held, so the first free span ran at 1.5 × Δ/L and the lap read 1.27–1.30 × (three laps with Δ/L under 0.021
   // printed the fallback note); ended at the start line, the seam row flattened the last span and the one before ran at 1.53 × (row 7's lap).
-  const U0 = D.knotVector(laid.pieces[road[0]]), a = startOf.get(road[0]) + (U0[2] + U0[3] + U0[4]) / 3, UL = D.knotVector(last), nl = last.channels.c.length, z = startOf.get(road[road.length - 1]) + (UL[nl - 1] + UL[nl] + UL[nl + 1]) / 3, ease = (x) => Math.max(0, Math.min(1, x));
+  const U0 = D.knotVector(laid.pieces[road[0]]), a = startOf.get(road[0]) + (U0[2] + U0[3] + U0[4]) / 3, UL = D.knotVector(last), nl = last.channels.c.length, z = startOf.get(road[road.length - 1]) + (UL[nl - 1] + UL[nl] + UL[nl + 1]) / 3;
+  const c2 = (1.875 * Math.abs(delta)) / (z - a) <= CUP_RATE_DEG_M;   // D459: the C2 quintic where the closer is long enough for its peak, else the linear ease
+  const ease = c2 ? smoother : (x) => Math.max(0, Math.min(1, x));
   const cs = new Map(road.map((p) => { const P = laid.pieces[p], U = D.knotVector(P); return [p, P.channels.c.map((c, i) => (p === road[0] && i < 2 ? c : c + delta * ease((startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3 - a) / (z - a))))]; }));
   // the joint slope rule GUARDS C1 BY CONSTRUCTION: under the linear ease it rewrites each joint's two points with the values they already have (a linear
-  // function sampled at the Greville abscissae is reproduced exactly), and it keeps every joint C1 should the ease ever stop being linear (D438 J8, ruled keep)
+  // function sampled at the Greville abscissae is reproduced exactly), and it keeps every joint C1 under the quintic (D438 J8, ruled keep; D459 uses it)
   road.forEach((p, j) => { if (j > 0 && road[j - 1] === p - 1) { const A = cs.get(p - 1), B = cs.get(p), Pa = laid.pieces[p - 1], Pb = laid.pieces[p], na = A.length;
     const hA = Pa.length - (Pa.knots.length ? Pa.knots[Pa.knots.length - 1] : 0), hB = Pb.knots.length ? Pb.knots[0] : Pb.length; B[0] = A[na - 1]; B[1] = B[0] + (hB / hA) * (A[na - 1] - A[na - 2]); } });
   return D.checkDoc({ ...laid, pieces: laid.pieces.map((P, p) => (cs.has(p) ? { ...P, channels: { ...P.channels, c: cs.get(p) } } : P)) });
@@ -490,9 +496,10 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   const b0 = D.valuesAt(doc.pieces[0], 0).phi, b1 = D.valuesAt(last, last.length).phi, bank = b0 + half + TAU * Math.round((b1 - b0 - half) / TAU), rollRad = Math.abs(bank - b1);
   // D438: and long enough that its roll fits BANK_ACCEL (bankPlan): a roll of θ from rest to rest needs at least 2·√(θ/A) at an acceleration A; ROLL_ACCEL_FIT
   // over that leaves room for the pinned ends (TEST TRACK 10: 54° on 87 m stepped 33.6 °/100 m under the outer wheels at both of its ends).
-  // 1.5 is a MARGIN SET BY THE SHAPE OF THE BLOSS BLEND (P, exo_memory/handback/p-d438-review-P_2026-10-22.md §1.1), not a fit to one track: extend lays the roll
-  // as bloss(u) = u²(3 − 2u) (extend.js channelFn), whose acceleration peaks at both ends at 6θ/L²; at L = 1.5·2·√(θ/A) = 3√(θ/A) that is (2/3)·A for every θ.
-  // A change to channelFn's blend moves this margin.
+  // 1.5 is a MARGIN SET BY THE SHAPE OF THE BLEND (P, exo_memory/handback/p-d438-review-P_2026-10-22.md §1.1), not a fit to one track: extend laid the roll
+  // as bloss(u) = u²(3 − 2u), whose acceleration peaks at both ends at 6θ/L²; at L = 1.5·2·√(θ/A) = 3√(θ/A) that is (2/3)·A for every θ. D459: the roll is the C2
+  // quintic now (extend.js smoother), whose acceleration is 0 at both ends and peaks at (10/√3)·θ/L² = 5.77·θ/L² a third of the way in: under the cubic's 6, so the
+  // same margin holds, with the step at the joints gone. A change to channelFn's blend moves this margin.
   const roll0 = rollRad > ROLL_FREE ? { bank, lengthM: Math.ceil(Math.max((rollRad / ROLL_RATE) * rollGuess, ROLL_ACCEL_FIT * 2 * Math.sqrt(rollRad / BANK_ACCEL))) } : null;
   const gap = Math.hypot(doc.start.pos[0] - e.p[0], doc.start.pos[1] - e.y, doc.start.pos[2] - e.p[1]);
   const deg = (a) => Math.round((a / DEG) * 10) / 10, f0 = fwd(th0);

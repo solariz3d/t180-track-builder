@@ -30,16 +30,21 @@ const MUTANTS = [
   { id: 'R15 the number path no longer refuses a transition past the length', pattern: '6 ·|1 ·', edits: [[X, 'if (!(Lt > 0 && Lt <= length)) throw', 'if (!(Lt > 0)) throw']] },
   { id: 'R16 the number path uses a different default (half the piece) for no transition', pattern: '1 ·', edits: [[X, ': transition === undefined ? length : transition);', ': transition === undefined ? length / 2 : transition);']] },
   { id: 'R17 the ramp control points are not rounded to the channel quantum (the document would not round-trip)', pattern: '5 ·', edits: [[X, 'P[i] = Number(v.toFixed(dec)) + 0;', 'P[i] = v;']] },
+  // D459: the C2 quintic for the bank, the cup and the edges (test/core_joint_c2.test.js runs beside core_ramp's rows here)
+  { id: 'Q1 the cross-section channels blend by the cubic again (C1, not C2, at every bank, cup and edge joint)', pattern: 'row 1|row 3|row 4', edits: [[X, 'const blend = C2_CHANNELS.has(ch) ? smoother : bloss;', 'const blend = bloss;']] },
+  { id: 'Q2 the fitted ends are not pinned to zero curvature (the fit alone reads 0.0034 to 0.038 °/m² at a ramp's start)', pattern: 'row 1|row 2', edits: [[X, 'for (const ch of c2Targets) c2Ends(piece, ch);', 'for (const ch of []) c2Ends(piece, ch);']] },
+  { id: 'Q3 the quintic blends the route channels too (the golden documents with kh, kv, w or r targets change)', pattern: '1 ·', edits: [[X, 'const blend = C2_CHANNELS.has(ch) ? smoother : bloss;', 'const blend = smoother;']] },
+  { id: 'Q4 a piece with a cross-section target keeps its even knots (a 40 m piece has one interior knot: no free point for both ends, the cup fade stays C1)', pattern: 'row 2', edits: [[X, 'c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;', 'undefined;']] },
 ];
 
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
-  fs.mkdirSync(path.join(dir, 'test')); fs.copyFileSync(path.join(__dirname, 'core_ramp.test.js'), path.join(dir, 'test', 'core_ramp.test.js'));
+  fs.mkdirSync(path.join(dir, 'test')); for (const f of ['core_ramp.test.js', 'core_joint_c2.test.js']) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too
   return dir;
 }
 function runTests(dir, pattern) {
-  const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), path.join(dir, 'test', 'core_ramp.test.js')];
+  const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), path.join(dir, 'test', 'core_ramp.test.js'), path.join(dir, 'test', 'core_joint_c2.test.js')];
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT'));
   const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
   const r = spawnSync(process.execPath, [...IR.reporterArgs(tap), ...args], { cwd: dir, env, encoding: 'utf8', timeout: 20 * 60 * 1000 });
@@ -48,7 +53,7 @@ function runTests(dir, pattern) {
   const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, ''), n = (k) => Number((out.match(new RegExp(`ℹ ${k} (\\d+)`)) || [])[1]);
   return { tests: n('tests'), pass: n('pass'), fail: n('fail'), skipped: n('skipped'), out };
 }
-test('CONTROL: the whole of core_ramp.test.js passes on an unmutated copy of src/ and tools/', () => {
+test('CONTROL: the whole of core_ramp.test.js and core_joint_c2.test.js passes on an unmutated copy of src/ and tools/', () => {
   const dir = tree();
   try { const r = runTests(dir); assert.ok(r.tests > 20 && r.fail === 0, `tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
