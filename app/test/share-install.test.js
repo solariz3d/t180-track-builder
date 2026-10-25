@@ -285,7 +285,7 @@ test('D252 follow-up: once Export to Assetto Corsa has found and remembered AC, 
     const m = mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more, card });
     await m.card; assert.match(card.textContent, /Assetto Corsa found at/, 'control: the card is up');
     await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
-    assert.strictEqual(native.root, found, 'Export found and remembered it'); assert.strictEqual(card.textContent, '', 'and the card is gone');
+    assert.strictEqual(native.root, found, 'Export found and remembered it'); assert.doesNotMatch(card.textContent, /Assetto Corsa found at|Use it|Choose another/, 'and the card is gone');   // AMENDED (D464): the banner row now holds the export's whole result (the D464 row below), so the card's question is gone rather than the row empty
   } finally { restore(); }
 });
 test('D252 follow-up: a long install note is cut to its box with the whole text in its tooltip, and the ⋯ menu opens toward the window (right-aligned)', async () => {
@@ -372,4 +372,23 @@ test('D264: the guards hold: ⋯ Test export on a CLOSED track is refused by nam
       assert.deepStrictEqual([r.ok, fs.readdirSync(d.tracks)], [false, []], name); assert.match(r.message, /name the track/);
     }
   } finally { d.done(); }
+});
+// D464 (D463 part 2 item 7, E's D461 report §2 item 7): the main Export's result was cut to "ex…" in the header note (cut on purpose, so the bar never overflows:
+// the row above). The whole result now also shows in the page's banner row, where the startup card sits, uncut, until the user closes it with ✕.
+test('D464: after Export to Assetto Corsa the whole result shows in the banner row, uncut, and ✕ clears it', async () => {
+  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
+  try {
+    const native = fakeNative(); native.root = 'G:/SteamLibrary/steamapps/common/assettocorsa';
+    const shell = { buildExportAsync: async () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
+    const root = new fake.Element('div'), card = new fake.Element('div');
+    mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more: new fake.Element('div'), card });
+    await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
+    const note = [...root.walk()].find((e) => e.className === 't-install-note').textContent;
+    assert.match(note, /^exported "X" into Assetto Corsa as t180b_x/, 'control: the note holds the result');
+    const bar = [...card.walk()].find((e) => e.className === 'bar result');
+    assert.ok(bar, 'the result is a bar in the banner row');
+    assert.ok(bar.textContent.includes(note), `the bar holds the whole result: ${bar.textContent}`);
+    const x = [...card.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === '✕');
+    assert.ok(x, 'a ✕ to close it'); x.onclick(); assert.strictEqual(card.textContent, '', 'and ✕ clears it');
+  } finally { restore(); }
 });

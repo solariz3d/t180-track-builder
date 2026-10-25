@@ -5,6 +5,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **An export's warnings are in plain words.** The message after File ▸ Export… used to show notes meant for the builders: source file names, design-document sections, a mesh-naming detail you could do nothing about. It now says what you can act on, for example that the track needs Custom Shaders Patch (CSP) and that Assetto Corsa without it can crash loading the track. The exported folder is the same as before.
+- **Sculpt's how-to line is no longer red.** The line under the tool strip that says what the tool does, and the value line beside it, were drawn in the colour the builder uses for errors. They are instructions, so they now use the normal text colour.
+
+### Fixed
+- **A Bend, Climb or Stretch that closing the lap takes back now says so.** On a closed lap, letting go of a route tool closes the lap again. Next to the start line the only road that can close it is the road you just changed, so your bend was quietly undone and the message only said the lap was closed. It now says "your bend was undone to close the lap; bend further from the start, or open the lap first", and when closing takes back part of a change it says how much.
+- **The result of Export to Assetto Corsa shows in full.** Beside the button it was cut to "ex…". The whole message, including where the track was written, now also shows across the top of the window until you close it with ✕.
+
 ## [0.4.19] - 2026-10-25
 
 ### Added

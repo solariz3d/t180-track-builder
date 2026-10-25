@@ -66,7 +66,8 @@ const { overlapCheck } = require('./overlapjob.js');
 // 2026-10-15: the close itself (Finish to start, a window, the whole lap) and how far each piece moves are app/core/closejob.js, ONE pure job the shell runs on the page
 // (no closeRunner given: tests) or that a Web Worker runs (app/core/closeworker.js), so working out a preview never holds the window (4.1 s on a 24 km track)
 const CJ = require('./closejob.js');
-const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
+const RG = require('../validate-ui/redgroups.js');
+const EW = require('./exportwords.js');   // D464: the export's warnings in the user's words   // D242: every red in plain words, grouped, with where
 const overlapPlacesText = (ck, segs, o) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs, o).flatMap((g) => g.places) });   // D248: "N places", merged as the red list shows them
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
@@ -150,6 +151,30 @@ const SCULPT_TOOLS = Object.freeze({
 });
 /** The family a channel's edit belongs to (D421): the rates steer the road after them, the offsets move only the road under the window, the rest shape it. */
 const familyOf = (ch) => (ch === 'kh' || ch === 'kv' ? 'route' : ch === 'height' || ch === 'lateral' || ch === 'h' || ch === 'l' ? 'local' : 'shape');
+/** D464 (E's D461 report, item 5): how much of a route tool's drag the re-closed lap still holds in the window: the drag's own change (its rate channel, or Stretch's piece
+ *  lengths) projected onto what the close left, 1 = all of it, 0 = none. At the seam the close can only re-solve the piece the tool changed, so the drag is taken back; the release
+ *  says so instead of only "closed again". null when the pieces cannot be compared (the drag changed nothing measurable, or the arrays differ). */
+function keptShare(base, open, closed, idx, tool) {
+  const T = SCULPT_TOOLS[tool];
+  if (!T || !base || !open || !closed) return null;
+  let num = 0, den = 0;
+  for (const i of idx) {
+    const b = base.pieces[i], o = open.pieces[i], c = closed.pieces[i];
+    if (!b || !o || !c) return null;
+    if (T.mode === 'stretch') { const d = o.length - b.length; num += (c.length - b.length) * d; den += d * d; continue; }
+    const bb = b.channels && b.channels[T.channel], oo = o.channels && o.channels[T.channel], cc = c.channels && c.channels[T.channel];
+    if (!bb || !oo || !cc || bb.length !== oo.length || oo.length !== cc.length) return null;
+    for (let k = 0; k < bb.length; k++) { const d = oo[k] - bb[k]; num += (cc[k] - bb[k]) * d; den += d * d; }
+  }
+  return den > 0 ? num / den : null;
+}
+/** D464: the release's message. Under half kept, the drag was undone and the user is told what to do; under 0.9, how much was taken back; otherwise as before. */
+function closedAgainWords(tool, kept, report) {
+  const word = tool === 'climb' ? 'climb' : tool === 'stretch' ? 'stretch' : 'bend';
+  if (kept != null && kept < 0.5) return `the lap is closed again: your ${word} was undone to close the lap; ${word} further from the start, or open the lap first (${report})`;
+  if (kept != null && kept < 0.9) return `the lap is closed again: closing it took back ${Math.round((1 - kept) * 100)}% of your ${word} (${report})`;
+  return `the lap is closed again: ${report}`;
+}
 /** Smooth works on the document's own channel: the Grab tools' 'height' and 'lateral' are its h and l. */
 const coreChannel = (ch) => (ch === 'height' ? 'h' : ch === 'lateral' ? 'l' : ch);
 // E's BRUSH (p-d186-brush-E): src/core/sculpt.js brush(doc, { mode: 'hill' | 'swerve' | 'value' | 'rate', channel, s0, r, delta })
@@ -430,7 +455,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
           return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: `ROUTE_NO_CLOSE: the lap could not be closed again after this ${b.tool}, so the drag was dropped and the track is as it was (the window: ${why})` });
         }
         const closed = r.out.doc, h = D.endDrag(D.dragTo(st.history, closed));
-        return set({ history: h, ...resolvedOf(closed), brush: null, dirty: true, lastEdited: win, lastStep: { op: `brush:${b.tool}:close`, ms: now() - entry.t0 }, ...ok(`the lap is closed again: ${r.out.report}`) });
+        const said = closedAgainWords(b.tool, keptShare(b.base, open, closed, win, b.tool), r.out.report);   // D464: a drag the close took back is said, not only "closed again"
+        return set({ history: h, ...resolvedOf(closed), brush: null, dirty: true, lastEdited: win, lastStep: { op: `brush:${b.tool}:close`, ms: now() - entry.t0 }, ...ok(said) });
       }, (e) => {
         if (!stillOurs()) { if (releaseJob === entry) { releaseJob = null; if (st.brush && st.brush.closing) return set({ brush: null }); } return st; }
         releaseJob = null;
@@ -1187,7 +1213,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       }
       if (!storage || typeof storage.writeExport !== 'function') return stop({ message: 'there is nowhere to write the export here' });
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);
-      const w = (out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '') + await tidy();
+      const shown = EW.exportWarningsWords(out.result.warnings);   // D464: the builders' notes off the screen, the rest in words
+      const w = (shown.length ? ` (${shown.length} warning${shown.length > 1 ? 's' : ''}: ${shown.join(' · ')})` : '') + await tidy();
       return set({ ...ok(`exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${w}`), exportReds: null, exportRefusal: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
       } catch (e) { await tidy(); throw e; }   // a failure nobody planned for (a write that throws): the empty folder still goes
     },

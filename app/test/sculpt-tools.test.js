@@ -302,3 +302,43 @@ test('row 21: with the real close, a Bend away from the seam whose window alone 
   const moved = new Set([...w, last]); for (const i of [...moved]) moved.add((i + 1) % open.pieces.length);   // a moved piece rebuilds the joint of the piece after it (round the seam for the last)
   a.history.present.pieces.forEach((P, i) => { if (!moved.has(i)) assert.equal(P, open.pieces[i], `piece ${i} is outside the window, the last piece and their joints: the very same object`); });
 });
+// D464 (D463 part 2 item 5, E's D461 report §2 item 5): A ROUTE RELEASE THAT TAKES THE DRAG BACK SAYS SO. On a closed lap the re-close may have to move the very piece the tool
+// changed: at the seam (the first road piece) only the two pieces beside the start line can close the lap, and the last alone is refused, so the close re-solves the bent piece and
+// the bend is gone (E's D461 run: -11 deg/100 m shown on p1, noise of +-0.0005 rad/m after, and the message said only "the lap is closed again"). The share kept is the drag's own
+// change in the window's channel that the closed lap still holds (a least-squares projection: 1 = all of it, 0 = none). Under half: the bend was undone, and the message says so
+// with what to do; under 0.9: the message says how much was taken back; otherwise the message is as before.
+const keptShare = (base, open, closed, idx, ch) => { let num = 0, den = 0; for (const i of idx) { const b = base.pieces[i].channels[ch], o = open.pieces[i].channels[ch], c = closed.pieces[i].channels[ch]; for (let k = 0; k < b.length; k++) { const d = o[k] - b[k]; num += (c[k] - b[k]) * d; den += d * d; } } return num / den; };
+
+test('row 22 (D464): a Bend on the seam piece, which the re-close takes back, says plainly that it was undone and what to do', async () => {
+  const s = await closedLap({ closeRunner: fakeRunner((args) => realClose(args)) });
+  const base = s.getState().history.present;
+  s.beginBrush({ tool: 'bend', s0: 150, r: 80 }); s.brushTo(3e-4);
+  const open = s.getState().history.present, win = s.getState().brush.changedPieces;
+  s.endBrush(); const a = await s.brushRelease();
+  assert.equal(a.history.present.closed, true, a.message);
+  assert.deepEqual(win, [0], 'the bend is on the seam piece');
+  const kept = keptShare(base, open, a.history.present, win, 'kh');
+  assert.ok(kept < 0.5, `the close takes the bend back (kept ${kept.toFixed(3)})`);
+  assert.match(a.message, /your bend was undone to close the lap; bend further from the start, or open the lap first/, a.message);
+});
+
+test('row 23 (D464): a Bend away from the seam that the re-close partly takes back says how much', async () => {
+  const s = await closedLap({ closeRunner: fakeRunner((args) => realClose(args)) });
+  const base = s.getState().history.present;
+  s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(3e-4);
+  const open = s.getState().history.present, win = s.getState().brush.changedPieces;
+  s.endBrush(); const a = await s.brushRelease();
+  const kept = keptShare(base, open, a.history.present, win, 'kh');
+  assert.ok(kept >= 0.5 && kept < 0.9, `part of the bend is taken back (kept ${kept.toFixed(3)})`);
+  const pct = Math.round((1 - kept) * 100);
+  assert.match(a.message, new RegExp(`closing it took back ${pct}% of your bend`), a.message);
+  assert.ok(!/undone/.test(a.message), a.message);
+});
+
+test('row 24 (D464): a re-close that keeps the drag says only that the lap is closed again', async () => {
+  // the runner answers with the dragged lap itself, closed: every bit of the bend is kept
+  const s = await closedLap({ closeRunner: fakeRunner((args) => ({ out: { converged: true, doc: { ...args.doc, closed: true }, report: 'kept as dragged' } })) });
+  s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(3e-4);
+  s.endBrush(); const a = await s.brushRelease();
+  assert.equal(a.message, 'the lap is closed again: kept as dragged');
+});

@@ -360,3 +360,17 @@ test('D243a the TEST export of a CLOSED lap is refused by name, and nothing is w
   assert.match(s.getState().message, /this track is closed: use Export/); assert.deepEqual(st.writes, [], 'nothing written');
   await s.exportTo(dir); assert.equal(s.getState().messageKind, 'ok', `control: a normal export of the closed lap goes through: ${s.getState().message}`);
 });
+// D464 (D463 part 2 item 6): the page's own Export (this shell, not app/shell.js) shows the export's warnings in the user's words: the CSP need, and no source
+// file, doc section, ini key or seat letter. The core's raw CSP text stays out of the message.
+test('D464: Export shows its warnings in the user\'s words: the CSP need, and none of the builders\' references', async () => {
+  const { CSP_ONLY_WARNING } = require('../../src/export/trackfiles.js');
+  const st = memStorage(), ex = await makeExporter(fromDisk);
+  const s = await lap({ storage: st, exporter: ex });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-words-')); made.push(dir);
+  s.close(); await s.exportTo(dir);
+  const m = s.getState().message;
+  assert.equal(s.getState().messageKind, 'ok', m);
+  assert.match(m, /needs Custom Shaders Patch \(CSP\)/, m);
+  assert.ok(!m.includes(CSP_ONLY_WARNING), m);
+  assert.doesNotMatch(m, /§|\.md\b|\.js\b|\.ini\b|ARCHITECTURE|INTERFACES|FINDINGS|\bC's\b|WAV_PITCH|mesh-node/, m);
+});
