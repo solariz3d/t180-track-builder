@@ -167,7 +167,7 @@ test('no tooltip on the page carries a tab or a line break (the install one said
   assert.deepStrictEqual(titles.filter((t) => /[\t\r\n]/.test(t)), []);
 });
 
-// D250 amended this row BY NAME: the keeper asked for an obvious "export into AC" beside Export, so the button is "Export to Assetto Corsa" (was "Install to AC")
+// D250 amended this row BY NAME: the user asked for an obvious "export into AC" beside Export, so the button is "Export to Assetto Corsa" (was "Install to AC")
 test('the Export to Assetto Corsa button installs the track under the name it was saved as', async () => {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js');
   const restore = fake.install();
@@ -182,7 +182,7 @@ test('the Export to Assetto Corsa button installs the track under the name it wa
   } finally { restore(); }
 });
 
-// D250 (the keeper: "it should automatically create the folder in the assetto track folder in steam"): the native side finds AC through Steam
+// D250 (the user: "it should automatically create the folder in the assetto track folder in steam"): the native side finds AC through Steam
 // when none is remembered (src-tauri/src/ac.rs root_or_find), so get_ac_root answers with a folder and the picker is never opened
 test('D250: with AC found through Steam the button exports with NO folder dialog, and the line says where it went and that exporting again updates it', async () => {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js');
@@ -206,7 +206,7 @@ test('D250: when AC is NOT found through Steam, the line says so and asks for th
   assert.deepStrictEqual([r.ok, r.needsRoot], [false, true]); assert.match(r.message, /not found through Steam/);
 });
 
-// D264 AMENDED THIS ROW BY NAME (the keeper, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the
+// D264 AMENDED THIS ROW BY NAME (the user, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the
 // test that isnt finished"). It was "an open loop is not installed: the refusal is the Export button's own, and nothing is written". Export to Assetto Corsa on an
 // OPEN track now installs the TEST export (D243a's own build, t180b_<name>_test) and says so; Export… (any folder) still refuses the open loop (app/test/core-shell.test.js).
 test('D264: an open loop is installed as the unfinished TEST export, t180b_<name>_test, and the line says so; never as t180b_<name>', async () => {
@@ -220,7 +220,7 @@ test('D264: an open loop is installed as the unfinished TEST export, t180b_<name
   assert.ok(r.message.includes('G:/games/assettocorsa\\content\\tracks\\t180b_monza_test'), r.message);
 });
 
-// D252 second item (the keeper, 11:38: "why two export buttons"; 11:39: "it shouldnt be there, creates too much clutter, the AC folder, instead, in the EXE
+// D252 second item (the user, 11:38: "why two export buttons"; 11:39: "it shouldnt be there, creates too much clutter, the AC folder, instead, in the EXE
 // startup, the user can choose where the track folder is in the beginning"). ONE main button, Export to Assetto Corsa; the AC folder and See it in Assetto
 // go into the "more" (⋯) container; at startup, with no folder remembered, a one-time card offers the folder Steam found (Use it / Choose another…).
 function mountIn(native, pickFolder = async () => null) {
@@ -305,7 +305,7 @@ test('D252 follow-up: a long install note is cut to its box with the whole text 
   assert.match(rule('.t-install-note'), /max-width/); assert.match(rule('.t-install-note'), /text-overflow:\s*ellipsis/);
 });
 
-// D264 (the keeper, 01:34; plan_t180_open_export_ac_2026-10-07.md): Export to Assetto Corsa on an OPEN track writes the TEST export into AC instead of refusing,
+// D264 (the user, 01:34; plan_t180_open_export_ac_2026-10-07.md): Export to Assetto Corsa on an OPEN track writes the TEST export into AC instead of refusing,
 // and ⋯ → Test export (unfinished)… goes into AC by the same path (the folder picker only if AC is not known). A closed track exports as before.
 // The native install here WRITES into a temp AC tree, so what lands on disk is read back; the native guards themselves are ac.rs's (cargo test, D264 row).
 const os = require('os');

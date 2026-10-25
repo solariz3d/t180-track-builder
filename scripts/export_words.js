@@ -7,7 +7,7 @@
 //   node scripts/export_words.js <track.json> --out <dir>              somewhere other than out/
 //   node scripts/export_words.js <track.json> --no-self-check          skip C's self-intersection check (said in the output)
 //
-// Nothing is installed and no game is launched (the keeper, 2026-09-27 12:17). The work is src/export/fromwords.js; a
+// Nothing is installed and no game is launched (the user, 2026-09-27 12:17). The work is src/export/fromwords.js; a
 // red document, an open loop or an empty one is refused with its reasons and nothing is written.
 'use strict';
 const fs = require('fs');

@@ -1,5 +1,5 @@
 // underskin.js: the UNDERSIDE of an equation-core track is an object that casts shadows, and the inside of a closed tube is dark (D230).
-// The keeper, 02:22: "during day light leaks into the tube it should be inclosed and pitch black"; 02:25: "i guess we need to make it so the bottom side of the
+// The user, 02:22: "during day light leaks into the tube it should be inclosed and pitch black"; 02:25: "i guess we need to make it so the bottom side of the
 // track is an object that casts shadows".
 //
 //   withUnderskin(scene, mesh, segments) -> scene      the export's scene with

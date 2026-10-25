@@ -31,7 +31,7 @@ test('S1: bank 360° over 300 m is accepted and read back as 360, then −540 (n
 
 // ── S3: the roll-rate bar ───────────────────────────────────────────────────────────────────────────────────────────────
 const spin = (L) => check(extend(start({ length: 60 }), { length: L, targets: { phi: 2 * Math.PI } }));
-test('S3: a full 360° of bank is RED over 300 m (the keeper\'s own example, 1.80°/m), AMBER over 450 m (1.20), clear over 600 m (0.90): the bar is 1.2144 red, 0.9338 amber, read over a 20 m chord', () => {
+test('S3: a full 360° of bank is RED over 300 m (the user\'s own example, 1.80°/m), AMBER over 450 m (1.20), clear over 600 m (0.90): the bar is 1.2144 red, 0.9338 amber, read over a 20 m chord', () => {
   const rate = (r) => Math.max(0, ...r.map((x) => x.worst)), want = { 300: 1.7973, 450: 1.1992, 600: 0.8997 };
   for (const L of [300, 450, 600]) {
     const { v } = spin(L), reds = v.red.filter((x) => x.reason === 'roll-rate'), ambers = v.amber.filter((x) => x.reason === 'roll-rate'), peak = rate([...reds, ...ambers]);
@@ -83,7 +83,7 @@ test('E2: the validator reds an edge past the cap by name (edge-past-cap) on a s
 });
 
 // ── S2 and S4: the spiral of a closed tube ──────────────────────────────────────────────────────────────────────────────
-/** A straight legacy start, a 100 m closing transition, then 700 m of closed tube rolling a full turn: the keeper's spiral. */
+/** A straight legacy start, a 100 m closing transition, then 700 m of closed tube rolling a full turn: the user's spiral. */
 function spiral() {
   let d = extend(start({ length: 60 }), { length: 100, transition: 100, targets: { t: 360 } });
   d = extend(d, { length: 700, targets: { phi: 2 * Math.PI } }); return d;

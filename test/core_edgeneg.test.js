@@ -1,5 +1,5 @@
 // core_edgeneg.test.js: node --test test/core_edgeneg.test.js
-// D406, negative edge angles (the keeper, 2026-10-18: "the left and right edge value, it should be able to go into the negatives, meaning the track curves
+// D406, negative edge angles (the user, 2026-10-18: "the left and right edge value, it should be able to go into the negatives, meaning the track curves
 // down tweaking the banking on one side to be closer to flat or even past it"). e and er may go below 0: the outer zone turns DOWN by that angle against the
 // profile. Each side's TOTAL edge angle (the profile's own at the rim plus e or er) has a floor of -30° (src/core/document.js EDGE_FLOOR). Rows:
 //   1  a negative left edge on a banked turn turns the left rim down by that angle, and the right rim stays the profile's

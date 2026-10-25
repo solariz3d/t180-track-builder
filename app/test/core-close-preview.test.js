@@ -26,7 +26,7 @@ async function openLap({ turns = 4, lastLen = 200 } = {}) {
   assert.equal(s.getState().message, null, s.getState().message); assert.equal(s.getState().history.present.closed, false); return s;
 }
 /** A NEAR lap in front of the user (adopted, as opening one does): openLap's lap closed whole, opened, one turn's inner control points nudged 1e-4
- *  rad/m; it ends 8.87 m from its start (B's lprobe2), as a lap the keeper is about to close does. openLap's own lap ends ~300 m past its start. */
+ *  rad/m; it ends 8.87 m from its start (B's lprobe2), as a lap the user is about to close does. openLap's own lap ends ~300 m past its start. */
 async function nearLap() {
   const D = require('../../src/core/document.js'), C = require('../../src/core/close.js'), far = (await openLap()).getState().history.present;
   const open = D.checkDoc({ ...C.close(far, { edited: [0] }).doc, closed: false });

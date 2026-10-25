@@ -1,5 +1,5 @@
 // validate-ui-worker.test.js: node --test app/test/validate-ui-worker.test.js
-// The track checker OFF the window's thread (the keeper, 2026-10-14: placing a piece on ELYSIUM froze the window; "option 2"). The worker runs
+// The track checker OFF the window's thread (the user, 2026-10-14: placing a piece on ELYSIUM froze the window; "option 2"). The worker runs
 // app/validate-ui/checkjob.js; the page talks to it through checkrunner.js; the panel (index.js) shows its answers. Rows:
 //   1  the job's answer equals the page's own controller after every kind of edit (place, undo, redo, a hill brush, a drag held open, the CSP
 //      switch), from a fresh COPY of the document each time, as a worker receives it

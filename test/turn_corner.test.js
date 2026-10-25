@@ -1,18 +1,18 @@
 // turn_corner.test.js: node --test test/turn_corner.test.js
-// D331 (ledger D332), B and C. A hand-made 90° turn on ELYSIUM came out 99.6° and crooked. Measured on the keeper's save (fixtures-d332, sha256 2e3642f7…): the
+// D331 (ledger D332), B and C. A hand-made 90° turn on ELYSIUM came out 99.6° and crooked. Measured on the user's save (fixtures-d332, sha256 2e3642f7…): the
 // heading follows the readout to the degree and the bank does not change it (the curve turns about WORLD up, src/geom/path.js:9-14); a piece eased to a turn RATE
 // ends still turning, so the next piece's "turn 0 at start" adds degrees the "90°" never said (p41 90.00°, p42 +9.64°), and the let-go is about eight times faster
-// than the build-up, which on a 53.5° bank shows as a sudden twist-and-dip. The keeper's word (plan :367-369): "the turn angle should take into account the
+// than the build-up, which on a 53.5° bank shows as a sudden twist-and-dip. The user's word (plan :367-369): "the turn angle should take into account the
 // banking ... but then turns that have less banking or no banking also just work how it should to convey the proper degrees to line up with the grid". Ruled
 // (plan :373-385): B, Extend's turn number is the corner's exact map heading change, ending straight, by default, with the rate meaning one switch away; C, the
 // corner eases in and out symmetrically, for Extend with B, Turn by and Turn to grid. Rows (each on a flat road AND on a road banked 53.5°, where it says so):
 //   1  a piece's heading change is the same on a road banked 126° as on a flat road (the turn is about world up; the frame hypothesis refuted as code)
 //   2  B: the panel's turn field, as a corner (its default), typed 90 makes a corner that turns the heading by 90.00° and ends straight: "turn 0 at start"
 //      after it adds 0.00°, and the corner readout reads 90.00° from the piece. Flat and banked
-//   2b B: the rate meaning is one switch away and makes today's piece exactly (the save's way: 99.65° with the ease-out), so nothing the keeper built changes
+//   2b B: the rate meaning is one switch away and makes today's piece exactly (the save's way: 99.65° with the ease-out), so nothing the user built changes
 //   2c B: a typed 0 keeps easing to straight (a "corner of 0°" after a road still turning would be an S-bend); blank continues, as ever
 //   3  C: the corner Extend (with B), Turn by and Turn to grid make peaks within 10% of the piece's middle and lets go no faster than it built up. Flat and banked
-//   4  old documents open unchanged: the keeper's save (uncommitted; skipped with the reason when absent) round-trips byte for byte and builds the identical
+//   4  old documents open unchanged: the user's save (uncommitted; skipped with the reason when absent) round-trips byte for byte and builds the identical
 //      track, pinned on the code before B and C (cb3a7ff + readouts A and D)
 'use strict';
 const test = require('node:test');
@@ -87,7 +87,7 @@ test('row 3b (C): from a head still turning the same way, the turn rate rises to
   for (let s = 0; s <= at; s += 0.05) { const v = D.channelAt(P, 'kh', s).v; assert.ok(v >= prev - 1e-9, `the rate falls at ${s.toFixed(2)} m on the way up: ${prev} → ${v}`); prev = v; }
 });
 const FX = path.join(__dirname, '..', 'fixtures-d332', 'eq-ELYSIUM.t180track');
-test('row 4: the keeper\'s save opens unchanged: it round-trips byte for byte and builds the identical track (pinned before B and C)', { skip: fs.existsSync(FX) ? false : 'fixtures-d332/eq-ELYSIUM.t180track is the keeper\'s save, kept out of the repository; copy it in read only to run this row' }, () => {
+test('row 4: the user\'s save opens unchanged: it round-trips byte for byte and builds the identical track (pinned before B and C)', { skip: fs.existsSync(FX) ? false : 'fixtures-d332/eq-ELYSIUM.t180track is the user\'s save, kept out of the repository; copy it in read only to run this row' }, () => {
   const raw = fs.readFileSync(FX, 'utf8'), doc = D.parse(raw), sha = (x) => crypto.createHash('sha256').update(x).digest('hex');
   assert.equal(D.serialize(doc), raw, 'byte for byte');
   assert.equal(sha(JSON.stringify(A.toSegments(doc))), 'caeb25442228e159c73ad8f9c6368ebb08ff35f50b23db817a3abaffaf72283e', 'the segments');

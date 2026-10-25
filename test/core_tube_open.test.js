@@ -1,9 +1,9 @@
 // core_tube_open.test.js: node --test test/core_tube_open.test.js   (under the heavy-run lock)
-// D268 (the keeper, 2026-10-07 10:20: "when you make the full 360 degree tube, but then try to transition back into a flatter track, there is this weird hump"):
+// D268 (the user, 2026-10-07 10:20: "when you make the full 360 degree tube, but then try to transition back into a flatter track, there is this weird hump"):
 // a closed tube's roll axis (its heartline, w/2π: src/core/adapter.js heartlineOf) used to be the integrated curve itself, with the road's centre hl BELOW it
 // (src/geom/path.js: x − hl·U), so closing a tube dropped the floor 7 m under the curve the user drew and opening it lifted the floor back: the hump, and the
 // wall tips rising 9 m over the tube's ceiling. Now the axis is hl ABOVE the curve and the road's centre is x + hl·(U0 − U): on the curve while the road is not
-// rolled, turned about the axis when it is. The keeper's track, rebuilt from his readout: a straight, a piece closing a full tube, 254.1 m opening it, width 44. Rows:
+// rolled, turned about the axis when it is. The user's track, rebuilt from his readout: a straight, a piece closing a full tube, 254.1 m opening it, width 44. Rows:
 //   1  the road's centre is ON THE CURVE the user drew at every station of the closing and opening pieces (≤ 1 cm)
 //   2  the floor is level through both: its centre's height moves ≤ 1 cm (the track has no climb anywhere)
 //   3  the walls rise above the floor no more than a fixed-width circular arc must: (w/θ)(1 − cos θ/2) at the row's own sweep θ (+ 1 cm), and the export's
@@ -19,8 +19,8 @@ const AD = require('../src/core/adapter.js');
 const G = require('../src/geom/index.js');
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-/** The keeper's track from his readout (10:20): a straight, a piece closing a full tube, then 254.1 m with the sweep from 360 to 0, width 44. */
-function keeperTrack() {
+/** The user's track from his readout (10:20): a straight, a piece closing a full tube, then 254.1 m with the sweep from 360 to 0, width 44. */
+function userTrack() {
   let d = extend(D.createDoc('tube open'), { length: 300, targets: { w: 44 }, transition: 20 });
   d = extend(d, { length: 300, targets: { t: 360 } });
   return extend(d, { length: 254.1, targets: { t: 0 } });
@@ -30,7 +30,7 @@ function built(d) {
   const p = AD.offsetPath(d, segs, G.buildPath(segs, { step: 2, closed: false, start }));
   return { segs, p, mesh: G.buildMesh(p, segs, { selfCheck: true }) };
 }
-const D0 = keeperTrack(), B0 = built(D0), S1 = D0.pieces[0].length, S3 = S1 + D0.pieces[1].length + D0.pieces[2].length;
+const D0 = userTrack(), B0 = built(D0), S1 = D0.pieces[0].length, S3 = S1 + D0.pieces[1].length + D0.pieces[2].length;
 const tubeSamples = B0.p.samples.filter((x) => x.s >= S1 - 1e-9 && x.s <= S3 + 1e-9);
 
 test('row 1: the road\'s centre stays on the curve the user drew at every station of the closing and opening pieces (≤ 1 cm)', () => {
@@ -61,7 +61,7 @@ function rows(B, d) {
   return out;
 }
 
-test('row 2b: the keeper\'s own case (the panel\'s fields, widths 44 and 30): a track that is a closed 45 m tube from its start, still turning, opened in 254.1 m', () => {
+test('row 2b: the user\'s own case (the panel\'s fields, widths 44 and 30): a track that is a closed 45 m tube from its start, still turning, opened in 254.1 m', () => {
   const { extendOptions } = require('../app/core/panel.js');
   // like his saved track: 1000 m of closed tube, 1000 m turning into a half turn, 300 m still turning (the turn rate he had, −0.18°/m), all 45 m wide
   let d = extend(D.createDoc('hump'), { length: 1000, first: { t: 360, w: 45 }, targets: { t: 360, w: 45 } });

@@ -21,7 +21,7 @@ const CLOSE_TIMEOUT_MS = 3000;   // a cleanup that hangs (a native call that nev
  * returns nothing or a promise. `win.destroy()` is the last thing the handler does, whatever happened before it.
  */
 /*
- * UNSAVED WORK (2026-10-03, the keeper: "if you press X it should ask you to save it first"). Before the cleanup, `ask()` is
+ * UNSAVED WORK (2026-10-03, the user: "if you press X it should ask you to save it first"). Before the cleanup, `ask()` is
  * awaited: it returns null when there is nothing unsaved (close as before), or the user's choice, 'save' | 'discard' | 'cancel'.
  * 'cancel' leaves the window open: the one case the handler does not destroy, because the user chose it. 'save' awaits `save()`,
  * which returns true once the work is saved; false (no name yet, a refused save) leaves the window open too, so the work is not

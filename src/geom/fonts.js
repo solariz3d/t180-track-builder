@@ -6,7 +6,7 @@
 //   DEFAULTS[font]                                   -> { width, wall: 0, psiL, psiR }: the handles a new word should get
 //
 // THE FLOOR IS THE WHOLE ROAD, and it rises progressively across it: ψ at ¼, ½, ¾ and the edge of each side's half-width,
-// linear in between, ψ(0) = 0. There is no flat floor with a wall curling up at its end. The keeper, 2026-09-28 01:27, of
+// linear in between, ψ(0) = 0. There is no flat floor with a wall curling up at its end. The user, 2026-09-28 01:27, of
 // the old fonts (a flat floor, then an 8 m wall to 60-110°): "the rims flip up too much and dont make sense".
 //   · The value at each fraction is the mean of the inside and outside medians (they differ by ≤ 1.65° at ¼, ½ and ¾ in
 //     every family; fontshape.json), so a font is symmetric and does not need the turn's direction. A corner tilts the

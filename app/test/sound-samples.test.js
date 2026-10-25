@@ -175,7 +175,7 @@ test('row 5: a failed fetch, a refused file or a failed decode is logged and the
 const placed = () => { const d = (n) => ({ pieces: Array.from({ length: n }, (_, i) => ({ id: i })), closed: false }); return [{ history: { past: [], present: d(1), future: [] } }, { history: { past: [d(1)], present: d(2), future: [] } }]; };
 
 test('row 6: the four files are the batch-8 WAVs byte for byte, and useSamples refuses a set with one missing', () => {
-  // AMENDED (D375): the drag tick is the keeper's pick of batch 9, Eiano tik (G:\Consonance-tools\b9\page\batch9\tick_eiano_tik.wav, copied byte for byte)
+  // AMENDED (D375): the drag tick is the user's pick of batch 9, Eiano tik (G:\Consonance-tools\b9\page\batch9\tick_eiano_tik.wav, copied byte for byte)
   // AMENDED (D377): batch 8's place.wav and undo.wav and all of batch 10's eight are removed from app/sounds (none was played), so their hashes go
   const SHA = { drag_tick: '0c63854e26167115886d2d0fc947362cdc72c82271b12e2bcb5a2cf8fe6cbfa8', loop_closed: '34fd8b2193a46a20add00efff7379c836b03795fb5bbd9e0531906e273852308',
     // D377: batch 11's Aqua, Skyline and Glass (E's table, exo_memory/handback/p-d376-batch11-E_2026-10-17.md §1) and batch 12's Aurora (p-d377-batch12-E §1)
@@ -244,7 +244,7 @@ test('row 10: each melody plays its own place and undo files, place_<name>.wav a
   assert.ok(!SAMPLES.slots.includes('place') && !SAMPLES.slots.includes('undo'), 'the batch 8 place and undo files are no longer loaded');
 });
 
-// D377: the place swell (the librarian's ruling, the keeper can veto). A place's six notes play at their levels times the step's swell (swellDb); an undo
+// D377: the place swell (the librarian's ruling, the user can veto). A place's six notes play at their levels times the step's swell (swellDb); an undo
 // is not swelled: it takes a step back at the level it always had
 test('row 11: a place plays every note at its level lifted by the step\'s swell, the same lift for all six; an undo plays at its own level at every step', () => {
   const { swellDb } = SND, base = { place: [0.85, 0.85, 0.85, 0.85, 0.7 / 0.55, 0.7], undo: [0.32 * 0.85 / 0.55, 0.32 * 0.85 / 0.55, 0.32 * 0.85 / 0.55, 0.32 * 0.85 / 0.55, 0.38 / 0.55, 0.16 / 0.24 * 0.7] };

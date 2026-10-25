@@ -1,5 +1,5 @@
 // core-spawndrag.test.js: node --test app/test/core-spawndrag.test.js
-// D285 part 1: DRAG THE START ON THE PREVIEW (the keeper, 06:11: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars at the start line
+// D285 part 1: DRAG THE START ON THE PREVIEW (the user, 06:11: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars at the start line
 // too"). FEEL tier: rows and fake hosts, no real window. The real shell, the real panel (app/core/panel.js mounts app/core/spawndrag.js on the stage) and the real exporter, on a
 // closed bowl lap; the stage is a fake that fires pointer events capture-first like a browser, so "the camera never sees the press" is a row and not a hope.
 'use strict';

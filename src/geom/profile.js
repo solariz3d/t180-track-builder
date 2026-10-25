@@ -261,7 +261,7 @@ function stepBetween(A, B) {
  */
 // A joint's step depends on its two segments alone. The window's shell reuses an unchanged piece's segments FROZEN (src/core/adapter.js
 // toSegments `cache`), so a joint between two frozen segments is measured once and remembered: the track checker measured every joint of
-// the keeper's 6 km track again on every placement, 6 of the 11 s that a place-then-undo cost (2026-10-12). Any other joint is measured each time.
+// the user's 6 km track again on every placement, 6 of the 11 s that a place-then-undo cost (2026-10-12). Any other joint is measured each time.
 const stepMemo = new WeakMap();
 function jointSteps(segments, closed) {
   if (!segments.some(readsBlend)) return [];

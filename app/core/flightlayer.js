@@ -1,6 +1,6 @@
 // flightlayer.js: THE FLIGHTS ON THE TRACK AS A DASHED LINE (D243's layer, simplified by D258, the free jump). A canvas over the preview (#preview), redrawn every animation frame like the labels and the
 // selection (the camera eases, so the line moves with it). It draws the centreline of every flight on screen, and of the ghost while one shows (the Jump button's candidate): the curve the free
-// flight takes from the take-off to the landing. NOTHING is computed about the air (no arc, no fall, no ramp: the keeper drives the jump in AC and moves the landing), so the line is only there to show
+// flight takes from the take-off to the landing. NOTHING is computed about the air (no arc, no fall, no ramp: the user drives the jump in AC and moves the landing), so the line is only there to show
 // that the two pieces are joined. The preview itself is not changed: its pose comes from 't180:view', the placed track from 't180:track-request' and the ghost from 't180:ghost-request'.
 //
 //   flightsOfPath(path, segments) -> [{ id, points: [[x, y, z]] }]            the centreline of each flight, from the take-off station to the landing's start

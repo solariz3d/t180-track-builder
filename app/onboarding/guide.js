@@ -1,4 +1,4 @@
-// guide.js: the guided first track as a STEP MACHINE, with no DOM (ARCHITECTURE §11.7; the keeper: the USER builds the
+// guide.js: the guided first track as a STEP MACHINE, with no DOM (ARCHITECTURE §11.7; the user: the USER builds the
 // track, and the guide only shows the moves).
 //
 //   STEPS                              [{ id, title, text, target, done(state, seen) | null }]
@@ -15,7 +15,7 @@
 //     exports anything;
 //   · the colours and the grid-and-mirror steps have no move to see (reading is not an action, and the grid lives in the
 //     preview, not in the track), so each is done by pressing Next.
-// D239 (the keeper: "can we keep only the equation mode?"): the steps are the EQUATION builder's (app/core): Extend, the brush,
+// D239 (the user: "can we keep only the equation mode?"): the steps are the EQUATION builder's (app/core): Extend, the brush,
 // Close the loop, the colours, Export, the grid and mirror. The piece builder's wording (words, starter phrases, handles, the
 // connector) went with the Pieces page.
 'use strict';

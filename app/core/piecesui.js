@@ -63,7 +63,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
   const saveBtn = el('button', { text: 'Save as piece', title: 'keep the selected pieces in the library, relative to where they start', onclick: () => { void shell.savePiece(nameIn.value.trim()); } });
   const delBtn = el('button', { text: 'Delete selected', title: 'at the end of the track the pieces simply go; in the middle you see what it does first', onclick: () => shell.deleteSelection() });
   const clearBtn = el('button', { text: 'Clear selection', onclick: () => shell.clearSelection() });
-  // D261 (the keeper: "change which piece has different grip"): the selected pieces' grip, a whole percent 50 to 150 (100 is AC's own road); "grip like…" fills the field from a known track
+  // D261 (the user: "change which piece has different grip"): the selected pieces' grip, a whole percent 50 to 150 (100 is AC's own road); "grip like…" fills the field from a known track
   const gripIn = el('input', { type: 'number', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'selection grip', title: 'grip of the selected road pieces, a whole percent from 50 to 150; 100 is AC\'s own road. Blank: the pieces differ' });
   const gripLike = el('select', { 'aria-label': 'selection grip like', title: 'grip like a known track: the measured road friction of installed tracks; picking one fills the grip box' });
   gripLike.replaceChildren(...GL.entries().map((e) => new win.Option(e.label, e.value)));

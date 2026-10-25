@@ -1,5 +1,5 @@
 // export_pitboxes.test.js: node --test test/export_pitboxes.test.js (under the heavy-run lock). D279 follow-up: the PAINTED PIT BOXES wear the
-// track's road surface (the keeper, 2026-10-09, asked which pits: "The painted pit boxes"). An equation-core track has no pit lane; its pits
+// track's road surface (the user, 2026-10-09, asked which pits: "The painted pit boxes"). An equation-core track has no pit lane; its pits
 // sit on the main road, marked only by the pit-box outlines, which were near-white paint (src/markers/paint.js, t180b_paint). Now each
 // PAINT_PIT_n wears the floor material of the road under it, with the road's own texture coordinates at each vertex, so it blends in.
 // Rows, on a core lap exported the way the app exports it (texture_flow.test.js's route), under the three road settings:

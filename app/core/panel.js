@@ -41,7 +41,7 @@ const DEG = Math.PI / 180;
 /**
  * The extend options the controls describe (pure: tested headless). Empty fields continue the channel. On an EMPTY track (`empty`) the
  * typed values are also the first piece's START (`first`, src/core/extend.js), so the whole first piece is what was typed from s = 0; without
- * it every channel started at its default and ramped (D194a, the keeper: "would alway make a bottle neck of width at the start of the track").
+ * it every channel started at its default and ramped (D194a, the user: "would alway make a bottle neck of width at the start of the track").
  * An untyped field is in neither, so that channel keeps its default start.
  */
 // AT THE START (D194b): a ticked field's target is reached within AT_START_M, one knot span (src/core/document.js KNOT_M; the piece's length
@@ -49,11 +49,11 @@ const DEG = Math.PI / 180;
 // the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres (A's D194b contract).
 const AT_START_M = 20;
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
-// THE TURN AS A CORNER (D331 B; the keeper, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). turnAs 'corner' (the
+// THE TURN AS A CORNER (D331 B; the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). turnAs 'corner' (the
 // panel's default) reads the turn field as the piece's exact heading change in degrees, ending straight: `turnDeg`, which src/core/turnby.js extendCorner places
 // with Turn by's symmetric ease (so it has no "at start" ramp of its own). A typed 0 still eases to a rate of 0, because a "corner of 0°" after a road still
 // turning would bend back the other way. turnAs 'rate' (and this function's default, for its other callers) is the old meaning: degrees per 100 m, a target rate.
-// The CLIMB the same way, on the same switch (the keeper: "the climb might need to do the same?"; plan :387-399): as a corner it is `climbDeg`, the exact pitch
+// The CLIMB the same way, on the same switch (the user: "the climb might need to do the same?"; plan :387-399): as a corner it is `climbDeg`, the exact pitch
 // change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
 function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate' }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
@@ -148,26 +148,26 @@ function mount(root, shell, mountOpts = {}) {
   // the CUP (D190): how deep the road's cross-section is, as its edge angle — 0 flat, ~15 today's bowl, ~31 today's half-pipe,
   // 90 vertical walls, 150 a partial tube. Independent of bank: bank still rolls the whole section
   const cup = el('input', { type: 'number', value: '', step: '1', min: '0', max: '150', title: 'cup: the edge angle of the cross-section in degrees, 0 (flat) to 150; 90 = vertical walls. Bank still rolls the whole section. Shows the cup at the head; left as shown, it keeps it' });
-  // THE FIELDS SHOW THE HEAD (D193, the keeper: "show the original value the first piece starts as instead of it being blank"). Each
+  // THE FIELDS SHOW THE HEAD (D193, the user: "show the original value the first piece starts as instead of it being blank"). Each
   // channel field shows the head's END state in its own units (the first piece's start on an empty track), refreshed whenever the
   // document changes (Extend, Undo, Redo, open, a brush). A field whose text is exactly what was shown sends NO target, the same as a
   // blank did: the core CONTINUES a channel (value + slope, src/core/extend.js), and a target equal to the value is not that — it
   // bends a channel that was still changing, and any cup target turns a legacy piece into a cup piece. Only a changed value is a target.
   // THE CROSS-SECTION (D225): the edge curve (an extra angle on the outer band, from the edge start out; 0 = off) and the tube (the sweep of
   // a circular section, 360 = a closed pipe). The bank field above takes any number of degrees, 360 included (the spiral): it has no min or max
-  // D385 (the keeper, 2026-10-18: "there is the right edge but not the left edge tweak"): the LEFT and the RIGHT edge, each its own side. Each shows its side at the
+  // D385 (the user, 2026-10-18: "there is the right edge but not the left edge tweak"): the LEFT and the RIGHT edge, each its own side. Each shows its side at the
   // head; typing one changes only that side (opts below sends the other side's head value with it, since the core sets both from e alone: src/core/extend.js :83-86)
   // D406: no min on the two edges, since an edge may be below 0 (it turns down); the floor depends on the profile under it (src/core/document.js EDGE_FLOOR),
   // so the core refuses a value past it by name
   const edge = el('input', { type: 'number', value: '', step: '1', title: 'left edge: how many degrees MORE the LEFT side\'s very edge tilts than the plain profile would, rising smoothly from the edge start out; 0 = off; below 0 it turns DOWN, toward flat and up to 30° past it. Bank still rolls the whole section. Shows the left edge at the head; left as shown, it keeps it; typed, only the left side changes' }),
-    // the keeper, 2026-10-12: bank the outside of a turn harder and turn the inside down, so the inside line is not banked
+    // the user, 2026-10-12: bank the outside of a turn harder and turn the inside down, so the inside line is not banked
     edgeR = el('input', { type: 'number', value: '', step: '1', title: 'right edge: how many degrees MORE the RIGHT side\'s very edge tilts than the plain profile would, like the left edge (below 0 it turns down). Shows the right edge at the head; left as shown, it keeps it; typed, only the right side changes. For a right turn: a big left edge (the outside) and a small right edge (the inside), so the inside line is not banked' }),
     start = el('input', { type: 'number', value: '', step: '0.01', min: '0.5', max: '0.95', title: 'edge start: where the edge curve begins, as a share of the half-width from the centre (0.64 = the outer 36% each side curves more; 0.5 to 0.95). Shows it at the head; left as shown, it keeps it' }),
     tube = el('input', { type: 'number', value: '', step: '1', min: '0', max: '360', title: 'tube sweep: the cross-section as an arc of this many degrees, 0 (none) to 360 (a closed pipe). Shows the sweep at the head; left as shown, it keeps it' });
   // (D385: the right edge is the shell's er; a shell without it, the right follows the left, as the core makes it)
   const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => HD.wrapTurn(h.phi / DEG)], width: [width, (h) => h.w], cup: [cup, (h) => h.c],
     edge: [edge, (h) => h[XS.CHANNEL.edge]], edgeR: [edgeR, (h) => (Number.isFinite(h.er) ? h.er : h[XS.CHANNEL.edge])], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
-  // THE WIDTH REFERENCE (D232, the keeper: "a drop down that tells you the width of different known t-180 tracks, such as track H, track N, track G"):
+  // THE WIDTH REFERENCE (D232, the user: "a drop down that tells you the width of different known t-180 tracks, such as track H, track N, track G"):
   // picking a known track puts its measured median into the width field, like typing it (so on an empty track it is the first piece's start, which is the
   // new-track default). For a TUBE (the sweep field at 360) the figures are the distance round and the entry says how wide that is across.
   const WL = require('./widthlike.js');
@@ -212,7 +212,7 @@ function mount(root, shell, mountOpts = {}) {
   const ZERO_WHEN_EMPTIED = new Set(['turn', 'climb', 'bank', 'cup', 'edge', 'tube']);
   const emptied = (k) => ZERO_WHEN_EMPTIED.has(k) && HEAD[k][0].value === '' && shown[k] !== '';
   const asTyped = (k) => (emptied(k) ? '0' : HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
-  // D259 (the keeper, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank keeps
+  // D259 (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank keeps
   // within ONE turn and keeps its sign, shown AND applied (HD.wrapTurn: 370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40): the field shows it (HEAD above), a drag
   // writes it, and a typed value is sent wrapped and otherwise as typed (absolute, as the core keeps its winding; extendOptions unchanged). No nearest-equivalent rewrite.
   const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return Number.isFinite(T) ? String(HD.wrapTurn(T)) : t; };
@@ -223,7 +223,7 @@ function mount(root, shell, mountOpts = {}) {
   // the turn field's label says which way it is read (D331 B); switching puts the field back to what it shows, so nothing typed in the other unit is applied
   const turnLabel = el('span', { text: 'turn °' }), turnField = fieldAt(turnLabel, turn, 'turn'), climbLabel = el('span', { text: 'climb °' }), climbField = fieldAt(climbLabel, climb, 'climb');
   turnAs.onchange = () => { showTurnHead(shell.headState()); applied.turn = turn.value; applied.climb = climb.value; ghost(); };
-  // GRIP (D261, the keeper: a different grip per piece; the core is src/core/document.js, E's). A whole percent 50 to 150 (100 is AC's own road), shown as the head's; left as shown the new piece keeps it, a changed
+  // GRIP (D261, the user: a different grip per piece; the core is src/core/document.js, E's). A whole percent 50 to 150 (100 is AC's own road), shown as the head's; left as shown the new piece keeps it, a changed
   // value is the new piece's grip. "grip like…" fills it from a known track (src/doc/grips.json). The words say what the number is, "untested: drive it" outside 60 to 110, and that the checker does not model grip.
   const gripF = el('input', { type: 'number', value: '100', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'grip', title: GL.tip() });
   const gripLike = el('select', { 'aria-label': 'grip like known track', title: 'grip like a known track: the measured road friction of installed tracks; picking one fills the grip box' });
@@ -238,12 +238,12 @@ function mount(root, shell, mountOpts = {}) {
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value });
-  // D242 item 7 (the keeper, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
+  // D242 item 7 (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
   const madeWith = new WeakMap();
   const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value });
-  // D385 (the keeper, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values"): AS CORNERS, after an Extend the turn and climb fields
+  // D385 (the user, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values"): AS CORNERS, after an Extend the turn and climb fields
   // KEEP the degrees typed for the piece just placed (the new document's draw has just shown the head, blank), so Extend again places the same corner, each ending straight.
   // A blank or a typed 0 is not carried (the field stays blank, as before). Only Extend carries (and Straight, whose 0 never is): Jump, Level, To floor, Turn by, Turn to grid
   // and Sharp show the head as before
@@ -333,7 +333,7 @@ function mount(root, shell, mountOpts = {}) {
   doc.addEventListener('t180-undo-guard', onUndoGuard);
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
     onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: () => { if (!shell.getState().sculpt) ghost(); }, onmouseleave: () => { if (!handlesOn.checked || shell.getState().sculpt) send('t180-ghost-clear'); } });   // with the drag handles on, the ghost stays up: its handles are what you drag
-  // D242 item 6, STRAIGHT IN ONE CLICK (the keeper: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
+  // D242 item 6, STRAIGHT IN ONE CLICK (the user: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
   // "at start" box is ticked. This button extends with turn 0 and climb 0, both reached within the first AT_START_M metres and held there, then puts the boxes back
   // as they were (they are a kept preference, not this button's to change)
   const straightBtn = el('button', { text: 'Straight', title: `a straight piece of the length above: turn 0 and climb 0, reached within its first ${AT_START_M} m and held exactly`, onclick: () => {
@@ -342,20 +342,20 @@ function mount(root, shell, mountOpts = {}) {
     send('t180-ghost-clear'); extendHere();
     atStart.turn.checked = was.turn; atStart.climb.checked = was.climb;
   } });
-  // D271, LEVEL and TO FLOOR (the keeper: "a way to snap the track to the floor to be true flat … its hard to calculate by hand"): the climb is a RATE, so climb 0 keeps
+  // D271, LEVEL and TO FLOOR (the user: "a way to snap the track to the floor to be true flat … its hard to calculate by hand"): the climb is a RATE, so climb 0 keeps
   // the slope the road has. These extend with the fields' piece and let the core solve its climb (src/core/level.js): Level ends it straight and level, To floor
   // also at height 0; a piece too short for that is refused by name with the length that works (the message line says it)
   const levelHere = (fn) => { const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell[fn](opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
   const levelBtn = el('button', { text: 'Level', title: 'a piece of the length above that ends straight and LEVEL (pitch 0): its climb is solved for you', onclick: () => levelHere('extendLevel') });
   const floorBtn = el('button', { text: 'To floor', title: 'a piece of the length above that ends straight, level and ON THE FLOOR (height 0): too short a piece is refused with the length that works', onclick: () => levelHere('extendToFloor') });
-  // D280, TURN BY (the keeper: "90 degree turns not coming out straight"): the turn field is a RATE, and a piece eased to a rate ENDS at it, so the next piece
+  // D280, TURN BY (the user: "90 degree turns not coming out straight"): the turn field is a RATE, and a piece eased to a rate ENDS at it, so the next piece
   // starts still turning. This extends with the fields' piece and lets the core solve its turn (src/core/turnby.js): exactly the angle typed beside it, ending
   // with turn rate 0; too short a piece is refused by name with the length that works
   const turnBy = num(90, 1, 'the angle the piece turns, degrees (+ = left, − = right)'); turnBy.oninput = turnBy.onchange = () => {};
   const turnByBtn = el('button', { text: 'Turn by', title: 'a piece of the length above that turns EXACTLY the angle beside it and ends straight (turn rate 0): too short a piece is refused with the length that works', onclick: () => {
     const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnBy(opts(), turnBy.value); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
-  // TURN TO GRID (2026-10-12, the keeper: "it should also connect to the 90 degree angle of the grid like snap to grid … Its hard to get a straight aligned to the grid
+  // TURN TO GRID (2026-10-12, the user: "it should also connect to the 90 degree angle of the grid like snap to grid … Its hard to get a straight aligned to the grid
   // from a free flowing spiral turn"): Turn by, with the angle that brings the end onto the nearest grid direction (src/core/gridturn.js). The line under it says
   // where the end points now and how far it is off the grid, so the user can see the alignment before and after
   const gridStep = el('select', { 'aria-label': 'grid step', title: 'the grid directions Turn to grid snaps to: every 90° (the grid lines), 45° or 15°' });
@@ -371,7 +371,7 @@ function mount(root, shell, mountOpts = {}) {
   const gridBtn = el('button', { text: 'Turn to grid', title: 'a piece of the length above that turns onto the nearest grid direction (the step beside it) and ends straight, so the straight after it runs along the grid: too short a piece is refused with the length that works', onclick: () => {
     const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnToGrid(opts(), Number(gridStep.value) || 90); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
-  // D282, SHARP (the keeper: "i also want to be able to make track H 90 degrees too"): a SECOND turn type beside the broad curve, which it leaves as it is. A
+  // D282, SHARP (the user: "i also want to be able to make track H 90 degrees too"): a SECOND turn type beside the broad curve, which it leaves as it is. A
   // corner of the angle typed, held at the radius typed, ramped in and out over a few metres (track H's are 0–8 m) and exiting dead straight
   // (src/core/sharp.js). The length field does not apply: the corner's length is its angle times its radius. Too tight a radius for the width is refused by name
   const sharpDeg = num(90, 1, 'the angle of the sharp corner, degrees (+ = left, − = right)'), sharpR = num(22, 0.5, 'the radius the sharp corner holds, m'), sharpRamp = num(4, 1, 'how many metres the sharp corner takes to tighten, and to straighten after it');
@@ -551,7 +551,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   let sculptDrag = null;
   // D258: THE LANDING (the free jump): while it is the head, its four handles (forward, sideways, height, heading) are on the track, and a drag is the shell's landing drag (one undo step; the same
-  // numbers as the boxes below the Jump button). D278 (the keeper: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and
+  // numbers as the boxes below the Jump button). D278 (the user: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and
   // height"): they used to TAKE THE PLACE of the Extend ghost's handles, and the landing stays the head until a piece is extended from it, so right after a Jump the only handles were the landing's and the
   // only way back to the Extend ghost's was to commit an Extend. They now stand BESIDE them (the landing's at the landing's start, the Extend ghost's on the piece that would follow the landing road): the
   // base equation's controls are there at once, and the landing stays tunable until an Extend fixes it, as before.
@@ -621,7 +621,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   doc.addEventListener('t180-sculpt-key', onSculptKey);
 
-  // JUMP, THE KEEPER'S WAY (D258; the core is src/core/jump.js, E's). The Jump button sits beside Extend: it places the piece the fields describe exactly as Extend would (the take-off: the climb is the
+  // JUMP, THE USER'S WAY (D258; the core is src/core/jump.js, E's). The Jump button sits beside Extend: it places the piece the fields describe exactly as Extend would (the take-off: the climb is the
   // fields' own), then a free flight to a default landing (a 60 m straight, 40 m ahead, the same height, lined up). While the landing is the head it is moved by the four handles on it (forward, sideways,
   // height, heading) and by these boxes: forward, sideways (+ left), height (+ up) in m, heading, pitch, bank in degrees (shell.moveLanding: one undo step each). Extend from the landing fixes it; deleting
   // back to it makes it the head again. A move the core refuses (LANDING_NOT_HEAD, a landing under 1 m from the take-off) says why in plain words. Nothing is solved or drawn for the air: drive it in AC.
@@ -680,7 +680,7 @@ function mount(root, shell, mountOpts = {}) {
   const pieces = PU.mount({ root, stage, shell, win, el, armed: () => brushedPress, send, settings: S });
   // D269: the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
   const bin = doc.getElementById ? doc.getElementById('pieces-bin') : null; if (bin) bin.replaceChildren(...pieces.nodes.library.slice(1));
-  // D355 part 2, THE SLIM LEFT SIDE (the keeper: "we can try it, but keep it the same aesthetic as we have it now"; plan_t180_handoff :1382-1387). The commands moved to
+  // D355 part 2, THE SLIM LEFT SIDE (the user: "we can try it, but keep it the same aesthetic as we have it now"; plan_t180_handoff :1382-1387). The commands moved to
   // the top-right menus: Build (app/core/buildmenu.js), pane B's Settings and View, and pane A's Track and File ▸ Developer (which make their own controls). Each moved control is still THIS panel's, the same
   // node with the same handlers, HELD out of sight below; a menu's popover borrows it while open (lend) and gives it back, so what it does is unchanged.
   const held = el('div', { 'aria-label': 'held for the menus', hidden: '', style: 'display:none' });
@@ -795,7 +795,7 @@ function mount(root, shell, mountOpts = {}) {
       if (keep.length) { for (const [fl, v] of keep) fl.value = v; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); }
       shownFor = d; lentFrom = null;
     }
-    // A SELECTED PIECE LENDS ITS VALUES (2026-10-15, the keeper: "when clicking a previous placed part of the track, while its highlighted, make the values
+    // A SELECTED PIECE LENDS ITS VALUES (2026-10-15, the user: "when clicking a previous placed part of the track, while its highlighted, make the values
     // change to it, so you can mimic certain values within a new piece"): one selected road piece puts its end values and its length in the Extend fields.
     // They differ from what the fields SHOW (the head), so Extend takes them as targets and places a piece like it. A run of several lends nothing (the fields
     // stay); clearing the selection shows the head again. A cup and a tube are one-of (exclusive): the lent kind wins

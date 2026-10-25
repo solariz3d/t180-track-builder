@@ -65,7 +65,7 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: var(--line); } ::-webkit-scrollbar-track { background: transparent; }
   /* Two columns: the controls on the left, the preview takes the rest. The validation panel (design speed, CSP wall
      raycasting, the load graph) and the other side sections sit under the builder's controls in the left column (#left);
-     a third column for them took 300 px from the preview to hold one short panel (the keeper, 2026-10-03). */
+     a third column for them took 300 px from the preview to hold one short panel (the user, 2026-10-03). */
   body { display: grid; grid-template-columns: 320px minmax(0, 1fr); grid-template-rows: 44px auto minmax(0, 1fr); height: 100vh; }
   header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--tex), var(--panel); min-width: 0; }
   header h1 { font: 300 13px var(--display); margin: 0 14px 0 2px; letter-spacing: .42em; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
@@ -225,7 +225,7 @@
   h3 { font: 400 12px var(--display); text-transform: uppercase; letter-spacing: .34em; color: var(--dim); margin: 18px 0 8px; display: flex; align-items: center; gap: 10px; }
   h3::after { content: ""; flex: 1; height: 1px; background: var(--hair); }
   .pickers { display: grid; gap: 6px; }
-  /* D235 (the keeper's screenshot: the Extend fields ran under the scroll bar, and the "width like…" select was cut off): the field column is minmax(0, 1fr), not 1fr,
+  /* D235 (the user's screenshot: the Extend fields ran under the scroll bar, and the "width like…" select was cut off): the field column is minmax(0, 1fr), not 1fr,
      so it can shrink below what an input or a select would like (a 1fr track will not go under its items' min-content, which is how the Extend rows grew to 65 px past the
      column's content box at 1818 px); and every field in a row is held to its track, whatever its own intrinsic width. */
   .picker { display: grid; grid-template-columns: 60px minmax(0, 1fr); align-items: center; gap: 6px; }
@@ -307,7 +307,7 @@
 <script>
 'use strict';
 // The page's glue: storage and export through the native side, the equation builder (app/core), the keys, the recovery offer, and
-// the panels (app/README.md, "The seam"). Nothing here edits a document: every action is the shell's. D239 (the keeper: "can we keep
+// the panels (app/README.md, "The seam"). Nothing here edits a document: every action is the shell's. D239 (the user: "can we keep
 // only the equation mode?"): the Pieces builder and its switch are gone; its share codes, Install to AC / See it in Assetto, autosave
 // with crash restore and the getting-started guide are carried onto this page, each working on the equation track.
 (async () => {
@@ -317,7 +317,7 @@
   const tauri = window.__TAURI__ && window.__TAURI__.core;
   const call = (cmd, args) => (tauri ? tauri.invoke(cmd, args) : Promise.reject(new Error('not running inside the app: no native side')));
   const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
-  // the page's LOCAL time as yyyy-mm-dd_hhmmss: a backup's name (src-tauri/src/backups.rs checks the form; the keeper reads it)
+  // the page's LOCAL time as yyyy-mm-dd_hhmmss: a backup's name (src-tauri/src/backups.rs checks the form; the user reads it)
   const localStamp = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
   const storage = {
     saveDoc: (name, text) => call('save_track', { name, text, stamp: localStamp() }),   // D239 amendment: the file it overwrites is moved to track-backups first
@@ -350,7 +350,7 @@
   // window). The handler cleans up through closeCleanup (the builder sets it), never lets an error or a hang stand in its way, and ends in
   // destroy(). If the module cannot load, a bare handler that only destroys is registered, so a stale listener can still not trap the window.
   let closeCleanup = null;
-  // UNSAVED WORK (the keeper, 2026-10-03): the builder sets closeDirty to "is there unsaved work?"; the X then asks Save / Don't
+  // UNSAVED WORK (the user, 2026-10-03): the builder sets closeDirty to "is there unsaved work?"; the X then asks Save / Don't
   // save / Cancel. Save is the Save button's own path; if the work is still unsaved after it (no name yet), the window stays
   // open with the name field focused. No dialog API (off Tauri) or a failing one: close as before (app/closer.js).
   let closeDirty = null;
@@ -363,7 +363,7 @@
     return askChoice(document, { title: 'Save before closing?', message: 'This track has changes that are not saved.', cancelValue: 'cancel',
       buttons: [{ label: "Don't save", value: 'discard', kind: 'quiet' }, { label: 'Cancel', value: 'cancel' }, { label: 'Save', value: 'save', kind: 'main', default: true }] });
   };
-  // D234 (the keeper read the outcome of a refused export from Content Manager, not from the app): a refused or failed export is also an ALERT, a native error dialog,
+  // D234 (the user read the outcome of a refused export from Content Manager, not from the app): a refused or failed export is also an ALERT, a native error dialog,
   // besides the red box and the status line. Not when the page's test seam answered the folder (an automated drive must not wait on a dialog).
   const notExportedAlert = async (st, seam) => {
     if (seam || !tauri || !st.exportRefusal || st.exportRefusal !== st.message) return;

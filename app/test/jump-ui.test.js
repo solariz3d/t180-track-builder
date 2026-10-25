@@ -1,8 +1,8 @@
 // jump-ui.test.js: node --test app/test/jump-ui.test.js   (under the heavy-run lock)
-// D258, THE FREE JUMP, UI HALF (the keeper's way: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error
+// D258, THE FREE JUMP, UI HALF (the user's way: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error
 // driving it themselves"; the core is src/core/jump.js, E's; this half is app/core/landing.js, jumpwords.js, flightlayer.js, the shell's jump / landing API and the panel's Jump button, landing boxes and
 // handles, whose rows are 14 to 14c of app/test/core-pieces-ui.test.js). It REPLACES D243's Add-jump control (gap, drop, landing angle, ballistic arcs: jumpplan.js is gone). FEEL tier: rows on the shell and
-// pure modules, fake hosts for the panel; NO real window (no pointer lock or focus while the keeper is at the PC: the rule of 2026-10-06). Rows:
+// pure modules, fake hosts for the panel; NO real window (no pointer lock or focus while the user is at the PC: the rule of 2026-10-06). Rows:
 //   1  shell.jump: the take-off as Extend would place it, a free flight, a 60 m landing, ONE undo step, the default landing 40 m ahead, lined up; the null take-off; the ghost is flagged a jump's
 //   1b every refusal in plain words (no code name), nothing changed, no undo step
 //   2  the landing while it is the head: its values in the boxes' units; moveLanding is one undo step; a drag (begin / to / end) is ONE undo step from the document it began on, a step the core refuses

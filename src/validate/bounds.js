@@ -1,4 +1,4 @@
-// bounds.js: live physics bounds for the sculpt handles (the keeper, 12:22: "you can also sculp pieces, and then even
+// bounds.js: live physics bounds for the sculpt handles (the user, 12:22: "you can also sculp pieces, and then even
 // create and save your own unqiue pieces"; ARCHITECTURE.md:46 "Handles: the continuous parameters sculpt mode drags,
 // bounded live by physics"; docs/INTERFACES.md §4b).
 //

@@ -1,5 +1,5 @@
 // core_gridturn.test.js: node --test test/core_gridturn.test.js
-// TURN TO GRID (the keeper, 2026-10-12: "Its hard to get a straight aligned to the grid from a free flowing spiral turn"). Rows:
+// TURN TO GRID (the user, 2026-10-12: "Its hard to get a straight aligned to the grid from a free flowing spiral turn"). Rows:
 //   1  offGridDeg / gridTurnDeg: the nearest grid direction, either way; a tie goes the preferred way; on the grid is 0; a step that is not 90, 45 or 15 is refused
 //   2  endHeadingDeg is the direction the path really ends in (its last sample's tangent), through turns and a free jump
 //   3  after a free-flowing spiral, Turn to grid ends the track on a grid direction (within 0.01°), dead straight, in ONE undo step, at 90, 45 and 15

@@ -1,5 +1,5 @@
 // index.js: the Install and See-it buttons, mounted as mount(root, shell, { native, pickFolder, getTextures, more }) on the core shell (D239).
-//   D252 second item (the keeper: "why two export buttons", then "the AC folder ... in the EXE startup, the user can choose where the track folder is
+//   D252 second item (the user: "why two export buttons", then "the AC folder ... in the EXE startup, the user can choose where the track folder is
 //   in the beginning, freeing up UI space"): `root` holds ONE button, Export to Assetto Corsa, and its note; "Assetto Corsa folder…" and See it in
 //   Assetto with its setting go into `more` (the page's ⋯ menu; without one, into root as before). At startup, with no folder remembered, the note
 //   is a one-time card: the folder Steam found (Use it / Choose another…), or, when Steam finds none, Choose…. The answer is remembered.

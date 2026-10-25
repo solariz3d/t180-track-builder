@@ -1,5 +1,5 @@
 // preview-speed.test.js: node --test app/test/preview-speed.test.js   (under the heavy-run lock, --max-old-space-size=4096; about a minute)
-// D235 part 2 (the keeper: "make the changes render faster while you change it from one to the next? Sometimes it lags and is so slow"). The preview path ONLY; the export
+// D235 part 2 (the user: "make the changes render faster while you change it from one to the next? Sometimes it lags and is so slow"). The preview path ONLY; the export
 // never sees any of this (core_cup_fixtures is the proof, run beside it). Rows:
 //   1  coarsen: the row grid thinned, the road's two edges kept, rows that shared a grid still share one, an unchanged segment is the same object, and detail 1 is the same array
 //   2  the track model: a coarse detail meshes far fewer vertices; the detail back to 1 equals a fresh full build; the real segments are returned; the very same document

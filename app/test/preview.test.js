@@ -715,7 +715,7 @@ test('the surface: asphalt or solid draws the sigil surface, an image draws the 
   x.p.setTextureSet(null, 'image'); x.win.step(); assert.equal(x.p.surface, 'textures'); assert.ok(/AC look/.test(hud.textContent), hud.textContent);
   x.p.setTextureSet(null); assert.equal(x.p.surface, 'textures', 'an old caller with no kind is not switched to sigil');
 });
-// D409 (the keeper's 0.4.8 screenshot: "FREE VIEW · SIGIL LOOK (L)" under Skyline): the plain surface is the ROAD's, drawn in every page look, so the HUD names
+// D409 (the user's 0.4.8 screenshot: "FREE VIEW · SIGIL LOOK (L)" under Skyline): the plain surface is the ROAD's, drawn in every page look, so the HUD names
 // the road and never a page look; the flag itself follows the road surface chosen, not the page's look
 test('D409: the camera HUD names the plain surface as the road\'s, never "sigil", for asphalt and solid alike', () => {
   const hud = { textContent: '' }, x = livePreview({ hud });

@@ -1,4 +1,4 @@
-// pitflat.js: FLATTEN FOR THE PIT (the keeper, 2026-10-09: "make it so a cupped track could change its cupping directly at the part the flat pit connects
+// pitflat.js: FLATTEN FOR THE PIT (the user, 2026-10-09: "make it so a cupped track could change its cupping directly at the part the flat pit connects
 // to the track"). A pit lane leaves the road's EDGE (src/geom/pitlane.js), and beside a cup wall or a tube there is no edge it can leave from (it joins an
 // edge of 35° or less). Along its run it rides that edge too, so lowering the cup only at the joins would leave the lane climbing to the wall's top and
 // back. So this lowers the road's SHAPE beside the whole lane: every cup (c), tube sweep (t) and edge angle (e) control point under [s0, s1] goes to 0

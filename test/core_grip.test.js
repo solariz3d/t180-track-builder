@@ -1,5 +1,5 @@
 // core_grip.test.js: node --test test/core_grip.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D261 step 2, GRIP PER PIECE, the core (the keeper, 18:46: "it would be interesting to be able to change which piece has different grip, than the global
+// D261 step 2, GRIP PER PIECE, the core (the user, 18:46: "it would be interesting to be able to change which piece has different grip, than the global
 // track being one value"; the plan: exo_memory/loop/plan_t180_piece_grip_2026-10-06.md). A road piece carries `grip`, an integer percent of AC's road
 // friction, 50 to 150, default 100. It lives ON THE PIECE (it changes at piece boundaries, never smoothly), it is written in the file only when it is not
 // 100 (so every track made before it, and every all-100 track, saves byte for byte as before), and it is carried by saved pieces and mirror, and left

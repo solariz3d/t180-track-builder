@@ -1,4 +1,4 @@
-// spawndrag.js: DRAG THE START ON THE PREVIEW (D285; the keeper, 06:11: "i want to be able to just click the hotlap spawn and move it by mouse … Also click dragging the start line and
+// spawndrag.js: DRAG THE START ON THE PREVIEW (D285; the user, 06:11: "i want to be able to just click the hotlap spawn and move it by mouse … Also click dragging the start line and
 // then the pack of cars at the start line too, so i can click and move both intuitively"). The marks are the ones app/core/spawnslayer.js draws; a press ON one grabs it:
 //   · the START LINE slides along the FIRST piece (spawns.line.along, clamped to it), following the road under the cursor
 //   · a GRID SLOT moves the whole pack toward or away from the line: the gap from the line to the pole slot (spawns.grid.poleBackM). The two staggered columns and the panel's

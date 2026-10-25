@@ -44,9 +44,9 @@ const SLOT_HALF_LENGTH = 2.4, SLOT_HALF_WIDTH = 1.0;   // src/export/markers.js 
 // is still the older inferred one: the measured size is used for the hand-placed grid pack below, and moving SLOT_HALF_* to it is the loop's call (it
 // changes which narrow tube floors fit a grid: test/export_tube_grid.test.js rows 1-3 fail with it).
 const T180 = Object.freeze({ widthM: 2.67, lengthM: 6.67, colliderLengthM: 5.95 });
-// THE HAND-PLACED GRID PACK's starting spacing (the keeper: "the general size and spacing that would just work first"), from T180: two staggered columns
+// THE HAND-PLACED GRID PACK's starting spacing (the user: "the general size and spacing that would just work first"), from T180: two staggered columns
 // 6 m apart centre to centre (3.3 m of air between cars side by side), a slot every 8 m along (alternate columns), so one column is 16 m nose-to-nose
-// (9.3 m of air nose to tail); pole 10 m behind the line (its nose 6.7 m from the line). The keeper stretches or condenses it from here.
+// (9.3 m of air nose to tail); pole 10 m behind the line (its nose 6.7 m from the line). The user stretches or condenses it from here.
 const PACK = Object.freeze({ count: 8, rowGapM: 16, colGapM: 6, rowGapMinM: T180.lengthM + 1, colGapMinM: T180.widthM + 0.5 });   // the minimums: one column nose to tail with 1 m of air, two columns side by side with 0.5 m
 
 function gridSlots(grid) {
@@ -102,7 +102,7 @@ function resolveLayout(layout, path, segments) {
   const sPit = anchorS(layout.pits.at, segments, starts);
   if (sPit == null) missing.push({ what: 'the pit boxes', word: layout.pits.at.word });
   else for (let k = 0; k < layout.pits.count; k++) markers.push({ name: `AC_PIT_${k}`, kind: 'pit', n: k, s: back(sPit, k * layout.pits.spacingM), u: layout.pits.u, h });
-  // the hotlap PLACED BY HAND (the keeper, 2026-10-09: "I place it down manually … literally plop down the spawn"): hotlap.at is an anchor like the line's.
+  // the hotlap PLACED BY HAND (the user, 2026-10-09: "I place it down manually … literally plop down the spawn"): hotlap.at is an anchor like the line's.
   // It stands where it is put; what it reports is the run it gets to the line, and the speed the T-180 reaches over that run on the flat at full thrust.
   if (layout.hotlap.at) {
     const sAt = anchorS(layout.hotlap.at, segments, starts);
@@ -161,7 +161,7 @@ const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g
 /**
  * The default layout: the line near the far end of the LONGEST straight, the grid behind it, the pits behind the grid.
  * Throws { code: 'NO_START_STRAIGHT' } when no straight is long or wide enough.
- * o.firstPiece (D284, the keeper 2026-10-10: "every piece i put down, the start line moves up again and again"): the line goes near the far end of the
+ * o.firstPiece (D284, the user 2026-10-10: "every piece i put down, the start line moves up again and again"): the line goes near the far end of the
  * run's FIRST piece (the segments carrying the run's first id) instead of the run's, and never nearer the run's start than the grid and pits need. On an
  * OPEN track the far end of the run is often the build head, so appending a Straight to it lengthened the run and carried the line along every time;
  * the run's first piece does not change on an append. A closed track does not pass it, so a finished track's start is where it always was.

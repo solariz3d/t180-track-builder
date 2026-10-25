@@ -61,7 +61,7 @@ test('the ramp\'s size puts BOTH landings in the zone: each touchdown lies on th
   assert.ok(R.touchdowns[0].x > R.touchdowns[1].x);
 });
 
-// CHANGED D250 (the keeper: jumps are tuned by driving them in AC): a landing the car may miss is AMBER, a warning, never a red. The two rows below
+// CHANGED D250 (the user: jumps are tuned by driving them in AC): a landing the car may miss is AMBER, a warning, never a red. The two rows below
 // keep their subject (the ramp too short, the fall too slow, the heaviest missed fall named) and now read it from r.amber, and assert it is NOT red.
 const ambers = (r) => r.amber.map((x) => x.reason);
 test('a ramp too short for the clean-flight landing is a WARNING (amber, D250): landing-misses-zone, the heaviest missed fall named; not red', () => {

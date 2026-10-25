@@ -1,4 +1,4 @@
-// selectionlayer.js: THE SELECTED PIECES ON THE TRACK (D240, saved pieces, the UI half; the keeper: "highlight/select pieces on the track"). A canvas over the preview
+// selectionlayer.js: THE SELECTED PIECES ON THE TRACK (D240, saved pieces, the UI half; the user: "highlight/select pieces on the track"). A canvas over the preview
 // (#preview), redrawn every animation frame like the labels (the camera eases, so the highlight moves with it): the selected pieces' centreline, drawn bright over the road
 // with a dark outline, and a dot at each end of the run. The preview is not changed: its pose comes from the 't180:view' event and the track from 't180:track-request'
 // (app/preview/index.js), exactly as app/core/labels.js reads them.

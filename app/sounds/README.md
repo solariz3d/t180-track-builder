@@ -4,7 +4,7 @@ Recorded samples rendered offline from Serum's factory presets on the sketch pag
 
 | file | the sound | preset | rendered on | sha256 |
 |---|---|---|---|---|
-| `drag_tick.wav` | the tick of a dragged handle | Eiano tik (batch 9, the keeper's pick) | MIDI 84 | `0c63854e26167115886d2d0fc947362cdc72c82271b12e2bcb5a2cf8fe6cbfa8` |
+| `drag_tick.wav` | the tick of a dragged handle | Eiano tik (batch 9, the user's pick) | MIDI 84 | `0c63854e26167115886d2d0fc947362cdc72c82271b12e2bcb5a2cf8fe6cbfa8` |
 | `loop_closed.wav` | the loop closed | SY Eiano and SY Vintage Bells | the whole gesture | `34fd8b2193a46a20add00efff7379c836b03795fb5bbd9e0531906e273852308` |
 | `place_aqua.wav` | a piece placed, in the aqua melody | PL Big Bells [AS] (batch 11) | MIDI 60 | `5b8b211c557ff965f897d1c6e6c761b0e9cc0c370311c2459fcae71cd5c0e4b7` |
 | `undo_aqua.wav` | a step undone, in the aqua melody | PL Big Bells [AS], softer | MIDI 60 | `d74353c720b0788d0917939dcbdb1114400f96336f7b3f77ec7ee40e79a622ef` |

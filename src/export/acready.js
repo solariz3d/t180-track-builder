@@ -13,7 +13,7 @@
 //   mergeForAc(scene)    after weldSeams: consecutive road meshes (`1ROAD_…`, not the pit lane) and underside-skin meshes
 //                        (`UNDERSKIN_…`) of the same material and flags are joined into chunks, so AC draws a few dozen
 //                        meshes instead of one per cell (D260: an equation track's cells are its 2 m segments, so TEST 1
-//                        recovered exported 15,271 meshes of ~95 triangles each, and the keeper's frame rate dropped).
+//                        recovered exported 15,271 meshes of ~95 triangles each, and the user's frame rate dropped).
 //
 // None changes geometry: the flattened positions equal the nested scene's world positions (tested), and a merge only concatenates
 // the same world-space vertices and triangles (tested: the triangle set is the same, vertex for vertex).
@@ -174,9 +174,9 @@ function ensureDiffuse(scene) {
  * Tangents are writeKn5's, from each vertex's own triangles; a merge shares no vertex between meshes, so they are the same.
  */
 const MERGE_CLASSES = Object.freeze([{ re: /^(1ROAD_CATCH_)/ }, { re: /^(1(?:ROAD|GRIP\d{3})_)(?!PIT)/ }, { re: /^(UNDERSKIN_)/ }]);   // D341: the catch under the road (catch.js) is first: a class of its own, so it never renumbers the road's chunks   // group 1 is the chunk's name prefix (its surface key)
-// 32,768, half the 16-bit budget (2026-10-12, the keeper on TEST TRACK 10: the road went invisible from the 90° turns on, though the car still drove on it).
+// 32,768, half the 16-bit budget (2026-10-12, the user on TEST TRACK 10: the road went invisible from the 90° turns on, though the car still drove on it).
 // Its two largest chunks held 65,088 and 65,472 vertices, every other under 60,000; the same export with chunks capped at 32,768 drew the whole lap
-// (the keeper drove it: "works"). Inferred, not measured: AC or Custom Shaders Patch adds vertices of its own to a mesh on load, so one filled to the
+// (the user drove it: "works"). Inferred, not measured: AC or Custom Shaders Patch adds vertices of its own to a mesh on load, so one filled to the
 // index budget passes it and is left undrawn, while the physics reads the kn5 as written. Twice the draw calls, still a few dozen on a lap.
 const MERGE_MAX_VERTS = 32768, MERGE_CHUNK_M = 400;
 function mergeForAc(scene, { maxVerts = MERGE_MAX_VERTS, chunkM = MERGE_CHUNK_M } = {}) {

@@ -8,7 +8,7 @@
 //      4.5:1 (WCAG) with the texture switched off (--tex: none) reads under it with the texture on. The probe is E's D389/D397 one: each visible text's glyph
 //      boxes and colour, then the glyphs hidden and the surfaces shot again, the text against the 2nd and 98th percentile background pixel in its boxes
 //   3  (D409) the empty builder shows no picture over the 3D view: with no pieces, in every look, there is no #empty-art and no <pre> in #stage.
-//      D399's track in characters stood still on the screen while the camera moved, which read as a fault (the keeper, 0.4.8); it is taken out, not moved
+//      D399's track in characters stood still on the screen while the camera moved, which read as a fault (the user, 0.4.8); it is taken out, not moved
 //   5  (A's review 12) at display scales 1.25 and 1.5 each fine tile (SIGIL, Skyline, Glass, Aurora) is drawn one tile pixel per device pixel, so it lands
 //      unresampled (resampled, Aurora's dots smeared into uneven two-pixel smudges)
 //   6  (D409, E's D405 shot check) no label in the 3D view sits under a panel: with six pieces placed and the chase camera, the camera label (.preview-hud)
@@ -232,7 +232,7 @@ test('row 6 (D409): no label in the 3D view sits under the top readout or the ca
   } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); t.diagnostic(got.join('; ')); }
 });
 
-// D417 (the keeper's screenshot, 16:02): Extend is reachable without scrolling. The panel's FIRST actions row reads Extend, Straight, Undo, Redo, in that
+// D417 (the user's screenshot, 16:02): Extend is reachable without scrolling. The panel's FIRST actions row reads Extend, Straight, Undo, Redo, in that
 // order, and Extend sits above the "Extend at the head" heading; each button is on the panel once
 const ACTIONS = `const pal = document.getElementById('palette'), first = pal.querySelector('.actions');
   const head = [...pal.querySelectorAll('h3')].find((h) => h.textContent.trim() === 'Extend at the head');

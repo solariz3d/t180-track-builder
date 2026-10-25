@@ -43,8 +43,8 @@ const TINE = Object.freeze({ peak: 0.226 });
 // put the climb drag at -14.7 on the bands' seeded render; 4 ms passes there and on 11 of 12 seeds, the twelfth one tick 0.3 dB under its floor)
 // D375: `slots` are the FILES the player fetches (ref and gain are each file's); `file` maps every slot a voice plays to its file. Each melody plays on its
 // own place_<name> and undo_<name> slots, each its own file (one line per melody below, so one pair can change alone). A melody file's gain is today's place or undo gain: E levelled each file to it. The tick is batch 9's Eiano
-// tik (the keeper's pick), measured through this engine at the old tick's gain, its file levelled to match (G:\Consonance-tools\b9\level_ticks.js)
-// D377: the keeper's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js, their files from page11\batch11) and Aurora of
+// tik (the user's pick), measured through this engine at the old tick's gain, its file levelled to match (G:\Consonance-tools\b9\level_ticks.js)
+// D377: the user's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js, their files from page11\batch11) and Aurora of
 // batch 12 (mel12.js, page12\batch12), in place of batch 10's four, whose files are gone from app/sounds with batch 8's place.wav and undo.wav
 // D402: SIGIL's own melody, Obsidian (G:Consonance-tools9mel13.js sigil1, the pick of three; its files from inst13_pick), fifth
 const MELODY_NAMES = Object.freeze(['aqua', 'skyline', 'glass', 'aurora', 'sigil']);
@@ -87,7 +87,7 @@ function soundFor(prev, next) {
 }
 
 // ── the music ──
-// THE FOUR MELODIES of place and undo (D375, the keeper's pick of batch 9, composed for this builder in G:Consonance-tools9mel9.js and copied here
+// THE FOUR MELODIES of place and undo (D375, the user's pick of batch 9, composed for this builder in G:Consonance-tools9mel9.js and copied here
 // as data): 64 steps each of [bass, chord of four, melody note on top], two steps a chord. One is picked at each launch (createSound); place walks it
 // forward, undo back
 const melody = (title, steps) => Object.freeze({ title, steps: Object.freeze(steps.map((s) => Object.freeze([s[0], Object.freeze(s[1]), s[2]]))) });
@@ -149,7 +149,7 @@ const MELODIES = Object.freeze({
 if (Object.keys(MELODIES).join() !== MELODY_NAMES.join() || MELODY_NAMES.some((k) => MELODIES[k].steps.length !== 64)) throw new Error('sound: the melodies are not the five of 64 steps MELODY_NAMES names');
 /** The melody step a track with `pieces` pieces has just played on its last placement (0..63); the first piece is step 0. */
 const stepOf = (pieces) => (((pieces - 1) % 64) + 64) % 64;
-// THE PLACE SWELL (D377, the librarian's ruling on E's batch 11, the keeper can veto). The steps carry pitch only, so every place played at one level and a
+// THE PLACE SWELL (D377, the librarian's ruling on E's batch 11, the user can veto). The steps carry pitch only, so every place played at one level and a
 // walk's phrases sat within 1.8 LU of each other. A place is now lifted by its step's swell: from `floor` dB at step 1, rising on a half cosine to `peak` over
 // steps 45 to 52 (indices rise..fall: the lift and the register's top), then easing back on a half cosine to the floor at step 64, so the next round
 // starts where this one did. Undo is not swelled. The two levels are as wide as the bands allow: every one of the 64 places of each melody, alone, stays in
@@ -208,7 +208,7 @@ function notePlan(kind, value, up, melAt = 0) {
 // ── the engine ──
 /** The audio graph and the voices, on one AudioContext. Everything is scheduled from ctx.currentTime. */
 /**
- * D345 addition 2 (a default the keeper can veto): a DELIBERATE single step (`single`: a wheel notch, an arrow nudge, a reset) always ticks and moves the melody one
+ * D345 addition 2 (a default the user can veto): a DELIBERATE single step (`single`: a wheel notch, an arrow nudge, a reset) always ticks and moves the melody one
  * place, whatever its size; anything else is tickPlan's (a drag: a tick only on a whole number). Its direction is the value's against `prev` (up when there is none).
  */
 function stepPlan(kind, prev, value, melAt = 0, single = false) {

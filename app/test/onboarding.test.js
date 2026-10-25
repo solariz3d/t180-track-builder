@@ -1,6 +1,6 @@
 // Headless tests for app/onboarding (D177, ARCHITECTURE §11.7): the guide's step machine, the moves it sees through the real
 // shell, and the first-run flag. Run: node --test --test-concurrency=4 "app/test/*.test.js"
-// D239 (the keeper: "can we keep only the equation mode?"): the steps are the EQUATION builder's (extend, brush, close, colours, export,
+// D239 (the user: "can we keep only the equation mode?"): the steps are the EQUATION builder's (extend, brush, close, colours, export,
 // grid), seen through the core shell (app/core/coreshell.js); the step-machine tests are restated on those ids, unchanged in what they
 // check. RETIRED D239, by name, each the piece builder's: 'five steps in order: place, sculpt, close, colours, export' (now six, the
 // equation builder's: app/test/core-eqonly.test.js), 'placing 3 words (a starter phrase counts word by word) completes "place" and moves

@@ -1,5 +1,5 @@
 // core-undo-persist.test.js: node --test app/test/core-undo-persist.test.js
-// D272 (the keeper, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool"): the undo history survives Save, closing the
+// D272 (the user, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool"): the undo history survives Save, closing the
 // program and reopening. Save writes a SIDECAR, eq-<name>.t180undo, beside the track (past and future, D.serialize'd, the last 200 steps; the track file itself unchanged); Open restores it only when its
 // present equals the opened file byte for byte, else drops it (silently on a mismatch, with one status line when it is corrupt); the autosave carries its history the same way. Fake storage here (the
 // native side is src-tauri/src/lib.rs, tested there); no real window.

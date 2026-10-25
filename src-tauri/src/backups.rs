@@ -1,4 +1,4 @@
-// backups.rs: SAVE KEEPS THE PREVIOUS VERSION (D239 amendment; the keeper lost TEST 1 to one Close, with no copy from before it).
+// backups.rs: SAVE KEEPS THE PREVIOUS VERSION (D239 amendment; the user lost TEST 1 to one Close, with no copy from before it).
 //   move_aside(file, backups, name, stamp)   the file a Save is about to overwrite is MOVED (renamed, never copied and deleted) to
 //                                            <backups>/<name>.<yyyy-mm-dd_hhmmss>.t180track before the new text is written
 //   write_copy(backups, name, stamp, text)   a copy of the document as it is now (the shell's backupNow, before a Close)
@@ -7,7 +7,7 @@
 //                                            ("eq-TEST 1.2339-closed.t180track") is never touched. Nothing else here deletes.
 //   list(backups, name)                      this track's backups, newest first: every <name>.<…>.t180track, hand-made ones included
 //   read(backups, file)                      one of them, by its bare file name (no path can ride in on it)
-// The stamp is the page's LOCAL time (the keeper reads it), checked here to be exactly yyyy-mm-dd_hhmmss; without one, UTC is used.
+// The stamp is the page's LOCAL time (the user reads it), checked here to be exactly yyyy-mm-dd_hhmmss; without one, UTC is used.
 // Two backups in the same second get _2, _3 … after the stamp, which sorts after the plain one, so the order is still by time.
 use std::fs;
 use std::path::{Path, PathBuf};

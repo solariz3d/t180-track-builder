@@ -1,4 +1,4 @@
-// redgroups.js: EVERY red, in plain words, grouped, with where (D242, the librarian's item 4; the keeper, TEST 1: his refusal showed only the
+// redgroups.js: EVERY red, in plain words, grouped, with where (D242, the librarian's item 4; the user, TEST 1: his refusal showed only the
 // first red, under the name "downforce-ray-gap", when 29 reds said one thing: the road runs into itself).
 //
 //   groupReds(reds, segments, { closed })  -> [{ key, title, count, items: [{ s, s0, s1, piece, km, what, reason, detail }], places: [...] }]
@@ -17,8 +17,8 @@
 //
 // PLACES (D248, E's note B on the D242 look: "1.47–1.51 km (p3), 1.48–1.51 km (p3)" were two lines for one place). Each group also carries
 // g.places: its reds merged where they overlap, or touch (a gap of at most TOUCH_M, one station of validation's 2 m step) on the piece the
-// place ends on, so they always share a piece, and the keeper reads one line per place. A place keeps where it starts (s, s0: a click goes there), where it ends, the pieces it
-// spans, every reason and plain description it merged, and how many reds it covers. The group is the kind the keeper reads ("the road
+// place ends on, so they always share a piece, and the user reads one line per place. A place keeps where it starts (s, s0: a click goes there), where it ends, the pieces it
+// spans, every reason and plain description it merged, and how many reds it covers. The group is the kind the user reads ("the road
 // overlaps itself" is one kind, whether the mesh, the stacking or the ray found it), so a self-intersection and a stacked red at one place are
 // ONE place. g.items (every red, unmerged) and g.count (the number of reds) are unchanged.
 'use strict';

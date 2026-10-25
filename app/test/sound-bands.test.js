@@ -31,7 +31,7 @@ test('every sound sits inside its loudness and peak band, the ticks under a plac
 });
 // D375: a launch plays one of four melodies, each on its own place and undo files (batch 10, the drop-in), so each one's place and undo, with the samples,
 // sits in the same bands as the row above measures for the first. One row per melody, so a red names the melody
-// AMENDED (D377): the keeper's four for 0.4.2, batch 11's three and batch 12's Aurora, in place of batch 10's
+// AMENDED (D377): the user's four for 0.4.2, batch 11's three and batch 12's Aurora, in place of batch 10's
 // AMENDED (D402): and SIGIL's own, Obsidian, on PL Phantoms (batch 13), fifth
 for (const [melody, instrument] of [['aqua', 'Big Bells'], ['skyline', 'Runtheharm'], ['glass', 'VeloHarm'], ['aurora', 'Linear Arithmetic'], ['sigil', 'Phantoms']]) {
   test(`${melody} (${instrument}): its place and undo, with the samples, sit inside their bands`, noChrome, async () => {

@@ -1,4 +1,4 @@
-// equation.js: a track as ONE equation (the keeper's design notes §12, M4), and the LOADER that opens one as an example
+// equation.js: a track as ONE equation (the user's design notes §12, M4), and the LOADER that opens one as an example
 // document.
 //
 // THE EQUATION ('t180b.equation/1'). Every function of the lap is a Fourier series in the arc length s over one lap L:
@@ -15,7 +15,7 @@
 // live in the gitignored reads/ folder and are never committed (tools/fourier.cjs refuses to write anywhere else, and
 // test/fourier.test.js checks no tracked path holds one). This file holds no track: only the arithmetic.
 //
-// THE LOADER, equationToDoc(eq): the equation as an ordinary document, so the keeper can open a reverse-engineered track
+// THE LOADER, equationToDoc(eq): the equation as an ordinary document, so the user can open a reverse-engineered track
 // in the builder as an example and edit it word by word.
 // - One road word per `wordM` metres (default 25). Each opens its curvature over its whole length (easeIn 1, easeOut 0),
 //   so the document's curvature is piecewise linear and continuous: each word's turn is chosen so its curvature ARRIVES

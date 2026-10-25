@@ -1,4 +1,4 @@
-// gridturn.js: TURN TO GRID (the keeper, 2026-10-12: "for free flowing tracks, it should also connect to the 90 degree angle of the grid like snap to grid
+// gridturn.js: TURN TO GRID (the user, 2026-10-12: "for free flowing tracks, it should also connect to the 90 degree angle of the grid like snap to grid
 // type things so that I can measure the degrees of turns connecting to the grid to have it all symmetrical or at least aligned to the grid. Its hard to get a
 // straight aligned to the grid from a free flowing spiral turn"). The preview's grid runs along the world axes, and a heading θ = 0 points along +Z
 // (src/geom/path.js tangent: [cos p·sin θ, sin p, cos p·cos θ]), so the grid's directions are the headings that are whole multiples of 90°.

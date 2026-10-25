@@ -1,5 +1,5 @@
 // validate_raygap_lean.test.js: node --test test/validate_raygap_lean.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D266 (the keeper, 01:48: "this page is having a problem and crashed … wouldnt close loop", on a 6 × 1000 m tube): the overlap check's memory.
+// D266 (the user, 01:48: "this page is having a problem and crashed … wouldnt close loop", on a 6 × 1000 m tube): the overlap check's memory.
 // src/validate/raygap.js now keeps its vertices, triangles, normals, edges and grids in typed arrays, and app/core/overlapjob.js builds its own mesh
 // lean (each piece's boundary rows and handles deleted before the self-check). The ANSWER must not change. Rows:
 //   1  rayGaps gives exactly the first form's answer (REFERENCE below, verbatim from t180 2b929c2), gap for gap, on slits, holes, welds across bucket
@@ -173,7 +173,7 @@ test('row 2: the check\'s lean mesh gives the check on buildMesh\'s own self-che
 });
 
 // ── row 3: memory ──
-/** The keeper's 6 × 1000 m tube oval, rebuilt from its shape (not his file): 1000 m straights and half turns of 2 × 1000 m, kh = −(π/1000)·(1 − cos(πs/1000))/2 rising then
+/** The user's 6 × 1000 m tube oval, rebuilt from its shape (not his file): 1000 m straights and half turns of 2 × 1000 m, kh = −(π/1000)·(1 − cos(πs/1000))/2 rising then
  * falling, every piece a full tube (t 360, r 2.993, w 45). */
 function bigTubeOval() {
   // a cubic spline on the knots 20, 40, … 980: 53 control points, each at its Greville abscissa, the first two and the last two equal (zero slope at the joints)

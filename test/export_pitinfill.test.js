@@ -1,4 +1,4 @@
-// export_pitinfill.test.js: node --test test/export_pitinfill.test.js (under the heavy-run lock). D279, the keeper, 2026-10-09 16:27: "the pit lane arc that
+// export_pitinfill.test.js: node --test test/export_pitinfill.test.js (under the heavy-run lock). D279, the user, 2026-10-09 16:27: "the pit lane arc that
 // is made, i wonder if the inside could just be filled in so there is no gap between the track and pit". A pit lane leaves the road's edge on an arc
 // (diverge), runs beside it offsetM away (body) and comes back (merge); between the road's edge and the lane's inner edge was nothing. Now ONE infill
 // surface (1ROAD_PIT_fill_0) fills that whole span, entry and exit arcs included, joined to the road's edge and to the lane's inner edge with no seam.

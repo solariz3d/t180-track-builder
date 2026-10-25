@@ -1,5 +1,5 @@
 // climb_corner.test.js: node --test test/climb_corner.test.js
-// D331 (ledger D332), the climb too (the keeper, 2026-10-15: "i wonder, the climb might need to do the same?"; ruled at plan :387-399). The climb channel kv is
+// D331 (ledger D332), the climb too (the user, 2026-10-15: "i wonder, the climb might need to do the same?"; ruled at plan :387-399). The climb channel kv is
 // a RATE exactly like the turn (src/geom/path.js:10, the pitch curvature kp(s); readout.js climbDeg = ∫κv ds), so a piece eased to a climb rate ends still
 // climbing and the next piece's ease-out adds pitch nobody read. The same three answers as the turn's (test/turn_corner.test.js):
 //   1  B: the climb field as a corner (the panel's default, the same "turn and climb as" switch), typed 10, changes the pitch by exactly 10.00° and ends at a

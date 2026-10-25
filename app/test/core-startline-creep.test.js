@@ -1,5 +1,5 @@
 // core-startline-creep.test.js: node --test app/test/core-startline-creep.test.js
-// D284 (the keeper, 2026-10-10: "every piece i put down, the start line moves up again and again"). On an OPEN track the automatic start went 15 m
+// D284 (the user, 2026-10-10: "every piece i put down, the start line moves up again and again"). On an OPEN track the automatic start went 15 m
 // before the far end of the longest straight run (src/markers/layout.js defaultLayout), and appending a Straight to that straight lengthens the run, so
 // the line followed the head. Now an open track's automatic line stays on the run's FIRST piece (its end, less the margin), and a hand-placed line never
 // moves. Through the app's core shell: spawnsInfo is what the panel and the preview draw, startLayout what the export uses.
@@ -47,7 +47,7 @@ test('a hand-placed line (along 100 on a 400 m first piece) does not move when a
   }
 });
 
-test('the automatic line on an open track stays put when a Straight is added to the straight it is on (the keeper\'s case: it followed the head)', async () => {
+test('the automatic line on an open track stays put when a Straight is added to the straight it is on (the user\'s case: it followed the head)', async () => {
   const s = await first400(); s.setPitLane(PIT('p1'));
   const at0 = shownLine(s);
   assert.deepEqual(exportLine(s), at0.line, 'the panel shows the line the export writes');

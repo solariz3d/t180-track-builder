@@ -1,7 +1,7 @@
 // shell.js: the app's state and actions, with no DOM and no Tauri in it, so it runs headless under node --test and
 // unchanged in the webview (loaded there by app/lib/cjs.js).
 //
-// The keeper, 2026-09-27: "youre not the one who builds the track, the user does". So the shell holds what the user
+// The user, 2026-09-27: "youre not the one who builds the track, the user does". So the shell holds what the user
 // is doing: the document and its undo history, the piece library, the pickers at the open end (font, tempo,
 // direction), and a selection of placed words. Every action goes through the document model (src/doc); the shell
 // never edits a document itself.

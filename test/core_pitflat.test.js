@@ -1,5 +1,5 @@
 // core_pitflat.test.js: node --test test/core_pitflat.test.js
-// FLATTEN FOR THE PIT (src/core/pitflat.js; the keeper, 2026-10-09: "a cupped track could change its cupping directly at the part the flat pit connects").
+// FLATTEN FOR THE PIT (src/core/pitflat.js; the user, 2026-10-09: "a cupped track could change its cupping directly at the part the flat pit connects").
 // The road's shape (cup, tube sweep, edge) goes to the plain road beside the lane and eases back; the route does not move; the lane then builds.
 'use strict';
 const test = require('node:test');

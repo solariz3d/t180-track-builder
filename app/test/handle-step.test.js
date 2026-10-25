@@ -81,7 +81,7 @@ test('row 3: through sound.js, every notch ticks (onto a whole number and off it
   D.doc.dispatchEvent({ type: 't180:handle-step', detail: { kind: 'length', value: 100.4 } });   // the next drag's first step, as handles.js sends it
   assert.equal(T.ticks.length, 60, 'the drag from 100.1 to 100.4 crosses nothing: no tick (with a stale 99.5 it ticked here)');
 });
-// D345 addition 2 (plan :1115-1118, a default the keeper can veto): a DELIBERATE single step always ticks and steps the melody one place, whatever its size: the wheel, an
+// D345 addition 2 (plan :1115-1118, a default the user can veto): a DELIBERATE single step always ticks and steps the melody one place, whatever its size: the wheel, an
 // arrow nudge and a reset send the step with `single: true`; a drag does not, and keeps the whole-number rule (a slow 0.01 scrub does not machine-gun)
 test('row 4: the wheel, an arrow nudge and a reset send their step with single: true; the steps of a drag carry no flag', () => {
   const Wd = world({ length: 160, turn: 2 }); Wd.wheel('length', true); assert.deepEqual(Wd.steps.pop(), { kind: 'length', value: 160.01, single: true });

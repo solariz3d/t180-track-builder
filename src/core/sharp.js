@@ -1,4 +1,4 @@
-// sharp.js: SHARP, a second turn type beside the broad curve (D282; the keeper, 2026-10-09 18:55: "THERE is nothign wrong with the 90 degree curves that can be
+// sharp.js: SHARP, a second turn type beside the broad curve (D282; the user, 2026-10-09 18:55: "THERE is nothign wrong with the 90 degree curves that can be
 // made now, as long as its straight it is a type of turn, but i also want to be able to make track H 90 degrees too"). track H's turns after the jump
 // hold about R 22 m for ~88° with entries and exits of 0–8 m (exo_memory/loop/sharp_turns_measure_B_2026-10-09.md §1). The broad curve eases its rate over
 // the whole piece and the "at start" ease is a fixed 20 m on 20 m knots (B §2 L1–L3), so neither draws that; this type does, and leaves both untouched.

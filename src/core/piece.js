@@ -1,4 +1,4 @@
-// piece.js: SAVED PIECES for the equation core (D240, the keeper: "can we keep only the equation mode? And then we can save pieces from that we make").
+// piece.js: SAVED PIECES for the equation core (D240, the user: "can we keep only the equation mode? And then we can save pieces from that we make").
 // A saved piece is one road piece, or a RUN of consecutive pieces (roads, and the flights between them), taken out of a core document and kept in a file that can be put back at
 // the head of any open track. This file is the CORE only: no UI, no files on disk (the library list, "Save as piece...", rename and delete are the app's, after D239).
 //
@@ -24,7 +24,7 @@
 //     recomputed: a track built from a saved and re-inserted run is then the same document as the one built by hand, and exports the same bytes (test/core_piece.test.js).
 //   · MIRROR (left/right): kh, phi and l are negated (their raw arrays, or their change and start); everything else is symmetric. Mirror of mirror is the original, exactly.
 // A RUN IS ONE CROSS-SECTION KIND (legacy, cup or tube, with or without an edge): a state shifted to meet a head cannot keep a legacy piece's drawn edge (a function of w and r)
-// equal to a neighbouring cup's c at their joint, so a mixed run is refused at save (MIXED_RUN); save each kind's run on its own. The keeper's tracks are single-kind.
+// equal to a neighbouring cup's c at their joint, so a mixed run is refused at save (MIXED_RUN); save each kind's run on its own. The user's tracks are single-kind.
 // Nothing here writes a document the document would refuse: every piece goes through D.appendPiece, whose checkDoc (joints, cup, tube and edge limits, flights) has the last word.
 'use strict';
 
@@ -53,7 +53,7 @@ const checkName = (name) => { if (typeof name !== 'string' || !NAME_RE.test(name
 
 // ── save ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 /**
- * The pieces of a run in lap order. ACROSS THE START LINE of a CLOSED lap (D250 item 4, the keeper: "Short way across start"; from > to) it is pieces from..last, then
+ * The pieces of a run in lap order. ACROSS THE START LINE of a CLOSED lap (D250 item 4, the user: "Short way across start"; from > to) it is pieces from..last, then
  * 0..to. The bank may have turned whole times round the lap (TEST 1 ends at -4π: two rolls), so the pieces after the line get the lap's bank winding added, the same
  * whole turns close.js forgives at the seam (`bank - TAU * m`, close.js residual): the road leans the same way either side, and the joint is C1 as written.
  */
@@ -129,7 +129,7 @@ function checkPiece(piece) {
     if (!P || typeof P !== 'object' || Array.isArray(P)) bad('BAD_PIECE_FIELD', `${at}: must be an object`);
     if (P.type === 'flight') {
       // D258: a saved jump made before the free jump (gap, drop, land: a solved flight and a generated ramp) cannot be placed again, since how far its
-      // ramp reached depended on the pitch it took off at; none was saved (checked: no flight in the keeper's pieces), so it is refused by name, not guessed
+      // ramp reached depended on the pitch it took off at; none was saved (checked: no flight in the user's pieces), so it is refused by name, not guessed
       if (P.gap !== undefined || P.drop !== undefined || P.land !== undefined) bad('OLD_FLIGHT', `${at}: this piece holds a jump from before jumps were placed by hand (gap, drop, landing angle); add the road around it and place the jump again with Jump`);
       for (const k of Object.keys(P)) if (!FLIGHT_KEYS.includes(k)) bad('BAD_PIECE_FIELD', `${at}: unknown field "${k}" in a flight`);
       for (const k of D.FLIGHT_POSE) if (!isNum(P[k])) bad('BAD_PIECE_NUMBER', `${at}: a flight's ${k} must be a finite number, got ${JSON.stringify(P[k])}`);
@@ -274,7 +274,7 @@ function deleteRun(doc, from, to = from) {
 
 // ── cut ──────────────────────────────────────────────────────────────────────────────
 /**
- * D361 (the keeper, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"): `doc.pieces[from..to]` (inclusive; on a closed lap
+ * D361 (the user, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"): `doc.pieces[from..to]` (inclusive; on a closed lap
  * from > to is the run across the start line, as a selection gives it) TAKEN OUT, and the track left OPEN at the gap, with NOTHING that is kept moved or edited. Returns
  * { doc, kept, removed, notes }. A document is one chain from its start, so the two ends of the gap are made its two ends by ROTATION (D360 §2): the piece after the cut comes
  * first and starts where it began (its block's world start on the path: position, heading and pitch, to the document's quanta; nothing else carries across a block, src/geom/path.js

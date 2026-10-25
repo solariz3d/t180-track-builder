@@ -1,7 +1,7 @@
 // document.js: the equation core's document (src/core/README.md is the shape). A track is a list of PIECES; a road piece
 // holds one clamped cubic B-spline per CHANNEL in its own arc length (ref 03 §1): heading rate κh, pitch rate κv, bank φ,
 // width w, the cross-section's rise rate r and (D190) the CUP c, the cross-section's edge angle. Every road joint is C1 in every channel (ref 09 §1), so the line is G2 by
-// construction. A flight piece is a jump (D258, the keeper's way): it carries the LANDING's start pose relative to the take-off end, and the road
+// construction. A flight piece is a jump (D258, the user's way): it carries the LANDING's start pose relative to the take-off end, and the road
 // after it starts at that pose; the user places it by hand and tunes it by driving. Nothing is solved or generated between (no ramp, no arc).
 //
 //   createDoc(name, { start })                 an empty open track
@@ -34,12 +34,12 @@ const OPTIONAL = Object.freeze({ c: 'cup', e: 'edge', s: 'edge', t: 'tube', er: 
 // e: the extra edge angle ψ added over the outer zone, degrees; below 0 (D406) the zone turns DOWN against the profile, to flat and past it (a lip), as far as
 // EDGE_FLOOR below. s: where the outer zone starts, a share of the half-width.
 // t: the tube's sweep, degrees; 360 closes the section into a cylinder. The tube's edge angle is t/2.
-// er (the keeper, 2026-10-12: "lower the angle on one side and increase the banking of the edge on the other … the inside of the right turn will be turned
+// er (the user, 2026-10-12: "lower the angle on one side and increase the banking of the edge on the other … the inside of the right turn will be turned
 // down so the inside isnt banked in a way that would mess up an inside line"): the RIGHT side's edge angle, degrees, as e is; e is then the LEFT side's. Every
 // edge piece carries it; a piece whose er equals its e is symmetric, exactly as before, and its text carries no er (so every file made before reads and
 // saves byte for byte as it did). A file with a piece whose sides differ is written as core/5, so a builder that predates er refuses it by name instead of
 // silently making it symmetric (seal V3's reason). The edge START s stays one value for both sides.
-// D406 (the keeper, 2026-10-18: "it should be able to go into the negatives, meaning the track curves down tweaking the banking on one side to be closer to
+// D406 (the user, 2026-10-18: "it should be able to go into the negatives, meaning the track curves down tweaking the banking on one side to be closer to
 // flat or even past it"): EDGE_FLOOR is the least TOTAL edge angle a side may reach, the profile's own angle at the rim (c on a cup, t/2 on a tube, the
 // family's on a legacy road) plus e or er: 30° past flat, a lip. The geometry itself would allow 90°: past that the outer zone runs back under the road
 // (its lateral step is the cosine of its angle), so -30 is the ruling's own limit on how far a rim may drop, not where the section breaks, and it may move.
@@ -227,7 +227,7 @@ function qChannel(ch, arr) { return arr.map((x) => q(x, DEC[ch])); }
 // ── D261, GRIP PER PIECE ─────────────────────────────────────────────────────────────────────────────────────────────────
 // A road piece's grip: an integer percent of AC's road friction (ROAD, FRICTION 1: AC's system/data/surfaces.ini), from GRIP_MIN to GRIP_MAX, default 100.
 // It lives ON THE PIECE, not in a channel: grip changes at piece boundaries, never smoothly. A piece at 100 carries NO grip field, in memory and in the file,
-// so every track made before it, and every all-100 track, is the same document and the same text as before (the keeper's range, 2026-10-06: 50–150%).
+// so every track made before it, and every all-100 track, is the same document and the same text as before (the user's range, 2026-10-06: 50–150%).
 const GRIP_MIN = 50, GRIP_MAX = 150, GRIP_DEFAULT = 100;
 /** A road piece's grip, percent (100 when it carries none). */
 const gripOf = (P) => (P && P.grip !== undefined ? P.grip : GRIP_DEFAULT);
@@ -251,7 +251,7 @@ function setGrip(doc, indices, g) {
   return deepFreeze(checkDoc({ ...doc, pieces }));
 }
 
-// ── SPAWNS (the keeper, 2026-10-09: "move the start line around the first piece … a numbered grid … a hotlap spawn I plop down") ───────────────────────
+// ── SPAWNS (the user, 2026-10-09: "move the start line around the first piece … a numbered grid … a hotlap spawn I plop down") ───────────────────────
 // Where the cars start, chosen by hand. It lives ON THE DOCUMENT, and a track that never had one carries NO spawns field, in memory and in the file, so
 // every track made before it is the same document and the same text (D261's rule for grip). Without it the export places the start itself
 // (app/core/coreshell.js startLayout, the longest straight); with it the export uses exactly this.
@@ -287,7 +287,7 @@ function normSpawns(sp) {
   if (sp.hotlap !== undefined) out.hotlap = { piece: sp.hotlap.piece, along: q(sp.hotlap.along, DEC.m) };
   return checkSpawns(out);
 }
-// ── THE PIT LANE on a core track (the keeper, 2026-10-09: "a pit road that is off to the side of the track, and can connect to the track … a secondary spawn
+// ── THE PIT LANE on a core track (the user, 2026-10-09: "a pit road that is off to the side of the track, and can connect to the track … a secondary spawn
 // point for practice, so cars don't spawn right on the track"). The lane itself is the word builder's (src/doc/pitlane.js, built by src/geom/pitlane.js:
 // it leaves the road's edge tangentially, runs beside it, and rejoins), anchored here to PIECE ids and metres into them; plus the pit boxes on it:
 //   { side, leave: { word, along }, rejoin: { word, along }, offsetM, width, divergeM, mergeM, speedKmh, boxes, boxSpacingM }
@@ -348,7 +348,7 @@ function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM =
 const FLIGHT_POSE = Object.freeze(['forward', 'left', 'up', 'heading', 'pitch', 'bank']);
 const FLIGHT_MIN_M = 1;   // a landing at least a metre from its take-off (a curve across the air needs a direction)
 const FLIGHT_PITCH_MAX = Math.PI / 2 - 1e-3;   // a landing pitched short of vertical: the heading frame needs a horizontal direction
-// the Jump button's landing (the keeper: "a blank straight piece just like the first piece"): lined up with the take-off, 40 m ahead, at the same height, level
+// the Jump button's landing (the user: "a blank straight piece just like the first piece"): lined up with the take-off, 40 m ahead, at the same height, level
 const LANDING_DEFAULT = Object.freeze({ forward: 40, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 });
 function flightPiece({ id, forward, left = 0, up = 0, heading = 0, pitch = 0, bank = 0 } = {}) {
   return { id: id || null, type: 'flight', forward: q(forward, DEC.m), left: q(left, DEC.m), up: q(up, DEC.m), heading: q(heading, DEC.rad), pitch: q(pitch, DEC.rad), bank: q(bank, DEC.phi) };
@@ -544,7 +544,7 @@ function parse(text) {
  * flight that lands where the road after it already was: at the END of that ramp. The ramp was `gap` along the ground and `drop` down to the lip, then a
  * horizontal landingRamp(...).length more at the landing pitch, sized from the take-off's pitch, which is reckoned here by the adapter's own rule (pitch
  * rate linear over 2 m chords). Nothing turns; the bank is the take-off's, as the road after it already carried. So every road piece keeps its place (a
- * closed lap still closes) and the generated ramp becomes air: the car now lands on the road that followed it. No keeper track or saved piece held one (checked).
+ * closed lap still closes) and the generated ramp becomes air: the car now lands on the road that followed it. No user track or saved piece held one (checked).
  */
 function convertOldFlights(pieces, start) {
   if (!pieces.some((P) => P && P.type === 'flight' && P.old)) return pieces;
@@ -571,7 +571,7 @@ function convertOldFlights(pieces, start) {
 // ── undo as history (the same contract as src/doc/history.js, for this document) ────────────────────────────────────
 const freezeH = (h) => Object.freeze(h);
 function createHistory(doc) { return freezeH({ past: Object.freeze([]), present: checkDoc(doc), future: Object.freeze([]), dragBase: null }); }
-// 2026-10-13 (the keeper, ELYSIUM: undo "freezes like its trying to do something, but then when it releases its the same"): a step whose document has the
+// 2026-10-13 (the user, ELYSIUM: undo "freezes like its trying to do something, but then when it releases its the same"): a step whose document has the
 // same CONTENT as the one before (a new object, the same text) is no step: it was kept as one (ELYSIUM's history held one), and undoing it changed nothing.
 const sameContent = (a, b) => a === b || serialize(a) === serialize(b);
 function commit(h, doc) { if (h.dragBase) throw new CoreError('IN_DRAG', 'commit during a drag; end the drag first'); if (doc === h.present || sameContent(doc, h.present)) return h; return freezeH({ past: Object.freeze([...h.past, h.present]), present: checkDoc(doc), future: Object.freeze([]), dragBase: null }); }

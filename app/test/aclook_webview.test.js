@@ -3,7 +3,7 @@
 // WHY THIS EXISTS. 5debee8 made app/preview/aclook.js resolveLook call src/export/acready.js ensureDiffuse, which built its texture with
 // Buffer.from(...). Every other aclook test runs the module under node, where Buffer exists, so all of them passed; in the app the
 // preview is loaded by app/lib/cjs.js loadCjs('app/preview/index.js', get) with NO Buffer global (only the exporter's own load injects
-// the shim), the first Extend gave the preview a mesh, resolveLook threw a ReferenceError, and the track did not draw (the keeper, 2026-10-03).
+// the shim), the first Extend gave the preview a mesh, resolveLook threw a ReferenceError, and the track did not draw (the user, 2026-10-03).
 //
 // HOW THIS RUNS IT THE APP'S WAY. The preview module is loaded through the app's own loader, fetching source text by relative path, with
 // Buffer (and process) shadowed to undefined for every file it loads, as a webview has them. Nothing node-only is provided: a bare

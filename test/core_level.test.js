@@ -1,8 +1,8 @@
 // core_level.test.js: node --test test/core_level.test.js   (under the heavy-run lock)
-// D271 (the keeper, 2026-10-08: "there needs to be a way to snap the track to the floor to be true flat … i wanted the downhill to straighten out but its hard
+// D271 (the user, 2026-10-08: "there needs to be a way to snap the track to the floor to be true flat … i wanted the downhill to straighten out but its hard
 // to calculate by hand"): src/core/level.js. The climb is a RATE, so "climb 0" keeps the slope; Level solves the climb so the piece ends straight and level,
 // To floor also at height 0, or refuses by name with the length that works. The track: a straight, a climb, then a piece easing the climb to 0, so the
-// head is straight but tilted (as the keeper's track was, +3.2°). Rows:
+// head is straight but tilted (as the user's track was, +3.2°). Rows:
 //   1  Level on a 500 m piece: |end pitch| ≤ 0.01°, and it ENDS STRAIGHT (climb rate and its slope 0); the piece joins C1 and every other channel is Extend's own
 //   2  To floor on a long enough piece: |end pitch| ≤ 0.01° and |height| ≤ 1 cm at its end, on the adapter's path, and the export's validator finds no red in it
 //   3  too short a piece is REFUSED by name (FLOOR_TOO_SHORT) with a length that then works, and a length 2 m shorter does not

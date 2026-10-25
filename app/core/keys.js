@@ -1,4 +1,4 @@
-// keys.js: the app's keys, MOVED here from app/shell.js as they were (D239 note, the keeper's undo request: removing the Pieces mode
+// keys.js: the app's keys, MOVED here from app/shell.js as they were (D239 note, the user's undo request: removing the Pieces mode
 // must not remove its keys). The equation page binds them to the core shell (app/index.html); app/shell.js re-exports keyAction so its
 // own tests and drivers are unchanged. D242 item 8a (below): undo and redo now work inside a field too; the History list (8b) waits
 // for D240 (plan_t180_safe_close_reds_2026-10-04.md item 8).
@@ -9,7 +9,7 @@
  * REMOVING THE HEAD TAKES Ctrl+Backspace (or Cmd+Backspace). A bare Backspace does nothing: it is the key most often hit
  * by accident, and a confirm step would interrupt every deliberate removal, which is one undo step anyway. So the guard
  * is a modifier, not a dialog. Letters without Ctrl belong to the panels (the cameras use them).
- * UNDO AND REDO WORK FROM ANYWHERE (D242 item 8a, the keeper: "make it like photoshop or video editing programs, cntrl z and what ever
+ * UNDO AND REDO WORK FROM ANYWHERE (D242 item 8a, the user: "make it like photoshop or video editing programs, cntrl z and what ever
  * to go forward and back"): Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z act on the TRACK with the focus in a number field, a checkbox or a select
  * too. Only a TEXT-ENTRY field (`inText`: the track's name, the share code box) keeps them for its own text, as an editor's text box
  * does. Ctrl+S and Ctrl+Backspace are unchanged: in ANY field (`inField`) they stay the field's, so Ctrl+Backspace there deletes a

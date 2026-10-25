@@ -12,12 +12,12 @@
 // fixtures, F1 F2, and NOTHING ELSE: their segs, path and mesh are identical to the D196 baseline, and the open fixtures have no kn5.
 // test/fixtures/manifest.d222.json records F1 F2's digests before (the seal) and after (D222) with the measured kn5 change. The seal's two
 // files and the D196 record stay untouched.
-// AMENDED BY NAME A THIRD TIME (D230, at the keeper's word, 2026-10-04 02:22 and 02:25): every core export now carries an UNDERSIDE SKIN under every road cell
+// AMENDED BY NAME A THIRD TIME (D230, at the user's word, 2026-10-04 02:22 and 02:25): every core export now carries an UNDERSIDE SKIN under every road cell
 // (src/export/underskin.js) so the closed tube is enclosed and the track's underside casts shadows. That changes the kn5 digest of the two CLOSED fixtures,
 // F1 F2, and NOTHING ELSE: their segs, path and mesh digests are identical to the D222 baseline, and the ROAD nodes of the exported scene are byte-identical
 // (roadNodesSha256 before = after, measured by one script in both trees). test/fixtures/manifest.d230.json records F1 F2's kn5 digests before (D222) and after,
 // the road-node digests, the skin count and the measured kn5 growth. The seal's two files and the D196 and D222 records stay untouched.
-// AMENDED BY NAME FOR D260 (the keeper, 2026-10-06 18:31: "is the track geometry like too complex"): the export joins the road cells and the skins into chunks
+// AMENDED BY NAME FOR D260 (the user, 2026-10-06 18:31: "is the track geometry like too complex"): the export joins the road cells and the skins into chunks
 // (src/export/acready.js mergeForAc), so the kn5 holds a few dozen meshes instead of one per 2 m. That changes the kn5 digest of the two CLOSED fixtures, F1 F2,
 // and NOTHING ELSE: their segs, path and mesh digests are the D230 record's, and the kn5's TRIANGLE SET (every triangle's world-space vertices as float32 bits,
 // winding kept, with its material) is equal before and after. test/fixtures/manifest.d260.json records F1 F2's kn5 digests before (D230) and after with the measure.

@@ -1,5 +1,5 @@
 // preview-async.test.js: node --test app/test/preview-async.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D240 follow-up, "the previews must not FREEZE" (the keeper reads a 10 s freeze as broken; E measured Close's preview at 13.4 s on TEST 1, a middle delete's took 8.5 to 10.3 s on 13 km):
+// D240 follow-up, "the previews must not FREEZE" (the user reads a 10 s freeze as broken; E measured Close's preview at 13.4 s on TEST 1, a middle delete's took 8.5 to 10.3 s on 13 km):
 // the preview of a Close and of a middle delete show their ghost and per-piece displacement AT ONCE, the overlap check runs off the page's thread (a Web Worker: app/core/overlapworker.js,
 // the pure job app/core/overlapjob.js, the runner app/core/overlaprunner.js), Apply is OFF until the result lands, and Cancel (or any change that drops the preview) stops it. FEEL tier:
 // targeted rows, no mutation harness. Rows:
@@ -187,7 +187,7 @@ test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece chec
   coil.cancelClose(); coil.selectPiece(0); coil.deleteSelection(); const dp = coil.getState().deleteProposal; assert.deepEqual(parts(dp.doc, false), clone(dp.check), 'a coil\'s delete');
   const DEG = Math.PI / 180, j = await mk(); j.extend({ length: 200, family: 'bowl' }); j.extend({ length: 100, transition: 40, targets: { kh: 1 / 300 } }); j.commitDoc(D.appendPiece(j.getState().history.present, D.flightPiece({ forward: -30, left: 60, heading: Math.PI }))); j.extend({ length: 150 }); j.extend({ length: 150, transition: 40, targets: { kh: 1 / 200 } }); j.extend({ length: 100 });
   // since the jumps core (fae3910) a flight is INTENDED, not red: the control's non-overlap red is a landing too short for the speed (core_jump row 3's), a 40 m jump taken at the 460 km/h design speed misses its landing ramp (checked: gap 40, drop 2, land -2 deg, 460: landing-misses-zone; 700: none)
-  // CHANGED D250 (pane E; the keeper: jumps are tuned by driving them): landing-misses-zone is a WARNING now, amber, so it is no longer in `others` (the reds).
+  // CHANGED D250 (pane E; the user: jumps are tuned by driving them): landing-misses-zone is a WARNING now, amber, so it is no longer in `others` (the reds).
   // The control becomes the jump's warning, which the merge must carry too (`amber`, a count). A non-overlap RED for this row would need another kind; a
   // core document cannot make a hole (every flight carries its ramp). Told to A in p-jumpwarn-E_2026-10-06.md.
   // CHANGED D258 (the free jump, pane E): nothing is computed about where the car lands any more, so the jump's warning here is the free jump's own: its landing

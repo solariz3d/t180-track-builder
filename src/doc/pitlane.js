@@ -1,7 +1,7 @@
 // pitlane.js: the document's PIT LANE (ARCHITECTURE §11.1: "a pit lane as a side road leaving and rejoining the loop";
 // §5c: "the pit lane is a side road leaving and rejoining the loop").
 //
-// The loop stays ONE ordered list of words (§11.1, the keeper: "there are no shortcuts"). The lane is not a second loop
+// The loop stays ONE ordered list of words (§11.1, the user: "there are no shortcuts"). The lane is not a second loop
 // and not a junction in it: it is a side road ANCHORED to the loop, the way the markers are (src/markers, E's D171
 // interface), so it follows its words when they are sculpted. `doc.pitLane` is null, or:
 //

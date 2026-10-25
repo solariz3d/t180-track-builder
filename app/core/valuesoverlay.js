@@ -1,9 +1,9 @@
-// valuesoverlay.js: THE VALUES OF THE PIECE BEING EDITED, LARGE, OVER THE 3D VIEW (D267, the keeper, 10:15, relaying a tester: "the values or degrees for the track needs to be in a better spot to be seen").
+// valuesoverlay.js: THE VALUES OF THE PIECE BEING EDITED, LARGE, OVER THE 3D VIEW (D267, the user, 10:15, relaying a tester: "the values or degrees for the track needs to be in a better spot to be seen").
 // A DOM layer over the preview (#preview) at the top: length, turn, climb, bank and width of the piece the fields describe, in big type, updated by the panel every time the readout is (as a handle is
 // dragged, a field is typed in, the track changes), and hidden while there is no such piece (a closed loop). The numbers are the panel's own (src/core/readout.js through app/core/labels.js
 // formatReadout; the width is the width field): nothing is computed here.
 //
-//   SPOT_CSS                    where it sits: the ONE constant to change if the keeper meant another spot (inferred from "a better spot to be seen")
+//   SPOT_CSS                    where it sits: the ONE constant to change if the user meant another spot (inferred from "a better spot to be seen")
 //   entries(f, widthText)       -> [{ key, label, value }]   f = labels.formatReadout(r) ({ length, turn, climb, bank }), widthText the width as shown ("31 m")
 //   sculptEntries(s)            -> [{ key, label, value }]   D425 part 4, IN SCULPT (P's design §1 cue 5): s = { tool, name, value, radius, moves }, the tool, its value at the centre under
 //                                                            the channel's name, the radius and what moves ("road after" / "stays"); the panel's own words, nothing computed here
@@ -28,7 +28,7 @@ function sculptEntries(s) {
 function mount(stage, win) {
   const doc = stage.ownerDocument, layer = doc.createElement('div');
   layer.setAttribute('aria-label', 'piece values');
-  // the keeper, 2026-10-12: the numbers "look goofy". A dashboard read: Bahnschrift (Windows' DIN face, on every Windows
+  // the user, 2026-10-12: the numbers "look goofy". A dashboard read: Bahnschrift (Windows' DIN face, on every Windows
   // 10 and 11) with fixed-width digits, so a number does not jitter as a handle drags it; each label small and grey above
   // its value, and a thin rule between the values.
   layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;padding:7px 4px;border-radius:8px;background:color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent);color:var(--on-ink-strong, #ffffff);font:bold 26px/1.05 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;

@@ -1,5 +1,5 @@
 // drag-ghost.test.js: node --test app/test/drag-ghost.test.js   (under the heavy-run lock)
-// D404 (the keeper: "even turning a 1000m straight isnt smooth and laggy as hell"): a handle drag rebuilt the ghost of the next piece on every pointer move, in 2 m chords, so a
+// D404 (the user: "even turning a 1000m straight isnt smooth and laggy as hell"): a handle drag rebuilt the ghost of the next piece on every pointer move, in 2 m chords, so a
 // 1,000 m piece cost about 20 ms a move and a 5,000 m one 100 ms. While a handle is dragged the ghost is now cut into a few dozen chords with a few dozen path stations (the
 // shell's candidate(opts, { coarse }) and the track model's cheap ghost); what is placed, what is exported and the full ghost built when the drag stops are what they were.
 // The work here is counted, not timed (the frame times are app/test/drag-frame.test.js). Rows:

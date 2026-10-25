@@ -1,5 +1,5 @@
 // release-ghost.test.js: node --test app/test/release-ghost.test.js   (under the heavy-run lock)
-// D407 (the keeper: "even turning a 1000m straight isnt smooth and laggy as hell"; the measurement of 2026-10-19, exo_memory/handback/p-d407-measure-A_2026-10-19.md): the full ghost of the
+// D407 (the user: "even turning a 1000m straight isnt smooth and laggy as hell"; the measurement of 2026-10-19, exo_memory/handback/p-d407-measure-A_2026-10-19.md): the full ghost of the
 // next piece (built when a handle is let go, on every field change and on a hover over Extend) cost about 0.06 ms a metre (60 ms at 1,000 m), and 45% of that was one function:
 // samplesAcross, 4,000 fine samples of the cross-section, run again for every 2 m chord of the piece (500 walks, 5 different cross-sections). The walk is a function of the numbers alone, so it
 // is now kept under them (profile.js samplesAcrossFor). The work here is counted and compared, not timed (the frame times are app/test/release-frame.test.js). Rows:

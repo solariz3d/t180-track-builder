@@ -28,7 +28,7 @@ const MACH6 = Object.freeze({
   downforceRay: Object.freeze({ upM: 0.4, aheadM: 1.0, lengthM: 1.0, fullWithinM: 0.5, noneAtM: 0.9 }),
   // THE DOWNFORCE ITSELF (docs/research/04_ac_physics_drivability.md §4, the same script.lua:424-433): `-200 × horizontal speed × suction`, along the
   // car's own up axis, so it presses the car onto the road whichever way the road faces; TOTALMASS 850 (§5). 2.4 g at 100 m/s, 6.46 g at 970 km/h.
-  // The research marks the m/s reading UNVERIFIED; the keeper's full-speed laps of ELYSIUM (2026-10-15: crests and an inverted stretch this check
+  // The research marks the m/s reading UNVERIFIED; the user's full-speed laps of ELYSIUM (2026-10-15: crests and an inverted stretch this check
   // called red, driven clean) are the evidence for it. Counted where the road holds the car (leaves-surface, holds-above, no-speed-holds), with
   // the suction full: a road under the ray. Where the ray loses the road (a gap, a jump lip) the downforce-ray-gap check is the one that speaks.
   // NOT counted in the load (fN_g) the 90 g and 20 g lines judge: those were measured on real laps, downforce already in them.

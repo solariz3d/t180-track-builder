@@ -28,7 +28,7 @@ const rampOf = (shell) => shell.getState().resolved.segments.find((g) => g.part 
 // the range and step the design-speed slider had (app/validate-ui/speed.js, removed in D256: 50 km/h to MACH6.vmaxKmh, step 5); a host can still pin any of them
 const MIN = 50, MAX = MACH6.vmaxKmh, STEP = 5;
 
-// CHANGED D256 BUILD (the keeper chose "always max"): the app's controller has no design speed of its own now (full speed), so this row PINS the
+// CHANGED D256 BUILD (the user chose "always max"): the app's controller has no design speed of its own now (full speed), so this row PINS the
 // ramp's default, 460 km/h, the speed it is about; the next row is the app's own default
 test('the default jump at the default design speed (460 km/h, FINDINGS.md:476) is clean: no red, both landings caught', async () => {
   const { shell } = await firstJump(), ctl = createValidationController(shell, { designSpeedKmh: MACH6.designSpeedKmh });
@@ -68,7 +68,7 @@ test(`the slider swept over its whole range (${MIN}–${MAX} km/h, its own step 
     slide(t, k);
     const r = reds(t.ctl);
     if (clears(k)) { if (r.length) dirty.push(`${k} km/h: ${r.map((x) => x.reason).join(', ')}`); else clean.push(k); }
-    // CHANGED D250 (the keeper: jumps are tuned by driving them): where the car does not clear the gap the jump WARNS (amber), and nothing is red
+    // CHANGED D250 (the user: jumps are tuned by driving them): where the car does not clear the gap the jump WARNS (amber), and nothing is red
     else { assert.deepStrictEqual(r, [], `${k} km/h: not red (a warning since D250)`); assert.ok(t.ctl.state.result.amber.some((x) => x.reason === 'landing-misses-zone'), `${k} km/h: the car does not clear the gap, so the jump warns`); }
     assert.deepStrictEqual([Math.round(rampOf(t.shell).landing.speed * 3.6), rampOf(t.shell).landing.speedFrom], [k, 'design'], `${k} km/h: the ramp follows the slider, and says so`);
   }

@@ -113,7 +113,7 @@ test('app/index.html has ONE close registration path (the closer, and a bare des
   assert.match(HTML, /closeCleanup = async \(\) => \{ if \(!shell\.getState\(\)\.dirty\) await shell\.cleanExit\(\); else await shell\.flushAutosave\(\); \};/);
 });
 
-// ── unsaved work: the X asks Save / Don't save / Cancel (the keeper, 2026-10-03) ──
+// ── unsaved work: the X asks Save / Don't save / Cancel (the user, 2026-10-03) ──
 const withAsk = (choice, save) => { const t = tauri(), calls = { save: 0 }; installCloseHandler(t.page(), () => null, { log: () => {}, ask: async () => choice, save: async () => { calls.save++; return save(); } }); return { t, calls }; };
 test('nothing unsaved (ask returns null): the X closes at once, with no save', async () => {
   const { t, calls } = withAsk(null, () => true); await t.x(); assert.deepEqual([t.destroyed, calls.save], [true, 0]);

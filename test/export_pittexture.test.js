@@ -1,5 +1,5 @@
 // export_pittexture.test.js: node --test test/export_pittexture.test.js. D279: the pit lane wears the same road texture as the track
-// (the keeper, 2026-10-09 13:47: "ALSO MAKE the pits the same texture as the track"). Before: withTextureSet (src/texture/set.js) gives the
+// (the user, 2026-10-09 13:47: "ALSO MAKE the pits the same texture as the track"). Before: withTextureSet (src/texture/set.js) gives the
 // textured floor material to the ROAD's cells only, so the lane kept the plain road material while the road around it wore the texture
 // (measured in an exported kn5: road 6/6 on the floor material, lane 5/5 on t180b_road). Rows, under each of the three texture settings:
 //   1  solid (no floor texture): the lane and the road both wear t180b_road, as before

@@ -61,14 +61,14 @@ function portOwner(port, root) {
  * identifier: a second instance of the app joined the first one's browser and its DevTools port was silently ignored
  * (two runs found no page on their port; the app launched alone, a minute later, opened it). WEBVIEW2_USER_DATA_FOLDER
  * gives each run a fresh folder of its own (measured: the folder fills with EBWebView and the page opens on its port), so a
- * run never shares a browser with the keeper's app or another seat's, and never writes into the keeper's webview storage
+ * run never shares a browser with the user's app or another seat's, and never writes into the user's webview storage
  * (the first-run guide's state, app/onboarding/firstrun.js, lives in its localStorage).
  */
 function profileDir(out) { const d = path.join(path.resolve(out), 'webview2-profile'); fs.rmSync(d, { recursive: true, force: true }); return d; }
 /**
- * THE KEEPER'S AUTOSAVE IS PUT BACK (D179). The app writes its unsaved track to <app data>/autosave.t180auto from the Rust
+ * THE USER'S AUTOSAVE IS PUT BACK (D179). The app writes its unsaved track to <app data>/autosave.t180auto from the Rust
  * side (src-tauri/src/lib.rs AUTOSAVE_FILE), which the WebView2 profile does not cover, so a run would overwrite the
- * keeper's own unsaved session. Before the launch it is copied into the run's out folder; after the run it is written back
+ * user's own unsaved session. Before the launch it is copied into the run's out folder; after the run it is written back
  * byte for byte, or, if there was none, the one the run made is removed. Returns restore() -> 'restored' | 'removed' | 'none'.
  */
 function appDataDir() {

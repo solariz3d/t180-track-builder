@@ -169,12 +169,12 @@ test('install on our own folder replaces our files and deletes nothing else', ()
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 't180-install-'));
   try {
     const b = fakeBuild(root), ac = fakeAc(root), t = path.join(ac, 'content', 'tracks', 't180b_x');
-    installOne(b, ac); fs.writeFileSync(path.join(t, 'keeper-note.txt'), 'kept');
+    installOne(b, ac); fs.writeFileSync(path.join(t, 'user-note.txt'), 'kept');
     fs.writeFileSync(path.join(b.dir, 'a.kn5'), 'kn5 v2');
     const r = installOne(b, ac);
     assert.strictEqual(r.existed, true);
     assert.strictEqual(fs.readFileSync(path.join(t, 'a.kn5'), 'utf8'), 'kn5 v2');
-    assert.strictEqual(fs.readFileSync(path.join(t, 'keeper-note.txt'), 'utf8'), 'kept');
+    assert.strictEqual(fs.readFileSync(path.join(t, 'user-note.txt'), 'utf8'), 'kept');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

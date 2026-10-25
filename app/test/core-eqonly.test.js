@@ -1,4 +1,4 @@
-// core-eqonly.test.js: D239 (the keeper: "can we keep only the equation mode?"): the Pieces page's four features, carried onto the
+// core-eqonly.test.js: D239 (the user: "can we keep only the equation mode?"): the Pieces page's four features, carried onto the
 // EQUATION track and tested against the real core shell (app/core/coreshell.js): autosave with crash restore, share codes (an old Pieces
 // code refused by name), Install to AC (the Export button's own build), and the getting-started guide; and the page holds one builder.
 // Run: node --test --test-concurrency=1 app/test/core-eqonly.test.js
@@ -182,7 +182,7 @@ test('Install to AC writes exactly the files Export writes, byte for byte, under
   for (const [i, [p, b]] of strip(installs[0].files).entries()) assert.ok(b.equals(strip(st.writes[0].files)[i][1]), `${p} differs`);
 });
 
-// ── D239 amendment: SAVE KEEPS THE PREVIOUS VERSION (the keeper lost TEST 1 to one Close). The move on Save, the 20 kept and the prune
+// ── D239 amendment: SAVE KEEPS THE PREVIOUS VERSION (the user lost TEST 1 to one Close). The move on Save, the 20 kept and the prune
 // are native and tested there (src-tauri/src/backups.rs, cargo test); these are the shell's and the page's halves. ──
 /** The native backups in memory: backup_track's copies, list_track_backups, open_track_backup. */
 function backupStore({ fail = false } = {}) {
@@ -254,7 +254,7 @@ test('the page: Save sends the local time for the backup\'s name, the three back
   for (const c of ['backup_track', 'list_track_backups', 'open_track_backup']) assert.match(rs, new RegExp(`generate_handler!\\[[^\\]]*\\b${c}\\b`), `${c} is registered`);
 });
 
-// ── D239 note (the keeper's undo request): the keys MOVED from app/shell.js to the equation page, Ctrl+Backspace included ──
+// ── D239 note (the user's undo request): the keys MOVED from app/shell.js to the equation page, Ctrl+Backspace included ──
 /** A page document for bindKeys: keydown listeners, and key events that record preventDefault. */
 function keyPage() {
   const ls = new Set(), doc = { addEventListener: (t, f) => { if (t === 'keydown') ls.add(f); }, removeEventListener: (t, f) => { if (t === 'keydown') ls.delete(f); } };

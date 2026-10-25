@@ -1,4 +1,4 @@
-// finish.js: FINISH TO START (the keeper, 2026-10-12, ELYSIUM: "the one thing that comes to my mind as the main problem to me right now is how hard it
+// finish.js: FINISH TO START (the user, 2026-10-12, ELYSIUM: "the one thing that comes to my mind as the main problem to me right now is how hard it
 // is to align the last turn onto the starting straight by hand"; and to the proposal "Yes"). Close bends the pieces the user built until the end meets the
 // start, and on ELYSIUM every window it offers refuses (the last piece cannot reach within 214 m; the last 20 or 40% would roll the road 7.5°/m, six times
 // the bar). Finish to start ADDS road instead and moves nothing the user built:

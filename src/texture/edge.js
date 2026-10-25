@@ -8,7 +8,7 @@
 //   rowMap(arc, w, lay)             -> u in the built image for one point `arc` metres from a row's edge, the row being w metres wide
 //
 // WHY. 'fit' (D364) stretches the whole texture across the road's own width, so a texture drawn for 35 m has its edge glow 0.56 m wide on a 35 m road
-// and 0.96 m on a 60 m one, and 'tile' repeats it across a wider road. The keeper's idea (2026-10-17): make the texture once the track is closed, when its
+// and 0.96 m on a 60 m one, and 'tile' repeats it across a wider road. The user's idea (2026-10-17): make the texture once the track is closed, when its
 // whole width range is known, and let it work at every width without inconsistency. So the texture is drawn ONCE, for `tileWidth` metres across, and
 // this file lays it out:
 //   * the edge band is the outer `edgeBand` metres of the drawing at each side. It keeps that many metres on the road at any width (u runs 0..fb over

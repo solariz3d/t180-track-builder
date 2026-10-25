@@ -1,6 +1,6 @@
 // core-pieces-ui.test.js: node --test app/test/core-pieces-ui.test.js   (under the heavy-run lock, --max-old-space-size=4096)
 // D240, THE UI HALF OF SAVED PIECES (the core is src/core/piece.js, tested by test/core_piece.test.js; this is the app: app/core/coreshell.js, piecesui.js, selectionlayer.js, the
-// preview's proposal ghost, and the native side's file commands through a storage in memory). FEEL tier: targeted rows, no mutation harness (the keeper's 09-29 rule). Rows:
+// preview's proposal ghost, and the native side's file commands through a storage in memory). FEEL tier: targeted rows, no mutation harness (the user's 09-29 rule). Rows:
 //   1   select: a piece, a shift-click run (the first piece selected stays the anchor), out of range refused, any change of the document drops the selection
 //   2   Save as piece: what is stored is exactly the core's text; a name already used is refused and the stored one is untouched; a bad name and a mixed run are refused by name
 //   3   the library: name, length, turn, climb, thumbnail; an unreadable file and a whole track are LISTED with the reason, not hidden
@@ -61,7 +61,7 @@ function lap() {
 }
 const tick = () => new Promise((r) => setImmediate(r));
 
-// D250 item 4 (the keeper: "Short way across start"; C's look F1 on 62f5d39: the last piece then p1 selected the whole lap)
+// D250 item 4 (the user: "Short way across start"; C's look F1 on 62f5d39: the last piece then p1 selected the whole lap)
 test('row 1c: on a CLOSED lap a shift-click across the start line takes the SHORT way: the pieces either side of the line; Save keeps them, Delete says CLOSED', async () => {
   const st = store(), s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 }); s.adopt(lap());
   const d = s.getState().history.present, n = d.pieces.length; assert.equal(d.closed, true);
@@ -333,7 +333,7 @@ async function mountPanel(st = store(), { bin = false, turnAsRate = true } = {})
   doc.addEventListener('t180-pick', (ev) => ev.detail.reply(T.s === null ? null : { s: T.s, pos: [0, 0, 0], px: 1 }));
   doc.addEventListener('t180:track-request', (ev) => ev.detail.reply({ segments: shell.getState().resolved.segments, path: { samples: [] } }));
   const panel = require('../core/panel.js').mount(root, shell);
-  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the keeper's word, plan :367-369, ruled :373-385). Every row in
+  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the user's word, plan :367-369, ruled :373-385). Every row in
   // this file types the turn as a RATE (°/100 m), the field's meaning when it was written, so the helper puts "turn as" on rate, the switch the ruling keeps one
   // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js (D331 B).
   if (turnAsRate !== false) { const ta = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); ta.value = 'rate'; ta.onchange(); }
@@ -446,7 +446,7 @@ function dragBy(P1, id, px, extra = {}) {
   fire(P1, 'pointerup', a.x + a.dx * k, a.y + a.dy * k, { timeStamp: t + 2, ...extra });
 }
 
-// AMENDED D331 (plan :417-426, 2026-10-16): this row first held that the turn and climb handles are NOT offered as corners, because they drag a rate. The keeper
+// AMENDED D331 (plan :417-426, 2026-10-16): this row first held that the turn and climb handles are NOT offered as corners, because they drag a rate. The user
 // scrubs turns with them, so the ruling gives them back: as corners they are their own kinds, turnDeg and climbDeg (app/core/handles.js), dragging the corner's
 // DEGREES and labelled in degrees; on rate they are the old turn and climb. Row 11e holds the drag itself.
 test('row 11d (D331 B, amended): as corners the ghost has the corner handles, turnDeg and climbDeg, labelled in degrees, even with the fields blank; "turn & climb as" rate gives the rate handles back', async () => {
@@ -653,7 +653,7 @@ test('row 14c: the landing\'s four handles (D278: BESIDE the Extend ghost\'s, wh
   P1.panel.unmount();
 });
 
-test('row 14d (D278, the keeper: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and height"): right after Jump the Extend ghost\'s handles are up BESIDE the landing\'s four; an Extend handle types into its field and edits no document; a landing handle still moves the landing in ONE undo step; Extend fixes the landing, and its handles go', async () => {
+test('row 14d (D278, the user: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and height"): right after Jump the Extend ghost\'s handles are up BESIDE the landing\'s four; an Extend handle types into its field and edits no document; a landing handle still moves the landing in ONE undo step; Extend fixes the landing, and its handles go', async () => {
   const P1 = await handlePanel(), { shell } = P1, box = landingBoxOf(P1);
   const EXT = ['length:0', 'width:1', 'width:-1', 'bank:1', 'bank:-1', 'cup:1', 'cup:-1', 'turn:1', 'turn:-1', 'climb:0'], LAND = ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'];
   const settle = () => { for (let i = 0; i < 40; i++) P1.frame(); }, idsOf = () => P1.panel.handles.handles().map((h) => h.id);
@@ -803,7 +803,7 @@ test('row 18: the CHEAP ghost while a handle is dragged (D266 item 2): every ste
   P1.panel.unmount();
 });
 
-// D267 (the keeper, relaying a tester: "too much damn text on the left side that overwhelmed chase ... what tf is the copy code paste code t180 code here??? the values or degrees for the track needs to be in a better spot to be seen")
+// D267 (the user, relaying a tester: "too much damn text on the left side that overwhelmed chase ... what tf is the copy code paste code t180 code here??? the values or degrees for the track needs to be in a better spot to be seen")
 const leafText = (P1) => P1.all().filter((e) => !(e.children && e.children.length) && e.textContent).map((e) => e.textContent).join('\n');
 test('row 19: no help paragraph stays in the left column (D267): the tube width, the grip, the turn-0 hint, the jump and the landing show only a few words or nothing, and the words are tooltips', async () => {
   const P1 = await handlePanel(), { shell } = P1, field = (t) => fieldOf(P1, t), tube = field('tube sweep °'), width = field('width m'), grip = P1.input('grip');
@@ -850,7 +850,7 @@ test('row 19c: the share codes are in the File menu as "Copy track code" and "Pa
   const r = await createShare(b).paste(code); assert.equal(r.kind, 'e', r.message); assert.equal(D.serialize(b.getState().history.present), D.serialize(a.getState().history.present));
 });
 
-// D269 (the keeper, 10:26: "take the saved pieces off the side, and add it somewhere to the top bar, and it will have like a drop down menu where all the saved pieces will be, think of like a sony vegas or something")
+// D269 (the user, 10:26: "take the saved pieces off the side, and add it somewhere to the top bar, and it will have like a drop down menu where all the saved pieces will be, think of like a sony vegas or something")
 test('row 20: the saved pieces are a drop-down bin in the top bar, not a section of the left column (D269): a row per piece with its thumbnail, name and summary; Add at head, Add mirrored, Rename and Delete; a click on the row adds it; the empty words are in the menu; Save as piece stays with the selection', async () => {
   const st = store(), P1 = await mountPanel(st, { bin: true }), { shell } = P1, tick = () => new Promise((r) => setImmediate(r));
   // the library is not in the left column
@@ -899,7 +899,7 @@ test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and c
   pv.clearGhost(); assert.equal(pv.ghostInfo(), null); pv.dispose();
 });
 
-// D259, the keeper (18:21-18:24): the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way". The bank keeps within
+// D259, the user (18:21-18:24): the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way". The bank keeps within
 // ONE turn and keeps its SIGN, shown and applied (370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40), in the Extend field and ghost handle, Sculpt's bank handle and the bank
 // brush; no nearest-equivalent rewrite; the stored winding of existing tracks and the core are untouched.
 const headBank = (shell) => shell.headState().phi * 180 / Math.PI;
@@ -999,7 +999,7 @@ test('row 22c (D430): as a corner the turn and climb fields rest blank, so a bla
   P1.panel.unmount();
 });
 
-// 2026-10-15, the keeper: "when clicking a previous placed part of the track, while its highlighted, make the values change to it, so you can mimic certain
+// 2026-10-15, the user: "when clicking a previous placed part of the track, while its highlighted, make the values change to it, so you can mimic certain
 // values within a new piece you place down". A SINGLE selected road piece lends its end values (and its length) to the Extend fields; Extend then places a
 // piece like it. A run of several pieces lends nothing (which one would it be). Clearing the selection, or any new document, shows the head again.
 test('a selected piece lends its values to the Extend fields: Extend places a piece like it; a run lends nothing; clearing shows the head', async () => {

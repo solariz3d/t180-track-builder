@@ -1,4 +1,4 @@
-// pitboxes.js (export): D279 follow-up, the PAINTED PIT BOXES wear the road (the keeper, 2026-10-09, asked which pits: "The painted pit boxes").
+// pitboxes.js (export): D279 follow-up, the PAINTED PIT BOXES wear the road (the user, 2026-10-09, asked which pits: "The painted pit boxes").
 //
 //   withPitBoxFloor(scene, paint, { path, segments, lane, set }) -> scene
 //     paint: placeAll's paint (src/markers/paint.js paintFor), whose `su` holds each pit box's vertices' (s, u) and whether it is on the lane

@@ -1,4 +1,4 @@
-// piecewise.cjs: a track's line as PIECEWISE equations fitted to the MESH itself (D184; the keeper's corrections, 05:3x,
+// piecewise.cjs: a track's line as PIECEWISE equations fitted to the MESH itself (D184; the user's corrections, 05:3x,
 // in exo_memory/loop/plan_t180_equation_skill_2026-09-28.md "Addendum" and "The method, thought through", the spec).
 // M4 (tools/fourier.cjs) fitted the reader's walk as one periodic series and rebuilt the line by integrating heading, so
 // long laps drifted. Here:

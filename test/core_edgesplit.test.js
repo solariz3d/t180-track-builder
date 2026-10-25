@@ -1,5 +1,5 @@
 // core_edgesplit.test.js: node --test test/core_edgesplit.test.js
-// The right edge er (the keeper, 2026-10-12: "lower the angle on one side and increase the banking of the edge on the other, say for a right turn,
+// The right edge er (the user, 2026-10-12: "lower the angle on one side and increase the banking of the edge on the other, say for a right turn,
 // the left of the track will be more banked, but the inside of the right turn will be turned down so the inside isnt banked"). Rows:
 //   1  an edge angle typed alone sets both sides, and the file is exactly what it was before er existed (core/4, no er)
 //   2  e 30 and er 0: the left rim tilts the cup plus 30°, the right rim only the cup; the file is core/5 and reads back to the same text

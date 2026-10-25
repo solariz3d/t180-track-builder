@@ -1,6 +1,6 @@
 // vocabgen.js: the built-in words' defaults, GENERATED from the measured library (src/doc/corpus.json, schema
 // t180b.corpus/1: tools/corpus.cjs over the track reader's words of every installed T-180 layout, FINDINGS §7f). The
-// keeper, 2026-09-27 23:36, on the hand-set vocabulary: "the pieces are nowhere near what I want them to be, they arent
+// user, 2026-09-27 23:36, on the hand-set vocabulary: "the pieces are nowhere near what I want them to be, they arent
 // good for t-180s". So nothing here is chosen: every default is a MEDIAN (p50), every tempo a percentile BAND, and every
 // default font the cross-section the library uses most in that class.
 //

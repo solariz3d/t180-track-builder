@@ -43,7 +43,7 @@ const SURFACES_HEADER = [
 // surfaces.ini files with the soft block also carry it (track E, track B, track K, track C, track F, track A), on a
 // `KEY=PIT` surface. It is written the same way, with AC's standard surface keys. No mesh of this builder is keyed PIT
 // (the pit lane is `1ROAD_PIT_…`, src/geom/pitlane.js), so defining it changes nothing but the flag. Whether the soft
-// block NEEDS the switch is UNVERIFIED (research §2: the keeper's one AC test settles it); it is written because
+// block NEEDS the switch is UNVERIFIED (research §2: the user's one AC test settles it); it is written because
 // ARCHITECTURE §6 says so and the proven tracks do.
 const EXTENDED_PHYSICS_SURFACE = [
   '[SURFACE_0]',
@@ -180,7 +180,7 @@ function fittedPng(scene, w, h, { margin = 8, rgba = [255, 255, 255, 255], backg
 }
 // Sizes: the CM-generated UI of the track K on D (ui/outline.png 365×192, ui/preview.png 355×200). inferred: CM's defaults.
 const outlinePng = (scene) => fittedPng(scene, 365, 192);
-// preview.png is the BACKDROP alone (the keeper, 2026-10-12, ELYSIUM in Content Manager: "the outline of it, like there are multiple on each other overlayed"):
+// preview.png is the BACKDROP alone (the user, 2026-10-12, ELYSIUM in Content Manager: "the outline of it, like there are multiple on each other overlayed"):
 // CM lays outline.png over preview.png, and the road drawn into both at different sizes (365×192, 355×200) showed two outlines, offset, a pile of them on a
 // track that passes over itself. A track's preview is its picture; the outline is CM's to draw. `scene` is kept for the signature (layouts.js, writeTrackFiles)
 const PREVIEW_BG = [24, 26, 30];

@@ -162,7 +162,7 @@ test('xsec headState (A\'s core): a non-tube head shows tube sweep 0 ("none"); a
 });
 
 // ── the panel ──
-// AMENDED D385 (2026-10-18): the field these rows type was "edge angle °"; it is now "left edge °" (the keeper: "there is the right edge but not the left edge
+// AMENDED D385 (2026-10-18): the field these rows type was "edge angle °"; it is now "left edge °" (the user: "there is the right edge but not the left edge
 // tweak"). Only the label moved: it is the same input on the same channel e, so every rule below is unchanged. Typed alone it now leaves the right side as it
 // was (app/test/core-carry.test.js), where these rows assert only e.
 test('xsec panel: the three fields are on the panel and show the head; left as shown they send nothing', async () => {
@@ -267,7 +267,7 @@ test('xsec panel: a refusal the REAL core makes on Extend is shown in the panel 
   assert.match(p.message(), /^[A-Z][A-Z_]+: /, `the message carries the core's refusal name: "${p.message()}"`);
   assert.equal(p.shell.getState().history.present.pieces.length, 0, 'and nothing was placed');
 });
-// D259 AMENDED THIS ROW BY NAME (the keeper, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360"): it was "xsec panel:
+// D259 AMENDED THIS ROW BY NAME (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360"): it was "xsec panel:
 // the bank field takes 360 and −540 and reads them back (S1 iv)". The field still takes any number (no min or max), but the bank keeps within ONE turn and keeps its sign,
 // shown and applied: 360 is 0 (no roll), -540 is -180. The core still winds whatever it is given (E's V5, unchanged).
 test('xsec panel: the bank field takes any number and keeps it within one turn, its sign kept: 360 is 0 and -540 is -180 (D259)', async () => {
@@ -349,7 +349,7 @@ test('xsec the panel loads in the webview loader with no node built-in (D186)', 
   assert.equal(typeof P.extendOptions, 'function');
   assert.equal(P.extendOptions({ length: 10, edge: '5' }).targets[E], 5);
 });
-// D406 (the keeper, 2026-10-18: "it should be able to go into the negatives"): the two edge fields take a number below 0, which the core places (its floor is
+// D406 (the user, 2026-10-18: "it should be able to go into the negatives"): the two edge fields take a number below 0, which the core places (its floor is
 // the core's, against the profile under it: test/core_edgeneg.test.js)
 test('xsec panel: the left and right edge fields take a negative number, with no min, and Extend places it (D406)', async () => {
   const p = await mountPanel();

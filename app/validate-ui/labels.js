@@ -29,7 +29,7 @@ function reasonText(reason, car = MACH6) {
     'seam-past-envelope': `a seam is sharper than measured on real tracks (over ${car.seamP90Deg}°)`,
     'on-the-stops': `the car is on its suspension stops (${car.suspensionStopG} g or more)`,
     'head-in-the-air': 'the open end is in the air: place the landing',
-    'landing-misses-zone': 'this jump may fly past its landing at the lap\'s speed (a warning: tune it by driving it in AC)',   // D250: amber since the keeper's ruling
+    'landing-misses-zone': 'this jump may fly past its landing at the lap\'s speed (a warning: tune it by driving it in AC)',   // D250: amber since the user's ruling
     'jump-gap-not-forward': 'a jump lands behind its own take-off',
     'joint-step': 'the road steps between two pieces here (the cup and the piece next to it do not meet)',
     // THE CROSS-SECTION reds (D225): the ids are the seal's and the librarian's rulings (ruling 1 `tube-too-narrow`, S3 `roll-rate`; A's
@@ -38,7 +38,7 @@ function reasonText(reason, car = MACH6) {
     'roll-rate': 'the road rolls about its own direction faster than any measured track (red over 1.21°/m, amber over 0.93°/m, read over 20 m): lengthen the roll',
     // A's third red (D225, checked against src/validate/index.js SRC at the combine): the ids above are A's too, unchanged
     'edge-past-cap': 'the edge curves up past the most a road can hold (150° in all, 180° on an open tube): the walls would touch',
-    // D256 (the keeper chose all three of E's proposals): the centreline lift-off on an open track, and the road facing the ground
+    // D256 (the user chose all three of E's proposals): the centreline lift-off on an open track, and the road facing the ground
     'leaves-surface': 'the car leaves the road surface here at full speed',
     'no-speed-holds': 'the road faces the ground here and nothing curves it toward the car: no speed holds the car on it',
     'holds-above': 'the road faces the ground here and holds the car only above a speed',

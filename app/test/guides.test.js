@@ -1,5 +1,5 @@
 // guides.test.js: node --test app/test/guides.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D237 (the keeper: "a 3D grid to some how see the track and make it all symmetrical ... a 2D grid if the track has no height, but as soon as the track turns up or downward the
+// D237 (the user: "a 3D grid to some how see the track and make it all symmetrical ... a 2D grid if the track has no height, but as soon as the track turns up or downward the
 // grid becomes 3D"). The preview path ONLY: nothing here reaches src/ or the export (core_cup_fixtures, run beside it, is the proof, and the last test reads the diff of what
 // was touched). Stated before the tests were written, and each is a test of an outcome:
 //   rows 1-4   the grid: a flat track draws the ground grid only; a track with height draws the lattice, which spans its lowest to its highest point; the line count stays bounded

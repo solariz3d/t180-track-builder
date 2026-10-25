@@ -1,4 +1,4 @@
-// checkjob.js: the track checker OFF the window's thread (the keeper, 2026-10-14: placing a piece on ELYSIUM, 24 km, froze the window 1.5 s
+// checkjob.js: the track checker OFF the window's thread (the user, 2026-10-14: placing a piece on ELYSIUM, 24 km, froze the window 1.5 s
 // and opening it about 40 s, most of it this check). ONE pure job that a Web Worker runs (app/validate-ui/checkworker.js), or a test runs here:
 //
 //   const job = createCheckJob();

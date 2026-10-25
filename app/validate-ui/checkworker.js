@@ -1,4 +1,4 @@
-// checkworker.js: the WEB WORKER the track checker runs in (the keeper, 2026-10-14: the window must not wait for the check). It loads
+// checkworker.js: the WEB WORKER the track checker runs in (the user, 2026-10-14: the window must not wait for the check). It loads
 // app/validate-ui/checkjob.js through the app's own CommonJS loader (app/lib/cjs.js, with the exporter's in-memory node shim the core's modules
 // need, as app/core/overlapworker.js does) and answers ONE kind of message:
 //   in:  { serial, doc, dragging, csp }                   the document as the shell holds it, and how to check it (checkjob.js)

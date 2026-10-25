@@ -80,7 +80,7 @@ const { withCatch, catchCells, rangesOfAmber, CATCH_OFFSET_M } = require('./catc
 const { withGripKeys } = require('./gripkeys.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
 const { placeMarker, surfaceAt } = require('../markers/place.js');
-// THE TEST EXPORT OF AN UNFINISHED TRACK (D243a, the keeper: "it should allow to export even without it being completed"). opts.test, never the default:
+// THE TEST EXPORT OF AN UNFINISHED TRACK (D243a, the user: "it should allow to export even without it being completed"). opts.test, never the default:
 // the path is OPEN, every red is a WARNING (listed in the folder's TEST_FILE and the message), the AI line is open, the ui name and folder say "test, unfinished",
 // point-to-point gates AC_AB_START/FINISH are added, and the road ends in a NAMED end block: TEST_RUNOFF_M of road after the finish gate, then a wall
 // (1WALL_T180_END, both faces). Why a run-off then a wall: every point-to-point layout in the local AC install runs its AI line 58–226 m past its finish
@@ -247,7 +247,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const testReds = test ? red.map(rangeText) : [];   // TEST: every red is listed, none blocks
   if (red.length && !test) throw new ExportError('RED', `validation is red, nothing written: ${red.map(rangeText).join('; ')}`, { red });
   if (test) warnings.push(`TEST EXPORT (unfinished): ${red.length} red finding(s) NOT blocking, listed in ${TEST_FILE}`);
-  // D250: a jump's reach is the user's to tune by driving it in AC (the keeper), so it WARNS, in plain words, and never blocks. Each line starts
+  // D250: a jump's reach is the user's to tune by driving it in AC (the user), so it WARNS, in plain words, and never blocks. Each line starts
   // "jump: " so the install message can carry the jump warnings alone (app/install/install.js). A missed landing is said once, from its amber range;
   // the lap proof adds only what no amber says (a landing too deep below the take-off to reach)
   for (const a of v.amber) warnings.push(a.reason === 'landing-misses-zone' ? jumpWarning(a) : `amber: ${rangeText(a)}`);

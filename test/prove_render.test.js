@@ -84,9 +84,9 @@ test('port: the process listening is "ours" when it is the root itself', async (
 test('autosave: an existing autosave is put back byte for byte after a run overwrote it', () => {
   const fs = require('fs'), os = require('os'), d = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-pr-')), out = path.join(d, 'out'); fs.mkdirSync(out);
   try {
-    const f = path.join(d, 'autosave.t180auto'); fs.writeFileSync(f, 'an unsaved track of the keeper');
+    const f = path.join(d, 'autosave.t180auto'); fs.writeFileSync(f, 'an unsaved track of the user');
     const restore = R.guardAutosave(d, out); fs.writeFileSync(f, 'a proof run');
-    assert.deepEqual([restore(), fs.readFileSync(f, 'utf8')], ['restored', 'an unsaved track of the keeper']);
+    assert.deepEqual([restore(), fs.readFileSync(f, 'utf8')], ['restored', 'an unsaved track of the user']);
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
 test('autosave: with none before the run, the one the run made is removed', () => {

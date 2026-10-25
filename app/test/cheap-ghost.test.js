@@ -1,5 +1,5 @@
 // cheap-ghost.test.js: node --test app/test/cheap-ghost.test.js   (under the heavy-run lock)
-// D266 item 2 (the keeper, 01:49: "when making very long turn like 1000m tube turn it lags when scrubbing cant precise move, i think the preview could be cheaper until extend is pressed"):
+// D266 item 2 (the user, 01:49: "when making very long turn like 1000m tube turn it lags when scrubbing cant precise move, i think the preview could be cheaper until extend is pressed"):
 // while a handle is being DRAGGED the ghost of the next piece is built CHEAP (its row grid thinned, app/preview/coarse.js, for the NEW pieces only) and the full ghost comes back when the drag
 // stops. FEEL tier: rows on the track model and the headless preview; the panel's side (the flag, the final full ghost) is core-pieces-ui row 18. The placed track and the export are unchanged.
 //   1  the track model: ghostFor(candidate, { cheap: true }) meshes far fewer vertices on a 1000 m tube, has the SAME path (the handles' samples), touches nothing placed, and a full ghost after it is
@@ -14,7 +14,7 @@ const { createTrackModel } = require('../preview/trackmodel.js');
 const P = require('../preview/preview.js');
 const XS = require('../core/xsec.js');
 
-/** A 300 m straight, placed; and the candidate of a 1000 m closed-tube turn after it (the keeper's piece). */
+/** A 300 m straight, placed; and the candidate of a 1000 m closed-tube turn after it (the user's piece). */
 async function bigTube(length = 1000) {
   const sh = await createCoreShell({ brushFn: null, autosaveMs: 0 }); sh.extend({ length: 300, family: 'bowl' });
   const cand = (kh = 1 / 600) => sh.candidate({ length, targets: { kh, [XS.CHANNEL.tube]: 360, w: 31 } });

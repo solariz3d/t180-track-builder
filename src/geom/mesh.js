@@ -5,7 +5,7 @@
 //   extendMesh(prev, path, segments)      the build head: new pieces were appended by extendPath
 //   sculptMesh(prev, path, segments, g)   piece g's handles changed; rebuildPathFrom re-grew the path from g
 //
-// A PIECE IS SELF-CONTAINED (the keeper, 12:22: users sculpt pieces and save their own). A road segment's mesh is made
+// A PIECE IS SELF-CONTAINED (the user, 12:22: users sculpt pieces and save their own). A road segment's mesh is made
 // from its OWN handles and nothing else:
 //   · its own vertex count across (K from its own profile, not a track-wide K);
 //   · its own stations, on its own grid (path.js samples each segment from its own start);

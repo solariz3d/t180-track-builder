@@ -114,7 +114,7 @@ test('E\'s panels load through A\'s webview loader (app/lib/cjs.js), and each ex
     assert.strictEqual(typeof (await loadCjs(p, fromDisk)).mount, 'function', p);
 });
 
-// D256 BUILD (the keeper, 12:56: "it should always be maxed out"; his decision 13:2x on E's measurement): the panel has NO speed control, and its
+// D256 BUILD (the user, 12:56: "it should always be maxed out"; his decision 13:2x on E's measurement): the panel has NO speed control, and its
 // controller checks at full speed. Mounted on a fake page with an empty track (no loads, so no graph is drawn).
 test('D256: the validation panel has no design-speed slider and no off box; its one control is the CSP box, and it checks at full speed', async () => {
   const fake = require('./palette-fakedom.js'), restore = fake.install(), had = { CustomEvent: global.CustomEvent, raf: global.requestAnimationFrame };
@@ -136,5 +136,5 @@ test('D256: the validation panel has no design-speed slider and no off box; its 
   } finally { restore(); global.CustomEvent = had.CustomEvent; global.requestAnimationFrame = had.raf; }
 });
 
-// REMOVED D256 BUILD (the keeper chose "always max", 13:2x: the slider and its off box are gone): B's row 'D256: the design-speed value has a
+// REMOVED D256 BUILD (the user chose "always max", 13:2x: the slider and its off box are gone): B's row 'D256: the design-speed value has a
 // FIXED box and the off box stays with its word, so the box does not move; off, on and off again all work' (6f2404d) went with the box.

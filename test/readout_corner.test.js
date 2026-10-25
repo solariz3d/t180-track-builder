@@ -10,7 +10,7 @@
 //   3  A: with no next piece, what "turn 0 at start" (the panel's 20 m ramp) would add is predicted, and is what placing that piece then turns
 //   4  D: the gravity bank is path.js's bankG at the piece's ends (asin of the road's left, vertical): flat 0, a 30° bank 30°, and past an inversion
 //      (pitch 186°, bank −234°) 53.5°, equal to the built path's bankG
-//   5  the keeper's save (fixtures-d332, uncommitted: his track, not for a public repository; skipped with the reason when absent): p41's corner 90.00°,
+//   5  the user's save (fixtures-d332, uncommitted: his track, not for a public repository; skipped with the reason when absent): p41's corner 90.00°,
 //      171°/100 m at its end, +9.64° from p42; p42's corner 99.64°; the gravity bank −53.5°
 'use strict';
 const test = require('node:test');
@@ -71,7 +71,7 @@ test('row 4 (D): the gravity bank is the road\'s bank against gravity at each en
   near(ri.gravityBankFromDeg, -53.5, 0.1, 'past the inversion'); near(ri.gravityBankFromDeg, S[0].bankG / DEG, 1e-6, 'the built path\'s bankG');
 });
 const FX = path.join(__dirname, '..', 'fixtures-d332', 'eq-ELYSIUM.t180track');
-test('row 5: the keeper\'s save: p41 corner 90.00°, ends turning at 171°/100 m, +9.64° from p42; p42 corner 99.64°; gravity bank −53.5°', { skip: fs.existsSync(FX) ? false : 'fixtures-d332/eq-ELYSIUM.t180track is the keeper\'s save, kept out of the repository; copy it in read only to run this row' }, () => {
+test('row 5: the user\'s save: p41 corner 90.00°, ends turning at 171°/100 m, +9.64° from p42; p42 corner 99.64°; gravity bank −53.5°', { skip: fs.existsSync(FX) ? false : 'fixtures-d332/eq-ELYSIUM.t180track is the user\'s save, kept out of the repository; copy it in read only to run this row' }, () => {
   const doc = D.parse(fs.readFileSync(FX, 'utf8')), i = doc.pieces.findIndex((p) => p.id === 'p41'), r = RO.pieceReadout(doc, i), r2 = RO.pieceReadout(doc, i + 1);
   near(r.corner.turnDeg, 90.00, 0.01, 'p41 corner'); near(r.corner.endsTurningDegPer100m, 171.4, 0.1, 'p41 ends turning'); near(RO.cornerNext(doc, i).nextAddsDeg, 9.64, 0.01, 'p42 adds');
   near(r2.corner.turnDeg, 99.64, 0.01, 'p42 corner'); assert.equal(r2.corner.fromId, 'p41');

@@ -1,4 +1,4 @@
-// geom_grow.test.js: node --test test/geom_grow.test.js. Growing the track from its OPEN END (the keeper, 12:20: the
+// geom_grow.test.js: node --test test/geom_grow.test.js. Growing the track from its OPEN END (the user, 12:20: the
 // user builds the track, coaster-builder style). Stated before these tests were written:
 //   · MATCH: an extended path and mesh equal a full rebuild of the same segments, with centreline and frame within
 //     1e-9 (f64), identical station choice and cells, and float32 vertex data within 1e-6 m.

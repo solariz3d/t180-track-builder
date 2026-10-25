@@ -90,7 +90,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // them (the ghost ran them on copies of the same placed track, so it is the same to the byte), so update() takes them instead of building them again (30 ms at 1,000 m, 60 at 2,000), and the
   // placed path and mesh it leaves are untouched, so the undo copy needs no copying. Anything else (a cheap ghost, a coarse detail, a lift, another document) and update() builds as before.
   let lastFull = null;
-  // UNDO OF A PLACEMENT (the keeper, 2026-10-12: "undoing the last piece lags too long"). A removal was a full rebuild: 1.2 to 1.4 s on his 10-piece
+  // UNDO OF A PLACEMENT (the user, 2026-10-12: "undoing the last piece lags too long"). A removal was a full rebuild: 1.2 to 1.4 s on his 10-piece
   // track, against 65 ms to place the piece. An 'extend' grows the path and the mesh IN PLACE (geom extendPath / extendMesh), so just before it the
   // model copies what those two touch: the path's arrays and the last block (extendPath pops a sample and shortens the last block), and the mesh
   // state's piece and seam lists (extendMesh only appends; it never changes an old piece). If the very next change is back to exactly those
@@ -134,7 +134,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     const ms = meshSegs(segs, lk), slot = isClosed ? slots.get(detail) : null;
     let m;
     if (slot && typeof geom.reuseMesh === 'function' && slot.mesh && slot.keys.length === segs.length) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(slot.mesh, sh, ms, segs.map((_, j) => nk[j] === slot.keys[j] && lk[j] === slot.liftKeys[j]));
-    // AN OPEN TRACK CLOSED BY ADDING ROAD (2026-10-15, Finish to start on the keeper's 24 km ELYSIUM: Apply rebuilt every piece, 6.5 s with the window frozen):
+    // AN OPEN TRACK CLOSED BY ADDING ROAD (2026-10-15, Finish to start on the user's 24 km ELYSIUM: Apply rebuilt every piece, 6.5 s with the window frozen):
     // every placed piece is the same and lies where it lay, so its mesh is kept and only the new road and the closing joint are made (geom.reuseMesh, grow);
     // D453: a Close that also banks placed curves (D447) remakes those pieces and the seams beside them, and keeps the rest
     else if (isClosed && !was.closed && was.mesh && was.mesh._state && was.detail === detail && typeof geom.reuseMesh === 'function' && keptFrom(was, nk, lk) > 0) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(was.mesh, sh, ms, segs.map((_, j) => j < was.keys.length && nk[j] === was.keys[j] && lk[j] === was.liftKeys[j]), { grow: true });
@@ -300,7 +300,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         const { lk, a } = relift(), s0 = Math.min(g, a);
         from = s0; fromS = path.starts[s0].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), s0); liftKeys = lk; how = 'sculpt';
       } else if (!isClosed && !closed && g === nk.length && mesh && mesh._state && typeof geom.reuseMesh === 'function') {
-        // A REMOVAL FROM THE END of an open track (an undo of a placement, in a history not made in this session; 2026-10-13: 19 to 20 s on the keeper's 24 km ELYSIUM, a full
+        // A REMOVAL FROM THE END of an open track (an undo of a placement, in a history not made in this session; 2026-10-13: 19 to 20 s on the user's 24 km ELYSIUM, a full
         // mesh): the path is grown again (cheap), and the mesh keeps every remaining piece whose segment and lift are what they were, placed anew (geom.reuseMesh, the
         // closed loop's own reuse, given the old mesh cut to the remaining pieces; equal to a full build to round-off, app/test/preview-undo.test.js row 6).
         const at0 = startOpt ? { start: startOpt } : {};   // where the track starts, as full() places it

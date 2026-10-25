@@ -105,7 +105,7 @@ test('validate: a flat 40 m jump reports both landings, the gap and the climb, f
   assert.strictEqual(j.reachable, true);
 });
 
-// CHANGED D250 (the keeper: jumps are tuned by driving them): a jump the car is not caught on WARNS in the lap proof (lap.warn) and no longer fails the
+// CHANGED D250 (the user: jumps are tuned by driving them): a jump the car is not caught on WARNS in the lap proof (lap.warn) and no longer fails the
 // lap (lap.where). The row's subject, the uncaught jump named with its fall, stands.
 test('validate: a jump taken too slowly is not caught, and a closed lap over it WARNS with the reason (D250), without failing on it', () => {
   const { path, segs } = jumpPath(20, { drop: 1 });   // 20 m/s over 40 m falling 1 m: short at either fall

@@ -91,7 +91,7 @@ test('a red track is refused, nothing is written, and the reds are shown with th
   // 150 km/h: far below any take-off speed the 12 m jump's 6.3 g landing needs, so this track is red whatever the
   // details of the jump check. At D169 it was 300 km/h, 13 km/h either side of the line depending on the jump check's
   // version, and it flipped when validation changed (D170).
-  // CHANGED D250 (the keeper: jumps are tuned by driving them): the jump this row used is a WARNING now and the same lap EXPORTS (checked: 1 jump
+  // CHANGED D250 (the user: jumps are tuned by driving them): the jump this row used is a WARNING now and the same lap EXPORTS (checked: 1 jump
   // warning, nothing red), so the red track is an INVERSION taken at 150 km/h instead, which the lap proof fails on (leaves-surface): the row's subject,
   // a red track refused with every red's source shown, is unchanged
   const jl = closed('Inversion Loop', ['straight', 'straight', 'inversion', 'straight', 'tight', 'straight', 'tight'], 150);
@@ -213,7 +213,7 @@ test('D227 "." and ".." as the picked folder name are refused BY NAME and never 
   }
 });
 
-test('D226 the empty folder the keeper made exports to content\\tracks as the normal t180b_<name> folder and the empty folder is removed, so Content Manager never sees it', async () => {
+test('D226 the empty folder the user made exports to content\\tracks as the normal t180b_<name> folder and the empty folder is removed, so Content Manager never sees it', async () => {
   const tracks = acTree('T-180 TUBE OVAL', 'somebody_elses'); fs.writeFileSync(path.join(tracks, 'somebody_elses', 'theirs.kn5'), 'theirs');
   const st = storage(), { s } = await shellWith(SAMPLE, st), picked = path.join(tracks, 'T-180 TUBE OVAL');
   await s.exportTo(picked);
@@ -245,7 +245,7 @@ test('D226 if the empty folder cannot be removed the export still stands, and th
 });
 
 // D234 REVERSED this D226 rule. D226 left the picked empty folder where it was after a refused or failed export ("nothing is removed unless the export was written"), and the
-// keeper's own exports then left an empty track folder that Content Manager listed as damaged. The folder was made for an export: it goes whatever the outcome.
+// user's own exports then left an empty track folder that Content Manager listed as damaged. The folder was made for an export: it goes whatever the outcome.
 test('D226 (reversed by D234) a refused export into an EMPTY picked folder removes the folder too, and says so; nothing is written', async () => {
   const tracks = acTree('T180 OVAL'), picked = path.join(tracks, 'T180 OVAL'), st = storage();
   const open = D.appendWord(D.appendWord(D.createDoc('Open'), 'straight'), 'turn'), { s } = await shellWith(open, st);

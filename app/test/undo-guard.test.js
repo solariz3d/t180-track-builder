@@ -48,7 +48,7 @@ async function page() {
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.isRoot = true;
   const shell = await createCoreShell({ brushFn: null, autosaveMs: 0 }); shell.extend({ length: 200 }); shell.extend({ length: 300 });
   const root = doc.createElement('div'), panel = require('../core/panel.js').mount(root, shell);
-  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the keeper's word, plan :367-369, ruled :373-385). Every row in
+  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the user's word, plan :367-369, ruled :373-385). Every row in
   // this file types the turn as a RATE (°/100 m), the field's meaning when it was written, so the helper puts "turn as" on rate, the switch the ruling keeps one
   // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js (D331 B).
   { const ta = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); ta.value = 'rate'; ta.onchange(); }

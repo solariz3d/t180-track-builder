@@ -1,4 +1,4 @@
-// pitui.js: THE "PIT LANE" SECTION of the core panel (the keeper, 2026-10-09: "a pit road that is off to the side of the track, and can connect to the track
+// pitui.js: THE "PIT LANE" SECTION of the core panel (the user, 2026-10-09: "a pit road that is off to the side of the track, and can connect to the track
 // … the pit lane and pit spawns wont be literally used in races … it allows for a secondary spawn point for practice and so cars dont spawn right on the
 // track when other racers are driving"). Off by default (no pitLane in the document). Ticked, the track gets the word builder's side road
 // (src/doc/pitlane.js, built by src/geom/pitlane.js): it peels off the road's edge on the chosen side, runs beside it, and comes back; the pit boxes
@@ -12,7 +12,7 @@ const PL = require('../../src/doc/pitlane.js');   // the lane's defaults (the co
 // the pit boxes' starting count and spacing (src/core/document.js PIT_DEFAULT says the same)
 const DEFAULT = Object.freeze({ ...PL.DEFAULTS, boxes: 4, boxSpacingM: 10 });
 
-// The lane geometry's refusals (src/geom/pitlane.js), in the keeper's words
+// The lane geometry's refusals (src/geom/pitlane.js), in the user's words
 const WHY = {
   PIT_JOIN_NOT_FLAT: 'the road\'s edge where the lane joins is too steep (a cup wall or a tube): the lane needs an edge of 35° or less. Move the join to a flatter part, or lower the cup there.',
   PIT_TOO_SHORT: 'the lane is too short for its peel-off and merge: move the joins further apart, or shorten the peel-off and merge.',
@@ -35,7 +35,7 @@ function mount({ shell, el, win }) {
   const merge = num('pit lane merge length', '1', '5', 'metres of road over which the lane comes back');
   const boxes = num('pit boxes', '1', '1'), spacing = num('pit box spacing', '0.5', '4', 'metres between pit boxes along the lane');
   const status = el('p', { class: 'message', 'aria-label': 'pit lane status', style: 'font-size:12px;margin:2px 0' });
-  // the keeper's idea: where the lane meets a cup wall or a tube, lower the road's shape beside the lane (src/core/pitflat.js; the route does not move)
+  // the user's idea: where the lane meets a cup wall or a tube, lower the road's shape beside the lane (src/core/pitflat.js; the route does not move)
   const flatten = el('button', { text: 'Flatten road for pit', title: 'lower the cup, tube or edge to the plain road beside the whole pit lane, easing back over 60 m either side; the route does not move; Ctrl+Z puts the walls back' });
   flatten.onclick = () => shell.flattenForPit();
   const field = (label, ...kids) => el('label', { style: 'display:block;margin:2px 0' }, el('span', { text: label }), ' ', ...kids);

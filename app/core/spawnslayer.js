@@ -1,4 +1,4 @@
-// spawnslayer.js: THE HAND-PLACED START ON THE PREVIEW (the keeper, 2026-10-09: the start line moved along the first piece, a numbered grid, a hotlap spawn put
+// spawnslayer.js: THE HAND-PLACED START ON THE PREVIEW (the user, 2026-10-09: the start line moved along the first piece, a numbered grid, a hotlap spawn put
 // down by hand). A canvas over the preview (#preview), redrawn every animation frame like app/core/griplayer.js (the camera eases, so the marks move with it):
 //   · the START LINE across the road, white, between the gate markers AC_TIME_0_L and _R
 //   · every GRID SLOT as a car-sized box on the road (the measured T-180, src/markers/layout.js T180: 6.67 m x 2.67 m), numbered from pole: 1, 2, 3 …

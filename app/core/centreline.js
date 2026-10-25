@@ -1,4 +1,4 @@
-// centreline.js: THE SCULPT GUARD (D244b, the keeper: a mode "to sculpt pieces once they are already put down, so they don't change the structure of the rest of the
+// centreline.js: THE SCULPT GUARD (D244b, the user: a mode "to sculpt pieces once they are already put down, so they don't change the structure of the rest of the
 // track, it's mostly just banking and cupping tweaks"). Sculpt offers ONLY the shape channels (bank, cup, width, edge angle, edge start, wall rise, tube sweep); the guard is the
 // runtime proof that an edit made in it really left the CENTRELINE alone, and it REFUSES BY NAME when it did not (SCULPT_MOVES_CENTRELINE), so a future channel, or a piece whose
 // shape does feed the route (a closed tube's heartline is its width / 2π, adapter.js heartlineOf), can never move the rest of the track silently.
@@ -36,7 +36,7 @@ function routeMovedDetail(baseDoc, baseSegments, newDoc, newSegments, baseStart,
 function routeMoved(...a) { const d = routeMovedDetail(...a); return d ? d.text : null; }
 
 /**
- * THE REASON IN THE KEEPER'S WORDS (D243's F3: C's look found the refusal naming an internal field, "heartline1 moved from undefined to 0"). `d` is what routeMovedDetail returns. A tube's roll axis is its own
+ * THE REASON IN THE USER'S WORDS (D243's F3: C's look found the refusal naming an internal field, "heartline1 moved from undefined to 0"). `d` is what routeMovedDetail returns. A tube's roll axis is its own
  * centre once its sweep passes 300° (src/core/adapter.js heartlineOf), so its width, bank and sweep feed the route there; a sweep that CROSSES 300° makes that field appear.
  */
 function plainWhy(d) {

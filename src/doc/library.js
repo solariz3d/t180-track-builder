@@ -1,4 +1,4 @@
-// library.js: the piece library, and the sculpt hook (the keeper, 12:22: "but you can also sculp pieces, and then even
+// library.js: the piece library, and the sculpt hook (the user, 12:22: "but you can also sculp pieces, and then even
 // create and save your own unqiue pieces"; ARCHITECTURE §2 handles and phrases; docs/INTERFACES.md §4b).
 //
 //   builtinLibrary() -> lib            one built-in piece per word, from the program itself

@@ -16,7 +16,7 @@
 // 236.9, 313.6 MiB. AMBER above the median (56,278,061 B: heavier than half of them), RED above the largest
 // (328,874,531 B: heavier than every one). Those are file bytes and theirs are mostly block-compressed, while this
 // builder writes uncompressed A8R8G8B8, so the same pixels cost more here; the comparison is of what the kn5 carries.
-// The red is a level shown, not a refusal: whether a red budget stops an export is the keeper's call.
+// The red is a level shown, not a refusal: whether a red budget stops an export is the user's call.
 'use strict';
 const { MAX_SIDE } = require('./dds.js');
 

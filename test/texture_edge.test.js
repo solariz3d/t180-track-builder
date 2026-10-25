@@ -1,5 +1,5 @@
 ﻿// texture_edge.test.js: node --test test/texture_edge.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D371 (the keeper's idea, 2026-10-17): a texture built once the track is closed, from its whole width range, so one texture works at every width.
+// D371 (the user's idea, 2026-10-17): a texture built once the track is closed, from its whole width range, so one texture works at every width.
 // The EDGE fit (src/texture/edge.js): the edge bands keep their size in METRES, the centre is a whole number of repeats. Rows:
 //   1  the layout: N is a whole number, chosen so that the worst stretch of a cell over the width range is the smallest there is
 //   2  the built image: the source's two edge bands, and its centre repeated N whole times between them (nothing half cut)

@@ -1,6 +1,6 @@
 // layout-css.test.js: node --test app/test/layout-css.test.js
-// D235 (the keeper's screenshot "scroll bar in the way of the click for changing values"): in the Extend column the value fields ran under the scroll bar, and the
-// "width like…" select was cut off. Measured in a real Chrome at the keeper's 1818 px: every Extend field ended 65 px past the section's content edge (x = 359 against
+// D235 (the user's screenshot "scroll bar in the way of the click for changing values"): in the Extend column the value fields ran under the scroll bar, and the
+// "width like…" select was cut off. Measured in a real Chrome at the user's 1818 px: every Extend field ended 65 px past the section's content edge (x = 359 against
 // 294, the bar's 15 px gutter lies between 304 and 319). The cause was the shared `.picker` grid, `60px 1fr`: a `1fr` track will not shrink below its items' min-content, so a
 // number input's or a select's own width pushed the row out. The fix is `minmax(0, 1fr)` and fields held to their track. This test pins the rules (the page is DOM and the
 // webview, and the geometry itself was measured over CDP, in the hand-back): a revert to `1fr` or the loss of the field rule fails here.

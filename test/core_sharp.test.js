@@ -1,4 +1,4 @@
-// core_sharp.test.js: node --test test/core_sharp.test.js. D282 part 1, SHARP, a second turn type (the keeper, 2026-10-09 18:55: "i also want to be able to make
+// core_sharp.test.js: node --test test/core_sharp.test.js. D282 part 1, SHARP, a second turn type (the user, 2026-10-09 18:55: "i also want to be able to make
 // track H 90 degrees too"; the broad curve stays as it is). track H's turns after the jump: about R 22 m, ~88°, entries and exits 0–8 m 10–90%, width ~24
 // (exo_memory/loop/sharp_turns_measure_B_2026-10-09.md §1). B registers its own bar and checks it blind (plan_t180_sharp_turn_type_2026-10-09.md lines 29–39);
 // these are E's rows: the angle on the path the app draws, the exit dead straight, short entries and exits, green at full speed, the minimum radius named by

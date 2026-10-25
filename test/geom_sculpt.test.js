@@ -1,4 +1,4 @@
-// geom_sculpt.test.js: node --test test/geom_sculpt.test.js. Sculpting pieces and saving the user's own (the keeper,
+// geom_sculpt.test.js: node --test test/geom_sculpt.test.js. Sculpting pieces and saving the user's own (the user,
 // 12:22: "you can also sculp pieces, and then even create and save your own unqiue pieces"). Stated before these tests
 // were written:
 //   · A piece regenerates from its handle values alone. The same handles at two placements give the same vertex
@@ -147,7 +147,7 @@ test('sculpt: a start-pitch change with NO bank change still remeshes the curve 
 //     and grows by exactly one per extra downstream segment (its re-placement);
 //   · on a pitched stretch the bank against gravity (bankG) of every re-placed sample is BIT-IDENTICAL to before (a turn
 //     about world up leaves every y component alone), and equals a full rebuild's to 1e-12;
-//   · a re-placed path equals a full rebuild EXACTLY (amended 18:5x, the chair: the keeper's rule, exact where it is
+//   · a re-placed path equals a full rebuild EXACTLY (amended 18:5x, the chair: the user's rule, exact where it is
 //     achievable; a first version agreed only to 2.2e-12, and was rebuilt as one placement chain for both).
 const PITCHED = 1 * D;
 /** A track on a steady 1° climb (a pitched start, no pitch curvature): straights and turns, then `after` downstream. */

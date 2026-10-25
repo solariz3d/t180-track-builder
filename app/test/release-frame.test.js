@@ -1,7 +1,7 @@
 // release-frame.test.js: node --test app/test/release-frame.test.js   (under the heavy-run lock; about two minutes)
-// D407 (the keeper: "even turning a 1000m straight isnt smooth and laggy as hell"; the measurement of 2026-10-19, exo_memory/handback/p-d407-measure-A_2026-10-19.md): LETTING GO of a handle
+// D407 (the user: "even turning a 1000m straight isnt smooth and laggy as hell"; the measurement of 2026-10-19, exo_memory/handback/p-d407-measure-A_2026-10-19.md): LETTING GO of a handle
 // built the exact ghost of the piece at once, inside the pointer-up: 60 ms at 1,000 m, 280 at 5,000, a second at 20 km, the page frozen meanwhile; and a number typed into a field of the
-// panel cost 13 ms. On the real page (app/index.html) in HEADLESS Chrome (never a window, muted), served from this checkout, frames uncapped as in drag-frame.test.js. The bar is the keeper's
+// panel cost 13 ms. On the real page (app/index.html) in HEADLESS Chrome (never a window, muted), served from this checkout, frames uncapped as in drag-frame.test.js. The bar is the user's
 // 165 Hz display, 6.0 ms (docs/ARCHITECTURE.md §9b). The cost of an action is the LONGEST piece of main-thread work it causes: the pointer-up handler itself (taken between a capture
 // listener and a bubble listener on the window) and each animation frame's callbacks after it. Each case is run again once if it misses, so a seat running something beside it does
 // not fail the row (a case passes when either run does; every run's figures are in the message). Skipped, with the reason, where there is no Chrome. Rows:
@@ -21,7 +21,7 @@ const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the release is 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.css': 'text/css' };
 const LOOKS = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'];
-const BUDGET = 6.0;          // ms: the keeper's display is 165 Hz (6.06 ms a frame), the D404 ruling
+const BUDGET = 6.0;          // ms: the user's display is 165 Hz (6.06 ms a frame), the D404 ruling
 const RUNS = 2;
 
 let srv, ch, ws, dir, base, send, ev, errors = [];

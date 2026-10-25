@@ -1,5 +1,5 @@
 // preview-undo.test.js: node --test app/test/preview-undo.test.js
-// Undo of a placement in the track model (the keeper, 2026-10-12: "undoing the last piece lags too long"). An undo straight back over the last
+// Undo of a placement in the track model (the user, 2026-10-12: "undoing the last piece lags too long"). An undo straight back over the last
 // placement puts back the copy the model kept before it grew (app/preview/trackmodel.js UNDO OF A PLACEMENT) instead of rebuilding the track.
 // It is only worth having if it is the track: rows
 //   1  after place-then-undo the model's batches equal a fresh full build of the same document, with no mesh built, and placing again from

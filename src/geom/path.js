@@ -31,7 +31,7 @@
 // HEARTLINE. The curve integrated is the heartline. The road's centre is the heartline minus heartline·U (+ = the
 // heartline above the road), as INTERFACES §1 "heartline … + = up" reads.
 //
-// GROWING FROM THE OPEN END (the keeper, 12:20: the user builds the track, coaster-builder style). Everything a segment
+// GROWING FROM THE OPEN END (the user, 12:20: the user builds the track, coaster-builder style). Everything a segment
 // needs from the past is its START STATE: position, heading, pitch, tangent and the unrolled RMF left, all carried in
 // `path._end`. So extendPath integrates only the new segments. Its stations are the same set a full rebuild would pick
 // (every multiple of `step`, plus every segment boundary), so an extended path equals a full rebuild, and its cost
@@ -117,7 +117,7 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
   const hl = g.heartline1 === undefined ? num(g.heartline) : num(g.heartline) + (g.heartline1 - num(g.heartline)) * u / L;
   // D268: a core segment (heartline1 given: adapter.js xsecSegments, a closed tube's roll axis) keeps the road's centre ON THE CURVE the user drew while it is not rolled:
   // the axis is hl ABOVE the curve (along the unrolled up U0) and a roll turns the road about it, so the centre is x + hl·(U0 − U). Before, it was x − hl·U, which put the
-  // floor of every closed tube hl = w/2π below the curve, so opening a tube back to a road lifted the floor that far inside the piece (the keeper's "hump", 7 m at 44 m wide).
+  // floor of every closed tube hl = w/2π below the curve, so opening a tube back to a road lifted the floor that far inside the piece (the user's "hump", 7 m at 44 m wide).
   // A word's heartline (constant, no heartline1: INTERFACES §1, the rider's heart above the track) is as before.
   const pos = g.heartline1 === undefined ? sub(x, mul(Ur, hl)) : add(x, mul(sub(U0, Ur), hl));
   const run = Math.hypot(T[0], T[2]);
@@ -153,7 +153,7 @@ const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1], c * v[2] - sn * v[0]];
 const same3 = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
 /**
- * D258, A FREE FLIGHT (the keeper places the landing by hand): a segment with `to` = { x: [left, up, forward], theta, p } ENDS at that pose, in its own
+ * D258, A FREE FLIGHT (the user places the landing by hand): a segment with `to` = { x: [left, up, forward], theta, p } ENDS at that pose, in its own
  * local coordinates (heading 0 at its start, the start pitch p0): x is where the landing starts (left along the heading's horizontal left, up along world up,
  * forward along the heading's horizontal forward), theta its heading (+ = left) and p its pitch. Between, the centreline is the cubic Hermite from the start
  * (tangent T(0, p0)) to x (tangent T(theta, p)), both tangents scaled by the chord: no road is there, it only carries the stations, the AI line and the

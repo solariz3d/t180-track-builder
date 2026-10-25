@@ -4,7 +4,7 @@
 // track reader's words over every installed T-180 layout, FINDINGS §7f), by src/doc/vocabgen.js: a word's default is
 // its class MEDIAN (radius, heading change, width, bank; the straight's length; the jump's gap and drop), its default
 // font is the cross-section its class uses most, and a tempo picks a percentile BAND of the class's radii. Before D182
-// they were hand-set, partly from the 500 m milestone-1 test loop; the keeper, 2026-09-27 23:36: "the pieces are nowhere
+// they were hand-set, partly from the 500 m milestone-1 test loop; the user, 2026-09-27 23:36: "the pieces are nowhere
 // near what I want them to be, they arent good for t-180s".
 //
 // WORDS. The names are the ones ARCHITECTURE §2 lists. The boundaries between straight, sweep, turn and tight are the
@@ -56,7 +56,7 @@ const TEMPOS = {
 };
 
 // D182: the bowl, half-pipe and flat are MEASURED (src/geom/fonts.js): their floor rises across the whole width, and a new
-// word gets the family's median width and NO wall, so nothing curls up past the measured edge (the keeper, 01:27: "the
+// word gets the family's median width and NO wall, so nothing curls up past the measured edge (the user, 01:27: "the
 // rims flip up too much"). resolve.js builds them through fonts.js fontProfile. wall-ride and tube are not measured.
 const { DEFAULTS: MEASURED } = require('../geom/fonts.js');
 const FONTS = {

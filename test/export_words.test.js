@@ -106,7 +106,7 @@ test('a red document is refused, the reason named, and nothing written (the 60°
 // CHANGED 2026-09-27 (D170): was 300 km/h. Validation then measured a jump one station long (a 12 m gap as 13 m), and
 // the 6.3 g landing needed about 311 km/h. Measured from the lip, it needs 287 km/h (D170 hand-back §2), so 300 now
 // lands it, and the jump is taken at 250 km/h instead: still below what the 6.3 g landing needs.
-// CHANGED D250 (the keeper: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): a jump the
+// CHANGED D250 (the user: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): a jump the
 // car is not caught on no longer fails the lap proof or refuses the export. This row was "a lap the proof fails is refused"; the same lap now EXPORTS, and
 // the jump is named in a plain warning. A lap that fails for any other reason is still refused (the steep-without-raycast row above, and the lap proof's
 // own stall / leaves-surface reasons, which are unchanged).

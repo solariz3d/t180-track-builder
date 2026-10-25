@@ -1,4 +1,4 @@
-// trackmenu.js: THE TRACK MENU's items (D355, the keeper: the controls that were on the left move into drop-down menus along the top right, "the same
+// trackmenu.js: THE TRACK MENU's items (D355, the user: the controls that were on the left move into drop-down menus along the top right, "the same
 // aesthetic as we have it now"). The menu bar (app/menubar/) renders what a menu module's items(ctx) returns (contract M: { label, run }, { label, checked,
 // toggle }, { label, panel: mountFn }, { section }, { separator }); this module is the Track side of it.
 //

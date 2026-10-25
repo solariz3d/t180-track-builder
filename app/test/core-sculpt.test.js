@@ -1,5 +1,5 @@
 // core-sculpt.test.js: node --test app/test/core-sculpt.test.js   (under the heavy-run lock)
-// D244b, SCULPT (the keeper, 09:17: "a separate mode to sculpt pieces once they are already put down, so they don't change the structure of the rest of the track, it's mostly just banking and
+// D244b, SCULPT (the user, 09:17: "a separate mode to sculpt pieces once they are already put down, so they don't change the structure of the rest of the track, it's mostly just banking and
 // cupping tweaks"). The shell's Sculpt mode (app/core/coreshell.js setSculpt, beginSculpt, sculptTo, endSculpt) and its guard (app/core/centreline.js). GEOMETRY tier for the guard: the claim
 // is that the CENTRELINE is bit-identical, so the rows compare every sample's position and tangent with Object.is, at the preview's step (2 m) and a finer one (1 m). Rows:
 //   1  every shape channel, on every kind of piece it applies to, leaves every centreline sample bit-identical (and the document did change)
@@ -181,7 +181,7 @@ test('row 9 (D243 F3): the refusal says the REAL reason in plain words, never an
 
 function close(a, b, eps) { assert.ok(Math.abs(a - b) <= eps, `${a} is not within ${eps} of ${b}`); return true; }
 
-// D259, the keeper (18:21-18:24): the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way". The bank keeps within
+// D259, the user (18:21-18:24): the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way". The bank keeps within
 // ONE turn and keeps its SIGN, shown and applied (370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40), in the Extend field and ghost handle, Sculpt's bank handle and the bank
 // brush; no nearest-equivalent rewrite; the stored winding of existing tracks and the core are untouched.
 const DEGR = Math.PI / 180;

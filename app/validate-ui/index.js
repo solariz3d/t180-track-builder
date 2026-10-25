@@ -2,7 +2,7 @@
 //
 // What it shows, in #validation:
 //   · a summary: red and amber counts, the lap (open while building), the jumps;
-//   · NO speed control (D256, the keeper: "it should always be maxed out"): an open track's loads at the lap sim's cap, 970 km/h
+//   · NO speed control (D256, the user: "it should always be maxed out"): an open track's loads at the lap sim's cap, 970 km/h
 //     (MACH6.vmaxKmh), a closed one on its ghost lap, the speed the export judges it at, so the two never disagree;
 //   · a CSP toggle: off validates for vanilla AC, where surfaces above 50° are red (ARCHITECTURE.md:87). D355: it is the saved setting `csp` (app/settings.js),
 //     shared with Settings ▸ Checker ▸ Wall raycasting: it starts from what is saved, a click on it saves it, and a change made in the menu ticks it here and re-checks;
@@ -24,7 +24,7 @@
 // the very array of the document being validated, and otherwise grows its own path, so an unanswered event costs
 // speed, never correctness.
 //
-// OFF THE WINDOW'S THREAD (the keeper, 2026-10-14: on ELYSIUM, 24 km, the check froze the window ~0.7 s per placed piece and ~30 s on opening it).
+// OFF THE WINDOW'S THREAD (the user, 2026-10-14: on ELYSIUM, 24 km, the check froze the window ~0.7 s per placed piece and ~30 s on opening it).
 // Where the page can make a Web Worker, the check runs there (checkrunner.js -> checkworker.js -> checkjob.js, the same resolve, the same
 // preview path, the same controller): the panel sends the document on every change, at most once a frame, and shows the answer when it comes,
 // with "checking…" while a newer document is still being checked. The worker sends back what this panel shows (findings, lap, jumps, arcs, the

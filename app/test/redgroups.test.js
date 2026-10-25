@@ -1,7 +1,7 @@
 // redgroups.test.js: node --test app/test/redgroups.test.js
 // D242 item 4: a refusal shows EVERY red in plain words, grouped, with where (s in km and the piece). The reds below are TEST 1's kinds and places
 // (E's diagnosis, loop/test1_raygap_diagnosis_2026-10-04.md: 6 downforce-ray-gap, 13 self-intersection, 13 stacked, 1 roll-rate, 1 lap-proof), on a
-// synthetic layout of segments, so nothing of the keeper's is read.
+// synthetic layout of segments, so nothing of the user's is read.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

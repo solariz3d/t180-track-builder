@@ -1,12 +1,12 @@
 // core_close_local.test.js: node --test test/core_close_local.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D242, THE LOCAL CLOSE (src/core/close.js, opts.window; the keeper, TEST 1: "completing the loop altered the rest of the track equation": the
+// D242, THE LOCAL CLOSE (src/core/close.js, opts.window; the user, TEST 1: "completing the loop altered the rest of the track equation": the
 // whole-lap close moved every control point, the opening 1,000 m straight's heading rate by 0.00204 rad/m, and the lap ran into itself). Rows:
 //   1  a close confined to the LAST piece leaves every earlier piece bit-identical and closes the loop
 //   2  the default window: the trailing pieces covering ~20% of the lap, at least the last piece; and the whole-lap close still reaches back (control)
 //   3  a window that cannot close the loop REFUSES BY NAME (CLOSE_WINDOW), naming the window; nothing is handed back
 //   4  a local close may not push the window past the roll-rate bar: refused by name (and its control: a smaller bank closes)
 //   5  a window with no road piece is refused by name
-// The laps (measured, B's lprobe2 and lprobe3): a NEAR lap ends 8.87 m from its start, as a lap the keeper is about to close does; the FAR lap
+// The laps (measured, B's lprobe2 and lprobe3): a NEAR lap ends 8.87 m from its start, as a lap the user is about to close does; the FAR lap
 // ends some 300 m past its start, which no window short of the whole lap can close.
 'use strict';
 const test = require('node:test');
@@ -51,7 +51,7 @@ test('row 2: the default window covers at least ~20% of the lap from its end (at
   assert.ok(outside.length > 0, 'the default window leaves pieces outside it');
   for (const i of outside) assert.ok(sameChannels(d.pieces[i], local.doc.pieces[i]), `${d.pieces[i].id} is outside the window: kept`);
   const whole = C.close(d, { edited: [lastIdx(d)] }); assert.equal(whole.converged, true, whole.report);
-  assert.ok(outside.some((i) => !sameChannels(d.pieces[i], whole.doc.pieces[i])), 'control: the whole-lap close reaches back into the lap (what the keeper saw)');
+  assert.ok(outside.some((i) => !sameChannels(d.pieces[i], whole.doc.pieces[i])), 'control: the whole-lap close reaches back into the lap (what the user saw)');
 });
 
 test('row 3: a window that cannot close the loop is REFUSED BY NAME (CLOSE_WINDOW), naming the window, and nothing is handed back', () => {

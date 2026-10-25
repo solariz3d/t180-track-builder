@@ -1,5 +1,5 @@
 // core_segcache.test.js: node --test test/core_segcache.test.js
-// The segment cache (the keeper, 2026-10-12: "there is a solid lag when putting the pieces down still"). The window's shell keeps a
+// The segment cache (the user, 2026-10-12: "there is a solid lag when putting the pieces down still"). The window's shell keeps a
 // cache so a placement converts only the pieces that changed (src/core/adapter.js toSegments `cache`). The cache is only worth having
 // if it is INVISIBLE: after every kind of edit the shell's segments must equal a fresh, uncached conversion of the same document,
 // number for number (isDeepStrictEqual: -0 and 0 differ, NaN equals NaN). Rows:

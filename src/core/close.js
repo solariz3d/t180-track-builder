@@ -373,7 +373,7 @@ function close(doc, opts = {}) {
 }
 
 /**
- * D242, THE LOCAL CLOSE's window (the keeper, TEST 1: "completing the loop altered the rest of the track equation": the whole-lap close moved
+ * D242, THE LOCAL CLOSE's window (the user, TEST 1: "completing the loop altered the rest of the track equation": the whole-lap close moved
  * every control point, the 1,000 m opening straight's heading rate by 0.00204 rad/m, and the lap ran into itself). `spec` is the piece indices
  * allowed to move. Only road pieces count; at least one must be given. Returns { set, ids, fromS (the window's start along the lap),
  * lengthM, text } where text names it for a person ("the last 1,234 m (p44–p46)").
@@ -403,7 +403,7 @@ function keptPieces(doc, expand, cols) {
 /**
  * The DEFAULT window for the app's Close (D242): the trailing road pieces that cover at least `fraction` of the lap (default 0.2, the plan's
  * "the last ~20%"), always at least the last road piece. `{ last: true }` is the last road piece alone; `{ fraction: 1 }` is every road piece
- * (the whole lap, kept for when the keeper asks for it). Returns piece indices.
+ * (the whole lap, kept for when the user asks for it). Returns piece indices.
  */
 function closeWindow(doc, { fraction = 0.2, last = false } = {}) {
   const road = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0);

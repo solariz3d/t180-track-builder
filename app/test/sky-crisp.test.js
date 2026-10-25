@@ -15,7 +15,7 @@
 //   3  the renderer's sky pass sends uPx, the angle of one device pixel at the middle of the view (2 |up| / height), whatever the window's size
 //   4  the prism sky is still calm: the stars vary in brightness and stay sparse (at most one in 2,000 of the view's pixels is a star)
 //   5  the prism band has fine structure: what varies faster than 2 degrees is at least a quarter of what varies slower
-//   6  the stars can be seen (D416, the keeper looks at them): in the river, the aurora and the city, the median star stands at least 10 levels over
+//   6  the stars can be seen (D416, the user looks at them): in the river, the aurora and the city, the median star stands at least 10 levels over
 //      its sky and the brightest tenth at least 30 (registered before measuring)
 // With SKY_SHOT_DIR set, each style's DPR 1 view is also written there as <style>-up-<SKY_SHOT_LABEL>.png, at full size (the before and after shots).
 'use strict';

@@ -1,4 +1,4 @@
-// griplike.js: THE GRIP FIELD'S WORDS AND THE "GRIP LIKE…" DROP-DOWN'S ENTRIES (D261, the keeper, 21:18: "LIKE how we took the width reference of other tracks, perhaps do the same with the friction
+// griplike.js: THE GRIP FIELD'S WORDS AND THE "GRIP LIKE…" DROP-DOWN'S ENTRIES (D261, the user, 21:18: "LIKE how we took the width reference of other tracks, perhaps do the same with the friction
 // for users to see which tracks they want to emulate grip"; shaped like app/core/widthlike.js, D232). The numbers are src/doc/grips.json (tools/grips.cjs, E's survey of the installed tracks'
 // road FRICTION as a percent of AC's own road; numbers only, each row with the file it came from).
 //
@@ -6,7 +6,7 @@
 //                                          value = the whole percent the field takes (`value` in the JSON), label "track H, 82%" (and "Red Bull Ring, 99.5% (100)" where the
 //                                          measured figure is not whole: the field only takes whole percents, so the label says what it will fill)
 //   check(text)     -> { ok, grip, why }   the field's text: a whole percent from GRIP_MIN to GRIP_MAX (50 to 150), else why not in plain words (49 and 151 are refused, 100.5 is not whole)
-//   note(text)      -> string              the line under the field: what the number is (100% is AC's road), "untested: drive it" outside TESTED_MIN..TESTED_MAX (60 to 110, the keeper's range
+//   note(text)      -> string              the line under the field: what the number is (100% is AC's road), "untested: drive it" outside TESTED_MIN..TESTED_MAX (60 to 110, the user's range
 //                                          decision 2026-10-06; E's survey: the installed tracks run 60 to 110), and always that the checker does not model grip
 //   GRIP_MIN, GRIP_MAX, TESTED_MIN, TESTED_MAX
 'use strict';

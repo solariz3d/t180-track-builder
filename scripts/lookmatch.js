@@ -7,7 +7,7 @@
 //       world camera pose, so the same view can be set up in AC for the reference shot.
 //   node scripts/lookmatch.js diff --ref <folder of AC shots, <id>.png> --ours <the render folder>
 //       the look-match number per view (src/lookmatch/metric.js: mean CIEDE2000, with the 95th percentile). Without
-//       reference shots it says so: the number is PARKED until the keeper takes them (the keeper, 12:17).
+//       reference shots it says so: the number is PARKED until the user takes them (the user, 12:17).
 //
 // NOTHING IS WRITTEN INTO THE REPOSITORY: our render of another author's track (track E, track B) is theirs to share,
 // not ours, so --out inside this repository is refused. The AC folder is only READ. No game is launched.

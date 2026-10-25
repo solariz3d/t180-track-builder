@@ -30,7 +30,7 @@ function placeAll(layout, path, segments, { paintMaterial = 0, lane = null } = {
     if (layout.pits.lane && Number.isFinite(layout.pits.lane.along)) {   // set by hand: from `along` into the lane, backwards by the spacing (as it always was)
       for (let k = 0; k < n; k++) r.markers.push({ name: `AC_PIT_${k}`, kind: 'pit', n: k, s: s0 + layout.pits.lane.along - k * gap, u: layout.pits.u, h: layout.height, onLane: true });
     } else {
-      // D285 (the keeper, 2026-10-10: "the pit lane spacing starts half way through the pit … Pit 1 starts half way to the back of the pits"): the row was
+      // D285 (the user, 2026-10-10: "the pit lane spacing starts half way through the pit … Pit 1 starts half way to the back of the pits"): the row was
       // laid from the lane's MIDPOINT backwards, so the front half of the lane stood empty. Now it is CENTRED on the lane's usable straight (its 'body',
       // between the entry and exit tapers; a lane with no parts is usable end to end), box 0 first after the entry and each next box `spacingM` further
       // on, so the gap before the first box equals the gap after the last. A row longer than the straight is still centred: it spills onto both tapers

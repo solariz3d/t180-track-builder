@@ -29,7 +29,7 @@ const DEG = Math.PI / 180;
 const { rayGaps } = require('./raygap.js');
 
 // THE ROLL RATE (D225, seal V7 and S3): the angle between the surface normal U at s − 10 m and at s + 10 m, both projected onto the plane normal to T(s), over the 20 m chord (°/m).
-// The bar is MEASURED, not derived: RED above 1.2144°/m (the maximum over the whole track B lap, 8,585 windows, a lap the keeper says "flows so smooth … at max speed"),
+// The bar is MEASURED, not derived: RED above 1.2144°/m (the maximum over the whole track B lap, 8,585 windows, a lap the user says "flows so smooth … at max speed"),
 // AMBER above 0.9338°/m (the maximum over its inverted words alone, 175 windows). It is read at a 20 m chord because the 4 m chord of that read is facet noise (4.26°/m on plain road).
 // A full 360° of bank passes the bar only over about 450 m (amber until 600 m); over 300 m it is red (1.8°/m). See FINDINGS and ref 09 §10 for the command and the read's sha256.
 const ROLL_RED_DEG_M = 1.2144, ROLL_AMBER_DEG_M = 0.9338, ROLL_CHORD_M = 20;
@@ -102,7 +102,7 @@ const SRC = Object.freeze({
   'seam-past-envelope': 'FINDINGS.md:24, :110-111',
   'on-the-stops': 'FINDINGS.md:103-104',
   'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
-  'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp should catch both landings); a WARNING since D250: the keeper tunes jumps by driving them',
+  'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp should catch both landings); a WARNING since D250: the user tunes jumps by driving them',
   'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
   'joint-step': 'FINDINGS.md:110 (a step in the road mesh is a gap: the D190 round-3 ruling (c) reds a lap seam or a cup joint that steps more than 1 mm)',
   'roll-rate': 'D225 seal V7 / S3 (exo_memory/loop/cross_section_seal_registration_2026-10-03.md): the roll rate over a 20 m chord, the bar the track B lap measured (RED 1.2144°/m, AMBER 0.9338°/m)',
@@ -122,7 +122,7 @@ const DOWNFORCE_STEP = (car) => ({ aheadM: car.downforceRay.aheadM, note: `the d
 /** D243, D258: segment j is the equation core's FLIGHT (src/core/adapter.js): word 'core', part 'gap', carrying its pose (to), followed by road (the landing the user placed). */
 const isCoreFlight = (segments, j) => { const g = segments[j], n = segments[j + 1]; return g.word === 'core' && g.part === 'gap' && !!g.to && !!n && n.kind === 'road'; };   // g.to: the adapter writes a flight's pose on its gap (a planted hole has none)
 
-// WHAT DEPENDS ON A FROZEN SEGMENT ALONE IS COMPUTED ONCE (2026-10-12, the keeper: "a solid lag when putting the pieces down"). The window's shell
+// WHAT DEPENDS ON A FROZEN SEGMENT ALONE IS COMPUTED ONCE (2026-10-12, the user: "a solid lag when putting the pieces down"). The window's shell
 // reuses an unchanged piece's segments FROZEN (src/core/adapter.js toSegments `cache`), and on his 6 km track the checker spent about 4 of every
 // placement's seconds recomputing, for every segment, what only its cross-section decides: its normalized profile, the per-u constants (constOf),
 // the lateral points of the stacked check (latOf), and a cup blend's profile at a station. Each is now remembered per frozen segment (or per the
@@ -149,7 +149,7 @@ function segProfiles(segments) {
 function speedProfile(path, segments, car, opts) {
   const S = path.samples, n = S.length;
   const road = segments.filter((g) => g.kind !== 'gap');
-  // D256 (the keeper, "it should always be maxed out"): opts.fullSpeed fills an OPEN track at the lap sim's cap; a closed one falls through
+  // D256 (the user, "it should always be maxed out"): opts.fullSpeed fills an OPEN track at the lap sim's cap; a closed one falls through
   // to its ghost lap below, the speed the export judges it at. An explicit opts.designSpeed still wins
   const fill = Number.isFinite(opts.designSpeed) && opts.designSpeed > 0 ? opts.designSpeed : opts.fullSpeed === true && !path.closed ? kmh(car.vmaxKmh) : null;
   const own = (g) => (Number.isFinite(g.speed) && g.speed > 0 ? g.speed : fill);
@@ -296,7 +296,7 @@ function core(path, segments, opts, from, carried, upto) {
   for (let i = from; i < end; i++) {
     if (!isRoad(i)) continue;
     const p = S[i], cs = constAt(p), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
-    // D256 (suite reds): the two checks the keeper's decision added judge the EQUATION CORE's own roads only (word 'core', src/core/adapter.js), as the
+    // D256 (suite reds): the two checks the user's decision added judge the EQUATION CORE's own roads only (word 'core', src/core/adapter.js), as the
     // roll-rate bar does below: the paused piece builder's word documents are not newly judged by them (its S phrase and its starter chain lift off at their
     // own tempo on the centreline, measured and flagged in the hand-back, never judged before)
     const coreRoad = segments[p.seg].word === 'core';
@@ -455,7 +455,7 @@ function core(path, segments, opts, from, carried, upto) {
     // A landing lip NOT AHEAD of the take-off lip (a measured gap ≤ 0: the flight would go straight up or backwards) has
     // no flight to check. It is RED, with that reason, and never a throw: validation runs under the user's hand, and a
     // throw there is a crash path (D179: checkJump threw on it, and buildExport passed the throw straight through)
-    // D258, THE FREE JUMP (the equation core's flight): the user placed the landing and tunes it by driving (the keeper: "through testing in the game trial
+    // D258, THE FREE JUMP (the equation core's flight): the user placed the landing and tunes it by driving (the user: "through testing in the game trial
     // and error driving it themselves"), so nothing is computed about where the car lands: no arcs, no landing zone, no reach. Its gap is intended (above).
     // A landing placed BEHIND its take-off is a WARNING, never a red: he put it there
     if (isCoreFlight(segments, j)) {
@@ -481,7 +481,7 @@ function core(path, segments, opts, from, carried, upto) {
     red.push({ s: S[first].s, s1: S[n - 1].s, u: null, reason: 'head-in-the-air' });
   }
   // With a known take-off speed, the landing road should catch BOTH landings (ARCHITECTURE.md:75-78; jumps.js). A missed one is AMBER, a WARNING
-  // (D250, the keeper: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): it never
+  // (D250, the user: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): it never
   // blocks an export or an install. `worst` is the heaviest fall that misses. A gap with NO landing ramp is still red above (gap-in-road, a hole).
   for (const jp of jumps) {
     if (jp.pending || !Number.isFinite(jp.speed)) continue;
@@ -512,7 +512,7 @@ function core(path, segments, opts, from, carried, upto) {
 
 /** The ghost lap's proof on a closed loop: its time, its slowest speed, and every place the lap would fail. */
 // D250: a jump's REACH (a landing the car flies past, or one too deep below the take-off to reach) is a WARNING, `warn`, not a reason the lap fails:
-// the keeper tunes jumps by driving them. The lap still fails (`where`) on a stall, a leave of the surface, or a jump whose landing lip is not ahead.
+// the user tunes jumps by driving them. The lap still fails (`where`) on a stall, a leave of the surface, or a jump whose landing lip is not ahead.
 function proveLap(S, isRoad, v, lines, jumps) {
   const n = S.length, where = [], warn = [];
   let t = 0, minV = Infinity;

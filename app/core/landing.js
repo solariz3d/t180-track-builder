@@ -1,4 +1,4 @@
-// landing.js: WHERE THE FREE JUMP'S LANDING IS ON THE TRACK, for the drag handles (D258, the keeper's jump: a landing piece you place by hand and tune by driving; the core is src/core/jump.js, E's).
+// landing.js: WHERE THE FREE JUMP'S LANDING IS ON THE TRACK, for the drag handles (D258, the user's jump: a landing piece you place by hand and tune by driving; the core is src/core/jump.js, E's).
 // Pure: it reads a built path and its segments and gives the landing's start and the two frames its handles work in. The pose is given in the TAKE-OFF's HEADING frame (forward along the take-off's
 // horizontal heading, left of it, world up: src/core/document.js flightPiece), so the handles' arrows are that frame's axes and a drag moves the number in the box of the same name.
 //

@@ -1,5 +1,5 @@
-// core_turnby.test.js: node --test test/core_turnby.test.js. D280 part 1, "TURN BY" (the keeper, 2026-10-09 18:52: "have a subtle problem with 90 degree turns not
-// coming out straight, it should be but isnt"). The turn field is a RATE (°/100 m), and a piece eased to a turn rate ENDS at that rate: on the keeper's TEST TRACK 3
+// core_turnby.test.js: node --test test/core_turnby.test.js. D280 part 1, "TURN BY" (the user, 2026-10-09 18:52: "have a subtle problem with 90 degree turns not
+// coming out straight, it should be but isnt"). The turn field is a RATE (°/100 m), and a piece eased to a turn rate ENDS at that rate: on the user's TEST TRACK 3
 // (a copy) a 750 m piece turns −90.0° and ends turning at −24.0°/100 m, so the next piece's "turn 0, at start" spends −1.35° ramping that rate down. Turn by
 // places a piece that turns EXACTLY the typed angle and ENDS with turn rate 0 (src/core/turnby.js). The bar, registered before the code
 // (exo_memory/handback/p-turnby-E_2026-10-09.md): B1 |heading change − θ| ≤ 0.01°; B2 the end turn rate 0 within the stored precision; B3 a following
@@ -26,7 +26,7 @@ function pathTurn(doc, i) {
 }
 const readTurn = (doc, i) => RD.pieceReadout(doc, i).turnDeg;
 const straightAfter = (doc, L = 100) => extend(doc, extendOptions({ length: String(L), turn: '0', climb: '0', bank: '', width: '', cup: '', edge: '', start: '', tube: '', atStart: { turn: true, climb: true } }));
-/** A 1500 m straight (TEST TRACK 3's first piece) and the keeper's −90° piece: 750 m, the turn rate eased from 0 to −24°/100 m over the whole piece. */
+/** A 1500 m straight (TEST TRACK 3's first piece) and the user's −90° piece: 750 m, the turn rate eased from 0 to −24°/100 m over the whole piece. */
 const straight = () => extend(D.createDoc('turn by'), { length: 1500, family: 'bowl' });
 const eased90 = (d) => extend(d, { length: 750, targets: { kh: -24 * DEG / 100 } });
 
@@ -71,9 +71,9 @@ test('row 5 (B4): a piece too short to shape is refused by name with the shortes
   assert.throws(() => TB.extendTurnBy({ ...straight(), closed: true }, { length: 750 }, -90 * DEG), (e) => e.code === 'CLOSED');
 });
 
-// AMENDED D331 C (ledger D332, 2026-10-15). This row was B6, the keeper's 18:55 "THERE is nothign wrong with the 90 degree curves that can be made now": Turn by
+// AMENDED D331 C (ledger D332, 2026-10-15). This row was B6, the user's 18:55 "THERE is nothign wrong with the 90 degree curves that can be made now": Turn by
 // kept today's broad curve (Extend's piece eased to an end rate) within 1°/100 m outside its last two knot spans. That curve peaks late and lets go about four times
-// as fast as it builds up (a 90° Turn by over 105 m peaked at 74%), which on a steep bank is the "crooked" twist-and-dip the keeper reported on ELYSIUM, and his
+// as fast as it builds up (a 90° Turn by over 105 m peaked at 74%), which on a steep bank is the "crooked" twist-and-dip the user reported on ELYSIUM, and his
 // word of 2026-10-15 (plan :367-369, ruled :373-385) replaces it with a symmetric ease. The new rule, the same piece: the peak within 10% of the middle, the
 // let-go no steeper than the build-up, and no tighter than today's curve was at its end (a symmetric ease peaks at about twice the average rate, which is the
 // rate an eased piece ends at). test/turn_corner.test.js row 3 holds the same rule on a 105 m corner, flat and banked 53.5°, and for Turn to grid.

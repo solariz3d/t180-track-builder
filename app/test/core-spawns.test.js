@@ -1,5 +1,5 @@
 // core-spawns.test.js: node --test app/test/core-spawns.test.js
-// THE HAND-PLACED START (the keeper, 2026-10-09): the start line moved along the FIRST piece, a numbered grid pack with its spacing, and a hotlap spawn put
+// THE HAND-PLACED START (the user, 2026-10-09): the start line moved along the FIRST piece, a numbered grid pack with its spacing, and a hotlap spawn put
 // down by hand. The shell (app/core/coreshell.js setSpawns, spawnsInfo, spawnsLayout) and the real exporter, headless, on a closed bowl lap.
 'use strict';
 const test = require('node:test');

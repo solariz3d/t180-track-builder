@@ -1,5 +1,5 @@
 // undo-reopen.test.js: node --test app/test/undo-reopen.test.js
-// The keeper, 2026-10-13, ELYSIUM reopened: "when I do undo and control z, it freezes like its trying to do something, but then when it releases its the same".
+// The user, 2026-10-13, ELYSIUM reopened: "when I do undo and control z, it freezes like its trying to do something, but then when it releases its the same".
 // Measured on his 24 km track: each undo took 54 to 102 s, the last steps were start-line moves (nothing visible), and one step changed nothing at all. Rows:
 //   1  the history never keeps a step whose document has the same content as the one before (a commit, or a drag moved and put back)
 //   2  a reopened history shares every unchanged piece between its steps (the same object), as one made in this session does

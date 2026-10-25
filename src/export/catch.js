@@ -24,7 +24,7 @@
 //   [{ s0, s1 }, …]         the cells overlapping those ranges (the pad applies): a stretch chosen by hand.
 //
 // NOT MEASURED, and said so: that a second surface at this depth stops a body that has gone through the first in AC. The replay says where one is needed and why; whether the catch
-// holds is the keeper's re-export and one fast pass. A catch that does not hold costs triangles and nothing else that is known.
+// holds is the user's re-export and one fast pass. A catch that does not hold costs triangles and nothing else that is known.
 'use strict';
 
 const CATCH_OFFSET_M = 0.3;   // how far under the road: past the box's 5-7 cm of clearance at 62 g and a tyre's squash (about 17 cm), a fifth of the skin's 0.5 m so it is the body's NEXT surface

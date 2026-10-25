@@ -52,7 +52,7 @@ async function mountPanel(wrap = (s) => s, shellOpts = {}, { turnAsRate = true }
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
   const root = doc.createElement('div'), shell = wrap(await createCoreShell({ brushFn: null, ...shellOpts }));
   const panel = require('../core/panel.js').mount(root, shell);
-  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the keeper's word, plan :367-369, ruled :373-385). Every row in
+  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the user's word, plan :367-369, ruled :373-385). Every row in
   // this file types the turn as a RATE (°/100 m), the field's meaning when it was written, so the helper puts "turn as" on rate, the switch the ruling keeps one
   // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js (D331 B).
   if (turnAsRate !== false) { const ta = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); ta.value = 'rate'; ta.onchange(); }
@@ -275,7 +275,7 @@ test('the panel: a field set extend refuses shows — (and says why in the title
   P.panel.unmount();
 });
 
-// D242 (amended by name; the keeper, 23:46: "it should be only when you hover over the pieces"): this test used to assert ONE LABEL PER ROAD PIECE. Now the
+// D242 (amended by name; the user, 23:46: "it should be only when you hover over the pieces"): this test used to assert ONE LABEL PER ROAD PIECE. Now the
 // head's own piece is always labelled and any other only while the pointer is over it; the text, the head's keep-out, the flight and the empty track are as before
 test('the labels on the track: the head\'s own piece always, any other only when hovered; the text A\'s numbers, clear of the head; a flight and an empty track draw none and throw nothing', async () => {
   const P = await mountPanel();
@@ -443,7 +443,7 @@ test('the brush\'s channel list offers the cross-section channels e, s and t (D2
   P.panel.unmount();
 });
 
-// ── D193, THE FIELDS SHOW THE HEAD (the keeper, 02:25: "show the original value the first piece starts as instead of it being blank") ──
+// ── D193, THE FIELDS SHOW THE HEAD (the user, 02:25: "show the original value the first piece starts as instead of it being blank") ──
 const Dc = require('../../src/core/document.js'), { extend: extendDoc } = require('../../src/core/extend.js'), { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 const DEGt = Math.PI / 180, BLANK = { turn: '', climb: '', bank: '', width: '', cup: '' };
 const FIELDS = { turn: 'turn °/100m', climb: 'climb °/100m', bank: 'bank °', width: 'width m', cup: 'cup °' };
@@ -532,7 +532,7 @@ test('a field left as shown builds the SAME piece, ghost and readout as a blank,
   P.panel.unmount();
 });
 
-// ── D194a, THE FIRST PIECE IS WHAT WAS TYPED FROM ITS START (the keeper, 02:39: "the standard width stays the same while toward the front it
+// ── D194a, THE FIRST PIECE IS WHAT WAS TYPED FROM ITS START (the user, 02:39: "the standard width stays the same while toward the front it
 // grows bigger ... would alway make a bottle neck of width at the start of the track"). On an empty track the typed values are the first
 // piece's START as well as its targets, so every typed channel is constant from s = 0; an untyped one keeps its default start ──
 const AD = require('../../src/core/adapter.js');
@@ -610,7 +610,7 @@ test('a lap whose first piece was typed (width 40, cup 30) closes, and exports t
   P.panel.unmount();
 });
 
-// ── D194b, "AT START" (the keeper: both "blend to the new value across the piece" and "the whole piece the same width"). A ticked field's
+// ── D194b, "AT START" (the user: both "blend to the new value across the piece" and "the whole piece the same width"). A ticked field's
 // target goes to the core in `transition` as a per-channel map in metres: reach it within one knot span (20 m, or the piece if shorter),
 // then hold. A's core (transition as a number OR a map) is not in this tree, so the panel tests stub it: see stubTransition ──
 // THE STUB: stubTransition(shell) wraps the REAL shell and does exactly two things: it records every options object handed to extend,
@@ -669,7 +669,7 @@ test('"at start" on a field left as shown sends nothing (no target, D193); the b
   P.panel.unmount();
 });
 
-// ── D238 (the keeper, 22:01: "can you remove the water sim feature?"): nothing about the water in the builder ───────────────────────────────────────────────────────────────────────────────────────────
+// ── D238 (the user, 22:01: "can you remove the water sim feature?"): nothing about the water in the builder ───────────────────────────────────────────────────────────────────────────────────────────
 test('no water: the panel has no Water section, the shell no pour and no water state, an edit pours and draws nothing, and no file of the app names the water', async () => {
   const fs = require('fs'), path = require('path');
   const P = await mountPanel(), els = P.root.all();
@@ -692,7 +692,7 @@ test('no water: the panel has no Water section, the shell no pour and no water s
   walk(app); assert.deepEqual(found, [], `files of the app that still name the water: ${found.join(', ')}`);
 });
 
-// ── D239 amendment (the keeper lost TEST 1 to one Close, with no copy from before it): Close keeps a copy FIRST ──────────
+// ── D239 amendment (the user lost TEST 1 to one Close, with no copy from before it): Close keeps a copy FIRST ──────────
 // D339: Close is ONE press (no preview, no Apply): the press writes the copy before it commits the close
 const closeLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
 /** A coil (two circles on one another): no way of closing it proves, so a press refuses. */
@@ -738,7 +738,7 @@ test('if that copy cannot be written, the press changes nothing and says why', a
   P.panel.unmount();
 });
 
-// ── D271, LEVEL and TO FLOOR (the keeper: "a way to snap the track to the floor to be true flat … its hard to calculate by hand") ──
+// ── D271, LEVEL and TO FLOOR (the user: "a way to snap the track to the floor to be true flat … its hard to calculate by hand") ──
 test('D271: Level ends the piece straight and level; To floor too short says the length that works, which then works; each is one undo step', async () => {
   const P = await mountPanel(), A = require('../../src/core/adapter.js'), DEGR = Math.PI / 180;
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
@@ -757,7 +757,7 @@ test('D271: Level ends the piece straight and level; To floor too short says the
   P.panel.unmount();
 });
 
-// ── D280, TURN BY (the keeper: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt") ──
+// ── D280, TURN BY (the user: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt") ──
 test('D280: Turn by places a piece that turns exactly the typed angle and ends straight; a Straight after it turns 0.0°; one undo step; too short names the length', async () => {
   const P = await mountPanel(), RD = require('../../src/core/readout.js');
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
@@ -774,7 +774,7 @@ test('D280: Turn by places a piece that turns exactly the typed angle and ends s
   P.panel.unmount();
 });
 
-// ── TURN TO GRID (2026-10-12, the keeper: "Its hard to get a straight aligned to the grid from a free flowing spiral turn") ──
+// ── TURN TO GRID (2026-10-12, the user: "Its hard to get a straight aligned to the grid from a free flowing spiral turn") ──
 test('Turn to grid: the line under the buttons says how far the end is off the grid, and the button turns onto it (90 by default, 45 when picked)', async () => {
   const P = await mountPanel();
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
@@ -792,7 +792,7 @@ test('Turn to grid: the line under the buttons says how far the end is off the g
   P.panel.unmount();
 });
 
-// ── D282, SHARP (the keeper: "i also want to be able to make track H 90 degrees too"): a second turn type beside the broad curve ──
+// ── D282, SHARP (the user: "i also want to be able to make track H 90 degrees too"): a second turn type beside the broad curve ──
 test('D282: Sharp places a corner of the typed angle at the typed radius as ONE undo step; too tight a radius names the tightest at this width and places nothing', async () => {
   const P = await mountPanel(), RD = require('../../src/core/readout.js');
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
@@ -811,7 +811,7 @@ test('D282: Sharp places a corner of the typed angle at the typed radius as ONE 
   P.panel.unmount();
 });
 
-// ── D242 item 6, STRAIGHTS AFTER A TURN (the keeper: "impossible to create a perfect straight") ──
+// ── D242 item 6, STRAIGHTS AFTER A TURN (the user: "impossible to create a perfect straight") ──
 test('D242: after a 30°/100m turn, Straight extends a piece whose turn and climb are 0 from 20 m on, and puts the "at start" boxes back; turn 0 without "at start" shows the hint', async () => {
   const P = await mountPanel(), Dm = require('../../src/core/document.js');
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), hint = () => P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title, base = P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title;   // D267: the hint is the "at start" box's tooltip, not a paragraph
@@ -889,7 +889,7 @@ test('the panel shows the corner (its turn, "ends turning at …", what turn 0 a
   Q.panel.unmount();
 });
 
-// D331 B (ledger D332; the keeper, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). The turn field is read as a
+// D331 B (ledger D332; the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). The turn field is read as a
 // CORNER by default: typed 90, the piece Extend places turns the map heading by exactly 90° and ends straight; "turn as" rate is the old field, one switch away.
 test('D331 B: by default the turn field is a corner: it shows nothing at the head, a typed 90 is the ghost\'s and the placed piece\'s exact 90.00°, ending straight', async () => {
   const P = await mountPanel(undefined, {}, { turnAsRate: false });
@@ -926,7 +926,7 @@ test('D331 B: "turn as" rate is the old field (°/100 m, the head\'s rate shown)
   }
   P.panel.unmount();
 });
-// D331, the climb too (the keeper: "i wonder, the climb might need to do the same?"; plan :387-399): the climb field follows the same switch
+// D331, the climb too (the user: "i wonder, the climb might need to do the same?"; plan :387-399): the climb field follows the same switch
 test('D331 climb: by default the climb field is a corner: blank at the head, a typed 10 is the ghost\'s and the placed piece\'s exact 10.00°, at a steady pitch after; the climb corner cell reads it', async () => {
   const P = await mountPanel(undefined, {}, { turnAsRate: false });
   P.shell.extend({ length: 100, family: 'bowl' }); P.shell.extend({ length: 60, targets: { kv: 0.003 } });   // a head still climbing

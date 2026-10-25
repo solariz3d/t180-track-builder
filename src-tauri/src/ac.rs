@@ -5,7 +5,7 @@
 // write_export_to, so every guard of the export applies: the folder must be t180b_… (the builder names every track so,
 // and says so in the UI), and an existing folder the builder did not write is refused untouched (the marker file).
 //
-// FOUND THROUGH STEAM (D250; the keeper: "when the track is saved and exported, it should automatically create the folder in the
+// FOUND THROUGH STEAM (D250; the user: "when the track is saved and exported, it should automatically create the folder in the
 // assetto track folder in steam"). With no folder remembered, root_or_find looks AC up before anyone is asked: Steam's folder from
 // the registry (HKCU\Software\Valve\Steam, SteamPath, read with Windows' own reg.exe, no new crate), then every library in
 // <Steam>\steamapps\libraryfolders.vdf, then <library>\steamapps\common\assettocorsa holding content\tracks. Found, it is
@@ -15,7 +15,7 @@
 // SEE IT IN ASSETTO. BUILT, NEVER RUN. The overnight plan's rules: a cfg file AC reads (Documents\Assetto Corsa\cfg\
 // race.ini) is copied to race.ini.bak-t180b-<stamp> BEFORE anything is written, and put back byte-exact in a
 // `finally`, whatever happens; a run has a hard 10-minute timeout, after which the acs.exe it started, and only that one,
-// is killed. And the keeper, 2026-09-27 12:17: "You need to just do the plan, not open assetto ... No in game testing
+// is killed. And the user, 2026-09-27 12:17: "You need to just do the plan, not open assetto ... No in game testing
 // needed." So the launch sits behind a setting, OFF by default and labelled as launching the game; no test and no automated run
 // turns it on. The process boundary is the Spawner trait: tests pass a mock that records what WOULD run; RealSpawner is
 // compiled and reachable only from the see_it_in_assetto command, behind that setting.
@@ -143,7 +143,7 @@ pub fn root_or_find(data: &Path, steam_path: &dyn Fn() -> Option<PathBuf>) -> Re
     }
 }
 
-/// What the STARTUP CARD needs (D252 second item; the keeper: "in the EXE startup, the user can choose where the track folder is"): the remembered
+/// What the STARTUP CARD needs (D252 second item; the user: "in the EXE startup, the user can choose where the track folder is"): the remembered
 /// AC folder, or, only when none is, the one found through Steam. NOTHING is remembered here: the user answers the card (Use it / Choose another…).
 pub fn root_status(data: &Path, steam_path: &dyn Fn() -> Option<PathBuf>) -> Result<(Option<PathBuf>, Option<PathBuf>), String> {
     if let Some(p) = recall_ac_root(data)? { return Ok((Some(p), None)); }
@@ -550,7 +550,7 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
-    // D252 second item (the keeper, 11:39: "in the EXE startup, the user can choose where the track folder is in the beginning"): the startup card
+    // D252 second item (the user, 11:39: "in the EXE startup, the user can choose where the track folder is in the beginning"): the startup card
     // asks root_status, which says what is remembered and, only when nothing is, what Steam finds, and REMEMBERS NOTHING (the user answers the card)
     #[test]
     fn root_status_says_what_is_remembered_or_what_steam_finds_and_writes_nothing() {

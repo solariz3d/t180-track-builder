@@ -183,7 +183,7 @@ test('preview: showGhost draws the ghost, clearGhost removes it, and placing the
   p.showGhost({ segments: all.slice(0, 4) }); resolved = { segments: all.slice(0, 4), closed: false }; sub(shell.getState());
   assert.equal(p.view().ghost, 0, 'placing the word retires its ghost');
 });
-// The keeper, 2026-09-29: "there shouldnt be a ground net its just the track for now". The grid is opt-in ({ ground: true }).
+// The user, 2026-09-29: "there shouldnt be a ground net its just the track for now". The grid is opt-in ({ ground: true }).
 test('preview: a frame draws the grid and the head marker as lines (the grid only with ground: true)', () => {
   const shell = { getState: () => ({ resolved: { segments: words(3), closed: false } }), subscribe: () => () => {} };
   const { calls, win, canvas } = fake(), p = P.createPreview({ canvas, shell, win, ground: true }); win.step();

@@ -1,5 +1,5 @@
 // export_test_unfinished.test.js: node --test test/export_test_unfinished.test.js
-// D243a, the TEST export of an UNFINISHED track (the keeper: "it should allow to export even without it being completed"), src/export/fromwords.js opts.test:
+// D243a, the TEST export of an UNFINISHED track (the user: "it should allow to export even without it being completed"), src/export/fromwords.js opts.test:
 // an OPEN track exports into a t180b_*_test folder named "(test, unfinished)", its reds are listed and do not block, the AI line is open, point-to-point
 // gates AC_AB_START/FINISH are placed, and the road ends in a named wall (1WALL_T180_END). A NORMAL export of an open track still refuses, unchanged.
 // The track used is fixture F7 (a hill, a core jump, the landing road; OPEN). Since D243 its jump is not red (a core flight's gap is intended), so

@@ -1,4 +1,4 @@
-// keys-anywhere.test.js: D242 item 8a (the keeper: "make it like photoshop or video editing programs, cntrl z and what ever to go forward
+// keys-anywhere.test.js: D242 item 8a (the user: "make it like photoshop or video editing programs, cntrl z and what ever to go forward
 // and back"). Undo and redo act on the TRACK from anywhere, a number field included; a text-entry field keeps them for its own text;
 // Ctrl+S and Ctrl+Backspace are unchanged (in any field they stay the field's: Ctrl+Backspace deletes a word, never the track's head).
 // Run: node --test --test-concurrency=1 app/test/keys-anywhere.test.js

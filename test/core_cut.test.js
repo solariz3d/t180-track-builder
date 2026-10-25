@@ -1,5 +1,5 @@
 // core_cut.test.js: node --test test/core_cut.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D361 part 1 (pane C): CUT (src/core/piece.js cutRun; the keeper, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them").
+// D361 part 1 (pane C): CUT (src/core/piece.js cutRun; the user, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them").
 // A cut takes the selected pieces out and leaves the track OPEN at the gap, moving nothing that is kept: a closed lap is ROTATED so the piece after the cut comes first
 // (its start is where that piece began) and the piece before the cut is the open end (D360 §2). Rows, stated before the code:
 //   1  a closed lap's middle run cut: open, the kept pieces' ids rotated (the piece after the cut first), nextId kept, frozen; every kept piece's path samples where they were

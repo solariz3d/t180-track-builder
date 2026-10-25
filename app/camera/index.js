@@ -1,7 +1,7 @@
 // index.js: the camera panel's seam (app/README.md "The seam"): mount(root) shows the camera modes as buttons, marks
 // the current one, and names the keys. The cameras themselves live in the preview (app/preview/index.js); this panel
 // asks for a mode with a 't180-camera' event and follows the preview's 't180-camera-mode' announcements.
-// D237: it also carries the GRID and SYMMETRY controls (the keeper: "a 3D grid ... see the track and make it all symmetrical"): Grid Auto | Ground | 3D | Off, Mirror Off |
+// D237: it also carries the GRID and SYMMETRY controls (the user: "a 3D grid ... see the track and make it all symmetrical"): Grid Auto | Ground | 3D | Off, Mirror Off |
 // Left/right | Front/back | Both, a Reset-centre button and the gap readout. They talk to the preview with 't180:guides' and follow its 't180:guides-state' (app/preview/index.js).
 'use strict';
 

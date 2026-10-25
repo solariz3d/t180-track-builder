@@ -1,5 +1,5 @@
 // markers_pitbalance.test.js: node --test test/markers_pitbalance.test.js
-// D285 (the keeper, 2026-10-10: "the pit lane spacing starts half way through the pit, it needs to be pushed more to the front of it to be balanced … Pit 1
+// D285 (the user, 2026-10-10: "the pit lane spacing starts half way through the pit, it needs to be pushed more to the front of it to be balanced … Pit 1
 // starts half way to the back of the pits"). With no hand-set `layout.pits.lane.along`, src/markers/index.js placeAll laid the boxes from the lane's
 // MIDPOINT backwards, so the front half of the lane was empty. Now the row is centred on the lane's usable straight (between the entry and exit tapers),
 // box 0 first after the entry. Through the app's core shell (spawnsInfo: what the panel, the preview and the export place) on the real pit lane

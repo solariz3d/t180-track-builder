@@ -1,4 +1,4 @@
-// Tests for src/validate/bounds.js: live physics bounds on the sculpt handles (the keeper, 12:22). For each handle the
+// Tests for src/validate/bounds.js: live physics bounds on the sculpt handles (the user, 12:22). For each handle the
 // packet names (length; curvature and ramps; pitch; bank; width; wall height; ψ), a document is built where that handle
 // meets a RED limit, and: the value AT the bound validates clean, and one quantum outside it turns red, through the same
 // validation, A's resolve and C's buildPath. node --test, no dependencies.

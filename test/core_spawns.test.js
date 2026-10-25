@@ -1,5 +1,5 @@
 // core_spawns.test.js: node --test test/core_spawns.test.js
-// SPAWNS ON THE DOCUMENT (the keeper, 2026-10-09: "move the start line around the first piece … a numbered grid … a hotlap spawn I plop down").
+// SPAWNS ON THE DOCUMENT (the user, 2026-10-09: "move the start line around the first piece … a numbered grid … a hotlap spawn I plop down").
 // A core document may carry `spawns`: the start line's distance into the FIRST piece, the grid pack (count, row and column spacing) and an optional
 // hotlap spawn (a piece id and a distance into it). A track that never had one carries NO field, so every track made before saves byte for byte as before.
 'use strict';

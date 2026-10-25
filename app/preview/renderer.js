@@ -78,7 +78,7 @@ uniform vec3 uColour; uniform float uAlpha; uniform vec3 uFog; uniform float uFo
 /* uFade = (near, far): the line fades out between them (D179: ties at a distance); far <= near: no fade */
 void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = uFade.y > uFade.x ? clamp((uFade.y - vDepth) / (uFade.y - uFade.x), 0.0, 1.0) : 1.0; gl_FragColor = vec4(mix(uFog, uColour, fog), uAlpha * f); }`;
 
-// THE SKY (D384; the keeper, 2026-10-18: the skin's sky should stay put in the world as you move around, not follow the camera). A full-screen pass
+// THE SKY (D384; the user, 2026-10-18: the skin's sky should stay put in the world as you move around, not follow the camera). A full-screen pass
 // drawn after the clear and before everything else, without depth: each pixel's ray is the camera's ROTATION only (skyBasis, from the inverse of the
 // view-projection with the eye at the origin), so turning moves the sky across the screen and moving or zooming does not. The pattern is the skin's style
 // (app/preview/sky/<style>.js: vec3 skyPattern(vec3 dir, float t)); 'none' draws no pass, which is today's frame call for call.
@@ -141,7 +141,7 @@ function skyBasis(pose, aspect) {
 
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
-// CHUNKS (the keeper, 2026-10-13: "the preview is so damn laggy" on ELYSIUM, 24 km). A batch is one ~2 m cell, so a long
+// CHUNKS (the user, 2026-10-13: "the preview is so damn laggy" on ELYSIUM, 24 km). A batch is one ~2 m cell, so a long
 // track was 12,069 surface draws and 24,233 line draws a frame: 11 fps on an RTX 5080, ~87 ms of JS per frame issuing
 // them (scratchpad perf/drive.js). Consecutive batches drawn alike (one material, or one colour) are now MERGED into a
 // chunk of at most CHUNK_V vertices, baked to world space with each batch's own model matrix (the same arithmetic the

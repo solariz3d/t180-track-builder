@@ -38,7 +38,7 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
       if (!root) return { ok: false, needsRoot: true, message: 'Assetto Corsa was not found through Steam: pick your Assetto Corsa folder (the one that holds content\\tracks); it is remembered' };
       const name = String(getDoc().name || '').trim();
       if (!name || /^untitled$/i.test(name)) return { ok: false, message: 'name the track first (Save, with a name): it installs as t180b_<name>, and an unnamed track would replace the last unnamed one' };
-      // D264 (the keeper, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the test that isnt finished"):
+      // D264 (the user, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the test that isnt finished"):
       // an OPEN track is not refused here: it is built as D243a's TEST export (open, run-off and wall, reds as warnings, folder t180b_<name>_test), the same build
       // the ⋯ menu's Test export makes. A closed track builds as before; a closed track asked for the test export is refused by the build (TEST_CLOSED).
       const refused = (e) => { if (e.name !== 'ExportError') throw e; return { ok: false, message: e.message, reds: e.code === 'RED' ? e.red : null }; };
@@ -59,7 +59,7 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
       const doc = getDoc();
       // D250: the line says where it went (the whole folder) and that exporting again updates that same folder
       const where = names.map((n) => `${root}\\content\\tracks\\${n}`).join(', ');
-      // D250 item 2: a jump the car may fly past is installed, and said (the keeper tunes jumps by driving them); the export's other warnings stay where they were
+      // D250 item 2: a jump the car may fly past is installed, and said (the user tunes jumps by driving them); the export's other warnings stay where they were
       // D446: and two parts of the road whose edges come within 1 m (validate's near-touch), said where the export's outcome is read
       const jumps = ((out.result && out.result.warnings) || []).filter((w) => /^(jump|near-touch): /.test(w));
       // D264: the test export says what it is, and how many reds it carries (the exporter's own TEST EXPORT warning)

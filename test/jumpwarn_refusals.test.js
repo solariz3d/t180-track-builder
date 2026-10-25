@@ -1,5 +1,5 @@
 // jumpwarn_refusals.test.js: node --test test/jumpwarn_refusals.test.js   (under the heavy-run lock; about half a minute)
-// D250 item 2 (the keeper: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): a jump the
+// D250 item 2 (the user: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): a jump the
 // car may fly past WARNS and exports. These rows pin the other side, from pane B's look at E's 6047714: ONLY a jump's reach moved to the warnings.
 //   1  the lap proof's split, through the exported lapOf: a lap whose only findings are a jump's reach PASSES, with them in `warn`; a stall, the car
 //      leaving the surface, and a jump whose landing is not ahead of its take-off each still FAIL it (`where`), which the export turns into the

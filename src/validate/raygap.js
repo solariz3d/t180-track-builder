@@ -73,7 +73,7 @@ function pointTriangle(p, a, b, c) {
  * measured round it), opts.near = an array that receives the edges whose probe met another pass (D446). Returns
  * [{ s, u, widthM, at }], one per gap edge, in s order.
  */
-// D266 (the keeper's 6 × 1000 m tube crashed the page on Close): the same check in TYPED ARRAYS. The first form kept a JS array per vertex, per triangle and
+// D266 (the user's 6 × 1000 m tube crashed the page on Close): the same check in TYPED ARRAYS. The first form kept a JS array per vertex, per triangle and
 // per normal, an object per edge and string keys for every bucket ("x,y,z", "a,b"): 1.47 GB of JavaScript heap on a 2.4-million-triangle tube, where a
 // browser renderer holds every heap of the page and its workers in 4 GB (V8's shared pointer-compression cage). The vertices, triangles, normals, edges and
 // both grids are now flat typed arrays (outside the V8 heap), the buckets hashed by their integer coordinates. NOTHING ELSE CHANGED: the same weld (the first

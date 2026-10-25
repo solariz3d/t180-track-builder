@@ -1,5 +1,5 @@
 // core_finish.test.js: node --test test/core_finish.test.js
-// FINISH TO START (src/core/finish.js; the keeper, 2026-10-12: aligning the last turn onto the start straight by hand is the main problem; "Yes" to a tool
+// FINISH TO START (src/core/finish.js; the user, 2026-10-12: aligning the last turn onto the start straight by hand is the main problem; "Yes" to a tool
 // that ADDS road from the end to the start). Rows:
 //   1  the plan-view routes: each turn-straight-turn the solver gives, laid out arc by arc, ends exactly on the start pose (position and heading)
 //   2  straight ahead: an end behind the start, pointing at it, is one straight of the gap, no turns

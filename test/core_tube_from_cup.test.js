@@ -1,5 +1,5 @@
 // core_tube_from_cup.test.js: node --test test/core_tube_from_cup.test.js   (under the heavy-run lock)
-// D274 (the keeper, 2026-10-08 13:33: "it wont let me project and build a tube correctly, it bugs the track and then eventually turns into a tube"): a cup
+// D274 (the user, 2026-10-08 13:33: "it wont let me project and build a tube correctly, it bugs the track and then eventually turns into a tube"): a cup
 // piece's last metres FADE into the next piece's first profile when that piece is a legacy road (src/core/adapter.js toSegments, the tail rule), and a tube
 // was taken for a legacy road: the fade rendered it as a legacy bowl and bent the PLACED cup's last 10 m into it (17.9° of surface on his FIRST TRACK) before
 // the tube morphed out of that. A tube or an edge piece makes its own handover from the previous piece's end (xsecSegments, MORPH_M). Rows:
@@ -18,7 +18,7 @@ const G = require('../src/geom/index.js');
 const V = require('../src/validate/index.js');
 const P = require('../src/geom/profile.js');
 
-/** A straight bowl, then a cup road like the keeper's head (cup 33.4°, width 35), held to its end. */
+/** A straight bowl, then a cup road like the user's head (cup 33.4°, width 35), held to its end. */
 function cupHead() {
   let d = extend(D.createDoc('cup head'), { length: 200, targets: { w: 35 } });
   return extend(d, { length: 300, transition: 60, targets: { c: 33.4, w: 35 } });

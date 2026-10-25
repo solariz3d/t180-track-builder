@@ -1,6 +1,6 @@
-// turnby.js: TURN BY (D280; the keeper, 2026-10-09 18:52: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt"). The turn
+// turnby.js: TURN BY (D280; the user, 2026-10-09 18:52: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt"). The turn
 // channel kh is a RATE (rad per metre of road), and Extend eases a piece to the rate it is given, so a piece that turns 90° that way ENDS still turning: on the
-// keeper's TEST TRACK 3 (a copy) a 750 m piece turns −90.0° and ends at −24°/100 m, and the next piece's "turn 0, at start" spends −1.35° ramping that rate to 0.
+// user's TEST TRACK 3 (a copy) a 750 m piece turns −90.0° and ends at −24°/100 m, and the next piece's "turn 0, at start" spends −1.35° ramping that rate to 0.
 //
 //   extendTurnBy(doc, opts, theta)    Extend (opts as extend's: length, width, climb…) with a piece that turns EXACTLY theta (rad, + = left) and ENDS STRAIGHT:
 //                                     turn rate 0 and its slope 0, so the next piece starts dead straight. Refused by name (TURN_TOO_SHORT) when the piece is
@@ -9,10 +9,10 @@
 //   extendCorner(doc, opts)           Extend with the panel's turn field read as a CORNER (D331 B, the panel's default): opts.turnDeg (degrees, + = left) is the
 //                                     exact map heading change of the piece, which ends straight (extendTurnBy, so the same refusals); without turnDeg, Extend.
 //
-// HOW. D331 C (ledger D332; the keeper, 2026-10-15: "the turn angle should take into account the banking to make the turns more intuitive ... but then turns that
+// HOW. D331 C (ledger D332; the user, 2026-10-15: "the turn angle should take into account the banking to make the turns more intuitive ... but then turns that
 // have less banking or no banking also just work how it should to convey the proper degrees to line up with the grid"). The turn rate is a SYMMETRIC EASE: it
 // rises over the first half of the piece and falls over the second by the same Bloss blend (extend.js bloss), so it peaks at the middle and lets go exactly as
-// gently as it built up. Before D331 the piece started as Extend's, eased to an end rate (the keeper's 18:55 "THERE is nothign wrong with the 90 degree curves
+// gently as it built up. Before D331 the piece started as Extend's, eased to an end rate (the user's 18:55 "THERE is nothign wrong with the 90 degree curves
 // that can be made now"), and was ended in its last two knot spans, so a 90° Turn by over 105 m peaked at 74% of the piece and let go about four times as fast as it
 // came in; on a steep bank, where most of a turn bends through the road's up (on 53.5°, cos = 0.59 of it lies in the road's plane), a quick let-go is a sudden
 // twist-and-dip. The ease is read at the knot averages (extend.js rampControl's variation-diminishing way: no ringing, and symmetric knots give symmetric

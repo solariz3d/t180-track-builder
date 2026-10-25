@@ -1,6 +1,6 @@
 // underskin.test.js: node --test test/underskin.test.js   (under the heavy-run lock, --max-old-space-size=4096; about two minutes)
-// D230 (as amended at the keeper's word): the underside of an equation-core track is an object that casts shadows, and the inside of a closed tube is dark.
-// The keeper: "during day light leaks into the tube it should be inclosed and pitch black", then "the bottom side of the track is an object that casts shadows". Rows:
+// D230 (as amended at the user's word): the underside of an equation-core track is an object that casts shadows, and the inside of a closed tube is dark.
+// The user: "during day light leaks into the tube it should be inclosed and pitch black", then "the bottom side of the track is an object that casts shadows". Rows:
 //   1  every core road cell, a closed tube's included, has an UNDERSIDE SKIN: the road's own normal, 0.5 m on the side away from the driver, normals out, castShadows, its own dark material
 //   2  on an OPEN road the skin is BELOW it (and the road keeps its light material)
 //   3  the DARK interior (ksAmbient 0.02) only on closed-ring cells, the textured ones too, and the set's shared material is untouched; the slot zone steps over one cell

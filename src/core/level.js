@@ -1,6 +1,6 @@
-// level.js: LEVEL and TO FLOOR (D271; the keeper, 2026-10-08: "there needs to be a way to snap the track to the floor to be true flat … i wanted the
+// level.js: LEVEL and TO FLOOR (D271; the user, 2026-10-08: "there needs to be a way to snap the track to the floor to be true flat … i wanted the
 // downhill to straighten out but its hard to calculate by hand"). The climb channel kv is a RATE (rad per metre of road), so "climb 0" keeps whatever
-// slope the road already has: on the keeper's track the last piece eases its climb to 0 and ends straight, but tilted +3.2° and 187 m below the start.
+// slope the road already has: on the user's track the last piece eases its climb to 0 and ends straight, but tilted +3.2° and 187 m below the start.
 //
 //   extendLevel(doc, opts)     Extend (opts as extend's: length, turn, width…) with a piece that ENDS STRAIGHT AND LEVEL: climb rate 0 and pitch 0.
 //   extendToFloor(doc, opts)   …that ends straight, level AND on the floor: pitch 0 and the road centre at height 0 (the start's ground, the grid the view

@@ -1,5 +1,5 @@
 // doc-library.test.js: node --test test/*.test.js
-// Sculpting and the piece library (the keeper, 12:22: "but you can also sculp pieces, and then even create and save
+// Sculpting and the piece library (the user, 12:22: "but you can also sculp pieces, and then even create and save
 // your own unqiue pieces"; ARCHITECTURE §2 handles and phrases; docs/INTERFACES.md §4b). Dependency-free.
 'use strict';
 const test = require('node:test');
@@ -21,7 +21,7 @@ function sculpted() {
 }
 
 // ── sculpting ──────────────────────────────────────────────────────────────────────────────────────────────────────
-test('every handle the keeper names is sculptable: length, curvature and ramps, pitch, bank, width, wall and ψ', () => {
+test('every handle the user names is sculptable: length, curvature and ramps, pitch, bank, width, wall and ψ', () => {
   const want = ['length', 'turn', 'easeIn', 'easeOut', 'climb', 'roll0', 'roll1', 'width', 'wall', 'psiL', 'psiR'];
   for (const h of want) assert.ok(D.handlesOf('turn').includes(h), `${h} is not a handle`);
   const d = sculpted();
@@ -58,7 +58,7 @@ test('the built-in library holds one piece per word and the starter phrases, and
 
 test('a sculpted run saved as a named piece, then placed, resolves to the same segments', () => {
   const d = sculpted();
-  let lib = L.savePiece(L.builtinLibrary(), { name: 'my-bend', author: 'keeper', doc: d, ids: ['w2', 'w3'] });
+  let lib = L.savePiece(L.builtinLibrary(), { name: 'my-bend', author: 'user', doc: d, ids: ['w2', 'w3'] });
   const piece = L.palette(lib).find((p) => p.name === 'my-bend');
   assert.deepEqual([piece.builtin, piece.kind, piece.words], [false, 'phrase', ['turn', 'tight']]);
   const placed = L.placePiece(D.appendWord(D.createDoc(), 'straight'), lib, 'my-bend');
@@ -69,7 +69,7 @@ test('a sculpted run saved as a named piece, then placed, resolves to the same s
 
 test('a single sculpted word saves as a word piece and places as the same word', () => {
   const d = sculpted();
-  const lib = L.savePiece(L.builtinLibrary(), { name: 'wide-turn', author: 'keeper', doc: d, ids: ['w2'] });
+  const lib = L.savePiece(L.builtinLibrary(), { name: 'wide-turn', author: 'user', doc: d, ids: ['w2'] });
   const placed = L.placePiece(D.appendWord(D.createDoc(), 'straight'), lib, 'wide-turn');
   assert.equal(placed.words[1].word, 'turn');
   assert.deepEqual(placed.words[1].handles, d.words[1].handles);
@@ -124,21 +124,21 @@ test('a run must be consecutive words of the document', () => {
 
 // ── text ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 test('a piece exported as text and re-imported exports byte-exact again', () => {
-  const lib = L.savePiece(L.builtinLibrary(), { name: 'my-bend', author: 'keeper', doc: sculpted(), ids: ['w2', 'w3'] });
+  const lib = L.savePiece(L.builtinLibrary(), { name: 'my-bend', author: 'user', doc: sculpted(), ids: ['w2', 'w3'] });
   const text = L.exportPiece(lib, 'my-bend');
   const other = L.importPiece(L.builtinLibrary(), text);
   assert.equal(L.exportPiece(other, 'my-bend'), text);
 });
 
 test('an imported piece places to the same segments as the one it was exported from', () => {
-  const lib = L.savePiece(L.builtinLibrary(), { name: 'my-bend', author: 'keeper', doc: sculpted(), ids: ['w2', 'w3'] });
+  const lib = L.savePiece(L.builtinLibrary(), { name: 'my-bend', author: 'user', doc: sculpted(), ids: ['w2', 'w3'] });
   const other = L.importPiece(L.builtinLibrary(), L.exportPiece(lib, 'my-bend'));
   const base = D.appendWord(D.createDoc(), 'straight');
   assert.deepEqual(D.resolve(L.placePiece(base, other, 'my-bend')), D.resolve(L.placePiece(base, lib, 'my-bend')));
 });
 
 test('the exported text does not depend on where the piece sits: imported into a fuller library, it exports the same', () => {
-  const lib = L.savePiece(L.builtinLibrary(), { name: 'my-bend', author: 'keeper', doc: sculpted(), ids: ['w2', 'w3'] });
+  const lib = L.savePiece(L.builtinLibrary(), { name: 'my-bend', author: 'user', doc: sculpted(), ids: ['w2', 'w3'] });
   const fuller = L.savePiece(L.builtinLibrary(), { name: 'other', author: 'k', doc: sculpted(), ids: ['w1'] });
   const text = L.exportPiece(lib, 'my-bend'), there = L.importPiece(fuller, text);
   assert.equal(there.pieces.find((p) => p.name === 'my-bend').id, 'u2', 'it got the next id of the library it went into');

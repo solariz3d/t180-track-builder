@@ -68,7 +68,7 @@ share ONE clamped knot vector:
 { id: 'p4', type: 'flight', forward, left, up, heading, pitch, bank }   // D258, a FREE flight: the landing's start pose (m, m, m, rad, rad, rad)
 ```
 
-- **The keeper's jump (D258):** the user places the landing by hand and tunes it by driving. The flight carries the LANDING's start pose relative to the
+- **The user's jump (D258):** the user places the landing by hand and tunes it by driving. The flight carries the LANDING's start pose relative to the
   take-off end: `forward`, `left` and `up` in the take-off's HEADING frame (horizontal forward, horizontal left, world up: "the same height" is `up` 0
   whatever the climb), `heading` a turn from the take-off's (+ = left, within ±180°), `pitch` and `bank` the landing's own. Nothing is solved or generated
   across the air: the adapter emits ONE gap segment carrying the pose (`to`), and `src/geom/path.js` draws it as a curve that ends exactly there.
@@ -261,7 +261,7 @@ candidateReadout(doc, opts)   // the piece extend(doc, opts) would place (the SA
 
 ## Saved pieces (`piece.js`, schema `t180b.piece/1`, D240)
 
-The keeper: "can we keep only the equation mode? And then we can save pieces from that we make." This is the CORE half: no UI and no files on disk (the library list, "Save as piece...", rename and delete are the app's).
+The user: "can we keep only the equation mode? And then we can save pieces from that we make." This is the CORE half: no UI and no files on disk (the library list, "Save as piece...", rename and delete are the app's).
 
 ```js
 const PC = require('./piece.js');

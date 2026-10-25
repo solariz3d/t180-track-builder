@@ -287,7 +287,7 @@ test('D226 export (core): an EMPTY folder made directly in content\\tracks expor
   assert.match(s.getState().message, /removed the empty folder "T-180 TUBE OVAL"/);
 });
 
-// ── D234: the EMPTY folder the user made in the picker goes whatever the outcome (the keeper: "when ever I export by myself, the track is errored in content manager") ──
+// ── D234: the EMPTY folder the user made in the picker goes whatever the outcome (the user: "when ever I export by myself, the track is errored in content manager") ──
 const acTreeCore = (...inside) => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-refused-')); made.push(root); const tracks = path.join(root, 'content', 'tracks'); fs.mkdirSync(tracks, { recursive: true }); for (const n of inside) fs.mkdirSync(path.join(tracks, n), { recursive: true }); return tracks; };
 /** A closed lap (the plain bowl lap) whose first piece may carry options, with the real exporter; `exporter` is swappable to stand in for a red. */
 async function closedLap(st, ex, first = undefined) {

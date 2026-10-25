@@ -1,5 +1,5 @@
 // metric.js: the look-match number (ARCHITECTURE §5.3: "Render the same views in the builder and measure the image
-// difference … The difference is a tracked number, not an impression"). PARKED until the keeper provides AC screenshots.
+// difference … The difference is a tracked number, not an impression"). PARKED until the user provides AC screenshots.
 //
 //   srgbToLab([r, g, b])            8-bit sRGB (D65) → CIELAB { L, a, b }
 //   deltaE00(lab1, lab2)             CIEDE2000, as Sharma, Wu and Dalal, "The CIEDE2000 color-difference formula:

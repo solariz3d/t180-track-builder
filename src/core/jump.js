@@ -1,4 +1,4 @@
-// jump.js: A JUMP THE KEEPER'S WAY (D258, pane E; it replaces D243's solved gap and generated landing ramp). The keeper: "the user will initiate a
+// jump.js: A JUMP THE USER'S WAY (D258, pane E; it replaces D243's solved gap and generated landing ramp). The user: "the user will initiate a
 // jump by instead of clicking extend, it says jump … it then lets the user move around a blank straight piece just like the first piece for them to
 // then place down in the space they need it to be through testing in the game trial and error driving it themselves". So a jump is a FREE FLIGHT
 // (document.js flightPiece: the landing's start pose relative to the take-off end) and a LANDING, an ordinary road piece that starts at that pose.
@@ -13,7 +13,7 @@
 //   setLanding(doc, pose)                            -> the head landing moved: its flight's pose changed (a partial pose keeps the rest), the landing's
 //                                                       bank following the flight's; refused by name, LANDING_NOT_HEAD, once road is extended from it
 //
-// The landing is movable only while it is the head (the keeper: "the user will make the landing and perfect it before expanding it on outward after the
+// The landing is movable only while it is the head (the user: "the user will make the landing and perfect it before expanding it on outward after the
 // jump … there is no need for this idea of tweaking a jump that tweaks the rest of the track"). Deleting back to it makes it the head, and movable, again.
 //
 // Refused by name: an empty track (NO_TAKEOFF), a closed one (CLOSED), a track that ends in a jump (JUMP_AFTER_JUMP, D.checkDoc), a road that still

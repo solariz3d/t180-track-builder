@@ -3,7 +3,7 @@
 // BOUNDS, stated before the tests were run:
 //   · ψ: at ¼, ½ and ¾ of each side's half-width, the font is within 1.5° of that side's median for its family
 //     (src/geom/fontshape.json). The edge is the larger of the edge and ¾ medians, per side, averaged (fonts.js says why).
-//   · THE CHAIR'S (D182, 01:27, from the keeper's "the rims flip up too much"), stated before these ran:
+//   · THE CHAIR'S (D182, 01:27, from the user's "the rims flip up too much"), stated before these ran:
 //     - the bowl, the default font of every road class (A's src/doc/vocabgen.js), sits inside EACH road class's p10-p90
 //       (src/doc/corpus.json) at ¼, ½, ¾ and the edge, on both sides; the half-pipe and flat, no class's default, inside
 //       their own family's p10-p90;

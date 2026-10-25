@@ -1,5 +1,5 @@
 // drag-frame.test.js: node --test app/test/drag-frame.test.js   (under the heavy-run lock; about two minutes)
-// D404 (the keeper: "even turning a 1000m straight isnt smooth and laggy as hell", then: "I want it as optimized as we can get it. If anything I always want it as smooth as
+// D404 (the user: "even turning a 1000m straight isnt smooth and laggy as hell", then: "I want it as optimized as we can get it. If anything I always want it as smooth as
 // the users refresh rate"): THE FRAME COST OF A HANDLE DRAG, on the real page (app/index.html) in HEADLESS Chrome (never a window), served from this checkout, in each of the
 // five looks. A real pointer press on the turn handle of the Extend ghost, then the pointer is moved back and forth for 3 s, every animation frame timed (Chrome run without
 // its frame-rate limit and vsync, so a page that is fast runs far faster than a display). A WORK frame is one in which the page's own animation-frame callbacks ran more than
@@ -23,7 +23,7 @@ const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the drag is tim
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.css': 'text/css' };
 const LOOKS = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'];
-const BUDGET = 6.0;          // ms: the keeper's display is 165 Hz (6.06 ms a frame); 6.9 ms is one frame at 144 Hz, the floor for a machine of that kind (the librarian's ruling, D404, 2026-10-19)
+const BUDGET = 6.0;          // ms: the user's display is 165 Hz (6.06 ms a frame); 6.9 ms is one frame at 144 Hz, the floor for a machine of that kind (the librarian's ruling, D404, 2026-10-19)
 const RUNS = 2;              // a case is run again once if it misses
 const DRAG_MS = 3000;
 

@@ -1,4 +1,4 @@
-// spawnsui.js: THE "START & GRID" SECTION of the core panel (the keeper, 2026-10-09: "move the start line around the first piece … a numbered grid that will
+// spawnsui.js: THE "START & GRID" SECTION of the core panel (the user, 2026-10-09: "move the start line around the first piece … a numbered grid that will
 // fit on the length and width of the track … I pick the number, and it grows the more I put down … lengthen the pack or condense it, make it wider or closer
 // together … a hotlap spawn I place down manually"). Off by default: the export places the start itself (app/core/coreshell.js startLayout). "Place by hand"
 // gives the track a spawns block (src/core/document.js) that the export then writes exactly; unticking it removes the block again.
@@ -47,7 +47,7 @@ function mount({ shell, el, win }) {
   byHand.onchange = () => {
     if (!byHand.checked) return shell.setSpawns(null);
     const first = doc().pieces[0], L = first ? lenOf(segs(), first.id) : 0;
-    // the line near the END of the first piece, so the pack sits behind it on that piece (the keeper: "most of the time I make a long straight for the start")
+    // the line near the END of the first piece, so the pack sits behind it on that piece (the user: "most of the time I make a long straight for the start")
     shell.setSpawns({ line: { along: r1(Math.max(0, L - 15)) }, grid: { count: PACK.count, rowGapM: PACK.rowGapM, colGapM: PACK.colGapM } });
   };
   lineR.oninput = () => { lineN.value = lineR.value; };

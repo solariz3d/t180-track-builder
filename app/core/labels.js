@@ -1,9 +1,9 @@
 // labels.js: THE READOUT on the track (L130, pane C; the plan's Part 2, "C: the display"). A small label at every placed road
 // piece, in the view: its length and the CHANGE it makes in turn, climb and bank, the numbers of src/core/readout.js (A). The
-// keeper, 01:2x: "see the degrees of change when adjusting the banking, pitch, and roll and even turns"; "DISTANCE OF EACH PIECE
+// user, 01:2x: "see the degrees of change when adjusting the banking, pitch, and roll and even turns"; "DISTANCE OF EACH PIECE
 // IN METERS SO YOU CAN SEE WITH THE DEGREE UI".
 //
-// ON HOVER ONLY (D242; the keeper, 23:46: "when there are lots of pieces, the tags take up a lot of space, it should be only when you hover over the pieces"): ONE
+// ON HOVER ONLY (D242; the user, 23:46: "when there are lots of pieces, the tags take up a lot of space, it should be only when you hover over the pieces"): ONE
 // label for the piece under the pointer (the preview's 't180-pick', asked only when the pointer moves), plus the head's own piece, which is always labelled. No other
 // piece is labelled, so the layout's work is those one or two labels, not every piece every frame.
 //

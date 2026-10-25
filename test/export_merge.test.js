@@ -1,5 +1,5 @@
 // export_merge.test.js: node --test test/export_merge.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D260 (the keeper, 2026-10-06 18:31: "i should be getting 400-500 frames in a map with no complex lighting, is the track geometry like too complex"):
+// D260 (the user, 2026-10-06 18:31: "i should be getting 400-500 frames in a map with no complex lighting, is the track geometry like too complex"):
 // an equation track's cells are its 2 m adapter segments, so the export wrote one mesh per 2 m of road and one per 2 m of underside skin (TEST 1
 // recovered: 15,271 meshes of ~95 triangles). src/export/acready.js mergeForAc joins them into chunks after the weld. Rows:
 //   1  the merge keeps every vertex and every triangle (positions, normals, uvs, world space, byte for byte) and only regroups them
@@ -52,7 +52,7 @@ test('row 1: the merge keeps every vertex and every triangle (position, normal, 
   assert.equal(meshes(before).length, 40, 'control: the scene it was given is untouched');
 });
 
-test('row 2b: with the default budget no chunk passes 32,768 vertices (AC left the keeper\x27s two chunks near 65,536 undrawn: the road went invisible but drivable)', () => {
+test('row 2b: with the default budget no chunk passes 32,768 vertices (AC left the user\x27s two chunks near 65,536 undrawn: the road went invisible but drivable)', () => {
   const big = []; for (let i = 0; i < 16; i++) big.push(strip(`1ROAD_w_${i}`, { x0: 2 * i, rows: 100, cols: 50, step: 0.01 }));   // 5,000 vertices each, 80,000 in all
   const b = meshes(mergeForAc(scene(big)));
   assert.ok(b.every((n) => n.positions.length / 3 <= 32768), b.map((n) => n.positions.length / 3).join(', '));

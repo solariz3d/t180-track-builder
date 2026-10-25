@@ -1,7 +1,7 @@
 // grips.test.js: node --test test/grips.test.js
 // D261: src/doc/grips.json, the grip reference behind the "Grip like…" drop-down (tools/grips.cjs makes it from an AC folder's surfaces.ini files, read only).
 // Rows:
-//   1  well-formed, in the keeper's order (the T-180 tracks first, then Kunos's), every value a whole percent the Grip field takes (50 to 150)
+//   1  well-formed, in the user's order (the T-180 tracks first, then Kunos's), every value a whole percent the Grip field takes (50 to 150)
 //   2  numbers only: a name, a key, the friction, its percent and value, the source file (relative to the AC folder) and the basis; no private track
 //   3  the committed file is what tools/grips.cjs makes from the AC folder, byte for byte, when one is given (T180_AC_ROOT; skipped, never failed, without one)
 'use strict';
@@ -15,7 +15,7 @@ const D = require('../src/core/document.js');
 const FILE = path.join(__dirname, '..', 'src', 'doc', 'grips.json');
 const G = JSON.parse(fs.readFileSync(FILE, 'utf8'));
 
-test('row 1: one entry per row the tool lists, in the keeper\'s order, and every value is a whole percent the Grip field takes (50 to 150)', () => {
+test('row 1: one entry per row the tool lists, in the user\'s order, and every value is a whole percent the Grip field takes (50 to 150)', () => {
   assert.deepEqual(G.tracks.map((t) => t.name), ROWS.map((r) => r[1]));
   assert.deepEqual(G.tracks.slice(0, 3).map((t) => t.name), ['track H', 'track N', 'track G'], 'track H, track N, track G first');
   for (const t of G.tracks) {

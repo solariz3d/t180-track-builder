@@ -1,5 +1,5 @@
 // cameras.js: the preview's cameras, with no DOM and no GL, so they run headless under node --test and unchanged in the
-// webview. The keeper, 2026-09-27 12:20: "the perspective can be like looking forward where you are placing the track
+// webview. The user, 2026-09-27 12:20: "the perspective can be like looking forward where you are placing the track
 // as it grows, maybe even different camera angles too or free came mode with the mode that looks in the direction the
 // track is being built".
 //

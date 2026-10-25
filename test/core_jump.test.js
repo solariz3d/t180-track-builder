@@ -1,5 +1,5 @@
 // core_jump.test.js: node --test test/core_jump.test.js   (under the heavy-run lock, --max-old-space-size=4096; about a minute)
-// D258, A JUMP THE KEEPER'S WAY (pane E; the plan: exo_memory/loop/plan_t180_free_jump_2026-10-06.md). It REPLACES D243's jump (a solved gap and a
+// D258, A JUMP THE USER'S WAY (pane E; the plan: exo_memory/loop/plan_t180_free_jump_2026-10-06.md). It REPLACES D243's jump (a solved gap and a
 // generated landing ramp): a FREE flight (src/core/document.js flightPiece) carries the landing's start pose relative to the take-off end, and the
 // landing is ordinary road that starts there; the user places it by hand and tunes it by driving. CHANGED D258: every row below is restated for the
 // free jump; the D243 rows about the ramp's landing zone (row 3, row 5b) are REMOVED with it (nothing is computed about where the car lands). Rows:

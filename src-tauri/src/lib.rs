@@ -71,7 +71,7 @@ pub fn names_with_ext(dir: &Path, ext: &str) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-/// THE TEST APP-DATA SEAM (B's D239 look, F2; the real fix for C's 09:06 incident, when a window test run shared the keeper's folder while his
+/// THE TEST APP-DATA SEAM (B's D239 look, F2; the real fix for C's 09:06 incident, when a window test run shared the user's folder while his
 /// app started): when and ONLY when the app was LAUNCHED with T180_TEST_APP_DATA set to an existing absolute folder, every file the app keeps
 /// (tracks, backups, the autosave, the AC folder and the launch setting) lives there instead. Like T180_TEST_EXPORT_FOLDER, a page cannot set a
 /// process's environment and nothing in normal use sets this one, so normal use always gets the real app data folder.

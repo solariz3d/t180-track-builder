@@ -21,7 +21,7 @@
 // t180b_. Picking `content\tracks` itself is allowed, because exportTrack only ever writes a t180b_* folder there, and
 // it refuses a folder of that name it did not write (NOT_OURS). The native side checks the same thing again. The test
 // is on the path, so it also guards a copy of the AC folders somewhere else, which errs on the safe side.
-// THE EMPTY FOLDER (D226): the keeper makes a folder named after the track directly in content\tracks ("T-180 TUBE OVAL") and picks it. It is
+// THE EMPTY FOLDER (D226): the user makes a folder named after the track directly in content\tracks ("T-180 TUBE OVAL") and picks it. It is
 // refused, and the EMPTY folder it leaves behind makes Content Manager say "main layout is damaged". So a picked folder that sits DIRECTLY in
 // content\tracks, is not t180b_*, and is EMPTY is not another track: the export goes into content\tracks as the normal t180b_<name>, and
 // that empty folder is removed afterwards (resolveTarget, then the shells call storage.removeEmptyFolder; the native side checks all of it

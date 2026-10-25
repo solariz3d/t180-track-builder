@@ -1,4 +1,4 @@
-// Tests for validation while the user builds (the keeper, 12:20: "youre not the one who builds the track, the user
+// Tests for validation while the user builds (the user, 12:20: "youre not the one who builds the track, the user
 // does"; docs/INTERFACES.md §4): validate() on an OPEN track, and revalidate() after appending one segment at the head,
 // which must equal a full validate() exactly while carrying, not recomputing, what the append cannot change.
 'use strict';

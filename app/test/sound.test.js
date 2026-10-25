@@ -19,12 +19,12 @@ test('soundFor: a placed piece, an undo and a closed loop each name their sound;
   assert.equal(soundFor(placed, placed), null); assert.equal(soundFor(null, placed), null); assert.equal(soundFor(placed, S(null)), null);
 });
 
-// AMENDED (D375): the 16 steps became four melodies of 64 (the keeper's pick of batch 9), so the step wraps at 64; the rule (one step per piece) is unchanged
+// AMENDED (D375): the 16 steps became four melodies of 64 (the user's pick of batch 9), so the step wraps at 64; the rule (one step per piece) is unchanged
 test('stepOf: the melody step follows the piece count, one step per piece at any pace, round the 64', () => {
   assert.deepEqual([1, 2, 64, 65, 129].map(stepOf), [0, 1, 63, 0, 0]);
 });
 
-// D377: the place swell (the librarian's ruling, the keeper can veto): a place's level rises gently through the 64 steps to its peak over steps 45 to 52
+// D377: the place swell (the librarian's ruling, the user can veto): a place's level rises gently through the 64 steps to its peak over steps 45 to 52
 // (indices 44..51, the lift and the register's top) and eases home by step 64, so the next round starts where this one did
 test('swellDb: a place rises from its floor at step 1 to its peak over steps 45 to 52 and eases back to the floor by step 64, gently, round the 64', () => {
   const db = [...Array(64)].map((_, i) => swellDb(i)), peak = Math.max(...db), floor = Math.min(...db);
@@ -39,7 +39,7 @@ test('swellDb: a place rises from its floor at step 1 to its peak over steps 45 
 });
 
 // D375: four melodies of 64 steps (G:\Consonance-tools\b9\mel9.js, batch 9: Yearning, Shoegaze, Light occult, Afterglow), each step today's shape
-// AMENDED (D377): the keeper's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js) and Aurora of batch 12 (mel12.js). The
+// AMENDED (D377): the user's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js) and Aurora of batch 12 (mel12.js). The
 // names change; the rule (four melodies of 64 steps of this shape) does not
 // AMENDED (D402): the rule changed by name: SIGIL's own melody, Obsidian, is the fifth
 test('the five melodies: 64 steps each of a bass, a chord of four and a melody note on top, each melody its own', () => {
@@ -110,7 +110,7 @@ test('tickPlan: climb rises in pitch with its value, bank arpeggiates and wraps,
   assert.ok(b[0] < b[1] && b[1] < b[2], 'banking further climbs the arpeggio'); assert.equal(b[3], b[0], 'after 15 steps it starts over');
 });
 
-// D374 (the keeper: "it doesnt do the climb effect"): with the fields read as corners (the panel's default) the climb and turn handles are climbDeg and
+// D374 (the user: "it doesnt do the climb effect"): with the fields read as corners (the panel's default) the climb and turn handles are climbDeg and
 // turnDeg (app/core/handles.js KINDS), and those ticks walked the length melody; every handle kind labelled climb or turn makes that handle's sound
 test('tickPlan: every handle labelled climb pitches by its value, and every one labelled turn pans, the corner kinds as the rate ones', () => {
   const HD = require('../core/handles.js');
@@ -185,8 +185,8 @@ test('mute and volume: remembered, clamped, reach the engine, and a bad volume i
   assert.equal(createSound(fakeWindow({ stored: { [KEYS.volume]: 'abc' } }).win, { log: () => {} }).volume, 0.45, 'an unreadable stored volume: the default (D382: 0.45, was 0.6)');
 });
 
-// D382 (the keeper: "the volume should be lowered a bit standard, not to where its quiet"): the default is 25% lower, 0.6 to 0.45. Only the default moves:
-// a saved volume is kept as it is, 0.6 included (moving saved levels is the keeper's call)
+// D382 (the user: "the volume should be lowered a bit standard, not to where its quiet"): the default is 25% lower, 0.6 to 0.45. Only the default moves:
+// a saved volume is kept as it is, 0.6 included (moving saved levels is the user's call)
 test('the default volume: nothing saved plays at 0.45; a saved volume, 0.6 included, is kept as saved; a saved value that is not a number falls back to 0.45', () => {
   const F = fakeWindow(), s = createSound(F.win, { engineFor: F.engineFor, log: () => {} });
   assert.equal(s.volume, 0.45, 'nothing saved: 0.45'); F.fire('pointerdown'); assert.deepEqual(F.calls[0], ['level', 0.45], 'and the engine starts at it');

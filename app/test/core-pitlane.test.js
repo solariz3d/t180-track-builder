@@ -1,5 +1,5 @@
 // core-pitlane.test.js: node --test app/test/core-pitlane.test.js
-// THE PIT LANE ON A CORE TRACK (the keeper, 2026-10-09): the shell (app/core/coreshell.js setPitLane, spawnsInfo), the export (its road built beside the
+// THE PIT LANE ON A CORE TRACK (the user, 2026-10-09): the shell (app/core/coreshell.js setPitLane, spawnsInfo), the export (its road built beside the
 // track and its pit boxes ON it), the panel section (app/core/pitui.js) and the preview's lane outline (app/core/spawnslayer.js), on a closed bowl lap
 // whose first piece is a 600 m straight. The lane geometry itself is the word builder's, tested in test/pitlane*.
 'use strict';

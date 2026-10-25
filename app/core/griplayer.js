@@ -1,4 +1,4 @@
-// griplayer.js: THE TRACK COLOURED BY GRIP (D261, the keeper: "a preview view that colours pieces by grip, with the value in the hover label"; the hover label is app/core/labels.js, which adds
+// griplayer.js: THE TRACK COLOURED BY GRIP (D261, the user: "a preview view that colours pieces by grip, with the value in the hover label"; the hover label is app/core/labels.js, which adds
 // "grip 85%" to a piece's readout when its grip is not 100 or this view is on). A canvas over the preview (#preview), redrawn every animation frame like the labels and the selection
 // (the camera eases, so the colours move with it), OFF until the panel's "colour by grip" box is ticked. Every road piece's centreline is drawn over the road, thick, in the colour of its
 // grip: BLUE below 100% (less grip), WHITE at 100% (AC's own road), ORANGE above (more grip), the full colour at 50% and 150%. The lines are app/core/selectionlayer.js's (the same

@@ -1,5 +1,5 @@
 // core_piece.test.js: node --test test/core_piece.test.js   (under the heavy-run lock, --max-old-space-size=4096, --test-concurrency=1)
-// D240, the CORE half of SAVED PIECES (src/core/piece.js; the keeper: "can we keep only the equation mode? And then we can save pieces from that we make"). EXPORT tier: it adds a
+// D240, the CORE half of SAVED PIECES (src/core/piece.js; the user: "can we keep only the equation mode? And then we can save pieces from that we make"). EXPORT tier: it adds a
 // document schema (t180b.piece/1), so the rows that matter most are the ones that hold the export still. Stated before the tests were written:
 //   1  the relative form: a state channel is stored as its change from the run's start (its first point 0) plus the start, a rate as the document holds it, and putting them back
 //      gives the saved numbers EXACTLY (on real, closed-and-adjusted laps of all three kinds); the text is canonical and round-trips
@@ -393,7 +393,7 @@ test('row 4c: a closed track says CLOSED whatever the run is: a legacy run into 
   assert.throws(() => PC.insert(closedCup, legacyRun), (e) => e.code === 'CLOSED');
 });
 
-// ── DELETE (the keeper's amendment of 08:55): pieces at the open end simply go; in the middle the two sides are re-joined C1; if that cannot be done without moving the far side, REFUSED BY NAME ──
+// ── DELETE (the user's amendment of 08:55): pieces at the open end simply go; in the middle the two sides are re-joined C1; if that cannot be done without moving the far side, REFUSED BY NAME ──
 const TURN = 1 / 180;
 /** An open track of four pieces of each kind: a straight, two turns, a straight again. */
 const openDocs = {
@@ -472,7 +472,7 @@ test('row 10j: a run that starts with a jump, added at a head that IS a jump, is
   assert.throws(() => PC.insert({ ...d, pieces: atJump }, lead), (e) => e instanceof D.CoreError && e.code === 'JUMP_AFTER_JUMP');
   assert.deepEqual(PC.insert({ ...d, pieces: d.pieces.slice(0, 2) }, lead).pieces.map((P) => P.type), ['road', 'road', 'flight', 'road'], 'control: at a road head');
 });
-// D250 item 4 (the keeper: "Short way across start"): on a CLOSED lap, saveRun(d, from, to) with from > to is the run ACROSS THE START LINE (from..last, then 0..to)
+// D250 item 4 (the user: "Short way across start"): on a CLOSED lap, saveRun(d, from, to) with from > to is the run ACROSS THE START LINE (from..last, then 0..to)
 test('row 11a: across a closed lap\'s start line the run is the pieces either side of it, in lap order, and putting it back gives those very pieces (legacy, cup, tube)', () => {
   for (const [kind, mk] of Object.entries(LAPS)) {
     const H = mk(), n = H.pieces.length;

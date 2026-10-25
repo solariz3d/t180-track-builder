@@ -1,6 +1,6 @@
 // coreshell.js: the app's state and actions for the EQUATION CORE (the core spec's build step (d), D186, pane C). No DOM and no
 // Tauri, so it runs headless under node --test and unchanged in the webview (app/lib/cjs.js). Since D239 it is the app's ONLY builder
-// (the keeper: "can we keep only the equation mode?"): app/shell.js, the old piece builder's shell, is kept only as a test driver for
+// (the user: "can we keep only the equation mode?"): app/shell.js, the old piece builder's shell, is kept only as a test driver for
 // the shared preview and validation (its keys moved to app/core/keys.js; app/README.md says why).
 //
 //   const shell = await createCoreShell({ storage, exporter })
@@ -48,7 +48,7 @@ const SH = require('../../src/core/sharp.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
 /**
- * D259 (the keeper, 18:24: "same for -360 if it banks the other way, instead of continuing another revolution past 360 it should reset back to 0"): a bank brush or a
+ * D259 (the user, 18:24: "same for -360 if it banks the other way, instead of continuing another revolution past 360 it should reset back to 0"): a bank brush or a
  * Sculpt bank drag that would take the bank at its centre past one full turn wraps it back from 0, its sign kept (350 + 20 -> 10, -350 - 20 -> -10, 300 stays 300).
  * The bank there is read on the drag's BASE document (b.s0 is the piece's middle for Sculpt), and the delta sent on is the one that lands on the wrapped value.
  * The stored winding is not rewritten otherwise: a drag that stays inside one turn is applied exactly as given.
@@ -92,7 +92,7 @@ const GL = require('./griplike.js');   // D261: the grip field's checks and word
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
 const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted (D239)
 const BRUSH_MODES = Object.freeze(['local', 'rate']);
-// D272 (the keeper, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool"): THE UNDO HISTORY SURVIVES SAVE AND RESTART.
+// D272 (the user, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool"): THE UNDO HISTORY SURVIVES SAVE AND RESTART.
 // Save writes a SIDECAR, storage.saveUndo(PREFIX + name, text), beside the track (natively eq-<name>.t180undo; the track file is unchanged, so share codes, exports and older builds read it as ever):
 // { schema: 1, kind: 'core-undo', present, past: [...], future: [...] }, every document D.serialize'd, the last UNDO_CAP steps (the past's newest, the future's nearest). Open restores it ONLY when its
 // `present` is the opened file byte for byte; a mismatch (the file was replaced, pasted, edited elsewhere, or saved by an older build) drops it silently, never mixed; a sidecar that is damaged opens
@@ -113,7 +113,7 @@ function unpackHistory(sideText, presentText, d) {
   if (o.kind !== UNDO_KIND || o.schema !== 1) return { bad: 'it is not an undo history this build reads' };
   if (typeof o.present !== 'string' || !Array.isArray(o.past) || !Array.isArray(o.future)) return { bad: 'it is missing its present, past or future' };
   if (o.present !== presentText) return { mismatch: true };
-  // SHARED PIECES (2026-10-13, the keeper on ELYSIUM: after reopening, each undo froze the window): every step was parsed on its own, so a piece unchanged between
+  // SHARED PIECES (2026-10-13, the user on ELYSIUM: after reopening, each undo froze the window): every step was parsed on its own, so a piece unchanged between
   // two steps was two different objects, and everything that reuses work for an unchanged piece by its OBJECT (the segment cache, adapter.js toSegments `cache`; the
   // preview's keys; the checker) saw 24 km of new road on every undo: 54 to 102 s an undo, measured. Now a piece whose text is the same as one already read IS that
   // object (the opened track's own pieces first), as it would have been had the history been made in this session.
@@ -280,7 +280,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (autoTimer) { timers.clearTimeout(autoTimer); autoTimer = null; }
     if (mayAutosave && typeof storage.clearAutosave === 'function') await storage.clearAutosave();
   }
-  // ── D240 follow-up: THE OVERLAP CHECK OFF THE UI THREAD (the keeper reads a 10 s freeze as broken: Close's preview took 13.4 s on TEST 1, a middle delete's 8.5 to 10.3 s on 13 km) ──
+  // ── D240 follow-up: THE OVERLAP CHECK OFF THE UI THREAD (the user reads a 10 s freeze as broken: Close's preview took 13.4 s on TEST 1, a middle delete's 8.5 to 10.3 s on 13 km) ──
   // With an overlapRunner (the page's: a Web Worker) a preview is shown AT ONCE (the ghost and the per-piece displacement) and its overlap check runs off the thread: state.proposalCheck is
   // { proposal, status 'checking' | 'done' | 'failed', result, error, startedAt, ms, via }, Apply is refused until it is 'done', and Cancel (or any change that drops the preview) terminates the worker.
   // With no runner (the tests, and a page that cannot make a worker is handled below) the check is run on the spot, exactly as it always was, and the proposal carries it as .check.
@@ -324,11 +324,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   };
   const jumpFor = (extendOpts) => { noCorner(extendOpts, 'Jump'); return JU.jumpHere(doc(), extendOpts || null); };
   let reads = null;   // the last pieceReadouts answer, { doc, reads, poses } (src/core/readout.js pieceReadouts)
-  // the keeper, 2026-10-12: "a solid lag when putting the pieces down". Every commit converted EVERY piece again (about 90 ms on a 9-piece
+  // the user, 2026-10-12: "a solid lag when putting the pieces down". Every commit converted EVERY piece again (about 90 ms on a 9-piece
   // track); the cache returns an unchanged piece's last segments, so a placement converts only what changed (adapter.js toSegments `cache`)
   const segCache = new WeakMap();
   const segmentsOf = (d, more) => (d.pieces.length ? toSegments(d, { cache: segCache, ...more }) : []);
-  // D404 (the keeper: "even turning a 1000m straight isnt smooth and laggy as hell"): while a handle is DRAGGED the ghost of the next piece is rebuilt on every move, and a
+  // D404 (the user: "even turning a 1000m straight isnt smooth and laggy as hell"): while a handle is DRAGGED the ghost of the next piece is rebuilt on every move, and a
   // piece is cut into chords of 2 m, so its cost grew with its length (1,000 m: 20 ms a move; 5,000 m: 100 ms). The ghost's piece is now cut into at most GHOST_CHORDS chords
   // (never shorter than the 2 m it always was, and never so long that the heading turns more than GHOST_TURN radians in one), so a drag costs about the same at 1,000 m as
   // at 20,000 m; the piece that is placed, the export and the full ghost built when the drag stops are cut as before. A drag is a preview, and the release is exact.
@@ -495,7 +495,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     subscribe(f) { subs.add(f); return () => subs.delete(f); },
     brushModes: () => BRUSH_MODES.filter((m) => m !== 'local' || !!brushFn),
     /**
-     * D244b, SCULPT (the keeper, 09:17: "a separate mode to sculpt pieces once they are already put down, so they don't change the structure of the rest of the track, it's mostly
+     * D244b, SCULPT (the user, 09:17: "a separate mode to sculpt pieces once they are already put down, so they don't change the structure of the rest of the track, it's mostly
      * just banking and cupping tweaks"). On: the brush offers only sculptChannels() and every step is checked against the centreline; beginSculpt reshapes the ONE selected road piece
      * (or `piece`) in place, with the brush centred on it and as wide as it is, so the joints are untouched and stay C1; one drag is one undo step.
      */
@@ -541,7 +541,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     sculptTo: (delta) => api.brushTo(delta),
     endSculpt: () => api.endBrush(),
     /**
-     * D258, THE FREE JUMP (the keeper: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error driving it
+     * D258, THE FREE JUMP (the user: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error driving it
      * themselves"; the core is src/core/jump.js, E's). jump(extendOpts) is the Jump button: the current piece placed as Extend would place it (extendOpts: what Extend takes, or null to take off from the
      * track's end as it is), then a free flight to a default landing (40 m ahead, the same height, lined up) and a 60 m straight landing: ONE undo step. The core refuses by name (NO_TAKEOFF, CLOSED,
      * JUMP_AFTER_JUMP, FLIGHT_OFFSET, BAD_FLIGHT, ...) and the message is that refusal in plain words (app/core/jumpwords.js). candidateJump is the ghost of it for the preview (flagged `jump`, so the
@@ -593,7 +593,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** D280 TURN BY: extend with the fields' piece, its turn solved so it turns EXACTLY `deg` degrees (+ = left) and ends straight (turn rate 0); src/core/turnby.js.
      *  One undo step, like extend; too short a piece is refused by name with the length that works (TURN_TOO_SHORT), as the message. */
     extendTurnBy: (opts, deg) => commit('turnBy', () => TB.extendTurnBy(doc(), opts, (Number(deg) * Math.PI) / 180), { lastEdited: [doc().pieces.length] }),
-    /** TURN TO GRID (2026-10-12, the keeper: "its hard to get a straight aligned to the grid from a free flowing spiral turn"): the heading at the end of the track,
+    /** TURN TO GRID (2026-10-12, the user: "its hard to get a straight aligned to the grid from a free flowing spiral turn"): the heading at the end of the track,
      *  degrees (+ = left; 0 = along the grid's +Z), from the segments the preview draws (src/core/gridturn.js). */
     endHeadingDeg: () => (doc().pieces.length && st.resolved ? GT.endHeadingDeg(st.resolved.segments, doc().start.heading) : (doc().start.heading * 180) / Math.PI),
     /** Extend with the fields' piece turned by Turn by onto the nearest `stepDeg` grid direction (90, 45 or 15), ending straight. A tie goes the way the turn field
@@ -809,7 +809,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
 
     /**
-     * D240, SAVED PIECES, THE UI HALF (the core is src/core/piece.js; the keeper: "can we keep only the equation mode? And then we can save pieces from that we make", and
+     * D240, SAVED PIECES, THE UI HALF (the core is src/core/piece.js; the user: "can we keep only the equation mode? And then we can save pieces from that we make", and
      * 10:xx: "highlight/select pieces on the track; the selection offers Save as piece or Delete").
      *
      * SELECT: piece i (a click on the track), or with `extend` the run from the piece selected first to i (a shift-click). A selection belongs to the document it was made on:
@@ -820,7 +820,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const d = doc();
       if (!Number.isInteger(i) || i < 0 || i >= d.pieces.length) return set({ message: `there is no piece ${i}: the track has pieces 0 to ${d.pieces.length - 1}` });
       const anchor = extend && st.selection && st.selection.base === d ? st.selection.anchor : i;
-      // D250 item 4 (the keeper: "Short way across start"): on a CLOSED lap a shift-click takes the SHORTER way round, by road length; across the start line it is from > to
+      // D250 item 4 (the user: "Short way across start"): on a CLOSED lap a shift-click takes the SHORTER way round, by road length; across the start line it is from > to
       // (from..last, then 0..to), which src/core/piece.js saveRun keeps; a tie (within 1e-6 m: the lengths are decimal sums) stays the run that does not cross the line.
       // A's look: the short way only where it CAN be kept. When the run across the line is refused (MIXED_RUN: a cup at one side and a plain piece at the other, as on
       // TEST 1; SEAM_RUN) and the run inside the lap can be saved, the inside run is selected, and the line says why (longWay)
@@ -843,7 +843,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     clearSelection: () => set({ selection: null, deleteProposal: null, cutProposal: null, message: null }),
     /**
-     * D261, GRIP of the selected pieces (the keeper: "change which piece has different grip"; the core is src/core/document.js setGrip, E's): `g` a whole percent 50 to 150 (a number or the field's
+     * D261, GRIP of the selected pieces (the user: "change which piece has different grip"; the core is src/core/document.js setGrip, E's): `g` a whole percent 50 to 150 (a number or the field's
      * text; anything else is refused in plain words, nothing changes). Only ROAD has grip, so a flight in the selection is left as it is. ONE undo step; the selection stays on the pieces.
      * 100 is AC's own road and writes no grip at all.
      */
@@ -881,7 +881,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return commit('pitLane', () => nd, { lastEdited: null, ...ok(lane ? 'pit lane set' : 'pit lane removed') });
     },
     /**
-     * FLATTEN FOR THE PIT (the keeper's idea, 2026-10-09): lower the cup, tube sweep and edge to the plain road beside the whole pit lane, easing back over
+     * FLATTEN FOR THE PIT (the user's idea, 2026-10-09): lower the cup, tube sweep and edge to the plain road beside the whole pit lane, easing back over
      * 60 m either side (src/core/pitflat.js), so the lane can leave and rejoin and runs level beside the road. Shape only: the route does not move. One undo step.
      */
     flattenForPit() {
@@ -891,7 +891,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const s0 = at(lane.leave), s1 = at(lane.rejoin);
       if (s0 === null || s1 === null) return set({ message: 'a pit lane join is on a piece that is not on the track any more: pick its piece again' });
       let nd; try { nd = require('../../src/core/pitflat.js').flattenUnder(d, { s0, s1, ramp: 60 }); } catch (e) { if (e && e.name === 'CoreError') return set({ message: e.message }); throw e; }
-      // a TUBE opened under the racing line leaves the line without road where it opens (measured on the keeper's T-180 TUBE OVAL: downforce-ray gaps at every
+      // a TUBE opened under the racing line leaves the line without road where it opens (measured on the user's T-180 TUBE OVAL: downforce-ray gaps at every
       // ramp tried, 60 to 300 m), so the export will refuse it: say so now, not at export time
       const tubeOpened = nd.pieces.some((P, i) => P.tube && P.channels.t !== d.pieces[i].channels.t);
       return commit('flattenForPit', () => nd, { lastEdited: null, ...ok(tubeOpened
@@ -916,7 +916,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return info;
     },
     /**
-     * THE START, FOR DRAGGING (D285; the keeper: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars"): the road the
+     * THE START, FOR DRAGGING (D285; the user: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars"): the road the
      * start sits on, in the path's own metres, so the preview can turn a pointer position into a place on the road. { path, starts, first: { id, s0, len }, roads:
      * [{ id, s0, s1 }] (every road piece, in lap order), spawns } or null when nothing resolves; `spawns` is the doc's block, or, on an automatic track, the block the
      * automatic layout comes to (what the first drag writes), or `error` says why it cannot (the automatic line is not on the first piece, where a hand-placed one must be).
@@ -1079,7 +1079,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     cancelDelete: () => set({ deleteProposal: null, message: null }),
 
     /**
-     * D361, CUT THE SELECTED PIECES OUT (the keeper, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"). src/core/piece.js
+     * D361, CUT THE SELECTED PIECES OUT (the user, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"). src/core/piece.js
      * cutRun takes them out and leaves the track OPEN at the gap, moving nothing kept (a closed lap is turned so the piece after the cut comes first). As the middle delete:
      * cutSelection PREVIEWS it (state.cutProposal; the track unchanged), applyCut copies the track to its backups first ('pre-cut'), refuses by name if that copy fails, and
      * commits ONE undo step; cancelCut drops it, and so does any change of the track or of the selection. No overlap check: nothing kept moves, so the cut adds no overlap.
@@ -1167,7 +1167,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
     async exportTo(dir, opts = {}) {
       if (!exporter) return set({ message: 'export is not available here' });
-      // D234 (the keeper: "when ever I export by myself, the track is errored in content manager before starting"): the target is resolved FIRST, then the track is refused or
+      // D234 (the user: "when ever I export by myself, the track is errored in content manager before starting"): the target is resolved FIRST, then the track is refused or
       // exported, and the EMPTY folder the user made in the picker is removed WHATEVER the outcome (an open loop, a red, a narrow grid, a failure, a success): it was made for an
       // export, and Content Manager lists an empty track folder as damaged. A folder with anything in it is refused by resolveTarget and never touched. `stop` is every way out
       // that is not a success: it removes the folder, says so in the message, and keeps the message as exportRefusal so the page can show it where it cannot be missed.
@@ -1181,7 +1181,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       set({ message: 'exporting…' });   // D437b: the export runs on its own now, and the page stays usable while it does
       try { out = await api.buildExportAsync(opts); } catch (e) {
         if (e.name !== 'ExportError') throw e;
-        // D242: a red refusal names EVERY red in plain words, grouped, with where (the message was the export's own, every reason by its id: the keeper read
+        // D242: a red refusal names EVERY red in plain words, grouped, with where (the message was the export's own, every reason by its id: the user read
         // "downforce-ray-gap" first and nothing about 28 more that all said the road runs into itself)
         return stop({ message: e.code === 'RED' && Array.isArray(e.red) ? `not exported: ${RG.groupsText(RG.groupReds(e.red, st.resolved.segments, { closed: st.resolved.closed }))}` : e.message, exportReds: e.code === 'RED' ? e.red : null });
       }
@@ -1227,7 +1227,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** The window is closing on purpose: nothing is left to recover. */
     async cleanExit() { await clearAutosave(); },
     /**
-     * BACKUP NOW (D239 amendment: the keeper lost TEST 1 to one Close, with no copy from before it). Writes the document AS IT IS NOW
+     * BACKUP NOW (D239 amendment: the user lost TEST 1 to one Close, with no copy from before it). Writes the document AS IT IS NOW
      * to the track's backups (native backup_track: track-backups/<eq-name>.<local time>.t180track, newest 20 kept), under the saved
      * name or, unsaved, under "unsaved". `reason` is said in the result. Resolves { file, reason }, or null where there is no native
      * side to write to (headless, a browser); a write that FAILS rejects, so the caller can refuse the operation it was guarding.
@@ -1361,7 +1361,7 @@ function startLayout(segments, lift, start, { open = false, base = null } = {}) 
 }
 
 /**
- * THE HAND-PLACED START (the keeper, 2026-10-09: "move the start line around the first piece … a numbered grid that fits the track … a hotlap spawn I
+ * THE HAND-PLACED START (the user, 2026-10-09: "move the start line around the first piece … a numbered grid that fits the track … a hotlap spawn I
  * plop down"): the layout the doc's `spawns` says, in src/markers/layout.js's shape, on the same path startLayout builds. The line is `along` metres into
  * the FIRST piece (clamped to it: a piece shortened after the line was placed keeps the line on it); the grid is two staggered columns of `count` slots
  * with the doc's spacing, pole 10 m behind the line (src/markers/layout.js PACK); the pit boxes stay automatic until the pit module exists (two boxes

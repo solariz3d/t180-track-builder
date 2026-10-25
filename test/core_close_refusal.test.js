@@ -1,7 +1,7 @@
 // core_close_refusal.test.js: node --test test/core_close_refusal.test.js
 // D239 (pane C, the librarian's fold-in of C's D238 finding): closing a lap whose closure system is SINGULAR (two straights: nothing can
 // bend round to meet the start) used to throw a plain Error from the solver (tools/piecewise.cjs denseSolve, called at close.js), which
-// the app's shell does not catch, so the keeper saw nothing at all. It is now a NAMED refusal, a CoreError the shell shows.
+// the app's shell does not catch, so the user saw nothing at all. It is now a NAMED refusal, a CoreError the shell shows.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

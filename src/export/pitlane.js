@@ -39,7 +39,7 @@ function laneForExport(mainPath, mainSegments, mainMesh, pitLane, { selfCheck = 
   return { lane, mesh: withFill, red, info };
 }
 
-/* D279 INFILL (the keeper, 2026-10-09 16:27: "the pit lane arc that is made, i wonder if the inside could just be filled in so there is no gap between the
+/* D279 INFILL (the user, 2026-10-09 16:27: "the pit lane arc that is made, i wonder if the inside could just be filled in so there is no gap between the
  * track and pit"). ONE drivable surface, 1ROAD_PIT_fill_0, from the road's edge to the lane's inner edge over the lane's whole span: the entry arc (where
  * the gap opens from 0), the body (offsetM wide) and the exit arc.
  * ITS TWO EDGES ARE THE MESHES' OWN, NOT A FORMULA. Measured on a core lap: the road mesh's edge vertices sit 2–9 cm from buildPitLane's analytic edge
@@ -124,7 +124,7 @@ function withLane(scene, laneMesh) {
 }
 
 /**
- * D279 (the keeper, 2026-10-09: "ALSO MAKE the pits the same texture as the track"): the lane wears the road's FLOOR. withTextureSet
+ * D279 (the user, 2026-10-09: "ALSO MAKE the pits the same texture as the track"): the lane wears the road's FLOOR. withTextureSet
  * (src/texture/set.js) gives a textured floor material to the road's own cells only, so the lane kept the plain road material while the
  * road around it wore the texture. Here every lane cell (1ROAD_PIT_…) takes the floor material of the road segment the lane LEAVES from:
  * the same material, so the same diffuse texture, under every setting (a made texture, the user's picture). An untextured floor changes

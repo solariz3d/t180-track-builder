@@ -1,4 +1,4 @@
-// overlapjob.js: THE OVERLAP CHECK of a proposed track, as ONE pure function that runs the same on the page, in a Web Worker and under node (D240 follow-up, the keeper reads a 10 s
+// overlapjob.js: THE OVERLAP CHECK of a proposed track, as ONE pure function that runs the same on the page, in a Web Worker and under node (D240 follow-up, the user reads a 10 s
 // freeze as broken: E measured Close's preview at 13.4 s on TEST 1, a middle delete's at 8.5 to 10.3 s on 13 km, and both were this function run on the page's own thread).
 //
 //   overlapCheck(resolved, designSpeedKmh, { closed })  the check itself, moved here unchanged from coreshell.js (D242, B's; D240's `closed: false` for an open track)
@@ -25,7 +25,7 @@ const lapSummary = (lap) => ({ ok: lap.ok, reason: lap.reason || null, first: la
  */
 /** D256: a set design speed pins it; none (the app: there is no slider) checks at FULL speed, as the panel and the export do. */
 /**
- * D266 (the keeper's 6 × 1000 m tube: the page died on Close): THE CHECK'S MESH, LEAN. buildMesh keeps, for each 2 m piece, its first and last rows as
+ * D266 (the user's 6 × 1000 m tube: the page died on Close): THE CHECK'S MESH, LEAN. buildMesh keeps, for each 2 m piece, its first and last rows as
  * objects (sculpt and the seams re-use them) and its handles: 660 MB of JavaScript heap on that track, of 750, and the check reads none of it. So the check
  * builds the mesh WITHOUT the self-check, deletes those four fields from its own pieces, and runs the self-check itself, with exactly the options and the folds
  * buildMesh's `selfCheck: true` gives (src/geom/mesh.js buildMesh: selfCheck(out, { closed, lengthM, minSeparationM, stackedM }), then folds += asFolds):

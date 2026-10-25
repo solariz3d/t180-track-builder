@@ -1,5 +1,5 @@
 // core_pitlane.test.js: node --test test/core_pitlane.test.js
-// THE PIT LANE ON A CORE DOCUMENT (the keeper, 2026-10-09): the word builder's side road (src/doc/pitlane.js) anchored to PIECE ids, plus the pit boxes on it.
+// THE PIT LANE ON A CORE DOCUMENT (the user, 2026-10-09): the word builder's side road (src/doc/pitlane.js) anchored to PIECE ids, plus the pit boxes on it.
 // Absent unless added, so every track without one saves byte for byte as before.
 'use strict';
 const test = require('node:test');

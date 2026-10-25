@@ -196,7 +196,7 @@ test('the ghost (the first word before anything is placed) carries its segments,
   assert.equal(g.segments.length, 1);
 });
 
-// ── 2026-09-29, the keeper: "the mouse look to be inverted from what is now left and right", "zoom in and out from all camera
+// ── 2026-09-29, the user: "the mouse look to be inverted from what is now left and right", "zoom in and out from all camera
 //    views with scroll wheel". Stated before these were written: a + yaw turns the view RIGHT on screen (what was ahead
 //    slides left); every follow view comes nearer on a + wheel step and backs off on a −, keeps its own zoom per view, and
 //    stays inside [ZOOM.min, ZOOM.max]; in free mode the wheel flies along the view. ──
@@ -275,7 +275,7 @@ test('the lens changes the pose\'s fov and nothing else, in every view (the eye,
   }
 });
 
-// ── D189, the keeper's feel: flying was slower the more the view looked down when W or S was held with Q or E ("0.0123× at −89°",
+// ── D189, the user's feel: flying was slower the more the view looked down when W or S was held with Q or E ("0.0123× at −89°",
 //    E's measurement). Forward follows the view's pitch, up is the WORLD's up, so the two are not perpendicular and their sum is
 //    shorter than either. Stated: free.move(fwd, right, up) moves the eye by exactly hypot(fwd, right, up) METRES, in the direction
 //    of  d·fwd + r·right + U·up  (d the view direction, r = d × up normalised, U world up), at every pitch and yaw and for every

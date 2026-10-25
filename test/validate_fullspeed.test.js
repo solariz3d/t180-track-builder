@@ -1,4 +1,4 @@
-// validate_fullspeed.test.js: D256, the keeper's decision (13:2x) on pane E's measurement (exo_memory/loop/design_speed_measure_2026-10-06.md):
+// validate_fullspeed.test.js: D256, the user's decision (13:2x) on pane E's measurement (exo_memory/loop/design_speed_measure_2026-10-06.md):
 // ALWAYS MAX. opts.fullSpeed: an OPEN track's loads at the lap sim's cap (MACH6.vmaxKmh), a CLOSED one on its ghost lap (as the export does);
 // the centreline lift-off (leaves-surface) on an open track too; and "holds above N km/h" on a centreline station facing down, red only
 // where no speed holds.
@@ -97,7 +97,7 @@ test('D256 no-speed-holds: a road facing the ground and curving AWAY from the ca
   assert.ok(!reasons(r.info).includes('holds-above'));
 });
 
-// D256 suite reds: the paused piece builder's word documents are not newly judged by the two checks the keeper's decision added, as the roll-rate bar
+// D256 suite reds: the paused piece builder's word documents are not newly judged by the two checks the user's decision added, as the roll-rate bar
 // judges only the core's roads (the word builder's S phrase lifts off at its own tempo: measured, flagged, not judged)
 test('D256: a word document (the paused piece builder) is not newly judged: no lift-off red on an open track, no holds-above, no no-speed-holds', () => {
   const crestRun = validate(X.pathOf(crest(3000, 0.1)), [X.seg()], { fullSpeed: true });

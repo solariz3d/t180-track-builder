@@ -22,7 +22,7 @@
 // INFERRED from the AC modding community's description (txMask's R/G/B/A weight txDetailR/G/B/A, each tiled by
 // multR/G/B/A; magicMult scales how much of the detail shows, 0 black, 1 as is): NOT verified against AC (§5.3 parked).
 //
-// THE REFERENCE LIGHT (stated, INFERRED: not measured in AC; the look-match number §5.3 is parked, the keeper 12:17 "No in
+// THE REFERENCE LIGHT (stated, INFERRED: not measured in AC; the look-match number §5.3 is parked, the user 12:17 "No in
 // game testing needed"): one sun at 14:00 track time, elevation 42°, azimuth 225° (from +z towards +x), colour
 // (1.00, 0.95, 0.86); a hemisphere ambient, ambientDown (0.30, 0.33, 0.38) + ambientRange (0.22, 0.24, 0.30) ×
 // (n.y·0.5 + 0.5), after actools' gAmbientDown / gAmbientRange (Base.fx; the exact GetAmbient body was not found, so the

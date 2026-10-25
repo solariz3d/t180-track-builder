@@ -1,5 +1,5 @@
 // core-widthlike.test.js: node --test app/test/core-widthlike.test.js
-// D232: the "width like…" drop-down beside Extend's width field (app/core/widthlike.js, mounted by app/core/panel.js). The keeper: "a drop down that tells you
+// D232: the "width like…" drop-down beside Extend's width field (app/core/widthlike.js, mounted by app/core/panel.js). The user: "a drop down that tells you
 // the width of different known t-180 tracks, such as track H, track N, track G". The entries, the tube's round-and-across wording, and the PANEL mounted on a
 // small fake DOM (the readout tests' own), read back as the text and the options it shows.
 'use strict';
