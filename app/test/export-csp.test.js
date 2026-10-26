@@ -36,6 +36,7 @@ test('Export shows the CSP-only warning in its message, and the exported surface
   await s.exportTo(out);
   const st = s.getState();
   assert.equal(st.exportReds, null, st.message);
-  assert.ok(st.message.includes(CSP_ONLY_WARNING), st.message);
+  // AMENDED (D464): the warning is shown in the user's words (app/core/exportwords.js): the CSP need, with no doc, section or ini key; the core's own text stays in the core
+  assert.match(st.message, /needs Custom Shaders Patch \(CSP\)/, st.message); assert.ok(!st.message.includes(CSP_ONLY_WARNING), st.message);
   assert.match(fs.readFileSync(path.join(out, st.lastExport.folders[0], 'data', 'surfaces.ini'), 'utf8'), /^WAV_PITCH=extended-0$/m);
 });

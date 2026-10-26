@@ -24,6 +24,7 @@
 //   await see.run(folder, layout) -> refuses without calling the native side while the setting is off
 // The launch itself is native (src-tauri/src/ac.rs): OFF by default, and never run by the builder's tests.
 'use strict';
+const EW = require('../core/exportwords.js');   // D464: the export's warnings in the user's words
 
 const PREFIX_NOTE = 'the builder names every track t180b_…, so it can never overwrite a track it did not make';
 
@@ -61,7 +62,8 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
       const where = names.map((n) => `${root}\\content\\tracks\\${n}`).join(', ');
       // D250 item 2: a jump the car may fly past is installed, and said (the user tunes jumps by driving them); the export's other warnings stay where they were
       // D446: and two parts of the road whose edges come within 1 m (validate's near-touch), said where the export's outcome is read
-      const jumps = ((out.result && out.result.warnings) || []).filter((w) => /^(jump|near-touch): /.test(w));
+      // D464 (the librarian's ruling on E's D463 §6(3)): and the CSP need, since this button is the main path and the first-start card shows once; every line in the user's words
+      const jumps = EW.exportWarningsWords(((out.result && out.result.warnings) || []).filter((w) => /^(jump|near-touch|csp-only): /.test(w)));
       // D264: the test export says what it is, and how many reds it carries (the exporter's own TEST EXPORT warning)
       const unfinished = test ? `; this track is not closed, so it was exported as an unfinished TEST: the road ends in a run-off and a wall; reds are listed as warnings${((out.result && out.result.warnings) || []).filter((w) => /^TEST EXPORT/.test(w)).map((w) => ` (${w})`).join('')}` : '';
       // D372: Assetto Corsa keeps a ghost and the CMRT HUD its laps by the track's NAME, so after a change of shape they were moved aside; never silent, either way

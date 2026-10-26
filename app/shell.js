@@ -25,6 +25,7 @@
 
 const D = require('../src/doc/index.js');
 const L = require('../src/doc/library.js');
+const EW = require('./core/exportwords.js');   // D464: the export's warnings in the user's words
 
 const PICKERS = { font: ['auto', ...Object.keys(D.FONTS)], tempo: Object.keys(D.TEMPOS), dir: ['L', 'R'] };
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$/;
@@ -259,7 +260,8 @@ async function createShell({ storage, exporter = null, autosaveMs = 1500, timers
         return set({ message, exportReds: e.code === 'RED' ? e.red : null, exportRefusal: message });
       }
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);
-      const warn = (out.result.warnings && out.result.warnings.length ? ` (${out.result.warnings.length} warning${out.result.warnings.length > 1 ? 's' : ''}: ${out.result.warnings.join(' · ')})` : '') + await tidy();
+      const shown = EW.exportWarningsWords(out.result.warnings);   // D464: the builders' notes off the screen, the rest in words
+      const warn = (shown.length ? ` (${shown.length} warning${shown.length > 1 ? 's' : ''}: ${shown.join(' · ')})` : '') + await tidy();
       return set({ message: `exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${warn}`, messageKind: 'ok', exportReds: null, exportRefusal: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
       } catch (e) { await tidy(); throw e; }
     },

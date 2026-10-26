@@ -676,7 +676,7 @@ function mount(root, shell, mountOpts = {}) {
   // D355 seam fix (plan_t180_handoff :1421-1424): Open example…, Start & grid… and Pit lane… are pane A's Track menu's (app/core/trackmenu.js), which mounts its own
   // spawnsui / pitui and its own file boxes when a panel opens and unmounts them when it closes; this panel no longer makes them (two live copies would each follow the shell)
 
-  const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
+  const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message hint', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
   const pieces = PU.mount({ root, stage, shell, win, el, armed: () => brushedPress, send, settings: S });
   // D269: the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
   const bin = doc.getElementById ? doc.getElementById('pieces-bin') : null; if (bin) bin.replaceChildren(...pieces.nodes.library.slice(1));
@@ -698,7 +698,7 @@ function mount(root, shell, mountOpts = {}) {
   // widening note. Shown only in Sculpt. Its class stays brush-strip: the page moves it under the bar (app/index.html) and lays it out. Exposed as sculptStrip
   // its HEIGHT IS FIXED, one line, empty or not: it gains its text as a drag opens, and a line that grew then pushed the stage down under the held pointer (19.39 px: every
   // delta gained that, and the road jumped as the drag began; A's sculpt-frame row 5, p-d421-sculptframe-A_2026-10-20.md §6). Never wraps: a long note is cut, its whole text the tooltip
-  const valueLine = el('p', { class: 'message', 'aria-label': 'sculpt value', style: 'font-size:12px;margin:2px 0;height:1.4em;line-height:1.4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' });
+  const valueLine = el('p', { class: 'message hint', 'aria-label': 'sculpt value', style: 'font-size:12px;margin:2px 0;height:1.4em;line-height:1.4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' });
   const moreTools = el('details', { class: 'sculpt-more' }, el('summary', { text: 'more ▾', style: 'cursor:pointer' }),
     el('div', { class: 'pickers' }, field('exact size (may nudge ≤ 0.1 mm outside)', sharp), field('other tool', otherTool), field('Edge changes', edgeSide), field('Smooth smooths', smoothCh)));
   const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools), sculptHint, valueLine);

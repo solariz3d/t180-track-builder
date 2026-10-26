@@ -35,6 +35,8 @@ function mount(root, shell, { native, pickFolder, getTextures, more = null, card
     if (r.needsRoot && (await pick())) r = await inst.install(opts);
     say(r.message); if (r.ok) last = r.folder;
     if (!r.needsRoot) dropCard();   // D252 follow-up (C's finding 1): Export found and remembered AC (get_ac_root), so the startup card has nothing left to ask
+    // D464 (E's D461 report, item 7): the note above is cut to its box, so the whole result also shows in the banner row, uncut, until ✕ closes it
+    if (cardEl && r.message) cardEl.replaceChildren(el('div', { className: 'bar result' }, [el('span', { textContent: r.message }), ' ', el('button', { textContent: '✕', title: 'close this message', onclick: () => cardEl.replaceChildren() })]));
   };
   install.onclick = () => run();
   if (testButton) testButton.onclick = () => run({ test: true });   // D264: the ⋯ menu's Test export, into AC by the same path

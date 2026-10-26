@@ -1083,3 +1083,17 @@ test('row 21: in Sculpt, a Tube sweep drag on a closed tube is refused in plain 
   assert.equal(shell.getState().history.present, d0, 'and the tube is as it was');
   P1.panel.unmount();
 });
+// D464 (D463 part 2 item 9, E's D461 report §2 item 9): Sculpt's how-to line and its value line are instructions, not errors. They were plain .message, which the page
+// paints in --bad (the colour the guide calls "known to break"); they carry the hint class now, painted in the text colour.
+test('row D464: Sculpt\'s how-to line and value line read as instructions, not errors: class hint, painted in the text colour', async () => {
+  const P1 = await handlePanel(), { shell } = P1;
+  shell.setSculpt(true); P1.frame();
+  for (const label of ['sculpt hint', 'sculpt value']) {
+    const e = P1.all().find((x) => x.attrs && x.attrs['aria-label'] === label);
+    assert.ok(e, label); assert.ok(String(e.attrs.class || '').split(/\s+/).includes('hint'), `${label}: class "${e.attrs.class}"`);
+  }
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const m = /\.message\.hint\s*\{([^}]*)\}/.exec(html);
+  assert.ok(m, 'the page has a .message.hint rule'); assert.match(m[1], /color:\s*var\(--text\)/); assert.doesNotMatch(m[1], /--bad/);
+  P1.panel.unmount();
+});
