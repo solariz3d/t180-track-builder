@@ -448,21 +448,25 @@ function bankLapRun(doc) {
   return { doc, withheld, none: 'every curve it could bank would lean out of its turn' };
 }
 /** D434: the laid route banked and closed, the bank sized from the closed route (above); the share scaled down while the window rolls past the amber. */
+/** D459 3c: the closure's curvature rows Finish asks for. Not the bank: bankPlan owns it at the closer's joints and the seam (D447: C1, its slope change bounded by
+ *  BANK_ACCEL), and a row there moved the plan's points off their share (0.46° on TEST TRACK 10). Not the cup: cupHome brings it home C2 where the rate allows and
+ *  by the slowest straight fade where it does not, and a row there steepened that fade past the rate it reports. The edges keep theirs. */
+const FINISH_C2 = Object.freeze(['e', 'er']);
 function closeBanked(laid, window, upright) {
   const flatPeak = bankRollPeak(laid, window);   // a roll the laid route already has (a roll straight) is not the bank's to cure
   // which pieces are laid upright is judged ONCE, on the laid route (the closed one already carries the first pass's bank)
   const uprightSet = new Set(window.filter((p) => laid.pieces[p].type === 'road' && laid.pieces[p].channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE)));
   let share = BANK_SHARE, res = null;
   for (let t = 0; t < BANK_TRIES; t++) {
-    const plan1 = bankPlan(laid, window, share, uprightSet), first = close(banked(laid, plan1), { window });
+    const plan1 = bankPlan(laid, window, share, uprightSet), first = close(banked(laid, plan1), { window, c2Channels: FINISH_C2 });
     if (!first.converged) return first;
-    res = close(banked({ ...first.doc, closed: false }, bankPlan(first.doc, window, share, uprightSet), plan1), { window });
+    res = close(banked({ ...first.doc, closed: false }, bankPlan(first.doc, window, share, uprightSet), plan1), { window, c2Channels: FINISH_C2 });
     if (!res.converged) return res;
     const peak = bankRollPeak(res.doc, window);
     if (peak <= Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6)) return res;
     share *= (Math.max(ROLL_AMBER_DEG_M, flatPeak) / peak) * 0.97;
   }
-  return close(laid, { window });   // the bank could not be kept under the amber: the turns as laid
+  return close(laid, { window, c2Channels: FINISH_C2 });   // the bank could not be kept under the amber: the turns as laid
 }
 
 /** D357: the laid road closed AS IT IS, when it already meets the start within Close's bars (THE END STRAIGHT BEHIND THE START); else null. */
@@ -511,7 +515,7 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
     for (let k = 1; k <= road.length; k++) {
       const window = road.slice(road.length - k);
       let res;
-      try { res = close(doc, { window, maxIter: NEAR_ITER }); } catch (err) { if (err.name !== 'CoreError') throw err; why = err.message; continue; }
+      try { res = close(doc, { window, maxIter: NEAR_ITER, c2Channels: FINISH_C2 }); } catch (err) { if (err.name !== 'CoreError') throw err; why = err.message; continue; }
       if (!res.converged) { why = res.report; continue; }
       const hold = roadHold(res.doc, window[0]);
       if (hold.worst < 0) { why = `the car would leave the road at ${(hold.at / 1000).toFixed(2)} km (a load of ${hold.worst.toFixed(0)} g)`; continue; }

@@ -23,6 +23,9 @@
 //   8  the ramp's SHAPE is the quintic's: a 30° bank over 100 m follows 6u⁵ − 15u⁴ + 10u³ within 1.5% of the change at every half metre, and a 35° right edge
 //      over 50 m (three interior knots: a coarser fit) within 3%. The Bloss cubic is 5.2% off the quintic at u = ¼, and a ramp blended by the cubic and merely
 //      pinned C2 at its ends by c2Ends reads 2.2% off on the 100 m bank: caught here, not by rows 1–4 (the ends read C2 either way)
+//   9  the closure itself (D459 3c, src/core/close.js): a WHOLE-LAP close (the seeded sweep's seeds 10 and 16, whose words are copied here) and a LOCAL close of
+//      the last piece on a lap with a bank ramp leave no curvature step at the seam nor at any joint the close moved. RED before 3c: the closure met value and
+//      slope only (seed 10's lap stepped at the seam by 0.34 °/m² and at a moved joint; seed 16's at the seam and at p7|p8), GREEN with the curvature rows
 //   7  through Close: the roll straight Finish lays is C2 where it meets the user's last piece (it is laid by extend, so it follows row 1). Its exit joint is
 //      bankLap's (finish.js bankPlan): the plan's own acceleration bound, BANK_ACCEL 2e-4 rad/m² = 0.0115 °/m², is what steps there, by the D447 ruling, not this lap's
 // The second derivative AT the end is read from document.js valuesAt by the one-sided four-point formula (2f₀ − 5f₁ + 4f₂ − f₃)/H², H = 0.5 m, which is exact for
@@ -38,6 +41,7 @@ const { extend } = require(path.join(T, 'src/core/extend.js'));
 const { extendTurnBy } = require(path.join(T, 'src/core/turnby.js'));
 const F = require(path.join(T, 'src/core/finish.js'));
 const Cn = require(path.join(T, 'src/core/continuity.js'));
+const { close } = require(path.join(T, 'src/core/close.js'));
 
 const DEG = Math.PI / 180, H = 0.5;
 const TOL_D2 = 1e-3;     // deg/m² (phi read in degrees): a Bloss ramp reads 18 to 84 times this on his words; a C2 ease reads 0 to rounding
@@ -159,4 +163,24 @@ test("row 8: a ramp's shape is the C2 quintic's: a bank over 100 m within 1.5% o
     let worst = 0, ws = 0; for (let s = 0; s <= L; s += 0.5) { const want = target * smoother(s / L), got = at(P, ch, s), e = Math.abs(got - want) / target; if (e > worst) { worst = e; ws = s; } }
     assert.ok(worst <= bar, `${ch} ${target}° over ${L} m: ${(100 * worst).toFixed(2)}% off the quintic at s ${ws} (the bar is ${100 * bar}%)`);
   }
+});
+
+/** the seeded sweep's laps (test/sweep_c2.test.js trackOf, seeds 10 and 16: the two whose whole-lap close moved an interior joint before 3c), their words copied */
+const SWEEP10 = [{ length: 300, first: { e: 28 } }, { length: 243, transition: 40, targets: { kh: 0, phi: -0.011913 } }, { length: 75, transition: 40, targets: { kh: -0.001991, er: 33 } }, { length: 48, transition: 40, targets: { kh: 0.0017, phi: -0.134038, e: 11 } }, { length: 75, transition: 40, targets: { kh: -0.002896, kv: -0.000197, er: 28 } }, { length: 171, transition: 40, targets: { kh: 0.002472, er: 31 } }, { length: 206, transition: 40, targets: { kh: 0.001394, e: 3 } }, { length: 231, transition: 40, targets: { kh: -0.002542, kv: 0.000266, er: 15 } }];
+const SWEEP16 = [{ length: 300, first: { e: 9 } }, { length: 41, transition: 40, targets: { kh: -0.003805, er: 16 } }, { length: 183, transition: 40, targets: { kh: -0.001596, phi: -0.29617, er: 11 } }, { length: 76, transition: 40, targets: { kh: 0 } }, { length: 146, transition: 40, targets: { kh: 0.002912 } }, { length: 197, transition: 40, targets: { kh: 0.001311 } }, { length: 112, transition: 40, targets: { kh: -0.002572, e: 0 } }, { length: 86, transition: 40, targets: { kh: 0, phi: -0.17314, er: 34 } }, { length: 79, transition: 40, targets: { kh: -0.002852, er: 20 } }];
+const lay = (words) => words.reduce((d, w) => extend(d, w), D.createDoc('closure'));
+test('row 9: the closure is C2: a whole-lap close and a local close leave no curvature step at the seam nor at any joint they moved', () => {
+  const moved = (open, doc) => { const same = (A, B) => JSON.stringify(A) === JSON.stringify(B), n = doc.pieces.length; return Cn.c2Breaks(doc).filter((e) => e.k === n - 1 || !same(doc.pieces[e.k], open.pieces[e.k]) || !same(doc.pieces[e.k + 1], open.pieces[e.k + 1])); };
+  for (const [name, words] of [['sweep seed 10', SWEEP10], ['sweep seed 16', SWEEP16]]) {
+    const open = lay(words), c = close(open, { edited: [0] });
+    assert.equal(c.converged, true, `control: ${name} closes whole-lap (${c.report})`);
+    assert.deepEqual(moved(open, c.doc).map((e) => `${e.joint} ${e.ch} ${e.dkDeg.toFixed(4)} °/m²`), [], `${name}, closed whole-lap: the seam and every moved joint are C2`);
+  }
+  // a LOCAL close of the last two pieces: core_close_banks_lap's square (four 100 m straights and 90° turns at R 300 m, so it nearly meets its start), a 12° bank
+  // ramped on the third straight and back on the fourth
+  const Q = (Math.PI * 300) / 2; let d = extend(D.createDoc('local'), { length: 100, family: 'bowl' }); d = extendTurnBy(d, { length: Q }, 90 * DEG); d = extend(d, { length: 100 }); d = extendTurnBy(d, { length: Q }, 90 * DEG);
+  d = extend(d, { length: 100, targets: { phi: 12 * DEG } }); d = extendTurnBy(d, { length: Q }, 90 * DEG); d = extend(d, { length: 100, targets: { phi: 0 } }); d = extendTurnBy(d, { length: Q }, 90 * DEG);
+  const c = close(d, { window: [d.pieces.length - 1, d.pieces.length - 2] });
+  assert.equal(c.converged, true, `control: the local close closes (${c.report})`);
+  assert.deepEqual(moved(d, c.doc).map((e) => `${e.joint} ${e.ch} ${e.dkDeg.toFixed(4)} °/m²`), [], "closed locally: the seam and the window's joints are C2");
 });
