@@ -123,3 +123,68 @@ test('row 4: a closed lap: the hover hatches the last and first road pieces; a d
   assert.equal(dc[0].positions, last.positions, 'built once, from the placed path: the very lines of the hover');
   assert.equal(sculptCues(fr, null), dc, 'the same frame: nothing built again');
 });
+// D467 (the librarian's ruling on E's D463 §6(2)): after a release that kept the bend by moving the lap's START PIECES (coreshell.js keptBend; the preview's startMovedOf), the
+// first and last road pieces are hatched with no hover, both at full strength, since both moved; with a hover the wash comes first as before. Not kept: nothing, as before.
+test('row D467: the start pieces a release moved are hatched with no hover, both at full strength; nothing when they did not move', async () => {
+  const s = await closedTrack(), tm = createTrackModel(), tr = tm.update(s.getState().resolved), P = tr.path, segs = tr.segments;
+  assert.equal(sculptCues(tr, null, false), null, 'control: no hover and nothing moved: no cue');
+  const k = sculptCues(tr, null, true);
+  assert.ok(k && k.length === 2, `two hatches (${k && k.length})`);
+  const [last, first] = k, idL = segs[segs.length - 1].id, idF = segs[0].id;
+  const onPiece = (id) => P.samples.filter((x, i) => segs[x.seg] && segs[x.seg].id === id && i % 2 === 0).length;
+  assert.equal(stationsOf(last.positions), onPiece(idL), 'the last piece: a line at every other station');
+  assert.equal(stationsOf(first.positions), onPiece(idF), 'the first piece: a line at every other station');
+  assert.deepEqual([last.colour, last.alpha, first.colour, first.alpha], [[1, 0.55, 0.15], 0.6, [1, 0.55, 0.15], 0.6], 'the marker orange, both at full strength');
+  assert.equal(sculptCues(tr, null, true), k, 'the same frame: nothing built again');
+  const hk = sculptCues(tr, { s0: 200, r: 100, tool: 'bend' }, true);
+  assert.equal(hk.length, 3, 'with a hover: the wash, then the two hatches'); assert.equal(hk[2].alpha, 0.6, 'the first piece at full strength, since it moved');
+});
+// D467: the preview's own frame draws that hatch: after a release that moved the start pieces, a frame draws line lists of exactly the hatches' sizes, and after an undo it does not.
+// The renderer runs on a GL stand-in whose drawArrays is recorded (the vertex count of each call), as core-pieces-ui.test.js's headless preview does.
+test('row D467 frame: the preview draws the start pieces\' hatch after such a release, and not after an undo', async () => {
+  const P = require('../preview/preview.js');
+  const counts = []; let q = [], now = 0;
+  const win = { devicePixelRatio: 1, document: { hidden: false, activeElement: null, body: {}, addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: (fn) => { q.push(fn); return q.length; }, cancelAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {} };
+  const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0, drawArrays: (m, f, n) => { counts.push(n); } }, { get: (t, k) => (k in t ? t[k] : () => 0) });
+  const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
+  // AMENDED (D467 re-ruled after C's review): the start pieces are taken only within the bar, which this file's lap does not pass, so the row uses a lap whose start
+  // pieces curve gently and whose start straight is in the middle, with a small bend (sculpt-tools.test.js curvedMidLap, built the same way)
+  const s = await createCoreShell({ autosaveMs: 0 }), Q = (Math.PI * R) / 2;
+  s.extend({ length: 300, family: 'bowl', targets: { kh: 1 / 600 } }); for (const len of [Q, Q]) s.extend({ length: len, transition: 40, targets: { kh: 1 / R } });
+  s.extend({ length: 500, transition: 40, targets: { kh: 0 } }); for (const len of [Q, Q]) s.extend({ length: len, transition: 40, targets: { kh: 1 / R } });
+  s.extend({ length: 200, transition: 40, targets: { kh: 1 / 600 } }); s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message);
+  const pv = P.createPreview({ canvas, shell: s, win });
+  const step = (n = 1) => { for (let i = 0; i < n; i++) { const f = q; q = []; now += 16; for (const g of f) g(now); } };
+  const drawnOnce = () => { step(80); counts.length = 0; step(1); return counts.slice(); };
+  const hatchSizes = () => { const t = pv.track(), k = sculptCues(t, null, true); assert.ok(k && k.length === 2, 'the track has two start pieces to hatch'); return k.map((c) => c.positions.length / 3); };
+  s.setSculpt(true); s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(1e-4); s.endBrush(); const a = await s.brushRelease();
+  assert.equal(P.startMovedOf(a), true, `control: this release moved the start pieces (${a.message})`);
+  const after = drawnOnce(), sizes = hatchSizes();
+  for (const n of sizes) assert.ok(after.includes(n), `a line list of ${n} vertices (a start piece's hatch) is drawn: ${JSON.stringify(after)}`);
+  s.undo(); assert.equal(P.startMovedOf(s.getState()), false);
+  const undone = drawnOnce(), sizes2 = hatchSizes();
+  assert.ok(!sizes2.every((n) => undone.includes(n)), `after the undo the hatch is not drawn: ${JSON.stringify(undone)} against ${JSON.stringify(sizes2)}`);
+  pv.dispose();
+});
+
+// D467, C's re-read (§8.3): the frame row as it was at 95d23f1, on this file's STRAIGHT-START lap (a 400 m straight, two half turns), restored beside the curved-start one:
+// it is green, and it is the one row where a straight-start lap's start pieces are taken in a real release, past the bar.
+test('row D467 frame (straight start): the preview draws the start pieces\' hatch after such a release, and not after an undo', async () => {
+  const P = require('../preview/preview.js');
+  const counts = []; let q = [], now = 0;
+  const win = { devicePixelRatio: 1, document: { hidden: false, activeElement: null, body: {}, addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: (fn) => { q.push(fn); return q.length; }, cancelAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {} };
+  const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0, drawArrays: (m, f, n) => { counts.push(n); } }, { get: (t, k) => (k in t ? t[k] : () => 0) });
+  const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
+  const s = await closedTrack(), pv = P.createPreview({ canvas, shell: s, win });
+  const step = (n = 1) => { for (let i = 0; i < n; i++) { const f = q; q = []; now += 16; for (const g of f) g(now); } };
+  const drawnOnce = () => { step(80); counts.length = 0; step(1); return counts.slice(); };
+  const hatchSizes = () => { const t = pv.track(), k = sculptCues(t, null, true); assert.ok(k && k.length === 2, 'the track has two start pieces to hatch'); return k.map((c) => c.positions.length / 3); };
+  s.setSculpt(true); s.beginBrush({ tool: 'bend', s0: 400 + Math.PI * R + 200, r: 100 }); s.brushTo(2e-4); s.endBrush(); const a = await s.brushRelease();
+  assert.equal(P.startMovedOf(a), true, `control: this release moved the start pieces (${a.message})`);
+  const after = drawnOnce(), sizes = hatchSizes();
+  for (const n of sizes) assert.ok(after.includes(n), `a line list of ${n} vertices (a start piece's hatch) is drawn: ${JSON.stringify(after)}`);
+  s.undo(); assert.equal(P.startMovedOf(s.getState()), false);
+  const undone = drawnOnce(), sizes2 = hatchSizes();
+  assert.ok(!sizes2.every((n) => undone.includes(n)), `after the undo the hatch is not drawn: ${JSON.stringify(undone)} against ${JSON.stringify(sizes2)}`);
+  pv.dispose();
+});

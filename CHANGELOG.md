@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **A Bend, Climb or Stretch on a closed lap keeps all of what you did when it safely can.** When you let go, the builder closes the lap again. Away from the start line it used to do that partly by reshaping the very road you had just changed, so a quarter to half of your bend could quietly go. It now first tries closing the lap with the road at the start instead. It takes that only when the start road moves no further than your own drag moved the track, the lap still has a straight long enough for the start, and no new red appears; then your change is kept whole, the start road that moved is hatched, and the message says "to keep your bend, the start of the lap moved". Otherwise it closes the lap as before and says how much of your bend that took back. Right at the start line it still tells you plainly when your bend had to be undone.
+
 ## [0.4.20] - 2026-10-25
 
 ### Added
