@@ -2,7 +2,8 @@
 // aesthetic as we have it now"). The menu bar (app/menubar/) renders what a menu module's items(ctx) returns (contract M: { label, run }, { label, checked,
 // toggle }, { label, panel: mountFn }, { section }, { separator }); this module is the Track side of it.
 //
-//   items(ctx)           the Track menu: Start & grid…, Pit lane…, Road surface ▸ (each a panel holding the same controls the left column held)
+//   items(ctx)           the Track menu: Start & grid…, Pit lane…, Road surface ▸ (each a panel holding the same controls the left column held), then
+//                        Smooth ramps (D465: a command, the shell's smoothRamps, which says what it did in the status line)
 //   developerItems(ctx)  File ▸ Developer: Open example… (the "Local example" section, a real track's fit and read from the user's own reads folder)
 //   ctx = { shell, document, window }   (el is optional: the bar may pass its own element maker; else the page's own is used)
 //
@@ -59,6 +60,8 @@ function items(ctx) {
     { label: 'Start & grid…', panel: sectionPanel(SU, c) },
     { label: 'Pit lane…', panel: sectionPanel(PIT, c) },
     { label: 'Road surface ▸', panel: surfacePanel(c) },
+    { separator: true },
+    { label: 'Smooth ramps', title: 'make every bank, cup and edge change on this track start and end without a jolt, as new pieces do; the route stays where it is (the track is copied to its backups first; one undo step)', run: () => { void c.shell.smoothRamps(); } },
   ];
 }
 

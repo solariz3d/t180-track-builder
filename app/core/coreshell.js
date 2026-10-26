@@ -35,6 +35,7 @@
 //   shell.selectPiece(i, { extend })   shell.clearSelection()   shell.selectionInfo()   await shell.savePiece(name)   await shell.listPieces()   await shell.insertPiece(name, { mirror })
 //   await shell.renamePiece(from, to)   await shell.deletePieceFile(name)   shell.deleteSelection()   shell.proposeDelete()   await shell.applyDelete()   shell.cancelDelete()
 //   shell.cutSelection()   await shell.applyCut()   shell.cancelCut()   (D361: the selected pieces cut out, the track left open at the gap)
+//   await shell.smoothRamps()   (D465: Track ▸ Smooth ramps: the bank, cup and edge ramps re-laid C2, the route kept; a backup first, one undo step)
 // TIMING: state.lastStep = { op, ms } for the last edit, the document operation plus the adapter's segments (spec test 6's
 // "per step" is measured by the bench on the same calls, not on this field).
 'use strict';
@@ -73,6 +74,8 @@ const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 const GHOST_CHORDS = 48, GHOST_TURN = 0.03, GHOST_PROBES = 16;   // D404: the drag's ghost: at most 48 chords, none turning the heading by more than 0.03 rad (1.7 degrees), the curvature read at 17 stations
 const PC = require('../../src/core/piece.js');   // D240: saved pieces (save a run, put one at the head, mirror it, delete pieces)
+const SR = require('../../src/core/smoothramps.js');   // D465: Track ▸ Smooth ramps
+const RAMP_WORD = Object.freeze({ phi: 'bank', c: 'cup', e: 'edge', er: 'right edge' });
 // A's offset channels h and l (the chair's ruling 1, D186): offsetPath(doc, segments, path) lifts a path and recomputes its frame.
 // Not at 17c2301; when the adapter exports it, the shell hands it on as `resolved.lift`, so the preview and the export
 // read the road AS BRUSHED (the segments alone do not carry the offsets).
@@ -1130,6 +1133,28 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         ...ok(`cut: ${cutWords(p)} Connect the two ends with Extend, or Close; save under a new name to keep the old track (Ctrl+Z puts ${p.removed.length === 1 ? 'it' : 'them'} back)`) });
     },
     cancelCut: () => set({ cutProposal: null, message: null }),
+
+    /**
+     * D465, TRACK ▸ SMOOTH RAMPS: the track's bank, cup and edge ramps re-laid by the C2 quintic (src/core/smoothramps.js), so a track laid before 0.4.20 gets the
+     * smooth joints a new piece has; the route does not move. Only when asked: opening a track never does it. The track AS IT IS NOW goes to track-backups first
+     * ('pre-smooth'), and a copy that fails refuses by name with nothing changed; then ONE undo step. An empty track, or one with no ramp to re-lay or none
+     * that would change, is left as it is, and the message says so.
+     */
+    async smoothRamps() {
+      if (st.brush) return set({ message: 'finish the brush drag first' });
+      const d = doc();
+      if (!d.pieces.length) return set({ message: 'the track is empty: there are no ramps to smooth' });
+      const t0 = now(); let r;
+      try { r = SR.smoothRamps(d); } catch (e) { if (e.name === 'CoreError') return set({ message: `not smoothed: ${e.message}; nothing changed` }); throw e; }
+      const ms = now() - t0, notes = r.left.length ? ` (left as ${r.left.length === 1 ? 'it is' : 'they are'}: ${r.left.map((x) => `${x.id} ${RAMP_WORD[x.ch]}, ${x.why}`).join('; ')})` : '';
+      if (!r.ramps.length) return set({ message: `no bank, cup or edge ramps to smooth on this track: nothing changed${notes}` });
+      if (!r.moved) return set({ message: `the ${r.ramps.length === 1 ? 'ramp on this track is' : `${r.ramps.length} ramps on this track are`} already smooth: nothing changed${notes}` });
+      try { await api.backupNow('pre-smooth'); } catch (e) { return set({ message: `not smoothed: the copy from before could not be written (${e && e.message || e}); nothing changed` }); }
+      if (doc() !== d) return set({ message: 'the track changed while its copy was being written: smooth the ramps again' });
+      const on = new Set(r.ramps.filter((x) => x.moved).map((x) => x.id)).size;
+      return set({ history: D.commit(st.history, r.doc), ...resolvedOf(r.doc), dirty: true, lastEdited: null, lastStep: { op: 'smoothRamps', ms },
+        ...ok(`smoothed ${r.moved} bank, cup and edge ramp${r.moved === 1 ? '' : 's'} on ${on} piece${on === 1 ? '' : 's'}: they now start and end without a jolt; the route did not move (Ctrl+Z puts them back)${notes}`) });
+    },
 
     // undo and redo SAY what they changed (2026-10-13: on ELYSIUM the last steps were start-line moves, invisible in the preview, so undo looked broken)
     undo: () => attempt(() => { if (st.brush) return set({ message: 'finish the brush drag first' }); if (!st.history.past.length) return set({ message: 'nothing to undo' }); const h = D.undo(st.history); return set({ history: h, ...resolvedOf(h.present), dirty: true, message: `undid: ${stepWords(st.history.present, h.present)}` }); }),
