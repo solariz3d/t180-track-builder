@@ -449,6 +449,18 @@ for (const kind of ['legacy', 'cup', 'tube']) {
 test('row 10h: a tube after a CUP head starts at twice the edge of the cup (tNext), so the rendered edge is continuous across the re-join', () => {
   const d = openDocs.kinds(); assert.deepEqual(d.pieces.map((P) => D.kindOf(P)), ['legacy', 'cup', 'cup', 'tube', 'tube']);
   const o = PC.deleteRun(d, 2); D.checkDoc(o); assert.equal(o.pieces[2].tube, true); assert.ok(Math.abs(o.pieces[2].channels.t[0] - 2 * D.pieceEnd(d.pieces[1]).c.v) < 1e-5 && o.pieces[2].channels.t[0] > 70, 'a tube starts at twice the edge the cup before it ends at');
+  // D466 (P): since D459 a ramp holds its target EXACTLY (extend.js fitWithHold), so kinds()'s two cups both end at 40.000° and the delete above re-joins the sides AS THEY ARE: the
+  // tNext line of deleteRun is never reached by it (on 0.4.19 the first cup's fitted end rang to 39.72°, which is why it was). The rule needs a track whose sides do NOT join: a
+  // second cup that ramps on to 60 and a tube that starts from it at 120; deleting that cup must bring the tube to 2 × 40 = 80 (tNext), never to the head's own sweep (a cup has none: 0)
+  let k = extend(D.createDoc('del kinds 2'), { length: 100, family: 'bowl' }); k = extend(k, { length: 80, transition: 40, targets: { c: 40 } }); k = extend(k, { length: 80, transition: 40, targets: { c: 60 } }); k = extend(k, { length: 80, transition: 40, targets: { t: 300, w: 30 } });
+  assert.ok(Math.abs(k.pieces[3].channels.t[0] - 120) < 1e-5, `control: the tube starts at 2 × 60 = 120 (got ${k.pieces[3].channels.t[0]})`);
+  assert.throws(() => D.checkDoc({ ...k, pieces: [k.pieces[0], k.pieces[1], k.pieces[3]] }), /JOINT/, 'control: without the second cup the sides do not join as they are (120/2 against 40), so the delete must edit the joint');
+  const o2 = PC.deleteRun(k, 2); D.checkDoc(o2); assert.equal(o2.pieces[2].tube, true);
+  assert.ok(Math.abs(o2.pieces[2].channels.t[0] - 80) < 1e-5 && Math.abs(o2.pieces[2].channels.t[1] - 80) < 1e-5, `the tube after the 40° cup starts flat at 2 × 40 = 80 (tNext), got ${o2.pieces[2].channels.t.slice(0, 2)}`);
+  assertOnlyTheJoint(k, o2, 2, 2, 'tube after cup');
+  // and after a LEGACY head the same rule: twice the rendered edge of the bowl (legacyEdgeDeg), which is what the deleted cups started from
+  const o3 = PC.deleteRun(k, 1, 2); D.checkDoc(o3); const rim = D.pieceEnd(k.pieces[0]).c.v; assert.ok(rim > 1 && rim < 40, `control: the bowl renders an edge of ${rim}°`);
+  assert.ok(Math.abs(o3.pieces[1].channels.t[0] - 2 * rim) < 1e-5, `the tube after the bowl starts at twice its rendered edge, ${2 * rim} (tNext), got ${o3.pieces[1].channels.t[0]}`);
 });
 
 test('row 10d: jumps: deleting the road before a jump, a jump itself, and the road after it each give a valid track with the jump kept (or its own refusal), the far side untouched', () => {

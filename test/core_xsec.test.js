@@ -109,11 +109,21 @@ test('EXTEND: e, s and t targets are range-checked by name; an e target on a pla
   d = extend(d, { length: 100 }); assert.strictEqual(last(d).edge, undefined, 'once the edge is off (e 0, slope 0) the next piece is a plain piece');
   assert.doesNotThrow(() => D.checkDoc(d));
 });
-test('EXTEND: the fit never leaves the range (D190 V5 ringing): a 30 m piece, a 10 m ramp to e = 150 − c on a cup, stays inside [0, cap] and the document is accepted (E2 iii, KE2-2)', () => {
+test('EXTEND: the fit never leaves the range (D190 V5 ringing): a 30 m piece, a 10 m ramp to e = 150 − c on a cup, stays inside [0, cap] and the document is accepted (E2 iii, KE2-2); D466: a 100 m piece with a 50 m ramp to the cap, an empty track with a 4 m ramp and a 50 m ramp down to −30° stay inside their range too (KE2-6)', () => {
   const c = 90, d = extend(extend(start(), { length: 120, targets: { c } }), { length: 30, transition: 10, targets: { e: 150 - c } });
   const p = last(d); assert.ok(p.channels.e.every((v) => v >= 0 && v <= 150 - c + 1e-9), `e control points ${Math.min(...p.channels.e)} to ${Math.max(...p.channels.e)}`);
   assert.ok(p.channels.c.every((v, i) => v + p.channels.e[i] <= 150 + 1e-9), 'the total stays within 150 at every control point'); assert.doesNotThrow(() => D.checkDoc(d));
   const s = extend(start(), { length: 60, transition: 10, targets: { e: 20, s: 0.95 } }); assert.ok(last(s).channels.s.every((v) => v >= 0.5 && v <= 0.95 + 1e-9));
+  // D466 (P): with the D459 fit (the quintic, its hold pinned, c2Ends) the 30 m case above no longer rings at all, so it no longer tells whether the clamp is there. These do
+  // (measured against a copy of extend.js with the clamp removed, KE2-6: without it the fit's control points reach c + e = 155.37°, e = −33.1° and e = −32.69°):
+  // a 100 m piece with a 50 m ramp to the cap on a 90° cup; an 8 m piece on an EMPTY track with a 4 m ramp to 60°; a 100 m piece with a 50 m ramp down to −30° on a bowl
+  const long = extend(extend(start(), { length: 120, targets: { c } }), { length: 100, transition: 50, targets: { e: 150 - c } }), lp = last(long);
+  assert.ok(lp.channels.e.every((v) => v >= 0 && v <= 150 - c + 1e-9) && lp.channels.c.every((v, i) => v + lp.channels.e[i] <= 150 + 1e-9), `a 50 m ramp to the cap stays at the cap: e ${Math.min(...lp.channels.e)} to ${Math.max(...lp.channels.e)}`);
+  const empty = extend(D.createDoc('empty'), { length: 8, transition: 4, targets: { e: 60 } }), ep = empty.pieces[0];
+  assert.ok(ep.channels.e.every((v) => v >= 0 && v <= 60 + 1e-9), `a 4 m ramp on an empty track stays in [0, 60]: e ${Math.min(...ep.channels.e)} to ${Math.max(...ep.channels.e)}`);
+  const down = extend(start(), { length: 100, transition: 50, targets: { e: -30 } }), dp = last(down);
+  assert.ok(dp.channels.e.every((v) => v >= -30 - 1e-9 && v <= 0 + 1e-9), `a 50 m ramp down to −30° stays in [−30, 0]: e ${Math.min(...dp.channels.e)} to ${Math.max(...dp.channels.e)}`);
+  for (const dd of [long, empty, down]) assert.doesNotThrow(() => D.checkDoc(dd));
 });
 test('EXTEND: the transition map takes e, s and t like the others, and the at-start `first` carries them on an empty track', () => {
   const d = extend(start(), { length: 200, transition: { e: 'start', s: 50 }, targets: { e: 12, s: 0.8 } });
