@@ -20,7 +20,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // src/geom/pitlane.js, the pit lane level from leave to rejoin) changes the lap's pit lane; pitlane.js put back to 9861c69's gives 00588932
 // again, so the isolation did not move it. The open TEST export has no pit lane and is unchanged. The row titles still say b6969da's;
 // they are left as they are because the mutation harness names its rows by them.
-const PIN = { lap: 'sha256 36ba2c6869a3d1d0 files 10', open: 'sha256 a257c20e84e68897 files 11' };   // export-isolated.test.js row 1, from 498e735 (see there)
+const PIN = { lap: 'sha256 9f3a7040bf4356e9 files 10', open: 'sha256 a257c20e84e68897 files 11' };   // export-isolated.test.js row 1, from 498e735; the lap moved for D460 (see there)
 const TYPES = { '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.html': 'text/html' };
 
 // The page: the app's modules from the served worktree, export-isolated.test.js's laps, and the same digest of an export's files

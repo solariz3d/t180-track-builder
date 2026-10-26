@@ -1,0 +1,120 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279, the mesh cap and the sector gates; F1 F4 F6 F8 only, their mesh digest (and F1's kn5) only",
+ "made_at": "pane C, 2026-10-25, D460 (D459 part 3a), t180 branch d460-c: one script (d460measure.js in exo_memory/handback/p-d459-fins-C_2026-10-25_evidence) rendering every fixture file with fixtures.js's digest arithmetic by v0.4.19 (496c347, before) and by the zipper fix (after), in one process",
+ "reason": "The seam between two pieces whose boundary rows differ (src/geom/mesh.js meshSeam) was zipped by each vertex's index fraction across its row; on a cupped or edged profile with rows of different vertex counts that paired points metres apart and stood the zipper up in the cross-section plane, a fin of road triangles (439 mm at TEST 10 s 3,700, felt in game as a bump and seen in the preview as a break in the centre line). The zipper now pairs by each vertex's lateral parameter u. Only the seams' index arrays change.",
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "before_d460": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "60b99fb112d106a3eb80c5c3930aa4a0ac3164ac105e98eda3fbeeda4b6bfdb7",
+    "meshParts": 3745,
+    "kn5": "fda70fbef52810d4f2ef25a0697fb954d450a9843a45ed17af047eb18e450871",
+    "kn5Bytes": 7112880
+   },
+   "after_d460": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
+    "meshParts": 3745,
+    "kn5": "c2e0a5122e38ce50611bf2daf0beb414a9f5e2abea638333ac69ef8ca69953e1",
+    "kn5Bytes": 7112880
+   },
+   "measure": {
+    "changed": [
+     "mesh",
+     "kn5"
+    ],
+    "buildMesh_scene": {
+     "nodes": 749,
+     "seam_index_arrays_changed_same_length": 1,
+     "any_other_array_changed": 0
+    },
+    "export_written_scene": {
+     "nodes": 1504,
+     "seam_index_arrays_changed_same_length": 1,
+     "any_other_array_changed": 0
+    }
+   }
+  },
+  "F4-halfpipe-width-31.5-to-12-along-s": {
+   "before_d460": {
+    "segs": "1c2d9039647ae34bf2da7e415d1f5c2b5f68b060447b613796169f45996be77d",
+    "path": "643f4b3f2e713b0eb7207f32558f676da1b29b8cec079bc694900a5a026bb318",
+    "mesh": "31ba12435d95ca332386711ac535472c7798150e02bf0bb03f772c4481f2fb53",
+    "meshParts": 1245
+   },
+   "after_d460": {
+    "segs": "1c2d9039647ae34bf2da7e415d1f5c2b5f68b060447b613796169f45996be77d",
+    "path": "643f4b3f2e713b0eb7207f32558f676da1b29b8cec079bc694900a5a026bb318",
+    "mesh": "ddb85fb3d7baa8f28b1ea635052ddb3fd6121a372d534569e9a648a385fdd869",
+    "meshParts": 1245
+   },
+   "measure": {
+    "changed": [
+     "mesh"
+    ],
+    "buildMesh_scene": {
+     "nodes": 249,
+     "seam_index_arrays_changed_same_length": 60,
+     "any_other_array_changed": 0
+    }
+   }
+  },
+  "F6-bowl-r-brushed": {
+   "before_d460": {
+    "segs": "b5dacdef6ceb60e2db420774965a844cbf14523a5b4c67883b938fbc8c6fb09d",
+    "path": "9326ec158697955fb3a6e00d4fab697164fee157fb1d879940d6af6421e88a27",
+    "mesh": "540dca559d435f0fad45beaab151441e8b974e3418650c9a8d2a2bab7cf37ea7",
+    "meshParts": 1110
+   },
+   "after_d460": {
+    "segs": "b5dacdef6ceb60e2db420774965a844cbf14523a5b4c67883b938fbc8c6fb09d",
+    "path": "9326ec158697955fb3a6e00d4fab697164fee157fb1d879940d6af6421e88a27",
+    "mesh": "99a0cdb75fb0de9de7643ea826fe085773cce782b612680d0e6658aba4708a41",
+    "meshParts": 1110
+   },
+   "measure": {
+    "changed": [
+     "mesh"
+    ],
+    "buildMesh_scene": {
+     "nodes": 222,
+     "seam_index_arrays_changed_same_length": 13,
+     "any_other_array_changed": 0
+    }
+   }
+  },
+  "F8-mixed-families": {
+   "before_d460": {
+    "segs": "c8ff96b70d4e9639e27a48b99611630ece3247092fb2177d4caa69cc0a8dfbc3",
+    "path": "447202421a049a3f82f40bc90a081300436c5b605bbfef4aeb242be31628f4f7",
+    "mesh": "ff3098c61c0fd7678892255b8153454ab594222e4a805f5092a11decf3958f03",
+    "meshParts": 1075
+   },
+   "after_d460": {
+    "segs": "c8ff96b70d4e9639e27a48b99611630ece3247092fb2177d4caa69cc0a8dfbc3",
+    "path": "447202421a049a3f82f40bc90a081300436c5b605bbfef4aeb242be31628f4f7",
+    "mesh": "88529824541ce523cc0c143673fc507088eb4c881aaf1b2f8924f88b67f05f13",
+    "meshParts": 1075
+   },
+   "measure": {
+    "changed": [
+     "mesh"
+    ],
+    "buildMesh_scene": {
+     "nodes": 215,
+     "seam_index_arrays_changed_same_length": 39,
+     "any_other_array_changed": 0
+    }
+   }
+  }
+ },
+ "unchanged": [
+  "F2-halfpipe-default-lap-closed",
+  "F3-bowl-narrow-12m-cap-binds",
+  "F5-flat-20m-bank-30",
+  "F7-hill-then-jump",
+  "F9-empty"
+ ]
+}

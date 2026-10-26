@@ -49,12 +49,16 @@ function reuseCase() {
   const segs = A.toSegments(d1), path = A.toPath(d1).path, key = (x) => JSON.stringify(x);
   return M.reuseMesh(a.mesh, path, segs, segs.map((x, j) => j < a.segs.length && key(x) === key(a.segs[j])));
 }
+// CHANGED D460 (the seam zipper pairs by lateral position, not index fraction: src/geom/mesh.js meshSeam): open, lap, reuse and lean have seams between
+// rows of different counts, so their seams' index arrays change; tube has no seam and keeps its pin. Measured with both trees in one process (cmpmesh.js in
+// exo_memory/handback/p-d459-fins-C_2026-10-25_evidence): every position, normal, uv, matrix, name, cell and fold is byte-identical, and only seam index
+// arrays differ, each the same length. Before (v0.4.19): open b154a8e1…, lap and lean 52f5fbf0…, reuse 654e6578…
 const PINNED = {
-  open: 'b154a8e19c93c893fe060f8e65af8724953f0b8c970f35a03e4f869ad20936cf',
-  lap: '52f5fbf017ff47328be2a4e013bee2ec9f9cc27eda878f9aeed2956ab9e523fd',
+  open: '0933a33c90c52614dcbb9154a91248482f621e9c60beff67c83b4bb7e6554b54',
+  lap: 'f1f8c5f262e4bb145b2f6a1e7f53a5fa637a0f70f7ba9e033ae0474664ea64d2',
   tube: '25882fc878244dd0078c3d1dbb83e6068cc31a09755f37397b0a990f3cbf3610',
-  reuse: '654e65786d0e3306ff5d349cdbb177a100892a5229c614d3c0be4c53a8e066f8',
-  lean: '52f5fbf017ff47328be2a4e013bee2ec9f9cc27eda878f9aeed2956ab9e523fd',
+  reuse: '737f87b701edec0eece0dd580f727862217273192d4fa9e8e708c2f91c04f258',
+  lean: 'f1f8c5f262e4bb145b2f6a1e7f53a5fa637a0f70f7ba9e033ae0474664ea64d2',
 };
 test('row 1: the mesh is the same to the byte (scene arrays, matrices, cells, folds) for zipper seams, a closed lap\'s joint, a tube, a reuse with stale rows, and a lean build', () => {
   const got = {

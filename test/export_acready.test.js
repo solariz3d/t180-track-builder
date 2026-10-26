@@ -93,7 +93,7 @@ test('an exported track has no transformed road, unique names, and a diffuse on 
 });
 
 // ── weldSeams: a sub-2 mm zipper is a strip of slivers facing along the road; it is dropped and the edge shared ─────────
-const { weldSeams, SNAP, SLIVER } = require('../src/export/acready.js');
+const { weldSeams, SNAP, SLIVER } = require(process.env.ACREADY_FILE || '../src/export/acready.js');   // acready_mutation.test.js points this at a mutant
 const strip = (A, B) => {   // the zipper's own layout: row A then row B, each a line across the road at z = 0
   const pts = [...A, ...B], idx = [];
   for (let i = 0; i < A.length - 1; i++) idx.push(i, A.length + i, i + 1, i + 1, A.length + i, A.length + i + 1);

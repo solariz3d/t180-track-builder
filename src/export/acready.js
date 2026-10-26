@@ -75,8 +75,63 @@ function flattenForAc(scene) {
  * row is moved onto it, in the strip and in the next piece alike, so the pieces share that edge; then every strip triangle
  * thinner than SLIVER (its height over its longest edge) is dropped: thinness, not area, is what makes a wall. Triangles that bridge a real gap (a font change across part of the width) are kept, and
  * a strip left with no triangle is removed.
+ * D460: a strip triangle that STANDS is dropped too, welded or not: its own normal more than STAND_DEG from the road normals its vertices carry, so it faces
+ * along the road like a wall instead of up out of it (TEST 10: a zipper paired by index fraction stood up to 439 mm in the cross-section plane). A bridge
+ * across a real gap lies in the road and faces up, and is kept.
  */
-const SNAP = 2e-3, SLIVER = 2 * SNAP;
+const SNAP = 2e-3, SLIVER = 2 * SNAP, STAND_DEG = 60;
+/** does the triangle (vertex offsets a, b, c into P and N) stand: its normal more than STAND_DEG from its vertices' mean road normal? (no normals: no) */
+function stands(P, N, a, b, c) {
+  const e1 = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]], e2 = [P[c] - P[a], P[c + 1] - P[a + 1], P[c + 2] - P[a + 2]];
+  const f = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]], r = [N[a] + N[b] + N[c], N[a + 1] + N[b + 1] + N[c + 1], N[a + 2] + N[b + 2] + N[c + 2]];
+  const lf = Math.hypot(...f), lr = Math.hypot(...r);
+  if (!(lf > 0 && lr > 0)) return false;
+  return Math.abs(f[0] * r[0] + f[1] * r[1] + f[2] * r[2]) / (lf * lr) < Math.cos(STAND_DEG * Math.PI / 180);
+}
+/**
+ * findFins(scene): THE FIN GUARD (D460), run on the scene the export is about to write (world space, after weldSeams). It reads the mesh itself: a ray cast
+ * down, as every surface check before it did (D436, D459 part 1), cannot see a sheet standing up in the cross-section plane, only its top edge. At a station
+ * joint (a seam mesh), every triangle must
+ *   · not STAND: its normal within STAND_DEG (60°) of the road normals its vertices carry, i.e. not within 30° of the road's own plane (the road's, not the
+ *     world's: a loop or a tube is vertical and is fine), and
+ *   · lie WITHIN THE SURFACE IT BRIDGES: each edge's midpoint within OFF_TOL of one of the seam's two rows (a triangle that joins neighbours of the two rows
+ *     lies within a row interval's sag of them; one that reaches across the road or along it does not).
+ * Returns one report per seam mesh with any such triangle: { mesh, piece, standing, offSurface, tallest (m), message }; [] when the road has none.
+ */
+const OFF_TOL = 0.01;
+function findFins(scene) {
+  const out = [], seg = (p, a, b) => {
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]], L = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    const t = L ? Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / L)) : 0;
+    return Math.hypot(p[0] - a[0] - t * ab[0], p[1] - a[1] - t * ab[1], p[2] - a[2] - t * ab[2]);
+  };
+  for (const n of scene.root.children) {
+    if (n.type !== 'mesh' || !/^\d?[A-Z]*ROAD.*seam/i.test(n.name)) continue;
+    const P = n.positions, nv = P.length / 3, pt = (i) => [P[3 * i], P[3 * i + 1], P[3 * i + 2]];
+    // the two rows, split as weldSeams splits them (where consecutive points jump back across the road); a strip that does not split is one row
+    let split = -1, big = -1;
+    for (let i = 1; i < nv; i++) { const d = Math.hypot(P[3 * i] - P[3 * i - 3], P[3 * i + 1] - P[3 * i - 2], P[3 * i + 2] - P[3 * i - 1]); if (d > big) { big = d; split = i; } }
+    const rows = split >= 2 && nv - split >= 2 ? [[0, split], [split, nv]] : [[0, nv]];
+    const nearRow = (p) => Math.min(...rows.map(([a, b]) => { let m = Infinity; for (let i = a + 1; i < b; i++) m = Math.min(m, seg(p, pt(i - 1), pt(i))); return b - a === 1 ? Math.hypot(...pt(a).map((x, k) => x - p[k])) : m; }));
+    let standing = 0, offSurface = 0, tallest = 0;
+    for (let i = 0; i < n.indices.length; i += 3) {
+      const [a, b, c] = [n.indices[i], n.indices[i + 1], n.indices[i + 2]], v = [pt(a), pt(b), pt(c)];
+      const e = [[v[1][0] - v[0][0], v[1][1] - v[0][1], v[1][2] - v[0][2]], [v[2][0] - v[0][0], v[2][1] - v[0][1], v[2][2] - v[0][2]], [v[2][0] - v[1][0], v[2][1] - v[1][1], v[2][2] - v[1][2]]];
+      const area2 = Math.hypot(e[0][1] * e[1][2] - e[0][2] * e[1][1], e[0][2] * e[1][0] - e[0][0] * e[1][2], e[0][0] * e[1][1] - e[0][1] * e[1][0]), longest = Math.max(...e.map((x) => Math.hypot(...x)));
+      if (!(longest > 0)) continue;
+      const thick = area2 / longest;
+      if (thick >= SLIVER && stands(P, n.normals, 3 * a, 3 * b, 3 * c)) { standing++; tallest = Math.max(tallest, thick); continue; }
+      const mids = [[0, 1], [1, 2], [0, 2]].map(([x, y]) => v[x].map((q, k) => (q + v[y][k]) / 2));
+      const far = Math.max(...mids.map(nearRow));
+      if (far > OFF_TOL) { offSurface++; tallest = Math.max(tallest, far); }
+    }
+    if (!standing && !offSurface) continue;
+    const piece = n.name.replace(/^\d?[A-Z]*ROAD_seam_/i, '').replace(/_body.*$/, '');
+    out.push({ mesh: n.name, piece, standing, offSurface, tallest,
+      message: `where ${piece} begins, ${standing + offSurface} triangle(s) of road ${standing ? 'stand up out of the surface' : 'reach off the surface'}, up to ${(tallest * 1000).toFixed(0)} mm` });
+  }
+  return out;
+}
 function weldSeams(scene) {
   const kids = scene.root.children, seams = new Map(), moves = new Map();
   const key = (x, y, z) => `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}`;
@@ -97,7 +152,9 @@ function weldSeams(scene) {
     const onA = (p) => { let best = null; for (let i = 1; i < A.length; i++) { const r = segDist(p, A[i - 1], A[i]); if (!best || r.d < best.d) best = r; } return best; };
     let welded = 0;
     for (const p of B) { const s = onA(p); if (s.d <= SNAP) { moves.set(key(...p), s.q); welded++; } }
-    if (welded) seams.set(n, true);
+    let stand = false;
+    for (let i = 0; i < n.indices.length && !stand; i += 3) stand = stands(P, n.normals, 3 * n.indices[i], 3 * n.indices[i + 1], 3 * n.indices[i + 2]);
+    if (welded || stand) seams.set(n, true);
   }
   if (!seams.size) return scene;
   const moved = (n) => {   // the mesh with every welded point moved; the same object when nothing in it moves
@@ -121,7 +178,7 @@ function weldSeams(scene) {
       const e1 = [P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]], e2 = [P[c] - P[a], P[c + 1] - P[a + 1], P[c + 2] - P[a + 2]];
       const area = Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]) / 2;
       const e3 = [P[c] - P[b], P[c + 1] - P[b + 1], P[c + 2] - P[b + 2]], longest = Math.max(Math.hypot(...e1), Math.hypot(...e2), Math.hypot(...e3));
-      if (longest > 0 && (2 * area) / longest >= SLIVER) keep.push(n.indices[i], n.indices[i + 1], n.indices[i + 2]);
+      if (longest > 0 && (2 * area) / longest >= SLIVER && !stands(P, n.normals, a, b, c)) keep.push(n.indices[i], n.indices[i + 1], n.indices[i + 2]);
     }
     if (keep.length) children.push({ ...n, indices: Uint16Array.from(keep) });   // a strip with nothing left is removed
   }
@@ -214,4 +271,4 @@ function mergeForAc(scene, { maxVerts = MERGE_MAX_VERTS, chunkM = MERGE_CHUNK_M 
   return { ...scene, root: { ...scene.root, children } };
 }
 
-module.exports = { flattenForAc, ensureDiffuse, ensureDiffusePlain, weldSeams, mergeForAc, MERGE_MAX_VERTS, MERGE_CHUNK_M, SNAP, SLIVER };
+module.exports = { flattenForAc, ensureDiffuse, ensureDiffusePlain, weldSeams, findFins, mergeForAc, MERGE_MAX_VERTS, MERGE_CHUNK_M, SNAP, SLIVER, STAND_DEG, OFF_TOL };
