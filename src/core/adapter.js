@@ -67,11 +67,15 @@ function profileMade(family, w, r) {
   };
 }
 
+const CUP_TOL = 0.5 * 10 ** -D.DEC.c;   // D469: half the cup's stored quantum (DEC.c decimals): what rounds to 0 is 0
 /** The CUP cross-section at width w (m) and edge angle c (degrees), ref 09 §9: ψ at the four quarters of each half-width is c·Fᵢ/F_edge, both sides. */
 function cupProfile(family, w, c) {
   if (!Object.prototype.hasOwnProperty.call(FLOORS, family)) throw new D.CoreError('BAD_FAMILY', 'family "' + family + '"');
   if (!(w > 0)) throw new D.CoreError('BAD_WIDTH', 'the road\'s width must be positive, got ' + w + ' m');
-  if (!Number.isFinite(c) || c < 0) throw new D.CoreError('BAD_CUP', 'the cup must be a number of degrees from 0, got ' + c);
+  // D469 (P; C's D467 review §5): a close measures its path on the UNROUNDED solve, where a flat cup's control point comes back as −1e-15, and this refused it
+  // (TEST 10: the start try [p1, p23] fell through to [p5, p23]). A value within half the stored quantum of 0 is 0; a stored document's own check is document.js's
+  if (!Number.isFinite(c) || c < -CUP_TOL) throw new D.CoreError('BAD_CUP', 'the cup must be a number of degrees from 0, got ' + c);
+  if (c < 0) c = 0;
   const F = FLOORS[family], side = AT.map((f, i) => [(f * w) / 2, ((c * F[i]) / F[F.length - 1]) * DEG]);
   return {
     font: family,

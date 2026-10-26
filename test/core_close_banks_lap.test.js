@@ -134,9 +134,17 @@ test('row 8: a tube is not banked; a level curve on the same lap is', () => {
   assert.ok(b.pieces[1].channels.phi.some((x, j) => Math.abs(x - c.doc.pieces[1].channels.phi[j]) > 30 * DEG), 'control: the level curve before it is banked');
 });
 
-test('row 9: a straight next to a curve keeps the bank it was laid with', () => {
+// AMENDED by D468 (P; the bank plan is C2, finish.js bankPlan's curvature rows): a straight next to a curve keeps the bank it was laid with but for the TAIL of the
+// curve's roll-off on its third control point from the joint (about 1.5°, the bank's smooth end over the straight's first span: a turn's bank ramps from its third
+// point, and the joint is C2 only if the straight's third point carries that curvature or the turn's is 0 too, which reached every corner's exit a knot later,
+// 24.4° against D447 §10's 32.5°). The joint itself (the first two points) and every other point are byte for byte as laid.
+const TAIL_DEG = 2;
+test('row 9: a straight next to a curve keeps the bank it was laid with, but for the tail of the roll-off on its third point from the joint (D468)', () => {
   const r = closed(), open = lap(); assert.equal(r.converged, true, r.report);
-  for (const i of [0, 2]) assert.deepEqual(r.doc.pieces[i].channels.phi, open.pieces[i].channels.phi, `${open.pieces[i].id}, a straight between curves`);
+  for (const i of [0, 2]) {
+    const got = r.doc.pieces[i].channels.phi, was = open.pieces[i].channels.phi, n = got.length;
+    got.forEach((x, k) => { if (k === 2 || k === n - 3) assert.ok(Math.abs(x - was[k]) < TAIL_DEG * DEG, `${open.pieces[i].id} point ${k}: the roll-off's tail, ${((x - was[k]) / DEG).toFixed(2)}°, within ${TAIL_DEG}°`); else assert.equal(x, was[k], `${open.pieces[i].id} point ${k}, a straight between curves, as laid`); });
+  }
 });
 
 const ROLL_DEG_M = 0.9 * require('../src/validate/index.js').ROLL_AMBER_DEG_M, SHARE_R300 = 0.75 * Math.atan(((460 / 3.6) ** 2 / 300) / 9.80665) / DEG;
@@ -346,4 +354,30 @@ test('row 6: the bank lands in Close\'s one undo step', async () => {
   const st = s.getState(); assert.equal(st.history.present.closed, true, st.message);
   leansIn({ converged: true, doc: st.history.present, report: st.message }, open, 'the shell');
   s.undo(); assert.equal(s.getState().history.present, base, 'one undo gives back the open lap');
+});
+
+// D468 follow-up (A's review §2b; the chair, 2026-10-26T05:02Z): WHEN THE PLAN REACHES ITS SWEEP BUDGET IT SAYS SO. On this lap at R 200 (tighter than any row above)
+// the alternating projections stop at BANK_SWEEPS with the acceleration about 5% past BANK_ACCEL at one triple; at R 300 every plan converges. Reaching the budget
+// used to be silent: the plan now carries it (plan.budget), bankLapWith hands it on, and the press's report (and Finish's) names it in user words.
+function lapAt(R) {
+  const QR = (Math.PI * R) / 2; let d = D.createDoc(`lap R ${R}`);
+  d = extend(d, { length: 100, family: 'bowl' }); d = extendTurnBy(d, { length: QR }, 90 * DEG);
+  d = extend(d, { length: 100 }); d = extend(d, { length: QR / 2, targets: { kh: 1 / R } }); d = extendTurnBy(d, { length: QR / 2 }, 67.5 * DEG);
+  d = extend(d, { length: 100, targets: { phi: -20 * DEG } }); d = extendTurnBy(d, { length: QR }, 90 * DEG);
+  d = extend(d, { length: 100, targets: { phi: 0 } }); d = extendTurnBy(d, { length: QR }, 90 * DEG);
+  return d;
+}
+test('row 20: where the bank plan reaches its sweep budget the press says so in user words (this lap at R 200), and where every plan converges it says nothing (R 300)', () => {
+  const { close } = require('../src/core/close.js'), F = require('../src/core/finish.js');
+  for (const [R, expect] of [[200, true], [300, false]]) {
+    const open = lapAt(R), r = CJ.runCloseBest({ doc: open }); assert.equal(r.converged, true, `R ${R}: ${r.report}`);
+    const said = /smoothness limit/.test(r.report);
+    assert.equal(said, expect, `R ${R}: the press's report ${expect ? 'names' : 'does not name'} the budget: ${r.report}`);
+    if (expect) assert.match(r.report, /the bank on the lap stopped about \d+% past its smoothness limit at one point \(p\d+\)/, `R ${R}: the words: ${r.report}`);
+    // and the plan itself, on the lap closed without the press (close() on its last piece), says the same through bankLapWith
+    const c = close(open, { window: [open.pieces.length - 1] }); assert.equal(c.converged, true, `R ${R}: ${c.report}`);
+    const b = F.bankLapWith(c.doc);
+    assert.equal(!!b.budget, expect, `R ${R}: bankLapWith ${expect ? 'carries' : 'carries no'} budget: ${JSON.stringify(b.budget)}`);
+    if (expect) assert.ok(b.budget.sweeps > 0 && b.budget.overPct > 0 && b.budget.overPct < 50 && typeof b.budget.at === 'string', `R ${R}: the budget names its sweeps, how far past the limit and where: ${JSON.stringify(b.budget)}`);
+  }
 });

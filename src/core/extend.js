@@ -239,7 +239,10 @@ function extend(doc, opts = {}) {
       // under it (a cup narrowing under e -45) is lifted to the floor, as the low end always did, not refused
       const lo = Math.min(0, C[ch][0], given(targets[ch]) ? targets[ch] : 0), top = Math.max(C[ch][0], given(targets[ch]) ? targets[ch] : C[ch][0]);
       const hi = (i) => (lo < 0 && top <= 0 ? Math.max(top, floor(i)) : Math.max(0, cap(i)));
-      C[ch] = C[ch].map((x, i) => Math.min(hi(i), Math.max(Math.max(lo, floor(i)), x)));
+      // D468 (P's D466 §4): the joint's own two points, the head's value and slope continued, are the head's and not the fit's: a tail still sloping at a limit
+      // took P₁ past lo or hi, the clamp moved it, and the piece was refused with the document's raw JOINT error. They are left to checkDoc, which refuses a point
+      // past the cap or under the floor BY NAME (a tail still rising at the cap cannot be continued inside it: BAD_EDGE, as it should be)
+      C[ch] = C[ch].map((x, i) => (held && i < 2 ? x : Math.min(hi(i), Math.max(Math.max(lo, floor(i)), x))));
       const ne = C[ch].length; if (C[ch][ne - 1] <= 1e-3) C[ch][ne - 2] = C[ch][ne - 1];   // an edge that ends at 0 ends flat, so the piece after it starts clean
     }
     C.s = C.s.map((x) => Math.min(D.S_MAX, Math.max(D.S_MIN, x)));

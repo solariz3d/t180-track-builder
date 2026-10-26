@@ -86,7 +86,9 @@ function banked(open, what, flatLatG) {
   for (const P of r.doc.pieces.slice(n0)) {
     const ph = P.channels.phi, kh = P.channels.kh, U = D.knotVector(P), g = (i) => (U[i + 1] + U[i + 2] + U[i + 3]) / 3;
     if (Math.abs(ph[0] - ph[ph.length - 1]) > 1e-4 || !kh.some((k) => Math.abs(k) > 1e-6)) continue;
-    for (let i = 2; i < ph.length - 2; i++) {
+    // AMENDED by D468 (P; the bank plan is C2, finish.js bankPlan's curvature rows): a joint of the plan now holds THREE points on each side (value, slope and
+    // curvature of the added bank continue across it; the third is 0 where the plan meets road outside it), so the share is read from the fourth point in
+    for (let i = 3; i < ph.length - 3; i++) {
       const t = (j) => ph[j] - ph[0];
       if (Math.abs(t(i) - t(i - 1)) > cap * (g(i) - g(i - 1)) || Math.abs(t(i + 1) - t(i)) > cap * (g(i + 1) - g(i))) continue;
       // AMENDED by D438 (plan_d438 "Part 2 ruled": a second limiter, on the roll's acceleration, finish.js BANK_ACCEL): a point the acceleration limit holds back
@@ -185,12 +187,21 @@ test('row 8: an end banked the way the closer turns is closed rolled last, on it
   assert.ok(L.lat < SIDE_BANKED_G + 0.5, `the peak side load at the design speed, ${L.lat.toFixed(2)} g, is under ${SIDE_BANKED_G + 0.5} g (6.12 on the user's own 54°, D459)`);
 });
 
-test('row 4: a straight gets none: a finish that is only a straight keeps the laid bank', () => {
+// AMENDED by D468 (P; the bank plan is C2, finish.js bankPlan's curvature rows and its box): a straight gets none OF ITS OWN. A turn's bank ramps from its third
+// control point (its first two are pinned at the joint), so for the joint to be C2 the straight's third point from that joint carries the turn's end curvature:
+// about 1.5° at one control point, the bank's smooth end over the straight's first span (the other way, a turn's third point at 0 too, reached every corner's
+// exit a knot later: 24.4° against D447 §10's 32.5°). Every other point of the straight is as laid.
+const TAIL_DEG = 2;
+test('row 4: a straight gets none of its own: a finish that is only a straight keeps the laid bank, but for the tail of a neighbouring roll-off on its third point from the joint (D468)', () => {
   let d = D.createDoc('straight');
   d = extend(d, { length: 400, family: 'bowl' });
   for (let i = 0; i < 4; i++) d = extendTurnBy(d, { length: 300, targets: { kv: 0 } }, Math.PI / 2);
   d = D.checkDoc({ ...d, pieces: d.pieces.slice(0, -1) });
   d = extendTurnBy(d, { length: 300, targets: { kv: 0 } }, Math.PI / 2);
   const r = F.finishToStart(d), n0 = d.pieces.length;
-  for (const P of r.doc.pieces.slice(n0)) if (Math.max(...P.channels.kh.map(Math.abs)) < 1e-9) assert.ok(P.channels.phi.every((x) => Math.abs(x - P.channels.phi[0]) < 1e-9), `${P.id}, a straight, keeps its laid bank`);
+  for (const P of r.doc.pieces.slice(n0)) if (Math.max(...P.channels.kh.map(Math.abs)) < 1e-9) {
+    const ph = P.channels.phi, n = ph.length;
+    assert.ok(ph.every((x, i) => (i === 2 || i === n - 3 ? Math.abs(x - ph[0]) < TAIL_DEG * DEG : Math.abs(x - ph[0]) < 1e-9)), `${P.id}, a straight, keeps its laid bank but for the roll-off's tail on its third point from each joint (≤ ${TAIL_DEG}°): ${ph.map((x) => ((x - ph[0]) / DEG).toFixed(2)).join(' ')}`);
+    assert.ok(Math.abs(ph[0] - ph[1]) < 1e-9 && Math.abs(ph[n - 1] - ph[n - 2]) < 1e-9, `${P.id}: the joints themselves meet the laid bank flat`);
+  }
 });
