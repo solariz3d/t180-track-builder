@@ -27,8 +27,10 @@ const GOLDEN_CASES = [
   [{ length: 45, family: 'flat', first: { w: 20 } }, { length: 45, transition: 45, targets: { w: 8, r: 2 } }],
   [{ length: 100, family: 'bowl' }, { length: 100, transition: undefined, targets: { w: 20 }, knotM: 10 }],
 ];
-const GOLDEN = ['6fe0da0b925df898', 'f9445c2f24202487', 'e3b479ab7eee115d', '0d4bc61fbd13d3d3', 'bd27d8e6adcffbbb', 'f4109c3835754b16'];   // sha256 (first 16) of D.serialize at 4ccdd58
-GOLDEN_CASES.forEach((steps, i) => test(`1 · a number (or no) transition is unchanged: case ${i} serialises exactly as it did at 4ccdd58`, () => {
+// sha256 (first 16) of D.serialize at 4ccdd58; cases 1, 2 and 3 (a phi or c target) RE-PINNED at D459 (2026-10-25): the bank and the cup blend by the C2 quintic now
+// (extend.js smoother, c2Ends), so those three documents changed by design; cases 0, 4 and 5 (w, r, kh, kv only) are 4ccdd58's bytes still
+const GOLDEN = ['6fe0da0b925df898', '5f3d402378472d63', 'c81bd9f10393fb8e', '22f9a9ab712685b9', 'bd27d8e6adcffbbb', 'f4109c3835754b16'];
+GOLDEN_CASES.forEach((steps, i) => test(`1 · a number (or no) transition is unchanged: case ${i} serialises exactly as it did at ${[1, 2, 3].includes(i) ? 'D459 (re-pinned: the quintic for phi and c)' : '4ccdd58'}`, () => {
   // D225: the schema string is /4 now; the GOLDEN digests were taken of /3 text, so the only difference allowed is that one string (seal E3c: a /3 document saved as /4 differs ONLY in the schema)
   const text = D.serialize(run(steps)); assert.ok(text.includes('"schema": "t180b.core/4"'));
   assert.equal(sha(text.replace('"schema": "t180b.core/4"', '"schema": "t180b.core/3"')), GOLDEN[i]);
@@ -95,9 +97,11 @@ test('5 · a ramped piece is stored on the channel quantum (every control point 
 });
 
 // ── 4 · what the map does not touch ──
-test('4 · a channel not in the map keeps the whole-piece blend: phi follows the number-transition document within 0.1% of its change', () => {
+// D459: the bar was 0.1% while the blend was the Bloss cubic, which any cubic spline carries EXACTLY whatever its knots (the two documents read the same to 3e-17);
+// the C2 quintic is fitted, and the map document's extra ramp knots fit it a little differently from the even knots: 0.84% of the change at most (row4probe.js), so 1%
+test('4 · a channel not in the map keeps the whole-piece blend: phi follows the number-transition document within 1% of its change (0.1% under the cubic, re-pinned at D459)', () => {
   const a = later({ L: 100, transition: { w: 'start' }, targets: { w: 12, phi: 0.3 } }).pieces[1], b = later({ L: 100, targets: { w: 12, phi: 0.3 } }).pieces[1];
-  for (let s = 0; s <= 100; s += 0.5) assert.ok(Math.abs(at(a, 'phi', s) - at(b, 'phi', s)) <= 3e-4, `phi(${s}): ${at(a, 'phi', s)} vs ${at(b, 'phi', s)}`);
+  for (let s = 0; s <= 100; s += 0.5) assert.ok(Math.abs(at(a, 'phi', s) - at(b, 'phi', s)) <= 3e-3, `phi(${s}): ${at(a, 'phi', s)} vs ${at(b, 'phi', s)}`);
   assert.ok(at(a, 'phi', 50) > 0.1 && at(a, 'phi', 50) < 0.2, 'phi is still blending at 50 m (it did not take the short ramp)');
 });
 test('4 · a map naming only a channel with no target changes nothing: the document equals the number-transition one', () => {

@@ -23,11 +23,15 @@ const MUTANTS = [
   // row 2: MAX binds the document
   { id: 'M5 (K2-1) MAX raised to 165', pattern: 'row 2', edits: [[C + 'document.js', 'const CUP_MAX = 150,', 'const CUP_MAX = 165,']] },
   { id: 'M6 (K2-2) no guard on the document', pattern: 'row 2', edits: [[C + 'document.js', 'if (P.cup && P.channels.c.some((v) => v < -CUP_EPS || v > CUP_MAX + CUP_EPS))', 'if (false)']] },
-  { id: 'M7 the fit\'s ringing is not clamped after the Extend fit', pattern: 'row 2', edits: [[C + 'extend.js', 'const c = piece.channels.c = piece.channels.c.map((x) => Math.min(D.CUP_MAX, Math.max(0, x))), n = c.length;', 'const c = piece.channels.c, n = c.length;']] },
+  // D459 (2026-10-25): M7 (the clamp after the fit) and M10b (a cup at a limit ends flat) are EQUIVALENT on the Extend path now: extend.js fitWithHold pins a cup ramp's last two
+  // control points to its target and refits the rest with them held, so no fitted cup rings past 150 or 0 and none ends unflat; rows 2 (iii) pass with either line removed. The
+  // lines stay in the source for a ramp maker that does not pin (a continued slope into a limit), and these two mutants are retired here, said in
+  // exo_memory/handback/p-d459-c2-P_2026-10-25.md. They were:
+  //{ id: 'M7 the fit\'s ringing is not clamped after the Extend fit', pattern: 'row 2', edits: [[C + 'extend.js', 'const c = piece.channels.c = piece.channels.c.map((x) => Math.min(D.CUP_MAX, Math.max(0, x))), n = c.length;', 'const c = piece.channels.c, n = c.length;']] },
+  //{ id: 'M10b a cup that ends at a limit is not made flat (the next piece would need a control point past it)', pattern: 'ends flat', edits: [[C + 'extend.js', 'if (c[n - 1] <= 1e-3 || c[n - 1] >= D.CUP_MAX - 1e-3) c[n - 2] = c[n - 1];', 'if (false) c[n - 2] = c[n - 1];']] },
   { id: 'M8 Extend does not refuse a typed cup past 150', pattern: 'row 2 \\(iii\\)', edits: [[C + 'extend.js', 'targets.c >= 0 && targets.c <= D.CUP_MAX)) throw', 'targets.c >= 0 && targets.c <= 1e9)) throw']] },
   { id: 'M9 Extend does not refuse a first-piece cup past 150', pattern: 'row 2 PLANTED', edits: [[C + 'extend.js', 'first.c >= 0 && first.c <= D.CUP_MAX)) throw', 'first.c >= 0 && first.c <= 1e9)) throw']] },
   { id: 'M10 the brush has no cup channel', pattern: 'row 2 \\(iii\\)', edits: [[C + 'sculpt.js', "'l', 'c', 'e', 's', 't', 'er'], what:", "'l', 'e', 's', 't', 'er'], what:"]] },
-  { id: 'M10b a cup that ends at a limit is not made flat (the next piece would need a control point past it)', pattern: 'ends flat', edits: [[C + 'extend.js', 'if (c[n - 1] <= 1e-3 || c[n - 1] >= D.CUP_MAX - 1e-3) c[n - 2] = c[n - 1];', 'if (false) c[n - 2] = c[n - 1];']] },
   { id: 'M10c the document guard has no tolerance for a solver\'s float noise at the limit', pattern: 'ends flat', edits: [[C + 'document.js', 'CUP_EPS = 1e-9;', 'CUP_EPS = 0;']] },
   // R2: the morph out of a legacy cross-section
   { id: 'M29 (R2) no morph: a cup after a legacy piece starts on the cup shape, not the legacy one', pattern: 'R2', edits: [[C + 'adapter.js', 'if (join) j = morphZone(P, n, E, s, join, out);', 'if (false) j = morphZone(P, n, E, s, join, out);']] },

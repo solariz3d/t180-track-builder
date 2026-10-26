@@ -9,7 +9,7 @@ const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
 const IR = require('../../test/inner_run.js');   // D352: a crashed inner run reads NOT TESTED
 const ROOT = path.join(__dirname, '..', '..');
-const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js', BEST = 'test/core_close_best.test.js', WORKER = 'app/test/close-worker.test.js', FIN = 'test/core_finish.test.js';
+const LOCAL = 'test/core_close_local.test.js', PREVIEW = 'app/test/core-close-preview.test.js', GROUPS = 'app/test/redgroups.test.js', DISPLAY = 'app/test/core-readout-display.test.js', BEST = 'test/core_close_best.test.js', WORKER = 'app/test/close-worker.test.js', FIN = 'test/core_finish.test.js', C2 = 'test/core_joint_c2.test.js';
 
 const MUTATIONS = [
   // src/core/close.js: the LOCAL close (items 1 and the refusal by name)
@@ -36,6 +36,11 @@ const MUTATIONS = [
   { id: 'B7 a press that finds no way still applies', file: 'app/core/coreshell.js', from: 'if (!out.converged) return set({ closePending: null, message: out.report });', to: '', tests: [PREVIEW], caughtBy: 'row 2: when no way of closing proves, nothing changes' },
   { id: 'B8 the press commits the open track', file: 'app/core/coreshell.js', from: 'history: D.commit(st.history, out.doc), ...resolvedOf(out.doc)', to: 'history: D.commit(st.history, base), ...resolvedOf(base)', tests: [PREVIEW], caughtBy: 'row 1: one press closes a near lap AT ONCE' },
   { id: 'N1 a laid road Close refuses is never taken as laid (the lone straight is lost to a loop again)', file: 'src/core/finish.js', from: 'res = metAsLaid(laid); if (!res) { best = best || err.message; continue; }', to: 'best = best || err.message; continue;', tests: [FIN], caughtBy: 'row 17: an end straight behind the start' },
+  // D459 3c: the closure's curvature rows (close.js): the seam's, and the moved joints'
+  { id: 'Q8 the seam gets no curvature row (the closure meets value and slope only, as before 3c)', file: 'src/core/close.js', from: "J.push(valueRow(ch, 'curv')); }   // D459 3c: the seam's curvature rows", to: "void 0; }   // D459 3c: the seam's curvature rows", tests: [C2], caughtBy: 'row 9: the closure is C2' },
+  { id: 'Q9 the joints the close moves get no curvature row (only the seam)', file: 'src/core/close.js', from: 'for (const [a, b, ch] of c2Pairs) { const row = new Float64Array(N); curvRow(ch, a, b, row); J.push(row); }', to: 'for (const [a, b, ch] of []) { const row = new Float64Array(N); curvRow(ch, a, b, row); J.push(row); }', tests: [C2], caughtBy: 'row 9: the closure is C2' },
+  // D459: the closer brings the cup home by the C2 quintic where the closer is long enough for its peak rate (finish.js cupHome)
+  { id: "Q5 the closer's cup fade is linear whatever its length (its curvature steps at the user's last joint and at the seam)", file: 'src/core/finish.js', from: 'const ease = c2 ? smoother : (x) => Math.max(0, Math.min(1, x));', to: 'const ease = (x) => Math.max(0, Math.min(1, x));', tests: [C2], caughtBy: 'row 6: through Close' },
   { id: 'N2 a route that is only a straight is not laid under 10 m', file: 'src/core/finish.js', from: 'else if (alone && r.straightM >= MIN_STRAIGHT_ALONE_M)', to: 'else if (false)', tests: [FIN], caughtBy: 'row 17: an end straight behind the start' },
   { id: 'F5 the worker\'s document is not frozen (the residual memo misses)', file: 'app/core/closejob.js', from: '  deepFreeze(doc);', to: '', tests: [BEST], caughtBy: 'row 13: the worker\'s press on a structuredClone' },
   { id: 'B9 a tie is not broken by the route order (micro-metres decide)', file: 'app/core/closejob.js', from: 'Math.abs(a.maxMoveM - b.maxMoveM) > MOVE_TIE_M ? a.maxMoveM - b.maxMoveM : a.rank - b.rank', to: 'a.maxMoveM - b.maxMoveM', tests: [BEST], caughtBy: 'row 8: the order' },

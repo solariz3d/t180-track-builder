@@ -178,7 +178,11 @@ test('row 8: an end banked the way the closer turns is closed rolled last, on it
   const r = F.finishToStart(d), L = lean(r.doc, d.pieces.length);
   assert.equal(r.plan.rollFirst, false, `rolled last: ${r.plan.report}`);
   assert.equal(L.out, 0, `no curved station of the closer leans out (${L.out} of ${L.n})`);
-  assert.ok(L.lat < SIDE_BANKED_G, `the peak side load at the design speed, ${L.lat.toFixed(2)} g, is under ${SIDE_BANKED_G} g`);
+  // D459 (2026-10-25): this row read 5.55 g while the 54° roll was a FITTED Bloss ramp whose end rang (53.5, 54.3, 53.8, 54.1, 53.9, 54: an end slope of about
+  // +0.01 °/m), so the closer, continuing value and slope, carried "its own bank" from 55° up to 70° over 1,400 m, and the turn rode on 64° at the peak. The roll
+  // is the C2 quintic now and holds 54.000° with slope 0 past its transition (src/core/extend.js), so the closer stays on 54° as typed and the same turn reads
+  // 6.12 g at the design speed: the user's bank, not a drift. Re-pinned at SIDE_BANKED_G + 0.5; the flat closer's 10.68 g is the figure this row guards against
+  assert.ok(L.lat < SIDE_BANKED_G + 0.5, `the peak side load at the design speed, ${L.lat.toFixed(2)} g, is under ${SIDE_BANKED_G + 0.5} g (6.12 on the user's own 54°, D459)`);
 });
 
 test('row 4: a straight gets none: a finish that is only a straight keeps the laid bank', () => {
