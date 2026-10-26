@@ -31,12 +31,16 @@ test('S1: bank 360° over 300 m is accepted and read back as 360, then −540 (n
 
 // ── S3: the roll-rate bar ───────────────────────────────────────────────────────────────────────────────────────────────
 const spin = (L) => check(extend(start({ length: 60 }), { length: L, targets: { phi: 2 * Math.PI } }));
-test('S3: a full 360° of bank is RED over 300 m (the user\'s own example, 1.80°/m), AMBER over 450 m (1.20), clear over 600 m (0.90): the bar is 1.2144 red, 0.9338 amber, read over a 20 m chord', () => {
-  const rate = (r) => Math.max(0, ...r.map((x) => x.worst)), want = { 300: 1.7973, 450: 1.1992, 600: 0.8997 };
-  for (const L of [300, 450, 600]) {
+// CHANGED D466 (landing 0.4.20; D459 3b, P: banks, cups and edges ramp by the C2 quintic, src/core/extend.js): the same 360° roll now peaks at 1.875 times its
+// average rate instead of the cubic's 1.5, so every peak here rises by 1.875/1.5 and the bands move one step; the bar itself (1.2144 red, 0.9338 amber, 20 m)
+// is unchanged. Measured on the merged tree against v0.4.19 + D462 (bfa34fb), the same spin, one script (s3.js in the D466 hand-back's scratch): 300 m
+// 1.7973 -> 2.2434 (red), 450 m 1.1992 amber -> 1.4980 red, 600 m clear -> 1.1242 amber, 720 m 0.9370 amber, 730 m and 750 m clear. Was: 300 red, 450 amber, 600 clear.
+test('S3: a full 360° of bank is RED over 300 m (the user\x27s own example) and 450 m, AMBER over 600 m, clear over 750 m, since the ramp is the C2 quintic (D466): the bar is 1.2144 red, 0.9338 amber, read over a 20 m chord', () => {
+  const rate = (r) => Math.max(0, ...r.map((x) => x.worst)), want = { 300: 2.2434, 450: 1.4980, 600: 1.1242 };
+  for (const L of [300, 450, 600, 750]) {
     const { v } = spin(L), reds = v.red.filter((x) => x.reason === 'roll-rate'), ambers = v.amber.filter((x) => x.reason === 'roll-rate'), peak = rate([...reds, ...ambers]);
-    if (L === 300) assert.ok(reds.length && !ambers.length || reds.length, '300 m is red'); if (L === 450) assert.ok(!reds.length && ambers.length, '450 m is amber, not red'); if (L === 600) assert.ok(!reds.length && !ambers.length, '600 m is clear');
-    if (peak > 0) assert.ok(Math.abs(peak - want[L]) / want[L] < 0.02, `${L} m: the peak ${peak} against the seal's ${want[L]}`);
+    if (L === 300 || L === 450) assert.ok(reds.length, `${L} m is red`); if (L === 600) assert.ok(!reds.length && ambers.length, '600 m is amber, not red'); if (L === 750) assert.ok(!reds.length && !ambers.length, '750 m is clear');
+    if (peak > 0) assert.ok(Math.abs(peak - want[L]) / want[L] < 0.02, `${L} m: the peak ${peak} against the measure's ${want[L]}`);
   }
   assert.strictEqual(V.ROLL_RED_DEG_M, 1.2144); assert.strictEqual(V.ROLL_AMBER_DEG_M, 0.9338); assert.strictEqual(V.ROLL_CHORD_M, 20);
 });
