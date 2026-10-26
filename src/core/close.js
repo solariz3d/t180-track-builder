@@ -302,6 +302,21 @@ function residualOf(doc, { cache = null, c2Pairs = [], c2Channels = CN.C2_CHANNE
  * report "NOT CLOSED …"), and still returns its best document with closed false, so nothing silently claims a closure.
  */
 function close(doc, opts = {}) {
+  // D469 (P; C's D467 review §5): THE CUP'S CURVATURE ROWS RESPECT c ≥ 0. Where the seam's cup row (3c) meets a flat cup at p1 against a fade that ends C1 on the
+  // other side (TEST 10's p23: 15 15 0 0, laid before D459), the least-norm step bends p1's cup BELOW 0 to match the curvature (−2.0° on TEST 10), and the document
+  // refuses the step as it is measured (residualOf → toPath → checkDoc: BAD_CUP). The cup cannot go below 0, so the row is left out and the cup stays C1 at the
+  // seam, the way cupHome falls back to its straight fade where the quintic would be too fast; the other channels keep their rows, and the report says so. Once:
+  // the second pass has no cup row to drop, and whatever it refuses is the close's own
+  const c2Asked = opts.c2Channels === undefined ? CN.C2_CHANNELS : opts.c2Channels;
+  if (!opts.cupRowLeftOut && c2Asked.includes('c')) {
+    try { return closeOnce(doc, opts); } catch (e) {
+      if (e instanceof D.CoreError && e.code === 'BAD_CUP') return closeOnce(doc, { ...opts, c2Channels: c2Asked.filter((ch) => ch !== 'c'), cupRowLeftOut: true });
+      throw e;
+    }
+  }
+  return closeOnce(doc, opts);
+}
+function closeOnce(doc, opts = {}) {
   D.checkDoc(doc); doc = D.fillCup(doc);
   checkSeamKinds(doc);
   // D243, D258: a track WITH JUMPS closes like any other (the landing's pose is the user's and stays as it is; see parameters, positionJacobian and netRows).
@@ -371,7 +386,8 @@ function close(doc, opts = {}) {
     x = xn; work = wn; m = mn;
   }
   // what is STORED is quantised (README): measure the quantised document, and report that
-  const stored = apply(doc, expand, x, true, keep), ms = residual(stored, { cache, c2Pairs, c2Channels }), converged = done(m) && ms.gapM < 1e-3;   // the closed path's own bar (src/geom/path.js closeTol 1e-3 m): a stored gap past it was reported closed (it was 0.01) and then could not be built (2026-10-14, 1.65 mm on ELYSIUM)
+  const stored = apply(doc, expand, x, true, keep), ms = residual(stored, { cache, c2Pairs, c2Channels }), converged = done(m) && ms.gapM < 1e-3;
+  const cupNote = opts.cupRowLeftOut ? "; the cup's curvature row at the seam was left out (it would have taken the cup below 0), so the cup is C1 there" : '';   // the closed path's own bar (src/geom/path.js closeTol 1e-3 m): a stored gap past it was reported closed (it was 0.01) and then could not be built (2026-10-14, 1.65 mm on ELYSIUM)
   // D242: a local close that does not close is a REFUSAL by name, never a best try handed back: the window could not do it, and nothing outside it may help
   if (local && !converged) throw refuse(`it gets no closer than ${ms.gapM.toFixed(3)} m (tangent ${ms.tangentRad.toExponential(1)} rad) in ${it} step(s)`);
   let out;
@@ -395,7 +411,7 @@ function close(doc, opts = {}) {
   return { doc: out, converged, iterations: it, turns: ms.turns, gapM: ms.gapM, tangentRad: ms.tangentRad, cupSeamStepDeg,
     window: win ? { pieces: [...win.set].sort((a, b) => a - b), ids: win.ids, fromS: win.fromS, lengthM: win.lengthM, text: win.text } : null,
     residual: Object.fromEntries(ms.names.map((n, i) => [n, ms.r[i]])),
-    report: converged ? `closed in ${it} step(s): ${(ms.gapM * 1000).toFixed(3)} mm, tangent ${ms.tangentRad.toExponential(1)} rad${cupSeamStepDeg > D.CUP_JOINT_DEG ? `; the cup steps ${cupSeamStepDeg.toFixed(2)}° at the seam (a cup meets a legacy piece there)` : ''}`
+    report: converged ? `closed in ${it} step(s): ${(ms.gapM * 1000).toFixed(3)} mm, tangent ${ms.tangentRad.toExponential(1)} rad${cupNote}${cupSeamStepDeg > D.CUP_JOINT_DEG ? `; the cup steps ${cupSeamStepDeg.toFixed(2)}° at the seam (a cup meets a legacy piece there)` : ''}`
       : `NOT CLOSED after ${it} step(s): ${ms.gapM.toFixed(4)} m, tangent ${ms.tangentRad.toExponential(1)} rad` };
 }
 

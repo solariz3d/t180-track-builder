@@ -134,9 +134,17 @@ test('row 8: a tube is not banked; a level curve on the same lap is', () => {
   assert.ok(b.pieces[1].channels.phi.some((x, j) => Math.abs(x - c.doc.pieces[1].channels.phi[j]) > 30 * DEG), 'control: the level curve before it is banked');
 });
 
-test('row 9: a straight next to a curve keeps the bank it was laid with', () => {
+// AMENDED by D468 (P; the bank plan is C2, finish.js bankPlan's curvature rows): a straight next to a curve keeps the bank it was laid with but for the TAIL of the
+// curve's roll-off on its third control point from the joint (about 1.5°, the bank's smooth end over the straight's first span: a turn's bank ramps from its third
+// point, and the joint is C2 only if the straight's third point carries that curvature or the turn's is 0 too, which reached every corner's exit a knot later,
+// 24.4° against D447 §10's 32.5°). The joint itself (the first two points) and every other point are byte for byte as laid.
+const TAIL_DEG = 2;
+test('row 9: a straight next to a curve keeps the bank it was laid with, but for the tail of the roll-off on its third point from the joint (D468)', () => {
   const r = closed(), open = lap(); assert.equal(r.converged, true, r.report);
-  for (const i of [0, 2]) assert.deepEqual(r.doc.pieces[i].channels.phi, open.pieces[i].channels.phi, `${open.pieces[i].id}, a straight between curves`);
+  for (const i of [0, 2]) {
+    const got = r.doc.pieces[i].channels.phi, was = open.pieces[i].channels.phi, n = got.length;
+    got.forEach((x, k) => { if (k === 2 || k === n - 3) assert.ok(Math.abs(x - was[k]) < TAIL_DEG * DEG, `${open.pieces[i].id} point ${k}: the roll-off's tail, ${((x - was[k]) / DEG).toFixed(2)}°, within ${TAIL_DEG}°`); else assert.equal(x, was[k], `${open.pieces[i].id} point ${k}, a straight between curves, as laid`); });
+  }
 });
 
 const ROLL_DEG_M = 0.9 * require('../src/validate/index.js').ROLL_AMBER_DEG_M, SHARE_R300 = 0.75 * Math.atan(((460 / 3.6) ** 2 / 300) / 9.80665) / DEG;
