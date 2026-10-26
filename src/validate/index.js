@@ -37,6 +37,29 @@ const ROLL_RED_DEG_M = 1.2144, ROLL_AMBER_DEG_M = 0.9338, ROLL_CHORD_M = 20;
 const TUBE_MIN_W = 9.74;
 // the cap on the total edge angle of a non-tube edge piece (CUP_MAX, document.js), and of an open tube with an edge (t/2 + e)
 const EDGE_CAP_DEG = 150, TUBE_EDGE_CAP_DEG = 180;
+// BANK, CUP AND EDGE STACKED (D463; the user, 2026-10-25, on TEST 10: the car "clips and becomes unstable at higher speeds and Gs into the curve, without the side flip
+// ups it didnt happen", so warn where "banking, plus cupping, plus extra banking with the side values" stack). AMBER, never red: nothing is refused or changed.
+// THE MEASURE is the cross-slope change under the car: the most the road's angle across it changes over STACK_CAR_W_M (the Mach 6's collider box is 2.0 m wide,
+// docs/research/04_ac_physics_drivability.md §5), read on the side the bank raises, over that side's outer half, where the car is carried at speed and load. On TEST 10
+// it reads 13.9-19.0° on his stacked turns and at most 4.3° on the same turns with the edges at 0 (which rode fine); STACK_CURL_DEG sits between, a judgment, not a measurement.
+// The roll the car sits in was not chosen: his bank of 60° alone with the edges at 0 (s 2200-2300) reads the same 60° as his stacked turn at s 3850-4600.
+// IT IS A STACK only where all three are there at the station: the bank raises that side by STACK_MIN_DEG or more; the road's own cup rises there (its angle at half the
+// half-width, inside every edge zone since an edge starts at 0.5 of the half-width or further out, document.js S_MIN, is STACK_MIN_DEG or more); and the edge lifts that
+// rim: no cross-section without an edge has a rim angle more than 2.83 times its angle at half the half-width (the half-pipe cup's shape, the steepest; checked over every
+// family, width 6-40 m, cup 1-150°, r 0.5-10 and the tube), so a rim past STACK_RIM_RATIO times it carries an edge. Tubes are left out (the car rides inside one).
+const STACK_CAR_W_M = 2.0, STACK_CURL_DEG = 8, STACK_MIN_DEG = 1, STACK_RIM_RATIO = 3;
+/** The cross-slope change (°) over the car's width on side sg (+1 left, −1 right) of normalized edge profile pr, or 0 where cup or edge is missing on that side. */
+function stackCurl(pr, sg) {
+  const h = sg > 0 ? pr.u[pr.u.length - 1] : -pr.u[0]; if (!(h > 0)) return 0;
+  const psi = (a) => P.psiAt(pr, sg * a) / DEG, mid = psi(h / 2);
+  if (!(mid >= STACK_MIN_DEG) || !(psi(h) > STACK_RIM_RATIO * mid)) return 0;
+  // ψ is linear between knots, so the change over a window is largest with one of its ends on a knot (or at the zone's ends)
+  const W = Math.min(STACK_CAR_W_M, h / 2), xs = [h / 2, h - W];
+  for (const u of pr.u) { const a = sg * u; if (a > h / 2 && a < h) xs.push(a, a - W); }
+  let worst = 0;
+  for (const x of xs) if (x >= h / 2 - 1e-9 && x <= h - W + 1e-9) worst = Math.max(worst, Math.abs(psi(x + W) - psi(x)));
+  return worst;
+}
 /** The roll rate (°/m) at each road station that has a station 10 m each side on road; closed paths wrap at their length. [{ i, s, rate }] */
 function rollRates(S, isRoad, closed, L) {
   const n = S.length, s0 = S[0].s, half = ROLL_CHORD_M / 2, out = [];
@@ -105,6 +128,7 @@ const SRC = Object.freeze({
   'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp should catch both landings); a WARNING since D250: the user tunes jumps by driving them',
   'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
   'joint-step': 'FINDINGS.md:110 (a step in the road mesh is a gap: the D190 round-3 ruling (c) reds a lap seam or a cup joint that steps more than 1 mm)',
+  'bank-cup-edge': 'D463 (the user, 2026-10-25, TEST 10: bank, cup and edge stacked rode rough at speed, the same turns without the edges did not): the cross-slope change over the car\'s 2 m on the raised side passes 8° where all three stack',
   'roll-rate': 'D225 seal V7 / S3 (exo_memory/loop/cross_section_seal_registration_2026-10-03.md): the roll rate over a 20 m chord, the bar the track B lap measured (RED 1.2144°/m, AMBER 0.9338°/m)',
   'tube-too-narrow': 'D225 ruling R1 (corrected): a closed tube narrower than 9.74 m cannot hold the chase camera (the 3 m eye, plus the seal\'s 0.1 m margin, must fit under the ceiling 2R = w/π)',
   'edge-past-cap': 'D225 seal V2 / E2: the total edge angle of an edge piece is capped at CUP_MAX 150° (180° on an open tube): the walls of a bowl past it touch',
@@ -420,7 +444,17 @@ function core(path, segments, opts, from, carried, upto) {
   if (!Array.isArray(opts.folds)) for (const e of raw.stacked.values()) if (e.clip) red.push({ s: e.s, u: e.u, reason: 'self-intersection', worst: null });
   // D435: less than car.overheadM of room under another road (the gap along this road's normal) is AMBER, 'low-overhead', worst the room in metres; a clip is red above
   const overheadAmber = [...raw.stacked.values()].filter((e) => !e.clip && e.low < car.overheadM).map((e) => ({ s: e.s, u: e.u, reason: 'low-overhead', worst: e.low }));
-  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...overheadAmber,...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = [...raw.pts.filter((p) => p.kind === 'info'), ...stackedInfo, ...nearTouches(nearRaw, car, step, (s) => end === n || s < S[end].s)];
+  // D463: bank, cup and edge stacked (stackCurl above), a whole-track read like the roll rate, so revalidate equals validate; worst is the change in degrees, u the raised side's rim
+  const stackAmber = [], sinMin = Math.sin(STACK_MIN_DEG * DEG);
+  for (let i = 0; i < end; i++) {
+    if (!isRoad(i)) continue;
+    const p = S[i], sg = p.L[1] >= sinMin ? 1 : p.L[1] <= -sinMin ? -1 : 0; if (!sg) continue;   // L[1] is the sine of the bank, + = left side up
+    const g = segments[p.seg], pr = P.readsBlend(g) && g.blend ? P.atSegment(g, p.s - segS0[p.seg]) : profiles[p.seg];   // the cross-section the loads read (constAt)
+    if (!pr || pr.font !== 'edge') continue;
+    const curl = stackCurl(pr, sg);
+    if (curl > STACK_CURL_DEG) stackAmber.push({ s: p.s, u: sg > 0 ? pr.u[pr.u.length - 1] : pr.u[0], reason: 'bank-cup-edge', worst: curl });
+  }
+  const amber = [...raw.pts.filter((p) => p.kind === 'amber'), ...rollAmber, ...overheadAmber, ...stackAmber, ...sustainedLoad(raw.lines, S, sp.v, isRoad, car, end, path.closed && end === n ? (path.lengthM || (S[n - 1].s - S[0].s)) : 0)], info = [...raw.pts.filter((p) => p.kind === 'info'), ...stackedInfo, ...nearTouches(nearRaw, car, step, (s) => end === n || s < S[end].s)];
   const lines = raw.lines.slice().sort((a, b) => a.i - b.i).map((l) => l.line);   // station order, u order within
 
   // ── jumps (ARCHITECTURE.md:72-80) ──
@@ -748,4 +782,4 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   }
 }
 
-module.exports = { validate, revalidate, lapOf, speedProfile, SRC, ROLL_RED_DEG_M, ROLL_AMBER_DEG_M, ROLL_CHORD_M, TUBE_MIN_W, _internal: { ranges, rollRates, sustainedLoad } };
+module.exports = { validate, revalidate, lapOf, speedProfile, SRC, ROLL_RED_DEG_M, ROLL_AMBER_DEG_M, ROLL_CHORD_M, TUBE_MIN_W, STACK_CURL_DEG, STACK_CAR_W_M, _internal: { ranges, rollRates, sustainedLoad, stackCurl } };
