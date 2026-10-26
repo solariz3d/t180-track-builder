@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.20] - 2026-10-25
+
 ### Added
 - **A warning where bank, cup and edge stack in a turn.** A turn that is banked, cupped and has its edge raised on the banked-up side can ride rough at speed: on a test track the car clipped the road and went unstable at high speed and load in such turns, and the same turns with the edges at 0 rode fine. The track checker now shows an amber line, "bank, cup and edge stack here and the turn may ride rough at speed", with the stretch it covers. It fires where the road's slope changes by more than 8° across the car's 2 m width on the raised side and all three are there; nothing is refused, capped or changed, and the edges work as before. It is a warning to use them with care.
 - **Track ▸ Smooth ramps, for tracks laid before this version.** A saved track keeps the ramps it was laid with, so the smoother banks, cups and edges below reached it only where a piece was laid again. Smooth ramps re-lays every bank, cup and edge change on the open track the new way, so each one starts and ends without a jolt; the route stays exactly where it was (every turn, climb, width and length is untouched), and so do the values at every joint. On TEST 10 it re-lays 13 ramps on 9 pieces, and the 19 places where the road's curvature stepped at a joint go to none. It copies the track to its backups first and is one undo step; it never runs by itself, and on a track with no ramps, or one already smooth, it changes nothing and says so.

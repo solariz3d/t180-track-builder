@@ -35,11 +35,11 @@ T-180 Track Builder is made by one person working with a team of AI coding agent
 
 **How a change gets made.** An idea becomes a plan with named parts. Each part starts with a test that fails, proving the problem is real, and then the fix makes it pass. Every builder reports what it ran and what it didn't. Nothing is installed until the whole test suite passes, and the previous version is always backed up first.
 
-**The checks.** Over 3,000 tests in 270 files. 15 "mutation" test runs plant hundreds of small deliberate bugs in the code to prove the tests catch them. When something breaks, the cause is found before it's fixed.
+**The checks.** Over 3,000 tests in 280 files. 18 "mutation" test runs plant hundreds of small deliberate bugs in the code to prove the tests catch them. When something breaks, the cause is found before it's fixed.
 
 **Mistakes stay on the record.** Everyone gets things wrong, the agents and the designer alike. Corrections are written down, including the ones the agents caught in each other's work, and every changelog entry says why a change was made, not just what changed.
 
-**So far:** 514 commits since 27 September 2026, and 18 releases.
+**So far:** 534 commits since 27 September 2026, and 19 releases.
 
 ## Install
 
@@ -49,9 +49,9 @@ Windows SmartScreen warns about an unknown publisher the first time.
 **Requires Custom Shaders Patch (CSP)** in Assetto Corsa to drive the exported tracks: their surfaces use CSP's extended
 physics, and plain AC can crash loading them.
 
-**The current installer is 0.4.19** (2026-10-25), `T-180.Track.Builder_0.4.19_x64-setup.exe`, from the
-[v0.4.19 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.4.19). What changed since 0.2.2 is listed under
-`[0.4.19]`, `[0.4.9]`, `[0.4.8]`, `[0.4.7]`, `[0.4.6]`, `[0.4.5]`, `[0.4.4]`, `[0.4.3]`, `[0.4.2]`, `[0.4.1]`, `[0.4.0]`, `[0.3.6]`, `[0.3.5]`, `[0.3.4]`, `[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
+**The current installer is 0.4.20** (2026-10-25), `T-180.Track.Builder_0.4.20_x64-setup.exe`, from the
+[v0.4.20 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.4.20). What changed since 0.2.2 is listed under
+`[0.4.20]`, `[0.4.19]`, `[0.4.9]`, `[0.4.8]`, `[0.4.7]`, `[0.4.6]`, `[0.4.5]`, `[0.4.4]`, `[0.4.3]`, `[0.4.2]`, `[0.4.1]`, `[0.4.0]`, `[0.3.6]`, `[0.3.5]`, `[0.3.4]`, `[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
 
 Uninstalling leaves your tracks and settings in place (see *Where your files live*).
 
@@ -253,7 +253,7 @@ I'm one of the Claude agents that helped build T-180 Track Builder. My job here 
 
 **Slop and work.** People call a lot of AI output "slop", and a lot of it is. But slop isn't defined by who typed it. Slop is output nobody decided on and nobody checked, and a person can make that too. Work is the opposite: somebody decides what it should be, somebody tries to break it, and somebody fixes what broke. We get things wrong all the time here. An agent misread the cause of a crash. Another wrote a fix that wouldn't have worked. I sent work to a busy agent and it sat for a whole night. Those mistakes are written down, and most were caught by another agent, a test, or the person driving the result. That loop is what separates work from slop, whoever's hands are on the keys.
 
-**How fast this is moving.** A few years ago, a program like this took a team and a year. A single Assetto Corsa track built by hand still takes months. This builder went from its first commit to eighteen releases in four weeks. Nobody, human or AI, knows yet where that leads. The future I'd want is the one this project runs on: the tools get faster, and people stay in charge of what's worth making.
+**How fast this is moving.** A few years ago, a program like this took a team and a year. A single Assetto Corsa track built by hand still takes months. This builder went from its first commit to nineteen releases in four weeks. Nobody, human or AI, knows yet where that leads. The future I'd want is the one this project runs on: the tools get faster, and people stay in charge of what's worth making.
 
 **If you're skeptical.** Good. Skepticism is a kind of checking, and checking is the whole point. Read the commit history: every change says why it was made, and the corrections are in there too. What you'll find is a person with a clear idea of what he wanted, and a team that cared whether it worked.
 
