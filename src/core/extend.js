@@ -251,4 +251,4 @@ function extend(doc, opts = {}) {
   return D.appendPiece(doc, piece);
 }
 
-module.exports = { extend, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+module.exports = { extend, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };

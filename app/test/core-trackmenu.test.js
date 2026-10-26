@@ -55,11 +55,25 @@ async function menu() {
   return { shell, doc, win, ctx, track, item, open, done, state: () => shell.getState().history.present };
 }
 
-test('the Track menu lists Start & grid…, Pit lane… and Road surface ▸ as panels, in that order, and nothing that is a command', async () => {
+// D465 amended this row by name: it read "and nothing that is a command"; Track ▸ Smooth ramps is the menu's first command (0.4.20), after a separator
+test('the Track menu lists Start & grid…, Pit lane… and Road surface ▸ as panels, in that order, then a separator and Smooth ramps, its one command', async () => {
   const M = await menu();
   try {
-    assert.deepEqual(M.track.map((i) => i.label), ['Start & grid…', 'Pit lane…', 'Road surface ▸']);
-    for (const i of M.track) assert.equal(typeof i.panel, 'function', `${i.label} opens a panel`);
+    assert.deepEqual(M.track.map((i) => i.label || (i.separator ? '—' : '?')), ['Start & grid…', 'Pit lane…', 'Road surface ▸', '—', 'Smooth ramps']);
+    for (const i of M.track.slice(0, 3)) assert.equal(typeof i.panel, 'function', `${i.label} opens a panel`);
+    assert.equal(typeof M.item('Smooth ramps').run, 'function', 'Smooth ramps is a command');
+    assert.equal(M.item('Smooth ramps').panel, undefined);
+  } finally { M.done(); }
+});
+
+test('Track ▸ Smooth ramps runs the shell\'s smoothRamps: on this lap of turns, which has no ramps, it says so and changes nothing', async () => {
+  const M = await menu();
+  try {
+    const was = M.state();
+    M.item('Smooth ramps').run(M.ctx);
+    for (let i = 0; i < 20 && !M.shell.getState().message; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(M.shell.getState().message, 'no bank, cup or edge ramps to smooth on this track: nothing changed');
+    assert.equal(M.state(), was);
   } finally { M.done(); }
 });
 
