@@ -36,6 +36,7 @@
 //   await shell.renamePiece(from, to)   await shell.deletePieceFile(name)   shell.deleteSelection()   shell.proposeDelete()   await shell.applyDelete()   shell.cancelDelete()
 //   shell.cutSelection()   await shell.applyCut()   shell.cancelCut()   (D361: the selected pieces cut out, the track left open at the gap)
 //   await shell.smoothRamps()   (D465: Track ▸ Smooth ramps: the bank, cup and edge ramps re-laid C2, the route kept; a backup first, one undo step)
+//   await shell.bankLap()       (D473: Track ▸ Bank the lap: a closed lap banked as Close banks the lap it closes, the route kept; one undo step)
 // TIMING: state.lastStep = { op, ms } for the last edit, the document operation plus the adapter's segments (spec test 6's
 // "per step" is measured by the bench on the same calls, not on this field).
 'use strict';
@@ -75,6 +76,7 @@ const { toSegments } = AD;
 const GHOST_CHORDS = 48, GHOST_TURN = 0.03, GHOST_PROBES = 16;   // D404: the drag's ghost: at most 48 chords, none turning the heading by more than 0.03 rad (1.7 degrees), the curvature read at 17 stations
 const PC = require('../../src/core/piece.js');   // D240: saved pieces (save a run, put one at the head, mirror it, delete pieces)
 const SR = require('../../src/core/smoothramps.js');   // D465: Track ▸ Smooth ramps
+const { bankLapWith, budgetNote } = require('../../src/core/finish.js');   // D473: Track ▸ Bank the lap
 const RAMP_WORD = Object.freeze({ phi: 'bank', c: 'cup', e: 'edge', er: 'right edge' });
 // A's offset channels h and l (the chair's ruling 1, D186): offsetPath(doc, segments, path) lifts a path and recomputes its frame.
 // Not at 17c2301; when the adapter exports it, the shell hands it on as `resolved.lift`, so the preview and the export
@@ -1169,6 +1171,35 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const on = new Set(r.ramps.filter((x) => x.moved).map((x) => x.id)).size;
       return set({ history: D.commit(st.history, r.doc), ...resolvedOf(r.doc), dirty: true, lastEdited: null, lastStep: { op: 'smoothRamps', ms },
         ...ok(`smoothed ${r.moved} bank, cup and edge ramp${r.moved === 1 ? '' : 's'} on ${on} piece${on === 1 ? '' : 's'}: they now start and end without a jolt; the route did not move (Ctrl+Z puts them back)${notes}`) });
+    },
+
+    /**
+     * D473, TRACK ▸ BANK THE LAP: a lap that is already closed banked as Close banks the lap it closes (src/core/finish.js bankLapWith, D447), so a lap closed
+     * before Close banked (a flat closer) gets its bank without being opened. The bank rolls the road about its centre line, so the route does not move: a result
+     * whose kh, kv or lengths differ is refused by name. ONE undo step. An open lap, or one with nothing to bank, is left as it is, and the message says so; what
+     * the bank held back (the level rule's loops and steep ramps, a piece that would lean out, a flip) is said in plain words.
+     */
+    async bankLap() {
+      if (st.brush) return set({ message: 'finish the brush drag first' });
+      const d = doc();
+      if (!d.closed) return set({ message: 'not banked: the lap is not closed (Close the loop banks the lap it closes); nothing changed' });
+      const t0 = now(); let B;
+      try { B = bankLapWith(d); } catch (e) { if (e.name === 'CoreError') return set({ message: `not banked: ${e.message}; nothing changed` }); throw e; }
+      const ms = now() - t0, names = (ids) => ids.join(', '), they = (ids, one, many) => (ids.length === 1 ? one : many);
+      const notes = [B.level.length ? `no bank on ${names(B.level)}: ${they(B.level, 'it climbs or dives', 'they climb or dive')} too steeply to bank (a loop or a steep ramp)` : null,
+        B.withheld.length ? `no bank on ${names(B.withheld)}: banked, ${they(B.withheld, 'it', 'they')} would lean out of ${they(B.withheld, 'its', 'their')} turn` : null,
+        B.eased.length ? `the bank eases to none where the turn changes direction faster than the road can roll (${names(B.eased)})` : null,
+        B.none ? `no curve was banked: ${B.none}` : null,
+        B.budget ? budgetNote(B.budget, 'lap') : null].filter(Boolean);
+      if (B.doc === d) return set({ message: notes.length ? `nothing banked, nothing changed: ${notes.join('; ')}` : 'nothing to bank: every curve on this lap already has its bank; nothing changed' });
+      const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+      if (B.doc.pieces.length !== d.pieces.length || B.doc.pieces.some((P, i) => P.length !== d.pieces[i].length || !same(P.channels.kh, d.pieces[i].channels.kh) || !same(P.channels.kv, d.pieces[i].channels.kv))) {
+        return set({ message: 'not banked: the bank would have moved the route; nothing changed' });
+      }
+      const banked = B.doc.pieces.filter((P, i) => !same(P.channels.phi, d.pieces[i].channels.phi)), up = D.valuesAt(d.pieces[0], 0).phi;
+      let most = 0; for (const P of banked) { const n = Math.max(1, Math.ceil(P.length / 2)); for (let j = 0; j <= n; j++) most = Math.max(most, Math.abs(D.valuesAt(P, (P.length * j) / n).phi - up)); }
+      return set({ history: D.commit(st.history, B.doc), ...resolvedOf(B.doc), dirty: true, lastEdited: null, lastStep: { op: 'bankLap', ms },
+        ...ok(`banked the lap: ${banked.length} piece${banked.length === 1 ? '' : 's'} (${names(banked.map((P) => P.id))}), up to ${(most * 180 / Math.PI).toFixed(1)}° into ${banked.length === 1 ? 'its turn' : 'their turns'}; the route did not move (Ctrl+Z takes the bank back)${notes.length ? `; ${notes.join('; ')}` : ''}`) });
     },
 
     // undo and redo SAY what they changed (2026-10-13: on ELYSIUM the last steps were start-line moves, invisible in the preview, so undo looked broken)
