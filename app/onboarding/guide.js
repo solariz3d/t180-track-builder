@@ -27,10 +27,10 @@ const pieceCount = (doc) => (doc && Array.isArray(doc.pieces) ? doc.pieces.lengt
 
 const STEPS = Object.freeze([
   { id: 'extend', title: 'Extend a few pieces', target: '#palette',
-    text: `Under "Extend at the head", set a length and a turn (or leave them), then press Extend. Each piece grows the track from its open end. Done at ${EXTEND_AT_LEAST} pieces; give at least one a turn, or there is nothing to close. For a jump choose Build ▸ Jump instead of Extend: it places the piece (give it some climb first, that is the take-off) and a landing 40 m ahead, which you then move by hand (drag its arrows on the track or type its numbers); drive it in AC and move the landing until it works. To take pieces out, click them on the track (Shift-click for a run) and press "Delete selected": at the end of the track that makes no backup, so Ctrl+Z is the only way back; in the middle you see a preview first and the track is copied to its backups before it is applied.`,
+    text: `Set a length and a turn under "Extend at the head", then press Extend: each piece grows the track from its open end. Done at ${EXTEND_AT_LEAST} pieces; give at least one a turn, or there is nothing to close.`,
     done: (st) => pieceCount(st.history.present) >= EXTEND_AT_LEAST },
-  { id: 'brush', title: 'Brush the track', target: '#m-build',
-    text: 'Choose Build ▸ Brush: a strip under the menus holds what to change (turn, bank, width, …) and the radius. Then drag on the track in the preview. The brush bends the track smoothly around where you drag; a stroke stops where the track would break (red). Build ▸ Brush again turns it off.',
+  { id: 'brush', title: 'Sculpt the road', target: '#m-build',
+    text: 'Press Tab (or Build ▸ Sculpt mode), pick a tool with 1–9, drag on the road. Each tool reshapes the road smoothly around where you drag; Tab again goes back to building.',
     done: (st, seen) => seen.brushed },
   { id: 'close', title: 'Close the loop', target: '#m-build',
     text: 'Choose Build ▸ Close the loop. The solver bends the pieces you edited least so the end meets the start, smoothly. A track of straights cannot close: it needs a turn.',

@@ -52,8 +52,8 @@ function mount(root, shell, { native, pickFolder, getTextures, more = null, card
     let s; try { s = await native.findAcRoot(); } catch (e) { return; }   // no answer: Export still finds AC itself, or asks
     if (!s || s.remembered) return;
     const choose = async () => remember(await pickFolder('Your Assetto Corsa folder (the one with content\\tracks)'));
-    if (s.found) show(`Assetto Corsa found at ${s.found} (through Steam). Export to Assetto Corsa writes your tracks there. `, el('button', { textContent: 'Use it', onclick: () => remember(s.found) }), ' ', el('button', { textContent: 'Choose another…', onclick: choose }));
-    else show('Assetto Corsa was not found through Steam: pick the folder that holds content\\tracks, so Export to Assetto Corsa can write your tracks there. ', el('button', { textContent: 'Choose…', onclick: choose }));
+    if (s.found) show(`Assetto Corsa found at ${s.found} (through Steam). Export to Assetto Corsa writes your tracks there. Exported tracks require Custom Shaders Patch (CSP): plain Assetto Corsa can crash loading them. `, el('button', { textContent: 'Use it', onclick: () => remember(s.found) }), ' ', el('button', { textContent: 'Choose another…', onclick: choose }));
+    else show('Assetto Corsa was not found through Steam: pick the folder that holds content\\tracks, so Export to Assetto Corsa can write your tracks there. Exported tracks require Custom Shaders Patch (CSP): plain Assetto Corsa can crash loading them. ', el('button', { textContent: 'Choose…', onclick: choose }));
   })();
   return { inst, see, card };
 }
