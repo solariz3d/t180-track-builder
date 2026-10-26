@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **A Bend, Climb or Stretch on a closed lap keeps all of what you did.** When you let go, the builder closes the lap again. Away from the start line it used to do that partly by reshaping the very road you had just changed, so a quarter to half of your bend could quietly go. It now closes the lap with the road at the start instead, keeps your change whole, hatches the start road that moved, and says "to keep your bend, the start of the lap moved". Right at the start line, where only the road you changed can close the lap, it still tells you plainly when your bend had to be undone.
+
 ## [0.4.20] - 2026-10-25
 
 ### Added

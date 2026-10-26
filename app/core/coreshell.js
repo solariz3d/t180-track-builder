@@ -171,6 +171,11 @@ function keptShare(base, open, closed, idx, tool) {
   }
   return den > 0 ? num / den : null;
 }
+/** D467: the release's message when the lap's start pieces closed it and the drag was kept whole. */
+function startMovedWords(tool, report) {
+  const word = tool === 'climb' ? 'climb' : tool === 'stretch' ? 'stretch' : 'bend';
+  return `the lap is closed again: to keep your ${word}, the start of the lap moved (${report})`;
+}
 /** D464: the release's message. Under half kept, the drag was undone and the user is told what to do; under 0.9, how much was taken back; otherwise as before. */
 function closedAgainWords(tool, kept, report) {
   const word = tool === 'climb' ? 'climb' : tool === 'stretch' ? 'stretch' : 'bend';
@@ -227,7 +232,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   }
   let st = {
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
-    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, brush: null, landingDrag: null, spawnsDrag: null, exportReds: null,
+    message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, keptBend: null, brush: null, landingDrag: null, spawnsDrag: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
     selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
     cutProposal: null,   // D361: a pending cut (cutSelection's preview), dropped with the document it was made on
@@ -442,9 +447,13 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     // A try that is the one before it (the window already holds that piece) is not run again.
     const road = open.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), lastR = road[road.length - 1], firstR = road[0];
     const withSeam = (...more) => [...new Set([...win, ...more])].sort((x, y) => x - y);
-    const tries = [win, withSeam(lastR), withSeam(lastR, firstR)].filter((w, k, all) => !k || w.length !== all[k - 1].length);
+    // D467 (the librarian's ruling on E's D463 §6(2), the designer's call deferred to it at 19:00): AWAY FROM THE SEAM (a window holding neither the first nor the last road piece)
+    // the lap's START PIECES are tried first, the window left as the drag made it, so the user's bend is kept whole (E's measure: 100% kept, against 51-55% by the window tries,
+    // which re-solve the bent piece). This reverses D421c's window-first order there, as ruled. At the seam the tries are D421c's, unchanged.
+    const startTry = firstR !== lastR && !win.includes(firstR) && !win.includes(lastR) ? [firstR, lastR] : null;
+    const tries = [...(startTry ? [startTry] : []), ...[win, withSeam(lastR), withSeam(lastR, firstR)].filter((w, k, all) => !k || w.length !== all[k - 1].length)];
     const whole = (rs) => runCloseJob({ doc: open, whole: true, edited: win }).then((r) => (closes(r) || r.cancelled ? r : { failed: [...rs, r] }));
-    const attempt = (k, rs) => (k === tries.length ? whole(rs) : runCloseJob({ doc: open, window: tries[k] }).then((r) => (closes(r) || r.cancelled || !stillOurs() ? r : attempt(k + 1, [...rs, r]))));
+    const attempt = (k, rs) => (k === tries.length ? whole(rs) : runCloseJob({ doc: open, window: tries[k] }).then((r) => (closes(r) ? { ...r, tried: tries[k] } : r.cancelled || !stillOurs() ? r : attempt(k + 1, [...rs, r]))));
     entry.promise = attempt(0, [])
       .then((r) => {
         if (r.cancelled || !stillOurs()) {   // dropped (Esc), or the document replaced meanwhile
@@ -458,8 +467,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
           return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: `ROUTE_NO_CLOSE: the lap could not be closed again after this ${b.tool}, so the drag was dropped and the track is as it was (the window: ${why})` });
         }
         const closed = r.out.doc, h = D.endDrag(D.dragTo(st.history, closed));
-        const said = closedAgainWords(b.tool, keptShare(b.base, open, closed, win, b.tool), r.out.report);   // D464: a drag the close took back is said, not only "closed again"
-        return set({ history: h, ...resolvedOf(closed), brush: null, dirty: true, lastEdited: win, lastStep: { op: `brush:${b.tool}:close`, ms: now() - entry.t0 }, ...ok(said) });
+        const byStart = !!startTry && r.tried === startTry;   // D467: the start pieces closed it, so the drag is as the user made it, and those pieces moved
+        const said = byStart ? startMovedWords(b.tool, r.out.report) : closedAgainWords(b.tool, keptShare(b.base, open, closed, win, b.tool), r.out.report);   // D464: a drag the close took back is said, not only "closed again"
+        const keptBend = byStart ? Object.freeze({ doc: closed, pieces: Object.freeze([...startTry]) }) : null;   // D467: the preview hatches these pieces while this is the document
+        return set({ history: h, ...resolvedOf(closed), brush: null, dirty: true, lastEdited: win, keptBend, lastStep: { op: `brush:${b.tool}:close`, ms: now() - entry.t0 }, ...ok(said) });
       }, (e) => {
         if (!stillOurs()) { if (releaseJob === entry) { releaseJob = null; if (st.brush && st.brush.closing) return set({ brush: null }); } return st; }
         releaseJob = null;

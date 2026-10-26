@@ -393,7 +393,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       }
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
-      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track, sculptCues(track, hoverNow())), depthLines: plan ? plan.depth : null,
+      renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track, sculptCues(track, hoverNow(), startMovedOf(shell.getState()))), depthLines: plan ? plan.depth : null,
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, time: skyTime(t) });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
@@ -526,8 +526,11 @@ function windowEnd(path, segments, h) {
   return path.starts[j].s + segments[j].length;
 }
 const cueMemo = new WeakMap();   // path -> the last hover's { key, list }
-/** The sculpt cues for this frame: an overlay list, or null. `h` is the page's hover (or null); the drag's own come from track.drag. */
-function sculptCues(track, h) {
+/** D467: whether the last release kept the user's bend by moving the lap's start pieces, and that is still the document (an undo or any later edit ends it). */
+function startMovedOf(st) { return !!(st && st.keptBend && st.history && st.keptBend.doc === st.history.present); }
+/** The sculpt cues for this frame: an overlay list, or null. `h` is the page's hover (or null); the drag's own come from track.drag. `startMoved` (D467): the last release moved
+ *  the start pieces to keep the bend, so they are hatched with no hover too, both at full strength. */
+function sculptCues(track, h, startMoved = false) {
   if (!track || !track.path || !Array.isArray(track.segments)) return null;
   if (track.drag) {
     const d = track.drag; if (!d.gap || !d.move || !d.base || !d.base.path) return null;   // the hatch only where a closed lap was opened by the move
@@ -537,13 +540,13 @@ function sculptCues(track, h) {
     if (H.first && d.window.from >= H.firstTo) list.push({ positions: H.first, colour: HATCH, alpha: HATCH_FIRST_ALPHA, blend: true });
     c = list.length ? list : null; cueMemo.set(d, c); return c;
   }
-  const colour = h ? washOf(h) : null; if (!colour) return null;
-  const path = track.path, segs = track.segments, sEnd = windowEnd(path, segs, h); if (sEnd === null) return null;
-  const closed = !!path.closed, key = `${sEnd}|${colour.join(',')}|${closed}`, was = cueMemo.get(path);
+  const colour = h ? washOf(h) : null, kept = !!startMoved && !!track.path.closed; if (!colour && !kept) return null;
+  const path = track.path, segs = track.segments, sEnd = colour ? windowEnd(path, segs, h) : null; if (colour && sEnd === null && !kept) return null;
+  const closed = !!path.closed, key = `${sEnd}|${colour ? colour.join(',') : ''}|${closed}|${kept}`, was = cueMemo.get(path);
   if (was && was.key === key && was.segments === segs) return was.list;
-  const list = [], wash = sEnd < path.lengthM ? acrossLines(path, segs, 0, segs.length, sEnd) : null;
+  const list = [], wash = colour && sEnd !== null && sEnd < path.lengthM ? acrossLines(path, segs, 0, segs.length, sEnd) : null;
   if (wash) list.push({ positions: wash, colour, alpha: WASH_ALPHA, blend: true });
-  if (closed) { const H = hatchOf(path, segs); if (H.last) list.push({ positions: H.last, colour: HATCH, alpha: HATCH_ALPHA, blend: true }); if (H.first) list.push({ positions: H.first, colour: HATCH, alpha: HATCH_FIRST_ALPHA, blend: true }); }
+  if (closed) { const H = hatchOf(path, segs); if (H.last) list.push({ positions: H.last, colour: HATCH, alpha: HATCH_ALPHA, blend: true }); if (H.first) list.push({ positions: H.first, colour: HATCH, alpha: kept ? HATCH_ALPHA : HATCH_FIRST_ALPHA, blend: true }); }   // D467: both moved, both full
   const out = list.length ? list : null; cueMemo.set(path, { key, segments: segs, list: out }); return out;
 }
 
@@ -627,4 +630,4 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, startHead, sculptCues };
+module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, startHead, sculptCues, startMovedOf };

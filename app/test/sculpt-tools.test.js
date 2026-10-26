@@ -111,15 +111,16 @@ test('row 5: the release only STARTS the job; the job lands the re-closed lap as
   s.undo(); assert.equal(s.getState().history.present, before, 'Undo: the lap as it was before the drag');
 });
 
-test('row 6: the window close first; refused, the whole-lap close with the window protected; refused again, the drag is dropped whole and named', async () => {
-  // refused, then converged: the second job is the whole lap with the window protected
-  // AMENDED (D421c, the librarian's ruling on O's window measure): four tries now, the window, + the last piece, + the last and the first, then the whole lap (was three: P's item 8's widening)
-  const r1 = fakeRunner((args, n) => (n < 4 ? { refused: { code: 'CLOSE_WINDOW', message: 'close: can\'t close using only the window' } } : realClose(args)));
+// AMENDED (D467, the librarian's ruling on E's D463 §6(2), the designer's call deferred to it at 19:00): a closed-lap release away from the seam tries the lap's START
+// PIECES first (the first and last road pieces), so the user's bend is kept whole; that put one try ahead of the window. Was (D421c): four tries, the window first.
+test('row 6: the start pieces first, then the window close; refused, the whole-lap close with the window protected; refused again, the drag is dropped whole and named', async () => {
+  // refused four times, then converged: the fifth job is the whole lap with the window protected
+  const r1 = fakeRunner((args, n) => (n < 5 ? { refused: { code: 'CLOSE_WINDOW', message: 'close: can\'t close using only the window' } } : realClose(args)));
   const s = await closedLap({ closeRunner: r1 });
   s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(5e-4); s.endBrush(); const a = await s.brushRelease();
-  assert.equal(r1.calls.length, 4); assert.ok(Array.isArray(r1.calls[0].window)); assert.ok(Array.isArray(r1.calls[1].window)); assert.ok(Array.isArray(r1.calls[2].window)); assert.equal(r1.calls[3].whole, true); assert.deepEqual(r1.calls[3].edited, r1.calls[0].window, 'the window is protected');
+  assert.equal(r1.calls.length, 5); for (let k = 0; k < 4; k++) assert.ok(Array.isArray(r1.calls[k].window), `try ${k + 1} has a window`); assert.equal(r1.calls[4].whole, true); assert.deepEqual(r1.calls[4].edited, r1.calls[1].window, 'the window is protected');
   assert.equal(a.history.present.closed, true, a.message);
-  // refused twice: the drag is dropped whole, by name, and the track is the very one from before the drag
+  // refused every time: the drag is dropped whole, by name, and the track is the very one from before the drag
   const r2 = fakeRunner(() => ({ refused: { code: 'CLOSE_WINDOW', message: 'no' } }));
   const t = await closedLap({ closeRunner: r2 }), before = t.getState().history.present, n0 = t.getState().history.past.length;
   t.beginBrush({ tool: 'bend', s0: 450, r: 80 }); t.brushTo(5e-4); t.endBrush(); const b = await t.brushRelease();
@@ -269,20 +270,21 @@ test('row 19: a handle on a two- or three-piece run lands the value asked where 
   }
 });
 
-test('row 20: the release tries the window, then the window with the lap\'s last road piece, then with the last and the first, then the whole lap with the window protected', async () => {
-  // AMENDED (D421c, the librarian's ruling on O's window measure, exo_memory/handback/p-d421c-window-O_2026-10-20.md): a window widened by pieces either side never closed a lap
-  // away from its seam (+1 to +8 all refused on row 3's lap, ~90 ms each); a window holding a piece beside the seam did. Was: the window widened by one piece each side (P's item 8).
-  const r = fakeRunner((args, n) => (n < 4 ? { refused: { code: 'CLOSE_WINDOW', message: 'no' } } : realClose(args)));
+// AMENDED (D467, the librarian's ruling on E's D463 §6(2)): a window away from the seam tries the start pieces [first, last] BEFORE itself, which keeps the bend whole (E's
+// measure: 100% kept on both away cases, against 51-55% by the window tries). Was (D421c): the window first. A window holding a seam piece is unchanged (its second half below).
+test('row 20: away from the seam the release tries the start pieces, then the window, then the window with the last road piece, then with the last and the first, then the whole lap with the window protected', async () => {
+  const r = fakeRunner((args, n) => (n < 5 ? { refused: { code: 'CLOSE_WINDOW', message: 'no' } } : realClose(args)));
   const s = await closedLap({ closeRunner: r });
   s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(5e-4); s.endBrush(); const a = await s.brushRelease();
   const P = a.history.present.pieces, road = P.map((x, i) => (x.type === 'road' ? i : -1)).filter((i) => i >= 0), last = road[road.length - 1], first = road[0];
-  assert.equal(r.calls.length, 4); const w = r.calls[0].window, sorted = (xs) => [...new Set(xs)].sort((x, y) => x - y);
+  assert.equal(r.calls.length, 5); const w = r.calls[1].window, sorted = (xs) => [...new Set(xs)].sort((x, y) => x - y);
   assert.ok(!w.includes(last) && !w.includes(first), 'control: the window holds neither seam piece');
-  assert.deepEqual(r.calls[1].window, sorted([...w, last]), 'then the window and the last road piece');
-  assert.deepEqual(r.calls[2].window, sorted([...w, last, first]), 'then the window and both pieces beside the seam');
-  assert.equal(r.calls[3].whole, true); assert.deepEqual(r.calls[3].edited, w, 'the whole lap protects the window the drag changed');
+  assert.deepEqual(r.calls[0].window, [first, last], 'first the start pieces, the window left as the drag made it');
+  assert.deepEqual(r.calls[2].window, sorted([...w, last]), 'then the window and the last road piece');
+  assert.deepEqual(r.calls[3].window, sorted([...w, last, first]), 'then the window and both pieces beside the seam');
+  assert.equal(r.calls[4].whole, true); assert.deepEqual(r.calls[4].edited, w, 'the whole lap protects the window the drag changed');
   assert.equal(a.history.present.closed, true, a.message);
-  // a window that already holds the last piece is not tried twice: the window, then + the first, then the whole lap
+  // a window that already holds the last piece is not tried twice, and gets no start-pieces try: the window, then + the first, then the whole lap
   const r2 = fakeRunner((args, n) => (n < 3 ? { refused: { code: 'CLOSE_WINDOW', message: 'no' } } : realClose(args)));
   const t = await closedLap({ closeRunner: r2 }), n = t.getState().history.present.pieces.length;
   t.beginBrush({ tool: 'bend', s0: t.getState().history.present.pieces.slice(0, n - 1).reduce((x, p) => x + p.length, 0) + 30, r: 20 }); t.brushTo(5e-4); t.endBrush(); await t.brushRelease();
@@ -290,17 +292,23 @@ test('row 20: the release tries the window, then the window with the lap\'s last
   assert.equal(r2.calls.length, 3); assert.deepEqual(r2.calls[1].window, sorted([...w2, 0]), 'then + the first'); assert.equal(r2.calls[2].whole, true);
 });
 
-test('row 21: with the real close, a Bend away from the seam whose window alone is refused closes with the window and the lap\'s last piece; only those and the joints after them change', async () => {
+// AMENDED (D467, the librarian's ruling on E's D463 §6(2)): with the real close a Bend away from the seam now closes on its FIRST try, the start pieces, and the window's
+// pieces are the very ones the drag made. Was (D421c): the window refused, then the window and the last piece closed, re-solving the bent piece.
+test('row 21: with the real close, a Bend away from the seam closes with the start pieces on the first try; the window\'s pieces stay as dragged, and only the start pieces and the joints after them change', async () => {
   const r = fakeRunner((args) => realClose(args));
-  const s = await closedLap({ closeRunner: r });
+  const s = await closedLap({ closeRunner: r }), base = s.getState().history.present;
   s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(3e-4);
-  const open = s.getState().history.present; s.endBrush(); const a = await s.brushRelease();
+  const open = s.getState().history.present, win = s.getState().brush.changedPieces; s.endBrush(); const a = await s.brushRelease();
   assert.equal(a.history.present.closed, true, a.message);
-  const w = r.calls[0].window, last = open.pieces.length - 1;
-  assert.ok(r.calls[0].window && r.calls.length === 2, `the window was refused and the second try closed (${r.calls.length} tries)`);
-  assert.deepEqual(r.calls[1].window, [...new Set([...w, last])].sort((x, y) => x - y), 'the second try is the window and the last piece');
-  const moved = new Set([...w, last]); for (const i of [...moved]) moved.add((i + 1) % open.pieces.length);   // a moved piece rebuilds the joint of the piece after it (round the seam for the last)
-  a.history.present.pieces.forEach((P, i) => { if (!moved.has(i)) assert.equal(P, open.pieces[i], `piece ${i} is outside the window, the last piece and their joints: the very same object`); });
+  const last = open.pieces.length - 1;
+  assert.equal(r.calls.length, 1, `one try (${r.calls.length})`); assert.deepEqual(r.calls[0].window, [0, last], 'the start pieces');
+  const moved = new Set([0, last]); for (const i of [...moved]) moved.add((i + 1) % open.pieces.length);   // a moved piece rebuilds the joint of the piece after it (round the seam for the last)
+  for (const i of win) {
+    const o = open.pieces[i], c = a.history.present.pieces[i], b0 = base.pieces[i];
+    if (!moved.has(i)) assert.equal(c, o, `piece ${i} is in the window and no joint of a start piece: the very piece the drag made`);
+    o.channels.kh.forEach((v, k) => { if (v !== b0.channels.kh[k]) assert.equal(c.channels.kh[k], v, `piece ${i} knot ${k}: every value the bend set is kept`); });
+  }
+  a.history.present.pieces.forEach((P, i) => { if (!moved.has(i)) assert.equal(P, open.pieces[i], `piece ${i} is outside the start pieces and their joints: the very same object`); });
 });
 // D464 (D463 part 2 item 5, E's D461 report §2 item 5): A ROUTE RELEASE THAT TAKES THE DRAG BACK SAYS SO. On a closed lap the re-close may have to move the very piece the tool
 // changed: at the seam (the first road piece) only the two pieces beside the start line can close the lap, and the last alone is refused, so the close re-solves the bent piece and
@@ -322,8 +330,10 @@ test('row 22 (D464): a Bend on the seam piece, which the re-close takes back, sa
   assert.match(a.message, /your bend was undone to close the lap; bend further from the start, or open the lap first/, a.message);
 });
 
-test('row 23 (D464): a Bend away from the seam that the re-close partly takes back says how much', async () => {
-  const s = await closedLap({ closeRunner: fakeRunner((args) => realClose(args)) });
+// AMENDED (D467): away from the seam the bend is now kept whole (the start pieces close the lap), so this row's case says the start moved; the partial take-back words
+// (D464) still serve a close that keeps less than 0.9 by a later try, shown with a runner that refuses the start pieces. Was: the real close kept 0.55 here and said so.
+test('row 23 (D464, D467): a later try that partly takes the bend back says how much', async () => {
+  const s = await closedLap({ closeRunner: fakeRunner((args, n) => (n === 1 ? { refused: { code: 'CLOSE_WINDOW', message: 'no' } } : realClose(args))) });
   const base = s.getState().history.present;
   s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(3e-4);
   const open = s.getState().history.present, win = s.getState().brush.changedPieces;
@@ -332,13 +342,55 @@ test('row 23 (D464): a Bend away from the seam that the re-close partly takes ba
   assert.ok(kept >= 0.5 && kept < 0.9, `part of the bend is taken back (kept ${kept.toFixed(3)})`);
   const pct = Math.round((1 - kept) * 100);
   assert.match(a.message, new RegExp(`closing it took back ${pct}% of your bend`), a.message);
-  assert.ok(!/undone/.test(a.message), a.message);
+  assert.ok(!/undone|start of the lap moved/.test(a.message), a.message);
 });
 
-test('row 24 (D464): a re-close that keeps the drag says only that the lap is closed again', async () => {
-  // the runner answers with the dragged lap itself, closed: every bit of the bend is kept
-  const s = await closedLap({ closeRunner: fakeRunner((args) => ({ out: { converged: true, doc: { ...args.doc, closed: true }, report: 'kept as dragged' } })) });
+// AMENDED (D467): the first try away from the seam is now the start pieces, whose close says the start moved; a close that keeps the drag by the WINDOW try still says only
+// "closed again", so the runner refuses the start pieces first. Was: the runner closed the first try, which was the window.
+test('row 24 (D464, D467): a re-close by the window that keeps the drag says only that the lap is closed again', async () => {
+  // the runner refuses the start pieces, then answers with the dragged lap itself, closed: every bit of the bend is kept
+  const s = await closedLap({ closeRunner: fakeRunner((args, n) => (n === 1 ? { refused: { code: 'CLOSE_WINDOW', message: 'no' } } : { out: { converged: true, doc: { ...args.doc, closed: true }, report: 'kept as dragged' } })) });
   s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(3e-4);
   s.endBrush(); const a = await s.brushRelease();
   assert.equal(a.message, 'the lap is closed again: kept as dragged');
+  assert.equal(a.keptBend, null, 'the start did not move: nothing to hatch');
+});
+
+// D467 (the librarian's ruling on E's D463 §6(2), the designer's call deferred to it at 19:00): KEEP THE USER'S WHOLE BEND. Away from the seam a closed-lap release first closes
+// the lap with its start pieces (the first and last road pieces), leaving the window as the drag made it; the start pieces that moved are hatched, and the message says why.
+// At the seam (a window holding the first or last road piece) nothing changes: no start-pieces try, and a close that takes the bend back says so (D464).
+const { startMovedOf } = require('../preview/preview.js');
+
+test('row 25 (D467): a Bend away from the seam keeps its full value after release', async () => {
+  const s = await closedLap({ closeRunner: fakeRunner((args) => realClose(args)) });
+  const base = s.getState().history.present;
+  s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(3e-4);
+  const open = s.getState().history.present, win = s.getState().brush.changedPieces;
+  s.endBrush(); const a = await s.brushRelease();
+  assert.equal(a.history.present.closed, true, a.message);
+  const kept = keptShare(base, open, a.history.present, win, 'kh');
+  assert.ok(Math.abs(kept - 1) < 1e-9, `the whole bend is kept (kept ${kept})`);
+});
+
+test('row 26 (D467): the start pieces that moved are named for the hatch, and the message says why; an undo ends the hatch', async () => {
+  const s = await closedLap({ closeRunner: fakeRunner((args) => realClose(args)) });
+  s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(3e-4); s.endBrush(); const a = await s.brushRelease();
+  const last = a.history.present.pieces.length - 1;
+  assert.match(a.message, /^the lap is closed again: to keep your bend, the start of the lap moved/, a.message);
+  assert.ok(a.keptBend && a.keptBend.doc === a.history.present, 'the kept bend names the document it was made on');
+  assert.deepEqual(a.keptBend.pieces, [0, last], 'the start pieces');
+  assert.equal(startMovedOf(a), true, 'the preview hatches the start pieces');
+  s.undo(); assert.equal(startMovedOf(s.getState()), false, 'after an undo the hatch is gone');
+  assert.equal(startMovedOf(null), false); assert.equal(startMovedOf({}), false);
+});
+
+test('row 27 (D467): at the seam nothing changes: no start-pieces try, the bend is said to be undone, nothing hatched', async () => {
+  const r = fakeRunner((args) => realClose(args));
+  const s = await closedLap({ closeRunner: r });
+  s.beginBrush({ tool: 'bend', s0: 150, r: 80 }); s.brushTo(3e-4);
+  const win = s.getState().brush.changedPieces; s.endBrush(); const a = await s.brushRelease();
+  assert.deepEqual(win, [0], 'control: the bend is on the seam piece');
+  assert.deepEqual(r.calls[0].window, [0], 'the first try is the window itself, as before');
+  assert.match(a.message, /your bend was undone to close the lap; bend further from the start, or open the lap first/, a.message);
+  assert.equal(a.keptBend, null); assert.equal(startMovedOf(a), false);
 });
