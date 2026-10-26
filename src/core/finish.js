@@ -229,6 +229,7 @@ const bankOf = (k, share) => -share * Math.atan((V_DESIGN * V_DESIGN * k) / G);
  * press has banked, the bounds are already met by what it carries and the plan is 0 to the quantum. On a lap whose upright pieces carry a bank of their own
  * under ROLL_FREE (TEST 10 closed by a plain bend of its last piece: p1 wobbles 0.19° from the seam row, p9 0.07° from his roll's end) the first press brings
  * the total to the plan where D473's added the plan on top of the wobble: up to 0.71° apart on p1 there. Close's own press on the same track is byte-equal.
+ * A bank he laid under ROLL_FREE on purpose is another matter and is kept: see the joint-pin rule at the box below (the chair's row, "D477 read").
  */
 function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips = false, rollScale = 1, carried = null } = {}) {
   const road = window.filter((p) => kFrom.pieces[p].type === 'road'), rate = (rollScale * BANK_ROLL * ROLL_AMBER_DEG_M * Math.PI) / 180, seq = [];
@@ -240,7 +241,7 @@ function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips
     // D447 (d): a joint `relax` names (two curved upright pieces, bankLap) is not pinned: its points are banked and limited like any other, and the later piece's
     // second point, like its first, follows the joint (the slope rule below), so a curve laid as several pieces banks as one
     const freeIn = linked && relax(p), freeOut = nextLinked && relax(p + 1);
-    for (let i = linked ? (freeIn ? 2 : 1) : 0; i < n; i++) { const pinned = (i < 2 && !freeIn) || (i > n - 3 && !freeOut); const t = up && !pinned ? bankOf(P.channels.kh[i], share) : 0, e = carried ? carried.get(p)[i] : 0; seq.push({ p, i, s: startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3, t: up && !pinned ? t : e, e, share: t, pinned, kh: P.channels.kh[i] }); }
+    for (let i = linked ? (freeIn ? 2 : 1) : 0; i < n; i++) { const pinned = (i < 2 && !freeIn) || (i > n - 3 && !freeOut); const t = up && !pinned ? bankOf(P.channels.kh[i], share) : 0, e = carried ? carried.get(p)[i] : 0; seq.push({ p, i, s: startOf.get(p) + (U[i + 1] + U[i + 2] + U[i + 3]) / 3, t: up && !pinned ? t : e, e, share: t, pinned, joint: pinned, kh: P.channels.kh[i] }); }   // joint: pinned by the joint rule (D477 reads it), before the flips pin more
   });
   // D447, P's review finding 1 (bankLap only, `flips`): WHERE THE TURN FLIPS (the stored turn rate changes sign between two points that both turn, |kh| over
   // CURVED_KH), every point from the last turning point before the flip to the first after it is pinned at no added bank, as at a straight. The bank then comes
@@ -293,15 +294,31 @@ function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips
   //   point must be 0 too and every corner reaches its exit a knot later: 24.4° at the last curved station against 32.5° (D447 §10's table, 5° allowed), and the
   //   20 m flip's second corner leaving at 38.5° against 50.9°. The tail on the straight is the smaller change and the better road; "a straight gets none" reads
   //   "none of its own" now (core_finish_bank row 4, core_close_banks_lap row 9, amended by name).
+  // D477 (the chair's row, "D477 read"): THE PLAN NEVER TAKES AWAY A BANK HE LAID. A piece is HIS when a point its JOINTS pin carries a bank (a straight he banked
+  // 3° has 3° at both pinned ends, a gentle curve carried at 3° the same, his roll to 3° has 3° at its far end); a piece this press laid has its joint pins at
+  // upright, or at a relaxed joint none. The joint pins decide because THE PRESS NEVER MOVES A PIN: a second press reads the same answer and solves the first
+  // press's system. (Not a flip's pins: on TEST 10 closed by a bend, a flip pinned inside the 1,000 m p1 carried the seam row's 0.19° wobble and made the whole
+  // piece his, 12° off D473's.)
+  // On a piece of his a free point's FAR SIDE is its share, or the bank it carries when that is larger and leans the same way; its box runs from the FLOOR (the
+  // least his joint pins carry the piece's way, the sign of its shares; 0 across a roll from upright) to that far side; a ringing or tail point keeps its open
+  // far side but, when the floor is above 0, not its open near one; and it starts at its far side, except where the share rings (there the start stays the
+  // share: the bent TEST 10's p1, his by a 0.19° wobble at its end, went 12° off D473's from a start at the wobble where its share leans the other way). So
+  // the straight at 3° starts and stays there, the curve at 3° with a 7° share starts at 7° and is never taken under 3°, the roll keeps its shape, and a bank
+  // carried the other way is replaced. On a piece that is not his every box and start is as before
+  const q = 10 ** -D.DEC.phi, hisOf = new Map();
+  for (const p of road) {
+    const pts = seq.filter((x) => x.p === p), pins = pts.filter((x) => x.joint), d = Math.sign(pts.reduce((a, x) => a + x.share, 0)) || Math.sign(pins.reduce((a, x) => a + x.e, 0)) || 1;
+    hisOf.set(p, { d, his: pins.some((x) => Math.abs(x.e) > q), f: pins.length ? Math.max(0, Math.min(...pins.map((x) => d * x.e))) : 0 });
+  }
   const RING = 3;
   for (let k = 0; k < seq.length; k++) {
-    const x = seq[k]; let ring = false;
+    const x = seq[k], { d, his, f } = hisOf.get(x.p); let ring = false;
     for (let j = Math.max(0, k - RING); j <= Math.min(seq.length - 1, k + RING); j++) if (seq[j].p === x.p && seq[j].share * x.share < 0) ring = true;
-    if (ring) { x.lo = -Infinity; x.hi = Infinity; continue; }
     const n = kFrom.pieces[x.p].channels.kh.length, prevLinked = road.includes(x.p - 1), nextL = road.includes(x.p + 1);
     const tail = (prevLinked && x.i <= 2) || (nextL && x.i >= n - 3);   // the three points nearest a joint to another planned piece: the joint's pins, row and bounds govern them
-    if (tail) { x.lo = -Infinity; x.hi = Infinity; continue; }
-    x.lo = Math.min(0, x.share); x.hi = Math.max(0, x.share);   // D477: on the TOTAL bank (t), as the rate and acceleration bounds are
+    const far = his && x.share * x.e >= 0 && Math.abs(x.e) > Math.abs(x.share) ? x.e : x.share, fl = his && f > 0 ? d * f : 0;   // the point's far side and the floor, signed
+    if (ring || tail) { x.lo = fl && d > 0 ? fl : -Infinity; x.hi = fl && d < 0 ? fl : Infinity; } else { x.lo = Math.min(fl, far); x.hi = Math.max(fl, far); }
+    if (his && !x.pinned && !ring) x.t = far;
   }
   // the pinned points stay where they are in both passes (a pass that moved them would undo the pin: the close would then meet the seam's bank row in one knot)
   for (let k = 1; k < seq.length; k++) { if (seq[k].pinned) continue; const d = rate * (seq[k].s - seq[k - 1].s); seq[k].t = Math.max(seq[k - 1].t - d, Math.min(seq[k - 1].t + d, seq[k].t)); }

@@ -9,6 +9,8 @@
 //   4  a loop whose stored turn is under 1/600 is named in the status line when the level rule holds it back (the plan would have banked it about 48°)
 //   5  the press copies the track to its backups first, as it was; a second press, which changes nothing, writes no second copy
 //   6  a copy that cannot be written refuses by name, and nothing changes: no undo step, the lap as it was
+//   7  a bank he laid on purpose under 5° is kept: a straight at 3° is unchanged but for the roll-off tail of the curve after it (D468's tail, one point, raised
+//      and never lowered; a4bfe52 raises it too), and a gentle curve at 3° is never taken below 3° (the chair's row, D477 read)
 // The second press's row on core-bank-lap.test.js row 2's looped lap is C's red row, app/test/core-bank-lap-twice.test.js, as C wrote it.
 'use strict';
 const test = require('node:test');
@@ -137,4 +139,37 @@ test('row 6: a copy that cannot be written refuses by name, and nothing changes'
   assert.equal(s.getState().history.past.length, past, 'no undo step');
   assert.deepEqual(st.log, ['backup']);
   assert.deepEqual(st.backups, []);
+});
+
+/** A lap with a deliberate 3° bank under ROLL_FREE: a roll to 3°, a 300 m straight carried at 3°, a gentle right-hand curve (R 10 km) carried at 3° (its share
+ *  bank is about 7°, the same way), a roll back to 0, then a rectangle of upright corners the same way, closed by close() on its last two pieces only (a close
+ *  on `edited` bends a fifth of the lap and would have bent the straight into a curve). */
+function deliberateLap() {
+  let d = extend(D.createDoc('deliberate 3'), { length: 200, family: 'bowl' });
+  d = extend(d, { length: 100, targets: { phi: 3 * DEG } });
+  d = extend(d, { length: 300 });
+  d = extend(d, { length: 500, transition: 40, targets: { kh: -1 / 10000 } });
+  d = extend(d, { length: 100, transition: 40, targets: { phi: 0, kh: 0 } });
+  d = extendTurnBy(d, { length: QQ }, -90 * DEG); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: QQ }, -90 * DEG); d = extend(d, { length: 1200 });
+  d = extendTurnBy(d, { length: QQ }, -90 * DEG); d = extend(d, { length: 400 }); d = extendTurnBy(d, { length: QQ }, -90 * DEG);
+  const c = close(d, { window: [d.pieces.length - 2, d.pieces.length - 1] }); assert.equal(c.converged, true, c.report);
+  return c.doc;
+}
+
+test('row 7: a bank he laid on purpose under 5° is kept: a straight at 3° is unchanged but for the roll-off tail into the curve, a gentle curve at 3° is never taken below 3°', async () => {
+  const before = deliberateLap(), STRAIGHT = before.pieces[2], CURVE = before.pieces[3], q = 10 ** -D.DEC.phi;
+  assert.ok(STRAIGHT.channels.phi.every((x) => Math.abs(x - 3 * DEG) <= q), 'control: the straight carries 3° at every point');
+  assert.ok(STRAIGHT.channels.kh.every((k) => k === 0), 'control: the straight is straight (the close did not bend it)');
+  assert.ok(CURVE.channels.phi.every((x) => Math.abs(x - 3 * DEG) <= q), 'control: the curve carries 3° at every point');
+  assert.ok(CURVE.channels.kh.some((k) => k < -1 / 20000), 'control: the curve turns the way its bank leans');
+  const s = await shellWith(before);
+  await s.bankLap();
+  const after = present(s), msg = s.getState().message;
+  assert.match(msg, /^banked the lap: /);
+  const n = STRAIGHT.channels.phi.length;
+  assert.deepEqual(after.pieces[2].channels.phi.slice(0, n - 3), STRAIGHT.channels.phi.slice(0, n - 3), `the straight at 3° is unchanged up to the curve's roll-off tail (${msg})`);
+  assert.ok(after.pieces[2].channels.phi.every((x) => x >= 3 * DEG - 1e-9), 'the straight is never taken below its 3°, its tail included');
+  const low = Math.min(...after.pieces[3].channels.phi) / DEG, high = Math.max(...after.pieces[3].channels.phi) / DEG;
+  assert.ok(low >= 3 - 1e-7, `the curve is never taken below its 3°: lowest point ${low.toFixed(4)}° (${msg})`);
+  assert.ok(high > 3 + 0.5, `control: the curve is banked further into its turn, to ${high.toFixed(2)}°`);
 });
