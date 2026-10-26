@@ -36,7 +36,9 @@ async function lap(opts = {}) {
   assert.equal(s.getState().message, null, s.getState().message);
   return s;
 }
-/** D467: a lap whose start pieces curve gently (1/600 m) and whose start straight, 500 m, is in the middle: there a small Bend away from the seam passes the bar. */
+/** D467: a lap whose start pieces curve gently (1/600 m) and whose start straight, 500 m, is in the middle: there a small Bend away from the seam passes the bar.
+ *  s0 450 is this lap's ONE passing spot (C §8.3: s0 700, 950, 1200, 1500 and 1800 fail part 3 at every size), so a later change to the close could tip it, and the
+ *  rows on it would then fail on the lap, not on a defect: look here first. */
 async function curvedMidLap(opts = {}) {
   const s = await createCoreShell({ autosaveMs: 0, ...opts });
   s.extend({ length: 300, family: 'bowl', targets: { kh: 1 / 600 } });
@@ -432,7 +434,7 @@ test('row 28 (D467 bar): C\'s lap case, a Bend the start pieces would close by s
   assert.equal(a.history.present.closed, true, a.message);
   assert.ok(r.calls.length > 1, `the start pieces were not taken (${r.calls.length} tries)`);
   const first = realClose(r.calls[0]); assert.equal(first.refused && first.refused.code, 'CLOSE_BAR', 'the first try was refused by the bar');
-  assert.match(first.refused.message, /move road you did not touch/, first.refused.message);
+  assert.match(first.refused.message, /move the track up to/, first.refused.message);
   assert.ok(r.calls.slice(1).every((c) => !c.bar), 'only the start-pieces try is asked the bar: the window tries are as D421c made them');
   assert.match(a.message, /closing it took back \d+% of your bend/, a.message);
   assert.equal(a.keptBend, null, 'nothing hatched');
@@ -456,25 +458,28 @@ test('row 29 (D467 bar): a lap whose two long straights run side by side (a hair
   assert.ok(redsOf(raw.doc).includes('self-intersection'), 'control: closed by the start pieces, the road crosses itself');
 });
 
+// AMENDED (D467, C's re-read §8.2): part 3 now counts every piece, so `edited` no longer switches it off; the open lap given is the result's own geometry, opened,
+// which makes the drag's largest move the result's and leaves part 3 nothing to refuse. Was: every piece in `edited`.
 test('row 30 (D467 bar): part 2 alone: a result with no straight long enough for the start misses, when the lap before had one', async () => {
   const base = (await closedLap()).getState().history.present, curved = (await curvedNoStraight()).getState().history.present;
-  const all = base.pieces.map((_, i) => i);   // every piece in the window, so part 3 measures nothing
-  assert.equal(CJ.barMiss({ ...base, closed: false }, base, { base, edited: all }), null, 'control: the lap itself passes');
-  assert.equal(CJ.barMiss({ ...base, closed: false }, curved, { base, edited: all }), 'leave no straight long enough for the start');
-  assert.equal(CJ.barMiss({ ...curved, closed: false }, curved, { base: curved, edited: all }), null, 'a lap that had no start straight cannot lose one');
+  const opened = (d) => ({ ...d, closed: false }), all = base.pieces.map((_, i) => i);
+  assert.equal(CJ.barMiss(opened(base), base, { base, edited: all }), null, 'control: the lap itself passes');
+  assert.equal(CJ.barMiss(opened(curved), curved, { base, edited: all }), 'leave no straight long enough for the start');
+  assert.equal(CJ.barMiss(opened(curved), curved, { base: curved, edited: all }), null, 'a lap that had no start straight cannot lose one');
   const placed = require('../../src/core/document.js').setSpawns(curved, { line: { along: 100 }, grid: { count: 6, rowGapM: 16, colGapM: 6 } });
-  assert.equal(CJ.barMiss({ ...base, closed: false }, placed, { base, edited: all }), null, 'a start placed by hand needs no straight');
+  assert.equal(CJ.barMiss(opened(placed), placed, { base, edited: all }), null, 'a start placed by hand needs no straight');
 });
 
-test('row 31 (D467 bar): part 1 alone: a result with reds the open lap did not have misses, and names the first', async () => {
-  const base = (await closedLap()).getState().history.present;
+// AMENDED (D467, C's re-read §8.1 and §8.2): part 1 compares with the lap before the drag now (row 33 is the new side of it), and part 3 counts every piece, so this
+// row holds the other side, with the open lap given as the result's own geometry: a red the lap before the drag already had is not new. Was: a result with reds the
+// open lap did not have misses (every piece in `edited`).
+test('row 31 (D467 bar): part 1 alone: a red the lap before the drag already had is not new, and the result passes', async () => {
   const s = await createCoreShell({ autosaveMs: 0 });
   s.extend({ length: 700, family: 'bowl' }); s.extend({ length: Math.PI * 30, transition: 20, targets: { kh: 1 / 30 } }); s.extend({ length: 700, transition: 20, targets: { kh: 0 } });
   s.extend({ length: Math.PI * 30, transition: 20, targets: { kh: 1 / 30 } }); s.extend({ length: 60, transition: 20, targets: { kh: 0 } }); s.close();
-  const crossing = s.getState().history.present, all = base.pieces.map((_, i) => i);
+  const crossing = s.getState().history.present, all = crossing.pieces.map((_, i) => i);
   assert.ok(redsOf(crossing).length > 0, 'control: this lap has reds');
-  const why = CJ.barMiss({ ...base, closed: false }, crossing, { base, edited: all });
-  assert.match(why, /^add \d+ reds? \(\w[\w-]* at \d+\.\d\d km\)$/, why);
+  assert.equal(CJ.barMiss({ ...crossing, closed: false }, crossing, { base: crossing, edited: all }), null, 'every red was there before the drag');
 });
 
 /** D467: a lap with no straight at all (its start pieces curve, and so does everything else). */
@@ -494,4 +499,45 @@ test('row 32 (D467 bar): the close runner hands the worker the bar a start-piece
   assert.deepEqual(posted[0].bar, bar, 'the bar rides in the message');
   runner.start({ doc: { pieces: [] }, window: [2] }).promise.catch(() => {});
   assert.ok(!('bar' in posted[1]), 'no bar asked: none sent, so every other job\'s message is what it was');
+});
+
+// D467, C's re-read (exo_memory/handback/p-d467-review-C_2026-10-25.md §8.1): PART 1 COMPARES WITH THE LAP BEFORE THE DRAG. A crossing the drag itself made is in the
+// open lap, so comparing with the open lap let the start pieces keep it where D421c's tries would have cleared it (his track after Smooth ramps: two crossings, 0 before).
+test('row 33 (D467 bar): part 1 counts a red as new when the lap before the drag did not have it, even when the open lap already did', async () => {
+  const base = (await closedLap()).getState().history.present;
+  const s = await createCoreShell({ autosaveMs: 0 });
+  s.extend({ length: 700, family: 'bowl' }); s.extend({ length: Math.PI * 30, transition: 20, targets: { kh: 1 / 30 } }); s.extend({ length: 700, transition: 20, targets: { kh: 0 } });
+  s.extend({ length: Math.PI * 30, transition: 20, targets: { kh: 1 / 30 } }); s.extend({ length: 60, transition: 20, targets: { kh: 0 } }); s.close();
+  const crossing = s.getState().history.present, all = base.pieces.map((_, i) => i);
+  assert.ok(!redsOf(base).includes('self-intersection') && redsOf(crossing).includes('self-intersection'), 'control: the lap before is clean, the result crosses itself');
+  assert.ok(redsOf({ ...crossing, closed: false }).includes('self-intersection'), 'control: the open lap already crosses itself where the result does');
+  const why = CJ.barMiss({ ...crossing, closed: false }, crossing, { base, edited: all });
+  assert.match(why || '', /^add \d+ reds? \(/, `the result's reds are new against the lap before the drag: ${why}`);
+});
+
+test('row 34 (D467 bar): a Bend that makes the open lap cross itself, which the window close clears: the start pieces miss and the closed lap does not cross', async () => {
+  // a narrow stadium (900 m straights, 40 m half turns); the Bend in the middle of the back straight swings it into the start straight
+  const s = await createCoreShell({ autosaveMs: 0, closeRunner: fakeRunner((args) => realClose(args)) });
+  s.extend({ length: 900, family: 'bowl' }); s.extend({ length: Math.PI * 40, transition: 30, targets: { kh: 1 / 40 } }); s.extend({ length: 900, transition: 30, targets: { kh: 0 } });
+  s.extend({ length: Math.PI * 40, transition: 30, targets: { kh: 1 / 40 } }); s.close();
+  const base = s.getState().history.present; assert.equal(base.closed, true, s.getState().message);
+  const L = base.pieces.reduce((a, P) => a + P.length, 0), mid = (d) => { const o = createCheckJob().run({ doc: d, csp: true }); return (o.result.red || []).filter((x) => x.reason === 'self-intersection' && (x.s ?? x.s0) > 40 && (x.s ?? x.s0) < L - 40); };
+  assert.equal(mid(base).length, 0, 'control: the lap does not cross itself');
+  s.beginBrush({ tool: 'bend', s0: 900 + Math.PI * 40 + 450, r: 120 }); s.brushTo(4e-3);
+  const open = s.getState().history.present; assert.ok(mid({ ...open, closed: false }).length > 0, 'control: the drag makes the open lap cross itself');
+  s.endBrush(); const a = await s.brushRelease();
+  assert.equal(a.history.present.closed, true, a.message);
+  assert.equal(a.keptBend, null, `the start pieces were not taken: ${a.message}`);
+  assert.equal(mid(a.history.present).length, 0, 'the closed lap does not cross itself');
+});
+
+// D467, C's re-read §8.2: PART 3 COUNTS THE WINDOW'S PIECES TOO. They carry the first start piece's new end, so they can be the lap's largest move; a bar that left them
+// out would pass a result whose only large move is in the window. Built from whole laps the shell made: two laps that share their start straight and differ in their
+// turns (180 m against 200 m), the turns given as the window, and an open lap (182 m turns) that moved the track 8.2 m.
+test('row 35 (D467 bar): part 3 counts the window\'s pieces too: a result that moves only the window further than the drag moved the track misses', async () => {
+  const lapOf = async (Rq) => { const t = await createCoreShell({ autosaveMs: 0 }), q = (Math.PI * Rq) / 2; t.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) t.extend({ length: q, transition: 40, targets: { kh: 1 / Rq } }); t.extend({ length: 60, transition: 40, targets: { kh: 0 } }); t.close(); return t.getState().history.present; };
+  const base = await lapOf(180), result = await lapOf(200), near = await lapOf(182), win = base.pieces.map((_, i) => i).filter((i) => i > 0);
+  const moves = CJ.displacementOf(base, result), drag = Math.max(...CJ.displacementOf(base, { ...near, closed: false }).map((x) => x.maxM));
+  assert.ok(moves[0].maxM < drag && Math.max(...moves.slice(1).map((x) => x.maxM)) > drag, `control: outside the window the result moves ${moves[0].maxM.toFixed(2)} m, inside it more than the drag's ${drag.toFixed(2)} m`);
+  assert.match(CJ.barMiss({ ...near, closed: false }, result, { base, edited: win }) || '', /^move the track up to /);
 });

@@ -51,19 +51,22 @@ function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = f
  * user's whole bend by moving the lap's start pieces has no bound of its own: on sculpt-tools' lap a Bend the window tries closed within 0.53 m swung the lap 72.9 m and left
  * no start straight, and on a smoothed TEST 10 the road crossed itself far from the bend. So the close is taken only when its result passes all three, checked cheapest
  * first, and otherwise refused by name, so the release falls through to D421c's tries:
- *   3  no road outside the window (the pieces the drag changed) moves further from where it was before the drag than the drag itself moved the open lap (displacementOf,
- *      C's measure: each piece's largest move, sample for sample);
+ *   3  the LAP-WIDE largest move of the result, from where the road was before the drag (displacementOf, C's measure: each piece's largest move, sample for sample,
+ *      the window's pieces counted too), is no larger than the drag's own largest move of the open lap. It reads lap-wide on purpose: piece by piece it would refuse
+ *      everything, since the road before the window moves 0 during a drag. The window's pieces count because they carry the first start piece's new end with them
+ *      (C §8.2: on sculpt-tools' lap the window moved 72.91 m against a 12.89 m drag), so they can be the lap's largest move;
  *   2  the exporter's own start-straight check (startlayout.js, as the export calls it) still passes, when it passed on the lap before the drag (a lap that had no start
  *      straight cannot lose one), and only when the start is the automatic one (a start placed by hand needs no straight);
- *   1  the validator adds no red the open lap did not have (the live checker's job, as Close's one press compares them: same reason within RED_NEAR_M).
+ *   1  the validator finds no red in the result that the lap BEFORE THE DRAG (`base`) did not have (the live checker's job; same reason within RED_NEAR_M counts as
+ *      had). Not the open lap: a crossing the drag itself made is in the open lap, and comparing with it would let the start pieces keep a crossing D421c's tries
+ *      would clear (C §8.1, his track after Smooth ramps).
  * Returns null when it passes, or the words for what it would do. */
-function barMiss(open, closed, { base, edited }) {
-  const win = new Set(edited || []);
+function barMiss(open, closed, { base, edited }) {   // eslint-disable-line no-unused-vars -- `edited` stays in the shape the release sends; part 3 counts every piece
   const drag = displacementOf(base, open).reduce((m, x) => Math.max(m, x.maxM), 0);
-  const outside = displacementOf(base, closed).filter((x) => !win.has(x.piece)).reduce((m, x) => Math.max(m, x.maxM), 0);
-  if (outside > drag + 1e-6) return `move road you did not touch up to ${fmtM(outside)}, further than your drag moved it (${fmtM(drag)})`;
+  const moved = displacementOf(base, closed).reduce((m, x) => Math.max(m, x.maxM), 0);
+  if (moved > drag + 1e-6) return `move the track up to ${fmtM(moved)}, further than your drag moved it (${fmtM(drag)})`;
   if (!closed.spawns && hasStart(base) && !hasStart(closed)) return 'leave no straight long enough for the start';
-  const job = createCheckJob(), mine = redsOf(closed, job), was = redsOf({ ...open, closed: false }, job);
+  const job = createCheckJob(), mine = redsOf(closed, job), was = redsOf(base, job);   // C §8.1: the lap before the drag, not the open lap
   const fresh = mine.reds.filter((x) => !was.reds.some((o) => o.reason === x.reason && Math.abs(o.s - x.s) <= RED_NEAR_M));
   if (fresh.length) return `add ${fresh.length} red${fresh.length === 1 ? '' : 's'} (${fresh[0].reason} at ${(fresh[0].s / 1000).toFixed(2)} km)`;
   return null;
