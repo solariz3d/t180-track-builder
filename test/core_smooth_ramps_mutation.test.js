@@ -27,8 +27,11 @@ const MUTATIONS = [
   { id: 'S8 a bump counts as a ramp', from: "  if (Math.abs(v1 - v0) < q / 2) return { why: 'it comes back", to: "  if (false) return { why: 'it comes back", caughtBy: 'row 8: a channel that changes' },
   { id: 'S9 a piece too short is re-laid anyway', from: '  if (n < MIN_POINTS) return', to: '  if (false) return', caughtBy: 'row 8: a channel that changes' },
   { id: 'S10 the route channels re-laid too', from: 'for (const ch of X.C2_CHANNELS) {', to: 'for (const ch of D.CHANNELS) {', caughtBy: 'row 2: the route is the same bytes' },
+  // the cap the edge shares with the cup (row 10, the librarian's ruling): the planted control, an edge laid over half the span while the cup takes all of it
+  { id: 'S17 the edge ramp laid over half its span (it arrives while the cup is still high)', from: 'const f = X.channelFn({ v: v0, m: 0 }, v1, Lt, ch), withCh', to: "const f = X.channelFn({ v: v0, m: 0 }, v1, ch === 'e' ? Lt / 2 : Lt, ch), withCh", caughtBy: 'row 10: a piece that ramps cup and edge together' },
+  { id: 'S18 moved read exactly (an unrounded clamp point counts as a change)', from: 'Math.abs(x - P.channels[ch][i]) > q / 2', to: 'x !== P.channels[ch][i]', caughtBy: 'row 10: a piece that ramps cup and edge together' },
   // what comes back
-  { id: 'S11 every ramp counts as moved (a smooth track is rewritten)', from: 'moved = now.some((x, i) => x !== P.channels[ch][i]);', to: 'moved = true;', caughtBy: 'row 5: a track laid by this build is already smooth' },
+  { id: 'S11 every ramp counts as moved (a smooth track is rewritten)', from: 'moved = now.some((x, i) => Math.abs(x - P.channels[ch][i]) > q / 2);', to: 'moved = true;', caughtBy: 'row 5: a track laid by this build is already smooth' },
   { id: 'S12 a re-laid channel is not kept', from: 'if (moved) (channels = channels || { ...P.channels })[ch] = now;', to: 'if (moved) channels = channels || { ...P.channels };', caughtBy: 'row 1: Smooth ramps takes every bank' },
   { id: 'S13 nothing moved, but a new document anyway', from: '  if (!moved) return { doc, ramps, moved, left };', to: '', caughtBy: 'row 6: an empty track' },
 ];

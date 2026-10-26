@@ -78,7 +78,9 @@ function smoothRamps(doc) {
       const r = rampOf(P, ch);
       if (!r) continue;
       if (r.why) { left.push({ id: P.id, ch, why: r.why }); continue; }
-      const now = relay(P, ch, r), moved = now.some((x, i) => x !== P.channels[ch][i]);
+      // moved: by more than half the channel's quantum. extend.js's edge clamp can leave a point unrounded (150 − 128.113932 = 21.886067999999995), which the
+      // re-lay rounds; that is the same ramp, and counting it would copy, commit and report a change of 5e-15° (found by row 10's track, D465)
+      const now = relay(P, ch, r), q = 10 ** -D.DEC[ch], moved = now.some((x, i) => Math.abs(x - P.channels[ch][i]) > q / 2);
       ramps.push({ id: P.id, ch, from: r.v0, to: r.v1, over: r.Lt, moved });
       if (moved) (channels = channels || { ...P.channels })[ch] = now;
     }
