@@ -716,7 +716,7 @@ function refineKnots(doc, pieceId, a, b, maxSpan) {
 module.exports = {
   boehm, insertKnot, insertKnots, refineKnots,
   fromPositionFit,
-  SCHEMA, SCHEMA_SPLIT, isSplit, SCHEMA_NEG, isNegEdge, EDGE_FLOOR, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, CUP_EPS, legacyEdgeDeg, endIsCup, fillCup, CoreError,
+  SCHEMA, SCHEMA_SPLIT, isSplit, SCHEMA_NEG, isNegEdge, EDGE_FLOOR, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
   checkSpawns, normSpawns, setSpawns, SPAWN_COUNT_MAX, SPAWN_GAP_MAX, checkPitLane, normPitLane, setPitLane, PIT_DEFAULT, PIT_BOXES_MAX,
   channelValue, createDoc, roadPiece, flightPiece, GRIP_MIN, GRIP_MAX, GRIP_DEFAULT, gripOf, checkGrip, withGrip, setGrip, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,

@@ -24,7 +24,7 @@
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 const { close, closeWindow, residual } = require('../../src/core/close.js');
-const { finishToStart, isNear, bankLapWith } = require('../../src/core/finish.js');
+const { finishToStart, isNear, bankLapWith, budgetNote } = require('../../src/core/finish.js');
 const { createCheckJob } = require('../validate-ui/checkjob.js');
 
 function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null } = {}) {
@@ -83,7 +83,8 @@ function runCloseBest({ doc, edited = null, openReds = null, exhaustive = false 
     const B = bankLapWith(res.doc), names = (ids) => ids.join(', ');
     const bankNote = [B.eased.length ? `the bank eases to none where the turn changes direction faster than the road can roll (${names(B.eased)})` : null,
       B.withheld.length ? `no bank on ${names(B.withheld)}: banked, it would lean out of its turn` : null,
-      B.none ? `no curve on the lap was banked: ${B.none}` : null].filter(Boolean).join('; ');
+      B.none ? `no curve on the lap was banked: ${B.none}` : null,
+      B.budget ? budgetNote(B.budget, 'lap') : null].filter(Boolean).join('; ');   // D468 follow-up (A's review §2b): a plan that reached its sweep budget says so
     res = { ...res, doc: B.doc, bankNote };
     const displacement = displacementOf(doc, res.doc), maxMoveM = displacement.reduce((m, x) => Math.max(m, x.maxM), 0);
     const newRoadM = res.doc.pieces.slice(doc.pieces.length).reduce((t, P) => t + (P.length || 0), 0), newPieces = res.doc.pieces.length - doc.pieces.length;

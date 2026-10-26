@@ -285,13 +285,13 @@ function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips
   //   "none of its own" now (core_finish_bank row 4, core_close_banks_lap row 9, amended by name).
   const RING = 3;
   for (let k = 0; k < seq.length; k++) {
-    const x = seq[k]; let ring = false, lo = -RING, hi = RING;
+    const x = seq[k]; let ring = false;
     for (let j = Math.max(0, k - RING); j <= Math.min(seq.length - 1, k + RING); j++) if (seq[j].p === x.p && seq[j].share * x.share < 0) ring = true;
     if (ring) { x.lo = -Infinity; x.hi = Infinity; continue; }
     const n = kFrom.pieces[x.p].channels.kh.length, prevLinked = road.includes(x.p - 1), nextL = road.includes(x.p + 1);
     const tail = (prevLinked && x.i <= 2) || (nextL && x.i >= n - 3);   // the three points nearest a joint to another planned piece: the joint's pins, row and bounds govern them
     if (tail) { x.lo = -Infinity; x.hi = Infinity; continue; }
-    x.lo = Math.min(0, x.share); x.hi = Math.max(0, x.share); void lo; void hi;
+    x.lo = Math.min(0, x.share); x.hi = Math.max(0, x.share);
   }
   // the pinned points stay where they are in both passes (a pass that moved them would undo the pin: the close would then meet the seam's bank row in one knot)
   for (let k = 1; k < seq.length; k++) { if (seq[k].pinned) continue; const d = rate * (seq[k].s - seq[k - 1].s); seq[k].t = Math.max(seq[k - 1].t - d, Math.min(seq[k - 1].t + d, seq[k].t)); }
@@ -299,6 +299,7 @@ function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips
   // D438: THE ROLL'S ACCELERATION. Each three neighbours' slope change, |(b₊ − b)/d₁ − (b − b₋)/d₀| ≤ BANK_ACCEL·(d₀ + d₁)/2, and each span's rate above, are
   // convex sets; the free points are projected onto each in turn, sweep after sweep (alternating projections), the pins never moved. Where the pins themselves
   // break a bound (two pinned spans meeting) nothing can move and it is left as laid.
+  let reached = true, lastWorst = 0;   // D468 follow-up (A's review §2b): reaching the budget is said, never silent
   for (let sweep = 0; sweep < BANK_SWEEPS; sweep++) {
     let worst = 0;
     for (let k = 1; k + 1 < seq.length; k++) {
@@ -324,15 +325,27 @@ function bankPlan(kFrom, window, share, uprightSet, relax = () => false, { flips
     // back from its share, but a projection onto a triple's acceleration bound moves the two neighbours the other way, and with the curvature rows that recoil
     // carried a point past its share (TEST 10's p22 point 4: 6.43° against a share of 6.13°) and put a bank on a straight's last free point (share 0)
     for (const x of seq) { if (x.pinned) continue; if (x.t < x.lo) { worst = Math.max(worst, x.lo - x.t); x.t = x.lo; } else if (x.t > x.hi) { worst = Math.max(worst, x.t - x.hi); x.t = x.hi; } }
-    if (worst < 1e-9) break;
+    lastWorst = worst; if (worst < 1e-9) { reached = false; break; }
   }
   const plan = new Map(road.map((p) => [p, new Array(kFrom.pieces[p].channels.kh.length).fill(0)]));
+  // D468 follow-up (A's review §2b: on core_close_banks_lap's lap at R 200 the sweeps stop at the budget with the acceleration 5% past BANK_ACCEL at one triple,
+  // and nothing said so). When the budget is reached the plan carries it: the sweeps, the last sweep's largest move, and how far past its bound (the acceleration's
+  // or the rate's, whichever is worse) the plan still is, and where; finishToStart's and the press's reports name it in user words (budgetNote)
+  plan.budget = null;
+  if (reached) {
+    let over = 0, at = null;
+    for (let k = 1; k + 1 < seq.length; k++) { const a = seq[k - 1], m = seq[k], c = seq[k + 1], d0 = m.s - a.s, d1 = c.s - m.s; if (!(d0 > 0 && d1 > 0)) continue; const g = Math.abs((c.t - m.t) / d1 - (m.t - a.t) / d0) / ((BANK_ACCEL * (d0 + d1)) / 2); if (g > over) { over = g; at = m; } }
+    for (let k = 1; k < seq.length; k++) { const a = seq[k - 1], c = seq[k], g = Math.abs(c.t - a.t) / (rate * (c.s - a.s)); if (g > over) { over = g; at = c; } }
+    plan.budget = { sweeps: BANK_SWEEPS, worst: lastWorst, overPct: Math.max(0, over - 1) * 100, at: at ? kFrom.pieces[at.p].id : null };
+  }
   for (const x of seq) plan.get(x.p)[x.i] = x.t;
   road.forEach((p, j) => { if (j > 0 && road[j - 1] === p - 1) { const A = plan.get(p - 1), B = plan.get(p), Pa = kFrom.pieces[p - 1], Pb = kFrom.pieces[p], na = A.length;
     const hA = Pa.length - (Pa.knots.length ? Pa.knots[Pa.knots.length - 1] : 0), hB = Pb.knots.length ? Pb.knots[0] : Pb.length; B[0] = A[na - 1]; B[1] = B[0] + (hB / hA) * (A[na - 1] - A[na - 2]); } });
   plan.eased = eased;
   return plan;
 }
+/** The budget in user words: what the plan could not finish smoothing, and where (`what`: "closer" or "lap"). */
+function budgetNote(budget, what) { const pct = budget.overPct < 1 ? 'under 1' : String(Math.round(budget.overPct)); return `the bank on the ${what} stopped about ${pct}% past its smoothness limit at one point${budget.at ? ` (${budget.at})` : ''}`; }
 /** doc with plan added to each planned piece's bank, less (when given) the plan `minus` added before. */
 function banked(doc, plan, minus = null) {
   return D.checkDoc({ ...doc, pieces: doc.pieces.map((P, p) => (!plan.has(p) ? P : { ...P, channels: { ...P.channels, phi: P.channels.phi.map((ph, i) => ph + plan.get(p)[i] - (minus ? minus.get(p)[i] : 0)) } })) });
@@ -450,7 +463,7 @@ function flipsOf(doc, { rollScale = 1 } = {}) {
 }
 /** bankLap with what it held back: { doc, eased (piece ids where the bank eased to none for a flip), withheld (piece ids left unbanked: they would lean out),
  *  none (when there were curves to bank and none was banked: why, in words; P's re-read (d)) }. */
-function bankLapWith(doc) { const r = bankLapRun(doc); return { doc: r.doc, eased: r.eased || [], withheld: r.withheld || [], none: r.none || null }; }
+function bankLapWith(doc) { const r = bankLapRun(doc); return { doc: r.doc, eased: r.eased || [], withheld: r.withheld || [], none: r.none || null, budget: r.budget || null }; }
 function bankLap(doc) { return bankLapRun(doc).doc; }
 /** One path of a closed lap read for bankLap at once (D447, its cost): per piece id the least road-up (U·ŷ, the level rule), the curved stations leaning out
  *  (leanOutPieces' read), and the roll rates as the checker reads them (validate's rollRates, its 20 m chord). One build of a 25 km path, not three. */
@@ -503,7 +516,7 @@ function bankLapRun(doc) {
     }
     if (!res) return { doc, withheld, none: 'its roll would pass the amber' };   // the bank could not be kept under the amber: the lap as closed
     const worse = set.filter((p) => (outAfter.get(doc.pieces[p].id) || 0) > (outBefore.get(doc.pieces[p].id) || 0)).map((p) => doc.pieces[p].id);
-    if (!worse.length) return { doc: freeze(res), eased: [...plan.eased].map((p) => doc.pieces[p].id), withheld };
+    if (!worse.length) return { doc: freeze(res), eased: [...plan.eased].map((p) => doc.pieces[p].id), withheld, budget: plan.budget };
     withheld.push(...worse);
   }
   return { doc, withheld, none: 'every curve it could bank would lean out of its turn' };
@@ -521,10 +534,11 @@ function closeBanked(laid, window, upright) {
   for (let t = 0; t < BANK_TRIES; t++) {
     const plan1 = bankPlan(laid, window, share, uprightSet), first = close(banked(laid, plan1), { window, c2Channels: FINISH_C2 });
     if (!first.converged) return first;
-    res = close(banked({ ...first.doc, closed: false }, bankPlan(first.doc, window, share, uprightSet), plan1), { window, c2Channels: FINISH_C2 });
+    const plan2 = bankPlan(first.doc, window, share, uprightSet);
+    res = close(banked({ ...first.doc, closed: false }, plan2, plan1), { window, c2Channels: FINISH_C2 });
     if (!res.converged) return res;
     const peak = bankRollPeak(res.doc, window);
-    if (peak <= Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6)) return res;
+    if (peak <= Math.max(ROLL_AMBER_DEG_M, flatPeak + 1e-6)) return { ...res, bankBudget: plan2.budget };   // D468 follow-up: the plan's budget, for the report
     share *= (Math.max(ROLL_AMBER_DEG_M, flatPeak) / peak) * 0.97;
   }
   return close(laid, { window, c2Channels: FINISH_C2 });   // the bank could not be kept under the amber: the turns as laid
@@ -645,7 +659,7 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
       // D438: the closer too short to bring the cup home at his own road's fastest says so, and at what rate (it is already the slowest the closer allows: cupHome)
       const cupNote = cupRate > CUP_RATE_DEG_M ? `; the cup comes home at ${cupRate.toFixed(3)}°/m, faster than ${CUP_RATE_DEG_M}°/m: the new road is too short to bring it home slower` : '';
       const rolled = roll ? (first ? `, after ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright first` : `, then ${roll.lengthM} m rolling ${Math.round(rollRad / DEG)}° upright onto the start`) : '';
-      const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}${cupNote}`;
+      const report = `${r.word} at R ${Math.round(r.radiusM)} m: turn ${deg(r.a1)}°, ${Math.round(r.straightM)} m straight, turn ${deg(r.a2)}°${rolled}${res.bankBudget ? `; ${budgetNote(res.bankBudget, 'closer')}` : ''}; ${window.length} new piece${window.length === 1 ? '' : 's'}, ${Math.round(added)} m; ${res.report}${cupNote}`;
       const cand = ({ side: load.side, result: { doc: res.doc, window, plan: Object.freeze({ word: r.word, radiusM: r.radiusM, turns: [deg(r.a1), deg(r.a2)], straightM: Math.round(r.straightM), rollM: roll ? roll.lengthM : 0, rollFirst: !!first, rollPeakDegM: Math.round(peak * 1000) / 1000, minHoldG: Math.round(hold.worst * 10) / 10, lengthM: Math.round(added), cupRateDegM: Math.round(cupRate * 10000) / 10000, report }) } });
       return { passed: [cand] };
     }
@@ -688,4 +702,4 @@ function finishToStart(doc, { radii = RADII_M, rollGuess = ROLL_PEAK_OVER_MEAN }
   throw new D.CoreError('FINISH_NO_ROUTE', `no finish closes from here: the end is ${Math.round(gap)} m from the start${rollText}, and none of the ${fail.tried} routes tried (turn, straight, turn at radius ${radii.join(', ')} m) could be closed${fail.best ? ` (the first refusal: ${fail.best})` : ''}. Extend toward the start and try again`);
 }
 
-module.exports = { finishToStart, bankLap, bankLapWith, flipsOf, isNear, NEAR_M, roadHold, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };
+module.exports = { finishToStart, bankLap, bankLapWith, budgetNote, flipsOf, isNear, NEAR_M, roadHold, routes, oneTurnRoutes, ONE_TURN_MIN_R, endPose, RADII_M };

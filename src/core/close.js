@@ -386,8 +386,9 @@ function closeOnce(doc, opts = {}) {
     x = xn; work = wn; m = mn;
   }
   // what is STORED is quantised (README): measure the quantised document, and report that
+  // converged: the closed path's own bar (src/geom/path.js closeTol 1e-3 m): a stored gap past it was reported closed (it was 0.01) and then could not be built (2026-10-14, 1.65 mm on ELYSIUM)
   const stored = apply(doc, expand, x, true, keep), ms = residual(stored, { cache, c2Pairs, c2Channels }), converged = done(m) && ms.gapM < 1e-3;
-  const cupNote = opts.cupRowLeftOut ? "; the cup's curvature row at the seam was left out (it would have taken the cup below 0), so the cup is C1 there" : '';   // the closed path's own bar (src/geom/path.js closeTol 1e-3 m): a stored gap past it was reported closed (it was 0.01) and then could not be built (2026-10-14, 1.65 mm on ELYSIUM)
+  const cupNote = opts.cupRowLeftOut ? "; the cup's curvature row at the seam was left out (it would have taken the cup below 0), so the cup is C1 there" : '';
   // D242: a local close that does not close is a REFUSAL by name, never a best try handed back: the window could not do it, and nothing outside it may help
   if (local && !converged) throw refuse(`it gets no closer than ${ms.gapM.toFixed(3)} m (tangent ${ms.tangentRad.toExponential(1)} rad) in ${it} step(s)`);
   let out;
