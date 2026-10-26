@@ -6,6 +6,9 @@
 //     edited     whole: true only: the pieces the whole-lap close goes round (the shell knows the stretch edited last)
 //   A core refusal (CoreError) is thrown, as close() and finishToStart() throw it.
 //
+//   runClose({ ..., window, bar })   bar (D467): { base, edited } — the result of a windowed close is refused by name (CLOSE_BAR) unless it passes barMiss below:
+//     base the lap before the drag, edited the pieces the drag changed. The release asks it of its start-pieces try only.
+//
 //   runCloseBest({ doc, edited, openReds, exhaustive })  -> { converged, report, doc, window, displacement, route, tried, phases }   (D339: Close is ONE press)
 //     openReds   (D343) the open track's reds [{ reason, s }] from the page's live checker, when it checked this very track with CSP on: no fresh check of it
 //     exhaustive (D343) every route run before any is checked, as D339 did; without it the near bend is closed and checked first, and when it proves nothing else runs
@@ -26,8 +29,10 @@ const { toSegments } = AD;
 const { close, closeWindow, residual } = require('../../src/core/close.js');
 const { finishToStart, isNear, bankLapWith } = require('../../src/core/finish.js');
 const { createCheckJob } = require('../validate-ui/checkjob.js');
+const D = require('../../src/core/document.js');
+const { startLayout } = require('./startlayout.js');
 
-function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null } = {}) {
+function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null, bar = null } = {}) {
   // D350: frozen all through, as the core's own documents are. The close worker receives a postMessage copy, which is not frozen, so the memos that serve only a
   // frozen document (close.js residual, and caches keyed on its frozen pieces) never applied there: on a 25 km track the worker's press took 24.5 s of CPU against
   // 18 s on the parsed save. Nothing the press runs writes to its document (every module on its path is strict, so a write would throw). The shell's document is
@@ -38,7 +43,36 @@ function runClose({ doc, fraction = 0.2, last = false, whole = false, finish = f
   const res = fin ? { converged: true, doc: fin.doc, report: `Finish to start: ${fin.plan.report}`, window: { pieces: fin.window, text: fin.plan.windowText || `the new road (${fin.window.length} piece${fin.window.length === 1 ? '' : 's'}, ${fin.plan.lengthM} m)` } }
     : whole ? close(doc, { edited }) : close(doc, { window: Array.isArray(window) ? window : closeWindow(doc, { fraction, last }) });   // D421: a window given (a route tool's release) is used as it is
   if (!res.converged) return { converged: false, report: res.report, doc: null, window: null, displacement: null };
+  if (bar) { const why = barMiss(doc, res.doc, bar); if (why) throw new D.CoreError('CLOSE_BAR', `close: closing with the start of the lap would ${why}`); }   // D467: taken only within the bar
   return { converged: true, report: res.report, doc: res.doc, window: res.window, displacement: displacementOf(doc, res.doc) };
+}
+
+/* D467, THE BAR on the start-pieces close (C's review of 95d23f1, exo_memory/handback/p-d467-review-C_2026-10-25.md §3 and §5; re-ruled by the librarian). Keeping the
+ * user's whole bend by moving the lap's start pieces has no bound of its own: on sculpt-tools' lap a Bend the window tries closed within 0.53 m swung the lap 72.9 m and left
+ * no start straight, and on a smoothed TEST 10 the road crossed itself far from the bend. So the close is taken only when its result passes all three, checked cheapest
+ * first, and otherwise refused by name, so the release falls through to D421c's tries:
+ *   3  no road outside the window (the pieces the drag changed) moves further from where it was before the drag than the drag itself moved the open lap (displacementOf,
+ *      C's measure: each piece's largest move, sample for sample);
+ *   2  the exporter's own start-straight check (startlayout.js, as the export calls it) still passes, when it passed on the lap before the drag (a lap that had no start
+ *      straight cannot lose one), and only when the start is the automatic one (a start placed by hand needs no straight);
+ *   1  the validator adds no red the open lap did not have (the live checker's job, as Close's one press compares them: same reason within RED_NEAR_M).
+ * Returns null when it passes, or the words for what it would do. */
+function barMiss(open, closed, { base, edited }) {
+  const win = new Set(edited || []);
+  const drag = displacementOf(base, open).reduce((m, x) => Math.max(m, x.maxM), 0);
+  const outside = displacementOf(base, closed).filter((x) => !win.has(x.piece)).reduce((m, x) => Math.max(m, x.maxM), 0);
+  if (outside > drag + 1e-6) return `move road you did not touch up to ${fmtM(outside)}, further than your drag moved it (${fmtM(drag)})`;
+  if (!closed.spawns && hasStart(base) && !hasStart(closed)) return 'leave no straight long enough for the start';
+  const job = createCheckJob(), mine = redsOf(closed, job), was = redsOf({ ...open, closed: false }, job);
+  const fresh = mine.reds.filter((x) => !was.reds.some((o) => o.reason === x.reason && Math.abs(o.s - x.s) <= RED_NEAR_M));
+  if (fresh.length) return `add ${fresh.length} red${fresh.length === 1 ? '' : 's'} (${fresh[0].reason} at ${(fresh[0].s / 1000).toFixed(2)} km)`;
+  return null;
+}
+/** Whether a closed lap has the export's start straight (startlayout.js, with the lift and the start the export uses). */
+function hasStart(d) {
+  const segs = toSegments({ ...d, closed: true }), lift = typeof AD.offsetPath === 'function' ? (p) => AD.offsetPath(d, segs, p) : undefined;
+  const start = d.start ? { pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch } : null;
+  try { startLayout(segs, lift, start, { open: false }); return true; } catch (e) { if (e && e.code === 'NO_START_STRAIGHT') return false; throw e; }
 }
 
 
@@ -170,4 +204,4 @@ function relink(base, doc) {
   return deepFreeze(out);
 }
 
-module.exports = { runClose, runCloseBest, byOrder, displacementOf, relink };
+module.exports = { runClose, runCloseBest, byOrder, displacementOf, relink, barMiss };

@@ -18,7 +18,7 @@ function createCloseRunner({ win, url = 'core/closeworker.js', WorkerCtor = win 
   return {
     /** The worker now in use (for the tests). */
     worker: () => w,
-    start({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null }) {
+    start({ doc, fraction = 0.2, last = false, whole = false, finish = false, edited = null, best = false, openReds = null, window = null, bar = null }) {
       if (running) running.cancel();   // one job at a time: the shell cancels the old one first, this is only a guard
       const mine = w, mySerial = ++serial, job = { promise: null, cancel: null };
       let settled = false, reject;
@@ -33,7 +33,7 @@ function createCloseRunner({ win, url = 'core/closeworker.js', WorkerCtor = win 
           res(m.ok ? { out: m.out, ms: m.ms } : { refused: m.refused });
         };
         mine.onerror = (e) => fail(new Error((e && e.message) || 'the close worker failed'));
-        mine.postMessage({ serial: mySerial, doc, fraction, last: !!last, whole: !!whole, finish: !!finish, edited, best: !!best, openReds, ...(window ? { window } : {}) });   // D421: only when asked, so every other job's message is what it was
+        mine.postMessage({ serial: mySerial, doc, fraction, last: !!last, whole: !!whole, finish: !!finish, edited, best: !!best, openReds, ...(window ? { window } : {}), ...(bar ? { bar } : {}) });   // D421: only when asked, so every other job's message is what it was
       });
       job.cancel = () => fail(Object.assign(new Error('cancelled'), { cancelled: true }));
       running = job;

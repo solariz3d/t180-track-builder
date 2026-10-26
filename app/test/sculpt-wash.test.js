@@ -147,11 +147,17 @@ test('row D467 frame: the preview draws the start pieces\' hatch after such a re
   const win = { devicePixelRatio: 1, document: { hidden: false, activeElement: null, body: {}, addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: (fn) => { q.push(fn); return q.length; }, cancelAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {} };
   const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0, drawArrays: (m, f, n) => { counts.push(n); } }, { get: (t, k) => (k in t ? t[k] : () => 0) });
   const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
-  const s = await closedTrack(), pv = P.createPreview({ canvas, shell: s, win });
+  // AMENDED (D467 re-ruled after C's review): the start pieces are taken only within the bar, which this file's lap does not pass, so the row uses a lap whose start
+  // pieces curve gently and whose start straight is in the middle, with a small bend (sculpt-tools.test.js curvedMidLap, built the same way)
+  const s = await createCoreShell({ autosaveMs: 0 }), Q = (Math.PI * R) / 2;
+  s.extend({ length: 300, family: 'bowl', targets: { kh: 1 / 600 } }); for (const len of [Q, Q]) s.extend({ length: len, transition: 40, targets: { kh: 1 / R } });
+  s.extend({ length: 500, transition: 40, targets: { kh: 0 } }); for (const len of [Q, Q]) s.extend({ length: len, transition: 40, targets: { kh: 1 / R } });
+  s.extend({ length: 200, transition: 40, targets: { kh: 1 / 600 } }); s.close(); assert.equal(s.getState().history.present.closed, true, s.getState().message);
+  const pv = P.createPreview({ canvas, shell: s, win });
   const step = (n = 1) => { for (let i = 0; i < n; i++) { const f = q; q = []; now += 16; for (const g of f) g(now); } };
   const drawnOnce = () => { step(80); counts.length = 0; step(1); return counts.slice(); };
   const hatchSizes = () => { const t = pv.track(), k = sculptCues(t, null, true); assert.ok(k && k.length === 2, 'the track has two start pieces to hatch'); return k.map((c) => c.positions.length / 3); };
-  s.setSculpt(true); s.beginBrush({ tool: 'bend', s0: 400 + Math.PI * R + 200, r: 100 }); s.brushTo(2e-4); s.endBrush(); const a = await s.brushRelease();
+  s.setSculpt(true); s.beginBrush({ tool: 'bend', s0: 450, r: 80 }); s.brushTo(1e-4); s.endBrush(); const a = await s.brushRelease();
   assert.equal(P.startMovedOf(a), true, `control: this release moved the start pieces (${a.message})`);
   const after = drawnOnce(), sizes = hatchSizes();
   for (const n of sizes) assert.ok(after.includes(n), `a line list of ${n} vertices (a start piece's hatch) is drawn: ${JSON.stringify(after)}`);

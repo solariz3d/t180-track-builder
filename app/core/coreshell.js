@@ -450,10 +450,14 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     // D467 (the librarian's ruling on E's D463 §6(2), the designer's call deferred to it at 19:00): AWAY FROM THE SEAM (a window holding neither the first nor the last road piece)
     // the lap's START PIECES are tried first, the window left as the drag made it, so the user's bend is kept whole (E's measure: 100% kept, against 51-55% by the window tries,
     // which re-solve the bent piece). This reverses D421c's window-first order there, as ruled. At the seam the tries are D421c's, unchanged.
+    // D467 RE-RULED (C's review): that try is taken only when its result passes the bar (closejob.js barMiss: the road outside the window moves no further than the
+    // drag moved it, the start straight still fits, no new red); a miss is refused by name, CLOSE_BAR, and the tries below run as D421c ordered them.
     const startTry = firstR !== lastR && !win.includes(firstR) && !win.includes(lastR) ? [firstR, lastR] : null;
     const tries = [...(startTry ? [startTry] : []), ...[win, withSeam(lastR), withSeam(lastR, firstR)].filter((w, k, all) => !k || w.length !== all[k - 1].length)];
     const whole = (rs) => runCloseJob({ doc: open, whole: true, edited: win }).then((r) => (closes(r) || r.cancelled ? r : { failed: [...rs, r] }));
-    const attempt = (k, rs) => (k === tries.length ? whole(rs) : runCloseJob({ doc: open, window: tries[k] }).then((r) => (closes(r) ? { ...r, tried: tries[k] } : r.cancelled || !stillOurs() ? r : attempt(k + 1, [...rs, r]))));
+    // D467 re-ruled (C's review): the start-pieces try is taken only when its result passes the bar (closejob.js barMiss); a miss is a refusal like any other
+    const jobFor = (w) => (w === startTry ? { doc: open, window: w, bar: { base: b.base, edited: win } } : { doc: open, window: w });
+    const attempt = (k, rs) => (k === tries.length ? whole(rs) : runCloseJob(jobFor(tries[k])).then((r) => (closes(r) ? { ...r, tried: tries[k] } : r.cancelled || !stillOurs() ? r : attempt(k + 1, [...rs, r]))));
     entry.promise = attempt(0, [])
       .then((r) => {
         if (r.cancelled || !stillOurs()) {   // dropped (Esc), or the document replaced meanwhile
@@ -1406,22 +1410,8 @@ function thumbOf(piece) {
 /** The road pieces the user built exactly straight and level (κh, κv and φ all exactly 0): close.js is told to go round them. */
 function straightPieces(doc) { return doc.pieces.map((P, i) => (P.type === 'road' && ['kh', 'kv', 'phi'].every((ch) => P.channels[ch].every((c) => c === 0)) ? i : -1)).filter((i) => i >= 0); }
 
-/**
- * THE START STRAIGHT for the export's grid, on a core track. src/markers/layout.js defaultLayout puts the grid on the longest run
- * of segments that are EXACTLY straight words (word 'straight', every curvature and roll 0). A core track has no words, and a
- * closed one has no exactly straight segment (the close leaves |κ| ~1e-4 rad/m on a guarded straight). So the layout is computed
- * by defaultLayout itself, on the REAL closed path, with each segment that is nearly straight (|κh|, |κv| ≤ STRAIGHT_K, radius
- * ≥ 5 km; |roll| ≤ STRAIGHT_ROLL) marked as a straight for the choice ONLY. Its result is anchors (segment id and distance
- * along it) and the grid's size; the export then places every marker on the real road and runs its own checks on them, unchanged.
- */
-const STRAIGHT_K = 1 / 5000, STRAIGHT_ROLL = 0.5 * Math.PI / 180;
-function startLayout(segments, lift, start, { open = false, base = null } = {}) {   // open (D243a): the test export of an unfinished track lays its grid on an OPEN path; base (D407): that path, already built
-  const { buildPath } = require('../../src/geom/index.js'), Markers = require('../../src/markers/layout.js');
-  const nearly = (g) => g.kind === 'road' && [g.k0, g.k1, g.kp0, g.kp1].every((x) => Math.abs(x) <= STRAIGHT_K) && [g.roll0, g.roll1].every((x) => Math.abs(x) <= STRAIGHT_ROLL);
-  const marked = segments.map((g) => (nearly(g) ? { ...g, word: 'straight', k0: 0, k1: 0, kp0: 0, kp1: 0, roll0: 0, roll1: 0 } : g));
-  const p = base || buildPath(segments, { step: 2, closed: !open, ...(start ? { start } : {}) });
-  return Markers.defaultLayout(lift ? lift(p) : p, marked, open ? { firstPiece: true } : {});   // D284: on an open track the line stays on its straight's first piece as pieces are added
-}
+// D467: startLayout and its constants live in app/core/startlayout.js now (moved verbatim), so the close job can run the exporter's start-straight check without the shell
+const { STRAIGHT_K, startLayout } = require('./startlayout.js');
 
 /**
  * THE HAND-PLACED START (the user, 2026-10-09: "move the start line around the first piece … a numbered grid that fits the track … a hotlap spawn I
