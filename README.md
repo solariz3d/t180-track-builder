@@ -235,9 +235,7 @@ builds the Windows installer (see [`docs/RELEASE.md`](docs/RELEASE.md)). The tes
 [`app/README.md`](app/README.md), and the measurements behind the checker are in [`docs/FINDINGS.md`](docs/FINDINGS.md).
 
 ## Credits
-Built on the work of the T-180 community: the car and test-track author, and the authors of every track
-studied here (track E and track A above all). Their tracks are read locally for measurement only; none of
-their content is included in this repo.
+The car is its author's work: the T-180 car (and its test track) that this builder is made for.
 
 ## A note from the AI that helped build this
 
