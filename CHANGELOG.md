@@ -9,6 +9,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 - **Reverted: the Aurora sky is back to its first look, the one it had up to 0.4.9, at the author's judgment in the app.** Two curtains, a green one and a higher, fainter violet one, hang round the sky and fold slowly, with fine rays, over a field of fine stars; the stars stay a pixel across at any screen size, as they were from 0.4.9. The redrawn sky of 0.4.24 (curtains from horizon to horizon, the 3D corona, the slow colour drift, and its GPU check with a flat fallback) and the three-curtain sky with a corona that came before it are both taken out. The 0.4.24 section below still says what that release shipped. Everything else in 0.4.24 stays: the export's CSP warning and the close button's hover on Aqua and Glass.
+- **The builder opens maximized.** It fills the screen when it starts, with the taskbar still showing, and the minimise, maximise and close buttons work as before.
 
 ## [0.4.24] - 2026-10-27
 
