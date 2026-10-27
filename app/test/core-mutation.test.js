@@ -10,9 +10,15 @@ const fs = require('fs'), os = require('os'), path = require('path'), { spawnSyn
 const IR = require('../../test/inner_run.js');   // D352: a crashed inner run reads NOT TESTED
 const ROOT = path.join(__dirname, '..', '..');
 // the tests every mutant is run against (L130 adds the readout display's)
-const TESTS = ['core-shell.test.js', 'core-readout-display.test.js'];
+const TESTS = ['core-shell.test.js', 'core-readout-display.test.js', 'ghost-stalekey.test.js'];   // D483 adds the cheap ghost's stale-key rows
 
 const MUTATIONS = [
+  // D483: the cheap ghost compares its new chords with a SNAPSHOT of the last ones, and takes one object as the same only when it is frozen all the way down
+  { id: 'G-D483a the chords kept for the next cheap ghost are the ones handed out (no snapshot)', file: 'preview/trackmodel.js', from: '(j < keys.length ? null : snapshot(g))', to: '(j < keys.length ? null : g)', caughtBy: 'a chord handed out with a cheap ghost' },
+  { id: 'G-D483b one object reached from both sides is always the same', file: 'preview/segkey.js', from: "if (a === b) return a === null || typeof a !== 'object' || frozenDeep(a);", to: 'if (a === b) return true;', caughtBy: 'sameContent: one object reached from both sides' },
+  { id: 'G-D483c a getter counts as a value', file: 'preview/segkey.js', from: "if (!('value' in d) || !frozenDeep(d.value)) return false; }", to: 'if (!frozenDeep(d.value)) return false; }', caughtBy: 'sameContent: one object reached from both sides' },
+  { id: 'G-D483d the snapshot copies no object (a change in place reaches it)', file: 'preview/segkey.js', from: 'const out = {}; for (const k of Object.keys(v)) out[k] = snapshot(v[k]); return out;', to: 'return v;', caughtBy: 'snapshot: a change made in place' },
+  { id: 'G-D483e every new chord is taken as the same as the last ghost has it', file: 'preview/trackmodel.js', from: 'j < reuse.segs.length && sameContent(g, reuse.segs[j])', to: 'j < reuse.segs.length', caughtBy: 'a chord handed out with a cheap ghost' },
   // L130, the readout display (app/core/labels.js, app/core/panel.js)
   { id: 'R1 the sign of an angle flipped', file: 'core/labels.js', from: "return `${v > 0 ? '+' : MINUS}", to: "return `${v > 0 ? MINUS : '+'}", caughtBy: 'the strings' },
   { id: 'R2 zero is signed', file: 'core/labels.js', from: "if (v === 0) return '0.00°';", to: '', caughtBy: 'the strings' },   // re-pointed 2026-10-15: two decimals

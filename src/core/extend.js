@@ -31,7 +31,6 @@
 'use strict';
 
 const D = require('./document.js');
-const { basisN } = require('../../tools/piecewise.cjs');
 const { WIDTHS, RATES } = require('../geom/fonts.js');
 
 const bloss = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));   // ref 02 §4, IFC-BLOSS: the route channels' blend (C1 at its ends: S″(0) = 6, S″(1) = −6)
@@ -128,17 +127,41 @@ function c2Ends(piece, ch) {
  * and the singular return are the same too; a back substitution replaces the Gauss–Jordan sweep above the diagonal, the one step whose rounding differs.
  */
 const BAND = 3;   // the basis degree: basisN is cubic
-/** D482: the fit's samples and each one's 4 basis values (from basisN) and first control point, kept per piece while its knots and length stand: a bank, cup and
- *  edge typed fit four channels (phi, c, e, er) on one knot vector, so a drag tick reads the basis once, not four times. */
-const SAMPLES = new WeakMap();
+/** D482: the fit's samples and each one's 4 basis values (from basisN) and first control point: a bank, cup and edge typed fit four channels (phi, c, e, er) on
+ *  one knot vector, so a drag tick reads the basis once, not four times. D484: kept by the knot vector's VALUE (the length and every knot), the last few, so
+ *  they carry to the next piece wherever its knot vector is the same (a turn drag keeps the length, and the corner's solve extends at one length again and
+ *  again). Knots every L/m move with the length, so a stretch carries nothing, and a new set is built by sampleBasis below, not one basisN per sample. */
+const SAMPLES = [], SAMPLES_MAX = 4;
 function samplesOf(piece, U, L) {
-  const kept = SAMPLES.get(piece);
-  if (kept && kept.knots === piece.knots && kept.n === piece.knots.length && kept.L === L) return kept;
+  const kn = piece.knots;
+  for (const kept of SAMPLES) if (kept.L === L && kept.kn.length === kn.length && kept.kn.every((x, i) => Object.is(x, kn[i]))) return kept;
   const S = []; const ds = Math.max(0.25, Math.min(0.5, L / 400)); for (let s = 0; s < L; s += ds) S.push(s); S.push(L);
-  const first = new Int32Array(S.length), N = new Float64Array(4 * S.length);
-  S.forEach((s, q) => { const b = basisN(U, Math.min(Math.max(s, 0), L)); first[q] = b.first; for (let k = 0; k < 4; k++) N[4 * q + k] = b.N[k]; });
-  const made = { knots: piece.knots, n: piece.knots.length, L, S, first, N };
-  SAMPLES.set(piece, made); return made;
+  const { first, N } = sampleBasis(U, S, L);
+  const made = { kn: kn.slice(), L, S, first, N };
+  SAMPLES.unshift(made); if (SAMPLES.length > SAMPLES_MAX) SAMPLES.pop();
+  return made;
+}
+/** D484: basisN(U, min(max(s, 0), L)) at every s of the ascending S, into flat arrays: the span by a walk (S ascends, so it is the binary search's span:
+ *  the last k in [3, nCP − 1] with s ≥ U[k], or nCP − 1 from U[nCP] on) and the Cox–de Boor recursion in basisN's own expressions and order, in two
+ *  reused buffers instead of an array a degree and an object a sample. Every value is the same double (test/core_fit_banded.test.js holds the two equal). */
+function sampleBasis(U, S, L) {
+  const p = 3, nCP = U.length - 1 - p, first = new Int32Array(S.length), N = new Float64Array(4 * S.length), a = new Float64Array(4), b = new Float64Array(4);
+  let walk = p;
+  for (let q = 0; q < S.length; q++) {
+    const s = Math.min(Math.max(S[q], 0), L);
+    let k;
+    if (s >= U[nCP]) k = nCP - 1; else { while (walk < nCP - 1 && s >= U[walk + 1]) walk++; k = walk; }
+    let prev = a, cur = b; prev[0] = 1;
+    for (let d = 1; d <= p; d++) {
+      for (let j = 0; j <= d; j++) {
+        const i = k - d + j, l = U[i + d] - U[i], r = U[i + d + 1] - U[i + 1];
+        cur[j] = (l > 0 ? (s - U[i]) / l : 0) * (j >= 1 ? prev[j - 1] : 0) + (r > 0 ? (U[i + d + 1] - s) / r : 0) * (j <= d - 1 ? prev[j] : 0);
+      }
+      const t = prev; prev = cur; cur = t;
+    }
+    first[q] = k - p; for (let j = 0; j < 4; j++) N[4 * q + j] = prev[j];
+  }
+  return { first, N };
 }
 function fitWithHold(piece, ch, f, Lt, target) {
   const C = piece.channels[ch], n = C.length, U = D.knotVector(piece), L = piece.length, dec = D.DEC[ch], t = Number(target.toFixed(dec)) + 0;
@@ -292,4 +315,4 @@ function extend(doc, opts = {}) {
   return D.appendPiece(doc, piece);
 }
 
-module.exports = { extend, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+module.exports = { extend, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };

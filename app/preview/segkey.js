@@ -25,4 +25,40 @@ function feed(v) {
 /** The key of a segment: equal for equal content, different (but for a 2^-64 chance) for different content. */
 function keyOf(seg) { h1 = 0x811c9dc5; h2 = 0x1b873593; feed(seg); return h1.toString(36) + '.' + h2.toString(36); }
 
-module.exports = { keyOf };
+/**
+ * D483: a and b have the same content as keyOf reads it, told without hashing: what the cheap ghost asks of the chords it meshed last time (app/preview/trackmodel.js),
+ * where hashing 48 chords of about 10 kB each on every move of a drag with an edge typed was 176 ms of 974. It walks both together and stops at the first difference. It
+ * may say "different" where the keys would agree (a NaN, a key that holds undefined, objects of different kinds): that costs a rebuild, never a stale mesh. It never says
+ * "same" where they would differ: one object reached from both sides is taken as the same only when it is FROZEN all the way down (it cannot have changed since it was
+ * meshed); one that is not may have been changed in place since, and counts as different.
+ */
+function sameContent(a, b) {
+  if (a === b) return a === null || typeof a !== 'object' || frozenDeep(a);
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b) || Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i] || !sameContent(a[ka[i]], b[ka[i]])) return false;
+  return true;
+}
+/**
+ * D483: the content of v AS IT IS NOW, for sameContent to compare with later: what is frozen all the way down is kept as it is (it cannot change), plain objects and arrays
+ * are copied (so a change made in place afterwards, by anyone, does not reach the copy), and anything else becomes a mark that sameContent never takes as the same.
+ */
+const UNSEEN = Symbol('not kept');
+function snapshot(v) {
+  if (v === null || typeof v !== 'object' || frozenDeep(v)) return typeof v === 'function' || typeof v === 'symbol' ? UNSEEN : v;
+  if (Array.isArray(v)) return v.map(snapshot);
+  if (Object.getPrototypeOf(v) !== Object.prototype) return UNSEEN;
+  const out = {}; for (const k of Object.keys(v)) out[k] = snapshot(v[k]); return out;
+}
+// frozen all the way down, every own property a value (no getter); a true answer is remembered, for it cannot change
+const DEEP = new WeakMap();
+function frozenDeep(v) {
+  if (v === null || typeof v !== 'object') return true;
+  if (DEEP.has(v)) return true;
+  if (!Object.isFrozen(v)) return false;
+  for (const k of Object.keys(v)) { const d = Object.getOwnPropertyDescriptor(v, k); if (!('value' in d) || !frozenDeep(d.value)) return false; }
+  DEEP.set(v, true); return true;
+}
+
+module.exports = { keyOf, sameContent, snapshot };

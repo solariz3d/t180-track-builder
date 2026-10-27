@@ -47,7 +47,11 @@ const MUTANTS = [
   { id: "F7 the elimination stops at the first upper band (with a swap the band is twice as wide)", pattern: "elimination swaps rows", edits: [[X, "right = Math.min(m - 1, c + 2 * BAND);", "right = Math.min(m - 1, c + BAND);"]] },
   { id: "F8 the back substitution reads one upper band (with a swap there are two)", pattern: "elimination swaps rows", edits: [[X, "j <= Math.min(m - 1, c + 2 * BAND); j++) v -=", "j <= Math.min(m - 1, c + BAND); j++) v -="]] },
   { id: "F9 a singular system is solved anyway (its free points are written: NaN or a blow-up)", pattern: "singular system", edits: [[X, "if (!(Math.abs(piv) > 1e-12)) return;", "if (false) return;"]] },
-  { id: "F11 the kept samples are read for a piece whose knots were replaced", pattern: "knots were replaced", edits: [[X, "if (kept && kept.knots === piece.knots && kept.n === piece.knots.length && kept.L === L) return kept;", "if (kept) return kept;"]] },
+  // D484: the samples are kept by the knot vector's value (rows 7 and 8); the anchor follows the line, the rule (no samples of other knots) is unchanged
+  { id: "F11 the kept samples are read for a piece of the same length and as many knots, whatever the knots", pattern: "knots were replaced|one knot moved", edits: [[X, "if (kept.L === L && kept.kn.length === kn.length && kept.kn.every((x, i) => Object.is(x, kn[i]))) return kept;", "if (kept.L === L && kept.kn.length === kn.length) return kept;"]] },
+  { id: "F14 the kept samples are keyed by the length alone", pattern: "knots were replaced|one knot moved", edits: [[X, "if (kept.L === L && kept.kn.length === kn.length && kept.kn.every((x, i) => Object.is(x, kn[i]))) return kept;", "if (kept.L === L) return kept;"]] },
+  { id: "F12 sampleBasis reads the last level's buffer past its end (basisN reads a 0 there)", pattern: "sampleBasis gives basisN", edits: [[X, "* (j <= d - 1 ? prev[j] : 0);", "* prev[j];"]] },
+  { id: "F13 sampleBasis's walk stops one span early on a knot (the binary search takes the span the knot starts)", pattern: "sampleBasis gives basisN", edits: [[X, "while (walk < nCP - 1 && s >= U[walk + 1]) walk++;", "while (walk < nCP - 1 && s > U[walk + 1]) walk++;"]] },
   { id: "F10 with no free point the fit goes on (and writes past the pins)", pattern: "no free point", edits: [[X, "if (!free.length) return;", "if (!free.length) free.push(0);"]] },
 ];
 

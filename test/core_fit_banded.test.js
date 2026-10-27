@@ -14,7 +14,11 @@
 //      the dense fit does, and writes the same control points; without pivoting it would stop there and leave the fit as it was. Such a system is ill-conditioned
 //      (a knot cluster 0.01 m wide, which the panel's words do not lay), and there the two eliminations' rounding parts beyond the kept digits: this row holds
 //      which points are written, not their values (the D482 hand-back lists the values)
-//   7  a piece refitted after its knots were replaced reads the new basis (D482 keeps the samples per piece: a typed bank, cup and edge fit four channels on one)
+//   7  a piece refitted after its knots were replaced reads the new basis (D482 kept the samples per piece: a typed bank, cup and edge fit four channels on one)
+//   8  D484 keeps the samples by the knot vector's VALUE, so they carry to the next piece where its knots are the same: a piece of the same length and as many knots,
+//      one of them moved, does not read the last piece's samples
+//   9  D484 builds a new set of samples by sampleBasis, not one basisN a sample: at every sample of every knot vector here (the public fixtures' pieces, pieces laid
+//      here, 400 seeded uneven ones with repeated knots, a sample on every knot and at the end) its first index and four values are basisN's, byte for byte
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -151,4 +155,46 @@ test('row 7: a piece refitted after its knots were replaced reads the new basis 
   const ref = withChannel(P, 'phi', P.channels.phi), f = rampOf(0, 0.3, 200);
   denseFit(ref, 'phi', f, 200, 0.3); X.fitWithHold(P, 'phi', f, 200, 0.3);   // the SAME piece object refitted: the kept samples are its old knots'
   assert.deepEqual(P.channels.phi, ref.channels.phi, 'the refit used the samples of the knots it had before');
+});
+
+test('row 8: the samples carry only to a piece whose knot vector is the same: one of the same length and as many knots, one knot moved, reads its own basis', () => {
+  const base = X.extend(D.createDoc('d484'), { length: 200, targets: { phi: 20 * DEG } }).pieces[0], f = rampOf(0, 0.3, 200);
+  const make = (knots) => ({ ...base, knots, channels: { ...base.channels, phi: new Array(knots.length + 4).fill(0) } });
+  const A = make([25, 50, 75, 100, 125, 150, 175]), B = make([25, 50, 75, 101.5, 125, 150, 175]);   // B: the same length, as many knots, the fourth moved
+  X.fitWithHold(A, 'phi', f, 200, 0.3);   // A's samples are kept
+  const ref = withChannel(B, 'phi', B.channels.phi); denseFit(ref, 'phi', f, 200, 0.3); X.fitWithHold(B, 'phi', f, 200, 0.3);
+  assert.deepEqual(B.channels.phi, ref.channels.phi, 'B was fitted on the samples kept for A');
+  const C = make([25, 50, 75, 100, 125, 150, 175]), refC = withChannel(C, 'phi', C.channels.phi);   // a new piece on A's very knots: its fit is still the dense fit's
+  denseFit(refC, 'phi', f, 200, 0.3); X.fitWithHold(C, 'phi', f, 200, 0.3);
+  assert.deepEqual(C.channels.phi, refC.channels.phi);
+});
+
+test('row 9: sampleBasis gives basisN\'s first index and four values at every sample, byte for byte (fixtures, laid pieces, uneven and repeated knots, samples on the knots)', (t) => {
+  const { basisN } = require(path.join(T, 'tools/piecewise.cjs'));
+  const vectors = [];
+  const FX = path.join(T, 'test', 'fixtures');
+  for (const f of fs.readdirSync(FX).filter((f) => f.endsWith('.core2.json'))) for (const P of D.parse(fs.readFileSync(path.join(FX, f), 'utf8')).pieces) if (P.type === 'road') vectors.push([f, P.length, P.knots]);
+  for (const L of [37, 200, 400, 1000, 2000]) for (const targets of [{ phi: 20 * DEG }, { phi: 20 * DEG, c: 30, e: 20 }]) { const P = X.extend(D.createDoc('d484'), { length: L, targets, transition: { phi: L / 5 } }).pieces[0]; vectors.push([`laid ${L}`, L, P.knots]); }
+  let seed = 484; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let trial = 0; trial < 400; trial++) {
+    const L = 5 + rnd() * 600, K = [];
+    for (let i = 0, k = Math.floor(rnd() * 14); i < k; i++) K.push(Number((rnd() * L).toFixed(trial % 3 ? 4 : 0)));
+    if (trial % 5 === 0 && K.length) K.push(K[0], K[0]);   // a knot of multiplicity three
+    K.sort((a, b) => a - b);
+    vectors.push([`seeded ${trial}`, L, K.filter((x) => x > 0 && x < L)]);
+  }
+  let samples = 0; const differ = [];
+  for (const [name, L, knots] of vectors) {
+    const U = [0, 0, 0, 0, ...knots, L, L, L, L];
+    const S = []; const ds = Math.max(0.25, Math.min(0.5, L / 400)); for (let s = 0; s < L; s += ds) S.push(s); S.push(L);
+    for (const k of knots) S.push(k); S.sort((a, b) => a - b);   // a sample on every knot (the span changes there)
+    const { first, N } = X.sampleBasis(U, S, L);
+    S.forEach((s, q) => {
+      samples++; const b = basisN(U, Math.min(Math.max(s, 0), L));
+      if (first[q] !== b.first || [0, 1, 2, 3].some((j) => !Object.is(N[4 * q + j], b.N[j]))) differ.push(`${name} s ${s}: first ${first[q]} / ${b.first}, N ${Array.from(N.slice(4 * q, 4 * q + 4))} / ${b.N}`);
+    });
+  }
+  t.diagnostic(`${samples} samples on ${vectors.length} knot vectors`);
+  assert.ok(vectors.length >= 440 && samples >= 100000, `only ${samples} samples on ${vectors.length} knot vectors`);
+  assert.deepEqual(differ.slice(0, 10), [], `${differ.length} samples differ`);
 });

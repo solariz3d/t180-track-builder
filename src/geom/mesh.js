@@ -111,7 +111,32 @@ function options(opts) {
   };
 }
 /** A piece's handles, as text: the ONLY input its mesh depends on besides its start pitch and bank. */
-const handleKey = (seg) => JSON.stringify(seg, (k, v) => (k === 'id' ? undefined : v));
+// D483: the text is JSON.stringify(seg) without its ids, made part by part so that a DEEPLY FROZEN part (a profile or row grid the core froze, which cannot change) is
+// written once and kept by identity: a drag's ghost is 48 fresh chords on every move, each about 10 kB of text, and nearly all of it is the same frozen profile. A part that is
+// not frozen all the way down (an array changed in place, a fresh blend object) is written afresh every time, as before (test/geom_mesh_stalekey.test.js). The text is the
+// same as JSON.stringify's: plain objects and arrays are written here in its order and form, anything else by JSON.stringify itself.
+const dropId = (k, v) => (k === 'id' ? undefined : v);
+const plainPart = (v) => v !== null && typeof v === 'object' && typeof v.toJSON !== 'function' && (Array.isArray(v) || Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
+const DEEP = new WeakMap(), PART_TEXT = new WeakMap();
+/** v is a plain object or array, frozen, whose every own property is a value (no getter) and every part is the same; a true answer is remembered (it cannot change) */
+function frozenDeep(v) {
+  if (v === null || typeof v !== 'object') return true;
+  if (DEEP.has(v)) return true;
+  if (!plainPart(v) || !Object.isFrozen(v)) return false;
+  for (const k of Object.keys(v)) { const d = Object.getOwnPropertyDescriptor(v, k); if (!('value' in d) || !frozenDeep(d.value)) return false; }
+  DEEP.set(v, true); return true;
+}
+/** the JSON text of v under a key that is not 'id' (undefined where JSON leaves it out) */
+function partText(v) {
+  if (!plainPart(v)) return JSON.stringify(v, dropId);
+  const keep = frozenDeep(v); if (keep && PART_TEXT.has(v)) return PART_TEXT.get(v);
+  let s;
+  if (Array.isArray(v)) { s = '['; for (let i = 0; i < v.length; i++) { const t = partText(v[i]); s += (i ? ',' : '') + (t === undefined ? 'null' : t); } s += ']'; }
+  else { s = '{'; let first = true; for (const k of Object.keys(v)) { if (k === 'id') continue; const t = partText(v[k]); if (t === undefined) continue; s += (first ? '' : ',') + JSON.stringify(k) + ':' + t; first = false; } s += '}'; }
+  if (keep) PART_TEXT.set(v, s);
+  return s;
+}
+const handleKey = (seg) => partText(seg);
 const pitchOf = (sm) => Math.asin(Math.max(-1, Math.min(1, sm.T[1])));
 // A resolved word emits up to three segments sharing one id (parts in/body/out, docs/INTERFACES.md §1), so a piece is
 // named by (id, part): without the part, node names repeat, and bvh.js's name→cell map collapses them (D167 read).
@@ -172,7 +197,7 @@ function meshPiece(g, seg, S, o, work) {
   }
   const ramp = seg.blend ? { from: seg.blend.from, s0: seg.blend.s0, length: seg.blend.length }
     : seg.profileIn !== undefined && rampM > 0 ? { from: seg.profileIn, s0: 0, length: Math.min(rampM, S[S.length - 1].s - S[0].s) } : null;
-  const A = ramp ? normalize(ramp.from) : null;
+  const A = ramp ? sealedNormal(ramp.from) : null;   // D483: the frozen normalised copy (the same numbers; kept by identity for a frozen profile, profile.js sealedNormal), not a new one per chord
   // a ramp: one vertex count for the whole piece, at matched fractions of the width; otherwise the font's own samples
   const fr = A ? (Array.isArray(seg.fractions) && seg.fractions.length >= 2 ? seg.fractions : blendSamples(A, P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross })) : null;   // seg.fractions (D225): the piece's shared row grid, so neighbouring chord segments make the same rows
   const Us = A ? usOf(P, fr) : samplesShared(P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross }).u, K = Us.length;   // D407: one walk per cross-section, not one per chord

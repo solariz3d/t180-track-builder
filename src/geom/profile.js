@@ -71,11 +71,19 @@ function sealed(P) {
  * running sums are made once. A profile that normalize() refuses is refused every time. At most SEALED_MAX are kept, the oldest dropped first.
  */
 const SEALED = new Map(), SEALED_MAX = 64;
+// D483: and by IDENTITY for a profile that is frozen with its knots (the core's, which cannot change): a drag's ghost meshes its 48 chords on every move, and with an edge typed
+// each chord's 137 knots were written out as text for the key above (numKey: 83 ms of a 3 s drag's 974 ms of rebuilds, D483 §2). A profile frozen with its knots is told by
+// its object; any other is keyed by value, as before. A profile that normalize() refuses is never kept, so it is refused every time.
+const SEALED_BY = new WeakMap();
+const valuesOnly = (o, keys) => keys.every((k) => { const d = Object.getOwnPropertyDescriptor(o, k); return !d || 'value' in d; });
+const knotsFrozen = (p) => Object.isFrozen(p) && Object.isFrozen(p.u) && Object.isFrozen(p.psi) && valuesOnly(p, ['u', 'psi', 'font', 'material']) && valuesOnly(p.u, Object.keys(p.u)) && valuesOnly(p.psi, Object.keys(p.psi));
 function sealedNormal(profile) {
   if (!profile || !Array.isArray(profile.u) || !Array.isArray(profile.psi)) return sealed(normalize(profile));
+  const held = SEALED_BY.get(profile); if (held) return held;
   const k = (profile.font || 'custom') + '|' + (profile.material || 'ROAD') + '|' + numKey(profile.u) + '|' + numKey(profile.psi);
   let r = SEALED.get(k);
   if (!r) { r = sealed(normalize(profile)); if (SEALED.size >= SEALED_MAX) SEALED.delete(SEALED.keys().next().value); SEALED.set(k, r); }
+  if (knotsFrozen(profile)) SEALED_BY.set(profile, r);
   return r;
 }
 /** Offset [X, Y] of the surface point at u, exactly (piecewise closed form). */
@@ -194,19 +202,45 @@ const FRACTIONS = new Map(), FRACTIONS_MAX = 64;
 const keyNum = (x) => (Object.is(x, -0) ? '-0' : String(x));
 function commonFractions(list, { maxAcross = 1, maxSeam = Math.PI / 180, cap = 40 } = {}) {
   const step = Math.max(1, Math.ceil(list.length / cap)), ps = list.filter((_, i) => i % step === 0 || i === list.length - 1).map((p) => normalize(p));
-  const key = [keyNum(maxAcross), keyNum(maxSeam), ...ps.map((p) => `${p.u.map(keyNum).join(',')};${p.psi.map(keyNum).join(',')}`)].join('|');
+  let lastU = null, uText = '';   // D484: a run of profiles on the same knots (an edge piece's chord ends) writes its u out once; the same text
+  const key = [keyNum(maxAcross), keyNum(maxSeam), ...ps.map((p) => { if (!sameNums(lastU, p.u)) { lastU = p.u; uText = p.u.map(keyNum).join(','); } return `${uText};${p.psi.map(keyNum).join(',')}`; })].join('|');
   const hit = FRACTIONS.get(key); if (hit) return hit.slice();
   const out = fractionsOf(ps, maxAcross, maxSeam);
   FRACTIONS.set(key, out); if (FRACTIONS.size > FRACTIONS_MAX) FRACTIONS.delete(FRACTIONS.keys().next().value);
   return out.slice();
 }
+/** Equal numbers by Object.is, element for element (a null or a different length is not equal). */
+const sameNums = (a, b) => !!a && !!b && a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
+// D484 (C's D483 profile: an edge ghost's chord ends missed the cache on every new length, and this loop was the largest part of the drag): the measure at each fine
+// fraction is psiAt(ps[k], uAt(Es[k], f)) for every profile. Profiles on the SAME knots (an edge piece's chord ends differ in ψ alone) have the same u at f and so
+// the same clamp, span and weight in psiAt; those are found once per such group, and each profile takes its own ψ there by psiAt's own expressions. The value at
+// a fraction is kept for the next step, where psiAt read the same arguments again. The max over k is the max of the same numbers, so m is the same, bit for bit.
 function fractionsOf(ps, maxAcross, maxSeam) {
   const Es = ps.map(edgesOf), R = Math.max(...Es.map((e) => -e[0])), Lw = Math.max(...Es.map((e) => e[1]));
   const f0 = R > 0 ? -1 : 0, f1 = Lw > 0 ? 1 : 0, N = 4000, fine = []; for (let i = 0; i <= N; i++) fine.push(f0 + (f1 - f0) * i / N);
+  const groups = [];
+  ps.forEach((p, k) => { const g = groups.find((x) => sameNums(x.u, p.u)); if (g) g.ks.push(k); else groups.push({ u: p.u, E: Es[k], ks: [k] }); });
+  const at = new Float64Array(ps.length);
+  const read = (f, i) => {   // psiAt(ps[k], uAt(Es[k], f)) of every profile, into at[k]; the largest change from what at[k] held when i > 0
+    let d = 0;
+    for (const g of groups) {
+      const U = g.u, n = U.length, u = uAt(g.E, f);
+      let span = 0, t = 0;   // -1: at or below the first knot; -2: at or past the last; else psiAt's i and t
+      if (u <= U[0]) span = -1; else if (u >= U[n - 1]) span = -2;
+      else { let lo = 1, hi = n - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (U[m] < u) lo = m + 1; else hi = m; } span = lo; t = (u - U[span - 1]) / (U[span] - U[span - 1]); }
+      for (const k of g.ks) {
+        const psi = ps[k].psi, v = span === -1 ? psi[0] : span === -2 ? psi[psi.length - 1] : psi[span - 1] + (psi[span] - psi[span - 1]) * t;
+        if (i > 0) d = Math.max(d, Math.abs(v - at[k]));
+        at[k] = v;
+      }
+    }
+    return d;
+  };
+  read(fine[0], 0);
   const m = [0];
   for (let i = 1; i <= N; i++) {
     const a = fine[i - 1], b = fine[i], side = (a + b) / 2 < 0 ? R : Lw;
-    let d = 0; for (let k = 0; k < ps.length; k++) d = Math.max(d, Math.abs(psiAt(ps[k], uAt(Es[k], b)) - psiAt(ps[k], uAt(Es[k], a))));
+    const d = read(b, i);
     m.push(m[i - 1] + (b - a) * side / maxAcross + d / maxSeam);
   }
   const K = Math.max(2, Math.ceil(m[N]) + 1), out = []; let j = 0;
