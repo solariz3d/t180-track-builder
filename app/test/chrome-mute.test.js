@@ -7,6 +7,9 @@
 //      texture-page's own spawn and prove_render's two app launches), so a scan that finds nothing cannot pass
 //   2  (the librarian, 07:05) the shared launcher itself: a Chrome started by soundrender.js launchChrome, with the caller's own arguments, was spawned
 //      with --mute-audio (its ChildProcess spawnargs, the command line it was started with). Skipped where there is no Chrome
+//   3  (D498 item 4, A's review of 8472e7d) every test file that starts a browser page itself (a launch site, or a call to the shared launchChrome) titles it
+//      zz-headless-test, so a window a run leaves behind is told from the user's at a glance; a file that only renders sound through soundrender.js
+//      renderClips is covered by soundrender.js, which sets it. This file's own row 2 opens no page and is left out
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -56,4 +59,18 @@ test('row 2: a Chrome started by the shared launchChrome is spawned with --mute-
   } finally {
     ch.kill(); await new Promise((r) => setTimeout(r, 300)); try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ }
   }
+});
+
+test('row 3: every test file that starts a browser page itself sets the zz-headless-test title', () => {
+  const code = (t) => t.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  const starters = [];
+  for (const d of ['app/test', 'test']) for (const f of walk(path.join(REPO, d), [])) {
+    if (f === __filename) continue;
+    const t = fs.readFileSync(f, 'utf8');
+    if (/--remote-debugging-port=|\blaunchChrome\(/.test(code(t))) starters.push({ file: path.relative(REPO, f).replace(/\\/g, '/'), titled: /zz-headless-test/.test(code(t)) });
+  }
+  const files = starters.map((x) => x.file);
+  for (const k of ['app/test/soundrender.js', 'app/test/drag-frame.test.js', 'app/test/texture-page.test.js']) assert.ok(files.includes(k), `the scan finds ${k} (found: ${files.join(', ') || 'none'})`);
+  assert.ok(starters.length >= 10, `the scan finds at least the ten known starters (${starters.length})`);
+  assert.deepEqual(starters.filter((x) => !x.titled).map((x) => x.file), [], 'test files that start a page and never title it zz-headless-test');
 });

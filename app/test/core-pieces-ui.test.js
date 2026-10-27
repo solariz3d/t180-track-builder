@@ -546,7 +546,7 @@ test('row 11c: the preview mounts AFTER the panel, so the first ask for the ghos
   P1.panel.unmount();
 });
 
-// AMENDED D421 part 3 (the rule changed by name: Sculpt is a MODE, set by the top bar's Build | Sculpt or Tab, not a box beside the brush, and its strip offers the
+// AMENDED D421 part 3 (the rule changed by name: Sculpt is a MODE, set by the tick Build ▸ Sculpt mode or Tab (D498: the comment named a Build | Sculpt switch that was never built), not a box beside the brush, and its strip offers the
 // tools by what the hand does, not the channels; which channels a tool may change is the shell's, by family, pane O's part 2)
 test('row 12: Sculpt through the panel: the strip offers the tools; ONE selected piece gets its handles; a drag reshapes that piece, is ONE undo step and the centreline does not move; Undo gives it back', async () => {
   const P1 = await handlePanel(), { shell } = P1;

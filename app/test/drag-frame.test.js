@@ -84,7 +84,13 @@ const stationsNow = () => ev("let n = null; document.dispatchEvent(new CustomEve
 async function drag(look, length, kind, ms = DRAG_MS, typed = {}, { placed = false } = {}) {
   await load(look);
   if (placed) { await setLength(100); await ev("[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Extend').click(); await new Promise((r) => setTimeout(r, 1200)); return true;"); }   // a 100 m piece is placed first
-  for (const [re, v] of Object.entries(typed)) await ev(`const f = [...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || '')); f.value = '${v}'; f.dispatchEvent(new Event('input', { bubbles: true })); return true;`);
+  // D498 item 4 (A's review of 41e7595): each typed field must read back what was typed, so a renamed label or a field that refuses the value fails here, by name,
+  // instead of timing an untyped drag (the field is found again after the input event, since the panel may rebuild it)
+  const typedField = (re) => `[...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || ''))`;
+  for (const [re, v] of Object.entries(typed)) {
+    const got = await ev(`const f = ${typedField(re)}; if (!f) return null; f.value = '${v}'; f.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 50)); const g = ${typedField(re)}; return g ? g.value : null;`);
+    assert.equal(Number(got), Number(v), `${look}: the field ${re} reads back ${JSON.stringify(got)} after ${v} was typed`);
+  }
   await setLength(length); await sleep(Math.min(4000, length / 4));   // a long piece's full ghost takes its time (a 20 km one about 2 s)
   const rgb = kind === 'turn' ? [185, 104, 255] : [255, 255, 255];
   // after a placed piece the handles are drawn small: the page's own list of them (t180:handles-request) is read instead of their colour, and the pointer moves along the handle's axis
