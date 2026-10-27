@@ -104,13 +104,20 @@ function tubeProfile(w, t) {
  * sides. Its knots are the base's plus nE + 1 equal steps of the outer zone each side (the slice itself and the edge included); ψ_mid at a new knot is the base's own linear
  * interpolation, as the mesh reads it. A piece with no edge never calls this: its profile object is the base, untouched (e = 0 is the identity, seal E3).
  */
-function edgeProfile(base, e, s, nE, er = e) {   // er: the RIGHT side (u < 0), e the left; equal, it is the symmetric edge exactly as before
+function edgeProfile(base, e, s, nE, er = e, frame = edgeFrame(base, s, nE)) {   // er: the RIGHT side (u < 0), e the left; equal, it is the symmetric edge exactly as before
+  const { P, u, R, mid } = frame;
+  const psi = u.map((x, i) => { const r = R[i]; return mid[i] + (r > s ? (x < 0 ? er : e) * DEG * smooth((r - s) / (1 - s)) : 0); });
+  return { font: P.font === 'tube' ? 'tube-edge' : 'edge', u: u.slice(), psi, material: P.material };   // the font says which cap applies (validate: edge-past-cap)
+}
+/** D484: what an edge profile takes from its base, its start s and nE alone, not from e: the knots u, each one's share r of its side, and ψ_mid there. xsecSegments
+ *  makes it once per piece for each base it meets (a piece of one width and rate has one), so a chord end adds only its e·G; the same numbers by the same expressions. */
+function edgeFrame(base, s, nE) {
   const P = normalize(base), hr = -P.u[0], hl = P.u[P.u.length - 1], us = [...P.u];
   for (let k = 0; k <= nE; k++) { const f = s + ((1 - s) * k) / nE; us.push(hl * f, -hr * f); }
   us.sort((a, b) => a - b);
-  const u = us.filter((x, i) => i === 0 || x - us[i - 1] > 1e-12);
-  const psi = u.map((x) => { const h = x < 0 ? hr : hl, r = h > 0 ? Math.abs(x) / h : 0; return psiAt(P, x) + (r > s ? (x < 0 ? er : e) * DEG * smooth((r - s) / (1 - s)) : 0); });
-  return { font: P.font === 'tube' ? 'tube-edge' : 'edge', u, psi, material: P.material };   // the font says which cap applies (validate: edge-past-cap)
+  const u = us.filter((x, i) => i === 0 || x - us[i - 1] > 1e-12), R = new Array(u.length), mid = new Array(u.length);
+  u.forEach((x, i) => { const h = x < 0 ? hr : hl, r = h > 0 ? Math.abs(x) / h : 0; R[i] = r; mid[i] = psiAt(P, x); });
+  return { P, u, R, mid };
 }
 /** The middle cross-section of piece P at the channel values x: the legacy profileAt, the cup, or the tube. */
 function baseProfileOf(P, x) { return P.tube ? tubeProfile(x.w, x.t) : P.cup ? cupProfile(P.family, x.w, x.c) : profileAt(P.family, x.w, x.r); }
@@ -128,7 +135,9 @@ const heartlineOf = (P, x) => (P.tube ? (x.w / (2 * Math.PI)) * smooth((x.t - HE
 function xsecSegments(P, n, at, join) {
   const s = (j) => (P.length * j) / n, E = Array.from({ length: n + 1 }, (_, j) => at(s(j))), edge = !!P.edge;
   const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => Math.max(Math.abs(x.e), Math.abs(x.er)))))) : 0;   // sized by the steeper side, a side that turns down (D406) by its size
-  const own = (x) => { const b = baseProfileOf(P, x); return edge ? edgeProfile(b, x.e, x.s, nE, x.er) : b; };
+  const frames = new Map();   // D484: one edgeFrame per base and start, not one per chord end (the legacy base is one kept object per width and rate, profileAt)
+  const frameOf = (b, s) => { let byS = frames.get(b); if (!byS) frames.set(b, (byS = new Map())); let f = byS.get(s); if (!f) byS.set(s, (f = edgeFrame(b, s, nE))); return f; };
+  const own = (x) => { const b = baseProfileOf(P, x); return edge ? edgeProfile(b, x.e, x.s, nE, x.er, frameOf(b, x.s)) : b; };
   const Lm = join ? Math.min(MORPH_M, P.length) : 0, J = join ? normalize(join.profile) : null;
   const prof = E.map((x, j) => { const o = own(x); return J && s(j) < Lm - 1e-9 ? blend(J, normalize(o), smooth(s(j) / Lm)) : o; });
   const fractions = commonFractions(prof), hl = E.map((x) => heartlineOf(P, x)), spiral = hl.some((x) => x > 0), out = new Array(n);

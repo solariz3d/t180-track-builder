@@ -177,12 +177,12 @@ async function edgeRow(t, kind, placed, bar, rateMax = Infinity) {
 test('row 7: a 1,000 m piece with a left edge typed, turned after a placed piece: p95 within one frame at 144 Hz (6.9 ms)', { skip }, async (t) => {
   await edgeRow(t, 'turn', true, BUDGET_EDGE);   // after D483: 4.4 / 4.3 ms
 });
-// ON AN EMPTY TRACK THE STANDARD IS NOT REACHED (D483 §5): after the fix the stretch measures p95 8.7 to 9.2 ms, median 4.8 to 5.1. What is left is the core, not the preview:
-// each move fits the edge's ramp twice (the readout's extend and the ghost's, src/core/extend.js fitWithHold, whose samples are read afresh for every new length) and makes the
-// piece's edge cross-sections at every chord end (src/core/adapter.js xsecSegments: edgeProfile, commonFractions). The bar here is the one PROPOSED in the hand-back, between the
-// fixed figures and the 11.3 / 11.4 ms the rebuild alone cost before it; it guards this work until the core's part is ordered. The row's sharper half is the rate: before
-// D483 the page did work on EVERY frame of this drag (356 / 362 work frames a second, the head's span), and now only on a move of the pointer (about 58); at most 120 a second.
-const BUDGET_EDGE_EMPTY = 10.0;   // ms: proposed, D483
-test('row 8: a 1,000 m piece with a left edge typed, stretched on an empty track: the page works only on a move (at most 120 work frames a second), p95 within the proposed bar (10.0 ms; the 6.9 ms standard is not reached here)', { skip }, async (t) => {
-  await edgeRow(t, 'stretch', false, BUDGET_EDGE_EMPTY, 120);
+// D484: ON AN EMPTY TRACK THE STANDARD IS NOW REACHED. After D483 the stretch measured p95 8.7 to 9.2 ms, and what was left was the core: each move read the edge ramp's
+// B-spline samples afresh (src/core/extend.js samplesOf, now built by one span walk and kept by the knot vector's values) and made the piece's edge cross-sections at every
+// chord end (src/core/adapter.js xsecSegments, now once per distinct start a piece; src/geom/profile.js commonFractions, once per distinct knot set). Measured headless,
+// BelowNormal, the machine quiet, by this file's own drag, d483-c and d484 alternately: p95 9.1 / 9.6 / 9.4 / 8.8 / 9.0 ms before, 6.2 / 6.6 / 6.3 / 6.1 / 6.0 after. The bar was
+// 10.0 ms (proposed, D483) and is now the standard. The rate half stands: before D483 the page did work on EVERY frame of this drag (356 / 362 work frames a second, the
+// head's span), and since only on a move of the pointer (about 58); at most 120 a second.
+test('row 8: a 1,000 m piece with a left edge typed, stretched on an empty track: the page works only on a move (at most 120 work frames a second), p95 within one frame at 144 Hz (6.9 ms)', { skip }, async (t) => {
+  await edgeRow(t, 'stretch', false, BUDGET_EDGE, 120);
 });

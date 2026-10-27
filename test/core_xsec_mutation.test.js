@@ -12,7 +12,8 @@ const IR = require('./inner_run.js');   // D352: a crashed inner run reads NOT T
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const C = 'core/', G = 'geom/', V = 'validate/';
-const FILES = { core: 'core_xsec.test.js', math: 'core_xsec_math.test.js', val: 'validate_xsec.test.js' };
+const FILES = { core: 'core_xsec.test.js', math: 'core_xsec_math.test.js', val: 'validate_xsec.test.js', shared: 'core_xsec_shared.test.js' };   // shared: D484
+const MIN_TESTS = { shared: 4 };   // D484: CONTROL's floor is more than 5 tests a file, so a file that loaded nothing cannot pass; core_xsec_shared has 4 rows, so its floor is all 4
 
 const MUTANTS = [
   // ── E1: the edge profile (KE1-*) ──
@@ -91,6 +92,14 @@ const MUTANTS = [
   { id: 'KC2 close does not refuse an edge active at one end only', file: 'core', pattern: 'CLOSE \\(E4 iii', edits: [[C + 'close.js', 'if (Math.abs(E[0]) > EDGE_SEAM_TOL || Math.abs(E[1]) > EDGE_SEAM_TOL) throw', 'if (false) throw']] },
   { id: 'KC3 close moves e (it joins e at a seam where only one end has it)', file: 'core', pattern: 'CLOSE: a lap whose edge ends', edits: [[C + 'close.js', "const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's', 'er'] : []),", "const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(true ? ['e', 's', 'er'] : []),"]] },
   // ── the brush ──
+  // ── D484: what an edge piece and its fraction grid share (test/core_xsec_shared.test.js) ──
+  { id: 'XS1 one edge frame serves every start along the piece', file: 'shared', pattern: 'row 3', edits: [[C + 'adapter.js', 'let f = byS.get(s); if (!f) byS.set(s, (f = edgeFrame(b, s, nE))); return f;', "let f = byS.get('any'); if (!f) byS.set('any', (f = edgeFrame(b, s, nE))); return f;"]] },
+  { id: 'XS2 one edge frame serves every base along the piece', file: 'shared', pattern: 'row 4', edits: [[C + 'adapter.js', 'let byS = frames.get(b); if (!byS) frames.set(b, (byS = new Map()));', "let byS = frames.get('any'); if (!byS) frames.set('any', (byS = new Map()));"]] },
+  { id: 'XS3 the frame leaves out the base\'s own knots', file: 'shared', pattern: 'row 3', edits: [[C + 'adapter.js', 'us = [...P.u];', 'us = [0];']] },
+  { id: 'XS4 the fraction grid groups profiles by their number of knots, not the knots', file: 'shared', pattern: 'row 2', edits: [[G + 'profile.js', 'const g = groups.find((x) => sameNums(x.u, p.u));', 'const g = groups.find((x) => x.u.length === p.u.length);']] },
+  { id: 'XS5 the step reads each profile against the first fraction, not the one before', file: 'shared', pattern: 'row 1|row 2', edits: [[G + 'profile.js', '        at[k] = v;', '        if (i === 0) at[k] = v;']] },
+  { id: 'XS6 the cache key writes the first profile\'s knots for every profile', file: 'shared', pattern: 'row 2', edits: [[G + 'profile.js', 'if (!sameNums(lastU, p.u)) { lastU = p.u;', 'if (!lastU) { lastU = p.u;']] },
+  { id: 'XS7 the largest step is taken from the last group only', file: 'shared', pattern: 'row 1|row 2', edits: [[G + 'profile.js', '    for (const g of groups) {\n      const U = g.u, n = U.length, u = uAt(g.E, f);', '    for (const g of groups) {\n      d = 0; const U = g.u, n = U.length, u = uAt(g.E, f);']] },
   { id: 'KB1 an e brush may reach a piece without an edge', file: 'core', pattern: 'BRUSH', edits: [[C + 'sculpt.js', "if (D.OPTIONAL[channel] && channel !== 'c' && !P[D.OPTIONAL[channel]]) throw", 'if (false) throw']] },
 ];
 
@@ -98,6 +107,7 @@ function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-xsec-mut-'));
   for (const d of ['src', 'tools', 'app']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true, filter: (p) => !/[\\/]app[\\/]test([\\/]|$)/.test(p) });
   fs.mkdirSync(path.join(dir, 'test')); for (const t of Object.values(FILES)) fs.copyFileSync(path.join(__dirname, t), path.join(dir, 'test', t));
+  fs.mkdirSync(path.join(dir, 'test', 'fixtures')); for (const f of fs.readdirSync(path.join(__dirname, 'fixtures')).filter((f) => f.endsWith('.core2.json'))) fs.copyFileSync(path.join(__dirname, 'fixtures', f), path.join(dir, 'test', 'fixtures', f));   // D484: core_xsec_shared row 1 reads the public fixtures
   return dir;
 }
 function runTests(dir, pattern, file) {
@@ -112,7 +122,7 @@ function runTests(dir, pattern, file) {
 }
 test('CONTROL: core_xsec, core_xsec_math and validate_xsec pass whole on an unmutated copy of src/, tools/ and app/', () => {
   const dir = tree();
-  try { for (const f of Object.values(FILES)) { const r = runTests(dir, undefined, f); assert.ok(r.tests > 5 && r.fail === 0, `${f}: tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  try { for (const [k, f] of Object.entries(FILES)) { const r = runTests(dir, undefined, f); assert.ok((MIN_TESTS[k] ? r.tests >= MIN_TESTS[k] : r.tests > 5) && r.fail === 0, `${f}: tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 // D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file
 test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
