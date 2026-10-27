@@ -80,7 +80,11 @@ function bindKeys(doc, shell, { save }) {
   const onKey = (e) => {
     const t = e.target, is = (sel) => !!t && typeof t.matches === 'function' && t.matches(sel);
     const inField = is('input, select, textarea') || !!(t && t.isContentEditable);
-    const sk = sculptKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, inField });
+    // D498 item 1 (A's review of 6650ac2): after a click a button (or a link, a summary) keeps the focus, and Tab there is the browser's: it moves the focus on.
+    // So for Tab only, any focused element but the page itself (no element, the body, the html) or the stage counts as a field
+    const tag = t && typeof t.tagName === 'string' ? t.tagName.toLowerCase() : '';
+    const onPage = !tag || tag === 'body' || tag === 'html' || (typeof t.closest === 'function' && !!t.closest('#stage'));
+    const sk = sculptKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, inField: inField || (e.key === 'Tab' && !onPage) });
     if (sk) { if (sculptKeyOnPage(doc, shell, sk)) e.preventDefault(); return; }
     const act = keyAction({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, inField: is('input, select, textarea'), inText: is(TEXT_ENTRY) || !!(t && t.isContentEditable) });
     if (!act) return;

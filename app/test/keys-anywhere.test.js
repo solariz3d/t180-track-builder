@@ -98,3 +98,13 @@ test('Tab in a text field (or any field) leaves Sculpt as it was and stays the b
   assert.equal(P.press('Tab', { shiftKey: true }, BODY).prevented, false, 'Shift+Tab is the browser\'s (the focus back)');
   assert.deepEqual([P.press('Tab', {}, BODY).prevented, !!s.getState().sculpt], [true, false], 'Tab again: Build');
 });
+
+// D498 item 1 (A's review of 6650ac2, p-d497-A §3): after a click a button keeps the focus, and Tab there is the browser's (the focus moves on). Only the page itself
+// (nothing focused, the body) or the stage takes Tab for Sculpt. Before, Tab with a focused button toggled Sculpt and the focus never moved
+test('Tab with a button focused (after a click) moves the focus as the browser does and does not toggle Sculpt; with nothing focused it still toggles', async () => {
+  const { s, P } = await twoPieces();
+  for (const target of [el('button'), el('summary'), el('a')]) {
+    assert.deepEqual([P.press('Tab', {}, target).prevented, !!s.getState().sculpt], [false, false], `Tab on a focused ${target.tagName}: the browser's, no Sculpt`);
+  }
+  assert.deepEqual([P.press('Tab', {}, BODY).prevented, !!s.getState().sculpt], [true, true], 'control: with nothing focused, Tab is Sculpt');
+});
