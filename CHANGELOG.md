@@ -5,6 +5,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Tab moves on from a button you just clicked.** After a click a button keeps the focus, and Tab there switched Sculpt on or off instead of moving the focus to the next control. Tab now switches Sculpt only when nothing is focused or the 3D view is; on a button, a link or a menu heading it moves the focus as usual.
+- **The live warning for low room overhead goes away when the road above is moved.** When a road that passed less than 1 m over another was raised or moved, the amber "low overhead" warning could stay on the lower road until something else made the whole track check again, if that lower road also ran close beside a third road. It now clears as soon as the road above moves away.
+- **On a closed lap that ends on a jump, Sculpt marks the right piece at the start line.** Sculpt hatches the last and first road pieces of a closed lap, the ones a release may reshape. When the lap's last piece was a jump's flight, that hatch landed on the flight and showed nothing; it now marks the last road piece before it.
+- **Sculpt's Grab glyph no longer stays turned after you leave the window with Alt held.** Alt released while the builder was not focused never reached it, so the Grab glyph stayed turned until the pointer next moved. It now resets when the window loses focus.
+
 ## [0.4.25] - 2026-10-27
 
 ### Changed
