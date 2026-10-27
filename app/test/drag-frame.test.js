@@ -47,7 +47,7 @@ test.before(async () => {
 test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } if (ch) ch.kill(); if (srv) srv.close(); await sleep(300); try { dir && fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } });
 
 // every animation-frame callback timed from page start; frames told apart by their timestamp
-const PRE = `(() => { const raf = window.requestAnimationFrame.bind(window); window.__ft = { on: false, frames: new Map() };
+const PRE = `(() => { document.title = 'zz-headless-test'; const raf = window.requestAnimationFrame.bind(window); window.__ft = { on: false, frames: new Map() };
   window.requestAnimationFrame = (fn) => raf((ts) => { const t0 = performance.now(); try { return fn(ts); } finally { if (window.__ft.on) { const f = window.__ft.frames.get(ts) || { ms: 0 }; f.ms += performance.now() - t0; window.__ft.frames.set(ts, f); } } }); })();`;
 async function load(look) {
   await send('Page.navigate', { url: `${base}/app/lib/cjs.js` });
@@ -57,6 +57,7 @@ async function load(look) {
   errors = []; await send('Page.navigate', { url: `${base}/app/index.html` });
   for (let i = 0; i < 200; i++) { await sleep(200); try { if (await ev("await new Promise((r) => setTimeout(r, 1500)); return !!document.querySelector('#palette input[aria-label]') && document.querySelectorAll('#stage canvas').length >= 2;")) break; } catch (e) { /* loading */ } }
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: id });
+  await ev("document.title = 'zz-headless-test'; return true;");   // the page's own <title> replaced the one PRE set: a headless page is always titled so
   await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Skip'); if (b && b.offsetParent) b.click(); return true;");
 }
 const setLength = (m) => ev(`const f = [...document.querySelectorAll('#palette input')].find((e) => /metres added/.test(e.getAttribute('aria-label') || e.title || '')); f.value = '${m}'; f.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 1200)); return true;`);
