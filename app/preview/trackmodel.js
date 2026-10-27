@@ -34,7 +34,7 @@ const { batchesOf } = require('./batches.js');
 const { coarsen, coarsenRun, mergeChords, sameSegment, CHEAP_FACTOR } = require('./coarse.js');
 const { worldBounds, linesFor } = require('./look.js');
 
-const { keyOf: hashOf } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
+const { keyOf: hashOf, sameContent, snapshot } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
 // A FROZEN segment cannot change, so its key is hashed once and remembered: the equation core's shell reuses an unchanged piece's segments,
 // deep-frozen (src/core/adapter.js toSegments `cache`), and keying all 3,077 of a 9-piece track's on every placement was about 55 ms of it.
 // Any other segment is hashed every time, as before.
@@ -84,7 +84,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   // D235: `detail` > 1 meshes a COARSER preview (app/preview/coarse.js thins each segment's row grid) while the track is being dragged; 1 is full detail, the export's.
   // A change of detail is a full rebuild. `lastResolved` is the state's document the last update was built from: the very same object builds nothing again.
   let detail = 1, detailMoved = false, lastResolved = null;
-  let lastCheap = null;   // the last CHEAP ghost's mesh and keys, reused by the next one (ghostFor)
+  let lastCheap = null;   // the last CHEAP ghost's mesh and its new chords as they were meshed (segkey.js snapshot), reused by the next one (ghostFor)
   // D407: THE PLACEMENT TAKES THE GHOST'S WORK. The last FULL ghost (not cheap, full detail) of an extension of the placed track: the placed path and mesh it was grown from, and the path, mesh and
   // batches it made. A placement whose segments are that ghost's, the very same objects, on the same placed path and mesh, with no offsets to lift, is what extendPath and extendMesh would make of
   // them (the ghost ran them on copies of the same placed track, so it is the same to the byte), so update() takes them instead of building them again (30 ms at 1,000 m, 60 at 2,000), and the
@@ -334,7 +334,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const all = candidate && candidate.segments;
       const segs = candidate && detail > 1 ? coarsen(all, detail) : cheap && Array.isArray(all) ? [...all.slice(0, keys.length), ...coarsenRun(all.slice(keys.length), CHEAP_FACTOR)] : all;
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
-      const nk = cheap ? segs.map(keyOf) : segs.slice(0, keys.length).map(keyOf);   // D407: the new chords' keys serve only the cheap ghost's reuse; a full ghost keys the placed prefix it must match
+      const nk = segs.slice(0, keys.length).map(keyOf);   // the placed prefix the candidate must match (D483: the new chords are no longer keyed; the cheap ghost compares them with the last one's, below)
       // D404: a cheap ghost whose new chords are COARSE (the shell's candidate(opts, { coarse }): longer than 2 m) puts at most CHEAP_STATIONS stations on them; one built from 2 m chords has
       // a station at every chord end whatever the step, so it is built as it always was (and reuses the last one's chords, below)
       const newSegs = cheap ? segs.slice(keys.length) : [], newLen = newSegs.reduce((a, g) => a + (g.length || 0), 0), step = newLen > CHEAP_STATIONS * STEP && newLen > 2.5 * newSegs.length ? newLen / CHEAP_STATIONS : STEP;
@@ -343,8 +343,11 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       // segments exactly as they were, so a new piece whose segment key is the last cheap ghost's at the same index keeps its mesh and only moves (geom.reuseMesh, `from`:
       // the placed track is taken as it is). Valid only on the same placed path; any full ghost, update or change of detail forgets it.
       const reuse = cheap && typeof geom.reuseMesh === 'function' && lastCheap && lastCheap.base === path && lastCheap.from === keys.length && lastCheap.step === step ? lastCheap : null;
-      const remember = (gm) => { lastCheap = cheap ? { base: path, from: keys.length, mesh: gm, nk, step } : null; return gm; };
-      const meshNew = function* (p, build) { return remember(reuse ? geom.reuseMesh(reuse.mesh, p, segs, nk.map((k, j) => j >= keys.length && k === reuse.nk[j]), { from: keys.length, grow: true }) : yield* build()); };
+      // D483: a new chord is the same as the last cheap ghost's at its index when segkey.js sameContent says so (it was: when their hashed keys agreed; with an edge typed, hashing
+      // the chords was 176 ms of a 3 s drag's 974, and a drag whose step moves cannot reuse at all). The new chords are kept for the next one as they were when meshed (a snapshot:
+      // the segments handed out with this ghost may be changed by a reader afterwards; the frozen profiles in them are shared, not copied), not their keys.
+      const remember = (gm) => { lastCheap = cheap ? { base: path, from: keys.length, mesh: gm, segs: segs.map((g, j) => (j < keys.length ? null : snapshot(g))), step } : null; return gm; };
+      const meshNew = function* (p, build) { return remember(reuse ? geom.reuseMesh(reuse.mesh, p, segs, segs.map((g, j) => j >= keys.length && j < reuse.segs.length && sameContent(g, reuse.segs[j])), { from: keys.length, grow: true }) : yield* build()); };
       if (!path) { const p = yield* geom.buildPathSteps(segs, { ...pathOpts, step, ...(step > STEP ? { substep: CHEAP_SUBSTEP } : {}), ...(candidate.start ? { start: candidate.start } : {}) }); const gm0 = yield* meshNew(p, () => geom.buildMeshSteps(p, segs, meshOpts)); yield; const bs0 = batchesOf(gm0); if (!cheap) yield* warmLines(bs0); return { batches: bs0, path: p, head: p.head, segments: segs }; }
       if (closed) throw new Error('ghost: a closed loop has no open end');
       // copies: extendPath only pops and pushes these arrays and never edits a sample, and of the blocks it changes only the

@@ -10,6 +10,17 @@ const IR = require('./inner_run.js');   // D352: a crashed inner run reads NOT T
 const SRC = path.join(__dirname, '..', 'src', 'geom');
 
 const MUTATIONS = [
+  // D483: the handle text and the normalised profile are kept by IDENTITY only for what is frozen all the way down (test/geom_mesh_stalekey.test.js)
+  { id: 'M-D483a the handle text of a part is kept when only its top is frozen (its arrays may change in place)', file: 'mesh.js',
+    from: 'const keep = frozenDeep(v); if (keep && PART_TEXT.has(v))', to: 'const keep = Object.isFrozen(v); if (keep && PART_TEXT.has(v))', caughtBy: 'a frozen profile whose ARRAYS are not frozen' },
+  { id: 'M-D483b a getter counts as a value for the handle text', file: 'mesh.js',
+    from: "if (!('value' in d) || !frozenDeep(d.value)) return false; }", to: 'if (!frozenDeep(d.value)) return false; }', caughtBy: 'a frozen profile that reads its angles through a GETTER' },
+  { id: 'M-D483c sealedNormal keeps ANY profile by identity (an unfrozen one changed in place reads as it was)', file: 'profile.js',
+    from: 'if (knotsFrozen(profile)) SEALED_BY.set(profile, r);', to: 'SEALED_BY.set(profile, r);', caughtBy: 'a number changed IN PLACE inside a later piece' },
+  { id: 'M-D483d sealedNormal keeps a profile frozen only at its top by identity', file: 'profile.js',
+    from: 'const knotsFrozen = (p) => Object.isFrozen(p) && Object.isFrozen(p.u) && Object.isFrozen(p.psi) &&', to: 'const knotsFrozen = (p) => Object.isFrozen(p) &&', caughtBy: 'a frozen profile whose ARRAYS are not frozen' },
+  { id: 'M-D483e sealedNormal takes a getter for a value', file: 'profile.js',
+    from: "const valuesOnly = (o, keys) => keys.every(", to: "const valuesOnly = (o, keys) => true || keys.every(", caughtBy: 'a frozen profile that reads its angles through a GETTER' },
   // D177 option 2 (the gravity frame): the old M1 (the RMF replaced by a level frame) and M2 (the closing twist not
   // spread) mutated code that is gone with the RMF: the double reflection no longer grows the frame, and there is no
   // closing twist to spread. Their replacements mutate the new rule:
@@ -58,7 +69,8 @@ const MUTATIONS = [
   { id: 'M19 the stacked reach is misread (gap scaled ×4)', file: 'bvh.js',
     from: 'const gap = Math.abs(t * 2 - 1) * reach;', to: 'const gap = Math.abs(t * 2 - 1) * reach * 4;', caughtBy: 'figure-8, 1.5 m separation' },
   { id: 'M20 ramps ignored in the mesh (a font jumps at the seam)', file: 'mesh.js',
-    from: 'const A = ramp ? normalize(ramp.from) : null;', to: 'const A = null;', caughtBy: 'no step at the seam, flat → half-pipe' },
+    from: 'const A = ramp ? sealedNormal(ramp.from) : null;', to: 'const A = null;',   // re-pointed D483: the ramp's from is read through sealedNormal (the same numbers), the rule unchanged
+    caughtBy: 'no step at the seam, flat → half-pipe' },
   { id: 'M21 the width does not ramp (the blend jumps to the new width)', file: 'profile.js',
     from: 'E = [EA[0] + (EB[0] - EA[0]) * w, EA[1] + (EB[1] - EA[1]) * w];', to: 'E = EB.slice();', caughtBy: 'no step at the seam, flat 26 m → flat 36 m' },
   { id: 'M22 a piece never inherits the previous font', file: 'mesh.js',
@@ -105,7 +117,7 @@ const MUTATIONS = [
 // by B in the D178 read and by me in D179) hid the named test's failing line, so the catch depended on the machine's load.
 // A run in which the named test gives NO verdict (its file ended before reporting it) is not counted either way: it is
 // repeated, at most twice, and every attempt is reported. Nothing here waits on time.
-const TEST_FILES = ['geom_path', 'geom_mesh', 'geom_grow', 'geom_sculpt', 'geom_bvh', 'geom_ramp', 'geom_loop', 'export_seam_fins'].map((n) => path.join(__dirname, `${n}.test.js`));
+const TEST_FILES = ['geom_path', 'geom_mesh', 'geom_grow', 'geom_sculpt', 'geom_bvh', 'geom_ramp', 'geom_loop', 'export_seam_fins', 'geom_mesh_stalekey'].map((n) => path.join(__dirname, `${n}.test.js`));
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function runOnce(geom, pattern) {
   const tap = path.join(path.dirname(geom), '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows

@@ -52,7 +52,7 @@ const { guidePlan, MODES: GRID_MODES, MIRRORS } = require('./guides.js');
 const { resolveLook } = require('./aclook.js');
 const { flowCell } = require('../../src/texture/flow.js');
 const { previewTextures } = require('../../src/texture/set.js');
-const { normalize, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
+const { normalize, sealed, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
 const { keyAction: shortcutOf } = require('../core/keys.js');   // D257: what Ctrl+key does in the app (undo, redo, save, remove the head): the keys that stop Left Ctrl
 
@@ -571,10 +571,13 @@ function pickAt(path, pose, x, y, w, h, maxPx = 40) {
 // section at the head is a blend made afresh by readAt, so offsetAt summed it from scratch each time: about 0.6 s of every 4 s of frames.
 // Both depend on the head segment alone, so for a FROZEN segment (the core shell's, src/core/adapter.js) the answer is remembered; any
 // other segment is read each time, as before.
+// D483: and an unfrozen one is read through a FROZEN COPY of its section (profile.js sealed), so offsetAt takes the running sums: the dragged ghost's head is a fresh unfrozen
+// copy on every move (coarse.js), and with an edge typed its 137 knots were each summed from the centre out on every frame (91.9% of the preview frame, D482 §5). The copy has
+// the same numbers and the sums add the same pieces in the same order, so the span is the same to the bit.
 const headMemo = { width: new WeakMap(), clearance: new WeakMap() };
 const perHead = (memo, g, f) => { if (!Object.isFrozen(g)) return f(g); if (!memo.has(g)) memo.set(g, f(g)); return memo.get(g); };
 function widthAtHead(segments) {
-  for (let i = (segments || []).length - 1; i >= 0; i--) if (segments[i] && segments[i].profile) return perHead(headMemo.width, segments[i], (g) => spanOf(readAt(g, g.length)));   // at the HEAD: the end of the last segment (a cup's segments carry a blend)
+  for (let i = (segments || []).length - 1; i >= 0; i--) if (segments[i] && segments[i].profile) return perHead(headMemo.width, segments[i], (g) => spanOf(sealed(readAt(g, g.length))));   // at the HEAD: the end of the last segment (a cup's segments carry a blend)
   return null;
 }
 

@@ -71,11 +71,19 @@ function sealed(P) {
  * running sums are made once. A profile that normalize() refuses is refused every time. At most SEALED_MAX are kept, the oldest dropped first.
  */
 const SEALED = new Map(), SEALED_MAX = 64;
+// D483: and by IDENTITY for a profile that is frozen with its knots (the core's, which cannot change): a drag's ghost meshes its 48 chords on every move, and with an edge typed
+// each chord's 137 knots were written out as text for the key above (numKey: 83 ms of a 3 s drag's 974 ms of rebuilds, D483 §2). A profile frozen with its knots is told by
+// its object; any other is keyed by value, as before. A profile that normalize() refuses is never kept, so it is refused every time.
+const SEALED_BY = new WeakMap();
+const valuesOnly = (o, keys) => keys.every((k) => { const d = Object.getOwnPropertyDescriptor(o, k); return !d || 'value' in d; });
+const knotsFrozen = (p) => Object.isFrozen(p) && Object.isFrozen(p.u) && Object.isFrozen(p.psi) && valuesOnly(p, ['u', 'psi', 'font', 'material']) && valuesOnly(p.u, Object.keys(p.u)) && valuesOnly(p.psi, Object.keys(p.psi));
 function sealedNormal(profile) {
   if (!profile || !Array.isArray(profile.u) || !Array.isArray(profile.psi)) return sealed(normalize(profile));
+  const held = SEALED_BY.get(profile); if (held) return held;
   const k = (profile.font || 'custom') + '|' + (profile.material || 'ROAD') + '|' + numKey(profile.u) + '|' + numKey(profile.psi);
   let r = SEALED.get(k);
   if (!r) { r = sealed(normalize(profile)); if (SEALED.size >= SEALED_MAX) SEALED.delete(SEALED.keys().next().value); SEALED.set(k, r); }
+  if (knotsFrozen(profile)) SEALED_BY.set(profile, r);
   return r;
 }
 /** Offset [X, Y] of the surface point at u, exactly (piecewise closed form). */
