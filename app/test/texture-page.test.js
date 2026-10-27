@@ -63,6 +63,7 @@ async function load(look) {
   await ev(`localStorage.clear(); localStorage.setItem('t180.settings.theme', ${JSON.stringify(JSON.stringify(look))}); return true;`);
   await send('Page.navigate', { url: base });
   for (let i = 0; i < 150; i++) { await sleep(200); try { if (await ev("return document.documentElement.dataset.menubar === 'ready';")) break; } catch (e) { /* loading */ } }
+  await ev("document.title = 'zz-headless-test'; return true;");   // D484: a headless page is always titled so; the page's own <title> replaced any set before
   assert.equal(await ev("return document.documentElement.dataset.menubar || 'not mounted';"), 'ready', `${look}: the menus mounted (page errors: ${errors.join(' | ') || 'none'})`);
   await ev("const b = [...document.querySelectorAll('#guide button')].find((x) => x.textContent.trim() === '✕'); if (b) b.click(); return true;"); await sleep(300);
 }

@@ -89,6 +89,7 @@ async function renderClips(src, clips = CLIPS, { samples = null, seed = SEED, me
   try {
     let send; try { ({ ws, send } = await connect(tgt.webSocketDebuggerUrl)); } catch (e) { throw new Error(`soundrender: ${e.message}`); }
     const ev = async (e) => { const d = await send('Runtime.evaluate', { expression: e, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`soundrender: page error ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 400)}`); return d.result.result.value; };
+    await ev("document.title = 'zz-headless-test'; true");   // D484: a headless page is always titled so, first thing
     await ev(`window.__M = (() => { const module = { exports: {} }; ${src}\n; return module.exports; })(); window.__SAMP = null; true`);
     if (samples) {   // each slot's two channels go over in pieces, into one AudioBuffer per slot that every clip's context can play
       await ev('window.__SAMP = {}; true');

@@ -24,7 +24,7 @@ const PIN = { lap: 'sha256 9f3a7040bf4356e9 files 10', open: 'sha256 a257c20e84e
 const TYPES = { '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.html': 'text/html' };
 
 // The page: the app's modules from the served worktree, export-isolated.test.js's laps, and the same digest of an export's files
-const PAGE = `<!doctype html><meta charset="utf-8"><title>d437b</title><body><canvas id="c" width="64" height="32"></canvas>
+const PAGE = `<!doctype html><meta charset="utf-8"><title>zz-headless-test</title><body><canvas id="c" width="64" height="32"></canvas>
 <script src="/app/lib/cjs.js"></script><script>
 'use strict';
 window.born = Math.random();

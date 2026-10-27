@@ -44,7 +44,7 @@ test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } i
 
 // every animation-frame callback timed (by its frame's timestamp); the pointer-up and every input and click event timed between a capture and a bubble listener on the window;
 // and, each frame while __ft.watch is on, whether a ghost is on show and how many stations it has
-const PRE = `(() => { const raf = window.requestAnimationFrame.bind(window); const ft = window.__ft = { on: false, frames: new Map(), ev: [], watch: false, seen: [] };
+const PRE = `(() => { document.title = 'zz-headless-test'; const raf = window.requestAnimationFrame.bind(window); const ft = window.__ft = { on: false, frames: new Map(), ev: [], watch: false, seen: [] };
   window.requestAnimationFrame = (fn) => raf((ts) => { const t0 = performance.now(); try { return fn(ts); } finally { if (ft.on) { const f = ft.frames.get(ts) || { ms: 0 }; f.ms += performance.now() - t0; ft.frames.set(ts, f); } } });
   for (const type of ['pointerup', 'input', 'click']) { let a = 0; window.addEventListener(type, () => { a = performance.now(); }, true); window.addEventListener(type, () => { if (ft.on) ft.ev.push([type, a, performance.now() - a]); }, false); }
   ft.asked = []; for (const t of ['t180-ghost', 't180-ghost-clear']) document.addEventListener(t, (e) => { if (ft.on) ft.asked.push([Math.round(performance.now()), t, e.detail ? [!!e.detail.cheap, !!e.detail.sliced, e.detail.candidate && e.detail.candidate.segments ? e.detail.candidate.segments.length : null] : null]); }, true);   // what the panel asked of the preview, for a failure's message
@@ -58,6 +58,7 @@ async function load(look) {
   errors = []; await send('Page.navigate', { url: `${base}/app/index.html` });
   for (let i = 0; i < 200; i++) { await sleep(200); try { if (await ev("await new Promise((r) => setTimeout(r, 1500)); return !!document.querySelector('#palette input[aria-label]') && document.querySelectorAll('#stage canvas').length >= 2;")) break; } catch (e) { /* loading */ } }
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: id });
+  await ev("document.title = 'zz-headless-test'; return true;");   // D484: a headless page is always titled so; the page's own <title> replaced any set before
   await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Skip'); if (b && b.offsetParent) b.click(); return true;");
 }
 const FIELD = (re) => `[...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || '') && !/start/i.test(e.getAttribute('aria-label') || ''))`;

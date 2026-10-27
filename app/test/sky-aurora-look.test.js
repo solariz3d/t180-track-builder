@@ -76,6 +76,7 @@ test.before(async () => {
   let tgt, send; ({ ch, dir, tgt } = await launchChrome(CHROME, ['--enable-unsafe-swiftshader'], 't180aur-'));
   ({ ws, send } = await connect(tgt.webSocketDebuggerUrl));
   ev = async (expr) => { const d = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 500)}`); return d.result.result.value; };
+  await ev("document.title = 'zz-headless-test'; true");   // D484: a headless page is always titled so, first thing
   await ev(PAGE);
   await ev(`window.S = window.__aur(${JSON.stringify(R.skyFS(SKY.patternSource('aurora')))}, ${JSON.stringify(colours())}); true`);
   // row 6 reads the sky without its stars: they are pixel-sized by design (bounded by their own twinkle rule), and one near the corona would read as fine rays

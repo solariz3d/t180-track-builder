@@ -95,6 +95,7 @@ test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } i
 // before the page's own scripts: the native side's stand-in (open_autosave answers the track once, save_autosave keeps the page's latest in __saved, lists are empty, the rest answers nothing);
 // every animation-frame callback timed by its frame's timestamp; pointer events timed between a capture and a bubble listener on the window; every long task (over 50 ms) kept
 const pre = (text) => `(() => {
+  document.title = 'zz-headless-test';
   let left = ${JSON.stringify(JSON.stringify({ schema: 1, kind: 'core', name: null, doc: text }))};
   window.__saved = null;
   window.__TAURI__ = { core: { invoke: (cmd, args) => { if (cmd === 'open_autosave') { const t = left; left = null; return Promise.resolve(t); } if (cmd === 'save_autosave') { window.__saved = args.text; return Promise.resolve(); } if (/^list_/.test(cmd)) return Promise.resolve([]); return Promise.resolve(null); } } };
@@ -112,6 +113,7 @@ async function load(look, track) {
   errors = []; await send('Page.navigate', { url: `${base}/app/index.html` });
   for (let i = 0; i < 200; i++) { await sleep(200); try { if (await ev("await new Promise((r) => setTimeout(r, 1000)); return !!document.querySelector('#palette input[aria-label]') && document.querySelectorAll('#stage canvas').length >= 2 && [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Restore it');")) break; } catch (e) { /* loading */ } }
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: id });
+  await ev("document.title = 'zz-headless-test'; return true;");   // D484: a headless page is always titled so; the page's own <title> replaced any set before
   await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Skip'); if (b && b.offsetParent) b.click(); return true;");
   assert.ok(await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Restore it'); if (!b) return false; b.click(); return true;"), `${track}: the page offered the track to restore`);
   const n = D.parse(text).pieces.length;

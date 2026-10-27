@@ -146,6 +146,7 @@ test.before(async () => {
   let tgt, send; ({ ch, dir, tgt } = await launchChrome(CHROME, ['--enable-unsafe-swiftshader'], 't180crisp-'));
   ({ ws, send } = await connect(tgt.webSocketDebuggerUrl));
   ev = async (expr) => { const d = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 600)}`); return d.result.result.value; };
+  await ev("document.title = 'zz-headless-test'; true");   // D484: a headless page is always titled so, first thing
   await ev(PAGE);
 });
 test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } if (ch) ch.kill(); await sleep(300); try { dir && fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } });
