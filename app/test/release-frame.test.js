@@ -8,7 +8,11 @@
 //   1  letting go of a 1,000 m turn handle and of a 1,000 m length handle, in every look: nothing it causes takes more than 6.0 ms (before: 60 ms in the handler)
 //   2  past the ordinary range it does not stall: letting go of a 20,000 m turn, nothing takes more than 120 ms (before: 1,058 ms in one handler), and the exact ghost is whole within 10 s
 //   3  the exact ghost arrives and nothing blinks: after letting go of a 2,000 m turn the ghost is on show at every frame until the exact one (a station every 2 m) takes its place, within 1 s
-//   4  a number typed into the Turn field on a 12-piece track (aqua): each change costs at most 6.0 ms at the 95th percentile, handler and frames together (before: 13 ms)
+//   4  a number typed into the Turn field on a 12-piece track (aqua): each change costs at most 6.0 ms at the 95th percentile, as the longest frame it causes, the handler
+//      counted with the first frame after it (before: 13 ms). D485: the D484 ruling (lighthouse exo_memory/loop/plan_d481_drag_lag_2026-10-26.md, "D484 collated, 04:05", Part 2) moved
+//      this row from the handler plus every frame summed to the per-frame rule rows 1-3 use: since D407 the exact ghost is built a 2.5 ms slice a frame, and the sum added the slices back
+//      together (p95 5.2 to 7.7 ms on every release 0.4.19 to 0.4.22, either side of the bar at random, while no frame was over 4.5). The sum is still printed, not asserted, so a growth in
+//      the total work of a change stays in sight
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -143,7 +147,7 @@ test('row 3: the exact ghost arrives and nothing blinks: after letting go of a 2
   assert.ok(exactAt, `the exact ghost (a station every 2 m, 1,001) was not in place within 1 s: ${r.stations} stations at the end`);
 });
 
-test('row 4: a number typed into the Turn field on a 12-piece track: each change costs at most 6.0 ms at the 95th percentile, handler and frames together', { skip }, async (t) => {
+test('row 4: a number typed into the Turn field on a 12-piece track: each change costs at most 6.0 ms at the 95th percentile, its longest frame with the handler counted in the first', { skip }, async (t) => {
   const runs = [];
   for (let k = 0; k < RUNS; k++) {
     await load('aqua'); await setField('/metres added/', 100);
@@ -156,11 +160,13 @@ test('row 4: a number typed into the Turn field on a 12-piece track: each change
     await sleep(200); await ev('window.__ft.on = false; return true;');
     const evs = (await ev("return window.__ft.ev.filter((e) => e[0] === 'input');")).sort((a, b) => a[1] - b[1]), fr = await ev('return [...window.__ft.frames.entries()].map(([ts, f]) => [ts, f.ms]);');
     assert.ok(evs.length >= 32, `${evs.length} field changes reached the page`);
-    const cost = evs.map(([, a, d], i) => { const end = Math.min(a + 120, i + 1 < evs.length ? evs[i + 1][1] : Infinity); return d + fr.filter(([ts, ms]) => ts >= a && ts < end && ms > 0.5).reduce((s, [, ms]) => s + ms, 0); });
-    runs.push({ p95: pct(cost, 0.95), median: pct(cost, 0.5) });
+    // each change's frames over 0.5 ms until the next change (at most 120 ms); the handler and the first of them share a display frame, each later one has its own
+    const mine = evs.map(([, a, d], i) => { const end = Math.min(a + 120, i + 1 < evs.length ? evs[i + 1][1] : Infinity); return [d, fr.filter(([ts, ms]) => ts >= a && ts < end && ms > 0.5).sort((x, y) => x[0] - y[0]).map(([, ms]) => ms)]; });
+    const cost = mine.map(([d, ms]) => Math.max(d + (ms.length ? ms[0] : 0), ...ms.slice(1))), sum = mine.map(([d, ms]) => ms.reduce((s, x) => s + x, d));
+    runs.push({ p95: pct(cost, 0.95), median: pct(cost, 0.5), sumP95: pct(sum, 0.95), sumMedian: pct(sum, 0.5) });
     if (runs[k].p95 <= BUDGET) break;
   }
-  t.diagnostic(`a field change: p95 ${runs.map((r) => r.p95.toFixed(1)).join(' / ')} ms (median ${runs.map((r) => r.median.toFixed(1)).join(' / ')})`);
-  assert.ok(runs.some((r) => r.p95 <= BUDGET), `a field change: p95 ${runs.map((r) => r.p95.toFixed(1)).join(' / ')} ms, over ${BUDGET}`);
+  t.diagnostic(`a field change, its longest frame: p95 ${runs.map((r) => r.p95.toFixed(1)).join(' / ')} ms (median ${runs.map((r) => r.median.toFixed(1)).join(' / ')}); handler and frames summed, not asserted: p95 ${runs.map((r) => r.sumP95.toFixed(1)).join(' / ')} ms (median ${runs.map((r) => r.sumMedian.toFixed(1)).join(' / ')})`);
+  assert.ok(runs.some((r) => r.p95 <= BUDGET), `a field change, its longest frame: p95 ${runs.map((r) => r.p95.toFixed(1)).join(' / ')} ms, over ${BUDGET} (summed: p95 ${runs.map((r) => r.sumP95.toFixed(1)).join(' / ')} ms)`);
   assert.deepEqual(errors, []);
 });
