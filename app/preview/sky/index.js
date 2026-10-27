@@ -27,10 +27,10 @@
 //       sin(dot(dir, axis) * k)) is not refused.
 'use strict';
 
-const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']);   // D405: city, Skyline Night's; D416: river, Glass's (prism stays a style)
+const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river', 'aurora1', 'aurora2', 'aurora3']);   // D490 PROTOTYPES: aurora1/2/3 (sky/arcs.js), on a branch for the user to pick from   // D405: city, Skyline Night's; D416: river, Glass's (prism stays a style)
 // each required by name, written out: the page's loader (app/lib/cjs.js) fetches only the requires it can read in the source. Requiring a module costs
 // nothing until its source() is called, so a stub that is not built yet throws only when a skin names it.
-const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js'), city: require('./city.js'), river: require('./river.js') };
+const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js'), city: require('./city.js'), river: require('./river.js'), aurora1: require('./aurora1.js'), aurora2: require('./aurora2.js'), aurora3: require('./aurora3.js') };
 
 /** D391: every way a style's GLSL breaks the two rules above, as readable lines (empty: it keeps them). Comments are not code, so they are skipped. */
 function contractProblems(style, src) {
@@ -53,4 +53,7 @@ function patternSource(style) {
   return src;
 }
 
-module.exports = { STYLES, patternSource, contractProblems };
+/** D490 PROTOTYPE: the resolution a style is drawn at, as a fraction of the canvas (1 unless its module says less; then it must define skyOverlay). */
+function scaleOf(style) { const m = MODULES[style]; const k = m && typeof m.scale === 'number' ? m.scale : 1; if (!(k > 0 && k <= 1)) throw new Error(`sky: ${style}.js has a scale of ${k}; it is a fraction from 0 to 1`); return k; }
+
+module.exports = { STYLES, patternSource, contractProblems, scaleOf };

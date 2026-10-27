@@ -82,7 +82,9 @@ test('an unknown sky style fails loudly, at setTheme and in the registry; a styl
   assert.throws(() => r.setTheme({ skyStyle: 3 }), /no style named 3/);
   assert.throws(() => SKY.patternSource('Sun'), /no style named "Sun"/);
   // AMENDED (D405): the rule changed by name: a sixth style, city (Skyline Night's). AMENDED (D416): a seventh, river (Glass's new sky)
-  assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']);
+  // D490 PROTOTYPES (branch d490-c only): the three reworked auroras are registered as styles so the user can pick from real renders; the pin
+  // names them, and goes back to seven when the pick lands as aurora.js
+  assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river', 'aurora1', 'aurora2', 'aurora3']);
   assert.equal(SKY.patternSource('none'), null);
   assert.match(SKY.patternSource('sun'), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/);
 });

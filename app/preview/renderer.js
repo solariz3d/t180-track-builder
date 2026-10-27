@@ -41,6 +41,7 @@ const { LIGHT, linesFor, tangentsFor } = require('./look.js');
 const AC = require('./acshaders.js');
 const ACLOOK = require('./aclook.js');
 const SKY = require('./sky/index.js');
+const CYCLE = require('./sky/cycle.js');   // D490 PROTOTYPE: the aurora's colour drift, once a frame
 
 const v3 = (v) => `vec3(${v.map((x) => x.toFixed(6)).join(', ')})`;
 const VS = `
@@ -106,6 +107,19 @@ ${pattern}
 float pass_bayer2(vec2 p){ return 2.0 * mod(p.x + p.y, 2.0) + p.y; }
 float pass_bayer4(vec2 a){ vec2 p = mod(floor(a), 4.0), lo = mod(p, 2.0); return (4.0 * pass_bayer2(lo) + pass_bayer2(floor(p * 0.5)) + 0.5) / 16.0; }
 void main(){ vec3 c = clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0); gl_FragColor = vec4(clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0), 1.0); }`;
+// D490 PROTOTYPE: a style drawn at a lower resolution (sky/index.js scaleOf, under 1) is drawn into a texture that size with skyFS, then this pass
+// draws the canvas from it, scaled up (linear), and adds the style's skyOverlay (its stars) at full resolution, so a star stays a device pixel (D416)
+const skyCompositeFS = (pattern) => `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec3 vRay;
+uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime; uniform float uPx;
+uniform sampler2D uLow; uniform vec2 uRes;
+${pattern}
+void main(){ vec3 under = texture2D(uLow, gl_FragCoord.xy / uRes).rgb; gl_FragColor = vec4(clamp(under + skyOverlay(normalize(vRay), uTime, under), 0.0, 1.0), 1.0); }`;
 const SKY_STRIP = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 /** The inverse of a column-major 4×4 (cofactors); a singular matrix throws. */
 function invert4(m) {
@@ -221,6 +235,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   if (!gl) throw new Error('renderer: no WebGL context');
   let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // D381: setTheme replaces these, the clear colour and the fog
   let skyStyle = 'none', skyProg = null, skyBuf = null, skyA = null, skyB = null, skyC = null;   // D384: the sky; a colour left null is the clear colour
+  let skyCycle = 'none', skyScale = 1, skyComp = null, skyLow = null;   // D490 PROTOTYPE: the colour cycle ('a', 'b' or 'none'), and a low-resolution sky's composite and texture
   if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -371,12 +386,14 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   // D410: uPx, the angle one device pixel spans at the middle of the view (2 |up| / height: up is the half-height ray offset at unit forward), so a
   // style can draw a point or an edge a pixel wide at any window size (prism's stars and moon limb)
   function drawSky(B, time, height) {
-    const sp = skyProg, s = clear, a = skyA || clear, b = skyB || clear, c = skyC || clear;
+    const sp = skyProg, s = clear, c = skyC || clear;
+    const [a, b] = CYCLE.colours(skyCycle, time, skyA || clear, skyB || clear);   // D490 PROTOTYPE: the drift, worked out once a frame ('none': the skin's own)
     if (!skyBuf) { skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.bufferData(gl.ARRAY_BUFFER, SKY_STRIP, gl.STATIC_DRAW); uploads++; }
     gl.useProgram(sp.p);
     gl.uniform3f(sp.fwd, B.fwd[0], B.fwd[1], B.fwd[2]); gl.uniform3f(sp.right, B.right[0], B.right[1], B.right[2]); gl.uniform3f(sp.up, B.up[0], B.up[1], B.up[2]);
     gl.uniform3f(sp.sky, s[0], s[1], s[2]); gl.uniform3f(sp.a, a[0], a[1], a[2]); gl.uniform3f(sp.b, b[0], b[1], b[2]); gl.uniform3f(sp.c, c[0], c[1], c[2]);
     gl.uniform1f(sp.time, time); gl.uniform1f(sp.px, 2 * Math.hypot(B.up[0], B.up[1], B.up[2]) / height);
+    if (sp.low) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, skyLow.tex); gl.uniform1i(sp.low, 0); gl.uniform2f(sp.res, sp.resW, sp.resH); }
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
     gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.enableVertexAttribArray(sp.pos); gl.vertexAttribPointer(sp.pos, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -388,6 +405,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       const ok = (v) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x >= 0 && x <= 1);
       for (const k of Object.keys(t || {})) {
         if (k === 'skyStyle') continue;
+        if (k === 'skyCycle') { if (!['a', 'b', 'none'].includes(t[k])) throw new Error(`renderer: skyCycle is 'a', 'b' or 'none', got ${JSON.stringify(t[k])}`); skyCycle = t[k]; continue; }   // D490 PROTOTYPE
         if (!['sky', 'fog', 'edge', 'tie', 'grid', 'skyA', 'skyB', 'skyC'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
         if (!ok(t[k])) throw new Error(`renderer: the ${k} colour is three numbers from 0 to 1, got ${JSON.stringify(t[k])}`);
       }
@@ -398,8 +416,10 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
           const u = (n) => gl.getUniformLocation(next.p, n);
           Object.assign(next, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime'), px: u('uPx') });
         }
-        if (skyProg) gl.deleteProgram(skyProg.p);
-        skyProg = next; skyStyle = t.skyStyle;
+        const k = t.skyStyle === 'none' ? 1 : SKY.scaleOf(t.skyStyle), comp = next && k < 1 ? program(SKY_VS, skyCompositeFS(src)) : null;
+        if (comp) { const u = (n) => gl.getUniformLocation(comp.p, n); Object.assign(comp, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime'), px: u('uPx'), low: u('uLow'), res: u('uRes') }); }
+        if (skyProg) gl.deleteProgram(skyProg.p); if (skyComp) gl.deleteProgram(skyComp.p);
+        skyProg = next; skyStyle = t.skyStyle; skyScale = k; skyComp = comp;
       }
       if (t.sky) clear = t.sky; if (t.fog) fog = t.fog; if (t.edge) edge = t.edge; if (t.tie) tie = t.tie; if (t.grid) gridColour = t.grid;
       if (t.skyA) skyA = t.skyA; if (t.skyB) skyB = t.skyB; if (t.skyC) skyC = t.skyC;
@@ -414,7 +434,22 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
       const time = extras.time === undefined ? 0 : extras.time;
       if (!Number.isFinite(time)) throw new Error(`renderer: the sky's time is a number of seconds, got ${String(time)}`);
-      if (skyProg) drawSky(skyBasis(pose, width / height), time, height);
+      if (skyProg && skyComp) {   // D490 PROTOTYPE: drawn small, then scaled up with the stars added
+        const lw = Math.max(1, Math.ceil(width * skyScale)), lh = Math.max(1, Math.ceil(height * skyScale)), B = skyBasis(pose, width / height);
+        if (!skyLow || skyLow.w !== lw || skyLow.h !== lh) {
+          if (skyLow) { gl.deleteFramebuffer(skyLow.fb); gl.deleteTexture(skyLow.tex); }
+          const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lw, lh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+          if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('renderer: the low-resolution sky target is not complete');
+          skyLow = { fb, tex, w: lw, h: lh }; uploads++;
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, skyLow.fb); gl.viewport(0, 0, lw, lh); drawSky(B, time, lh);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, width, height);
+        const main = skyProg; skyProg = Object.assign(skyComp, { resW: width, resH: height }); try { drawSky(B, time, height); } finally { skyProg = main; }
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      } else if (skyProg) drawSky(skyBasis(pose, width / height), time, height);
       const vp = new Float32Array(M.viewProj(pose, width / height));
       if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, gridColour, 1); }
       let chunks;
@@ -457,6 +492,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       for (const e of buffers.values()) gl.deleteBuffer(e.buf); buffers.clear();
       for (const e of texes.values()) gl.deleteTexture(e.t); texes.clear(); if (white) gl.deleteTexture(white);
       if (skyProg) gl.deleteProgram(skyProg.p); if (skyBuf) gl.deleteBuffer(skyBuf);
+      if (skyComp) gl.deleteProgram(skyComp.p); if (skyLow) { gl.deleteFramebuffer(skyLow.fb); gl.deleteTexture(skyLow.tex); }   // D490 PROTOTYPE
       gl.deleteProgram(surf.p); gl.deleteProgram(line.p); for (const pr of Object.values(ac)) gl.deleteProgram(pr.p);
     },
   };
