@@ -12,6 +12,7 @@ All notable changes to this project are recorded here. The format follows
 - **The sky checks that it fits the graphics card.** The new sky costs at most 1.5 ms of GPU time a frame at 2560×1440 on the machine it was built on. For its first few seconds the 3D view times the sky on the GPU. If it is over 1.5 ms a frame, the view switches to a flat form of the same sky, about a quarter of the cost, and says so in the console. Where the browser offers no GPU timer, the sky is drawn as it is.
 
 ### Fixed
+- **The export's CSP warning no longer points to a setting that is not there.** Since 0.4.20, every export said the track needs Custom Shaders Patch and then told you to turn off "T-180 track" to export without it, but the builder has no such setting: every track it exports needs CSP. The warning now says only that the track needs CSP and that Assetto Corsa without it can crash loading the track.
 - **The title bar's close button turns red under the pointer on the Aqua and Glass looks.** Those two looks cleared every window button's background and gave the hover back only to minimise and maximise, so the close button stayed plain when hovered. It now turns the same red it does on Aurora.
 
 ## [0.4.23] - 2026-10-27

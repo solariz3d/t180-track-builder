@@ -15,7 +15,7 @@ const plain = (w) => String(w).replace(REF, '').replace(/\s+/g, ' ').trim();
 function exportWarningWords(w) {
   const s = String(w || '');
   if (!s) return null;
-  if (/^csp-only:/.test(s)) return 'needs Custom Shaders Patch (CSP): Assetto Corsa without CSP can crash loading this track. Turn off "T-180 track" to export without it';
+  if (/^csp-only:/.test(s)) return 'needs Custom Shaders Patch (CSP): Assetto Corsa without CSP can crash loading this track';
   if (/mesh-node names repeat/.test(s)) return null;
   if (/^self-intersection NOT checked/.test(s)) return 'the road was not checked for running into itself';
   if (/^noblock:/.test(s)) return 'this folder has no soft-collision road: it was written only because it was asked for';
