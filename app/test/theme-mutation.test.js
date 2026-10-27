@@ -2,8 +2,6 @@
 // D381 part 2a (pane B): the skin pick and the token reader, mutated; D384 part 1 (pane B): the sky pass too (S1-S13, run against sky.test.js).
 // D410 (pane B): Glass's crisp sky (P1-P4, run against sky-crisp.test.js; P2-P4 skip where there is no Chrome, as that file's rows do).
 // D416 (pane B): every night sky at the screen's own pixels (P5-P12; that file is sky-crisp.test.js now, every night style's rows at DPR 1 and 1.5).
-// D495 (pane C): the sky's GPU budget, its fallback and the aurora's colour cycle (B1-B14, against sky-budget.test.js), and the GPU row (G1-G3, against
-// sky-gpu.test.js, in headless Chrome on the machine's GPU: run this harness alone, as a timing session).
 // Each mutation copies app/ (all but its tests, plus theme.test.js and sky.test.js with its fixture), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED theme.test.js there. "Applied" means the patch text was
 // found exactly once; "caught" means the named test FAILED on the mutant. A CONTROL runs the unmutated copy first. The originals are never touched.
 'use strict';
@@ -66,8 +64,7 @@ const MUTATIONS = [
   { id: 'P3 a star is the old gaussian', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'max(0.0, 1.0 - length(dd) / (1.25 * prism_px()))', to: 'exp(-dot(dd, dd) / (2.0 * 0.0020 * 0.0020))', caughtBy: 'row 1 (prism)' },
   { id: 'P4 the band has no filaments', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: '(0.6 + 0.4 * toward) * fil;', to: '(0.6 + 0.4 * toward);', caughtBy: 'row 5' },
   // D416: every night sky at the screen's own pixels, one mutant per new row
-  // CHANGED D495: the aurora's stars are drawn by sky/arcs.js now (the GLSL the reworked aurora is built from, its helpers named ${P}_); the anchor follows the line
-  { id: 'P5 an aurora star is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/arcs.js', from: 'max(0.0, 1.0 - length(dir - sd) / (1.25 * ${P}_px()))', to: 'exp(-dot(dir - sd, dir - sd) * 180.0 * 180.0 / (2.0 * 0.13 * 0.13))', caughtBy: 'row 1 (aurora)' },
+  { id: 'P5 an aurora star is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/aurora.js', from: 'max(0.0, 1.0 - length(dir - sd) / (1.25 * aurora_px()))', to: 'exp(-dot(dir - sd, dir - sd) * 180.0 * 180.0 / (2.0 * 0.13 * 0.13))', caughtBy: 'row 1 (aurora)' },
   { id: 'P6 a city star is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/city.js', from: 'max(0.0, 1.0 - length(dir - sd) / (1.25 * city_px()))', to: 'exp(-dot(dir - sd, dir - sd) * 150.0 * 150.0 / (2.0 * 0.13 * 0.13))', caughtBy: 'row 1 (city)' },
   { id: 'P7 a mote is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/caustics.js', from: 'max(0.0, 1.0 - length(rd - sd) / (1.25 * caustics_px()))', to: 'exp(-dot(rd - sd, rd - sd) * 70.0 * 70.0 / (2.0 * 0.12 * 0.12))', caughtBy: 'row 1 (caustics)' },
   { id: 'P8 a river star is a fixed angle, not a device pixel', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/river.js', from: 'float river_px() { return (uPx > 0.0 ? uPx : 0.0008) * pow(dot(vRay, vRay), -0.75); }', to: 'float river_px() { return 0.0008; }', caughtBy: 'row 1 (river)' },
@@ -75,25 +72,6 @@ const MUTATIONS = [
   { id: 'P10 the prism limb is a fixed angle, not device pixels', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'float lw = 1.5 * prism_px();', to: 'float lw = 1.5 * 0.0008;', caughtBy: 'row 2' },
   { id: 'P11 Glass names the prism again', test: 'sky.test.js', file: 'themes/glass.css', from: '--sky-style: river;', to: '--sky-style: prism;', caughtBy: 'Glass names the river sky' },
   { id: 'P12 a river star is sized by the middle pixel everywhere, so it grows toward the screen\'s edges', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/river.js', from: 'return (uPx > 0.0 ? uPx : 0.0008) * pow(dot(vRay, vRay), -0.75);', to: 'return uPx > 0.0 ? uPx : 0.0008;', caughtBy: 'row 1 (river)' },
-  // D495: the sky's GPU budget, its fallback and the aurora's colour cycle (B1-B14, run against sky-budget.test.js, node only), and the GPU row itself
-  // (G1-G3, run against sky-gpu.test.js, which times the sky on the machine's GPU in headless Chrome)
-  { id: 'B1 the meter never finds a sky over budget', test: 'sky-budget.test.js', file: 'preview/sky/budget.js', from: 'verdict = { over: p95 > budgetMs,', to: 'verdict = { over: false,', caughtBy: 'row 1' },
-  { id: 'B2 a p95 equal to the budget is over', test: 'sky-budget.test.js', file: 'preview/sky/budget.js', from: 'verdict = { over: p95 > budgetMs,', to: 'verdict = { over: p95 >= budgetMs,', caughtBy: 'row 1' },
-  { id: 'B3 the warm-up frames are counted', test: 'sky-budget.test.js', file: 'preview/sky/budget.js', from: 'if (++seen <= warm) return null;', to: '++seen;', caughtBy: 'row 1' },
-  { id: 'B4 the median, not the 95th percentile', test: 'sky-budget.test.js', file: 'preview/sky/budget.js', from: 'const p95 = quantile(got, 0.95);', to: 'const p95 = quantile(got, 0.5);', caughtBy: 'row 1' },
-  { id: 'B5 a disjoint reading is counted', test: 'sky-budget.test.js', file: 'preview/renderer.js', from: 'if (disjoint) continue;', to: '', caughtBy: 'row 4' },
-  { id: 'B6 the fallback is compiled but not drawn', test: 'sky-budget.test.js', file: 'preview/renderer.js', from: "gl.deleteProgram(skyProg.p); skyProg = flat; skyMeasure = 'fell back';", to: "skyMeasure = 'fell back';", caughtBy: 'row 2' },
-  { id: 'B7 the fallback is not said', test: 'sky-budget.test.js', file: 'preview/renderer.js', from: 'console.warn(`renderer: the ${skyStyle} sky took', to: 'void (`renderer: the ${skyStyle} sky took', caughtBy: 'row 2' },
-  { id: 'B8 nothing is timed', test: 'sky-budget.test.js', file: 'preview/renderer.js', from: 'skyMeter = fallback && timerExt() ? BUDGET.createSkyMeter({ budgetMs: skyBudgetMs }) : null;', to: 'skyMeter = null;', caughtBy: 'row 2' },
-  { id: 'B9 the timing goes on after the verdict', test: 'sky-budget.test.js', file: 'preview/renderer.js', from: 'const q = skyMeter && !skyMeter.verdict && skyQueries.length < 4 ? gl.createQuery() : null;', to: 'const q = skyMeter && skyQueries.length < 4 ? gl.createQuery() : null;', caughtBy: 'row 3' },
-  { id: 'B10 queries pile up in flight', test: 'sky-budget.test.js', file: 'preview/renderer.js', from: 'const q = skyMeter && !skyMeter.verdict && skyQueries.length < 4 ? gl.createQuery() : null;', to: 'const q = skyMeter && !skyMeter.verdict ? gl.createQuery() : null;', caughtBy: 'row 4' },
-  { id: 'B11 the cycle is not sent', test: 'sky-budget.test.js', file: 'preview/renderer.js', from: 'const [a, b] = CYCLE.colours(skyCycle, time, skyA || clear, skyB || clear);', to: 'const [a, b] = [skyA || clear, skyB || clear];', caughtBy: 'row 6' },
-  { id: 'B12 the cycle dims the hem\'s green too', test: 'sky-budget.test.js', file: 'preview/sky/cycle.js', from: 'return [a, b.map((v) => clamp01(v * k))];', to: 'return [a.map((v) => clamp01(v * k)), b.map((v) => clamp01(v * k))];', caughtBy: 'row 6' },
-  { id: 'B13 the aurora asks for no cycle', test: 'sky-budget.test.js', file: 'preview/sky/index.js', from: "const c = MODULES[style].cycle === undefined ? 'none' : MODULES[style].cycle;", to: "const c = 'none';", caughtBy: 'row 6' },
-  { id: 'B14 the aurora\'s fallback is the volume sky itself', test: 'sky-budget.test.js', file: 'preview/sky/aurora.js', from: 'fallback() { return FLAT; }', to: 'fallback() { return SOURCE; }', caughtBy: 'row 2' },
-  { id: 'G1 the budget is ten times the frame share', test: 'sky-gpu.test.js', chrome: true, file: 'preview/sky/budget.js', from: 'const BUDGET_MS = 1.5;', to: 'const BUDGET_MS = 15;', caughtBy: 'row 4' },
-  { id: 'G2 the near curtain is marched in 96 steps', test: 'sky-gpu.test.js', chrome: true, file: 'preview/sky/aurora.js', from: "ARCS.source('aurora', { steps: 12,", to: "ARCS.source('aurora', { steps: 96,", caughtBy: 'row 1' },
-  { id: 'G3 the fallback draws its near curtain as a volume (24 steps)', test: 'sky-gpu.test.js', chrome: true, file: 'preview/sky/aurora.js', from: '{ ...NEAR, W: 0.02, volume: false }', to: '{ ...NEAR, W: 0.02, volume: true }', caughtBy: 'row 2' },
 ];
 const HAS_CHROME = !!require('./soundrender.js').chromePath();
 
@@ -102,7 +80,7 @@ function runMutant(m) {
   try {
     fs.cpSync(path.join(ROOT, 'app'), app, { recursive: true, filter: (s) => path.relative(path.join(ROOT, 'app'), s) !== 'test' });
     fs.mkdirSync(path.join(app, 'test'));
-    for (const n of ['theme.test.js', 'sky.test.js', 'sky-fixture.js', 'sky-none-cbd7a40.json', 'sky-crisp.test.js', 'soundrender.js', 'sky-budget.test.js', 'sky-gpu.test.js', 'sky-aurora-0.4.23.js']) fs.copyFileSync(path.join(__dirname, n), path.join(app, 'test', n));   // D495: the sky's budget rows and their fixture
+    for (const n of ['theme.test.js', 'sky.test.js', 'sky-fixture.js', 'sky-none-cbd7a40.json', 'sky-crisp.test.js', 'soundrender.js']) fs.copyFileSync(path.join(__dirname, n), path.join(app, 'test', n));
     for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
     const f = path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
@@ -122,14 +100,6 @@ test('control: the unmutated copy passes theme.test.js', () => {
 });
 test('control: the unmutated copy passes sky.test.js', () => {
   const r = runMutant({ id: 'control', test: 'sky.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
-  assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
-});
-test('control: the unmutated copy passes sky-budget.test.js (D495)', () => {
-  const r = runMutant({ id: 'control', test: 'sky-budget.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
-  assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
-});
-test('control: the unmutated copy passes sky-gpu.test.js (D495)', { skip: HAS_CHROME ? false : 'no Chrome here (set CHROME_PATH): sky-gpu.test.js times the sky in headless Chrome' }, () => {
-  const r = runMutant({ id: 'control', test: 'sky-gpu.test.js', file: 'lib/theme.js', from: null, to: null, caughtBy: null });
   assert.ok(r.passedAll, `the control failed: ${r.failed.join(' | ')}`);
 });
 test('control: the unmutated copy passes sky-crisp.test.js (D410, D416)', () => {
