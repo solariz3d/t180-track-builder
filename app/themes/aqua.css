@@ -59,6 +59,7 @@
 /* the window buttons stay glyphs on the bar, in white */
 [data-theme="aqua"] #winctl button { background: transparent; box-shadow: none; border-color: transparent; border-radius: 0; }
 [data-theme="aqua"] #win-min:hover, [data-theme="aqua"] #win-max:hover { background: rgba(63, 224, 245, .30); box-shadow: none; }
+[data-theme="aqua"] #win-close:hover { background: #b0303a; box-shadow: none; }
 /* the camera dock's buttons are words on the water, not pills */
 [data-theme="aqua"] #camera [role="toolbar"] button { background: transparent; box-shadow: none; border-color: transparent; color: var(--text); }
 [data-theme="aqua"] #camera [role="toolbar"] button:hover:not([disabled]) { background: rgba(63, 224, 245, .18); color: #ffffff; }

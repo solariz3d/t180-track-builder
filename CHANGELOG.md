@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **The title bar's close button turns red under the pointer on the Aqua and Glass looks.** Those two looks cleared every window button's background and gave the hover back only to minimise and maximise, so the close button stayed plain when hovered. It now turns the same red it does on Aurora.
+
 ## [0.4.23] - 2026-10-27
 
 ### Fixed

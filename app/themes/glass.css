@@ -51,6 +51,7 @@
 /* the window buttons stay glyphs on the bar (no chip), as today */
 [data-theme="glass"] #winctl button { background: transparent; box-shadow: none; border-color: transparent; }
 [data-theme="glass"] #win-min:hover, [data-theme="glass"] #win-max:hover { background: rgba(143, 230, 255, .22); box-shadow: none; }
+[data-theme="glass"] #win-close:hover { background: #b0303a; box-shadow: none; }
 
 /* FIELDS: clear ice, a frost line under the top edge, a cold glow when focused */
 [data-theme="glass"] input[type="number"], [data-theme="glass"] input[type="text"], [data-theme="glass"] input:not([type]), [data-theme="glass"] textarea,
