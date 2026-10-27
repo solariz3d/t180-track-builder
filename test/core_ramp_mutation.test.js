@@ -37,16 +37,29 @@ const MUTANTS = [
   { id: 'Q6 continuity.js reads the start curvature over the wrong knot span (U[5] for U[4])', pattern: 'row 0', edits: [['core/continuity.js', 'k: (2 * (q1 - q0)) / U[4] }', 'k: (2 * (q1 - q0)) / U[5] }']] },
   { id: 'Q7 continuity.js reads the end slope from the wrong points (the last three for the last two)', pattern: 'row 0', edits: [['core/continuity.js', 'const qe = (3 * (c[n - 1] - c[n - 2])) / (L - U[n - 1])', 'const qe = (3 * (c[n - 1] - c[n - 3])) / (L - U[n - 1])']] },
   { id: 'Q4 a piece with a cross-section target keeps its even knots (a 40 m piece has one interior knot: no free point for both ends, the cup fade stays C1)', pattern: 'row 2', edits: [[X, 'c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;', 'undefined;']] },
+  // D482: the banded fitWithHold (test/core_fit_banded.test.js runs beside the others here, with the public fixtures its row 1 reads)
+  { id: "F1 a free point at the first column of the band is left out of the normal equations", pattern: "the banded fit equals 0.4.21", edits: [[X, "const a = col[f0 + k]; if (a < 0) continue;", "const a = col[f0 + k]; if (a < 1) continue;"]] },
+  { id: "F2 the held points are left out of the residual the free points are fitted to", pattern: "the banded fit equals 0.4.21", edits: [[X, "v += held[f0 + k] * N[o + k];", "v += 0 * N[o + k];"]] },
+  { id: "F3 the right-hand side is not eliminated with its row", pattern: "the banded fit equals 0.4.21", edits: [[X, " rhs[r] -= k * rhs[c]; } }", " } }"]] },
+  { id: "F4 the band is two-thirds as wide (an entry past it is dropped by the typed array)", pattern: "the banded fit equals 0.4.21", edits: [[X, "W = 3 * BAND + 1", "W = 2 * BAND + 1"]] },
+  { id: "F5 no partial pivoting (on uneven knots that moves only bits below the kept digits; at a column under the singular bar it decides whether the fit goes on)", pattern: "pivoting decides", edits: [[X, "if (Math.abs(A[r][at(r, c)]) > Math.abs(A[p][at(p, c)])) p = r;", "if (false) p = r;"]] },
+  { id: "F6 a swapped row is copied without re-slotting", pattern: "elimination swaps rows", edits: [[X, "x[at(c, j)] = A[p][at(p, j)];", "x[at(c, j)] = A[p][at(c, j)];"]] },
+  { id: "F7 the elimination stops at the first upper band (with a swap the band is twice as wide)", pattern: "elimination swaps rows", edits: [[X, "right = Math.min(m - 1, c + 2 * BAND);", "right = Math.min(m - 1, c + BAND);"]] },
+  { id: "F8 the back substitution reads one upper band (with a swap there are two)", pattern: "elimination swaps rows", edits: [[X, "j <= Math.min(m - 1, c + 2 * BAND); j++) v -=", "j <= Math.min(m - 1, c + BAND); j++) v -="]] },
+  { id: "F9 a singular system is solved anyway (its free points are written: NaN or a blow-up)", pattern: "singular system", edits: [[X, "if (!(Math.abs(piv) > 1e-12)) return;", "if (false) return;"]] },
+  { id: "F11 the kept samples are read for a piece whose knots were replaced", pattern: "knots were replaced", edits: [[X, "if (kept && kept.knots === piece.knots && kept.n === piece.knots.length && kept.L === L) return kept;", "if (kept) return kept;"]] },
+  { id: "F10 with no free point the fit goes on (and writes past the pins)", pattern: "no free point", edits: [[X, "if (!free.length) return;", "if (!free.length) free.push(0);"]] },
 ];
 
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
-  fs.mkdirSync(path.join(dir, 'test')); for (const f of ['core_ramp.test.js', 'core_joint_c2.test.js']) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too
+  fs.mkdirSync(path.join(dir, 'test')); for (const f of ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js']) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's
+  fs.mkdirSync(path.join(dir, 'test', 'fixtures')); for (const f of fs.readdirSync(path.join(__dirname, 'fixtures')).filter((x) => x.endsWith('.core2.json'))) fs.copyFileSync(path.join(__dirname, 'fixtures', f), path.join(dir, 'test', 'fixtures', f));
   return dir;
 }
 function runTests(dir, pattern) {
-  const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), path.join(dir, 'test', 'core_ramp.test.js'), path.join(dir, 'test', 'core_joint_c2.test.js')];
+  const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), path.join(dir, 'test', 'core_ramp.test.js'), path.join(dir, 'test', 'core_joint_c2.test.js'), path.join(dir, 'test', 'core_fit_banded.test.js')];
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT'));
   const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
   const r = spawnSync(process.execPath, [...IR.reporterArgs(tap), ...args], { cwd: dir, env, encoding: 'utf8', timeout: 20 * 60 * 1000 });

@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Dragging a long piece with bank, cup or edge typed is smooth again.** Since 0.4.20, stretching or turning a piece while any of those fields held a value refitted the whole ramp in a way whose cost grew with the cube of the piece's length: a 1,000 m stretch redrew about 4 times a second instead of every frame, and a 10 km piece froze the builder for over two minutes per move. The fit now works only where each control point reaches, so its cost grows in step with the length (10 km: 10 to 23 ms, from over two and a half minutes). The road it lays is the same: on every test track and saved track it was checked on, every bank, cup and edge value came out identical except one, on one piece, which lay exactly halfway between two values at the ninth decimal place and rounded to the other one.
+
 ## [0.4.21] - 2026-10-26
 
 ### Changed
