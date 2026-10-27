@@ -284,8 +284,11 @@ function core(path, segments, opts, from, carried, upto) {
     const cutSeg = S[Math.min(from, n - 1)].seg;
     for (const r of carried.segReds) if (r.j < cutSeg) raw.segReds.push(r);
     // a carried stack stays only if BOTH its station and its deepest partner lie before the cut; a station whose deepest
-    // partner was in the changed part is re-queried against every point (an edit can remove what it was stacked on)
-    for (const [k, e] of carried.stacked) { if (e.i >= from) continue; if (e.p < from) raw.stacked.set(k, { ...e }); else rederive.add(e.i); }
+    // partner was in the changed part is re-queried against every point (an edit can remove what it was stacked on).
+    // D498 item 2: the same for the partner that set its least room overhead (lowP) and the one that set its clip (clipP): mark() only lowers `low` and only
+    // sets `clip`, so carried whole they outlived a road that had moved away (a low-overhead amber with nothing over the road any more)
+    const before = (q) => q === undefined || q < from;
+    for (const [k, e] of carried.stacked) { if (e.i >= from) continue; if (e.p < from && before(e.lowP) && before(e.clipP)) raw.stacked.set(k, { ...e }); else rederive.add(e.i); }
   }
 
   // ── loads per lateral line, folds, seams, holes: stations from `from` on ──
@@ -686,9 +689,13 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   const mark = (pt, worst, partner, clip = false, low = Infinity) => {
     if (pt.i >= end) return;   // a pending station keeps no finding: it is checked in full when the window ends
     const k = pt.i, e = out.get(k);
-    const lo = Math.min(low, e && e.low !== undefined ? e.low : Infinity);   // D435: the least room overhead any pair left this station
-    if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner, clip: clip || !!(e && e.clip), low: lo });
-    else if ((clip && !e.clip) || lo < e.low) out.set(k, { ...e, clip: clip || e.clip, low: lo });
+    const eLow = e && e.low !== undefined ? e.low : Infinity, lo = Math.min(low, eLow);   // D435: the least room overhead any pair left this station
+    // D498 item 2: which partner set that room (the smaller index on a tie) and the largest partner that clipped, so the carry can tell when either has changed
+    const lowP = low < eLow || (low === eLow && low < Infinity && (e.lowP === undefined || partner < e.lowP)) ? partner : e ? e.lowP : undefined;
+    const clipP = clip ? Math.max(partner, e && e.clipP !== undefined ? e.clipP : -1) : e ? e.clipP : undefined;
+    const tags = { ...(lowP !== undefined ? { lowP } : {}), ...(clipP !== undefined ? { clipP } : {}) };
+    if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner, clip: clip || !!(e && e.clip), low: lo, ...tags });
+    else if ((clip && !e.clip) || lo < e.low || lowP !== e.lowP || clipP !== e.clipP) out.set(k, { ...e, clip: clip || e.clip, low: lo, ...tags });
   };
   // D432, THE CLIP TEST without a mesh (the live checker and every check that runs validate without the mesh's folds have no self-intersection test, so the stack
   // was their only sign of one road on another). For a pair of stations the stack measures, each point of one is taken over the other's surface: its nearest

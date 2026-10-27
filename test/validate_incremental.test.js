@@ -197,3 +197,29 @@ test('an EDIT that removes the deepest stack keeps the shallower OLD one: those 
   assert.ok(onA.length > 30 && onA.every((e) => Math.abs(e.worst - 0.2) < 1e-9), 'A stays stacked on B at 0.2');
   assert.deepStrictEqual(inc, full);
 });
+
+// D498 item 2 (A's review of ab24ba8, p-d497-A §3): a stacked entry is carried whole when its DEEPEST partner is unchanged, but its `low` (D435, the least room
+// overhead) can have come from another partner, one in the changed part; mark() only lowers it, so a low-overhead amber set by a road that has since moved outlived it
+// until a full validate. The lap: a side road, a right U-turn bringing the lead back 0.3 m from it (the lead's deepest partner, unchanged), and F.crossing's climbing
+// 270 deg turn whose last straight crosses the lead 0.8 m up (the low room, from the changed part). Raising the crossing to 3 m (the climb and everything after it
+// change) clears the amber in a full validate, and revalidate must say the same
+test('revalidate: a low-overhead amber set by a road that has since moved is not carried by a station whose deepest stack is on an unchanged road', () => {
+  const G = require('../src/geom/index.js'), F = require('./geom_fixtures.js');
+  const lap = (h, gap = 0.3) => {
+    const Ru = 13 + gap / 2, R = 25, T = 1.5 * Math.PI * R, Lh = T - 40, a = h / (200 + 20 * Lh + 200), k = 1 / R;
+    return [{ id: 'side', kind: 'road', length: 120, profile: F.FLAT }, { id: 'uturn', kind: 'road', length: Math.PI * Ru, k0: -1 / Ru, k1: -1 / Ru, profile: F.FLAT },
+      { id: 'lead', kind: 'road', length: 110, profile: F.FLAT }, { id: 'up', kind: 'road', length: 20, k0: k, k1: k, kp0: a, kp1: a, profile: F.FLAT },
+      { id: 'hold', kind: 'road', length: Lh, k0: k, k1: k, profile: F.FLAT }, { id: 'down', kind: 'road', length: 20, k0: k, k1: k, kp0: -a, kp1: -a, profile: F.FLAT },
+      { id: 'over', kind: 'road', length: 80, profile: F.FLAT }];
+  };
+  const opts = { csp: true, fullSpeed: true }, low = (v) => v.amber.filter((x) => x.reason === 'low-overhead');
+  const segsA = lap(0.8), pA = G.buildPath(segsA, { step: 2 }), vA = validate(pA, segsA, opts);
+  assert.ok(low(vA).length > 0, 'control: the 0.8 m crossing is a low-overhead amber');
+  const lead = [...vA._raw.stacked.values()].filter((e) => segsA[pA.samples[e.i].seg].id === 'lead' && e.low < Infinity);
+  assert.ok(lead.length && lead.every((e) => segsA[pA.samples[e.p].seg].id === 'side'), 'control: on the lead, the deepest partner is the unchanged side road and the low room is the crossing\'s');
+  const segsB = lap(3.0), pB = G.buildPath(segsB, { step: 2 }), fromS = pB.samples[pB.samples.findIndex((x) => x.seg === 3)].s;
+  const full = validate(pB, segsB, opts), inc = revalidate(vA, pB, segsB, fromS, opts);
+  assert.equal(low(full).length, 0, 'control: at 3 m a full validate has no low-overhead amber');
+  assert.deepStrictEqual(low(inc), low(full), 'revalidate keeps no stale low-overhead amber');
+  assert.deepStrictEqual(inc, full, 'and the whole result equals a full validate');
+});
