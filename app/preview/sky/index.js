@@ -3,7 +3,8 @@
 // only today's clear colour.
 //
 // THE CONTRACT for a style module, app/preview/sky/<style>.js:
-//   module.exports = { source() }      source() returns GLSL ES 1.0 that defines
+//   module.exports = { source(), fallback()?, cycle? }      source() returns GLSL ES 1.0 that defines (D495: fallback(), if there is one, returns a cheaper
+//                                      sky by the same rules, drawn when this one's measured GPU time is over budget; cycle 'a' asks for sky/cycle.js's drift)
 //       vec3 skyPattern(vec3 dir, float t)
 //     dir  the pixel's world view direction, unit length, +y up (the camera's rotation only: moving or zooming does not change it)
 //     t    seconds; frozen at 0 under prefers-reduced-motion, so a still sky is the t = 0 frame
@@ -27,10 +28,10 @@
 //       sin(dot(dir, axis) * k)) is not refused.
 'use strict';
 
-const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river', 'aurora1', 'aurora2', 'aurora3']);   // D490 PROTOTYPES: aurora1/2/3 (sky/arcs.js), on a branch for the user to pick from   // D405: city, Skyline Night's; D416: river, Glass's (prism stays a style)
+const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']);   // D405: city, Skyline Night's; D416: river, Glass's (prism stays a style)
 // each required by name, written out: the page's loader (app/lib/cjs.js) fetches only the requires it can read in the source. Requiring a module costs
 // nothing until its source() is called, so a stub that is not built yet throws only when a skin names it.
-const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js'), city: require('./city.js'), river: require('./river.js'), aurora1: require('./aurora1.js'), aurora2: require('./aurora2.js'), aurora3: require('./aurora3.js') };
+const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js'), city: require('./city.js'), river: require('./river.js') };
 
 /** D391: every way a style's GLSL breaks the two rules above, as readable lines (empty: it keeps them). Comments are not code, so they are skipped. */
 function contractProblems(style, src) {
@@ -53,7 +54,24 @@ function patternSource(style) {
   return src;
 }
 
-/** D490 PROTOTYPE: the resolution a style is drawn at, as a fraction of the canvas (1 unless its module says less; then it must define skyOverlay). */
-function scaleOf(style) { const m = MODULES[style]; const k = m && typeof m.scale === 'number' ? m.scale : 1; if (!(k > 0 && k <= 1)) throw new Error(`sky: ${style}.js has a scale of ${k}; it is a fraction from 0 to 1`); return k; }
+const PATTERN = /vec3\s+skyPattern\s*\(\s*vec3\s+\w+\s*,\s*float\s+\w+\s*\)/;
+/** D495: the GLSL of a style's cheaper FALLBACK (its module's fallback(), held to the same two rules), or null when it has none. The renderer draws it
+ *  instead when the style's measured GPU time is over its budget (renderer.js, sky/budget.js). An unknown style throws, as patternSource does. */
+function fallbackSource(style) {
+  if (patternSource(style) === null) return null;
+  const m = MODULES[style];
+  if (typeof m.fallback !== 'function') return null;
+  const src = m.fallback();
+  if (typeof src !== 'string' || !PATTERN.test(src)) throw new Error(`sky: ${style}.js's fallback does not define vec3 skyPattern(vec3 dir, float t)`);
+  const bad = contractProblems(style, src); if (bad.length) throw new Error(`sky: ${style}.js's fallback breaks the GLSL rules: ${bad.join('; ')}`);
+  return src;
+}
+/** D495: the colour cycle a style asks for (sky/cycle.js): 'a', or 'none' when it names none. An unknown style or cycle throws. */
+function cycleOf(style) {
+  if (patternSource(style) === null) return 'none';
+  const c = MODULES[style].cycle === undefined ? 'none' : MODULES[style].cycle;
+  if (c !== 'a' && c !== 'none') throw new Error(`sky: ${style}.js asks for a colour cycle ${JSON.stringify(c)}; the cycles are 'a' and 'none'`);
+  return c;
+}
 
-module.exports = { STYLES, patternSource, contractProblems, scaleOf };
+module.exports = { STYLES, patternSource, contractProblems, fallbackSource, cycleOf };

@@ -1,5 +1,5 @@
-// sky/arcs.js (D490 PROTOTYPE, pane C): the GLSL of the reworked aurora, shared by the three prototype styles aurora1/2/3 (sky/aurora1.js and on).
-// Not a sky style itself: each style calls source(prefix, opts) for its own copy, its helpers named with its own prefix (the sky contract, index.js).
+// sky/arcs.js (D490, shipped in D495): the GLSL of the aurora sky (sky/aurora.js), its volume form and its flat fallback.
+// Not a sky style itself: a style calls source(prefix, opts) for its own copy, its helpers named with its own prefix (the sky contract, index.js).
 //
 // THE MODEL (E's D489 research, p-d489-aurora-research-E_2026-10-27.md §0-§3; written here from that, nothing copied): an aurora is a few CURTAINS,
 // thin vertical sheets of light hung along the magnetic field at about 100 to 300 km up. Each runs roughly magnetic east-west for far longer than
@@ -10,8 +10,10 @@
 //   magnetic east), v (across it, magnetic north) of the field line's foot, and h its height. A curtain k is the sheet v = D_k + F_k(u, t), the folds
 //   F a domain-warped fbm in u drifting in time; its light starts at the hem h = hem_k(u, t) (a sharp lower edge near 100 km), green, fading upward
 //   with a tail as long as the ray is strong, red-topped above about 200 km, and a thin magenta lower border only under a bright ray.
-//   Motion in layers (E §3): the arc's shape drifts at about 0.15 km/s, the folds and curls along it at under 1 km/s, the rays along the hem at about
-//   1 km/s and low in contrast, a pulsating patch field over about 9 s; nothing large crosses the view in under four minutes (D403).
+//   Motion in layers (E §3): the arc's shape drifts at about 0.03 km/s, its curls a little faster, the ray groups slowly, and a faint shimmer runs along
+//   the hem at about 1 km/s; a patch brightens by up to 8% over about 12 s. D495: they are this slow because a curtain seen along its arc is seen edge-on,
+//   where its folds draw bright lines that a slow drift moves a long way across the view; at the first speeds (arc 0.16 km/s, curls 0.4) a column of the
+//   hem changed by 35% in a second, and D403's rule (sky-aurora-look row 4) is 15%: nothing pulses or flashes behind the work.
 // Two ways to draw a curtain:
 //   SHEET   one hit: the ray meets the sheet once (a Newton step for the fold), and the light there is weighted by 1 / |cos| of the angle to the sheet
 //           (a sheet seen edge-on is brighter, as real curtains are). Cheap: today's cost.
@@ -41,46 +43,50 @@ const vec3 ${P}_E = vec3(0.7658, 0.0, -0.6430);
 const vec3 ${P}_B = vec3(0.1447, 0.9744, 0.1723);
 // the fold: the sheet's offset across the arc at u, metres of 100 km. A long gentle bend (the arc is not straight), folds of tens of km drifting
 // slowly along it, and curls on those, the curls' positions warped by a slower noise so they roll rather than slide
-float ${P}_fold(float u, float t, float amp, float sd) {
+float ${P}_fold(float u, float t, float amp, float sd, float lod) {
   float bend = 0.5 * (${P}_vn(vec2(u * 0.07 + sd, sd * 1.7)) - 0.5);
-  float big = ${P}_fbm3(vec2(u * 0.55 - t * 0.0009, sd)) - 0.5;
+  float big = ${P}_fbm3(vec2(u * 0.55 - t * 0.00018, sd)) - 0.5;
   float warp = ${P}_vn(vec2(u * 1.7 + sd, t * 0.004));
-  float curl = ${P}_vn(vec2(u * 4.5 + 1.4 * warp - t * 0.004, sd + 5.0)) - 0.5;
-  return bend + amp * (2.0 * big + 0.55 * curl);
+  float curl = ${P}_vn(vec2(u * 4.5 + 1.4 * warp - t * 0.0013, sd + 5.0)) - 0.5;
+  return bend + amp * (2.0 * big + 0.55 * curl * lod);   // lod: how much of the curls a volume's step can follow (D495 (ii)); 1 for a sheet
 }
 float ${P}_hem(float u, float t, float sd) { return 1.0 + 0.09 * (${P}_vn(vec2(u * 1.3 + sd, t * 0.003 + sd)) - 0.5); }
-// the rays: columns 2 to 3 km wide running along the hem at about 1 km/s, over groups 8 km wide; fpx is how much u one pixel spans here, so a ray
-// scale finer than about two pixels fades to its mean instead of shimmering
+// the rays: columns 2 to 3 km wide over groups 8 km wide, both drifting slowly; over them a faint shimmer runs along the hem at about 1 km/s (E's
+// "rays running along it at km/s, low in contrast"), at most 3.5% either way, so no part of a curtain changes by more than 15% in a second (D403's
+// rule; D495: at full contrast the running rays changed a column by 98% in a second). fpx is how much u one pixel spans here, so a ray scale finer
+// than about two pixels fades to its mean instead of shimmering
 float ${P}_rays(float u, float t, float sd, float fpx) {
-  float fine = ${P}_vn(vec2(u * 40.0 - t * 0.45, sd + 9.0)), mid = ${P}_vn(vec2(u * 12.0 + t * 0.06, sd + 2.0));
-  fine = mix(0.5, fine, 1.0 - smoothstep(0.012, 0.03, fpx)); mid = mix(0.5, mid, 1.0 - smoothstep(0.04, 0.1, fpx));
-  return smoothstep(0.2, 0.85, 0.55 * fine + 0.45 * mid);
+  float fine = ${P}_vn(vec2(u * 40.0 + t * 0.014, sd + 9.0)), mid = ${P}_vn(vec2(u * 12.0 + t * 0.028, sd + 2.0)), run = ${P}_vn(vec2(u * 40.0 - t * 0.45, sd + 4.0));
+  float keep = 1.0 - smoothstep(0.012, 0.03, fpx);
+  fine = mix(0.5, fine, keep); run = mix(0.5, run, keep); mid = mix(0.5, mid, 1.0 - smoothstep(0.04, 0.1, fpx));
+  return smoothstep(0.2, 0.85, 0.55 * fine + 0.45 * mid) * (1.0 + 0.07 * (run - 0.5));
 }
 // the light of a curtain at height hh over its hem, under ray strength r, along-arc brightness g: rgb. Green at the hem, a touch of the skin's violet
 // as it climbs (the skin's palette; nature's is blue at the same height, E §1.2), red above 200 km, and a magenta lower border under a bright ray
 vec3 ${P}_light(float hh, float r, float g, float act) {
   float up = max(hh, 0.0);
   float green = smoothstep(-0.035, 0.015, hh) * (0.55 * exp(-up / 0.1) + 0.45 * exp(-up / (0.14 + 0.5 * r))) * (0.25 + 0.75 * r);
-  float red = smoothstep(0.55, 1.4, hh) * exp(-max(hh - 1.4, 0.0) / 0.8) * (0.35 + 0.65 * r) * 0.16;
+  float red = smoothstep(0.55, 1.4, hh) * exp(-max(hh - 1.4, 0.0) / 1.1) * (0.35 + 0.65 * r) * 0.16;
+  float top = 1.0 - smoothstep(1.6, 3.6, hh);                                              // D495 (i): the tops fade out softly by about 460 km, no hard end
   vec3 rc = vec3(uSkyB.b, 0.5 * uSkyB.g, 0.9 * uSkyB.r);                                  // the violet token turned toward red, as aurora.js
   float d = (hh + 0.03) / 0.018, edge = exp(-d * d) * smoothstep(0.55, 0.95, r * g) * act;
   vec3 c = mix(uSkyA, uSkyB, 0.22 * smoothstep(0.12, 0.7, hh)) * green + rc * red + mix(rc, uSkyB, 0.4) * edge * 0.45;
-  return c * g;
+  return c * g * top;
 }
 float ${P}_along(float u, float t, float sd) {
   float span = 0.35 + 0.65 * ${P}_fbm(vec2(u * 0.33 + sd * 3.0, t * 0.0025));                 // brighter in stretches, never gone
-  float pulse = 1.0 + 0.22 * smoothstep(0.62, 0.9, ${P}_vn(vec2(u * 1.6 + sd, t / 9.0)));      // a patch that brightens over about 9 s
+  float pulse = 1.0 + 0.08 * smoothstep(0.55, 0.95, ${P}_vn(vec2(u * 1.6 + sd, t / 12.0)));    // a patch that brightens by up to 8% over about 12 s (D495: at 22% over 9 s a column changed by more than D403's 15% a second)
   return span * pulse;
 }
 vec3 ${P}_sheet(vec3 d, vec3 dq, float t, float D, float W, float amp, float sd, float act) {
   float vd = dot(dq, ${P}_N), ud = dot(dq, ${P}_E);
   if (vd * D <= 0.0 || abs(vd) < 1e-4) return vec3(0.0);
-  float s = D / vd; s = (D + ${P}_fold(s * ud, t, amp, sd)) / vd;
+  float s = D / vd; s = (D + ${P}_fold(s * ud, t, amp, sd, 1.0)) / vd;
   if (s <= 0.0 || s > 40.0) return vec3(0.0);
   float u = s * ud, h = s * d.y, hem = ${P}_hem(u, t, sd);
-  if (h < hem - 0.08 || h > hem + 2.6) return vec3(0.0);
+  if (h < hem - 0.08 || h > hem + 3.6) return vec3(0.0);
   vec3 nrm = normalize(cross(${P}_E, ${P}_B));
-  float k = 0.02 / max(abs(dot(d, nrm)), 0.08);
+  float k = 0.02 / max(abs(dot(d, nrm)), 0.22);                                          // D495: a sheet seen edge-on brightens at most 4.5 times (at 12 it drew hard bright ribbons overhead)
   return ${P}_light(h - hem, ${P}_rays(u, t, sd, s * ${P}_px()), ${P}_along(u, t, sd), act) * k * 22.0;
 }
 float ${P}_erf(float x) { float e = exp(-1.2732 * x * x); return sign(x) * sqrt(1.0 - e * (1.0 - 0.14 * x * x) / (1.0 + 0.14 * x * x)); }   // within 1e-3
@@ -88,14 +94,17 @@ vec3 ${P}_volume(vec3 d, vec3 dq, float t, float D, float W, float amp, float sd
   float vd = dot(dq, ${P}_N), ud = dot(dq, ${P}_E);
   if (d.y < 0.015) return vec3(0.0);
   float A = 0.25 + 1.3 * amp + 3.0 * W;                                                     // the slab the folded sheet can be in: |fold| <= 0.25 + 1.275 amp, and its thickness
-  float s0 = 0.86 / d.y, s1 = min(3.4 / d.y, 40.0);
+  float s0 = 0.86 / d.y, s1 = min(4.7 / d.y, 40.0);
   if (abs(vd) > 1e-4) { float a = (D - A) / vd, b = (D + A) / vd; s0 = max(s0, min(a, b)); s1 = min(s1, max(a, b)); }
   if (s1 <= s0) return vec3(0.0);
-  float ds = (s1 - s0) / ${steps}.0;
+  // D495 (ii): each pixel starts its steps at its own offset (interleaved gradient noise), so the fold, taken at the step ends, does not band in step with
+  // the neighbours; the steps cover the range whatever the offset
+  float ds = (s1 - s0) / (${steps}.0 - 1.0), j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   vec3 col = vec3(0.0);
-  float sa = s0, ca = ${P}_fold(sa * ud, t, amp, sd), da = sa * vd - D - ca;
+  float lod = 1.0 - smoothstep(0.06, 0.2, abs(ud) * ds);                                   // D495 (ii): a step that spans more of the arc than a curl is long leaves the curls out (they banded)
+  float sa = s0 - j * ds, ca = ${P}_fold(sa * ud, t, amp, sd, lod), da = sa * vd - D - ca;
   for (int i = 0; i < ${steps}; i++) {
-    float sb = sa + ds, cb = ${P}_fold(sb * ud, t, amp, sd), db = sb * vd - D - cb;
+    float sb = sa + ds, cb = ${P}_fold(sb * ud, t, amp, sd, lod), db = sb * vd - D - cb;
     float cover = 0.5 * abs(${P}_erf(db / W) - ${P}_erf(da / W));                              // how much of the sheet's thickness this step crosses
     if (cover > 0.0015) {
       float x = (da * db < 0.0) ? da / (da - db) : (abs(da) < abs(db) ? 0.0 : 1.0), sm = sa + x * ds, u = sm * ud, h = sm * d.y, hem = ${P}_hem(u, t, sd);   // the light where the ray crosses the sheet, or the end of the step nearest it (a step's middle left seams)
@@ -123,12 +132,21 @@ vec3 ${P}_aurora(vec3 d, float t) {
   float act = 0.6;
   vec3 col = vec3(0.0);
 ${curtainCalls}
+  // D495: within about 7 degrees of the point the rays converge on (the magnetic zenith), the curtains' light fades out softly: there only their faint
+  // tops would reach (a hem passing there read as the wrong way round, sky-aurora-look row 7), and their lines meet finer than a pixel (a moire, row 6).
+  // The tops fade out softly too (top, in _light), so the gap between the two curtains overhead has no hard edge; a glow filling the point was tried and
+  // left out, since it made the point brighter than the rays' bases
+  float cz = max(dot(d, ${P}_B), 0.0);
+  col *= smoothstep(0.04, 0.12, sqrt(max(2.0 * (1.0 - cz), 0.0)));
   float el = asin(clamp(d.y, -1.0, 1.0));
   return col * smoothstep(0.175, 0.25, el);                                                // nothing under about 10 degrees, as today
 }
 vec3 skyPattern(vec3 dir, float t) {
   float el = asin(clamp(dir.y, -1.0, 1.0));
   vec3 light = ${P}_aurora(dir, t);
+  // D495: the highlights pressed softly (the hem's usual level, about 0.3, kept as it is; a fold seen edge-on, two or three times that, pressed to under
+  // twice it), so the brightest lines are softer and their slow drift does not flash: D403's rule, 15% a second (sky-aurora-look row 4)
+  light = 1.25 * light / (1.0 + 0.8 * light);
   vec3 col = 1.0 - (1.0 - ${P}_night(el)) * (1.0 - clamp(light, 0.0, 1.0));
 ${opts.overlay ? '  return col;' : `  float glow = clamp(dot(light, vec3(0.3333)), 0.0, 1.0);
   return col + vec3(0.85, 0.9, 1.0) * ${P}_stars(dir, t) * smoothstep(0.17, 0.35, el) * (1.0 - 0.7 * glow);`}

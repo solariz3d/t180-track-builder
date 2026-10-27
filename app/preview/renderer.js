@@ -21,7 +21,15 @@
 //   extras.time = seconds, for the sky's drift (the preview hands 0 under prefers-reduced-motion)
 //   r.stats()  -> { uploads, buffers, draws, lines, acDraws, textures, chunks }      uploads = bufferData + texImage2D calls;
 //                 chunks = the placed track's merged chunks drawn last frame (CHUNKS below)
-//   createRenderer(gl, { chunkVertices })   the most vertices in one chunk (default and maximum 65,535: Uint16 indices)
+//   r.skyState() -> { style, cycle, measure, p95, budgetMs }   D495: whether the sky is being timed, fits, or fell back (THE SKY'S BUDGET below)
+//   createRenderer(gl, { chunkVertices, skyBudgetMs })   the most vertices in one chunk (default and maximum 65,535: Uint16 indices); the sky's
+//                 GPU budget in ms a frame (default 1.5, sky/budget.js)
+// THE SKY'S BUDGET (D495): a style with a fallback (sky/index.js fallbackSource; the aurora's flat form) has its pass timed on the GPU for its first
+// frames (EXT_disjoint_timer_query_webgl2, TIME_ELAPSED round the pass, a few queries in flight, read when ready, a disjoint one dropped). When the
+// 95th percentile is over the budget the renderer compiles the fallback and draws it from then on, and says so once on the console. Without the timer
+// query (WebGL1, or a browser that hides it) nothing is timed and the style is drawn as it is; skyState says which.
+// THE SKY'S CYCLE (D495): a style may ask for a colour drift (sky/index.js cycleOf, sky/cycle.js), worked out here once a frame from the time and sent
+// through uSkyA / uSkyB; --sky-c is sent as it is.
 //   r.dispose()
 //
 // LIGHT (D170 item 1): the lighting is look.js `shade`, compiled into the fragment shader from the same constants, so a
@@ -41,7 +49,8 @@ const { LIGHT, linesFor, tangentsFor } = require('./look.js');
 const AC = require('./acshaders.js');
 const ACLOOK = require('./aclook.js');
 const SKY = require('./sky/index.js');
-const CYCLE = require('./sky/cycle.js');   // D490 PROTOTYPE: the aurora's colour drift, once a frame
+const CYCLE = require('./sky/cycle.js');     // D495: the sky's colour drift
+const BUDGET = require('./sky/budget.js');   // D495: does the sky fit this GPU
 
 const v3 = (v) => `vec3(${v.map((x) => x.toFixed(6)).join(', ')})`;
 const VS = `
@@ -107,19 +116,6 @@ ${pattern}
 float pass_bayer2(vec2 p){ return 2.0 * mod(p.x + p.y, 2.0) + p.y; }
 float pass_bayer4(vec2 a){ vec2 p = mod(floor(a), 4.0), lo = mod(p, 2.0); return (4.0 * pass_bayer2(lo) + pass_bayer2(floor(p * 0.5)) + 0.5) / 16.0; }
 void main(){ vec3 c = clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0); gl_FragColor = vec4(clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0), 1.0); }`;
-// D490 PROTOTYPE: a style drawn at a lower resolution (sky/index.js scaleOf, under 1) is drawn into a texture that size with skyFS, then this pass
-// draws the canvas from it, scaled up (linear), and adds the style's skyOverlay (its stars) at full resolution, so a star stays a device pixel (D416)
-const skyCompositeFS = (pattern) => `
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-varying vec3 vRay;
-uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime; uniform float uPx;
-uniform sampler2D uLow; uniform vec2 uRes;
-${pattern}
-void main(){ vec3 under = texture2D(uLow, gl_FragCoord.xy / uRes).rgb; gl_FragColor = vec4(clamp(under + skyOverlay(normalize(vRay), uTime, under), 0.0, 1.0), 1.0); }`;
 const SKY_STRIP = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 /** The inverse of a column-major 4×4 (cofactors); a singular matrix throws. */
 function invert4(m) {
@@ -231,11 +227,15 @@ const FOG = Object.freeze([0.07, 0.08, 0.1]);
 const themeFrom = (T) => { const sky = T.floats('--sky', CLEAR); return { sky, fog: T.floats('--fog', FOG), edge: T.floats('--road-edge', COLOURS.edge), tie: T.floats('--road-tie', COLOURS.tie), grid: T.floats('--ground-grid', COLOURS.grid),
   skyStyle: T.word('--sky-style', 'none'), skyA: T.floats('--sky-a', sky), skyB: T.floats('--sky-b', sky), skyC: T.floats('--sky-c', sky) }; };
 
-function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
+function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V, skyBudgetMs = BUDGET.BUDGET_MS } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');
   let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // D381: setTheme replaces these, the clear colour and the fog
   let skyStyle = 'none', skyProg = null, skyBuf = null, skyA = null, skyB = null, skyC = null;   // D384: the sky; a colour left null is the clear colour
-  let skyCycle = 'none', skyScale = 1, skyComp = null, skyLow = null;   // D490 PROTOTYPE: the colour cycle ('a', 'b' or 'none'), and a low-resolution sky's composite and texture
+  // D495: the sky's cycle, its fallback's GLSL, the meter timing it and its queries in flight, and what the measuring found
+  let skyCycle = 'none', skyFallback = null, skyMeter = null, skyQueries = [], skyMeasure = 'none', skyP95 = null;
+  if (!(Number.isFinite(skyBudgetMs) && skyBudgetMs > 0)) throw new Error(`renderer: skyBudgetMs is a number of ms over 0, got ${String(skyBudgetMs)}`);
+  let timer;   // D495: the GPU timer query, looked up the first time a style with a fallback is compiled (null where there is none)
+  const timerExt = () => { if (timer === undefined) timer = typeof gl.getExtension === 'function' && typeof gl.createQuery === 'function' ? gl.getExtension('EXT_disjoint_timer_query_webgl2') || null : null; return timer; };
   if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -387,17 +387,37 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   // style can draw a point or an edge a pixel wide at any window size (prism's stars and moon limb)
   function drawSky(B, time, height) {
     const sp = skyProg, s = clear, c = skyC || clear;
-    const [a, b] = CYCLE.colours(skyCycle, time, skyA || clear, skyB || clear);   // D490 PROTOTYPE: the drift, worked out once a frame ('none': the skin's own)
+    const [a, b] = CYCLE.colours(skyCycle, time, skyA || clear, skyB || clear);   // D495: the drift, once a frame ('none': the skin's own)
     if (!skyBuf) { skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.bufferData(gl.ARRAY_BUFFER, SKY_STRIP, gl.STATIC_DRAW); uploads++; }
     gl.useProgram(sp.p);
     gl.uniform3f(sp.fwd, B.fwd[0], B.fwd[1], B.fwd[2]); gl.uniform3f(sp.right, B.right[0], B.right[1], B.right[2]); gl.uniform3f(sp.up, B.up[0], B.up[1], B.up[2]);
     gl.uniform3f(sp.sky, s[0], s[1], s[2]); gl.uniform3f(sp.a, a[0], a[1], a[2]); gl.uniform3f(sp.b, b[0], b[1], b[2]); gl.uniform3f(sp.c, c[0], c[1], c[2]);
     gl.uniform1f(sp.time, time); gl.uniform1f(sp.px, 2 * Math.hypot(B.up[0], B.up[1], B.up[2]) / height);
-    if (sp.low) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, skyLow.tex); gl.uniform1i(sp.low, 0); gl.uniform2f(sp.res, sp.resW, sp.resH); }
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
     gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.enableVertexAttribArray(sp.pos); gl.vertexAttribPointer(sp.pos, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  }
+  // D495: a sky program's uniforms, by name
+  const skyUniforms = (pr) => { const u = (n) => gl.getUniformLocation(pr.p, n); return Object.assign(pr, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime'), px: u('uPx') }); };
+  const dropQueries = () => { for (const q of skyQueries) gl.deleteQuery(q); skyQueries = []; };
+  // D495: read the sky's timings that are ready (oldest first; a disjoint reading is dropped), and act on the meter's verdict: over budget, the
+  // fallback is compiled and drawn from now on
+  function readSkyTimes() {
+    while (skyQueries.length && skyMeter && !skyMeter.verdict) {
+      const q = skyQueries[0];
+      if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+      const disjoint = gl.getParameter(timer.GPU_DISJOINT_EXT), ns = gl.getQueryParameter(q, gl.QUERY_RESULT);
+      gl.deleteQuery(q); skyQueries.shift();
+      if (disjoint) continue;
+      const v = skyMeter.add(ns / 1e6);
+      if (!v) continue;
+      skyP95 = v.p95; dropQueries();
+      if (!v.over) { skyMeasure = 'fits'; break; }
+      const flat = skyUniforms(program(SKY_VS, skyFS(skyFallback)));   // a fallback that does not compile throws here, loudly, as a style does at setTheme
+      gl.deleteProgram(skyProg.p); skyProg = flat; skyMeasure = 'fell back';
+      console.warn(`renderer: the ${skyStyle} sky took ${v.p95.toFixed(2)} ms of GPU time a frame (95th percentile of ${v.samples} frames), over its ${v.budgetMs} ms budget; it is drawn in its flat form from now on`);
+    }
   }
   return {
     /** D381: a skin's 3D colours, { sky, fog, edge, tie, grid }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
@@ -405,21 +425,19 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       const ok = (v) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x >= 0 && x <= 1);
       for (const k of Object.keys(t || {})) {
         if (k === 'skyStyle') continue;
-        if (k === 'skyCycle') { if (!['a', 'b', 'none'].includes(t[k])) throw new Error(`renderer: skyCycle is 'a', 'b' or 'none', got ${JSON.stringify(t[k])}`); skyCycle = t[k]; continue; }   // D490 PROTOTYPE
         if (!['sky', 'fog', 'edge', 'tie', 'grid', 'skyA', 'skyB', 'skyC'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
         if (!ok(t[k])) throw new Error(`renderer: the ${k} colour is three numbers from 0 to 1, got ${JSON.stringify(t[k])}`);
       }
       // D384: the sky is compiled here, so an unknown style or a pattern that does not compile fails at the skin change, before anything is replaced
       if (t && t.skyStyle !== undefined && t.skyStyle !== skyStyle) {
         const src = SKY.patternSource(t.skyStyle), next = src ? program(SKY_VS, skyFS(src)) : null;
-        if (next) {
-          const u = (n) => gl.getUniformLocation(next.p, n);
-          Object.assign(next, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime'), px: u('uPx') });
-        }
-        const k = t.skyStyle === 'none' ? 1 : SKY.scaleOf(t.skyStyle), comp = next && k < 1 ? program(SKY_VS, skyCompositeFS(src)) : null;
-        if (comp) { const u = (n) => gl.getUniformLocation(comp.p, n); Object.assign(comp, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime'), px: u('uPx'), low: u('uLow'), res: u('uRes') }); }
-        if (skyProg) gl.deleteProgram(skyProg.p); if (skyComp) gl.deleteProgram(skyComp.p);
-        skyProg = next; skyStyle = t.skyStyle; skyScale = k; skyComp = comp;
+        if (next) skyUniforms(next);
+        const fallback = SKY.fallbackSource(t.skyStyle), cycle = SKY.cycleOf(t.skyStyle);   // D495: read (and checked) before anything is replaced
+        if (skyProg) gl.deleteProgram(skyProg.p);
+        skyProg = next; skyStyle = t.skyStyle;
+        dropQueries(); skyFallback = fallback; skyCycle = cycle; skyP95 = null;
+        skyMeter = fallback && timerExt() ? BUDGET.createSkyMeter({ budgetMs: skyBudgetMs }) : null;
+        skyMeasure = !fallback ? 'none' : skyMeter ? 'measuring' : 'unmeasured: no GPU timer query here';
       }
       if (t.sky) clear = t.sky; if (t.fog) fog = t.fog; if (t.edge) edge = t.edge; if (t.tie) tie = t.tie; if (t.grid) gridColour = t.grid;
       if (t.skyA) skyA = t.skyA; if (t.skyB) skyB = t.skyB; if (t.skyC) skyC = t.skyC;
@@ -434,22 +452,14 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
       const time = extras.time === undefined ? 0 : extras.time;
       if (!Number.isFinite(time)) throw new Error(`renderer: the sky's time is a number of seconds, got ${String(time)}`);
-      if (skyProg && skyComp) {   // D490 PROTOTYPE: drawn small, then scaled up with the stars added
-        const lw = Math.max(1, Math.ceil(width * skyScale)), lh = Math.max(1, Math.ceil(height * skyScale)), B = skyBasis(pose, width / height);
-        if (!skyLow || skyLow.w !== lw || skyLow.h !== lh) {
-          if (skyLow) { gl.deleteFramebuffer(skyLow.fb); gl.deleteTexture(skyLow.tex); }
-          const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, lw, lh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-          if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('renderer: the low-resolution sky target is not complete');
-          skyLow = { fb, tex, w: lw, h: lh }; uploads++;
-        }
-        gl.bindFramebuffer(gl.FRAMEBUFFER, skyLow.fb); gl.viewport(0, 0, lw, lh); drawSky(B, time, lh);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, width, height);
-        const main = skyProg; skyProg = Object.assign(skyComp, { resW: width, resH: height }); try { drawSky(B, time, height); } finally { skyProg = main; }
-        gl.bindTexture(gl.TEXTURE_2D, null);
-      } else if (skyProg) drawSky(skyBasis(pose, width / height), time, height);
+      if (skyProg) {
+        // D495: while the meter is measuring, the pass is timed (at most four queries in flight; the oldest are read as they come ready)
+        const q = skyMeter && !skyMeter.verdict && skyQueries.length < 4 ? gl.createQuery() : null;
+        if (q) gl.beginQuery(timer.TIME_ELAPSED_EXT, q);
+        drawSky(skyBasis(pose, width / height), time, height);
+        if (q) { gl.endQuery(timer.TIME_ELAPSED_EXT); skyQueries.push(q); }
+        if (skyMeter && !skyMeter.verdict) readSkyTimes();
+      }
       const vp = new Float32Array(M.viewProj(pose, width / height));
       if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, gridColour, 1); }
       let chunks;
@@ -488,11 +498,13 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       for (const [arr, e] of texes) if (e.gen !== gen) { gl.deleteTexture(e.t); texes.delete(arr); }
     },
     stats: () => ({ uploads, buffers: buffers.size, draws, lines, acDraws, textures: texes.size, chunks: chunkCount }),
+    /** D495: the sky's style, its cycle, and its budget: measure is 'none' (no fallback), 'measuring', 'fits', 'fell back', or 'unmeasured: …' */
+    skyState: () => ({ style: skyStyle, cycle: skyCycle, measure: skyMeasure, p95: skyP95, budgetMs: skyBudgetMs }),
     dispose() {
+      dropQueries();
       for (const e of buffers.values()) gl.deleteBuffer(e.buf); buffers.clear();
       for (const e of texes.values()) gl.deleteTexture(e.t); texes.clear(); if (white) gl.deleteTexture(white);
       if (skyProg) gl.deleteProgram(skyProg.p); if (skyBuf) gl.deleteBuffer(skyBuf);
-      if (skyComp) gl.deleteProgram(skyComp.p); if (skyLow) { gl.deleteFramebuffer(skyLow.fb); gl.deleteTexture(skyLow.tex); }   // D490 PROTOTYPE
       gl.deleteProgram(surf.p); gl.deleteProgram(line.p); for (const pr of Object.values(ac)) gl.deleteProgram(pr.p);
     },
   };

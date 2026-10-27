@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The Aurora look has a new sky: real curtains, with depth.** The old sky hung three rings of light round the horizon, and looking up showed a flat starburst that was brightest and green at its centre, the wrong way round. Now the curtains run from one horizon over the sky to the other, as real aurora arcs do, with slow folds and curls and rays running along the lower edge. The nearest curtain is drawn in 3D, so looking up its rays converge with real depth: green at their bases, faint at the top, the way a corona looks from underneath. Over about ten minutes the red tops and pink lower edges fade and swell, while the green stays. The large shapes still drift slowly enough to stay behind the work, nothing is drawn below about 10 degrees, and with reduced motion the sky holds still in the skin's own colours.
+- **The sky checks that it fits the graphics card.** The new sky costs at most 1.5 ms of GPU time a frame at 2560×1440 on the machine it was built on. For its first few seconds the 3D view times the sky on the GPU. If it is over 1.5 ms a frame, the view switches to a flat form of the same sky, about a quarter of the cost, and says so in the console. Where the browser offers no GPU timer, the sky is drawn as it is.
+
 ## [0.4.23] - 2026-10-27
 
 ### Fixed

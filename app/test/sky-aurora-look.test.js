@@ -10,11 +10,14 @@
 //   4  motion: slow and alive: the hem's ray pattern moves along azimuth by under 0.0044 rad/s (a 60-degree view in four minutes), it keeps its shape while
 //      it moves (so the speed means something), and nothing pulses or flashes (no column changes by more than 15% in a second); and the folds and the hem's sway
 //      (read on the near curtain alone, its rays held still) move at under 0.0047 rad/s: at the narrowest window, 900 px,
-//      the default lens shows 65 degrees (B's review of D403), which that speed takes four minutes to cross
+//      the default lens shows 65 degrees (B's review of D403), which that speed takes four minutes to cross (AMENDED D495: read as the hem edge's shift,
+//      no longer as harmonics of the azimuth, since the curtains are no longer rings; the rule is the same)
 //   5  a corona: looking up there is one point overhead where rays converge: round it the brightness is a fan of at least 6 rays, and it is brighter than the sky
 //      beside it
-//   6  the corona's centre is soft, not a moire: on rings round its point C, out to 0.03 rad, the brightness holds no ray contrast finer than the default view
-//      can show (angular harmonics whose period round the ring is under two pixels of the 60-degree, 816 px view): at most ALIAS (2%) rms of the ring's mean
+//   6  the corona's centre is soft, not a moire: on rings round its point (AMENDED D495: the magnetic zenith aurora_B the rays converge on, no longer a fixed
+//      point C), out to 0.03 rad, the brightness holds no ray contrast finer than the default view can show (angular harmonics whose period round the ring is
+//      under two pixels of the 60-degree, 816 px view): at most ALIAS (2%) rms of the ring's mean
+//   7  (D495) the corona is the right way round: the rays' bases, 0.30 rad from the magnetic zenith, at least 1.5 times as bright as their tops, 0.05 rad out
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -85,9 +88,12 @@ test.before(async () => {
   await ev(`window.S0 = window.__aur(${JSON.stringify(R.skyFS(noStars))}, ${JSON.stringify(colours())}); true`);
   // row 4's ribbon: the near curtain alone, its rays held at their mean, no stars, no other curtains, no corona, so what moves is only the ribbon's folds and
   // its hem's sway. Each line is found once or the row fails loudly
-  const RIBBON = [[/float r = aurora_rays\([^;]*\);/, 'float r = 0.5;'], [/vec3 m = aurora_curtain\(([^;]*), 0\.7\);/, 'vec3 m = vec3(0.0);'],
-    [/vec3 f = aurora_curtain\(([^;]*), 0\.4\);/, 'vec3 f = vec3(0.0);'], [/vec3 cor = aurora_corona\(dir, t\) \* low;/, 'vec3 cor = vec3(0.0);']];
-  const ribbon = RIBBON.reduce((src, [re, to]) => { if ((src.match(new RegExp(re.source, 'g')) || []).length !== 1) throw new Error(`row 4: ${re} is not found once in aurora.js`); return src.replace(re, to); }, noStars);
+  // AMENDED (D495): the rule is unchanged; the lines it holds still are the new sky's (sky/arcs.js): the near curtain (the volume) alone, the three sheet
+  // curtains gone, its rays at a fixed strength and its brightness along the arc (the slow stretches, the 9 s patch) held at 1
+  const RIBBON = [[/return smoothstep\(0\.2, 0\.85, 0\.55 \* fine \+ 0\.45 \* mid\) \* \(1\.0 \+ 0\.07 \* \(run - 0\.5\)\);/, 'return 0.5;'], [/return span \* pulse;/, 'return 1.0;']];
+  const SHEETS = /col \+= [\d.]+ \* aurora_sheet\([^;]*\);/g;
+  if ((noStars.match(SHEETS) || []).length !== 3) throw new Error('row 4: aurora.js does not draw three sheet curtains beside its volume');
+  const ribbon = RIBBON.reduce((src, [re, to]) => { if ((src.match(new RegExp(re.source, 'g')) || []).length !== 1) throw new Error(`row 4: ${re} is not found once in aurora.js`); return src.replace(re, to); }, noStars.replace(SHEETS, ''));
   await ev(`window.S1 = window.__aur(${JSON.stringify(R.skyFS(ribbon))}, ${JSON.stringify(colours())}); true`);
 });
 test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } if (ch) ch.kill(); await sleep(300); try { dir && fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } });
@@ -150,18 +156,21 @@ test('row 4: motion is slow and alive: the hem pattern drifts under 0.0044 rad/s
   assert.ok(worst.speed <= MAX_SPEED, `the hem pattern drifts ${worst.speed.toFixed(5)} rad/s, over ${MAX_SPEED}`);
   assert.ok(worst.corr >= 0.5, `the pattern at the best shift correlates only ${worst.corr.toFixed(3)} over 5 s: it is changing, not drifting`);
   assert.ok(worst.pulse <= MAX_PULSE, `a column changes ${(worst.pulse * 100).toFixed(1)}% in one second, over ${MAX_PULSE * 100}%`);
-  // the folds and the hem's sway (B's review of D403, the four-minute rule at the 900 px window), on the near curtain's ribbon alone (S1: its rays held at their
-  // mean, no stars, no other curtains, no corona), 11 to 50 degrees. The fold brightens the ribbon by cos(2 az + w t), so the ribbon's brightness summed
-  // over elevation carries the fold as its 2nd harmonic; the hem's sway is the 3rd harmonic of the hem edge's elevation (per column, the row where the
-  // brightness rises fastest). Each harmonic's phase speed over 10 s, from six times 100 s apart, at most MAX_FOLD
-  const phase = (p, k) => { let re = 0, im = 0; for (let x = 0; x < W; x++) { const ph = 2 * Math.PI * k * x / W; re += p[x] * Math.cos(ph); im -= p[x] * Math.sin(ph); } return Math.atan2(im, re); };
-  const ribbonAt = async (tt) => { const H = 160, px = await ev(`window.S1.lat(${tt}, ${11 * DEG}, ${50 * DEG}, ${H})`), sum = new Float64Array(W), edge = new Float64Array(W);
-    for (let x = 0; x < W; x++) { let best = -1, at = 0; for (let y = 0; y < H; y++) { const v = Yof(px, (y * W + x) * 4); sum[x] += v; if (y >= 2 && y < H - 2) { const g = Yof(px, ((y + 2) * W + x) * 4) - Yof(px, ((y - 2) * W + x) * 4); if (g > best) { best = g; at = y; } } } edge[x] = at; }
-    return [phase(sum, 2), phase(edge, 3)]; };
+  // the folds and the hem's sway (B's review of D403, the four-minute rule at the 900 px window), on the near curtain's ribbon alone (S1: its rays held at a
+  // fixed strength and its brightness along the arc held, no stars, no other curtains, no glow), 11 to 50 degrees.
+  // AMENDED (D495): the rule is unchanged; the measure is not. Until D495 the curtains were rings round the sky, so their folds and sway were harmonics of
+  // the azimuth, read by their phases; the new curtains run from horizon to horizon, and their folds are not harmonics of anything. So the hem's edge is
+  // read per column (the row where the brightness rises fastest, where the column is lit at all) and the edge line at t0 + 10 s is matched to the one at t0
+  // by the best whole-column shift (as the hem pattern's drift above): that shift over 10 s, from six times 100 s apart, at most MAX_FOLD
+  const ribbonAt = async (tt) => { const H = 160, px = await ev(`window.S1.lat(${tt}, ${11 * DEG}, ${50 * DEG}, ${H})`), edge = new Float64Array(W);
+    for (let x = 0; x < W; x++) { let best = -1, at = -1; for (let y = 2; y < H - 2; y++) { const g = Yof(px, ((y + 2) * W + x) * 4) - Yof(px, ((y - 2) * W + x) * 4); if (g > best) { best = g; at = y; } } edge[x] = best > 0.004 ? at : -1; }
+    return edge; };
   let fold = 0; const sp = [];
   for (const t0 of [0, 100, 200, 300, 400, 500]) {
-    const h0 = await ribbonAt(t0), h1 = await ribbonAt(t0 + 10);
-    [['fold', 2], ['sway', 3]].forEach(([n, k], i) => { let d = h1[i] - h0[i]; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; const v = Math.abs(d) / (k * 10); sp.push(`t${t0} ${n} ${v.toFixed(5)}`); fold = Math.max(fold, v); });
+    const e0 = await ribbonAt(t0), e1 = await ribbonAt(t0 + 10); let bestLag = 0, bestErr = Infinity, used = 0;
+    for (let lag = -60; lag <= 60; lag++) { let e = 0, n = 0; for (let x = 0; x < W; x++) { const u = e0[x], v = e1[(x + lag + W) % W]; if (u >= 0 && v >= 0) { e += (u - v) ** 2; n++; } } if (n >= 100 && e / n < bestErr) { bestErr = e / n; bestLag = lag; used = n; } }
+    assert.ok(used >= 100, `t${t0}: the near curtain's hem is lit in only ${used} columns between 11 and 50 degrees, too few to read its motion`);
+    const v = Math.abs(bestLag) * (2 * Math.PI / W) / 10; sp.push(`t${t0} ${v.toFixed(5)} (${used} columns)`); fold = Math.max(fold, v);
   }
   t.diagnostic(`the ribbon's folds and hem sway move at ${fold.toFixed(5)} rad/s at most (${sp.join(', ')})`);
   assert.ok(fold <= MAX_FOLD, `the ribbon's folds or hem sway move at ${fold.toFixed(5)} rad/s, over ${MAX_FOLD}: they would cross a 900 px window's view in ${(1.134 / fold).toFixed(0)} s`);
@@ -190,7 +199,9 @@ test('row 5: a corona: overhead there is a point where rays converge: a fan of a
 // point, read from its source) at 0.003 to 0.03 rad, 1400 samples each, the ring's angular harmonics whose period round the ring is under two pixels of the
 // default view (k > rho * 2 pi / (2 PX)) together hold at most ALIAS of the ring's mean brightness (rms), at t = 0 and t = 500
 test('row 6: the corona\'s centre is soft: round its point the brightness holds no ray contrast finer than the default view can show (at most 2% rms)', { skip }, async (t) => {
-  const m = /vec3 C = (?:normalize\()?vec3\(([^)]*)\)/.exec(SKY.patternSource('aurora')); assert.ok(m, 'aurora.js names its corona point C');
+  // AMENDED (D495): the rule is unchanged; its point is the new sky's. Until D495 the corona was a fan drawn round a fixed point C; now it is the
+  // curtains' rays converging by perspective on the magnetic zenith, the field direction aurora_B (sky/arcs.js), so the rings are drawn round that
+  const m = /const vec3 aurora_B = vec3\(([^)]*)\)/.exec(SKY.patternSource('aurora')); assert.ok(m, 'aurora.js names its field direction aurora_B');
   const c0 = m[1].split(',').map(Number), n0 = Math.hypot(...c0), C = c0.map((v) => v / n0);
   const e = [C[2], 0, -C[0]], ne = Math.hypot(...e), E1 = e.map((v) => v / ne), E2 = [C[1] * E1[2] - C[2] * E1[1], C[2] * E1[0] - C[0] * E1[2], C[0] * E1[1] - C[1] * E1[0]];
   // the measure: the rms of the ring's harmonics above the view's Nyquist limit, against the ring's mean. The pass's own 8-bit output already holds some there
@@ -212,4 +223,22 @@ test('row 6: the corona\'s centre is soft: round its point the brightness holds 
   }
   t.diagnostic(`ray contrast above the view's Nyquist limit over the 8-bit floor, rms of the ring's mean: ${rows.join(', ')}`);
   assert.ok(worst.a <= ALIAS, `${worst.rad.toFixed(3)} rad from the corona's point (t = ${worst.tt}) the rays finer than two pixels hold ${(worst.a * 100).toFixed(2)}% of the brightness over the 8-bit floor, over ${ALIAS * 100}%: a moire`);
+});
+
+// D495 (E's D489 research §0.1, the starburst's colour and brightness inverted at aurora.js 0.4.23 :85-86): a corona seen from beneath has its rays' bright
+// green BASES out from the point they converge on, and only their faint tops near it. Round the magnetic zenith (aurora_B, sky/arcs.js), without the
+// stars, the mean brightness of a ring 0.30 rad out (the bases) is at least 1.5 times that of a ring 0.05 rad out (the tops), at t = 0 and t = 500
+// (registered before measuring)
+test('row 7: the corona is the right way round: round the magnetic zenith the ray bases, 0.30 rad out, are at least 1.5 times as bright as the tops, 0.05 rad out', { skip }, async (t) => {
+  const m = /const vec3 aurora_B = vec3\(([^)]*)\)/.exec(SKY.patternSource('aurora')); assert.ok(m, 'aurora.js names its field direction aurora_B');
+  const c0 = m[1].split(',').map(Number), n0 = Math.hypot(...c0), C = c0.map((v) => v / n0);
+  const e = [C[2], 0, -C[0]], ne = Math.hypot(...e), E1 = e.map((v) => v / ne), E2 = [C[1] * E1[2] - C[2] * E1[1], C[2] * E1[0] - C[0] * E1[2], C[0] * E1[1] - C[1] * E1[0]];
+  const ringMean = async (tt, rad) => { const r = await ev(`window.S0.ring(${tt}, ${JSON.stringify(C)}, ${JSON.stringify(E1)}, ${JSON.stringify(E2)}, ${Math.tan(rad)})`); let s = 0; for (let x = 0; x < W; x++) s += Yof(r, x * 4); return s / W; };
+  const rows = [];
+  for (const tt of [0, 500]) {
+    const base = await ringMean(tt, 0.30), top = await ringMean(tt, 0.05);
+    rows.push(`t${tt}: bases ${base.toFixed(4)}, tops ${top.toFixed(4)}, ratio ${(base / top).toFixed(2)}`);
+    assert.ok(base >= 1.5 * top, `t = ${tt}: the ring 0.30 rad from the magnetic zenith is Y ${base.toFixed(4)}, under 1.5 times the ring 0.05 rad out (${top.toFixed(4)}): the corona is the wrong way round`);
+  }
+  t.diagnostic(`the corona round the magnetic zenith: ${rows.join('; ')}`);
 });
