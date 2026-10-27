@@ -223,3 +223,26 @@ test('revalidate: a low-overhead amber set by a road that has since moved is not
   assert.deepStrictEqual(low(inc), low(full), 'revalidate keeps no stale low-overhead amber');
   assert.deepStrictEqual(inc, full, 'and the whole result equals a full validate');
 });
+
+// D498 item 2, the clip: the same carry kept an entry's `clip` (D432) when the partner that clipped had changed, and mark() never clears it, so a
+// self-intersection red outlived a crossing that had been raised. The row above's lap (repeated here), its crossing laid at zero climb so it clips the lead;
+// raised to 3 m it clears. The control asserts the case itself: clipping stations whose deepest partner is unchanged and whose clipping partner changed
+test('revalidate: a self-intersection set by a road that has since moved is not carried by a station whose deepest stack is on an unchanged road', () => {
+  const G = require('../src/geom/index.js'), F = require('./geom_fixtures.js');
+  const lap = (h, gap = 0.3) => {
+    const Ru = 13 + gap / 2, R = 25, T = 1.5 * Math.PI * R, Lh = T - 40, a = h / (200 + 20 * Lh + 200), k = 1 / R;
+    return [{ id: 'side', kind: 'road', length: 120, profile: F.FLAT }, { id: 'uturn', kind: 'road', length: Math.PI * Ru, k0: -1 / Ru, k1: -1 / Ru, profile: F.FLAT },
+      { id: 'lead', kind: 'road', length: 110, profile: F.FLAT }, { id: 'up', kind: 'road', length: 20, k0: k, k1: k, kp0: a, kp1: a, profile: F.FLAT },
+      { id: 'hold', kind: 'road', length: Lh, k0: k, k1: k, profile: F.FLAT }, { id: 'down', kind: 'road', length: 20, k0: k, k1: k, kp0: -a, kp1: -a, profile: F.FLAT },
+      { id: 'over', kind: 'road', length: 80, profile: F.FLAT }];
+  };
+  const opts = { csp: true, fullSpeed: true }, clipRed = (v) => v.red.filter((x) => x.reason === 'self-intersection'), OLD = new Set(['side', 'uturn', 'lead']);
+  const segsA = lap(0), pA = G.buildPath(segsA, { step: 2 }), vA = validate(pA, segsA, opts), id = (i) => segsA[pA.samples[i].seg].id;
+  assert.ok(clipRed(vA).length > 0, 'control: the crossing at zero climb clips the lead (self-intersection)');
+  assert.ok([...vA._raw.stacked.values()].some((e) => e.clip && OLD.has(id(e.p)) && !OLD.has(id(e.clipP))), 'control: a clipping station has an unchanged deepest partner and a changed clipping partner');
+  const segsB = lap(3.0), pB = G.buildPath(segsB, { step: 2 }), fromS = pB.samples[pB.samples.findIndex((x) => x.seg === 3)].s;
+  const full = validate(pB, segsB, opts), inc = revalidate(vA, pB, segsB, fromS, opts);
+  assert.equal(clipRed(full).length, 0, 'control: at 3 m a full validate has no self-intersection');
+  assert.deepStrictEqual(clipRed(inc), clipRed(full), 'revalidate keeps no stale self-intersection');
+  assert.deepStrictEqual(inc, full, 'and the whole result equals a full validate');
+});
