@@ -188,3 +188,24 @@ test('row D467 frame (straight start): the preview draws the start pieces\' hatc
   assert.ok(!sizes2.every((n) => undone.includes(n)), `after the undo the hatch is not drawn: ${JSON.stringify(undone)} against ${JSON.stringify(sizes2)}`);
   pv.dispose();
 });
+
+// D498 item 3 (A's review of 1dd7801, p-d497-A §3): the closed-lap hatch took the first and last SEGMENTS, while the seam tries a release makes (coreshell.js, firstR
+// and lastR) take the first and last ROAD pieces. On a lap that ends on a flight the last segment is the flight's gap, so the hatch lay on the gap and the road piece
+// the release moves went unmarked. The lap: core_jump's jump lap, closed, its pieces rotated so the flight is last and its landing first (the same loop)
+test('row D498: on a closed lap that ends on a flight, the hatch marks the last ROAD piece (the one the seam tries move), not the flight', async () => {
+  const D = require('../../src/core/document.js'), J = require('../../src/core/jump.js'), { extend } = require('../../src/core/extend.js'), { close } = require('../../src/core/close.js');
+  let d = J.jumpHere(extend(D.createDoc('jump lap'), { length: 300, family: 'bowl' }), null, { landing: { forward: 40 }, landingM: 300 });
+  for (let i = 0; i < 4; i++) d = extend(d, { length: (Math.PI * R) / 2, transition: 40, targets: { kh: 1 / R } });
+  const c = close(extend(d, { length: 60, transition: 40, targets: { kh: 0 } })); assert.equal(c.converged, true, c.report);
+  const P = c.doc.pieces, fl = P.findIndex((x) => x.type === 'flight'), lap = { ...c.doc, pieces: [...P.slice(fl + 1), ...P.slice(0, fl + 1)] };
+  const s = await createCoreShell({ autosaveMs: 0 }); s.adopt(lap);
+  const tm = createTrackModel(), tr = tm.update(s.getState().resolved), segs = tr.segments;
+  assert.equal(segs[segs.length - 1].kind, 'gap', 'control: the lap ends on the flight');
+  const roads = lap.pieces.map((x, i) => (x.type === 'road' ? i : -1)).filter((i) => i >= 0), idL = lap.pieces[roads[roads.length - 1]].id, idF = lap.pieces[roads[0]].id;
+  const onPiece = (id) => tr.path.samples.filter((x, i) => segs[x.seg] && segs[x.seg].id === id && i % 2 === 0).length;
+  const cues = sculptCues(tr, { s0: 200, r: 50, tool: 'bend' });
+  assert.equal(cues.length, 3, 'the wash and two hatches');
+  const [, last, first] = cues;
+  assert.equal(stationsOf(last.positions), onPiece(idL), `the last hatch is on the last road piece (${idL}), the one the seam tries move`);
+  assert.equal(stationsOf(first.positions), onPiece(idF), `the first hatch is on the first road piece (${idF})`);
+});

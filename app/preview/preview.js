@@ -499,12 +499,17 @@ function acrossLines(path, segments, ja, jb, sFrom = -Infinity, every = 1) {
   }
   return out.length ? Float32Array.from(out) : null;
 }
-/** The segments [from, to) of the first and the last road piece (by the segments' piece id). */
+/** The segments [from, to) of the first and the last road piece (by the segments' piece id). D498 item 3: a flight's gap is not road, so a lap that ends (or starts)
+ *  on a flight is hatched on its last (first) ROAD piece, the one the release's seam tries move (coreshell.js firstR, lastR); before, the hatch was laid on the gap
+ *  and drew nothing. */
 function seamSpans(segments) {
-  const n = segments.length; if (!n) return null;
-  let f = 1; while (f < n && segments[f].id === segments[0].id) f++;
-  let l = n - 1; while (l > 0 && segments[l - 1].id === segments[n - 1].id) l--;
-  return { first: [0, f], last: [l, n] };
+  const n = segments.length, road = (g) => !!g && g.kind !== 'gap';
+  let a = 0; while (a < n && !road(segments[a])) a++;
+  let b = n - 1; while (b >= 0 && !road(segments[b])) b--;
+  if (a >= n || b < 0) return null;
+  let f = a + 1; while (f < n && segments[f].id === segments[a].id) f++;
+  let l = b; while (l > 0 && segments[l - 1].id === segments[b].id) l--;
+  return { first: [a, f], last: [l, b + 1] };
 }
 const hatchMemo = new WeakMap();   // path -> { segments, first, last } (the hatch lines, built once for a path)
 function hatchOf(path, segments) {
