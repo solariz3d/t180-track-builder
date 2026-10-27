@@ -11,6 +11,7 @@
 //   3  a 1,000 m and a 2,000 m piece stretched by its length handle: p95 <= 6.0 ms (before: 9 and 19 ms)
 //   4  past the ordinary range the drag adapts and does not stall: a 20,000 m turn's p95 stays under 40 ms (before: 650 ms; now about 8), at no fewer than 20 rebuilds a second
 //   5  the release is the exact road: during the drag the ghost has a few hundred path stations, and the moment the pointer is let go it has a station every 2 m again
+//   6  a 1,000 m piece with bank, cup and edge typed, stretched by its length handle: p95 <= 13.4 ms, 1.5 x the worst of 0.4.19's six measured runs (D481; 0.4.21: 536 to 557 ms)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -46,7 +47,7 @@ test.before(async () => {
 test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } if (ch) ch.kill(); if (srv) srv.close(); await sleep(300); try { dir && fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } });
 
 // every animation-frame callback timed from page start; frames told apart by their timestamp
-const PRE = `(() => { const raf = window.requestAnimationFrame.bind(window); window.__ft = { on: false, frames: new Map() };
+const PRE = `(() => { document.title = 'zz-headless-test'; const raf = window.requestAnimationFrame.bind(window); window.__ft = { on: false, frames: new Map() };
   window.requestAnimationFrame = (fn) => raf((ts) => { const t0 = performance.now(); try { return fn(ts); } finally { if (window.__ft.on) { const f = window.__ft.frames.get(ts) || { ms: 0 }; f.ms += performance.now() - t0; window.__ft.frames.set(ts, f); } } }); })();`;
 async function load(look) {
   await send('Page.navigate', { url: `${base}/app/lib/cjs.js` });
@@ -56,6 +57,7 @@ async function load(look) {
   errors = []; await send('Page.navigate', { url: `${base}/app/index.html` });
   for (let i = 0; i < 200; i++) { await sleep(200); try { if (await ev("await new Promise((r) => setTimeout(r, 1500)); return !!document.querySelector('#palette input[aria-label]') && document.querySelectorAll('#stage canvas').length >= 2;")) break; } catch (e) { /* loading */ } }
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: id });
+  await ev("document.title = 'zz-headless-test'; return true;");   // the page's own <title> replaced the one PRE set: a headless page is always titled so
   await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Skip'); if (b && b.offsetParent) b.click(); return true;");
 }
 const setLength = (m) => ev(`const f = [...document.querySelectorAll('#palette input')].find((e) => /metres added/.test(e.getAttribute('aria-label') || e.title || '')); f.value = '${m}'; f.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 1200)); return true;`);
@@ -76,8 +78,10 @@ const fieldNow = (re) => ev(`const f = [...document.querySelectorAll('#palette i
 const stationsNow = () => ev("let n = null; document.dispatchEvent(new CustomEvent('t180:ghost-request', { detail: { reply: (g) => { n = g ? g.samples.length : null; } } })); return n;");
 
 /** one drag: the look, the piece length, which handle; the work frames' script ms (sorted by time), the rebuild rate, and the ghost's stations during and after the drag */
-async function drag(look, length, kind, ms = DRAG_MS) {
-  await load(look); await setLength(length); await sleep(Math.min(4000, length / 4));   // a long piece's full ghost takes its time (a 20 km one about 2 s)
+async function drag(look, length, kind, ms = DRAG_MS, typed = {}) {
+  await load(look);
+  for (const [re, v] of Object.entries(typed)) await ev(`const f = [...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || '')); f.value = '${v}'; f.dispatchEvent(new Event('input', { bubbles: true })); return true;`);
+  await setLength(length); await sleep(Math.min(4000, length / 4));   // a long piece's full ghost takes its time (a 20 km one about 2 s)
   const rgb = kind === 'turn' ? [185, 104, 255] : [255, 255, 255];
   const h = await findHandle(rgb, kind === 'turn'); assert.ok(h, `${look}: the ${kind} handle is on the overlay`);
   const amp = kind === 'turn' ? 250 : 220, field = kind === 'turn' ? '/turn/i' : '/metres|length/i', before = await fieldNow(field);
@@ -135,4 +139,17 @@ test('row 5: the release is the exact road: a few hundred stations while the han
   t.diagnostic(`ghost stations during the drag ${r.duringStations}, after the release ${r.afterStations}`);
   assert.ok(r.duringStations > 0 && r.duringStations < 600, `during the drag: ${r.duringStations} stations (a full ghost of 2,000 m has about 1,000)`);
   assert.ok(r.afterStations > 900, `after the release: ${r.afterStations} stations (a station every 2 m is about 1,000 on a 2,000 m piece: the full ghost is back)`);
+});
+
+// D481 (the user: "as soon as I drag the straight more than 400m it lags very bad"): with bank, cup and edge typed, the stretch costs what it cost in 0.4.19. Measured on 0.4.19,
+// headless, BelowNormal, the machine quiet, by this file's own drag: p95 7.7, 7.7, 7.9, 8.9, 8.2, 8.2 ms; the bar is the worst of them with half again for margin. On 0.4.21: p95 557 and 536 ms, about 5
+// rebuilds a second. (0.4.19 itself is over one frame at 144 Hz here, so this row guards the regression, not the user's 6.9 ms standard; that is a separate finding.)
+const TYPED = { '/^degrees of bank/': 20, '/^cup:/': 30, '/^left edge/': 20 };
+const BUDGET_TYPED = 13.4;   // ms: 1.5 x 8.9, 0.4.19's worst measured p95
+test('row 6: a 1,000 m piece with bank, cup and edge typed, stretched by its length handle: p95 within 0.4.19\'s cost with margin (13.4 ms)', { skip }, async (t) => {
+  const runs = [];
+  for (let i = 0; i < RUNS; i++) { const r = await drag('aqua', 1000, 'stretch', DRAG_MS, TYPED); runs.push(r); if (r.p95 <= BUDGET_TYPED) break; }
+  const v = { runs, ok: runs.some((r) => r.p95 <= BUDGET_TYPED) };
+  t.diagnostic(`p95 ${runs.map((r) => r.p95.toFixed(1)).join(' / ')} ms, ${runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
+  assert.ok(v.ok, `${said('aqua', 1000, 'stretch with bank, cup and edge typed', BUDGET_TYPED, v)}, ${runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
 });

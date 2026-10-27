@@ -31,6 +31,7 @@
 'use strict';
 
 const D = require('./document.js');
+const { basisN } = require('../../tools/piecewise.cjs');
 const { WIDTHS, RATES } = require('../geom/fonts.js');
 
 const bloss = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));   // ref 02 §4, IFC-BLOSS: the route channels' blend (C1 at its ends: S″(0) = 6, S″(1) = −6)
@@ -117,27 +118,64 @@ function c2Ends(piece, ch) {
  * D459: the least-squares fit of a cross-section ramp with its hold PINNED. document.js fitChannel holds the start pair only; the Bloss cubic needed nothing more (a
  * cubic in s, it was fitted exactly, hold and all), but the fitted quintic rang in the hold and at the piece's end (0.02° on a 17° bank, 0.1° at the transition when
  * the hold alone was overwritten). Here every control point whose Greville abscissa lies past the transition, and the last two, are set to the target, and the
- * remaining free points are refitted to the ideal ramp by least squares with those held (the normal equations over samples every ~0.5 m; the basis values come
- * from channelValue on one-hot control points). The ramp then reaches its target at the transition and holds it exactly, as the blend's own definition says.
+ * remaining free points are refitted to the ideal ramp by least squares with those held (the normal equations over samples every ~0.5 m).
+ *
+ * D482: BANDED, so a drag tick costs linear time in the length (it was cubic: 141 s for one 10 km extend with bank, cup and edge typed). A cubic B-spline basis
+ * function is non-zero over 4 spans, so each sample adds to at most 4 × 4 entries of the normal equations, and two free points more than 3 apart never meet:
+ * the matrix has 3 bands either side. Each sample's 4 basis values come from one basisN on the one knot vector (they are the very doubles channelValue gave on a
+ * one-hot control point, whose sum adds only zeros to one N), and every entry sums its products in the same sample order, so the system is the same to the
+ * last bit. The elimination is the same partial pivoting, kept to the band (with pivoting the upper band widens to 6, as in LAPACK's dgbtrf), so each pivot
+ * and the singular return are the same too; a back substitution replaces the Gauss–Jordan sweep above the diagonal, the one step whose rounding differs.
  */
+const BAND = 3;   // the basis degree: basisN is cubic
+/** D482: the fit's samples and each one's 4 basis values (from basisN) and first control point, kept per piece while its knots and length stand: a bank, cup and
+ *  edge typed fit four channels (phi, c, e, er) on one knot vector, so a drag tick reads the basis once, not four times. */
+const SAMPLES = new WeakMap();
+function samplesOf(piece, U, L) {
+  const kept = SAMPLES.get(piece);
+  if (kept && kept.knots === piece.knots && kept.n === piece.knots.length && kept.L === L) return kept;
+  const S = []; const ds = Math.max(0.25, Math.min(0.5, L / 400)); for (let s = 0; s < L; s += ds) S.push(s); S.push(L);
+  const first = new Int32Array(S.length), N = new Float64Array(4 * S.length);
+  S.forEach((s, q) => { const b = basisN(U, Math.min(Math.max(s, 0), L)); first[q] = b.first; for (let k = 0; k < 4; k++) N[4 * q + k] = b.N[k]; });
+  const made = { knots: piece.knots, n: piece.knots.length, L, S, first, N };
+  SAMPLES.set(piece, made); return made;
+}
 function fitWithHold(piece, ch, f, Lt, target) {
   const C = piece.channels[ch], n = C.length, U = D.knotVector(piece), L = piece.length, dec = D.DEC[ch], t = Number(target.toFixed(dec)) + 0;
   const pinned = new Set([0, 1, n - 2, n - 1]); for (let i = 2; i < n; i++) if ((U[i + 1] + U[i + 2] + U[i + 3]) / 3 >= Lt - 1e-9) pinned.add(i);
   for (const i of pinned) if (i >= 2) C[i] = t;
   const free = []; for (let i = 0; i < n; i++) if (!pinned.has(i)) free.push(i);
   if (!free.length) return;
-  const S = []; const ds = Math.max(0.25, Math.min(0.5, L / 400)); for (let s = 0; s < L; s += ds) S.push(s); S.push(L);
-  const one = (i) => ({ ...piece, channels: { ...piece.channels, [ch]: C.map((_, k) => (k === i ? 1 : 0)) } });
-  const B = free.map((i) => { const Q = one(i); return S.map((s) => D.channelValue(Q, ch, s)); });
-  const held = { ...piece, channels: { ...piece.channels, [ch]: C.map((v, k) => (pinned.has(k) ? v : 0)) } }, rest = S.map((s, q) => f(s) - D.channelValue(held, ch, s));
-  const m = free.length, A = Array.from({ length: m }, () => new Float64Array(m + 1));
-  for (let a = 0; a < m; a++) { for (let b = 0; b < m; b++) { let v = 0; for (let q = 0; q < S.length; q++) v += B[a][q] * B[b][q]; A[a][b] = v; } let r = 0; for (let q = 0; q < S.length; q++) r += B[a][q] * rest[q]; A[a][m] = r; }
-  for (let c = 0; c < m; c++) {   // Gaussian elimination with partial pivoting (m is at most a few tens)
-    let p = c; for (let r = c + 1; r < m; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; if (p !== c) [A[c], A[p]] = [A[p], A[c]];
-    if (!(Math.abs(A[c][c]) > 1e-12)) return;   // a singular system: the fit as it was
-    for (let r = 0; r < m; r++) { if (r === c) continue; const k = A[r][c] / A[c][c]; if (k) for (let j = c; j <= m; j++) A[r][j] -= k * A[c][j]; }
+  const { S, first, N } = samplesOf(piece, U, L);
+  const held = C.map((v, k) => (pinned.has(k) ? v : 0)), col = new Int32Array(n).fill(-1); free.forEach((i, a) => { col[i] = a; });
+  // row r of the band holds columns r − BAND .. r + 2·BAND at slot j − r + BAND
+  const m = free.length, W = 3 * BAND + 1, A = Array.from({ length: m }, () => new Float64Array(W)), rhs = new Float64Array(m), at = (r, j) => j - r + BAND;
+  for (let q = 0; q < S.length; q++) {
+    const f0 = first[q], o = 4 * q;
+    let v = 0; for (let k = 0; k < 4; k++) v += held[f0 + k] * N[o + k];   // channelValue of the held points, in its own order
+    const rest = f(S[q]) - v;
+    for (let k = 0; k < 4; k++) {
+      const a = col[f0 + k]; if (a < 0) continue;
+      const Na = N[o + k], row = A[a];
+      rhs[a] += Na * rest;
+      for (let k2 = 0; k2 < 4; k2++) { const c = col[f0 + k2]; if (c >= 0) row[c - a + BAND] += Na * N[o + k2]; }
+    }
   }
-  free.forEach((i, a) => { C[i] = Number((A[a][m] / A[a][a]).toFixed(dec)) + 0; });
+  for (let c = 0; c < m; c++) {   // Gaussian elimination with partial pivoting, inside the band (below row c + BAND, column c is exactly 0)
+    const last = Math.min(m - 1, c + BAND), right = Math.min(m - 1, c + 2 * BAND);
+    let p = c; for (let r = c + 1; r <= last; r++) if (Math.abs(A[r][at(r, c)]) > Math.abs(A[p][at(p, c)])) p = r;
+    if (p !== c) {   // swap rows c and p, re-slotted: both are zero left of column c and right of c + 2·BAND
+      const x = new Float64Array(W), y = new Float64Array(W);
+      for (let j = c; j <= right; j++) { x[at(c, j)] = A[p][at(p, j)]; y[at(p, j)] = A[c][at(c, j)]; }
+      A[c] = x; A[p] = y; [rhs[c], rhs[p]] = [rhs[p], rhs[c]];
+    }
+    const piv = A[c][at(c, c)];
+    if (!(Math.abs(piv) > 1e-12)) return;   // a singular system: the fit as it was
+    for (let r = c + 1; r <= last; r++) { const k = A[r][at(r, c)] / piv; if (k) { for (let j = c; j <= right; j++) A[r][at(r, j)] -= k * A[c][at(c, j)]; rhs[r] -= k * rhs[c]; } }
+  }
+  const x = new Float64Array(m);
+  for (let c = m - 1; c >= 0; c--) { let v = rhs[c]; for (let j = c + 1; j <= Math.min(m - 1, c + 2 * BAND); j++) v -= A[c][at(c, j)] * x[j]; x[c] = v / A[c][at(c, c)]; }
+  free.forEach((i, a) => { C[i] = Number(x[a].toFixed(dec)) + 0; });
 }
 
 function extend(doc, opts = {}) {
