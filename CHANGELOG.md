@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.25] - 2026-10-27
+
 ### Changed
 - **Reverted: the Aurora sky back to 0.4.23's, at the author's judgment in the app.** The redrawn sky of 0.4.24 (curtains from horizon to horizon, the 3D corona, the slow colour drift, and its GPU check with a flat fallback) is taken out whole, and the Aurora look draws the sky it had in 0.4.23. The 0.4.24 section below still says what that release shipped. Everything else in 0.4.24 stays: the export's CSP warning and the close button's hover on Aqua and Glass.
 
