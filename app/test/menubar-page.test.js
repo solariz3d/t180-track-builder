@@ -74,6 +74,7 @@ async function load({ clear = true, blocked = false, random = null } = {}) {
   if (clear && !blocked) { await send('Page.navigate', { url: base.replace('index.html', 'lib/cjs.js') }); await sleep(300); await ev('localStorage.clear(); return true;'); }
   await send('Page.navigate', { url: base });
   for (let i = 0; i < 150; i++) { await sleep(200); try { if (await ev("return document.documentElement.dataset.menubar === 'ready';")) break; } catch (e) { /* loading */ } }
+  await ev("document.title = 'zz-headless-test'; return true;");   // D484: a headless page is always titled so; the page's own <title> replaced any set before
   if (script) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script });
   if (pin) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: pin });
   assert.equal(await ev("return document.documentElement.dataset.menubar || 'not mounted';"), 'ready', `the menus mounted (page errors: ${errors.join(' | ') || 'none'})`);
@@ -361,7 +362,7 @@ test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sid
     try {
       for (const w of [979, 999, 1099, 1279, 1319]) {
         await sc.call('Page.navigate', { url: base.replace('index.html', 'lib/cjs.js') }); await sleep(300);
-        await sc.run(`localStorage.clear(); document.documentElement.innerHTML = '<body style="margin:0"><iframe id="f" src="/app/index.html" style="display:block;width:${w}px;height:860px;border:0"></iframe></body>'; return true;`);
+        await sc.run(`localStorage.clear(); document.documentElement.innerHTML = '<body style="margin:0"><iframe id="f" src="/app/index.html" style="display:block;width:${w}px;height:860px;border:0"></iframe></body>'; document.title = 'zz-headless-test'; return true;`);
         let ready = false; for (let i = 0; i < 150 && !ready; i++) { await sleep(200); ready = await sc.run("const d = document.getElementById('f').contentDocument; return !!d && d.documentElement.dataset.menubar === 'ready';"); }
         assert.ok(ready, `the page in a ${w} px frame at 125% mounted its menus (page errors: ${sc.errs.join(' | ') || 'none'})`);
         const m = await sc.run(BAR("document.getElementById('f').contentDocument"));
