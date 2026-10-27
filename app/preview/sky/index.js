@@ -3,7 +3,8 @@
 // only today's clear colour.
 //
 // THE CONTRACT for a style module, app/preview/sky/<style>.js:
-//   module.exports = { source() }      source() returns GLSL ES 1.0 that defines
+//   module.exports = { source(), fallback()?, cycle? }      source() returns GLSL ES 1.0 that defines (D495: fallback(), if there is one, returns a cheaper
+//                                      sky by the same rules, drawn when this one's measured GPU time is over budget; cycle 'a' asks for sky/cycle.js's drift)
 //       vec3 skyPattern(vec3 dir, float t)
 //     dir  the pixel's world view direction, unit length, +y up (the camera's rotation only: moving or zooming does not change it)
 //     t    seconds; frozen at 0 under prefers-reduced-motion, so a still sky is the t = 0 frame
@@ -53,4 +54,24 @@ function patternSource(style) {
   return src;
 }
 
-module.exports = { STYLES, patternSource, contractProblems };
+const PATTERN = /vec3\s+skyPattern\s*\(\s*vec3\s+\w+\s*,\s*float\s+\w+\s*\)/;
+/** D495: the GLSL of a style's cheaper FALLBACK (its module's fallback(), held to the same two rules), or null when it has none. The renderer draws it
+ *  instead when the style's measured GPU time is over its budget (renderer.js, sky/budget.js). An unknown style throws, as patternSource does. */
+function fallbackSource(style) {
+  if (patternSource(style) === null) return null;
+  const m = MODULES[style];
+  if (typeof m.fallback !== 'function') return null;
+  const src = m.fallback();
+  if (typeof src !== 'string' || !PATTERN.test(src)) throw new Error(`sky: ${style}.js's fallback does not define vec3 skyPattern(vec3 dir, float t)`);
+  const bad = contractProblems(style, src); if (bad.length) throw new Error(`sky: ${style}.js's fallback breaks the GLSL rules: ${bad.join('; ')}`);
+  return src;
+}
+/** D495: the colour cycle a style asks for (sky/cycle.js): 'a', or 'none' when it names none. An unknown style or cycle throws. */
+function cycleOf(style) {
+  if (patternSource(style) === null) return 'none';
+  const c = MODULES[style].cycle === undefined ? 'none' : MODULES[style].cycle;
+  if (c !== 'a' && c !== 'none') throw new Error(`sky: ${style}.js asks for a colour cycle ${JSON.stringify(c)}; the cycles are 'a' and 'none'`);
+  return c;
+}
+
+module.exports = { STYLES, patternSource, contractProblems, fallbackSource, cycleOf };
