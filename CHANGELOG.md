@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.22] - 2026-10-27
+
 ### Added
 - **Track ▸ Bank the lap, for a lap that is already closed.** Since 0.4.19, closing a loop banks its turns, but a lap closed before then kept its flat turns, and no command banked a lap that was already closed. Bank the lap banks every upright curve of a closed lap into its turn, as closing a loop does, and leaves the route exactly where it is. It is one undo step, and it is greyed out until the lap is closed. The status line says which pieces it banked and how far, and names any piece it held back: a loop or a steep ramp (too steep to bank), a piece that would lean out of its turn, or a place where the turn changes direction faster than the road can roll.
 
