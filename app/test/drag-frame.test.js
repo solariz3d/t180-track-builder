@@ -12,6 +12,9 @@
 //   4  past the ordinary range the drag adapts and does not stall: a 20,000 m turn's p95 stays under 40 ms (before: 650 ms; now about 8), at no fewer than 20 rebuilds a second
 //   5  the release is the exact road: during the drag the ghost has a few hundred path stations, and the moment the pointer is let go it has a station every 2 m again
 //   6  a 1,000 m piece with bank, cup and edge typed, stretched by its length handle: p95 <= 13.4 ms, 1.5 x the worst of 0.4.19's six measured runs (D481; 0.4.21: 536 to 557 ms)
+//   7  a 1,000 m piece with a left edge typed, turned after a placed piece: p95 <= 6.9 ms, one frame at 144 Hz (D483; before: 8.6 / 8.9 ms)
+//   8  the same piece stretched on an empty track: at most 120 work frames a second (before: 356 / 362, every frame) and p95 <= 10.0 ms, a PROPOSED bar (D483: the 6.9 ms
+//      standard is not reached there; before: 9.7 / 10.6 ms)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -78,19 +81,23 @@ const fieldNow = (re) => ev(`const f = [...document.querySelectorAll('#palette i
 const stationsNow = () => ev("let n = null; document.dispatchEvent(new CustomEvent('t180:ghost-request', { detail: { reply: (g) => { n = g ? g.samples.length : null; } } })); return n;");
 
 /** one drag: the look, the piece length, which handle; the work frames' script ms (sorted by time), the rebuild rate, and the ghost's stations during and after the drag */
-async function drag(look, length, kind, ms = DRAG_MS, typed = {}) {
+async function drag(look, length, kind, ms = DRAG_MS, typed = {}, { placed = false } = {}) {
   await load(look);
+  if (placed) { await setLength(100); await ev("[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Extend').click(); await new Promise((r) => setTimeout(r, 1200)); return true;"); }   // a 100 m piece is placed first
   for (const [re, v] of Object.entries(typed)) await ev(`const f = [...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || '')); f.value = '${v}'; f.dispatchEvent(new Event('input', { bubbles: true })); return true;`);
   await setLength(length); await sleep(Math.min(4000, length / 4));   // a long piece's full ghost takes its time (a 20 km one about 2 s)
   const rgb = kind === 'turn' ? [185, 104, 255] : [255, 255, 255];
-  const h = await findHandle(rgb, kind === 'turn'); assert.ok(h, `${look}: the ${kind} handle is on the overlay`);
+  // after a placed piece the handles are drawn small: the page's own list of them (t180:handles-request) is read instead of their colour, and the pointer moves along the handle's axis
+  const listed = placed ? await ev("let l = null; document.dispatchEvent(new CustomEvent('t180:handles-request', { detail: { reply: (x) => { l = x; } } })); const r = document.getElementById('stage').getBoundingClientRect(); return { l, left: r.left, top: r.top };") : null;
+  const lh = listed && listed.l ? listed.l.find((x) => x.kind === (kind === 'turn' ? 'turnDeg' : 'length')) : null, len = lh ? Math.hypot(lh.dx, lh.dy) : 0, axis = placed && len > 0 ? [lh.dx / len, lh.dy / len] : kind === 'turn' ? [1, 0] : [0, -1];
+  const h = placed ? (lh ? { x: lh.x + listed.left, y: lh.y + listed.top } : null) : await findHandle(rgb, kind === 'turn'); assert.ok(h, `${look}: the ${kind} handle is on the overlay`);
   const amp = kind === 'turn' ? 250 : 220, field = kind === 'turn' ? '/turn/i' : '/metres|length/i', before = await fieldNow(field);
   await mouse('mouseMoved', h.x, h.y); await sleep(50); await mouse('mousePressed', h.x, h.y, { button: 'left', buttons: 1, clickCount: 1 }); await sleep(100);
   await ev('window.__ft.frames.clear(); window.__ft.on = true; return true;');
   const t0 = Date.now(); let moves = 0, duringStations = null;
   while (Date.now() - t0 < ms) {
     const d = Math.sin(((Date.now() - t0) / 1000) * Math.PI) * amp;
-    await mouse('mouseMoved', kind === 'turn' ? h.x + d : h.x, kind === 'turn' ? h.y : h.y - d, { buttons: 1 }); moves++; await sleep(4);
+    await mouse('mouseMoved', h.x + axis[0] * d, h.y + axis[1] * d, { buttons: 1 }); moves++; await sleep(4);
     if (duringStations === null && Date.now() - t0 > ms / 2) duringStations = await stationsNow();
   }
   const during = await fieldNow(field);
@@ -152,4 +159,30 @@ test('row 6: a 1,000 m piece with bank, cup and edge typed, stretched by its len
   const v = { runs, ok: runs.some((r) => r.p95 <= BUDGET_TYPED) };
   t.diagnostic(`p95 ${runs.map((r) => r.p95.toFixed(1)).join(' / ')} ms, ${runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
   assert.ok(v.ok, `${said('aqua', 1000, 'stretch with bank, cup and edge typed', BUDGET_TYPED, v)}, ${runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
+});
+
+// D483 (the user's 6.9 ms standard, which row 6 does not reach): a left edge alone made every frame read the head's span afresh (preview.js widthAtHead: the dragged ghost's
+// head is not frozen, so it was not remembered, and spanOf on its 137 knots summed each one from the centre out) and every move write its 48 chords out as text and hash them
+// again (mesh.js handleKey, trackmodel.js: about 10 kB a chord). Measured before the fix, headless, BelowNormal, the machine quiet, by this file's own drag: p95 8.6 / 8.9 ms
+// after a placed piece, 9.7 / 10.6 ms on an empty track. After a placed piece the length handle barely moves on screen, so that case drags the turn handle along its own axis.
+const EDGE = { '/^left edge/': 20 };
+const BUDGET_EDGE = 6.9;     // ms: one frame at 144 Hz, the user's standard
+async function edgeRow(t, kind, placed, bar, rateMax = Infinity) {
+  const runs = [], ok = (r) => r.p95 <= bar && r.rate <= rateMax;
+  for (let i = 0; i < RUNS; i++) { const r = await drag('aqua', 1000, kind, DRAG_MS, EDGE, { placed }); runs.push(r); if (ok(r)) break; }
+  t.diagnostic(`p95 ${runs.map((r) => r.p95.toFixed(1)).join(' / ')} ms (median ${runs.map((r) => r.median.toFixed(1)).join(' / ')}), ${runs.map((r) => r.rate.toFixed(1)).join(' / ')} work frames a second`);
+  assert.ok(runs.some(ok), `${said('aqua', 1000, `${kind} with a left edge typed${placed ? ' after a placed piece' : ' on an empty track'}`, bar, { runs })}, ${runs.map((r) => r.rate.toFixed(1)).join(' / ')} work frames a second${rateMax < Infinity ? ` (at most ${rateMax})` : ''}`);
+  assert.deepEqual(errors, []);
+}
+test('row 7: a 1,000 m piece with a left edge typed, turned after a placed piece: p95 within one frame at 144 Hz (6.9 ms)', { skip }, async (t) => {
+  await edgeRow(t, 'turn', true, BUDGET_EDGE);   // after D483: 4.4 / 4.3 ms
+});
+// ON AN EMPTY TRACK THE STANDARD IS NOT REACHED (D483 §5): after the fix the stretch measures p95 8.7 to 9.2 ms, median 4.8 to 5.1. What is left is the core, not the preview:
+// each move fits the edge's ramp twice (the readout's extend and the ghost's, src/core/extend.js fitWithHold, whose samples are read afresh for every new length) and makes the
+// piece's edge cross-sections at every chord end (src/core/adapter.js xsecSegments: edgeProfile, commonFractions). The bar here is the one PROPOSED in the hand-back, between the
+// fixed figures and the 11.3 / 11.4 ms the rebuild alone cost before it; it guards this work until the core's part is ordered. The row's sharper half is the rate: before
+// D483 the page did work on EVERY frame of this drag (356 / 362 work frames a second, the head's span), and now only on a move of the pointer (about 58); at most 120 a second.
+const BUDGET_EDGE_EMPTY = 10.0;   // ms: proposed, D483
+test('row 8: a 1,000 m piece with a left edge typed, stretched on an empty track: the page works only on a move (at most 120 work frames a second), p95 within the proposed bar (10.0 ms; the 6.9 ms standard is not reached here)', { skip }, async (t) => {
+  await edgeRow(t, 'stretch', false, BUDGET_EDGE_EMPTY, 120);
 });
