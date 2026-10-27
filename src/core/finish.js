@@ -462,8 +462,9 @@ function flipsOf(doc, { rollScale = 1 } = {}) {
   return out;
 }
 /** bankLap with what it held back: { doc, eased (piece ids where the bank eased to none for a flip), withheld (piece ids left unbanked: they would lean out),
- *  none (when there were curves to bank and none was banked: why, in words; P's re-read (d)) }. */
-function bankLapWith(doc) { const r = bankLapRun(doc); return { doc: r.doc, eased: r.eased || [], withheld: r.withheld || [], none: r.none || null, budget: r.budget || null }; }
+ *  none (when there were curves to bank and none was banked: why, in words; P's re-read (d)), level (D473: piece ids of upright curves the level rule kept
+ *  out: a loop or a steep ramp) }. */
+function bankLapWith(doc) { const info = {}, r = bankLapRun(doc, info); return { doc: r.doc, eased: r.eased || [], withheld: r.withheld || [], none: r.none || null, budget: r.budget || null, level: info.level || [] }; }
 function bankLap(doc) { return bankLapRun(doc).doc; }
 /** One path of a closed lap read for bankLap at once (D447, its cost): per piece id the least road-up (U·ŷ, the level rule), the curved stations leaning out
  *  (leanOutPieces' read), and the roll rates as the checker reads them (validate's rollRates, its 20 m chord). One build of a 25 km path, not three. */
@@ -479,7 +480,7 @@ function lapReads(doc) {
 }
 /** The bank channel (phi, rad) of doc at s metres along it (bankLap's descent check). */
 function bankAtS(doc, s) { let s0 = 0; for (const P of doc.pieces) { const L = P.length || 0; if (s <= s0 + L) return D.valuesAt(P, Math.max(0, s - s0)).phi; s0 += L; } return NaN; }
-function bankLapRun(doc) {
+function bankLapRun(doc, info = {}) {
   if (!doc.closed || !doc.pieces.length || doc.pieces[0].type !== 'road') return { doc };
   const upright = D.valuesAt(doc.pieces[0], 0).phi, lane = pitPieces(doc), curved = (p) => doc.pieces[p].channels.kh.some((k) => Math.abs(k) > CURVED_KH);
   const flat = []; doc.pieces.forEach((P, p) => { if (P.type === 'road' && !P.tube && !lane.has(p) && P.channels.phi.every((ph) => Math.abs(ph - upright) <= ROLL_FREE)) flat.push(p); });
@@ -487,6 +488,7 @@ function bankLapRun(doc) {
   if (!flat.some(curved)) return { doc };
   const reads = lapReads(doc), level = (P) => reads.lowUp.has(P.id) && reads.lowUp.get(P.id) >= Math.cos(LEVEL_DEG * DEG);
   const lap = flat.filter((p) => level(doc.pieces[p]));
+  info.level = flat.filter((p) => curved(p) && !level(doc.pieces[p])).map((p) => doc.pieces[p].id);   // D473: said by Track ▸ Bank the lap
   if (!lap.length) return { doc };
   // a joint is relaxed (D447 (d)) between two pieces that both curve; a flip at or near it is pinned by bankPlan's flip rule (`flips`), not by the joint
   const outBefore = reads.out, withheld = [];

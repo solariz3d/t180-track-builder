@@ -56,13 +56,18 @@ async function menu() {
 }
 
 // D465 amended this row by name: it read "and nothing that is a command"; Track ▸ Smooth ramps is the menu's first command (0.4.20), after a separator
-test('the Track menu lists Start & grid…, Pit lane… and Road surface ▸ as panels, in that order, then a separator and Smooth ramps, its one command', async () => {
+// AMENDED (D473): it read "then a separator and Smooth ramps, its one command"; Bank the lap is its second command, enabled on a closed lap only
+test('the Track menu lists Start & grid…, Pit lane… and Road surface ▸ as panels, in that order, then a separator and its two commands, Smooth ramps and Bank the lap', async () => {
   const M = await menu();
   try {
-    assert.deepEqual(M.track.map((i) => i.label || (i.separator ? '—' : '?')), ['Start & grid…', 'Pit lane…', 'Road surface ▸', '—', 'Smooth ramps']);
+    assert.deepEqual(M.track.map((i) => i.label || (i.separator ? '—' : '?')), ['Start & grid…', 'Pit lane…', 'Road surface ▸', '—', 'Smooth ramps', 'Bank the lap']);
     for (const i of M.track.slice(0, 3)) assert.equal(typeof i.panel, 'function', `${i.label} opens a panel`);
     assert.equal(typeof M.item('Smooth ramps').run, 'function', 'Smooth ramps is a command');
     assert.equal(M.item('Smooth ramps').panel, undefined);
+    assert.equal(typeof M.item('Bank the lap').run, 'function', 'Bank the lap is a command');
+    assert.equal(!!M.item('Bank the lap').disabled, false, 'enabled on this closed lap');
+    M.shell.newDoc();
+    assert.equal(TM.items(M.ctx).find((i) => i.label === 'Bank the lap').disabled, true, 'disabled on a lap that is not closed');
   } finally { M.done(); }
 });
 
