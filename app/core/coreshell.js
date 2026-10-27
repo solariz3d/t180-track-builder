@@ -36,7 +36,7 @@
 //   await shell.renamePiece(from, to)   await shell.deletePieceFile(name)   shell.deleteSelection()   shell.proposeDelete()   await shell.applyDelete()   shell.cancelDelete()
 //   shell.cutSelection()   await shell.applyCut()   shell.cancelCut()   (D361: the selected pieces cut out, the track left open at the gap)
 //   await shell.smoothRamps()   (D465: Track ▸ Smooth ramps: the bank, cup and edge ramps re-laid C2, the route kept; a backup first, one undo step)
-//   await shell.bankLap()       (D473: Track ▸ Bank the lap: a closed lap banked as Close banks the lap it closes, the route kept; one undo step)
+//   await shell.bankLap()       (D473: Track ▸ Bank the lap: a closed lap banked as Close banks the lap it closes, the route kept; a backup first, one undo step)
 // TIMING: state.lastStep = { op, ms } for the last edit, the document operation plus the adapter's segments (spec test 6's
 // "per step" is measured by the bench on the same calls, not on this field).
 'use strict';
@@ -1176,8 +1176,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /**
      * D473, TRACK ▸ BANK THE LAP: a lap that is already closed banked as Close banks the lap it closes (src/core/finish.js bankLapWith, D447), so a lap closed
      * before Close banked (a flat closer) gets its bank without being opened. The bank rolls the road about its centre line, so the route does not move: a result
-     * whose kh, kv or lengths differ is refused by name. ONE undo step. An open lap, or one with nothing to bank, is left as it is, and the message says so; what
-     * the bank held back (the level rule's loops and steep ramps, a piece that would lean out, a flip) is said in plain words.
+     * whose kh, kv or lengths differ is refused by name. The track AS IT IS NOW goes to track-backups first ('pre-bank', D477: it changes every curve on the lap and
+     * Undo lasts the session), and a copy that fails refuses by name with nothing changed; then ONE undo step. An open lap, or one with nothing to bank, is left as
+     * it is, and the message says so; what the bank held back (the level rule's loops and steep ramps, a piece that would lean out, a flip) is said in plain words.
      */
     async bankLap() {
       if (st.brush) return set({ message: 'finish the brush drag first' });
@@ -1196,6 +1197,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (B.doc.pieces.length !== d.pieces.length || B.doc.pieces.some((P, i) => P.length !== d.pieces[i].length || !same(P.channels.kh, d.pieces[i].channels.kh) || !same(P.channels.kv, d.pieces[i].channels.kv))) {
         return set({ message: 'not banked: the bank would have moved the route; nothing changed' });
       }
+      try { await api.backupNow('pre-bank'); } catch (e) { return set({ message: `not banked: the copy from before could not be written (${e && e.message || e}); nothing changed` }); }
+      if (doc() !== d) return set({ message: 'the track changed while its copy was being written: bank the lap again' });
       const banked = B.doc.pieces.filter((P, i) => !same(P.channels.phi, d.pieces[i].channels.phi)), up = D.valuesAt(d.pieces[0], 0).phi;
       let most = 0; for (const P of banked) { const n = Math.max(1, Math.ceil(P.length / 2)); for (let j = 0; j <= n; j++) most = Math.max(most, Math.abs(D.valuesAt(P, (P.length * j) / n).phi - up)); }
       return set({ history: D.commit(st.history, B.doc), ...resolvedOf(B.doc), dirty: true, lastEdited: null, lastStep: { op: 'bankLap', ms },
