@@ -20,8 +20,8 @@
 //   VOLUME  the ray is marched through the curtain's slab in N steps, and in each step the sheet's Gaussian thickness is integrated exactly across the
 //           step (the folded sheet's offset taken at both ends of the step, an erf difference), so a fold seen edge-on is as bright as it should be and
 //           the result is soft and has no banding at any step count; N only has to follow the folds' shape.
-// opts = { curtains: [{ D, W, amp, seed, gain, volume }], steps, overlay }   overlay true: skyPattern leaves out the stars, and skyOverlay(dir, t)
-// returns them, for a style drawn at a lower resolution (sky/index.js scaleOf) whose stars stay sharp in the full-resolution composite (D416).
+// opts = { curtains: [{ D, W, amp, seed, gain, volume }], steps }   steps: a volume's, 24 when not named (D490's half-resolution look 3 and its
+// overlay option stay on branch d490-c; they do not ship).
 'use strict';
 
 function source(P, opts) {
@@ -148,13 +148,10 @@ vec3 skyPattern(vec3 dir, float t) {
   // twice it), so the brightest lines are softer and their slow drift does not flash: D403's rule, 15% a second (sky-aurora-look row 4)
   light = 1.25 * light / (1.0 + 0.8 * light);
   vec3 col = 1.0 - (1.0 - ${P}_night(el)) * (1.0 - clamp(light, 0.0, 1.0));
-${opts.overlay ? '  return col;' : `  float glow = clamp(dot(light, vec3(0.3333)), 0.0, 1.0);
-  return col + vec3(0.85, 0.9, 1.0) * ${P}_stars(dir, t) * smoothstep(0.17, 0.35, el) * (1.0 - 0.7 * glow);`}
+  float glow = clamp(dot(light, vec3(0.3333)), 0.0, 1.0);
+  return col + vec3(0.85, 0.9, 1.0) * ${P}_stars(dir, t) * smoothstep(0.17, 0.35, el) * (1.0 - 0.7 * glow);
 }
-${opts.overlay ? `vec3 skyOverlay(vec3 dir, float t, vec3 under) {
-  float el = asin(clamp(dir.y, -1.0, 1.0)), glow = clamp(dot(max(under - ${P}_night(el), 0.0), vec3(0.3333)) * 1.5, 0.0, 1.0);
-  return vec3(0.85, 0.9, 1.0) * ${P}_stars(dir, t) * smoothstep(0.17, 0.35, el) * (1.0 - 0.7 * glow);
-}` : ''}
+
 `;
 }
 
