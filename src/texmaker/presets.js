@@ -1,5 +1,5 @@
 // presets.js: starting textures, each a parameter set (so each is also its canonical text). Our own parameters only: no
-// other author's texture bytes are read or copied (the README's promise). "rainbow" takes its bands' look from our own
+// other author's texture bytes are read or copied. "rainbow" takes its bands' look from our own
 // colour ramp (red through amber and green to blue and white), as colour stops.
 'use strict';
 
