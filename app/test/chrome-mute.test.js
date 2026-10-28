@@ -71,6 +71,7 @@ test('row 3: every test file that starts a browser page itself sets the zz-headl
   }
   const files = starters.map((x) => x.file);
   for (const k of ['app/test/soundrender.js', 'app/test/drag-frame.test.js', 'app/test/texture-page.test.js']) assert.ok(files.includes(k), `the scan finds ${k} (found: ${files.join(', ') || 'none'})`);
-  assert.ok(starters.length >= 10, `the scan finds at least the ten known starters (${starters.length})`);
+  // nine, not ten (D503): 0.4.25's Aurora revert (70f7c63) took out sky-aurora-look.test.js, one of the ten this row was written against at fd4c8ea
+  assert.ok(starters.length >= 9, `the scan finds at least the nine known starters (${starters.length})`);
   assert.deepEqual(starters.filter((x) => !x.titled).map((x) => x.file), [], 'test files that start a page and never title it zz-headless-test');
 });
