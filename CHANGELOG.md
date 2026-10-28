@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.27] - 2026-10-28
+
 ### Added
 
 - **The right-button look has no wall.** Dragging the view with the right button now locks the pointer to the preview for the drag, so the mouse never reaches the edge of the screen or another monitor; the look keeps going as long as the button is held, and the cursor comes back where it was at the release. If the runtime refuses the lock, the drag works as before and stops at the edge.
