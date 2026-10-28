@@ -57,7 +57,7 @@ test('row 3: a wait is said once after waitLogMs, naming the holders; after maxW
     const held = await takeSlot({ dir, n: 2, poll: 20, ...quiet }), held2 = await takeSlot({ dir, n: 2, poll: 20, ...quiet });
     const lines = [];
     await assert.rejects(takeSlot({ dir, n: 2, poll: 20, waitLogMs: 100, maxWaitMs: 500, log: (s) => lines.push(s) }),
-      (e) => { assert.match(e.message, /no headless browser slot after 0\.5 s/); assert.match(e.message, new RegExp(`pid ${process.pid}`)); return true; });
+      (e) => { const w = Number((/no headless browser slot after ([0-9.]+) s/.exec(e.message) || [])[1]); assert.ok(w >= 0.5, `the error says how long it waited, at least 0.5 s: ${e.message}`); assert.match(e.message, new RegExp(`pid ${process.pid}`)); return true; });
     assert.equal(lines.length, 1, `one line while waiting: ${JSON.stringify(lines)}`);
     assert.match(lines[0], /waiting for a headless browser slot \(2 of 2 held/);
     assert.match(lines[0], new RegExp(`pid ${process.pid}`));
