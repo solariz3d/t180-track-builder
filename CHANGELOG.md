@@ -11,6 +11,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **The piece handles sit at its front, middle and back.** Width and cupping are now at the back of the new piece, bank and climb in its middle, and length and turn stay at the front, so the controls no longer crowd one end.
 - **Labels read as words, not shouting.** Section headings, the camera bar and its caption, the readout over the 3D view, the Export layouts dialog and the wordmark are in sentence case without wide letter spacing ("Equation track", "Build", "length", "T-180 Track builder"), and Settings ▸ Theme lists "Sigil" like the others. A track with no name is "Untitled" (it said "unsaved"; the dot after the name is what marks changes not yet saved). The left panel's summary ends "loop open" instead of "open · last extend 0 ms" (a timing for developers), and the checker's line no longer repeats that the loop is open.
 
 ### Fixed
