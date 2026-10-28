@@ -9,6 +9,8 @@ All notable changes to this project are recorded here. The format follows
 
 - **A bank Extend lays starts banking at the joint.** It used to roll almost nothing over a new piece's first fifth and then quickly in its middle: 54° over 100 m banked 0.3° by 10 m and peaked at 1.02 °/m, the bump after a straight. Now the bank's rate eases in over the first 10 m (a quarter of a shorter ramp), holds steady, and eases out the same way: 3.0° by 10 m, 9.0° by 20 m, a steady 0.60 °/m, still smooth to the second derivative at both joints. Only new pieces Extend lays with a bank typed (Level, To floor, corner turns and Sharp too); saved tracks, Close and Finish are unchanged (D521; the user, 2026-10-28).
 
+- **Sculpt's Grab: the point you press follows the mouse, on its own side, within the radius.** With Grab, press the road and drag: the point stays under the pointer. Off the middle, that side follows and the far edge stays where it is, at any bank (the road tilts and widens about the far edge, so the far half moves less and less toward it); in the middle the whole road slides and lifts. The grab acts at exactly the radius asked, 30 m by default (the other tools keep 60 m): the road outside it moves by less than 0.1 mm, where before a grab could reach 100 m past the press. Dragging along the road changes nothing, so a grab never bends, climbs or stretches the road. A press on the road's edge now finds the road (it used to find nothing when the edge was far from the centreline on screen). The selected run shows hollow dots across it every 100 m or more to press on, and the hover box says what follows there. The other tool keys work as before.
+
 ## [0.4.28] - 2026-10-28
 
 ### Changed

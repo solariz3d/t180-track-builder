@@ -55,6 +55,7 @@ const { previewTextures } = require('../../src/texture/set.js');
 const { normalize, sealed, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
 const { keyAction: shortcutOf } = require('../core/keys.js');   // D257: what Ctrl+key does in the app (undo, redo, save, remove the head): the keys that stop Left Ctrl
+const { acrossAt } = require('../core/zonegrab.js');   // D519 Part 2: a point on the road's surface across it
 
 // the Sigil surface's one material and its 2×2 texture (warm near-black; the lighting does the rest)
 const SIGIL_TEX = 't180_sigil_surface';
@@ -466,8 +467,10 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       const c = ctx(canvas.clientWidth > 0 && canvas.clientHeight > 0 ? canvas.clientWidth / canvas.clientHeight : 1.6); if (rig.mode !== 'free' && c) rig.setMode('free', c);
       const ok = rig.free.lookFrom(eye, m.pos.slice()); said(); return ok;
     },
-    /** D186: the track station under a point of the canvas (css px from its top-left): { s, pos, px } or null (pickAt). */
-    pick(x, y) { return shownPose && track && track.path ? pickAt(track.path, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
+    /** D186: the track station under a point of the canvas (css px from its top-left): { s, pos, px } or null. D519 Part 2: and where across the road, { u, at, axes, side } (pickAcross). */
+    pick(x, y) { return shownPose && track && track.path ? pickAcross(track.path, track.segments, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
+    /** D520: the pointer's ray under the pose shown NOW, kept for the drag that asks (the grab plane faces the camera as it was at the press): (x, y) -> { origin, dir, forward }, or null. */
+    grabRay() { if (!shownPose) return null; const pose = shownPose, w = canvas.clientWidth, h = canvas.clientHeight; return (x, y) => rayAt(pose, x, y, w, h); },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
     dispose() {
       win.cancelAnimationFrame(raf); clearFull(); exactJob = null; exactDue = null; unsub(); unskin(); if (layer) layer.dispose();
@@ -584,6 +587,60 @@ function pickAt(path, pose, x, y, w, h, maxPx = 40) {
   return best;
 }
 
+// D519 Part 2 (O's design, p-d519-design-O_2026-10-28.md §2): THE PICK ACROSS THE ROAD. pickAt gives the centreline station only, and a press on the rim of a wide
+// road seen close is often more than 40 px from every centreline sample, so it picks nothing. Sculpt's zone grab needs where across the road the press was.
+const ACROSS_N = 41;   // the cross-section points a candidate is refined on (O's §2 item 2)
+const PICK_KEEP = 4;   // the candidates kept for the refine
+/**
+ * THE PICK ACROSS (D519 Part 2): pickAt's three fields { s, pos, px } and four more: `u` the share across the road at the hit (signed, + left, ±1 the rims), `at` the
+ * hit's world point, `axes` { U: [dx, dy], L: [dx, dy] } the on-screen px of one metre along the section's normal and its outward across direction there, and `side`
+ * (+1 left, -1 right; +1 at the centreline). `s` and `pos` are the station's centreline sample, as pickAt's, so the labels read what they did.
+ * 1. Candidates: every sample's centreline and its two rims (pos ± half-width·L) on screen; a candidate's distance is the pointer's to the line rim–centre–rim; the
+ *    PICK_KEEP nearest within maxPx are kept (a press on the rim that pickAt misses is caught here).
+ * 2. Each is refined on ACROSS_N points across its own section, then once at the half step either side of the nearest. Null when nothing lies within maxPx.
+ */
+function pickAcross(path, segments, pose, x, y, w, h, maxPx = 40) {
+  if (!(w > 0 && h > 0) || !path || !Array.isArray(path.samples)) return null;
+  const VP = M.viewProj(pose, w / h);
+  const scr = (p) => { const c = M.apply(VP, p); return c[3] > 0 ? [(c[0] / c[3] * 0.5 + 0.5) * w, (1 - (c[1] / c[3] * 0.5 + 0.5)) * h] : null; };
+  const toSeg = (a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], q = vx * vx + vy * vy, t = q > 0 ? Math.max(0, Math.min(1, ((x - a[0]) * vx + (y - a[1]) * vy) / q)) : 0; return Math.hypot(a[0] + vx * t - x, a[1] + vy * t - y); };
+  const keep = [];
+  for (const m of path.samples) {
+    const c = scr(m.pos); if (!c) continue;
+    const hw = halfWidth(segments && segments[m.seg]);
+    let d = Math.hypot(c[0] - x, c[1] - y);
+    if (hw > 0) for (const k of [1, -1]) { const r = scr([0, 1, 2].map((i) => m.pos[i] + k * hw * m.L[i])); if (r) d = Math.min(d, toSeg(c, r)); }
+    if (!(d <= maxPx) || (keep.length === PICK_KEEP && d >= keep[PICK_KEEP - 1].d)) continue;
+    keep.push({ m, d }); keep.sort((a, b) => a.d - b.d); if (keep.length > PICK_KEEP) keep.pop();
+  }
+  let best = null;
+  const tryAt = (m, u) => { const A = acrossAt(path, segments, m, u), p = A && scr(A.pos); if (!p) return; const d = Math.hypot(p[0] - x, p[1] - y); if (d <= maxPx && (!best || d < best.d)) best = { m, u, A, d }; };
+  for (const { m } of keep) {
+    if (!(halfWidth(segments && segments[m.seg]) > 0)) { const c = scr(m.pos), d = Math.hypot(c[0] - x, c[1] - y); if (d <= maxPx && (!best || d < best.d)) best = { m, u: 0, A: null, d }; continue; }
+    for (let i = 0; i < ACROSS_N; i++) tryAt(m, -1 + 2 * i / (ACROSS_N - 1));
+  }
+  if (!best) return null;
+  if (best.A) { const half = 1 / (ACROSS_N - 1), b = best; for (const u of [b.u - half, b.u + half]) if (u >= -1 && u <= 1) tryAt(b.m, u); }
+  const { m, u, A } = best, at = A ? A.pos : m.pos.slice(), a0 = scr(at);
+  const axis = (v) => { const e = v && scr([0, 1, 2].map((k) => at[k] + v[k])); return e && a0 ? [e[0] - a0[0], e[1] - a0[1]] : [0, 0]; };
+  return { s: m.s, pos: m.pos.slice(), px: best.d, u, at, axes: { U: axis(A ? A.U : m.U), L: axis(A ? A.L : m.L) }, side: u < 0 ? -1 : 1 };
+}
+
+/**
+ * D520: THE POINTER'S RAY (the grab plane's other half, app/core/zonegrab.js planePoint): the canvas point (x, y), css px from the top-left of a `w` × `h` view under `pose`
+ * (app/camera/math.js lookAt and perspective, fovy), as a world ray { origin: the eye, dir: unit, toward the scene, forward: the camera's unit view direction }. Its point at
+ * any depth projects back onto (x, y) (app/test/zonegrab.test.js). Null for a view with no size or a pose with no direction.
+ */
+function rayAt(pose, x, y, w, h) {
+  if (!(w > 0 && h > 0) || !pose) return null;
+  const z = [0, 1, 2].map((k) => pose.eye[k] - pose.target[k]), zl = Math.hypot(...z); if (!(zl > 0)) return null;
+  const Z = z.map((v) => v / zl), up = pose.up, X0 = [up[1] * Z[2] - up[2] * Z[1], up[2] * Z[0] - up[0] * Z[2], up[0] * Z[1] - up[1] * Z[0]], xl = Math.hypot(...X0); if (!(xl > 0)) return null;
+  const X = X0.map((v) => v / xl), Y = [Z[1] * X[2] - Z[2] * X[1], Z[2] * X[0] - Z[0] * X[2], Z[0] * X[1] - Z[1] * X[0]];
+  const t = Math.tan(pose.fov / 2), nx = (2 * x) / w - 1, ny = 1 - (2 * y) / h, a = w / h;
+  const d = [0, 1, 2].map((k) => -Z[k] + X[k] * nx * t * a + Y[k] * ny * t), dl = Math.hypot(...d);
+  return { origin: pose.eye.slice(), dir: d.map((v) => v / dl), forward: Z.map((v) => -v) };
+}
+
 /** The road's span at the head (m): the last road segment's cross-section (profile.js spanOf), for the build view's framing. */
 // THE HEAD'S SECTION IS READ ONCE PER SEGMENT (2026-10-13, ELYSIUM's preview): widthAtHead and clearanceAtHead run on every frame, and a cup's
 // section at the head is a blend made afresh by readAt, so offsetAt summed it from scratch each time: about 0.6 s of every 4 s of frames.
@@ -651,4 +708,4 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, startHead, sculptCues, startMovedOf };
+module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, pickAcross, rayAt, startHead, sculptCues, startMovedOf };

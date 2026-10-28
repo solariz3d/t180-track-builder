@@ -322,15 +322,15 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs2 = frames.splice(0); for (const f of fs2) f(0); } };
 }
-async function mountPanel(st = store(), { bin = false, turnAsRate = true } = {}) {
+async function mountPanel(st = store(), { bin = false, turnAsRate = true, shellOpts = {} } = {}) {   // D519 Part 2: shellOpts, for a row that needs the local brush
   const { doc, win, tick: frame } = fakeWindow();
   let menuEl = null, binEl = null;   // D269: the top bar's Pieces menu (index.html: <details id="pieces"><div id="pieces-bin">), found by the panel by id as #preview is
   if (bin) { menuEl = doc.createElement('details'); menuEl.setAttribute('id', 'pieces'); menuEl.open = false; binEl = doc.createElement('div'); binEl.setAttribute('id', 'pieces-bin'); menuEl.append(binEl); }
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
-  const root = doc.createElement('div'), shell = await track(st);
+  const root = doc.createElement('div'), shell = await track(st, shellOpts);
   // the preview's side of the events the panel asks: a pick answers the station the test sets; the track is the shell's
-  const T = { s: 100 };
-  doc.addEventListener('t180-pick', (ev) => ev.detail.reply(T.s === null ? null : { s: T.s, pos: [0, 0, 0], px: 1 }));
+  const T = { s: 100, extra: null };   // D519 Part 2: extra, what the preview's pick adds (u, side, axes), for the zone grab's rows
+  doc.addEventListener('t180-pick', (ev) => ev.detail.reply(T.s === null ? null : { s: T.s, pos: [0, 0, 0], px: 1, ...(T.extra || {}) }));
   doc.addEventListener('t180:track-request', (ev) => ev.detail.reply({ segments: shell.getState().resolved.segments, path: { samples: [] } }));
   const panel = require('../core/panel.js').mount(root, shell);
   // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the user's word, plan :367-369, ruled :373-385). Every row in
@@ -1098,4 +1098,60 @@ test('row D464: Sculpt\'s how-to line and value line read as instructions, not e
   const m = /\.message\.hint\s*\{([^}]*)\}/.exec(html);
   assert.ok(m, 'the page has a .message.hint rule'); assert.match(m[1], /color:\s*var\(--text\)/); assert.doesNotMatch(m[1], /--bad/);
   P1.panel.unmount();
+});
+
+// D519 Part 2 (O's design, p-d519-design-O_2026-10-28.md §1, §3): THE ZONE GRAB in the panel. AMENDED D520 (plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md; the user, 15:12:
+// "the mouse click gives a singular point you then drag to sculpt the track simple as that"): the rule this row pinned, the first move past the click picking ONE channel read along
+// one screen axis, is gone (the plan: "axisOf ... is no longer used by Grab"), so the row pins its replacement. A press on the road opens the follow (shell.beginFollow) at the press's
+// station; the drag is a SET of channels; and, built again from the document the drag made, the pressed point is under the pointer on the grab plane (the plan's falsifier) and a
+// rim press keeps the far rim. A press on a dot opens at the dot's station; off the road, or with no u, the press is Grab's one channel as before; never a re-route. The view is a
+// real one (app/camera/math.js) over the shell's own road, the preview's ray (preview.js rayAt) answering 't180-grab-ray'.
+test('row 25 (D519, amended D520): Grab on the road: the pressed point follows the pointer and a rim keeps the far rim (built again and read), a dot opens at its own station, off the road is Grab as before', async () => {
+  const PV = require('../preview/preview.js'), ZG = require('../core/zonegrab.js'), M = require('../camera/math.js');
+  const P = await mountPanel(store(), { shellOpts: { brushFn: undefined } }), { shell, doc } = P, opened = [], follows = [], begin = shell.beginBrush, beginF = shell.beginFollow;   // brushFn undefined: the core's brush, as the app has it
+  shell.beginBrush = (o) => { opened.push(o); return begin(o); }; shell.beginFollow = (o) => { follows.push(o); return beginF(o); };
+  shell.setSculpt(true); P.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').value = 'grab';
+  const built = () => AD.toPath(shell.getState().history.present);
+  doc.addEventListener('t180:track-request', (ev) => { const t = built(); ev.detail.reply({ segments: t.segments, path: t.path }); });   // after the panel's own (empty) one: the last reply wins
+  const m0 = built().path.samples.find((x) => x.s === 100), pose = { eye: [m0.pos[0] - m0.T[0] * 60, m0.pos[1] + 50, m0.pos[2] - m0.T[2] * 60], target: m0.pos.slice(), up: [0, 1, 0], fov: Math.PI / 3 };
+  const VP = M.viewProj(pose, 900 / 600), scr = (p) => { const c = M.apply(VP, p); return [(c[0] / c[3] * 0.5 + 0.5) * 900, (1 - (c[1] / c[3] * 0.5 + 0.5)) * 600]; };
+  doc.addEventListener('t180-grab-ray', (ev) => ev.detail.reply((x, y) => PV.rayAt(pose, x, y, 900, 600)));
+  const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const press = (u, dx, dy, { s = 100, extra } = {}) => {
+    const t = built(), m = t.path.samples.find((x) => x.s === s), A = ZG.acrossAt(t.path, t.segments, m, u), [x, y] = scr(A.pos), before = shell.getState().history.present;
+    P.T.s = s; P.T.extra = extra !== undefined ? extra : { u, side: u < 0 ? -1 : 1, axes: { U: [0, 0], L: [0, 0] }, at: A.pos };
+    P.pointer('pointerdown', x, y); P.pointer('pointermove', x + dx, y + dy); P.frame();
+    const b = shell.getState().brush, d = b ? b.delta : null, after = shell.getState().history.present; P.pointer('pointerup', x + dx, y + dy);
+    const r0 = PV.rayAt(pose, x, y, 900, 600), r1 = PV.rayAt(pose, x + dx, y + dy, 900, 600), D3 = ZG.planePoint(r1, A.pos, r0.forward).map((v, k) => v - A.pos[k]);
+    const want = A.pos.map((v, k) => v + D3[k] - dot(D3, m.T) * m.T[k]), t2 = AD.toPath(after), m2 = t2.path.samples.find((q) => q.s === s), fu = u < 0 ? 1 : -1;
+    const out = { d, moved: Math.hypot(...D3), miss: gap(ZG.acrossAt(t2.path, t2.segments, m2, u).pos, want), far: gap(ZG.acrossAt(t2.path, t2.segments, m2, fu).pos, ZG.acrossAt(t.path, t.segments, m, fu).pos) };
+    if (shell.getState().history.present !== before) shell.undo();
+    return out;
+  };
+  let r = press(0.05, 0, -40);
+  assert.deepEqual(follows.map((o) => o.s0), [100], 'the centre opens the follow at the press'); assert.deepEqual(Object.keys(r.d).sort(), ['h', 'l'], `the centre slides and lifts: ${JSON.stringify(r.d)}`);
+  assert.ok(r.moved > 1, `the pointer moved ${r.moved} m on the plane`); assert.ok(r.miss < 0.01, `the pressed point is ${r.miss} m from the pointer`);
+  r = press(-0.95, -30, -25);
+  assert.deepEqual(Object.keys(r.d).sort(), ['h', 'l', 'phi', 'w'], `the rim turns and stretches the road: ${JSON.stringify(r.d)}`);
+  assert.ok(r.miss < 0.01, `the rim point is ${r.miss} m from the pointer`); assert.ok(r.far < 0.01, `the far rim moved ${r.far} m`);
+  const at400 = (() => { const t = built(), m = t.path.samples.find((x) => x.s === 400); return ZG.acrossAt(t.path, t.segments, m, 0).pos; })();
+  P.panel.handles.dotAt = () => ({ s: 400, u: 0, side: 1, axes: { U: [0, 0], L: [0, 0] }, at: at400 });   // a dot under the press: the grab opens at the dot, not at the station the pick finds
+  press(0.05, 0, -30); assert.equal(follows[follows.length - 1].s0, 400, 'a press on a dot opens the follow at that dot'); delete P.panel.handles.dotAt;
+  const n = follows.length;
+  press(0.05, 30, 0, { extra: { u: 1.3, side: 1, axes: { U: [0, 0], L: [0, 0] }, at: m0.pos } }); assert.deepEqual([opened[opened.length - 1].tool, opened[opened.length - 1].channel], ['grab-up', 'height'], 'off the road (u past 1.25): Grab as before');
+  press(0.05, 0, -30, { extra: null }); assert.deepEqual([opened[opened.length - 1].tool, opened[opened.length - 1].channel], ['grab-up', 'height'], 'a pick with no u: Grab as before');
+  assert.equal(follows.length, n, 'neither opened the follow');
+  for (const o of opened) assert.ok(!['kh', 'kv', 'length'].includes(o.channel) && !['bend', 'climb', 'stretch'].includes(o.tool), `never a re-route: ${o.tool}`);
+});
+
+test('row 25b (D519): with another key the press keeps that key\'s one channel wherever it lands; the shell says what the piece is and why a channel would be refused', async () => {
+  const P = await mountPanel(), { shell } = P, opened = [], begin = shell.beginBrush;
+  shell.beginBrush = (o) => { opened.push(o); return begin(o); };
+  shell.setSculpt(true); P.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').value = 'twist';
+  P.T.s = 100; P.T.extra = { u: 0.95, side: 1, axes: { U: [0, -20], L: [20, 0] } }; P.pointer('pointerdown', 50, 50); P.pointer('pointermove', 80, 50); P.frame(); P.pointer('pointerup', 80, 50);
+  assert.equal(opened[0].tool, 'twist', 'Twist on the rim is Twist'); shell.undo();
+  assert.equal(shell.zoneRefusal('phi', 100, 60), null, 'bank is on every road');
+  assert.equal(shell.zoneRefusal('c', 100, 60), 'no cup on piece p1: extend with a cup target first');
+  assert.equal(shell.zoneRefusal('e', 100, 60), 'no edge on piece p1: extend with an edge target first');
+  assert.deepEqual(shell.zoneInfo(100), { id: 'p1', cup: false, edge: false, tube: false, family: 'bowl', s: null, walls: false }); assert.equal(shell.zoneInfo(-5), null);
 });

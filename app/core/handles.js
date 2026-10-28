@@ -16,10 +16,12 @@
 //   hitTest(list, x, y, r)         -> the nearest handle within r px, or null
 //   mount(stage, win, host)        the overlay canvas: draws the handles every animation frame, hover shows the name and value, a drag calls host.apply
 //   brushFormat(channel, delta)    D425 part 4: a Sculpt brush's change at its centre, as the strip and the glyph both say it ("turn rate +0.12 °/100 m")
+//   placeDots(dots, VP, W, H)      D519 Part 2: the dot rows on the selected run, at the thinned stations (app/core/zonegrab.js dotStations), with their screen axes
 'use strict';
 
 const M = require('../camera/math.js');
 const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
+const ZG = require('./zonegrab.js');   // D519 Part 2: the dot rows' stations
 
 const DEG = Math.PI / 180;
 /**
@@ -126,6 +128,11 @@ const SPEED_WINDOW_MS = 60;  // the speed is the pointer's path over this long, 
 const DETENT_PX = 6;         // D251: the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
 const EDGE_ON_PX_PER_M = 0.05;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead. A FAR handle's axis is short too (the far end of a ghost seen from behind: 0.3 px/m, found in the window) but has a direction, so it is not edge-on
 const HIT_PX = 12;
+// D519 Part 2 (O's design §3): THE DOTS, visible handles onto the zone grab on the selected run: rows across the road (the centre, the rims, and on a cup piece
+// halfway out), at stations thinned to DOT_MIN_M (or the radius) and DOT_MIN_PX apart, at most DOT_CAP a row. Hollow, HIT_PX to press; a press on one is the zone
+// grab opened at that dot (the panel's, through dotAt), never a handle's drag. The colours are D425's: the centre white (height), a rim red (width) and green on its
+// inner half when that side has an edge or a cup to lift, the cup rows green.
+const DOT_MIN_M = 100, DOT_MIN_PX = 2 * HIT_PX, DOT_CAP = 40, DOT_R = 6;
 
 const round = (x, step) => { const v = Math.round(x / step + 1e-9) * step; return Number(v.toFixed(Math.max(0, Math.ceil(-Math.log10(step) - 1e-9)))) || 0; };
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -172,6 +179,29 @@ function placeHandles(model) {
     }
   }
   return out;
+}
+
+/**
+ * D519 Part 2: the dots. `dots` = { stations, run: { s0, s1 }, radius, rows: [{ u, colour, inner? }], at(s, u) -> { pos, U, L } | null } (at: the road's surface at share u
+ * across it at station s, with its normal and outward across direction). The stations are thinned on the centreline's screen positions; each kept station has a dot in
+ * every row: { id, dot: true, s, u, side, colour, inner, pos, screen: { x, y }, axes: { U: [dx, dy], L: [dx, dy] } (px a metre) }. Dots behind the camera are dropped.
+ */
+function placeDots(dots, VP, W, H) {
+  if (!dots || typeof dots.at !== 'function' || !Array.isArray(dots.rows)) return [];
+  const project = (s) => { const a = dots.at(s, 0), q = a && screenOf(VP, W, H, a.pos); return q ? [q.x, q.y] : null; };
+  const kept = ZG.dotStations(dots.stations, dots.run, project, { radius: dots.radius, minM: DOT_MIN_M, minPx: DOT_MIN_PX, cap: DOT_CAP }), out = [];
+  for (const s of kept) for (const row of dots.rows) {
+    const a = dots.at(s, row.u), q = a && screenOf(VP, W, H, a.pos); if (!q) continue;
+    const axis = (v) => { const e = screenOf(VP, W, H, add(a.pos, v)); return e ? [e.x - q.x, e.y - q.y] : [0, 0]; };
+    out.push({ id: `dot:${s}:${row.u}`, dot: true, s, u: row.u, side: row.u < 0 ? -1 : 1, colour: row.colour, inner: row.inner || null, pos: a.pos, screen: { x: q.x, y: q.y, dx: 0, dy: 0, len: 0 }, axes: { U: axis(a.U), L: axis(a.L) } });
+  }
+  return out;
+}
+/** D519 Part 2: the dot nearest (x, y) within r px, or null. */
+function dotHit(list, x, y, r = HIT_PX) {
+  let best = null, bd = Infinity;
+  for (const h of list) { if (!h.dot || !h.screen) continue; const d = (h.screen.x - x) ** 2 + (h.screen.y - y) ** 2; if (d <= r * r && d < bd) { bd = d; best = h; } }
+  return best;
 }
 
 const screenOf = (VP, W, H, p) => { const c = M.apply(VP, p); return c[3] > 0 ? { x: (c[0] / c[3] * 0.5 + 0.5) * W, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * H } : null; };
@@ -232,7 +262,7 @@ function resetValue(kind, pre) { const K = KINDS[kind]; if (!K) throw new Error(
 
 function hitTest(list, x, y, r = HIT_PX) {
   let best = null, bd = Infinity;
-  for (const h of list) { if (!h.screen || h.brush) continue; const d = (h.screen.x - x) ** 2 + (h.screen.y - y) ** 2; if (d <= r * r && d < bd) { bd = d; best = h; } }
+  for (const h of list) { if (!h.screen || h.brush || h.dot) continue; const d = (h.screen.x - x) ** 2 + (h.screen.y - y) ** 2; if (d <= r * r && d < bd) { bd = d; best = h; } }
   return best;
 }
 
@@ -283,6 +313,7 @@ function mount(stage, win, host) {
     if (!model || !pose || !(W > 0 && H > 0)) { drawn = []; return; }
     const VP = M.viewProj(pose, W / H);
     drawn = placeHandles(model).map((h) => ({ ...h, screen: screenAxis(VP, W, H, h.pos, h.axis) }));
+    if (model.dots && !drag) drawn = placeDots(model.dots, VP, W, H).concat(drawn);   // D519 Part 2: under the handles and the glyph; hidden while a handle is dragged
   };
   const draw = () => {
     const ctx = canvas.getContext ? canvas.getContext('2d') : null; if (!ctx) return;
@@ -293,6 +324,7 @@ function mount(stage, win, host) {
     for (const h of drawn) {
       const s = h.screen; if (!s) continue;
       if (h.brush) { drawBrush(ctx, h, W, H, boxed); continue; }
+      if (h.dot) { drawDot(ctx, h); continue; }
       const K = KINDS[h.kind], on = (drag && drag.h.id === h.id) || (!drag && hover && hover.id === h.id), size = on ? 8 : 6;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       // the double arrow: along the way a drag runs on screen
@@ -311,6 +343,16 @@ function mount(stage, win, host) {
       }
     }
   };
+  // D519 Part 2: a dot, a hollow ring; a rim's inner half green when that side has an edge or a cup to lift
+  const drawDot = (ctx, h) => {
+    const s = h.screen, ink = T.css('--ink', '#0b0d11');
+    ctx.lineWidth = 4; ctx.strokeStyle = ink; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, 0, 2 * Math.PI); ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = h.colour; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, 0, 2 * Math.PI); ctx.stroke();
+    if (h.inner) {   // the inner half: the half facing the centreline on screen (the dot's own L axis points outward)
+      const a = Math.atan2(h.axes.L[1], h.axes.L[0]) + Math.PI;
+      ctx.strokeStyle = h.inner; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, a - Math.PI / 2, a + Math.PI / 2); ctx.stroke();
+    }
+  };
   // D425 part 4: THE BRUSH GLYPH. Build's mark and double arrow, the arrow along the pointer's own axis (the drag reads the pointer, not the road), hollow for a Sculpt-only kind; one box a
   // kind beside it: during the tool's drag the value (model.brush.text, the strip's own words), on hover the words for each way, the Alt tag and the family's line (model.brush.note)
   const drawBrush = (ctx, h, W, H, boxed) => {
@@ -324,7 +366,7 @@ function mount(stage, win, host) {
     }
     ctx.fillStyle = K.hollow ? ink : colour; ctx.strokeStyle = K.hollow ? colour : ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
     if (boxed.has(h.kind)) return; boxed.add(h.kind);
-    const lines = B.open ? [B.text || ''] : [brushWords(h.kind), B.note || ''];
+    const lines = B.open ? [B.text || ''] : [B.words || brushWords(h.kind), B.note || ''];   // D519 Part 2: the zone grab's own words on hover
     const shown = lines.filter(Boolean); if (!shown.length) return;
     ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
     const w = Math.max(...shown.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * shown.length, bx = clamp(s.x + 30, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 4);
@@ -337,7 +379,7 @@ function mount(stage, win, host) {
   let lastKey = null;
   const frameKey = (m, pose) => {
     const W = stage.clientWidth, H = stage.clientHeight, k = [W, H, win.devicePixelRatio || 1, pose ? JSON.stringify(pose) : null, hover ? hover.id : null, drag ? `${drag.h.id}:${drag.value}` : null, pre ? `${pre.kind}:${pre.from}:${pre.to}` : null, T.css('--ink', '#0b0d11')];
-    if (m) { k.push(m.mode, m.samples, m.s0, m.s1, m.halfTarget, m.free, m.info, m.kinds.join(',')); if (m.brush) { const B = m.brush; k.push(B.samples, B.s, B.half, B.lat, B.sides ? B.sides.join(',') : null, B.colour, B.open, B.text, B.note); } for (const kind of m.kinds) { const c = m.ctx(kind); k.push(m.base(kind), c && c.half, c && c.free); } }
+    if (m) { k.push(m.mode, m.samples, m.s0, m.s1, m.halfTarget, m.free, m.info, m.kinds.join(',')); if (m.brush) { const B = m.brush; k.push(B.samples, B.s, B.half, B.lat, B.sides ? B.sides.join(',') : null, B.colour, B.open, B.text, B.note, B.words); } if (m.dots) { const Dt = m.dots; k.push(Dt.stations, Dt.run.s0, Dt.run.s1, Dt.radius, Dt.rows.map((r) => `${r.u}:${r.colour}:${r.inner}`).join(',')); } for (const kind of m.kinds) { const c = m.ctx(kind); k.push(m.base(kind), c && c.half, c && c.free); } }
     return k;
   };
   const sameKey = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -482,9 +524,11 @@ function mount(stage, win, host) {
   stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('wheel', onWheel, { capture: true, passive: false }); stage.addEventListener('dblclick', onDouble, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
   raf = win.requestAnimationFrame(frame);
   return {
-    handles: () => drawn.slice(), hovered: () => hover, dragging: () => !!drag,
+    handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), hovered: () => hover, dragging: () => !!drag,   // D519 Part 2: the dots are listed apart from the handles
+    /** D519 Part 2: the dot under (x, y), css px of the stage, or null: { s, u, side, axes } for the zone grab to open at. */
+    dotAt: (x, y) => { const h = dotHit(drawn, x, y); return h ? { s: h.s, u: h.u, side: h.side, axes: h.axes, at: h.pos ? h.pos.slice() : null } : null; },   // D520: `at`, the dot's world point, where the grab plane passes
     unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('wheel', onWheel, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) doc.removeEventListener('keydown', onKeyDown); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
   };
 }
 
-module.exports = { wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };
+module.exports = { placeDots, dotHit, DOT_MIN_M, DOT_MIN_PX, DOT_CAP, wrapTurn, KINDS, BRUSH_KINDS, BRUSH_CHANNELS, brushFormat, brushWords, ORDER, LANDING_ORDER, DEG, PRECISE_MOD, WARP_WAIT_MS, WARP_MISSES, placeHandles, sampleNear, screenOf, screenAxis, dragPixels, scrubGain, SPEED_SLOW, SPEED_FAST, targetFor, resetValue, DETENT_PX, hitTest, format, cursorFor, mount };

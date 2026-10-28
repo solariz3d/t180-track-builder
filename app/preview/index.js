@@ -20,6 +20,7 @@
 // And for the EQUATION CORE's panel (D186, app/core/panel.js):
 //   't180-camera-focus'   { detail: { s } }                the camera goes to free mode above and behind the station at s, looking at it (D242)
 //   't180-pick'           { detail: { x, y, reply(hit) } } the station under a canvas point (css px): { s, pos, px } or null
+//   't180-grab-ray'       { detail: { reply(ray) } }       D520: ray(x, y) -> { origin, dir, forward } under the pose shown now (Sculpt's grab plane), or null
 // And for the 3D GRID and the SYMMETRY GUIDES (D237, app/preview/guides.js, drawn here; the buttons are the camera panel's, app/camera/index.js):
 //   't180:guides'          { detail: { grid?, mirror?, centre? } }   grid auto | ground | 3d | off; mirror off | x | z | both; centre { x, z } or null (the box's middle)
 //   't180:guides-state'    { detail: state }                          what is asked and what is drawn (preview.guides()), on mount and on every change
@@ -83,6 +84,7 @@ function mount(root, shell) {
   const textures = (e) => { p.setTextureSet(e.detail ? e.detail.set : null, e.detail ? e.detail.kind : undefined); };
   const viewNow = (e) => { if (!e.detail || typeof e.detail.reply !== 'function') return; const v = p.view(), h = v.track && v.track.path ? v.track.path.head : null; e.detail.reply({ pose: v.pose, mode: v.mode, head: h ? { pos: h.pos.slice(), T: h.T.slice() } : null }); };
   const pickNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.pick(e.detail.x, e.detail.y)); };
+  const rayNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.grabRay()); };
   const trackNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.track()); };
   const ghostNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.ghostInfo()); };
   const buildingNow = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(p.ghostBuilding()); };
@@ -99,11 +101,12 @@ function mount(root, shell) {
   doc.addEventListener('t180-ghost', showGhost);
   doc.addEventListener('t180-ghost-clear', hideGhost);
   doc.addEventListener('t180-pick', pickNow);
+  doc.addEventListener('t180-grab-ray', rayNow);
   doc.addEventListener('t180:view', viewNow);
   // D242: a click on a red in a list moves the camera there ('t180-camera-focus', { s }: metres along the placed track)
   const focusNow = (e) => { if (e.detail && Number.isFinite(e.detail.s)) p.focus(e.detail.s); };
   doc.addEventListener('t180-camera-focus', focusNow);
-  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180:ghost-building', buildingNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
+  return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180:ghost-building', buildingNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180-grab-ray', rayNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };
 }
 
 module.exports = { mount, PreviewMountError };
