@@ -394,7 +394,7 @@ function mount(root, shell, mountOpts = {}) {
   const familyWords = (ch) => (ROUTE_CH.has(ch) ? 'moves the road after it' : LOCAL_CH.has(ch) ? 'the road after it stays where it is' : 'the road itself does not move');
   // one row a tool, in the order of the keys 1-9 (app/core/keys.js sculptKey); `axis`: the pointer's direction a drag reads (y: up is more; x: left is more)
   const TOOLS = Object.freeze([
-    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'press the road and drag: the point you press stays under the mouse, the road around it follows within the radius; the road after it stays' }),   // D520: the grab that follows (no longer than the hint it replaced, so the strip keeps its height)
+    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'press the road and drag: that side follows the mouse and the far edge stays put, all within the radius; the road outside the radius stays' }),   // D522: one side, within the radius (as long as the hint it replaced, so it wraps where that did and the strip keeps its height)
     Object.freeze({ key: 'stretch', label: 'Stretch', tool: 'stretch', channel: 'length', axis: 'y', hint: 'drag up to make the piece under the brush longer, down to shorten it, keeping its bend (Alt at the press: keeping its rate); moves the road after it' }),
     Object.freeze({ key: 'bend', label: 'Bend', tool: 'bend', channel: 'kh', axis: 'x', hint: 'drag left or right to turn the road harder or straighter here; moves the road after it' }),
     Object.freeze({ key: 'climb', label: 'Climb', tool: 'climb', channel: 'kv', axis: 'y', hint: 'drag up or down to tilt the road here; for a hill that stays put, use Grab; moves the road after it' }),
@@ -419,8 +419,12 @@ function mount(root, shell, mountOpts = {}) {
   edgeSide.replaceChildren(new win.Option('left edge', 'edge'), new win.Option('right edge', 'edge-right'), new win.Option('edge start', 'edge-start')); edgeSide.value = 'edge';
   const smoothCh = el('select', { 'aria-label': 'smooth channel', title: 'what Smooth smooths: the channel of the last tool used, unless you pick another here' });
   smoothCh.replaceChildren(...SMOOTH_CH.map((c) => new win.Option(CHANNEL_NAMES[c], c))); smoothCh.value = 'phi';
-  const radius = num(60, 10, 'brush radius, m');
-  const radiusNow = () => { const v = Number(radius.value); return radius.value !== '' && v > 0 ? v : 60; };   // an emptied field: the default, not a refusal
+  // D522 (plan_d522_grab_one_side_within_the_radius decision 3): Grab's own radius is 30 m by default, a local push; the other tools keep 60 m. Each keeps what it was set to
+  // when the tool changes (syncRadius, below); the strip's control, the wheel and [ ] set it as before
+  const RADIUS_DEFAULT = Object.freeze({ grab: 30, tools: 60 });
+  const radius = num(RADIUS_DEFAULT.grab, 10, 'brush radius, m');
+  const radiusClass = () => (toolNow().key === 'grab' ? 'grab' : 'tools');
+  const radiusNow = () => { const v = Number(radius.value); return radius.value !== '' && v > 0 ? v : RADIUS_DEFAULT[radiusClass()]; };   // an emptied field: the default, not a refusal
   // SHARP (E's opt-in, the chair's ruling 2): its spill is declared right here, in the words of E's own SHARP_NOTE. D421: "exact size", under "more ▾"
   const sharp = el('input', { type: 'checkbox', 'aria-label': 'sharp brush', title: 'Sharp brush: acts at exactly the size you set by adding finer control points first. It can nudge the track just outside the brush by up to 0.1 mm. Leave it off for an exactly local edit.' });
   const handlesOn = el('input', { type: 'checkbox', 'aria-label': 'drag handles', title: 'drag handles: marks on the ghost of the piece Extend would add (and in Sculpt on the selected run\'s middle piece); drag one to change its value, Shift for fine steps, Ctrl to snap to round numbers. Off: the ghost shows only while the pointer is on Extend' });
@@ -446,9 +450,8 @@ function mount(root, shell, mountOpts = {}) {
   };
   // the hover box's first line, per zone; the second is the family's line, or why the cup cannot turn here. D520: the grab follows the pointer (zonegrab.js follow), so a zone
   // says what follows the point there, not which channel a direction picks
-  const zoneWords = (z) => (z.zone === 'rim' ? 'this edge follows the pointer · the far edge stays' : z.zone === 'cup' && z.info && z.info.cup ? 'the point follows the pointer · the cup turns to lift it'
-    : 'the road follows the pointer · any way');
-  const cupWhy = (z, s0) => (z && z.zone === 'cup' && z.info && z.info.cup && typeof shell.zoneRefusal === 'function' ? shell.zoneRefusal('c', s0, radiusNow()) : null);
+  // D522: off the centre band (zonegrab.js HINGE_U) the press's side follows and the far rim stays; in it, the whole road
+  const zoneWords = (z, u) => (Math.abs(u) >= ZG.HINGE_U ? 'this side follows the pointer · the far edge stays' : 'the road follows the pointer · any way');
   const stage = doc.getElementById('preview');
   values = stage ? VO.mount(stage, win) : null;
   const CLICK_PX = PU.CLICK_PX;   // app/core/piecesui.js's: more than this between press and release is a drag
@@ -478,7 +481,7 @@ function mount(root, shell, mountOpts = {}) {
   // D519 Part 2: with Grab the hover carries its zone (kept for the pick, Alt and the radius, so a still pointer asks the shell nothing again) and a refused channel's reason
   const hoverZone = () => {
     const k = `${hover.alt}|${radiusNow()}|${toolNow().key}`; if (hover.zk === k) return hover.zone;
-    const z = zoneOf(hover.hit, false); hover.zk = k; hover.zone = z ? { ...z, why: cupWhy(z, hover.s0) } : null; return hover.zone;
+    const z = zoneOf(hover.hit, false); hover.zk = k; hover.zone = z ? { ...z, why: null } : null; return hover.zone;
   };
   const sculptHover = () => { const st = shell.getState(); if (!hover || !st.sculpt || (drag && drag.open) || st.brush || hoverStation() === null) return null; const T = toolNow(), z = hoverZone(); return { s0: hover.s0, r: radiusNow(), tool: T.key, channel: T.channel, alt: hover.alt && !!T.side, ...(z ? { zone: z, u: hover.hit.u, altHeld: false } : {}) }; };
   const onSculptHover = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(sculptHover()); };
@@ -504,14 +507,13 @@ function mount(root, shell, mountOpts = {}) {
   /**
    * D520 (plan_d520_sculpt_point_follows_the_mouse item 1): THE GRAB PLANE. With Grab, a press on the road keeps what the drag needs: the pointer's ray under the camera as it
    * is at the press (the preview's 't180-grab-ray'), the hit's world point and the plane through it facing the camera, the road's frame and section there (zonegrab.js
-   * frameAt) and the piece's kind (the cup's lift at the hit, unless the brush would refuse a cup there: then the point slides). Null when any is missing.
+   * frameAt) and the piece's kind. Null when any is missing.
    */
   const followOf = (hit, x, y) => {
     const z = zoneOf(hit, false); if (!z || !Array.isArray(hit.at)) return null;
     const ray = askOf('t180-grab-ray'), tr = askOf('t180:track-request'); if (typeof ray !== 'function' || !tr || !tr.path || !Array.isArray(tr.segments)) return null;
     const r0 = ray(x, y), frame = ZG.frameAt(tr.path, tr.segments, hit.s, hit.u), P0 = r0 && ZG.planePoint(r0, hit.at, r0.forward); if (!frame || !P0) return null;
-    const info = typeof shell.zoneInfo === 'function' ? shell.zoneInfo(hit.s, hit.u) : null, cupOK = !!(info && info.cup && !cupWhy({ ...z, info }, hit.s));
-    return { ray, at: hit.at.slice(), forward: r0.forward, P0, frame, piece: { ...(info || {}), cup: cupOK } };
+    return { ray, at: hit.at.slice(), forward: r0.forward, P0, frame, piece: z.info || {} };
   };
   /** D520: the follow's channel changes for the pointer at (x, y): the pointer's point on the grab plane less the press's (so a press a few px off a dot does not jump), carried by zonegrab.js follow. */
   const followAt = (x, y) => {
@@ -521,7 +523,7 @@ function mount(root, shell, mountOpts = {}) {
   /** The press became a drag: the brush opens on the document as it is now. False (and no drag) when the shell refuses it; its message says why. */
   const openBrush = (x, y) => {
     const T = drag.T;
-    if (drag.follow) shell.beginFollow({ s0: drag.s0, r: radiusNow(), sharp: sharp.checked });
+    if (drag.follow) shell.beginFollow({ s0: drag.s0, r: radiusNow() });   // D522: sharp by itself (coreshell.js beginFollow), so the Sharp tick is not passed
     else shell.beginBrush({ tool: T.tool, mode: LOCAL_CH.has(T.channel) ? 'local' : 'rate', channel: T.channel, s0: drag.s0, r: radiusNow(), sharp: sharp.checked, ...(drag.keepRate ? { keepRate: true } : {}) });
     if (!shell.getState().brush) { drag = null; return false; }
     if (T.key !== 'smooth' && SMOOTH_CH.includes(T.channel)) smoothCh.value = T.channel;   // Smooth smooths the last tool's channel (design §3.7)
@@ -653,7 +655,7 @@ function mount(root, shell, mountOpts = {}) {
     }
     const side = zg ? zg.place : T.key === 'edge' ? (T.channel === 'er' ? { sides: [-1] } : T.channel === 's' ? { lat: 0.75 } : {}) : {};   // Edge: the mark on the edge "Edge changes" names; a zone: at the hit's u
     const brush = { samples: tr.path.samples, s: glyphAt.at, half: glyphAt.half, ...side, colour: T.key === 'smooth' && HD.BRUSH_CHANNELS[T.channel] ? HD.BRUSH_CHANNELS[T.channel].colour : undefined,
-      open: !!open, text: open ? roadWords(st.brush, T) : '', note: open ? '' : z ? z.why || familyWords(z.U) : familyWords(T.channel), ...(z ? { words: zoneWords(z) } : {}) };
+      open: !!open, text: open ? roadWords(st.brush, T) : '', note: open ? '' : z ? z.why || familyWords('height') : familyWords(T.channel), ...(z ? { words: zoneWords(z, h.u) } : {}) };
     return { mode: 'brush', samples: NO_SAMPLES, s0: 0, s1: 0, half: () => 0, kinds: [kind], brush, base: () => 0, ctx: () => ({}) };
   };
   // the glyph beside the selected run's handles: each kind answers for itself, as the landing's beside Extend's (D278)
@@ -777,11 +779,13 @@ function mount(root, shell, mountOpts = {}) {
   // SMOOTH'S RADIUS (O's measurement, p-d421-shell-O_2026-10-20.md addendum: at a bump's own radius Smooth moves ONE control point, nothing to see; 10 at r 160, 29 at r 300):
   // picking Smooth puts 3x the last tool's radius in the field, so the smooth reaches past the bump it is taking out and scales with it (a fixed 300 m would swallow a
   // 60 m bump's neighbours and fall short of a 500 m bend); leaving Smooth puts the other tools' radius back. The field only: an open drag keeps its r
-  let smoothing = false, toolsR = null;
+  let smoothing = false, toolsR = null, rClass = 'grab';
+  const keptR = { grab: RADIUS_DEFAULT.grab, tools: RADIUS_DEFAULT.tools };   // D522: each class's radius while the other is shown
   const syncRadius = () => {
-    const now = toolNow().key === 'smooth'; if (now === smoothing) return;
-    smoothing = now;
-    if (now) { toolsR = radiusNow(); radius.value = String(3 * toolsR); } else if (toolsR !== null) radius.value = String(toolsR);
+    const now = toolNow().key === 'smooth';
+    if (!now && smoothing) { smoothing = false; if (toolsR !== null) radius.value = String(toolsR); }   // leaving Smooth: the tools' radius again
+    const c = radiusClass(); if (c !== rClass) { keptR[rClass] = radiusNow(); rClass = c; radius.value = String(keptR[c]); }   // D522: Grab's radius and the other tools' each kept
+    if (now && !smoothing) { smoothing = true; toolsR = radiusNow(); radius.value = String(3 * toolsR); }
   };
   const showTool = () => {
     syncRadius();
@@ -805,7 +809,9 @@ function mount(root, shell, mountOpts = {}) {
   // closed lap under a route tool, the two the release may also move (the lap's last road piece and its first: the seam tries, app/core/coreshell.js)
   const valueLineOf = (st, T) => {
     const b = st.brush, K = HD.KINDS[brushKindOf(T, T.channel === 'lateral')], d = b.delta;
-    const way = K && Number.isFinite(d) && d !== 0 ? (d > 0 ? K.words[0] : K.words[1] || '') : '';
+    // D522: a grab says which way the road gives (one side, or the whole road at the centre) and the radius it moves within, the radius really used
+    const way = b.mode === 'follow' ? `${drag && drag.follow && Math.abs(drag.follow.frame.u) >= ZG.HINGE_U ? 'this side; the far edge stays' : 'the whole road'}, within ${(Number.isFinite(b.rUsed) ? b.rUsed : b.r).toFixed(0)} m`
+      : K && Number.isFinite(d) && d !== 0 ? (d > 0 ? K.words[0] : K.words[1] || '') : '';
     const widened = Number.isFinite(b.rUsed) && b.rUsed > b.r + 1e-9 ? `brush widened to ${b.rUsed.toFixed(0)} m (asked ${b.r.toFixed(0)} m)` : '';
     const doc0 = b.closedBase || st.history.present, idOf = (i) => (doc0.pieces[i] ? doc0.pieces[i].id : String(i));
     const ps = Array.isArray(b.pieces) && b.pieces.length ? b.pieces : null, lo = ps ? Math.min(...ps) : 0, hi = ps ? Math.max(...ps) : 0;

@@ -165,12 +165,16 @@ test('row 14a (D520): the pointer\'s ray passes through the world point drawn un
   assert.equal(rayAt(pose, 1, 1, 0, H), null); assert.equal(ZG.planePoint({ origin: [0, 0, 0], dir: [1, 0, 0] }, [0, 0, 5], [0, 0, 1]), null, 'a ray along the plane meets it nowhere');
 });
 
-test('row 14b (D520, plan item 2, "anywhere between the rims, sideways"): a sideways drag slides the road under the point, l only, and the point follows', async () => {
-  for (const u of [0.05, 0.5]) {
-    const doc = road(0), { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, u), r = await grabbed(doc, u, F.R.map((x) => x * 2.5));
-    assert.ok(Math.abs(r.d.l - 2.5) < 1e-9 && Math.abs(r.d.h) < 1e-9 && r.d.w === undefined && r.d.phi === undefined, JSON.stringify(r.d));
-    assert.ok(r.miss < MM, `u ${u}: the point misses the pointer by ${r.miss} m`);
-  }
+// AMENDED D522 (plan_d522_grab_one_side_within_the_radius decision 1; the user, 15:39: "it should only affect one side of the track ... not both sides"): D520 slid the whole
+// section for any press off the rims; now only a press in the centre band (|u| < ZG.HINGE_U) does, and every other hinges about the far rim. So this row keeps its centre-band
+// press (u 0.05: l only) and its u 0.5 press now pins the hinge: the far rim stays and the near side follows.
+test('row 14b (D520, amended D522): a sideways drag in the centre band slides the road under the point, l only; at u 0.5 it hinges about the far rim; the point follows both', async () => {
+  const doc = road(0), { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, 0.05), r = await grabbed(doc, 0.05, F.R.map((x) => x * 2.5));
+  assert.ok(Math.abs(r.d.l - 2.5) < 1e-9 && Math.abs(r.d.h) < 1e-9 && r.d.w === undefined && r.d.phi === undefined, JSON.stringify(r.d));
+  assert.ok(r.miss < MM, `u 0.05: the point misses the pointer by ${r.miss} m`);
+  const F5 = ZG.frameAt(path, segments, S0, 0.5), h = await grabbed(doc, 0.5, F5.R.map((x) => x * 2.5));
+  assert.ok(Number.isFinite(h.d.w) && h.d.w > 0, `the road widens on the pressed side: ${JSON.stringify(h.d)}`);
+  assert.ok(h.far < MM, `u 0.5: the far rim moves ${h.far} m`); assert.ok(h.miss < MM, `u 0.5: the point misses the pointer by ${h.miss} m`);
 });
 
 test('row 14c (D520, plan item 2, "centre, up"): an upward drag at the centre lifts the height by the drag, and the point follows', async () => {
@@ -178,11 +182,35 @@ test('row 14c (D520, plan item 2, "centre, up"): an upward drag at the centre li
   assert.ok(Math.abs(r.d.h - 2) < 1e-9 && Math.abs(r.d.l) < 1e-9, JSON.stringify(r.d)); assert.ok(r.miss < MM, `misses by ${r.miss}`);
 });
 
-test('row 14d (D520, plan item 2, "cup zone"): partway out on a cup piece an upward drag turns the cup so the point rises to the pointer; a piece with no cup lifts the height', async () => {
-  const cup = await grabbed(road(0, { cup: 30, family: 'bowl' }), 0.6, [0, 1.5, 0]);
-  assert.ok(Number.isFinite(cup.d.c) && cup.d.c > 0, `the cup turns up: ${JSON.stringify(cup.d)}`); assert.ok(cup.miss < MM, `the cup point misses by ${cup.miss} m`);
-  const flat = await grabbed(road(0), 0.6, [0, 1.5, 0]);
-  assert.equal(flat.d.c, undefined); assert.ok(Math.abs(flat.d.h - 1.5) < 1e-9, JSON.stringify(flat.d)); assert.ok(flat.miss < MM, `misses by ${flat.miss}`);
+// AMENDED D522 (decision 1, as row 14b): D520 turned the cup to lift a press partway out on a cup piece, and lifted a plain road whole; both now hinge about the far rim, which
+// moves both sides no more (the cup is a both-sides shape: turning it lifted the far side as well). The row pins that: no cup change, a bank, and the far rim kept.
+test('row 14d (D520, amended D522): partway out on a cup piece or a plain road an upward drag hinges about the far rim: no cup change, the far rim stays, the point follows', async () => {
+  for (const o of [{ cup: 30, family: 'bowl' }, {}]) {
+    const r = await grabbed(road(0, o), 0.6, [0, 1.5, 0]);
+    assert.equal(r.d.c, undefined, JSON.stringify(r.d)); assert.ok(r.d.phi > 0, `the left side up is a left bank: ${JSON.stringify(r.d)}`);
+    assert.ok(r.far < MM, `${o.cup ? 'cup' : 'plain'}: the far rim moves ${r.far} m`); assert.ok(r.miss < MM, `${o.cup ? 'cup' : 'plain'}: the point misses by ${r.miss} m`);
+  }
+});
+
+test('row 14l (D522, the plan\'s far-rim rows): a press at u 0.25, 0.5 and 0.75, either side, on a flat road and at 60°, dragged up, out and both: the far rim stays within 1 cm', async () => {
+  let worstFar = 0, worstMiss = 0;
+  for (const phi of [0, 60]) for (const u of [0.25, 0.5, 0.75, -0.25, -0.5, -0.75]) for (const delta of [[0, 1.5, 0], [2, 0, 0], [-1, 1, 0.5]]) {
+    const r = await grabbed(road(phi), u, delta); worstFar = Math.max(worstFar, r.far); worstMiss = Math.max(worstMiss, r.miss);
+  }
+  assert.ok(worstFar < 0.01, `the far rim moves up to ${worstFar} m`); assert.ok(worstMiss < 0.01, `the point misses by up to ${worstMiss} m`);
+});
+
+test('row 14m (D522, decision 2): a 30 m grab on 20 m knots is sharp: the road changes by more than 0.1 mm only within the 30 m asked, and outside it by under 0.1 mm (Sharp\'s declared spill)', async () => {
+  // the road read every 0.5 m along the 200 m piece, its centreline and both rims; "moved" is the most any of the three moved there
+  const along = (doc) => { const { path, segments } = toPath(doc); return path.samples.filter((m) => Math.abs(m.s * 2 - Math.round(m.s * 2)) < 1e-9).map((m) => ({ s: m.s, p: [-1, 0, 1].map((u) => ZG.acrossAt(path, segments, m, u).pos) })); };
+  const doc = road(60), before = along(doc), { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, 0.5), d = ZG.follow([0, 1.5, 0], F, {});
+  const sh = await createCoreShell({ autosaveMs: 0 }); sh.adopt(doc); sh.setSculpt(true); sh.beginFollow({ s0: S0, r: 30 }); sh.brushTo(d);
+  const rUsed = sh.getState().brush.rUsed, after = along(sh.getState().history.present); sh.endBrush();
+  const moved = after.map((x, i) => ({ s: x.s, m: Math.max(...x.p.map((p, k) => gap(p, before[i].p[k]))) }));
+  const reach = (tol) => Math.max(0, ...moved.filter((x) => x.m > tol).map((x) => Math.abs(x.s - S0)));
+  assert.equal(rUsed, 30, 'the band shows 30 m: the radius used is the radius asked');
+  assert.ok(reach(1e-4) <= 30, `more than 0.1 mm reaches ${reach(1e-4)} m from the press`);
+  assert.ok(Math.max(...moved.filter((x) => Math.abs(x.s - S0) > 30).map((x) => x.m)) <= 1e-4, 'outside the 30 m, under 0.1 mm (Sharp\'s declared spill)');
 });
 
 test('row 14e (D520, plan item 2, "a rim, sideways"): on a flat road the touched edge moves and the far edge stays: w += side·e, l += e/2, as the plan checks it', async () => {
