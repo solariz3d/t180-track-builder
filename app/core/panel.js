@@ -28,6 +28,7 @@ const SPD = require('./spawndrag.js');
 const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // D285: and dragged there
 const VO = require('./valuesoverlay.js');   // D267: the values of the piece being edited, large over the 3D view   // D258: the free jump's landing: where its handles are, and its number boxes
 const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
+const ZG = require('./zonegrab.js');   // D519 Part 2: Sculpt grabs the road itself (the zone at the press, the drag's axis, the dot rows)
 const SL = require('./selectionlayer.js');   // D425 part 4: pieceSpan, the piece under a station (Stretch's glyph stands at its far joint)
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
@@ -393,7 +394,7 @@ function mount(root, shell, mountOpts = {}) {
   const familyWords = (ch) => (ROUTE_CH.has(ch) ? 'moves the road after it' : LOCAL_CH.has(ch) ? 'the road after it stays where it is' : 'the road itself does not move');
   // one row a tool, in the order of the keys 1-9 (app/core/keys.js sculptKey); `axis`: the pointer's direction a drag reads (y: up is more; x: left is more)
   const TOOLS = Object.freeze([
-    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'drag up or down to lift or sink the road under the brush (Alt at the press: left or right to move it sideways); the road after it stays where it is' }),
+    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'press across the road: the middle lifts or slides it, partway out cups or banks it, the edge tilts it, the rim widens it; the road after it stays' }),   // D519 Part 2: the zone grab (no longer than the hint it replaced, so the strip keeps its height)
     Object.freeze({ key: 'stretch', label: 'Stretch', tool: 'stretch', channel: 'length', axis: 'y', hint: 'drag up to make the piece under the brush longer, down to shorten it, keeping its bend (Alt at the press: keeping its rate); moves the road after it' }),
     Object.freeze({ key: 'bend', label: 'Bend', tool: 'bend', channel: 'kh', axis: 'x', hint: 'drag left or right to turn the road harder or straighter here; moves the road after it' }),
     Object.freeze({ key: 'climb', label: 'Climb', tool: 'climb', channel: 'kv', axis: 'y', hint: 'drag up or down to tilt the road here; for a hill that stays put, use Grab; moves the road after it' }),
@@ -432,6 +433,26 @@ function mount(root, shell, mountOpts = {}) {
     if (x.key === 'smooth') { const ch = SMOOTH_CH.includes(smoothCh.value) ? smoothCh.value : 'phi'; return { ...x, channel: ch, hint: `drag up to smooth the ${CHANNEL_NAMES[ch]} under the brush (which: more ▾); ${familyWords(ch)}` }; }
     return x;
   };
+  // D519 Part 2 (O's design, exo_memory/handback/p-d519-design-O_2026-10-28.md §1, §4): THE ZONE GRAB. With Grab, where across the road a press lands names the channel
+  // (app/core/zonegrab.js zoneAt, from the pick's u and the piece's kind, shell.zoneInfo), and the first move past CLICK_PX picks between the zone's lift and its out-and-in
+  // (zonegrab.js axisOf); the value is then read along that axis on screen. Never a re-route: the zones name no kh, kv or length. The other keys keep their one channel.
+  const toolOf = (key) => TOOLS.find((x) => x.key === key);
+  const ZONE_TOOL = Object.freeze({ height: toolOf('grab'), lateral: Object.freeze({ ...toolOf('grab'), ...toolOf('grab').side }), phi: toolOf('twist'), w: toolOf('width'), c: toolOf('cup'),
+    e: Object.freeze({ ...toolOf('edge'), tool: 'edge', channel: 'e' }), er: Object.freeze({ ...toolOf('edge'), tool: 'edge-right', channel: 'er' }), s: Object.freeze({ ...toolOf('edge'), tool: 'edge-start', channel: 's' }), r: MORE_TOOLS.wall, t: MORE_TOOLS.sweep });
+  const zoneGrabOn = () => toolNow().key === 'grab';
+  /** The zone under a pick `hit` ({ s, u, ... }) with Alt `alt`: zoneAt's answer with the piece's kind beside it (`info`), or null (not Grab, no u, off the road, no piece). */
+  const zoneOf = (hit, alt) => {
+    if (!zoneGrabOn() || !hit || !Number.isFinite(hit.u) || typeof shell.zoneInfo !== 'function') return null;
+    const info = shell.zoneInfo(hit.s), z = info ? ZG.zoneAt(hit.u, info, { alt: !!alt }) : null;
+    return z ? { ...z, info } : null;
+  };
+  /** Why the brush would refuse a zone's channels at s0 with the radius now (the first refused, lift first), or null. */
+  const zoneRefusalOf = (z, s0) => { if (!z || typeof shell.zoneRefusal !== 'function') return null; for (const ch of [z.U, z.L]) { const why = ch ? shell.zoneRefusal(ch, s0, radiusNow()) : null; if (why) return why; } return null; };
+  // the hover box's first line, per zone (design §4, in D425's words); the second is the family's line, or a refused channel's reason
+  const ZONE_LIFT = Object.freeze({ height: 'height · ↕ lift / sink', lateral: 'sideways · ↔ left / right', phi: 'bank · ↕ this side up / down', c: 'cup · ↕ edges up / flatter', t: 'tube sweep · ↕ close more / open more',
+    r: 'wall rise · ↕ higher / lower', e: 'left edge angle · ↕ more / less', er: 'right edge angle · ↕ more / less' });
+  const ZONE_OUT = Object.freeze({ lateral: '↔ sideways', s: '↔ edge start' });
+  const zoneWords = (z) => (z.zone === 'rim' && z.L === 'w' ? `width ↔ wider / narrower · ↕ ${CHANNEL_NAMES[z.U]}` : [ZONE_LIFT[z.U], z.L ? ZONE_OUT[z.L] : ''].filter(Boolean).join(' · '));
   const stage = doc.getElementById('preview');
   values = stage ? VO.mount(stage, win) : null;
   const CLICK_PX = PU.CLICK_PX;   // app/core/piecesui.js's: more than this between press and release is a drag
@@ -450,7 +471,7 @@ function mount(root, shell, mountOpts = {}) {
     const [x, y] = rel(e); hover = { x, y, alt: !!e.altKey, e };
   };
   const hoverStation = () => {
-    if (hover && hover.s0 === undefined) { const tr = askOf('t180:track-request'), hit = LB.sharedPick(doc, win, hover.x, hover.y, hover.e, tr ? tr.segments : undefined); hover.s0 = hit && Number.isFinite(hit.s) ? hit.s : null; }
+    if (hover && hover.s0 === undefined) { const tr = askOf('t180:track-request'), hit = LB.sharedPick(doc, win, hover.x, hover.y, hover.e, tr ? tr.segments : undefined); hover.s0 = hit && Number.isFinite(hit.s) ? hit.s : null; hover.hit = hit; }
     return hover ? hover.s0 : null;
   };
   const onAltKey = (e) => { if (hover && e && e.key === 'Alt') hover.alt = e.type === 'keydown'; };
@@ -458,7 +479,12 @@ function mount(root, shell, mountOpts = {}) {
   const onBlur = () => { if (hover) hover.alt = false; };   // D498 item 5: Alt released while the window is not focused never sends keyup
   const winEvents = !!(win && typeof win.addEventListener === 'function');   // a window with no event API (a test's fake) gets no blur listener
   if (winEvents) win.addEventListener('blur', onBlur);
-  const sculptHover = () => { const st = shell.getState(); if (!hover || !st.sculpt || (drag && drag.open) || st.brush || hoverStation() === null) return null; const T = toolNow(); return { s0: hover.s0, r: radiusNow(), tool: T.key, channel: T.channel, alt: hover.alt && !!T.side }; };
+  // D519 Part 2: with Grab the hover carries its zone (kept for the pick, Alt and the radius, so a still pointer asks the shell nothing again) and a refused channel's reason
+  const hoverZone = () => {
+    const k = `${hover.alt}|${radiusNow()}|${toolNow().key}`; if (hover.zk === k) return hover.zone;
+    const z = zoneOf(hover.hit, hover.alt); hover.zk = k; hover.zone = z ? { ...z, why: zoneRefusalOf(z, hover.s0) } : null; return hover.zone;
+  };
+  const sculptHover = () => { const st = shell.getState(); if (!hover || !st.sculpt || (drag && drag.open) || st.brush || hoverStation() === null) return null; const T = toolNow(), z = hoverZone(); return { s0: hover.s0, r: radiusNow(), tool: T.key, channel: T.channel, alt: hover.alt && !!T.side, ...(z ? { zone: z, u: hover.hit.u, altHeld: !!hover.alt } : {}) }; };
   const onSculptHover = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(sculptHover()); };
   doc.addEventListener('t180:sculpt-hover', onSculptHover);
   const leave = () => { hover = null; };
@@ -466,14 +492,32 @@ function mount(root, shell, mountOpts = {}) {
     brushedPress = false;
     if (!shell.getState().sculpt || e.button !== 0 || drag || shell.getState().brush) return;
     const [x, y] = rel(e);   // (a press on a handle never gets here: handles.js takes it in the capture phase and stops it)
-    let hit = null; send('t180-pick', { x, y, reply: (h) => { hit = h; } });
+    let hit = null; const dot = handles && typeof handles.dotAt === 'function' ? handles.dotAt(x, y) : null;   // D519 Part 2: a press on a dot is the zone grab opened at that dot
+    if (dot) hit = { s: dot.s, u: dot.u, side: dot.side, axes: dot.axes }; else send('t180-pick', { x, y, reply: (h) => { hit = h; } });
     if (!hit) return;
+    const z = zoneOf(hit, e.altKey);   // D519 Part 2: Grab reads the zone; off the road (no zone) the press is the key's tool, as before
+    if (z) {
+      drag = { x, y, s0: hit.s, zone: z, axes: hit.axes || { U: [0, 0], L: [0, 0] }, side: hit.side || 1, alt: !!e.altKey, T: null, delta: 0, open: false }; e.preventDefault();
+      if (stage.setPointerCapture && e.pointerId !== undefined) stage.setPointerCapture(e.pointerId);
+      return;
+    }
     const base = toolNow(), T = base.side && e.altKey ? { ...base, ...base.side } : base;
     drag = { x, y, s0: hit.s, T, keepRate: T.key === 'stretch' && !!e.altKey, axis: T.axis, per: PER_PX[T.key === 'smooth' ? 'smooth' : T.channel], smooth: T.key === 'smooth', delta: 0, open: false }; e.preventDefault();
     if (stage.setPointerCapture && e.pointerId !== undefined) stage.setPointerCapture(e.pointerId);
   };
   /** The press became a drag: the brush opens on the document as it is now. False (and no drag) when the shell refuses it; its message says why. */
-  const openBrush = () => {
+  // D519 Part 2: the zone grab's axis, locked at the first move past the click: the channel, its tool, and how its value is read. A channel the brush would refuse here does
+  // nothing (the hover said why); it never falls through to another channel
+  const lockZone = (x, y) => {
+    const z = drag.zone, axis = drag.alt ? 'U' : ZG.axisOf([x - drag.x, y - drag.y], drag.axes, z), ch = z[axis], T = ZONE_TOOL[ch];
+    if (!T || (typeof shell.zoneRefusal === 'function' && shell.zoneRefusal(ch, drag.s0, radiusNow()))) { drag = null; brushedPress = true; return false; }
+    // bank: lifting the left part banks it left-up, so the right side's lift is a negative bank; sideways along the across axis: + is left (the axis points outward)
+    const sign = ch === 'phi' || (ch === 'lateral' && !drag.alt) ? drag.side : 1;
+    Object.assign(drag, { T, axis: T.axis, per: PER_PX[ch], smooth: false, keepRate: false, sign, vec: drag.alt ? null : drag.axes[axis] });
+    return true;
+  };
+  const openBrush = (x, y) => {
+    if (drag.zone && !drag.T && !lockZone(x, y)) return false;
     const T = drag.T;
     shell.beginBrush({ tool: T.tool, mode: LOCAL_CH.has(T.channel) ? 'local' : 'rate', channel: T.channel, s0: drag.s0, r: radiusNow(), sharp: sharp.checked, ...(drag.keepRate ? { keepRate: true } : {}) });
     if (!shell.getState().brush) { drag = null; return false; }
@@ -481,7 +525,12 @@ function mount(root, shell, mountOpts = {}) {
     liveTool = T; drag.open = true; brushedPress = true; hover = null;   // D428: the brush's own cues take over from the hover's
     return true;
   };
-  const deltaAt = (x, y) => { const v = (drag.axis === 'x' ? drag.x - x : drag.y - y) * drag.per; return drag.smooth ? Math.max(0, v) : v; };
+  // D519 Part 2: a zone grab reads the pointer along its locked axis on screen (as Build's dragPixels reads a handle's arrow); an axis under EDGE_ON_PX px a metre (seen end-on) reads the tool's own way
+  const deltaAt = (x, y) => {
+    const a = drag.vec, len = a ? Math.hypot(a[0], a[1]) : 0;
+    if (len >= ZG.EDGE_ON_PX) return ((x - drag.x) * a[0] + (y - drag.y) * a[1]) / len * drag.per * drag.sign;
+    const v = (drag.axis === 'x' ? drag.x - x : drag.y - y) * drag.per * (drag.sign || 1); return drag.smooth ? Math.max(0, v) : v;
+  };
   // D235 (nothing coalesced the pointer moves: each one ran a whole brush step, and a closed tube's takes seconds, so the moves queued behind it): at most ONE brushTo per
   // animation frame, with the LATEST position; the release applies the last position that is still waiting, then ends the drag. D421: a radius change (the wheel, [ ]) during
   // the drag goes into the same frame: the new r first (shell.brushRadius, pane O: the brush state's r, re-run from the same base), then the one brushTo
@@ -495,7 +544,7 @@ function mount(root, shell, mountOpts = {}) {
   const move = (e) => {
     if (!drag) { hoverAt(e); return; }
     const [x, y] = rel(e);
-    if (!drag.open && (Math.hypot(x - drag.x, y - drag.y) <= CLICK_PX || !openBrush())) return;
+    if (!drag.open && (Math.hypot(x - drag.x, y - drag.y) <= CLICK_PX || !openBrush(x, y))) return;
     waiting = [x, y]; if (!frame) frame = win.requestAnimationFrame(flush);
   };
   const up = () => {
@@ -550,7 +599,26 @@ function mount(root, shell, mountOpts = {}) {
     if (!sculptSamples || sculptSamples.tr !== tr.path || sculptSamples.id !== si.id) sculptSamples = { tr: tr.path, id: si.id, list: tr.path.samples.filter((m) => tr.segments[m.seg] && tr.segments[m.seg].id === si.id) };
     const list = sculptSamples.list; if (list.length < 2) return null;
     const kinds = ['bank', 'width'].concat(si.hasCup ? ['cup'] : []), valueOf = { bank: si.values.phi, width: si.values.w, cup: si.values.c };
-    return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), at: { width: 1 }, kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }) };
+    const dots = st.brush || !zoneGrabOn() ? null : dotsOf(tr, si, list);
+    return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), at: { width: 1 }, kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }), ...(dots ? { dots } : {}) };
+  };
+  // D519 Part 2 (O's design §3): THE DOT ROWS on the selected run, for handles.js placeDots: the centre, the two rims and, on a cup piece, halfway out; at the run's stations
+  // a knot span apart (src/core/document.js KNOT_M, the control points' spacing), which placeDots thins on screen. Kept while the track, the run and the radius are the same, so the
+  // overlay's frame key is unchanged and the dots are placed once per pose and run (never per drag step: they are left out while a brush is open, and the drag's glyph shows)
+  let dotsMemo = null;
+  const dotsOf = (tr, si, list) => {
+    const r = radiusNow(), ids = new Set(shell.getState().history.present.pieces.slice(si.from, si.to + 1).map((P) => P.id));
+    if (dotsMemo && dotsMemo.tr === tr.path && dotsMemo.from === si.from && dotsMemo.to === si.to && dotsMemo.id === si.id && dotsMemo.r === r) return dotsMemo.dots;
+    const S = tr.path.samples, run = S.filter((m) => tr.segments[m.seg] && ids.has(tr.segments[m.seg].id)); if (run.length < 2) return null;
+    const s0 = run[0].s, s1 = run[run.length - 1].s, stations = [];
+    for (let x = s0; x < s1; x += KNOT_M) stations.push(x);
+    stations.push(s1);
+    const near = (x) => { let lo = 0, hi = S.length - 1; while (lo < hi) { const mid = (lo + hi) >> 1; if (S[mid].s < x) lo = mid + 1; else hi = mid; } return lo > 0 && Math.abs(S[lo - 1].s - x) < Math.abs(S[lo].s - x) ? S[lo - 1] : S[lo]; };
+    const info = typeof shell.zoneInfo === 'function' ? shell.zoneInfo(list[Math.floor(list.length / 2)].s) : null, lift = !!(info && (info.edge || info.cup)) ? '#3ddc6e' : null;
+    const rows = [{ u: 0, colour: '#ffffff' }, { u: 1, colour: '#ff5a5a', inner: lift }, { u: -1, colour: '#ff5a5a', inner: lift }].concat(si.hasCup ? [{ u: 0.5, colour: '#3ddc6e' }, { u: -0.5, colour: '#3ddc6e' }] : []);
+    const dots = { stations, run: { s0, s1 }, radius: r, rows, at: (x, u) => ZG.acrossAt(tr.path, tr.segments, near(x), u) };
+    dotsMemo = { tr: tr.path, from: si.from, to: si.to, id: si.id, r, dots };
+    return dots;
   };
   let sculptDrag = null;
   // D258: THE LANDING (the free jump): while it is the head, its four handles (forward, sideways, height, heading) are on the track, and a drag is the shell's landing drag (one undo step; the same
@@ -575,16 +643,16 @@ function mount(root, shell, mountOpts = {}) {
   const brushModel = () => {
     const st = shell.getState(); if (!st.sculpt) return null;
     const open = drag && drag.open && st.brush && liveTool ? drag : null, h = open ? null : sculptHover(); if (!open && !h) return null;
-    const T = open ? liveTool : toolNow(), s = open ? drag.s0 : h.s0, kind = brushKindOf(T, open ? T.channel === 'lateral' : h.alt);
+    const T = open ? liveTool : toolNow(), s = open ? drag.s0 : h.s0, z = open ? null : h.zone, zg = z ? ZG.glyphOf(z, h.u, h.altHeld) : null, kind = zg ? zg.kind : brushKindOf(T, open ? T.channel === 'lateral' : h.alt);   // D519 Part 2: on hover with Grab, the zone's glyph
     if (!HD.KINDS[kind]) return null;
     const tr = askOf('t180:track-request'); if (!tr || !tr.path || !Array.isArray(tr.path.samples) || !tr.path.samples.length || !Array.isArray(tr.segments)) return null;
     if (!glyphAt || glyphAt.tr !== tr.path || glyphAt.s !== s || glyphAt.key !== T.key) {
       const span = SL.pieceSpan(tr, s), ps = span ? shell.pieceState(span.id) : null;
       glyphAt = { tr: tr.path, s, key: T.key, at: T.key === 'stretch' && span ? span.s0 + span.r : s, half: ps && ps.w > 0 ? ps.w / 2 : 0 };   // Stretch: at the piece's far joint, where Build's length mark sits
     }
-    const side = T.key === 'edge' ? (T.channel === 'er' ? { sides: [-1] } : T.channel === 's' ? { lat: 0.75 } : {}) : {};   // Edge: the mark on the edge "Edge changes" names
+    const side = zg ? zg.place : T.key === 'edge' ? (T.channel === 'er' ? { sides: [-1] } : T.channel === 's' ? { lat: 0.75 } : {}) : {};   // Edge: the mark on the edge "Edge changes" names; a zone: at the hit's u
     const brush = { samples: tr.path.samples, s: glyphAt.at, half: glyphAt.half, ...side, colour: T.key === 'smooth' && HD.BRUSH_CHANNELS[T.channel] ? HD.BRUSH_CHANNELS[T.channel].colour : undefined,
-      open: !!open, text: open ? roadWords(st.brush, T) : '', note: open ? '' : familyWords(T.channel) };
+      open: !!open, text: open ? roadWords(st.brush, T) : '', note: open ? '' : z ? z.why || familyWords(z.U) : familyWords(T.channel), ...(z ? { words: zoneWords(z) } : {}) };
     return { mode: 'brush', samples: NO_SAMPLES, s0: 0, s1: 0, half: () => 0, kinds: [kind], brush, base: () => 0, ctx: () => ({}) };
   };
   // the glyph beside the selected run's handles: each kind answers for itself, as the landing's beside Extend's (D278)

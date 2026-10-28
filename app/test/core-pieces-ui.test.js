@@ -322,15 +322,15 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs2 = frames.splice(0); for (const f of fs2) f(0); } };
 }
-async function mountPanel(st = store(), { bin = false, turnAsRate = true } = {}) {
+async function mountPanel(st = store(), { bin = false, turnAsRate = true, shellOpts = {} } = {}) {   // D519 Part 2: shellOpts, for a row that needs the local brush
   const { doc, win, tick: frame } = fakeWindow();
   let menuEl = null, binEl = null;   // D269: the top bar's Pieces menu (index.html: <details id="pieces"><div id="pieces-bin">), found by the panel by id as #preview is
   if (bin) { menuEl = doc.createElement('details'); menuEl.setAttribute('id', 'pieces'); menuEl.open = false; binEl = doc.createElement('div'); binEl.setAttribute('id', 'pieces-bin'); menuEl.append(binEl); }
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
-  const root = doc.createElement('div'), shell = await track(st);
+  const root = doc.createElement('div'), shell = await track(st, shellOpts);
   // the preview's side of the events the panel asks: a pick answers the station the test sets; the track is the shell's
-  const T = { s: 100 };
-  doc.addEventListener('t180-pick', (ev) => ev.detail.reply(T.s === null ? null : { s: T.s, pos: [0, 0, 0], px: 1 }));
+  const T = { s: 100, extra: null };   // D519 Part 2: extra, what the preview's pick adds (u, side, axes), for the zone grab's rows
+  doc.addEventListener('t180-pick', (ev) => ev.detail.reply(T.s === null ? null : { s: T.s, pos: [0, 0, 0], px: 1, ...(T.extra || {}) }));
   doc.addEventListener('t180:track-request', (ev) => ev.detail.reply({ segments: shell.getState().resolved.segments, path: { samples: [] } }));
   const panel = require('../core/panel.js').mount(root, shell);
   // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the user's word, plan :367-369, ruled :373-385). Every row in
@@ -1098,4 +1098,41 @@ test('row D464: Sculpt\'s how-to line and value line read as instructions, not e
   const m = /\.message\.hint\s*\{([^}]*)\}/.exec(html);
   assert.ok(m, 'the page has a .message.hint rule'); assert.match(m[1], /color:\s*var\(--text\)/); assert.doesNotMatch(m[1], /--bad/);
   P1.panel.unmount();
+});
+
+// D519 Part 2 (O's design, p-d519-design-O_2026-10-28.md §1, §3): THE ZONE GRAB in the panel. The pick's u names the zone, the first move past the click picks its axis, and the
+// value is read along that axis on screen. The pieces of this track are bowl roads with no cup, edge or tube, so the cup zone and the rim lift bank. A press on a dot (the
+// handles overlay's dotAt) opens the grab at the dot's station.
+test('row 25 (D519): Grab reads the zone under the press: the centre lifts or slides, the rim widens or banks by side, a dot opens at its own station, off the road is Grab as before', async () => {
+  const P = await mountPanel(store(), { shellOpts: { brushFn: undefined } }), { shell } = P, opened = [], begin = shell.beginBrush;   // brushFn undefined: the local brush (height and sideways), as the app has it
+  shell.beginBrush = (o) => { opened.push(o); return begin(o); };
+  shell.setSculpt(true); P.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').value = 'grab';
+  const drag = (hit, dx, dy, extra = {}) => {
+    P.T.s = hit.s; P.T.extra = hit.extra; P.pointer('pointerdown', 50, 50, extra); P.pointer('pointermove', 50 + dx, 50 + dy, extra); P.frame();
+    const b = shell.getState().brush, d = b ? b.delta : null; P.pointer('pointerup', 50 + dx, 50 + dy, extra);
+    const o = opened[opened.length - 1]; if (shell.getState().history.past.length) shell.undo(); return { o, d };
+  };
+  const axes = { U: [0, -20], L: [20, 0] }, centre = { s: 100, extra: { u: 0.05, side: 1, axes } }, right = { s: 100, extra: { u: -0.95, side: -1, axes: { U: [0, -20], L: [-20, 0] } } };
+  let r = drag(centre, 0, -30); assert.deepEqual([r.o.tool, r.o.channel, r.o.s0], ['grab-up', 'height', 100], 'the centre, a lift: height'); assert.ok(Math.abs(r.d - 30 * 0.03) < 1e-9, `30 px up the U axis is 0.9 m (${r.d})`);
+  r = drag(centre, 30, 0); assert.deepEqual([r.o.tool, r.o.channel], ['grab-side', 'lateral'], 'the centre, out and in: sideways'); assert.ok(Math.abs(r.d - 0.9) < 1e-9, `30 px along the left axis is 0.9 m left (${r.d})`);
+  r = drag(right, -30, 0); assert.deepEqual([r.o.tool, r.o.channel], ['width', 'w'], 'the right rim, outward: width'); assert.ok(Math.abs(r.d - 30 * 0.05) < 1e-9, `outward is wider (${r.d})`);
+  r = drag(right, 0, -30); assert.deepEqual([r.o.tool, r.o.channel], ['twist', 'phi'], 'the right rim of a plain road, a lift: bank'); assert.ok(Math.abs(r.d + 30 * 0.002) < 1e-9, `lifting the right side banks it right-up, a negative bank (${r.d})`);
+  r = drag(right, 0, -30, { altKey: true }); assert.equal(r.o.channel, 'phi', 'Alt off the centre: bank'); assert.ok(r.d < 0, 'the side still sets its sign');
+  P.panel.handles.dotAt = (x, y) => (x === 50 && y === 50 ? { s: 400, u: 0, side: 1, axes } : null);   // a dot under the press: the grab opens at the dot, not at the station the pick finds
+  r = drag(centre, 0, -30); assert.equal(r.o.s0, 400, 'a press on a dot opens the brush at that dot'); delete P.panel.handles.dotAt;
+  r = drag({ s: 100, extra: { u: 1.3, side: 1, axes } }, 30, 0); assert.deepEqual([r.o.tool, r.o.channel], ['grab-up', 'height'], 'off the road (u past 1.25): Grab as before, a lift whatever the motion');
+  r = drag({ s: 100, extra: null }, 0, -30); assert.deepEqual([r.o.tool, r.o.channel], ['grab-up', 'height'], 'a pick with no u: Grab as before');
+  for (const o of opened) assert.ok(!['kh', 'kv', 'length'].includes(o.channel) && !['bend', 'climb', 'stretch'].includes(o.tool), `never a re-route: ${o.tool}`);
+});
+
+test('row 25b (D519): with another key the press keeps that key\'s one channel wherever it lands; the shell says what the piece is and why a channel would be refused', async () => {
+  const P = await mountPanel(), { shell } = P, opened = [], begin = shell.beginBrush;
+  shell.beginBrush = (o) => { opened.push(o); return begin(o); };
+  shell.setSculpt(true); P.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').value = 'twist';
+  P.T.s = 100; P.T.extra = { u: 0.95, side: 1, axes: { U: [0, -20], L: [20, 0] } }; P.pointer('pointerdown', 50, 50); P.pointer('pointermove', 80, 50); P.frame(); P.pointer('pointerup', 80, 50);
+  assert.equal(opened[0].tool, 'twist', 'Twist on the rim is Twist'); shell.undo();
+  assert.equal(shell.zoneRefusal('phi', 100, 60), null, 'bank is on every road');
+  assert.equal(shell.zoneRefusal('c', 100, 60), 'no cup on piece p1: extend with a cup target first');
+  assert.equal(shell.zoneRefusal('e', 100, 60), 'no edge on piece p1: extend with an edge target first');
+  assert.deepEqual(shell.zoneInfo(100), { id: 'p1', cup: false, edge: false, tube: false, family: 'bowl', s: null, walls: false }); assert.equal(shell.zoneInfo(-5), null);
 });

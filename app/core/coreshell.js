@@ -698,6 +698,20 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const e = D.pieceEnd(P);
       return withRight({ kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, !!P.tube), length: P.length, tube: !!P.tube }, e);
     },
+    /** D519 Part 2: what the ROAD piece at track distance `s` is, for Sculpt's zone grab (app/core/zonegrab.js zoneAt's `piece`): { id, cup, edge, tube, family, s (an edge
+     *  piece's edge start there, else null), walls (a half-pipe whose wall rise there is above 0) }, or null where there is no road piece. Read only. */
+    zoneInfo(s) {
+      const d = doc(), c = Number.isFinite(s) ? centreOf(d, s) : null; if (!c) return null;
+      const P = d.pieces[c.piece];
+      return { id: P.id, cup: !!P.cup, edge: !!P.edge, tube: !!P.tube, family: P.family, s: P.edge ? D.channelAt(P, 's', c.u).v : null, walls: P.family === 'half-pipe' && D.channelAt(P, 'r', c.u).v > 0 };
+    },
+    /** D519 Part 2: why a brush on `channel` centred at s0 with radius r would be refused because a piece under it lacks that channel (src/core/sculpt.js checkReach's
+     *  rule), in the hover's words, or null. The window is the radius as given (the brush may widen it; a press then says why in the message line). Read only. */
+    zoneRefusal(channel, s0, r) {
+      const flag = D.OPTIONAL[channel]; if (!flag || !Number.isFinite(s0) || !(r > 0)) return null;
+      const d = doc(), idx = piecesIn(d, s0 - r, s0 + r) || [], P = idx.map((i) => d.pieces[i]).find((x) => x && x.type === 'road' && !x[flag]);
+      return P ? `no ${flag} on piece ${P.id}: extend with ${flag === 'edge' ? 'an' : 'a'} ${flag} target first` : null;
+    },
     /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
     // 2026-10-14 (ELYSIUM: ~260 ms of every placed piece on the window's thread, every one of the 43 labels read again): a ROAD piece's readout reads
     // its own piece, the pose entering it and its corners alone, so a piece whose object, entering pose and corners are the ones it had keeps its readout.

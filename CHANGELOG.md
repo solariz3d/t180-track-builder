@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Sculpt's Grab takes the road where you press it.** With Grab, the place across the road you press picks what a drag changes: the middle lifts the road or, dragged along its width, moves it sideways; partway out it cups the road on a cup piece, closes a tube, or banks it; on an edge piece the edge tilts that side's edge or moves where the edge starts; the rim widens the road or lifts that side. The first move decides between the two, and Alt banks (or slides, at the middle). A press on the road's edge now finds the road (it used to find nothing when the edge was far from the centreline on screen). The selected run shows hollow dots across it every 100 m or more to press on, and the hover box says what the place does, or why that piece can't (a cup with no cup channel). The other tool keys work as before, and nothing here bends, climbs or stretches the road.
+
 ## [0.4.28] - 2026-10-28
 
 ### Changed

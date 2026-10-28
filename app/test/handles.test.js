@@ -592,3 +592,38 @@ test('row 17g (D335): the speed is the hand\'s over a short window, so one quick
   R.S.fire('pointerup', { clientX: x, clientY: y, timeStamp: t + 40 });
   assert.ok(Math.abs(R.cur.bank - 0.5) < 0.05, `50 px of a slow scrub with one quick pixel is about 0.5 degree (it is ${R.cur.bank})`);
 });
+
+// D519 Part 2 (O's design §3, §4): the zone grab's glyph, and the dot rows
+const ZG = require('../core/zonegrab.js');
+test('row 18 (D519): one row a zone: the hover glyph\'s kind and its mark at the hit\'s u (a pair, cup or width, at its own place)', () => {
+  const FLAT = { family: 'bowl' }, CUP = { family: 'bowl', cup: true }, EDGE = { family: 'bowl', edge: true, s: 0.64 };
+  const cases = [[0.1, FLAT, 'brush-grab', [[1, 0, 100]]], [-0.5, FLAT, 'brush-twist', [[-5, 0, 100]]], [0.5, CUP, 'brush-cup', [[3, 0, 100], [-3, 0, 100]]], [0.7, EDGE, 'brush-edge', [[7, 0, 100]]], [-0.95, FLAT, 'brush-width', [[10, 0, 100], [-10, 0, 100]]]];
+  for (const [u, P, kind, at] of cases) {
+    const z = ZG.zoneAt(u, P), g = ZG.glyphOf(z, u);
+    assert.equal(g.kind, kind, `${z.zone} at u ${u}`);
+    const list = HD.placeHandles({ samples: SAMPLES, s0: 0, s1: 0, half: () => 0, kinds: [g.kind], brush: { samples: SAMPLES, s: 100, half: 10, ...g.place } });
+    assert.deepEqual(list.map((h) => h.pos.map((v) => +v.toFixed(9) || 0)), at, `${kind}: the mark at u ${u}`); assert.ok(list.every((h) => h.brush), 'never hit');
+  }
+});
+const DOTS = (rows) => ({ stations: Array.from({ length: 33 }, (_, i) => 40 + i * 5), run: { s0: 40, s1: 200 }, radius: 60, rows, at: (s, u) => ({ pos: [u * 10, 0, s], U: [0, 1, 0], L: [u < 0 ? -1 : 1, 0, 0] }) });
+const ROWS3 = [{ u: 0, colour: '#ffffff' }, { u: 1, colour: '#ff5a5a' }, { u: -1, colour: '#ff5a5a' }], ROWS5 = ROWS3.concat([{ u: 0.5, colour: '#3ddc6e' }, { u: -0.5, colour: '#3ddc6e' }]);
+test('row 18b (D519): the dots stand at the thinned stations, one in each row (three, or five on a cup piece), on the road\'s own surface', () => {
+  for (const rows of [ROWS3, ROWS5]) {
+    const dots = HD.placeDots(DOTS(rows), VP, W, Hh), at = [...new Set(dots.map((d) => d.s))];
+    const project = (s) => { const q = HD.screenOf(VP, W, Hh, [0, 0, s]); return q ? [q.x, q.y] : null; };
+    assert.deepEqual(at, ZG.dotStations(DOTS(rows).stations, { s0: 40, s1: 200 }, project, { radius: 60, minM: HD.DOT_MIN_M, minPx: HD.DOT_MIN_PX, cap: HD.DOT_CAP }));
+    assert.ok(at.length >= 2 && at.slice(1).every((s, i) => s - at[i] >= 100), `at least 100 m apart (${at})`); assert.equal(dots.length, at.length * rows.length, `${rows.length} rows`);
+    for (const d of dots) { assert.deepEqual(d.pos, [d.u * 10, 0, d.s]); assert.equal(d.dot, true); assert.ok(d.screen && Number.isFinite(d.axes.U[1])); }
+  }
+});
+test('row 18c (D519): a press within 12 px of a dot is left to the zone grab (no handle takes it) and dotAt names the dot; farther, none', () => {
+  const S = fakeStage(), calls = [];
+  const ov = HD.mount(S.stage, S.win, { model: () => ({ ...MODEL, kinds: ['width'], base: () => 31, ctx: () => ({ half: 10 }), dots: DOTS(ROWS3) }), pose: () => POSE, begin: () => calls.push('begin'), apply: () => {}, end: () => {} });
+  S.tick();
+  const d = ov.dots().find((h) => h.u === 0); assert.ok(d, 'the dots are drawn'); assert.ok(ov.handles().every((h) => !h.dot), 'and listed apart from the handles');
+  const ev = S.fire('pointerdown', { clientX: d.screen.x + 11, clientY: d.screen.y }); assert.equal(ev.stopped, false, 'the overlay does not take a press on a dot'); assert.deepEqual(calls, []);
+  assert.deepEqual(ov.dotAt(d.screen.x + 11, d.screen.y), { s: d.s, u: 0, side: 1, axes: d.axes }, 'within 12 px: the dot, its station and its share across');
+  assert.equal(ov.dotAt(d.screen.x + 13, d.screen.y), null, 'farther: no dot');
+  assert.equal(HD.hitTest(ov.dots(), d.screen.x, d.screen.y), null, 'a dot is never a handle\'s hit');
+  ov.unmount();
+});
