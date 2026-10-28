@@ -66,11 +66,18 @@ void main(){
   float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0);
   gl_FragColor = vec4(mix(uFog, uColour * lit, fog), uAlpha);
 }`;
+// D524 (the user, "test bump": "in the previewer it looks glitchy from the white lines"): a line is lifted 3 cm along the road's normal (look.js LIFT), and seen
+// nearly edge-on (a camera low over a long road, or a bump's tilted rows) those 3 cm part line and road by under a millimetre along the view ray, below what the
+// depth buffer tells apart at 150 m, so the lines came out dashed. Each line vertex is pulled toward the camera by LINE_BIAS in normalised depth (z -= LINE_BIAS w):
+// with the near plane at 0.5 m (app/camera/math.js) that is LINE_BIAS d² metres at distance d (2 mm at 10 m, 7 cm at 60 m, 45 cm at 150 m, 20 m at 1 km), growing
+// as the depth buffer's own steps do, so the lines stay on top of their road at any range, and a crest more than that in front of a line still hides it (checked
+// at 0, 2e-6, 2e-5 and 2e-4 on a 1 m bump seen from 1 m up: no line shows past the crest at any of them; 2e-6 changed almost nothing, 2e-4 drew ties through the road's side)
+const LINE_BIAS = 2e-5;
 const LVS = `
 attribute vec3 aPos;
 uniform mat4 uVP; uniform mat4 uModel;
 varying float vDepth;
-void main(){ gl_Position = uVP * uModel * vec4(aPos, 1.0); vDepth = gl_Position.w; }`;
+void main(){ gl_Position = uVP * uModel * vec4(aPos, 1.0); vDepth = gl_Position.w; gl_Position.z -= ${LINE_BIAS.toExponential()} * gl_Position.w; }`;
 const LFS = `
 precision mediump float;
 varying float vDepth;
