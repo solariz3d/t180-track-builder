@@ -383,7 +383,12 @@
     if (win && win.onCloseRequested) win.onCloseRequested(async (ev) => { ev.preventDefault(); try { await win.destroy(); } catch (err) { /* nothing more to try */ } });
   }
   // the title bar AFTER the close handler, so its X always has a handler to reach (app/titlebar.js)
-  try { await (await loadCjs("app/titlebar.js", get)).wireTitlebar(document, win); } catch (e) { console.error(`title bar not wired: ${e && e.message}`); }
+  let TB = null;
+  try { TB = await loadCjs("app/titlebar.js", get); await TB.wireTitlebar(document, win); } catch (e) { console.error(`title bar not wired: ${e && e.message}`); }
+  // D508: the window is created hidden (no white window before the maximize); it is shown, maximized, once this page has painted its look (the head
+  // script set it before the first paint). Not awaited: the builder starts meanwhile. Without titlebar.js the window is shown at once, and if this
+  // page never runs at all, lib.rs shows it natively
+  try { if (TB) TB.revealWindow(win); else if (win && win.show) win.show().catch(() => {}); } catch (e) { console.error(`window not revealed by the page: ${e && e.message}`); if (win && win.show) win.show().catch(() => {}); }
 
   // ONE BUILDER (D239): the EQUATION TRACK (app/core, src/core). The Pieces builder (D186's second mode, ?mode=pieces, the t180.mode
   // setting) is removed; the word tracks it saved stay on disk in the app's tracks folder (app/README.md says where), never deleted.
