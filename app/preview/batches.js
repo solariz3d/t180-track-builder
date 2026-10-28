@@ -20,11 +20,14 @@ function colourOf(pieceIndex, id, seam) { return hsl(hue(id), 0.45, (pieceIndex 
 /** The draw batches of a mesh. `fromPiece` > 0 builds only the nodes of pieces from there on (the ghost wants the new pieces and the seam onto them, not the whole track). */
 function batchesOf(mesh, fromPiece = 0) {
   if (!mesh || !mesh.scene || !Array.isArray(mesh.cells)) throw new Error('batchesOf: needs a mesh from src/geom buildMesh');
-  const byName = new Map(mesh.cells.map((c) => [c.name, c])), out = [], kids = mesh.scene.root.children;
+  const out = [], kids = mesh.scene.root.children;
   for (let k = 0; k < kids.length; k++) {
     const node = kids[k];
     if (fromPiece > 0 && mesh.cells[k] && mesh.cells[k].piece < fromPiece) continue;   // the cells and the root's children are in one order (set.js withTextureSet pairs them the same way)
-    const m = node.children[0], cell = byName.get(m.name);
+    // D524 part 2 (the user's "test bump": white lines standing above the road like a ladder): each node's cell record is taken by POSITION, not looked up by name. A piece
+    // split into parts names every part's cells alike (1ROAD_p1_body_0 for all 275 cells of a 500 m bump), so a lookup by name gave every batch the LAST cell's record:
+    // its rowS (a tie on every row) and its cols and us (the lines read the vertices with another part's stride, joining rows they do not belong to)
+    const m = node.children[0], cell = mesh.cells[k] && mesh.cells[k].name === m.name ? mesh.cells[k] : null;
     if (!cell) throw new Error(`batchesOf: mesh ${m.name} has no cell record`);
     const id = m.name.replace(/^\d[A-Z]+_(seam_)?/, '').replace(/_\d+$/, '');
     // for the road lines (app/preview/look.js): vertices across, their u, and each row's s (cells only, not seams)
