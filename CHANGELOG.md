@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **No white window before the builder opens full screen.** Opening the builder first showed a small white window where it used to open, and only then went full screen. The window now stays hidden until the page has drawn itself, and appears once, full screen, in its own colours.
+
 ## [0.4.26] - 2026-10-27
 
 ### Fixed
