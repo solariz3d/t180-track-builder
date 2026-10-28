@@ -282,7 +282,8 @@ test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and
     await load();
     await open('m-settings');
     const shownS = await shown('m-settings');
-    for (const t of ['Random', 'Aqua', 'Skyline', 'Skyline Night', 'Glass', 'Aurora', 'SIGIL']) assert.ok(shownS.includes(t), `Settings ▸ Theme holds ${t}: ${shownS.join(' | ')}`);
+    // AMENDED (D502 part 2): the rule changed by name, the user's copy pick of 2026-10-27: Settings ▸ Theme shows SIGIL as "Sigil", in the others' case
+    for (const t of ['Random', 'Aqua', 'Skyline', 'Skyline Night', 'Glass', 'Aurora', 'Sigil']) assert.ok(shownS.includes(t), `Settings ▸ Theme holds ${t}: ${shownS.join(' | ')}`);
     assert.equal(await ticked('m-settings', 'Random'), true, 'nothing saved: Random, today\'s random pick');   // D401: Music is called Random
     const now = await ev("return document.documentElement.getAttribute('data-theme');");
     const target = now === 'glass' ? 'aurora' : 'glass', label = target === 'glass' ? 'Glass' : 'Aurora';
@@ -304,10 +305,10 @@ test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and
     assert.deepEqual(urls.filter((u) => /sounds\/(place|undo)_/.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort(), [`place_${target}.wav`, `undo_${target}.wav`], 'and its own melody');
     await open('m-settings');
     // AMENDED (D402): the rule changed by name: SIGIL has its own melody, Obsidian, so its tooltip names it and choosing SIGIL plays it (its two files)
-    const sigilTip = await ev("return [...document.querySelectorAll('#m-settings label')].find((x) => x.textContent.trim() === 'SIGIL').title;");
+    const sigilTip = await ev("return [...document.querySelectorAll('#m-settings label')].find((x) => x.textContent.trim() === 'Sigil').title;");   // AMENDED (D502 part 2): shown as Sigil
     assert.match(sigilTip, /Obsidian/, `SIGIL names its own melody: ${sigilTip}`); assert.doesNotMatch(sigilTip, /random/, 'and no longer says its melody is random');
     urls.length = 0;
-    await clickText('m-settings', 'SIGIL');
+    await clickText('m-settings', 'Sigil');   // AMENDED (D502 part 2): shown as Sigil
     assert.equal(await ev("return document.documentElement.hasAttribute('data-theme');"), false, 'SIGIL: no data-theme');
     for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/undo_sigil.wav')); i++) await sleep(100);
     assert.deepEqual(urls.filter((u) => /\/sounds\//.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort(), ['place_sigil.wav', 'undo_sigil.wav'], 'and Obsidian follows: only its two files are fetched');

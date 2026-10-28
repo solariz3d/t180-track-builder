@@ -288,7 +288,7 @@ test('preview: L toggles the look between the AC shaders and the colour per word
   press('L'); win.step(); const c = p.view().look;
   p.dispose();
   assert.deepStrictEqual([keyAction('l'), keyAction('l', { ctrlKey: true }), a, b, c],
-    [{ look: true }, null, ['ac', true, 'build view · AC look (L)'], ['words', 0, 'build view · word colours (L)'], 'ac']);
+    [{ look: true }, null, ['ac', true, 'Build view · AC look (L)'], ['words', 0, 'Build view · word colours (L)'], 'ac']);   // AMENDED (D502 part 2): the rule changed by name, the user's copy pick of 2026-10-27: the camera label starts with a capital, as a sentence
 });
 
 // D179, the usability pass: the ties fade with distance (they hatched the road dark from overhead), and the canvas is

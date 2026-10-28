@@ -43,7 +43,7 @@ function mount(stage, win) {
       const s = doc.createElement('span'), label = doc.createElement('span'), value = doc.createElement('span');
       s.setAttribute('data-value', e.key);
       s.style.cssText = `display:flex;flex-direction:column;align-items:center;padding:0 16px${i ? ';border-left:1px solid var(--veil-rule, rgba(255,255,255,0.14))' : ''}`;
-      label.style.cssText = 'font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);margin-bottom:3px';
+      label.style.cssText = 'font-size:11px;font-weight:600;color:var(--dim);margin-bottom:3px';
       label.textContent = e.label;
       value.textContent = e.value;
       s.append(label, value);

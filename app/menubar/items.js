@@ -67,7 +67,7 @@ function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, 
     { section: 'Theme' }, ...choice('theme', [['music', 'Random', 'a look and its own melody, picked at random each start, and picked again when you choose this'],
       ...[['aqua', 'Aqua'], ['skyline', 'Skyline'], ['glass', 'Glass'], ['aurora', 'Aurora']].map(([v, l]) => [v, l, `${l}'s look and its own melody, every start; the melody changes a moment after the look, once its files are in`])
         .flatMap((it) => (it[0] === 'skyline' ? [it, ['skyline-night', 'Skyline Night', 'Skyline at night: navy glass, a city glow on the horizon and a few stars, with Skyline\'s melody']] : [it])),   // D405
-      ['sigil', 'SIGIL', 'the black-and-bone look, with its own melody, Obsidian']])
+      ['sigil', 'Sigil', 'the black-and-bone look, with its own melody, Obsidian']])
       .map((it, i) => (i === 0 ? { ...it, toggle: (on, c) => { const was = c.settings.get('theme', undefined); c.settings.set('theme', 'music'); if (was === 'music' && typeof c.repickTheme === 'function') c.repickTheme(); } } : it)),
     { section: 'Turn & climb read as' }, ...choice('turnClimbAs', [['corner', 'corner °, ends straight'], ['rate', 'rate °/100 m']]),
     { section: 'Grid step (Turn to grid)' }, ...choice('gridStep', [[90, '90°'], [45, '45°'], [15, '15°']]),
