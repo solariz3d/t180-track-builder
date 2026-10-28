@@ -16,9 +16,15 @@
 // THE LIMIT (To floor's refusal, and nothing else): the road's centre must keep the car on it at the open track's speed, the validator's own D256
 // check (src/validate/index.js 'leaves-surface' on the centreline: g·cos p + v²·κ_climb + the downforce ≥ 0 at vmax 970 km/h, src/validate/limits.js). A
 // shape that would lift the car off is never placed, and never clamped: the user is told the length that does it.
+// A TURN READ AS A CORNER (D516; the user, 2026-10-28, on CRAZY TEST's end: "currently it does nothing if there is a turn value added"): with opts.turnDeg the
+// piece is Turn by's (src/core/turnby.js extendCorner: its symmetric ease, the exact heading change, ending straight) instead of Extend's, and then its climb
+// is corrected as above. The two are independent: the heading is ∫kh and the pitch ∫kv on the same 2 m segments (adapter.js toSegments), the correction
+// changes only kv, so the piece turns exactly turnDeg AND ends level (and, for To floor, at height 0). A climb read as a corner (climbDeg) is refused by name:
+// the climb is what is solved here, so it would be lost (the shell refuses it first, with its own message: app/core/coreshell.js noCorner).
 'use strict';
 const D = require('./document.js');
 const { extend } = require('./extend.js');
+const { extendCorner } = require('./turnby.js');
 const { toPath } = require('./adapter.js');
 const { basis, denseSolve } = require('../../tools/piecewise.cjs');
 const { MACH6, G } = require('../validate/limits.js');
@@ -84,12 +90,14 @@ function step(J, r, m) {
 const DF = MACH6.downforce ? (MACH6.downforce.nPerMps / MACH6.downforce.massKg) * V_OPEN : 0;
 const crestMargin = (rows) => Math.min(...rows.kv.map((k, j) => G * Math.cos(rows.p[j]) + V_OPEN * V_OPEN * k + DF));
 
-/** The piece Extend would place with climb 0 (its easing: the rate to 0 over the whole piece), the climb's own at-start ramp dropped. */
+/** The piece Extend would place with climb 0 (its easing: the rate to 0 over the whole piece), the climb's own at-start ramp dropped; with opts.turnDeg, the
+ *  corner's piece (D516: Turn by's ease, turning exactly turnDeg and ending straight). */
 function basePiece(doc, opts) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to level');
+  if (opts && 'climbDeg' in opts) throw new D.CoreError('CLIMB_AS_CORNER', `Level and To floor solve the climb themselves: a climb of ${opts.climbDeg}° read as a corner cannot be placed with them`);
   const targets = { ...(opts.targets || {}), kv: 0 }, o = { ...opts, targets };
   if (o.transition && typeof o.transition === 'object') { const { kv, ...rest } = o.transition; o.transition = Object.keys(rest).length ? rest : undefined; if (o.transition === undefined) delete o.transition; }
-  return extend(doc, o);
+  return 'turnDeg' in o ? extendCorner(doc, o) : extend(doc, o);
 }
 
 function solve(doc, opts, floor, { model = false, head: given = null, flip = null } = {}) {
@@ -122,7 +130,7 @@ const yModel = (rows, st, y0) => { let y = y0; for (let j = 1; j < st.length; j+
 /** Extend with a piece that ends straight and level (pitch 0). */
 function extendLevel(doc, opts) { return solve(doc, opts, false).doc; }
 
-const feasible = (doc, opts, L, how = {}) => { try { const r = solve(doc, { ...opts, length: L }, true, how); return r.converged && r.crest >= 0; } catch (e) { if (e && e.code === 'LEVEL_TOO_SHORT') return false; throw e; } };
+const feasible = (doc, opts, L, how = {}) => { try { const r = solve(doc, { ...opts, length: L }, true, how); return r.converged && r.crest >= 0; } catch (e) { if (e && (e.code === 'LEVEL_TOO_SHORT' || e.code === 'TURN_TOO_SHORT')) return false; throw e; } };   // D516: too short for the corner is too short
 /** The shortest whole-metre length at which To floor works from this head (with these fields), or null when none up to MAX_SEARCH_M does. */
 function shortestToFloor(doc, opts) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to level');
