@@ -68,7 +68,7 @@
      a third column for them took 300 px from the preview to hold one short panel (the user, 2026-10-03). */
   body { display: grid; grid-template-columns: 320px minmax(0, 1fr); grid-template-rows: 44px auto minmax(0, 1fr); height: 100vh; }
   header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--tex), var(--panel); min-width: 0; }
-  header h1 { font: 300 13px var(--display); margin: 0 14px 0 2px; letter-spacing: .42em; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
+  header h1 { font: 300 13px var(--display); margin: 0 14px 0 2px; letter-spacing: .08em; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
   header h1::before { content: ""; width: 14px; height: 14px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 16%, transparent 18%); flex: none; }
   /* D395, THE WORDMARK: the sigil dot leads (each skin draws its own), "T-180" in the text colour, a hairline rule, then the rest dimmed; tokens only, so it follows the theme.
      The rule sits in the old word space: the -8px takes back most of the h1's gap between the two spans, so the header is no wider than with one text (A's review 8) */
@@ -94,7 +94,7 @@
   /* A QUESTION IN THE PAGE (app/askdialog.js): the save-on-close prompt, in the same black, bone and violet. */
   .ask-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(6, 6, 6, .62); backdrop-filter: blur(3px); }
   .ask-card { width: min(380px, calc(100vw - 48px)); background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); padding: 22px 24px 18px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6); }
-  .ask-card h2 { margin: 0 0 10px; font: 300 12px var(--display); letter-spacing: .32em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+  .ask-card h2 { margin: 0 0 10px; font: 300 12px var(--display); display: flex; align-items: center; gap: 10px; }
   .ask-card h2::before { content: ""; width: 10px; height: 10px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 18%, transparent 20%); flex: none; }
   .ask-card p { margin: 0 0 20px; color: var(--dim); }
   .ask-row { display: flex; gap: 8px; justify-content: flex-end; }
@@ -107,7 +107,7 @@
   .ask-card.ask-layouts { width: min(680px, calc(100vw - 48px)); }
   .ask-layouts .lx-row { display: grid; grid-template-columns: 40px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) 40px; align-items: center; gap: 8px; margin: 0 0 6px; }
   .ask-layouts label.lx-row { grid-template-columns: 110px minmax(0, 1fr); margin-bottom: 14px; }
-  .ask-layouts .lx-head span { color: var(--dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .ask-layouts .lx-head span { color: var(--dim); font-size: 11px; }
   .ask-layouts .lx-track { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ask-layouts input[type="text"] { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 3px 5px; }
   .ask-layouts .lx-problem { min-height: 1.2em; color: var(--accent); margin: 10px 0 14px; }
@@ -207,12 +207,12 @@
   #camera { position: absolute; z-index: 9; left: 346px; right: 16px; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
   #camera > * { pointer-events: auto; }
   #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-  #camera [role="toolbar"] button { border-color: transparent; text-transform: uppercase; letter-spacing: .22em; font-size: 10.5px; padding: 6px 10px; }
+  #camera [role="toolbar"] button { border-color: transparent; font-size: 10.5px; padding: 6px 10px; }
   #camera [role="toolbar"] button[aria-pressed="true"], #camera [role="toolbar"] button.on { color: var(--accent); box-shadow: 0 -1px 0 var(--accent) inset; }
   /* the depth behind the track: a soft vignette over the view (the road keeps its own lighting) */
   #preview::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 55% 38%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
   /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
-  .preview-hud { z-index: 2; left: 346px !important; top: 84px; bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; letter-spacing: .14em; text-transform: uppercase; }
+  .preview-hud { z-index: 2; left: 346px !important; top: 84px; bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; }
   #camera p { margin: 0; color: var(--dim); font-size: 11px; letter-spacing: .04em; text-shadow: 0 0 6px #000; }
   /* The side sections never scroll sideways (seen at the default window size once E's 480 px load graph showed): what a
      panel puts here is held to the column's width. Canvases, images and tables shrink to fit, long words break, and the
@@ -222,7 +222,7 @@
   #side canvas, #side img, #side svg, #side video { display: block; max-width: 100%; height: auto; }
   #side table { display: block; max-width: 100%; overflow-x: auto; }
   #reds:empty { display: none; }
-  h3 { font: 400 12px var(--display); text-transform: uppercase; letter-spacing: .34em; color: var(--dim); margin: 18px 0 8px; display: flex; align-items: center; gap: 10px; }
+  h3 { font: 400 12px var(--display); color: var(--dim); margin: 18px 0 8px; display: flex; align-items: center; gap: 10px; }
   h3::after { content: ""; flex: 1; height: 1px; background: var(--hair); }
   .pickers { display: grid; gap: 6px; }
   /* D235 (the user's screenshot: the Extend fields ran under the scroll bar, and the "width like…" select was cut off): the field column is minmax(0, 1fr), not 1fr,
@@ -260,7 +260,7 @@
 </head>
 <body>
 <header data-tauri-drag-region>
-  <h1 data-tauri-drag-region><span class="wm-name" data-tauri-drag-region>T-180</span> <span class="wm-rest" data-tauri-drag-region>TRACK BUILDER</span></h1>
+  <h1 data-tauri-drag-region><span class="wm-name" data-tauri-drag-region>T-180</span> <span class="wm-rest" data-tauri-drag-region>Track builder</span></h1>
   <input id="name" placeholder="track name" aria-label="track name" size="16">
   <span id="status" style="color: var(--dim)" data-tauri-drag-region></span>
   <span class="drag" data-tauri-drag-region></span>
@@ -444,7 +444,7 @@
       bar.append(el('span', `A track from your last session was not saved${st.recovery.name ? ` ("${st.recovery.name}")` : ''}: ${n} piece${n === 1 ? '' : 's'}${st.recovery.doc.closed ? ', a closed loop' : ''}.`), restore, discard);
       b.replaceChildren(bar, setupSlot, brushSlot);
     };
-    const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'unsaved'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
+    const draw = (st) => { drawBanner(st); drawReds(st); status.textContent = `${st.name || 'Untitled'}${st.dirty ? ' •' : ''}${st.history.present.closed ? ' · closed loop' : ''}`; };
     shell.subscribe(draw); draw(shell.getState());
     // D340, THE LATE-INPUT LOG: each key event the preview handled late ('t180:input-late', app/preview/preview.js checkLate) is appended to input-late.log in
     // the app's data folder (src-tauri/src/lib.rs append_input_log, off the main thread, size-capped), buffered and written later, never on the key's path

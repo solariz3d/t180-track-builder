@@ -54,7 +54,7 @@ function mount(root, shell) {
     const s = summary(state);
     head.textContent = state.error ? `not validated: ${state.error}`
       : state.checking && !state.result ? 'checking…'
-      : `${s.red} red · ${s.amber} amber · ${lapText(s.lap)} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}${s.jumpsPending ? ` (${s.jumpsPending} waiting for ${s.jumpsPending === 1 ? 'its landing' : 'their landings'})` : ''}${s.pendingFrom != null ? ` · checked to ${Math.round(s.pendingFrom)} m, the rest when the drag ends` : ''}${state.checking ? ' · checking…' : ''}`;
+      : `${s.red} red · ${s.amber} amber${s.lap && s.lap.reason === 'open' && s.lap.ok !== true && s.lap.ok !== false ? '' : ` · ${lapText(s.lap)}`} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}${s.jumpsPending ? ` (${s.jumpsPending} waiting for ${s.jumpsPending === 1 ? 'its landing' : 'their landings'})` : ''}${s.pendingFrom != null ? ` · checked to ${Math.round(s.pendingFrom)} m, the rest when the drag ends` : ''}${state.checking ? ' · checking…' : ''}`;
     head.style.color = state.error ? css(PALETTE[LEVEL.RED]) : '';
     const gm = 'graph' in state ? state.graph : graphModel(state);   // the worker sends its graph ready-made
     graph.style.display = gm ? '' : 'none';   // hidden while there is no load to draw

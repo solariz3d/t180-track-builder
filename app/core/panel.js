@@ -815,7 +815,7 @@ function mount(root, shell, mountOpts = {}) {
       }
       lentFrom = one;
     } else if (!sel && lentFrom) { showHead(); lentFrom = null; readout(); }
-    info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'open'}${st.lastStep ? ` · last ${st.lastStep.op} ${st.lastStep.ms.toFixed(0)} ms` : ''}`;
+    info.textContent = `${d.pieces.length} piece${d.pieces.length === 1 ? '' : 's'} · ${Math.round(L).toLocaleString('en-US')} m · ${d.closed ? 'closed loop' : 'loop open'}`;
     extendBtn.disabled = jumpBtn.disabled = !!d.closed || !!st.sculpt; straightBtn.disabled = !!st.sculpt; closeBtn.disabled = !!d.closed || !d.pieces.length;
     drawProposal();
     msg.textContent = plainMessage(st.message) || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
