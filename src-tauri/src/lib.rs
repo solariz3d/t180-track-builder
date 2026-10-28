@@ -713,6 +713,20 @@ fn see_it_in_assetto(app: tauri::AppHandle, track: String, layout: String) -> Re
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // D508: the window is created hidden (tauri.conf.json "visible": false) and the page shows it once it has painted (app/titlebar.js revealWindow).
+        // If the page never runs at all, the window is shown here after a few seconds, so a broken page is never an invisible app
+        .setup(|app| {
+            if let Some(w) = app.get_webview_window("main") {
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(8));
+                    if !w.is_visible().unwrap_or(false) {
+                        if let Err(e) = w.show() { eprintln!("the window could not be shown: {e}"); }
+                        let _ = w.set_focus();
+                    }
+                });
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export, write_layouts_export, folder_is_empty, remove_empty_folder,
