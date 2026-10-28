@@ -76,6 +76,9 @@ test('extendOptions: empty fields continue; turn and climb are degrees per 100 m
   const o = extendOptions({ length: 50, turn: 18, climb: -9, bank: 10, width: 30 });
   assert.ok(Math.abs(o.targets.kh - Math.PI / 1000) < 1e-15); assert.ok(Math.abs(o.targets.kv + Math.PI / 2000) < 1e-15);
   assert.ok(Math.abs(o.targets.phi - Math.PI / 18) < 1e-15); assert.equal(o.targets.w, 30);
+  // D521: a typed bank asks the core for the rounded bank (it starts banking at the joint, src/core/extend.js roundedLinear); no bank typed, no shape asked
+  assert.equal(o.bankShape, 'rounded');
+  assert.equal(extendOptions({ length: 50, turn: 18, climb: '', bank: '', width: '' }).bankShape, undefined);
 });
 
 test('a failed extend changes nothing and says why', async () => {

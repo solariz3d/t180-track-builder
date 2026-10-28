@@ -74,3 +74,58 @@ test('extend refuses a closed track, a bad length and an unknown channel, by nam
   assert.throws(() => extend(d, { length: 10, transition: 20 }), (e) => e.code === 'BAD_TRANSITION');
   assert.throws(() => extend(D.checkDoc({ ...d, closed: true }), { length: 10 }), (e) => e.code === 'CLOSED');
 });
+
+// D521 (the user, 2026-10-28 15:18-15:31, his piece: a 100 m straight, then 100 m turning +11.70° as a corner with the bank at −54.05°, width 31 m, no ticks: "start banking where
+// the red circle is at the start of the next piece vs where it does further down"; "i just want the banking to be more smooth without that bump"). Today's quintic banked 0.33° by
+// 10 m and 2.68° by 20 m, then rolled at 1.02 °/m mid-piece (the hand-back, his.js). bankShape 'rounded' (the panel's Extend) lays the bank's RATE rounded over ℓ = min(10 m,
+// a quarter of the ramp) at each end and steady between: C2 at both joints, as D459 asks of the bank.
+const { extendCorner } = require('../src/core/turnby.js');
+const { roundedLinear } = require('../src/core/extend.js');
+const DEGR = Math.PI / 180, H5 = 0.5;
+const PIN_HIS = '9f28319aad54a0a3', PIN_PLAIN = '983fb7ff292d7f93';   // sha256 (first 16) of D.serialize at 9069bd4, before D521 (his.js / the hand-back)
+const his = (shape) => extendCorner(extend(D.createDoc('d521'), { length: 100 }), { length: 100, turnDeg: 11.70, targets: { phi: -54.05 * DEGR, w: 31 }, ...(shape ? { bankShape: shape } : {}) });
+const phiAt = (P, s) => D.valuesAt(P, Math.max(0, Math.min(P.length, s))).phi / DEGR;
+const peakRate = (P) => { let b = 0; for (let s = 0.1; s <= P.length + 1e-9; s += 0.1) b = Math.max(b, Math.abs(phiAt(P, s) - phiAt(P, s - 0.1)) / 0.1); return b; };
+const d2At = (P, s, dir) => { const g = (x) => phiAt(P, s + dir * x); return (2 * g(0) - 5 * g(H5) + 4 * g(2 * H5) - g(3 * H5)) / (H5 * H5); };
+
+test('D521 row 1: on his piece the rounded bank starts at the joint: 3.0° by 10 m, 9.0° by 20 m, 27.0° at the middle, -54.05° at the end, and rolls no faster than real tracks', () => {
+  const P = his('rounded').pieces[1];
+  assert.ok(Math.abs(phiAt(P, 10) + 3.0) < 0.3, `at 10 m: ${phiAt(P, 10)}°`);
+  assert.ok(Math.abs(phiAt(P, 20) + 9.0) < 0.4, `at 20 m: ${phiAt(P, 20)}°`);
+  assert.ok(Math.abs(phiAt(P, 50) + 27.025) < 0.1, `at 50 m: ${phiAt(P, 50)}°`);
+  assert.ok(Math.abs(phiAt(P, 100) + 54.05) < 1e-6, 'it ends at the bank asked');
+  const { BANK_RATE } = require('../src/doc/vocab.js');
+  assert.ok(peakRate(P) <= BANK_RATE, `peak ${peakRate(P).toFixed(3)} °/m, real tracks' p90 ${BANK_RATE}`);
+});
+test('D521 row 2: the rounded bank is C2 at both joints: value, slope and second derivative continue across the straight\'s end and are steady at its own end', () => {
+  const d = his('rounded'), A = d.pieces[0], P = d.pieces[1], H1 = 1e-3;
+  assert.ok(Math.abs(phiAt(P, 0) - phiAt(A, 100)) < 1e-6, 'value');
+  assert.ok(Math.abs((phiAt(P, H1) - phiAt(P, 0)) / H1 - (phiAt(A, 100) - phiAt(A, 100 - H1)) / H1) < 1e-3, 'slope');
+  assert.ok(Math.abs(d2At(P, 0, 1) - d2At(A, 100, -1)) < 1e-3, `second derivative at the start: ${d2At(P, 0, 1)} against ${d2At(A, 100, -1)}`);
+  assert.ok(Math.abs(d2At(P, 100, -1)) < 1e-3 && Math.abs((phiAt(P, 100) - phiAt(P, 100 - H1)) / H1) < 1e-3, 'steady at its end: no slope, no curvature');
+});
+test('D521 row 3: his corner still turns exactly 11.70°, and the other channels keep their ramps (the turn rate within 1e-4 rad/m of today\'s)', () => {
+  const r = his('rounded'), t = his(null), { toPath } = require('../src/core/adapter.js');
+  const turned = (d) => { const S = toPath(d, { step: 0.5 }).path.samples, a = S.find((m) => m.s >= 100), b = S.filter((m) => m.s <= 200).pop(); return Math.atan2(-(b.T[2] * a.T[0] - b.T[0] * a.T[2]), b.T[0] * a.T[0] + b.T[2] * a.T[2]) / DEGR; };
+  assert.ok(Math.abs(turned(r) - 11.70) < 1e-3, `turned ${turned(r)}°`);
+  for (let s = 0; s <= 100; s += 0.5) assert.ok(Math.abs(D.valuesAt(r.pieces[1], s).kh - D.valuesAt(t.pieces[1], s).kh) < 1e-4, `kh at ${s}`);
+  // only the bank is rounded: a cup typed beside it keeps its curve exactly (the bank's knots are INSERTED, Boehm: 2.9e-7 at most, its stored step)
+  const cupBy = (shape) => extend(extend(D.createDoc('d521'), { length: 100, first: { c: 10 } }), { length: 100, targets: { phi: -30 * DEGR, c: 40 }, ...(shape ? { bankShape: shape } : {}) }).pieces[1];
+  const cr = cupBy('rounded'), ct = cupBy(null);
+  for (let s = 0; s <= 100; s += 0.5) assert.ok(Math.abs(D.valuesAt(cr, s).c - D.valuesAt(ct, s).c) < 1e-6, `cup at ${s}: ${D.valuesAt(cr, s).c} against ${D.valuesAt(ct, s).c}`);
+});
+test('D521 row 4: without bankShape the bank is laid exactly as before (Close, Finish and every caller but the panel): his piece and a plain bank ramp keep their bytes', () => {
+  const sha = (x) => require('crypto').createHash('sha256').update(D.serialize(x)).digest('hex').slice(0, 16);
+  assert.equal(sha(his(null)), PIN_HIS);
+  assert.equal(sha(extend(extend(D.createDoc('d521'), { length: 100 }), { length: 200, targets: { phi: -30 * DEGR } })), PIN_PLAIN);
+  assert.throws(() => extend(D.createDoc('d521'), { length: 50, bankShape: 'square' }), (e) => e.code === 'BAD_SHAPE');
+});
+test('D521 row 5: the rounding is a quarter of a short ramp, so a 24 m bank still has its steady middle, and the shape itself is C2 with S(0) = 0, S(1) = 1', () => {
+  const P = extend(extend(D.createDoc('d521'), { length: 100 }), { length: 24, targets: { phi: 20 * DEGR }, bankShape: 'rounded' }).pieces[1];
+  assert.ok(Math.abs(phiAt(P, 12) - 10) < 0.3, `the middle is half the bank: ${phiAt(P, 12)}°`);
+  const mid = (phiAt(P, 13) - phiAt(P, 11)) / 2; assert.ok(Math.abs(mid - 20 / 18) < 0.06, `the steady rate is 20° over 24 − 6 m: ${mid.toFixed(3)} °/m`);
+  assert.ok(Math.abs(d2At(P, 0, 1)) < 1e-3 && Math.abs(d2At(P, 24, -1)) < 1e-3, 'C2 at both ends');
+  for (const a of [0.1, 0.25]) { assert.equal(roundedLinear(0, a), 0); assert.equal(roundedLinear(1, a), 1); assert.ok(Math.abs(roundedLinear(0.5, a) - 0.5) < 1e-12, 'symmetric'); }
+  // the shape's own second derivative goes to 0 at both ends (6u/(a²(1 − a)): 0.067 at u = 1e-4 for a = 0.1, where a rate rising linearly would hold 1/(a(1 − a)) = 11.1) (the rate rises on the Bloss cubic, so the bank is C2 by its shape, not only by the spline's end pinning)
+  for (const a of [0.1, 0.25]) { const h = 1e-4, d2 = (u) => (roundedLinear(u + h, a) - 2 * roundedLinear(u, a) + roundedLinear(u - h, a)) / (h * h); assert.ok(Math.abs(d2(h)) < 1 && Math.abs(d2(1 - h)) < 1, `S'' at the ends: ${d2(h)}, ${d2(1 - h)}`); assert.ok(Math.abs(d2(0.5) ) < 1e-6, 'none on the plateau'); }
+});

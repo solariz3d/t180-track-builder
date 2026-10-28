@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A bank Extend lays starts banking at the joint.** It used to roll almost nothing over a new piece's first fifth and then quickly in its middle: 54° over 100 m banked 0.3° by 10 m and peaked at 1.02 °/m, the bump after a straight. Now the bank's rate eases in over the first 10 m (a quarter of a shorter ramp), holds steady, and eases out the same way: 3.0° by 10 m, 9.0° by 20 m, a steady 0.60 °/m, still smooth to the second derivative at both joints. Only new pieces Extend lays with a bank typed (Level, To floor, corner turns and Sharp too); saved tracks, Close and Finish are unchanged (D521; the user, 2026-10-28).
+
 ## [0.4.28] - 2026-10-28
 
 ### Changed

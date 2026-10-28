@@ -77,6 +77,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   if (sl !== null) targets[XS.CHANNEL.start] = sl;
   if (tb !== null) targets[XS.CHANNEL.tube] = tb;
   const out = { length: Number(length), targets };
+  if (b !== null) out.bankShape = 'rounded';   // D521: the bank Extend lays starts banking at the joint (src/core/extend.js roundedLinear); Close and Finish keep theirs
   if (corner) out.turnDeg = t;
   if (climbCorner) out.climbDeg = c;   // D331, the climb too (plan :387-399): the exact pitch change, ending at a climb rate of 0
   if (num(grip) !== null) out.grip = num(grip);   // D261: a grip typed in the field (blank: the new piece keeps the last road's); the core refuses a value that is not a whole percent 50 to 150

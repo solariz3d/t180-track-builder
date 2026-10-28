@@ -35,16 +35,38 @@ const { WIDTHS, RATES } = require('../geom/fonts.js');
 
 const bloss = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));   // ref 02 §4, IFC-BLOSS: the route channels' blend (C1 at its ends: S″(0) = 6, S″(1) = −6)
 const smoother = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * u * (u * (6 * u - 15) + 10));   // 6u⁵ − 15u⁴ + 10u³ (Perlin's smootherstep): S′ = S″ = 0 at both ends, C2
+/**
+ * D521, THE BANK'S ROUNDED-LINEAR RAMP (the user, 2026-10-28 15:18 and 15:31, a 100 m piece banking 54° after a straight: "start banking where the red circle is at the start of the
+ * next piece vs where it does further down"; "i just want the banking to be more smooth without that bump for shorter turns"). The quintic's S′(0) = S″(0) = 0 makes a ramp's first
+ * fifth nearly flat and its middle steep: on his piece 0.46° at 10 m, 2.9° at 20 m, then 1.01 °/m at 50 m. Rounded-linear: the bank's RATE rises from 0 to a plateau over
+ * BANK_ROUND_M (or a quarter of the ramp, if that is shorter, so the plateau always exists), holds, and falls the same way at the end; the rate's rise is the Bloss cubic,
+ * so the rate is C1 and the bank itself is C2 at both joints, as D459 requires of a cross-section channel (test/core_joint_c2.test.js). On his piece: 3.0° at 10 m, 9.0° at 20 m,
+ * a plateau of Δ/(L − ℓ) = 0.60 °/m. Only the bank, only when opts.bankShape is 'rounded' (the panel's Extend, app/core/panel.js extendOptions): Close, Finish and every other
+ * caller of extend keep the quintic, so their bytes do not move.
+ *   roundedLinear(u, a): u the share of the ramp, a = ℓ / ramp; S(0) = 0, S(1) = 1, S′ = S″ = 0 at both ends
+ */
+const BANK_ROUND_M = 10;
+const ROUND_I = (t) => t * t * t - (t * t * t * t) / 2;   // ∫ of the Bloss cubic 3t² − 2t³ from 0 to t; ROUND_I(1) = 1/2
+function roundedLinear(u, a) {
+  if (u <= 0) return 0; if (u >= 1) return 1;
+  const N = 1 - a;
+  if (u < a) return (a * ROUND_I(u / a)) / N;
+  if (u <= 1 - a) return (a / 2 + (u - a)) / N;
+  return 1 - (a * ROUND_I((1 - u) / a)) / N;
+}
+const roundOf = (Lt) => Math.min(BANK_ROUND_M, Lt / 4);
 /** The channels blended by the C2 quintic: what the wheels ride on across the road. The route's own (kh, kv, w, r, s, t, h, l) keep the Bloss cubic. */
 const C2_CHANNELS = new Set(['phi', 'c', 'e', 'er']);
 
 /** A channel's function over the new piece: the continuation, blended to the target if there is one (ref 09 §2); `ch` picks the blend (C2_CHANNELS). */
-function channelFn({ v, m }, target, Lt, ch) {
+function channelFn({ v, m }, target, Lt, ch, shape = null) {
   const cont = (s) => v + m * s;
   if (target === undefined || target === null) return cont;
   if (!Number.isFinite(target)) throw new D.CoreError('BAD_TARGET', `a target must be a finite number, got ${target}`);
+  const a = ch === 'phi' && shape === 'rounded' ? roundOf(Lt) / Lt : null;   // D521: the bank's rounded-linear ramp, asked for
   const blend = C2_CHANNELS.has(ch) ? smoother : bloss;
-  return (s) => { const u = s / Lt, S = blend(u); return u >= 1 ? target : (1 - S) * cont(s) + S * target; };
+  const S0 = a !== null ? (u) => roundedLinear(u, a) : blend;
+  return (s) => { const u = s / Lt, S = S0(u); return u >= 1 ? target : (1 - S) * cont(s) + S * target; };
 }
 
 /** The ramp 'start' means: the first knot span of a piece of this length, at most KNOT_M (20 m); the whole piece when it is shorter than that. */
@@ -79,9 +101,9 @@ function rampKnots(length, ramps, knotM, sub = RAMP_KNOTS) {
  * ideal ramp at the Greville abscissae, clamped into the range the start value, the target and those two points span (a no-op for a monotone ramp; the continued
  * slope of the joint may legitimately carry the first two points past the range and they are not touched).
  */
-function rampControl(piece, ch, from, target, R, held, sub = RAMP_KNOTS) {
+function rampControl(piece, ch, from, target, R, held, sub = RAMP_KNOTS, shape = null) {
   const P = piece.channels[ch], U = D.knotVector(piece), free = held ? 2 : 0, dec = D.DEC[ch];
-  const f = channelFn(from, target, Math.max(R - (2 * R) / sub, R / sub), ch);
+  const f = channelFn(from, target, Math.max(R - (2 * R) / sub, R / sub), ch, shape);
   let lo = Math.min(from.v, target), hi = Math.max(from.v, target); for (let i = 0; i < free; i++) { lo = Math.min(lo, P[i]); hi = Math.max(hi, P[i]); }
   for (let i = free; i < P.length; i++) {
     const xi = (U[i + 1] + U[i + 2] + U[i + 3]) / 3, v = Math.min(hi, Math.max(lo, f(xi)));
@@ -202,7 +224,9 @@ function fitWithHold(piece, ch, f, Lt, target) {
 }
 
 function extend(doc, opts = {}) {
-  let { length, transition, targets = {}, family, knotM, first, grip } = opts;
+  let { length, transition, targets = {}, family, knotM, first, grip, bankShape } = opts;
+  if (bankShape !== undefined && bankShape !== null && bankShape !== 'rounded') throw new D.CoreError('BAD_SHAPE', `bankShape is 'rounded' or left out, got ${bankShape}`);
+  const shape = bankShape === 'rounded' ? 'rounded' : null;
   if (!(length > 0)) throw new D.CoreError('BAD_LENGTH', `extend needs a positive length, got ${length}`);
   // er, the RIGHT edge angle (document.js): an edge angle typed without a right one sets both sides, as before er existed; a right one typed alone
   // splits them. Its ramp follows e's unless it has its own.
@@ -255,13 +279,13 @@ function extend(doc, opts = {}) {
     from = Object.fromEntries(D.CHANNELS.map((ch) => [ch, { v: f[ch], m: 0 }])); held = false;
   }
   if (from.tNext) from = { ...from, t: from.tNext };   // the tube this piece may start continues from tNext (endState reports t only at a tube head)
-  const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch), ch)]));
+  const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch), ch, shape)]));
   const c2Targets = [...C2_CHANNELS].filter((ch) => given(targets[ch]));
   const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch)) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // D459: the short-ramp subdivisions, 8 when a cross-section channel ramps short
   // extra knots only where a ramp is short; D459: a piece with a bank, cup or edge target has at least three interior knots, so c2Ends has a free point at each end and one is left for the shape
   const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM, sub) : c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;
   const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube, grip: grip === undefined ? D.gripOf(last) : grip });
-  for (const ch of shortRamps) rampControl(piece, ch, from[ch], targets[ch], ramp[ch], held, sub);   // not fitted: see rampControl
+  for (const ch of shortRamps) rampControl(piece, ch, from[ch], targets[ch], ramp[ch], held, sub, shape);   // not fitted: see rampControl
   for (const ch of c2Targets) if (!shortRamps.includes(ch)) fitWithHold(piece, ch, channels[ch], Lof(ch), targets[ch]);   // D459: the fitted quintic, its hold and end pinned (fitWithHold)
   // D459: the clamps below may move a channel's last two points ("an edge that ends at 0 ends flat"), so the ends are pinned to zero curvature AFTER them (c2Ends moves
   // only P[2] and P[n − 3]) and the clamps run once more on what it moved: a point pushed past a cap or the floor is held there, and that one end stays C1 (a ramp from
@@ -312,7 +336,16 @@ function extend(doc, opts = {}) {
   clamps();
   for (const ch of c2Targets) c2Ends(piece, ch);   // D459: zero curvature at both ends of a bank, cup or edge ramp
   if (c2Targets.length) clamps();
+  // D521: a rounded bank over the fitted path needs knots where its rate turns (ℓ/2 and ℓ in from each end of the ramp): with knots every 20 m its first span is one cubic, which
+  // a C2 joint makes a·s³ whatever the ramp asks (1.41° at 10 m on his piece against 3.00). They are INSERTED (document.js insertKnots, Boehm) into the piece laid as today, so every
+  // other channel keeps its curve (the turn, the width, a cup: the same curve, three points around each new knot re-quantised to their step); then the bank alone is refitted on them
+  if (shape && given(targets.phi) && !shortRamps.includes('phi')) {
+    const Lt = Lof('phi'), r = roundOf(Lt), ts = [r / 2, r, Lt - r, Lt - r / 2].map((k) => +k.toFixed(4)).filter((k) => k > 0.5 && k < length - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
+    const refined = D.insertKnots(piece, [...new Set(ts)]);
+    fitWithHold(refined, 'phi', channels.phi, Lt, targets.phi); c2Ends(refined, 'phi');
+    return D.appendPiece(doc, refined);
+  }
   return D.appendPiece(doc, piece);
 }
 
-module.exports = { extend, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+module.exports = { extend, roundedLinear, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
