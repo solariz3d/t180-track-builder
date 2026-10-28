@@ -298,7 +298,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (e.code === 'ControlLeft') ctrlFly = null;   // a descent that ran alone is kept
     if (e.code === 'Space' && !swallowsKeys(e.target)) e.preventDefault();   // D252: a button clicks on the key-UP of Space too
   };
-  const letGo = () => { held.clear(); expectRepeat = false; quietMs = 0; takeover = false; boost = false; boostT = 0; drag = null; down.clear(); shortcutDown.clear(); buttons = 0; ctrlFly = null; };
+  const letGo = () => { unlockLook(); held.clear(); expectRepeat = false; quietMs = 0; takeover = false; boost = false; boostT = 0; drag = null; down.clear(); shortcutDown.clear(); buttons = 0; ctrlFly = null; };
   const onVis = () => { if (win.document && win.document.hidden) letGo(); };
   let boost = false, boostT = 0;   // Shift is down; and for how long (s)
   // MOUSE LOOK: the right button drags the look from any view (it takes the view over into free); the left button never looks (D255: it is the
@@ -311,6 +311,15 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   // The same for a right release whose PRESS the page never saw (it went down while the OS had the window, a title-bar drag): it cannot be a click on a panel,
   // and its menu takes the key-ups the same way. A menu opened from the keyboard has no release, so it is untouched
   let lookMenu = false, rightSeen = false, orphanUp = false;
+  // D510 (the user, 2026-10-28: "infinite mouse room in either way, so it never hits a wall or runs onto my second monitor"): a right-button look LOCKS
+  // the pointer to the canvas for the drag (the Pointer Lock API: the cursor is hidden and held in place, and every move reports movementX/Y with no edge),
+  // and unlocks at the release. A lock the runtime refuses, or one lost to Esc, falls back to the plain drag, which still looks but stops at the screen's edge.
+  let locked = false;
+  const lockLook = () => { try { const p = typeof canvas.requestPointerLock === 'function' ? canvas.requestPointerLock() : null; if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (err) { /* no lock: the plain drag */ } };
+  // the lock arrives on its own event: a look let go before it lands (E's read, 2026-10-28) would stay locked, so exitPointerLock is called whenever the
+  // document holds a lock, and a lock that lands after the look ended is let go at once
+  const unlockLook = () => { const d = win.document; if (d && typeof d.exitPointerLock === 'function' && (locked || d.pointerLockElement)) { try { d.exitPointerLock(); } catch (err) { /* already out */ } } };
+  const onLockChange = () => { locked = !!(win.document && win.document.pointerLockElement === canvas); if (locked && !drag) unlockLook(); };
   const onMenu = (e) => { if (lookMenu || orphanUp) { lookMenu = false; orphanUp = false; e.preventDefault(); } };
   const onDown = (e) => {
     const ae = win.document && win.document.activeElement;   // a click on the canvas takes focus off a field (a preventDefault below would keep it)
@@ -319,10 +328,12 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (e.button === 2) {   // D255: the RIGHT button only, in every view; the left is for clicking things (it looked in free mode before)
       if (rig.mode !== 'free') { const c = ctx(); if (!c) return; rig.setMode('free', c); said(); }
       drag = [e.clientX, e.clientY]; lookMenu = true; e.preventDefault();
+      lockLook();   // D510: no wall for the look
     }
   };
-  const onMove = (e) => { if (!drag) return; rig.free.look((e.clientX - drag[0]) * 0.004, -(e.clientY - drag[1]) * 0.004); drag = [e.clientX, e.clientY]; };
-  const onRelease = (e) => { drag = null; if (!e || e.button === undefined || e.button === 0) buttons = 0; if (e && e.button === 2) { orphanUp = !rightSeen; rightSeen = false; } };
+  // D510: under the lock the pointer does not move, so the look reads movementX/Y; without it, the pointer's travel as before
+  const onMove = (e) => { if (!drag) return; const dx = locked ? (e.movementX || 0) : e.clientX - drag[0], dy = locked ? (e.movementY || 0) : e.clientY - drag[1]; rig.free.look(dx * 0.004, -dy * 0.004); drag = [e.clientX, e.clientY]; };
+  const onRelease = (e) => { drag = null; if (!e || e.button === undefined || e.button === 0) buttons = 0; if (e && e.button === 2) { unlockLook(); orphanUp = !rightSeen; rightSeen = false; } };
   // D252: a press anywhere (a handle drag included) stops Left Ctrl; D257: the LEFT button only, the right button's look drag flies with it
   // D336: a press on the title bar's drag region hands the window to the OS's move loop, which takes the key-ups with no blur, so the held keys are let go first
   const onAnyDown = (e) => {
@@ -339,6 +350,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   const onWheel = (e) => { spoilCtrl(); const steps = -Math.sign(e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0) * (e.shiftKey ? 4 : 1); if (steps) { if (e.ctrlKey) rig.lens(steps); else rig.zoom(steps); } e.preventDefault(); };
   win.addEventListener('keydown', onKey); win.addEventListener('keyup', onUp); win.addEventListener('blur', letGo);
   if (win.document) win.document.addEventListener('visibilitychange', onVis);
+  if (win.document) win.document.addEventListener('pointerlockchange', onLockChange);   // D510
   canvas.addEventListener('mousedown', onDown); win.addEventListener('mousemove', onMove); win.addEventListener('mouseup', onRelease); win.addEventListener('mousedown', onAnyDown, true); win.addEventListener('pointerdown', onAnyDown, true); win.addEventListener('pointerup', onAnyUp, true);
   canvas.addEventListener('contextmenu', noMenu); canvas.addEventListener('wheel', onWheel, { passive: false }); win.addEventListener('contextmenu', onMenu, true);
 
@@ -460,7 +472,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     dispose() {
       win.cancelAnimationFrame(raf); clearFull(); exactJob = null; exactDue = null; unsub(); unskin(); if (layer) layer.dispose();
       win.removeEventListener('keydown', onKey); win.removeEventListener('keyup', onUp); win.removeEventListener('blur', letGo);
-      if (win.document) win.document.removeEventListener('visibilitychange', onVis);
+      unlockLook();   // D510: a look still locked when the preview goes away is let go
+      if (win.document) { win.document.removeEventListener('visibilitychange', onVis); win.document.removeEventListener('pointerlockchange', onLockChange); }
       canvas.removeEventListener('mousedown', onDown); win.removeEventListener('mousemove', onMove); win.removeEventListener('mouseup', onRelease); win.removeEventListener('mousedown', onAnyDown, true); win.removeEventListener('pointerdown', onAnyDown, true); win.removeEventListener('pointerup', onAnyUp, true);
       canvas.removeEventListener('contextmenu', noMenu); canvas.removeEventListener('wheel', onWheel); win.removeEventListener('contextmenu', onMenu, true);
       renderer.dispose();

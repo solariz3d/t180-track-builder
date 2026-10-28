@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The right-button look has no wall.** Dragging the view with the right button now locks the pointer to the preview for the drag, so the mouse never reaches the edge of the screen or another monitor; the look keeps going as long as the button is held, and the cursor comes back where it was at the release. If the runtime refuses the lock, the drag works as before and stops at the edge.
+
 ### Changed
 
 - **Labels read as words, not shouting.** Section headings, the camera bar and its caption, the readout over the 3D view, the Export layouts dialog and the wordmark are in sentence case without wide letter spacing ("Equation track", "Build", "length", "T-180 Track builder"), and Settings ▸ Theme lists "Sigil" like the others. A track with no name is "Untitled" (it said "unsaved"; the dot after the name is what marks changes not yet saved). The left panel's summary ends "loop open" instead of "open · last extend 0 ms" (a timing for developers), and the checker's line no longer repeats that the loop is open.
