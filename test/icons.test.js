@@ -92,15 +92,15 @@ test('on a light taskbar (#f3f3f3) the tile\'s edge reads at 24 and 32 px: at le
   }
 });
 
-// AMENDED (D502 part 2): the rule changed by name, the user's copy pick of 2026-10-27: the rest reads "Track builder" in sentence case (no all-caps label)
-test('the title bar still reads "T-180 Track builder", now as the wordmark: the name, a hairline rule, the dimmed rest', () => {
+// AMENDED (D502 part 2, then D512): the rule changed by name, the user's copy pick of 2026-10-27, then his ask of 2026-10-28: the rest reads "Track Builder", a capital B, no all-caps label
+test('the title bar still reads "T-180 Track Builder", now as the wordmark: the name, a hairline rule, the dimmed rest', () => {
   const html = fs.readFileSync(path.join(ROOT, 'app', 'index.html'), 'utf8');
   assert.match(html, /<title>T-180 Track Builder<\/title>/, 'the window title is unchanged');
   const h1 = (html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/) || [])[1];
   assert.ok(h1 !== undefined, 'the page has its h1');
-  assert.equal(h1.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(), 'T-180 Track builder', 'the h1\'s text');
+  assert.equal(h1.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(), 'T-180 Track Builder', 'the h1\'s text');
   assert.match(h1, /<span class="wm-name" data-tauri-drag-region>T-180<\/span>/, 'the name, in its own span, still a drag handle');
-  assert.match(h1, /<span class="wm-rest" data-tauri-drag-region>Track builder<\/span>/, 'the rest, in its own span, still a drag handle');
+  assert.match(h1, /<span class="wm-rest" data-tauri-drag-region>Track Builder<\/span>/, 'the rest, in its own span, still a drag handle');
   const css = (html.match(/header h1 \.wm-rest[^{]*\{[^}]*\}/g) || []).join('\n');
   assert.ok(css, 'the rest has its own rule');
   assert.match(css, /var\(--hair\)/, 'the rule between them is the theme\'s hairline token');
