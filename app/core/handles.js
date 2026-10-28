@@ -29,28 +29,37 @@ const DEG = Math.PI / 180;
  * `perPx` is the value change per PIXEL of the pointer's travel along the handle's on-screen axis (D251: the same at any zoom; it was per metre of the world, so zoomed out one pixel jumped a lot). The numbers are TODAY's per-metre speeds divided by the px a metre takes at the default Build camera (measured in the window), so the feel is the same there; LENGTH is 5x that (asked for); the Extend fields'
  * units (the core's channels are the same, degrees and metres). `zero`: a kind whose natural rest is 0 (bank, turn, climb): the drag holds there, and a double-click resets to it.
  */
+const BACK_AT = 0.02;   // D509: the back of the piece, a hair in from its join with the head (below)
 const EXTEND_KINDS = Object.freeze({
-  // D250 item 3 put LENGTH and WIDTH at the piece's NEAR end; since 2026-10-14 they are at its FRONT (below). The width marks sit at the TARGET half-width
-  // (`target: true`: the field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. Turn and climb are three
-  // quarters along, bank and cup mid-piece.
+  // D250 item 3 put LENGTH and WIDTH at the piece's NEAR end; from 2026-10-14 they were at its FRONT, and D509 put WIDTH back at the near end (below). The width marks sit at the TARGET half-width
+  // (`target: true`: the field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. (Then: turn and climb three
+  // quarters along, bank and cup mid-piece; the places today are D509's, below.)
   // 2026-10-14: LENGTH and WIDTH moved to the FRONT of the piece (its far end, where the piece grows to), a suggestion from a track maker who tried the
   // builder: the white length mark at the centreline there, dragged FORWARD to lengthen (`sign: 'forward'`, it follows the front end as it moves), and the red
-  // width marks at that end's edges. The width the field sets is the width the piece ENDS at, so its marks now sit where that width is reached
+  // width marks at that end's edges.
+  // D509 (2026-10-28, the user, with a screenshot: "I want the width and cupping at the back so the controls are at the front and back of the piece"): the piece's
+  // controls at its two ends and its middle. FRONT (at 1): length at the centre, turn at the edges. MIDDLE (at 0.5): bank at the edges, climb at the centre.
+  // BACK (at BACK_AT): width at the edges, cup just inside. BACK_AT is a hair in from 0, so the marks stand on the new piece and not on its join with the head:
+  // 0.02 is 2 m of the default 100 m piece, about 24 px at the default camera (11.78 px a metre), twice a mark's 12 px hit radius clear of the seam.
+  // The width field still sets the width the piece ENDS at (a drag from the back widens the FRONT; the back is the head's width and does not move), and the
+  // marks still sit at that TARGET half-width so they follow the pointer; so whenever the two widths differ the marks stand off the road's edge at the back
+  // by half the difference (outside when widening, on the road when narrowing). Sculpt keeps its width mark at the far end (panel.js sculptModel `at`)
   length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 1, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'forward', perPx: 0.42, min: 1, max: 5000, step: 0.01, snap: 10 }),
-  // 2026-10-14, the second move: WIDTH to the middle of the piece, BANK three quarters along, TURN at the front edges (the length mark stays at the front centre)
-  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: 0.5, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.01, snap: 5 }),
-  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.75, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.01, snap: 5 }),
-  cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: 0.5, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.24, min: 0, max: 150, step: 0.01, snap: 5 }),
+  // 2026-10-14, the second move: WIDTH to the middle of the piece, BANK three quarters along, TURN at the front edges (the length mark stays at the front centre);
+  // D509: width to the back
+  width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: BACK_AT, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.01, snap: 5 }),
+  bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.01, snap: 5 }),
+  cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: BACK_AT, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.24, min: 0, max: 150, step: 0.01, snap: 5 }),
   // 2026-10-14, reported: a turn could not go past 90 degrees unless Turn by 90 was chosen first, so there is no clamp (Turn by and Turn to grid
   // are the exact-angle tools); and the camera orientation changed which way a drag had to go, which should be the same from every view: `screen: 'x'`, the
   // pointer's own left and right (a drag to the right is a right turn, from any view), not the road's left as it happens to lie on screen
   turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.01, snap: 5 }),
-  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.01, snap: 5 }),
+  climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.5, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.01, snap: 5 }),
   // D331 (plan :417-426, turns are scrubbed with these): with the turn and climb fields read as CORNERS (app/core/panel.js "turn & climb as", the default) the
   // panel offers these two in place of turn and climb. They sit and move as those do, with A2's precise rules unchanged (Shift one pixel = 0.01, the wheel and the
   // arrows one step, Ctrl snaps to 5), but the value is the corner's DEGREES, and it is labelled so. The climb's range is a pitch change of a full loop either way
   turnDeg: Object.freeze({ label: 'turn', unit: '°', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.01, snap: 5 }),
-  climbDeg: Object.freeze({ label: 'climb', unit: '°', colour: '#ffd23d', at: 0.75, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -360, max: 360, step: 0.01, snap: 5 }),
+  climbDeg: Object.freeze({ label: 'climb', unit: '°', colour: '#ffd23d', at: 0.5, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -360, max: 360, step: 0.01, snap: 5 }),
 });
 // D258, THE FREE JUMP'S LANDING (asked for: drag it in the 3D view AND type it in number boxes). `free: true` kinds sit at the LANDING's start (model.free.pos), not along a piece, and their axes are the
 // TAKE-OFF's heading frame (T0 forward, L0 left, U0 up), because that is the frame the landing's pose is given in (src/core/document.js flightPiece), so the arrow moves the number of its box. Each mark sits `leadM` m out along its own
