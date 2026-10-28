@@ -499,13 +499,15 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   const lat = (h, st) => (h.pos[0] - st.pos[0]) * st.L[0] + (h.pos[1] - st.pos[1]) * st.L[1] + (h.pos[2] - st.pos[2]) * st.L[2];
   const along = (h, st) => (h.pos[0] - st.pos[0]) * st.T[0] + (h.pos[1] - st.pos[1]) * st.T[1] + (h.pos[2] - st.pos[2]) * st.T[2];
   width.value = String(w0); width.oninput(); P1.frame(); let now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
-  const front = stationAt(1), mid = stationAt(0.5);
+  // AMENDED (D509): the width marks moved to the piece's BACK (d509-c 4f5a4c1, the user: "the width and cupping at the back so the controls are at the
+  // front and back of the piece"), at share 0.02 as handles.js places them; this row checked them at the middle
+  const front = stationAt(1), back = stationAt(0.02);
   assert.ok(Math.hypot(now['length:0'].pos[0] - front.pos[0], now['length:0'].pos[2] - front.pos[2]) < 1e-6, 'length:0 is on the front station, the centreline');
   // the panel interpolates between the 2 m stations, so a mark is within half a station of the nearest one
-  for (const k of ['width:1', 'width:-1']) assert.ok(Math.abs(along(now[k], mid)) <= 1.5 && Math.abs(along(now[k], front)) > 10, `${k} is at the middle of the piece (${along(now[k], mid).toFixed(2)} m from its nearest station)`);
+  for (const k of ['width:1', 'width:-1']) assert.ok(Math.abs(along(now[k], back)) <= 1.5 && Math.abs(along(now[k], front)) > 10, `${k} is at the back of the piece (${along(now[k], back).toFixed(2)} m from its nearest station)`);
   const nearly = (x, y, eps) => assert.ok(Math.abs(x - y) <= eps, `${x} is not within ${eps} of ${y}`);
-  nearly(lat(now['width:1'], mid), w0 / 2, 0.05); nearly(lat(now['width:-1'], mid), -w0 / 2, 0.05); width.value = String(w0 + 4); width.oninput(); P1.frame(); now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
-  nearly(lat(now['width:1'], stationAt(0.5)), (w0 + 4) / 2, 0.05); const turnNow = now['turn:1']; assert.ok(Math.abs(along(turnNow, stationAt(1))) <= 1.01 && Math.abs(lat(turnNow, stationAt(1))) > 0, 'the turn mark sits at the front, on the edge');
+  nearly(lat(now['width:1'], back), w0 / 2, 0.05); nearly(lat(now['width:-1'], back), -w0 / 2, 0.05); width.value = String(w0 + 4); width.oninput(); P1.frame(); now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
+  nearly(lat(now['width:1'], stationAt(0.02)), (w0 + 4) / 2, 0.05); const turnNow = now['turn:1']; assert.ok(Math.abs(along(turnNow, stationAt(1))) <= 1.01 && Math.abs(lat(turnNow, stationAt(1))) > 0, 'the turn mark sits at the front, on the edge');
   width.value = String(w0); width.oninput(); P1.frame();
   // bank: the left edge up, the right edge down are both positive; a drag is typed (Shift: one step a pixel, D330)
   dragBy(P1, 'bank:1', 20); const b1 = Number(bank.value); assert.ok(b1 > 0, `bank rose: ${b1}`); bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:-1', 20); assert.equal(Number(bank.value), b1, 'the right edge dragged DOWN 20 px is the same bank');
