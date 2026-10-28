@@ -10,6 +10,10 @@ All notable changes to this project are recorded here. The format follows
 - **The wordmark reads "Track Builder".** The second word takes a capital B again; the rest of the sentence-case copy from 0.4.27 is unchanged (D512; the user, 2026-10-28).
 - **Number fields have arrows in each look's colours.** The up and down arrows on every number field were the plain white Windows box in every look; they are now two small chevrons drawn in the look's own colours, brighter under the pointer, and clicking or holding them still steps the value. The fields keep their size.
 
+### Fixed
+
+- **Level and To floor work with a turn typed as a corner.** With "turn & climb as" on corner (the default), a turn in the turn field made Level and To floor refuse and place nothing, with the reason only in the message line. They now place the turn exactly, as Extend would, and still end the piece level (and To floor on the floor). A climb typed as a corner is still refused by name, since the climb is what they solve.
+
 ## [0.4.27] - 2026-10-28
 
 ### Added

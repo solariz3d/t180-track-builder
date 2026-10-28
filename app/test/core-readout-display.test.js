@@ -909,7 +909,9 @@ test('D331 B: by default the turn field is a corner: it shows nothing at the hea
   assert.equal(turnAs.value, 'corner'); assert.equal(P.field('turn °').value, '90', 'the corner it was made with');
   P.panel.unmount();
 });
-test('D331 B: "turn as" rate is the old field (°/100 m, the head\'s rate shown); switching back puts the field back; Level, To floor and Jump refuse a corner by name and place nothing', async () => {
+// AMENDED (D516): the rule changed by name: Level and To floor place a turn read as a corner exactly (src/core/level.js, test/core_level.test.js rows 6-8), so
+// only Jump still refuses it; Level's refusal of a climb corner is the D331 climb row's below
+test('D331 B: "turn as" rate is the old field (°/100 m, the head\'s rate shown); switching back puts the field back; Jump refuses a corner by name and places nothing', async () => {
   const P = await mountPanel(undefined, {}, { turnAsRate: false });
   const turnAs = P.root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'), button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t);
   P.shell.extend({ length: 100, family: 'bowl' }); P.shell.extend({ length: 60, targets: { kh: 30 * Math.PI / 180 / 100 } });
@@ -919,7 +921,7 @@ test('D331 B: "turn as" rate is the old field (°/100 m, the head\'s rate shown)
   turnAs.value = 'corner'; turnAs.onchange();
   assert.equal(P.field('turn °').value, '', 'switching puts the field back to what it shows, so the 12 typed as a rate is not applied as a corner');
   P.type('turn °', 45); const n = P.shell.getState().history.present.pieces.length;
-  for (const b of ['Level', 'To floor', 'Jump']) {
+  for (const b of ['Jump']) {
     button(b).onclick();
     assert.equal(P.shell.getState().history.present.pieces.length, n, `${b} placed nothing`);
     assert.match(P.shell.getState().message || '', new RegExp(`${b} takes the turn and the climb as rates`), `${b} says why`);

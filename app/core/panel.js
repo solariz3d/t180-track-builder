@@ -346,8 +346,8 @@ function mount(root, shell, mountOpts = {}) {
   // the slope the road has. These extend with the fields' piece and let the core solve its climb (src/core/level.js): Level ends it straight and level, To floor
   // also at height 0; a piece too short for that is refused by name with the length that works (the message line says it)
   const levelHere = (fn) => { const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell[fn](opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
-  const levelBtn = el('button', { text: 'Level', title: 'a piece of the length above that ends straight and LEVEL (pitch 0): its climb is solved for you', onclick: () => levelHere('extendLevel') });
-  const floorBtn = el('button', { text: 'To floor', title: 'a piece of the length above that ends straight, level and ON THE FLOOR (height 0): too short a piece is refused with the length that works', onclick: () => levelHere('extendToFloor') });
+  const levelBtn = el('button', { text: 'Level', title: 'a piece of the length above that ends straight and LEVEL (pitch 0): its climb is solved for you, and a turn typed as a corner is placed exactly', onclick: () => levelHere('extendLevel') });
+  const floorBtn = el('button', { text: 'To floor', title: 'a piece of the length above that ends straight, level and ON THE FLOOR (height 0), a turn typed as a corner placed exactly: too short a piece is refused with the length that works', onclick: () => levelHere('extendToFloor') });
   // D280, TURN BY (the user: "90 degree turns not coming out straight"): the turn field is a RATE, and a piece eased to a rate ENDS at it, so the next piece
   // starts still turning. This extends with the fields' piece and lets the core solve its turn (src/core/turnby.js): exactly the angle typed beside it, ending
   // with turn rate 0; too short a piece is refused by name with the length that works
