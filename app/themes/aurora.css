@@ -56,6 +56,9 @@
 /* fields */
 [data-theme="aurora"] input[type="number"], [data-theme="aurora"] input[type="text"], [data-theme="aurora"] input:not([type]), [data-theme="aurora"] textarea,
 [data-theme="aurora"] .save-piece input, [data-theme="aurora"] .picker select, [data-theme="aurora"] select { background: rgba(6, 8, 26, .85); color: var(--text); border-color: rgba(150, 200, 255, .24); border-radius: 8px; }
+[data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button { background-color: var(--dim); }   /* D513: the spin chevrons in this skin's colours (their shape is in index.html) */
+[data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
+[data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #c9a8ff; }
 [data-theme="aurora"] input:focus, [data-theme="aurora"] select:focus, [data-theme="aurora"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(111, 245, 192, .16), 0 0 12px var(--green-glow); }
 [data-theme="aurora"] option { background: #080a1a; color: var(--text); }
 [data-theme="aurora"] option:checked { background: rgba(160, 120, 255, .35); color: #fff; }
