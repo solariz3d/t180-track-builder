@@ -73,6 +73,9 @@
   background: linear-gradient(180deg, #011d26 0%, #02303c 100%); border-color: rgba(120, 230, 245, .55); border-radius: 10px; color: var(--text);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, .45), 0 1px 0 rgba(160, 245, 255, .18);
 }
+[data-theme="aqua"] input[type="number"]::-webkit-inner-spin-button { background-color: rgba(166, 236, 247, .85); }   /* D513: the spin chevrons in this skin's colours (their shape is in index.html) */
+[data-theme="aqua"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
+[data-theme="aqua"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #ffffff; }
 [data-theme="aqua"] input:focus, [data-theme="aqua"] select:focus, [data-theme="aqua"] textarea:focus { border-color: var(--accent); box-shadow: inset 0 2px 4px rgba(0, 0, 0, .45), 0 0 10px rgba(63, 224, 245, .7); }
 [data-theme="aqua"] option { background: #022a35; color: var(--text); }
 [data-theme="aqua"] input[type="checkbox"], [data-theme="aqua"] input[type="radio"], [data-theme="aqua"] input[type="range"] { accent-color: #3fe0f5; }
