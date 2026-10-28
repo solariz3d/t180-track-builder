@@ -7,7 +7,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
--**Number fields have arrows in each look's colours.** The up and down arrows on every number field were the plain white Windows box in every look; they are now two small chevrons drawn in the look's own colours, brighter under the pointer, and clicking or holding them still steps the value. The fields keep their size.
+- **Number fields have arrows in each look's colours.** The up and down arrows on every number field were the plain white Windows box in every look; they are now two small chevrons drawn in the look's own colours, brighter under the pointer, and clicking or holding them still steps the value. The fields keep their size.
 
 ## [0.4.27] - 2026-10-28
 
