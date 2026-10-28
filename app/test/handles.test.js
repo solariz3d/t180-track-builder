@@ -622,7 +622,8 @@ test('row 18c (D519): a press within 12 px of a dot is left to the zone grab (no
   S.tick();
   const d = ov.dots().find((h) => h.u === 0); assert.ok(d, 'the dots are drawn'); assert.ok(ov.handles().every((h) => !h.dot), 'and listed apart from the handles');
   const ev = S.fire('pointerdown', { clientX: d.screen.x + 11, clientY: d.screen.y }); assert.equal(ev.stopped, false, 'the overlay does not take a press on a dot'); assert.deepEqual(calls, []);
-  assert.deepEqual(ov.dotAt(d.screen.x + 11, d.screen.y), { s: d.s, u: 0, side: 1, axes: d.axes }, 'within 12 px: the dot, its station and its share across');
+  // AMENDED D520: dotAt also names the dot's world point, `at` (the grab plane passes through it: the follow needs it where the pick would have given it)
+  assert.deepEqual(ov.dotAt(d.screen.x + 11, d.screen.y), { s: d.s, u: 0, side: 1, axes: d.axes, at: d.pos }, 'within 12 px: the dot, its station, its share across and its world point');
   assert.equal(ov.dotAt(d.screen.x + 13, d.screen.y), null, 'farther: no dot');
   assert.equal(HD.hitTest(ov.dots(), d.screen.x, d.screen.y), null, 'a dot is never a handle\'s hit');
   ov.unmount();

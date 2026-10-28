@@ -1100,28 +1100,47 @@ test('row D464: Sculpt\'s how-to line and value line read as instructions, not e
   P1.panel.unmount();
 });
 
-// D519 Part 2 (O's design, p-d519-design-O_2026-10-28.md §1, §3): THE ZONE GRAB in the panel. The pick's u names the zone, the first move past the click picks its axis, and the
-// value is read along that axis on screen. The pieces of this track are bowl roads with no cup, edge or tube, so the cup zone and the rim lift bank. A press on a dot (the
-// handles overlay's dotAt) opens the grab at the dot's station.
-test('row 25 (D519): Grab reads the zone under the press: the centre lifts or slides, the rim widens or banks by side, a dot opens at its own station, off the road is Grab as before', async () => {
-  const P = await mountPanel(store(), { shellOpts: { brushFn: undefined } }), { shell } = P, opened = [], begin = shell.beginBrush;   // brushFn undefined: the local brush (height and sideways), as the app has it
-  shell.beginBrush = (o) => { opened.push(o); return begin(o); };
+// D519 Part 2 (O's design, p-d519-design-O_2026-10-28.md §1, §3): THE ZONE GRAB in the panel. AMENDED D520 (plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md; the user, 15:12:
+// "the mouse click gives a singular point you then drag to sculpt the track simple as that"): the rule this row pinned, the first move past the click picking ONE channel read along
+// one screen axis, is gone (the plan: "axisOf ... is no longer used by Grab"), so the row pins its replacement. A press on the road opens the follow (shell.beginFollow) at the press's
+// station; the drag is a SET of channels; and, built again from the document the drag made, the pressed point is under the pointer on the grab plane (the plan's falsifier) and a
+// rim press keeps the far rim. A press on a dot opens at the dot's station; off the road, or with no u, the press is Grab's one channel as before; never a re-route. The view is a
+// real one (app/camera/math.js) over the shell's own road, the preview's ray (preview.js rayAt) answering 't180-grab-ray'.
+test('row 25 (D519, amended D520): Grab on the road: the pressed point follows the pointer and a rim keeps the far rim (built again and read), a dot opens at its own station, off the road is Grab as before', async () => {
+  const PV = require('../preview/preview.js'), ZG = require('../core/zonegrab.js'), M = require('../camera/math.js');
+  const P = await mountPanel(store(), { shellOpts: { brushFn: undefined } }), { shell, doc } = P, opened = [], follows = [], begin = shell.beginBrush, beginF = shell.beginFollow;   // brushFn undefined: the core's brush, as the app has it
+  shell.beginBrush = (o) => { opened.push(o); return begin(o); }; shell.beginFollow = (o) => { follows.push(o); return beginF(o); };
   shell.setSculpt(true); P.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').value = 'grab';
-  const drag = (hit, dx, dy, extra = {}) => {
-    P.T.s = hit.s; P.T.extra = hit.extra; P.pointer('pointerdown', 50, 50, extra); P.pointer('pointermove', 50 + dx, 50 + dy, extra); P.frame();
-    const b = shell.getState().brush, d = b ? b.delta : null; P.pointer('pointerup', 50 + dx, 50 + dy, extra);
-    const o = opened[opened.length - 1]; if (shell.getState().history.past.length) shell.undo(); return { o, d };
+  const built = () => AD.toPath(shell.getState().history.present);
+  doc.addEventListener('t180:track-request', (ev) => { const t = built(); ev.detail.reply({ segments: t.segments, path: t.path }); });   // after the panel's own (empty) one: the last reply wins
+  const m0 = built().path.samples.find((x) => x.s === 100), pose = { eye: [m0.pos[0] - m0.T[0] * 60, m0.pos[1] + 50, m0.pos[2] - m0.T[2] * 60], target: m0.pos.slice(), up: [0, 1, 0], fov: Math.PI / 3 };
+  const VP = M.viewProj(pose, 900 / 600), scr = (p) => { const c = M.apply(VP, p); return [(c[0] / c[3] * 0.5 + 0.5) * 900, (1 - (c[1] / c[3] * 0.5 + 0.5)) * 600]; };
+  doc.addEventListener('t180-grab-ray', (ev) => ev.detail.reply((x, y) => PV.rayAt(pose, x, y, 900, 600)));
+  const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const press = (u, dx, dy, { s = 100, extra } = {}) => {
+    const t = built(), m = t.path.samples.find((x) => x.s === s), A = ZG.acrossAt(t.path, t.segments, m, u), [x, y] = scr(A.pos), before = shell.getState().history.present;
+    P.T.s = s; P.T.extra = extra !== undefined ? extra : { u, side: u < 0 ? -1 : 1, axes: { U: [0, 0], L: [0, 0] }, at: A.pos };
+    P.pointer('pointerdown', x, y); P.pointer('pointermove', x + dx, y + dy); P.frame();
+    const b = shell.getState().brush, d = b ? b.delta : null, after = shell.getState().history.present; P.pointer('pointerup', x + dx, y + dy);
+    const r0 = PV.rayAt(pose, x, y, 900, 600), r1 = PV.rayAt(pose, x + dx, y + dy, 900, 600), D3 = ZG.planePoint(r1, A.pos, r0.forward).map((v, k) => v - A.pos[k]);
+    const want = A.pos.map((v, k) => v + D3[k] - dot(D3, m.T) * m.T[k]), t2 = AD.toPath(after), m2 = t2.path.samples.find((q) => q.s === s), fu = u < 0 ? 1 : -1;
+    const out = { d, moved: Math.hypot(...D3), miss: gap(ZG.acrossAt(t2.path, t2.segments, m2, u).pos, want), far: gap(ZG.acrossAt(t2.path, t2.segments, m2, fu).pos, ZG.acrossAt(t.path, t.segments, m, fu).pos) };
+    if (shell.getState().history.present !== before) shell.undo();
+    return out;
   };
-  const axes = { U: [0, -20], L: [20, 0] }, centre = { s: 100, extra: { u: 0.05, side: 1, axes } }, right = { s: 100, extra: { u: -0.95, side: -1, axes: { U: [0, -20], L: [-20, 0] } } };
-  let r = drag(centre, 0, -30); assert.deepEqual([r.o.tool, r.o.channel, r.o.s0], ['grab-up', 'height', 100], 'the centre, a lift: height'); assert.ok(Math.abs(r.d - 30 * 0.03) < 1e-9, `30 px up the U axis is 0.9 m (${r.d})`);
-  r = drag(centre, 30, 0); assert.deepEqual([r.o.tool, r.o.channel], ['grab-side', 'lateral'], 'the centre, out and in: sideways'); assert.ok(Math.abs(r.d - 0.9) < 1e-9, `30 px along the left axis is 0.9 m left (${r.d})`);
-  r = drag(right, -30, 0); assert.deepEqual([r.o.tool, r.o.channel], ['width', 'w'], 'the right rim, outward: width'); assert.ok(Math.abs(r.d - 30 * 0.05) < 1e-9, `outward is wider (${r.d})`);
-  r = drag(right, 0, -30); assert.deepEqual([r.o.tool, r.o.channel], ['twist', 'phi'], 'the right rim of a plain road, a lift: bank'); assert.ok(Math.abs(r.d + 30 * 0.002) < 1e-9, `lifting the right side banks it right-up, a negative bank (${r.d})`);
-  r = drag(right, 0, -30, { altKey: true }); assert.equal(r.o.channel, 'phi', 'Alt off the centre: bank'); assert.ok(r.d < 0, 'the side still sets its sign');
-  P.panel.handles.dotAt = (x, y) => (x === 50 && y === 50 ? { s: 400, u: 0, side: 1, axes } : null);   // a dot under the press: the grab opens at the dot, not at the station the pick finds
-  r = drag(centre, 0, -30); assert.equal(r.o.s0, 400, 'a press on a dot opens the brush at that dot'); delete P.panel.handles.dotAt;
-  r = drag({ s: 100, extra: { u: 1.3, side: 1, axes } }, 30, 0); assert.deepEqual([r.o.tool, r.o.channel], ['grab-up', 'height'], 'off the road (u past 1.25): Grab as before, a lift whatever the motion');
-  r = drag({ s: 100, extra: null }, 0, -30); assert.deepEqual([r.o.tool, r.o.channel], ['grab-up', 'height'], 'a pick with no u: Grab as before');
+  let r = press(0.05, 0, -40);
+  assert.deepEqual(follows.map((o) => o.s0), [100], 'the centre opens the follow at the press'); assert.deepEqual(Object.keys(r.d).sort(), ['h', 'l'], `the centre slides and lifts: ${JSON.stringify(r.d)}`);
+  assert.ok(r.moved > 1, `the pointer moved ${r.moved} m on the plane`); assert.ok(r.miss < 0.01, `the pressed point is ${r.miss} m from the pointer`);
+  r = press(-0.95, -30, -25);
+  assert.deepEqual(Object.keys(r.d).sort(), ['h', 'l', 'phi', 'w'], `the rim turns and stretches the road: ${JSON.stringify(r.d)}`);
+  assert.ok(r.miss < 0.01, `the rim point is ${r.miss} m from the pointer`); assert.ok(r.far < 0.01, `the far rim moved ${r.far} m`);
+  const at400 = (() => { const t = built(), m = t.path.samples.find((x) => x.s === 400); return ZG.acrossAt(t.path, t.segments, m, 0).pos; })();
+  P.panel.handles.dotAt = () => ({ s: 400, u: 0, side: 1, axes: { U: [0, 0], L: [0, 0] }, at: at400 });   // a dot under the press: the grab opens at the dot, not at the station the pick finds
+  press(0.05, 0, -30); assert.equal(follows[follows.length - 1].s0, 400, 'a press on a dot opens the follow at that dot'); delete P.panel.handles.dotAt;
+  const n = follows.length;
+  press(0.05, 30, 0, { extra: { u: 1.3, side: 1, axes: { U: [0, 0], L: [0, 0] }, at: m0.pos } }); assert.deepEqual([opened[opened.length - 1].tool, opened[opened.length - 1].channel], ['grab-up', 'height'], 'off the road (u past 1.25): Grab as before');
+  press(0.05, 0, -30, { extra: null }); assert.deepEqual([opened[opened.length - 1].tool, opened[opened.length - 1].channel], ['grab-up', 'height'], 'a pick with no u: Grab as before');
+  assert.equal(follows.length, n, 'neither opened the follow');
   for (const o of opened) assert.ok(!['kh', 'kv', 'length'].includes(o.channel) && !['bend', 'climb', 'stretch'].includes(o.tool), `never a re-route: ${o.tool}`);
 });
 

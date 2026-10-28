@@ -179,7 +179,8 @@ const MODES = Object.freeze({
  * Returns what `sculpt` returns, plus `mode`, and for a rate brush on a CLOSED track `close`: the re-close's report. The lap is
  * re-closed with the brushed stretch protected (close's `edited`), and a re-close that fails leaves the track OPEN and says so.
  */
-function brush(doc, { mode = 'hill', channel, s0, r, delta, sharp = false } = {}) {
+function brush(doc, { mode = 'hill', channel, channels, s0, r, delta, sharp = false } = {}) {
+  if (channels !== undefined) return brushSet(doc, { mode, channels, s0, r, sharp });   // D520: a SET of value channels in one step (below)
   const M = MODES[mode];
   // SHARP (opt-in): refine the knots under the brush first (A's refineKnots, Boehm), so it acts at the asked radius instead of
   // widening. Its cost, measured (the D186 hand-back §3): the new control points are re-quantised in EVERY channel, so values up to
@@ -217,6 +218,32 @@ function brush(doc, { mode = 'hill', channel, s0, r, delta, sharp = false } = {}
   const { close } = require('./close.js');
   const c = close({ ...res.doc, closed: false }, { edited: res.changed.map((x) => x.piece) });
   return { ...res, mode, doc: c.doc, close: { converged: c.converged, iterations: c.iterations, gapM: c.gapM, report: c.report } };
+}
+
+/**
+ * D520, A SET OF CHANNELS IN ONE STEP (Sculpt's grabbed point follows the mouse: the press's point stays under the pointer, so one drag moves height, lateral, width
+ * and bank together; exo_memory/loop/plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md item 3). `channels` = { ch: delta, ... }, value channels only, mode 'value'.
+ * Each channel is brushed exactly as a single 'value' brush is, one after another on the document the one before made, in the document's channel order: the
+ * channels are separate control-point arrays, so the order changes nothing (test/core_sculpt_set.test.js). A channel whose delta is 0 is left alone; sharp
+ * refines the knots once, with the first channel. Returns what brush returns, `changed` carrying each entry's `channel`, and the widest radius used.
+ */
+function brushSet(doc, { mode, channels, s0, r, sharp }) {
+  if (mode !== 'value') throw new D.CoreError('BAD_MODE', `brush: a set of channels is a value brush (mode "value"), got mode "${mode}"`);
+  if (!channels || typeof channels !== 'object' || Array.isArray(channels) || !Object.keys(channels).length) throw new D.CoreError('BAD_BRUSH', `brush: a set of channels is { channel: delta, ... }, got ${JSON.stringify(channels)}`);
+  for (const [ch, v] of Object.entries(channels)) {
+    if (!MODES.value.channels.includes(ch)) throw new D.CoreError('BAD_CHANNEL', `brush: a set takes the value channels ${MODES.value.channels.join(', ')} (${MODES.value.what}), got ${ch}`);
+    if (typeof v !== 'number' || !Number.isFinite(v)) throw new D.CoreError('BAD_BRUSH', `brush: the set's ${ch} must be a finite number, got ${v}`);
+  }
+  let out = doc, first = true, used = null; const changed = [], notes = [];
+  for (const ch of D.CHANNELS) {
+    if (!Object.prototype.hasOwnProperty.call(channels, ch) || channels[ch] === 0) continue;
+    const res = brush(out, { mode: 'value', channel: ch, s0, r, delta: channels[ch], sharp: sharp && first });
+    first = false; out = res.doc;
+    for (const c of res.changed) changed.push({ ...c, channel: ch });
+    if (Number.isFinite(res.radiusUsed)) used = used === null ? res.radiusUsed : Math.max(used, res.radiusUsed);
+    if (res.note && !notes.includes(res.note)) notes.push(res.note);
+  }
+  return { doc: out, changed, radiusUsed: used === null ? r : used, note: notes.length ? notes.join(' · ') : null, mode: 'value', ...(sharp && !first ? { sharp: SHARP_BOUND } : {}) };
 }
 
 // ── D421, THE SCULPT MODE's two new tools (P's design, exo_memory/loop/design_d421_sculpt_P_2026-10-20.md §3.2 and §3.7) ─────────────────────────────────────

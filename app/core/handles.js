@@ -526,7 +526,7 @@ function mount(stage, win, host) {
   return {
     handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), hovered: () => hover, dragging: () => !!drag,   // D519 Part 2: the dots are listed apart from the handles
     /** D519 Part 2: the dot under (x, y), css px of the stage, or null: { s, u, side, axes } for the zone grab to open at. */
-    dotAt: (x, y) => { const h = dotHit(drawn, x, y); return h ? { s: h.s, u: h.u, side: h.side, axes: h.axes } : null; },
+    dotAt: (x, y) => { const h = dotHit(drawn, x, y); return h ? { s: h.s, u: h.u, side: h.side, axes: h.axes, at: h.pos ? h.pos.slice() : null } : null; },   // D520: `at`, the dot's world point, where the grab plane passes
     unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('wheel', onWheel, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) doc.removeEventListener('keydown', onKeyDown); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
   };
 }

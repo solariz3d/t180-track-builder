@@ -105,7 +105,7 @@ test('row 12: glyphOf: the glyph a zone shows, and the mark at the hit\'s u (a p
 
 // row 13: pickAcross on a real path: a 200 m straight seen from 60 m straight above its station at 100 m
 const D = require('../../src/core/document.js'), { toPath } = require('../../src/core/adapter.js'), M = require('../camera/math.js');
-const { pickAt, pickAcross } = require('../preview/preview.js');
+const { pickAt, pickAcross, rayAt } = require('../preview/preview.js');
 const W = 800, H = 600;
 function view(piece) {
   const { path, segments } = toPath(D.appendPiece(D.createDoc('p'), D.roadPiece(piece))), m = path.samples.find((x) => x.s === 100);
@@ -135,4 +135,111 @@ test('row 13c: a cup section: u is the share along its arc, so a point halfway u
   const A = ZG.acrossAt(V.path, V.segments, V.m, 0.5); assert.ok(A.pos[1] > V.m.pos[1] + 0.1, 'the cup rises toward the rim');
   const [x, y] = V.scr(A.pos), hit = pickAcross(V.path, V.segments, V.pose, x, y, W, H);
   assert.ok(Math.abs(hit.u - 0.5) <= 0.05, `u ${hit.u}`);
+});
+// ── D520: THE GRABBED POINT FOLLOWS THE MOUSE (plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md). Each row presses a REAL road (a 200 m piece through the core and
+// its adapter), drags through the core shell as the panel does (beginFollow, brushTo with follow's set, endBrush), builds the road again and reads where the pressed
+// point and the far rim went. The falsifier the plan registers: the pressed point drifting from the pointer.
+const { createCoreShell } = require('../core/coreshell.js');
+const S0 = 100, RAD = 60, DEGR = Math.PI / 180;
+const road = (phiDeg, o = {}) => D.appendPiece(D.createDoc('p'), D.roadPiece({ length: 200, family: o.family || 'flat', ...(o.cup !== undefined ? { cup: true } : {}),
+  channels: { kh: () => o.kh || 0, kv: () => o.kv || 0, phi: () => phiDeg * DEGR, w: () => 32, r: () => 0, ...(o.cup !== undefined ? { c: () => o.cup } : {}) } }));
+const surface = (doc, u, s = S0) => { const { path, segments } = toPath(doc), m = path.samples.find((x) => Math.abs(x.s - s) < 1e-9); return ZG.acrossAt(path, segments, m, u).pos; };
+const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const dotv = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+async function grabbed(doc, u, delta) {
+  const sh = await createCoreShell({ autosaveMs: 0 }); sh.adopt(doc); sh.setSculpt(true);
+  const { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, u), info = sh.zoneInfo(S0, u), d = ZG.follow(delta, F, info);
+  sh.beginFollow({ s0: S0, r: RAD }); assert.ok(sh.getState().brush, sh.getState().message || 'the grab opened'); sh.brushTo(d); const out = sh.getState().history.present; sh.endBrush();
+  const want = surface(doc, u).map((x, k) => x + delta[k] - dotv(delta, F.T) * F.T[k]);
+  return { d, F, out, sh, miss: gap(surface(out, u), want), far: gap(surface(out, u < 0 ? 1 : -1), surface(doc, u < 0 ? 1 : -1)) };
+}
+const MM = 5e-4;   // half a millimetre: the doubles stored to 0.1 mm (DEC.h, l, w) and the bank's smoothstep between the path's samples (measured 0.004 to 0.05 mm, D520 probe.js)
+
+test('row 14a (D520): the pointer\'s ray passes through the world point drawn under it, and the grab plane meets it there: a pointer that has not moved lands on the hit', () => {
+  const pose = { eye: [10, 40, -30], target: [0, 0, 50], up: [0, 1, 0], fov: Math.PI / 3 }, VP = M.viewProj(pose, W / H);
+  for (const p of [[0, 0, 50], [12, 3, 70], [-20, -4, 40]]) {
+    const c = M.apply(VP, p), x = (c[0] / c[3] * 0.5 + 0.5) * W, y = (1 - (c[1] / c[3] * 0.5 + 0.5)) * H, r = rayAt(pose, x, y, W, H);
+    const t = dotv(p.map((v, k) => v - r.origin[k]), r.dir), off = gap(p, r.origin.map((v, k) => v + r.dir[k] * t));
+    assert.ok(off < 1e-9, `the ray misses ${p} by ${off}`); assert.ok(gap(ZG.planePoint(r, p, r.forward), p) < 1e-9, 'the plane through p, under the same pointer, is p');
+  }
+  assert.equal(rayAt(pose, 1, 1, 0, H), null); assert.equal(ZG.planePoint({ origin: [0, 0, 0], dir: [1, 0, 0] }, [0, 0, 5], [0, 0, 1]), null, 'a ray along the plane meets it nowhere');
+});
+
+test('row 14b (D520, plan item 2, "anywhere between the rims, sideways"): a sideways drag slides the road under the point, l only, and the point follows', async () => {
+  for (const u of [0.05, 0.5]) {
+    const doc = road(0), { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, u), r = await grabbed(doc, u, F.R.map((x) => x * 2.5));
+    assert.ok(Math.abs(r.d.l - 2.5) < 1e-9 && Math.abs(r.d.h) < 1e-9 && r.d.w === undefined && r.d.phi === undefined, JSON.stringify(r.d));
+    assert.ok(r.miss < MM, `u ${u}: the point misses the pointer by ${r.miss} m`);
+  }
+});
+
+test('row 14c (D520, plan item 2, "centre, up"): an upward drag at the centre lifts the height by the drag, and the point follows', async () => {
+  const r = await grabbed(road(0), 0.05, [0, 2, 0]);
+  assert.ok(Math.abs(r.d.h - 2) < 1e-9 && Math.abs(r.d.l) < 1e-9, JSON.stringify(r.d)); assert.ok(r.miss < MM, `misses by ${r.miss}`);
+});
+
+test('row 14d (D520, plan item 2, "cup zone"): partway out on a cup piece an upward drag turns the cup so the point rises to the pointer; a piece with no cup lifts the height', async () => {
+  const cup = await grabbed(road(0, { cup: 30, family: 'bowl' }), 0.6, [0, 1.5, 0]);
+  assert.ok(Number.isFinite(cup.d.c) && cup.d.c > 0, `the cup turns up: ${JSON.stringify(cup.d)}`); assert.ok(cup.miss < MM, `the cup point misses by ${cup.miss} m`);
+  const flat = await grabbed(road(0), 0.6, [0, 1.5, 0]);
+  assert.equal(flat.d.c, undefined); assert.ok(Math.abs(flat.d.h - 1.5) < 1e-9, JSON.stringify(flat.d)); assert.ok(flat.miss < MM, `misses by ${flat.miss}`);
+});
+
+test('row 14e (D520, plan item 2, "a rim, sideways"): on a flat road the touched edge moves and the far edge stays: w += side·e, l += e/2, as the plan checks it', async () => {
+  for (const side of [1, -1]) {
+    const u = 0.95 * side, doc = road(0), { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, u), e = 3 * side, r = await grabbed(doc, u, F.R.map((x) => x * e));
+    const reach = (1 + 0.95) / 2;   // the press at 0.95 is this share of the width from the far rim, so the width grows by e / reach and the centre by half of that
+    assert.ok(Math.abs(r.d.w - (side * e) / reach) < 1e-6 && Math.abs(r.d.l - e / (2 * reach)) < 1e-6 && Math.abs(r.d.phi) < 1e-9, JSON.stringify(r.d));
+    assert.ok(r.far < MM, `side ${side}: the far rim moves ${r.far} m`); assert.ok(r.miss < MM, `side ${side}: the point misses by ${r.miss} m`);
+  }
+});
+
+test('row 14f (D520, plan item 2, "a rim, up"): on a flat road the touched side rises, the far rim stays: a bank and half the lift', async () => {
+  for (const side of [1, -1]) {
+    const r = await grabbed(road(0), side, [0, 2, 0]);
+    assert.ok(Math.sign(r.d.phi) === side && Math.abs(Math.abs(Math.tan(r.d.phi)) - 2 / 32) < 1e-9 && Math.abs(r.d.h - 1) < 1e-6, JSON.stringify(r.d));
+    assert.ok(r.far < MM, `the far rim moves ${r.far} m`); assert.ok(r.miss < MM, `the point misses by ${r.miss} m`);
+  }
+});
+
+test('row 14g (D520, plan item 2, "the forward component is dropped"): a drag along the road changes nothing anywhere across it', () => {
+  const doc = road(-60, { kh: 0.004 }), { path, segments } = toPath(doc);
+  for (const u of [0, 0.5, -0.95, 1]) { const F = ZG.frameAt(path, segments, S0, u), d = ZG.follow(F.T.map((x) => x * 4), F, {}); for (const k of Object.keys(d)) assert.ok(Math.abs(d[k]) < 1e-9, `u ${u}: ${k} ${d[k]}`); }
+});
+
+test('row 14h (D520, O\'s catch, D519 §6): on a road banked 60° and 85°, either way, a rim dragged any way keeps the FAR rim where it was, and the point follows', async () => {
+  let worstFar = 0, worstMiss = 0;
+  for (const phi of [60, -60, 85, -85]) for (const u of [1, -1, 0.95, -0.95]) for (const delta of [[0, 2, 0], [2, 0, 0], [1.5, -1, 0.7], [0, -3, 0]]) {
+    const r = await grabbed(road(phi), u, delta); worstFar = Math.max(worstFar, r.far); worstMiss = Math.max(worstMiss, r.miss);
+  }
+  assert.ok(worstFar < MM, `the far rim moves up to ${worstFar} m`); assert.ok(worstMiss < MM, `the point misses by up to ${worstMiss} m`);
+});
+
+test('row 14i (D520, the control for 14h): the plan\'s flat-road rim rule (w += e, l += e/2 along world-horizontal left) moves the far rim of an 85° road by more than a metre', async () => {
+  const doc = road(-85), { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, 1), sh = await createCoreShell({ autosaveMs: 0 });
+  sh.adopt(doc); sh.setSculpt(true); sh.beginFollow({ s0: S0, r: RAD }); sh.brushTo({ w: 2, l: 1 }); const naive = sh.getState().history.present; sh.endBrush();
+  const far = gap(surface(naive, -1), surface(doc, -1)), solved = await grabbed(doc, 1, F.R.map((x) => x * 2));
+  assert.ok(far > 1, `the plan's rule moves the far rim ${far} m`); assert.ok(solved.far < MM, `the follow keeps it within ${solved.far} m`);
+});
+
+test('row 14j (D520): on a road pitched up to 23°, where a lift along world up also slides the section along the road, the road stays under the pointer to 1 cm', async () => {
+  const toLine = (doc, u, p) => {
+    const { path, segments } = toPath(doc), pts = path.samples.filter((m) => Math.abs(m.s - S0) <= 10).map((m) => ZG.acrossAt(path, segments, m, u).pos); let best = Infinity;
+    for (let i = 0; i + 1 < pts.length; i++) { const a = pts[i], v = pts[i + 1].map((x, k) => x - a[k]), t = Math.max(0, Math.min(1, dotv(p.map((x, k) => x - a[k]), v) / dotv(v, v))); best = Math.min(best, gap(p, a.map((x, k) => x + v[k] * t))); }
+    return best;
+  };
+  let worst = 0;
+  for (const o of [{ kv: 0.002 }, { kv: 0.004 }, { kh: 0.004, kv: -0.002 }]) for (const phi of [-85, 60]) for (const u of [1, -0.95, 0, 0.5]) {
+    const doc = road(phi, o), r = await grabbed(doc, u, [1.2, 1.5, -0.8]), want = surface(doc, u).map((x, k) => x + [1.2, 1.5, -0.8][k] - dotv([1.2, 1.5, -0.8], r.F.T) * r.F.T[k]);
+    worst = Math.max(worst, toLine(r.out, u, want));
+  }
+  assert.ok(worst < 0.01, `the pointer is ${worst} m off the road`);
+});
+
+test('row 14k (D520): follow\'s boundaries: no frame, a delta that is not three numbers, and a road pitched past ~87° give null; a rim pulled past the far rim keeps a tenth of the width and does not fold the road over', () => {
+  const doc = road(0), { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, 1);
+  assert.equal(ZG.follow([0, 1, 0], null), null); assert.equal(ZG.follow([0, NaN, 0], F), null); assert.equal(ZG.follow([0, 1], F), null);
+  assert.equal(ZG.follow([0, 1, 0], { ...F, U0: [0, 0.01, 1] }), null);
+  const d = ZG.follow(F.R.map((x) => x * -100), F, {}); assert.ok(Math.abs(d.w - 32 * (ZG.SQUEEZE_MIN - 1)) < 1e-6, `the width change ${d.w}`); assert.ok(Math.abs(d.phi) < 1e-9, `the bank change ${d.phi}`);
+  assert.equal(ZG.frameAt(path, segments, NaN, 0), null); assert.equal(ZG.frameAt({ samples: [] }, segments, S0, 0), null);
 });

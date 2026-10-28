@@ -391,6 +391,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // the brush, as E's hand-back gives its API: height -> hill, sideways -> swerve; a rate channel (kh, kv) -> rate, which re-closes a
   // closed lap itself; bank, width, rise -> value. Without E's brush, the rate brush is D185's sculpt().
   const brushed = (b, delta) => {
+    if (b.mode === 'follow') return followed(b, delta);
     if (b.mode === 'stretch') return stretched(b, delta);
     if (b.mode === 'smooth') return smoothed(b, delta);
     const at = { s0: b.s0, r: b.r, delta, ...(b.sharp ? { sharp: true } : {}) };   // sharp: E's opt-in (ruling 2), off by default
@@ -408,6 +409,27 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const which = b.span.from === b.span.to ? b.span.from : { from: b.span.from, to: b.span.to };
     const res = stretchFn(b.base, which, L + delta, { keepRate: !!b.keepRate });
     return { doc: res.doc, changed: (res.pieces || b.pieces).map((piece) => ({ piece })) };
+  };
+  // D520: THE GRAB THAT FOLLOWS (exo_memory/loop/plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md): the drag's delta is a SET { h, l, w, phi, c } from the panel's follow
+  // (app/core/zonegrab.js), and the core brushes it in one step (src/core/sculpt.js brush `channels`). The pressed point lands on the pointer only when each channel's VALUE at the
+  // press changes by what follow asked, so each is divided by the value one unit of brush gives there (D335's reading, at s0 itself; once per base, channel and radius).
+  const followRatios = new WeakMap();
+  const followRatio = (b, ch) => {
+    let m = followRatios.get(b.base); if (!m) followRatios.set(b.base, m = {});
+    const id = `${ch}@${b.s0}@${b.r}@${b.sharp}`; if (m[id] !== undefined) return m[id];
+    let k = 1;
+    try {
+      const c = centreOf(b.base, b.s0), unit = c && brushFn(b.base, { mode: 'value', channel: ch, s0: b.s0, r: b.r, delta: 1, sharp: !!b.sharp }).doc;
+      const got = unit ? D.channelAt(unit.pieces[c.piece], ch, c.u).v - D.channelAt(b.base.pieces[c.piece], ch, c.u).v : NaN;
+      if (Number.isFinite(got) && got > 0.2 && got <= 1.5) k = got;
+    } catch (e) { if (!(e instanceof D.CoreError)) throw e; }   // a channel the brush refuses here is refused by the step itself, in its own words
+    return (m[id] = k);
+  };
+  const followed = (b, delta) => {
+    if (!delta || typeof delta !== 'object') return { doc: b.base, changed: [] };
+    const channels = {}; for (const [ch, v] of Object.entries(delta)) if (v !== 0) channels[ch] = v / followRatio(b, ch);
+    if (!Object.keys(channels).length) return { doc: b.base, changed: [] };
+    return brushFn(b.base, { mode: 'value', channels, s0: b.s0, r: b.r, sharp: !!b.sharp });
   };
   // D421: SMOOTH, one channel's Laplacian relax under the window (design §3.7), the drag's delta its strength; the core returns a document or { doc, changed, note }
   const smoothed = (b, lambda) => { const res = smoothFn(b.base, coreChannel(b.channel), b.s0, b.r, lambda); return res && res.doc ? res : { doc: res, changed: [] }; };
@@ -700,10 +722,19 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     /** D519 Part 2: what the ROAD piece at track distance `s` is, for Sculpt's zone grab (app/core/zonegrab.js zoneAt's `piece`): { id, cup, edge, tube, family, s (an edge
      *  piece's edge start there, else null), walls (a half-pipe whose wall rise there is above 0) }, or null where there is no road piece. Read only. */
-    zoneInfo(s) {
+    zoneInfo(s, u) {
       const d = doc(), c = Number.isFinite(s) ? centreOf(d, s) : null; if (!c) return null;
       const P = d.pieces[c.piece];
-      return { id: P.id, cup: !!P.cup, edge: !!P.edge, tube: !!P.tube, family: P.family, s: P.edge ? D.channelAt(P, 's', c.u).v : null, walls: P.family === 'half-pipe' && D.channelAt(P, 'r', c.u).v > 0 };
+      // D520: on a cup piece, with the share `u` across, cupMove(dc): how far the point there moves in its section ([along the across, along the up], m) when the cup turns
+      // by dc degrees, null past the cup's limits (0 to CUP_MAX): what the follow solves the cup by to lift a point partway out (app/core/zonegrab.js follow). Read off the
+      // cup's own profile (src/core/adapter.js cupProfile) at the width there
+      const cupMove = P.cup && Number.isFinite(u) ? (() => {
+        const w = D.channelAt(P, 'w', c.u).v, c0 = D.channelAt(P, 'c', c.u).v, Pr = require('../../src/geom/profile.js'), at = (Math.max(-1, Math.min(1, u)) * w) / 2;
+        if (!(w > 0)) return null;
+        const o = (cc) => Pr.offsetAt(Pr.sealed(AD.cupProfile(P.family, w, cc)), at), a = o(c0);
+        return (dc) => { const cc = c0 + dc; if (!(cc >= 0 && cc <= D.CUP_MAX)) return null; const b2 = o(cc); return [b2[0] - a[0], b2[1] - a[1]]; };
+      })() : undefined;
+      return { id: P.id, cup: !!P.cup, edge: !!P.edge, tube: !!P.tube, family: P.family, s: P.edge ? D.channelAt(P, 's', c.u).v : null, walls: P.family === 'half-pipe' && D.channelAt(P, 'r', c.u).v > 0, ...(cupMove !== undefined ? { cupMove } : {}) };
     },
     /** D519 Part 2: why a brush on `channel` centred at s0 with radius r would be refused because a piece under it lacks that channel (src/core/sculpt.js checkReach's
      *  rule), in the hover's words, or null. The window is the radius as given (the brush may widen it; a press then says why in the message line). Read only. */
@@ -741,6 +772,20 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (st.sculpt && (mode !== 'rate' || !SCULPT_CHANNELS.includes(channel))) return set({ message: `SCULPT_CHANNEL: Sculpt offers only the shape channels (${SCULPT_CHANNELS.join(', ')}); ${mode === 'local' ? `the ${channel} brush` : `"${channel}"`} would move the track after it. Turn Sculpt off to use it` });
       const sculpting = st.sculpt ? { sculpt: true, baseHistory: st.history, baseResolved: st.resolved, sculptPiece: piece } : {};
       return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode, channel, s0, r, sharp: !!(sharp && brushFn), base: doc(), delta: 0, ...sculpting }, message: null }));
+    },
+    /**
+     * D520, THE GRAB THAT FOLLOWS (the user, 15:12: "the mouse click gives a singular point you then drag to sculpt the track simple as that"): a Sculpt drag whose delta is a SET of
+     * value channels { h, l, w, phi, c } (the panel's follow, app/core/zonegrab.js), brushed in one step on the press's window [s0 − r, s0 + r]; brushTo takes the set, endBrush is one
+     * undo step, Esc drops it. Moves only the road under the window, as Grab always did (no centreline guard: h and l are the offsets). Refused by name with Sculpt off, without the
+     * core's brush, with a drag open, or off the road.
+     */
+    beginFollow({ s0, r, sharp = false } = {}) {
+      if (!st.sculpt) return set({ message: 'SCULPT_OFF: turn Sculpt on first' });
+      if (!brushFn) return set({ message: 'NOT_YET: the grab needs the core\'s brush on a set of channels (D520)' });
+      if (st.brush) return set({ message: 'a brush drag is already open' });
+      if (!Number.isFinite(s0) || !(Number(r) > 0)) return set({ message: `the grab needs a place on the road and a radius above 0 m (got ${s0}, ${r})` });
+      const d = doc(); if (!centreOf(d, s0)) return set({ message: 'Grab: there is no road under the press' });
+      return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode: 'follow', family: 'local', s0, r: Number(r), sharp: !!sharp, base: d, delta: null, pieces: piecesIn(d, s0 - r, s0 + r) || [], baseHistory: st.history }, message: null }));
     },
     brushTo(delta0) {
       const b = st.brush; if (!b) return set({ message: 'no brush drag is open' });

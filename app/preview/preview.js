@@ -469,6 +469,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     },
     /** D186: the track station under a point of the canvas (css px from its top-left): { s, pos, px } or null. D519 Part 2: and where across the road, { u, at, axes, side } (pickAcross). */
     pick(x, y) { return shownPose && track && track.path ? pickAcross(track.path, track.segments, shownPose, x, y, canvas.clientWidth, canvas.clientHeight) : null; },
+    /** D520: the pointer's ray under the pose shown NOW, kept for the drag that asks (the grab plane faces the camera as it was at the press): (x, y) -> { origin, dir, forward }, or null. */
+    grabRay() { if (!shownPose) return null; const pose = shownPose, w = canvas.clientWidth, h = canvas.clientHeight; return (x, y) => rayAt(pose, x, y, w, h); },
     setMode(m) { const c = ctx(); if (m === 'free' && !c) return rig.mode; rig.setMode(m, c); said(); return rig.mode; },
     dispose() {
       win.cancelAnimationFrame(raf); clearFull(); exactJob = null; exactDue = null; unsub(); unskin(); if (layer) layer.dispose();
@@ -624,6 +626,21 @@ function pickAcross(path, segments, pose, x, y, w, h, maxPx = 40) {
   return { s: m.s, pos: m.pos.slice(), px: best.d, u, at, axes: { U: axis(A ? A.U : m.U), L: axis(A ? A.L : m.L) }, side: u < 0 ? -1 : 1 };
 }
 
+/**
+ * D520: THE POINTER'S RAY (the grab plane's other half, app/core/zonegrab.js planePoint): the canvas point (x, y), css px from the top-left of a `w` × `h` view under `pose`
+ * (app/camera/math.js lookAt and perspective, fovy), as a world ray { origin: the eye, dir: unit, toward the scene, forward: the camera's unit view direction }. Its point at
+ * any depth projects back onto (x, y) (app/test/zonegrab.test.js). Null for a view with no size or a pose with no direction.
+ */
+function rayAt(pose, x, y, w, h) {
+  if (!(w > 0 && h > 0) || !pose) return null;
+  const z = [0, 1, 2].map((k) => pose.eye[k] - pose.target[k]), zl = Math.hypot(...z); if (!(zl > 0)) return null;
+  const Z = z.map((v) => v / zl), up = pose.up, X0 = [up[1] * Z[2] - up[2] * Z[1], up[2] * Z[0] - up[0] * Z[2], up[0] * Z[1] - up[1] * Z[0]], xl = Math.hypot(...X0); if (!(xl > 0)) return null;
+  const X = X0.map((v) => v / xl), Y = [Z[1] * X[2] - Z[2] * X[1], Z[2] * X[0] - Z[0] * X[2], Z[0] * X[1] - Z[1] * X[0]];
+  const t = Math.tan(pose.fov / 2), nx = (2 * x) / w - 1, ny = 1 - (2 * y) / h, a = w / h;
+  const d = [0, 1, 2].map((k) => -Z[k] + X[k] * nx * t * a + Y[k] * ny * t), dl = Math.hypot(...d);
+  return { origin: pose.eye.slice(), dir: d.map((v) => v / dl), forward: Z.map((v) => -v) };
+}
+
 /** The road's span at the head (m): the last road segment's cross-section (profile.js spanOf), for the build view's framing. */
 // THE HEAD'S SECTION IS READ ONCE PER SEGMENT (2026-10-13, ELYSIUM's preview): widthAtHead and clearanceAtHead run on every frame, and a cup's
 // section at the head is a blend made afresh by readAt, so offsetAt summed it from scratch each time: about 0.6 s of every 4 s of frames.
@@ -691,4 +708,4 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, pickAcross, startHead, sculptCues, startMovedOf };
+module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, pickAcross, rayAt, startHead, sculptCues, startMovedOf };

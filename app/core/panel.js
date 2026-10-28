@@ -394,7 +394,7 @@ function mount(root, shell, mountOpts = {}) {
   const familyWords = (ch) => (ROUTE_CH.has(ch) ? 'moves the road after it' : LOCAL_CH.has(ch) ? 'the road after it stays where it is' : 'the road itself does not move');
   // one row a tool, in the order of the keys 1-9 (app/core/keys.js sculptKey); `axis`: the pointer's direction a drag reads (y: up is more; x: left is more)
   const TOOLS = Object.freeze([
-    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'press across the road: the middle lifts or slides it, partway out cups or banks it, the edge tilts it, the rim widens it; the road after it stays' }),   // D519 Part 2: the zone grab (no longer than the hint it replaced, so the strip keeps its height)
+    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'press the road and drag: the point you press stays under the mouse, the road around it follows within the radius; the road after it stays' }),   // D520: the grab that follows (no longer than the hint it replaced, so the strip keeps its height)
     Object.freeze({ key: 'stretch', label: 'Stretch', tool: 'stretch', channel: 'length', axis: 'y', hint: 'drag up to make the piece under the brush longer, down to shorten it, keeping its bend (Alt at the press: keeping its rate); moves the road after it' }),
     Object.freeze({ key: 'bend', label: 'Bend', tool: 'bend', channel: 'kh', axis: 'x', hint: 'drag left or right to turn the road harder or straighter here; moves the road after it' }),
     Object.freeze({ key: 'climb', label: 'Climb', tool: 'climb', channel: 'kv', axis: 'y', hint: 'drag up or down to tilt the road here; for a hill that stays put, use Grab; moves the road after it' }),
@@ -433,12 +433,10 @@ function mount(root, shell, mountOpts = {}) {
     if (x.key === 'smooth') { const ch = SMOOTH_CH.includes(smoothCh.value) ? smoothCh.value : 'phi'; return { ...x, channel: ch, hint: `drag up to smooth the ${CHANNEL_NAMES[ch]} under the brush (which: more ▾); ${familyWords(ch)}` }; }
     return x;
   };
-  // D519 Part 2 (O's design, exo_memory/handback/p-d519-design-O_2026-10-28.md §1, §4): THE ZONE GRAB. With Grab, where across the road a press lands names the channel
-  // (app/core/zonegrab.js zoneAt, from the pick's u and the piece's kind, shell.zoneInfo), and the first move past CLICK_PX picks between the zone's lift and its out-and-in
-  // (zonegrab.js axisOf); the value is then read along that axis on screen. Never a re-route: the zones name no kh, kv or length. The other keys keep their one channel.
+  // D519 Part 2 (O's design, exo_memory/handback/p-d519-design-O_2026-10-28.md §1, §4): THE ZONE. With Grab, where across the road a press lands is its zone (app/core/zonegrab.js
+  // zoneAt, from the pick's u and the piece's kind, shell.zoneInfo). D520 (plan_d520_sculpt_point_follows_the_mouse): the zone no longer picks a channel by the drag's first
+  // direction; the pressed point follows the pointer (followOf, below), and the zone says only how the road around it gives. The other keys keep their one channel.
   const toolOf = (key) => TOOLS.find((x) => x.key === key);
-  const ZONE_TOOL = Object.freeze({ height: toolOf('grab'), lateral: Object.freeze({ ...toolOf('grab'), ...toolOf('grab').side }), phi: toolOf('twist'), w: toolOf('width'), c: toolOf('cup'),
-    e: Object.freeze({ ...toolOf('edge'), tool: 'edge', channel: 'e' }), er: Object.freeze({ ...toolOf('edge'), tool: 'edge-right', channel: 'er' }), s: Object.freeze({ ...toolOf('edge'), tool: 'edge-start', channel: 's' }), r: MORE_TOOLS.wall, t: MORE_TOOLS.sweep });
   const zoneGrabOn = () => toolNow().key === 'grab';
   /** The zone under a pick `hit` ({ s, u, ... }) with Alt `alt`: zoneAt's answer with the piece's kind beside it (`info`), or null (not Grab, no u, off the road, no piece). */
   const zoneOf = (hit, alt) => {
@@ -446,13 +444,11 @@ function mount(root, shell, mountOpts = {}) {
     const info = shell.zoneInfo(hit.s), z = info ? ZG.zoneAt(hit.u, info, { alt: !!alt }) : null;
     return z ? { ...z, info } : null;
   };
-  /** Why the brush would refuse a zone's channels at s0 with the radius now (the first refused, lift first), or null. */
-  const zoneRefusalOf = (z, s0) => { if (!z || typeof shell.zoneRefusal !== 'function') return null; for (const ch of [z.U, z.L]) { const why = ch ? shell.zoneRefusal(ch, s0, radiusNow()) : null; if (why) return why; } return null; };
-  // the hover box's first line, per zone (design §4, in D425's words); the second is the family's line, or a refused channel's reason
-  const ZONE_LIFT = Object.freeze({ height: 'height · ↕ lift / sink', lateral: 'sideways · ↔ left / right', phi: 'bank · ↕ this side up / down', c: 'cup · ↕ edges up / flatter', t: 'tube sweep · ↕ close more / open more',
-    r: 'wall rise · ↕ higher / lower', e: 'left edge angle · ↕ more / less', er: 'right edge angle · ↕ more / less' });
-  const ZONE_OUT = Object.freeze({ lateral: '↔ sideways', s: '↔ edge start' });
-  const zoneWords = (z) => (z.zone === 'rim' && z.L === 'w' ? `width ↔ wider / narrower · ↕ ${CHANNEL_NAMES[z.U]}` : [ZONE_LIFT[z.U], z.L ? ZONE_OUT[z.L] : ''].filter(Boolean).join(' · '));
+  // the hover box's first line, per zone; the second is the family's line, or why the cup cannot turn here. D520: the grab follows the pointer (zonegrab.js follow), so a zone
+  // says what follows the point there, not which channel a direction picks
+  const zoneWords = (z) => (z.zone === 'rim' ? 'this edge follows the pointer · the far edge stays' : z.zone === 'cup' && z.info && z.info.cup ? 'the point follows the pointer · the cup turns to lift it'
+    : 'the road follows the pointer · any way');
+  const cupWhy = (z, s0) => (z && z.zone === 'cup' && z.info && z.info.cup && typeof shell.zoneRefusal === 'function' ? shell.zoneRefusal('c', s0, radiusNow()) : null);
   const stage = doc.getElementById('preview');
   values = stage ? VO.mount(stage, win) : null;
   const CLICK_PX = PU.CLICK_PX;   // app/core/piecesui.js's: more than this between press and release is a drag
@@ -482,9 +478,9 @@ function mount(root, shell, mountOpts = {}) {
   // D519 Part 2: with Grab the hover carries its zone (kept for the pick, Alt and the radius, so a still pointer asks the shell nothing again) and a refused channel's reason
   const hoverZone = () => {
     const k = `${hover.alt}|${radiusNow()}|${toolNow().key}`; if (hover.zk === k) return hover.zone;
-    const z = zoneOf(hover.hit, hover.alt); hover.zk = k; hover.zone = z ? { ...z, why: zoneRefusalOf(z, hover.s0) } : null; return hover.zone;
+    const z = zoneOf(hover.hit, false); hover.zk = k; hover.zone = z ? { ...z, why: cupWhy(z, hover.s0) } : null; return hover.zone;
   };
-  const sculptHover = () => { const st = shell.getState(); if (!hover || !st.sculpt || (drag && drag.open) || st.brush || hoverStation() === null) return null; const T = toolNow(), z = hoverZone(); return { s0: hover.s0, r: radiusNow(), tool: T.key, channel: T.channel, alt: hover.alt && !!T.side, ...(z ? { zone: z, u: hover.hit.u, altHeld: !!hover.alt } : {}) }; };
+  const sculptHover = () => { const st = shell.getState(); if (!hover || !st.sculpt || (drag && drag.open) || st.brush || hoverStation() === null) return null; const T = toolNow(), z = hoverZone(); return { s0: hover.s0, r: radiusNow(), tool: T.key, channel: T.channel, alt: hover.alt && !!T.side, ...(z ? { zone: z, u: hover.hit.u, altHeld: false } : {}) }; };
   const onSculptHover = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(sculptHover()); };
   doc.addEventListener('t180:sculpt-hover', onSculptHover);
   const leave = () => { hover = null; };
@@ -493,11 +489,11 @@ function mount(root, shell, mountOpts = {}) {
     if (!shell.getState().sculpt || e.button !== 0 || drag || shell.getState().brush) return;
     const [x, y] = rel(e);   // (a press on a handle never gets here: handles.js takes it in the capture phase and stops it)
     let hit = null; const dot = handles && typeof handles.dotAt === 'function' ? handles.dotAt(x, y) : null;   // D519 Part 2: a press on a dot is the zone grab opened at that dot
-    if (dot) hit = { s: dot.s, u: dot.u, side: dot.side, axes: dot.axes }; else send('t180-pick', { x, y, reply: (h) => { hit = h; } });
+    if (dot) hit = { s: dot.s, u: dot.u, side: dot.side, axes: dot.axes, at: dot.at }; else send('t180-pick', { x, y, reply: (h) => { hit = h; } });
     if (!hit) return;
-    const z = zoneOf(hit, e.altKey);   // D519 Part 2: Grab reads the zone; off the road (no zone) the press is the key's tool, as before
-    if (z) {
-      drag = { x, y, s0: hit.s, zone: z, axes: hit.axes || { U: [0, 0], L: [0, 0] }, side: hit.side || 1, alt: !!e.altKey, T: null, delta: 0, open: false }; e.preventDefault();
+    const f = followOf(hit, x, y);   // D520: Grab on the road: the pressed point follows the pointer; off the road, or with no view to follow in, the press is the key's tool, as before
+    if (f) {
+      drag = { x, y, s0: hit.s, follow: f, T: toolOf('grab'), delta: null, open: false }; e.preventDefault();
       if (stage.setPointerCapture && e.pointerId !== undefined) stage.setPointerCapture(e.pointerId);
       return;
     }
@@ -505,31 +501,36 @@ function mount(root, shell, mountOpts = {}) {
     drag = { x, y, s0: hit.s, T, keepRate: T.key === 'stretch' && !!e.altKey, axis: T.axis, per: PER_PX[T.key === 'smooth' ? 'smooth' : T.channel], smooth: T.key === 'smooth', delta: 0, open: false }; e.preventDefault();
     if (stage.setPointerCapture && e.pointerId !== undefined) stage.setPointerCapture(e.pointerId);
   };
-  /** The press became a drag: the brush opens on the document as it is now. False (and no drag) when the shell refuses it; its message says why. */
-  // D519 Part 2: the zone grab's axis, locked at the first move past the click: the channel, its tool, and how its value is read. A channel the brush would refuse here does
-  // nothing (the hover said why); it never falls through to another channel
-  const lockZone = (x, y) => {
-    const z = drag.zone, axis = drag.alt ? 'U' : ZG.axisOf([x - drag.x, y - drag.y], drag.axes, z), ch = z[axis], T = ZONE_TOOL[ch];
-    if (!T || (typeof shell.zoneRefusal === 'function' && shell.zoneRefusal(ch, drag.s0, radiusNow()))) { drag = null; brushedPress = true; return false; }
-    // bank: lifting the left part banks it left-up, so the right side's lift is a negative bank; sideways along the across axis: + is left (the axis points outward)
-    const sign = ch === 'phi' || (ch === 'lateral' && !drag.alt) ? drag.side : 1;
-    Object.assign(drag, { T, axis: T.axis, per: PER_PX[ch], smooth: false, keepRate: false, sign, vec: drag.alt ? null : drag.axes[axis] });
-    return true;
+  /**
+   * D520 (plan_d520_sculpt_point_follows_the_mouse item 1): THE GRAB PLANE. With Grab, a press on the road keeps what the drag needs: the pointer's ray under the camera as it
+   * is at the press (the preview's 't180-grab-ray'), the hit's world point and the plane through it facing the camera, the road's frame and section there (zonegrab.js
+   * frameAt) and the piece's kind (the cup's lift at the hit, unless the brush would refuse a cup there: then the point slides). Null when any is missing.
+   */
+  const followOf = (hit, x, y) => {
+    const z = zoneOf(hit, false); if (!z || !Array.isArray(hit.at)) return null;
+    const ray = askOf('t180-grab-ray'), tr = askOf('t180:track-request'); if (typeof ray !== 'function' || !tr || !tr.path || !Array.isArray(tr.segments)) return null;
+    const r0 = ray(x, y), frame = ZG.frameAt(tr.path, tr.segments, hit.s, hit.u), P0 = r0 && ZG.planePoint(r0, hit.at, r0.forward); if (!frame || !P0) return null;
+    const info = typeof shell.zoneInfo === 'function' ? shell.zoneInfo(hit.s, hit.u) : null, cupOK = !!(info && info.cup && !cupWhy({ ...z, info }, hit.s));
+    return { ray, at: hit.at.slice(), forward: r0.forward, P0, frame, piece: { ...(info || {}), cup: cupOK } };
   };
+  /** D520: the follow's channel changes for the pointer at (x, y): the pointer's point on the grab plane less the press's (so a press a few px off a dot does not jump), carried by zonegrab.js follow. */
+  const followAt = (x, y) => {
+    const f = drag.follow, r = f.ray(x, y), P = r && ZG.planePoint(r, f.at, f.forward); if (!P) return drag.delta;
+    return ZG.follow([0, 1, 2].map((k) => P[k] - f.P0[k]), f.frame, f.piece) || drag.delta;
+  };
+  /** The press became a drag: the brush opens on the document as it is now. False (and no drag) when the shell refuses it; its message says why. */
   const openBrush = (x, y) => {
-    if (drag.zone && !drag.T && !lockZone(x, y)) return false;
     const T = drag.T;
-    shell.beginBrush({ tool: T.tool, mode: LOCAL_CH.has(T.channel) ? 'local' : 'rate', channel: T.channel, s0: drag.s0, r: radiusNow(), sharp: sharp.checked, ...(drag.keepRate ? { keepRate: true } : {}) });
+    if (drag.follow) shell.beginFollow({ s0: drag.s0, r: radiusNow(), sharp: sharp.checked });
+    else shell.beginBrush({ tool: T.tool, mode: LOCAL_CH.has(T.channel) ? 'local' : 'rate', channel: T.channel, s0: drag.s0, r: radiusNow(), sharp: sharp.checked, ...(drag.keepRate ? { keepRate: true } : {}) });
     if (!shell.getState().brush) { drag = null; return false; }
     if (T.key !== 'smooth' && SMOOTH_CH.includes(T.channel)) smoothCh.value = T.channel;   // Smooth smooths the last tool's channel (design §3.7)
     liveTool = T; drag.open = true; brushedPress = true; hover = null;   // D428: the brush's own cues take over from the hover's
     return true;
   };
-  // D519 Part 2: a zone grab reads the pointer along its locked axis on screen (as Build's dragPixels reads a handle's arrow); an axis under EDGE_ON_PX px a metre (seen end-on) reads the tool's own way
   const deltaAt = (x, y) => {
-    const a = drag.vec, len = a ? Math.hypot(a[0], a[1]) : 0;
-    if (len >= ZG.EDGE_ON_PX) return ((x - drag.x) * a[0] + (y - drag.y) * a[1]) / len * drag.per * drag.sign;
-    const v = (drag.axis === 'x' ? drag.x - x : drag.y - y) * drag.per * (drag.sign || 1); return drag.smooth ? Math.max(0, v) : v;
+    if (drag.follow) return followAt(x, y);
+    const v = (drag.axis === 'x' ? drag.x - x : drag.y - y) * drag.per; return drag.smooth ? Math.max(0, v) : v;
   };
   // D235 (nothing coalesced the pointer moves: each one ran a whole brush step, and a closed tube's takes seconds, so the moves queued behind it): at most ONE brushTo per
   // animation frame, with the LATEST position; the release applies the last position that is still waiting, then ends the drag. D421: a radius change (the wheel, [ ]) during
@@ -792,12 +793,14 @@ function mount(root, shell, mountOpts = {}) {
   otherTool.onchange = edgeSide.onchange = smoothCh.onchange = showTool;
   // the change a drag has made at its centre, in the channel's own unit (the shell holds the delta it applied), and Smooth's strength
   // (D425 part 4: the units are handles.js BRUSH_CHANNELS', read by the glyph too; roadWords is what the glyph says, valueWords the strip's "at the centre")
+  const FOLLOW_CH = Object.freeze({ h: 'height', l: 'lateral', w: 'w', phi: 'phi', c: 'c' });
   const roadWords = (b, T) => {
+    if (b && b.mode === 'follow') return b.delta ? Object.keys(FOLLOW_CH).filter((k) => Number.isFinite(b.delta[k]) && Math.abs(b.delta[k]) > 1e-9).map((k) => HD.brushFormat(FOLLOW_CH[k], b.delta[k])).join(' · ') : '';   // D520: what the point's drag changed there
     if (!b || !T || !Number.isFinite(b.delta)) return '';
     if (T.key === 'smooth') return `smoothing the ${CHANNEL_NAMES[T.channel]}, strength ${b.delta.toFixed(2)}`;
     return HD.brushFormat(T.channel, b.delta);
   };
-  const valueWords = (b, T) => { const v = roadWords(b, T); return v && T.key !== 'smooth' ? `${v} at the centre` : v; };
+  const valueWords = (b, T) => { const v = roadWords(b, T); return v && T.key !== 'smooth' ? `${v} ${b.mode === 'follow' ? 'at the point' : 'at the centre'}` : v; };
   // D425 part 4 (design §1 cue 5 (ii)): THE VALUE LINE, in this order: the tool's word for the way the drag goes, the value at the centre, the widened note, the pieces in the window and, on a
   // closed lap under a route tool, the two the release may also move (the lap's last road piece and its first: the seam tries, app/core/coreshell.js)
   const valueLineOf = (st, T) => {
