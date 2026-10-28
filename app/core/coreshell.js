@@ -68,8 +68,8 @@ const { overlapCheck } = require('./overlapjob.js');
 // 2026-10-15: the close itself (Finish to start, a window, the whole lap) and how far each piece moves are app/core/closejob.js, ONE pure job the shell runs on the page
 // (no closeRunner given: tests) or that a Web Worker runs (app/core/closeworker.js), so working out a preview never holds the window (4.1 s on a 24 km track)
 const CJ = require('./closejob.js');
-const RG = require('../validate-ui/redgroups.js');
-const EW = require('./exportwords.js');   // D464: the export's warnings in the user's words   // D242: every red in plain words, grouped, with where
+const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
+const EW = require('./exportwords.js');   // D464: the export's warnings in the user's words
 const overlapPlacesText = (ck, segs, o) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs, o).flatMap((g) => g.places) });   // D248: "N places", merged as the red list shows them
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;

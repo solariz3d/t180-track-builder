@@ -46,7 +46,7 @@ const TINE = Object.freeze({ peak: 0.226 });
 // tik (the user's pick), measured through this engine at the old tick's gain, its file levelled to match (G:\Consonance-tools\b9\level_ticks.js)
 // D377: the user's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js, their files from page11\batch11) and Aurora of
 // batch 12 (mel12.js, page12\batch12), in place of batch 10's four, whose files are gone from app/sounds with batch 8's place.wav and undo.wav
-// D402: SIGIL's own melody, Obsidian (G:Consonance-tools9mel13.js sigil1, the pick of three; its files from inst13_pick), fifth
+// D402: SIGIL's own melody, Obsidian (G:\Consonance-tools\b9\mel13.js sigil1, the pick of three; its files from inst13_pick), fifth
 const MELODY_NAMES = Object.freeze(['aqua', 'skyline', 'glass', 'aurora', 'sigil']);
 const SAMPLES = Object.freeze({
   slots: Object.freeze(['drag_tick', 'loop_closed', ...MELODY_NAMES.flatMap((m) => [`place_${m}`, `undo_${m}`])]),
@@ -87,7 +87,7 @@ function soundFor(prev, next) {
 }
 
 // ── the music ──
-// THE FOUR MELODIES of place and undo (D375, the user's pick of batch 9, composed for this builder in G:Consonance-tools9mel9.js and copied here
+// THE FOUR MELODIES of place and undo (D375, the user's pick of batch 9, composed for this builder in G:\Consonance-tools\b9\mel9.js and copied here
 // as data): 64 steps each of [bass, chord of four, melody note on top], two steps a chord. One is picked at each launch (createSound); place walks it
 // forward, undo back
 const melody = (title, steps) => Object.freeze({ title, steps: Object.freeze(steps.map((s) => Object.freeze([s[0], Object.freeze(s[1]), s[2]]))) });

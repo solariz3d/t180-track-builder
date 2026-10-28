@@ -183,7 +183,7 @@ test('row 6: the four files are the batch-8 WAVs byte for byte, and useSamples r
     place_skyline: '33f7aac3cbabf4b86a400b6087b39f3ec3546fafe2b931b47b8b09a2e013be93', undo_skyline: 'bbb4608845e8a373ff578b63090e2fcb861c7183276864ab7efd93db3caf9bec',
     place_glass: '96b5268d2ce972d05d9d625b52c86523500306f60411a64d6567d8bf26504b61', undo_glass: '1a1971604311bdad48f02a33104cf7c8b7f075c940a94a2e1c8206a9708d93c5',
     place_aurora: '929e061648f00a5360db018742f35e0b33da43c506a579e2d6d4251d81e29cd7', undo_aurora: 'c91f9db343bfe20ed6ee453598fdf3637990b1ac4f918996cab7532797c3ff7b',
-    // AMENDED (D402): Obsidian's two, PL Phantoms [SD] (G:Consonance-tools9inst13_pick)
+    // AMENDED (D402): Obsidian's two, PL Phantoms [SD] (G:\Consonance-tools\b9\inst13_pick)
     place_sigil: '35fe0fe5196be0a77a8114e86b60a58b2634ec45ed9acebfeb6d1b7ce3361843', undo_sigil: '8070c7e698b1a08bcabbc72d7ede78da10f14de68ff713bfdb5266c65ee77ddd' };
   // AMENDED (D375 drop-in): every WAV shipped in app/sounds, loaded or not, is checked, not only the loaded ones
   const shipped = fs.readdirSync(path.join(__dirname, '..', 'sounds')).filter((x) => x.endsWith('.wav')).map((x) => x.replace(/.wav$/, '')).sort();
