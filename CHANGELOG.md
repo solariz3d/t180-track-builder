@@ -5,6 +5,9 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **The wordmark reads "Track Builder".** The second word takes a capital B again; the rest of the sentence-case copy from 0.4.27 is unchanged (D512; the user, 2026-10-28).
+
 ## [0.4.27] - 2026-10-28
 
 ### Added
