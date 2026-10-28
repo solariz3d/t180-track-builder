@@ -3,7 +3,9 @@
 //
 //   chromePath()                    the Chrome to use (CHROME_PATH, else the usual Windows place), or null when there is none
 //   launchChrome(exe, args, prefix) -> { ch, dir, port, tgt }   (D400) headless Chrome on a free port, attached only if that port's browser is the one it started;
-//                                   always muted (D409: --mute-audio, so a test never plays the builder's sounds aloud; an OfflineAudioContext still renders)
+//                                   always muted (D409: --mute-audio, so a test never plays the builder's sounds aloud; an OfflineAudioContext still renders);
+//                                   it waits for one of the machine's T180_BROWSERS slots first (D504, 4 by default) and gives it back when that Chrome exits
+//   takeSlot(o) -> release()         (D504) one of N browser slots in SLOT_DIR (os.tmpdir()/t180-browsers); slotCount(env) is N
 //   connect(url, onEvent)           -> { ws, send }   (D400) a DevTools socket whose waiting sends are rejected when it closes, so a lost browser fails fast
 //   renderClips(src, clips, o)     -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }; o.samples = a folder; o.seed (default SEED)
 //                                   of the four slot WAVs (app/sounds): the engine is handed them (useSamples) before each clip, as the app does once they load;
@@ -56,14 +58,68 @@ async function connect(url, onEvent = null) {
   });
   return { ws, send };
 }
+// D504: AT MOST N HEADLESS BROWSERS ON THE MACHINE. Each page test opened its own Chrome (5 to 9 processes), 4 files ran at once and harnesses ran inner
+// suites at 4 more: one run held 11 browsers and 97 chrome.exe (7.2 GB) on 2026-10-27. A slot is a file in SLOT_DIR, which every process on the machine
+// shares, holding { pid, started, token } and the Chrome's pid once it is spawned. It is taken ('wx', so two takers cannot both have it) before a Chrome is
+// spawned and given back when that Chrome exits, or when this process exits. A slot whose holder pid is gone is taken over. Two takers that find the same
+// dead slot can at worst leave one browser over N for that one moment; a release only ever removes a slot that still holds its own token
+const SLOT_DIR = path.join(os.tmpdir(), 't180-browsers');
+/** N: T180_BROWSERS, 4 when unset; at least 2, since menubar-page holds one browser while it opens a second (with 1 it would wait on itself) */
+function slotCount(env = process.env) {
+  const v = env.T180_BROWSERS; if (v === undefined || v === '') return 4;
+  const n = Number(v); if (!/^\s*\d+\s*$/.test(v) || !Number.isInteger(n) || n < 2) throw new Error(`T180_BROWSERS must be a whole number 2 or more (the number of headless browsers a run may open at once), got ${JSON.stringify(v)}`);
+  return n;
+}
+const pidAlive = (pid) => { if (!Number.isInteger(pid) || pid <= 0) return false; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+const readSlot = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code === 'ENOENT') return null; return undefined; } };   // undefined: being written
+const held = new Set();
+let exitHook = false;
+/**
+ * Take one of n slots in dir, waiting as long as all are held: -> release(), which gives it back (once; a second call does nothing), with release.note(fields)
+ * to add fields to the slot file. A wait is said once on `log` after waitLogMs; after maxWaitMs it is an error naming the holders.
+ */
+async function takeSlot({ dir = SLOT_DIR, n = slotCount(), waitLogMs = 30000, maxWaitMs = 600000, poll = 250, log = (s) => console.error(s) } = {}) {
+  fs.mkdirSync(dir, { recursive: true });
+  const token = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`, t0 = Date.now();
+  const holders = () => { const out = []; for (let k = 1; k <= n; k++) { const h = readSlot(path.join(dir, `slot-${k}.json`)); if (h) out.push(`pid ${h.pid} since ${h.started}`); } return out; };
+  let said = false;
+  for (;;) {
+    for (let k = 1; k <= n; k++) {
+      const f = path.join(dir, `slot-${k}.json`), rec = { pid: process.pid, started: new Date().toISOString(), token };
+      try { fs.writeFileSync(f, JSON.stringify(rec), { flag: 'wx' }); } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+        const h = readSlot(f);
+        if (h && !pidAlive(h.pid)) { try { fs.unlinkSync(f); } catch (x) { if (x.code !== 'ENOENT') throw x; } }   // its holder is gone: free it, and try it again on the next pass
+        continue;
+      }
+      held.add(f);
+      if (!exitHook) { exitHook = true; process.on('exit', () => { for (const g of held) { const h = readSlot(g); if (h && h.pid === process.pid) try { fs.unlinkSync(g); } catch (x) { /* exiting */ } } }); }
+      let done = false;
+      const release = () => { if (done) return; done = true; held.delete(f); const h = readSlot(f); if (h && h.token === token) { try { fs.unlinkSync(f); } catch (x) { if (x.code !== 'ENOENT') throw x; } } };
+      release.note = (fields) => { if (done) return; const h = readSlot(f); if (h && h.token === token) fs.writeFileSync(f, JSON.stringify({ ...h, ...fields })); };
+      return release;
+    }
+    const waited = Date.now() - t0;
+    if (waited >= maxWaitMs) throw new Error(`no headless browser slot after ${(waited / 1000).toFixed(1)} s: ${n} of ${n} held (${holders().join('; ')}). A holder's slot is ${dir}\\slot-<k>.json; set T180_BROWSERS to allow more`);
+    if (!said && waited >= waitLogMs) { said = true; log(`t180: waiting for a headless browser slot (${n} of ${n} held: ${holders().join('; ')}) since ${Math.round(waited / 1000)} s`); }
+    await sleep(poll);
+  }
+}
+
 /**
  * Start headless Chrome on a free port with its own profile folder, and attach only if that port's browser is this Chrome: the browser names its own pid
  * (SystemInfo.getProcessInfo, type "browser"), and it must be the pid spawned here, as prove_render.js's checkOwner refuses a port another process holds.
  * -> { ch, dir, port, tgt } (tgt = its first page target). On any failure this Chrome is killed and the error thrown.
  */
 async function launchChrome(exe, args, prefix) {
-  const port = await freePort(), dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const ch = spawn(exe, ['--headless=new', '--mute-audio', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', ...args, 'about:blank'], { stdio: 'ignore' });
+  const release = await takeSlot();   // D504: one of the machine's N browser slots, given back when this Chrome exits
+  let port, dir, ch;
+  try {
+    port = await freePort(); dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    ch = spawn(exe, ['--headless=new', '--mute-audio', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', ...args, 'about:blank'], { stdio: 'ignore' });
+  } catch (e) { release(); throw e; }
+  ch.once('exit', release); ch.once('error', release);
+  if (ch.pid !== undefined) release.note({ chrome: ch.pid });
   try {
     let ver; for (let i = 0; i < 100 && !ver; i++) { await sleep(200); try { ver = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); } catch (e) { /* not up yet */ } }
     if (!ver) throw new Error(`headless Chrome did not answer on port ${port}`);
@@ -165,7 +221,7 @@ function wav({ L, R, sampleRate }) {
   return b;
 }
 
-module.exports = { CLIPS, SEED, chromePath, freePort, connect, launchChrome, renderClips, readWav, peakDb, lufs, kWeight, wav };
+module.exports = { CLIPS, SEED, chromePath, freePort, connect, launchChrome, takeSlot, slotCount, SLOT_DIR, renderClips, readWav, peakDb, lufs, kWeight, wav };
 
 if (require.main === module) {
   const out = process.argv[2]; if (!out) { console.error('usage: node app/test/soundrender.js OUTDIR [--synth]'); process.exit(1); }

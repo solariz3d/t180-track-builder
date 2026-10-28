@@ -3,8 +3,8 @@
 // headless Chrome the tests start, like any Chrome, plays what the page plays. --mute-audio silences the browser's output; an OfflineAudioContext
 // (soundrender.js renderClips) renders into a buffer and is not affected. Rows:
 //   1  every launch site in app/, scripts/ and test/ (a line that hands a browser --remote-debugging-port: a spawned Chrome, or WebView2's
-//      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) passes --mute-audio on that same line; the scan must find the known sites (the shared launchChrome,
-//      texture-page's own spawn and prove_render's two app launches), so a scan that finds nothing cannot pass
+//      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) passes --mute-audio on that same line; the scan must find the known sites (the shared launchChrome
+//      and prove_render's two app launches), so a scan that finds nothing cannot pass. AMENDED (D504): texture-page's own spawn is gone, it uses launchChrome
 //   2  (the librarian, 07:05) the shared launcher itself: a Chrome started by soundrender.js launchChrome, with the caller's own arguments, was spawned
 //      with --mute-audio (its ChildProcess spawnargs, the command line it was started with). Skipped where there is no Chrome
 //   3  (D498 item 4, A's review of 8472e7d) every test file that starts a browser page itself (a launch site, or a call to the shared launchChrome) titles it
@@ -45,8 +45,10 @@ function launchSites() {
 test('row 1: every browser launch site in app/, scripts/ and test/ passes --mute-audio', () => {
   const sites = launchSites();
   const files = [...new Set(sites.map((s) => s.file))].sort();
-  for (const f of ['app/test/soundrender.js', 'app/test/texture-page.test.js', 'scripts/prove_render.js']) assert.ok(files.includes(f), `the scan finds the launch site in ${f} (found: ${files.join(', ') || 'none'})`);
-  assert.ok(sites.length >= 4, `the scan finds at least the four known launch sites (${sites.length})`);
+  // AMENDED (D504): texture-page.test.js left the known sites when its Chrome moved onto launchChrome (the browser cap); it must now have none of its own
+  for (const f of ['app/test/soundrender.js', 'scripts/prove_render.js']) assert.ok(files.includes(f), `the scan finds the launch site in ${f} (found: ${files.join(', ') || 'none'})`);
+  assert.ok(!files.includes('app/test/texture-page.test.js'), 'texture-page.test.js starts no Chrome of its own (D504: it uses launchChrome)');
+  assert.ok(sites.length >= 3, `the scan finds at least the three known launch sites (${sites.length})`);
   const loud = sites.filter((s) => !/--mute-audio/.test(s.text)).map((s) => `${s.file}:${s.line}`);
   assert.deepEqual(loud, [], 'launch sites without --mute-audio');
 });

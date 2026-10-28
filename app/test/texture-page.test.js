@@ -21,8 +21,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('http'), fs = require('fs'), path = require('path'), os = require('os'), { spawn } = require('child_process');
-const { chromePath } = require('./soundrender.js');
+const http = require('http'), fs = require('fs'), path = require('path');
+const { chromePath, launchChrome } = require('./soundrender.js');
 const { decode } = require('./png.js');
 
 const REPO = path.join(__dirname, '..', '..');
@@ -42,10 +42,8 @@ test.before(async () => {
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${srv.address().port}/app/index.html`;
-  const port = 9300 + Math.floor(Math.random() * 600); dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180tex-'));
-  ch = spawn(CHROME, ['--headless=new', '--mute-audio', '--hide-scrollbars', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', '--window-size=1400,860', 'about:blank'], { stdio: 'ignore' });
-  let tgt; for (let i = 0; i < 100 && !tgt; i++) { await sleep(200); try { tgt = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === 'page'); } catch (e) { /* not up yet */ } }
-  if (!tgt) throw new Error(`headless Chrome did not answer on port ${port}`);
+  // D504: through the shared launcher, so this Chrome is under the machine's browser cap, on a free port the launcher checks is its own (D400)
+  let tgt; ({ ch, dir, tgt } = await launchChrome(CHROME, ['--hide-scrollbars', '--window-size=1400,860'], 't180tex-'));
   ws = new WebSocket(tgt.webSocketDebuggerUrl); await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error('the DevTools socket failed')); });
   let id = 0; const pend = new Map();
   ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } if (d.method === 'Runtime.exceptionThrown') errors.push(d.params.exceptionDetails.exception ? d.params.exceptionDetails.exception.description : d.params.exceptionDetails.text); };
