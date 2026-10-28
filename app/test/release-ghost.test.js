@@ -123,10 +123,11 @@ test('row 5: the exact ghost in slices is ghostFor to the byte, and yields at le
   assert.equal(hashBatches(require('../preview/batches.js').batchesOf(run(G.buildMeshSteps(p, segs)).value)), hashBatches(require('../preview/batches.js').batchesOf(G.buildMesh(p, segs))), 'buildMeshSteps is buildMesh');
 });
 
+// AMENDED (D524): the edge and tie hashes are re-derived. batches.js took each cell record BY NAME, and every cell of a piece is named alike (1ROAD_p1_body_0), so every batch had the LAST cell's rowS (a tie on every 2 m cell, not one every 10 m as look.js says) and, where a piece's parts differ in width, its cols (edges joined at the wrong vertices: the user's ladder over a bump). v0.4.8 had the same lookup, so its bytes held that bug; the records are now taken by position. The centre line moves too where a part's own us place u = 0 (3 of the 4; the tube placed is unchanged).
 // CHANGED D433b (local-0.4.14): the centre line moved to u = 0 on purpose, so this row now holds the two EDGE lines and the TIES to v0.4.8's bytes (the hashes re-derived from 6261a22's
 // look.js, whose lines were v0.4.8's: this row passed there) and pins the CENTRE line to D433b's own bytes, each part on its own. It was one hash of all three lines and the centre's index.
 test('row 6: the road\'s edge lines and ties are byte for byte what v0.4.8 made, and the centre line is D433b\'s', async () => {
-  const LK = require('../preview/look.js'), want = { 'bowl placed': 'a3a81e0e754b6342 150', 'bowl ghost': 'a3fd450da154a39b 500', 'tube placed': 'fb3af30bafc07c72 175', 'tube ghost': '216fb71f36aa5235 500' }, wantCentre = { 'bowl placed': '82b2ca97fc6a7ab7', 'bowl ghost': 'c0d0ab08d21cee15', 'tube placed': 'a1093d8f334de6e5', 'tube ghost': '87322ae7a47eeaf8' }, got = {}, gotCentre = {};
+  const LK = require('../preview/look.js'), want = { 'bowl placed': '395b2925632929e4 150', 'bowl ghost': 'ad3d88c545e28e54 500', 'tube placed': '1d20af2bf9afaca6 175', 'tube ghost': '05662c65acf2cab2 500' }, wantCentre = { 'bowl placed': 'b365b24f5eb4c421', 'bowl ghost': 'c82fb1a137fcd8b2', 'tube placed': 'a1093d8f334de6e5', 'tube ghost': '227afc3dc008041a' }, got = {}, gotCentre = {};
   for (const [name, mk] of [['bowl', bowl], ['tube', tubeTrack]]) {
     const sh = await mk(), tm = createTrackModel(), u = tm.update(sh.getState().resolved), g = tm.ghostFor(sh.candidate({ length: 1000, turnDeg: 30 }));
     for (const [k, bs] of [['placed', u.batches], ['ghost', g.batches]]) {

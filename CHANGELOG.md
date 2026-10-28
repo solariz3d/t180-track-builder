@@ -13,7 +13,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
-- **The road lines in the preview no longer break up on a bump.** Seen low along the road, or over a bump, the white edges and the ties came out dashed, because a line and the road under it were too close together for the depth test far off. The lines are now kept just in front of their road at any distance, and a crest in front of them still hides them.
+- **The road lines in the preview follow the road over a bump.** On a bump, white lines could stand above the road like a ladder and not follow it. Each stretch of road now draws its own lines, so the edges run over the bump with the road, and the cross lines come every 10 m as they were meant to, not every 2 m. The lines are also kept just in front of the road far off, so they no longer break into dashes there.
 
 ## [0.4.28] - 2026-10-28
 
