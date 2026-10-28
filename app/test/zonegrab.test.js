@@ -271,3 +271,16 @@ test('row 14k (D520): follow\'s boundaries: no frame, a delta that is not three 
   const d = ZG.follow(F.R.map((x) => x * -100), F, {}); assert.ok(Math.abs(d.w - 32 * (ZG.SQUEEZE_MIN - 1)) < 1e-6, `the width change ${d.w}`); assert.ok(Math.abs(d.phi) < 1e-9, `the bank change ${d.phi}`);
   assert.equal(ZG.frameAt(path, segments, NaN, 0), null); assert.equal(ZG.frameAt({ samples: [] }, segments, S0, 0), null);
 });
+
+// 0.4.29 (O's before-release review, p-0429-review-O_2026-10-28.md item 2): the panel draws the dots and handles from shell.sculptInfo(), which reads the selection only while it
+// belongs to the document shown. A follow step made a new document and left the selection on the old one, so after the first step the dots vanished until the run was clicked again.
+test('row 14n (0.4.29): a grab at a dot keeps the run selected: the handles read it at every step and after the release, on the document the grab made', async () => {
+  const doc = road(0), sh = await createCoreShell({ autosaveMs: 0 }); sh.adopt(doc); sh.setSculpt(true); sh.selectPiece(0);
+  assert.equal(sh.sculptInfo().index, 0, 'the run is selected before the press');
+  const { path, segments } = toPath(doc), F = ZG.frameAt(path, segments, S0, 0.5);
+  sh.beginFollow({ s0: S0, r: RAD });
+  for (const k of [1, 2, 3]) { sh.brushTo(ZG.follow([0, 0.5 * k, 0], F, {})); const si = sh.sculptInfo(); assert.ok(si && si.index === 0, `step ${k}: the run is still selected`); }
+  sh.endBrush();
+  const st = sh.getState(), si = sh.sculptInfo();
+  assert.ok(st.history.present !== doc, 'the grab changed the road'); assert.ok(si && si.index === 0, 'after the release the run is still selected'); assert.equal(st.selection.base, st.history.present, 'on the document the grab made');
+});

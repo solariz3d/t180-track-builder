@@ -803,8 +803,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         const spilled = b.sculpt && Number.isInteger(b.sculptPiece) ? (res.changed || []).filter((c) => c.piece !== b.sculptPiece).map((c) => c.piece) : [];
         const note = b.sculpt && Number.isInteger(b.sculptPiece) && !spilled.length ? null : [widened, res.note, reclose, spilled.length ? `Sculpt also changed ${spilled.map((i) => d.pieces[i].id).join(', ')} at the joint` : null].filter(Boolean).join(' · ') || null;
         const h = D.dragTo(st.history, d);
-        // D244b: a Sculpt step keeps the same pieces in the same places, so the piece the handles are on stays selected (a selection otherwise belongs to the document it was made on)
-        const keep = b.sculpt && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {};
+        // D244b: a Sculpt step keeps the same pieces in the same places, so the piece the handles are on stays selected (a selection otherwise belongs to the document it was made on);
+        // 0.4.29: so does a grab's step (beginFollow), or its run's dots vanished after the first step (O's review, item 2)
+        const keep = (b.sculpt || b.mode === 'follow') && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {};
         return set({ history: h, ...r, ...keep, brush: { ...b, delta, rUsed: used, ...(b.tool ? { changedPieces: (res.changed || []).map((c) => c.piece) } : {}) }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
       });
     },

@@ -11,7 +11,9 @@
 //   4  the work in a ghost: a full ghost of 1,000 m (500 chords) walks the cross-section at most 10 times (500 before), and the oldest answers go first (the cache is bounded)
 //   5  the exact ghost in slices (the release): ghostSteps yields at least once per new chord, on an empty track and on a placed one, and what it returns is ghostFor's to the byte (the batches,
 //      the path's stations, the head); buildPathSteps / extendPathSteps / buildMeshSteps / extendMeshSteps run to the end are buildPath / extendPath / buildMesh / extendMesh
-//   6  the road lines (look.js linesFor, written straight into its arrays) are byte for byte what v0.4.8 made, for the placed track and a 1,000 m ghost, bowl and tube
+//   6a the batches of a piece split into parts (every cell named alike) each read their own cell's record: its rows' s inside the cell, and its own part's columns
+//   6  the road lines (look.js linesFor, written straight into its arrays) are pinned to the bytes D524's by-position cell records make (re-derived then: v0.4.8's held the
+//      by-name bug, row 6a), for the placed track and a 1,000 m ghost, bowl and tube
 //   7  the adapter's profileAt keeps one frozen profile per family, width and rate: the same numbers as fonts.fontProfile, the same object asked twice, a -0 rate its own, and a bad
 //      width or family refused every time
 //   8  placing the piece whose full ghost is on show takes the ghost's path and mesh: the placed track is byte for byte what a model that built it afresh makes (batches, path, bounds), it is built
@@ -123,10 +125,26 @@ test('row 5: the exact ghost in slices is ghostFor to the byte, and yields at le
   assert.equal(hashBatches(require('../preview/batches.js').batchesOf(run(G.buildMeshSteps(p, segs)).value)), hashBatches(require('../preview/batches.js').batchesOf(G.buildMesh(p, segs))), 'buildMeshSteps is buildMesh');
 });
 
+// 0.4.29 (O's before-release review, p-0429-review-O_2026-10-28.md item 4): the D524 fix (batches.js takes each node's cell record by POSITION) had no row of its own; this is it.
+// Red at 07cee60 (by name: every batch had the last cell's record), green from f28bd69. Every cell of a core piece is named alike (1ROAD_p1_body_0), one cell to a part.
+test('row 6a: the batches of a piece split into parts each read their own cell\'s record: the rows\' s inside that cell, and that part\'s own columns', async () => {
+  const G = require('../../src/geom/index.js'), B = require('../preview/batches.js'), segs = (await bowl()).getState().resolved.segments, p = G.buildPath(segs, { step: 2 }), m = G.buildMesh(p, segs);
+  assert.ok(m.cells.length > 100 && new Set(m.cells.map((c) => c.name)).size === 1, `a piece of parts named alike: ${m.cells.length} cells`);
+  const bs = B.batchesOf(m); let own = 0;
+  bs.forEach((b, k) => {
+    if (b.seam) return;
+    const c = m.cells[k], pc = m._state.pieces[c.piece];
+    assert.ok(b.rowS[0] >= c.s0 - 1e-9 && b.rowS[b.rowS.length - 1] <= c.s1 + 1e-9, `batch ${k}: rows at ${b.rowS[0]}..${b.rowS[b.rowS.length - 1]} m, its cell ${c.s0}..${c.s1} m`);
+    assert.equal(b.cols, pc.K, `batch ${k}: its own part's columns`); assert.equal(b.us, pc.Us, `batch ${k}: its own part's u`); own++;
+  });
+  assert.equal(own, m.cells.length, 'every cell batch checked');
+});
+
 // AMENDED (D524): the edge and tie hashes are re-derived. batches.js took each cell record BY NAME, and every cell of a piece is named alike (1ROAD_p1_body_0), so every batch had the LAST cell's rowS (a tie on every 2 m cell, not one every 10 m as look.js says) and, where a piece's parts differ in width, its cols (edges joined at the wrong vertices: the user's ladder over a bump). v0.4.8 had the same lookup, so its bytes held that bug; the records are now taken by position. The centre line moves too where a part's own us place u = 0 (3 of the 4; the tube placed is unchanged).
 // CHANGED D433b (local-0.4.14): the centre line moved to u = 0 on purpose, so this row now holds the two EDGE lines and the TIES to v0.4.8's bytes (the hashes re-derived from 6261a22's
 // look.js, whose lines were v0.4.8's: this row passed there) and pins the CENTRE line to D433b's own bytes, each part on its own. It was one hash of all three lines and the centre's index.
-test('row 6: the road\'s edge lines and ties are byte for byte what v0.4.8 made, and the centre line is D433b\'s', async () => {
+// RETITLED (0.4.29, O's review item 4): its hashes are no longer v0.4.8's or D433b's, so its name says what it now pins; row 6a is what shows the records under them are right.
+test('row 6: the road\'s edge lines, ties and centre line are the bytes D524\'s by-position cell records make', async () => {
   const LK = require('../preview/look.js'), want = { 'bowl placed': '395b2925632929e4 150', 'bowl ghost': 'ad3d88c545e28e54 500', 'tube placed': '1d20af2bf9afaca6 175', 'tube ghost': '05662c65acf2cab2 500' }, wantCentre = { 'bowl placed': 'b365b24f5eb4c421', 'bowl ghost': 'c82fb1a137fcd8b2', 'tube placed': 'a1093d8f334de6e5', 'tube ghost': '227afc3dc008041a' }, got = {}, gotCentre = {};
   for (const [name, mk] of [['bowl', bowl], ['tube', tubeTrack]]) {
     const sh = await mk(), tm = createTrackModel(), u = tm.update(sh.getState().resolved), g = tm.ghostFor(sh.candidate({ length: 1000, turnDeg: 30 }));
@@ -140,8 +158,8 @@ test('row 6: the road\'s edge lines and ties are byte for byte what v0.4.8 made,
       got[name + ' ' + k] = h.digest('hex').slice(0, 16) + ' ' + n; gotCentre[name + ' ' + k] = hc.digest('hex').slice(0, 16);
     }
   }
-  assert.deepEqual(got, want, 'the edge lines and the ties are v0.4.8\'s');
-  assert.deepEqual(gotCentre, wantCentre, 'the centre line is D433b\'s, at u = 0');
+  assert.deepEqual(got, want, 'the edge lines and the ties are the bytes pinned at D524');
+  assert.deepEqual(gotCentre, wantCentre, 'the centre line, at u = 0, is the bytes pinned at D524');
 });
 
 test('row 7: profileAt keeps one frozen profile per family, width and rate, and refuses bad input every time', () => {
