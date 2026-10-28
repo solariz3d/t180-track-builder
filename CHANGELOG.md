@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.26] - 2026-10-27
+
 ### Fixed
 - **Tab moves on from a button you just clicked.** After a click a button keeps the focus, and Tab there switched Sculpt on or off instead of moving the focus to the next control. Tab now switches Sculpt only when nothing is focused or the 3D view is; on a button, a link or a menu heading it moves the focus as usual.
 - **The live warning for low room overhead goes away when the road above is moved.** When a road that passed less than 1 m over another was raised or moved, the amber "low overhead" warning could stay on the lower road until something else made the whole track check again, if that lower road also ran close beside a third road. It now clears as soon as the road above moves away.
