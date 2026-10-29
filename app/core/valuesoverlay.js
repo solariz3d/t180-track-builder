@@ -10,7 +10,7 @@
 //   mount(stage, win)           -> { set(entries | null), entries(), visible(), attach(node), unmount() }   attach: a node shown under the values, in the same strip, while they show
 'use strict';
 
-const SPOT_CSS = 'top:10px;left:50%;transform:translateX(-50%)';
+const SPOT_CSS = 'top:8px;left:calc(50% + var(--preview-shift, 0px));transform:translateX(-50%)';   // --preview-shift: half the column, so it centres on the view the column leaves (app/index.html)
 const KEYS = Object.freeze([['length', 'length'], ['turn', 'turn'], ['climb', 'climb'], ['bank', 'bank'], ['width', 'width']]);
 
 function entries(f, widthText) {
@@ -31,7 +31,7 @@ function mount(stage, win) {
   // the user, 2026-10-12: the numbers "look goofy". A dashboard read: Bahnschrift (Windows' DIN face, on every Windows
   // 10 and 11) with fixed-width digits, so a number does not jitter as a handle drags it; each label small and grey above
   // its value, and a thin rule between the values.
-  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;flex-direction:column;align-items:center;padding:7px 4px;border-radius:8px;background:color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent);color:var(--on-ink-strong, #ffffff);font:bold 26px/1.05 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
+  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;flex-direction:column;align-items:center;padding:4px 6px;border-radius:8px;background:color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent);color:var(--on-ink-strong, #ffffff);font:bold 15px/1.2 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
   row.style.cssText = 'display:flex';
   layer.append(row);
   stage.append(layer);
@@ -44,8 +44,8 @@ function mount(stage, win) {
     row.replaceChildren(...shown.map((e, i) => {
       const s = doc.createElement('span'), label = doc.createElement('span'), value = doc.createElement('span');
       s.setAttribute('data-value', e.key);
-      s.style.cssText = `display:flex;flex-direction:column;align-items:center;padding:0 16px${i ? ';border-left:1px solid var(--veil-rule, rgba(255,255,255,0.14))' : ''}`;
-      label.style.cssText = 'font-size:11px;font-weight:600;color:var(--dim);margin-bottom:3px';
+      s.style.cssText = `display:flex;align-items:baseline;gap:5px;padding:0 10px${i ? ';border-left:1px solid var(--veil-rule, rgba(255,255,255,0.14))' : ''}`;
+      label.style.cssText = 'font-size:11px;font-weight:600;color:color-mix(in srgb, currentColor 66%, transparent);font-variant:small-caps;letter-spacing:.04em';   // the strip's own text colour (whatever the look makes it), mixed down: --dim at this size fell under 4.5:1 on it
       label.textContent = e.label;
       value.textContent = e.value;
       s.append(label, value);

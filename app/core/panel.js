@@ -890,7 +890,7 @@ function mount(root, shell, mountOpts = {}) {
   const selBox = el('div', { 'aria-label': 'selected pieces' }, ...pieces.nodes.selection);
   const showSel = (st) => { const d = st.history.present; selBox.style.display = shell.selectionInfo() || (st.deleteProposal && st.deleteProposal.base === d) ? '' : 'none'; };
   root.replaceChildren(
-    el('h3', { text: 'Equation track' }), info,
+    info,   // the track line first, directly under the bar (no heading above it)
     el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     sculptStrip,
     el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, fieldAt('bank °', bank, 'bank'), ...shapeFields),
