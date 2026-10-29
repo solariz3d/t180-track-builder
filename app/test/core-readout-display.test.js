@@ -375,9 +375,9 @@ test('extendOptions: the cup field is the target c, in DEGREES, typed as it is (
 test('the Extend panel has a "cup °" field beside bank, 0 to 150, and Extend hands its value to the core as c', async () => {
   const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubCup(s)));
   // AMENDED D355 part 2 (position only): the cup field moved from right after bank into "More shape", folded under bank (plan_t180_handoff :1384); the rest of this row is unchanged
-  const more = P.root.all().find((e) => e.tagName === 'DETAILS' && e.children[0] && e.children[0].textContent === 'More shape');
-  const pickers = more.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
-  assert.equal(pickers[0], 'cup °', `cup is the first field of More shape (fields: ${pickers.join(', ')})`);
+  // AMENDED (the left column laid out for space): "More shape" is gone, so the cup field is right after bank again, in the one list of fields
+  const pickers = P.root.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
+  assert.equal(pickers[pickers.indexOf('bank °') + 1], 'cup °', `cup is the field after bank (fields: ${pickers.join(', ')})`);
   const f = P.field('cup °'); assert.equal(f.attrs.min, '0'); assert.equal(f.attrs.max, '150');
   P.type('length m', 100); P.type('cup °', 90);   // (the fake DOM keeps a field's initial value as an attribute: type the length)
   const btn = P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend'); btn.onclick();
