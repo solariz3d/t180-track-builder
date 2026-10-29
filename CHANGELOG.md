@@ -9,6 +9,8 @@ All notable changes to this project are recorded here. The format follows
 
 - **File ▸ Open… and Previous versions… no longer show the menu behind them.** As the pointer moved down the list, the menu's own buttons showed through its rows. Both are now lists drawn in the menu itself: click to unfold the saved tracks (or the previous versions), click one to open it, or use the arrow keys and Enter; Esc closes the menu.
 
+- **The choices inside the menus draw themselves too.** Track ▸ Pit lane…'s side and the pieces it leaves and rejoins on, Track ▸ Start & grid…'s hotlap piece and grid pattern, Track ▸ Road surface's picker and Build ▸ Turn to grid…'s step now unfold their choices inside the menu, in its look, instead of a drop-down that showed the menu behind it.
+
 ## [0.4.29] - 2026-10-28
 
 ### Changed

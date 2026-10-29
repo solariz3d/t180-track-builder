@@ -12,6 +12,7 @@
 'use strict';
 const { PACK, DEFAULTS } = require('../../src/markers/layout.js');
 const { POLE_MIN_M, POLE_MAX_M } = require('./spawndrag.js');
+const { menuPick } = require('./menupick.js');   // a choice drawn by the page: this section sits in a menu, where a native select's pop-up showed the menu behind it
 
 const lenOf = (segments, id) => (segments || []).filter((g) => g.id === id).reduce((a, g) => a + g.length, 0);
 const r1 = (x) => Math.round(x * 10) / 10;
@@ -28,7 +29,7 @@ function mount({ shell, el, win }) {
   const poleN = el('input', { type: 'number', step: '0.5', min: String(POLE_MIN_M), max: String(POLE_MAX_M), 'aria-label': 'pole gap: metres from the start line to the pole car', title: 'metres from the start line back to the centre of the pole car; drag any grid box on the preview to change it' });
   const resetPack = el('button', { text: 'Measured spacing', title: `back to the spacing from the measured T-180 (6.67 m x 2.67 m): ${PACK.rowGapM} m along a column, ${PACK.colGapM} m between columns` });
   const hotSet = el('button', { text: 'Hotlap on selected piece', title: 'select a piece on the track first (click it), then put the hotlap spawn on it; slide it along the piece after' });
-  const hotPiece = el('select', { 'aria-label': 'hotlap piece' });
+  const hotPiece = menuPick(el('div').ownerDocument, { 'aria-label': 'hotlap piece' });
   const hotR = el('input', { type: 'range', min: '0', max: '100', step: '0.5', 'aria-label': 'hotlap along its piece', style: 'width:100%' });
   const hotN = el('input', { type: 'number', step: '0.5', min: '0', 'aria-label': 'hotlap metres into its piece' });
   const hotOff = el('button', { text: 'Remove hotlap' });

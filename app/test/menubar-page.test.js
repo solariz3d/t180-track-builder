@@ -34,7 +34,7 @@
 //  19b (D401) that first click on a fresh install picks ONCE: with Math.random pinned at 0.4 the start is Skyline and one pick is Glass (a second pick, which the first click
 //      made when nothing was saved yet, lands back on Skyline)
 //  20  File ▸ Open… is a list the page draws, not a native select (whose pop-up showed the menu behind it through its rows in the frameless window): no select in any
-//      menu; unfolded, its rows are the saved tracks; the arrow keys reach them; a click opens that track and closes the menu; Esc closes the menu and folds the list
+//      menu, nor in any of the menus' panels opened in turn; unfolded, its rows are the saved tracks; the arrow keys reach them; a click opens that track and closes the menu; Esc closes the menu and folds the list
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -206,11 +206,12 @@ test('row 10: with the Track part, the road surface has one controller, alive be
   await load();
   if (!(await ev("return (await fetch('../app/core/trackmenu.js')).ok;"))) return t.skip('app/core/trackmenu.js (the Track part, D355 part 3) is not in this tree');
   assert.equal(await ev("return document.getElementById('textures');"), null, 'no #textures section in the left column');
-  const pickers = "[...document.querySelectorAll('select')].filter((s) => [...s.options].some((o) => /Asphalt \\(made here\\)/.test(o.text))).length";
+  // amended: the picker was a native select, found by its Asphalt option; it sits in a menu, so it is a choice the page draws now (app/core/menupick.js), found by its label
+  const pickers = "document.querySelectorAll('[aria-label=\"road surface\"]').length";
   assert.equal(await ev(`return ${pickers};`), 1, 'one road-surface picker on the page');
   await open('m-track'); await clickText('m-track', 'Road surface ▸');
   assert.equal(await ev(`return ${pickers};`), 1, 'still one with the panel open');
-  assert.equal(await ev("return !!document.querySelector('#m-track .menu-panel:not([hidden]) select');"), true, 'the picker shows in the panel');
+  assert.equal(await ev("return !!document.querySelector('#m-track .menu-panel:not([hidden]) [aria-label=\"road surface\"]');"), true, 'the picker shows in the panel');
 });
 
 test('row 11: Build ▸ Sculpt mode shows the Sculpt strip under the bar, keeps it there across an edit, and hides it again', { skip }, async (t) => {
@@ -491,6 +492,16 @@ test('row 20: File ▸ Open… is a list the page draws: no select in any menu, 
   try {
     await load();
     assert.equal(await ev("return document.querySelectorAll('.more-menu select').length;"), 0, 'no native select in any menu');
+    // and none inside a menu's panels either, each opened in turn: the choices there (the grid step, the pit lane's side and pieces, the hotlap piece, the grid
+    // pattern, the road surface) are drawn by the page too; Settings, View and Edit have none (Settings' turn & climb are the menu's own ticks)
+    const selects = () => ev("return document.querySelectorAll('.more-menu select').length;"), picks = () => ev("return document.querySelectorAll('.more-menu .menu-pick').length;");
+    for (const [menu, panel] of [['m-build', 'Turn to grid…'], ['m-track', 'Pit lane…'], ['m-track', 'Start & grid…'], ['m-track', 'Road surface ▸']]) {
+      await open(menu); await clickText(menu, panel);
+      assert.equal(await selects(), 0, `no native select in ${menu} ▸ ${panel}`);
+      assert.ok(await picks() > 0, `${menu} ▸ ${panel} shows its choices as lists the page draws`);
+    }
+    for (const menu of ['m-settings', 'm-view', 'm-edit']) { await open(menu); assert.equal(await selects(), 0, `no native select in ${menu}`); }
+    await ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true;");
     const rows = () => ev("return [...document.querySelectorAll('#open .menu-rows .menu-row')].map((r) => r.textContent);");
     const unfold = () => ev("document.querySelector('#open .menu-list-head').click(); await new Promise((r) => setTimeout(r, 150)); return !document.querySelector('#open .menu-rows').hidden;");
     await open('m-file');

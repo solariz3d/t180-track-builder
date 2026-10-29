@@ -161,6 +161,9 @@
   .more-menu .menu-row { padding: 4px 8px; color: var(--text); white-space: nowrap; cursor: pointer; border-radius: 4px; outline: none; }
   .more-menu .menu-row:hover, .more-menu .menu-row:focus { background: rgba(255,255,255,0.05); }
   .more-menu .menu-row-none { padding: 4px 8px; color: var(--dim); white-space: nowrap; }
+  /* a choice inside a menu (app/core/menupick.js): its head shows the chosen value, its rows unfold under it as Open…'s do */
+  .more-menu .menu-pick { display: inline-flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 8ch; }
+  .more-menu .menu-pick-head { text-align: left; white-space: nowrap; }
   .more-menu #share { display: flex; flex-direction: column; gap: 6px; }   /* D267: the share codes live in the menu (they were a section of the left column) */
   .more-menu #share textarea { width: 100%; box-sizing: border-box; }
   /* D252 follow-up (C's finding 2): a long install note (the full Assetto Corsa path) pushed ⋯ right and its menu off the window; it is cut to a box, the whole text in its tooltip */

@@ -15,6 +15,7 @@
 'use strict';
 
 const LB = require('./labels.js');
+const { menuPick } = require('./menupick.js');   // the grid step's choice, which sits in Build ▸ Turn to grid…, drawn by the page: a native select's pop-up showed the menu behind it
 const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
 const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
 const HD = require('./handles.js');   // D244: the drag handles on the Extend ghost, and (Sculpt, D244b) on a placed piece
@@ -360,7 +361,7 @@ function mount(root, shell, mountOpts = {}) {
   // TURN TO GRID (2026-10-12, the user: "it should also connect to the 90 degree angle of the grid like snap to grid … Its hard to get a straight aligned to the grid
   // from a free flowing spiral turn"): Turn by, with the angle that brings the end onto the nearest grid direction (src/core/gridturn.js). The line under it says
   // where the end points now and how far it is off the grid, so the user can see the alignment before and after
-  const gridStep = el('select', { 'aria-label': 'grid step', title: 'the grid directions Turn to grid snaps to: every 90° (the grid lines), 45° or 15°' });
+  const gridStep = menuPick(doc, { 'aria-label': 'grid step', title: 'the grid directions Turn to grid snaps to: every 90° (the grid lines), 45° or 15°' });
   gridStep.replaceChildren(...[90, 45, 15].map((d) => new win.Option(`${d}°`, String(d))));
   const headingNote = el('p', { class: 'message', 'aria-label': 'end heading', style: 'font-size:12px;margin:2px 0' });
   const showHeading = () => {
