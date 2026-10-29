@@ -29,12 +29,14 @@ test('at start: bank 20° on a 1,000 m piece after a straight rolls under the ch
   const peak = rollPeak(doc);
   assert.ok(peak < BAR, `the roll peaks at ${peak.toFixed(4)} °/m, the amber is ${BAR}`);
   for (const s of [R, R + 1, 500, 1000]) assert.ok(Math.abs(bankAt(doc, s) - 20) < 0.01, `bank at ${s} m: ${bankAt(doc, s)}°`);
-  assert.ok(R < 50, `still early in a 1,000 m piece: ramp ${R} m`);
+  // AMENDED (the rule changed: a bank at start is one swell, laid over 2.6 × |change| / the amber, was 2.2; 20° is 55.7 m, was 47.2)
+  assert.ok(R < 60, `still early in a 1,000 m piece: ramp ${R} m`);
 });
 
-test('at start: 54° of bank comes in over about 127 m, under the amber; 5° keeps the 20 m floor', () => {
+test('at start: 54° of bank comes in over about 150 m, under the amber; 5° keeps the 20 m floor', () => {
   const big = piece(straight(), { length: 1000, bank: '54' }, { bank: true });
-  assert.ok(big.o.transition.phi > 126 && big.o.transition.phi < 128.5, `54°: ramp ${big.o.transition.phi} m`);
+  // AMENDED (the rule changed: the bank's swell is laid over 2.6 × |change| / the amber; 54° is 150.4 m, was 127.3)
+  assert.ok(big.o.transition.phi > 149.5 && big.o.transition.phi < 151.5, `54°: ramp ${big.o.transition.phi} m`);
   assert.ok(rollPeak(big.doc) < BAR, `54°: the roll peaks at ${rollPeak(big.doc)} °/m`);
   assert.ok(Math.abs(bankAt(big.doc, big.o.transition.phi) - 54) < 0.01);
   const small = piece(straight(), { length: 1000, bank: '5' }, { bank: true });
