@@ -222,7 +222,7 @@
   /* the track line is the column's first line now, on the top of the panel, where Aqua's gloss is lightest: a shade over --dim keeps it at 4.5:1 there */
   #palette > .head:first-child { color: color-mix(in srgb, var(--dim) 55%, var(--text)); }
   /* the guide's card and its Show the guide button sit under the values band, which runs to the right at 1400 px */
-  #guide .guide-card, #guide .guide-open { top: 64px; }
+  #guide .guide-card { top: 64px; }   /* the tour card is wide and would meet the band's end; the Show the guide button keeps its own 12px: the band stops short of it (below) */
   #preview { --preview-shift: 130px; }   /* half the column: the values strip centres on the view beside it */
   #stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
   #preview { position: relative; min-height: 0; overflow: hidden; }
@@ -268,7 +268,7 @@
   .picker .like-pick option { color: var(--text); }
   #palette .pickers > .message { margin: -2px 0 0 70px !important; color: var(--dim); }
   /* the next-piece line under the preview's values (app/core/panel.js roBox, attached by valuesoverlay): chips, the unchanged ones dimmed */
-  [aria-label="piece values"] .readout { display: flex; flex-wrap: wrap; justify-content: center; max-width: min(1200px, calc(100vw - 300px)); margin: 3px 8px 0; padding-top: 3px; border-top: 1px solid var(--veil-rule, rgba(255,255,255,0.14)); font: 600 11px/1.35 var(--body); }
+  [aria-label="piece values"] .readout { display: flex; flex-wrap: wrap; justify-content: center; max-width: min(1200px, calc(100vw - 600px));   /* centred on the view, so 100vw - 600 ends about 170px short of the window's right edge: clear of the Show the guide button; at 1400 the line wraps to two rows */ margin: 3px 8px 0; padding-top: 3px; border-top: 1px solid var(--veil-rule, rgba(255,255,255,0.14)); font: 600 11px/1.35 var(--body); }
   [aria-label="piece values"] { width: max-content; }   /* centred at left 50%, it would otherwise be held to half the view, and the line under it with it */
   [aria-label="piece values"] .readout .chip { padding: 0 6px; white-space: nowrap; }
   [aria-label="piece values"] .readout .chip[data-chip="corner"] { max-width: 250px; overflow: hidden; text-overflow: ellipsis; }   /* its whole text is the chip's tooltip */
