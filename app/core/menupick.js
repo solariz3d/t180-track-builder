@@ -32,8 +32,13 @@ function menuPick(doc, attrs = {}, options = []) {
     if (typeof box.onchange === 'function') box.onchange({ target: box });
   };
   const rowEls = () => rows.children ? [...rows.children] : [];
+  // the menu it sits in (its <details>): when that closes, the rows fold, as File ▸ Open…'s do (app/index.html rowList); found when the rows first unfold, since the
+  // choice is made before it is placed in a menu
+  let menu = null;
+  const watchMenu = () => { const d = typeof box.closest === 'function' ? box.closest('details') : null; if (!d || d === menu) return; menu = d; d.addEventListener('toggle', () => { if (!d.open) fold(); }); };
   const unfold = () => {
     if (off) return;
+    watchMenu();
     rows.replaceChildren(...opts.map((o) => {
       const r = doc.createElement('div');
       r.setAttribute('class', 'menu-row'); r.setAttribute('role', 'option'); r.setAttribute('aria-selected', String(o.value === cur));

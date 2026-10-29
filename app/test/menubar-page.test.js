@@ -34,7 +34,7 @@
 //  19b (D401) that first click on a fresh install picks ONCE: with Math.random pinned at 0.4 the start is Skyline and one pick is Glass (a second pick, which the first click
 //      made when nothing was saved yet, lands back on Skyline)
 //  20  File ▸ Open… is a list the page draws, not a native select (whose pop-up showed the menu behind it through its rows in the frameless window): no select in any
-//      menu, nor in any of the menus' panels opened in turn; unfolded, its rows are the saved tracks; the arrow keys reach them; a click opens that track and closes the menu; Esc closes the menu and folds the list
+//      menu, nor in any of the menus' panels opened in turn; a choice unfolded in a menu is folded again when the menu closes; unfolded, its rows are the saved tracks; the arrow keys reach them; a click opens that track and closes the menu; Esc closes the menu and folds the list
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -500,6 +500,14 @@ test('row 20: File ▸ Open… is a list the page draws: no select in any menu, 
       assert.equal(await selects(), 0, `no native select in ${menu} ▸ ${panel}`);
       assert.ok(await picks() > 0, `${menu} ▸ ${panel} shows its choices as lists the page draws`);
     }
+    // a choice drawn in a menu folds when its menu closes: Turn to grid's step unfolded, the menu closed with Esc, opened again: the rows are folded
+    const stepRows = () => ev("const r = document.querySelector('[aria-label=\"grid step\"] .menu-rows'); return r ? { hidden: r.hidden, rows: r.children.length } : null;");
+    await open('m-build'); await clickText('m-build', 'Turn to grid…');
+    await ev("document.querySelector('[aria-label=\"grid step\"] .menu-pick-head').click(); await new Promise((r) => setTimeout(r, 100)); return true;");
+    assert.deepEqual(await stepRows(), { hidden: false, rows: 3 }, 'the grid step unfolds its three rows');
+    await ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise((r) => setTimeout(r, 100)); return true;");
+    await open('m-build'); await clickText('m-build', 'Turn to grid…');
+    assert.deepEqual(await stepRows(), { hidden: true, rows: 0 }, 'closing the menu folded it');
     for (const menu of ['m-settings', 'm-view', 'm-edit']) { await open(menu); assert.equal(await selects(), 0, `no native select in ${menu}`); }
     await ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true;");
     const rows = () => ev("return [...document.querySelectorAll('#open .menu-rows .menu-row')].map((r) => r.textContent);");
