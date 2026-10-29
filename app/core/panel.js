@@ -297,9 +297,12 @@ function mount(root, shell, mountOpts = {}) {
   // THE NEXT PIECE LINE: the readout's cells as chips, one line under the preview's values (valuesoverlay attach, where the stage is found below; with no stage they stay
   // in the column). A chip whose value does not change on this piece is dimmed, so the eye lands on what Extend will do; the length chip is the values' own, so it is not repeated
   const chipName = (k) => (k === 'start' ? 'edge start' : k === 'climbCorner' ? 'climb corner' : k === 'gravity' ? 'bank to gravity' : k);
-  const roChips = Object.fromEntries(RO.map((k) => [k, el('span', { class: 'chip', 'data-chip': k, ...(k === 'length' ? { hidden: '' } : {}) }, el('span', { class: 'chip-name', text: chipName(k) }), roCells[k])]));
+  const roChips = Object.fromEntries(RO.map((k) => [k, el('span', { class: 'chip', 'data-chip': k, ...(k === 'length' ? { hidden: '' } : {}) }, el('span', { class: 'chip-name', text: chipName(k) }), roCells[k], el('span', { class: 'chip-short' }))]));
   const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add' }, el('span', { class: 'chip-head', text: 'next' }), ...RO.map((k) => roChips[k]));
   // unchanged on this piece: a "from → to" with both ends the same, a change of 0, or no corner
+  // a dim chip's short text, shown in place of its cell under the preview's values (the cell keeps the readout's whole words): "edge 0", "climb 0°", "climb corner none"
+  const shortOf = (k, v) => { const m = /^(.*) → (.*)$/.exec(v), n = (s) => { const x = Number(String(s).replace(/[°%]/g, '').replace('−', '-')); return Number.isFinite(x) ? String(Math.abs(x) < 1e-9 ? 0 : Number(x.toFixed(2))) : s; };
+    if (m) return n(m[1]); if (k === 'corner' || k === 'climbCorner') return 'none'; return `${n(v)}°`; };
   const sameOf = (k, v) => { const m = /^(.*) → (.*)$/.exec(v); if (m) return m[1] === m[2]; if (k === 'corner' || k === 'climbCorner') return /^none/.test(v); return /^[+−-]?0(\.0+)?°?$/.test(v); };
   // D421c part 1: IN SCULPT the readout is not computed: every brush step is a new document (draw, below), and Extend's candidateReadout and candidateCorner cost
   // 2.3-3.4 ms of each step's frame (A's profile, sculpt-frame rows 2 and 3) for a piece Extend cannot add in Sculpt. The cells show '—' with the reason, as on a
@@ -314,7 +317,7 @@ function mount(root, shell, mountOpts = {}) {
         edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup),
         climbCorner: fmtClimbCorner(r), corner: fmtCorner(r, 'corner' in r && r.corner && r.corner.endsTurningDegPer100m !== null ? shell.candidateCorner(opts()) : null), gravity: pairOf(r, ['gravityBankFromDeg', 'gravityBankToDeg'], LB.fmtDeg) }; }
     } catch (e) { why = e.message; }
-    for (const k of RO) { roCells[k].textContent = f ? f[k] : '—'; roChips[k].setAttribute('class', f && sameOf(k, f[k]) ? 'chip same' : 'chip'); roChips[k].title = f ? `${chipName(k)}: ${f[k]}` : ''; }
+    for (const k of RO) { roCells[k].textContent = f ? f[k] : '—'; const same = !!f && sameOf(k, f[k]); roChips[k].setAttribute('class', same ? 'chip same' : 'chip'); roChips[k].children[2].textContent = same ? shortOf(k, f[k]) : ''; roChips[k].title = f ? `${chipName(k)}: ${f[k]}` : ''; }
     roBox.style.display = f ? '' : 'none';   // only while there is a next piece to describe (not in Sculpt, not on a closed loop)
     if (values && !shell.getState().sculpt) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // D267: the same numbers, large over the 3D view
     roBox.title = why;

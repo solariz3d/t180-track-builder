@@ -257,13 +257,18 @@
   .picker .like-pick option { color: var(--text); }
   #palette .pickers > .message { margin: -2px 0 0 82px !important; color: var(--dim); }
   /* the next-piece line under the preview's values (app/core/panel.js roBox, attached by valuesoverlay): chips, the unchanged ones dimmed */
-  [aria-label="piece values"] .readout { display: flex; flex-wrap: wrap; justify-content: center; max-width: min(940px, calc(100vw - 790px)); margin: 6px 8px 0; padding-top: 5px; border-top: 1px solid var(--veil-rule, rgba(255,255,255,0.14)); font: 600 11.5px/1.5 var(--body); }
+  [aria-label="piece values"] .readout { display: flex; flex-wrap: wrap; justify-content: center; max-width: min(1200px, calc(100vw - 790px)); margin: 6px 8px 0; padding-top: 5px; border-top: 1px solid var(--veil-rule, rgba(255,255,255,0.14)); font: 600 11.5px/1.5 var(--body); }
+  [aria-label="piece values"] { width: max-content; }   /* centred at left 50%, it would otherwise be held to half the view, and the line under it with it */
   [aria-label="piece values"] .readout .chip { padding: 0 6px; white-space: nowrap; }
   [aria-label="piece values"] .readout .chip[data-chip="corner"] { max-width: 250px; overflow: hidden; text-overflow: ellipsis; }   /* its whole text is the chip's tooltip */
   [aria-label="piece values"] .readout .chip[hidden] { display: none; }
   [aria-label="piece values"] .readout .chip-name, [aria-label="piece values"] .readout .chip-head { color: var(--dim); font-weight: 500; margin-right: 4px; }
   [aria-label="piece values"] .readout .chip-head { text-transform: uppercase; letter-spacing: .12em; font-size: 10px; align-self: center; }
   [aria-label="piece values"] .readout .chip.same { opacity: .42; }
+  /* a dim chip shows its short text ("edge 0") in place of its cell, whose whole words stay the readout's (and the chip's tooltip) */
+  .readout .chip-short { display: none; }
+  [aria-label="piece values"] .readout .chip.same [data-readout] { display: none; }
+  [aria-label="piece values"] .readout .chip.same .chip-short { display: inline; }
   #left .readout { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 8px 0; font-size: 12px; }
   .pieces { display: flex; flex-wrap: wrap; gap: 6px; }
   .piece.mine { border-color: var(--mine); color: var(--mine); }
