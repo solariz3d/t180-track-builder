@@ -308,6 +308,7 @@ function mount(root, shell, mountOpts = {}) {
   // a dim chip's short text, shown in place of its cell under the preview's values (the cell keeps the readout's whole words): "edge 0", "climb 0°", "climb corner none"
   const shortOf = (k, v) => { const m = /^(.*) → (.*)$/.exec(v), n = (s) => { const x = Number(String(s).replace(/[°%]/g, '').replace('−', '-')); return Number.isFinite(x) ? String(Math.abs(x) < 1e-9 ? 0 : Number(x.toFixed(2))) : s; };
     if (m) return n(m[1]); if (k === 'corner' || k === 'climbCorner') return 'none'; return `${n(v)}°`; };
+  const roShown = {};   // the text each cell shows now
   const sameOf = (k, v) => { const m = /^(.*) → (.*)$/.exec(v); if (m) return m[1] === m[2]; if (k === 'corner' || k === 'climbCorner') return /^none/.test(v); return /^[+−-]?0(\.0+)?°?$/.test(v); };
   // D421c part 1: IN SCULPT the readout is not computed: every brush step is a new document (draw, below), and Extend's candidateReadout and candidateCorner cost
   // 2.3-3.4 ms of each step's frame (A's profile, sculpt-frame rows 2 and 3) for a piece Extend cannot add in Sculpt. The cells show '—' with the reason, as on a
@@ -322,8 +323,9 @@ function mount(root, shell, mountOpts = {}) {
         edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup),
         climbCorner: fmtClimbCorner(r), corner: fmtCorner(r, 'corner' in r && r.corner && r.corner.endsTurningDegPer100m !== null ? shell.candidateCorner(opts()) : null), gravity: pairOf(r, ['gravityBankFromDeg', 'gravityBankToDeg'], LB.fmtDeg) }; }
     } catch (e) { why = e.message; }
-    for (const k of RO) { roCells[k].textContent = f ? f[k] : '—'; const same = !!f && sameOf(k, f[k]); roChips[k].setAttribute('class', same ? 'chip same' : 'chip'); roChips[k].children[2].textContent = same ? shortOf(k, f[k]) : ''; roChips[k].title = f ? `${chipName(k)}: ${f[k]}` : ''; }
-    roBox.style.display = f ? '' : 'none';   // only while there is a next piece to describe (not in Sculpt, not on a closed loop)
+    // each cell and chip is written only when its text changes: a drag sets the same words on most frames, and every write was style and layout work in that frame
+    for (const k of RO) { const v = f ? f[k] : '—'; if (roShown[k] === v) continue; roShown[k] = v; roCells[k].textContent = v; const same = !!f && sameOf(k, f[k]); roChips[k].setAttribute('class', same ? 'chip same' : 'chip'); roChips[k].children[2].textContent = same ? shortOf(k, f[k]) : ''; roChips[k].title = f ? `${chipName(k)}: ${f[k]}` : ''; }
+    const disp = f ? '' : 'none'; if (roBox.style.display !== disp) roBox.style.display = disp;   // only while there is a next piece to describe (not in Sculpt, not on a closed loop)
     if (values && !shell.getState().sculpt) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // D267: the same numbers, large over the 3D view
     roBox.title = why;
   };

@@ -35,10 +35,13 @@ function mount(stage, win) {
   row.style.cssText = 'display:flex';
   layer.append(row);
   stage.append(layer);
-  let shown = null;
+  let shown = null, drawn = null;   // drawn: the text of what the row shows now, so a set with the same values (every frame of a drag that does not change them) does nothing
   const set = (list) => {
     if (!layer.isConnected && stage.isConnected !== false) stage.append(layer);   // the preview's mount clears #preview after the panel mounted this layer
     shown = list && list.length ? list : null;
+    const key = shown ? JSON.stringify(shown) : null;
+    if (key === drawn) return;
+    drawn = key;
     if (!shown) { layer.style.display = 'none'; row.replaceChildren(); below(); return; }
     layer.style.display = 'flex';
     row.replaceChildren(...shown.map((e, i) => {
@@ -54,9 +57,13 @@ function mount(stage, win) {
     below();
   };
   const attach = (node) => { layer.append(node); };
-  // where the strip ends, for what the page places under it (the camera's label, app/index.html .preview-hud): it grows with the next-piece line
-  const below = () => { if (stage.style && typeof stage.style.setProperty === 'function') stage.style.setProperty('--values-bottom', shown ? `${layer.offsetTop + layer.offsetHeight}px` : '0px'); };
-  return { set, entries: () => (shown ? shown.slice() : null), visible: () => !!shown, attach, layer, unmount() { layer.remove(); } };
+  // where the strip ends, for what the page places under it (the camera's label, app/index.html .preview-hud): it grows with the next-piece line. Read by a ResizeObserver,
+  // after layout, where there is one: reading offsetHeight here forced a layout in the middle of every drag frame that set new values
+  const put = (px) => { if (stage.style && typeof stage.style.setProperty === 'function') stage.style.setProperty('--values-bottom', px); };
+  const RO = win && typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(() => put(shown ? `${layer.offsetTop + layer.offsetHeight}px` : '0px')) : null;
+  if (RO) RO.observe(layer);
+  const below = () => { if (!shown) put('0px'); else if (!RO) put(`${layer.offsetTop + layer.offsetHeight}px`); };
+  return { set, entries: () => (shown ? shown.slice() : null), visible: () => !!shown, attach, layer, unmount() { if (RO) RO.disconnect(); layer.remove(); } };
 }
 
 module.exports = { entries, sculptEntries, mount, SPOT_CSS };
