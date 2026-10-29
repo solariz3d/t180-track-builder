@@ -28,7 +28,10 @@ function reasonText(reason, car = MACH6) {
     'load-above-proven': `the load is over ${car.provenG} g, more than any track has proven`,
     'load-sustained': `the load stays over ${car.sustainedG} g for more than ${car.sustainedS} s: held that long it has put a car through the road (a warning)`,
     'seam-past-envelope': `a seam is sharper than measured on real tracks (over ${car.seamP90Deg}°)`,
-    'on-the-stops': `the car is on its suspension stops (${car.suspensionStopG} g or more)`,
+    'on-the-stops': `the car is on its suspension stops (${car.suspensionStopG} g or more): no travel is left, so from here a step or a gap in the road reaches the chassis`,
+    // D517: a limit known to hold, not a fault (D515: 56-63 g held for about 7 s on a continuous soft road)
+    'load-on-the-chassis': `the load is ${(car.chassisG || MACH6.chassisG)} g or more: the car rides on its chassis here, not its tyres. It has held up to 63 g for about 7 s on a continuous soft road with no step and no gap, and 62 g went through the road once: keep the surface continuous here (a warning)`,
+    'wall-swerve': ((ws) => `on this wall (steeper than ${ws.tiltDeg}°) a climb change asks a sideways swerve here as hard as the hardest one driven (3.2 g, which recovered), while less than ${ws.holdG} g presses the car into the road: an estimate, not a known failure (a warning)`)(car.wallSwerve || MACH6.wallSwerve),
     'head-in-the-air': 'the open end is in the air: place the landing',
     'landing-misses-zone': 'this jump may fly past its landing at the lap\'s speed (a warning: tune it by driving it in AC)',   // D250: amber since the user's ruling
     'jump-gap-not-forward': 'a jump lands behind its own take-off',

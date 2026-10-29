@@ -26,10 +26,11 @@ test('with a design speed from the picker, a word with no speed of its own gets 
   close(l.fN_g, 1 + 30 * 30 / (G * R), 1e-9);
 });
 
-test('boundary, the suspension stop (FINDINGS.md:103-104): just under 20 g is not flagged, just over is information', () => {
-  assert.strictEqual(MACH6.suspensionStopG, 20);
-  const under = bottom(vFor(20 - 1e-6)), over = bottom(vFor(20 + 1e-6));
-  assert.ok(under.l.fN_g < 20 && over.l.fN_g > 20, `${under.l.fN_g} ${over.l.fN_g}`);
+// AMENDED (D517): the stop moved 20 → 25 g, the plateau D515 measured (bands.txt; src/validate/limits.js suspensionStopG)
+test('boundary, the suspension stop (D515; FINDINGS.md:103-104): just under 25 g is not flagged, just over is information', () => {
+  assert.strictEqual(MACH6.suspensionStopG, 25);
+  const under = bottom(vFor(25 - 1e-6)), over = bottom(vFor(25 + 1e-6));
+  assert.ok(under.l.fN_g < 25 && over.l.fN_g > 25, `${under.l.fN_g} ${over.l.fN_g}`);
   const atBottom = (r) => r.info.some((a) => a.reason === 'on-the-stops' && a.s0 === 0);
   assert.deepStrictEqual([atBottom(under.r), atBottom(over.r)], [false, true]);
 });

@@ -8,7 +8,8 @@
 // LEVELS, highest wins: RED 3 > AMBER 2 > INFO 1 > CLEAR 0.
 //   · From a line's own load, with validation's own comparisons (src/validate/index.js), so they cannot disagree:
 //       fN_g >  provenG (90 g, FINDINGS.md:105)            → AMBER   ("no track has proven this yet")
-//       fN_g >= suspensionStopG (20 g, FINDINGS.md:103-104) → INFO    (the suspension stop: shown, never a warning)
+//       fN_g >= suspensionStopG (25 g, D515; FINDINGS.md:103-104) → INFO    (the suspension stop: shown, never a warning)
+//     (D517: the 40 g chassis line and the wall swerve are ambers as RANGES, so rangeLevel below paints them; a line's own level is unchanged)
 //       otherwise                                           → CLEAR
 //   · From the red and amber RANGES (folds, stacks, gaps, steep, seams, …): every line of every station whose s lies in
 //     [s0, s1]. A range carries only its worst u, so a range colours the whole cross-section. That is coarser than the

@@ -12,6 +12,7 @@ const A = require('../src/core/adapter.js');
 const RD = require('../src/core/readout.js');
 const V = require('../src/validate/index.js');
 const SH = require('../src/core/sharp.js');
+const ADVISORY = new Set(['load-on-the-chassis', 'wall-swerve']);   // D517: D515's two warnings, which never set Sharp's minimum radius
 const { extendOptions } = require('../app/core/panel.js');
 
 const DEG = Math.PI / 180;
@@ -42,7 +43,8 @@ for (const [W, R] of [[24, 22], [45, 24.25]]) {
     assert.deepEqual([kh[kh.length - 2], kh[kh.length - 1]], [0, 0], 'the corner ends with turn rate 0 and slope 0');
     assert.equal(Math.abs(m.straight).toFixed(1), '0.0', `the Straight after it turns ${m.straight}°`);
     assert.ok(Math.abs(m.last50) <= 0.01, `the last 50 m of the Straight turn ${m.last50}°`);
-    assert.deepEqual([m.red, m.amber], [[], []], 'no red, no amber on the corner');
+    // AMENDED (D517): D515's two warnings (src/core/sharp.js ADVISORY) are limits known to hold, not geometry, and a full-speed corner carries the chassis one
+    assert.deepEqual([m.red, m.amber.filter((x) => !ADVISORY.has(x))], [[], []], 'no red, and no amber but D515\'s warnings, on the corner');
   });
 }
 
@@ -72,7 +74,7 @@ test('width 24: R 11 is refused for the fold, and the tightest named is green wi
   const b = base(24), e = refusal(() => SH.extendSharp(b, {}, { angle: 90 * DEG, R: 11 }));
   assert.ok(e && e.code === 'SHARP_TOO_TIGHT' && e.faults.red.includes('fold'), `refused: ${e && e.message}`);
   assert.ok(Number.isFinite(e.needR) && e.needR > 11, `tightest ${e.needR} m`);
-  assert.deepEqual((({ red, amber }) => [red, amber])(corner(24, e.needR, 90)), [[], []], 'the tightest named is green');
+  assert.deepEqual((({ red, amber }) => [red, amber.filter((x) => !ADVISORY.has(x))])(corner(24, e.needR, 90)), [[], []], 'the tightest named is green');   // AMENDED (D517), as above
   assert.equal(refusal(() => SH.extendSharp(b, {}, { angle: 90 * DEG, R: e.needR - 0.2 })).code, 'SHARP_TOO_TIGHT');
 });
 

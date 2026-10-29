@@ -123,7 +123,9 @@ const SRC = Object.freeze({
   'load-above-proven': 'FINDINGS.md:105, :112-113',
   'load-sustained': 'D341: the ELYSIUM replay of 2026-10-16 (56-62 g held for about 2 s: seven passes held, one went through the road); src/validate/limits.js sustainedG, sustainedS',
   'seam-past-envelope': 'FINDINGS.md:24, :110-111',
-  'on-the-stops': 'FINDINGS.md:103-104',
+  'on-the-stops': 'D515 bands.txt (the suspension height\'s plateau from 25 g: past it a step or a gap reaches the chassis); FINDINGS.md:103-104 (about 20 g, the earlier reading)',
+  'load-on-the-chassis': 'D515 bands.txt (the box reaches the road mesh at about 47 g) and peaks.txt (the line\'s load ran 6.2-9.2 g low at the peaks): 40 g predicted; held to 63 g for about 7 s on a continuous soft road (D515), 62 g went through the road once (D341); src/validate/limits.js chassisG',
+  'wall-swerve': 'D515 §5 rule 5 (piece 11: an 85° wall at 819 km/h, the climb −5.05° → 0° over 100 m, swerved the car 3.16 g sideways and the load into the road fell to −1.67 g; it recovered): 3 g sideways, that swerve (D517 part 2); the 1 g into the road is inferred; src/validate/limits.js wallSwerve',
   'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
   'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp should catch both landings); a WARNING since D250: the user tunes jumps by driving them',
   'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
@@ -372,6 +374,14 @@ function core(path, segments, opts, from, carried, upto) {
       if (!path.closed && coreRoad && u === 0 && line.fHold_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fHold_g });
       if (line.fN_g > car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-above-proven', worst: line.fN_g });
       else if (line.fN_g >= car.suspensionStopG) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'on-the-stops', worst: line.fN_g });
+      // D517 (D515's rules 2 and 3): at chassisG or more, up to the proven line, the car rides on its chassis: AMBER, a limit known to hold (limits.js)
+      if (line.fN_g >= car.chassisG && line.fN_g <= car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-on-the-chassis', worst: line.fN_g });
+      // D517 (D515's rule 5): on a surface tilted past wallSwerve.tiltDeg, the line's curvature in the road's plane (κ⃗·l over the margin, about dθ/ds·sin φ
+      // for a climb change on a wall) asks the car sideways; where that is over sideG and the load into the road is under holdG, AMBER, worst the sideways g
+      if (car.wallSwerve && n1 < Math.cos(car.wallSwerve.tiltDeg * DEG)) {
+        const side = Math.abs(K[0] * l0 + K[1] * l1 + K[2] * l2) * w / G;
+        if (side > car.wallSwerve.sideG && line.fN_g < car.wallSwerve.holdG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'wall-swerve', worst: side });
+      }
     }
     if (centre || hardest) for (const line of [centre, hardest].filter(Boolean).sort((a, b) => a.u - b.u)) raw.lines.push({ i, line });   // u order within the station, as the full set
     if (i + 1 < n && isRoad(i + 1) && S[i + 1].seg === p.seg) for (const c of cs) {

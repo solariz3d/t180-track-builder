@@ -6,9 +6,23 @@
 const G = 9.81;   // m/s², the same constant the measuring tools use (tools/jump_flight.cjs:11 `G = 9.81`, tools/read_track.cjs:151)
 
 const MACH6 = Object.freeze({
-  // FINDINGS.md:103-104 "About 20 g: the suspension runs out (measured). It is a change in how the car sits, not a
-  // failure." INFORMATIONAL: never red, never amber (docs/INTERFACES.md §3).
-  suspensionStopG: 20,
+  // D515 bands.txt (the CRAZY TEST replay of 2026-10-28, 6,530 frames): "25-30 g h p50 -19.4 cm … 45-50 g -20.9 cm", the suspension height's plateau
+  // from 25 g, with the tyre squash flat at about 13.5 cm from 10 g; past it the box rode 0.2-1.4 cm over the mesh, so a step or a gap reaches the
+  // chassis (their reds already exist). FINDINGS.md:103-104, the earlier reading: "About 20 g: the suspension runs out (measured). It is a change in how
+  // the car sits, not a failure." INFORMATIONAL: never red, never amber (docs/INTERFACES.md §3).
+  suspensionStopG: 25,
+  // D515 bands.txt: "box under the mesh surface: half the frames or more from 47 g", and peaks.txt: the line-predicted load ran low at the ten peaks
+  // ("63.28 g (line asks 54.1)" … "56.24 g (line asks 48.9)": 6.2-9.2 g), so 47 − about 7 = 40 g PREDICTED is where the box reaches the road (D515 §5
+  // rules 2 and 3: 37-40 g). AMBER 'load-on-the-chassis', a limit known to hold, not a ceiling: the same replay held 56-63 g for about 7 s on a
+  // continuous soft road ("time at ≥ 55 g: 476 frames = 7.14 s"), and D341's 62 g went through the road once. Up to provenG; past it that line speaks.
+  chassisG: 40,
+  // D515 §5 rule 5 (piece 11, t 82.5-83.6: an 85° wall at 819 km/h, the climb −5.05° → 0° over 100 m; κg −0.7 /km predicts 3.7 g sideways, the car
+  // swerved 3.16 g and the load into the road fell to −1.67 g, 8.5 m off the line, and recovered): on a surface tilted over tiltDeg, a line whose
+  // curvature in the road's plane asks over sideG sideways while the load into the road is under holdG is AMBER 'wall-swerve'. sideG is that one
+  // measured swerve, "Lateral g reached −3.16 g (t 83.01)", which recovered (D517 part 2, the librarian's ruling e9b793bb: O's inferred 1 g fired on a
+  // 1.2° climb change over 100 m, an amber nobody reads). holdG is O's INFERRED 1 g ("the 1 g figure is not measured as a failure; this replay survived
+  // −1.67 g"). An estimate either way, not a measured failure.
+  wallSwerve: Object.freeze({ tiltDeg: 60, sideG: 3, holdG: 1 }),
   // FINDINGS.md:105 "Up to about 90 g: proven, on a soft-collision surface"; FINDINGS.md:112-113 "AMBER, for 'beyond
   // what any track has proven': load above the highest survived (about 90 g today). It is shown, not forbidden."
   // The withdrawn 60 g red line (FINDINGS.md:116-118, struck) is deliberately absent.

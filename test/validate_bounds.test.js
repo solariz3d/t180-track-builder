@@ -19,7 +19,8 @@ function doc(words) { let d = D.createDoc('t'); for (const [w, o, patch] of word
 function edgeHolds(d, id, h, bounds, side, opts = {}) {
   const b = bounds.handles[h], stop = side === 'max' ? b.above : b.below;
   assert.strictEqual(stop.kind, 'red', `${h} ${side}: expected a red limit, got ${JSON.stringify(stop)}`);
-  assert.ok(stop.sources.every((s) => /(FINDINGS|ARCHITECTURE)\.md:\d/.test(s)), JSON.stringify(stop.sources));
+  // AMENDED (D517): the edge's sources include the ambers there, and D515's (the chassis line, the wall swerve) cite the lap that measured them, not a .md line
+  assert.ok(stop.sources.every((s) => /(FINDINGS|ARCHITECTURE)\.md:\d|^D\d{3}\b/.test(s)), JSON.stringify(stop.sources));
   const q = QUANTUM[UNIT[h]], at = b[side], out = at + (side === 'max' ? q : -q);
   const o = { ...opts, scope: bounds.scope };
   assert.strictEqual(probe(d, id, h, at, o).ok, true, `${h} = ${at} (the bound) must validate clean`);
@@ -115,9 +116,10 @@ test('amber is reported inside the red bounds: amberMax ≤ max, and a faster wo
   const b = handleBounds(d, 'w2', { handles: ['climb'], step: 1 });
   const h = b.handles.climb;
   assert.ok(h.amberMax != null && h.amberMax < h.max, JSON.stringify(h));
-  // one quantum past amberMax the word is amber (load above the proven 90 g) but still not red
+  // one quantum past amberMax the word is amber (a load amber) but still not red. AMENDED (D517): the first load amber a climbing word meets is now the
+  // 40 g chassis line (D515), before the proven 90 g
   const past = probe(d, 'w2', 'climb', h.amberMax + QUANTUM[UNIT.climb], { step: 1, scope: b.scope });
-  assert.strictEqual(past.ok, true); assert.ok(past.amberList.some((x) => x.reason === 'load-above-proven'), JSON.stringify(past.amberList.map((x) => x.reason)));
+  assert.strictEqual(past.ok, true); assert.ok(past.amberList.some((x) => x.reason === 'load-on-the-chassis' || x.reason === 'load-above-proven'), JSON.stringify(past.amberList.map((x) => x.reason)));
 });
 
 test('A\'s handleInfo hook takes these bounds as its physics (src/doc/library.js handleInfo(doc, id, boundsFn))', () => {

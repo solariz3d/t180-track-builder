@@ -84,13 +84,14 @@ test('the withdrawn 60 g red line does not come back: 70 g is neither red nor am
   const r = validate(X.pathOf(X.leftTurn(R, Math.PI / 2)), [X.seg({ speed: vFor(70), profile: prof })]);
   assert.deepStrictEqual(reasons(r.red), []);
   assert.ok(!r.amber.some((x) => x.reason === 'load-above-proven'));
-  assert.ok(r.info.some((x) => x.reason === 'on-the-stops'), '70 g is past the 20 g suspension stop: informational only');
+  assert.ok(r.info.some((x) => x.reason === 'on-the-stops'), '70 g is past the 25 g suspension stop: informational only');
 });
 
-test('the 20 g suspension stop is INFORMATION, from 20 g on, never red or amber (FINDINGS.md:103-104)', () => {
+// AMENDED (D517): the stop moved 20 → 25 g, the plateau D515 measured (bands.txt; src/validate/limits.js suspensionStopG); FINDINGS.md:103 stays in its source
+test('the 25 g suspension stop is INFORMATION, from 25 g on, never red or amber (D515; FINDINGS.md:103-104)', () => {
   const { R, prof, vFor } = turnAtLoad();
-  const at = validate(X.pathOf(X.leftTurn(R, Math.PI / 2)), [X.seg({ speed: vFor(20.01), profile: prof })]);
-  const below = validate(X.pathOf(X.leftTurn(R, Math.PI / 2)), [X.seg({ speed: vFor(19.9), profile: prof })]);
+  const at = validate(X.pathOf(X.leftTurn(R, Math.PI / 2)), [X.seg({ speed: vFor(25.01), profile: prof })]);
+  const below = validate(X.pathOf(X.leftTurn(R, Math.PI / 2)), [X.seg({ speed: vFor(24.9), profile: prof })]);
   assert.ok(at.info.some((x) => x.reason === 'on-the-stops' && /FINDINGS\.md:103/.test(x.source)));
   assert.ok(!below.info.some((x) => x.reason === 'on-the-stops'));
 });
@@ -209,12 +210,13 @@ test('lap: a closed loop driven fast enough proves out, with a lap time', () => 
   close(r.lap.minV, v, 1e-12);
 });
 
+// AMENDED (D517), as this test exists to make happen: the suspension stop 20 → 25 g (D515 bands.txt, the height's plateau from 25 g).
 // CHANGED 2026-10-03, as this test exists to make happen: vmax 764 → 970 (FINDINGS.md §3e, the first lap whose straights
 // let the car reach top speed). CHANGED 2026-09-27 (D169): vmax 745 → 764 (FINDINGS.md:484), accel null → the
 // measured table (FINDINGS.md:494), and the new design-speed default 460 km/h (FINDINGS.md:476).
 test('MACH6 defaults are the FINDINGS numbers (a changed number must fail here, beside its citation)', () => {
   assert.deepStrictEqual([MACH6.suspensionStopG, MACH6.provenG, [...MACH6.jumpG], MACH6.reach.downDeg, MACH6.reach.fallG, MACH6.reach.minTakeoffKmh, MACH6.seamP90Deg, MACH6.stackedM, MACH6.steepDeg, MACH6.vmaxKmh, MACH6.designSpeedKmh],
-    [20, 90, [3.2, 6.3], 10, 6.5, 375, 5.9, 2, 50, 970, 460]);
+    [25, 90, [3.2, 6.3], 10, 6.5, 375, 5.9, 2, 50, 970, 460]);
   assert.deepStrictEqual(MACH6.accel.map((r) => [...r]), [[100, 24.71], [250, 25.52], [350, 23.20], [450, 20.07], [550, 17.73], [650, 14.75], [750, 11.50]]);
 });
 

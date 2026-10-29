@@ -25,9 +25,10 @@ function build(words, speed) {
 const levelsOf = (map) => map.stations.map((e) => Array.from(e.levels));
 
 // ── the mapping, at every threshold ──
-test('load → colour: below the 20 g suspension stop is clear, and exactly 20 g is info', () => {
-  assert.strictEqual(MACH6.suspensionStopG, 20);
-  assert.deepStrictEqual([loadLevel(19.999999), loadLevel(20)], [LEVEL.CLEAR, LEVEL.INFO]);
+// AMENDED (D517): the stop moved 20 → 25 g, the plateau D515 measured (src/validate/limits.js suspensionStopG)
+test('load → colour: below the 25 g suspension stop is clear, and exactly 25 g is info', () => {
+  assert.strictEqual(MACH6.suspensionStopG, 25);
+  assert.deepStrictEqual([loadLevel(24.999999), loadLevel(25)], [LEVEL.CLEAR, LEVEL.INFO]);
 });
 test('load → colour: exactly the proven 90 g is still info, and anything above it is amber', () => {
   assert.strictEqual(MACH6.provenG, 90);

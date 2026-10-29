@@ -105,8 +105,10 @@ function faults(doc, opts, sharp) {
   const V = require('../validate/index.js');
   const { d, s0, s1 } = probe(doc, opts, sharp), { path } = toPath(d), res = V.validate(path, toSegments(d), { csp: true, fullSpeed: true });
   const on = (xs) => (xs || []).filter((x) => { const a = x.s0 != null ? x.s0 : x.s, b = x.s1 != null ? x.s1 : a; return b >= s0 - NEAR_M && a <= s1 + NEAR_M; }).map((x) => x.reason);
-  return { red: [...new Set(on(res.red))], amber: [...new Set(on(res.amber))] };
+  return { red: [...new Set(on(res.red))], amber: [...new Set(on(res.amber.filter((x) => !ADVISORY.has(x.reason))))] };
 }
+// D517: the two warnings D515's lap measured are limits known to hold, not geometry: they never set Sharp's minimum radius (the user drove 56-63 g clean)
+const ADVISORY = new Set(['load-on-the-chassis', 'wall-swerve']);
 const green = (doc, opts, sharp) => { const f = faults(doc, opts, sharp); return !f.red.length && !f.amber.length; };
 
 /** The smallest radius (rounded UP to 0.1 m) at which this corner stays green from this head, or null when none up to R_HI m does. */
