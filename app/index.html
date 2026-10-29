@@ -219,6 +219,10 @@
   #palette, #side { flex: none; background: var(--panel); }
   #palette { padding: 4px 8px 8px; }   /* the track line sits right under the bar: no band above it */
   #palette > p:first-child, #palette > :first-child { margin-top: 0; }
+  /* the track line is the column's first line now, on the top of the panel, where Aqua's gloss is lightest: a shade over --dim keeps it at 4.5:1 there */
+  #palette > .head:first-child { color: color-mix(in srgb, var(--dim) 55%, var(--text)); }
+  /* the guide's card and its Show the guide button sit under the values band, which runs to the right at 1400 px */
+  #guide .guide-card, #guide .guide-open { top: 64px; }
   #preview { --preview-shift: 130px; }   /* half the column: the values strip centres on the view beside it */
   #stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
   #preview { position: relative; min-height: 0; overflow: hidden; }
