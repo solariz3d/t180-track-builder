@@ -33,6 +33,8 @@
 //      and again on the next click; Random stays ticked and the theme is saved as music
 //  19b (D401) that first click on a fresh install picks ONCE: with Math.random pinned at 0.4 the start is Skyline and one pick is Glass (a second pick, which the first click
 //      made when nothing was saved yet, lands back on Skyline)
+//  20  File ▸ Open… is a list the page draws, not a native select (whose pop-up showed the menu behind it through its rows in the frameless window): no select in any
+//      menu; unfolded, its rows are the saved tracks; the arrow keys reach them; a click opens that track and closes the menu; Esc closes the menu and folds the list
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -477,4 +479,37 @@ test('row 19b (D401): on a fresh install the first click on the ticked Random pi
   await clickText('m-settings', 'Random');
   assert.equal(await look(), 'glass', 'the next click, the theme now saved as music, picks once from Aurora: Glass');
   assert.deepEqual(errors, []);
+});
+
+test('row 20: File ▸ Open… is a list the page draws: no select in any menu, its rows are the saved tracks, a click opens one, Esc closes it', { skip }, async () => {
+  const { createCoreShell } = require('../core/coreshell.js'), D = require('../../src/core/document.js');
+  const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 100, family: 'bowl' }); s.extend({ length: 100, family: 'bowl' });
+  const text = D.serialize(s.getState().history.present);
+  // the native side's stand-in: two saved equation tracks (and a word track, which Open does not list), and the track text for open_track
+  const stand = (await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__opened = null; window.__TAURI__ = { core: { invoke: (cmd, a) => cmd === 'list_tracks' ? Promise.resolve(['eq-Alpha', 'eq-Beta', 'old word track'])
+    : cmd === 'open_track' ? (window.__opened = a.name, Promise.resolve(${JSON.stringify(text)})) : /^list_/.test(cmd) ? Promise.resolve([]) : Promise.resolve(null) }, event: { listen: () => Promise.resolve(() => {}) } };` })).result.identifier;
+  try {
+    await load();
+    assert.equal(await ev("return document.querySelectorAll('.more-menu select').length;"), 0, 'no native select in any menu');
+    const rows = () => ev("return [...document.querySelectorAll('#open .menu-rows .menu-row')].map((r) => r.textContent);");
+    const unfold = () => ev("document.querySelector('#open .menu-list-head').click(); await new Promise((r) => setTimeout(r, 150)); return !document.querySelector('#open .menu-rows').hidden;");
+    await open('m-file');
+    assert.equal(await unfold(), true, 'Open… unfolds its rows');
+    assert.deepEqual(await rows(), ['Alpha', 'Beta'], 'the rows are the saved tracks');
+    assert.deepEqual(await openIds(), ['m-file'], 'unfolding the list keeps the menu open');
+    await ev("document.querySelector('#open .menu-list-head').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); return true;");
+    assert.equal(await ev('return document.activeElement.textContent;'), 'Alpha', 'the down arrow reaches the first row');
+    await ev("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); return true;");
+    assert.equal(await ev('return document.activeElement.textContent;'), 'Beta', 'and the next');
+    await ev("[...document.querySelectorAll('#open .menu-row')].find((r) => r.textContent === 'Beta').click(); await new Promise((r) => setTimeout(r, 300)); return true;");
+    assert.equal(await ev('return window.__opened;'), 'eq-Beta', 'a click opens that track');
+    assert.deepEqual(await openIds(), [], 'and closes the menu');
+    assert.equal(await ev("return document.getElementById('name').value;"), 'Beta');
+    assert.match(await ev("return document.querySelector('#palette .head').textContent;"), /^2 pieces/, 'the opened track is on show');
+    await open('m-file'); assert.equal(await unfold(), true);
+    await ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true;");
+    assert.deepEqual(await openIds(), [], 'Esc closes the menu');
+    assert.deepEqual([await ev("return document.querySelector('#open .menu-rows').hidden;"), await rows()], [true, []], 'and the list is folded');
+    assert.deepEqual(errors, []);
+  } finally { await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: stand }); }
 });

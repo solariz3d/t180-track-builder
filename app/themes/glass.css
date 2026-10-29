@@ -89,7 +89,7 @@
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
 }
 [data-theme="glass"] .more-menu hr { border-top-color: rgba(190, 235, 255, .30); }
-[data-theme="glass"] .pieces-menu .piece-row:hover { background: rgba(143, 230, 255, .10); }
+[data-theme="glass"] .pieces-menu .piece-row:hover, [data-theme="glass"] .more-menu .menu-row:hover, [data-theme="glass"] .more-menu .menu-row:focus { background: rgba(143, 230, 255, .10); }
 
 /* the strips under the bar */
 [data-theme="glass"] .bar, [data-theme="glass"] #banner .brush-strip { background: linear-gradient(180deg, rgba(200, 238, 255, .14), rgba(15, 34, 50, .95)); }

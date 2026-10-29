@@ -41,7 +41,7 @@
 /* the menus: navy frosted panes */
 [data-theme="skyline-night"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(18, 36, 72, .97), rgba(11, 25, 54, .95)); border-color: #2f5590; border-radius: 14px; box-shadow: 0 14px 40px rgba(0, 8, 30, .6), inset 0 1px 0 rgba(170, 215, 255, .2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="skyline-night"] .more-menu button { border-radius: 9px; }
-[data-theme="skyline-night"] .pieces-menu .piece-row:hover { background: rgba(124, 200, 255, .1); }
+[data-theme="skyline-night"] .pieces-menu .piece-row:hover, [data-theme="skyline-night"] .more-menu .menu-row:hover, [data-theme="skyline-night"] .more-menu .menu-row:focus { background: rgba(124, 200, 255, .1); }
 
 /* fields */
 [data-theme="skyline-night"] input[type="number"], [data-theme="skyline-night"] input[type="text"], [data-theme="skyline-night"] input:not([type]), [data-theme="skyline-night"] textarea,

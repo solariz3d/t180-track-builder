@@ -154,6 +154,13 @@
   .more-menu .menu-slot, .more-menu .menu-panel-wrap, .more-menu .menu-panel { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
   .more-menu .menu-slot:empty { display: none; }
   .pieces-menu .piece-row:hover { background: rgba(255,255,255,0.05); }
+  /* Open… and Previous versions…: lists the page draws (a native select's pop-up showed the menu behind it through its rows in this frameless window) */
+  .more-menu .menu-list { display: flex; flex-direction: column; gap: 2px; }
+  .more-menu .menu-rows { display: flex; flex-direction: column; max-height: 50vh; overflow-y: auto; margin-left: 6px; padding-left: 6px; border-left: 1px solid var(--line); }
+  .more-menu .menu-rows[hidden] { display: none; }
+  .more-menu .menu-row { padding: 4px 8px; color: var(--text); white-space: nowrap; cursor: pointer; border-radius: 4px; outline: none; }
+  .more-menu .menu-row:hover, .more-menu .menu-row:focus { background: rgba(255,255,255,0.05); }
+  .more-menu .menu-row-none { padding: 4px 8px; color: var(--dim); white-space: nowrap; }
   .more-menu #share { display: flex; flex-direction: column; gap: 6px; }   /* D267: the share codes live in the menu (they were a section of the left column) */
   .more-menu #share textarea { width: 100%; box-sizing: border-box; }
   /* D252 follow-up (C's finding 2): a long install note (the full Assetto Corsa path) pushed ⋯ right and its menu off the window; it is cut to a box, the whole text in its tooltip */
@@ -273,9 +280,9 @@
   <!-- D355: THE MENUS, each the page's <details class="more"> drop-down (app/menubar/menubar.js fills the .menu-slot ones as they open) -->
   <details id="m-file" class="more"><summary title="new, open, save, previous versions, export, See it in Assetto, the track codes">File ▾</summary><div class="more-menu">
     <button id="new" title="New track">New</button>
-    <select id="open" aria-label="open a saved track"><option value="">Open…</option></select>
+    <div id="open" class="menu-list" aria-label="open a saved track"><button class="menu-list-head" aria-expanded="false" title="the saved tracks: pick one to open it">Open…</button><div class="menu-rows" role="listbox" aria-label="saved tracks" hidden></div></div>
     <button id="save" title="Ctrl+S">Save</button>
-    <select id="versions" aria-label="previous versions of the open track" title="Every Save keeps the version it replaces (the newest 20), and Close the loop keeps the track from before it. One opens as an unsaved copy."><option value="">Previous versions…</option></select>
+    <div id="versions" class="menu-list" aria-label="previous versions of the open track" title="Every Save keeps the version it replaces (the newest 20), and Close the loop keeps the track from before it. One opens as an unsaved copy."><button class="menu-list-head" aria-expanded="false">Previous versions…</button><div class="menu-rows" role="listbox" aria-label="previous versions" hidden></div></div>
     <hr>
     <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
     <button id="testexport" title="TEST export of an UNFINISHED track into Assetto Corsa, as t180b_&lt;name&gt;_test, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export. Export to Assetto Corsa does the same on an open track.">Test export (unfinished)…</button>
@@ -476,20 +483,40 @@
       mute.onchange = () => sound.setMuted(mute.checked);
       vol.oninput = () => sound.setVolume(Number(vol.value) / 100);
     } catch (e) { console.error(`sounds not started: ${e && e.message}`); }
-    const refreshList = async () => { try { const names = await shell.list(); $('open').replaceChildren(new Option('Open…', ''), ...names.map((n) => new Option(n, n))); } catch (e) { status.textContent = e.message; } };
+    // OPEN… and PREVIOUS VERSIONS…: lists the page draws itself in the File menu. The head unfolds its rows, read fresh each time; the arrows move between
+    // them, Enter or a click picks one, and the menu closes. Closing the menu (Esc, a press outside, a command) folds them again
+    const rowList = (box, load, pick) => {
+      const head = box.querySelector('.menu-list-head'), rows = box.querySelector('.menu-rows'), word = head.textContent;
+      const fold = () => { rows.hidden = true; rows.replaceChildren(); head.textContent = word; head.setAttribute('aria-expanded', 'false'); };
+      const row = (it) => { const r = document.createElement('div'); r.className = 'menu-row'; r.setAttribute('role', 'option'); r.tabIndex = 0; r.textContent = it.label; r.dataset.value = it.value;
+        r.onclick = () => { $('m-file').open = false; pick(it.value); }; return r; };
+      const fill = async () => {
+        let got; try { got = await load(); } catch (e) { status.textContent = e.message || String(e); fold(); return; }
+        if (rows.hidden) return;   // folded while it was being read
+        rows.replaceChildren(...(got.items.length ? got.items.map(row) : [Object.assign(document.createElement('div'), { className: 'menu-row-none', textContent: got.none })]));
+        if (got.head) head.textContent = got.head;
+      };
+      head.onclick = () => { if (!rows.hidden) { fold(); return; } rows.hidden = false; head.setAttribute('aria-expanded', 'true'); fill(); };
+      const step = (from, by) => { const list = [...rows.querySelectorAll('.menu-row')]; if (!list.length) return; const i = list.indexOf(from); list[i < 0 ? (by > 0 ? 0 : list.length - 1) : Math.max(0, Math.min(list.length - 1, i + by))].focus(); };
+      head.onkeydown = (e) => { if (e.key === 'ArrowDown' && !rows.hidden) { e.preventDefault(); step(null, 1); } };
+      rows.onkeydown = (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (e.key === 'ArrowUp' && document.activeElement === rows.querySelector('.menu-row')) head.focus(); else step(document.activeElement, e.key === 'ArrowDown' ? 1 : -1); }
+        else if (e.key === 'Enter' && document.activeElement && document.activeElement.classList.contains('menu-row')) { e.preventDefault(); document.activeElement.click(); }
+      };
+      $('m-file').addEventListener('toggle', () => { if (!$('m-file').open) fold(); });
+      return { refresh: () => { if (!rows.hidden) fill(); } };
+    };
+    const openList = rowList($('open'), async () => ({ items: (await shell.list()).map((n) => ({ label: n, value: n })), none: 'no saved tracks yet' }),
+      async (n) => { try { await shell.open(n); $('name').value = n; } catch (err) { status.textContent = err.message; } });
+    const refreshList = () => openList.refresh();
     $('new').onclick = () => shell.newDoc();
     $('save').onclick = async () => { try { await shell.save($('name').value.trim()); await refreshList(); } catch (e) { status.textContent = e.message; } };
-    // PREVIOUS VERSIONS of the open track (D239 amendment): listed when the picker is opened, one opens as an unsaved copy
-    const refreshVersions = async () => {
-      const v = $('versions');
-      try {
-        const list = await shell.listVersions();
-        v.replaceChildren(new Option(list.length ? `Previous versions (${list.length})…` : 'Previous versions: none yet', ''), ...list.map((b) => new Option(`${b.when || b.file}${b.length != null ? ` · ${Math.round(b.length).toLocaleString('en-US')} m` : ''}${b.closed != null ? (b.closed ? ' · closed' : ' · open') : ' · unreadable'}`, b.file)));
-      } catch (e) { status.textContent = `previous versions: ${e.message || e}`; }
-    };
-    $('versions').onmousedown = $('versions').onfocus = () => { refreshVersions(); };
-    $('versions').onchange = async (e) => { const f = e.target.value; if (!f) return; await shell.openVersion(f); $('name').value = ''; e.target.value = ''; };
-    $('open').onchange = async (e) => { const n = e.target.value; if (!n) return; try { await shell.open(n); $('name').value = n; } catch (err) { status.textContent = err.message; } e.target.value = ''; };
+    // PREVIOUS VERSIONS of the open track: listed when the list is unfolded, one opens as an unsaved copy
+    rowList($('versions'), async () => {
+      let list; try { list = await shell.listVersions(); } catch (e) { throw new Error(`previous versions: ${e.message || e}`); }
+      return { head: list.length ? `Previous versions (${list.length})…` : 'Previous versions: none yet', none: 'none yet: every Save keeps the version it replaces',
+        items: list.map((b) => ({ value: b.file, label: `${b.when || b.file}${b.length != null ? ` · ${Math.round(b.length).toLocaleString('en-US')} m` : ''}${b.closed != null ? (b.closed ? ' · closed' : ' · open') : ' · unreadable'}` })) };
+    }, async (f) => { await shell.openVersion(f); $('name').value = ''; });
     $('export').onclick = async () => {
       try {
         const seam = await call('test_export_folder'), dir = seam || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
@@ -582,7 +609,7 @@
       // (settings.set tells its listeners only on a change; A's read of D401, §8). app/menubar/items.js calls this from the Random item
       ctx.repickTheme = () => onTheme('music');
       MB.mountBar(document, [
-        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport'), $('open'), $('versions')] },
+        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport')] },
         { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: some(selection, 'The selection\'s entries')(c) }) },
         { details: $('m-build'), slot: $('m-build-slot'), items: whole(build) },
         { details: $('m-track'), slot: $('m-track-slot'), items: whole(track) },
