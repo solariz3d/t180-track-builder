@@ -23,7 +23,7 @@ physics, and plain AC can crash loading them.
 [v0.4.30 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.4.30). What changed since 0.2.2 is listed under
 `[0.4.30]`, `[0.4.29]`, `[0.4.28]`, `[0.4.27]`, `[0.4.26]`, `[0.4.25]`, `[0.4.24]`, `[0.4.23]`, `[0.4.22]`, `[0.4.21]`, `[0.4.20]`, `[0.4.19]`, `[0.4.9]`, `[0.4.8]`, `[0.4.7]`, `[0.4.6]`, `[0.4.5]`, `[0.4.4]`, `[0.4.3]`, `[0.4.2]`, `[0.4.1]`, `[0.4.0]`, `[0.3.6]`, `[0.3.5]`, `[0.3.4]`, `[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
 
-Only the current installer is published here. Earlier versions are listed in the changelog but no longer offered for
+Only recent installers are published here. Earlier versions are listed in the changelog but no longer offered for
 download; the current one carries everything they did.
 
 Uninstalling leaves your tracks and settings in place (see *Where your files live*).
