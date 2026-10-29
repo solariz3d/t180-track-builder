@@ -14,6 +14,7 @@
 const { createMarkersController } = require('./panel.js');
 const { PATTERNS, runUpM } = require('../../src/markers/index.js');
 const { MACH6 } = require('../../src/validate/limits.js');
+const { menuPick } = require('../core/menupick.js');   // a choice drawn by the page: this panel sits in a menu, where a native select's pop-up showed the menu behind it
 
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 const num = (value, step, onchange) => { const i = el('input', { type: 'number', value, step }); i.onchange = () => onchange(Number(i.value)); return i; };
@@ -30,7 +31,7 @@ function mount(root, shell) {
     if (!st.layout) { head.textContent = 'markers: place a straight to drop the grid on'; return; }
     const L = st.layout, red = st.check ? st.check.checks.filter((c) => !c.ok) : [];
     head.textContent = `${red.length ? `${red.length} red` : 'ready'}${st.custom ? '' : ' · default layout'} · ${st.placed.filter((m) => m.kind === 'grid').length} grid slots · ${st.placed.filter((m) => m.kind === 'pit').length} pit boxes`;
-    const pat = el('select', {}, Object.keys(PATTERNS).map((p) => el('option', { value: p, textContent: p, selected: p === L.grid.pattern })));
+    const pat = menuPick(document, { 'aria-label': 'grid pattern' }, Object.keys(PATTERNS).map((p) => ({ value: p, text: p, selected: p === L.grid.pattern })));
     pat.onchange = () => ctl.edit((l) => { l.grid.pattern = pat.value; return l; });
     const hot = L.hotlap.speedKmh != null ? L.hotlap.speedKmh : MACH6.designSpeedKmh;
     form.append(

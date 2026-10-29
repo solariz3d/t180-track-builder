@@ -41,7 +41,7 @@
 /* the menus: white frosted panes with a sky shadow */
 [data-theme="skyline"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(236, 246, 255, .94)); border-color: #a9cdf0; border-radius: 14px; box-shadow: 0 14px 40px rgba(18, 80, 170, .32), inset 0 1px 0 #fff; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="skyline"] .more-menu button { border-radius: 9px; }
-[data-theme="skyline"] .pieces-menu .piece-row:hover { background: rgba(31, 111, 214, .08); }
+[data-theme="skyline"] .pieces-menu .piece-row:hover, [data-theme="skyline"] .more-menu .menu-row:hover, [data-theme="skyline"] .more-menu .menu-row:focus { background: rgba(31, 111, 214, .08); }
 
 /* fields */
 [data-theme="skyline"] input[type="number"], [data-theme="skyline"] input[type="text"], [data-theme="skyline"] input:not([type]), [data-theme="skyline"] textarea,

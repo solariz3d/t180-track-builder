@@ -8,6 +8,7 @@
 //   mount({ shell, el, win }) -> { nodes, update(state), unmount() }
 'use strict';
 const { lenOf } = require('./spawnsui.js');
+const { menuPick } = require('./menupick.js');   // a choice drawn by the page: this section sits in a menu, where a native select's pop-up showed the menu behind it
 const PL = require('../../src/doc/pitlane.js');   // the lane's defaults (the core's document.js needs node's fs; the UI must load in the webview without it)
 // the pit boxes' starting count and spacing (src/core/document.js PIT_DEFAULT says the same)
 const DEFAULT = Object.freeze({ ...PL.DEFAULTS, boxes: 4, boxSpacingM: 10 });
@@ -24,11 +25,11 @@ const say = (msg) => { const code = Object.keys(WHY).find((k) => String(msg).sta
 
 function mount({ shell, el, win }) {
   const on = el('input', { type: 'checkbox', 'aria-label': 'pit lane', title: 'a side road off the start straight, with the practice spawns on it' });
-  const side = el('select', { 'aria-label': 'pit lane side' });
+  const side = menuPick(el('div').ownerDocument, { 'aria-label': 'pit lane side' });
   side.replaceChildren(new win.Option('right', 'R'), new win.Option('left', 'L'));
   const num = (aria, step, min, title) => el('input', { type: 'number', step, min, 'aria-label': aria, ...(title ? { title } : {}) });
-  const leaveP = el('select', { 'aria-label': 'pit lane leaves on piece' }), leaveM = num('pit lane leaves at metres into its piece', '1', '0');
-  const backP = el('select', { 'aria-label': 'pit lane rejoins on piece' }), backM = num('pit lane rejoins at metres into its piece', '1', '0');
+  const leaveP = menuPick(el('div').ownerDocument, { 'aria-label': 'pit lane leaves on piece' }), leaveM = num('pit lane leaves at metres into its piece', '1', '0');
+  const backP = menuPick(el('div').ownerDocument, { 'aria-label': 'pit lane rejoins on piece' }), backM = num('pit lane rejoins at metres into its piece', '1', '0');
   const gap = num('pit lane gap from the road', '0.5', '0', 'metres between the road\'s edge and the lane, along its run');
   const width = num('pit lane width', '0.5', '2', 'the lane\'s own width, metres');
   const peel = num('pit lane peel-off length', '1', '5', 'metres of road over which the lane peels off');

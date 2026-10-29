@@ -26,6 +26,7 @@ const T = require('../../src/texture/index.js');
 const TM = require('../../src/texmaker/index.js');
 const { NAME_RE } = require('../../src/doc/textures.js');
 const EDGE = require('../../src/texture/edge.js');
+const { menuPick } = require('./menupick.js');   // a choice drawn by the page: the road surface sits in a menu, where a native select's pop-up showed the menu behind it
 
 const KEY = 't180.coreLook';
 const ASPHALT = TM.serialize(TM.PRESETS.asphalt);   // canonical text, so the made texture's name is the same wherever it is rebuilt
@@ -94,7 +95,7 @@ let remember = (v, key = KEY) => { try { localStorage.setItem(key, v); } catch (
 function mount(root, shell) {
   const { nameFromFile } = require('../texture/panel.js');
   const start = remembered() === 'solid' ? 'solid' : 'asphalt';
-  const head = el('div', { className: 't-head' }), pick = el('select', {}, [el('option', { value: 'asphalt', textContent: 'Asphalt (made here)' }), el('option', { value: 'solid', textContent: 'Solid colour' }), el('option', { value: 'image', textContent: 'My picture' })]);
+  const head = el('div', { className: 't-head' }), pick = menuPick(document, { 'aria-label': 'road surface' }, [{ value: 'asphalt', text: 'Asphalt (made here)' }, { value: 'solid', text: 'Solid colour' }, { value: 'image', text: 'My picture' }]);
   const file = el('input', { type: 'file', accept: '.png,.jpg,.jpeg,image/png,image/jpeg', title: 'a PNG or JPG you have the right to use' }), note = el('div', { className: 't-budget' });
   // D371: the edge fit, off unless chosen (and remembered): once the track is closed the surface is laid out from its whole width range
   const edgeBox = el('input', { type: 'checkbox', checked: remembered(KEY_EDGE) === '1' }), edgeRow = el('label', { className: 't-edge', title: 'once the track is closed: the edge bands keep their size at every width, and the centre is whole repeats' }, [edgeBox, el('span', { textContent: ' edge bands fitted to the closed track' })]);

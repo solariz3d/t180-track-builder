@@ -51,7 +51,7 @@
 [data-theme="aurora"] .more-menu { background: var(--tex), linear-gradient(180deg, rgba(14, 18, 52, .94), rgba(6, 8, 24, .96)); border-color: rgba(184, 146, 255, .45); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .6), 0 0 30px rgba(120, 90, 255, .25), inset 0 1px 0 rgba(111, 245, 192, .18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 [data-theme="aurora"] .more-menu button { border-radius: 8px; }
 [data-theme="aurora"] .more-menu hr { border-top-color: rgba(184, 146, 255, .3); }
-[data-theme="aurora"] .pieces-menu .piece-row:hover { background: rgba(111, 245, 192, .07); }
+[data-theme="aurora"] .pieces-menu .piece-row:hover, [data-theme="aurora"] .more-menu .menu-row:hover, [data-theme="aurora"] .more-menu .menu-row:focus { background: rgba(111, 245, 192, .07); }
 
 /* fields */
 [data-theme="aurora"] input[type="number"], [data-theme="aurora"] input[type="text"], [data-theme="aurora"] input:not([type]), [data-theme="aurora"] textarea,

@@ -137,7 +137,8 @@ test('Road surface ▸: opening it shows the same picker, choosing solid colour 
   const M = await menu();
   try {
     const P = M.open('Road surface ▸');
-    const pick = P.host.all().find((e) => e.tagName === 'SELECT');
+    // amended: the picker was a native select, found by its tag; it sits in a menu, so it is a choice the page draws now (app/core/menupick.js), found by its label
+    const pick = P.host.all().find((e) => e.attrs && e.attrs['aria-label'] === 'road surface');
     assert.ok(pick, 'the surface picker is in the panel'); assert.equal(pick.value, 'asphalt');
     assert.ok(P.host.all().some((e) => e.tagName === 'INPUT' && e.type === 'file'), 'and the picture box');
     const events = () => M.doc.events.filter((e) => e.type === 't180:textures');
@@ -146,7 +147,7 @@ test('Road surface ▸: opening it shows the same picker, choosing solid colour 
     P.m.unmount();
     assert.equal(P.host.children.length, 0, 'the picker leaves the host when the panel closes');
     const second = M.open('Road surface ▸');
-    assert.equal(second.host.all().find((e) => e.tagName === 'SELECT').value, 'solid', 'reopened, it still says what was chosen');
+    assert.equal(second.host.all().find((e) => e.attrs && e.attrs['aria-label'] === 'road surface').value, 'solid', 'reopened, it still says what was chosen');
     M.shell.extend({ length: 50 });
     assert.ok(events().length >= 3, 'a new piece after the panel closed is still announced: the controller outlives the panel');
   } finally { M.done(); }

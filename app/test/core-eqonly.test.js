@@ -249,7 +249,8 @@ test('the page: Save sends the local time for the backup\'s name, the three back
   const html = fs.readFileSync(path.join(REPO, 'app', 'index.html'), 'utf8');
   assert.match(html, /saveDoc: \(name, text\) => call\('save_track', \{ name, text, stamp: localStamp\(\) \}\)/);
   for (const c of ['backup_track', 'list_track_backups', 'open_track_backup']) assert.ok(html.includes(`call('${c}'`), c);
-  assert.match(html, /<select id="versions"/);
+  // amended: the picker was a native <select>, whose pop-up showed the menu behind it in the frameless window; it is now a list the page draws (menubar-page row 20)
+  assert.match(html, /<div id="versions" class="menu-list"/);
   const rs = fs.readFileSync(path.join(REPO, 'src-tauri', 'src', 'lib.rs'), 'utf8');
   for (const c of ['backup_track', 'list_track_backups', 'open_track_backup']) assert.match(rs, new RegExp(`generate_handler!\\[[^\\]]*\\b${c}\\b`), `${c} is registered`);
 });
