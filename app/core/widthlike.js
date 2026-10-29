@@ -1,12 +1,12 @@
-// widthlike.js: the "width like…" drop-down's entries (D232), from src/doc/widths.json (numbers only; tools/widths.cjs makes it from the reads).
+// widthlike.js: the "width like…" drop-down's entries (D232), from src/doc/widths.json (numbers only).
 //
 //   entries(tube, tracks) -> [{ value, label }]   the first is the placeholder (value ''), then one per known track WHOSE READ CLOSES, narrowest first: value = the median as text.
-//                                          A track whose read did not close the lap (`read_closes: false`: track M, track N (long)) is in the JSON, honestly flagged, and
+//                                          A track whose read did not close the lap (`read_closes: false`: the 21 m road and the 34 m (32–53) one) is in the JSON, honestly flagged, and
 //                                          is NEVER offered here: a walk that did not come back to its start may not have been the lap, so its width is not a reference.
 //                                          `tracks` is the JSON's list unless a caller (a test) gives its own.
-//                                          label "track H, 24 m (21–28)": the median, then the 10th to 90th percentile of what that track's reads measure.
+//                                          label "24 m road (21–28)": the median, then the 10th to 90th percentile of what that road's reads measure.
 //                                          For a TUBE piece (the tube sweep t = 360) the figures are the distance ROUND the tube, and the entry adds how wide that
-//                                          is across: "track H, 24 m round (21–28), a tube 7.6 m across".
+//                                          is across: "24 m round (21–28), a tube 7.6 m across".
 //   tubeNote(w)   -> string                (D267) the few words under the field of a tube, "≈ 14.3 m across"; tubeTip(w) is the explanation, the field's tooltip. Before D267 this was the line under the drop-down for a tube: w is the distance ROUND it (the circumference, u runs −w/2 to +w/2 round the
 //                                          ring, src/texture/flow.js), so a tube's width across is w/π.
 //   isTube(sweep) -> bool                  the sweep field's value (degrees) says a closed pipe: 360.
@@ -22,7 +22,7 @@ const isTube = (sweep) => Number.isFinite(Number(sweep)) && String(sweep).trim()
 
 function label(t, tube) {
   const band = `(${fmt(t.p10_m)}–${fmt(t.p90_m)})`;
-  return tube ? `${t.name}, ${fmt(t.median_m)} m round ${band}, a tube ${across(t.median_m)} m across` : `${t.name}, ${fmt(t.median_m)} m ${band}`;
+  return tube ? `${fmt(t.median_m)} m round ${band}, a tube ${across(t.median_m)} m across` : `${fmt(t.median_m)} m road ${band}`;
 }
 function entries(tube = false, tracks = W.tracks) {
   return [{ value: '', label: tube ? 'width like… (m round)' : 'width like…' }, ...tracks.filter((t) => t.read_closes !== false).map((t) => ({ value: String(t.median_m), label: label(t, tube) }))];

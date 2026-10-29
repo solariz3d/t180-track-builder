@@ -67,10 +67,6 @@ test('cameras: forward and right move the eye; yaw + 90° looks left (left = up 
 test('cameras: a view whose anchor the track does not have is refused', () => {
   assert.throws(() => C.resolveView(view({ anchor: 'AC_TIME_9_L' }), grid), /has no AC_TIME_9_L/);
 });
-test('cameras: the repository\'s views file loads: track E and track B, every view anchored to an AC_ dummy', () => {
-  const V = C.loadViews(fs.readFileSync(CLI.VIEWS_FILE, 'utf8'));
-  assert.deepStrictEqual([Object.keys(V.tracks).sort(), [...new Set(V.views.map((v) => v.track))].sort(), V.views.every((v) => /^AC_/.test(v.anchor))], [['trackb', 'tracke'], ['trackb', 'tracke'], true]);
-});
 test('cameras: a bad views file is refused, saying why', () => {
   const ok = { tracks: { t: { folder: 't', models: ['t.kn5'] } }, views: [view({ track: 't' })] }, bad = (patch) => assert.throws(() => C.loadViews(JSON.stringify(patch(JSON.parse(JSON.stringify(ok))))), /lookmatch: /);
   assert.doesNotThrow(() => C.loadViews(JSON.stringify(ok)));

@@ -1,5 +1,5 @@
 // Tests for CSP's extended-physics switch in the export (ARCHITECTURE §6: the soft-collision block "plus CSP's
-// WAV_PITCH=extended-0 opt-in with a CSP-only warning"; R1, docs/research/04_ac_physics_drivability.md §2): the "T-180 track"
+// WAV_PITCH=extended-0 opt-in with a CSP-only warning"; R1): the "T-180 track"
 // toggle ON writes the block AND the switch and says the CSP-only warning; OFF writes neither; the soft-road control
 // (noblock) and the platform test's two variants differ by the block ALONE, so FINDINGS §4c's prediction tests one thing.
 // Run: node --test --test-concurrency=4 test/export_csp.test.js

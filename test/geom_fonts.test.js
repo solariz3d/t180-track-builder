@@ -48,13 +48,6 @@ for (const font of FONTS) {
   });
 }
 
-test('fonts: src/geom/fontshape.json is what tools/fontshape.cjs makes from the reads, when the reads are here', (t) => {
-  const reads = path.join(R, 'reads');
-  if (!fs.existsSync(path.join(reads, 'tracke.read.json'))) { t.skip('no reads/ on this machine: FINDINGS §7f has the commands that make them'); return; }
-  const { words, families } = require(path.join(R, 'tools/fontshape.cjs'));
-  assert.deepEqual(families(words(reads)), SHAPE.families);
-});
-
 test('fontProfile: symmetric, ψ(0) = 0, the floor at ¼ ½ ¾ 1 of the half-width, the wall beyond it to ψL / ψR', () => {
   const P = fontProfile('half-pipe', { width: 40, wall: 8, psiL: 70 * DEG, psiR: 50 * DEG });
   assert.deepEqual(P.u, [-28, -20, -15, -10, -5, 0, 5, 10, 15, 20, 28]);

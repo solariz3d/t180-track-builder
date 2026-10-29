@@ -1,5 +1,5 @@
 // doc-head.test.js: node --test test/*.test.js
-// The build head (the user, 12:20: "youre not the one who builds the track, the user does"; docs/INTERFACES.md §4):
+// The build head (the user, 12:20: "youre not the one who builds the track, the user does"):
 // the user grows an OPEN track from its end. Append, remove and replace at the head are the core edits, each one
 // undo step, and resolveFrom re-resolves only from the first changed word. Dependency-free.
 'use strict';

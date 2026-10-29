@@ -78,7 +78,7 @@ function askLayouts(doc, { tracks = [] } = {}) {
   });
   nameIn.oninput = () => { state.name = nameIn.value; refresh(); };
   card.appendChild(mk('h2', { textContent: 'Export layouts' }));
-  card.appendChild(mk('p', { textContent: 'One Assetto Corsa track with one layout per saved track, each a whole road, the way track N ships its layouts. Re-exporting removes the files of a layout you leave out, and nothing else.' }));
+  card.appendChild(mk('p', { textContent: 'One Assetto Corsa track with one layout per saved track, each a whole road, the way a track with several layouts ships them. Re-exporting removes the files of a layout you leave out, and nothing else.' }));
   const nameLine = mk('label', { className: 'lx-row' }); nameLine.appendChild(mk('span', { textContent: 'Track name' })); nameLine.appendChild(nameIn);
   card.appendChild(nameLine);
   card.appendChild(table); card.appendChild(problem);

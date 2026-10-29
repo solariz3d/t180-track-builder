@@ -186,13 +186,3 @@ test('a helix loads with κv = 0 at its constant pitch, and κh = cos p / R (the
   let worst = 0; for (let s = 5; s < P.length - 5; s += 2) worst = Math.max(worst, Math.abs(D.channelAt(P, 'kv', s).v) * R, Math.abs(D.channelAt(P, 'kh', s).v * R / Math.cos(p) - 1));
   assert.ok(worst < 2e-3, `worst ${worst}`);
 });
-
-test('a real track from reads/ opens as a LOCAL example (skipped where reads/ has no position fit)', (t) => {
-  const reads = process.env.T180_READS || path.join(__dirname, '..', 'reads');
-  const f = path.join(reads, 'trackj.pieces.json'), r = path.join(reads, 'trackj.read.json');
-  if (!fs.existsSync(f) || !fs.existsSync(r)) { t.skip('no local position fit of track J in reads/ (other authors\' tracks stay local)'); return; }
-  const d = D.fromPositionFit(JSON.parse(fs.readFileSync(f, 'utf8')), JSON.parse(fs.readFileSync(r, 'utf8')), { name: 'track J (local)' });
-  const { toPath } = require('../src/core/adapter.js'), { path: p } = toPath(d);
-  assert.ok(d.pieces.length >= 1 && p.lengthM > 1900 && p.lengthM < 2300, `${d.pieces.length} pieces, ${p.lengthM} m`);
-  assert.equal(D.serialize(D.parse(D.serialize(d))), D.serialize(d));
-});

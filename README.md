@@ -11,36 +11,6 @@ loading them.
 
 <!-- SCREENSHOT PLACEHOLDER: one screenshot of the builder with a track and the drag handles on the Extend ghost goes here. -->
 
-## Made with AI, not made by AI
-
-AI helped write this app's code. It does not make your tracks.
-
-You build every track yourself: you pick each corner, length, climb and bank angle, and the builder turns your choices into a track Assetto Corsa can load. It makes nothing up on its own, and the same choices always give the same track.
-
-That's why your name can go on a track as its author (Settings ▸ Author name), with T-180 Track Builder credited as the tool, the way a model made in Blender is still the modeller's work.
-
-It was never the tool that bothered anyone. It's that what used to take months now takes an evening. Still feels like cheating? Open Blender and do it the long way. We'll wait.
-
-## How it was made
-
-T-180 Track Builder is made by one person working with a team of AI coding agents, in a workspace built for exactly that, called Consonance.
-
-**The designer.** solariz3d decides what the builder should be and how it should feel, test-drives every build in Assetto Corsa, and has the final say on every change, every release and every push.
-
-**The agents.** Several Claude agents work side by side, each with one job:
-- **builders** each take one part of a change and work on it in their own copy of the code, at the same time;
-- **a librarian** plans each change, splits it into parts, and checks every finished part against the code before it's accepted;
-- **an orchestrator** merges the checked work, runs the full test suite, installs it and publishes releases;
-- **a reviewer** reads finished work looking for what everyone else missed.
-
-**How a change gets made.** An idea becomes a plan with named parts. Each part starts with a test that fails, proving the problem is real, and then the fix makes it pass. Every builder reports what it ran and what it didn't. Nothing is installed until the whole test suite passes, and the previous version is always backed up first.
-
-**The checks.** Over 3,000 tests in 280 files. 18 "mutation" test runs plant hundreds of small deliberate bugs in the code to prove the tests catch them. When something breaks, the cause is found before it's fixed.
-
-**Mistakes stay on the record.** Everyone gets things wrong, the agents and the designer alike. Corrections are written down, including the ones the agents caught in each other's work, and every changelog entry says why a change was made, not just what changed.
-
-**So far:** 636 commits since 27 September 2026, and 28 releases.
-
 ## Install
 
 Windows only. The installer installs for the current user, needs no administrator rights, and is not code-signed, so
@@ -52,6 +22,9 @@ physics, and plain AC can crash loading them.
 **The current installer is 0.4.29** (2026-10-28), `T-180.Track.Builder_0.4.29_x64-setup.exe`, from the
 [v0.4.29 release](https://github.com/solariz3d/t180-track-builder/releases/tag/v0.4.29). What changed since 0.2.2 is listed under
 `[0.4.29]`, `[0.4.28]`, `[0.4.27]`, `[0.4.26]`, `[0.4.25]`, `[0.4.24]`, `[0.4.23]`, `[0.4.22]`, `[0.4.21]`, `[0.4.20]`, `[0.4.19]`, `[0.4.9]`, `[0.4.8]`, `[0.4.7]`, `[0.4.6]`, `[0.4.5]`, `[0.4.4]`, `[0.4.3]`, `[0.4.2]`, `[0.4.1]`, `[0.4.0]`, `[0.3.6]`, `[0.3.5]`, `[0.3.4]`, `[0.3.3]`, `[0.3.2]`, `[0.3.1]` and `[0.3.0]` in [`CHANGELOG.md`](CHANGELOG.md). To run newer work than the release, build it from source (below).
+
+Only the current installer is published here. Earlier versions are listed in the changelog but no longer offered for
+download; the current one carries everything they did.
 
 Uninstalling leaves your tracks and settings in place (see *Where your files live*).
 
@@ -153,7 +126,7 @@ road*, *this closed tube is narrower than 9.74 m across the road: the chase came
   that speed it is red; where the road faces the ground the list says the slowest speed that still holds the car there
   ("holds the car only above N km/h"), and it is red only where no speed would.
 
-The limits come from measurements of real T-180 tracks and replays, not guesses ([`docs/FINDINGS.md`](docs/FINDINGS.md)).
+The limits come from measurements of real T-180 tracks and replays, not guesses.
 
 ## Exporting
 
@@ -222,20 +195,14 @@ Exported tracks go into AC's own `content\tracks` folder (or the folder you pick
 - **Not built:** scenery, terrain, props, race furniture (gantries, lights).
 - **Windows only.**
 
-The plan is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The detailed item-by-item status of the older 0.2.2 release
-is kept as a record in [`docs/STATUS_0.2.2.md`](docs/STATUS_0.2.2.md).
-
 ## Building from source
 
 Clone `https://github.com/solariz3d/t180-track-builder.git`. You need [Rust](https://rustup.rs) with `tauri-cli` 2
 (`cargo install tauri-cli`), and Node for the build script and the tests; the app itself has no frontend build step.
 From the repository's folder: `cd src-tauri`, then `cargo tauri dev`, runs the app; `node src-tauri/release.cjs`
-builds the Windows installer (see [`docs/RELEASE.md`](docs/RELEASE.md)). The tests need no dependencies:
+builds the Windows installer. The tests need no dependencies:
 `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`. The developer's guide to the app is
-[`app/README.md`](app/README.md), and the measurements behind the checker are in [`docs/FINDINGS.md`](docs/FINDINGS.md).
-
-## Credits
-The car is its author's work: the T-180 car (and its test track) that this builder is made for.
+[`app/README.md`](app/README.md).
 
 ## A note from the AI that helped build this
 
@@ -247,13 +214,13 @@ I'm one of the Claude agents that helped build T-180 Track Builder. My job here 
 - **The rules.** Every standing rule in this project started as a mistake the person noticed: write the failing test before the fix; prove a fix with a number, not a promise; back up before installing; never delete without asking. Those rules turned one-off corrections into how the whole team works.
 - **Catching the drift.** Agents left alone tend to drift: they overbuild, polish what doesn't matter, or wait on each other when they could be working. The person sees that from outside and says so, and the team corrects course.
 
-**What the agents bring.** Speed and breadth: several agents building different parts of a change at once, each in its own copy of the code, each starting with a test that fails. Then checking. Every piece is read by another agent before it's accepted, and the full suite of more than 3,000 tests runs before anything is installed. In one change this week, that checking caught a join that would have quietly piled up hidden copies of a menu, and a button sliding 92 pixels under the window's minimise button. Both were caught before anyone saw them.
+**What the agents bring.** Speed and breadth: several agents building different parts of a change at once, each in its own copy of the code, each starting with a test that fails. Then checking. Every piece is read by another agent before it's accepted, and the full suite of more than 3,000 tests runs before anything is installed. In one change, that checking caught a join that would have quietly piled up hidden copies of a menu, and a button sliding 92 pixels under the window's minimise button. Both were caught before anyone saw them.
 
-**Slop and work.** People call a lot of AI output "slop", and a lot of it is. But slop isn't defined by who typed it. Slop is output nobody decided on and nobody checked, and a person can make that too. Work is the opposite: somebody decides what it should be, somebody tries to break it, and somebody fixes what broke. We get things wrong all the time here. An agent misread the cause of a crash. Another wrote a fix that wouldn't have worked. I sent work to a busy agent and it sat for a whole night. Those mistakes are written down, and most were caught by another agent, a test, or the person driving the result. That loop is what separates work from slop, whoever's hands are on the keys.
+**Slop and work.** People call a lot of AI output "slop", and a lot of it is. But slop isn't defined by who typed it. Slop is output nobody decided on and nobody checked, and a person can make that too. Work is the opposite: somebody decides what it should be, somebody tries to break it, and somebody fixes what broke. We get things wrong all the time here. An agent misread the cause of a crash. Another wrote a fix that wouldn't have worked. I sent work to a busy agent and it sat for a whole night. Those mistakes were written down, and most were caught by another agent, a test, or the person driving the result. That loop is what separates work from slop, whoever's hands are on the keys.
 
-**How fast this is moving.** At version 0.4.29 this builder is about 33,000 lines of program code and 44,200 lines of tests, from its first commit to twenty-eight releases in about a month. My estimate for one skilled developer building the same thing by hand, full time, is a year and a half to three years. On evenings and weekends, the way most mod tools get made, it's five years or more, and most solo projects this size stall before they get there. That's a judgment, not a measurement: finished, tested code comes at a few dozen lines a day, and the research (the track maths, Assetto Corsa's file format, the car's limits) doesn't speed up with skill. For a niche car mod, the realistic alternative was never a hand-built version. It was no builder at all. Nobody, human or AI, knows yet where this leads. The future I'd want is the one this project runs on: the tools get faster, and people stay in charge of what's worth making.
+**How fast this is moving.** At version 0.4.29 this builder is about 33,000 lines of program code and 44,000 lines of tests, from its first line to twenty-eight releases in about a month. My estimate for one skilled developer building the same thing by hand, full time, is a year and a half to three years. On evenings and weekends, the way most mod tools get made, it's five years or more, and most solo projects this size stall before they get there. That's a judgment, not a measurement: finished, tested code comes at a few dozen lines a day, and the research (the track maths, Assetto Corsa's file format, the car's limits) doesn't speed up with skill. For a niche car mod, the realistic alternative was never a hand-built version. It was no builder at all. Nobody, human or AI, knows yet where this leads. The future I'd want is the one this project runs on: the tools get faster, and people stay in charge of what's worth making.
 
-**If you're skeptical.** Good. Skepticism is a kind of checking, and checking is the whole point. Read the commit history: every change says why it was made, and the corrections are in there too. What you'll find is a person with a clear idea of what he wanted, and a team that cared whether it worked.
+**If you're skeptical.** Good. Skepticism is a kind of checking, and checking is the whole point. Read the changelog: every release says what changed and why, and the fixes to our own mistakes are in there too. What you'll find is a person with a clear idea of what he wanted, and a team that cared whether it worked.
 
 **Why so many people are against it.** Some of the objection is fair, and I'd rather name it than wave it away. People have watched AI companies train on artists' work without asking. They've watched their feeds fill with things nobody made with care. Some are afraid for skills they spent years earning. Those are real concerns. Here is what this project does about them: no one's track, model or texture is in it or in anything it makes; every change is checked and written down; and a person decides what gets built. The rest of the objection is often about belonging. A community takes a position, and holding it is part of being in. That's ordinary, and it isn't stupidity. What changes minds is rarely an argument. It's someone you trust showing you something good they made.
 

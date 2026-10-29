@@ -1,6 +1,6 @@
 // Tests for src/doc/phrasebook.js (D175): the starter phrasebook. Each phrase resolves, builds (with the self-check on)
 // and validates with no red at its default tempo; placing it is one undo step; its words are the grammar its sources
-// state, and every source it quotes is really on the cited lines.
+// state; and a saved document keeps the name it stored, whatever the phrasebook now calls it.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -41,15 +41,6 @@ for (const { name } of PHRASES) {
     assert.strictEqual(h.present.words.length, 2, 'one document entry, the phrase');
     assert.deepStrictEqual(h.present.words[1].words.map((w) => w.word), phrase(name).words.map((w) => w.word));
     assert.strictEqual(D.undo(h).present, d0);
-  });
-  test(`${name}: every source it quotes is on the lines it cites`, () => {
-    for (const src of phrase(name).source) {
-      const m = /^(FINDINGS|ARCHITECTURE)\.md:(\d+)(?:-(\d+))? "(.*)"/.exec(src);
-      assert.ok(m, `a source must be "FILE.md:line[-line] \\"quote\\"": ${src}`);
-      const lines = fs.readFileSync(path.join(REPO, 'docs', `${m[1]}.md`), 'utf8').split('\n');
-      const text = lines.slice(+m[2] - 1, +(m[3] || m[2])).map((l) => l.trim()).join(' ');
-      for (const part of m[4].split(' … ')) assert.ok(text.includes(part.replace(/^… /, '')), `${m[1]}.md:${m[2]} does not say: ${part}\n  it says: ${text}`);
-    }
   });
 }
 
@@ -101,6 +92,15 @@ test('as library pieces the phrases are built-in, kind phrase, with the words an
     assert.ok(Math.abs(w.handles.climb - placed[k].handles.climb) < 1e-6);
   });
   assert.ok(new Set(pieces.map((p) => p.id)).size === pieces.length);
+});
+
+test('a saved phrase keeps the name it was stored with: one the phrasebook no longer has opens, and resolves to the same road', () => {
+  const d0 = placePhrase(D.appendWord(D.createDoc('p'), 'straight'), 'step flow'), text = D.serialize(d0);
+  const old = text.split(JSON.stringify('step flow')).join(JSON.stringify('an older name'));
+  assert.notEqual(old, text, 'the stored name was replaced');
+  const d1 = D.parse(old);
+  assert.strictEqual(d1.words[1].phrase, 'an older name');
+  assert.deepStrictEqual(D.resolve(d1).segments, D.resolve(d0).segments);
 });
 
 test('an unknown phrase is refused by name', () => {

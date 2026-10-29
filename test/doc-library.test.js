@@ -1,6 +1,6 @@
 // doc-library.test.js: node --test test/*.test.js
 // Sculpting and the piece library (the user, 12:22: "but you can also sculp pieces, and then even create and save
-// your own unqiue pieces"; ARCHITECTURE §2 handles and phrases; docs/INTERFACES.md §4b). Dependency-free.
+// your own unqiue pieces"; ARCHITECTURE §2 handles and phrases). Dependency-free.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

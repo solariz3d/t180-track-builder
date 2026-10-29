@@ -6,14 +6,6 @@
 // NOT DEFAULTS, so not checked against a band: a straight's bank (it has no inside to lean to; it keeps the head's roll)
 // and heading (the builder's straight is straight; the reader's straights turn 0.06–1.6° per fragment); the inversion's
 // length, heading and bank (its class is the upside-down fragment, and the builder's word is a whole roll).
-//
-// THE READS: the BANK_RATE test reads reads/<layout>.read.json for every layout in tools/corpus.cjs LAYOUTS. reads/ is
-// gitignored (the layouts are other authors' tracks and stay local). BANK_RATE was measured from one exact set of those
-// files, named with their sha256 in test/bankrate_reads.manifest.json, and the test runs only when reads/ holds exactly
-// those bytes: with any file missing or different it SKIPS and names them (a different read of a layout moves the p90:
-// one re-read of track C gives 0.85, not 0.849). Other files in reads/ are not named: build() never opens them. To run
-// it, make the reads with the commands in docs/FINDINGS.md §7f (`node reads/readall.js`, or `node tools/read_track.cjs`
-// once per track) into reads/, or copy that exact set from a machine that has it.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -27,8 +19,6 @@ const { placePhrase, PHRASES } = require('../src/doc/phrasebook.js');
 const { validate } = require('../src/validate/index.js');
 const { MACH6 } = require('../src/validate/limits.js');
 const CORPUS = require('../src/doc/corpus.json');
-const { LAYOUTS } = require('../tools/corpus.cjs');
-const READS_MANIFEST = require('./bankrate_reads.manifest.json');
 
 const DEG = Math.PI / 180, C = CORPUS.classes;
 const ROAD = ['straight', 'sweep', 'turn', 'tight', 'wall-ride', 'inversion'], CURVED = ['sweep', 'turn', 'tight', 'wall-ride'];
@@ -131,51 +121,11 @@ test('THE BANK RAMPS: a wall-ride after a turn still reaches its class bank, ove
   assert.ok(Math.abs(R - alone.R) < 1e-3 * alone.R, `at the class radius ${alone.R} m, got ${R} m`);
 });
 
-test('BANK_RATE is what tools/bankrate.cjs measures from reads/ (the p90 of the steps where the bank is changing)', (t) => {
-  const reads = path.join(__dirname, '..', 'reads');
-  if (!fs.existsSync(reads)) { t.skip('reads/ is not in this checkout (the layouts are other authors\' tracks and stay local; docs/FINDINGS.md §7f makes them)'); return; }
-  const { build, inputDiff } = require('../tools/bankrate.cjs');
-  const { missing, changed } = inputDiff(reads, READS_MANIFEST.sha256);
-  if (missing.length || changed.length) {
-    t.skip(`reads/ is not the set BANK_RATE was measured from (test/bankrate_reads.manifest.json): ${missing.length} missing${missing.length ? ` (${missing.join(', ')})` : ''}, ${changed.length} with different bytes${changed.length ? ` (${changed.join(', ')})` : ''}. That is the clone's data, not the code (docs/FINDINGS.md §7f makes the reads)`);
-    return;
-  }
-  assert.equal(Number(build(reads).changing.p90.toFixed(3)), V.BANK_RATE);
-});
-
-test('the BANK_RATE manifest names exactly the reads bankrate.cjs build() opens, each with a sha256', () => {
-  assert.deepEqual(Object.keys(READS_MANIFEST.sha256).sort(), LAYOUTS.map(([f]) => `${f}.read.json`).sort());
-  for (const [f, h] of Object.entries(READS_MANIFEST.sha256)) assert.match(h, /^[0-9a-f]{64}$/, `${f}: a sha256`);
-});
-
-test('bankrate.inputDiff names the reads that are missing and the ones whose bytes differ from the manifest (what the BANK_RATE test skips on)', () => {
-  const { inputDiff } = require('../tools/bankrate.cjs');
-  const sha = (text) => require('crypto').createHash('sha256').update(text).digest('hex');
-  const want = { 'a.read.json': sha('A'), 'b.read.json': sha('B'), 'c.read.json': sha('C') };
-  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'bankrate-'));
-  try {
-    assert.deepEqual(inputDiff(dir, want), { missing: ['a.read.json', 'b.read.json', 'c.read.json'], changed: [] }, 'an empty folder: every read missing');
-    fs.writeFileSync(path.join(dir, 'a.read.json'), 'A'); fs.writeFileSync(path.join(dir, 'b.read.json'), 'B, read again'); fs.writeFileSync(path.join(dir, 'extra.read.json'), 'X');
-    assert.deepEqual(inputDiff(dir, want), { missing: ['c.read.json'], changed: ['b.read.json'] }, 'a matching read is not named, a different one is, and a file outside the manifest is not');
-    fs.writeFileSync(path.join(dir, 'b.read.json'), 'B'); fs.writeFileSync(path.join(dir, 'c.read.json'), 'C');
-    assert.deepEqual(inputDiff(dir, want), { missing: [], changed: [] }, 'the exact set: nothing named');
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-});
-
 test('THE BANK RAMPS: the inversion is not ramped — its whole roll is the word, so it keeps its length after any bank', () => {
   for (const a of ['turn', 'tight', 'wall-ride']) {
     const d = D.appendWord(D.appendWord(D.createDoc('i'), a, { dir: 'L' }), 'inversion');
     assert.equal(d.words[1].handles.length, V.WORDS.inversion.length, `after a ${a}`);
   }
-});
-
-test('bankrate.cjs unwraps the roll: a road rolling through ±180° reads its real rate, not the jump across the seam', () => {
-  const { ratesOf } = require('../tools/bankrate.cjs');
-  // four stations 4 m apart, forward +z, the normal rolling 170°, 175°, −180°, −175° (5° per step, across the ±180° seam) about the forward axis
-  // and back the other way (−170°, −175°, 180°, 175°): the seam crossed in both directions
-  const st = (degs) => degs.map((deg, i) => { const r = deg * DEG; return { d: 4 * i, f: [0, 0, 1], n: [Math.sin(r), Math.cos(r), 0] }; });
-  const rates = (degs) => ratesOf({ stations: st(degs) }).map((x) => Number(x.toFixed(6)));
-  assert.deepEqual([rates([170, 175, -180, -175]), rates([-170, -175, 180, 175])], [[1.25, 1.25, 1.25], [1.25, 1.25, 1.25]]);
 });
 
 test('a measured font resolves through its measured floor (src/geom/fonts.js fontProfile), not the old flat-floor-and-wall', () => {

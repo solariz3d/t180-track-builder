@@ -1,5 +1,5 @@
 // doc-geom.test.js: node --test test/*.test.js
-// The contract between the document model and the geometry core (docs/INTERFACES.md §1–§2): what resolve() hands
+// The contract between the document model and the geometry core: what resolve() hands
 // buildPath() is built as meant. If either side changes its shape, this goes red. Dependency-free.
 'use strict';
 const test = require('node:test');

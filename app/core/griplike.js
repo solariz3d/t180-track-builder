@@ -1,9 +1,9 @@
 // griplike.js: THE GRIP FIELD'S WORDS AND THE "GRIP LIKE…" DROP-DOWN'S ENTRIES (D261, the user, 21:18: "LIKE how we took the width reference of other tracks, perhaps do the same with the friction
-// for users to see which tracks they want to emulate grip"; shaped like app/core/widthlike.js, D232). The numbers are src/doc/grips.json (tools/grips.cjs, E's survey of the installed tracks'
-// road FRICTION as a percent of AC's own road; numbers only, each row with the file it came from).
+// for users to see which tracks they want to emulate grip"; shaped like app/core/widthlike.js, D232). The numbers are src/doc/grips.json (E's survey of installed road surfaces'
+// FRICTION as a percent of AC's own road; numbers only).
 //
 //   entries(tracks) -> [{ value, label }]   the first is the placeholder (value ''), then one per known track, in the file's order (the T-180 tracks first, then the others):
-//                                          value = the whole percent the field takes (`value` in the JSON), label "track H, 82%" (and "Red Bull Ring, 99.5% (100)" where the
+//                                          value = the whole percent the field takes (`value` in the JSON), label "82 % grip" (and "99.5 % grip (100)" where the
 //                                          measured figure is not whole: the field only takes whole percents, so the label says what it will fill)
 //   check(text)     -> { ok, grip, why }   the field's text: a whole percent from GRIP_MIN to GRIP_MAX (50 to 150), else why not in plain words (49 and 151 are refused, 100.5 is not whole)
 //   note(text)      -> string              the line under the field: what the number is (100% is AC's road), "untested: drive it" outside TESTED_MIN..TESTED_MAX (60 to 110, the user's range
@@ -16,7 +16,7 @@ const { GRIP_MIN, GRIP_MAX } = require('./gripvals.js');
 const TESTED_MIN = 60, TESTED_MAX = 110;
 const fmt = (x) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 10) / 10));
 
-function label(t) { return Number(t.percent) === Number(t.value) ? `${t.name}, ${fmt(t.percent)}%` : `${t.name}, ${fmt(t.percent)}% (${t.value})`; }
+function label(t) { return Number(t.percent) === Number(t.value) ? `${fmt(t.percent)} % grip` : `${fmt(t.percent)} % grip (${t.value})`; }
 function entries(tracks = G.tracks) {
   return [{ value: '', label: 'grip like…' }, ...tracks.filter((t) => Number.isInteger(t.value) && t.value >= GRIP_MIN && t.value <= GRIP_MAX).map((t) => ({ value: String(t.value), label: label(t) }))];
 }
