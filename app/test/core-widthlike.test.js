@@ -82,8 +82,8 @@ test('the PANEL: the drop-down sits beside the width field, lists the known trac
   const P = await mountPanel(), sel = P.like();
   assert.ok(sel && sel.tagName === 'SELECT', 'a select'); assert.equal(P.labels()[0], 'width like…'); assert.ok(P.labels().includes('24 m road (21–28)'));
   assert.equal(P.labels().length, W.tracks.filter((t) => t.read_closes).length + 1); assert.ok(!P.labels().some((l) => /^21 m road|^34 m road \(32–53\)/.test(l)), 'the panel offers no track whose read does not close'); assert.equal(P.note().textContent, '', 'no tube note on a plain road');
-  assert.ok(P.label('width like…'), 'its own labelled row, right after the width m field');
-  const rows = P.root.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent), wi = rows.indexOf('width m'); assert.equal(rows[wi + 1], 'width like…');
+  // AMENDED (the left column laid out for space): width like… was its own labelled row after width m; it is a small ▾ picker on the width m row itself
+  const row = P.root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === 'width m'); assert.ok(row && row.children.includes(sel), 'on the width m row, beside the field');
   P.pick('24 m road'); assert.equal(P.field('width m').value, '24'); assert.equal(sel.value, '', 'the select goes back to its placeholder, so the same entry can be picked again');
   assert.equal(P.panel.options().first && P.panel.options().first.w, 24, 'on an empty track a typed width is the first piece\'s start: the new-track default');
   P.field('length m').value = '100';   // the fake DOM keeps a field's value property apart from its value attribute (the readout tests type the length too)

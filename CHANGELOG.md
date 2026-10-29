@@ -13,6 +13,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **The left column shows every field, and the next piece reads above the view.** The "More shape" fold is gone: cup, width, grip, the edges, edge start and tube sweep are always shown, each "at start" box (now "start") sits at the end of its field's row, and width like and grip like are small ▾ pickers beside their fields, so the column fits without scrolling. It is narrower too and starts right under the bar, with no heading above the track line. What Extend will add (turn, climb, bank, cup, edges, tube, corner, bank to gravity) left the column: it is a NEXT line under the values at the top of the view, with what changes on this piece bright and the rest dimmed, shown while a next piece is being set up. The values themselves are one slim line in smaller type, and they, the camera bar and its hints are centred on the view beside the column.
+
 - **"At start" on a bank, cup or edge now comes in smoothly instead of twisting over the first 20 m.** A ticked bank, cup or edge still reaches its value early and holds it for the rest of the piece, but now over as long as the road needs to roll there within the checker's own roll limit (20 m at least, and at most half the piece). A bank at start comes in as one smooth swell: it starts to lean at the joint, rolls fastest in the middle of its ramp and eases out, with no flat stretch and no shoulder where the ramp ends. A 20° bank after a straight comes in over about 56 m, where it used to roll at 1.0 °/m over 20 m, above the checker's 0.93 °/m warning. Turn, climb and width at start keep their 20 m, and a piece shorter than 40 m keeps the ramp it had.
 
 ### Fixed

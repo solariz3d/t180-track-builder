@@ -10,7 +10,7 @@
 //       the item and the strip) Sculpt mode, the first item, says whether Sculpt is on and turns it on and off; the Sculpt strip (tool, radius, sharp under "more")
 //       shows only in Sculpt, and in Sculpt Build's commands that place or close are disabled with the reason "in Sculpt"
 //   5   Close the loop from Build starts the close as the button did (the line says so); on a closed loop it is disabled and does nothing
-//   6   the left side keeps the brief's list, "More shape" folded, and nothing else shows there; the moved controls are still in the panel (held, out of sight)
+//   6   the left side keeps the brief's list, every field shown (AMENDED: "More shape" was a fold; it is gone), and nothing else shows there; the moved controls are still in the panel (held, out of sight)
 //   7   the selection box shows only with a selection (and while a delete it started is previewed)
 //   8   Edit's selection items (piecesui via M): nothing selected, they are disabled; with a selection they save, set the grip, delete and clear
 //   9   the six keys through S: the panel starts from what S holds, follows S.on, and a setting survives a reload (a new store over the same storage)
@@ -191,7 +191,7 @@ test('row 5: Close the loop from Build starts the close as the button did; on a 
   Q.panel.unmount(); P.panel.unmount();
 });
 
-test('row 6: the left side keeps the brief\'s list, "More shape" folded, and nothing else shows there; the moved controls are still in the panel, held out of sight', async () => {
+test('row 6: the left side keeps the brief\'s list, every field shown, and nothing else shows there; the moved controls are still in the panel, held out of sight', async () => {
   const P = await mountPanel(), shown = P.shown();
   const shownButtons = shown.filter((e) => e.tagName === 'BUTTON').map((e) => e.textContent);
   for (const b of ['Undo', 'Redo', 'Extend', 'Straight']) assert.ok(shownButtons.includes(b), `${b} is on the left`);
@@ -201,13 +201,17 @@ test('row 6: the left side keeps the brief\'s list, "More shape" folded, and not
   for (const f of ['length m', 'bank °']) assert.ok(shownSpans.includes(f), `${f} is on the left`);
   assert.ok(shownSpans.some((t) => /^turn °/.test(t)) && shownSpans.some((t) => /^climb °/.test(t)), 'turn and climb are on the left');
   for (const f of ['turn & climb as', 'drag handles', 'colour by grip', 'turn by °', 'grid °', 'sharp °', 'fit', 'read']) assert.ok(!shownSpans.includes(f), `${f} is not on the left`);
-  const more = P.all().find((e) => e.tagName === 'DETAILS' && e.children[0] && e.children[0].textContent === 'More shape');
-  assert.ok(more, 'there is a "More shape"'); assert.equal(!!more.open, false, 'folded');
-  const inMore = more.all().filter((e) => e.tagName === 'SPAN').map((e) => e.textContent);
+  // AMENDED (the left column laid out for space): "More shape" was a fold holding these fields; the fold is gone, so they are shown with the rest, each
+  // channel field with its at-start box at the end of its own row
+  assert.ok(!P.all().some((e) => e.tagName === 'DETAILS' && e.children[0] && e.children[0].textContent === 'More shape'), 'no "More shape" fold');
+  const inMore = shownSpans;
   // AMENDED D385 (2026-10-18): "edge angle °" is now "left edge °", the same field renamed (app/test/core-carry.test.js)
-  for (const f of ['cup °', 'width m', 'grip %', 'left edge °', 'right edge °', 'edge start', 'tube sweep °']) assert.ok(inMore.includes(f), `More shape holds ${f}`);
-  assert.equal(more.all().filter((e) => e.tagName === 'INPUT' && /at the start$/.test(e.attrs['aria-label'] || '')).length, 6, 'and the at-start boxes of its six channel fields');
-  assert.ok(P.byLabel('the piece Extend would add') && !P.hiddenEl(P.byLabel('the piece Extend would add')), 'the readout is on the left');
+  for (const f of ['cup °', 'width m', 'grip %', 'left edge °', 'right edge °', 'edge start', 'tube sweep °']) assert.ok(inMore.includes(f), `${f} is shown on the left`);
+  const rowOf = (f) => P.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === f);
+  for (const f of ['cup °', 'width m', 'left edge °', 'right edge °', 'edge start', 'tube sweep °']) assert.ok(rowOf(f).all().some((e) => e.tagName === 'INPUT' && /at the start$/.test(e.attrs['aria-label'] || '')), `${f} has its at-start box on its own row`);
+  // AMENDED (the left column laid out for space): the readout left the column; it is the next-piece line under the preview's values, where there is a preview
+  const ro = P.byLabel('the piece Extend would add', P.panel.values ? P.panel.values.layer.all() : P.all()); assert.ok(ro, "the readout is the panel's");
+  assert.ok(P.panel.values ? P.panel.values.layer.all().includes(ro) : !P.hiddenEl(ro), "under the preview's values (with no preview, in the column)");
   // every control that moved is still the panel's (the menus borrow them), so what it does is unchanged
   for (const l of ['turn and climb as', 'drag handles', 'colour by grip', 'grid step']) assert.ok(P.byLabel(l), `${l} is still in the panel`);
   for (const b of ['Jump', 'Level', 'To floor', 'Turn by', 'Turn to grid', 'Sharp', 'Close the loop']) assert.ok(P.button(b), `${b} is still in the panel`);

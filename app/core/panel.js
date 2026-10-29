@@ -163,7 +163,10 @@ function mount(root, shell, mountOpts = {}) {
   const el = (tag, attrs = {}, ...kids) => { const e = doc.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; };
   const field = (label, input) => el('label', { class: 'picker' }, el('span', { text: label }), input);
   // a channel field with its "at start" box after the input (D194b); the input stays the label's second child
-  const fieldAt = (label, input, k) => el('label', { class: 'picker' }, typeof label === 'string' ? el('span', { text: label }) : label, input, el('span', { class: 'at-start', style: 'white-space:nowrap;font-size:12px', title: atStart[k].getAttribute ? atStart[k].getAttribute('title') : '' }, atStart[k], el('span', { text: ' at start' })));
+  // the at-start box sits at the END of its field's row, "start" in the muted colour, the whole sentence in its tooltip; `extra` (width like…, grip like…) goes between
+  // the input and the box, a small ▾ picker on the same row. The input stays the label's second child
+  const fieldAt = (label, input, k, extra = null) => el('label', { class: 'picker inline' }, typeof label === 'string' ? el('span', { text: label }) : label, input, ...(extra ? [extra] : []),
+    el('span', { class: 'at-start', title: atStart[k].getAttribute ? atStart[k].getAttribute('title') : '' }, atStart[k], el('span', { text: 'start' })));
   const num = (value, step, title) => el('input', { type: 'number', value: String(value), step: String(step), title: title || '' });
   const send = (name, detail) => doc.dispatchEvent(new win.CustomEvent(name, { detail }));
 
@@ -296,8 +299,16 @@ function mount(root, shell, mountOpts = {}) {
   const RO = ['length', 'turn', 'climb', 'bank', 'cup', 'edge', 'start', 'tube', 'corner', 'climbCorner', 'gravity'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
   const roName = (k) => (k === 'length' ? 'length' : k === 'cup' ? 'cup from → to' : k === 'edge' ? 'edge from → to' : k === 'start' ? 'edge start from → to' : k === 'tube' ? 'tube from → to'
     : k === 'corner' ? 'corner' : k === 'climbCorner' ? 'climb corner' : k === 'gravity' ? 'bank to gravity from → to' : `${k} change`);
-  const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add', style: 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font:bold 16px/1.3 system-ui,"Segoe UI",sans-serif;color:var(--on-ink, #eef1f6)' },
-    ...RO.flatMap((k) => [el('span', { text: roName(k), style: 'color:var(--dim);font-weight:600' }), roCells[k]]));
+  // THE NEXT PIECE LINE: the readout's cells as chips, one line under the preview's values (valuesoverlay attach, where the stage is found below; with no stage they stay
+  // in the column). A chip whose value does not change on this piece is dimmed, so the eye lands on what Extend will do; the length chip is the values' own, so it is not repeated
+  const chipName = (k) => (k === 'start' ? 'edge start' : k === 'climbCorner' ? 'climb corner' : k === 'gravity' ? 'bank to gravity' : k);
+  const roChips = Object.fromEntries(RO.map((k) => [k, el('span', { class: 'chip', 'data-chip': k, ...(k === 'length' ? { hidden: '' } : {}) }, el('span', { class: 'chip-name', text: chipName(k) }), roCells[k], el('span', { class: 'chip-short' }))]));
+  const roBox = el('div', { class: 'readout', 'aria-label': 'the piece Extend would add' }, el('span', { class: 'chip-head', text: 'next' }), ...RO.map((k) => roChips[k]));
+  // unchanged on this piece: a "from → to" with both ends the same, a change of 0, or no corner
+  // a dim chip's short text, shown in place of its cell under the preview's values (the cell keeps the readout's whole words): "edge 0", "climb 0°", "climb corner none"
+  const shortOf = (k, v) => { const m = /^(.*) → (.*)$/.exec(v), n = (s) => { const x = Number(String(s).replace(/[°%]/g, '').replace('−', '-')); return Number.isFinite(x) ? String(Math.abs(x) < 1e-9 ? 0 : Number(x.toFixed(2))) : s; };
+    if (m) return n(m[1]); if (k === 'corner' || k === 'climbCorner') return 'none'; return `${n(v)}°`; };
+  const sameOf = (k, v) => { const m = /^(.*) → (.*)$/.exec(v); if (m) return m[1] === m[2]; if (k === 'corner' || k === 'climbCorner') return /^none/.test(v); return /^[+−-]?0(\.0+)?°?$/.test(v); };
   // D421c part 1: IN SCULPT the readout is not computed: every brush step is a new document (draw, below), and Extend's candidateReadout and candidateCorner cost
   // 2.3-3.4 ms of each step's frame (A's profile, sculpt-frame rows 2 and 3) for a piece Extend cannot add in Sculpt. The cells show '—' with the reason, as on a
   // closed loop; leaving Sculpt is a new state, so draw reads them again then
@@ -311,7 +322,8 @@ function mount(root, shell, mountOpts = {}) {
         edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup),
         climbCorner: fmtClimbCorner(r), corner: fmtCorner(r, 'corner' in r && r.corner && r.corner.endsTurningDegPer100m !== null ? shell.candidateCorner(opts()) : null), gravity: pairOf(r, ['gravityBankFromDeg', 'gravityBankToDeg'], LB.fmtDeg) }; }
     } catch (e) { why = e.message; }
-    for (const k of RO) roCells[k].textContent = f ? f[k] : '—';
+    for (const k of RO) { roCells[k].textContent = f ? f[k] : '—'; const same = !!f && sameOf(k, f[k]); roChips[k].setAttribute('class', same ? 'chip same' : 'chip'); roChips[k].children[2].textContent = same ? shortOf(k, f[k]) : ''; roChips[k].title = f ? `${chipName(k)}: ${f[k]}` : ''; }
+    roBox.style.display = f ? '' : 'none';   // only while there is a next piece to describe (not in Sculpt, not on a closed loop)
     if (values && !shell.getState().sculpt) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // D267: the same numbers, large over the 3D view
     roBox.title = why;
   };
@@ -875,25 +887,26 @@ function mount(root, shell, mountOpts = {}) {
   const TUBE_SHUT = 'Sculpt can\'t change the sweep of a closed tube: at 360° it is already shut, and a little less would leave a slit between its tips that the car falls through.';
   // (the words are src/core/document.js:412's alone, which only a sweep step reaches: extend.js and adapter.js say "must be from 0 to 360 degrees")
   const plainMessage = (m) => (m && /BAD_TUBE/.test(m) && /must stay within 0 to 360/.test(m) ? TUBE_SHUT : m);
-  // "More shape", folded: the channels used less often, each with its "at start" box, and the notes that explain them
-  const moreShape = el('details', { class: 'more-shape' }, el('summary', { text: 'More shape', style: 'cursor:pointer;margin:6px 0' }),
-    el('div', { class: 'pickers' }, fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width'), field('width like…', wlike), field('grip %', gripF), field('grip like…', gripLike),
-      fieldAt('left edge °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube')), wnote, gripNote);
+  // the rest of the shape, always shown: each channel with its "at start" box on its row, width like… and grip like… beside their fields, each note under its field
+  wlike.setAttribute('class', 'like-pick'); gripLike.setAttribute('class', 'like-pick');
+  const shapeFields = [fieldAt('cup °', cup, 'cup'), fieldAt('width m', width, 'width', wlike), el('label', { class: 'picker inline' }, el('span', { text: 'grip %' }), gripF, gripLike), gripNote,
+    fieldAt('left edge °', edge, 'edge'), fieldAt('right edge °', edgeR, 'edgeR'), fieldAt('edge start', start, 'start'), fieldAt('tube sweep °', tube, 'tube'), wnote];
   // the selection box, shown only with a selection (and while a delete it started is previewed: its Apply and Cancel are in it)
   const selBox = el('div', { 'aria-label': 'selected pieces' }, ...pieces.nodes.selection);
   const showSel = (st) => { const d = st.history.present; selBox.style.display = shell.selectionInfo() || (st.deleteProposal && st.deleteProposal.base === d) ? '' : 'none'; };
   root.replaceChildren(
-    el('h3', { text: 'Equation track' }), info,
+    info,   // the track line first, directly under the bar (no heading above it)
     el('div', { class: 'actions' }, extendBtn, straightBtn, el('button', { text: 'Undo', title: 'Undo (Ctrl+Z), also from a number field', onclick: () => shell.undo() }), el('button', { text: 'Redo', title: 'Redo (Ctrl+Y or Ctrl+Shift+Z)', onclick: () => shell.redo() })),
     sculptStrip,
-    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, fieldAt('bank °', bank, 'bank')),
-    moreShape, roBox,
+    el('h3', { text: 'Extend at the head' }), el('div', { class: 'pickers' }, field('length m', len), turnField, climbField, fieldAt('bank °', bank, 'bank'), ...shapeFields),
+    roBox,
     jumpNote, landingBox,
     el('div', { class: 'actions' }, cancelBtn), proposalBox,
     selBox, ...(bin ? [] : pieces.nodes.library),
     msg,
     held,
   );
+  if (values && values.attach) values.attach(roBox);   // the next-piece line, under the values (after the column is built, which would take it back)
   // 't180:build-request' { detail: { reply(build) } }: the Build menu's commands (app/core/buildmenu.js), read when the menu opens
   const onBuildRequest = (e) => {
     if (!e.detail || typeof e.detail.reply !== 'function') return;
