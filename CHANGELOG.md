@@ -13,7 +13,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
-- **"At start" on a bank, cup or edge now comes in smoothly instead of twisting over the first 20 m.** A ticked bank, cup or edge still reaches its value early and holds it for the rest of the piece, but now over as long as the road needs to roll there within the checker's own roll limit (20 m at least, and at most half the piece). A 20° bank after a straight comes in over about 47 m and rolls at about 0.76 °/m, where it used to roll at 1.0 °/m over 20 m, above the checker's 0.93 °/m warning. Turn, climb and width at start keep their 20 m, and a piece shorter than 40 m keeps the ramp it had.
+- **"At start" on a bank, cup or edge now comes in smoothly instead of twisting over the first 20 m.** A ticked bank, cup or edge still reaches its value early and holds it for the rest of the piece, but now over as long as the road needs to roll there within the checker's own roll limit (20 m at least, and at most half the piece). A bank at start comes in as one smooth swell: it starts to lean at the joint, rolls fastest in the middle of its ramp and eases out, with no flat stretch and no shoulder where the ramp ends. A 20° bank after a straight comes in over about 56 m, where it used to roll at 1.0 °/m over 20 m, above the checker's 0.93 °/m warning. Turn, climb and width at start keep their 20 m, and a piece shorter than 40 m keeps the ramp it had.
 
 ### Fixed
 

@@ -75,11 +75,12 @@ const MUTANTS = [
   { id: 'B16 another channel is written beside the bank', pattern: 'swing: only phi', edits: [[B, '{ ...P, channels: { ...P.channels, phi: w } }', '{ ...P, channels: { ...P.channels, phi: w, kh: w } }']] },
   { id: "B17 the rounded halves blend by extend.js's quintic", pattern: 'swing: the rounded swing rolls', edits: [[X, 'if (u <= 1 - a) return (a / 2 + (u - a)) / N;', 'if (u <= 1 - a) return smoother(u);']] },
   // "at start" for the cross-section: app/core/panel.js lays a ticked bank, cup or edge over a ramp the roll amber allows (test/core_extend_at_start.test.js)
-  { id: 'S1 the cross-section ramp at the start loses its 20 m floor', pattern: 'keeps the 20 m floor', edits: [[P, 'const want = Math.max(AT_START_M, (START_SPREAD * Math.abs(to - from)) / START_RATE)', 'const want = (START_SPREAD * Math.abs(to - from)) / START_RATE']] },
-  { id: 'S2 the cross-section ramp at the start allows twice the roll rate', pattern: 'rolls under the checker', edits: [[P, '(START_SPREAD * Math.abs(to - from)) / START_RATE)', '(START_SPREAD * Math.abs(to - from)) / (2 * START_RATE))']] },
+  { id: 'S1 the cross-section ramp at the start loses its 20 m floor', pattern: 'keeps the 20 m floor', edits: [[P, 'const want = Math.max(AT_START_M, (spread * Math.abs(to - from)) / START_RATE)', 'const want = (spread * Math.abs(to - from)) / START_RATE']] },   // re-anchored: the spread is now a parameter (the bank's swell has its own)
+  { id: 'S2 the cross-section ramp at the start allows twice the roll rate', pattern: 'rolls under the checker', edits: [[P, '(spread * Math.abs(to - from)) / START_RATE)', '(spread * Math.abs(to - from)) / (2 * START_RATE))']] },   // re-anchored with S1
+  // a bank at start is one swell: src/core/extend.js SWELL_A (test/core_bank_swell.test.js runs beside the others here)
+  { id: 'W1 the swell has its plateau back (a quarter-ramp rounding)', pattern: 'no flat stretch', edits: [[X, 'const SWELL_A = 0.5;', 'const SWELL_A = 0.25;']] },
 ];
-
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js'];
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads
