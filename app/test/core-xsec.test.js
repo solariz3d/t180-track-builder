@@ -132,7 +132,8 @@ test('xsec extendOptions: bank winds past ±180 (the spiral, S1 iv)', () => {
 });
 test('xsec extendOptions: the new fields take the "at start" box like the others', () => {
   const o = extendOptions({ length: 100, edge: '15', start: '0.8', tube: '90', atStart: { edge: true, start: true, tube: true } });
-  assert.deepEqual(o.transition, { [E]: 20, [S]: 20, [T]: 20 });
+  // AMENDED (the rule changed: an edge at start ramps as long as the roll amber needs; 15° from 0 is 35.4 m, was 20 m). The edge start and the tube keep 20 m.
+  assert.deepEqual(o.transition, { [E]: 35.4, [S]: 20, [T]: 20 });
   const short = extendOptions({ length: 12, edge: '15', atStart: { edge: true } });
   assert.deepEqual(short.transition, { [E]: 12 }, 'held to the piece when it is shorter than 20 m');
   assert.ok(!('transition' in extendOptions({ length: 100, edge: '', atStart: { edge: true } })), 'a ticked field with no target sends nothing');
@@ -183,7 +184,8 @@ test('xsec panel: a changed field is a target, and its cell shows the DOCUMENT, 
   assert.equal(p.cell('start'), '0.64 → 0.71', 'edge start from → to, two decimals');
   assert.equal(p.cell('tube'), '0.00° → 179.13°', 'tube from → to');
   p.box('left edge °').checked = true; p.box('left edge °').oninput();
-  assert.deepEqual(p.opts().transition, { [E]: 20 }, 'the edge\'s at-start box');
+  // AMENDED (the rule changed: 15° of edge from the head's 0 ramps over 35.4 m, was 20 m)
+  assert.deepEqual(p.opts().transition, { [E]: 35.4 }, 'the edge\'s at-start box');
 });
 // Each field redraws on its OWN (X11): the row above types the tube last, and the tube's handler redraws every cell, so it could not see an edge or
 // edge-start field that redraws nothing. Since the undo guard (8926789) wraps every field's handler, such a field no longer throws either.

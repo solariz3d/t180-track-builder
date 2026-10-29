@@ -49,6 +49,20 @@ const DEG = Math.PI / 180;
 // if that is shorter: the core needs a transition no longer than the piece), then held for the rest of the piece. Unticked, it blends over
 // the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres (A's D194b contract).
 const AT_START_M = 20;
+// The CROSS-SECTION at the start (the user, 2026-10-29, a 20° bank at start over 20 m: "keep what it does, but make the transition a lot more smoother gradient"): a
+// ticked bank, cup or edge comes in no faster than the checker's own roll amber (src/validate/index.js ROLL_AMBER_DEG_M, read at a 20 m chord), so its ramp is
+// START_SPREAD × |change| / that rate, at least AT_START_M. START_SPREAD is measured, not derived: Extend lays a short ramp's change inside about three quarters of it,
+// rounded, so the road rolls at up to about twice |change| / ramp. The checker's roll over a 1,000 m piece after a straight, bank to 8, 12, 20, 30, 54, 90 and
+// 180° at start: with 1.0 (|change| / rate alone) 20° rolls 0.998 °/m; with 1.9 the worst is 1.010 (90°), with 2.1 0.924, with 2.2 0.886, all under the 0.9338
+// amber. The ramp is capped at half the piece so the value is still held for most of it, but never below what at start laid before (AT_START_M, or the piece if
+// shorter): a piece under 40 m keeps its old ramp rather than a faster one. Turn, climb and width keep AT_START_M.
+const START_RATE = require('../../src/validate/index.js').ROLL_AMBER_DEG_M, START_SPREAD = 2.2;
+const XS_START = new Set(['phi', 'c', 'e', 'er']);
+/** The at-start ramp (m) of a cross-section channel going from `from` to `to` (degrees) on a piece `length` m long; rounded up to 0.1 m. */
+function crossStartM(from, to, length) {
+  const want = Math.max(AT_START_M, (START_SPREAD * Math.abs(to - from)) / START_RATE), cap = Math.max(Math.min(AT_START_M, length), length / 2);
+  return Math.min(Math.ceil(want * 10 - 1e-9) / 10, cap);
+}
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
 // THE TURN AS A CORNER (D331 B; the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). turnAs 'corner' (the
 // panel's default) reads the turn field as the piece's exact heading change in degrees, ending straight: `turnDeg`, which src/core/turnby.js extendCorner places
@@ -56,7 +70,9 @@ const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', widt
 // turning would bend back the other way. turnAs 'rate' (and this function's default, for its other callers) is the old meaning: degrees per 100 m, a target rate.
 // The CLIMB the same way, on the same switch (the user: "the climb might need to do the same?"; plan :387-399): as a corner it is `climbDeg`, the exact pitch
 // change, ending at a climb rate of 0 (a steady pitch, level only when it ends at pitch 0).
-function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate' }) {
+// `head`: the head's end values as coreshell headState gives them (phi in rad; c, e, er in degrees), which a cross-section ramp at the start is measured from;
+// without one (an empty track, or a caller that has none) the change is measured from 0
+function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, start, tube, grip, empty = false, atStart = {}, turnAs = 'rate', head = null }) {
   const targets = {}, num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
   const t = num(turn), c = num(climb), b = num(bank), w = num(width), k = num(cup), corner = turnAs === 'corner' && t !== null && t !== 0, climbCorner = turnAs === 'corner' && c !== null && c !== 0;
   if (turnAs !== 'rate' && turnAs !== 'corner') throw new Error(`BAD_TURN_AS: the turn is read as 'rate' or 'corner', got ${turnAs}`);
@@ -84,7 +100,10 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   if (num(grip) !== null) out.grip = num(grip);   // D261: a grip typed in the field (blank: the new piece keeps the last road's); the core refuses a value that is not a whole percent 50 to 150
   // only a field WITH a target can be "at the start" (an untouched field has none, D193); none ticked: no `transition`, exactly as before
   const transition = {};
-  for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) transition[ch] = Math.min(AT_START_M, out.length);
+  const fromDeg = (ch) => { const v = head && Number.isFinite(head[ch]) ? head[ch] : 0; return ch === 'phi' ? v / DEG : v; };
+  for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) {
+    transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length) : Math.min(AT_START_M, out.length);
+  }
   if (Object.keys(transition).length) out.transition = transition;
   if (empty && Object.keys(targets).length) out.first = { ...targets };   // D194a: on an empty track the typed values are the first piece's start
   return out;
@@ -221,7 +240,9 @@ function mount(root, shell, mountOpts = {}) {
   // "at start" (D194b): one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
   const atStart = Object.fromEntries(Object.keys(HEAD).map((k) => [k, el('input', { type: 'checkbox', 'aria-label': `${k} at the start`,
-    title: `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
+    title: ['bank', 'cup', 'edge', 'edgeR'].includes(k)
+      ? `at start: reach this ${k} as early as the road can roll to it (${AT_START_M} m at least, never faster than the checker's roll limit) and hold it (off: ease to it over the whole piece)`
+      : `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
   // the turn field's label says which way it is read (D331 B); switching puts the field back to what it shows, so nothing typed in the other unit is applied
   const turnLabel = el('span', { text: 'turn °' }), turnField = fieldAt(turnLabel, turn, 'turn'), climbLabel = el('span', { text: 'climb °' }), climbField = fieldAt(climbLabel, climb, 'climb');
   turnAs.onchange = () => { showTurnHead(shell.headState()); applied.turn = turn.value; applied.climb = climb.value; ghost(); };
@@ -239,7 +260,7 @@ function mount(root, shell, mountOpts = {}) {
   const rightTarget = () => { const r = asTyped('edgeR'); return r !== '' || asTyped('edge') === '' ? r : String(HEAD.edgeR[1](shell.headState())); };
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
-    empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value });
+    empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState() });
   // D242 item 7 (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before

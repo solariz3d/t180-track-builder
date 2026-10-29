@@ -10,6 +10,7 @@ const IR = require('./inner_run.js');   // D352: a crashed inner run reads NOT T
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const X = 'core/extend.js';
+const P = '../app/core/panel.js';   // a file outside src/, given relative to it (the tree copies the app folders the panel loads)
 
 const MUTANTS = [
   // (no mutant on Lof's map branch: a short-ramp channel's fitted curve is overwritten by rampControl, so the length it is fitted over cannot change the document;
@@ -53,17 +54,20 @@ const MUTANTS = [
   { id: "F12 sampleBasis reads the last level's buffer past its end (basisN reads a 0 there)", pattern: "sampleBasis gives basisN", edits: [[X, "* (j <= d - 1 ? prev[j] : 0);", "* prev[j];"]] },
   { id: "F13 sampleBasis's walk stops one span early on a knot (the binary search takes the span the knot starts)", pattern: "sampleBasis gives basisN", edits: [[X, "while (walk < nCP - 1 && s >= U[walk + 1]) walk++;", "while (walk < nCP - 1 && s > U[walk + 1]) walk++;"]] },
   { id: "F10 with no free point the fit goes on (and writes past the pins)", pattern: "no free point", edits: [[X, "if (!free.length) return;", "if (!free.length) free.push(0);"]] },
+  // "at start" for the cross-section: app/core/panel.js lays a ticked bank, cup or edge over a ramp the roll amber allows (test/core_extend_at_start.test.js)
+  { id: 'S1 the cross-section ramp at the start loses its 20 m floor', pattern: 'keeps the 20 m floor', edits: [[P, 'const want = Math.max(AT_START_M, (START_SPREAD * Math.abs(to - from)) / START_RATE)', 'const want = (START_SPREAD * Math.abs(to - from)) / START_RATE']] },
+  { id: 'S2 the cross-section ramp at the start allows twice the roll rate', pattern: 'rolls under the checker', edits: [[P, '(START_SPREAD * Math.abs(to - from)) / START_RATE)', '(START_SPREAD * Math.abs(to - from)) / (2 * START_RATE))']] },
 ];
 
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
-  for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
-  fs.mkdirSync(path.join(dir, 'test')); for (const f of ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js']) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's
+  for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads
+  fs.mkdirSync(path.join(dir, 'test')); for (const f of ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_extend_at_start.test.js']) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's; the cross-section at start
   fs.mkdirSync(path.join(dir, 'test', 'fixtures')); for (const f of fs.readdirSync(path.join(__dirname, 'fixtures')).filter((x) => x.endsWith('.core2.json'))) fs.copyFileSync(path.join(__dirname, 'fixtures', f), path.join(dir, 'test', 'fixtures', f));
   return dir;
 }
 function runTests(dir, pattern) {
-  const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), path.join(dir, 'test', 'core_ramp.test.js'), path.join(dir, 'test', 'core_joint_c2.test.js'), path.join(dir, 'test', 'core_fit_banded.test.js')];
+  const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), path.join(dir, 'test', 'core_ramp.test.js'), path.join(dir, 'test', 'core_joint_c2.test.js'), path.join(dir, 'test', 'core_fit_banded.test.js'), path.join(dir, 'test', 'core_extend_at_start.test.js')];
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT'));
   const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
   const r = spawnSync(process.execPath, [...IR.reporterArgs(tap), ...args], { cwd: dir, env, encoding: 'utf8', timeout: 20 * 60 * 1000 });

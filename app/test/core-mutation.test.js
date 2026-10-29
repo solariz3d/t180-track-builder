@@ -53,8 +53,9 @@ const MUTATIONS = [
   { id: 'U9 the cup field is not on the panel', file: 'core/panel.js', from: "fieldAt('cup °', cup, 'cup'), ", to: '', caughtBy: 'the Extend panel has a "cup °" field' },
   // D194b, "at start": a ticked field with a target goes in transition as { channel: min(20 m, length) }; nothing else changes
   { id: 'V1 the at-start boxes are ignored', file: 'core/panel.js', from: 'if (Object.keys(transition).length) out.transition = transition;', to: '', caughtBy: 'extendOptions "at start"' },
-  { id: 'V2 an untouched field is sent at start', file: 'core/panel.js', from: 'if (atStart[f] && targets[ch] !== undefined) transition[ch]', to: 'if (atStart[f]) transition[ch]', caughtBy: 'extendOptions "at start"' },
-  { id: 'V3 the span is not held to the piece', file: 'core/panel.js', from: 'transition[ch] = Math.min(AT_START_M, out.length);', to: 'transition[ch] = AT_START_M;', caughtBy: 'extendOptions "at start"' },
+  { id: 'V2 an untouched field is sent at start', file: 'core/panel.js', from: 'if (atStart[f] && targets[ch] !== undefined) {', to: 'if (atStart[f]) {', caughtBy: 'extendOptions "at start"' },   // re-anchored: the at-start line now opens a block
+  // re-anchored: the at-start line now picks a cross-section ramp first; the turn, climb and width span is the line's last term
+  { id: 'V3 the span is not held to the piece', file: 'core/panel.js', from: ': Math.min(AT_START_M, out.length);', to: ': AT_START_M;', caughtBy: 'extendOptions "at start"' },
   { id: 'V4 transition sent as one number for all channels', file: 'core/panel.js', from: 'if (Object.keys(transition).length) out.transition = transition;', to: 'if (Object.keys(transition).length) out.transition = AT_START_M;', caughtBy: 'extendOptions "at start"' },
   { id: 'V5 a field sent on the wrong channel', file: 'core/panel.js', from: "bank: 'phi', width: 'w'", to: "bank: 'w', width: 'phi'", caughtBy: 'extendOptions "at start"' },
   { id: 'V6 the panel never passes the boxes', file: 'core/panel.js', from: 'atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),', to: '', caughtBy: 'the panel: an "at start" box' },
