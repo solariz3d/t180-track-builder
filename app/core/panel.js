@@ -173,7 +173,7 @@ function mount(root, shell, mountOpts = {}) {
   // picking a known track puts its measured median into the width field, like typing it (so on an empty track it is the first piece's start, which is the
   // new-track default). For a TUBE (the sweep field at 360) the figures are the distance round and the entry says how wide that is across.
   const WL = require('./widthlike.js');
-  const wlike = el('select', { 'aria-label': 'width like a known T-180 track', title: 'width like a known T-180 track: the median of what its reads measure (the 10th to 90th percentile in brackets). Picking one sets the width field' });
+  const wlike = el('select', { 'aria-label': 'width like a measured road', title: 'width like a measured road: these are road widths measured from Assetto Corsa tracks, nothing more. Each entry is the usual width, with the range most of that road stays in, in brackets. Picking one sets the width field' });
   const wnote = el('p', { class: 'message', 'aria-label': 'what the width means for a tube', style: 'font-size:12px;margin:2px 0' });
   const widthTitle = width.getAttribute('title');
   const showTubeNote = () => { const t = WL.isTube(tube.value); wnote.textContent = t ? WL.tubeNote(width.value) : ''; const tip = t ? `${widthTitle} ${WL.tubeTip(width.value)}` : widthTitle; width.setAttribute('title', tip); wnote.setAttribute('title', t ? WL.tubeTip(width.value) : ''); };   // D267: the explanation is the tooltip
@@ -228,7 +228,7 @@ function mount(root, shell, mountOpts = {}) {
   // GRIP (D261, the user: a different grip per piece; the core is src/core/document.js, E's). A whole percent 50 to 150 (100 is AC's own road), shown as the head's; left as shown the new piece keeps it, a changed
   // value is the new piece's grip. "grip like…" fills it from a known track (src/doc/grips.json). The words say what the number is, "untested: drive it" outside 60 to 110, and that the checker does not model grip.
   const gripF = el('input', { type: 'number', value: '100', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'grip', title: GL.tip() });
-  const gripLike = el('select', { 'aria-label': 'grip like known track', title: 'grip like a known track: the measured road friction of installed tracks; picking one fills the grip box' });
+  const gripLike = el('select', { 'aria-label': 'grip like a measured road', title: 'grip like a measured road: these are road grips read from Assetto Corsa tracks, nothing more. Picking one fills the grip box' });
   gripLike.replaceChildren(...GL.entries().map((e) => new win.Option(e.label, e.value)));
   const gripNote = el('p', { class: 'message', 'aria-label': 'what the grip means', style: 'font-size:12px;margin:2px 0' });
   let shownGrip = '100';

@@ -42,7 +42,7 @@ async function mountPanel(prep = () => {}) {
   const panel = require('../core/panel.js').mount(root, shell);
   const label = (text) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text);
   const field = (text) => label(text).children[1];
-  const like = () => root.all().find((e) => e.attrs['aria-label'] === 'width like a known T-180 track');
+  const like = () => root.all().find((e) => e.attrs['aria-label'] === 'width like a measured road');
   const note = () => root.all().find((e) => e.attrs['aria-label'] === 'what the width means for a tube');
   const pick = (name) => { const s = like(), o = s.children.find((c) => c.textContent.startsWith(name)); assert.ok(o, `an entry for ${name}`); s.value = o.value; s.onchange(); };
   return { root, shell, panel, label, field, like, note, pick, labels: () => like().children.map((c) => c.textContent) };
