@@ -70,10 +70,16 @@ test('the sky pass runs before the track, over the whole view, without writing d
   assert.match(R.SKY_VS, /uFwd \+ aPos\.x \* uRight \+ aPos\.y \* uUp/, 'the vertex shader builds each ray from the basis');
 });
 
-test('\'none\' draws the very calls cbd7a40 drew: SIGIL, the one skin left without a sky', () => {
-  assert.deepEqual(drawScene(R), BASE, 'no theme: cbd7a40\'s calls');
-  assert.deepEqual(drawScene(R, { setTheme: (r) => r.setTheme({ skyStyle: 'none', sky: [...R.CLEAR] }) }), BASE, 'none: cbd7a40\'s calls');
-  assert.deepEqual(drawScene(R, { setTheme: (r) => { r.setTheme({ skyStyle: 'sun' }); r.setTheme({ skyStyle: 'none' }); } }), BASE, 'back to none from a sky: cbd7a40\'s calls again');
+// AMENDED (0.4.29): D524 (0eb6f25, the user's road lines breaking into dashes far off) pulls each line vertex toward the camera (renderer.js LINE_BIAS), so the line vertex
+// shader is no longer cbd7a40's. The rule this row pins is that 'none' draws no sky and changes nothing else, so it now expects cbd7a40's calls with that one shader source
+// swapped for today's, and checks the swap happens exactly once; every other call is cbd7a40's as before. The fixture file is unchanged.
+const LINE_VS_CBD = 'void main(){ gl_Position = uVP * uModel * vec4(aPos, 1.0); vDepth = gl_Position.w; }';
+const LINE_VS_NOW = `void main(){ gl_Position = uVP * uModel * vec4(aPos, 1.0); vDepth = gl_Position.w; gl_Position.z -= ${(2e-5).toExponential()} * gl_Position.w; }`;
+const BASE_NOW = (() => { const s = JSON.stringify(BASE), n = s.split(JSON.stringify(LINE_VS_CBD).slice(1, -1)).length - 1; assert.equal(n, 1, `cbd7a40's line shader is in the fixture once (found ${n})`); return JSON.parse(s.replace(JSON.stringify(LINE_VS_CBD).slice(1, -1), () => JSON.stringify(LINE_VS_NOW).slice(1, -1))); })();
+test('\'none\' draws the very calls cbd7a40 drew, but for D524\'s line depth bias: SIGIL, the one skin left without a sky', () => {
+  assert.deepEqual(drawScene(R), BASE_NOW, 'no theme: cbd7a40\'s calls, D524\'s line shader');
+  assert.deepEqual(drawScene(R, { setTheme: (r) => r.setTheme({ skyStyle: 'none', sky: [...R.CLEAR] }) }), BASE_NOW, 'none: cbd7a40\'s calls, D524\'s line shader');
+  assert.deepEqual(drawScene(R, { setTheme: (r) => { r.setTheme({ skyStyle: 'sun' }); r.setTheme({ skyStyle: 'none' }); } }), BASE_NOW, 'back to none from a sky: cbd7a40\'s calls again, D524\'s line shader');
 });
 
 test('an unknown sky style fails loudly, at setTheme and in the registry; a style not built yet says so', () => {

@@ -172,6 +172,7 @@ function runMutant(m, extra = []) {
   try {
     for (const d of ['camera', 'preview', 'testhook', 'texmaker', 'lib']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });   // D381: preview.js requires app/lib/tokens.js; the whole of app/lib, so a later require of theme.js or cjs.js finds it too
     fs.mkdirSync(path.join(app, 'core')); fs.copyFileSync(path.join(ROOT, 'app', 'core', 'keys.js'), path.join(app, 'core', 'keys.js'));   // D257: preview.js asks app/core/keys.js which Ctrl+keys are shortcuts (keys.js requires nothing)
+    fs.copyFileSync(path.join(ROOT, 'app', 'core', 'zonegrab.js'), path.join(app, 'core', 'zonegrab.js'));   // 0.4.29: preview.js requires app/core/zonegrab.js since D519 (it requires only src/, copied below); without it the control failed
     fs.mkdirSync(path.join(dir, 'scripts')); fs.copyFileSync(path.join(ROOT, 'scripts', 'prove_render.js'), path.join(dir, 'scripts', 'prove_render.js'));
     fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });   // all of src/: the modules reach across it (src/doc now requires src/validate)
     fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });   // src/export/fromwords.js reads its kn5 back with tools/kn5.cjs (D177: the export is in the look's list test)

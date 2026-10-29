@@ -226,14 +226,18 @@ for (const [row, track, tool, why] of [['4a', 'tube360', 'grab', 'Grab on the 36
   });
 }
 
+// AMENDED (0.4.29): since D519 Part 2 and D520 a Grab pressed ON the road is the follow (a set of channels solved from the pointer's ray: app/core/zonegrab.js follow), not
+// Grab's one height channel times PER_PX, so the shell's sculptOnce of the height channel is no longer what the page does, and this row went red at e2922e7. Its rule (the release
+// is the exact road, and bit for bit the shell's own stroke) is unchanged, so it drags Twist, which keeps its one channel wherever it is pressed (core-pieces-ui row 25b). The
+// follow's own release is pinned through the shell in zonegrab rows 14b-14n.
 test('row 5: the release is the exact road: a station every 2 m again, and the document is bit for bit the one the shell\'s sculptOnce gives for the same brush and delta', { skip }, async (t) => {
-  const r = await sculptDrag('aqua', 'open10', 'grab', 200, 5100, 60, 3000);
-  enough(r, 'grab');
+  const r = await sculptDrag('aqua', 'open10', 'twist', 200, 5100, 60, 3000);
+  enough(r, 'twist');
   assert.ok(r.road && r.road.whole, `after the release the road is whole: ${JSON.stringify(r.road)}`);
   assert.ok(r.saved, 'the page autosaved the brushed track');
   const pageText = JSON.parse(r.saved).doc;
   const s = await createCoreShell({ autosaveMs: 0, storage: { openAutosave: async () => JSON.stringify({ schema: 1, kind: 'core', name: null, doc: await trackText('open10') }), saveAutosave: async () => {} } });
-  s.restore(); const T = TOOLS.grab;
+  s.restore(); const T = TOOLS.twist;
   s.sculptOnce({ mode: T.mode, channel: T.channel, s0: r.s0, r: r.r, delta: r.delta * PER_PX[T.ch] });
   assert.equal(s.getState().message === null || s.getState().messageKind !== 'error', true, `the shell's own stroke ran: ${s.getState().message}`);
   const want = D.serialize(s.getState().history.present);
