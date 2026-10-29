@@ -4,6 +4,7 @@
 //   1  a preview leaves the track as it is and quotes the roll rate; Apply copies the track to its backups first, then banks as ONE undo step; Undo gives it back
 //   2  the preview drops when the track changes under it (an Extend, an Undo) and when the selection changes; Cancel drops it
 //   3  a stretch the core refuses (a jump inside it) says the core's own words and previews nothing
+//   4  a run that ends in a jump: a sane stretch or the core's words, never NaN (the shell read a flight's length, which it has none of)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -77,4 +78,16 @@ test('a stretch the core refuses says the core\'s words and previews nothing', a
   assert.ok(words, 'the core refuses a stretch with a jump inside');
   assert.equal(s.getState().bankProposal, null);
   assert.equal(s.getState().message, words);
+});
+
+test('a run that ends in a jump either previews over a sane stretch or refuses in the core\'s words, never with NaN', async () => {
+  const s = await createCoreShell({ brushFn: null, storage: store(), autosaveMs: 0 });
+  s.extend({ length: 100, family: 'bowl' }); s.extend({ length: 100, family: 'bowl' }); s.jump(null);
+  const d = present(s), fi = d.pieces.findIndex((P) => P.type !== 'road');
+  assert.ok(fi > 0, 'the track has a flight');
+  s.selectPiece(0); s.selectPiece(fi, { extend: true }); s.proposeBankSwing({ peakDeg: 20 });
+  const msg = s.getState().message || '', p = s.getState().bankProposal;
+  assert.doesNotMatch(msg, /NaN/, `no NaN in the words: ${msg}`);
+  if (p) assert.ok([p.s0, p.s1, p.peakS].every(Number.isFinite) && p.s0 < p.peakS && p.peakS < p.s1, `a sane stretch: ${p.s0}, ${p.peakS}, ${p.s1}`);
+  else assert.match(msg, /^[A-Z_]+: /, `refused in the core's own words: ${msg}`);
 });

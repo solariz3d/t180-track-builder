@@ -1234,8 +1234,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!(at > 0 && at < 1)) return set({ bankProposal: null, message: `peak at is a share of the selected run, between 0 and 1 (0.5 is its middle), got ${peakAt}` });
       if (!(li >= 0) || !(ro >= 0)) return set({ bankProposal: null, message: 'lead-in and run-out are metres, 0 or more' });
       if (ex !== null && !Number.isFinite(ex)) return set({ bankProposal: null, message: `exit bank is degrees, or blank for the bank there as it is, got ${exitDeg}` });
-      const off = pieceOffsets(d), total = d.pieces.length ? off[off.length - 1] + d.pieces[d.pieces.length - 1].length : 0;
-      const r0 = off[s.from], r1 = off[s.to] + d.pieces[s.to].length, peakS = r0 + at * (r1 - r0);
+      // each piece's length from the offsets (a flight has no length of its own; the last piece's is its segments' sum), as src/core/bankswing.js reads them
+      const off = pieceOffsets(d), n = d.pieces.length, last = n ? d.pieces[n - 1] : null;
+      const total = n ? off[n - 1] + (last.type === 'road' ? last.length : toSegments(d).filter((g) => g.id === last.id).reduce((a, g) => a + g.length, 0)) : 0;
+      const endOf = (i) => (i + 1 < n ? off[i + 1] : total);
+      const r0 = off[s.from], r1 = endOf(s.to), peakS = r0 + at * (r1 - r0);
       const s0 = d.closed ? r0 - li : Math.max(0, r0 - li), s1 = d.closed ? r1 + ro : Math.min(total, r1 + ro);
       const t0 = now(); let nd;
       try { nd = BS.swingBank(d, { s0, s1, peakS, peakDeg: pk, exitDeg: ex, shape: 'rounded' }); } catch (e) { if (e && e.name === 'CoreError') return set({ bankProposal: null, message: e.message }); throw e; }
