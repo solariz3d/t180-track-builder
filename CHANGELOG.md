@@ -11,6 +11,10 @@ All notable changes to this project are recorded here. The format follows
 
 - **Sculpt ▸ Bank the bend: lay the bank over a whole bend as one smooth swing, across every joint.** Select the bend (Shift-click for a run), type the peak bank, where the peak is (0.5 is the middle of the run), how far before and after the run the swing starts and ends (80 m each by default), and the exit bank (blank keeps what is there). Preview shows the road banked, see-through over the track, with its peak roll rate beside the checker's amber and red, so the trade is on screen before Apply. Apply is one undo step, and a copy of the track goes to its backups first. Only the bank changes; the route does not move.
 
+### Changed
+
+- **"At start" on a bank, cup or edge now comes in smoothly instead of twisting over the first 20 m.** A ticked bank, cup or edge still reaches its value early and holds it for the rest of the piece, but now over as long as the road needs to roll there within the checker's own roll limit (20 m at least, and at most half the piece). A 20° bank after a straight comes in over about 47 m and rolls at about 0.76 °/m, where it used to roll at 1.0 °/m over 20 m, above the checker's 0.93 °/m warning. Turn, climb and width at start keep their 20 m, and a piece shorter than 40 m keeps the ramp it had.
+
 ### Fixed
 
 - **Opening a long track no longer freezes the window while the road is built.** The road now appears over the next second or two, and the view stays live meanwhile, with "building the road…" shown at the bottom of the preview. Placing a piece is unchanged: it still appears at once.

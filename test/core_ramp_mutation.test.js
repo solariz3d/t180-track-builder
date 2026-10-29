@@ -11,6 +11,7 @@ const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const X = 'core/extend.js';
 const B = 'core/bankswing.js';
+const P = '../app/core/panel.js';   // a file outside src/, given relative to it (the tree copies the app folders the panel loads)
 
 const MUTANTS = [
   // (no mutant on Lof's map branch: a short-ramp channel's fitted curve is overwritten by rampControl, so the length it is fitted over cannot change the document;
@@ -73,12 +74,15 @@ const MUTANTS = [
   { id: 'B15 the rounded rate rounds over 10 m whatever the knots', pattern: 'swing: the rounded swing rolls', edits: [[B, 'Math.min(Math.max(X.BANK_ROUND_M, span), len / 4) / len', 'Math.min(X.BANK_ROUND_M, len / 4) / len']] },
   { id: 'B16 another channel is written beside the bank', pattern: 'swing: only phi', edits: [[B, '{ ...P, channels: { ...P.channels, phi: w } }', '{ ...P, channels: { ...P.channels, phi: w, kh: w } }']] },
   { id: "B17 the rounded halves blend by extend.js's quintic", pattern: 'swing: the rounded swing rolls', edits: [[X, 'if (u <= 1 - a) return (a / 2 + (u - a)) / N;', 'if (u <= 1 - a) return smoother(u);']] },
+  // "at start" for the cross-section: app/core/panel.js lays a ticked bank, cup or edge over a ramp the roll amber allows (test/core_extend_at_start.test.js)
+  { id: 'S1 the cross-section ramp at the start loses its 20 m floor', pattern: 'keeps the 20 m floor', edits: [[P, 'const want = Math.max(AT_START_M, (START_SPREAD * Math.abs(to - from)) / START_RATE)', 'const want = (START_SPREAD * Math.abs(to - from)) / START_RATE']] },
+  { id: 'S2 the cross-section ramp at the start allows twice the roll rate', pattern: 'rolls under the checker', edits: [[P, '(START_SPREAD * Math.abs(to - from)) / START_RATE)', '(START_SPREAD * Math.abs(to - from)) / (2 * START_RATE))']] },
 ];
 
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js'];
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
-  for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
+  for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads
   fs.mkdirSync(path.join(dir, 'test')); for (const f of FILES) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's; bank the bend's
   fs.mkdirSync(path.join(dir, 'test', 'fixtures')); for (const f of fs.readdirSync(path.join(__dirname, 'fixtures')).filter((x) => x.endsWith('.core2.json'))) fs.copyFileSync(path.join(__dirname, 'fixtures', f), path.join(dir, 'test', 'fixtures', f));
   return dir;

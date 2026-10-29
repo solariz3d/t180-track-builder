@@ -632,7 +632,9 @@ test('extendOptions "at start": a ticked field WITH a target goes in transition 
   assert.deepEqual(extendOptions({ ...base, width: '45' }), { length: 100, targets: { w: 45 } }, 'nothing ticked: no transition, exactly as before');
   assert.deepEqual(extendOptions({ ...base, width: '45', atStart: { ...NONE, width: true } }).transition, { w: 20 }, 'width at start: w reaches 45 within 20 m');
   assert.equal(extendOptions({ ...base, atStart: { ...NONE, width: true } }).transition, undefined, 'ticked but untouched (no target): nothing');
-  assert.deepEqual(extendOptions({ ...base, turn: '', bank: '30', cup: '90', atStart: { ...NONE, turn: true, bank: true, cup: true } }).transition, { phi: 20, c: 20 },
+  // AMENDED (the rule changed: a ticked bank, cup or edge ramps as long as the roll amber needs, capped at half the piece; was 20 m for every channel).
+  // 30° of bank and 90° of cup from 0 want 70.7 m and 212 m; on this 100 m piece both stop at 50 m. Turn and width keep 20 m (the rows above and below).
+  assert.deepEqual(extendOptions({ ...base, turn: '', bank: '30', cup: '90', atStart: { ...NONE, turn: true, bank: true, cup: true } }).transition, { phi: 50, c: 50 },
     'each ticked field with a target, by its own channel; turn has no target');
   assert.deepEqual(extendOptions({ ...base, length: 12, width: '45', atStart: { ...NONE, width: true } }).transition, { w: 12 }, 'a piece shorter than 20 m: its own length');
   const first = extendOptions({ ...base, width: '45', empty: true, atStart: { ...NONE, width: true } });
@@ -662,7 +664,8 @@ test('"at start" on a field left as shown sends nothing (no target, D193); the b
   box.checked = true; box.onchange();
   assert.equal(S.stub.seen.at(-1).transition, undefined, 'bank untouched: nothing to reach, so nothing sent');
   P.type('bank °', 20);
-  assert.deepEqual(S.stub.seen.at(-1).transition, { phi: 20 }, 'bank typed: now it goes');
+  // AMENDED (the rule changed: a bank at start ramps as long as the roll amber needs; 20° from the straight's 0° is 47.2 m, was 20 m)
+  assert.deepEqual(S.stub.seen.at(-1).transition, { phi: 47.2 }, 'bank typed: now it goes');
   P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
   assert.equal(box.checked, true, 'kept after Extend, like a preference');
   assert.equal(S.stub.seen.at(-1).transition, undefined, 'after Extend the field shows the head again (untouched), so nothing is sent');
