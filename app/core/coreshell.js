@@ -75,6 +75,7 @@ const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
 const GHOST_CHORDS = 48, GHOST_TURN = 0.03, GHOST_PROBES = 16;   // D404: the drag's ghost: at most 48 chords, none turning the heading by more than 0.03 rad (1.7 degrees), the curvature read at 17 stations
 const PC = require('../../src/core/piece.js');   // D240: saved pieces (save a run, put one at the head, mirror it, delete pieces)
+const BS = require('../../src/core/bankswing.js');   // Bank the bend: one bank swing laid across a stretch of road
 const SR = require('../../src/core/smoothramps.js');   // D465: Track ▸ Smooth ramps
 const { bankLapWith, budgetNote } = require('../../src/core/finish.js');   // D473: Track ▸ Bank the lap
 const RAMP_WORD = Object.freeze({ phi: 'bank', c: 'cup', e: 'edge', er: 'right edge' });
@@ -238,6 +239,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
     selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
     cutProposal: null,   // D361: a pending cut (cutSelection's preview), dropped with the document it was made on
+    bankProposal: null,   // a pending Bank the bend (proposeBankSwing's preview), dropped with the document it was made on
     sculpt: false,   // D244b: the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
     lastToolChannel: null,   // D421: the channel of the Sculpt tool used last, which Smooth works on
     closePending: null,   // 2026-10-15: a close the worker is working out, { base, finish, startedAt }: no preview yet (closeRunner)
@@ -294,6 +296,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (patch.history && st.selection && !('selection' in patch) && patch.history.present !== st.selection.base) patch = { ...patch, selection: null };
     if (patch.history && st.deleteProposal && !('deleteProposal' in patch) && patch.history.present !== st.deleteProposal.base) patch = { ...patch, deleteProposal: null };
     if (patch.history && st.cutProposal && !('cutProposal' in patch) && patch.history.present !== st.cutProposal.base) patch = { ...patch, cutProposal: null };
+    if (patch.history && st.bankProposal && !('bankProposal' in patch) && patch.history.present !== st.bankProposal.base) patch = { ...patch, bankProposal: null };
     const before = st.history.present;
     st = Object.freeze({ ...st, ...patch });
     // D240 follow-up: the overlap check belongs to the preview it was started for; when that preview goes (Cancel, an edit, an Undo, another selection) the check is STOPPED (the worker terminated)
@@ -378,6 +381,12 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
   const resolvedOf = (d) => { const segments = segmentsOf(d); return { resolved: Object.freeze({ segments, closed: !!d.closed, start: startOf(d), lift: offsetPath && segments.length ? (p) => offsetPath(d, segments, p) : undefined }), resolveError: null }; };
   /** Run an edit; a core error becomes the message, and nothing else changes. */
+  // the worst roll rate (°/m) on the road over lap distance [s0, s1], read as the checker reads it (src/validate rollRates, its 20 m chord); a closed lap wraps
+  const rollOn = (d, s0, s1) => {
+    const V = require('../../src/validate/index.js'), { segments, path } = AD.toPath(d, { step: 2 }), S = path.samples, L = path.lengthM;
+    const inside = (x) => (d.closed ? [x, x + L, x - L].some((y) => y >= s0 - 1e-9 && y <= s1 + 1e-9) : x >= s0 - 1e-9 && x <= s1 + 1e-9);
+    return V._internal.rollRates(S, (i) => segments[S[i].seg].kind !== 'gap', !!d.closed, L).filter((q) => inside(q.s)).reduce((m, q) => Math.max(m, q.rate), 0);
+  };
   const attempt = (fn) => { try { return fn(); } catch (e) { if (e.name === 'CoreError') { set({ message: e.message }); return null; } throw e; } };
   /** Commit a new document as one undo step, timing the operation plus the adapter. */
   const commit = (op, make, extra = {}) => attempt(() => {
@@ -943,9 +952,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         }
       }
       const ids = from <= to ? d.pieces.slice(from, to + 1) : [...d.pieces.slice(from), ...d.pieces.slice(0, to + 1)];
-      return set({ selection: Object.freeze({ base: d, anchor, from, to, longWay, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, cutProposal: null, message: null });
+      return set({ selection: Object.freeze({ base: d, anchor, from, to, longWay, ids: Object.freeze(ids.map((P) => P.id)) }), deleteProposal: null, cutProposal: null, bankProposal: null, message: null });
     },
-    clearSelection: () => set({ selection: null, deleteProposal: null, cutProposal: null, message: null }),
+    clearSelection: () => set({ selection: null, deleteProposal: null, cutProposal: null, bankProposal: null, message: null }),
     /**
      * D261, GRIP of the selected pieces (the user: "change which piece has different grip"; the core is src/core/document.js setGrip, E's): `g` a whole percent 50 to 150 (a number or the field's
      * text; anything else is refused in plain words, nothing changes). Only ROAD has grip, so a flight in the selection is left as it is. ONE undo step; the selection stays on the pieces.
@@ -1208,6 +1217,44 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         ...ok(`cut: ${cutWords(p)} Connect the two ends with Extend, or Close; save under a new name to keep the old track (Ctrl+Z puts ${p.removed.length === 1 ? 'it' : 'them'} back)`) });
     },
     cancelCut: () => set({ cutProposal: null, message: null }),
+    /**
+     * BANK THE BEND: one bank swing laid over a stretch of road, across every joint in it (src/core/bankswing.js swingBank); the route does not move. The stretch is the
+     * selected run with `leadIn` metres before it and `runOut` after (an open track's ends stop it); the peak is `peakAt` of the way along the run (0 to 1), and the
+     * bank at the stretch's end is `exitDeg`, or as it is when that is null. As the cut: proposeBankSwing PREVIEWS it (state.bankProposal, the track unchanged) with the
+     * checker's roll-rate read on the stretch (src/validate rollRates, its 20 m chord), applyBankSwing copies the track to its backups first ('pre-swing'), refuses by
+     * name if that copy fails, and commits ONE undo step; cancelBankSwing drops it, and so does any change of the track.
+     */
+    proposeBankSwing({ peakDeg, peakAt = 0.5, leadIn = 80, runOut = 80, exitDeg = null } = {}) {
+      if (st.brush) return set({ message: 'finish the brush drag first' });
+      const s = st.selection, d = doc();
+      if (!s || s.base !== d) return set({ bankProposal: null, message: 'select the bend first: click a piece on the track (shift-click for a run)' });
+      const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+      const pk = num(peakDeg), at = num(peakAt) ?? 0.5, li = num(leadIn) ?? 80, ro = num(runOut) ?? 80, ex = num(exitDeg);
+      if (!Number.isFinite(pk)) return set({ bankProposal: null, message: 'type the peak bank first (degrees, + leans the road to the left)' });
+      if (!(at > 0 && at < 1)) return set({ bankProposal: null, message: `peak at is a share of the selected run, between 0 and 1 (0.5 is its middle), got ${peakAt}` });
+      if (!(li >= 0) || !(ro >= 0)) return set({ bankProposal: null, message: 'lead-in and run-out are metres, 0 or more' });
+      if (ex !== null && !Number.isFinite(ex)) return set({ bankProposal: null, message: `exit bank is degrees, or blank for the bank there as it is, got ${exitDeg}` });
+      const off = pieceOffsets(d), total = d.pieces.length ? off[off.length - 1] + d.pieces[d.pieces.length - 1].length : 0;
+      const r0 = off[s.from], r1 = off[s.to] + d.pieces[s.to].length, peakS = r0 + at * (r1 - r0);
+      const s0 = d.closed ? r0 - li : Math.max(0, r0 - li), s1 = d.closed ? r1 + ro : Math.min(total, r1 + ro);
+      const t0 = now(); let nd;
+      try { nd = BS.swingBank(d, { s0, s1, peakS, peakDeg: pk, exitDeg: ex, shape: 'rounded' }); } catch (e) { if (e && e.name === 'CoreError') return set({ bankProposal: null, message: e.message }); throw e; }
+      const r = resolvedOf(nd), ms = now() - t0, roll = rollOn(nd, s0, s1), V = require('../../src/validate/index.js');
+      const grade = roll > V.ROLL_RED_DEG_M ? 'RED' : roll > V.ROLL_AMBER_DEG_M ? 'AMBER' : null;
+      const proposal = Object.freeze({ base: d, doc: nd, resolved: r.resolved, s0, s1, peakS, peakDeg: pk, exitDeg: ex, roll, grade, ms });
+      const words = `bank the bend preview: ${pk}° at ${peakS.toFixed(0)} m, over ${(s1 - s0).toFixed(0)} m of road (${s0.toFixed(0)} to ${s1.toFixed(0)} m); peak roll ${roll.toFixed(2)} °/m; amber above ${V.ROLL_AMBER_DEG_M.toFixed(2)}, red above ${V.ROLL_RED_DEG_M.toFixed(2)}${grade ? ` (${grade}: a longer lead-in or run-out rolls it slower)` : ''}. Apply or Cancel`;
+      return set({ bankProposal: proposal, ...ok(words) });
+    },
+    async applyBankSwing() {
+      const p = st.bankProposal;
+      if (!p) return set({ message: 'nothing to apply: preview Bank the bend first' });
+      if (p.base !== doc()) return set({ bankProposal: null, message: 'the track changed since the bank preview: preview Bank the bend again' });
+      try { await api.backupNow('pre-swing'); } catch (e) { return set({ message: `not banked: the copy from before could not be written (${e && e.message || e}); nothing changed` }); }
+      if (st.bankProposal !== p || p.base !== doc()) return set({ bankProposal: null, message: 'the track changed while its copy was being written: preview Bank the bend again' });
+      return set({ history: D.commit(st.history, p.doc), resolved: p.resolved, resolveError: null, dirty: true, bankProposal: null, lastEdited: null, lastStep: { op: 'bankSwing', ms: p.ms },
+        ...ok(`banked the bend: ${p.peakDeg}° at its peak, peak roll ${p.roll.toFixed(2)} °/m; the route did not move (Ctrl+Z takes it back)`) });
+    },
+    cancelBankSwing: () => set({ bankProposal: null, message: null }),
 
     /**
      * D465, TRACK ▸ SMOOTH RAMPS: the track's bank, cup and edge ramps re-laid by the C2 quintic (src/core/smoothramps.js), so a track laid before 0.4.20 gets the

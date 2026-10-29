@@ -776,7 +776,19 @@ function mount(root, shell, mountOpts = {}) {
   const valueLine = el('p', { class: 'message hint', 'aria-label': 'sculpt value', style: 'font-size:12px;margin:2px 0;height:1.4em;line-height:1.4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' });
   const moreTools = el('details', { class: 'sculpt-more' }, el('summary', { text: 'more ▾', style: 'cursor:pointer' }),
     el('div', { class: 'pickers' }, field('exact size (may nudge ≤ 0.1 mm outside)', sharp), field('other tool', otherTool), field('Edge changes', edgeSide), field('Smooth smooths', smoothCh)));
-  const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools), sculptHint, valueLine);
+  // BANK THE BEND, beside Twist: one bank swing over the selected run, a lead-in before it and a run-out after, across every joint (the shell's proposeBankSwing). Preview first:
+  // the road as it would bank is the ghost and the message gives the roll rate; Apply is one undo step. Blank exit bank: the bank there as it is
+  const swingPeak = num('', 1, 'peak bank, degrees (+ leans the road to the left, − to the right)'), swingAt = num(0.5, 0.05, 'where the peak is: a share of the selected run, 0 to 1 (0.5 is its middle)');
+  const swingIn = num(80, 10, 'lead-in, m: how far before the selected run the bank starts to swing'), swingOut = num(80, 10, 'run-out, m: how far after the selected run the bank swings to the exit bank');
+  const swingExit = num('', 1, 'exit bank, degrees, at the end of the run-out; blank keeps the bank there as it is');
+  const swingOpts = () => ({ peakDeg: swingPeak.value, peakAt: swingAt.value, leadIn: swingIn.value, runOut: swingOut.value, exitDeg: swingExit.value === '' ? null : swingExit.value });
+  const swingPreview = el('button', { text: 'Preview', title: 'show the selected run banked as one swing (see-through over the road) and its roll rate; nothing changes until Apply', onclick: () => shell.proposeBankSwing(swingOpts()) });
+  const swingApply = el('button', { text: 'Apply', title: 'bank the road as previewed: one undo step (a copy of the track goes to its backups first)', onclick: () => shell.applyBankSwing() });
+  const swingCancel = el('button', { text: 'Cancel', title: 'drop the preview', onclick: () => shell.cancelBankSwing() });
+  const bankBend = el('details', { class: 'sculpt-more', 'aria-label': 'bank the bend' }, el('summary', { text: 'Bank the bend ▾', style: 'cursor:pointer', title: 'lay the bank over a whole bend as one smooth swing, across every joint: select the bend (shift-click for a run), type the peak bank, Preview, Apply' }),
+    el('div', { class: 'pickers' }, field('peak bank °', swingPeak), field('peak at', swingAt), field('lead-in m', swingIn), field('run-out m', swingOut), field('exit bank °', swingExit)),
+    el('div', { class: 'actions' }, swingPreview, swingApply, swingCancel));
+  const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools, bankBend), sculptHint, valueLine);
   // SMOOTH'S RADIUS (O's measurement, p-d421-shell-O_2026-10-20.md addendum: at a bump's own radius Smooth moves ONE control point, nothing to see; 10 at r 160, 29 at r 300):
   // picking Smooth puts 3x the last tool's radius in the field, so the smooth reaches past the bump it is taking out and scales with it (a fixed 300 m would swallow a
   // 60 m bump's neighbours and fall short of a 500 m bend); leaving Smooth puts the other tools' radius back. The field only: an open drag keeps its r
@@ -865,6 +877,7 @@ function mount(root, shell, mountOpts = {}) {
   let wasSculpt = false;
   let shownFor = null, lentFrom = null;   // lentFrom: the selected piece whose values the fields hold (2026-10-15)
   const draw = (st) => {
+    swingApply.disabled = swingCancel.disabled = !(st.bankProposal && st.bankProposal.base === st.history.present);
     showHeading();   // the end heading line (Turn to grid)
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
     if (d !== shownFor) {   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head, and an UNDONE Extend's own values (item 7)

@@ -212,7 +212,8 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (track.how === 'drag') return;   // a drag's frame moves nothing the shared track's readers keep: they hear the exact road when the drag ends
     // D242: a close PROPOSAL (the core shell's closeProposal, for the document on screen) is the ghost: the pieces it moves, see-through over the placed ones
     // D240: a middle DELETE's preview (the core shell's deleteProposal) is shown the same way: the track as it would be, see-through over the placed one
-    const propOf = (p) => (p && st.history && p.base === st.history.present ? p : null), prop = propOf(st.closeProposal) || propOf(st.deleteProposal);
+    // and Bank the bend's (bankProposal): the road as it would bank, see-through over the placed one
+    const propOf = (p) => (p && st.history && p.base === st.history.present ? p : null), prop = propOf(st.closeProposal) || propOf(st.deleteProposal) || propOf(st.bankProposal);
     if (prop !== proposalShown) {
       if (ghost && ghost.proposal) ghost = null;
       proposalShown = prop;
