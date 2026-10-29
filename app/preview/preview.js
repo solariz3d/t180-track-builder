@@ -189,10 +189,20 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
   }
   // a sliced build of state st, begun now (its first slice this frame)
   function startExact(st) { try { exactJob = { st, it: model.updateSteps(st.resolved), built: null, list: null, k: 0 }; } catch (e) { exactJob = null; refreshNow(st); return; } stepExact(); }
+  // any other state with no drag open: the model's first step now. A build that does not yield (a placement, a sculpt, an undo, the same document) is whole at once and shown
+  // this frame, as before; one that yields is a full rebuild (opening a long track: 19.7 km meshed in about 1.7 s), and the rest of it is built a slice a frame, the stage
+  // showing what it showed until it lands, the HUD saying the road is being built
+  function startBuild(st) {
+    let it, r;
+    try { it = model.updateSteps(st.resolved); r = it.next(); } catch (e) { refreshNow(st); return; }   // the geometry failed: built (and failing) the plain way, its error shown
+    if (r.done) { refreshNow(st, r.value); return; }
+    exactJob = { st, it, built: null, list: null, k: 0, building: true }; stepExact();
+  }
   const refresh = (st) => {
     if (exactJob) { if (!st.brush) { exactDue = st; return; } while (exactJob) stepExact(true); }   // a new drag: the exact road first (and any build chained after it), then its frame
     if (!st.brush && track && track.how === 'drag') { exactDue = st; return; }   // the release: the exact road in the next frame
     exactDue = null;
+    if (!st.brush) { startBuild(st); return; }
     refreshNow(st);
   };
   const refreshNow = (st, built = null) => {
@@ -211,7 +221,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (onTrack && track.how !== 'same' && track.how !== 'kept') onTrack(shared());
   };
   const unsub = shell.subscribe(refresh);
-  refresh(shell.getState());
+  refreshNow(shell.getState());   // the state the preview is mounted on is built at once, as before; only the changes after it are built a slice a frame
   /** The camera's context: the head and path, the track's box (the overhead fit) and the view's aspect. With nothing
    *  placed yet but a ghost showing, the ghost's head and path stand in, so the first word can be previewed too. With
    *  NOTHING placed and no ghost, the track's START stands in (D195): before it, the context was null there, so no frame
@@ -410,7 +420,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
         look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, time: skyTime(t) });
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
-    if (hud) hud.textContent = `${rig.mode.charAt(0).toUpperCase()}${rig.mode.slice(1)} view · ${look === 'ac' ? (sigil ? 'plain road' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}${lateShown && t < lateShown.until ? ` · ${lateShown.rec.type === 'keyup' ? 'key-up' : 'key-down'} ${lateShown.rec.code} came ${(lateShown.rec.lateMs / 1000).toFixed(1)} s late (${lateShown.rec.cause})` : ''}`;
+    if (hud) hud.textContent = `${rig.mode.charAt(0).toUpperCase()}${rig.mode.slice(1)} view · ${look === 'ac' ? (sigil ? 'plain road' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}${exactJob && exactJob.building ? ' · building the road…' : ''}${lateShown && t < lateShown.until ? ` · ${lateShown.rec.type === 'keyup' ? 'key-up' : 'key-down'} ${lateShown.rec.code} came ${(lateShown.rec.lateMs / 1000).toFixed(1)} s late (${lateShown.rec.cause})` : ''}`;
   }
   raf = win.requestAnimationFrame(frame);
   said();

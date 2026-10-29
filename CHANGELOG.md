@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Opening a long track no longer freezes the window while the road is built.** The road now appears over the next second or two, and the view stays live meanwhile, with "building the road…" shown at the bottom of the preview. Placing a piece is unchanged: it still appears at once.
+
 ## [0.4.29] - 2026-10-28
 
 ### Changed
