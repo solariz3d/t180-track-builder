@@ -202,12 +202,13 @@ async function mountPanel(shell) {
 
 test('row 6: the panel has ONE Close button (no "close using" box, no Apply); while the worker works it says so and Cancel stops it; then the line says what was done', async () => {
   const r = handRunner(), s = await nearLap(r), P = await mountPanel(s), base = s.getState().history.present;
-  assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'close using') || null, null, 'no choice of how to close'); assert.equal(P.button('Apply') || null, null, 'no Apply');
+  const cancel = () => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Cancel' && /^stop the close/.test(e.attrs.title || ''));   // the Close's own Cancel: Bank the bend has a Cancel in the same panel
+  assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'close using') || null, null, 'no choice of how to close'); assert.equal(P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Apply' && !/^bank the road as previewed/.test(e.attrs.title || '')) || null, null, 'no Apply');   // Sculpt's Bank the bend has an Apply of its own, in the same panel; Close still has none
   P.button('Close the loop').onclick(); P.fire();
   assert.equal(r.jobs.length, 1, 'the panel asked for the close'); assert.equal(r.jobs[0].args.best, true);
   assert.equal(P.text('close working'), 'Closing the loop: trying each way of closing it and checking the lap… The window stays free; Cancel stops it.');
-  assert.equal(P.button('Cancel').style.display, '', 'Cancel is offered while it works');
-  P.button('Cancel').onclick(); assert.equal(r.jobs[0].cancelled, 1, 'Cancel in the panel stops the job'); assert.equal(P.text('close working'), null); assert.equal(P.button('Cancel').style.display, 'none');
+  assert.equal(cancel().style.display, '', 'Cancel is offered while it works');
+  cancel().onclick(); assert.equal(r.jobs[0].cancelled, 1, 'Cancel in the panel stops the job'); assert.equal(P.text('close working'), null); assert.equal(cancel().style.display, 'none');
   P.button('Close the loop').onclick(); P.fire();
   r.jobs[1].resolve(answerOf(base)); await tick(); await tick(); await tick();
   assert.equal(s.getState().history.present.closed, true, s.getState().message);
