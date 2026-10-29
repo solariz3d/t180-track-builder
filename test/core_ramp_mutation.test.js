@@ -10,6 +10,7 @@ const IR = require('./inner_run.js');   // D352: a crashed inner run reads NOT T
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const X = 'core/extend.js';
+const B = 'core/bankswing.js';
 
 const MUTANTS = [
   // (no mutant on Lof's map branch: a short-ramp channel's fitted curve is overwritten by rampControl, so the length it is fitted over cannot change the document;
@@ -53,17 +54,37 @@ const MUTANTS = [
   { id: "F12 sampleBasis reads the last level's buffer past its end (basisN reads a 0 there)", pattern: "sampleBasis gives basisN", edits: [[X, "* (j <= d - 1 ? prev[j] : 0);", "* prev[j];"]] },
   { id: "F13 sampleBasis's walk stops one span early on a knot (the binary search takes the span the knot starts)", pattern: "sampleBasis gives basisN", edits: [[X, "while (walk < nCP - 1 && s >= U[walk + 1]) walk++;", "while (walk < nCP - 1 && s > U[walk + 1]) walk++;"]] },
   { id: "F10 with no free point the fit goes on (and writes past the pins)", pattern: "no free point", edits: [[X, "if (!free.length) return;", "if (!free.length) free.push(0);"]] },
+  // bank the bend: src/core/bankswing.js, which lays its halves with extend.js's rounded-linear ramp (test/core_bankswing.test.js runs beside the others here)
+  { id: 'B1 the peak is not held at the peak bank', pattern: 'swing: 0°', edits: [[B, "row(pointForm(peakS, 'v'), vp);", '']] },
+  { id: 'B2 the ends are not held at the bank there and the exit bank', pattern: 'swing: 0°|swing: an exit bank of', edits: [[B, "row(pointForm(s0, 'v'), v0);", ''], [B, "row(pointForm(s1, 'v'), v1);", '']] },
+  { id: 'B3 the joints are not held C1 in the fit (the quantised re-set then breaks their C2)', pattern: 'swing: every joint', edits: [[B, "for (const key of ['v', 'd1']) row(", "for (const key of []) row("]] },
+  { id: 'B4 the joints inside the stretch are not held C2', pattern: 'swing: every joint', edits: [[B, 'if (J >= s0 && J <= s1 && nA >= MIN_C2', 'if (false && nA >= MIN_C2']] },
+  { id: 'B5 the road after an exit bank is not moved with it', pattern: 'swing: an exit bank', edits: [[B, 'mine[k] = Number((e.P.channels.phi[k] + shift).toFixed(D.DEC.phi)) + 0;', 'mine[k] = e.P.channels.phi[k];']] },
+  { id: 'B6 the road after an exit bank is moved past the next jump', pattern: 'swing: an exit bank carries', edits: [[B, "for (const e of E) if (e.P.type !== 'road' && e.o >= s1 && e.o < shiftEnd) shiftEnd = e.o;", '']] },
+  { id: 'B7 a jump inside the stretch is not refused', pattern: 'NOT_ROAD', edits: [[B, "for (const e of E) if (e.P.type !== 'road' && e.end > s0 && e.o < s1) throw", "for (const e of E) if (false) throw"]] },
+  { id: 'B8 a half shorter than a knot span is not refused', pattern: 'TOO_SHORT', edits: [[B, 'if (b - a < span) throw', 'if (false) throw']] },
+  { id: 'B9 a peak at either end of the stretch is accepted', pattern: 'BAD_RANGE', edits: [[B, 's0 < peakS && peakS < s1)) throw', 's0 <= peakS && peakS <= s1)) throw']] },
+  { id: 'B10 a stretch off the end of an open track is accepted', pattern: 'BAD_RANGE', edits: [[B, 'if (s0 < 0 || s1 > roadEnd + 1e-9) throw', 'if (false) throw']] },
+  { id: 'B11 a closed lap with no jump takes an exit bank (and opens a step where the swing starts)', pattern: 'SWING_REFUSED', edits: [[B, 'if (doc.closed && !(shiftEnd < s0 + total)) throw', 'if (false) throw']] },
+  { id: "B12 a landing's first point is not held at its flight bank", pattern: 'just after a landing', edits: [[B, 'if (hits(b, [0])) row([{ e: b, k: 0, w: 1 }], b.P.channels.phi[0]);', '']] },
+  // (no mutant on the re-set of a joint after quantising: the fit holds both sides equal to ~1e-15, so they round alike, and a quantum either way is inside
+  //  checkDoc's own tolerance; 'quantising re-sets no joint' was not caught in the first run and is left out as equivalent on these tracks)
+  { id: 'B14 the road either side of the stretch weighs no more than the stretch in the fit', pattern: 'swing: an exit bank of', edits: [[B, 'OUTSIDE : 1;', '1 : 1;']] },
+  { id: 'B15 the rounded rate rounds over 10 m whatever the knots', pattern: 'swing: the rounded swing rolls', edits: [[B, 'Math.min(Math.max(X.BANK_ROUND_M, span), len / 4) / len', 'Math.min(X.BANK_ROUND_M, len / 4) / len']] },
+  { id: 'B16 another channel is written beside the bank', pattern: 'swing: only phi', edits: [[B, '{ ...P, channels: { ...P.channels, phi: w } }', '{ ...P, channels: { ...P.channels, phi: w, kh: w } }']] },
+  { id: "B17 the rounded halves blend by extend.js's quintic", pattern: 'swing: the rounded swing rolls', edits: [[X, 'if (u <= 1 - a) return (a / 2 + (u - a)) / N;', 'if (u <= 1 - a) return smoother(u);']] },
 ];
 
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
-  fs.mkdirSync(path.join(dir, 'test')); for (const f of ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js']) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's
+  fs.mkdirSync(path.join(dir, 'test')); for (const f of FILES) fs.copyFileSync(path.join(__dirname, f), path.join(dir, 'test', f));   // D459: the C2 rows too; D482: the banded fit's; bank the bend's
   fs.mkdirSync(path.join(dir, 'test', 'fixtures')); for (const f of fs.readdirSync(path.join(__dirname, 'fixtures')).filter((x) => x.endsWith('.core2.json'))) fs.copyFileSync(path.join(__dirname, 'fixtures', f), path.join(dir, 'test', 'fixtures', f));
   return dir;
 }
 function runTests(dir, pattern) {
-  const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), path.join(dir, 'test', 'core_ramp.test.js'), path.join(dir, 'test', 'core_joint_c2.test.js'), path.join(dir, 'test', 'core_fit_banded.test.js')];
+  const args = ['--max-old-space-size=4096', '--test', ...(pattern ? ['--test-name-pattern', pattern] : []), ...FILES.map((f) => path.join(dir, 'test', f))];
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT'));
   const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
   const r = spawnSync(process.execPath, [...IR.reporterArgs(tap), ...args], { cwd: dir, env, encoding: 'utf8', timeout: 20 * 60 * 1000 });
