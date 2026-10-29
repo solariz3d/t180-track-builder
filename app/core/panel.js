@@ -61,7 +61,9 @@ const START_RATE = require('../../src/validate/index.js').ROLL_AMBER_DEG_M, STAR
 // A BANK at start is laid as one swell (bankShape 'swell', below): its rate has no plateau, so it peaks higher for the same length and needs a longer ramp. Measured the
 // same way, over banks of 8 to 180° at start: with 2.2 the swell's worst roll is 1.024 °/m (180°), over the amber; with 2.6, 0.867, and on the user's 41.38° piece the
 // rate's largest change over 2 m falls from 0.163 °/m (rounded-linear, 2.2) to 0.077. Cup and edge at start keep START_SPREAD and the quintic.
-const SWELL_SPREAD = 2.6;
+// Raised to 3.4 (the user, on 2.6: "it needs to go a little into it more and by less steep transition gradient"): his piece's ramp is 150.7 m against 115.3, the
+// change over 2 m 0.045 against 0.077, and the worst roll over 8 to 180° 0.664 °/m.
+const SWELL_SPREAD = 3.4;
 const XS_START = new Set(['phi', 'c', 'e', 'er']);
 /** The at-start ramp (m) of a cross-section channel going from `from` to `to` (degrees) on a piece `length` m long; rounded up to 0.1 m. */
 function crossStartM(from, to, length, spread = START_SPREAD) {
