@@ -223,10 +223,10 @@
   #palette > .head:first-child { color: color-mix(in srgb, var(--dim) 55%, var(--text)); }
   /* the guide's card and its Show the guide button sit under the values band, which runs to the right at 1400 px */
   #guide .guide-card { top: 64px; }   /* the tour card is wide and would meet the band's end; the Show the guide button keeps its own 12px: the band stops short of it (below) */
-  #preview { --preview-shift: 130px; }   /* half the column: the values strip centres on the view beside it */
+  #preview { --preview-shift: 0px; }   /* the values strip centres on the window, the 3D picture's own centre (the camera is drawn across the whole window) */
   #stage { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
   #preview { position: relative; min-height: 0; overflow: hidden; }
-  #camera { position: absolute; z-index: 9; left: 260px; right: 0; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+  #camera { position: absolute; z-index: 9; left: 0; right: 0; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
   #camera > * { pointer-events: auto; }
   #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   #camera [role="toolbar"] button { border-color: transparent; font-size: 10.5px; padding: 6px 10px; }
@@ -268,7 +268,7 @@
   .picker .like-pick option { color: var(--text); }
   #palette .pickers > .message { margin: -2px 0 0 70px !important; color: var(--dim); }
   /* the next-piece line under the preview's values (app/core/panel.js roBox, attached by valuesoverlay): chips, the unchanged ones dimmed */
-  [aria-label="piece values"] .readout { display: flex; flex-wrap: wrap; justify-content: center; max-width: min(1200px, calc(100vw - 600px));   /* centred on the view, so 100vw - 600 ends about 170px short of the window's right edge: clear of the Show the guide button; at 1400 the line wraps to two rows */ margin: 3px 8px 0; padding-top: 3px; border-top: 1px solid var(--veil-rule, rgba(255,255,255,0.14)); font: 600 11px/1.35 var(--body); }
+  [aria-label="piece values"] .readout { display: flex; flex-wrap: wrap; justify-content: center; max-width: min(1200px, calc(100vw - 560px));   /* centred on the window, so 100vw - 560 leaves 280 px each side: clear of the 260 px column on the left and of the Show the guide button on the right; at 1400 the line wraps to two rows */ margin: 3px 8px 0; padding-top: 3px; border-top: 1px solid var(--veil-rule, rgba(255,255,255,0.14)); font: 600 11px/1.35 var(--body); }
   [aria-label="piece values"] { width: max-content; }   /* centred at left 50%, it would otherwise be held to half the view, and the line under it with it */
   [aria-label="piece values"] .readout .chip { padding: 0 6px; white-space: nowrap; }
   [aria-label="piece values"] .readout .chip[data-chip="corner"] { max-width: 250px; overflow: hidden; text-overflow: ellipsis; }   /* its whole text is the chip's tooltip */
