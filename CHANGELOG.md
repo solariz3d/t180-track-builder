@@ -13,7 +13,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
-- **The road lines in the preview follow the road over a bump.** On a bump, white lines could stand above the road like a ladder and not follow it. Each stretch of road now draws its own lines, so the edges run over the bump with the road, and the cross lines come every 10 m as they were meant to, not every 2 m. The lines are also kept just in front of the road far off, so they no longer break into dashes there.
+- **The road lines in the preview follow the road over a bump.** On a bump, white lines could stand above the road like a ladder and not follow it. Every stretch of road used to draw its lines from the last stretch's rows; each now draws its own, so the edges run over the bump with the road and the stack of short lines where the road changes width is gone. The lines are also kept just in front of the road far off, so they no longer break into dashes there.
 
 ## [0.4.28] - 2026-10-28
 
