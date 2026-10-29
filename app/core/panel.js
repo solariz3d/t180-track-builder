@@ -780,8 +780,10 @@ function mount(root, shell, mountOpts = {}) {
   // the road as it would bank is the ghost and the message gives the roll rate; Apply is one undo step. Blank exit bank: the bank there as it is
   const swingPeak = num('', 1, 'peak bank, degrees (+ leans the road to the left, − to the right)'), swingAt = num(0.5, 0.05, 'where the peak is: a share of the selected run, 0 to 1 (0.5 is its middle)');
   const swingIn = num(80, 10, 'lead-in, m: how far before the selected run the bank starts to swing'), swingOut = num(80, 10, 'run-out, m: how far after the selected run the bank swings to the exit bank');
-  const swingExit = num('', 1, 'exit bank, degrees, at the end of the run-out; blank keeps the bank there as it is');
-  const swingOpts = () => ({ peakDeg: swingPeak.value, peakAt: swingAt.value, leadIn: swingIn.value, runOut: swingOut.value, exitDeg: swingExit.value === '' ? null : swingExit.value });
+  const EXIT_TITLE = 'exit bank, degrees, at the end of the run-out; blank keeps the bank there as it is. A different exit bank moves the bank of the road after it by the same amount, up to the next jump or the open end';
+  const EXIT_OFF = 'exit bank: off on a closed lap with no jump, because a different exit bank would carry all the way round the lap to where the swing starts; the swing ends at the bank the road has there';
+  const swingExit = num('', 1, EXIT_TITLE);
+  const swingOpts = () => ({ peakDeg: swingPeak.value, peakAt: swingAt.value, leadIn: swingIn.value, runOut: swingOut.value, exitDeg: swingExit.disabled || swingExit.value === '' ? null : swingExit.value });
   const swingPreview = el('button', { text: 'Preview', title: 'show the selected run banked as one swing (see-through over the road) and its roll rate; nothing changes until Apply', onclick: () => shell.proposeBankSwing(swingOpts()) });
   const swingApply = el('button', { text: 'Apply', title: 'bank the road as previewed: one undo step (a copy of the track goes to its backups first)', onclick: () => shell.applyBankSwing() });
   const swingCancel = el('button', { text: 'Cancel', title: 'drop the preview', onclick: () => shell.cancelBankSwing() });
@@ -878,6 +880,8 @@ function mount(root, shell, mountOpts = {}) {
   let shownFor = null, lentFrom = null;   // lentFrom: the selected piece whose values the fields hold (2026-10-15)
   const draw = (st) => {
     swingApply.disabled = swingCancel.disabled = !(st.bankProposal && st.bankProposal.base === st.history.present);
+    // the exit bank: off on a closed lap with no jump (the core refuses it there: the shift after the stretch would come round to its start)
+    { const off = !!st.history.present.closed && st.history.present.pieces.every((P) => P.type === 'road'); if (swingExit.disabled !== off) { swingExit.disabled = off; swingExit.setAttribute('title', off ? EXIT_OFF : EXIT_TITLE); } }
     showHeading();   // the end heading line (Turn to grid)
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
     if (d !== shownFor) {   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head, and an UNDONE Extend's own values (item 7)
