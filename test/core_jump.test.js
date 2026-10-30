@@ -9,6 +9,7 @@
 //   5  export: a closed free-jump lap exports (kn5, AI line, no jump warning); an open one is still refused
 //   6  saved pieces and old files: a run with a free flight re-adds and mirrors; an OLD document jump opens at the end of its old ramp; an old saved one is refused
 //   7  readout: the flight's pose for the UI's number boxes
+//   8  a jump from a lip the brush raised or shifted: the take-off is the road as built, the mesh has no step, a clean lip is byte-identical, the lap closes
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -226,4 +227,107 @@ test('row 7: the readout of a flight gives its pose for the number boxes, its tu
   near(o.landing.forwardM, 50, 1e-9); near(o.landing.leftM, 3, 1e-9); near(o.landing.upM, -2, 1e-9);
   near(o.landing.headingDeg, 2, 1e-6); near(o.landing.pitchDeg, -2, 1e-6); near(o.landing.bankDeg, 0.05 / DEG, 1e-6);
   near(o.turnDeg, 2, 1e-6); near(o.bankToDeg, 0.05 / DEG, 1e-6);
+});
+// ── row 8: a jump takes off from a lip the brush raised or shifted (the user: "you should be able to add the climb to create the jump, then place the jump from it") ──
+// The take-off is the road's end AS BUILT: the route's end moved by h along world up and l along the heading's left, leaving along the lifted road's own tangent (its pitch
+// tilted by the h slope, its heading by the l slope); the landing is that pose plus the flight's own. Before, the document refused a jump after an offset (FLIGHT_OFFSET).
+const SC = require('../src/core/sculpt.js');
+const { buildMesh } = require('../src/geom/mesh.js');
+const crypto = require('crypto');
+/** 200 m of bowl whose end the brush moved: 'hill' writes h, 'swerve' writes l, centred at s0 with radius r, by delta m. */
+const lipped = (mode, { s0 = 200, r = 40, delta = 2 } = {}, first = { length: 200, family: 'bowl' }) => SC.brush(extend(D.createDoc('lip'), first), { mode, s0, r, delta }).doc;
+/** The same lip made LEVEL at the end: its last two control points equal, so on the clamped spline the end's slope is exactly 0 and the lift there is a pure translation. */
+const flatLip = (d, ch = 'h') => { const P = d.pieces[d.pieces.length - 1], c = P.channels[ch].slice(); c[c.length - 2] = c[c.length - 1]; return D.checkDoc({ ...d, pieces: [...d.pieces.slice(0, -1), { ...P, channels: { ...P.channels, [ch]: c } }] }); };
+/** The take-off and landing as built, on the adapter's own (lifted) path: the road's last row, the flight's first sample, the landing's first sample. */
+function lipRead(doc) {
+  const segs = A.toSegments(doc), { path: P } = A.toPath(doc), k = segs.findIndex((g) => g.part === 'gap');
+  return { segs, P, k, road: P.segEnd[k - 1], gap0: P.samples[P.segFirst[k]], land0: P.samples[P.segFirst[k + 1]] };
+}
+const vnear = (a, b, eps, msg) => { for (let i = 0; i < 3; i++) near(a[i], b[i], eps, `${msg} [${i}]`); };
+const headingOf = (T) => Math.atan2(T[0], T[2]), pitchOf = (T) => Math.asin(Math.max(-1, Math.min(1, T[1])));
+/** A pose { forward, left, up } from point p in the heading frame th (forward and left horizontal, up world up), as the flight's landing is placed. */
+const poseFrom = (p, th, o) => [p[0] + o.forward * Math.sin(th) + o.left * Math.cos(th), p[1] + o.up, p[2] + o.forward * Math.cos(th) - o.left * Math.sin(th)];
+
+test('row 8: a jump takes off from a lip RAISED with the brush (h): the flight starts at the lifted lip, along the road\'s own tangent, and the landing sits at that pose plus its own', () => {
+  const t = lipped('hill'), P0 = t.pieces[0];
+  near(D.channelAt(P0, 'h', P0.length).v, 2, 1e-9, 'control: the lip is lifted 2 m');
+  const d = J.jumpHere(t, null), r = lipRead(d), base = pathOf(d, false), F = d.pieces[1];
+  vnear(r.gap0.pos, r.road.pos, 1e-9, 'the flight starts at the road\'s last row');
+  vnear(r.road.pos, [0, 1, 2].map((i) => base.segEnd[r.k - 1].pos[i] + (i === 1 ? 2 : 0)), 1e-9, 'which is the unlifted end 2 m up');
+  vnear(r.gap0.T, r.road.T, 1e-9, 'it leaves along the lifted road\'s tangent: no kink at the lip');
+  const th = headingOf(r.gap0.T);
+  vnear(r.land0.pos, poseFrom(r.gap0.pos, th, F), 1e-9, 'the landing starts at the lip\'s pose plus the flight\'s');
+  near(headingOf(r.land0.T), th + F.heading, 1e-9, 'its heading'); near(pitchOf(r.land0.T), F.pitch, 1e-9, 'its pitch');
+  assert.ok(['h', 'l'].every((ch) => d.pieces[2].channels[ch].every((v) => v === 0)), 'the landing\'s own h and l are 0: the air resets them');
+});
+test('row 8: the MESH has no step at a raised lip: the road\'s last row is the unlifted one moved 2 m up, and the landing\'s first row stands on its pose', () => {
+  const t = flatLip(lipped('hill')), P0 = t.pieces[0]; assert.equal(D.channelAt(P0, 'h', P0.length).d1, 0, 'control: a level lip');
+  const d = J.jumpHere(t, null), r = lipRead(d), base = pathOf(d, false);
+  const M = buildMesh(r.P, r.segs), M0 = buildMesh(base, r.segs), last = M._state.pieces[r.k - 1].last, last0 = M0._state.pieces[r.k - 1].last;
+  assert.ok(last && last0 && last.length === last0.length && last.length >= 12, 'control: both meshes keep the lip\'s row');
+  for (let o = 0; o < last.length; o += 6) vnear([last[o], last[o + 1], last[o + 2]], [last0[o], last0[o + 1] + 2, last0[o + 2]], 1e-9, `the lip row's vertex ${o / 6}`);
+  const off = (row, sm) => { const n = row.length / 6, c = [0, 0, 0]; for (let o = 0; o < row.length; o += 6) for (let i = 0; i < 3; i++) c[i] += row[o + i] / n; const q = c.map((v, i) => v - sm.pos[i]); return Math.abs(q[0] * sm.L[0] + q[1] * sm.L[1] + q[2] * sm.L[2]) + Math.abs(q[0] * sm.T[0] + q[1] * sm.T[1] + q[2] * sm.T[2]); };
+  near(off(last, r.road), 0, 1e-6, 'the road\'s last row is centred on the lifted lip');
+  near(off(M._state.pieces[r.k + 1].first, r.land0), 0, 1e-6, 'the landing\'s first row is centred on its start');
+});
+test('row 8: a lip SHIFTED sideways (l) and still moving: the flight starts at the shifted lip, turned by atan(dl/ds), and the landing turns with it', () => {
+  const t = lipped('swerve', { s0: 215, r: 40, delta: 3 }), P0 = t.pieces[0], l = D.channelAt(P0, 'l', P0.length);
+  assert.ok(Math.abs(l.v) > 0.5 && Math.abs(l.d1) > 0.01, `control: a shifted lip still moving, l ${l.v}, dl/ds ${l.d1}`);
+  const d = J.jumpHere(t, null, { landing: { forward: 45, left: 2, up: -1, heading: 0.1 } }), r = lipRead(d), F = d.pieces[1], base = pathOf(d, false);
+  vnear(r.gap0.pos, r.road.pos, 1e-9, 'the flight starts at the shifted lip'); vnear(r.gap0.T, r.road.T, 1e-9, 'along the shifted road\'s tangent');
+  const th = headingOf(r.gap0.T);
+  near(th - headingOf(base.segEnd[r.k - 1].T), Math.atan(l.d1), 1e-9, 'the heading tilted by atan(dl/ds) (a straight: no curvature term)');
+  vnear(r.land0.pos, poseFrom(r.gap0.pos, th, F), 1e-9, 'the landing at the tilted pose plus the flight\'s'); near(headingOf(r.land0.T), th + F.heading, 1e-9, 'its heading');
+});
+test('row 8: a RISING lip (h still climbing at the end) keeps rising into the air: the flight\'s pitch is the lifted road\'s, atan(dh/ds) on a level piece', () => {
+  const t = lipped('hill', { s0: 215, r: 40, delta: 2 }), P0 = t.pieces[0], h = D.channelAt(P0, 'h', P0.length);
+  assert.ok(h.d1 > 0.01, `control: the lip still rises, dh/ds ${h.d1}`);
+  const r = lipRead(J.jumpHere(t, null));
+  near(pitchOf(r.gap0.T), Math.atan(h.d1), 1e-9, 'the take-off pitch: the piece\'s 0 tilted by the lip\'s slope');
+  vnear(r.gap0.T, r.road.T, 1e-9, 'the same tangent as the lifted road\'s last row');
+});
+test('row 8: on a CLIMBING piece a raised lip tilts the climb: the take-off pitch is the lifted road\'s at the lip, above the piece\'s own', () => {
+  const t = SC.brush(takeoff(), { mode: 'hill', s0: 315, r: 40, delta: 2 }).doc, Pn = t.pieces[t.pieces.length - 1], h = D.channelAt(Pn, 'h', Pn.length);
+  assert.ok(h.d1 > 0.01, 'control: a rising lip on a climbing piece');
+  const d = J.jumpHere(t, null), r = lipRead(d), own = pitchOf(pathOf(d, false).segEnd[r.k - 1].T);
+  vnear(r.gap0.T, r.road.T, 1e-9, 'it leaves along the lifted road\'s tangent');
+  assert.ok(pitchOf(r.gap0.T) > own + 0.9 * Math.atan(h.d1), `the pitch ${pitchOf(r.gap0.T)} rad is the piece's ${own} tilted up by the lip's slope (about ${Math.atan(h.d1)})`);
+});
+test('row 8: a jump from a lip with NO offset is BYTE-IDENTICAL to before (segments, path, saved text), on a climbing take-off, by the button and posed', () => {
+  const sha = (o) => crypto.createHash('sha256').update(typeof o === 'string' ? o : JSON.stringify(o)).digest('hex'), t = takeoff();
+  const want = { button: ['36797e3e521119b7c673eeeee252a0d748501e58b986f7e29d7f76459131161c', '33d341fafa50f09afdef15bb0dbbed598bf75b69ed1cbafc1c9cb1fa1533a563', '6f400c6a1ed525d423b4d8c3f955dd15cea0415eb606588ff9dfe8bb5e3839f9'],
+    posed: ['fd31d333e874cdd4db042608cd7471f15b89190c55f1827c68e49d24bca1baca', '438fe31edc32c9b8e962b187eb6fc060d0d52c32e4da74652def4bca81b4099c', 'a305a770fecb0d45b583b6e972d30254e49ed7c8a52c317a3cc39b44093fd232'] };   // read off 98e3d81, before a jump could take off from a moved lip
+  for (const [name, d] of [['button', J.jumpHere(t, null)], ['posed', J.jumpHere(t, null, { landing: { forward: 52.5, left: -7.25, up: -4.5, heading: 0.31, pitch: -0.08, bank: 0.12 } })]]) {
+    const segs = A.toSegments(d), P = A.toPath(d).path;
+    assert.deepEqual([sha(segs), sha(P.samples.map((x) => [x.s, x.pos, x.T, x.L, x.U])), sha(D.serialize(d))], want[name], `${name}: segments, path samples, saved text`);
+  }
+});
+test('row 8: a lap with a jump from a SHIFTED lip closes, and the close\'s model predicts the adapter across it (a control point before the lip and after the landing)', () => {
+  let d = J.jumpHere(lipped('swerve', { s0: 315, r: 40, delta: 3 }, { length: 300, family: 'bowl' }), null, { landing: { forward: 40 }, landingM: 300 });
+  for (let i = 0; i < 4; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
+  d = extend(d, { length: 60, transition: 40, targets: { kh: 0 } });
+  const Jc = positionJacobian(d), endOf = (x) => { const S = A.toPath({ ...x, closed: false }).path.samples; return S[S.length - 1].pos; }, e0 = endOf(d), eps = 1e-6;
+  const f = d.pieces.findIndex((P) => P.type === 'flight');
+  for (const [p, ch, i] of [[0, 'kh', 3], [0, 'kv', 3], [f + 1, 'kh', 3]]) {
+    const c = d.pieces[p].channels[ch].slice(); c[i] += eps;
+    const e1 = endOf({ ...d, pieces: d.pieces.map((X, k) => (k === p ? { ...X, channels: { ...X.channels, [ch]: c } } : X)) });
+    const act = [0, 1, 2].map((k) => (e1[k] - e0[k]) / eps), pred = Jc[ch].get(`${p}:${i}`) || [0, 0, 0], scale = Math.max(1, Math.hypot(...act)), err = Math.hypot(...act.map((v, k) => v - pred[k])) / scale;
+    assert.ok(err < 1e-3, `${ch} of p${p}[${i}] (${p < f ? 'before' : 'after'} the jump): the adapter moves the end ${act.map((v) => v.toFixed(2))}, the model says ${pred.map((v) => v.toFixed(2))} (relative ${err.toExponential(2)})`);
+  }
+  const r = close(d);
+  assert.equal(r.converged, true, r.report); assert.ok(r.gapM < 1e-3, `${r.gapM} m`); assert.ok(r.tangentRad < 1e-6, `${r.tangentRad} rad`);
+});
+test('row 8: the document no longer refuses a jump after an offset; a value that is not a number at the lip is still refused', () => {
+  const t = lipped('hill');
+  assert.doesNotThrow(() => J.jump(t, { forward: 40 }), 'a jump after a raised lip is a document');
+  const bad = { ...t, pieces: [{ ...t.pieces[0], channels: { ...t.pieces[0].channels, h: t.pieces[0].channels.h.map((v, i, a) => (i === a.length - 1 ? NaN : v)) } }] };
+  assert.throws(() => D.checkDoc(bad), (e) => e.name === 'CoreError', 'a NaN offset is refused by the document\'s own checks');
+});
+test('row 8: the SEGMENT CACHE sees the lip: re-brushing the lip under a placed jump rebuilds the flight (the flight piece itself is unchanged), the same as an uncached build', () => {
+  const d1 = J.jumpHere(lipped('hill', { s0: 215, r: 40, delta: 2 }), null), cache = new WeakMap(), first = A.toSegments(d1, { cache });
+  const d2 = SC.brush(d1, { mode: 'hill', s0: 190, r: 30, delta: 1.5 }).doc;
+  assert.equal(d2.pieces[1], d1.pieces[1], 'control: the flight piece is the very same object after the brush');
+  const cached = A.toSegments(d2, { cache }), fresh = A.toSegments(d2), k = fresh.findIndex((g) => g.part === 'gap');
+  assert.notDeepEqual(fresh[k].to, first[k].to, 'control: the new lip moves the take-off');
+  assert.deepEqual(cached[k].to, fresh[k].to, 'the cached build takes off from the new lip'); assert.equal(cached[k].length, fresh[k].length);
 });

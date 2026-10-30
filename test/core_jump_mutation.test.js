@@ -22,7 +22,7 @@ const MUTANTS = [
   { id: 'J3 a track with a jump is refused again (NOT_YET)', pattern: 'row 4', file: 'src/core/close.js', from: "  if (doc.pieces.length && doc.pieces[doc.pieces.length - 1].type === 'flight')", to: "  if (doc.pieces.some((P) => P.type === 'flight')) throw new D.CoreError('NOT_YET', 'close: a jump');\n  if (doc.pieces.length && doc.pieces[doc.pieces.length - 1].type === 'flight')" },
   { id: 'J4 the landing is linked across the jump (its start not held)', pattern: 'row 4', file: 'src/core/close.js', from: 'if (prev >= 0 && i < 2 && flightSince) {', to: 'if (false) {' },
   { id: 'J5 the close\'s model skips the flight (no displacement, no heading or pitch reset)', pattern: 'row 4', file: 'src/core/close.js', from: "    if (P.type === 'flight') {\n      const F = [Math.sin(th)", to: "    if (false) {\n      const F = [Math.sin(th)" },
-  { id: 'J6 the net pitch is not counted again from a jump, nor its turn added', pattern: 'row 4', file: 'src/core/close.js', from: "out.kv = new Map(); out.kvBase = F.pitch - doc.start.pitch; out.khBase += F.heading; continue;", to: 'continue;' },
+  { id: 'J6 the net pitch is not counted again from a jump, nor its turn added', pattern: 'row 4', file: 'src/core/close.js', from: "out.kv = new Map(); out.kvBase = F.pitch - doc.start.pitch; out.khBase += g.to.theta; continue;", to: 'continue;' },
   { id: 'J7 the landing pitch and the jumps\' turns are left out of the net angles', pattern: 'row 4', file: 'src/core/close.js', from: 'net = { kh: rows.khBase, kv: rows.kvBase }', to: 'net = { kh: 0, kv: 0 }' },
   { id: 'J8 the model\'s pitch is not cut at the flight', pattern: 'row 4', file: 'src/core/close.js', from: 'sT = sT.map((v, k) => v + g.Tt[k]); sP = [0, 0, 0]; continue;', to: 'sT = sT.map((v, k) => v + g.Tt[k]); continue;' },
   { id: 'J8c the model leaves out the landing\'s sideways offset turning with the take-off', pattern: 'row 4', file: 'src/core/close.js', from: 'P.forward * Lh[k] - P.left * F[k]', to: 'P.forward * Lh[k]' },
@@ -33,10 +33,20 @@ const MUTANTS = [
   { id: 'J13 a landing pitch past vertical is accepted', pattern: 'row 1', file: 'src/core/document.js', from: 'if (!(Math.abs(P.pitch) <= FLIGHT_PITCH_MAX))', to: 'if (false)' },
   { id: 'J14 an empty track is not refused by name', pattern: 'row 1', file: 'src/core/jump.js', from: "if (!doc.pieces.length) throw new D.CoreError('NO_TAKEOFF'", to: "if (false) throw new D.CoreError('NO_TAKEOFF'" },
   { id: 'J15 a landing that is not the head is moved anyway', pattern: 'row 1', file: 'src/core/jump.js', from: "if (!L) throw new D.CoreError('LANDING_NOT_HEAD'", to: "if (false) throw new D.CoreError('LANDING_NOT_HEAD'" },
-  { id: 'J16 the landing is not where its pose says (a metre further on)', pattern: 'row 1', file: 'src/core/adapter.js', from: 'const to = { x: [P.left, P.up, P.forward]', to: 'const to = { x: [P.left, P.up, P.forward + 1]' },
+  { id: 'J16 the landing is not where its pose says (a metre further on)', pattern: 'row 1', file: 'src/core/adapter.js', from: ': { x: [P.left, P.up, P.forward], theta: P.heading, p: P.pitch };', to: ': { x: [P.left, P.up, P.forward + 1], theta: P.heading, p: P.pitch };' },
   // src/core/document.js, piece.js: old files and saved pieces
   { id: 'J17 an old jump opens at its lip, its ramp forgotten (the roads after it move)', pattern: 'row 6', file: 'src/core/document.js', from: 'forward: gap + r,', to: 'forward: gap,' },
   { id: 'J18 the mirror of a saved jump does not cross to the other side', pattern: 'row 6', file: 'src/core/piece.js', from: 'left: P.left === 0 ? 0 : -P.left,', to: 'left: P.left,' },
+  // a jump from a lip the brush moved (row 8): the take-off is the lip as built (adapter.js lipOf), the curve starts there (path.js), the segment cache and the close see it.
+  // J16 above is re-anchored on the no-lip branch of the same line (a lip with no offset is the segment as it always was)
+  { id: 'J20 the lip\'s height is dropped from the take-off (a step at a raised lip)', pattern: 'row 8', file: 'src/core/adapter.js', from: 'return { x: [l.v, h.v, 0], theta', to: 'return { x: [l.v, 0, 0], theta' },
+  { id: 'J21 the lip\'s slopes are dropped from the take-off tangent (a kink at the lip)', pattern: 'row 8', file: 'src/core/adapter.js', from: 'd1 = [l.d1, Math.sin(p0) + h.d1, Math.cos(p0) - kh * l.v]', to: 'd1 = [0, Math.sin(p0), Math.cos(p0) - kh * l.v]' },
+  { id: 'J22 the landing does not turn with the lip\'s tilt', pattern: 'row 8', file: 'src/core/adapter.js', from: 'theta: lip.theta + P.heading, p: P.pitch, from: lip', to: 'theta: P.heading, p: P.pitch, from: lip' },
+  { id: 'J23 the landing\'s height is from the route\'s end, not the lifted lip', pattern: 'row 8', file: 'src/core/adapter.js', from: 'lip.x[1] + P.up,', to: 'P.up,' },
+  { id: 'J24 the flight\'s curve ignores where it takes off (from the route\'s end again)', pattern: 'row 8', file: 'src/geom/path.js', from: 'if (to.from) return flightCurveFrom(to);', to: 'if (false) return flightCurveFrom(to);' },
+  { id: 'J25 the segment cache forgets the lip (a re-brushed lip keeps the old flight)', pattern: 'row 8', file: 'src/core/adapter.js', from: "P.type === 'flight' ? lipKey(doc.pieces[pi - 1]) : null]", to: 'null]' },
+  { id: 'J26 the close\'s model leaves out the lip\'s tilt after a jump', pattern: 'row 8', file: 'src/core/close.js', from: 'th += lip.theta;', to: '' },
+  { id: 'J27 the close\'s net turn leaves out the lip\'s tilt', pattern: 'row 8', file: 'src/core/close.js', from: 'out.khBase += g.to.theta;', to: 'out.khBase += F.heading;' },
 ];
 
 function runMutant(m) {

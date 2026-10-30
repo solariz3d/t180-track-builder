@@ -458,7 +458,7 @@ function checkDoc(doc) {
     const at = `piece ${i} (${P && P.id})`;
     if (!P || typeof P.id !== 'string' || ids.has(P.id)) bad(`${at}: needs a unique string id`); ids.add(P.id);
     if (P.type === 'flight') {
-      if (prev) { const e = pieceEnd(prev); for (const ch of OFFSETS) if (Math.abs(e[ch].v) > 10 ** -DEC[ch] || Math.abs(e[ch].m) > 1e-6) throw new CoreError('FLIGHT_OFFSET', `${at}: ${ch} must fade to 0 (value and slope) before a jump, got ${e[ch].v} m, slope ${e[ch].m}: the adapter cannot lift a jump's gap or its landing ramp`); }
+      // a jump may take off from road the brush raised or shifted: the adapter starts the flight from the lip as built (its h and l, and their slopes), so no step
       checkFlight(P, at);
       if (!prev) bad(`${at}: a flight must follow a road piece`);
       // D243 (B's look): LAND ON ROAD FIRST. Two flights in a row would take the second off from the first one's landing ramp, which no road piece

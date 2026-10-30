@@ -626,7 +626,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      * D258, THE FREE JUMP (the user: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error driving it
      * themselves"; the core is src/core/jump.js, E's). jump(extendOpts) is the Jump button: the current piece placed as Extend would place it (extendOpts: what Extend takes, or null to take off from the
      * track's end as it is), then a free flight to a default landing (40 m ahead, the same height, lined up) and a 60 m straight landing: ONE undo step. The core refuses by name (NO_TAKEOFF, CLOSED,
-     * JUMP_AFTER_JUMP, FLIGHT_OFFSET, BAD_FLIGHT, ...) and the message is that refusal in plain words (app/core/jumpwords.js). candidateJump is the ghost of it for the preview (flagged `jump`, so the
+     * JUMP_AFTER_JUMP, BAD_FLIGHT, ...) and the message is that refusal in plain words (app/core/jumpwords.js). candidateJump is the ghost of it for the preview (flagged `jump`, so the
      * Extend handles stay off it); it throws the core's CoreError, which the panel puts through the same words.
      */
     candidateJump(extendOpts) { const d = jumpFor(extendOpts); return { segments: segmentsOf(d), closed: false, start: startOf(d), jump: true }; },

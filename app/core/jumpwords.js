@@ -8,7 +8,6 @@ function jumpWords(e) {
     case 'NO_TAKEOFF': return 'A jump needs road to take off from: press Extend first, then Jump.';
     case 'CLOSED': return 'The loop is closed, so there is no open end to add a jump to. Undo the close first.';
     case 'JUMP_AFTER_JUMP': return 'The track already ends in a jump. Extend from its landing first, so the car has road to land on, then add the next one.';
-    case 'FLIGHT_OFFSET': return 'The road at the end still carries a height or sideways offset (from the local brush), and a jump can only take off from road where those have faded back to zero. Brush them out, or Extend a little further so they fade.';
     case 'FLIGHT_TOO_SHORT': return 'The landing is too close to the take-off: put it at least 1 m away.';
     case 'BAD_FLIGHT': return msg.replace(/^BAD_FLIGHT:\s*/, '');
     case 'BAD_LENGTH': return 'The landing\'s length must be more than 0 m.';

@@ -23,7 +23,7 @@
 'use strict';
 const { basis, denseSolve } = require('../../tools/piecewise.cjs');
 const D = require('./document.js');
-const { toPath, toSegments } = require('./adapter.js');
+const { toPath, toSegments, lipOf } = require('./adapter.js');
 const { jointSteps } = require('../geom/profile.js');
 const CN = require('./continuity.js');   // D459 3c: the curvature at a piece's ends, in closed form
 
@@ -105,9 +105,8 @@ function parameters(doc, edited, free = null) {
     let prev = -1, flightSince = false;
     doc.pieces.forEach((P, p) => {
       if (P.type !== 'road') {
-        // D243: A JUMP. (The road before it must end with h and l at 0, value and slope: checkDoc FLIGHT_OFFSET. No closing row reaches those control
-        // points, since the seam rows touch only the lap's first and last road pieces and a lap ending in a jump is refused, so they never move; and
-        // if one ever did, the closed document's checkDoc would refuse it by name.)
+        // D243: A JUMP. (The road before it may end with h and l set: the flight takes off from that lip as built, adapter.js lipOf. No closing row reaches
+        // those control points, since the seam rows touch only the lap's first and last road pieces and a lap ending in a jump is refused, so they never move.)
         if (P.type === 'flight') flightSince = true;
         return;
       }
@@ -190,8 +189,15 @@ function positionJacobian(doc, step = 1) {
     // HEADING frame (F = (sin θ, 0, cos θ), Lh = (cos θ, 0, −sin θ)), whatever its pitch; then the heading turns by the flight's heading and the pitch IS the
     // landing's. So in heading the jump is one step, ∂/∂θ = forward·Lh(θ) − left·F(θ); in pitch it CUTS the chain (nothing before it reaches the end through pitch)
     if (P.type === 'flight') {
-      const F = [Math.sin(th), 0, Math.cos(th)], Lh = [Math.cos(th), 0, -Math.sin(th)];
-      G.push({ flight: true, Tt: [0, 1, 2].map((k) => P.forward * Lh[k] - P.left * F[k]) });
+      const F = [Math.sin(th), 0, Math.cos(th)], Lh = [Math.cos(th), 0, -Math.sin(th)], lip = lipOf(doc.pieces[pi - 1], p);
+      if (!lip) G.push({ flight: true, Tt: [0, 1, 2].map((k) => P.forward * Lh[k] - P.left * F[k]) });
+      else {
+        // a lip the brush moved (adapter.js lipOf): the take-off is l along Lh(θ) from the route's end and turned by its tilt θ0, so the landing is
+        // l·Lh(θ) + forward·F(θ+θ0) + left·Lh(θ+θ0) + up·ŷ and ∂/∂θ = −l·F(θ) + forward·Lh(θ+θ0) − left·F(θ+θ0); after it the heading carries θ0 too
+        const t = th + lip.theta, F2 = [Math.sin(t), 0, Math.cos(t)], L2 = [Math.cos(t), 0, -Math.sin(t)];
+        G.push({ flight: true, Tt: [0, 1, 2].map((k) => P.forward * L2[k] - P.left * F2[k] - lip.x[0] * F[k]) });
+        th += lip.theta;
+      }
       th += P.heading; p = P.pitch;
       return;
     }
@@ -230,7 +236,7 @@ function netRows(doc, { cache = null } = {}) {
   for (const g of segs) {
     // D258: A JUMP sets the pitch to its landing's (adapter.js), so the net pitch is counted again from there: the lap's end pitch is the last jump's
     // landing pitch plus the road after it, and no kv before that jump reaches it. Its heading TURN adds to the net heading (a constant: the user's)
-    if (g.part === 'gap') { const F = doc.pieces[byId.get(g.id)]; out.kv = new Map(); out.kvBase = F.pitch - doc.start.pitch; out.khBase += F.heading; continue; }
+    if (g.part === 'gap') { const F = doc.pieces[byId.get(g.id)]; out.kv = new Map(); out.kvBase = F.pitch - doc.start.pitch; out.khBase += g.to.theta; continue; }   // to.theta: the flight's turn, and a moved lip's tilt with it (adapter.js lipOf)
     if (g.part !== 'body') continue;
     const p = byId.get(g.id), P = doc.pieces[p], U = D.knotVector(P), s0 = s.get(p) || 0, s1 = s0 + g.length; s.set(p, s1);
     for (const x of [s0, s1]) {
