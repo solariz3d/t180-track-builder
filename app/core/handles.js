@@ -337,7 +337,7 @@ function mount(stage, win, host) {
       }
       ctx.fillStyle = K.colour; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
       if (on) {
-        const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
+        const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
         const w = ctx.measureText(text).width + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 34, 4, H - 24);
         ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, 22); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, 22);
         ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 6, by + 11);
@@ -369,7 +369,7 @@ function mount(stage, win, host) {
     if (boxed.has(h.kind)) return; boxed.add(h.kind);
     const lines = B.open ? [B.text || ''] : [B.words || brushWords(h.kind), B.note || ''];   // D519 Part 2: the zone grab's own words on hover
     const shown = lines.filter(Boolean); if (!shown.length) return;
-    ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
+    ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
     const w = Math.max(...shown.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * shown.length, bx = clamp(s.x + 30, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 4);
     tipBoxes.push({ x: bx, y: by, w, h: hgt }); ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);
     ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; shown.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));

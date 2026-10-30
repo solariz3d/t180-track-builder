@@ -7,6 +7,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **Three sizes of type.** Words are 12 px, headings 16 px, and the road's numbers 24 px (18 px on the road labels), where seven nearby sizes from 10 to 15 px made everything look about the same; the small labels beside the numbers stay 11 px. The height ruler's tags in Sculpt sit fully on their backing.
+
 - **The checker says each thing once.** A warning that holds in several places is one line with every place listed ("at 15645–16487, 17797–18651 and 19773–19789 m"), where the list used to repeat the same sentence for each.
 
 - **Glow only where you are acting.** Every look keeps its colours and shapes, but a soft shadow or glow now marks only the control under the mouse, the field you are typing in, the open menu, the pressed camera mode and Export; the bar, the column, the menus, the camera bars, the values strip and the guide card have clean edges. Glass no longer blurs behind its menus and camera bars (the column keeps its frost). Aurora's sky is unchanged.
