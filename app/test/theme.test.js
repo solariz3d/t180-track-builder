@@ -67,7 +67,8 @@ test('the page sets the skin in its head, before the first paint, from the same 
   assert.equal(scripts.length, 1, 'one inline script in <head> sets data-theme');
   // AMENDED (D402): five names, so 0.15 and 0.85 are added: there a rounded pick (names[Math.round(r * 4)]) lands in another fifth than the floored one
   for (const r of [0, 0.15, 0.2499, 0.25, 0.5, 0.7501, 0.85, 0.9999]) {
-    const root = fakeRoot(), win = {}, ctx = { window: win, document: { documentElement: root }, Math: Object.assign(Object.create(Math), { random: () => r }) };
+    // AMENDED: the random pick runs from a SAVED Random (music) now; nothing saved opens in SIGIL (the D394 row below)
+    const root = fakeRoot(), win = { localStorage: { getItem: (k) => (k === 't180.settings.theme' ? '"music"' : null), setItem() {} } }, ctx = { window: win, document: { documentElement: root }, Math: Object.assign(Object.create(Math), { random: () => r }) };
     vm.runInNewContext(scripts[0], ctx);
     assert.equal(win.__t180MelodyPick, r, 'the head keeps the number for the player');
     const sound = SOUND.createSound({}, { pick: () => win.__t180MelodyPick, log: () => {} });
@@ -108,7 +109,9 @@ test('D394: Settings ▸ Theme has seven choices: music follows the melody, each
 });
 
 // AMENDED (D402): the rule changed by name: a saved sigil now plays SIGIL's own melody (its pick inside the last fifth), as a fixed theme plays its own
-test('D394: the head reads the saved theme: a fixed theme sets its own skin AND melody; music, nothing saved and broken saved text keep the random pick; sigil plays its own melody under SIGIL', () => {
+// AMENDED: the rule changed by name: a new install opens in SIGIL, so nothing saved and broken saved text start on SIGIL (its look and melody); only a saved
+// music (Random) keeps the random pick
+test('D394: the head reads the saved theme: a fixed theme sets its own skin AND melody; music keeps the random pick; nothing saved and broken saved text start on SIGIL; sigil plays its own melody under SIGIL', () => {
   const NAMES = SOUND.MELODY_NAMES;
   // AMENDED (D405): the random pick's SKIN is a look: in the lower half of Skyline's quarter (r 0.25 to 0.375) it is Skyline Night, on Skyline's melody
   // AMENDED (D402): five names, so Skyline's share is a fifth (r 0.2 to 0.4, the night 0.2 to 0.3), and the last fifth is SIGIL's look (no skin)
@@ -119,13 +122,15 @@ test('D394: the head reads the saved theme: a fixed theme sets its own skin AND 
       const x = runHead(r, savedTheme(JSON.stringify(t)));
       assert.equal(x.skin, t, `r = ${r}, saved ${t}: the skin`); assert.equal(x.melody, t, `r = ${r}, saved ${t}: the melody is the theme's own`); assert.equal(x.theme, t);
     }
-    for (const [why, win] of [['music', savedTheme('"music"')], ['nothing saved', savedTheme(null)], ['no storage', {}], ['not JSON', savedTheme('glass')], ['an unknown name', savedTheme('"neon"')],
+    { const x = runHead(r, savedTheme('"music"'));
+      assert.equal(x.pick, r, 'music: the random pick is kept'); assert.equal(x.melody, random, 'music: the random melody'); assert.equal(x.skin, lookAt(r), 'music: its look'); assert.equal(x.theme, 'music'); }
+    for (const [why, win] of [['nothing saved', savedTheme(null)], ['no storage', {}], ['not JSON', savedTheme('glass')], ['an unknown name', savedTheme('"neon"')],
       ['a number', savedTheme('42')], ['an object', savedTheme('{"theme":"glass"}')], ['null', savedTheme('null')], ['the wrong case', savedTheme('"Glass"')],
       ['a store that throws', { localStorage: { getItem() { throw new Error('SecurityError: blocked'); } } }],
       ['reading localStorage throws', Object.defineProperty({}, 'localStorage', { get() { throw new Error('SecurityError: no storage'); } })]]) {
       const x = runHead(r, win);
-      assert.equal(x.pick, r, `${why}: the random pick is kept`); assert.equal(x.melody, random, `${why}: the random melody`); assert.equal(x.skin, lookAt(r), `${why}: its look`);
-      assert.equal(x.theme, 'music', `${why}: read as music`);
+      assert.equal(x.skin, null, `${why}: SIGIL's look (no data-theme)`); assert.equal(x.pick, 4.5 / 5, `${why}: the pick inside SIGIL's fifth`); assert.equal(x.melody, 'sigil', `${why}: SIGIL's own melody`);
+      assert.equal(x.theme, 'sigil', `${why}: read as sigil`);
     }
     const s = runHead(r, savedTheme('"sigil"'));
     assert.equal(s.skin, null, 'sigil: no data-theme (SIGIL)'); assert.equal(s.pick, 4.5 / 5, 'sigil: the pick is inside its own fifth'); assert.equal(s.melody, 'sigil', 'sigil: its own melody, Obsidian'); assert.equal(s.theme, 'sigil');
@@ -148,7 +153,7 @@ test('D405: Skyline Night is a sixth look on Skyline\'s melody: its own skin, ch
   for (const r of [0, 0.3, 0.6, 0.9999]) { const x = runHead(r, savedTheme('"skyline-night"')); assert.deepEqual([x.skin, x.melody, x.theme], ['skyline-night', 'skyline', 'skyline-night'], `r = ${r}, saved skyline-night`); }
   // AMENDED (D402): five names, so Skyline's fifth is r 0.2 to 0.4 and its night the lower half, 0.2 to 0.3; the last fifth is SIGIL's look (null: no skin)
   for (const [r, skin] of [[0.1, 'aqua'], [0.2, 'skyline-night'], [0.25, 'skyline-night'], [0.2999, 'skyline-night'], [0.3, 'skyline'], [0.35, 'skyline'], [0.5, 'glass'], [0.7, 'aurora'], [0.9, null]]) {
-    const x = runHead(r, {}); assert.equal(x.skin, skin, `r = ${r}, nothing saved: ${skin}`); assert.equal(x.melody, TH.melodyOf(skin || 'sigil'), `r = ${r}: its melody`); assert.equal(x.pick, r, 'the pick is kept');
+    const x = runHead(r, savedTheme('"music"')); assert.equal(x.skin, skin, `r = ${r}, Random saved: ${skin}`);   // AMENDED: Random saved (nothing saved is SIGIL now) assert.equal(x.melody, TH.melodyOf(skin || 'sigil'), `r = ${r}: its melody`); assert.equal(x.pick, r, 'the pick is kept');
   }
   for (const r of [0.25, 0.3]) assert.equal(runHead(r, savedTheme('"skyline"')).skin, 'skyline', `r = ${r}, saved skyline: Skyline, never the night`);
   assert.ok(HTML.includes('<link rel="stylesheet" href="themes/skyline-night.css">'), 'the page links its skin');

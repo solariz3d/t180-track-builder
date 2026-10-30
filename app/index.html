@@ -15,8 +15,9 @@
    D402, SIGIL'S OWN MELODY: sigil is the fifth name (Obsidian). Saved, it sets the pick inside its own fifth, as a fixed theme does, and removes the skin; a
    random pick that lands in that fifth is SIGIL's look too. So Random picks among five looks (Skyline's fifth half night) and five melodies. */
 (function () {
-  var names = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'], r = Math.random(), theme = 'music', root = document.documentElement;
-  try { var saved = JSON.parse(window.localStorage.getItem('t180.settings.theme')); if (saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved; } catch (e) { /* unreadable: music */ }
+  // a NEW install (nothing saved) opens in SIGIL, the one look the app is designed around; Random is still a choice, and a saved choice (Random included) is kept
+  var names = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'], r = Math.random(), theme = 'sigil', root = document.documentElement;
+  try { var saved = JSON.parse(window.localStorage.getItem('t180.settings.theme')); if (saved === 'music' || saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved; } catch (e) { /* unreadable: SIGIL */ }
   if (names.indexOf(theme) >= 0) r = (names.indexOf(theme) + 0.5) / names.length;
   if (theme === 'skyline-night') r = (names.indexOf('skyline') + 0.25) / names.length;
   var look = names[Math.floor(r * names.length)];

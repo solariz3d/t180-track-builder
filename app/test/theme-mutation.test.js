@@ -22,8 +22,8 @@ const MUTATIONS = [
   { id: 'T4 the boot does not follow the player', file: 'index.html', from: 'TH0.skinFor(window.__t180Theme, sound.melody, window.__t180Look)', to: 'TH0.skinFor(window.__t180Theme, null, null)', caughtBy: 'the page sets the skin in its head' },
   // D394: Settings ▸ Theme, read by the head and resolved by skinFor
   { id: 'T14 the head ignores a saved theme', file: 'index.html', from: 'if (names.indexOf(theme) >= 0) r = ', to: 'if (false) r = ', caughtBy: 'D394: the head reads the saved theme' },
-  // CHANGED D405: the head also takes skyline-night; the anchor follows the line
-  { id: 'T15 the head takes any saved text as a theme', file: 'index.html', from: "if (saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved;", to: "theme = saved || 'music';", caughtBy: 'D394: the head reads the saved theme' },
+  // CHANGED D405: the head also takes skyline-night; the anchor follows the line. CHANGED: it also takes music by name (nothing saved is SIGIL now); the anchor follows
+  { id: 'T15 the head takes any saved text as a theme', file: 'index.html', from: "if (saved === 'music' || saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved;", to: "theme = saved || 'sigil';", caughtBy: 'D394: the head reads the saved theme' },
   { id: 'T16 sigil shows a skin', file: 'lib/theme.js', from: "if (choice === 'sigil') return null;", to: '', caughtBy: 'D394: Settings ▸ Theme has seven choices' },   // CHANGED D405: the row's title says seven now
   // CHANGED D402: the anchor follows the code (melodyOf names SIGIL's own melody too)
   { id: 'T17 Skyline Night plays a melody of its own name', file: 'lib/theme.js', from: "(NIGHT[look] || (THEMES.includes(look) || look === SIGIL ? look : null))", to: "(THEMES.includes(look) || look === SIGIL || look in NIGHT ? look : null)", caughtBy: 'D405: Skyline Night is a sixth look' },
