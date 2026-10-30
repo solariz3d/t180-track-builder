@@ -200,7 +200,7 @@ function mount(stage, shell, win) {
     for (const e of pool) if (e) { e.style.color = fg; e.style.background = bg; e.style.boxShadow = `0 0 0 2px ${bg}`; }
   });
   // the first line (the piece's length) large, the rest small and light; the box's text read as a whole is the label's text, unchanged
-  const fill = (e, text) => { const i = text.indexOf('\n'), big = doc.createElement('span'); big.style.cssText = 'font-size:18px;font-weight:600'; big.textContent = i < 0 ? text : text.slice(0, i); e.replaceChildren(big); if (i >= 0) { const rest = doc.createElement('span'); rest.textContent = text.slice(i); e.append(rest); } };
+  const fill = (e, text) => { const i = text.indexOf('\n'), big = doc.createElement('span'); big.style.cssText = 'font-size:18px;font-weight:600'; big.textContent = i < 0 ? text : text.slice(0, i + 1); e.replaceChildren(big); if (i >= 0) { const rest = doc.createElement('span'); rest.textContent = text.slice(i + 1); e.append(rest); } };   // the line break ends the first span, so each span's box is its own line
   const measure = (text) => { const e = box(pool.length); fill(e, text); e.style.left = '-9999px'; e.style.top = '0'; const r = { w: e.offsetWidth, h: e.offsetHeight }; e.remove(); pool.pop(); return r; };
   const sizes = new Map();
   // a size is cached only once it is real: an element measured while the layer is out of the page measures 0

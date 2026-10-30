@@ -242,7 +242,7 @@
   #camera p { margin: 0; color: var(--dim); font-size: 11px; letter-spacing: .04em; text-shadow: 0 0 6px #000; }
   /* the camera keys: a small "?" at the foot; the line shows while it is hovered or focused, or after a press (app/camera/index.js) */
   #camera .camera-keys { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  #camera .camera-keys > button { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 12px; line-height: 20px; }
+  #camera .camera-keys > button { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 12px; line-height: 20px; color: var(--on-ink-strong, #ffffff); background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); }   /* the values strip's own pair (its ground and its text colour, which every look sets): on Sigil's dim button face the "?" read 2.2:1 */
   #camera .camera-keys > p { display: none; order: -1; }
   #camera .camera-keys:hover > p, #camera .camera-keys:focus-within > p, #camera .camera-keys.open > p { display: block; }
   /* The side sections never scroll sideways (seen at the default window size once E's 480 px load graph showed): what a
