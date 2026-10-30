@@ -63,6 +63,28 @@ const roundOf = (Lt) => Math.min(BANK_ROUND_M, Lt / 4);
 const SWELL_A = 0.5;
 /** The bank's rounding (m) for a shape on a ramp Lt long: the swell's is half the ramp, the rounded-linear's roundOf. */
 const roundingOf = (shape, Lt) => (shape === 'swell' ? Lt * SWELL_A : roundOf(Lt));
+/**
+ * THE TWO-SHARE RAMP (the user, 2026-10-29 22:01, on the swell: "without the start its smooth but doesnt bank soon enough, but the other one ramps and just needs more smooth
+ * gradient"): the bank's RATE rises from 0 over the first `rise` share of the ramp (the Bloss cubic, as roundedLinear's), holds when rise + fall < 1, and falls to 0 over the
+ * last `fall` share. Equal shares are roundedLinear exactly (the same arithmetic), so the rounded ramp and the swell are its special cases; unequal ones lean in quickly and
+ * fade slowly (rise 0.1, fall 0.9) or the other way. S(0) = 0, S(1) = 1, S′ = S″ = 0 at both ends: the bank is C2 at the joint and where the ramp ends.
+ *   rampShape(u, rise, fall): u the share of the ramp; rise, fall above 0 and at most 1 together
+ */
+function rampShape(u, rise, fall) {
+  if (!(rise > 0 && fall > 0 && rise + fall <= 1 + 1e-12)) throw new D.CoreError('BAD_SHAPE', `a ramp's rise and fall shares are each above 0 and at most 1 together, got ${rise} and ${fall}`);
+  if (u <= 0) return 0; if (u >= 1) return 1;
+  const N = 1 - (rise + fall) / 2;
+  if (u < rise) return (rise * ROUND_I(u / rise)) / N;
+  if (u <= 1 - fall) return (rise / 2 + (u - rise)) / N;
+  return 1 - (fall * ROUND_I((1 - u) / fall)) / N;
+}
+/** A bankShape given as shares, { rise, fall }: true; checked by rampShape when the ramp is laid. */
+const isShares = (shape) => shape !== null && typeof shape === 'object' && !Array.isArray(shape);
+/** The bank ramp's turning points (m from its start) for a shape on a ramp Lt long: half of the rise, the rise's end, the fall's start, half into the fall. */
+const turnsOf = (shape, Lt) => {
+  if (isShares(shape)) return [(shape.rise * Lt) / 2, shape.rise * Lt, Lt - shape.fall * Lt, Lt - (shape.fall * Lt) / 2];
+  const r = roundingOf(shape, Lt); return [r / 2, r, Lt - r, Lt - r / 2];
+};
 /** The channels blended by the C2 quintic: what the wheels ride on across the road. The route's own (kh, kv, w, r, s, t, h, l) keep the Bloss cubic. */
 const C2_CHANNELS = new Set(['phi', 'c', 'e', 'er']);
 
@@ -73,7 +95,7 @@ function channelFn({ v, m }, target, Lt, ch, shape = null) {
   if (!Number.isFinite(target)) throw new D.CoreError('BAD_TARGET', `a target must be a finite number, got ${target}`);
   const a = ch === 'phi' && (shape === 'rounded' || shape === 'swell') ? roundingOf(shape, Lt) / Lt : null;   // D521: the bank's rounded-linear ramp, asked for; the swell's
   const blend = C2_CHANNELS.has(ch) ? smoother : bloss;
-  const S0 = a !== null ? (u) => roundedLinear(u, a) : blend;
+  const S0 = ch === 'phi' && isShares(shape) ? (u) => rampShape(u, shape.rise, shape.fall) : a !== null ? (u) => roundedLinear(u, a) : blend;   // the two-share ramp, asked for by its shares
   return (s) => { const u = s / Lt, S = S0(u); return u >= 1 ? target : (1 - S) * cont(s) + S * target; };
 }
 
@@ -233,8 +255,9 @@ function fitWithHold(piece, ch, f, Lt, target) {
 
 function extend(doc, opts = {}) {
   let { length, transition, targets = {}, family, knotM, first, grip, bankShape } = opts;
-  if (bankShape !== undefined && bankShape !== null && bankShape !== 'rounded' && bankShape !== 'swell') throw new D.CoreError('BAD_SHAPE', `bankShape is 'rounded', 'swell' or left out, got ${bankShape}`);
-  const shape = bankShape === 'rounded' || bankShape === 'swell' ? bankShape : null;
+  if (bankShape !== undefined && bankShape !== null && bankShape !== 'rounded' && bankShape !== 'swell' && !isShares(bankShape)) throw new D.CoreError('BAD_SHAPE', `bankShape is 'rounded', 'swell', { rise, fall } or left out, got ${bankShape}`);
+  if (isShares(bankShape)) rampShape(0.5, bankShape.rise, bankShape.fall);   // the shares are checked before anything is laid
+  const shape = bankShape === 'rounded' || bankShape === 'swell' || isShares(bankShape) ? bankShape : null;
   if (!(length > 0)) throw new D.CoreError('BAD_LENGTH', `extend needs a positive length, got ${length}`);
   // er, the RIGHT edge angle (document.js): an edge angle typed without a right one sets both sides, as before er existed; a right one typed alone
   // splits them. Its ramp follows e's unless it has its own.
@@ -348,7 +371,7 @@ function extend(doc, opts = {}) {
   // a C2 joint makes a·s³ whatever the ramp asks (1.41° at 10 m on his piece against 3.00). They are INSERTED (document.js insertKnots, Boehm) into the piece laid as today, so every
   // other channel keeps its curve (the turn, the width, a cup: the same curve, three points around each new knot re-quantised to their step); then the bank alone is refitted on them
   if (shape && given(targets.phi) && !shortRamps.includes('phi')) {
-    const Lt = Lof('phi'), r = roundingOf(shape, Lt), ts = [r / 2, r, Lt - r, Lt - r / 2].map((k) => +k.toFixed(4)).filter((k) => k > 0.5 && k < length - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
+    const Lt = Lof('phi'), ts = turnsOf(shape, Lt).map((k) => +k.toFixed(4)).filter((k) => k > 0.5 && k < length - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
     const refined = D.insertKnots(piece, [...new Set(ts)]);
     fitWithHold(refined, 'phi', channels.phi, Lt, targets.phi); c2Ends(refined, 'phi');
     return D.appendPiece(doc, refined);
@@ -356,4 +379,4 @@ function extend(doc, opts = {}) {
   return D.appendPiece(doc, piece);
 }
 
-module.exports = { extend, roundedLinear, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
+module.exports = { extend, roundedLinear, rampShape, BANK_ROUND_M, channelFn, bloss, smoother, C2_CHANNELS, c2Ends, fitWithHold, sampleBasis, startRampM, rampKnots, RAMP_KNOTS, RAMP_KNOTS_C2 };
