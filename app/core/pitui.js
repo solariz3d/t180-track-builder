@@ -78,7 +78,8 @@ function mount({ shell, el, win }) {
     boxes.value = String(lane.boxes); spacing.value = String(lane.boxSpacingM);
     const info = shell.spawnsInfo();
     const onLane = info && info.placed ? info.placed.filter((m) => /^AC_PIT_/.test(m.name) && m.onLane && !m.error).length : 0;
-    status.style.color = info && info.laneError ? 'var(--bad, #ff4d4d)' : '';
+    status.style.color = info && info.laneError ? 'var(--bad-text, var(--bad, #ff4d4d))' : '';
+    status.className = info && info.laneError ? 'message' : 'message hint';   // information (the lane's length, its boxes) in the plain text colour; a problem in red
     flatten.style.display = info && info.laneError && /^PIT_JOIN_NOT_FLAT/.test(info.laneError) ? '' : 'none';
     status.textContent = !info ? '' : info.laneError ? `The pit lane cannot be built here: ${say(info.laneError)}${/^PIT_JOIN_NOT_FLAT/.test(info.laneError) ? ' Or press "Flatten road for pit".' : ''}`
       : info.lane ? `Pit lane: ${Math.round(info.lane.lengthM)} m, ${onLane} of ${lane.boxes} pit box${lane.boxes === 1 ? '' : 'es'} on it. Practice and hotlap pit starts spawn here.` : '';

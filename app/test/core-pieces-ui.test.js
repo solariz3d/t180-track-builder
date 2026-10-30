@@ -707,7 +707,8 @@ test('row 16: the Grip field in Extend (D261): it shows the head\'s grip, "grip 
   assert.equal(grip.value, '100', 'a track with no grip set: AC\'s own road'); assert.ok(like, 'a "grip like…" drop-down beside it'); // AMENDED (the left column laid out for space): grip like… was the row after grip %; it is a small ▾ picker on the grip % row itself
   const gripRow = P1.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === 'grip %'); assert.ok(gripRow && gripRow.children.includes(like) && gripRow.children.includes(grip), 'the grip box and its drop-down side by side in Extend, on one row (the selection has its own pair further down)');
   const opts = like.children.map((o) => [o.value, o.textContent]); assert.deepEqual(opts[0], ['', 'grip like…'], 'the placeholder first'); assert.ok(opts.some(([v, t]) => v === '82' && t === '82 % grip'), 'a known surface with its measured grip'); assert.ok(opts.every(([v]) => v === '' || (Number.isInteger(Number(v)) && Number(v) >= 50 && Number(v) <= 150)), 'every entry is a grip the field takes');
-  assert.equal(note(), 'Grip 100%', 'D267: just the grip'); assert.match(grip.attrs.title, /100% is AC's own road/, 'the explanation is the field\'s tooltip');
+  // AMENDED: at 100, AC's own road, the line under the field says nothing (it said "Grip 100%" under a field that reads 100); any other grip still says itself
+  assert.equal(note(), '', 'at 100: no line'); assert.match(grip.attrs.title, /100% is AC's own road/, 'the explanation is the field\'s tooltip');
   // a pick fills the field, and its words follow
   like.value = '82'; like.onchange(); assert.equal(grip.value, '82', 'the pick filled the field'); assert.equal(like.value, '', 'the drop-down goes back to its placeholder'); assert.equal(note(), 'Grip 82%');
   // outside 60 to 110: untested, in words; and the checker is always said not to model it

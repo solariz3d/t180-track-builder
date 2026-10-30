@@ -7,6 +7,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **Notes that said nothing are gone.** "Grip 100%" under a grip that reads 100 no longer shows (any other grip still says itself); the line of camera keys at the foot sits behind a small "?" (hover or press it) and in the guide's camera step; and the pit lane's note is in the plain text colour unless it reports a problem.
+
 - **A new install opens in one look, Sigil, and Random is still a choice.** The first start used to pick a look at random; now it opens in Sigil. Settings ▸ Theme still offers Random, listed after the named looks, and a look you already chose (Random included) is kept.
 
 - **Warnings read in every look.** The checker's red and amber lines were drawn in the road's own paint colours, which some looks' panels all but swallowed (amber on Skyline was nearly invisible). Each look now writes its warnings in its own red and amber, the same colours made lighter or darker until they read clearly on that look's panels.

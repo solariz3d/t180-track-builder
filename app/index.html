@@ -240,6 +240,11 @@
   /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
   .preview-hud { z-index: 2; left: 274px !important; top: calc(var(--values-bottom, 66px) + 14px); bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; }
   #camera p { margin: 0; color: var(--dim); font-size: 11px; letter-spacing: .04em; text-shadow: 0 0 6px #000; }
+  /* the camera keys: a small "?" at the foot; the line shows while it is hovered or focused, or after a press (app/camera/index.js) */
+  #camera .camera-keys { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #camera .camera-keys > button { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 12px; line-height: 20px; }
+  #camera .camera-keys > p { display: none; order: -1; }
+  #camera .camera-keys:hover > p, #camera .camera-keys:focus-within > p, #camera .camera-keys.open > p { display: block; }
   /* The side sections never scroll sideways (seen at the default window size once E's 480 px load graph showed): what a
      panel puts here is held to the column's width. Canvases, images and tables shrink to fit, long words break, and the
      vertical scrollbar's width is reserved up front so it cannot push content sideways when it appears. */
