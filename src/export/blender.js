@@ -23,21 +23,31 @@ const README = (name, r, pieces) => [
   '',
   `${r.meshes} meshes, ${r.markers} markers${r.skipped.length ? `; textures left out (not readable as an image): ${r.skipped.join('; ')}` : ''}.`,
   '',
-  'To the game: the community route is Blender > File > Export > FBX (binary, Y up, apply unit scale, mesh and empties) > ksEditor (assettocorsa\\sdk\\editor) > kn5.',
+  'To the game: the community route is Blender > File > Export > FBX > ksEditor (assettocorsa\\sdk\\editor) > kn5. The FBX settings that keep the track',
+  'exactly as the game had it (measured: same vertices, same metres, not mirrored): Object Types Empty and Mesh; Scale 1.00; Apply Scalings "FBX All";',
+  'Forward "-Z Forward"; Up "Y Up"; Apply Unit on; Apply Transform on; Path Mode Copy with the embed button on; no animation, no leaf bones.',
   'Keep the names: the game finds the road by the 1ROAD / 1GRIP prefixes and the markers by their AC_ names.',
   '',
 ].join('\r\n');
 
-function writeForBlender(ex, { dir, pieces = null, ai = true } = {}) {
-  if (!ex || !ex.acScene) throw new Error('writeForBlender needs an export result with its acScene (src/export/fromwords.js buildFromSegments)');
-  if (!dir) throw new Error('writeForBlender needs a folder');
+/** The folder's files in memory, for the app (its native side writes them): [{ path, bytes }] with <name>.glb first, and the counts. Writes nothing. */
+function blenderFiles(ex, { pieces = null, ai = true } = {}) {
+  if (!ex || !ex.acScene) throw new Error('the export for Blender needs an export result with its acScene (src/export/fromwords.js buildFromSegments)');
   const name = ((ex.desc && ex.desc.name) || 'track').replace(/[^A-Za-z0-9_. -]/g, '_');
   const points = ai && ex.ai ? readAiLine(ex.ai).points.map((p) => p.pos) : null;
   const r = toGlb(ex.acScene, { name, ai: points, closed: !!(ex.path && ex.path.closed), pieces });
-  fs.mkdirSync(dir, { recursive: true });
-  const glb = path.join(dir, `${name}.glb`), readme = path.join(dir, 'README.txt');
-  fs.writeFileSync(glb, r.glb); fs.writeFileSync(readme, README(name, r, pieces));
-  return { glb, readme, bytes: r.glb.length, meshes: r.meshes, markers: r.markers, skipped: r.skipped };
+  return { name, files: [{ path: `${name}.glb`, bytes: r.glb }, { path: 'README.txt', bytes: Buffer.from(README(name, r, pieces), 'utf8') }], meshes: r.meshes, markers: r.markers, skipped: r.skipped };
 }
 
-module.exports = { writeForBlender };
+function writeForBlender(ex, { dir, pieces = null, ai = true } = {}) {
+  if (!dir) throw new Error('writeForBlender needs a folder');
+  const b = blenderFiles(ex, { pieces, ai });
+  fs.mkdirSync(dir, { recursive: true });
+  for (const f of b.files) fs.writeFileSync(path.join(dir, f.path), f.bytes);
+  return { glb: path.join(dir, b.files[0].path), readme: path.join(dir, 'README.txt'), bytes: b.files[0].bytes.length, meshes: b.meshes, markers: b.markers, skipped: b.skipped };
+}
+
+/** The command line that turns <glb> into <fbx> with the user's Blender and the bundled script (src/export/blender_fbx.py): no window, nothing saved but the FBX. */
+const fbxArgs = (script, glb, fbx) => ['--background', '--factory-startup', '--python', script, '--', glb, fbx];
+
+module.exports = { writeForBlender, blenderFiles, fbxArgs };
