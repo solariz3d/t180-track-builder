@@ -62,3 +62,33 @@ test('on his piece the laid bank follows the asked shares (0.1 / 0.9 over 500 m,
   assert.ok(own < 1.2, `off its own shape by ${own.toFixed(3)}°`);
   assert.ok(sym > 3, `as near equal shares as its own: ${sym.toFixed(2)}°`);
 });
+
+// THE FIT OF A SHAPED BANK AT START (src/core/extend.js shapeKnots): knots across the rise and the fall, so the laid bank is the curve asked for
+const { candidates, lay, laidOf } = require('../tools/bank-ramp-candidates.cjs');
+test('every candidate, A to F, at 41.38, 20 and 54 degrees: the laid bank stays within 0.5° of its asked curve on the laid length', () => {
+  for (const bank of [-41.38, -20, -54]) for (const c of candidates(bank)) {
+    const P = lay(c, bank).pieces[1], Lc = laidOf(c.ramp), S = (u) => (c.shape === 'swell' ? roundedLinear(u, 0.5) : rampShape(u, c.shape.rise, c.shape.fall));
+    let off = 0, at = 0; for (let s = 0; s <= c.ramp; s += 0.5) { const d = Math.abs(D.channelAt(P, 'phi', s).v / DEG - bank * S(s / Lc)); if (d > off) { off = d; at = s; } }
+    assert.ok(off < 0.5, `${c.id} at ${bank}°: ${off.toFixed(3)}° off at ${at} m`);
+  }
+});
+
+// recorded on t180-fresh 98e3d81 (before the shaped fit): sha256 of the serialized document, each laid by the panel (app/core/panel.js extendOptions) or by extend
+const NONE = { turn: false, climb: false, bank: false, width: false, cup: false, edge: false, edgeR: false, start: false, tube: false };
+const crypto = require('crypto'), { extendOptions } = require('../app/core/panel.js');
+const headOf = (d) => { const e = D.endState(d); return { phi: e.phi.v, c: e.c.v, e: e.e ? e.e.v : 0, er: e.er ? e.er.v : 0 }; };
+const panel = (f, at, length = 1000) => { const b = extend(D.createDoc('id'), { length: 1000, family: 'bowl' }); return extend(b, extendOptions({ length, ...f, atStart: { ...NONE, ...at }, head: headOf(b) })); };
+const base = () => extend(D.createDoc('id'), { length: 1000, family: 'bowl' });
+const UNMOVED = [
+  ['bank box-off (rounded, whole piece)', () => panel({ bank: '-41.38', cup: '15.5', width: '31' }, {}), '4baca63faf7640e94ef7839d71c3c2b628af9a8ef917a3b2e3d25b373fe07823'],
+  ['bank box-off, 100 m', () => panel({ bank: '54' }, {}, 100), 'e22a3fb5423cd583442f9f8703fd7da5061d9b35ba4bd0b83d7feaa501e5961c'],
+  ['cup at start, bank box-off', () => panel({ bank: '-20', cup: '15.5' }, { cup: true }), '44763e2e8b4e96ee5cac5407cf0faa9d735befdd7f5045705280bcaeab4ecd85'],
+  ['edge at start', () => panel({ edge: '30' }, { edge: true }), 'cd86500ef86a20cc7ce6e53f5cac280bbac56a59ee04a7148d3f3ab77133531f'],
+  ['width and turn at start', () => panel({ width: '20', turn: '20' }, { width: true, turn: true }), 'bc32275b4252118c551dd2c44dc361c14dd0c49a44f2cb460b2ab4c93ee98af9'],
+  ['a bank at start with no shape', () => extend(base(), { length: 1000, targets: { phi: -0.5 }, transition: { phi: 150 } }), '4e1eb450b81b66f9383a79baa34810b73dcd7ed2648c42087e65b35b94959076'],
+  ['the swell over the whole piece', () => extend(base(), { length: 300, targets: { phi: 0.6 }, bankShape: 'swell' }), '0bde7db3c1cdf0d8fa6b81590acd73fb4796fa80cceb8877266b4fce7794f27c'],
+  ['the quintic bank, no shape', () => extend(base(), { length: 300, targets: { phi: 0.6 } }), 'cf8e2094802f8b4f1ac66cbdd647f3c429a4f302e4aed810dcf084236a773716'],
+];
+test('the shaped fit moves nothing else: box-off, whole-piece, cup, edge, width and turn at start, and an unshaped bank at start are byte for byte as before', () => {
+  for (const [what, make, want] of UNMOVED) assert.equal(crypto.createHash('sha256').update(D.serialize(make())).digest('hex'), want, what);
+});

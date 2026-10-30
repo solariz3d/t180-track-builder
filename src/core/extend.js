@@ -85,6 +85,18 @@ const turnsOf = (shape, Lt) => {
   if (isShares(shape)) return [(shape.rise * Lt) / 2, shape.rise * Lt, Lt - shape.fall * Lt, Lt - (shape.fall * Lt) / 2];
   const r = roundingOf(shape, Lt); return [r / 2, r, Lt - r, Lt - r / 2];
 };
+/**
+ * THE KNOTS A SHAPED BANK RAMP AT START IS LAID ON (the user's at-start ramps, 2026-10-30): a short ramp is not fitted but read at its knot averages (rampControl), so
+ * it follows the asked curve only as closely as its knots are dense, and with knots every ramp/8 a quick rise was smoothed away (a 20 m rise over a 375 m ramp laid
+ * 2.4° off its curve, an 11 m one 6.0° off). These are SHAPE_SUB knots across the rise and as many across the fall, each measured on the length the ramp is laid
+ * over (Lc, its compressed length); the hold between, a straight line, needs none. Inserted into the piece as laid (document.js insertKnots), so every other channel keeps its curve.
+ */
+const SHAPE_SUB = 8;
+function shapeKnots(shape, Lc) {
+  const { rise, fall } = isShares(shape) ? shape : { rise: roundingOf(shape, Lc) / Lc, fall: roundingOf(shape, Lc) / Lc }, out = [];
+  for (let j = 1; j <= SHAPE_SUB; j++) { out.push((rise * Lc * j) / SHAPE_SUB); out.push(Lc - (fall * Lc * (j - 1)) / SHAPE_SUB); }
+  return out;
+}
 /** The channels blended by the C2 quintic: what the wheels ride on across the road. The route's own (kh, kv, w, r, s, t, h, l) keep the Bloss cubic. */
 const C2_CHANNELS = new Set(['phi', 'c', 'e', 'er']);
 
@@ -370,6 +382,15 @@ function extend(doc, opts = {}) {
   // D521: a rounded bank over the fitted path needs knots where its rate turns (ℓ/2 and ℓ in from each end of the ramp): with knots every 20 m its first span is one cubic, which
   // a C2 joint makes a·s³ whatever the ramp asks (1.41° at 10 m on his piece against 3.00). They are INSERTED (document.js insertKnots, Boehm) into the piece laid as today, so every
   // other channel keeps its curve (the turn, the width, a cup: the same curve, three points around each new knot re-quantised to their step); then the bank alone is refitted on them
+  // a SHAPED bank at start (a short ramp): knots across its rise and its fall (shapeKnots), inserted into the piece as laid, then the bank alone read again on them;
+  // a box-off ramp, a whole-piece one (below) and a bank at start with no shape never come here, so their bytes do not move
+  if (shape && given(targets.phi) && shortRamps.includes('phi')) {
+    const Lc = Math.max(ramp.phi - (2 * ramp.phi) / sub, ramp.phi / sub);
+    const ts = shapeKnots(shape, Lc).map((k) => +k.toFixed(4)).filter((k) => k > 0.5 && k < length - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
+    const refined = D.insertKnots(piece, [...new Set(ts)].sort((a, b) => a - b));
+    rampControl(refined, 'phi', from.phi, targets.phi, ramp.phi, held, sub, shape); c2Ends(refined, 'phi');
+    return D.appendPiece(doc, refined);
+  }
   if (shape && given(targets.phi) && !shortRamps.includes('phi')) {
     const Lt = Lof('phi'), ts = turnsOf(shape, Lt).map((k) => +k.toFixed(4)).filter((k) => k > 0.5 && k < length - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
     const refined = D.insertKnots(piece, [...new Set(ts)]);
