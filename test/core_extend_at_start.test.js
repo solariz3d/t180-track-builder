@@ -55,10 +55,11 @@ test('at start: the cup and the edges come in no faster than the roll amber eith
   assert.ok(Math.abs(o.transition.c - 2.2 * (40 - h.c) / BAR) < 0.11 && Math.abs(o.transition.e - 2.2 * (30 - h.e) / BAR) < 0.11, `${JSON.stringify(o.transition)} from cup ${h.c}`);
   // a piece under 40 m: the ramp is what "at start" laid before (20 m, or the piece if shorter), not half the piece, which would roll faster
   const short = piece(straight(), { length: 30, bank: '20' }, { bank: true });
-  assert.equal(short.o.transition.phi, 20, '30 m piece: 20 m, as before');
+  // AMENDED (the rule changed, 2026-10-30: the bank's half-piece cap bends to the roll bar's length where holding it would lay the swell faster than the amber, app/core/panel.js swellPeak): a 20° bank in a 30 m piece's 20 m would pass the amber, so it takes the whole piece; never shorter than before
+  assert.equal(short.o.transition.phi, 30, '30 m piece: the whole piece, no faster than before');
   assert.equal(piece(straight(), { length: 12, bank: '20' }, { bank: true }).o.transition.phi, 12, '12 m piece: its length, as before');
-  // and a long one keeps half the piece held: 54° on a 100 m piece ramps over 50 m
-  assert.equal(piece(straight(), { length: 100, bank: '54' }, { bank: true }).o.transition.phi, 50);
+  // AMENDED (the rule changed, 2026-10-30: the bank's half-piece cap bends to the roll bar's length where holding it would lay the swell faster than the amber, app/core/panel.js swellPeak): 54° on a 100 m piece within 50 m would roll 2.9 °/m, so it takes the whole piece (it was 50 m)
+  assert.equal(piece(straight(), { length: 100, bank: '54' }, { bank: true }).o.transition.phi, 100);
 });
 
 test('at start: turn, climb and width keep exactly 20 m; nothing ticked sends no transition, and the bytes Extend lays are as before', () => {

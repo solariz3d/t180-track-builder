@@ -65,9 +65,15 @@ const START_RATE = require('../../src/validate/index.js').ROLL_AMBER_DEG_M, STAR
 // change over 2 m 0.045 against 0.077, and the worst roll over 8 to 180° 0.664 °/m.
 const SWELL_SPREAD = 3.4;
 const XS_START = new Set(['phi', 'c', 'e', 'er']);
-/** The at-start ramp (m) of a cross-section channel going from `from` to `to` (degrees) on a piece `length` m long; rounded up to 0.1 m. */
-function crossStartM(from, to, length, spread = START_SPREAD) {
-  const want = Math.max(AT_START_M, (spread * Math.abs(to - from)) / START_RATE), cap = Math.max(Math.min(AT_START_M, length), length / 2);
+// THE CAP BENDS FOR THE BANK (2026-10-30): a bank laid faithfully as its swell peaks at 2·|change| over the length it is laid in, three quarters of the ramp
+// (src/core/extend.js rampControl), so where half the piece is too short for that to stay under the checker's amber (a 180° bank at start on 1,000 m: 0.944
+// against 0.934), the ramp takes the roll bar's length instead, up to the whole piece. The amber outranks "held for half the piece". Cup and edge keep the cap.
+const swellPeak = (change, R) => (2 * Math.abs(change)) / Math.max(R - (2 * R) / 8, R / 8);
+/** The at-start ramp (m) of a cross-section channel going from `from` to `to` (degrees) on a piece `length` m long; rounded up to 0.1 m. `bends`: the bank's
+ *  cap gives way to the roll bar's length when the swell laid within the cap would roll faster than the amber. */
+function crossStartM(from, to, length, spread = START_SPREAD, bends = false) {
+  const want = Math.max(AT_START_M, (spread * Math.abs(to - from)) / START_RATE), half = Math.max(Math.min(AT_START_M, length), length / 2);
+  const cap = bends && swellPeak(to - from, half) > START_RATE ? length : half;
   return Math.min(Math.ceil(want * 10 - 1e-9) / 10, cap);
 }
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
@@ -110,7 +116,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   const transition = {};
   const fromDeg = (ch) => { const v = head && Number.isFinite(head[ch]) ? head[ch] : 0; return ch === 'phi' ? v / DEG : v; };
   for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) {
-    transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length, ch === 'phi' ? SWELL_SPREAD : START_SPREAD) : Math.min(AT_START_M, out.length);
+    transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length, ch === 'phi' ? SWELL_SPREAD : START_SPREAD, ch === 'phi') : Math.min(AT_START_M, out.length);
   }
   if (Object.keys(transition).length) out.transition = transition;
   if (empty && Object.keys(targets).length) out.first = { ...targets };   // D194a: on an empty track the typed values are the first piece's start

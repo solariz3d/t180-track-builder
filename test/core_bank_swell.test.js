@@ -63,9 +63,14 @@ test('swell: the checker\'s roll stays under the amber for a bank of 8 to 180 de
   }
 });
 
-test('swell: the 20 m floor and the cap are as before (5 deg -> 20 m; a 30 m piece -> 20 m; 54 deg on 100 m -> 50 m)', () => {
+// AMENDED (2026-10-30, the chair's call on the at-start ramp): the half-piece cap now BENDS for the bank where holding it would lay the swell faster than the amber
+// (app/core/panel.js swellPeak), so a 30 m piece's 20° and a 100 m piece's 54° take the whole piece (they were 20 m and 50 m), and a 180° bank on 1,000 m its
+// 655.4 m (was 500); the 20 m floor, a piece shorter than it, and a cap that holds the swell under the amber are as before (140° on 1,000 m keeps 500)
+test('swell: the 20 m floor holds, and the half-piece cap bends to the roll bar\'s length only where the swell laid within it would pass the amber', () => {
   const t = (len, deg) => lay(flat(), { length: len, bank: String(deg), atStart: { ...NONE, bank: true } }).o.transition.phi;
-  assert.equal(t(1000, 5), 20); assert.equal(t(30, 20), 20); assert.equal(t(12, 20), 12); assert.equal(t(100, 54), 50);
+  assert.equal(t(1000, 5), 20); assert.equal(t(12, 20), 12);
+  assert.equal(t(1000, 140), 500, 'the cap holds where the swell within it stays under the amber');
+  assert.equal(t(1000, 180), 655.4); assert.equal(t(30, 20), 30); assert.equal(t(100, 54), 100);
 });
 
 test('swell: the bank with its box off, a cup or edge at start, and turn and width at start lay the same bytes as before', () => {

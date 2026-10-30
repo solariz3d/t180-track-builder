@@ -65,11 +65,11 @@ test('on his piece the laid bank follows the asked shares (0.1 / 0.9 over 500 m,
 
 // THE FIT OF A SHAPED BANK AT START (src/core/extend.js shapeKnots): knots across the rise and the fall, so the laid bank is the curve asked for
 const { candidates, lay, laidOf } = require('../tools/bank-ramp-candidates.cjs');
-test('every candidate, A to F, at 41.38, 20 and 54 degrees: the laid bank stays within 0.5° of its asked curve on the laid length', () => {
+test('every candidate, A to F, at 41.38, 20 and 54 degrees: the laid bank stays within 0.25° of its asked curve on the laid length (the order asks 0.5°; it lays 0.17°, and knots spread over the length asked lay 0.37°)', () => {
   for (const bank of [-41.38, -20, -54]) for (const c of candidates(bank)) {
     const P = lay(c, bank).pieces[1], Lc = laidOf(c.ramp), S = (u) => (c.shape === 'swell' ? roundedLinear(u, 0.5) : rampShape(u, c.shape.rise, c.shape.fall));
     let off = 0, at = 0; for (let s = 0; s <= c.ramp; s += 0.5) { const d = Math.abs(D.channelAt(P, 'phi', s).v / DEG - bank * S(s / Lc)); if (d > off) { off = d; at = s; } }
-    assert.ok(off < 0.5, `${c.id} at ${bank}°: ${off.toFixed(3)}° off at ${at} m`);
+    assert.ok(off < 0.25, `${c.id} at ${bank}°: ${off.toFixed(3)}° off at ${at} m`);
   }
 });
 
