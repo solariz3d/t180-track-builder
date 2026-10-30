@@ -7,6 +7,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **Glow only where you are acting.** Every look keeps its colours and shapes, but a soft shadow or glow now marks only the control under the mouse, the field you are typing in, the open menu, the pressed camera mode and Export; the bar, the column, the menus, the camera bars, the values strip and the guide card have clean edges. Glass no longer blurs behind its menus and camera bars (the column keeps its frost). Aurora's sky is unchanged.
+
+- **Every word on screen reads clearly in every look.** The view name under the values strip and the grid hint at the foot sit on a backing of their own, so the scene behind them never swallows them; the height ruler's tags in Sculpt are on a darker ground; and Aqua's CSP switch reads in white.
+
 - **A piece's label on the road moves clear of the handles.** In Sculpt the drag handles, the dots and their hover words are drawn over the road labels, and a label kept under them had its numbers drawn over; it now finds a spot beside them.
 
 - **The road's numbers are the biggest thing on screen.** The values strip over the view shows each number in large bold type (24 px), with its unit and its name small beside it, and stays one slim strip; the label on the road shows the piece's length large and its turn, climb and bank small under it.

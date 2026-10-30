@@ -19,7 +19,7 @@ const { firstRun, webStore } = require('./firstrun.js');
 const CSS = `
 .guide-card { position: absolute; right: 12px; top: 12px; z-index: 5; width: 340px; max-width: calc(100% - 24px); box-sizing: border-box;
   padding: 10px 12px; border-radius: 8px; pointer-events: auto;
-  background: var(--guide-bg, rgba(20, 22, 28, 0.94)); color: var(--guide-text, #e8eaee); font: 13px/1.4 system-ui, sans-serif; box-shadow: 0 4px 18px rgba(0,0,0,.45); }
+  background: var(--guide-bg, rgba(20, 22, 28, 0.94)); color: var(--guide-text, #e8eaee); font: 13px/1.4 system-ui, sans-serif; box-shadow: 0 0 0 1px rgba(0,0,0,.45); }   /* a hard edge, not a drop */
 .guide-card h3 { margin: 0 0 4px; font-size: 14px; } .guide-card p { margin: 0 0 8px; }
 .guide-card .guide-count { float: right; opacity: .6; font-size: 12px; }
 .guide-card .guide-row { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }

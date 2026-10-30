@@ -201,7 +201,7 @@
     header select::picker-icon { color: var(--dim); transition: rotate .15s; }
     header select:open::picker-icon { rotate: 180deg; color: var(--accent); }
     header select::picker(select) { background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); border-radius: 2px; padding: 4px 0;
-      margin-top: 4px; max-height: min(70vh, 560px); min-width: max(anchor-size(width), 260px); box-shadow: 0 18px 50px rgba(0, 0, 0, .65); }
+      margin-top: 4px; max-height: min(70vh, 560px); min-width: max(anchor-size(width), 260px); box-shadow: none; }
     header select option { background: transparent; color: #fff; padding: 7px 14px; font: 300 13px var(--body); letter-spacing: .03em; border-left: 2px solid transparent; }
     header select option:first-of-type { color: var(--dim); font: 300 11px var(--display); letter-spacing: .3em; text-transform: uppercase; }
     header select option:hover, header select option:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent); border-left-color: var(--accent); outline: none; }
@@ -238,8 +238,9 @@
   /* the depth behind the track: a soft vignette over the view (the road keeps its own lighting) */
   #preview::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 55% 38%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
   /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
-  .preview-hud { z-index: 2; left: 274px !important; top: calc(var(--values-bottom, 66px) + 14px); bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; }
-  #camera p { margin: 0; color: var(--dim); font-size: 11px; letter-spacing: .04em; text-shadow: 0 0 6px #000; }
+  /* the view tag has a backing like the values strip's, so it never sits on the scene (a grid line at the horizon took it to 3.7 : 1) */
+  .preview-hud { z-index: 2; left: 274px !important; top: calc(var(--values-bottom, 66px) + 14px); bottom: auto !important; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent) !important; color: var(--on-ink-strong, #ffffff) !important; padding: 2px 6px !important; border-radius: 6px !important; font-family: var(--mono) !important; font-size: 10.5px !important; }
+  #camera p { margin: 0; color: var(--dim); font-size: 11px; letter-spacing: .04em; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); padding: 1px 6px; border-radius: 6px; }   /* a backing, not a glow, behind the words over the scene; padded, so the letters' own box stays on it (skyline's read 1.2 : 1 where they ran past its edge onto the ground) */
   /* the camera keys: a small "?" at the foot; the line shows while it is hovered or focused, or after a press (app/camera/index.js) */
   #camera .camera-keys { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   #camera .camera-keys > button { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 12px; line-height: 20px; color: var(--on-ink-strong, #ffffff); background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); }   /* the values strip's own pair (its ground and its text colour, which every look sets): on Sigil's dim button face the "?" read 2.2:1 */
