@@ -50,7 +50,7 @@ const { tokensOf } = require('../lib/tokens.js');
 const { gridLines, headMarker, linesFor, tangentsFor } = require('./look.js');
 const { guidePlan, MODES: GRID_MODES, MIRRORS } = require('./guides.js');
 const { resolveLook } = require('./aclook.js');
-const { flowCell } = require('../../src/texture/flow.js');
+const { flowCell, flowDeps, sameDeps } = require('../../src/texture/flow.js');
 const { previewTextures } = require('../../src/texture/set.js');
 const { normalize, sealed, spanOf, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 const M = require('../camera/math.js');
@@ -140,13 +140,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
     if (!set || look !== 'ac' || !tr.mesh) return tr.batches;
     if (flowTrack === tr.batches && flowSet === set) return flowOut;
     if (flowSet !== set) flowMemo = new WeakMap();
-    const kids = tr.mesh.scene.root.children;   // batches, cells and the root's children are in one order; mesh names repeat, so position is the key
-    flowOut = tr.batches.map((b, k) => {
-      const cell = tr.mesh.cells[k]; if (!cell) return b;
-      let u = flowMemo.get(b.uvs);
-      if (u === undefined) { u = flowCell(tr.mesh, tr.segments, set, cell, kids[k].children[0]); flowMemo.set(b.uvs, u); }
-      return u ? { ...b, uvs: u } : b;
-    });
+    flowOut = texturedBatches(tr, set, flowMemo);
     flowTrack = tr.batches; flowSet = set;
     return flowOut;
   };
@@ -719,4 +713,20 @@ function backingSize(cssW, cssH, dpr) {
   return { width: w, height: h };
 }
 
-module.exports = { createPreview, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, pickAcross, rayAt, startHead, sculptCues, startMovedOf };
+/**
+ * The placed batches with a textured equation-core cell's uvs flowed on the path's arc (src/texture/flow.js flowCell), each kept in `memo` by the batch's
+ * own uvs array WITH what its flow also reads (flowDeps: the segment before's end arc, the ring run's repeats round), so an edit that keeps a cell's array
+ * and those keeps its flowed copy too (and the renderer its GPU buffer), and one that changes them (a width change elsewhere in the ring run) flows it again.
+ * A batch wearing no texture is returned as it is.
+ */
+function texturedBatches(tr, set, memo) {
+  const kids = tr.mesh.scene.root.children;   // batches, cells and the root's children are in one order; mesh names repeat, so position is the key
+  return tr.batches.map((b, k) => {
+    const cell = tr.mesh.cells[k]; if (!cell) return b;
+    const deps = flowDeps(tr.mesh, tr.segments, set, cell), m = memo.get(b.uvs);
+    let u = m && sameDeps(m.deps, deps) ? m.u : undefined;
+    if (u === undefined) { u = flowCell(tr.mesh, tr.segments, set, cell, kids[k].children[0]); memo.set(b.uvs, { u, deps }); }
+    return u ? { ...b, uvs: u } : b;
+  });
+}
+module.exports = { createPreview, texturedBatches, keyAction, boostAt, backingSize, MAX_SIDE, markerSize, widthAtHead, clearanceAtHead, pickAt, pickAcross, rayAt, startHead, sculptCues, startMovedOf };

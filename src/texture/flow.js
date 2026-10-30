@@ -148,4 +148,23 @@ function flowUvs(mesh, segments, set) {
   return out;
 }
 
-module.exports = { flowCell, flowUvs, closedRing };
+/**
+ * What a cell's flow reads BESIDES its own uvs (flowCell above), for a caller that keeps flowed cells by their uvs array (app/preview/preview.js texturedBatches):
+ * `start`, the segment before's end arc as mesh.js stores it (Us), which a road cell's first row takes; and `n`, the ring run's whole number of repeats round
+ * for the cell's segment and, for a seam, the segment before. An edit can keep a cell's array while it changes either: a width change elsewhere in a ring run
+ * moves the run's median and so its n. Two keys that are `sameDeps` give the same flow for the same uvs.
+ */
+function flowDeps(mesh, segments, set, cell) {
+  const st = mesh && mesh._state, seg = segments[cell.piece], f = floorOf(seg, set);
+  if (!st || !f) return null;
+  const ip = cell.piece === 0 ? (st.closed ? st.pieces.length - 1 : -1) : cell.piece - 1, prev = ip >= 0 ? st.pieces[ip] : null, tw = f.tileWidth;
+  return { start: prev && prev.Us ? Float64Array.from(prev.Us) : null, n: ringRunN(st, segments, cell.piece, tw), nPrev: ip >= 0 ? ringRunN(st, segments, ip, tw) : null };
+}
+const sameDeps = (a, b) => {
+  if (a === b) return true;
+  if (!a || !b || a.n !== b.n || a.nPrev !== b.nPrev || !a.start !== !b.start) return false;
+  if (a.start) { if (a.start.length !== b.start.length) return false; for (let k = 0; k < a.start.length; k++) if (a.start[k] !== b.start[k]) return false; }
+  return true;
+};
+
+module.exports = { flowCell, flowUvs, closedRing, flowDeps, sameDeps };
