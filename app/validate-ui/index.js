@@ -36,7 +36,7 @@ const { createValidationController, summary } = require('./panel.js');
 const { levelAt, rgbaAt, rangeLevel, PALETTE, LEVEL } = require('./colour.js');
 const { createCheckRunner } = require('./checkrunner.js');
 const { graphModel, drawGraph } = require('./graph.js');
-const { lapText, lapWhereText, findingLine } = require('./labels.js');
+const { lapText, lapWhereText, findingLine, findingGroups } = require('./labels.js');
 const S = require('../settings.js');   // D355: the CSP box is the saved setting `csp`
 
 const css = (rgba) => `rgb(${Math.round(rgba[0] * 255)}, ${Math.round(rgba[1] * 255)}, ${Math.round(rgba[2] * 255)})`;
@@ -70,7 +70,7 @@ function mount(root, shell) {
     const r = state.result;
     if (r) {
       for (const [kind, items, lvl] of [['red', r.red, LEVEL.RED], ['amber', r.amber, LEVEL.AMBER]]) {
-        for (const x of items) { const f = findingLine(kind, x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${textCss(lvl)}` })); }   // the rule and its source in the tooltip
+        for (const f of findingGroups(kind, items)) list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${textCss(lvl)}` }));   // one line per reason with its places; the rule and its sources in the tooltip
       }
       // D256: "holds above N km/h" (information): where the centreline faces the ground, the slowest speed that keeps the car on it
       for (const x of r.info) if (x.reason === 'holds-above') { const f = findingLine('info', x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${css(PALETTE[LEVEL.INFO])}` })); }
