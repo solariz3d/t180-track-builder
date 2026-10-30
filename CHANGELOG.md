@@ -7,6 +7,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **Warnings read in every look.** The checker's red and amber lines were drawn in the road's own paint colours, which some looks' panels all but swallowed (amber on Skyline was nearly invisible). Each look now writes its warnings in its own red and amber, the same colours made lighter or darker until they read clearly on that look's panels.
+
 - **The bank at start comes in over a longer, gentler swell.** It leans further into the piece and turns less steeply on the way: a 41° bank at start now swells in over about 150 m instead of 115 m, rolling at most 0.65 °/m instead of 0.84.
 
 ## [0.4.30] - 2026-10-29

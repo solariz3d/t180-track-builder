@@ -6,6 +6,8 @@
    canvas hue) keep their hues; only --bad is lighter here (D384), so an error reads on these teal panes. Fonts: the page's own (Windows). */
 
 [data-theme="aqua"] {
+  /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
+  --bad-text: #f8c0bd; --warn-text: #ffad1a;
   --tex: url(tex/aqua.png) 0 0 / 256px 256px repeat;   /* D399: this look's texture (index.html, --tex): a soft fluid noise; app/themes/tex/aqua.png, scripts/texture_tiles.js */
   --bg: #022a35; --panel: #033846; --raise: #054556; --line: #1b8ea6; --hair: rgba(140, 240, 255, .40);
   /* D384 (A's review 6, finding 2): SIGIL's --bad #e0573f read 3.38:1 on --panel, 4.05 on --bg and 2.81 on --raise here. The same red, lighter: hue 8.8

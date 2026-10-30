@@ -32,6 +32,9 @@
     --bg: #060606; --panel: #0b0b0a; --raise: #121211; --line: #24221f; --hair: rgba(235, 230, 220, .14);
     --text: #ebe6dc; --dim: #8a847a; --accent: #b9a8ff; --accent-dim: rgba(185, 168, 255, .16);
     --mine: #d9a55a; --bad: #e0573f; --warn: #e3b448; --ok: #8fc9a2;
+    /* the warning colours as TEXT: the same red and amber hues, lighter or darker so a warning line reads at 4.5:1 or better on its own panel (each look sets its own;
+       the 3D road keeps app/validate-ui/colour.js PALETTE). The checker's lines, the red list and the error messages use these */
+    --bad-text: #f18680; --warn-text: #ffad1a;
     /* D381: the colours the canvas layers, the overlays and the 3D view draw with (app/lib/tokens.js reads them); SIGIL's are exactly the literals
        those files held, so SIGIL draws as before. A skin (app/themes/<name>.css) sets them under [data-theme="<name>"]. */
     --ink: #0b0d11; --on-ink: #eef1f6; --on-ink-strong: #ffffff; --veil: #0b0d11; --veil-rule: rgba(255, 255, 255, .14);
@@ -293,7 +296,7 @@
   .track li { padding: 2px 6px; border-radius: 3px; cursor: pointer; }
   .track li.selected { background: var(--accent-dim); color: var(--accent); }
   .head { color: var(--dim); margin-bottom: 8px; }
-  .message, .panel-error { color: var(--bad); white-space: pre-wrap; }
+  .message, .panel-error { color: var(--bad-text, var(--bad)); white-space: pre-wrap; }
   .message.ok { color: var(--text); }
   .message.hint { color: var(--text); }   /* D464: Sculpt's how-to and value lines are instructions, not errors (they were --bad) */
   .panel-error { margin: 12px; }

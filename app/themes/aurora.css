@@ -5,6 +5,8 @@
    The drift stops for anyone who asks the system for reduced motion. */
 
 [data-theme="aurora"] {
+  /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
+  --bad-text: #f28d88; --warn-text: #ffad1a;
   --tex: url(tex/aurora.png) 0 0 / calc(3 * var(--dpx)) calc(3 * var(--dpx)) repeat;   /* D399: this look's texture (index.html, --tex): a dot matrix, one dot every 3 px; app/themes/tex/aurora.png, scripts/texture_tiles.js */
   --bg: #04050d; --panel: #080a1a; --raise: #0e1130; --line: #252a5c; --hair: rgba(150, 200, 255, .18);
   --text: #eaf6ff; --dim: #b6c4e4; --accent: #6ff5c0; --accent-dim: rgba(111, 245, 192, .16);

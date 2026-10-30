@@ -4,6 +4,8 @@
    reads this file for them). The warning hues keep their hue: they are SIGIL's own, which already read on a dark surface. */
 
 [data-theme="skyline-night"] {
+  /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
+  --bad-text: #f4a09c; --warn-text: #ffad1a;
   --tex: url(tex/skyline-night.png) 0 0 / calc(128 * var(--dpx)) calc(128 * var(--dpx)) repeat;   /* Skyline's paper grain (2 px cells) with every speck's colour flipped: on the navy panels the light specks are the ones seen; app/themes/tex/skyline-night.png, scripts/texture_tiles.js */
   --bg: #08142c; --panel: #0e1d3b; --raise: #15294d; --line: #2c4a78; --hair: rgba(150, 200, 255, .22);
   --text: #e8f2ff; --dim: #a9c3e6; --accent: #7cc8ff; --accent-dim: rgba(124, 200, 255, .18);

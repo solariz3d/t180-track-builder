@@ -40,7 +40,7 @@ function mount({ shell, el, win }) {
   const flatten = el('button', { text: 'Flatten road for pit', title: 'lower the cup, tube or edge to the plain road beside the whole pit lane, easing back over 60 m either side; the route does not move; Ctrl+Z puts the walls back' });
   flatten.onclick = () => shell.flattenForPit();
   const field = (label, ...kids) => el('label', { style: 'display:block;margin:2px 0' }, el('span', { text: label }), ' ', ...kids);
-  const box = el('div', {}, field('side', side), field('leaves on', leaveP, ' at m ', leaveM), field('rejoins on', backP, ' at m ', backM),
+  const box = el('div', {}, field('side', side), field('leaves on', leaveP, el('span', { text: 'at m', style: 'margin:0 4px' }), leaveM), field('rejoins on', backP, el('span', { text: 'at m', style: 'margin:0 4px' }), backM),
     field('gap from road m', gap), field('lane width m', width), field('peel-off m', peel), field('merge m', merge), field('pit boxes', boxes), field('box spacing m', spacing), status, el('div', { class: 'actions' }, flatten));
 
   const doc = () => shell.getState().history.present;
