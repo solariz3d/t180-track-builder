@@ -53,3 +53,12 @@ test('on his piece the quick rise leans sooner than the swell over the same 151 
   assert.ok(Math.abs(b({ rise: 0.1, fall: 0.9 }, 151, 20)) > Math.abs(b('swell', 151, 20)), 'B leans further than A by 20 m');
   assert.ok(peak({ rise: 0.1, fall: 0.9 }, 500) < peak('swell', 151), 'C rolls slower than A');
 });
+
+// A ramp at start is laid compressed into R − 2R/8 (extend.js rampControl, RAMP_KNOTS_C2), so the change completes at three quarters of the ramp it is asked for
+test('on his piece the laid bank follows the asked shares (0.1 / 0.9 over 500 m, compressed to 375 m): within 1.2° of that curve, and far from equal shares', () => {
+  const P = his({ rise: 0.1, fall: 0.9 }, 500).pieces[1], Lc = 500 * 0.75;
+  let own = 0, sym = 0;
+  for (let s = 0; s <= 500; s += 0.5) { const v = D.channelAt(P, 'phi', s).v / DEG; own = Math.max(own, Math.abs(v + 41.38 * rampShape(s / Lc, 0.1, 0.9))); sym = Math.max(sym, Math.abs(v + 41.38 * rampShape(s / Lc, 0.1, 0.1))); }
+  assert.ok(own < 1.2, `off its own shape by ${own.toFixed(3)}°`);
+  assert.ok(sym > 3, `as near equal shares as its own: ${sym.toFixed(2)}°`);
+});

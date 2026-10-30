@@ -79,8 +79,12 @@ const MUTANTS = [
   { id: 'S2 the cross-section ramp at the start allows twice the roll rate', pattern: 'rolls under the checker', edits: [[P, '(spread * Math.abs(to - from)) / START_RATE)', '(spread * Math.abs(to - from)) / (2 * START_RATE))']] },   // re-anchored with S1
   // a bank at start is one swell: src/core/extend.js SWELL_A (test/core_bank_swell.test.js runs beside the others here)
   { id: 'W1 the swell has its plateau back (a quarter-ramp rounding)', pattern: 'no flat stretch', edits: [[X, 'const SWELL_A = 0.5;', 'const SWELL_A = 0.25;']] },
+  // the two-share ramp: src/core/extend.js rampShape (test/core_bank_ramp.test.js runs beside the others here)
+  { id: 'W2 the fall share is laid equal to the rise', pattern: 'follows the asked shares', edits: [[X, '(u) => rampShape(u, shape.rise, shape.fall)', '(u) => rampShape(u, shape.rise, shape.rise)']] },
+  { id: 'W3 the rise share is dropped (the rate starts at its hold)', pattern: 'never turns back', edits: [[X, 'if (u < rise) return (rise * ROUND_I(u / rise)) / N;', '']] },
+  { id: 'W4 the shares are not checked (a rise and fall over 1 together is laid)', pattern: 'not a ramp', edits: [[X, 'if (!(rise > 0 && fall > 0 && rise + fall <= 1 + 1e-12)) throw', 'if (false) throw']] },
 ];
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js'];
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads
