@@ -173,6 +173,10 @@ function mount(stage, shell, win) {
     return out;
   };
   let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true, gripView = false, heldReads = null;
+  // the drag handles and dots are drawn ABOVE the labels (app/core/handles.js, z 6: a control stays visible), so a label kept over one had its words overdrawn:
+  // setAvoid(fn) hands the layout a reader of their screen points and words boxes (css px of the stage), each kept clear as a panel is: a point 10 px round it, a box 6 px
+  let avoidOf = null;
+  const avoided = () => { if (!avoidOf) return []; const pts = avoidOf(); return Array.isArray(pts) ? pts.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)).map((p) => (Number.isFinite(p.w) && Number.isFinite(p.h) ? { x: p.x - 6, y: p.y - 6, w: p.w + 12, h: p.h + 12 } : { x: p.x - 10, y: p.y - 10, w: 20, h: 20 })) : []; };
   // D242: the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
   let pointer = null, pickedFor = null, hoverId = null;
   const onPointer = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; pointer = { x: e.clientX - r.left, y: e.clientY - r.top, e }; };   // (e: the event, the key of the shared pick)
@@ -252,7 +256,7 @@ function mount(stage, shell, win) {
         const text = labelText(r, gripView).join('\n'), size = sizeOf(text);
         items.push({ piece: r.id, text, x: p.x, y: p.y, w: size.w, h: size.h, head: isHead, priority: isHead ? -1 : head ? Math.hypot(p.x - head.x, p.y - head.y) : 0 });
       });
-      placed = layout(items, { width: W, height: H, head, panels: items.length ? panelsOf() : [] });
+      placed = layout(items, { width: W, height: H, head, panels: items.length ? panelsOf().concat(avoided()) : [] });
     }
     placed.drawn.forEach((d, i) => { const e = box(i); if (e.textContent !== d.text) fill(e, d.text); e.style.left = `${Math.round(d.rect.x)}px`; e.style.top = `${Math.round(d.rect.y)}px`; e.style.display = ''; });
     for (let i = placed.drawn.length; i < pool.length; i++) pool[i].style.display = 'none';
@@ -265,6 +269,7 @@ function mount(stage, shell, win) {
     labels: () => drawn.slice(), culled: () => culled.slice(),
     setVisible(v) { on = !!v; layer.style.display = on ? '' : 'none'; },
     setGripView(v) { gripView = !!v; },
+    setAvoid(fn) { avoidOf = typeof fn === 'function' ? fn : null; },
     hovered: () => hoverId,
     unmount() { win.cancelAnimationFrame(raf); unskin(); doc.removeEventListener('t180:labels', answer); stage.removeEventListener('pointermove', onPointer); stage.removeEventListener('pointerleave', onLeave); layer.remove(); },
   };

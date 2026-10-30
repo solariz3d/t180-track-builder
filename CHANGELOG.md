@@ -7,6 +7,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **A piece's label on the road moves clear of the handles.** In Sculpt the drag handles, the dots and their hover words are drawn over the road labels, and a label kept under them had its numbers drawn over; it now finds a spot beside them.
+
 - **The road's numbers are the biggest thing on screen.** The values strip over the view shows each number in large bold type (24 px), with its unit and its name small beside it, and stays one slim strip; the label on the road shows the piece's length large and its turn, climb and bank small under it.
 
 - **Notes that said nothing are gone.** "Grip 100%" under a grip that reads 100 no longer shows (any other grip still says itself); the line of camera keys at the foot sits behind a small "?" (hover or press it) and in the guide's camera step; and the pit lane's note is in the plain text colour unless it reports a problem.
