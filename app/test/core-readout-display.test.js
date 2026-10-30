@@ -206,8 +206,11 @@ test('the label box holds only an opaque background and its text: no border, squ
   track = { path: tp.path, segments: tp.segments };
   view = { pose: { eye: [h.pos[0], h.pos[1] + 900, h.pos[2] - 1], target: h.pos, up: [0, 0, 1], fov: Math.PI / 3 }, mode: 'overhead', head: { pos: h.pos, T: h.T } };
   P.tick();
-  // the label's own box: the element holding the text itself (the layer around it has the same textContent, through its child)
-  const box = P.stage.all().find((e) => e.children.length === 0 && e.textContent === P.panel.labels.labels()[0].text && e.style.cssText), css = box.style.cssText;
+  // the label's own box: the element with the text and a background (the layer around it has the same textContent, through its child)
+  // AMENDED: the rule changed by name: the box holds its text in two spans (the length large, the rest small), so it is found by its background, not as a leaf;
+  // the spans carry no background or border of their own, so the box still holds only its background and its text
+  const box = P.stage.all().find((e) => e.textContent === P.panel.labels.labels()[0].text && /background:/.test(e.style.cssText || '')), css = box.style.cssText;
+  for (const c of box.children) assert.doesNotMatch(c.style.cssText || '', /background|border|shadow/, 'a span in the box has no background, border or shadow of its own');
   const prop = (k) => { const m = new RegExp(`(?:^|;)${k}:([^;]+)`).exec(css); return m ? m[1].trim() : null; };
   const bg = prop('background'), fg = prop('color');
   assert.match(bg, /^#[0-9a-f]{6}$/i, `the background is an opaque colour (got ${bg})`);
@@ -231,7 +234,8 @@ test('a skin change recolours the label boxes already made, and their background
   track = { path: tp.path, segments: tp.segments };
   view = { pose: { eye: [h.pos[0], h.pos[1] + 900, h.pos[2] - 1], target: h.pos, up: [0, 0, 1], fov: Math.PI / 3 }, mode: 'overhead', head: { pos: h.pos, T: h.T } };
   P.tick();
-  const box = () => P.stage.all().find((e) => e.children.length === 0 && e.textContent === P.panel.labels.labels()[0].text && e.style.cssText);
+  // AMENDED: found by its background, not as a leaf: the box holds its text in two spans
+  const box = () => P.stage.all().find((e) => e.textContent === P.panel.labels.labels()[0].text && /background:/.test(e.style.cssText || ''));
   assert.match(box().style.cssText, /background:#0b0d11;/, 'SIGIL: today\'s colour');
   // the page turns to a skin whose ink is translucent: the reader on this window (app/lib/tokens.js) reads it, and the box stays opaque
   const skin = { '--ink': 'rgba(248, 250, 255, 0.5)', '--on-ink-strong': '#0b2747' };
