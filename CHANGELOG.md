@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A road texture flows smoothly through a tube that widens or narrows.** Where a closed tube changed width, the texture on its walls and roof was cut into short pieces every 2 m, each shifted sideways from the last, worse toward the roof. Each row now takes its own section's width, and a tube keeps one count of texture repeats round for its whole length, so the lines run on without a step. A tube of one width, and every other road, looks exactly as before.
+
 ## [0.4.30] - 2026-10-29
 
 ### Added
