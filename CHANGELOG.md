@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **File ▸ Export for Blender…: open your track in Blender.** It writes the track as a `.glb` into a folder of its own, with a README: in Blender, File ▸ Import ▸ glTF 2.0 opens it textured, in metres and the right way round (a right-hand corner still turns right), with every road piece, underside and marker named as the game names them. Tick "Only the selected pieces" to export just those. When Blender is found (Steam's, or the one you pick in Settings ▸ Blender…) it can also make the `.fbx` for ksEditor, running hidden in the background; that FBX holds the game's own vertices in metres. Nothing is written into the game.
+
 ### Changed
 
 - **The bank at start comes in over a longer, gentler swell.** It leans further into the piece and turns less steeply on the way: a 41° bank at start now swells in over about 150 m instead of 115 m, rolling at most 0.65 °/m instead of 0.84.

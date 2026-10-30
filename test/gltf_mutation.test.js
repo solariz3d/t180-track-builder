@@ -17,7 +17,7 @@ const MUTANTS = [
   { id: 'G3 a mesh node is unnamed', pattern: 'same name with the same vertex count', edits: [[G, "nodes.push({ name: m.name, mesh: gltfMeshes.length - 1 });", 'nodes.push({ mesh: gltfMeshes.length - 1 });']] },
   { id: 'G4 v is written as the scene holds it, not as the kn5 writes it (1 - v)', pattern: 'AI line is a polyline', edits: [[G, 'uv[i + 1] = 1 - m.uvs[i + 1];', 'uv[i + 1] = m.uvs[i + 1];']] },
   { id: 'G5 a marker loses its transform', pattern: 'AC markers are empty nodes', edits: [[G, '...(isIdentity(d.matrix) ? {} : { matrix: d.matrix.slice() })', '']] },
-  { id: 'G6 the JSON chunk is padded with zeros, not spaces', pattern: 'NEEDS padding', edits: [[G, 'Buffer.alloc(jpad, 0x20)', 'Buffer.alloc(jpad, 0)']] },
+  { id: 'G6 the JSON chunk is padded with zeros, not spaces', pattern: 'NEEDS padding', edits: [[G, "Buffer.from(' '.repeat(jpad), 'latin1')", 'Buffer.alloc(jpad, 0)']] },   // AMENDED: the anchor follows the padding line, rewritten so the page's Buffer pads with spaces too; the mutant is the same (zeros)
   { id: 'G7 the BIN chunk is not padded to 4 bytes', pattern: 'NEEDS padding', edits: [[G, "const pad = (4 - (len % 4)) % 4; if (pad) { parts.push(Buffer.alloc(pad)); len += pad; }\n  const json", 'const json']] },
   { id: 'G8 the groups take the piece number unpadded and the kind dropped', pattern: 'same name with the same vertex count', edits: [[G, 'const g = pk.group || `p${String(pk.piece).padStart(width, \'0\')}_${pk.kind}`;', 'const g = pk.group || `p${pk.piece}`;']] },
   { id: 'G9 a mesh under a moved parent is written anyway', pattern: 'moved parent', edits: [[G, "if (moved) throw new GltfError('GLTF_NOT_FLAT',", "if (false) throw new GltfError('GLTF_NOT_FLAT',"]] },

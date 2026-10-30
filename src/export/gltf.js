@@ -67,7 +67,7 @@ function toGlb(scene, { name = 'track', ai = null, closed = false, pieces = null
   const bufferViews = [], accessors = [];
   const view = (bytes, target) => {
     const pad = (4 - (len % 4)) % 4; if (pad) { parts.push(Buffer.alloc(pad)); len += pad; }
-    const b = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength); parts.push(b);
+    const b = Buffer.from(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)); parts.push(b);   // a copy of exactly the view: the page's Buffer (app/export/node-shim.js) takes no offset and length
     bufferViews.push({ buffer: 0, byteOffset: len, byteLength: b.length, ...(target ? { target } : {}) }); len += b.length;
     return bufferViews.length - 1;
   };
@@ -128,9 +128,9 @@ function toGlb(scene, { name = 'track', ai = null, closed = false, pieces = null
     scene: 0, scenes: [{ name, nodes: roots }], nodes, meshes: gltfMeshes, accessors, bufferViews, buffers: [{ byteLength: len }],
     ...(materials.length ? { materials } : {}), ...(images.length ? { images, textures, samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 10497, wrapT: 10497 }] } : {}),
   };
-  let jb = Buffer.from(JSON.stringify(json), 'utf8'); const jpad = (4 - (jb.length % 4)) % 4; if (jpad) jb = Buffer.concat([jb, Buffer.alloc(jpad, 0x20)]);
+  let jb = Buffer.from(JSON.stringify(json), 'utf8'); const jpad = (4 - (jb.length % 4)) % 4; if (jpad) jb = Buffer.concat([jb, Buffer.from(' '.repeat(jpad), 'latin1')]);
   const bin = Buffer.concat(parts), total = 12 + 8 + jb.length + 8 + bin.length, head = Buffer.alloc(12), jh = Buffer.alloc(8), bh = Buffer.alloc(8);
-  head.write('glTF', 0, 'latin1'); head.writeUInt32LE(2, 4); head.writeUInt32LE(total, 8);
+  head.writeUInt32LE(0x46546C67, 0); head.writeUInt32LE(2, 4); head.writeUInt32LE(total, 8);   // 0x46546C67 is 'glTF' read little-endian: the page's Buffer has no write(string)
   jh.writeUInt32LE(jb.length, 0); jh.writeUInt32LE(0x4E4F534A, 4); bh.writeUInt32LE(bin.length, 0); bh.writeUInt32LE(0x004E4942, 4);
   return { glb: Buffer.concat([head, jh, jb, bh, bin]), nodes: nodes.map((n) => n.name), meshes: meshes.length, markers: markers.length, skipped };
 }

@@ -6,6 +6,8 @@
 // A launch-time T180_TEST_APP_DATA (an existing absolute folder) moves every kept file there, for test runs (test_app_data).
 // A launch-time T180_TEST_STEAM_PATH (an existing absolute folder) is the Steam folder a test run looks in (ac.rs test_steam_path, D252).
 //   save_autosave(text) · open_autosave · clear_autosave: the unsaved track, for crash recovery
+//   find_blender · set_blender_path(path) · write_blender_export(dir, folder, files, fbx): File ▸ Export for Blender (blender.rs): the glb and README
+//   into a folder of their own, and the FBX through the user's own Blender, headless
 //   write_export(dir, folder, files): an exported track into the folder the user picked (never an AC install's other tracks)
 //   get_ac_root · set_ac_root(path) · install_track(folder, files): INSTALL TO AC, into the remembered AC folder's
 //   content/tracks (ac.rs); with none remembered, get_ac_root finds AC through Steam and remembers it (D250, ac.rs root_or_find);
@@ -23,6 +25,7 @@ use tauri::Manager;
 
 mod ac;
 mod backups;
+mod blender;
 
 const TRACK_EXT: &str = "t180track";
 const LIBRARY_FILE: &str = "library.t180lib";
@@ -684,6 +687,44 @@ fn install_track(app: tauri::AppHandle, folder: String, files: Vec<ExportFile>) 
     install_with_retire(&root, &docs, &folder, &decode_files(files)?, &utc_stamp(secs))
 }
 
+// ---- File ▸ Export for Blender (blender.rs) ----
+#[tauri::command]
+fn find_blender(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    Ok(blender::blender_or_find(&data_dir(&app)?, &ac::steam_path)?.map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+fn set_blender_path(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    Ok(blender::remember_blender(&data_dir(&app)?, Path::new(&path))?.to_string_lossy().into_owned())
+}
+
+#[derive(serde::Serialize)]
+struct BlenderWritten { folder: String, written: usize, fbx: Option<String>, objects: Option<usize>, fbx_error: Option<String> }
+
+/// Write the glb and README into `dir/folder`; with `fbx`, then run Blender (found as find_blender finds it) to add <name>.fbx. A failed FBX
+/// step leaves the written files and says why in fbx_error; the write's own failure is the command's error. Off the page's thread: Blender takes seconds.
+#[tauri::command]
+async fn write_blender_export(app: tauri::AppHandle, dir: String, folder: String, files: Vec<ExportFile>, fbx: bool) -> Result<BlenderWritten, String> {
+    let data = data_dir(&app)?;
+    let decoded = decode_files(files)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let target = blender::write_blender_folder(Path::new(&dir), &folder, &decoded)?;
+        let mut w = BlenderWritten { folder: target.to_string_lossy().into_owned(), written: decoded.len(), fbx: None, objects: None, fbx_error: None };
+        if fbx {
+            let glb = decoded.iter().find(|(p, _)| p.to_ascii_lowercase().ends_with(".glb")).map(|(p, _)| target.join(p)).ok_or("no .glb among the files")?;
+            let out = glb.with_extension("fbx");
+            match blender::blender_or_find(&data, &ac::steam_path)? {
+                None => w.fbx_error = Some("Blender was not found (set it in Settings ▸ Blender…)".into()),
+                Some(exe) => match blender::run_fbx(&exe, &data, &glb, &out) {
+                    Ok(n) => { w.fbx = Some(out.to_string_lossy().into_owned()); w.objects = Some(n); }
+                    Err(e) => w.fbx_error = Some(e),
+                },
+            }
+        }
+        Ok(w)
+    }).await.map_err(|e| format!("the export for Blender stopped: {e}"))?
+}
+
 #[tauri::command]
 fn get_see_it_setting(app: tauri::AppHandle) -> Result<bool, String> {
     Ok(ac::launch_enabled(&data_dir(&app)?))
@@ -731,7 +772,7 @@ pub fn run() {
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export, write_layouts_export, folder_is_empty, remove_empty_folder,
             get_ac_root, find_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
-            test_export_folder, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo, append_input_log
+            test_export_folder, find_blender, set_blender_path, write_blender_export, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo, append_input_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running the T-180 Track Builder");

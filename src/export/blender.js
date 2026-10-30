@@ -33,7 +33,8 @@ const README = (name, r, pieces) => [
 /** The folder's files in memory, for the app (its native side writes them): [{ path, bytes }] with <name>.glb first, and the counts. Writes nothing. */
 function blenderFiles(ex, { pieces = null, ai = true } = {}) {
   if (!ex || !ex.acScene) throw new Error('the export for Blender needs an export result with its acScene (src/export/fromwords.js buildFromSegments)');
-  const name = ((ex.desc && ex.desc.name) || 'track').replace(/[^A-Za-z0-9_. -]/g, '_');
+  // a name the app's folder write takes (src-tauri/src/blender.rs valid_plain_name): plain characters, no dot or space at either end, short
+  const name = ((ex.desc && ex.desc.name) || 'track').replace(/[^A-Za-z0-9_. -]/g, '_').slice(0, 60).replace(/^[. ]+|[. ]+$/g, '') || 'track';
   const points = ai && ex.ai ? readAiLine(ex.ai).points.map((p) => p.pos) : null;
   const r = toGlb(ex.acScene, { name, ai: points, closed: !!(ex.path && ex.path.closed), pieces });
   return { name, files: [{ path: `${name}.glb`, bytes: r.glb }, { path: 'README.txt', bytes: Buffer.from(README(name, r, pieces), 'utf8') }], meshes: r.meshes, markers: r.markers, skipped: r.skipped };

@@ -4,7 +4,7 @@
 //   fileItems(ctx, { developer })        the slot under File's own controls: Developer ▸ (A's trackmenu.developerItems: Open example…) when there is any
 //   editItems(ctx, { selection })        Undo, Redo, then the selection's entries (C's piecesui.items, which bring their own Selection heading), when there are any
 //   viewItems(ctx)                       Drag handles and Colour by grip (saved settings), Show the guide
-//   settingsItems(ctx, { soundRow, acFolder, acAllow })   sound, the theme (D394), how the turn and climb are read, the grid step, mirror on insert, the checker's wall
+//   settingsItems(ctx, { soundRow, acFolder, acAllow, blenderItem })   sound, the theme (D394), how the turn and climb are read, the grid step, mirror on insert, the checker's wall
 //                                        raycasting, the Assetto Corsa folder and launch permission, Reset the guide
 //   authorName(settings)                 D365: the saved author name, trimmed, at most 64 characters; '' for none (then the export writes t180-track-builder)
 //   authorField(doc, settings)           D365: Settings ▸ Author name, a text field that saves what is typed (trimmed, at most 64)
@@ -56,7 +56,7 @@ function authorField(doc, settings) {
   return label;
 }
 
-function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, authorRow = null } = {}) {
+function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, authorRow = null, blenderItem = null } = {}) {
   return [
     { section: 'Sound' }, ...(soundRow ? [{ node: soundRow }] : []),
     // D394: each theme is a look with its own melody; the look changes at once and the melody as soon as its two files are in (app/index.html, app/sound.js).
@@ -74,6 +74,7 @@ function settingsItems(ctx, { soundRow = null, acFolder = null, acAllow = null, 
     { section: 'Pieces' }, tick('Mirror on insert', 'mirrorOnInsert', 'add saved pieces as their left/right mirror image'),
     { section: 'Checker' }, tick('Wall raycasting (CSP)', 'csp', 'the checker\'s wall raycasting'),
     ...(acFolder || acAllow || authorRow ? [{ section: 'Assetto Corsa' }, ...(authorRow ? [{ node: authorRow }] : []), ...(acFolder ? [{ node: acFolder }] : []), ...(acAllow ? [{ node: acAllow }] : [])] : []),
+    ...(blenderItem ? [{ section: 'Blender' }, blenderItem] : []),   // File ▸ Export for Blender's .fbx runs this Blender (app/menubar/blenderexport.js)
     { separator: true },
     { label: 'Reset the guide', title: 'the guide opens by itself again at the next start', run: (c) => c.resetGuide() },
   ];

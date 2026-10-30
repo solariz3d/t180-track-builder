@@ -325,6 +325,7 @@
     <button id="export" title="Write an Assetto Corsa track folder into a folder you pick. Nothing is installed or launched.">Export…</button>
     <button id="testexport" title="TEST export of an UNFINISHED track into Assetto Corsa, as t180b_&lt;name&gt;_test, to drive it by hand: the loop may be open, reds are listed as warnings (not blocking), the road ends in a wall after a run-off, and the track is named (test, unfinished). Never a finished export. Export to Assetto Corsa does the same on an open track.">Test export (unfinished)…</button>
     <button id="exportlayouts" title="Two or more saved tracks as ONE Assetto Corsa track with one layout each (the way a track with several layouts ships them): you name each layout and mark the main one. Re-exporting removes the files of a layout you leave out, and nothing else. Nothing is installed or launched.">Export layouts…</button>
+    <button id="exportblender" title="The open track as a .glb for Blender, in a folder of its own with a README (and an .fbx for ksEditor when Blender is found): every mesh and marker keeps the name the game uses. Never written into the game.">Export for Blender…</button>
     <span id="more-install"></span>
     <hr>
     <div id="share" title="the whole track as one line of text to share (Copy track code), or open a track from such a line (Paste track code…). The open track is one Ctrl+Z away"></div>
@@ -577,6 +578,19 @@
         catch (e) { status.textContent = `export layouts failed: ${e.message || e}`; }
       };
     } catch (e) { const why = (e && e.message) || String(e); $('exportlayouts').onclick = () => { status.textContent = `Export layouts could not start: ${why}`; }; }
+    // File ▸ Export for Blender… (app/menubar/blenderexport.js): the open track as a .glb in a folder of its own, and the .fbx through the user's own Blender
+    // (src-tauri/src/blender.rs). Its own copy of the exporter and node shim, like Export layouts. If it cannot load, the button says why instead of doing nothing
+    try {
+      const bxShim = (await loadCjs('app/export/node-shim.js', get)).createShim(), bxOpt = { builtins: bxShim.builtins, globals: { Buffer: bxShim.Buffer } };
+      const BX = await loadCjs('app/menubar/blenderexport.js', get);
+      const bx = BX.createBlenderExport({ layouts: await loadCjs('src/export/layouts.js', get, bxOpt), blender: await loadCjs('src/export/blender.js', get, bxOpt) });
+      const pickBlenderFolder = async (title) => (await call('test_export_folder')) || call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
+      const writeBlender = (dir, folder, files, fbx) => call('write_blender_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })), fbx });
+      $('exportblender').onclick = async () => {
+        try { await BX.exportBlenderFlow({ bx, shell, ask: (q) => BX.askBlender(document, q), pickFolder: pickBlenderFolder, findBlender: () => call('find_blender'), write: writeBlender, say: (t) => { status.textContent = t; }, textures: textureSet, author: authorNow() }); }
+        catch (e) { status.textContent = `export for Blender failed: ${e.message || e}`; }
+      };
+    } catch (e) { const why = (e && e.message) || String(e); $('exportblender').onclick = () => { status.textContent = `Export for Blender could not start: ${why}`; }; }
     // D243a: the TEST export of an unfinished track, its own button (never the default Export). D264: it goes into Assetto Corsa by the install's path
     // (app/install/index.js, mounted below with testButton), asking for the AC folder only when it is not known; Export… (any folder) is unchanged
     refreshList();
@@ -646,14 +660,21 @@
       // and a click on Random while it is already the choice (every fresh start: it is the default) picks again, though the saved value does not change
       // (settings.set tells its listeners only on a change; A's read of D401, §8). app/menubar/items.js calls this from the Random item
       ctx.repickTheme = () => onTheme('music');
+      // Settings ▸ Blender…: the blender.exe File ▸ Export for Blender runs for the .fbx (src-tauri/src/blender.rs remember_blender); with none set, Steam's is found by itself
+      const blenderItem = { label: 'Blender…', title: 'pick the blender.exe that File ▸ Export for Blender runs to make the .fbx (the Blender in Steam is found by itself)', run: async () => {
+        try {
+          const p = await call('plugin:dialog|open', { options: { directory: false, multiple: false, title: 'Pick blender.exe', filters: [{ name: 'Blender', extensions: ['exe'] }] } });
+          status.textContent = p ? `Blender for the .fbx: ${await call('set_blender_path', { path: p })}` : 'Blender: nothing picked, nothing changed.';
+        } catch (e) { status.textContent = `Blender not set: ${(e && e.message) || e}`; }
+      } };
       MB.mountBar(document, [
-        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport')] },
+        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('exportblender'), $('testexport')] },
         { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: some(selection, 'The selection\'s entries')(c) }) },
         { details: $('m-build'), slot: $('m-build-slot'), items: whole(build) },
         { details: $('m-track'), slot: $('m-track-slot'), items: whole(track) },
         { details: $('pieces') },
         { details: $('m-view'), slot: $('m-view-slot'), items: (c) => MI.viewItems(c) },
-        { details: $('m-settings'), slot: $('m-settings-slot'), items: (c) => MI.settingsItems(c, { soundRow, acFolder, acAllow, authorRow }) },
+        { details: $('m-settings'), slot: $('m-settings-slot'), items: (c) => MI.settingsItems(c, { soundRow, acFolder, acAllow, authorRow, blenderItem }) },
       ], ctx);
       document.documentElement.dataset.menubar = 'ready';   // the page test waits for this
     } catch (e) { console.error(`the menus could not start: ${e && e.message}`); }
