@@ -4,7 +4,7 @@
 // no require(), so this gives it one: fetch the entry file, find its require('./…') calls, fetch those, and so on;
 // then evaluate each file once, in the order it is required, with module/exports/require of its own. Only RELATIVE
 // requires are served. A node built-in ('fs', 'path', …) fails loudly, naming the module and the file that asked:
-// the code the app runs in the UI process must not need one (ARCHITECTURE §9: the geometry core runs in the UI process).
+// the code the app runs in the UI process must not need one (the geometry core runs in the UI process).
 // A require() that appears only in a comment is fetched speculatively; if the file is not there, nothing fails
 // unless the code really calls it.
 //

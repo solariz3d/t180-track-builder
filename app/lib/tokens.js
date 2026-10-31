@@ -1,8 +1,8 @@
-// tokens.js: THE PAGE'S COLOURS FOR WHAT CSS CANNOT REACH (D381, pane B). The canvas layers (handles, selection, flights, grip, spawns, labels) and the
+// tokens.js: THE PAGE'S COLOURS FOR WHAT CSS CANNOT REACH. The canvas layers (handles, selection, flights, grip, spawns, labels) and the
 // WebGL view draw with colours of their own; a skin (app/themes/<name>.css) changes the page's tokens, and this reader hands those tokens to the code
 // that draws. It reads getComputedStyle(<html>) once per token, keeps the answer, and reads again when <html data-theme> changes (a MutationObserver).
 // Every read names today's colour as its fallback, which is what a page without the token draws (the preview's smoke page, a test's stand-in window):
-// SIGIL's :root (app/index.html) holds exactly those literals, so SIGIL draws as it did before D381.
+// SIGIL's :root (app/index.html) holds exactly those literals, so SIGIL draws as it did before the skins.
 //
 //   tokensOf(win)                  -> the window's one reader (kept on the window: each loadCjs builds a fresh module graph, as the settings store does)
 //   createTokens(win, { log })     -> { css, rgba, floats, alpha, solid, word, refresh, onChange, version }
@@ -11,7 +11,7 @@
 //     floats(name, fallback)       -> [r, g, b] 0..1 for WebGL (a token written color(srgb r g b) gives its floats exactly); fallback is the float array
 //     alpha(name, a, fallback)     -> 'rgba(r, g, b, a)': the token at a site's own alpha (a translucent backing)
 //     solid(name, fallback)        -> '#rrggbb' with any alpha the skin gave dropped (a box that must stay opaque)
-//     word(name, fallback)         -> a token that is a word (D384: --sky-style), unquoted; the fallback word when the page has none
+//     word(name, fallback)         -> a token that is a word (--sky-style), unquoted; the fallback word when the page has none
 // A token the reader cannot understand is reported once (console.error) and today's colour is drawn; a missing token is today's colour, silently.
 'use strict';
 
@@ -85,7 +85,7 @@ function createTokens(win, { log = null } = {}) {
     floats(name, fallback) { const c = read(name, fallback); return c ? [...c.floats] : [...fallback]; },
     alpha(name, a, fallback) { const c = read(name, fallback) || fb(name, fallback); return `rgba(${c.rgba.slice(0, 3).map(Math.round).join(', ')}, ${a})`; },
     solid(name, fallback) { return hexOf(read(name, fallback) || fb(name, fallback)); },
-    /** D384: a token that is a word, not a colour (--sky-style): its value without quotes or spaces, or the fallback when the page has none. */
+    /** a token that is a word, not a colour (--sky-style): its value without quotes or spaces, or the fallback when the page has none. */
     word(name, fallback) {
       if (typeof fallback !== 'string') throw new Error(`tokens: ${name} needs today's word as its fallback`);
       const k = 'word:' + name;
