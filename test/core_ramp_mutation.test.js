@@ -75,12 +75,31 @@ const MUTANTS = [
   { id: 'B16 another channel is written beside the bank', pattern: 'swing: only phi', edits: [[B, '{ ...P, channels: { ...P.channels, phi: w } }', '{ ...P, channels: { ...P.channels, phi: w, kh: w } }']] },
   { id: "B17 the rounded halves blend by extend.js's quintic", pattern: 'swing: the rounded swing rolls', edits: [[X, 'if (u <= 1 - a) return (a / 2 + (u - a)) / N;', 'if (u <= 1 - a) return smoother(u);']] },
   // "at start" for the cross-section: app/core/panel.js lays a ticked bank, cup or edge over a ramp the roll amber allows (test/core_extend_at_start.test.js)
-  { id: 'S1 the cross-section ramp at the start loses its 20 m floor', pattern: 'keeps the 20 m floor', edits: [[P, 'const want = Math.max(AT_START_M, (spread * Math.abs(to - from)) / START_RATE)', 'const want = (spread * Math.abs(to - from)) / START_RATE']] },   // re-anchored: the spread is now a parameter (the bank's swell has its own)
-  { id: 'S2 the cross-section ramp at the start allows twice the roll rate', pattern: 'rolls under the checker', edits: [[P, '(spread * Math.abs(to - from)) / START_RATE)', '(spread * Math.abs(to - from)) / (2 * START_RATE))']] },   // re-anchored with S1
+  // re-anchored (D573): the floor is F's 300 m now, not the 20 m one (app/core/panel.js F_RAMP_M); losing it lays a small change in 20 m again
+  { id: 'S1 the cross-section ramp at the start loses its F floor (back to 20 m)', pattern: 'his piece|takes the roll bar|20 m floor|F\'s 300', edits: [[P, 'const want = Math.max(F_RAMP_M, (spread * Math.abs(to - from)) / START_RATE)', 'const want = Math.max(AT_START_M, (spread * Math.abs(to - from)) / START_RATE)']] },
+  // re-pointed (D573): under F's 300 m floor a doubled rate shows only where the roll bar is longer than 300 m (a change past about 82 deg), so the rows that lay one run
+  { id: 'S2 the cross-section ramp at the start allows twice the roll rate', pattern: 'rolls under the checker|takes the roll bar|8 to 180', edits: [[P, '(spread * Math.abs(to - from)) / START_RATE)', '(spread * Math.abs(to - from)) / (2 * START_RATE))']] },   // re-anchored with S1
+  { id: 'S3 the half-piece cap of the bank never bends (a 180° bank at start rolls past the amber)', pattern: '8 to 180|cap bends', edits: [[P, 'const cap = bends && swellPeak(to - from, half) > START_RATE ? length : half;', 'const cap = half;']] },
   // a bank at start is one swell: src/core/extend.js SWELL_A (test/core_bank_swell.test.js runs beside the others here)
-  { id: 'W1 the swell has its plateau back (a quarter-ramp rounding)', pattern: 'no flat stretch', edits: [[X, 'const SWELL_A = 0.5;', 'const SWELL_A = 0.25;']] },
+  // re-pointed (D573): the panel's bank at start is F now, so the swell is read where extend still lays it: the byte rows' swell over the whole piece
+  { id: 'W1 the swell has its plateau back (a quarter-ramp rounding)', pattern: 'byte for byte', edits: [[X, 'const SWELL_A = 0.5;', 'const SWELL_A = 0.25;']] },
+  // the two-share ramp: src/core/extend.js rampShape (test/core_bank_ramp.test.js runs beside the others here)
+  { id: 'W2 the fall share is laid equal to the rise', pattern: 'follows the asked shares', edits: [[X, '(u) => rampShape(u, shape.rise, shape.fall)', '(u) => rampShape(u, shape.rise, shape.rise)']] },
+  { id: 'W3 the rise share is dropped (the rate starts at its hold)', pattern: 'never turns back', edits: [[X, 'if (u < rise) return (rise * ROUND_I(u / rise)) / N;', '']] },
+  { id: 'W5 a shaped bank at start is laid on the knots of the ramp alone (the rise smoothed away)', pattern: 'within 0.25', edits: [[X, 'if (shapedShort.length) {', 'if (false) {']] },
+  { id: 'W6 the fall gets no knots of its own', pattern: 'within 0.25', edits: [[X, 'out.push(Lc - (fall * Lc * (j - 1)) / SHAPE_SUB);', '']] },
+  { id: 'W7 the knots are spread over the length asked, not the length laid', pattern: 'within 0.25', edits: [[X, 'shapeKnots(shapeOf(ch), Math.max(ramp[ch] - (2 * ramp[ch]) / sub, ramp[ch] / sub))', 'shapeKnots(shapeOf(ch), ramp[ch])']] },
+  { id: 'W8 the bank is not read again on the new knots', pattern: 'within 0.25', edits: [[X, 'rampControl(laid, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch)); c2Ends(laid, ch);', 'c2Ends(laid, ch);']] },
+  { id: 'W4 the shares are not checked (a rise and fall over 1 together is laid)', pattern: 'not a ramp', edits: [[X, 'if (!(rise > 0 && fall > 0 && rise + fall <= 1 + 1e-12)) throw', 'if (false) throw']] },
+  // D573, candidate F the at-start default (ids A1-A6: F is the banded fit's) (test/core_at_start_f.test.js runs beside the others here)
+  { id: 'A1 a cup or edge at start gets no shape in extend (the quintic again)', pattern: 'laid as F too', edits: [[X, '(startShapes && shortRamps.includes(ch) && startShapes[ch]) || null', 'null']] },
+  { id: 'A2 the panel asks the swell\'s halves, not a 20 m rise', pattern: 'his piece', edits: [[P, 'return rise >= 0.5 ? { rise: 0.5, fall: 0.5 } : { rise, fall: 1 - rise };', 'return { rise: 0.5, fall: 0.5 };']] },
+  { id: 'A3 the panel sends no start shape for the cup and the edge', pattern: 'laid as F too', edits: [[P, 'else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);', 'else {}']] },
+  { id: 'A4 the right edge does not follow the edge\'s start shape', pattern: 'laid as F too', edits: [[X, 'if (startShapes.e && !startShapes.er) startShapes = { ...startShapes, er: startShapes.e };', '']] },
+  { id: 'A5 startShapes takes any channel', pattern: 'refuses what is not', edits: [[X, "if (!['c', 'e', 'er'].includes(ch)) throw", 'if (false) throw']] },
+  { id: 'A6 the rise is measured on the ramp asked, not the length laid', pattern: 'his piece', edits: [[P, 'const rise = F_RISE_M / laidOf(R);', 'const rise = F_RISE_M / R;']] },
 ];
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js'];
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads

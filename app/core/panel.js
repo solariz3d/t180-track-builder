@@ -65,9 +65,26 @@ const START_RATE = require('../../src/validate/index.js').ROLL_AMBER_DEG_M, STAR
 // change over 2 m 0.045 against 0.077, and the worst roll over 8 to 180° 0.664 °/m.
 const SWELL_SPREAD = 3.4;
 const XS_START = new Set(['phi', 'c', 'e', 'er']);
-/** The at-start ramp (m) of a cross-section channel going from `from` to `to` (degrees) on a piece `length` m long; rounded up to 0.1 m. */
-function crossStartM(from, to, length, spread = START_SPREAD) {
-  const want = Math.max(AT_START_M, (spread * Math.abs(to - from)) / START_RATE), cap = Math.max(Math.min(AT_START_M, length), length / 2);
+// THE CAP BENDS FOR THE BANK (2026-10-30): a bank laid faithfully as its swell peaks at 2·|change| over the length it is laid in, three quarters of the ramp
+// (src/core/extend.js rampControl), so where half the piece is too short for that to stay under the checker's amber (a 180° bank at start on 1,000 m: 0.944
+// against 0.934), the ramp takes the roll bar's length instead, up to the whole piece. The amber outranks "held for half the piece". Cup and edge keep the cap.
+const swellPeak = (change, R) => (2 * Math.abs(change)) / laidOf(R);
+// CANDIDATE F, THE AT-START DEFAULT (the user, 2026-10-30 20:31, on the six ramps laid on his piece side by side: "F looks good we can try it"): a ticked bank, cup
+// or edge leans in over a RISE of F_RISE_M as laid, then fades over the rest of an F_RAMP_M ramp. On his piece (1,000 m, bank 41.38° at start) that is
+// 0.72 / 3.69 / 14.44 / 29.38 / 41.19° at 10 / 20 / 50 / 100 / 200 m, done by 234.5 m, the rate peaking at 0.366 °/m at 20 m. The ramp is F_RAMP_M at least;
+// a change the fade would carry past the amber takes the roll bar's length instead (SWELL_SPREAD: F, like the swell, peaks at 2·|change| over its laid
+// length), and the caps are as before: half the piece, which the bank's alone bends. A ramp laid in 40 m or less cannot hold a 20 m rise and is the swell.
+// Cup and edge take F as the bank does (src/core/extend.js startShapes); the quintic and START_SPREAD they had are what F replaces.
+const F_RAMP_M = 300, F_RISE_M = 20;
+/** The length a ramp asked for R m is laid in: src/core/extend.js rampControl's compression with RAMP_KNOTS_C2 = 8 subdivisions. */
+function laidOf(R) { return Math.max(R - (2 * R) / 8, R / 8); }
+/** F's shares for a ramp of R m: a rise of F_RISE_M as laid, the rest the fade; the swell's halves where the laid ramp is 40 m or less. */
+function startShapeOf(R) { const rise = F_RISE_M / laidOf(R); return rise >= 0.5 ? { rise: 0.5, fall: 0.5 } : { rise, fall: 1 - rise }; }
+/** The at-start ramp (m) of a cross-section channel going from `from` to `to` (degrees) on a piece `length` m long; rounded up to 0.1 m: F_RAMP_M, or the roll
+ *  bar's length where that is longer, within the cap. `bends`: the bank's cap gives way to the roll bar's length when F laid within the cap would roll faster than the amber. */
+function crossStartM(from, to, length, spread = SWELL_SPREAD, bends = false) {
+  const want = Math.max(F_RAMP_M, (spread * Math.abs(to - from)) / START_RATE), half = Math.max(Math.min(AT_START_M, length), length / 2);
+  const cap = bends && swellPeak(to - from, half) > START_RATE ? length : half;
   return Math.min(Math.ceil(want * 10 - 1e-9) / 10, cap);
 }
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
@@ -102,7 +119,7 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   if (tb !== null) targets[XS.CHANNEL.tube] = tb;
   const out = { length: Number(length), targets };
   if (b !== null) out.bankShape = 'rounded';   // D521: the bank Extend lays starts banking at the joint (src/core/extend.js roundedLinear); Close and Finish keep theirs
-  if (b !== null && atStart.bank) out.bankShape = 'swell';   // a bank at start is one swell: its roll rises and fades with no plateau between (src/core/extend.js SWELL_A)
+  // a bank, cup or edge at start is candidate F (crossStartM, startShapeOf): set below, with its ramp
   if (corner) out.turnDeg = t;
   if (climbCorner) out.climbDeg = c;   // D331, the climb too (plan :387-399): the exact pitch change, ending at a climb rate of 0
   if (num(grip) !== null) out.grip = num(grip);   // D261: a grip typed in the field (blank: the new piece keeps the last road's); the core refuses a value that is not a whole percent 50 to 150
@@ -110,7 +127,10 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   const transition = {};
   const fromDeg = (ch) => { const v = head && Number.isFinite(head[ch]) ? head[ch] : 0; return ch === 'phi' ? v / DEG : v; };
   for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) {
-    transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length, ch === 'phi' ? SWELL_SPREAD : START_SPREAD) : Math.min(AT_START_M, out.length);
+    transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length, SWELL_SPREAD, ch === 'phi') : Math.min(AT_START_M, out.length);
+    if (!XS_START.has(ch)) continue;
+    if (ch === 'phi') out.bankShape = startShapeOf(transition.phi);
+    else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);
   }
   if (Object.keys(transition).length) out.transition = transition;
   if (empty && Object.keys(targets).length) out.first = { ...targets };   // D194a: on an empty track the typed values are the first piece's start
