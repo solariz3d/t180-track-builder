@@ -829,7 +829,8 @@ test('D242: after a 30°/100m turn, Straight extends a piece whose turn and clim
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), hint = () => P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title, base = P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title;   // D267: the hint is the "at start" box's tooltip, not a paragraph
   P.type('length m', 200); P.type('turn °/100m', 30); button('Extend').onclick();
   assert.equal(P.shell.getState().history.present.pieces.length, 1, P.shell.getState().message);
-  assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'straight hint'), undefined, 'D267: no paragraph under the buttons'); P.type('turn °/100m', 0); assert.match(hint(), /turn 0 eases over the whole piece: tick "at start" \(or press Straight\) to be straight from 20 m on/); assert.match(hint(), /^at start: reach this turn/, 'the box\'s own words come first');
+  // AMENDED (D581, the rule changed: the box reads "early" and its tooltip is its row's own sentence, the user 2026-10-31)
+  assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'straight hint'), undefined, 'D267: no paragraph under the buttons'); P.type('turn °/100m', 0); assert.match(hint(), /turn 0 eases over the whole piece: tick "early" \(or press Straight\) to be straight from 20 m on/); assert.match(hint(), /^Reach this turn early/, 'the box\'s own words come first');
   P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').checked = true; P.field('turn °/100m').oninput(); assert.doesNotMatch(hint(), /eases over the whole piece/, 'with "at start" ticked there is nothing to hint');
   P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').checked = false;
   P.type('length m', 150); button('Straight').onclick();
