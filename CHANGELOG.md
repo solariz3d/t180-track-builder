@@ -51,6 +51,8 @@ All notable changes to this project are recorded here. The format follows
 
 - **Opening a long track uses about 0.9 GB less memory.** The track checker, which runs beside the page, was building a full 3D model of the whole road it never looks at; on ELYSIUM that was about 0.9 GB of the memory the page and its helpers share, and seconds of work every time the track was opened or changed. It now builds only the line it checks.
 
+- **The track checker keeps about half the memory it did on a long track.** After checking, it kept what it had worked out about every piece's cross-section, one small record per point across the road: about 1 GB on ELYSIUM and 0.5 GB on a 100 km lap. It now keeps the same numbers packed together, about 0.5 GB and 0.3 GB, so a long track is less likely to run the page out of memory. Every red, amber and information line it gives is exactly what it gave before, and it checks no slower.
+
 - **Dragging fast no longer makes the tick sound buzz.** Ticks now come at most about 28 a second (one per 35 ms, where it was up to 250), so a quick drag sounds like a steady ratchet; a tick that would come too soon is skipped, never played late.
 
 - **A road texture flows smoothly through a tube that widens or narrows.** Where a closed tube changed width, the texture on its walls and roof was cut into short pieces every 2 m, each shifted sideways from the last, worse toward the roof. Each row now takes its own section's width, and a tube keeps one count of texture repeats round for its whole length, so the lines run on without a step. A tube of one width, and every other road, looks exactly as before.
