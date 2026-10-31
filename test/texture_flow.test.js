@@ -40,7 +40,9 @@ function exportDoc(doc, textures) {
   return FW.buildFromSegments(segs, { name: 'flow', via: 'test', liftPath: lift, start }, { markers: startLayout(segs, lift, start), ...(textures !== undefined ? { textures } : {}) });
 }
 const setFor = (doc, kind = 'asphalt') => { const ctl = createCoreTextures({ segments: () => A.toSegments(doc), kind }); return ctl.current(); };
-const roadNodes = (scene) => scene.root.children.filter((c) => c.children && c.children[0] && /^1ROAD_/.test(c.children[0].name)).map((c) => c.children[0]);
+// AMENDED D572 by name: the export now lays an edge apron outside the road's edges (src/export/apron.js), a physics strip named 1ROAD_APRON_… with its own material. This
+// row is about the ROAD CELLS wearing the floor material, so the apron is left out of "the road's nodes", as the pit lane and the catch are left out elsewhere
+const roadNodes = (scene) => scene.root.children.filter((c) => c.children && c.children[0] && /^1ROAD_/.test(c.children[0].name) && !/^1ROAD_APRON_/.test(c.children[0].name)).map((c) => c.children[0]);
 
 test('row 1: a core export WITH a texture set writes its DDS and its material, and the kn5 reads back with the road wearing it', () => {
   const doc = plainOval(31), set = setFor(doc);

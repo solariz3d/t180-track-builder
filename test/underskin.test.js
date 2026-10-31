@@ -133,7 +133,9 @@ test('row 5: the skin is not a physics surface: no leading digit, no 1ROAD, no "
     for (const g of globs) { const re = new RegExp(`^${g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\?/g, '.').replace(/\*/g, '.*')}`); for (const n of names) assert.ok(!re.test(n), `${n} must not match MESHES=${g}`); }
     // AMENDED D341 by name: the export now lays a physical catch under the road where a sustained load is listed (src/export/catch.js), named 1ROAD_CATCH_…. The rule this row holds is that the SKIN adds no physics
     // mesh, so the road meshes are counted without the catch
-    const roads = (s) => kids(s).flatMap((c) => (c.children || []).filter((m) => m.type === 'mesh' && /^1ROAD(?!_CATCH_)/.test(m.name))).length;
+    // AMENDED D572 by name, as D341 was: the export now lays an edge apron too (src/export/apron.js, a physics strip named 1ROAD_APRON_…, added by apron.js, not the skin);
+    // the rule this row holds is still that the SKIN adds no physics, so the apron is left out of the count as the catch is
+    const roads = (s) => kids(s).flatMap((c) => (c.children || []).filter((m) => m.type === 'mesh' && /^1ROAD(?!_CATCH_|_APRON_)/.test(m.name))).length;
     assert.equal(roads(out.scene), roads(mesh.scene), 'the same number of 1ROAD meshes as the road alone'); assert.ok(out.markers.placed.every((m) => !/SKIN|JOIN/.test(m.name)));
   }
 });

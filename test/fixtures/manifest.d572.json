@@ -1,0 +1,88 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279, the mesh cap, the sector gates and D460; F1 F2 only, their kn5 digest only",
+ "made_at": "pane E, 2026-10-30, D572 (the edge apron, Part A), t180 branch d572-e: one script (digest-one.js, fixtures.js's own digest arithmetic, plus the written kn5 read back mesh by mesh) run on two trees: this branch with src/export/apron.js withApron returning its scene unchanged (before) and as committed (after). The before digests equal the amended manifest on all nine fixtures (the cross-check).",
+ "reason": "Every core export now lays an edge apron outside the road's open edges (src/export/apron.js): a physics strip 1ROAD_APRON_ (or 1GRIPnnn_APRON_) and a scenery join APRONSIDE_, appended after every node the scene holds, with one material t180b_apron. The road is not touched, so segs, path and mesh are unchanged in all nine fixtures; only the two closed fixtures, which are exported, change their kn5.",
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "before_d572": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
+    "meshParts": 3745,
+    "kn5": "c2e0a5122e38ce50611bf2daf0beb414a9f5e2abea638333ac69ef8ca69953e1"
+   },
+   "after_d572": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
+    "meshParts": 3745,
+    "kn5": "bc6acff0f6cee8d899a2f7dd612ad1f66a403976ed7cb9c947580cb6401cc3ef",
+    "kn5Bytes": 7676408
+   },
+   "measure": {
+    "changed": [
+     "kn5"
+    ],
+    "kn5_meshes_before": 15,
+    "kn5_meshes_after": 23,
+    "kn5_meshes_kept_byte_for_byte": 15,
+    "kn5_meshes_added": 8,
+    "added_all_apron": true,
+    "added_apron_tops": 4,
+    "added_apron_sides": 4,
+    "added_vertices": 11968,
+    "materials_added": [
+     "t180b_apron"
+    ],
+    "materials_kept_in_order": true,
+    "kn5_bytes_before": 7112880,
+    "kn5_bytes_after": 7676408
+   }
+  },
+  "F2-halfpipe-default-lap-closed": {
+   "before_d572": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "bb1fcb4e55ea3fe141c50d5a4f6ae3b95f099cdeaabe5074dca2da2305456c54"
+   },
+   "after_d572": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "33ab797150b29226e62168c39b7fe8347e05ac91d90596453cbd19f12ddddc4e",
+    "kn5Bytes": 9998381
+   },
+   "measure": {
+    "changed": [
+     "kn5"
+    ],
+    "kn5_meshes_before": 16,
+    "kn5_meshes_after": 24,
+    "kn5_meshes_kept_byte_for_byte": 16,
+    "kn5_meshes_added": 8,
+    "added_all_apron": true,
+    "added_apron_tops": 4,
+    "added_apron_sides": 4,
+    "added_vertices": 11968,
+    "materials_added": [
+     "t180b_apron"
+    ],
+    "materials_kept_in_order": true,
+    "kn5_bytes_before": 9434853,
+    "kn5_bytes_after": 9998381
+   }
+  }
+ },
+ "unchanged": [
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}

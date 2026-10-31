@@ -74,10 +74,11 @@ function digestOf(out) {
 // D460 (pane C, d460-c): the lap pin moved from 36ba2c6869a3d1d0 (v0.4.19, 496c347, read there with PRINT_D437B=1) to 9f3a7040bf4356e9 because the seam
 // zipper pairs by lateral position (src/geom/mesh.js meshSeam) and the weld drops a standing seam triangle (src/export/acready.js); the lap's seams change
 // their index arrays only (cmpmesh.js in exo_memory/handback/p-d459-fins-C_2026-10-25_evidence). The open TEST export is unchanged.
-// AMENDED BY NAME (2026-10-30, at the user's yes): both pins moved from 9f3a7040bf4356e9 / a257c20e84e68897 to the values below because
-// data/surfaces.ini's soft block now writes SOFT_CFM=0.00005 (src/export/trackfiles.js, its header says why). That constant is used only in
-// surfacesIni, and row 1 at the parent commit (60c7688, PRINT_D437B=1) still prints the old pair, so the one ini line is the whole change.
-const PIN = { lap: 'sha256 ab7ea68c80621a84 files 10', open: 'sha256 b59349993f6e9440 files 11' };
+// AMENDED BY NAME (2026-10-31, the merge of the firm road and the edge apron): both pins moved from ab7ea68c80621a84 / b59349993f6e9440 (the firm
+// road alone) and from ace32da6e9890964 / bfb1bda31e289ce1 (the apron alone) to the values below, because the merged exporter writes both: data/surfaces.ini's
+// soft block with SOFT_CFM=0.00005 (src/export/trackfiles.js) and an edge apron outside the road's open edges (src/export/apron.js). Each alone was proven the
+// only cause of its own move against 9f3a7040bf4356e9 / a257c20e84e68897; the pair below was read with PRINT_D437B=1 on the merged tree.
+const PIN = { lap: 'sha256 257d550e6870bdf1 files 10', open: 'sha256 2b6ad34e0f135050 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });
