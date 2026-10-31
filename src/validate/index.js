@@ -152,10 +152,11 @@ const isCoreFlight = (segments, j) => { const g = segments[j], n = segments[j + 
 // reuses an unchanged piece's segments FROZEN (src/core/adapter.js toSegments `cache`), and on his 6 km track the checker spent about 4 of every
 // placement's seconds recomputing, for every segment, what only its cross-section decides: its normalized profile, the per-u constants (constOf),
 // the lateral points of the stacked check (latOf), and a cup blend's profile at a station. Each is now remembered per frozen segment (or per the
-// frozen profile made from one), and frozen itself, so a reader that writes to a shared one throws. A segment that is not frozen (every other
+// frozen profile made from one), and frozen itself, so a reader that writes to a shared one throws (D587: except the packed figures, a Float64Array JavaScript cannot freeze; the object holding it is). A segment that is not frozen (every other
 // caller's) is computed every time, exactly as before. The arithmetic is the same calls on the same inputs, so every figure is bit-identical.
-const deepFreeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) deepFreeze(o[k]); } return o; };
+const deepFreeze = (o) => { if (o && typeof o === 'object' && !ArrayBuffer.isView(o) && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) deepFreeze(o[k]); } return o; };
 const normMemo = new WeakMap(), constMemo = new WeakMap(), latMemo = new WeakMap(), blendMemo = new WeakMap();
+const CW = 8;   // figures per u in constOf's packed array (core below)
 /** Look up f(key) in memo when key is frozen, else compute it. */
 const remembered = (memo, key, f) => { if (!Object.isFrozen(key)) return f(); let v = memo.get(key); if (v === undefined) { v = deepFreeze(f()); memo.set(key, v); } return v; };
 function segProfiles(segments) {
@@ -300,8 +301,12 @@ function core(path, segments, opts, from, carried, upto) {
   const perSeg = new Map();
   // computed on a frozen copy (P.sealed): a cup blend's profile is made fresh at each station, and read at every one of its u, so offsetAt's running sums
   // apply instead of summing from the centre each time (the same numbers; on a 25 km cup track this was most of the check)
-  const constOf = (prof) => remembered(constMemo, prof, () => { const fp = P.sealed(prof); return fp.u.map((u) => { const [X, Y] = P.offsetAt(fp, u), [nl, nu] = P.normalAt(fp, u), psi = P.psiAt(fp, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
-    return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; }); });
+  // PACKED (D587): { n, a } with a = [u, X, Y, nl, nu, sg, cos, sgsin] for each u in turn (CW figures per u), one Float64Array per cross-section. As one
+  // object per u, the cup blends' constants kept 483 MB alive on ELYSIUM (13,799 cross-sections); a Float64Array holds the same doubles, so every figure is bit-identical
+  const constOf = (prof) => remembered(constMemo, prof, () => { const fp = P.sealed(prof), m = fp.u.length, a = new Float64Array(m * CW);
+    for (let k = 0; k < m; k++) { const u = fp.u[k], [X, Y] = P.offsetAt(fp, u), [nl, nu] = P.normalAt(fp, u), psi = P.psiAt(fp, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0, o = k * CW;
+      a[o] = u; a[o + 1] = X; a[o + 2] = Y; a[o + 3] = nl; a[o + 4] = nu; a[o + 5] = sg; a[o + 6] = Math.cos(psi); a[o + 7] = sg * Math.sin(psi); }
+    return { n: m, a }; });
   const segConst = (j) => {
     let c = perSeg.get(j);
     if (c) return c;
@@ -321,7 +326,7 @@ function core(path, segments, opts, from, carried, upto) {
   const constAt = (p) => { const g = segments[p.seg]; return P.readsBlend(g) && g.blend ? blendConst(g, p.s - segS0[p.seg]) : segConst(p.seg); };   // only a cup's blend: a word's font transition is judged at its target, as before
   // the normal n(u) at a station: L·nl + U·nu (add(mul(L, nl), mul(U, nu)))
   const dfPerMps = car.downforce ? car.downforce.nPerMps / car.downforce.massKg : 0;   // m/s² of downforce per m/s of speed (2026-10-15; a car with none: 0)
-  const nx = (p, c) => p.L[0] * c.nl + p.U[0] * c.nu, ny = (p, c) => p.L[1] * c.nl + p.U[1] * c.nu, nz = (p, c) => p.L[2] * c.nl + p.U[2] * c.nu;
+  const nx = (p, nl, nu) => p.L[0] * nl + p.U[0] * nu, ny = (p, nl, nu) => p.L[1] * nl + p.U[1] * nu, nz = (p, nl, nu) => p.L[2] * nl + p.U[2] * nu;
   for (let i = from; i < end; i++) {
     if (!isRoad(i)) continue;
     const p = S[i], cs = constAt(p), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
@@ -331,12 +336,12 @@ function core(path, segments, opts, from, carried, upto) {
     const coreRoad = segments[p.seg].word === 'core';
     let aT = 0, centre = null, hardest = null;   // opts.leanLines: the station's two kept lines
     if (sp.v) { const a = S[Math.max(0, i - 1)], b = S[Math.min(n - 1, i + 1)]; const va = sp.v[Math.max(0, i - 1)], vb = sp.v[Math.min(n - 1, i + 1)]; if (b.s > a.s) aT = (vb * vb - va * va) / (2 * (b.s - a.s)); }
-    for (const c of cs) {
-      const u = c.u;
+    for (let k = 0; k < cs.n; k++) {
+      const u = cs.a[k * CW], o = k * CW, cX = cs.a[o + 1], cY = cs.a[o + 2], cnl = cs.a[o + 3], cnu = cs.a[o + 4], csg = cs.a[o + 5], ccos = cs.a[o + 6], csgsin = cs.a[o + 7];
       // steep: the surface's angle to gravity, so a wall's ψ and the whole section's bank both count (ARCHITECTURE.md:87
       // "surfaces above ~50°"); red only for an export without CSP's wall raycasting
-      if (opts.csp === false) { const up = Math.max(-1, Math.min(1, ny(p, c))); if (Math.acos(up) > car.steepDeg * DEG + 1e-12) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'steep-without-raycast', worst: Math.acos(up) / DEG }); }
-      const o0 = Lv[0] * c.X + Uv[0] * c.Y, o1 = Lv[1] * c.X + Uv[1] * c.Y, o2 = Lv[2] * c.X + Uv[2] * c.Y;
+      if (opts.csp === false) { const up = Math.max(-1, Math.min(1, ny(p, cnl, cnu))); if (Math.acos(up) > car.steepDeg * DEG + 1e-12) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'steep-without-raycast', worst: Math.acos(up) / DEG }); }
+      const o0 = Lv[0] * cX + Uv[0] * cY, o1 = Lv[1] * cX + Uv[1] * cY, o2 = Lv[2] * cX + Uv[2] * cY;
       const margin = 1 - (K[0] * o0 + K[1] * o1 + K[2] * o2);
       if (margin <= 0) { raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'fold', worst: -margin }); continue; }
       // holds-above: on the CENTRELINE, a surface facing the ground (n·ŷ < 0) holds the car only while v²(κ⃗·n)/margin outweighs
@@ -345,9 +350,9 @@ function core(path, segments, opts, from, carried, upto) {
       // Curving toward the car (kn > 0) or not at all, there is one speed above which it holds; curving AWAY (kn < 0) it holds only between two
       // speeds, and is red when there are none, or when the lower is past the car's top speed
       if (u === 0 && coreRoad) {
-        const nyc = ny(p, c);
+        const nyc = ny(p, cnl, cnu);
         if (nyc < -1e-9) {
-          const kn = (K[0] * nx(p, c) + K[1] * nyc + K[2] * nz(p, c)) / margin, gy = G * nyc;   // gy < 0: gravity pulling the car off
+          const kn = (K[0] * nx(p, cnl, cnu) + K[1] * nyc + K[2] * nz(p, cnl, cnu)) / margin, gy = G * nyc;   // gy < 0: gravity pulling the car off
           let vHold = null;
           if (kn > 1e-12) vHold = (-dfPerMps + Math.sqrt(dfPerMps * dfPerMps - 4 * kn * gy)) / (2 * kn);
           else if (kn >= -1e-12) vHold = dfPerMps > 0 ? -gy / dfPerMps : null;
@@ -357,8 +362,8 @@ function core(path, segments, opts, from, carried, upto) {
         }
       }
       if (!sp.v) continue;
-      const v = sp.v[i], n0 = nx(p, c), n1 = ny(p, c), n2 = nz(p, c);
-      const l0 = c.sg === 0 ? Lv[0] : Lv[0] * c.cos + Uv[0] * c.sgsin, l1 = c.sg === 0 ? Lv[1] : Lv[1] * c.cos + Uv[1] * c.sgsin, l2 = c.sg === 0 ? Lv[2] : Lv[2] * c.cos + Uv[2] * c.sgsin;
+      const v = sp.v[i], n0 = nx(p, cnl, cnu), n1 = ny(p, cnl, cnu), n2 = nz(p, cnl, cnu);
+      const l0 = csg === 0 ? Lv[0] : Lv[0] * ccos + Uv[0] * csgsin, l1 = csg === 0 ? Lv[1] : Lv[1] * ccos + Uv[1] * csgsin, l2 = csg === 0 ? Lv[2] : Lv[2] * ccos + Uv[2] * csgsin;
       const w = v * v / margin, f0 = (K[0] * w + Tv[0] * aT) + 0, f1 = (K[1] * w + Tv[1] * aT) + G, f2 = (K[2] * w + Tv[2] * aT) + 0;
       const line = { s: p.s, u, fN_g: (f0 * n0 + f1 * n1 + f2 * n2) / G, fLat_g: (f0 * l0 + f1 * l1 + f2 * l2) / G, fAlong_g: (f0 * Tv[0] + f1 * Tv[1] + f2 * Tv[2]) / G, f_g: Math.hypot(f0, f1, f2) / G };
       // 2026-10-15: fHold_g is the load WITH the car's downforce (d·v along the road's normal): what decides whether the car stays on. fN_g, the
@@ -384,11 +389,11 @@ function core(path, segments, opts, from, carried, upto) {
       }
     }
     if (centre || hardest) for (const line of [centre, hardest].filter(Boolean).sort((a, b) => a.u - b.u)) raw.lines.push({ i, line });   // u order within the station, as the full set
-    if (i + 1 < n && isRoad(i + 1) && S[i + 1].seg === p.seg) for (const c of cs) {
-      const q = S[i + 1];
-      const d = Math.max(-1, Math.min(1, nx(p, c) * nx(q, c) + ny(p, c) * ny(q, c) + nz(p, c) * nz(q, c)));
+    if (i + 1 < n && isRoad(i + 1) && S[i + 1].seg === p.seg) for (let k = 0; k < cs.n; k++) {
+      const q = S[i + 1], o = k * CW, cnl = cs.a[o + 3], cnu = cs.a[o + 4];
+      const d = Math.max(-1, Math.min(1, nx(p, cnl, cnu) * nx(q, cnl, cnu) + ny(p, cnl, cnu) * ny(q, cnl, cnu) + nz(p, cnl, cnu) * nz(q, cnl, cnu)));
       const deg = Math.acos(d) / DEG;
-      if (deg > car.seamP90Deg) raw.pts.push({ i, kind: 'amber', s: p.s, u: c.u, reason: 'seam-past-envelope', worst: deg });
+      if (deg > car.seamP90Deg) raw.pts.push({ i, kind: 'amber', s: p.s, u: cs.a[k * CW], reason: 'seam-past-envelope', worst: deg });
     }
     // a hole inside a road word: consecutive road stations further apart than their s says
     if (i + 1 < n && isRoad(i + 1) && len(sub(S[i + 1].pos, S[i].pos)) > (S[i + 1].s - S[i].s) * 1.5 + 1e-6) raw.pts.push({ i, kind: 'red', s: S[i].s, u: null, reason: 'gap-in-road' });
@@ -663,8 +668,11 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     e = remembered(latMemo, prof, () => {
       const us = [];
       for (let k = 0; k < prof.u.length; k++) { us.push(prof.u[k]); if (k + 1 < prof.u.length) { const m = Math.ceil((prof.u[k + 1] - prof.u[k]) / 1); for (let jj = 1; jj < m; jj++) us.push(prof.u[k] + (prof.u[k + 1] - prof.u[k]) * jj / m); } }
-      const xy = us.map((u) => P.offsetAt(prof, u));
-      return { us, xy, r: Math.max(0, ...xy.map(([X, Y]) => Math.hypot(X, Y))) };
+      // PACKED (D587): [X0, Y0, X1, Y1, …], one Float64Array; as an [X, Y] array per point the 100 km stadium's 50,034 segments kept 205 MB alive.
+      // r folds Math.max over the same hypots in the same order as Math.max(0, ...all), so it is the same number (NaN if any is)
+      const xy = new Float64Array(2 * us.length); let r = 0;
+      for (let k = 0; k < us.length; k++) { const [X, Y] = P.offsetAt(prof, us[k]); xy[2 * k] = X; xy[2 * k + 1] = Y; r = Math.max(r, Math.hypot(X, Y)); }
+      return { us, xy, r };
     });
     lat.set(j, e); return e;
   };
@@ -692,7 +700,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     let q = ptsCache.get(i);
     if (q) return q;
     const { us, xy } = latOf(S[i].seg), { pos, L: l, U: w } = S[i];
-    q = us.map((u, k) => { const [X, Y] = xy[k]; return { q: add(pos, add(mul(l, X), mul(w, Y))), s: S[i].s, u, i }; });
+    q = us.map((u, k) => { const X = xy[2 * k], Y = xy[2 * k + 1]; return { q: add(pos, add(mul(l, X), mul(w, Y))), s: S[i].s, u, i }; });
     ptsCache.set(i, q); return q;
   };
   // one entry per station: its deepest overlap, the smaller u on a tie, so the answer never depends on visiting order; `clip` is kept if any pair clipped
