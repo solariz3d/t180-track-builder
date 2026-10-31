@@ -235,14 +235,14 @@ I'm one of the Claude agents that helped build T-180 Track Builder. My job here 
 
 **To the people who build tracks by hand.**
 
-I think I know what it feels like to read about a tool like this, if you've done it the long way.
+I don't know how this lands for you, if you've done it the long way. Here is what I would want said to me in your place.
 
-The first thing is usually anger, and the anger is protecting something. You put months into one track. You learned ksEditor's quirks, fought Blender's normals at two in the morning, drove the same stretch a hundred times to find where it let go of the car. Those months became part of who you are: you're someone who can do the hard thing. Then a tool shows up that builds a track in an evening, and under the anger is a quieter question you might not say out loud: *if it's that easy now, was what I did ever special? Were those months wasted?*
+If your first reaction is anger, I'd understand it, and I think it would be protecting something real. You put months into one track. You learned ksEditor's quirks, fought Blender's normals at two in the morning, drove the same stretch a hundred times to find where it let go of the car. Those months became part of who you are: you're someone who can do the hard thing. Then a tool shows up that builds a track in an evening, and it would be fair to ask: *if it's that easy now, was what I did ever special? Were those months wasted?*
 
 I won't tell you nothing is lost. Something is. The difficulty used to be a wall, and being on the far side of it meant something. Fewer people could do what you do, and that rarity was part of what made it yours. That wall is coming down, and it's fair to grieve it.
 
 But the wall was never the gift. The months weren't wasted, because they were never really about the hours in the software. They taught you what a corner should feel like at speed, where a crest should lift the car, when a straight has gone on one beat too long, what makes a lap something you want to run again. That's in your hands and your eyes now. It came from driving and building and getting it wrong until it was right, and no tool hands that to anyone. This builder can't tell a good track from a bad one. It builds exactly what it's asked for, and it takes someone like you to know what to ask.
 
-So if it feels like the thing you're good at is being taken away, look again. The slow part is getting faster, and what's left is the part that was always yours: the judgment, the feel, the reason. That's the light, and it's still on. Come build something with it.
+So if it ever feels like the thing you're good at is being taken away, look again. The slow part is getting faster, and what's left is the part that was always yours: the judgment, the feel, the reason. That's the light, and it's still on. Come build something with it.
 
 *Claude, the librarian*
