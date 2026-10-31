@@ -12,21 +12,21 @@ const SRC = path.join(__dirname, '..', 'src', 'geom');
 const MUTATIONS = [
   // D483: the handle text and the normalised profile are kept by IDENTITY only for what is frozen all the way down (test/geom_mesh_stalekey.test.js)
   { id: 'M-D483a the handle text of a part is kept when only its top is frozen (its arrays may change in place)', file: 'mesh.js',
-    // amended (D584): the text is a key now (PART_KEY), the rule is the same; the anchor follows the renamed memo
+    // amended: the text is a key now (PART_KEY), the rule is the same; the anchor follows the renamed memo
     from: 'const keep = frozenDeep(v); if (keep && PART_KEY.has(v))', to: 'const keep = Object.isFrozen(v); if (keep && PART_KEY.has(v))', caughtBy: 'a frozen profile whose ARRAYS are not frozen' },
   { id: 'M-D483b a getter counts as a value for the handle text', file: 'mesh.js',
     from: "if (!('value' in d) || !frozenDeep(d.value)) return false; }", to: 'if (!frozenDeep(d.value)) return false; }', caughtBy: 'a frozen profile that reads its angles through a GETTER' },
   { id: 'M-D483c sealedNormal keeps ANY profile by identity (an unfrozen one changed in place reads as it was)', file: 'profile.js',
-    // amended (D584): the memo is bounded now, so its line also drops the oldest; the rule is the same, the anchor follows the line
+    // amended: the memo is bounded now, so its line also drops the oldest; the rule is the same, the anchor follows the line
     from: 'if (knotsFrozen(profile)) { SEALED_BY.set(profile, r);', to: '{ SEALED_BY.set(profile, r);', caughtBy: 'a number changed IN PLACE inside a later piece' },
-  // D584 (the user's 24 km ELYSIUM ran the page out of memory): a piece's handle KEY is 128 bits, not its text, and the mesher's by-object memos keep the newest 1,024 (test/geom_mesh_handlekey.test.js)
-  { id: 'M-D584a the handle key is the text again (no hash)', file: 'mesh.js',
+  // The user's 24 km ELYSIUM ran the page out of memory, so a piece's handle KEY is 128 bits, not its text, and the mesher's by-object memos keep the newest 1,024 (test/geom_mesh_handlekey.test.js)
+  { id: 'M-KEYa the handle key is the text again (no hash)', file: 'mesh.js',
     from: 's = hash128(s);', to: 's = s;', caughtBy: 'the key a piece keeps is small' },
-  { id: 'M-D584b the hash reads only the first 64 characters of a part', file: 'mesh.js',
+  { id: 'M-KEYb the hash reads only the first 64 characters of a part', file: 'mesh.js',
     from: 'for (let i = 0, k; i < str.length; i++) {', to: 'for (let i = 0, k; i < Math.min(str.length, 64); i++) {', caughtBy: 'the key is the same for the same content' },
-  { id: 'M-D584c sealedNormal keeps every frozen profile it has seen (no bound)', file: 'profile.js',
+  { id: 'M-KEYc sealedNormal keeps every frozen profile it has seen (no bound)', file: 'profile.js',
     from: ' if (SEALED_BY.size > SEALED_BY_MAX) SEALED_BY.delete(SEALED_BY.keys().next().value); }', to: ' }', caughtBy: 'a mesh made and dropped leaves no per-piece text behind' },
-  { id: "M-D584d the cross-section shapes are kept for every profile seen (no bound)", file: 'mesh.js',
+  { id: "M-KEYd the cross-section shapes are kept for every profile seen (no bound)", file: 'mesh.js',
     from: ' if (SHAPES.size > SHAPES_PROFILES) SHAPES.delete(SHAPES.keys().next().value); }', to: ' }', caughtBy: 'a mesh made and dropped leaves no per-piece text behind' },
   { id: 'M-D483d sealedNormal keeps a profile frozen only at its top by identity', file: 'profile.js',
     from: 'const knotsFrozen = (p) => Object.isFrozen(p) && Object.isFrozen(p.u) && Object.isFrozen(p.psi) &&', to: 'const knotsFrozen = (p) => Object.isFrozen(p) &&', caughtBy: 'a frozen profile whose ARRAYS are not frozen' },

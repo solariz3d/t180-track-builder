@@ -68,7 +68,7 @@ file in both places.
 - `bvh.js`: whole-surface checks (self-intersection, stacking) (`selfCheck`). `pitlane.js`: the pit lane's road (`buildPitLane`). `index.js`: the one require.
 
 **`src/validate/`, the checker.**
-- `index.js`: red, amber and info along the track, the speed profile and the lap (`validate`, `revalidate`, `lapOf`, `speedProfile`). *why: see header* Its per-segment memos (`constOf`, `latOf`) keep their figures packed in one Float64Array each, the heap a check keeps is pinned by `test/validate_heap.test.js` (D587).
+- `index.js`: red, amber and info along the track, the speed profile and the lap (`validate`, `revalidate`, `lapOf`, `speedProfile`). *why: see header* Its per-segment memos (`constOf`, `latOf`) keep their figures packed in one Float64Array each, the heap a check keeps is pinned by `test/validate_heap.test.js`.
 - `limits.js`: every number the checker uses, each with its source. `raygap.js`: gaps under the car's downforce ray (`rayGaps`). *why: see header*
 - `jumps.js`: the jump as a forward problem (`checkJump`, `minSpeed`). `bounds.js`: live limits for the sculpt handles (`handleBounds`).
 

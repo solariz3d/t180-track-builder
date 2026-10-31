@@ -1,12 +1,12 @@
 // validate_heap.test.js: node --test test/validate_heap.test.js   (each row runs the check in its own node process, about 15-40 s)
-// D587 (the validator's heap): what the track checker keeps alive after a check, measured in a fresh process the way the check worker runs it
+// The validator's heap: what the track checker keeps alive after a check, measured in a fresh process the way the check worker runs it
 // (app/validate-ui/checkjob.js: the PATH-ONLY track model, then the validation controller, leanLines, CSP on). The figure is V8's used heap PLUS
 // ArrayBuffer backing stores, after a full GC, above the model alone: a typed array over 64 bytes keeps its numbers outside the V8 heap, so a
 // heap-only figure (or --max-old-space-size) would pass a cut that only moved memory out of sight.
-// What held it (exo_memory/handback/p-d587-validator-heap-O_2026-10-31.md): the module's per-segment memos, not the findings. The cup blends'
+// What held it: the module's per-segment memos, not the findings. The cup blends'
 // constants (one object per u: ELYSIUM's 13,799 cross-sections kept 483 MB) and the stacked check's lateral points (an [X, Y] array per point: the
 // 100 km stadium's 50,034 segments kept 205 MB) are now one Float64Array each (src/validate/index.js constOf, latOf). Rows:
-//   1  the 100 km stadium (test/fixtures/stadium-100km.t180track, C's D583 synthetic: two straights and two R 1500 m bowl half circles, closed)
+//   1  the 100 km stadium (test/fixtures/stadium-100km.t180track, a synthetic lap: two straights and two R 1500 m bowl half circles, closed)
 //      keeps under STADIUM_CEILING_MB above the model after its check
 //   2  ELYSIUM (test/fixtures/elysium-2026-10-22.t180track), the user's cup track, keeps under ELYSIUM_CEILING_MB above the model after its check
 // The findings themselves are unchanged by the cut; that proof is byte-for-byte over ELYSIUM, the nine F fixtures and the stadium (the hand-back §3).

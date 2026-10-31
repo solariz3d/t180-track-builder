@@ -152,7 +152,7 @@ const isCoreFlight = (segments, j) => { const g = segments[j], n = segments[j + 
 // reuses an unchanged piece's segments FROZEN (src/core/adapter.js toSegments `cache`), and on his 6 km track the checker spent about 4 of every
 // placement's seconds recomputing, for every segment, what only its cross-section decides: its normalized profile, the per-u constants (constOf),
 // the lateral points of the stacked check (latOf), and a cup blend's profile at a station. Each is now remembered per frozen segment (or per the
-// frozen profile made from one), and frozen itself, so a reader that writes to a shared one throws (D587: except the packed figures, a Float64Array JavaScript cannot freeze; the object holding it is). A segment that is not frozen (every other
+// frozen profile made from one), and frozen itself, so a reader that writes to a shared one throws (except the packed figures, a Float64Array JavaScript cannot freeze; the object holding it is). A segment that is not frozen (every other
 // caller's) is computed every time, exactly as before. The arithmetic is the same calls on the same inputs, so every figure is bit-identical.
 const deepFreeze = (o) => { if (o && typeof o === 'object' && !ArrayBuffer.isView(o) && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) deepFreeze(o[k]); } return o; };
 const normMemo = new WeakMap(), constMemo = new WeakMap(), latMemo = new WeakMap(), blendMemo = new WeakMap();
@@ -301,7 +301,7 @@ function core(path, segments, opts, from, carried, upto) {
   const perSeg = new Map();
   // computed on a frozen copy (P.sealed): a cup blend's profile is made fresh at each station, and read at every one of its u, so offsetAt's running sums
   // apply instead of summing from the centre each time (the same numbers; on a 25 km cup track this was most of the check)
-  // PACKED (D587): { n, a } with a = [u, X, Y, nl, nu, sg, cos, sgsin] for each u in turn (CW figures per u), one Float64Array per cross-section. As one
+  // PACKED: { n, a } with a = [u, X, Y, nl, nu, sg, cos, sgsin] for each u in turn (CW figures per u), one Float64Array per cross-section. As one
   // object per u, the cup blends' constants kept 483 MB alive on ELYSIUM (13,799 cross-sections); a Float64Array holds the same doubles, so every figure is bit-identical
   const constOf = (prof) => remembered(constMemo, prof, () => { const fp = P.sealed(prof), m = fp.u.length, a = new Float64Array(m * CW);
     for (let k = 0; k < m; k++) { const u = fp.u[k], [X, Y] = P.offsetAt(fp, u), [nl, nu] = P.normalAt(fp, u), psi = P.psiAt(fp, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0, o = k * CW;
@@ -668,7 +668,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     e = remembered(latMemo, prof, () => {
       const us = [];
       for (let k = 0; k < prof.u.length; k++) { us.push(prof.u[k]); if (k + 1 < prof.u.length) { const m = Math.ceil((prof.u[k + 1] - prof.u[k]) / 1); for (let jj = 1; jj < m; jj++) us.push(prof.u[k] + (prof.u[k + 1] - prof.u[k]) * jj / m); } }
-      // PACKED (D587): [X0, Y0, X1, Y1, …], one Float64Array; as an [X, Y] array per point the 100 km stadium's 50,034 segments kept 205 MB alive.
+      // PACKED: [X0, Y0, X1, Y1, …], one Float64Array; as an [X, Y] array per point the 100 km stadium's 50,034 segments kept 205 MB alive.
       // r folds Math.max over the same hypots in the same order as Math.max(0, ...all), so it is the same number (NaN if any is)
       const xy = new Float64Array(2 * us.length); let r = 0;
       for (let k = 0; k < us.length; k++) { const [X, Y] = P.offsetAt(prof, us[k]); xy[2 * k] = X; xy[2 * k + 1] = Y; r = Math.max(r, Math.hypot(X, Y)); }
