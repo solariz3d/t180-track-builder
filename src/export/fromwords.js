@@ -78,6 +78,7 @@ const PitLane = require('./pitlane.js');
 const PitBoxes = require('./pitboxes.js');
 const { withTextureSet } = require('../texture/set.js');
 const { withUnderskin } = require('./underskin.js');
+const { withApron, APRON_WIDTH_M } = require('./apron.js');   // D572: the edge apron (src/export/apron.js)
 const { withCatch, catchCells, rangesOfAmber, CATCH_OFFSET_M } = require('./catch.js');   // D341: a physical catch under the road (src/export/catch.js)
 const { withGripKeys } = require('./gripkeys.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
@@ -300,7 +301,13 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
     const sA = Math.min(...catchChosen.map((k) => mesh.cells[k].s0)), sB = Math.max(...catchChosen.map((k) => mesh.cells[k].s1));
     warnings.push(`catch: a second road surface ${CATCH_OFFSET_M} m under the road on ${catchChosen.length} cells, s ${sA.toFixed(0)}–${sB.toFixed(0)} m (${o.underCatch === 'all' ? 'all road' : Array.isArray(catchMode) && o.underCatch !== undefined && o.underCatch !== 'loaded' ? 'the ranges given' : 'where the load stays over 55 g for more than 0.5 s'}); it is a second chance for a body that gets through the road, untested in AC`);
   }
-  const scene = withGripKeys(withCatch(withUnderskin(boxed, mesh, segs), mesh, segs, catchMode), mesh, segs);
+  // D572: the edge apron outside every open road edge, joined to the skin's edge so the side gap is closed (src/export/apron.js): `edgeApronM` its width across, default
+  // APRON_WIDTH_M; 0 closes the gap with a side face only. LAST, after the grip keys, so each apron takes its own cell's surface (1ROAD_ or 1GRIPnnn_); it is appended after
+  // everything, so the road cells keep their places. Not on the pit lane's side over the lane's span, where the lane and its infill join the road
+  const keyed = withGripKeys(withCatch(withUnderskin(boxed, mesh, segs), mesh, segs, catchMode), mesh, segs);
+  const laneSpan = pit && doc.pitLane ? { side: doc.pitLane.side, s0: pit.lane.joins.leave.s, s1: pit.lane.joins.rejoin.s } : null;
+  let scene;
+  try { scene = withApron(keyed, mesh, segs, { widthM: o.edgeApronM === undefined ? APRON_WIDTH_M : o.edgeApronM, lane: laneSpan }); } catch (e) { throw new ExportError('BAD_OPTION', e.message); }
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);
