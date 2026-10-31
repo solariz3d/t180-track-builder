@@ -2,7 +2,7 @@
 //
 //   validate(path, segments, opts) -> { speed, lines, red, amber, info, jumps, lap, notChecked }
 //
-// `path` is C's buildPath output (samples with s, seg, pos, T, L, U, kvec); `segments` is A's resolve output (kind,
+// `path` is buildPath output (samples with s, seg, pos, T, L, U, kvec); `segments` is resolve output (kind,
 // word, speed, profile). Pure and deterministic: no clock, no randomness, no I/O.
 //
 // THE LOAD, per lateral line u (ARCHITECTURE.md:68-69). A profile point sits at o(u) = X·L + Y·U from the centre
@@ -28,19 +28,19 @@ const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const DEG = Math.PI / 180;
 const { rayGaps } = require('./raygap.js');
 
-// THE ROLL RATE (D225, seal V7 and S3): the angle between the surface normal U at s − 10 m and at s + 10 m, both projected onto the plane normal to T(s), over the 20 m chord (°/m).
+// THE ROLL RATE: the angle between the surface normal U at s − 10 m and at s + 10 m, both projected onto the plane normal to T(s), over the 20 m chord (°/m).
 // The bar is MEASURED, not derived: RED above 1.2144°/m (the maximum over the whole track B lap, 8,585 windows, a lap the user says "flows so smooth … at max speed"),
 // AMBER above 0.9338°/m (the maximum over its inverted words alone, 175 windows). It is read at a 20 m chord because the 4 m chord of that read is facet noise (4.26°/m on plain road).
-// A full 360° of bank passes the bar only over about 450 m (amber until 600 m); over 300 m it is red (1.8°/m). See FINDINGS and ref 09 §10 for the command and the read's sha256.
+// A full 360° of bank passes the bar only over about 450 m (amber until 600 m); over 300 m it is red (1.8°/m).
 const ROLL_RED_DEG_M = 1.2144, ROLL_AMBER_DEG_M = 0.9338, ROLL_CHORD_M = 20;
-// a CLOSED tube narrower than this cannot hold the chase camera's eye: the eye is 3 m up the road's U, the ceiling of a circle of circumference w is 2R = w/π above the floor, and the seal's margin is 0.1 m (X2 i: the eye inside R − 0.1 of the axis), so w/π must exceed 3.1: w > 9.74 m (3π = 9.43 would put the eye ON the ceiling; the librarian's first ruling had that, corrected in the D225 fixes round). REFUSED by name.
+// a CLOSED tube narrower than this cannot hold the chase camera's eye: the eye is 3 m up the road's U, the ceiling of a circle of circumference w is 2R = w/π above the floor, and the margin is 0.1 m (the eye inside R − 0.1 of the axis), so w/π must exceed 3.1: w > 9.74 m (3π = 9.43 would put the eye ON the ceiling, a figure once used here and corrected). REFUSED by name.
 const TUBE_MIN_W = 9.74;
 // the cap on the total edge angle of a non-tube edge piece (CUP_MAX, document.js), and of an open tube with an edge (t/2 + e)
 const EDGE_CAP_DEG = 150, TUBE_EDGE_CAP_DEG = 180;
-// BANK, CUP AND EDGE STACKED (D463; the user, 2026-10-25, on TEST 10: the car "clips and becomes unstable at higher speeds and Gs into the curve, without the side flip
+// BANK, CUP AND EDGE STACKED (the user, 2026-10-25, on TEST 10: the car "clips and becomes unstable at higher speeds and Gs into the curve, without the side flip
 // ups it didnt happen", so warn where "banking, plus cupping, plus extra banking with the side values" stack). AMBER, never red: nothing is refused or changed.
-// THE MEASURE is the cross-slope change under the car: the most the road's angle across it changes over STACK_CAR_W_M (the Mach 6's collider box is 2.0 m wide,
-// docs/research/04_ac_physics_drivability.md §5), read on the side the bank raises, over that side's outer half, where the car is carried at speed and load. On TEST 10
+// THE MEASURE is the cross-slope change under the car: the most the road's angle across it changes over STACK_CAR_W_M (the Mach 6's collider box is 2.0 m
+// wide), read on the side the bank raises, over that side's outer half, where the car is carried at speed and load. On TEST 10
 // it reads 13.9-19.0° on his stacked turns and at most 4.3° on the same turns with the edges at 0 (which rode fine); STACK_CURL_DEG sits between, a judgment, not a measurement.
 // The roll the car sits in was not chosen: his bank of 60° alone with the edges at 0 (s 2200-2300) reads the same 60° as his stacked turn at s 3850-4600.
 // IT IS A STACK only where all three are there at the station: the bank raises that side by STACK_MIN_DEG or more; the road's own cup rises there (its angle at half the
@@ -86,7 +86,7 @@ function rollRates(S, isRoad, closed, L) {
 }
 
 /**
- * D341: the loads held. For each station the hardest line's load (the centre line and the hardest other line are all that leanLines keeps; with every line kept it is the same maximum);
+ * the loads held. For each station the hardest line's load (the centre line and the hardest other line are all that leanLines keeps; with every line kept it is the same maximum);
  * a run of consecutive road stations over car.sustainedG that lasts more than car.sustainedS seconds at the speed model's speeds is amber at every station of it. Read from the whole
  * track on every call, as the roll rate is, so revalidate equals validate. On a closed lap (wrapL, its length, > 0) a run wraps the lap's seam; a run ends at a gap in the road.
  */
@@ -145,7 +145,7 @@ const SRC = Object.freeze({
 // The landing should expect that step, not only the fall. Its size is not given: the research's figure (about 2.4 g at
 // 100 m/s) rests on UNVERIFIED arithmetic (the script's speed unit), so only the fact and its source are carried.
 const DOWNFORCE_STEP = (car) => ({ aheadM: car.downforceRay.aheadM, note: `the downforce drops to zero as the car's downforce ray, ${car.downforceRay.aheadM} m ahead, passes the lip, and returns in one step when it finds the landing (docs/research/04_ac_physics_drivability.md §4)` });
-/** D243, D258: segment j is the equation core's FLIGHT (src/core/adapter.js): word 'core', part 'gap', carrying its pose (to), followed by road (the landing the user placed). */
+/** segment j is the equation core's FLIGHT (src/core/adapter.js): word 'core', part 'gap', carrying its pose (to), followed by road (the landing the user placed). */
 const isCoreFlight = (segments, j) => { const g = segments[j], n = segments[j + 1]; return g.word === 'core' && g.part === 'gap' && !!g.to && !!n && n.kind === 'road'; };   // g.to: the adapter writes a flight's pose on its gap (a planted hole has none)
 
 // WHAT DEPENDS ON A FROZEN SEGMENT ALONE IS COMPUTED ONCE (2026-10-12, the user: "a solid lag when putting the pieces down"). The window's shell
@@ -175,7 +175,7 @@ function segProfiles(segments) {
 function speedProfile(path, segments, car, opts) {
   const S = path.samples, n = S.length;
   const road = segments.filter((g) => g.kind !== 'gap');
-  // D256 (the user, "it should always be maxed out"): opts.fullSpeed fills an OPEN track at the lap sim's cap; a closed one falls through
+  // the user: "it should always be maxed out": opts.fullSpeed fills an OPEN track at the lap sim's cap; a closed one falls through
   // to its ghost lap below, the speed the export judges it at. An explicit opts.designSpeed still wins
   const fill = Number.isFinite(opts.designSpeed) && opts.designSpeed > 0 ? opts.designSpeed : opts.fullSpeed === true && !path.closed ? kmh(car.vmaxKmh) : null;
   const own = (g) => (Number.isFinite(g.speed) && g.speed > 0 ? g.speed : fill);
@@ -209,7 +209,7 @@ function speedProfile(path, segments, car, opts) {
 
 /** Group point findings into ranges along s: same reason, consecutive stations. */
 /**
- * D446: the edges whose downforce-ray probe met another pass of the road (src/validate/raygap.js opts.near), within car.nearEdgeM, as INFORMATION 'near-touch':
+ * the edges whose downforce-ray probe met another pass of the road (src/validate/raygap.js opts.near), within car.nearEdgeM, as INFORMATION 'near-touch':
  * one finding per place (edges within ranges()'s merge distance of each other), worst = the CLOSEST edge there in metres (ranges() keeps the largest worst,
  * which for a distance would be the farthest), u at that edge.
  */
@@ -250,27 +250,27 @@ function ranges(list, step) {
 //                           surface point within 2 m of its own: a SPATIAL reach of r_i + r_j + 2 m around it (r the
 //                           station's half-section, at most 15.9 m for the built-in words, the bowl; so ≤ 33.8 m), at
 //                           ANY s, since a new piece can land on road laid kilometres earlier. A hit marks both stations,
-//                           so an old road that a new piece lands on is reported too (in info since D432); an old station whose deepest stack
+//                           so an old road that a new piece lands on is reported too (in info); an old station whose deepest stack
 //                           was on a changed one is re-derived. The work is the stations near the changed ones, not the
 //                           track (stacked() below)
 //   · jumps                 recomputed whole: a jump's landing depends on road up to its landing search after its flight
 //                           (150 m, or the jump's own landing ramp when that is longer), so a word placed within that of
 //                           an earlier jump can change it; jumps are few, and each costs at most its landing search
-//   · self-intersection     not computed here: it is buildMesh's (C's BVH between cells), passed in as opts.folds
+//   · self-intersection     not computed here: it is buildMesh's (BVH between cells), passed in as opts.folds
 //   · the speed             v(s) is O(stations) per call (a design speed per word, or the closed loop's ghost lap)
 //   · the lap               only on a closed path, and closing re-validates everything (C spreads the closing twist
 //                           along the whole loop, so every frame changes: docs/INTERFACES.md §4). opts.lap === false
 //                           defers its proof (a drag tick); lapOf() gives it afterwards
-// DOWNSTREAM of a sculpt every station is recomputed, per station: a sculpt moves what follows it (C's rigid re-placement
+// DOWNSTREAM of a sculpt every station is recomputed, per station: a sculpt moves what follows it (rigid re-placement
 // turns and shifts it about world up), and a full validate of the moved path reads the moved coordinates, so carrying the
 // old figures would differ from it in rounding. Per station this is cheap (the profile's constants are per segment);
-// what made a sculpt cost seconds was the stacking check measuring every surface point of the whole track (D177).
+// what made a sculpt cost seconds was the stacking check measuring every surface point of the whole track.
 function core(path, segments, opts, from, carried, upto) {
   if (!path || !Array.isArray(path.samples) || !Array.isArray(segments)) throw new Error('validate: needs a path with samples and the segments');
   const car = { ...MACH6, ...(opts.car || {}) };
   const S = path.samples, n = S.length;
   if (n < 2) throw new Error('validate: the path needs at least two samples');
-  // THE WINDOW (D179 drag budget): stations from `end` on are PENDING, not checked. `end` is n unless the caller bounds
+  // THE WINDOW (drag budget): stations from `end` on are PENDING, not checked. `end` is n unless the caller bounds
   // it (revalidate's opts.uptoS); the result says where the pending stretch starts (pendingFrom), so no one reads it as clean
   const end = upto === undefined ? n : Math.max(Math.min(from, n), Math.min(n, upto));
   const profiles = segProfiles(segments);
@@ -287,18 +287,18 @@ function core(path, segments, opts, from, carried, upto) {
     for (const r of carried.segReds) if (r.j < cutSeg) raw.segReds.push(r);
     // a carried stack stays only if BOTH its station and its deepest partner lie before the cut; a station whose deepest
     // partner was in the changed part is re-queried against every point (an edit can remove what it was stacked on).
-    // D498 item 2: the same for the partner that set its least room overhead (lowP) and the one that set its clip (clipP): mark() only lowers `low` and only
+    // the same for the partner that set its least room overhead (lowP) and the one that set its clip (clipP): mark() only lowers `low` and only
     // sets `clip`, so carried whole they outlived a road that had moved away (a low-overhead amber with nothing over the road any more)
     const before = (q) => q === undefined || q < from;
     for (const [k, e] of carried.stacked) { if (e.i >= from) continue; if (e.p < from && before(e.lowP) && before(e.clipP)) raw.stacked.set(k, { ...e }); else rederive.add(e.i); }
   }
 
   // ── loads per lateral line, folds, seams, holes: stations from `from` on ──
-  // What depends only on the profile and u (offset, normal, ψ) is computed once per segment (D177: this loop allocated
+  // What depends only on the profile and u (offset, normal, ψ) is computed once per segment (this loop allocated
   // several vectors per station and line); each station then combines it with its own frame, in the same arithmetic
   // order as the vector helpers above, so every figure is bit-identical to the per-station form it replaced.
   const perSeg = new Map();
-  // D343: computed on a frozen copy (P.sealed): a cup blend's profile is made fresh at each station, and read at every one of its u, so offsetAt's running sums
+  // computed on a frozen copy (P.sealed): a cup blend's profile is made fresh at each station, and read at every one of its u, so offsetAt's running sums
   // apply instead of summing from the centre each time (the same numbers; on a 25 km cup track this was most of the check)
   const constOf = (prof) => remembered(constMemo, prof, () => { const fp = P.sealed(prof); return fp.u.map((u) => { const [X, Y] = P.offsetAt(fp, u), [nl, nu] = P.normalAt(fp, u), psi = P.psiAt(fp, u), sg = u > 0 ? 1 : u < 0 ? -1 : 0;
     return { u, X, Y, nl, nu, sg, cos: Math.cos(psi), sgsin: sg * Math.sin(psi) }; }); });
@@ -308,7 +308,7 @@ function core(path, segments, opts, from, carried, upto) {
     c = constOf(profiles[j]);
     perSeg.set(j, c); return c;
   };
-  // a segment that carries a BLEND (the cup's) has a different cross-section at every station: the blend is evaluated at the station (D190),
+  // a segment that carries a BLEND (the cup's) has a different cross-section at every station: the blend is evaluated at the station,
   // so the loads, the folds and the steepness read the road as the mesh draws it, not the blend's target for the whole segment
   const segS0 = new Array(segments.length);
   for (let i = 0; i < n; i++) if (segS0[S[i].seg] === undefined) segS0[S[i].seg] = S[i].s;
@@ -325,7 +325,7 @@ function core(path, segments, opts, from, carried, upto) {
   for (let i = from; i < end; i++) {
     if (!isRoad(i)) continue;
     const p = S[i], cs = constAt(p), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
-    // D256 (suite reds): the two checks the user's decision added judge the EQUATION CORE's own roads only (word 'core', src/core/adapter.js), as the
+    // the two checks the user's decision added judge the EQUATION CORE's own roads only (word 'core', src/core/adapter.js), as the
     // roll-rate bar does below: the paused piece builder's word documents are not newly judged by them (its S phrase and its starter chain lift off at their
     // own tempo on the centreline, measured and flagged in the hand-back, never judged before)
     const coreRoad = segments[p.seg].word === 'core';
@@ -339,7 +339,7 @@ function core(path, segments, opts, from, carried, upto) {
       const o0 = Lv[0] * c.X + Uv[0] * c.Y, o1 = Lv[1] * c.X + Uv[1] * c.Y, o2 = Lv[2] * c.X + Uv[2] * c.Y;
       const margin = 1 - (K[0] * o0 + K[1] * o1 + K[2] * o2);
       if (margin <= 0) { raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'fold', worst: -margin }); continue; }
-      // D256 holds-above: on the CENTRELINE, a surface facing the ground (n·ŷ < 0) holds the car only while v²(κ⃗·n)/margin outweighs
+      // holds-above: on the CENTRELINE, a surface facing the ground (n·ŷ < 0) holds the car only while v²(κ⃗·n)/margin outweighs
       // gravity's pull off it, i.e. above v = sqrt(−g(n·ŷ) / ((κ⃗·n)/margin)) at a steady speed. Information in km/h; red where no speed holds
       // 2026-10-15, THE DOWNFORCE COUNTS (limits.js MACH6.downforce): d·v more presses the car on, so it holds where kn·v² + d·v + g·(n·ŷ) ≥ 0.
       // Curving toward the car (kn > 0) or not at all, there is one speed above which it holds; curving AWAY (kn < 0) it holds only between two
@@ -370,13 +370,13 @@ function core(path, segments, opts, from, carried, upto) {
       if (!opts.leanLines) raw.lines.push({ i, line });
       else if (u === 0) centre = line;
       else if (!hardest || line.fN_g > hardest.fN_g) hardest = line;
-      // D256: the centreline lift-off on an OPEN track (a closed one has it in the lap proof below, so it is not counted twice)
+      // the centreline lift-off on an OPEN track (a closed one has it in the lap proof below, so it is not counted twice)
       if (!path.closed && coreRoad && u === 0 && line.fHold_g < 0) raw.pts.push({ i, kind: 'red', s: p.s, u, reason: 'leaves-surface', worst: -line.fHold_g });
       if (line.fN_g > car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-above-proven', worst: line.fN_g });
       else if (line.fN_g >= car.suspensionStopG) raw.pts.push({ i, kind: 'info', s: p.s, u, reason: 'on-the-stops', worst: line.fN_g });
-      // D517 (D515's rules 2 and 3): at chassisG or more, up to the proven line, the car rides on its chassis: AMBER, a limit known to hold (limits.js)
+      // at chassisG or more, up to the proven line, the car rides on its chassis: AMBER, a limit known to hold (limits.js)
       if (line.fN_g >= car.chassisG && line.fN_g <= car.provenG) raw.pts.push({ i, kind: 'amber', s: p.s, u, reason: 'load-on-the-chassis', worst: line.fN_g });
-      // D517 (D515's rule 5): on a surface tilted past wallSwerve.tiltDeg, the line's curvature in the road's plane (κ⃗·l over the margin, about dθ/ds·sin φ
+      // on a surface tilted past wallSwerve.tiltDeg, the line's curvature in the road's plane (κ⃗·l over the margin, about dθ/ds·sin φ
       // for a climb change on a wall) asks the car sideways; where that is over sideG and the load into the road is under holdG, AMBER, worst the sideways g
       if (car.wallSwerve && n1 < Math.cos(car.wallSwerve.tiltDeg * DEG)) {
         const side = Math.abs(K[0] * l0 + K[1] * l1 + K[2] * l2) * w / G;
@@ -399,10 +399,10 @@ function core(path, segments, opts, from, carried, upto) {
   // the change, so the old head (whose gap exemption ends when it stops being the head) is always re-checked
   const fromSeg = S[Math.min(from, n - 1)].seg, lastSeg = S[n - 1].seg;
   raw.fromSeg = fromSeg;
-  // each segment's first and last station, in one pass (D177: this was a scan of every station per segment)
+  // each segment's first and last station, in one pass (this was a scan of every station per segment)
   const firstOf = new Array(segments.length).fill(-1), lastOf = new Array(segments.length).fill(-1);
   for (let i = 0; i < n; i++) { const j = S[i].seg; if (firstOf[j] < 0) firstOf[j] = i; lastOf[j] = i; }
-  // a cup's joint (legacy <-> cup, the lap seam) or any joint inside a cup whose curve steps more than 1 mm (D190 R3, the chair's ruling (c)): red, so
+  // a cup's joint (legacy <-> cup, the lap seam) or any joint inside a cup whose curve steps more than 1 mm: red, so
   // the panel never reads "0 red · lap proved" over a cliff. Word documents' joints are unchanged (jointSteps looks only where a cup is).
   const jointStep = new Map(P.jointSteps(segments, path.closed).filter((x) => x.m > 1e-3).map((x) => [x.j, x]));
   segments.forEach((g, j) => {
@@ -417,7 +417,7 @@ function core(path, segments, opts, from, carried, upto) {
       if (cap !== null && edgeDeg > cap + 1e-3) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'edge-past-cap', worst: edgeDeg });
     }
     // a gap that is not a jump is a hole; the open head is exempt (INTERFACES §4: "no 'gap in road' red at the head"). A jump is the word 'jump',
-    // or (D243) the equation core's FLIGHT: a gap the adapter writes as part 'gap' of word 'core' with its own landing ramp next (src/core/adapter.js
+    // or the equation core's FLIGHT: a gap the adapter writes as part 'gap' of word 'core' with its own landing ramp next (src/core/adapter.js
     // toSegments). Its gap is intended; any other gap, the core's included, is still a hole
     if (g.kind === 'gap' && g.word !== 'jump' && !isCoreFlight(segments, j) && !(!path.closed && j === lastSeg)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'gap-in-road' });
     if (g.kind !== 'gap' && g.word === 'wall-ride' && /^WALL/i.test(profiles[j].material)) raw.segReds.push({ j, s: s0, s1, u: null, reason: 'wall-ride-from-wall-object' });
@@ -433,7 +433,7 @@ function core(path, segments, opts, from, carried, upto) {
     for (const f of opts.folds) if (end === n || f.s < S[end].s) red.push({ s: f.s, u: f.u == null ? null : f.u, reason: f.other ? 'self-intersection' : 'fold', worst: f.margin == null ? null : -f.margin });
   } else notChecked.push('self-intersection: needs buildMesh folds[] (a BVH between cells, ARCHITECTURE.md:58); pass opts.folds');
   // gaps in the PHYSICS road the downforce ray can fall into (raygap.js): needs the built road, which the export has
-  // D446: measured round a closed lap, and an edge whose probe met only ANOTHER pass is no gap; it is kept as a near-touch, reported in info below
+  // measured round a closed lap, and an edge whose probe met only ANOTHER pass is no gap; it is kept as a near-touch, reported in info below
   const nearRaw = [];
   if (Array.isArray(opts.roadMesh)) {
     for (const g of rayGaps(opts.roadMesh, S, car.downforceRay, { lapM: path.closed ? (path.lengthM || (S[n - 1].s - S[0].s)) : null, near: nearRaw })) if (g.s != null && (end === n || g.s < S[end].s)) red.push({ s: g.s, u: g.u, reason: 'downforce-ray-gap', worst: g.widthM });
@@ -449,15 +449,15 @@ function core(path, segments, opts, from, carried, upto) {
     if (q.rate > ROLL_RED_DEG_M) red.push({ s: q.s, u: null, reason: 'roll-rate', worst: q.rate });
     else if (q.rate > ROLL_AMBER_DEG_M) rollAmber.push({ s: q.s, u: null, reason: 'roll-rate', worst: q.rate });
   }
-  // D432: two passes closer than car.stackedM are INFORMATION, not red. The user, 2026-10-22: "the tracks can be under 2m apart as long as the geometry
+  // two passes closer than car.stackedM are INFORMATION, not red. The user, 2026-10-22: "the tracks can be under 2m apart as long as the geometry
   // isnt clipping into eachother". Geometry that clips is red as self-intersection (the mesh's folds, above); the stack is still found and reported in info
   const stackedInfo = [...raw.stacked.values()].map((e) => ({ s: e.s, u: e.u, reason: 'stacked-within-2m', worst: e.worst }));
   // where the stack CLIPS (stacked() below, the gap along the normal changes sign or is zero), it is red as self-intersection, but only where no mesh's folds were
   // given: with them, the mesh's own self-check (bvh.js) is the authority and has already said where the road meets itself
   if (!Array.isArray(opts.folds)) for (const e of raw.stacked.values()) if (e.clip) red.push({ s: e.s, u: e.u, reason: 'self-intersection', worst: null });
-  // D435: less than car.overheadM of room under another road (the gap along this road's normal) is AMBER, 'low-overhead', worst the room in metres; a clip is red above
+  // less than car.overheadM of room under another road (the gap along this road's normal) is AMBER, 'low-overhead', worst the room in metres; a clip is red above
   const overheadAmber = [...raw.stacked.values()].filter((e) => !e.clip && e.low < car.overheadM).map((e) => ({ s: e.s, u: e.u, reason: 'low-overhead', worst: e.low }));
-  // D463: bank, cup and edge stacked (stackCurl above), a whole-track read like the roll rate, so revalidate equals validate; worst is the change in degrees, u the raised side's rim
+  // bank, cup and edge stacked (stackCurl above), a whole-track read like the roll rate, so revalidate equals validate; worst is the change in degrees, u the raised side's rim
   const stackAmber = [], sinMin = Math.sin(STACK_MIN_DEG * DEG);
   for (let i = 0; i < end; i++) {
     if (!isRoad(i)) continue;
@@ -477,12 +477,12 @@ function core(path, segments, opts, from, carried, upto) {
     const first = firstOf[j]; if (first < 0) return;
     if (first >= end) { jumps.push({ s: S[first].s, id: g.id, pending: true, deferred: true, reason: 'not checked until the drag ends' }); return; }
     let last = first; while (last + 1 < n && S[last + 1].seg === j) last++;
-    // THE LIP is the station AT the gap's start, the end of the take-off road. C's buildPath samples every boundary and
+    // THE LIP is the station AT the gap's start, the end of the take-off road. buildPath samples every boundary and
     // gives it to the segment it starts, so there it is the flight's first station, S[first]; a path sampled the other
     // way (the boundary kept by the road before) has it at S[first − 1]. So the lip is whichever of the two sits at the
-    // gap's start s. (Until D170 it was always S[first − 1], which on buildPath's paths is one station BEFORE the edge:
+    // gap's start s. (It used to be always S[first − 1], which on buildPath's paths is one station BEFORE the edge:
     // every jump read one station step too long, a 12 m gap as 13 m at a 1 m step. test/validate_head.test.js pins it.)
-    // the gap's start s, from the segment lengths (on C's paths this is exactly path.starts[j].s). Where segments carry no
+    // the gap's start s, from the segment lengths (on paths this is exactly path.starts[j].s). Where segments carry no
     // length it is NaN, and the older rule (the road's last station) stands, right for a path that keeps the boundary on
     // the road before.
     const sGap = S[0].s + segments.slice(0, j).reduce((a, x) => a + x.length, 0);
@@ -493,7 +493,7 @@ function core(path, segments, opts, from, carried, upto) {
     // THE LANDING SEARCH: 150 m of road past the landing lip (opts.landingSearchM), and never less than the jump's OWN
     // landing ramp, the road resolve sized to catch both measured falls at the design speed (resolve.js landingRamp). A
     // search shorter than the ramp read a touchdown ON the ramp as a miss: the measured 81 m jump at 755 km/h comes down
-    // about 152 m past the lip, on a 162 m ramp (the ripple, p-d182-ripple-E; test/validate_jumps.test.js).
+    // about 152 m past the lip, on a 162 m ramp (the ripple; test/validate_jumps.test.js).
     const own = segments[j + 1] && segments[j + 1].part === 'land' && segments[j + 1].id === g.id ? segments[j + 1].length : 0;   // a word jump's own ramp (the core's free jump has none)
     const searchM = Math.max(opts.landingSearchM || 150, own);
     const landingRoad = [];
@@ -501,8 +501,8 @@ function core(path, segments, opts, from, carried, upto) {
     const v = sp.v ? sp.v[take] : null;
     // A landing lip NOT AHEAD of the take-off lip (a measured gap ≤ 0: the flight would go straight up or backwards) has
     // no flight to check. It is RED, with that reason, and never a throw: validation runs under the user's hand, and a
-    // throw there is a crash path (D179: checkJump threw on it, and buildExport passed the throw straight through)
-    // D258, THE FREE JUMP (the equation core's flight): the user placed the landing and tunes it by driving (the user: "through testing in the game trial
+    // throw there is a crash path (checkJump threw on it once, and buildExport passed the throw straight through)
+    // THE FREE JUMP (the equation core's flight): the user placed the landing and tunes it by driving (the user: "through testing in the game trial
     // and error driving it themselves"), so nothing is computed about where the car lands: no arcs, no landing zone, no reach. Its gap is intended (above).
     // A landing placed BEHIND its take-off is a WARNING, never a red: he put it there
     if (isCoreFlight(segments, j)) {
@@ -519,7 +519,7 @@ function core(path, segments, opts, from, carried, upto) {
     jumps.push({ s: A.s, id: g.id, speed: v, ...r, downforceStep: DOWNFORCE_STEP(car) });
   });
 
-  // ── the open end and the landings (D170, the librarian's item 3, 2026-09-27) ──
+  // ── the open end and the landings ──
   // An OPEN end must sit on road. A head that is a jump's flight is over nothing: a hole at the head (ARCHITECTURE.md:82).
   // The open-head exemption above is for a gap word that is still being placed; a jump's flight never ends on road by
   // itself, so it is red until a landing is there (the jump word's own landing ramp, or the next word).
@@ -528,7 +528,7 @@ function core(path, segments, opts, from, carried, upto) {
     red.push({ s: S[first].s, s1: S[n - 1].s, u: null, reason: 'head-in-the-air' });
   }
   // With a known take-off speed, the landing road should catch BOTH landings (ARCHITECTURE.md:75-78; jumps.js). A missed one is AMBER, a WARNING
-  // (D250, the user: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): it never
+  // (the user: "the jumps are going to have to be tested by the user through trial and error driving it in assetto themselves"): it never
   // blocks an export or an install. `worst` is the heaviest fall that misses. A gap with NO landing ramp is still red above (gap-in-road, a hole).
   for (const jp of jumps) {
     if (jp.pending || !Number.isFinite(jp.speed)) continue;
@@ -537,7 +537,7 @@ function core(path, segments, opts, from, carried, upto) {
   }
 
   // ── the lap (ARCHITECTURE.md:88-89) ──
-  // opts.lap === false DEFERS the proof (D177: "the lap proof runs on demand or debounced, NEVER on every drag tick"):
+  // opts.lap === false DEFERS the proof (the lap proof runs on demand or debounced, NEVER on every drag tick):
   // the result says so, and lapOf() gives the proof from the result afterwards, the same as it would have been
   let lap;
   if (!path.closed) lap = { ok: null, reason: 'open' };
@@ -558,7 +558,7 @@ function core(path, segments, opts, from, carried, upto) {
 }
 
 /** The ghost lap's proof on a closed loop: its time, its slowest speed, and every place the lap would fail. */
-// D250: a jump's REACH (a landing the car flies past, or one too deep below the take-off to reach) is a WARNING, `warn`, not a reason the lap fails:
+// a jump's REACH (a landing the car flies past, or one too deep below the take-off to reach) is a WARNING, `warn`, not a reason the lap fails:
 // the user tunes jumps by driving them. The lap still fails (`where`) on a stall, a leave of the surface, or a jump whose landing lip is not ahead.
 function proveLap(S, isRoad, v, lines, jumps) {
   const n = S.length, where = [], warn = [];
@@ -570,7 +570,7 @@ function proveLap(S, isRoad, v, lines, jumps) {
   }
   for (const l of lines) { const hold = l.fHold_g !== undefined ? l.fHold_g : l.fN_g; if (l.u === 0 && hold < 0) where.push({ s: l.s, reason: 'leaves-surface', fN_g: hold }); }   // with the downforce (2026-10-15)
   for (const jp of jumps) {
-    if (jp.pending || jp.free) continue;   // D258: a free jump is the user's to tune by driving; the lap proof says nothing about it
+    if (jp.pending || jp.free) continue;   // a free jump is the user's to tune by driving; the lap proof says nothing about it
     if (jp.badGap) { where.push({ s: jp.s, reason: 'jump-gap-not-forward', gap: jp.gap }); continue; }
     for (const L of jp.landings) if (!L.caught) warn.push({ s: jp.s, reason: `jump-not-caught-${L.g}g`, speed: jp.speed, minSpeed: L.minSpeed });
     if (!jp.reachable) warn.push({ s: jp.s, reason: 'landing-unreachable' });
@@ -607,7 +607,7 @@ function validate(path, segments, opts = {}) { return core(path, segments, opts,
  * A full `validate` runs instead when the carried part could have changed: the path is closed (the closing twist moves
  * every frame), `prev` has no raw findings, or the speed model changed (e.g. a word without a design speed was added).
  *
- * THE DRAG WINDOW (D179, the librarian's direction). opts.uptoS bounds the recheck: stations from it on are PENDING, and
+ * THE DRAG WINDOW. opts.uptoS bounds the recheck: stations from it on are PENDING, and
  * result.pendingFrom says where they start. Every station before it is exact: a pending station still has its stacking
  * measured against them. A `prev` that was windowed carries nothing past its pendingFrom, so the next revalidate starts
  * no later than there; revalidate(windowed, …, prev.pendingFrom) with no uptoS finishes the track, equal to a full
@@ -628,7 +628,7 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
 }
 
 /**
- * D432: what this finds is INFORMATION (the result's info), not red: two passes may be closer than 2 m as long as they do not clip.
+ * what this finds is INFORMATION (the result's info), not red: two passes may be closer than 2 m as long as they do not clip.
  * Drivable surfaces stacked within `car.stackedM` (ARCHITECTURE.md:85): surface points of two passes of the road closer
  * than that. Points on the same pass (within `minSeparationM` of s, default 25 m, inferred: well beyond any cross-section
  * and any radius a T-180 drives, FINDINGS.md:39 "about 33–50 m radius at the tightest") are not a stack.
@@ -636,7 +636,7 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
  * stations, each keeping its worst (deepest) overlap. With from = 0 that is the whole-track check.
  *
  * THE POINTS are each road station's surface: the profile's u, with points at most 1 m apart laterally between them, at
- * q = pos + L·X + U·Y. Two points of different passes closer than `cell` are a stack. Which pairs are measured (D177, the
+ * q = pos + L·X + U·Y. Two points of different passes closer than `cell` are a stack. Which pairs are measured (the
  * incremental-validation ruling) is decided per STATION PAIR first, by two lower bounds on the distance between any
  * point of station i and any point of station j, where r is a station's largest |(X, Y)| (its points lie within r of
  * pos, in the plane through pos normal to T):
@@ -651,7 +651,7 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
  * surface point of the track (the point grid this replaced was 95% of a full validate at 40 km: 3.1 of 3.3 s).
  */
 const SLACK = 1e-4;   // m: a pair whose bounds clear the stack distance by less than this is measured anyway
-const CLIP_EPS = 0.02;   // m (D432): a gap along the normal within this of zero is one road lying on the other (inferred: well under any road's thickness or a car's)
+const CLIP_EPS = 0.02;   // m: a gap along the normal within this of zero is one road lying on the other (inferred: well under any road's thickness or a car's)
 function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new Set(), end = S.length) {
   const cell = car.stackedM, sep = opts.minSeparationM || 25, L = path.lengthM || (S[S.length - 1].s - S[0].s), n = S.length;
   // the lateral points of each segment's profile, with their (X, Y) and the largest |(X, Y)|, once per segment
@@ -695,19 +695,19 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     q = us.map((u, k) => { const [X, Y] = xy[k]; return { q: add(pos, add(mul(l, X), mul(w, Y))), s: S[i].s, u, i }; });
     ptsCache.set(i, q); return q;
   };
-  // one entry per station: its deepest overlap, the smaller u on a tie, so the answer never depends on visiting order; `clip` (D432) is kept if any pair clipped
+  // one entry per station: its deepest overlap, the smaller u on a tie, so the answer never depends on visiting order; `clip` is kept if any pair clipped
   const mark = (pt, worst, partner, clip = false, low = Infinity) => {
     if (pt.i >= end) return;   // a pending station keeps no finding: it is checked in full when the window ends
     const k = pt.i, e = out.get(k);
-    const eLow = e && e.low !== undefined ? e.low : Infinity, lo = Math.min(low, eLow);   // D435: the least room overhead any pair left this station
-    // D498 item 2: which partner set that room (the smaller index on a tie) and the largest partner that clipped, so the carry can tell when either has changed
+    const eLow = e && e.low !== undefined ? e.low : Infinity, lo = Math.min(low, eLow);   // the least room overhead any pair left this station
+    // which partner set that room (the smaller index on a tie) and the largest partner that clipped, so the carry can tell when either has changed
     const lowP = low < eLow || (low === eLow && low < Infinity && (e.lowP === undefined || partner < e.lowP)) ? partner : e ? e.lowP : undefined;
     const clipP = clip ? Math.max(partner, e && e.clipP !== undefined ? e.clipP : -1) : e ? e.clipP : undefined;
     const tags = { ...(lowP !== undefined ? { lowP } : {}), ...(clipP !== undefined ? { clipP } : {}) };
     if (!e || worst > e.worst || (worst === e.worst && pt.u < e.u)) out.set(k, { i: pt.i, s: pt.s, u: pt.u, worst, p: partner, clip: clip || !!(e && e.clip), low: lo, ...tags });
     else if ((clip && !e.clip) || lo < e.low || lowP !== e.lowP || clipP !== e.clipP) out.set(k, { ...e, clip: clip || e.clip, low: lo, ...tags });
   };
-  // D432, THE CLIP TEST without a mesh (the live checker and every check that runs validate without the mesh's folds have no self-intersection test, so the stack
+  // THE CLIP TEST without a mesh (the live checker and every check that runs validate without the mesh's folds have no self-intersection test, so the stack
   // was their only sign of one road on another). For a pair of stations the stack measures, each point of one is taken over the other's surface: its nearest
   // point there, when it lies within half a station step along the road and not beyond the road's edges; the gap along that surface's normal is then signed.
   // The two roads CLIP where that gap changes sign (one passes through the other) or is within CLIP_EPS of zero (one lies on the other). The normal is the
@@ -727,7 +727,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
   };
   /** a row of another road's points (a station's, or one between two stations) over station i's surface, by the sign of their gap along its normal */
   const sides = (i, Bq) => {
-    const A = geomOf(i), last = A.Q.length - 1; let pos = false, neg = false, zero = false, room = Infinity;   // room (D435): the least gap above this road
+    const A = geomOf(i), last = A.Q.length - 1; let pos = false, neg = false, zero = false, room = Infinity;   // room: the least gap above this road
     for (const o of Bq) {
       let best = -1, bd = Infinity;
       for (let k = 0; k <= last; k++) { const d = len(sub(o.q, A.Q[k].q)); if (d < bd) { bd = d; best = k; } }
@@ -739,7 +739,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     }
     return { pos, neg, zero, room };
   };
-  // D432d, ALONG THE ROAD: two roads whose edge strips cross between stations show one sign at every station, so each station is signed together with the rows
+  // ALONG THE ROAD: two roads whose edge strips cross between stations show one sign at every station, so each station is signed together with the rows
   // linearly between it and its neighbours (at a quarter, a half and three quarters of the way, as the mesh's own triangles run between its rows): a sign change
   // among them is the road passing through the other between stations
   const rowsOf = (j) => {
@@ -756,7 +756,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
     for (const row of rowsOf(j)) { const x = sides(i, row); r.pos = r.pos || x.pos; r.neg = r.neg || x.neg; r.zero = r.zero || x.zero; r.room = Math.min(r.room, x.room); }
     return r;
   };
-  // the pair's verdict: whether the two roads clip, and (D435) the room each has under the other: the least gap ALONG ITS OWN NORMAL to the other's surface over it
+  // the pair's verdict: whether the two roads clip, and the room each has under the other: the least gap ALONG ITS OWN NORMAL to the other's surface over it
   // (the "up" of a car on it), Infinity where the other road is not over it
   const verdictOf = (i, j) => {
     const a = around(i, j), b = around(j, i);
@@ -772,7 +772,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
       for (let t = 0; t < list.length; t++) {
         const j = list[t];
         // a pair of two PENDING stations waits for the window to end; a pending station is still measured against the
-        // window and everything before it, so a station that is not pending never shows a stale "clean" (D179)
+        // window and everything before it, so a station that is not pending never shows a stale "clean"
         if (i >= end && j >= end) continue;
         if (qd[j] && j <= i) continue;   // a pair of two queried stations is measured once
         let ds = Math.abs(sOf[j] - sA); if (path.closed) ds = Math.min(ds, L - ds);
@@ -790,7 +790,7 @@ function stacked(S, isRoad, profiles, path, car, opts, from, out, rederive = new
           mark(pt, cell - dist, o.i); mark(o, cell - dist, pt.i);
           if (!deep || dist < deep.dist) deep = { pt, o, dist };
         }
-        if (deep) {   // D432 the clip, D435 the room overhead: each station keeps the least room any pair left it
+        if (deep) {   // the clip and the room overhead: each station keeps the least room any pair left it
           const v = verdictOf(i, j);
           if (v.clip || v.roomI < Infinity || v.roomJ < Infinity) { mark(deep.pt, cell - deep.dist, deep.o.i, v.clip, v.roomI); mark(deep.o, cell - deep.dist, deep.pt.i, v.clip, v.roomJ); }
         }

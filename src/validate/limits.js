@@ -6,28 +6,28 @@
 const G = 9.81;   // m/s², the same constant the measuring tools use (tools/jump_flight.cjs:11 `G = 9.81`, tools/read_track.cjs:151)
 
 const MACH6 = Object.freeze({
-  // D515 bands.txt (the CRAZY TEST replay of 2026-10-28, 6,530 frames): "25-30 g h p50 -19.4 cm … 45-50 g -20.9 cm", the suspension height's plateau
+  // The CRAZY TEST replay of 2026-10-28 (6,530 frames): "25-30 g h p50 -19.4 cm … 45-50 g -20.9 cm", the suspension height's plateau
   // from 25 g, with the tyre squash flat at about 13.5 cm from 10 g; past it the box rode 0.2-1.4 cm over the mesh, so a step or a gap reaches the
   // chassis (their reds already exist). FINDINGS.md:103-104, the earlier reading: "About 20 g: the suspension runs out (measured). It is a change in how
   // the car sits, not a failure." INFORMATIONAL: never red, never amber (docs/INTERFACES.md §3).
   suspensionStopG: 25,
-  // D515 bands.txt: "box under the mesh surface: half the frames or more from 47 g", and peaks.txt: the line-predicted load ran low at the ten peaks
-  // ("63.28 g (line asks 54.1)" … "56.24 g (line asks 48.9)": 6.2-9.2 g), so 47 − about 7 = 40 g PREDICTED is where the box reaches the road (D515 §5
-  // rules 2 and 3: 37-40 g). AMBER 'load-on-the-chassis', a limit known to hold, not a ceiling: the same replay held 56-63 g for about 7 s on a
-  // continuous soft road ("time at ≥ 55 g: 476 frames = 7.14 s"), and D341's 62 g went through the road once. Up to provenG; past it that line speaks.
+  // The same replay: "box under the mesh surface: half the frames or more from 47 g", and the line-predicted load ran low at the ten peaks
+  // ("63.28 g (line asks 54.1)" … "56.24 g (line asks 48.9)": 6.2-9.2 g), so 47 − about 7 = 40 g PREDICTED is where the box reaches the road (37-40 g
+  // by the replay's rules). AMBER 'load-on-the-chassis', a limit known to hold, not a ceiling: the same replay held 56-63 g for about 7 s on a
+  // continuous soft road ("time at ≥ 55 g: 476 frames = 7.14 s"), and a 62 g pass on another track went through the road once. Up to provenG; past it that line speaks.
   chassisG: 40,
-  // D515 §5 rule 5 (piece 11, t 82.5-83.6: an 85° wall at 819 km/h, the climb −5.05° → 0° over 100 m; κg −0.7 /km predicts 3.7 g sideways, the car
+  // The same replay (piece 11, t 82.5-83.6: an 85° wall at 819 km/h, the climb −5.05° → 0° over 100 m; κg −0.7 /km predicts 3.7 g sideways, the car
   // swerved 3.16 g and the load into the road fell to −1.67 g, 8.5 m off the line, and recovered): on a surface tilted over tiltDeg, a line whose
   // curvature in the road's plane asks over sideG sideways while the load into the road is under holdG is AMBER 'wall-swerve'. sideG is that one
-  // measured swerve, "Lateral g reached −3.16 g (t 83.01)", which recovered (D517 part 2, the librarian's ruling e9b793bb: O's inferred 1 g fired on a
-  // 1.2° climb change over 100 m, an amber nobody reads). holdG is O's INFERRED 1 g ("the 1 g figure is not measured as a failure; this replay survived
+  // measured swerve, "Lateral g reached −3.16 g (t 83.01)", which recovered (an inferred 1 g for sideG fired on a
+  // 1.2° climb change over 100 m, an amber nobody reads). holdG is an INFERRED 1 g ("the 1 g figure is not measured as a failure; this replay survived
   // −1.67 g"). An estimate either way, not a measured failure.
   wallSwerve: Object.freeze({ tiltDeg: 60, sideG: 3, holdG: 1 }),
   // FINDINGS.md:105 "Up to about 90 g: proven, on a soft-collision surface"; FINDINGS.md:112-113 "AMBER, for 'beyond
   // what any track has proven': load above the highest survived (about 90 g today). It is shown, not forbidden."
   // The withdrawn 60 g red line (FINDINGS.md:116-118, struck) is deliberately absent.
   provenG: 90,
-  // D341 (plan :876-884; hand-back p-d341, the ELYSIUM replay of 2026-10-16): the 90 g line above rests on SPIKES, episodes of 0.1-0.25 s. A SUSTAINED load is
+  // The ELYSIUM replay of 2026-10-16: the 90 g line above rests on SPIKES, episodes of 0.1-0.25 s. A SUSTAINED load is
   // proven much lower: seven passes of one turn held 56-62 g (over 45 g for about 2 s) with 4-8 cm of box clearance, and the eighth, at 62 g, went through
   // the road 0.4 s after its peak. So a load above sustainedG held for more than sustainedS seconds is AMBER (advisory, like the line above).
   sustainedG: 55,
@@ -35,12 +35,12 @@ const MACH6 = Object.freeze({
   // FINDINGS.md:336-337 (§7d): "the measured range is 3.2–6.3 g"; ARCHITECTURE.md:73-78: "a jump must hold at both
   // ends of that range … the landing ramp must catch both". The clean flight and the override dive (FINDINGS.md:383-386).
   jumpG: Object.freeze([3.2, 6.3]),
-  // THE DOWNFORCE RAY (R1, docs/research/04_ac_physics_drivability.md §4, SOURCED there from the INSTALLED car's
+  // THE DOWNFORCE RAY (read from the INSTALLED car's
   // mach6_active/data/script.lua:424-433): cast from upM above the car's origin and aheadM ahead of it, lengthM long, down
   // the car's up axis; suction full within fullWithinM of the ray's start, none at noneAtM, and none on a miss (inferred
   // there from the code). src/validate/raygap.js uses aheadM as the reach of a gap the ray can fall into.
   downforceRay: Object.freeze({ upM: 0.4, aheadM: 1.0, lengthM: 1.0, fullWithinM: 0.5, noneAtM: 0.9 }),
-  // THE DOWNFORCE ITSELF (docs/research/04_ac_physics_drivability.md §4, the same script.lua:424-433): `-200 × horizontal speed × suction`, along the
+  // THE DOWNFORCE ITSELF: `-200 × horizontal speed × suction`, along the
   // car's own up axis, so it presses the car onto the road whichever way the road faces; TOTALMASS 850 (§5). 2.4 g at 100 m/s, 6.46 g at 970 km/h.
   // The research marks the m/s reading UNVERIFIED; the user's full-speed laps of ELYSIUM (2026-10-15: crests and an inverted stretch this check
   // called red, driven clean) are the evidence for it. Counted where the road holds the car (leaves-surface, holds-above, no-speed-holds), with
@@ -54,14 +54,14 @@ const MACH6 = Object.freeze({
   // sharper than any proven track's p90: AMBER (FINDINGS.md:110-111 calls such seams red but "inferred, not yet observed
   // failing"; ARCHITECTURE.md:81-87, the master, leaves them off the red list).
   seamP90Deg: 5.9,
-  // ARCHITECTURE.md:85 "drivable surfaces stacked within about 2 m": INFORMATION since D432, not red. The user, 2026-10-22: "the reds are bullshit, the
+  // ARCHITECTURE.md:85 "drivable surfaces stacked within about 2 m": INFORMATION, not red. The user, 2026-10-22: "the reds are bullshit, the
   // tracks can be under 2m apart as long as the geometry isnt clipping into eachother". Geometry that clips is red as self-intersection; a stack that
   // does not clip is still measured (src/validate/index.js stacked) and reported in the result's info, with this distance.
   stackedM: 2,
-  // D435, the user (2026-10-22 15:34, asked how little room under another road should warn): "i think 1m is good". A road with another passing over it, without
+  // The user (2026-10-22 15:34, asked how little room under another road should warn): "i think 1m is good". A road with another passing over it, without
   // clipping, closer than this along its normal is AMBER ('low-overhead'): a car on it would hit the road above. It does not block an export.
   overheadM: 1,
-  // D446 (the librarian's ruling on E's hand-back, 2026-10-23): two passes of the road whose edges come within this distance, side by side, are INFORMATION
+  // Two passes of the road whose edges come within this distance, side by side, are INFORMATION
   // ('near-touch'), never red: the downforce-ray check no longer reads the other pass as road beyond a gap (src/validate/raygap.js). Within the ray's reach, 1 m.
   nearEdgeM: 1,
   // ARCHITECTURE.md:87 "surfaces above ~50° without CSP's wall raycasting (vanilla AC tyres ignore steep surfaces;
