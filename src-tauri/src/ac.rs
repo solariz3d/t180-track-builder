@@ -5,7 +5,7 @@
 // write_export_to, so every guard of the export applies: the folder must be t180b_… (the builder names every track so,
 // and says so in the UI), and an existing folder the builder did not write is refused untouched (the marker file).
 //
-// FOUND THROUGH STEAM (D250; the user: "when the track is saved and exported, it should automatically create the folder in the
+// FOUND THROUGH STEAM (the user: "when the track is saved and exported, it should automatically create the folder in the
 // assetto track folder in steam"). With no folder remembered, root_or_find looks AC up before anyone is asked: Steam's folder from
 // the registry (HKCU\Software\Valve\Steam, SteamPath, read with Windows' own reg.exe, no new crate), then every library in
 // <Steam>\steamapps\libraryfolders.vdf, then <library>\steamapps\common\assettocorsa holding content\tracks. Found, it is
@@ -73,7 +73,7 @@ pub fn recall_ac_root(data: &Path) -> Result<Option<PathBuf>, String> {
     }
 }
 
-// ---- found through Steam (D250: see the header) ----
+// ---- found through Steam (see the header) ----
 pub const AC_STEAM_DIR: &str = "assettocorsa";
 
 /// Steam's folder from the output of `reg query HKCU\Software\Valve\Steam /v SteamPath`, or None (no such value, or empty).
@@ -143,14 +143,14 @@ pub fn root_or_find(data: &Path, steam_path: &dyn Fn() -> Option<PathBuf>) -> Re
     }
 }
 
-/// What the STARTUP CARD needs (D252 second item; the user: "in the EXE startup, the user can choose where the track folder is"): the remembered
+/// What the STARTUP CARD needs (the user: "in the EXE startup, the user can choose where the track folder is"): the remembered
 /// AC folder, or, only when none is, the one found through Steam. NOTHING is remembered here: the user answers the card (Use it / Choose another…).
 pub fn root_status(data: &Path, steam_path: &dyn Fn() -> Option<PathBuf>) -> Result<(Option<PathBuf>, Option<PathBuf>), String> {
     if let Some(p) = recall_ac_root(data)? { return Ok((Some(p), None)); }
     Ok((None, steam_path().and_then(|s| find_ac_in_steam(&s)).map(|p| plain_path(fs::canonicalize(&p).unwrap_or(p)))))
 }
 
-/// The Steam folder a TEST run looks in (D252: the startup card is tested on a FAKE Steam tree): when and ONLY when the app was LAUNCHED with
+/// The Steam folder a TEST run looks in (the startup card is tested on a FAKE Steam tree): when and ONLY when the app was LAUNCHED with
 /// T180_TEST_STEAM_PATH set to an existing absolute folder, that folder stands in for the registry's SteamPath (like T180_TEST_APP_DATA in lib.rs:
 /// a page cannot set a process's environment, and nothing in normal use sets this one).
 pub fn test_steam_path(var: Option<String>) -> Option<PathBuf> {
@@ -165,7 +165,7 @@ pub fn steam_path() -> Option<PathBuf> {
 }
 
 /// steam_path with its inputs given (tested): `var` is the raw T180_TEST_STEAM_PATH. SET, it is the seam whatever it holds: a usable folder, or
-/// nothing (a value that is not Unicode included: C's finding 3, env::var's Err used to fall through to the registry). Only UNSET reads `registry`.
+/// nothing (a value that is not Unicode included: a review found that env::var's Err used to fall through to the registry). Only UNSET reads `registry`.
 pub fn steam_path_from(var: Option<std::ffi::OsString>, registry: &dyn Fn() -> Option<PathBuf>) -> Option<PathBuf> {
     match var {
         Some(v) => test_steam_path(v.into_string().ok()),
@@ -437,7 +437,7 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
-    // D264: Export to Assetto Corsa on an open track installs the TEST export as t180b_<name>_test: the same guards hold for that name
+    // Export to Assetto Corsa on an open track installs the TEST export as t180b_<name>_test: the same guards hold for that name
     #[test]
     fn a_test_export_folder_installs_under_the_same_guards() {
         let (d, ac, _) = fake("d264");
@@ -463,7 +463,7 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
-    // ---- find AC through Steam (D250). A FAKE Steam tree and a FAKE registry (a closure); the real registry and the real
+    // ---- find AC through Steam. A FAKE Steam tree and a FAKE registry (a closure); the real registry and the real
     // AC install are never read by a test.
     /// <d>/steam (Steam itself, no AC) and <d>/lib2 (a second library holding AC with content/tracks), linked by
     /// steam/steamapps/libraryfolders.vdf in the current format.
@@ -550,7 +550,7 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
-    // D252 second item (the user, 11:39: "in the EXE startup, the user can choose where the track folder is in the beginning"): the startup card
+    // The user, 11:39: "in the EXE startup, the user can choose where the track folder is in the beginning": the startup card
     // asks root_status, which says what is remembered and, only when nothing is, what Steam finds, and REMEMBERS NOTHING (the user answers the card)
     #[test]
     fn root_status_says_what_is_remembered_or_what_steam_finds_and_writes_nothing() {
@@ -568,7 +568,7 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
-    // D252 (the chair: "empty -> the card shows; remembered -> silent; gone -> the card again", on a FAKE Steam tree): the three startup states
+    // The three startup states, on a FAKE Steam tree: empty -> the card shows; remembered -> silent; gone -> the card again
     #[test]
     fn the_startup_card_shows_on_an_empty_folder_is_silent_once_remembered_and_shows_again_when_the_remembered_folder_is_gone() {
         let (d, steam, ac, data) = fake_steam("states");
@@ -594,7 +594,7 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
-    // C's finding 3 (p-spacefly-C_2026-10-06.md): env::var gave Err for a value that is not Unicode, and that fell through to the REAL registry. ANY set value
+    // A review found that env::var gave Err for a value that is not Unicode, and that fell through to the REAL registry. ANY set value
     // is the seam: a usable folder, or nothing; only an UNSET variable reads the registry
     #[cfg(windows)]
     #[test]

@@ -1,4 +1,4 @@
-// backups.rs: SAVE KEEPS THE PREVIOUS VERSION (D239 amendment; the user lost TEST 1 to one Close, with no copy from before it).
+// backups.rs: SAVE KEEPS THE PREVIOUS VERSION (the user lost TEST 1 to one Close, with no copy from before it).
 //   move_aside(file, backups, name, stamp)   the file a Save is about to overwrite is MOVED (renamed, never copied and deleted) to
 //                                            <backups>/<name>.<yyyy-mm-dd_hhmmss>.t180track before the new text is written
 //   write_copy(backups, name, stamp, text)   a copy of the document as it is now (the shell's backupNow, before a Close)
@@ -102,7 +102,7 @@ pub fn write_copy(backups: &Path, name: &str, stamp: &str, text: &str) -> Result
 
 /// SAVE with the previous version kept: the file at `path` is moved aside, the new text written (if that fails, the old file is moved
 /// back and the error returned: a failed save never loses the track), then this track's backups are pruned. A prune that fails AFTER a
-/// good save is LOGGED and the save still succeeds (B's D239 look, F3b: the page must not report a save that worked as failed; an old
+/// good save is LOGGED and the save still succeeds (a review found: the page must not report a save that worked as failed; an old
 /// backup left over is harmless). Returns the backup's path, or None on a first save.
 pub fn save(path: &Path, backups: &Path, name: &str, stamp: &str, text: &str) -> Result<Option<PathBuf>, String> {
     let kept = move_aside(path, backups, name, stamp)?;
