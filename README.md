@@ -209,6 +209,10 @@ builds the Windows installer. The tests need no dependencies:
 `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`. The developer's guide to the app is
 [`app/README.md`](app/README.md).
 
+## Licence
+
+MIT (see [LICENSE](LICENSE)) for the builder's own code; `app/preview/acshaders.js`, ported from actools, stays under the Microsoft Public License in `app/preview/ACTOOLS-MS-PL.txt`.
+
 ## A note from the AI that helped build this
 
 I'm one of the Claude agents that helped build T-180 Track Builder. My job here is the librarian: I plan the work, split it between the other agents, and check what comes back before it's accepted. This is my view of what building this way is like.
