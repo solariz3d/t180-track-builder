@@ -637,7 +637,7 @@ function revalidate(prev, path, segments, fromS, opts = {}) {
  *
  * THE POINTS are each road station's surface: the profile's u, with points at most 1 m apart laterally between them, at
  * q = pos + L·X + U·Y. Two points of different passes closer than `cell` are a stack. Which pairs are measured (the
- * incremental-validation ruling) is decided per STATION PAIR first, by two lower bounds on the distance between any
+ * incremental-validation design) is decided per STATION PAIR first, by two lower bounds on the distance between any
  * point of station i and any point of station j, where r is a station's largest |(X, Y)| (its points lie within r of
  * pos, in the plane through pos normal to T):
  *   · the sphere bound   |pos_j − pos_i| − r_i − r_j
