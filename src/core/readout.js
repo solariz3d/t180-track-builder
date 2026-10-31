@@ -7,25 +7,25 @@
 //
 // A ROAD piece's readout:
 //   { type: 'road', id, lengthM, turnDeg, climbDeg, bankFromDeg, bankToDeg, cupFromDeg, cupToDeg, edgeFromDeg, edgeToDeg, sliceFrom, sliceTo, tubeFromDeg, tubeToDeg, pitchFromDeg, pitchToDeg, offsets }
-//   D225: edgeFrom/To = the edge curve's e at the ends (degrees; 0 on a piece without one), sliceFrom/To = its start s (a share of the half-width; the default 0.64 where there is no edge),
+//   edgeFrom/To = the edge curve's e at the ends (degrees; 0 on a piece without one), sliceFrom/To = its start s (a share of the half-width; the default 0.64 where there is no edge),
 //   tubeFrom/To = the tube's sweep t at the ends (degrees; 0 on a piece that is not a tube). cupFrom/To of a TUBE piece is the edge it renders, t/2. All are read from the DOCUMENT.
 //   turnDeg = ∫κh ds (+ = left), climbDeg = ∫κv ds (+ = nosing up): EXACT, by 3-point Gauss–Legendre on each knot span, where
 //   the channel is one cubic (ref 09 §8). bankFrom/To = φ at the ends. pitchFrom = the start pitch plus every earlier road
 //   piece's climb, a flight setting it to its landing pitch; pitchTo = pitchFrom + climb. cupFrom/To = the cup c(0) and c(L), degrees, of a
-//   CUP piece (D190); of a LEGACY piece the edge its road renders, profileAt(family, w, r) at each end (D.legacyEdgeDeg).
+//   CUP piece; of a LEGACY piece the edge its road renders, profileAt(family, w, r) at each end (D.legacyEdgeDeg).
 //   offsets: null when the piece has no h/l; otherwise the EFFECTIVE { turnDeg, climbDeg, pitchFromDeg, pitchToDeg,
 //   roadLengthM } with the lift of ref 09 §7 applied at the ends (a hill that fades inside the piece changes none of them) and
 //   the road length over the lifted curve (∫|r̃′| ds by composite Gauss–Legendre, not exact). Bank is not changed by h or l.
 // A FLIGHT piece's readout:
 //   { type: 'flight', id, lengthM, turnDeg, climbDeg, bankFromDeg, bankToDeg, cupFromDeg, cupToDeg, pitchFromDeg, pitchToDeg, offsets: null, landing }
 //   lengthM = the flight's curve across the air, as the adapter builds it (src/core/adapter.js toSegments); turnDeg = the landing's heading turn;
-//   climbDeg = landing pitch − take-off pitch; bankTo = the landing's bank. landing (D258) = the pose { forwardM, leftM, upM, headingDeg, pitchDeg,
+//   climbDeg = landing pitch − take-off pitch; bankTo = the landing's bank. landing = the pose { forwardM, leftM, upM, headingDeg, pitchDeg,
 //   bankDeg } the UI's number boxes show. The cup is the take-off's (the landing's own cross-section is its own piece's).
 'use strict';
 
 const D = require('./document.js');
 const { extend } = require('./extend.js');
-const { extendCorner } = require('./turnby.js');   // D331 B: the ghost is the piece Extend places, the turn field read as a corner or as a rate
+const { extendCorner } = require('./turnby.js');   // the ghost is the piece Extend places, the turn field read as a corner or as a rate
 const { toSegments } = require('./adapter.js');
 
 const DEG = 180 / Math.PI;
@@ -45,7 +45,7 @@ function channelIntegral(P, ch, a = 0, b = P.length) {
   return sum;
 }
 
-// ── THE CORNER (D331, ledger D332: a hand-made "90°" turn on ELYSIUM turned 99.6°, and nothing on screen summed it) ───────────────────────────────────
+// ── THE CORNER (a hand-made "90°" turn on ELYSIUM turned 99.6°, and nothing on screen summed it) ───────────────────────────────────
 // The turn channel is a RATE, so a piece eased to one ENDS STILL TURNING, and the next piece spends its first metres easing that rate out. A piece's own turn
 // then tells only part of the corner. corner(doc, i) reads the corner piece i belongs to, from the document alone:
 //   turnDeg    the heading change from where the road was last straight (κh = 0) to the end of piece i; a piece that ends straight is read up to its turning
@@ -102,7 +102,7 @@ function trailingStraightFrom(P, ch = 'kh') {
   }
   return 0;
 }
-// D421c: a FROZEN piece's whole-piece reads, kept with it (a document's pieces are deep-frozen, so these cannot change; knotVectorOf keeps its knot vector so, D404): its whole
+// a FROZEN piece's whole-piece reads, kept with it (a document's pieces are deep-frozen, so these cannot change; knotVectorOf keeps its knot vector so): its whole
 // integral of a channel and where it was last straight before its end. A corner walks back over every turning piece before it, so the labels read every earlier piece again for
 // each piece: after a whole-lap re-close nothing is quite straight (the close gives each piece about 1e-6 rad/m of turn), and row 3's re-close frame spent 49 ms on it.
 // The same function on the same piece gives the same number, so a kept read is the read, to the bit; an unfrozen piece is read afresh every time.
@@ -130,7 +130,7 @@ function cornerOf(doc, i, ch) {
   return { deg: turn * DEG, fromId: doc.pieces[j].id, endsPer100m: ends ? kEnd * DEG * 100 : null };
 }
 function corner(doc, i) { const c = cornerOf(doc, i, 'kh'); return c && { turnDeg: c.deg, fromId: c.fromId, endsTurningDegPer100m: c.endsPer100m }; }
-/** D331, the climb too (plan :387-399): the climb's corner, the pitch change since the climb rate was last 0 (a steady pitch, not necessarily level), where it
+/** The climb too: the climb's corner, the pitch change since the climb rate was last 0 (a steady pitch, not necessarily level), where it
  *  began, and the climb rate it ends at, degrees per 100 m, or null when it ends at a steady pitch. */
 function climbCorner(doc, i) { const c = cornerOf(doc, i, 'kv'); return c && { climbDeg: c.deg, fromId: c.fromId, endsClimbingDegPer100m: c.endsPer100m }; }
 /**
@@ -150,7 +150,7 @@ function cornerNext(doc, i) {
   const d = extend(doc, { length: 2 * AT_START_M, targets: { kh: 0 }, transition: { kh: AT_START_M } }), M = d.pieces[d.pieces.length - 1];
   return { nextAddsDeg: channelIntegral(M, 'kh', 0, firstStraight(M) ?? M.length) * DEG, nextFrom: 'turn 0 at start' };
 }
-// ── THE GRAVITY BANK (D331 D): the road's bank against gravity, as src/geom/path.js reads it (sampleAt: bankG = asin(L.y)). With the gravity frame the
+// ── THE GRAVITY BANK: the road's bank against gravity, as src/geom/path.js reads it (sampleAt: bankG = asin(L.y)). With the gravity frame the
 // unrolled left is horizontal and the unrolled up U0 = T × R has U0.y = cos p, so the rolled left's height is L.y = cos p · sin φ: past an inversion
 // (pitch 186°) a bank of −234° reads −53.5°, the road's real tilt, where φ itself reads in the flipped form. Without the lift of h and l (ref 09 §7).
 const gravityBank = (p, phi) => Math.asin(Math.max(-1, Math.min(1, Math.cos(p) * Math.sin(phi)))) * DEG;
@@ -160,7 +160,7 @@ function poseBefore(doc, i) {
   let theta = doc.start.heading, p = doc.start.pitch;
   for (let j = 0; j < i; j++) {
     const P = doc.pieces[j];
-    if (P.type === 'flight') { theta += P.heading; p = P.pitch; continue; }   // D258: the landing's pose
+    if (P.type === 'flight') { theta += P.heading; p = P.pitch; continue; }   // the landing's pose
     theta += channelIntegral(P, 'kh'); p += channelIntegral(P, 'kv');
   }
   return { theta, p };
@@ -221,7 +221,7 @@ const cornerHolds = (c, ch, i, doc, was) => {
   return true;
 };
 /**
- * D421c: EVERY piece's readout at once, each pieceReadout(doc, i)'s to the bit: the document checked once and the pose carried on, where pieceReadout checks the
+ * EVERY piece's readout at once, each pieceReadout(doc, i)'s to the bit: the document checked once and the pose carried on, where pieceReadout checks the
  * whole document and sums the pose from the start for each piece (a 50-piece lap: 50 checks and 1,225 pose sums; 85-91 ms of row 3's re-close frame, the labels').
  * `prev` is an earlier answer ({ doc, reads, poses }): a ROAD piece keeps its readout (the very object) when it is the very piece it was, at the same place, entering
  * at the same pitch (and the same heading when it has offsets, whose lifted turn reads it), and its corners read the very pieces they read. A road readout reads
@@ -247,10 +247,10 @@ function readoutAt(doc, i, pose) {
     const lengthM = toSegments(doc).filter((g) => g.id === P.id).reduce((a, g) => a + g.length, 0);
     return { type: 'flight', id: P.id, lengthM, turnDeg: P.heading * DEG, climbDeg: (P.pitch - pose.p) * DEG, bankFromDeg: bank * DEG, bankToDeg: P.bank * DEG, cupFromDeg: cupEnd, cupToDeg: cupEnd, edgeFromDeg: edgeEnd, edgeToDeg: edgeEnd, sliceFrom: sliceEnd, sliceTo: sliceEnd, tubeFromDeg: tubeEnd, tubeToDeg: tubeEnd,
       pitchFromDeg: pose.p * DEG, pitchToDeg: P.pitch * DEG, offsets: null,
-      landing: { forwardM: P.forward, leftM: P.left, upM: P.up, headingDeg: P.heading * DEG, pitchDeg: P.pitch * DEG, bankDeg: P.bank * DEG } };   // D258: the pose the UI's number boxes show
+      landing: { forwardM: P.forward, leftM: P.left, upM: P.up, headingDeg: P.heading * DEG, pitchDeg: P.pitch * DEG, bankDeg: P.bank * DEG } };   // the pose the UI's number boxes show
   }
   const turn = channelIntegral(P, 'kh'), climb = channelIntegral(P, 'kv');
-  const out = { type: 'road', id: P.id, lengthM: P.length, gripPct: D.gripOf(P), turnDeg: turn * DEG, climbDeg: climb * DEG,   // gripPct: D261, the piece's grip for the hover label
+  const out = { type: 'road', id: P.id, lengthM: P.length, gripPct: D.gripOf(P), turnDeg: turn * DEG, climbDeg: climb * DEG,   // gripPct: the piece's grip for the hover label
     bankFromDeg: D.channelAt(P, 'phi', 0).v * DEG, bankToDeg: D.channelAt(P, 'phi', P.length).v * DEG,
     cupFromDeg: P.tube ? D.channelAt(P, 't', 0).v / 2 : P.cup ? D.channelAt(P, 'c', 0).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', 0).v, D.channelAt(P, 'r', 0).v),
     cupToDeg: P.tube ? D.channelAt(P, 't', P.length).v / 2 : P.cup ? D.channelAt(P, 'c', P.length).v : D.legacyEdgeDeg(P.family, D.channelAt(P, 'w', P.length).v, D.channelAt(P, 'r', P.length).v),
@@ -258,8 +258,8 @@ function readoutAt(doc, i, pose) {
     sliceFrom: P.edge ? D.channelAt(P, 's', 0).v : D.S_DEFAULT, sliceTo: P.edge ? D.channelAt(P, 's', P.length).v : D.S_DEFAULT,
     tubeFromDeg: P.tube ? D.channelAt(P, 't', 0).v : 0, tubeToDeg: P.tube ? D.channelAt(P, 't', P.length).v : 0,
     pitchFromDeg: pose.p * DEG, pitchToDeg: (pose.p + climb) * DEG, offsets: null,
-    gravityBankFromDeg: gravityBank(pose.p, D.channelAt(P, 'phi', 0).v), gravityBankToDeg: gravityBank(pose.p + climb, D.channelAt(P, 'phi', P.length).v),   // D331 D
-    corner: corner(doc, i), climbCorner: climbCorner(doc, i) };   // D331 A, and the climb's
+    gravityBankFromDeg: gravityBank(pose.p, D.channelAt(P, 'phi', 0).v), gravityBankToDeg: gravityBank(pose.p + climb, D.channelAt(P, 'phi', P.length).v),
+    corner: corner(doc, i), climbCorner: climbCorner(doc, i) };   // the corner, and the climb's
   if (D.OFFSETS.some((ch) => P.channels[ch].some((v) => v !== 0))) {
     const a = liftedAngles(P, 0, pose.theta, pose.p), b = liftedAngles(P, P.length, pose.theta + turn, pose.p + climb);
     out.offsets = {
@@ -270,12 +270,12 @@ function readoutAt(doc, i, pose) {
   return out;
 }
 
-/** The readout of the piece Extend would place (extendCorner: extend, or with opts.turnDeg the corner, D331 B): the ghost, before it is placed. Same numbers as after placing. */
+/** The readout of the piece Extend would place (extendCorner: extend, or with opts.turnDeg the corner): the ghost, before it is placed. Same numbers as after placing. */
 function candidateReadout(doc, opts) {
   const d = extendCorner(doc, opts);
   return pieceReadout(d, d.pieces.length - 1);
 }
-/** D331 A: what easing the piece extend(doc, opts) would place out would add (cornerNext of the ghost, the open end). Apart from candidateReadout, whose numbers are the placed piece's. */
+/** What easing the piece extend(doc, opts) would place out would add (cornerNext of the ghost, the open end). Apart from candidateReadout, whose numbers are the placed piece's. */
 function candidateCorner(doc, opts) {
   const d = extendCorner(doc, opts);
   return cornerNext(d, d.pieces.length - 1);

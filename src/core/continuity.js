@@ -1,6 +1,6 @@
 // continuity.js: what a channel does at the two ends of a piece, and how it steps across a joint, read EXACTLY from the stored control points: no path is
-// sampled, no difference is taken over metres. D459 (the user, 2026-10-25, TEST 10: "there is still a bump its not smooth"; plan_test10_bump_d459, the user's
-// frame: "a C2 check on the document, not on a sampled path").
+// sampled, no difference is taken over metres. (The user, 2026-10-25, TEST 10: "there is still a bump its not smooth"; and the
+// aim: "a C2 check on the document, not on a sampled path".)
 //
 //   endDerivatives(piece, ch)   -> { start: { v, m, k }, end: { v, m, k } }: the channel's value, slope (per m) and second derivative (per m²) at s = 0 and at
 //                                  s = length, in the channel's stored units (phi in rad, the cup and edges in degrees, w in m, kh and kv in rad/m)
@@ -10,10 +10,10 @@
 //   c2Breaks(doc, opts)         -> the entries whose |dkDeg| is over opts.tol (°/m², default TOL_K), for opts.channels (default C2_CHANNELS: the ones the wheels
 //                                  ride on). Empty means every joint of those channels is C2.
 //
-// WHY THIS AND NOT A SAMPLED CHECK. Every check the room had before D459 sampled: the vertical curvature of a surface line by second differences over 2 m
-// (kstep436.js, core_finish_joints.test.js) or rays cast down at a mesh (surf436.js). A sampled check turns a curvature STEP at a joint into a finite "change
+// WHY THIS AND NOT A SAMPLED CHECK. Every check there was before this one sampled: the vertical curvature of a surface line by second differences over 2 m
+// (core_finish_joints.test.js) or rays cast down at a mesh. A sampled check turns a curvature STEP at a joint into a finite "change
 // over 2 m" that is ranked against other places and judged by a bar; the step at every bank, cup and edge joint of TEST 10 was in those lists for three days
-// (D433, D436) and read as "a design question", because nothing said what a ramp joint's curvature OUGHT to be. This reads the spline itself: a cubic B-spline's
+// and read as "a design question", because nothing said what a ramp joint's curvature OUGHT to be. This reads the spline itself: a cubic B-spline's
 // end value, slope and curvature are closed forms in its first three (last three) control points and the first (last) knot spans, so the step across a joint is
 // one number per channel, exact to rounding, and the assertion is "0", not "under a bar".
 //

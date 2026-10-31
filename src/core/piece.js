@@ -1,17 +1,17 @@
-// piece.js: SAVED PIECES for the equation core (D240, the user: "can we keep only the equation mode? And then we can save pieces from that we make").
+// piece.js: SAVED PIECES for the equation core (the user: "can we keep only the equation mode? And then we can save pieces from that we make").
 // A saved piece is one road piece, or a RUN of consecutive pieces (roads, and the flights between them), taken out of a core document and kept in a file that can be put back at
-// the head of any open track. This file is the CORE only: no UI, no files on disk (the library list, "Save as piece...", rename and delete are the app's, after D239).
+// the head of any open track. This file is the CORE only: no UI, no files on disk (the library list, "Save as piece...", rename and delete are the app's).
 //
 //   saveRun(doc, from, to, { name })        the run doc.pieces[from..to] (inclusive) as a piece: schema t180b.piece/1; on a closed lap from > to is the run across
-//                                           the start line (D250 item 4), or SEAM_RUN when the road is not smooth across the line
+//                                           the start line, or SEAM_RUN when the road is not smooth across the line
 //   serialize(piece) / parse(text)          the canonical text, and the checked piece read back from it (refused BY NAME when malformed)
 //   checkPiece(piece)                       every rule the text must meet, on an object
 //   insert(doc, piece, { mirror, keepStart }) the run added at the head: a new document (the old one is untouched)
 //   mirrored(piece)                         the piece's left/right mirror image (kh, phi and l negated)
 //   summary(piece)                          { pieces, roads, flights, kind, lengthM, turnDeg, climbDeg } for a library list
-//   deleteRun(doc, from, to) / cutRun(doc, from, to)   pieces taken out of a track: the gap closed again (delete), or left as the track's two open ends (cut, D361)
+//   deleteRun(doc, from, to) / cutRun(doc, from, to)   pieces taken out of a track: the gap closed again (delete), or left as the track's two open ends (cut)
 //
-// THE RELATIVE FORM (the plan's rule, plan_t180_equation_only_pieces_2026-10-04.md, D240). A piece is stored relative to its OWN START, so it can start anywhere:
+// THE RELATIVE FORM. A piece is stored relative to its OWN START, so it can start anywhere:
 //   · TURN and CLIMB are RATES (kh, kv) and so are the two OFFSET channels (h, l, a hill and a swerve off the base line): stored as the document holds them, because each is a
 //     property of the road and not a state that accumulates. (The plan names turn and climb; the offsets are the same kind of thing and are treated alike: a hill saved as
 //     "10 m up and down" is that wherever it is put.)
@@ -29,7 +29,7 @@
 'use strict';
 
 const D = require('./document.js');
-const A = require('./adapter.js');   // D361: cutRun reads where the piece after a cut begins off the path
+const A = require('./adapter.js');   // cutRun reads where the piece after a cut begins off the path
 
 const SCHEMA = 't180b.piece/1', GENERATOR = 't180-track-builder/core 0.3.0';
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;   // the shell's NAME_RE (app/core/coreshell.js): a piece name becomes a file name, so no path can ride in it
@@ -39,7 +39,7 @@ const NEGATED = Object.freeze(['kh', 'phi', 'l']);        // what a left/right m
 const MAX_CHARS = 8e6, MAX_PIECES = 2000, MAX_KNOTS = 4000;   // a text, a run and a piece's knots: far above any real track (a 1 km piece has 49 knots), far below a denial of service
 const TOP_KEYS = Object.freeze(['schema', 'generator', 'name', 'start', 'pieces']);
 // the cup, edge and tube flags are IMPLIED by the channel arrays in the text (as in a document's); a piece object may carry them (checkPiece's own output does), if they agree with the arrays
-const ROAD_KEYS = Object.freeze(['type', 'length', 'family', 'knots', 'channels', 'cup', 'edge', 'tube', 'grip']), FLIGHT_KEYS = Object.freeze(['type', ...D.FLIGHT_POSE]);   // D258: a free flight; its bank is kept as its change from the run's start bank, like phi
+const ROAD_KEYS = Object.freeze(['type', 'length', 'family', 'knots', 'channels', 'cup', 'edge', 'tube', 'grip']), FLIGHT_KEYS = Object.freeze(['type', ...D.FLIGHT_POSE]);   // a free flight; its bank is kept as its change from the run's start bank, like phi
 
 const err = (code, msg) => new D.CoreError(code, msg);
 const q = (x, dec) => { const v = Number(x.toFixed(dec)); return Object.is(v, -0) ? 0 : v; };
@@ -53,7 +53,7 @@ const checkName = (name) => { if (typeof name !== 'string' || !NAME_RE.test(name
 
 // ── save ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 /**
- * The pieces of a run in lap order. ACROSS THE START LINE of a CLOSED lap (D250 item 4, the user: "Short way across start"; from > to) it is pieces from..last, then
+ * The pieces of a run in lap order. ACROSS THE START LINE of a CLOSED lap (the user: "Short way across start"; from > to) it is pieces from..last, then
  * 0..to. The bank may have turned whole times round the lap (TEST 1 ends at -4π: two rolls), so the pieces after the line get the lap's bank winding added, the same
  * whole turns close.js forgives at the seam (`bank - TAU * m`, close.js residual): the road leans the same way either side, and the joint is C1 as written.
  */
@@ -128,7 +128,7 @@ function checkPiece(piece) {
     const at = `piece ${i}`;
     if (!P || typeof P !== 'object' || Array.isArray(P)) bad('BAD_PIECE_FIELD', `${at}: must be an object`);
     if (P.type === 'flight') {
-      // D258: a saved jump made before the free jump (gap, drop, land: a solved flight and a generated ramp) cannot be placed again, since how far its
+      // a saved jump made before the free jump (gap, drop, land: a solved flight and a generated ramp) cannot be placed again, since how far its
       // ramp reached depended on the pitch it took off at; none was saved (checked: no flight in the user's pieces), so it is refused by name, not guessed
       if (P.gap !== undefined || P.drop !== undefined || P.land !== undefined) bad('OLD_FLIGHT', `${at}: this piece holds a jump from before jumps were placed by hand (gap, drop, landing angle); add the road around it and place the jump again with Jump`);
       for (const k of Object.keys(P)) if (!FLIGHT_KEYS.includes(k)) bad('BAD_PIECE_FIELD', `${at}: unknown field "${k}" in a flight`);
@@ -165,12 +165,12 @@ function checkPiece(piece) {
   for (const k of Object.keys(piece.start)) if (!want.includes(k)) bad('BAD_PIECE_START', `start has "${k}", which this ${sig} run does not carry (it needs ${want.join(', ')})`);
   for (const ch of want) { const v = ch === 'er' && piece.start.er === undefined ? piece.start.e : piece.start[ch]; if (!isNum(v)) bad('BAD_PIECE_START', `start needs a finite ${ch} (the run carries it), got ${JSON.stringify(v)}`); out.start[ch] = q(v, D.DEC[ch]); }
   // the run as the document would hold it: its own joints (C1 in every channel), cup, tube and edge limits, flights, all by the document's own checks.
-  // ONE checkDoc of the assembled run (C's D240 F1): appending piece by piece re-checked the whole growing document each time, so the time grew with
+  // ONE checkDoc of the assembled run: appending piece by piece re-checked the whole growing document each time, so the time grew with
   // the square of the run (800 pieces took about 1 s). appendPiece adds nothing checkDoc lacks here: its CLOSED check cannot fire on this fresh scratch
   // document, and the ids and nextId are the ones it would have given (p1..pN, N + 1). checkDoc walks the pieces in order and judges each one against
   // the one before it only, so the first failure, its code and its message are the same.
   const i0 = out.pieces.indexOf(first), run = absolute(out).slice(i0).map((P, k) => ({ ...P, id: `p${k + 1}` }));
-  // LAND ON ROAD FIRST (D243) for the flights BEFORE the first road too, which the check below never sees: refused when the file is read, so the library lists why
+  // LAND ON ROAD FIRST for the flights BEFORE the first road too, which the check below never sees: refused when the file is read, so the library lists why
   if (i0 > 1) bad('JUMP_AFTER_JUMP', `piece 1: the run starts with ${i0} jumps in a row: a jump must land on road before the next one takes off; put a road piece between them`);
   D.checkDoc({ ...D.createDoc('piece check'), nextId: run.length + 1, pieces: run });
   return out;
@@ -196,13 +196,13 @@ function parse(text) {
 }
 
 // ── mirror ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-/** The left/right mirror image of a piece: kh (turn), phi (bank) and l (a swerve) negated, in their raw arrays or, for the bank, in its change and its start; a flight's left, heading and bank (D258). Mirror of mirror is the piece itself. */
+/** The left/right mirror image of a piece: kh (turn), phi (bank) and l (a swerve) negated, in their raw arrays or, for the bank, in its change and its start; a flight's left, heading and bank. Mirror of mirror is the piece itself. */
 function mirrored(piece) {
   const neg = (a) => a.map((v) => (v === 0 ? 0 : -v));
   const start = { ...piece.start }; if (start.phi !== undefined) start.phi = start.phi === 0 ? 0 : -start.phi;
   if (start.e !== undefined && start.er !== undefined) [start.e, start.er] = [start.er, start.e];   // the right edge is the left in the mirror
   const pieces = piece.pieces.map((P) => {
-    if (!isRoad(P)) return { ...P, left: P.left === 0 ? 0 : -P.left, heading: P.heading === 0 ? 0 : -P.heading, bank: P.bank === 0 ? 0 : -P.bank };   // D258: the landing on the other side, turned and banked the other way
+    if (!isRoad(P)) return { ...P, left: P.left === 0 ? 0 : -P.left, heading: P.heading === 0 ? 0 : -P.heading, bank: P.bank === 0 ? 0 : -P.bank };   // the landing on the other side, turned and banked the other way
     const channels = { ...P.channels }; for (const ch of NEGATED) if (channels[ch] !== undefined) channels[ch] = neg(channels[ch]);
     if (channels.e !== undefined && channels.er !== undefined) [channels.e, channels.er] = [channels.er, channels.e];
     return { ...P, channels };
@@ -218,7 +218,7 @@ function continued(p, head) {
   const at = (ch) => (ch === 't' ? want.tNext : want[ch]);   // a tube started after any piece continues from tNext (endState reports t only at a tube head)
   const shifts = Object.fromEntries(STATE.filter((ch) => p.start[ch] !== undefined).map((ch) => [ch, at(ch).v]));
   const out = absolute(p, shifts), first = out[i0], h1 = first.knots.length ? first.knots[0] : first.length;
-  if (after) return out;   // D258: the run starts with a jump: its landing starts at the jump's pose, not C1 with the head
+  if (after) return out;   // the run starts with a jump: its landing starts at the jump's pose, not C1 with the head
   for (const ch of D.CHANNELS) {
     if (!hasChannel(first, ch)) continue;   // an unflagged piece's default array is not the head's to continue
     const { v, m } = at(ch), c = first.channels[ch]; c[0] = q(v, D.DEC[ch]); c[1] = q(v + (m * h1) / 3, D.DEC[ch]);
@@ -245,8 +245,8 @@ function insert(doc, piece, { mirror = false, keepStart = false } = {}) {
 /**
  * `doc.pieces[from..to]` (inclusive; one piece when `to` is left out) taken out: a NEW document; the others keep their ids (nextId is not wound back: an id is never reused). At the open
  * end the pieces are simply removed. In the MIDDLE the two sides must meet C1 again. First the far side is tried exactly as it is (it joins when the deleted run began and ended in the
- * same state: nothing is changed anywhere). Otherwise the far side's FIRST road piece is re-joined the way Extend makes a joint and the librarian matched p7 to p6 in TEST 1's recovery
- * (D190, ref 09 §1): every channel's first two control points become the near side's end value and slope carried on, and NOTHING else changes (that piece's own end, so its joint with the
+ * same state: nothing is changed anywhere). Otherwise the far side's FIRST road piece is re-joined the way Extend makes a joint (as p7 was matched to p6 in TEST 1's recovery)
+ * (ref 09 §1): every channel's first two control points become the near side's end value and slope carried on, and NOTHING else changes (that piece's own end, so its joint with the
  * next, and every piece after it are bit for bit as they were: the far side keeps its shape and moves along as one). When that does not make a valid document (a limit, a cup or tube that
  * cannot start there, a jump that needs a level road with no hill or swerve in front of it, a jump with nothing before it) it is REFUSED BY NAME, DELETE_REJOIN, and nothing is reshaped.
  * A closed track has no open end to delete from (CLOSED); a range that is not in the track is BAD_RANGE.
@@ -274,9 +274,9 @@ function deleteRun(doc, from, to = from) {
 
 // ── cut ──────────────────────────────────────────────────────────────────────────────
 /**
- * D361 (the user, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"): `doc.pieces[from..to]` (inclusive; on a closed lap
+ * (The user, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"): `doc.pieces[from..to]` (inclusive; on a closed lap
  * from > to is the run across the start line, as a selection gives it) TAKEN OUT, and the track left OPEN at the gap, with NOTHING that is kept moved or edited. Returns
- * { doc, kept, removed, notes }. A document is one chain from its start, so the two ends of the gap are made its two ends by ROTATION (D360 §2): the piece after the cut comes
+ * { doc, kept, removed, notes }. A document is one chain from its start, so the two ends of the gap are made its two ends by ROTATION: the piece after the cut comes
  * first and starts where it began (its block's world start on the path: position, heading and pitch, to the document's quanta; nothing else carries across a block, src/geom/path.js
  * BLOCKS AND THE PLACEMENT CHAIN), then round the old start line to the piece before the cut, which is the open end. On an open track a cut at its start or its end leaves one
  * piece of road; in its middle it would leave two, which one document cannot hold, so that is refused by name (CUT_OPEN_MIDDLE). The kept pieces are the very same objects.

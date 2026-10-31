@@ -1,12 +1,12 @@
 // document.js: the equation core's document (src/core/README.md is the shape). A track is a list of PIECES; a road piece
 // holds one clamped cubic B-spline per CHANNEL in its own arc length (ref 03 §1): heading rate κh, pitch rate κv, bank φ,
-// width w, the cross-section's rise rate r and (D190) the CUP c, the cross-section's edge angle. Every road joint is C1 in every channel (ref 09 §1), so the line is G2 by
-// construction. A flight piece is a jump (D258, the user's way): it carries the LANDING's start pose relative to the take-off end, and the road
+// width w, the cross-section's rise rate r and the CUP c, the cross-section's edge angle. Every road joint is C1 in every channel (ref 09 §1), so the line is G2 by
+// construction. A flight piece is a jump (the user's way): it carries the LANDING's start pose relative to the take-off end, and the road
 // after it starts at that pose; the user places it by hand and tunes it by driving. Nothing is solved or generated between (no ramp, no arc).
 //
 //   createDoc(name, { start })                 an empty open track
 //   roadPiece({ length, family, from, channels, knotM })   a piece whose channels START at `from` (the previous end state)
-//   flightPiece({ forward, left, up, heading, pitch, bank })   a free flight (D258); LANDING_DEFAULT is the Jump button's
+//   flightPiece({ forward, left, up, heading, pitch, bank })   a free flight; LANDING_DEFAULT is the Jump button's
 //   appendPiece(doc, piece) / endState(doc)    grow at the open end; the end value and slope of every channel
 //   channelAt(piece, ch, s)                    { v, d1, d2 } of one channel
 //   serialize(doc) / parse(text) / checkDoc(doc)
@@ -17,11 +17,11 @@
 
 const { basis, basisN, bandChol } = require('../../tools/piecewise.cjs');
 
-// core/2 (D186) adds the OFFSET channels h and l; a core/1 file is read and upgraded with both at zero (parse).
-// core/3 (D190) adds the CUP channel c (degrees). A /1 or /2 road piece loads as a LEGACY piece: its cross-section is the old
+// core/2 adds the OFFSET channels h and l; a core/1 file is read and upgraded with both at zero (parse).
+// core/3 adds the CUP channel c (degrees). A /1 or /2 road piece loads as a LEGACY piece: its cross-section is the old
 // profileAt(family, w, r), unchanged, and nothing of c reaches its render. A piece is a CUP piece only when P.cup is true, which is
 // written as a `c` array in its canonical text; a legacy piece's c is zeros in memory and absent in the text (src/core/README.md "the cup").
-// core/4 (D225, the cross-section lap) adds the EDGE channels e and s (an extra turning of the outer zone, ref 09 §10) and the TUBE channel t (a circular-arc
+// core/4 (the cross-section lap) adds the EDGE channels e and s (an extra turning of the outer zone, ref 09 §10) and the TUBE channel t (a circular-arc
 // cross-section, sweep in degrees). Like the cup, each is carried only by the pieces that use it: a piece is an EDGE piece when P.edge is true (its text has e and s
 // arrays), a TUBE piece when P.tube is true (a t array); a /1, /2 or /3 piece loads with none of them and renders byte for byte as before. The version bump is
 // deliberate: a /3 reader would accept a file with e and s and drop them on its next save, a /4 file is refused by name by the older builder (seal V3).
@@ -31,7 +31,7 @@ const SCHEMA = 't180b.core/4', OLD_SCHEMAS = Object.freeze(['t180b.core/1', 't18
 const CHANNELS = Object.freeze(['kh', 'kv', 'phi', 'w', 'r', 'h', 'l', 'c', 'e', 's', 't', 'er']);
 // the channels a piece carries only when its flag is set (cup: c; edge: e and s; tube: t), and what an unflagged piece reads for each
 const OPTIONAL = Object.freeze({ c: 'cup', e: 'edge', s: 'edge', t: 'tube', er: 'edge' });
-// e: the extra edge angle ψ added over the outer zone, degrees; below 0 (D406) the zone turns DOWN against the profile, to flat and past it (a lip), as far as
+// e: the extra edge angle ψ added over the outer zone, degrees; below 0 the zone turns DOWN against the profile, to flat and past it (a lip), as far as
 // EDGE_FLOOR below. s: where the outer zone starts, a share of the half-width.
 // t: the tube's sweep, degrees; 360 closes the section into a cylinder. The tube's edge angle is t/2.
 // er (the user, 2026-10-12: "lower the angle on one side and increase the banking of the edge on the other … the inside of the right turn will be turned
@@ -39,18 +39,18 @@ const OPTIONAL = Object.freeze({ c: 'cup', e: 'edge', s: 'edge', t: 'tube', er: 
 // edge piece carries it; a piece whose er equals its e is symmetric, exactly as before, and its text carries no er (so every file made before reads and
 // saves byte for byte as it did). A file with a piece whose sides differ is written as core/5, so a builder that predates er refuses it by name instead of
 // silently making it symmetric (seal V3's reason). The edge START s stays one value for both sides.
-// D406 (the user, 2026-10-18: "it should be able to go into the negatives, meaning the track curves down tweaking the banking on one side to be closer to
+// (The user, 2026-10-18: "it should be able to go into the negatives, meaning the track curves down tweaking the banking on one side to be closer to
 // flat or even past it"): EDGE_FLOOR is the least TOTAL edge angle a side may reach, the profile's own angle at the rim (c on a cup, t/2 on a tube, the
 // family's on a legacy road) plus e or er: 30° past flat, a lip. The geometry itself would allow 90°: past that the outer zone runs back under the road
-// (its lateral step is the cosine of its angle), so -30 is the ruling's own limit on how far a rim may drop, not where the section breaks, and it may move.
-// A file with a negative edge on any piece is written as core/6, so a builder that predates D406 refuses it by name instead of meeting values it never allowed.
+// (its lateral step is the cosine of its angle), so -30 is a chosen limit on how far a rim may drop, not where the section breaks, and it may move.
+// A file with a negative edge on any piece is written as core/6, so a builder that predates negative edges refuses it by name instead of meeting values it never allowed.
 // The floor is checked at the RIM. Inside the outer zone the angle can dip a little under it: on cups and legacy roads the rim is the least (to 0.09°), but on an
-// open tube, whose own angle rises to the rim while the edge term's slope is 0 there, the least reaches -32.74° (t 300, s 0.5; E's D406 review §1, probe1). The
+// open tube, whose own angle rises to the rim while the edge term's slope is 0 there, the least reaches -32.74° (t 300, s 0.5, probed). The
 // section does not cross itself there, far from the 90° where the step reverses, so this is named here and not checked.
 const EDGE_FLOOR = -30;
 const EDGE_EPS = 1e-9, S_MIN = 0.5, S_MAX = 0.95, S_DEFAULT = 0.64, TUBE_MAX = 360, TUBE_EDGE_MAX = 180;
 const OPT_DEFAULT = Object.freeze({ c: 0, e: 0, s: S_DEFAULT, t: 0, er: 0 });
-// c is the cross-section's edge angle ψ at u = ±w/2, in DEGREES, in [0, CUP_MAX]. 150: the bowl's two walls touch at 159.681° (the D190 seal, V2)
+// c is the cross-section's edge angle ψ at u = ±w/2, in DEGREES, in [0, CUP_MAX]. 150: the bowl's two walls touch at 159.681°
 const CUP_MAX = 150, CUP_JOINT_DEG = 0.05, CUP_EPS = 1e-9;   // CUP_EPS: the float noise a solver leaves on a control point at a limit (close.js)
 const OFFSETS = Object.freeze(['h', 'l']);
 const FAMILIES = Object.freeze(['bowl', 'half-pipe', 'flat']);
@@ -68,7 +68,7 @@ const deepFreeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o
 
 /** The clamped knot vector of a piece (ref 03 §1). */
 const knotVector = (P) => [0, 0, 0, 0, ...P.knots, P.length, P.length, P.length, P.length];
-/** D404: the knot vector for a reader that only reads it (the basis): kept for a piece that is frozen, with its knots (a document's are), so 100 readings of one piece
+/** The knot vector for a reader that only reads it (the basis): kept for a piece that is frozen, with its knots (a document's are), so 100 readings of one piece
  *  build one array. knotVector itself still makes a fresh array every time, for the callers that are free to change what they are given. */
 const KV = new WeakMap();
 function knotVectorOf(P) {
@@ -79,7 +79,7 @@ function knotVectorOf(P) {
 /** Evenly spaced interior knots, one span per ≤ knotM metres (at least one span). */
 function evenKnots(L, knotM = KNOT_M) { const m = Math.max(1, Math.ceil(L / knotM - 1e-9)), out = []; for (let j = 1; j < m; j++) out.push((j * L) / m); return out; }
 
-/** D404: a channel's VALUE at s, exactly channelAt(P, ch, s).v (the same basis values, summed in the same order) without the two derivatives. */
+/** A channel's VALUE at s, exactly channelAt(P, ch, s).v (the same basis values, summed in the same order) without the two derivatives. */
 function channelValue(P, ch, s) {
   const c = P.channels[ch];
   if (c === undefined && OPTIONAL[ch] && !P[OPTIONAL[ch]]) return OPT_DEFAULT[ch];
@@ -99,7 +99,7 @@ function channelAt(P, ch, s) {
 }
 /**
  * Every channel's VALUE at s, as { kh: v, kv: v, ... } over CHANNELS: exactly `channelAt(P, ch, s).v` for each, from ONE basis evaluation (the basis depends on the knots and
- * s alone, so channelAt rebuilt the very same one for each of the eleven channels; D236: the adapter reads all of them at every segment end of every piece, on every brush step).
+ * s alone, so channelAt rebuilt the very same one for each of the eleven channels; the adapter reads all of them at every segment end of every piece, on every brush step).
  */
 function valuesAt(P, s) {
   const out = {}; let b = null;
@@ -158,7 +158,7 @@ function fillCup(doc) {
 }
 /** True when the last road piece is a cup piece (a piece extended after it is one too). */
 function endIsCup(doc) { for (let i = doc.pieces.length - 1; i >= 0; i--) if (doc.pieces[i].type === 'road') return !!doc.pieces[i].cup; return false; }
-/** The state a new road piece must start from: the last road piece's end; after a flight (D258), level (κh = κv = 0, no offset) at the flight's bank, the rest carried as a default. */
+/** The state a new road piece must start from: the last road piece's end; after a flight, level (κh = κv = 0, no offset) at the flight's bank, the rest carried as a default. */
 function endState(doc) {
   let flight = null;
   for (let i = doc.pieces.length - 1; i >= 0; i--) {
@@ -177,7 +177,7 @@ const afterFlight = (e, F) => ({ ...e, kh: { v: 0, m: 0 }, kv: { v: 0, m: 0 }, h
  * channel starts at value v and slope m (ref 09 §1) when `start` is given. Banded normal equations, solved by the
  * repository's banded Cholesky (tools/piecewise.cjs). Samples: 8 per span and both ends.
  */
-/** D404: the part of a least-squares fit that does not depend on the function fitted: the sample stations, the basis at each, the banded normal matrix and its Cholesky factor. A piece fits
+/** The part of a least-squares fit that does not depend on the function fitted: the sample stations, the basis at each, the banded normal matrix and its Cholesky factor. A piece fits
  *  eleven channels over the same knots, and an Extend ghost is rebuilt on every move of a handle drag, so the same system was built eleven times a move (about 70% of the fit). It is
  *  built by the very same loops in the very same order as before, so every control point is the same double; kept for the knots it was built for (checked by value), a few at a time. */
 const FITS = new WeakMap();
@@ -224,7 +224,7 @@ function qChannel(ch, arr) { return arr.map((x) => q(x, DEC[ch])); }
  * length). `from` is the state it must start from (endState), or null for a first piece. Each channel is fitted with its
  * start held (fitChannel), then quantised.
  */
-// ── D261, GRIP PER PIECE ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ── GRIP PER PIECE ───────────────────────────────────────────────────────────────────────────────────────────────────────
 // A road piece's grip: an integer percent of AC's road friction (ROAD, FRICTION 1: AC's system/data/surfaces.ini), from GRIP_MIN to GRIP_MAX, default 100.
 // It lives ON THE PIECE, not in a channel: grip changes at piece boundaries, never smoothly. A piece at 100 carries NO grip field, in memory and in the file,
 // so every track made before it, and every all-100 track, is the same document and the same text as before (the user's range, 2026-10-06: 50–150%).
@@ -253,11 +253,11 @@ function setGrip(doc, indices, g) {
 
 // ── SPAWNS (the user, 2026-10-09: "move the start line around the first piece … a numbered grid … a hotlap spawn I plop down") ───────────────────────
 // Where the cars start, chosen by hand. It lives ON THE DOCUMENT, and a track that never had one carries NO spawns field, in memory and in the file, so
-// every track made before it is the same document and the same text (D261's rule for grip). Without it the export places the start itself
+// every track made before it is the same document and the same text (the rule grip follows too). Without it the export places the start itself
 // (app/core/coreshell.js startLayout, the longest straight); with it the export uses exactly this.
 //   { line: { along },                         the start/finish line, metres into the FIRST piece (clamped to its length where it is used)
 //     grid: { count, rowGapM, colGapM },       the grid pack: how many slots, the along-the-road spacing of one column (a staggered pair every
-//                                              rowGapM) and the across-the-road spacing of the two columns; plus poleBackM? (D285): how far behind the line the
+//                                              rowGapM) and the across-the-road spacing of the two columns; plus poleBackM?: how far behind the line the
 //                                              pole slot sits, set by dragging the pack. ABSENT until a drag sets it, and absent means the 10 m the export always
 //                                              used (src/markers/layout.js DEFAULTS), so every file made before it is the same text
 //     hotlap?: { piece, along } }              the hotlap spawn, a piece id and metres into it; absent until placed
@@ -271,7 +271,7 @@ function checkSpawns(sp, at = 'spawns') {
   const g = sp.grid;
   if (!g || !Number.isInteger(g.count) || g.count < 1 || g.count > SPAWN_COUNT_MAX) bad(`grid.count must be a whole number from 1 to ${SPAWN_COUNT_MAX}, got ${JSON.stringify(g && g.count)}`);
   pos(g.rowGapM, 'grid.rowGapM', SPAWN_GAP_MAX); pos(g.colGapM, 'grid.colGapM', SPAWN_GAP_MAX);
-  if (g.poleBackM !== undefined) pos(g.poleBackM, 'grid.poleBackM', SPAWN_GAP_MAX);   // D285: how far behind the line the pole slot sits; absent = the export's 10 m
+  if (g.poleBackM !== undefined) pos(g.poleBackM, 'grid.poleBackM', SPAWN_GAP_MAX);   // how far behind the line the pole slot sits; absent = the export's 10 m
   if (sp.hotlap !== undefined) {
     const h = sp.hotlap;
     if (!h || typeof h.piece !== 'string' || !h.piece) bad(`hotlap.piece must be a piece id, got ${JSON.stringify(h && h.piece)}`);
@@ -341,7 +341,7 @@ function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM =
   const P = { id: id || null, type: 'road', length: L, family, knots: K, channels: out };
   return { ...P, ...(grip !== GRIP_DEFAULT ? { grip } : {}), ...(cup ? { cup: true } : {}), ...(edge ? { edge: true } : {}), ...(tube ? { tube: true } : {}) };
 }
-// ── D258, THE FREE FLIGHT ──────────────────────────────────────────────────────────────────────────────────────────────
+// ── THE FREE FLIGHT ────────────────────────────────────────────────────────────────────────────────────────────────────
 // The landing's start POSE relative to the take-off end: forward, left and up (m) in the take-off's HEADING frame (forward along its heading on the
 // ground, left across it on the ground, up along world up, so "the same height" is up 0 whatever the take-off's climb), heading (rad, a TURN from the
 // take-off's heading, + = left), pitch (rad, the landing's own pitch, + = nose up) and bank (rad, the landing's own bank: its φ at its start).
@@ -361,7 +361,7 @@ function checkFlight(P, at) {
   if (!(Math.abs(P.pitch) <= FLIGHT_PITCH_MAX)) throw new CoreError('BAD_FLIGHT', `${at}: the landing's pitch must be short of vertical (inside ±${(FLIGHT_PITCH_MAX * 180 / Math.PI).toFixed(2)}°), got ${(P.pitch * 180 / Math.PI).toFixed(2)}°`);
   if (!(Math.abs(P.heading) <= Math.PI + 1e-9)) throw new CoreError('BAD_FLIGHT', `${at}: the landing's heading is a turn from the take-off within ±180°, got ${(P.heading * 180 / Math.PI).toFixed(2)}°`);
 }
-/** Why a landing P does not start as flight F says (null when it does): level (κh, κv, h, l: 0 in value and slope) and at F's bank. Its other channels are its own (D258: not C1 with the take-off). */
+/** Why a landing P does not start as flight F says (null when it does): level (κh, κv, h, l: 0 in value and slope) and at F's bank. Its other channels are its own (not C1 with the take-off). */
 function landingProblem(F, P) {
   const h = P.knots.length ? P.knots[0] : P.length;
   for (const ch of ['kh', 'kv', 'h', 'l']) {
@@ -406,21 +406,21 @@ function jointProblem(prevEnd, P, prevKind = 'legacy') {
   }
   return null;
 }
-/** The tube's own domain (D225): the sweep in [0, 360], and not HELD where the two tips are closer than the downforce ray reaches (every control point in the band). */
+/** The tube's own domain: the sweep in [0, 360], and not HELD where the two tips are closer than the downforce ray reaches (every control point in the band). */
 function checkTube(P, at) {
   const t = P.channels.t, w = P.channels.w;
   if (t.some((v) => v < -EDGE_EPS || v > TUBE_MAX + EDGE_EPS)) throw new CoreError('BAD_TUBE', `${at}: the tube sweep must stay within 0 to ${TUBE_MAX}°, but a control point is ${Math.min(...t)} to ${Math.max(...t)}°`);
   if (t.every((v, i) => v > tubeSlotMinDeg(w[i]) + 1e-6 && v < TUBE_MAX - 1e-6)) throw new CoreError('BAD_TUBE', `${at}: a tube held at ${Math.min(...t).toFixed(2)}° to ${Math.max(...t).toFixed(2)}° leaves a slot under ${MACH6.downforceRay.aheadM} m between its tips, which the car's downforce ray falls through (a sweep below ${tubeSlotMinDeg(Math.max(...w)).toFixed(1)}° is open, 360° is closed; pass through the band, do not stay in it)`);
 }
 /**
- * The edge's own domain (D225, seal V4 and E2): s in [0.5, 0.95], and each side's total edge angle (the middle profile's edge angle plus e or er) within the cap: CUP_MAX = 150 on a legacy
- * or cup piece, 180 on an open tube (t/2 + e), and at or above EDGE_FLOOR (D406), each bound on the CONTROL POINTS by the convex hull (ref 03 §1b). A closed tube takes
+ * The edge's own domain: s in [0.5, 0.95], and each side's total edge angle (the middle profile's edge angle plus e or er) within the cap: CUP_MAX = 150 on a legacy
+ * or cup piece, 180 on an open tube (t/2 + e), and at or above EDGE_FLOOR, each bound on the CONTROL POINTS by the convex hull (ref 03 §1b). A closed tube takes
  * no edge: the edge is moot there.
  */
 function checkEdge(P, at) {
   // the larger side binds every cap below: each side's total edge angle must fit, and that is the larger one's
   const s = P.channels.s, er = P.channels.er || P.channels.e, e = P.channels.e.map((v, i) => Math.max(v, er[i]));
-  // and each side on its own keeps to the floor (D406): the profile's angle at the rim plus that side's, at every control point. A legacy road's angle grows
+  // and each side on its own keeps to the floor: the profile's angle at the rim plus that side's, at every control point. A legacy road's angle grows
   // with its width and rise, so its least is at their least
   const rim = P.tube ? P.channels.t.map((v) => v / 2) : P.cup ? P.channels.c : P.channels.e.map(() => legacyEdgeDeg(P.family, Math.min(...P.channels.w), Math.min(...P.channels.r)));
   for (const [side, vs] of [['edge angle e', P.channels.e], ['right edge angle er', er]]) vs.forEach((v, i) => {
@@ -438,7 +438,7 @@ function checkEdge(P, at) {
     if (mid > CUP_MAX + EDGE_EPS) throw new CoreError('BAD_EDGE', `${at}: the road's edge angle plus e reaches ${mid.toFixed(3)}°, past ${CUP_MAX}° (the walls of a ${CUP_MAX}°+ bowl touch)`);
   }
 }
-// D429: A ROAD PIECE ALREADY CHECKED IS NOT CHECKED AGAIN. A drag step checks its document three times (made, toSegments, dragTo) and every piece each time, though only the
+// A ROAD PIECE ALREADY CHECKED IS NOT CHECKED AGAIN. A drag step checks its document three times (made, toSegments, dragTo) and every piece each time, though only the
 // pieces in the brush's window are new objects. A road piece's checks below read only the piece, the piece before it and whether a flight came between, so a piece that
 // passed them after the same piece, both frozen all the way down (they cannot have changed since), passes again; ids, flights, nextId and the rest still run every time
 const DEEP = new WeakSet(), ROAD_OK = new WeakMap(), FIRST = {};
@@ -461,14 +461,14 @@ function checkDoc(doc) {
       // a jump may take off from road the brush raised or shifted: the adapter starts the flight from the lip as built (its h and l, and their slopes), so no step
       checkFlight(P, at);
       if (!prev) bad(`${at}: a flight must follow a road piece`);
-      // D243 (B's look): LAND ON ROAD FIRST. Two flights in a row would take the second off from the first one's landing ramp, which no road piece
+      // LAND ON ROAD FIRST. Two flights in a row would take the second off from the first one's landing ramp, which no road piece
       // describes; jump() never makes one, and an opened or hand-edited file may not hold one either
       if (flight) throw new CoreError('JUMP_AFTER_JUMP', `${at}: two jumps in a row (${doc.pieces[i - 1].id}, then ${P.id}): a jump must land on road before the next one takes off; put a road piece between them`);
       flight = P; return;
     }
     if (P.type !== 'road') bad(`${at}: type must be road or flight, got ${P.type}`);
     if (!flight && ROAD_OK.get(P) === (prev || FIRST)) { prev = P; return; }
-    if (P.grip !== undefined) checkGrip(P.grip, `${at}: grip`);   // D261
+    if (P.grip !== undefined) checkGrip(P.grip, `${at}: grip`);
     if (!(P.length > 0)) bad(`${at}: length must be positive`);
     if (!FAMILIES.includes(P.family)) bad(`${at}: family "${P.family}"`);
     if (!Array.isArray(P.knots) || P.knots.some((t, k) => !(t > 0 && t < P.length) || (k && !(t > P.knots[k - 1])))) bad(`${at}: knots must be ascending, strictly inside (0, length)`);
@@ -481,7 +481,7 @@ function checkDoc(doc) {
     if (P.edge) checkEdge(P, at);
     // a cup piece's c stays in [0, CUP_MAX]: every control point is, so the curve is (its basis is non-negative and sums to 1: the convex hull, ref 03 §1b)
     if (P.cup && P.channels.c.some((v) => v < -CUP_EPS || v > CUP_MAX + CUP_EPS)) throw new CoreError('BAD_CUP', `${at}: the cup must stay within 0 to ${CUP_MAX}°, but a control point is ${Math.min(...P.channels.c)} to ${Math.max(...P.channels.c)}° (the walls of a ${CUP_MAX}°+ bowl touch)`);
-    if (prev && flight) {   // D258: a LANDING starts at its flight's pose, not C1 with the take-off: level, at the flight's bank, the rest its own
+    if (prev && flight) {   // a LANDING starts at its flight's pose, not C1 with the take-off: level, at the flight's bank, the rest its own
       const p = landingProblem(flight, P); if (p) throw new CoreError('LANDING', `${at}: ${p}`);
     } else if (prev) {
       const p = jointProblem(pieceEnd(prev), P, kindOf(prev)); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint is C1 in every channel, ref 09 §1)`);
@@ -500,7 +500,7 @@ const pieceText = (P) => (P.type === 'flight'
 /** An edge piece whose two sides differ (er is not e): only such a piece writes er, and a document with one is written as core/5. */
 const isSplit = (P) => !!(P.type === 'road' && P.edge && P.channels.er && P.channels.er.some((v, i) => v !== P.channels.e[i]));
 const SCHEMA_SPLIT = 't180b.core/5';
-/** An edge piece with a side below 0 (D406): a document with one is written as core/6, which also carries a split. */
+/** An edge piece with a side below 0: a document with one is written as core/6, which also carries a split. */
 const isNegEdge = (P) => !!(P.type === 'road' && P.edge && (P.channels.e.some((v) => v < 0) || (P.channels.er || []).some((v) => v < 0)));
 const SCHEMA_NEG = 't180b.core/6';
 function serialize(doc) {
@@ -540,7 +540,7 @@ function parse(text) {
 }
 
 /**
- * D258: an OLD flight (D243's { gap, drop, land }: a solved flight plus a landing ramp the adapter generated, sized at the design speed) opens as the FREE
+ * An OLD flight ({ gap, drop, land }: a solved flight plus a landing ramp the adapter generated, sized at the design speed) opens as the FREE
  * flight that lands where the road after it already was: at the END of that ramp. The ramp was `gap` along the ground and `drop` down to the lip, then a
  * horizontal landingRamp(...).length more at the landing pitch, sized from the take-off's pitch, which is reckoned here by the adapter's own rule (pitch
  * rate linear over 2 m chords). Nothing turns; the bank is the take-off's, as the road after it already carried. So every road piece keeps its place (a
@@ -587,13 +587,13 @@ function redo(h) { if (h.dragBase) throw new CoreError('IN_DRAG', 'redo during a
 
 // ── loading a real track (a LOCAL example: its equation is another author's layout; it lives in reads/, never committed) ──
 /**
- * A document from D184's position fit (`tools/piecewise.cjs --write`, schema t180b.pieces/1) and the read it was fitted
+ * A document from a position fit (`tools/piecewise.cjs --write`, schema t180b.pieces/1) and the read it was fitted
  * from. Each fitted road piece becomes a road piece:
  *   - κh and κv come from the position spline's derivatives (ref 09 §4), re-parameterised by true arc length;
  *   - φ is the READ's normal against the geometry's gravity frame at the nearest read station. The fit's own bank is
  *     against a rotation-minimising frame whose start is not in the file, so it cannot be turned into a gravity roll;
  *   - w is the read's width there; r is the family's measured rate.
- * A jump joint becomes a FREE flight (D258): the landing point's place in the take-off's heading frame, the turn between their headings, the landing's
+ * A jump joint becomes a FREE flight: the landing point's place in the take-off's heading frame, the turn between their headings, the landing's
  * pitch and bank, so the line after a jump starts where the real track's does (no generated ramp any more).
  * The lap is returned OPEN: closing it is close.js's (the spec's GO §1 "then close").
  */

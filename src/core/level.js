@@ -1,4 +1,4 @@
-// level.js: LEVEL and TO FLOOR (D271; the user, 2026-10-08: "there needs to be a way to snap the track to the floor to be true flat … i wanted the
+// level.js: LEVEL and TO FLOOR (the user, 2026-10-08: "there needs to be a way to snap the track to the floor to be true flat … i wanted the
 // downhill to straighten out but its hard to calculate by hand"). The climb channel kv is a RATE (rad per metre of road), so "climb 0" keeps whatever
 // slope the road already has: on the user's track the last piece eases its climb to 0 and ends straight, but tilted +3.2° and 187 m below the start.
 //
@@ -13,10 +13,10 @@
 // two stay 0 (it ends straight: rate 0 and slope 0). For Level the end pitch is LINEAR in them (the adapter's rule: pitch += the trapezoid of kv over
 // each 2 m segment, src/core/adapter.js toSegments), so one step is exact. To floor adds the end height, which is not linear (∫ sin p ds), so the
 // step is iterated (Gauss–Newton) with the residual read on the adapter's own path (toPath: what the app draws and exports, offsets included).
-// THE LIMIT (To floor's refusal, and nothing else): the road's centre must keep the car on it at the open track's speed, the validator's own D256
+// THE LIMIT (To floor's refusal, and nothing else): the road's centre must keep the car on it at the open track's speed, the validator's own
 // check (src/validate/index.js 'leaves-surface' on the centreline: g·cos p + v²·κ_climb + the downforce ≥ 0 at vmax 970 km/h, src/validate/limits.js). A
 // shape that would lift the car off is never placed, and never clamped: the user is told the length that does it.
-// A TURN READ AS A CORNER (D516; the user, 2026-10-28, on CRAZY TEST's end: "currently it does nothing if there is a turn value added"): with opts.turnDeg the
+// A TURN READ AS A CORNER (the user, 2026-10-28, on CRAZY TEST's end: "currently it does nothing if there is a turn value added"): with opts.turnDeg the
 // piece is Turn by's (src/core/turnby.js extendCorner: its symmetric ease, the exact heading change, ending straight) instead of Extend's, and then its climb
 // is corrected as above. The two are independent: the heading is ∫kh and the pitch ∫kv on the same 2 m segments (adapter.js toSegments), the correction
 // changes only kv, so the piece turns exactly turnDeg AND ends level (and, for To floor, at height 0). A climb read as a corner (climbDeg) is refused by name:
@@ -35,7 +35,7 @@ const PITCH_TOL = 1e-6;        // rad (0.00006°): the bar is 0.01°
 const Y_TOL = 5e-3;            // m: the bar is 1 cm. Not tighter: the climb is STORED to 1e-9 rad/m (document.js DEC.kv), and over a piece of several km that rounding alone moves the end height by millimetres
 const MAX_ITER = 12;
 const MAX_SEARCH_M = 50000;
-const V_OPEN = MACH6.vmaxKmh / 3.6;   // the open track's speed (D256 fullSpeed)
+const V_OPEN = MACH6.vmaxKmh / 3.6;   // the open track's speed (fullSpeed)
 const q = (x, dec) => { const v = Number(x.toFixed(dec)); return Object.is(v, -0) ? 0 : v; };   // document.js's quantisation (what is stored is what is measured, as close.js)
 const freeze = (o) => { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) freeze(o[k]); } return o; };
 
@@ -91,7 +91,7 @@ const DF = MACH6.downforce ? (MACH6.downforce.nPerMps / MACH6.downforce.massKg) 
 const crestMargin = (rows) => Math.min(...rows.kv.map((k, j) => G * Math.cos(rows.p[j]) + V_OPEN * V_OPEN * k + DF));
 
 /** The piece Extend would place with climb 0 (its easing: the rate to 0 over the whole piece), the climb's own at-start ramp dropped; with opts.turnDeg, the
- *  corner's piece (D516: Turn by's ease, turning exactly turnDeg and ending straight). */
+ *  corner's piece (Turn by's ease, turning exactly turnDeg and ending straight). */
 function basePiece(doc, opts) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to level');
   if (opts && 'climbDeg' in opts) throw new D.CoreError('CLIMB_AS_CORNER', `Level and To floor solve the climb themselves: a climb of ${opts.climbDeg}° read as a corner cannot be placed with them`);
@@ -130,7 +130,7 @@ const yModel = (rows, st, y0) => { let y = y0; for (let j = 1; j < st.length; j+
 /** Extend with a piece that ends straight and level (pitch 0). */
 function extendLevel(doc, opts) { return solve(doc, opts, false).doc; }
 
-const feasible = (doc, opts, L, how = {}) => { try { const r = solve(doc, { ...opts, length: L }, true, how); return r.converged && r.crest >= 0; } catch (e) { if (e && (e.code === 'LEVEL_TOO_SHORT' || e.code === 'TURN_TOO_SHORT')) return false; throw e; } };   // D516: too short for the corner is too short
+const feasible = (doc, opts, L, how = {}) => { try { const r = solve(doc, { ...opts, length: L }, true, how); return r.converged && r.crest >= 0; } catch (e) { if (e && (e.code === 'LEVEL_TOO_SHORT' || e.code === 'TURN_TOO_SHORT')) return false; throw e; } };   // too short for the corner is too short
 /** The shortest whole-metre length at which To floor works from this head (with these fields), or null when none up to MAX_SEARCH_M does. */
 function shortestToFloor(doc, opts) {
   if (doc.closed) throw new D.CoreError('CLOSED', 'the loop is closed: there is no open end to level');

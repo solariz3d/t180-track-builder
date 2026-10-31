@@ -1,4 +1,4 @@
-// water.js: pour water down the track (the core spec §5, exo_memory/loop/spec_t180_equation_core_2026-09-28.md; D185, pane C).
+// water.js: pour water down the track.
 //
 //   surfaceFrom({ samples, closed, lengthM, profileAt })  -> a surface the water can ride
 //   pour(surface, { speed, count | streams, s0, g, h, laps | distance, tMax, energyTol }) -> { streams, reds, energy }
@@ -12,7 +12,7 @@
 //   · L and U are CUBIC Hermite, their slopes by central differences over the samples (one-sided at an open end);
 //   · where two samples carry different profiles, X and Y are blended by the smoothstep 3t² − 2t³ (references/02 §4), so
 //     the surface stays C1 along s.
-// A sample may carry d1 = dpos/ds and d2 = d²pos/ds² (D186: a LIFTED sample, whose s is the base parameter, not arc length, so
+// A sample may carry d1 = dpos/ds and d2 = d²pos/ds² (a LIFTED sample, whose s is the base parameter, not arc length, so
 // its T is dpos/ds normalised and its kvec is per metre of road); then those are the Hermite's slopes instead of T and kvec.
 // pos' = T holds only when the samples' pos is ∫T ds (no heartline offset). That is checked when the surface is built,
 // and a sample list that breaks it is refused, loudly, never ridden.
@@ -98,7 +98,7 @@ function finishSurface(S, pos, T, K, L, U, prof, closed, Lm) {
   for (let i = 0; i + 1 < n; i++) {
     const h = S[i + 1] - S[i], chord = sub(pos[i + 1], pos[i]);
     const want = add(mul(add(T[i], T[i + 1]), h / 2), mul(sub(K[i], K[i + 1]), h * h / 12)), off = len(sub(chord, want)) / h;
-    // D225: a closed tube's road centre is off the integrated curve (a heartline offset, the spiral), so water cannot ride it: REFUSED BY NAME (WATER_HEARTLINE) for the UI to show, never an anonymous throw
+    // a closed tube's road centre is off the integrated curve (a heartline offset, the spiral), so water cannot ride it: REFUSED BY NAME (WATER_HEARTLINE) for the UI to show, never an anonymous throw
     if (!(off <= 1e-3)) { const e = new Error(`WATER_HEARTLINE: water: samples ${i}–${i + 1}: pos is not ∫T ds (off by ${off.toExponential(2)} per metre); a heartline offset (the roll axis of a closed tube, the spiral) is not supported by the water: pour over a track without a closed tube`); e.name = 'CoreError'; e.code = 'WATER_HEARTLINE'; throw e; }   // named like a CoreError (this file stands alone: the water mutation harness loads it by itself)
   }
   // frame slopes by the three-point difference for UNEVEN spacing, exact for a quadratic (wrapping on a closed loop, whose

@@ -1,7 +1,7 @@
-// sharp.js: SHARP, a second turn type beside the broad curve (D282; the user, 2026-10-09 18:55: "THERE is nothign wrong with the 90 degree curves that can be
+// sharp.js: SHARP, a second turn type beside the broad curve (the user, 2026-10-09 18:55: "THERE is nothign wrong with the 90 degree curves that can be
 // made now, as long as its straight it is a type of turn, but i also want to be able to make track H 90 degrees too"). track H's turns after the jump
-// hold about R 22 m for ~88° with entries and exits of 0–8 m (exo_memory/loop/sharp_turns_measure_B_2026-10-09.md §1). The broad curve eases its rate over
-// the whole piece and the "at start" ease is a fixed 20 m on 20 m knots (B §2 L1–L3), so neither draws that; this type does, and leaves both untouched.
+// hold about R 22 m for ~88° with entries and exits of 0–8 m (measured). The broad curve eases its rate over
+// the whole piece and the "at start" ease is a fixed 20 m on 20 m knots, so neither draws that; this type does, and leaves both untouched.
 //
 //   extendSharp(doc, opts, { angle, R, ramp = 4 })   two pieces as ONE edit: a TURN piece that ramps the turn rate to ±1/R over `ramp` metres and holds it, then
 //                                                  an EXIT piece of `ramp` metres that ramps it back to 0, ending with rate 0 and slope 0 (dead straight). The hold
@@ -10,8 +10,8 @@
 //                                                  wrong, and knotM ≤ ramp draws it right). opts are extend's for the other channels (width, climb, bank…).
 //   tightestSharp(doc, opts, { angle, ramp })        the smallest radius (m, to 0.1 m) at which the corner stays GREEN for the head's width and cross-section.
 //
-// THE MINIMUM RADIUS is the geometry's, not a cap (B §2 L4/L5): the validator at full speed reds the fold (1 − κ·o ≤ 0 at the inner edge) and road that runs into
-// itself (since D432 the clip test; surfaces merely within 2 m are information), and ambers a normal load past the proven 90 g. Sharp refuses a radius at which any red or amber falls on the corner (SHARP_TOO_TIGHT), naming the
+// THE MINIMUM RADIUS is the geometry's, not a cap: the validator at full speed reds the fold (1 − κ·o ≤ 0 at the inner edge) and road that runs into
+// itself (the clip test; surfaces merely within 2 m are information), and ambers a normal load past the proven 90 g. Sharp refuses a radius at which any red or amber falls on the corner (SHARP_TOO_TIGHT), naming the
 // tightest that stays green ("tightest at this width: 15.0 m"), and changes nothing. It is judged on a PROBE: a straight with the head's cross-section, the
 // corner, and a straight after it, so it is a property of the width and cross-section (and cheap on a long track); what the corner does to the REST of the
 // track (running over another part of it) is the validator's to show, as for any piece.
@@ -107,7 +107,7 @@ function faults(doc, opts, sharp) {
   const on = (xs) => (xs || []).filter((x) => { const a = x.s0 != null ? x.s0 : x.s, b = x.s1 != null ? x.s1 : a; return b >= s0 - NEAR_M && a <= s1 + NEAR_M; }).map((x) => x.reason);
   return { red: [...new Set(on(res.red))], amber: [...new Set(on(res.amber.filter((x) => !ADVISORY.has(x.reason))))] };
 }
-// D517: the two warnings D515's lap measured are limits known to hold, not geometry: they never set Sharp's minimum radius (the user drove 56-63 g clean)
+// the two warnings measured on a driven lap are limits known to hold, not geometry: they never set Sharp's minimum radius (the user drove 56-63 g clean)
 const ADVISORY = new Set(['load-on-the-chassis', 'wall-swerve']);
 const green = (doc, opts, sharp) => { const f = faults(doc, opts, sharp); return !f.red.length && !f.amber.length; };
 

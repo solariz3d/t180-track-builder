@@ -1,4 +1,4 @@
-// turnby.js: TURN BY (D280; the user, 2026-10-09 18:52: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt"). The turn
+// turnby.js: TURN BY (the user, 2026-10-09 18:52: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt"). The turn
 // channel kh is a RATE (rad per metre of road), and Extend eases a piece to the rate it is given, so a piece that turns 90° that way ENDS still turning: on the
 // user's TEST TRACK 3 (a copy) a 750 m piece turns −90.0° and ends at −24°/100 m, and the next piece's "turn 0, at start" spends −1.35° ramping that rate to 0.
 //
@@ -6,13 +6,13 @@
 //                                     turn rate 0 and its slope 0, so the next piece starts dead straight. Refused by name (TURN_TOO_SHORT) when the piece is
 //                                     too short to have a free turn control point; the refusal carries `needM`, the shortest length that has one.
 //   shortestTurnBy(doc, opts)         that length (m, whole metres).
-//   extendCorner(doc, opts)           Extend with the panel's turn field read as a CORNER (D331 B, the panel's default): opts.turnDeg (degrees, + = left) is the
+//   extendCorner(doc, opts)           Extend with the panel's turn field read as a CORNER (the panel's default): opts.turnDeg (degrees, + = left) is the
 //                                     exact map heading change of the piece, which ends straight (extendTurnBy, so the same refusals); without turnDeg, Extend.
 //
-// HOW. D331 C (ledger D332; the user, 2026-10-15: "the turn angle should take into account the banking to make the turns more intuitive ... but then turns that
+// HOW. (The user, 2026-10-15: "the turn angle should take into account the banking to make the turns more intuitive ... but then turns that
 // have less banking or no banking also just work how it should to convey the proper degrees to line up with the grid"). The turn rate is a SYMMETRIC EASE: it
 // rises over the first half of the piece and falls over the second by the same Bloss blend (extend.js bloss), so it peaks at the middle and lets go exactly as
-// gently as it built up. Before D331 the piece started as Extend's, eased to an end rate (the user's 18:55 "THERE is nothign wrong with the 90 degree curves
+// gently as it built up. Before this the piece started as Extend's, eased to an end rate (the user's 18:55 "THERE is nothign wrong with the 90 degree curves
 // that can be made now"), and was ended in its last two knot spans, so a 90° Turn by over 105 m peaked at 74% of the piece and let go about four times as fast as it
 // came in; on a steep bank, where most of a turn bends through the road's up (on 53.5°, cos = 0.59 of it lies in the road's plane), a quick let-go is a sudden
 // twist-and-dip. The ease is read at the knot averages (extend.js rampControl's variation-diminishing way: no ringing, and symmetric knots give symmetric
@@ -21,7 +21,7 @@
 // heading grows by the trapezoid of kh over each 2 m segment, src/core/adapter.js toSegments), so the ease's height that turns theta is one solve; the stored
 // rounding is then taken up by the least-norm step close.js takes (ref 04 §3: δ = Jᵀ(JJᵀ)⁻¹(−r)) on the free control points.
 // THE LIMIT: none but having a free control point. Neither the document nor the validator bounds the turn rate (at the open track's 970 km/h the loads of a
-// turn are amber, D256), so a short sharp turn is the user's to judge by driving it; how sharp a builder turn can be is D280 part 2's to measure.
+// turn are amber), so a short sharp turn is the user's to judge by driving it; how sharp a builder turn can be is still to measure.
 'use strict';
 const D = require('./document.js');
 const { extend, bloss } = require('./extend.js');
@@ -79,14 +79,14 @@ function symmetricEase(P, ch) {
 
 /** The piece whose channels in `aims` ({ kh: θ, kv: Δp }, rad) change the heading and the pitch by exactly those angles, each ending at rate 0. The two are solved
  *  apart: the heading is ∫kh and the pitch ∫kv on the same segments (adapter.js toSegments), and neither channel enters the other's integral. */
-/** D404: what a solve starts from does not depend on the angle aimed at: Extend's piece with the channels aimed at eased to 0 (the document and the fields without the angle), and the
+/** What a solve starts from does not depend on the angle aimed at: Extend's piece with the channels aimed at eased to 0 (the document and the fields without the angle), and the
  *  heading weights of it (a basis evaluation every 2 m of the piece). A handle drag changes only the angle, so the last few are kept by document and fields (a frozen document, an
  *  answer that did not throw): the next move starts from them. Nothing here is changed by a solve: the weights are read, and every document it makes is a new one. */
 const START = new WeakMap(), START_MAX = 4;
 /** The key both memos keep answers by: the fields as JSON, with a non-finite number written apart (JSON writes NaN, Infinity and null all as null, so a NaN target
- *  came back with the answer kept for a null one, where a fresh document refuses it; E's review of D404, §0). null when the fields cannot be written. */
+ *  came back with the answer kept for a null one, where a fresh document refuses it). null when the fields cannot be written. */
 const memoKey = (v) => { try { return JSON.stringify(v, (k, x) => (typeof x === 'number' && !Number.isFinite(x) ? `\u0000${x}` : x)); } catch (e) { return null; } };
-/** A document whose answers may be kept: frozen, and its pieces array too (one frozen at the top only can be edited in place; E's review of D404, §1b). */
+/** A document whose answers may be kept: frozen, and its pieces array too (one frozen at the top only can be edited in place). */
 const keepable = (doc) => Object.isFrozen(doc) && Object.isFrozen(doc.pieces);
 function startOf(doc, opts, chs) {
   const key = memoKey([opts, chs]);
@@ -149,12 +149,12 @@ function extendBy(doc, opts, aims) {
 /** Extend with a piece that turns exactly theta (rad) and ends straight, or refuse by name with the shortest length that does it. Turn by's angle is its own (a
  *  turn field read as a corner is dropped); a climb field read as a corner is kept, as Turn by keeps a climb rate typed in the fields. */
 const extendTurnBy = (doc, opts, theta) => extendBy(doc, opts, { kh: theta, ...(opts && Number.isFinite(opts.climbDeg) ? { kv: (opts.climbDeg * Math.PI) / 180 } : {}) });
-/** D331 (climb): Extend with a piece whose pitch changes by exactly dp (rad, + = nosing up) and ends at a climb rate of 0 (a steady pitch, not necessarily level). */
+/** Climb: Extend with a piece whose pitch changes by exactly dp (rad, + = nosing up) and ends at a climb rate of 0 (a steady pitch, not necessarily level). */
 const extendClimbBy = (doc, opts, dp) => extendBy(doc, opts, { kv: dp });
-/** D331 B: Extend with the turn and the climb fields read as corners when opts.turnDeg / opts.climbDeg are given (those exact changes of heading and pitch,
+/** Extend with the turn and the climb fields read as corners when opts.turnDeg / opts.climbDeg are given (those exact changes of heading and pitch,
  *  each ending at rate 0), else Extend as it always was. */
 function extendCorner(doc, opts = {}) {
-  // D404: the panel asks for the same piece three times for every move of a handle drag (the readout's numbers, the corner's, the ghost), and each is the solve below
+  // the panel asks for the same piece three times for every move of a handle drag (the readout's numbers, the corner's, the ghost), and each is the solve below
   // (about 2.5 ms on a 2,000 m piece). The last few answers for one document are kept by its fields, so the move costs one solve. A document is frozen and so is
   // what this returns, and an answer that throws is never kept: the same call is the same document, or the same error.
   const key = memoKey(opts);
