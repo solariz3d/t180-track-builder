@@ -323,7 +323,8 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // driving into it (TEST 10, s 3,700). The zipper and the weld make none; this refuses if one ever gets through
   const fins = findFins(welded);
   if (fins.length) throw new ExportError('FINS', `the road would stand up in a thin wall where two pieces meet (${fins.map((x) => x.message).join('; ')}). That is a fault in the builder, not in your track, and nothing was written. Please report it.`, { fins });
-  const kn5 = Buffer.from(writeKn5(ensureDiffuse(o.mergeMeshes === false ? welded : mergeForAc(welded))));
+  // acScene: the very scene the kn5 is written from (flat, welded, merged, with diffuse textures), returned too so the export for Blender (src/export/gltf.js) serialises the same meshes
+  const acScene = ensureDiffuse(o.mergeMeshes === false ? welded : mergeForAc(welded)), kn5 = Buffer.from(writeKn5(acScene));
   stage('reading the kn5 back');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-')), tf = path.join(tmp, 'readback.kn5');
   let back;
@@ -340,7 +341,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
 
   const turn = segs.reduce((a, g) => a + ((g.k0 + g.k1) / 2) * g.length, 0);
   return {
-    folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, geometry: geometryOf(p, segs), resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
+    folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, acScene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, geometry: geometryOf(p, segs), resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh },
     desc: { name: (doc.name || 'Untitled') + (test ? ' (test, unfinished)' : ''), description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original', BUILDER], author, version: '0.1' },

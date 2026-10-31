@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **File ▸ Export for Blender…: open your track in Blender.** It writes the track as a `.glb` into a folder of its own, with a README: in Blender, File ▸ Import ▸ glTF 2.0 opens it textured, in metres and the right way round (a right-hand corner still turns right), with every road piece, underside and marker named as the game names them. Tick "Only the selected pieces" to export just those. When Blender is found (Steam's, or the one you pick in Settings ▸ Blender…) it can also make the `.fbx` for ksEditor, running hidden in the background; that FBX holds the game's own vertices in metres. Nothing is written into the game.
+
 ### Changed
 
 - **Three sizes of type.** Words are 12 px, headings 16 px, and the road's numbers 24 px (18 px on the road labels), where seven nearby sizes from 10 to 15 px made everything look about the same; the small labels beside the numbers stay 11 px. The height ruler's tags in Sculpt sit fully on their backing.

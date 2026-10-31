@@ -143,6 +143,11 @@ The limits come from measurements of real T-180 tracks and replays, not guesses.
   - **Test export (unfinished)…**: an open, unfinished track, to drive it by hand, written into AC like the main button
     (it asks for the AC folder only if AC is not known). Reds are listed as warnings, the road ends in a run-off and a
     wall, and the folder is `t180b_<name>_test`. A closed track uses the normal export.
+  - **Export for Blender…** (File): the open track as a `.glb` in a folder of its own, `<name> for Blender`, with a
+    README. Open it in Blender with File ▸ Import ▸ glTF 2.0: textured, in metres, every road piece, skin and marker
+    named as in the game, and not mirrored. With pieces selected you can export only those. When Blender is found
+    (Steam's, or the one you pick in Settings ▸ Blender…), it can also make the `.fbx` for ksEditor, running hidden
+    for a few seconds. It never writes into the game.
   - **Assetto Corsa folder…**: change the AC folder.
   - **See it in Assetto**: starts AC on the exported track. It is off until you tick its box, and it has not been
     tried yet (see *Status and limits*).
