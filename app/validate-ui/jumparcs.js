@@ -1,4 +1,4 @@
-// jumparcs.js: every jump's two landings drawn (ARCHITECTURE §4 "Show two landings, not one"; FINDINGS §7d-e): the
+// jumparcs.js: every jump's two landings drawn ("Show two landings, not one"): the
 // clean-flight fall (3.2 g) and the override-dive fall (6.3 g), as world-space polylines, and the landing zone marked.
 //
 //   jumpArcs(result, path, { points = 48 }) -> [{ id, s, speed, speedFrom, rampDeg, arcs: [arc], zone }]

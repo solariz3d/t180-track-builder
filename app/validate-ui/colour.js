@@ -1,4 +1,4 @@
-// colour.js: red and amber along the track, from src/validate's result (ARCHITECTURE §1.3, §4; the plan's step 5).
+// colour.js: red and amber along the track, from src/validate's result.
 // It runs in the UI process and reads only the validation result: no geometry, no mesh.
 //
 //   colourMap(result, { car, path })      -> map          every station, every lateral line
@@ -7,9 +7,9 @@
 //
 // LEVELS, highest wins: RED 3 > AMBER 2 > INFO 1 > CLEAR 0.
 //   · From a line's own load, with validation's own comparisons (src/validate/index.js), so they cannot disagree:
-//       fN_g >  provenG (90 g, FINDINGS.md:105)            → AMBER   ("no track has proven this yet")
-//       fN_g >= suspensionStopG (25 g, D515; FINDINGS.md:103-104) → INFO    (the suspension stop: shown, never a warning)
-//     (D517: the 40 g chassis line and the wall swerve are ambers as RANGES, so rangeLevel below paints them; a line's own level is unchanged)
+//       fN_g >  provenG (90 g)                              → AMBER   ("no track has proven this yet")
+//       fN_g >= suspensionStopG (25 g)                      → INFO   (the suspension stop: shown, never a warning)
+//     (the 40 g chassis line and the wall swerve are ambers as RANGES, so rangeLevel below paints them; a line's own level is unchanged)
 //       otherwise                                           → CLEAR
 //   · From the red and amber RANGES (folds, stacks, gaps, steep, seams, …): every line of every station whose s lies in
 //     [s0, s1]. A range carries only its worst u, so a range colours the whole cross-section. That is coarser than the
@@ -24,7 +24,7 @@
 'use strict';
 const { MACH6 } = require('../../src/validate/limits.js');
 
-// PENDING (D179): a station not checked yet, while a drag is open (validation's result.pendingFrom). It is never shown as
+// PENDING: a station not checked yet, while a drag is open (validation's result.pendingFrom). It is never shown as
 // clear: it was not found clean, it was not looked at. It sits above RED in number only so a max() never hides it.
 const LEVEL = Object.freeze({ CLEAR: 0, INFO: 1, AMBER: 2, RED: 3, PENDING: 4 });
 // inferred: display choices, not measurements. Red and amber as the program names them; info a quiet blue.
@@ -51,7 +51,7 @@ function rangeLevel(result, s) {
 }
 
 /**
- * rangeLevel for every station at once (D177: per station it scanned every red and amber range, O(stations × ranges) on
+ * rangeLevel for every station at once (before, per station it scanned every red and amber range, O(stations × ranges) on
  * each edit). For stations in s order, each range marks the stations inside it, found by binary search, through a
  * difference array: O(stations + ranges · log stations), and the same level rangeLevel gives each station. Stations out of
  * order fall back to rangeLevel one by one.

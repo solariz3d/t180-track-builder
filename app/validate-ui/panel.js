@@ -1,7 +1,7 @@
-// panel.js: the validation panel's logic, with no DOM (tested headless against A's real shell). index.js mounts it.
+// panel.js: the validation panel's logic, with no DOM (tested headless against the real shell). index.js mounts it.
 //
 //   const ctl = createValidationController(shell, { csp: true, designSpeedKmh, validate, onUpdate, schedule })
-//     designSpeedKmh: left out (the app, D256: "it should always be maxed out"), FULL SPEED: an open track at the lap sim's cap,
+//     designSpeedKmh: left out (the app; the user: "it should always be maxed out"), FULL SPEED: an open track at the lap sim's cap,
 //     970 km/h, a closed one on its ghost lap, as the export judges it. A number pins a speed for words without their own,
 //     null gives none (tests and other hosts). ctl.setDesignSpeed(kmh | null) re-validates the whole track at it.
 //     validate: further src/validate options (e.g. a `car` with an acceleration, so the lap sim gives loads).
@@ -13,18 +13,18 @@
 //
 // FOLLOWING THE BUILD HEAD. The shell keeps `resolved` incrementally (resolveFrom), and a panel "should keep the
 // previous path and use extendPath / revalidate when only the tail changed" (app/README.md). So, per change:
-//   · an APPEND at the open head (the old segments are the same objects, and only new ones follow): C's extendPath, then
+//   · an APPEND at the open head (the old segments are the same objects, and only new ones follow): extendPath, then
 //     revalidate from the old end, then re-colour only what changed                              how: 'append'
 //   · a SCULPT of an earlier word (a prefix kept by identity, the first changed segment still there; the part count
-//     may change, e.g. an ease set to 0): C's rebuildPathFrom from it, revalidate from its start  how: 'sculpt'
+//     may change, e.g. an ease set to 0): rebuildPathFrom from it, revalidate from its start      how: 'sculpt'
 //   · a TRIM, the head's word taken off (an undo of a placement; 2026-10-13, ELYSIUM's undo took 2.2 s of a frozen window
 //     re-checking 24 km): revalidate from the start of the new head's word, the rest carried         how: 'trim'
 //   · anything else (the first build, undo across a length change, a new or opened document, a closed loop): a full
 //     buildPath and validate                                                                       how: 'full'
 // The prefix check is by object identity, so a shell that resolved from scratch simply takes the full route.
 //
-// ONE PATH (D177; C's hardening §1 item 2). With `sharedPath` (a function returning the preview's { path, segments } as
-// C's 't180:track-request' replies it, or { path, resolved }),
+// ONE PATH (from a hardening review). With `sharedPath` (a function returning the preview's { path, segments } as
+// the preview's 't180:track-request' replies it, or { path, resolved }),
 // the controller validates a 2 m VIEW of the preview's path (pathview.js: its stations ARE buildPath's at 2 m, bit for bit)
 // instead of growing a second path next to it; `state.pathFrom` says 'shared' or 'own'. The view is used only when
 // `resolved` is the very document being validated; otherwise (no preview, a preview not yet updated, a step that does not
@@ -60,7 +60,7 @@ function windowEnd(path, segments, g) {
   let m = k; while (m < segments.length && idAt(m) === idAt(k)) m++;          // the one after it
   if (m >= segments.length) return null;
   return fromSOf(path, m);
-}   // m between stations: the step the export and the D167 tests use (inferred: not tuned for the preview)
+}   // m between stations: the step the export and its tests use (inferred: not tuned for the preview)
 
 function createValidationController(shell, { csp = true, designSpeedKmh, validate: extra = {}, onUpdate = () => {}, schedule = (fn) => fn(), sharedPath = null, colours = true } = {}) {   // colours: false makes no colour map (live.js; the checker worker sends none back)
   let design = designSpeedKmh;
@@ -84,7 +84,7 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
 
   /**
    * The preview's path for THIS resolved document, or null: only a path built from the very same document, known by
-   * identity, either the resolved object ({ path, resolved }) or its segments array (C's 't180:track' detail,
+   * identity, either the resolved object ({ path, resolved }) or its segments array (the preview's 't180:track' detail,
    * { path, segments, … }, app/preview/index.js).
    */
   function shared(r) {
@@ -143,7 +143,7 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
       }
       const pathFrom = np.src ? 'shared' : 'own';
       // the lap is proven when no drag is open (a closed loop's lap, never on a drag tick)
-      // THE DRAG WINDOW (D179): while a drag is open, a sculpt checks the dragged word and the word after it; the rest of
+      // THE DRAG WINDOW: while a drag is open, a sculpt checks the dragged word and the word after it; the rest of
       // the track is PENDING until the drag ends (above). Only a sculpt: an append or a full build checks everything
       const uptoS = dragging && p.how === 'sculpt' ? windowEnd(np, r.segments, p.g) : null;
       const u = live.update(np, r.segments, p.how === 'full' ? { lap: !dragging } : { fromS, lap: !dragging, uptoS });
@@ -170,13 +170,13 @@ function createValidationController(shell, { csp = true, designSpeedKmh, validat
 
 /**
  * Counts for the panel's summary line. `jumps` is every jump validation checked, including one still PENDING at the
- * open head (no landing road yet): D170 fixed a counter that read the drawn arcs, which leave a pending jump out, so a
- * placed jump read "0 jumps" (the librarian's item 4, 2026-09-27).
+ * open head (no landing road yet): this replaced a counter that read the drawn arcs, which leave a pending jump out, so a
+ * placed jump read "0 jumps" (reported 2026-09-27).
  */
 function summary(state) {
   const r = state.result;
   if (!r) return { red: 0, amber: 0, lap: null, jumps: 0, jumpsPending: 0, pendingFrom: null };
-  // pendingFrom (D179): during a drag the counts cover the track up to it; a jump past it is deferred, not waiting for a landing
+  // pendingFrom: during a drag the counts cover the track up to it; a jump past it is deferred, not waiting for a landing
   return { red: r.red.length, amber: r.amber.length, lap: r.lap, jumps: r.jumps.length, jumpsPending: r.jumps.filter((j) => j.pending && !j.deferred).length, pendingFrom: r.pendingFrom == null ? null : r.pendingFrom };
 }
 
