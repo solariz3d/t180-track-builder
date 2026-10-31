@@ -7,6 +7,24 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **Three sizes of type.** Words are 12 px, headings 16 px, and the road's numbers 24 px (18 px on the road labels), where seven nearby sizes from 10 to 15 px made everything look about the same; the small labels beside the numbers stay 11 px. The height ruler's tags in Sculpt sit fully on their backing.
+
+- **The checker says each thing once.** A warning that holds in several places is one line with every place listed ("at 15645–16487, 17797–18651 and 19773–19789 m"), where the list used to repeat the same sentence for each.
+
+- **Glow only where you are acting.** Every look keeps its colours and shapes, but a soft shadow or glow now marks only the control under the mouse, the field you are typing in, the open menu, the pressed camera mode and Export; the bar, the column, the menus, the camera bars, the values strip and the guide card have clean edges. Glass no longer blurs behind its menus and camera bars (the column keeps its frost). Aurora's sky is unchanged.
+
+- **Every word on screen reads clearly in every look.** The view name under the values strip and the grid hint at the foot sit on a backing of their own, so the scene behind them never swallows them; the height ruler's tags in Sculpt are on a darker ground; and Aqua's CSP switch reads in white.
+
+- **A piece's label on the road moves clear of the handles.** In Sculpt the drag handles, the dots and their hover words are drawn over the road labels, and a label kept under them had its numbers drawn over; it now finds a spot beside them.
+
+- **The road's numbers are the biggest thing on screen.** The values strip over the view shows each number in large bold type (24 px), with its unit and its name small beside it, and stays one slim strip; the label on the road shows the piece's length large and its turn, climb and bank small under it.
+
+- **Notes that said nothing are gone.** "Grip 100%" under a grip that reads 100 no longer shows (any other grip still says itself); the line of camera keys at the foot sits behind a small "?" (hover or press it) and in the guide's camera step; and the pit lane's note is in the plain text colour unless it reports a problem.
+
+- **A new install opens in one look, Sigil, and Random is still a choice.** The first start used to pick a look at random; now it opens in Sigil. Settings ▸ Theme still offers Random, listed after the named looks, and a look you already chose (Random included) is kept.
+
+- **Warnings read in every look.** The checker's red and amber lines were drawn in the road's own paint colours, which some looks' panels all but swallowed (amber on Skyline was nearly invisible). Each look now writes its warnings in its own red and amber, the same colours made lighter or darker until they read clearly on that look's panels.
+
 - **The bank at start comes in over a longer, gentler swell.** It leans further into the piece and turns less steeply on the way: a 41° bank at start now swells in over about 150 m instead of 115 m, rolling at most 0.65 °/m instead of 0.84.
 
 ### Fixed

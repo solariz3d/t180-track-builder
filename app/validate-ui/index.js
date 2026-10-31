@@ -36,10 +36,13 @@ const { createValidationController, summary } = require('./panel.js');
 const { levelAt, rgbaAt, rangeLevel, PALETTE, LEVEL } = require('./colour.js');
 const { createCheckRunner } = require('./checkrunner.js');
 const { graphModel, drawGraph } = require('./graph.js');
-const { lapText, lapWhereText, findingLine } = require('./labels.js');
+const { lapText, lapWhereText, findingLine, findingGroups } = require('./labels.js');
 const S = require('../settings.js');   // D355: the CSP box is the saved setting `csp`
 
 const css = (rgba) => `rgb(${Math.round(rgba[0] * 255)}, ${Math.round(rgba[1] * 255)}, ${Math.round(rgba[2] * 255)})`;
+// a red or amber line is TEXT: the look's text token (app/index.html --bad-text, --warn-text: the same hue, measured to read on its panel), the road's paint colour the fallback
+const TEXT_TOKEN = Object.freeze({ [LEVEL.RED]: '--bad-text', [LEVEL.AMBER]: '--warn-text' });
+const textCss = (lvl) => (TEXT_TOKEN[lvl] ? `var(${TEXT_TOKEN[lvl]}, ${css(PALETTE[lvl])})` : css(PALETTE[lvl]));
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
 function mount(root, shell) {
@@ -55,7 +58,7 @@ function mount(root, shell) {
     head.textContent = state.error ? `not validated: ${state.error}`
       : state.checking && !state.result ? 'checking…'
       : `${s.red} red · ${s.amber} amber${s.lap && s.lap.reason === 'open' && s.lap.ok !== true && s.lap.ok !== false ? '' : ` · ${lapText(s.lap)}`} · ${s.jumps} jump${s.jumps === 1 ? '' : 's'}${s.jumpsPending ? ` (${s.jumpsPending} waiting for ${s.jumpsPending === 1 ? 'its landing' : 'their landings'})` : ''}${s.pendingFrom != null ? ` · checked to ${Math.round(s.pendingFrom)} m, the rest when the drag ends` : ''}${state.checking ? ' · checking…' : ''}`;
-    head.style.color = state.error ? css(PALETTE[LEVEL.RED]) : '';
+    head.style.color = state.error ? textCss(LEVEL.RED) : '';
     const gm = 'graph' in state ? state.graph : graphModel(state);   // the worker sends its graph ready-made
     graph.style.display = gm ? '' : 'none';   // hidden while there is no load to draw
     // the canvas's backing store follows its SHOWN size (D177 window pass: drawn at 480 px and shown at ~265, its labels
@@ -67,11 +70,11 @@ function mount(root, shell) {
     const r = state.result;
     if (r) {
       for (const [kind, items, lvl] of [['red', r.red, LEVEL.RED], ['amber', r.amber, LEVEL.AMBER]]) {
-        for (const x of items) { const f = findingLine(kind, x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${css(PALETTE[lvl])}` })); }   // the rule and its source in the tooltip
+        for (const f of findingGroups(kind, items)) list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${textCss(lvl)}` }));   // one line per reason with its places; the rule and its sources in the tooltip
       }
       // D256: "holds above N km/h" (information): where the centreline faces the ground, the slowest speed that keeps the car on it
       for (const x of r.info) if (x.reason === 'holds-above') { const f = findingLine('info', x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${css(PALETTE[LEVEL.INFO])}` })); }
-      if (r.lap && r.lap.ok === false) for (const w of r.lap.where) list.append(el('li', { textContent: `lap: ${lapWhereText(w)}, at ${w.s.toFixed(0)} m`, title: w.reason, style: `color: ${css(PALETTE[LEVEL.RED])}` }));
+      if (r.lap && r.lap.ok === false) for (const w of r.lap.where) list.append(el('li', { textContent: `lap: ${lapWhereText(w)}, at ${w.s.toFixed(0)} m`, title: w.reason, style: `color: ${textCss(LEVEL.RED)}` }));
     }
     for (const j of state.arcs) {
       const legs = j.arcs.map((a) => `${a.g} g ${a.caught ? `lands at ${a.touchdown.x.toFixed(1)} m` : a.clear ? 'clears, no touchdown found' : `falls short (needs ${(a.minSpeed * 3.6).toFixed(0)} km/h)`}`);

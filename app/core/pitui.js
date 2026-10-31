@@ -40,7 +40,7 @@ function mount({ shell, el, win }) {
   const flatten = el('button', { text: 'Flatten road for pit', title: 'lower the cup, tube or edge to the plain road beside the whole pit lane, easing back over 60 m either side; the route does not move; Ctrl+Z puts the walls back' });
   flatten.onclick = () => shell.flattenForPit();
   const field = (label, ...kids) => el('label', { style: 'display:block;margin:2px 0' }, el('span', { text: label }), ' ', ...kids);
-  const box = el('div', {}, field('side', side), field('leaves on', leaveP, ' at m ', leaveM), field('rejoins on', backP, ' at m ', backM),
+  const box = el('div', {}, field('side', side), field('leaves on', leaveP, el('span', { text: 'at m', style: 'margin:0 4px' }), leaveM), field('rejoins on', backP, el('span', { text: 'at m', style: 'margin:0 4px' }), backM),
     field('gap from road m', gap), field('lane width m', width), field('peel-off m', peel), field('merge m', merge), field('pit boxes', boxes), field('box spacing m', spacing), status, el('div', { class: 'actions' }, flatten));
 
   const doc = () => shell.getState().history.present;
@@ -78,7 +78,8 @@ function mount({ shell, el, win }) {
     boxes.value = String(lane.boxes); spacing.value = String(lane.boxSpacingM);
     const info = shell.spawnsInfo();
     const onLane = info && info.placed ? info.placed.filter((m) => /^AC_PIT_/.test(m.name) && m.onLane && !m.error).length : 0;
-    status.style.color = info && info.laneError ? 'var(--bad, #ff4d4d)' : '';
+    status.style.color = info && info.laneError ? 'var(--bad-text, var(--bad, #ff4d4d))' : '';
+    status.className = info && info.laneError ? 'message' : 'message hint';   // information (the lane's length, its boxes) in the plain text colour; a problem in red
     flatten.style.display = info && info.laneError && /^PIT_JOIN_NOT_FLAT/.test(info.laneError) ? '' : 'none';
     status.textContent = !info ? '' : info.laneError ? `The pit lane cannot be built here: ${say(info.laneError)}${/^PIT_JOIN_NOT_FLAT/.test(info.laneError) ? ' Or press "Flatten road for pit".' : ''}`
       : info.lane ? `Pit lane: ${Math.round(info.lane.lengthM)} m, ${onLane} of ${lane.boxes} pit box${lane.boxes === 1 ? '' : 'es'} on it. Practice and hotlap pit starts spawn here.` : '';

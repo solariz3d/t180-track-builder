@@ -42,7 +42,12 @@ function mount(root) {
   for (const m of ['off', 'x', 'z', 'both']) { const b = doc.createElement('button'); b.type = 'button'; b.textContent = MIRROR_LABEL[m]; b.title = m === 'x' ? 'left/right: x flips about the centre' : m === 'z' ? 'front/back: z flips about the centre' : m === 'both' ? 'point symmetry: a half turn about the centre' : 'no mirror'; b.onclick = () => send({ mirror: m }); mirrorButtons.set(m, b); gridBar.append(b); }
   const reset = doc.createElement('button'); reset.type = 'button'; reset.textContent = 'Reset centre'; reset.title = 'put the symmetry centre back at the middle of the track\'s box'; reset.onclick = () => send({ centre: null }); gridBar.append(reset);
   words.style.cssText = 'margin:4px 10px;color:var(--dim);font-size:12px'; words.setAttribute('aria-live', 'polite');
-  root.append(bar, gridBar, words, keys);
+  // the keys line never changes, so it is not on show all the time: a small "?" at the foot opens it (hover, focus, or a press toggles it); the guide's camera step says them too
+  const help = doc.createElement('div'), ask = doc.createElement('button');
+  help.className = 'camera-keys'; ask.type = 'button'; ask.textContent = '?'; ask.setAttribute('aria-label', 'camera keys'); ask.title = keys.textContent;
+  ask.onclick = () => { const open = help.classList.toggle('open'); ask.setAttribute('aria-expanded', String(open)); };
+  ask.setAttribute('aria-expanded', 'false'); help.append(ask, keys);
+  root.append(bar, gridBar, words, help);
   const follow = (e) => { for (const [m, b] of buttons) b.setAttribute('aria-pressed', String(e.detail && e.detail.mode === m)); };
   const guides = (e) => {
     const s = e.detail; if (!s || s.error) return;

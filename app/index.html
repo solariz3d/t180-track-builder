@@ -15,8 +15,9 @@
    D402, SIGIL'S OWN MELODY: sigil is the fifth name (Obsidian). Saved, it sets the pick inside its own fifth, as a fixed theme does, and removes the skin; a
    random pick that lands in that fifth is SIGIL's look too. So Random picks among five looks (Skyline's fifth half night) and five melodies. */
 (function () {
-  var names = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'], r = Math.random(), theme = 'music', root = document.documentElement;
-  try { var saved = JSON.parse(window.localStorage.getItem('t180.settings.theme')); if (saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved; } catch (e) { /* unreadable: music */ }
+  // a NEW install (nothing saved) opens in SIGIL, the one look the app is designed around; Random is still a choice, and a saved choice (Random included) is kept
+  var names = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'], r = Math.random(), theme = 'sigil', root = document.documentElement;
+  try { var saved = JSON.parse(window.localStorage.getItem('t180.settings.theme')); if (saved === 'music' || saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved; } catch (e) { /* unreadable: SIGIL */ }
   if (names.indexOf(theme) >= 0) r = (names.indexOf(theme) + 0.5) / names.length;
   if (theme === 'skyline-night') r = (names.indexOf('skyline') + 0.25) / names.length;
   var look = names[Math.floor(r * names.length)];
@@ -32,6 +33,9 @@
     --bg: #060606; --panel: #0b0b0a; --raise: #121211; --line: #24221f; --hair: rgba(235, 230, 220, .14);
     --text: #ebe6dc; --dim: #8a847a; --accent: #b9a8ff; --accent-dim: rgba(185, 168, 255, .16);
     --mine: #d9a55a; --bad: #e0573f; --warn: #e3b448; --ok: #8fc9a2;
+    /* the warning colours as TEXT: the same red and amber hues, lighter or darker so a warning line reads at 4.5:1 or better on its own panel (each look sets its own;
+       the 3D road keeps app/validate-ui/colour.js PALETTE). The checker's lines, the red list and the error messages use these */
+    --bad-text: #f18680; --warn-text: #ffad1a;
     /* D381: the colours the canvas layers, the overlays and the 3D view draw with (app/lib/tokens.js reads them); SIGIL's are exactly the literals
        those files held, so SIGIL draws as before. A skin (app/themes/<name>.css) sets them under [data-theme="<name>"]. */
     --ink: #0b0d11; --on-ink: #eef1f6; --on-ink-strong: #ffffff; --veil: #0b0d11; --veil-rule: rgba(255, 255, 255, .14);
@@ -59,7 +63,8 @@
   * { box-sizing: border-box; }
   /* The page never scrolls: the grid fills the window exactly, and each side panel scrolls inside itself. (At the
      default 1400×860 window the page used to scroll: grid rows sized to content push the body past the window.) */
-  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font: 300 13px/1.45 var(--body); letter-spacing: .01em; }
+  /* the type scale: body 12, heading 16, display 24 (the values strip's numbers) and 18 (a road label's length); the 11 px small-caps labels beside the numbers are the one exception */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font: 300 12px/1.45 var(--body); letter-spacing: .01em; }
   ::selection { background: var(--accent-dim); color: var(--text); }
   :focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
   ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: var(--line); } ::-webkit-scrollbar-track { background: transparent; }
@@ -68,7 +73,7 @@
      a third column for them took 300 px from the preview to hold one short panel (the user, 2026-10-03). */
   body { display: grid; grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: 44px auto minmax(0, 1fr); height: 100vh; }
   header { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--tex), var(--panel); min-width: 0; }
-  header h1 { font: 300 13px var(--display); margin: 0 14px 0 2px; letter-spacing: .08em; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
+  header h1 { font: 300 12px var(--display); margin: 0 14px 0 2px; letter-spacing: .08em; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
   header h1::before { content: ""; width: 14px; height: 14px; border: 1px solid var(--text); border-radius: 50%; background: radial-gradient(circle, var(--accent) 0 16%, transparent 18%); flex: none; }
   /* D395, THE WORDMARK: the sigil dot leads (each skin draws its own), "T-180" in the text colour, a hairline rule, then the rest dimmed; tokens only, so it follows the theme.
      The rule sits in the old word space: the -8px takes back most of the h1's gap between the two spans, so the header is no wider than with one text (A's review 8) */
@@ -107,7 +112,7 @@
   .ask-card.ask-layouts { width: min(680px, calc(100vw - 48px)); }
   .ask-layouts .lx-row { display: grid; grid-template-columns: 40px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) 40px; align-items: center; gap: 8px; margin: 0 0 6px; }
   .ask-layouts label.lx-row { grid-template-columns: 110px minmax(0, 1fr); margin-bottom: 14px; }
-  .ask-layouts .lx-head span { color: var(--dim); font-size: 11px; }
+  .ask-layouts .lx-head span { color: var(--dim); font-size: 12px; }
   .ask-layouts .lx-track { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ask-layouts input[type="text"] { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 3px 5px; }
   .ask-layouts .lx-problem { min-height: 1.2em; color: var(--accent); margin: 10px 0 14px; }
@@ -197,9 +202,9 @@
     header select::picker-icon { color: var(--dim); transition: rotate .15s; }
     header select:open::picker-icon { rotate: 180deg; color: var(--accent); }
     header select::picker(select) { background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); border-radius: 2px; padding: 4px 0;
-      margin-top: 4px; max-height: min(70vh, 560px); min-width: max(anchor-size(width), 260px); box-shadow: 0 18px 50px rgba(0, 0, 0, .65); }
-    header select option { background: transparent; color: #fff; padding: 7px 14px; font: 300 13px var(--body); letter-spacing: .03em; border-left: 2px solid transparent; }
-    header select option:first-of-type { color: var(--dim); font: 300 11px var(--display); letter-spacing: .3em; text-transform: uppercase; }
+      margin-top: 4px; max-height: min(70vh, 560px); min-width: max(anchor-size(width), 260px); box-shadow: none; }
+    header select option { background: transparent; color: #fff; padding: 7px 14px; font: 300 12px var(--body); letter-spacing: .03em; border-left: 2px solid transparent; }
+    header select option:first-of-type { color: var(--dim); font: 300 12px var(--display); letter-spacing: .3em; text-transform: uppercase; }
     header select option:hover, header select option:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent); border-left-color: var(--accent); outline: none; }
     header select option:checked { background: transparent; color: var(--accent); }
     header select option::checkmark { content: "\25CF"; order: 1; margin-left: auto; font-size: 7px; color: var(--accent); }
@@ -229,13 +234,19 @@
   #camera { position: absolute; z-index: 9; left: 0; right: 0; bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
   #camera > * { pointer-events: auto; }
   #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-  #camera [role="toolbar"] button { border-color: transparent; font-size: 10.5px; padding: 6px 10px; }
+  #camera [role="toolbar"] button { border-color: transparent; font-size: 12px; padding: 6px 10px; }
   #camera [role="toolbar"] button[aria-pressed="true"], #camera [role="toolbar"] button.on { color: var(--accent); box-shadow: 0 -1px 0 var(--accent) inset; }
   /* the depth behind the track: a soft vignette over the view (the road keeps its own lighting) */
   #preview::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 55% 38%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
   /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
-  .preview-hud { z-index: 2; left: 274px !important; top: calc(var(--values-bottom, 66px) + 14px); bottom: auto !important; background: transparent !important; font-family: var(--mono) !important; font-size: 10.5px !important; }
-  #camera p { margin: 0; color: var(--dim); font-size: 11px; letter-spacing: .04em; text-shadow: 0 0 6px #000; }
+  /* the view tag has a backing like the values strip's, so it never sits on the scene (a grid line at the horizon took it to 3.7 : 1) */
+  .preview-hud { z-index: 2; left: 274px !important; top: calc(var(--values-bottom, 66px) + 14px); bottom: auto !important; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent) !important; color: var(--on-ink-strong, #ffffff) !important; padding: 2px 6px !important; border-radius: 6px !important; font-family: var(--mono) !important; font-size: 12px !important; }
+  #camera p { margin: 0; color: var(--dim); font-size: 12px; letter-spacing: .04em; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); padding: 1px 6px; border-radius: 6px; }   /* a backing, not a glow, behind the words over the scene; padded, so the letters' own box stays on it (skyline's read 1.2 : 1 where they ran past its edge onto the ground) */
+  /* the camera keys: a small "?" at the foot; the line shows while it is hovered or focused, or after a press (app/camera/index.js) */
+  #camera .camera-keys { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #camera .camera-keys > button { width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 12px; line-height: 20px; color: var(--on-ink-strong, #ffffff); background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); }   /* the values strip's own pair (its ground and its text colour, which every look sets): on Sigil's dim button face the "?" read 2.2:1 */
+  #camera .camera-keys > p { display: none; order: -1; }
+  #camera .camera-keys:hover > p, #camera .camera-keys:focus-within > p, #camera .camera-keys.open > p { display: block; }
   /* The side sections never scroll sideways (seen at the default window size once E's 480 px load graph showed): what a
      panel puts here is held to the column's width. Canvases, images and tables shrink to fit, long words break, and the
      vertical scrollbar's width is reserved up front so it cannot push content sideways when it appears. */
@@ -268,14 +279,14 @@
   .picker .like-pick option { color: var(--text); }
   #palette .pickers > .message { margin: -2px 0 0 70px !important; color: var(--dim); }
   /* the next-piece line under the preview's values (app/core/panel.js roBox, attached by valuesoverlay): chips, the unchanged ones dimmed */
-  [aria-label="piece values"] .readout { display: flex; flex-wrap: wrap; justify-content: center; max-width: min(1200px, calc(100vw - 560px));   /* centred on the window, so 100vw - 560 leaves 280 px each side: clear of the 260 px column on the left and of the Show the guide button on the right; at 1400 the line wraps to two rows */ margin: 3px 8px 0; padding-top: 3px; border-top: 1px solid var(--veil-rule, rgba(255,255,255,0.14)); font: 600 11px/1.35 var(--body); }
+  [aria-label="piece values"] .readout { font-size: 12px; display: flex; flex-wrap: wrap; justify-content: center; max-width: min(1200px, calc(100vw - 560px));   /* centred on the window, so 100vw - 560 leaves 280 px each side: clear of the 260 px column on the left and of the Show the guide button on the right; at 1400 the line wraps to two rows */ margin: 3px 8px 0; padding-top: 3px; border-top: 1px solid var(--veil-rule, rgba(255,255,255,0.14)); font: 600 11px/1.35 var(--body); }
   [aria-label="piece values"] { width: max-content; }   /* centred at left 50%, it would otherwise be held to half the view, and the line under it with it */
   [aria-label="piece values"] .readout .chip { padding: 0 6px; white-space: nowrap; }
   [aria-label="piece values"] .readout .chip[data-chip="corner"] { max-width: 250px; overflow: hidden; text-overflow: ellipsis; }   /* its whole text is the chip's tooltip */
   [aria-label="piece values"] .readout .chip[hidden] { display: none; }
   /* the names and the dimmed chips are the strip's own text colour (currentColor, whatever the look makes it), mixed down (not opacity, which took the small text under 4.5:1 in Skyline Night) */
   [aria-label="piece values"] .readout .chip-name, [aria-label="piece values"] .readout .chip-head { color: color-mix(in srgb, currentColor 66%, transparent); font-weight: 500; margin-right: 4px; }
-  [aria-label="piece values"] .readout .chip-head { text-transform: uppercase; letter-spacing: .12em; font-size: 10px; align-self: center; }
+  [aria-label="piece values"] .readout .chip-head { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; align-self: center; }
   [aria-label="piece values"] .readout .chip.same { color: color-mix(in srgb, currentColor 62%, transparent); font-weight: 500; }   /* its name inherits it, so the mix is taken once */
   [aria-label="piece values"] .readout .chip.same .chip-name { color: inherit; }
   /* a dim chip shows its short text ("edge 0") in place of its cell, whose whole words stay the readout's (and the chip's tooltip) */
@@ -293,7 +304,7 @@
   .track li { padding: 2px 6px; border-radius: 3px; cursor: pointer; }
   .track li.selected { background: var(--accent-dim); color: var(--accent); }
   .head { color: var(--dim); margin-bottom: 8px; }
-  .message, .panel-error { color: var(--bad); white-space: pre-wrap; }
+  .message, .panel-error { color: var(--bad-text, var(--bad)); white-space: pre-wrap; }
   .message.ok { color: var(--text); }
   .message.hint { color: var(--text); }   /* D464: Sculpt's how-to and value lines are instructions, not errors (they were --bad) */
   .panel-error { margin: 12px; }

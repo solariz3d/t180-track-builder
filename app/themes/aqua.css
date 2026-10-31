@@ -6,6 +6,8 @@
    canvas hue) keep their hues; only --bad is lighter here (D384), so an error reads on these teal panes. Fonts: the page's own (Windows). */
 
 [data-theme="aqua"] {
+  /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
+  --bad-text: #f8c0bd; --warn-text: #ffad1a;
   --tex: url(tex/aqua.png) 0 0 / 256px 256px repeat;   /* D399: this look's texture (index.html, --tex): a soft fluid noise; app/themes/tex/aqua.png, scripts/texture_tiles.js */
   --bg: #022a35; --panel: #033846; --raise: #054556; --line: #1b8ea6; --hair: rgba(140, 240, 255, .40);
   /* D384 (A's review 6, finding 2): SIGIL's --bad #e0573f read 3.38:1 on --panel, 4.05 on --bg and 2.81 on --raise here. The same red, lighter: hue 8.8
@@ -28,12 +30,13 @@
 [data-theme="aqua"] body { background: radial-gradient(130% 110% at 30% 0%, #0a6f86 0%, #034152 40%, #011820 100%); }
 
 /* THE BAR: a glossy aqua band, a wet highlight across its upper edge, deep teal below where the words sit */
+/* the glow budget: a blurred shadow only on a hovered, focused, open or pressed control and on Export; static chrome (the bar, the column, menus, the camera bars, the band, the guide card) has hard edges */
 [data-theme="aqua"] header {
   background: var(--tex),
     linear-gradient(180deg, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, .10) 18%, transparent 24%),
     linear-gradient(180deg, #0e8aa3 0%, #06566a 40%, #033846 100%);
   border-bottom-color: var(--rim);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 4px 18px rgba(0, 60, 80, .6), 0 1px 0 rgba(63, 224, 245, .6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 1px 0 rgba(63, 224, 245, .6);
 }
 /* the sigil becomes a water bubble: a clear sphere with a highlight and an aqua core */
 [data-theme="aqua"] header h1::before {
@@ -48,7 +51,7 @@
 [data-theme="aqua"] button, [data-theme="aqua"] .more > summary {
   background: linear-gradient(180deg, #f1feff 0%, #b9f4fc 46%, #4fd7ed 50%, #7fe8f7 82%, #b4f6ff 100%);
   border-color: #0a7d95; border-radius: 999px; color: var(--gel-text);
-  box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 4px rgba(0, 120, 150, .35), 0 1px 3px rgba(0, 30, 40, .5);
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 0 rgba(0, 120, 150, .35), 0 1px 0 rgba(0, 30, 40, .5);
 }
 [data-theme="aqua"] button:hover:not([disabled]), [data-theme="aqua"] .more > summary:hover {
   border-color: #ffffff; color: #00252f; background: linear-gradient(180deg, #ffffff 0%, #d2f9ff 46%, #6ae4f5 50%, #9ef0fb 82%, #d0faff 100%);
@@ -71,7 +74,7 @@
 [data-theme="aqua"] input[type="number"], [data-theme="aqua"] input[type="text"], [data-theme="aqua"] input:not([type]), [data-theme="aqua"] textarea,
 [data-theme="aqua"] select, [data-theme="aqua"] .picker select, [data-theme="aqua"] header input, [data-theme="aqua"] header select, [data-theme="aqua"] .save-piece input {
   background: linear-gradient(180deg, #011d26 0%, #02303c 100%); border-color: rgba(120, 230, 245, .55); border-radius: 10px; color: var(--text);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, .45), 0 1px 0 rgba(160, 245, 255, .18);
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, .45), 0 1px 0 rgba(160, 245, 255, .18);
 }
 [data-theme="aqua"] input[type="number"]::-webkit-inner-spin-button { background-color: rgba(166, 236, 247, .85); }   /* D513: the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="aqua"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
@@ -87,12 +90,13 @@
     linear-gradient(180deg, rgba(10, 110, 135, .90) 0%, rgba(4, 64, 80, .93) 26%, rgba(2, 40, 52, .95) 100%);
   border-color: var(--rim); border-radius: 18px;
   backdrop-filter: blur(14px) saturate(170%); -webkit-backdrop-filter: blur(14px) saturate(170%);
-  box-shadow: inset 0 1px 0 var(--wet), inset 0 -18px 30px rgba(63, 224, 245, .12), 0 0 0 1px rgba(0, 30, 40, .6), 0 18px 50px rgba(0, 40, 60, .6), 0 0 34px rgba(63, 224, 245, .25);
+  box-shadow: inset 0 1px 0 var(--wet), 0 0 0 1px rgba(0, 30, 40, .6);
 }
 [data-theme="aqua"] #palette, [data-theme="aqua"] #side { background: transparent; }
 [data-theme="aqua"] #side { border-top-color: rgba(120, 235, 250, .35); }
 [data-theme="aqua"] #side > section { border-bottom-color: rgba(120, 235, 250, .25); }
 [data-theme="aqua"] h3 { color: #c9f6fc; }
+[data-theme="aqua"] #validation > label { color: #ffffff; }   /* the CSP switch's words: --text read 4.4 : 1 on the column's lighter teal */
 [data-theme="aqua"] h3::after { background: linear-gradient(90deg, rgba(63, 224, 245, .95), rgba(63, 224, 245, .2) 60%, transparent); }
 
 /* THE MENUS: a rounded water-glass pane dropping from the bar */
@@ -102,7 +106,7 @@
     linear-gradient(180deg, rgba(8, 96, 118, .96) 0%, rgba(3, 52, 66, .97) 30%, rgba(2, 36, 46, .98) 100%);
   border-color: var(--rim); border-radius: 18px;
   backdrop-filter: blur(16px) saturate(170%); -webkit-backdrop-filter: blur(16px) saturate(170%);
-  box-shadow: inset 0 1px 0 var(--wet), 0 22px 54px rgba(0, 20, 30, .75);
+  box-shadow: inset 0 1px 0 var(--wet);
 }
 [data-theme="aqua"] .more-menu hr { border-top-color: rgba(120, 235, 250, .35); }
 [data-theme="aqua"] .pieces-menu .piece-row:hover, [data-theme="aqua"] .more-menu .menu-row:hover, [data-theme="aqua"] .more-menu .menu-row:focus { background: rgba(63, 224, 245, .14); }
@@ -115,7 +119,7 @@
   background: radial-gradient(100% 18px at 50% 0%, rgba(255, 255, 255, .20), transparent 100%), linear-gradient(180deg, rgba(6, 82, 100, .95), rgba(2, 40, 52, .96));
   border-color: var(--rim); border-radius: 999px;
   backdrop-filter: blur(12px) saturate(170%); -webkit-backdrop-filter: blur(12px) saturate(170%);
-  box-shadow: inset 0 1px 0 var(--wet), 0 10px 30px rgba(0, 30, 40, .65), 0 0 22px rgba(63, 224, 245, .22);
+  box-shadow: inset 0 1px 0 var(--wet);
 }
 [data-theme="aqua"] #camera p { color: #e6fbfe; text-shadow: none; background: rgba(2, 40, 52, .92); border-radius: 999px; box-shadow: 0 0 0 5px rgba(2, 40, 52, .92), 0 0 0 6px rgba(120, 235, 250, .35); }
 
@@ -123,7 +127,7 @@
    itself (D381), so the stand-in overlays of D379 are gone. */
 /* The soft caustic light is the 3D view's own sky now (D384: --sky-style above, app/preview/sky/caustics.js), drawn at infinity so it stays put as
    the camera turns; its drift stops under prefers-reduced-motion there. #preview::after is the page's own vignette again. */
-[data-theme="aqua"] .preview-hud { color: #e6fbfe !important; text-shadow: 0 0 6px #000; }
+[data-theme="aqua"] .preview-hud { color: #e6fbfe !important; text-shadow: none; }
 
 /* the dialogs and the onboarding card: rounded water-glass */
 [data-theme="aqua"] .ask-veil { background: rgba(1, 30, 40, .60); backdrop-filter: blur(6px) saturate(150%); }
@@ -135,7 +139,7 @@
 [data-theme="aqua"] .guide-card {
   background: radial-gradient(110% 22px at 50% 0%, rgba(255, 255, 255, .16), transparent 100%), linear-gradient(180deg, rgba(5, 70, 88, .97) 0%, rgba(3, 48, 62, .97) 30%, rgba(2, 36, 46, .98) 100%) !important;
   border-radius: 18px !important; color: var(--text) !important;
-  box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 0 var(--wet), 0 18px 50px rgba(0, 20, 30, .7), 0 0 28px rgba(63, 224, 245, .22) !important;
+  box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 0 var(--wet) !important;
 }
 [data-theme="aqua"] .guide-card .guide-count { opacity: .85 !important; }   /* its own CSS dims it to .6; on the water it needs .85 to read */
 /* "look here": the guide's outline follows the accent (the librarian's ruling on B's UNCLEAR six, plan :2362) */

@@ -173,6 +173,10 @@ function mount(stage, shell, win) {
     return out;
   };
   let anchorsFor = null, anchors = new Map(), drawn = [], culled = [], raf = 0, on = true, gripView = false, heldReads = null;
+  // the drag handles and dots are drawn ABOVE the labels (app/core/handles.js, z 6: a control stays visible), so a label kept over one had its words overdrawn:
+  // setAvoid(fn) hands the layout a reader of their screen points and words boxes (css px of the stage), each kept clear as a panel is: a point 10 px round it, a box 6 px
+  let avoidOf = null;
+  const avoided = () => { if (!avoidOf) return []; const pts = avoidOf(); return Array.isArray(pts) ? pts.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)).map((p) => (Number.isFinite(p.w) && Number.isFinite(p.h) ? { x: p.x - 6, y: p.y - 6, w: p.w + 12, h: p.h + 12 } : { x: p.x - 10, y: p.y - 10, w: 20, h: 20 })) : []; };
   // D242: the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
   let pointer = null, pickedFor = null, hoverId = null;
   const onPointer = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; pointer = { x: e.clientX - r.left, y: e.clientY - r.top, e }; };   // (e: the event, the key of the shared pick)
@@ -182,13 +186,13 @@ function mount(stage, shell, win) {
   const box = (i) => {
     if (!pool[i]) {
       const e = doc.createElement('div');
-      // 16 px bold, white on an OPAQUE near-black: its ink is ≥ 11 device px tall and its contrast far above 4.5 : 1 over any road
+      // the length 18 px semibold and the rest 12 px light, white on an OPAQUE near-black: the length's ink is ≥ 11 device px tall and its contrast far above 4.5 : 1 over any road
       // (E's M5). Measured by pixels, everything in the box that is not background counts as ink, so the box holds ONLY its
       // background and its text (B's score, D187: a border, rounded corners the road showed through, and a background the road
       // bled into put grey "ink" in the box and dragged the median below 4.5 : 1). The 2 px ring of the same colour outside the
       // box keeps the road off the box's own edge pixels.
       const bg = T.solid('--ink', '#0b0d11');
-      e.style.cssText = `position:absolute;font:bold 16px/1.25 system-ui,"Segoe UI",sans-serif;color:${T.solid('--on-ink-strong', '#ffffff')};background:${bg};`
+      e.style.cssText = `position:absolute;font:300 12px/1.25 system-ui,"Segoe UI",sans-serif;color:${T.solid('--on-ink-strong', '#ffffff')};background:${bg};`
         + `padding:3px 7px;border:0;border-radius:0;box-shadow:0 0 0 2px ${bg};white-space:pre`;
       layer.append(e); pool[i] = e;
     }
@@ -199,7 +203,9 @@ function mount(stage, shell, win) {
     const bg = T.solid('--ink', '#0b0d11'), fg = T.solid('--on-ink-strong', '#ffffff');
     for (const e of pool) if (e) { e.style.color = fg; e.style.background = bg; e.style.boxShadow = `0 0 0 2px ${bg}`; }
   });
-  const measure = (text) => { const e = box(pool.length); e.textContent = text; e.style.left = '-9999px'; e.style.top = '0'; const r = { w: e.offsetWidth, h: e.offsetHeight }; e.remove(); pool.pop(); return r; };
+  // the first line (the piece's length) large, the rest small and light; the box's text read as a whole is the label's text, unchanged
+  const fill = (e, text) => { const i = text.indexOf('\n'), big = doc.createElement('span'); big.style.cssText = 'font-size:18px;font-weight:600'; big.textContent = i < 0 ? text : text.slice(0, i + 1); e.replaceChildren(big); if (i >= 0) { const rest = doc.createElement('span'); rest.textContent = text.slice(i + 1); e.append(rest); } };   // the line break ends the first span, so each span's box is its own line
+  const measure = (text) => { const e = box(pool.length); fill(e, text); e.style.left = '-9999px'; e.style.top = '0'; const r = { w: e.offsetWidth, h: e.offsetHeight }; e.remove(); pool.pop(); return r; };
   const sizes = new Map();
   // a size is cached only once it is real: an element measured while the layer is out of the page measures 0
   const sizeOf = (text) => { if (sizes.has(text)) return sizes.get(text); const r = measure(text); if (r.w > 0 && r.h > 0) sizes.set(text, r); return r; };
@@ -250,9 +256,9 @@ function mount(stage, shell, win) {
         const text = labelText(r, gripView).join('\n'), size = sizeOf(text);
         items.push({ piece: r.id, text, x: p.x, y: p.y, w: size.w, h: size.h, head: isHead, priority: isHead ? -1 : head ? Math.hypot(p.x - head.x, p.y - head.y) : 0 });
       });
-      placed = layout(items, { width: W, height: H, head, panels: items.length ? panelsOf() : [] });
+      placed = layout(items, { width: W, height: H, head, panels: items.length ? panelsOf().concat(avoided()) : [] });
     }
-    placed.drawn.forEach((d, i) => { const e = box(i); if (e.textContent !== d.text) e.textContent = d.text; e.style.left = `${Math.round(d.rect.x)}px`; e.style.top = `${Math.round(d.rect.y)}px`; e.style.display = ''; });
+    placed.drawn.forEach((d, i) => { const e = box(i); if (e.textContent !== d.text) fill(e, d.text); e.style.left = `${Math.round(d.rect.x)}px`; e.style.top = `${Math.round(d.rect.y)}px`; e.style.display = ''; });
     for (let i = placed.drawn.length; i < pool.length; i++) pool[i].style.display = 'none';
     drawn = placed.drawn.map((d) => ({ piece: d.piece, text: d.text, rect: { ...d.rect, x: Math.round(d.rect.x), y: Math.round(d.rect.y) } })); culled = placed.culled;
   }
@@ -263,6 +269,7 @@ function mount(stage, shell, win) {
     labels: () => drawn.slice(), culled: () => culled.slice(),
     setVisible(v) { on = !!v; layer.style.display = on ? '' : 'none'; },
     setGripView(v) { gripView = !!v; },
+    setAvoid(fn) { avoidOf = typeof fn === 'function' ? fn : null; },
     hovered: () => hoverId,
     unmount() { win.cancelAnimationFrame(raf); unskin(); doc.removeEventListener('t180:labels', answer); stage.removeEventListener('pointermove', onPointer); stage.removeEventListener('pointerleave', onLeave); layer.remove(); },
   };

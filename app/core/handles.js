@@ -306,6 +306,7 @@ function mount(stage, win, host) {
   canvas.setAttribute('aria-label', 'drag handles');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
   stage.append(canvas);
+  let tipBoxes = [];   // the words boxes the last draw put up ({ x, y, w, h }, css px of the stage), for the road labels to keep clear of
   let raf = 0, sized = '', drawn = [], model = null, hover = null, drag = null, waiting = null, frameReq = 0, pre = null, onKeyDown = null, lastClick = null;   // lastClick: { id, t } the last press-and-release on a handle that changed nothing (the first half of a double-click)   // pre: { kind, from, to } the last drag that moved a value (the double-click's "before the drag")
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const layout = (m = host.model(), pose = host.pose()) => {
@@ -320,7 +321,7 @@ function mount(stage, win, host) {
     const W = stage.clientWidth, H = stage.clientHeight, dpr = win.devicePixelRatio || 1, key = `${W}x${H}@${dpr}`;
     if (key !== sized) { canvas.width = Math.max(1, Math.round(W * dpr)); canvas.height = Math.max(1, Math.round(H * dpr)); sized = key; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-    const boxed = new Set();
+    const boxed = new Set(); tipBoxes = [];
     for (const h of drawn) {
       const s = h.screen; if (!s) continue;
       if (h.brush) { drawBrush(ctx, h, W, H, boxed); continue; }
@@ -336,7 +337,7 @@ function mount(stage, win, host) {
       }
       ctx.fillStyle = K.colour; ctx.strokeStyle = T.css('--ink', '#0b0d11'); ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
       if (on) {
-        const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
+        const text = drag ? format(h.kind, drag.value) : format(h.kind, model.base(h.kind)) + (K.zero ? ' · double-click: 0' : pre && pre.kind === h.kind && pre.to === model.base(h.kind) ? ` · double-click: ${Number(pre.from).toFixed(2)}` : ''); ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
         const w = ctx.measureText(text).width + 12, bx = clamp(s.x + 14, 4, W - w - 4), by = clamp(s.y - 34, 4, H - 24);
         ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, 22); ctx.strokeStyle = K.colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, 22);
         ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 6, by + 11);
@@ -368,9 +369,9 @@ function mount(stage, win, host) {
     if (boxed.has(h.kind)) return; boxed.add(h.kind);
     const lines = B.open ? [B.text || ''] : [B.words || brushWords(h.kind), B.note || ''];   // D519 Part 2: the zone grab's own words on hover
     const shown = lines.filter(Boolean); if (!shown.length) return;
-    ctx.font = 'bold 14px system-ui, "Segoe UI", sans-serif';
+    ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
     const w = Math.max(...shown.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * shown.length, bx = clamp(s.x + 30, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 4);
-    ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);
+    tipBoxes.push({ x: bx, y: by, w, h: hgt }); ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);
     ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; shown.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));
   };
   // D407: THE LAYOUT IS DONE WHEN SOMETHING IT READS CHANGED, not every frame (it ran on every frame, the model, every handle placed and drawn: about a third of an idle frame's script, the measurement of
@@ -524,7 +525,7 @@ function mount(stage, win, host) {
   stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('wheel', onWheel, { capture: true, passive: false }); stage.addEventListener('dblclick', onDouble, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
   raf = win.requestAnimationFrame(frame);
   return {
-    handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), hovered: () => hover, dragging: () => !!drag,   // D519 Part 2: the dots are listed apart from the handles
+    handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), tips: () => tipBoxes.slice(), hovered: () => hover, dragging: () => !!drag,   // D519 Part 2: the dots are listed apart from the handles
     /** D519 Part 2: the dot under (x, y), css px of the stage, or null: { s, u, side, axes } for the zone grab to open at. */
     dotAt: (x, y) => { const h = dotHit(drawn, x, y); return h ? { s: h.s, u: h.u, side: h.side, axes: h.axes, at: h.pos ? h.pos.slice() : null } : null; },   // D520: `at`, the dot's world point, where the grab plane passes
     unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('wheel', onWheel, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) doc.removeEventListener('keydown', onKeyDown); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },

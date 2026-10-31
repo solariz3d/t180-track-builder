@@ -18,6 +18,9 @@
 //      and each of the four is on the panel once, in every look
 //   8  (D405) Skyline Night: every enabled text reads 4.5:1 or more against its own pixels, in the builder and with the File menu open (a text outside the
 //      menu that the menu partly covers is left out, by name). It was titled row 6 beside D409's row 6 until D419
+//   9  the warning texts read 4.5:1 or more on their own pixels in EVERY look: the checker's red, amber and lap lines (a 150 m piece turning 720°, which
+//      crosses itself and loads hard, gives both), and every text in Track ▸ Pit lane… with the lane on (its status note and fields). Each look's own
+//      --bad-text and --warn-text are what these read in; before them the lines wore the 3D road's paint colours (skyline's amber read 1.1:1)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -249,4 +252,41 @@ test('row 7 (D417): the first actions row is Extend, Straight, Undo, Redo, and E
     assert.deepEqual(a.counts, [1, 1, 1, 1], `${look}: each of the four is on the panel once`);
     assert.deepEqual(errors, [], `${look}: no page errors`);
   }
+});
+
+/** the probe's keys (as TEXTS makes them: tag, id and the first 40 characters) of the texts inside the element matched by `sel` */
+const keysIn = (sel) => ev(`const box = document.querySelector(${JSON.stringify(sel)}); if (!box) return [];
+  return [...box.querySelectorAll('*')].map((e) => { const own = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(''); const text = (own || ((e.tagName === 'INPUT' || e.tagName === 'TEXTAREA') ? e.value : '') || '').trim().slice(0, 40); return text ? e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '|' + text : null; }).filter(Boolean);`);
+test('row 9: the warning texts (the checker\'s red, amber and lap lines, and Track ▸ Pit lane…) read 4.5:1 or more on their own pixels in every look', { skip }, async (t) => {
+  const report = [], under = [];
+  for (const look of LOOKS) {
+    await load(look);
+    // a 150 m piece turning 720° (the turn field reads a corner's degrees): it crosses itself (red) and loads hard (amber)
+    await ev(`const f = (lab) => [...document.querySelectorAll('#palette label')].find((l) => l.firstChild && l.firstChild.textContent.trim().startsWith(lab));
+      for (const [lab, v] of [['length', '150'], ['turn', '720']]) { const r = f(lab); const i = r && r.querySelector('input'); if (i) { i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); } } return true;`);
+    await extend(1);
+    let lines = [];
+    for (let i = 0; i < 60; i++) { await sleep(250); lines = await ev("return [...document.querySelectorAll('#validation li')].map((l) => l.textContent.slice(0, 6));"); if (lines.some((x) => /^red:/.test(x)) && lines.some((x) => /^amber/.test(x))) break; }
+    assert.ok(lines.some((x) => /^red:/.test(x)) && lines.some((x) => /^amber/.test(x)), `${look}: the checker lists a red and an amber (${lines.join(' | ')})`);
+    await ev("const v = document.getElementById('validation'); if (v) v.scrollIntoView({ block: 'start' }); return true;");
+    const warn = new Set((await keysIn('#validation')).filter((k) => /\|(red|amber|lap):/.test(k)));
+    let on = await contrasts(), n = 0;
+    for (const [k, list] of on) if (warn.has(k)) list.forEach((w) => { n++; if (w < 4.5) under.push(`${look} checker: ${k.split('|')[1]} ${w.toFixed(2)}`); });
+    assert.ok(n >= 2, `${look}: the probe read the checker's warning lines (${n})`);
+    report.push(`${look}: ${n} warning lines`);
+    await ev("document.getElementById('left').scrollTop = 0; return true;");
+    // Track ▸ Pit lane…, the lane ticked: its fields and its status note
+    await ev(`document.querySelector('#m-track summary').click(); await new Promise((r) => setTimeout(r, 200));
+      const b = [...document.querySelectorAll('#m-track button')].find((x) => x.textContent.trim() === 'Pit lane…'); if (b) b.click(); await new Promise((r) => setTimeout(r, 300));
+      const on = document.querySelector('#m-track input[aria-label="pit lane"]'); if (on && !on.checked) on.click(); await new Promise((r) => setTimeout(r, 600)); return true;`);
+    const inPanel = new Set(await keysIn('#m-track .more-menu'));
+    on = await contrasts(); let m = 0;
+    for (const [k, list] of on) if (inPanel.has(k)) list.forEach((w) => { m++; if (w < 4.5) under.push(`${look} pit lane: ${k.split('|')[1]} ${w.toFixed(2)}`); });
+    assert.ok(m >= 5, `${look}: the probe read the pit lane panel's texts (${m})`);
+    report[report.length - 1] += `, ${m} pit lane texts`;
+    await ev("document.getElementById('m-track').open = false; return true;");
+    assert.deepEqual(errors, [], `${look}: no page errors`);
+  }
+  t.diagnostic(report.join('; '));
+  assert.deepEqual(under, [], 'warning texts under 4.5:1 on their own pixels');
 });

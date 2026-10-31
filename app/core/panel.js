@@ -263,8 +263,10 @@ function mount(root, shell, mountOpts = {}) {
   const gripLike = el('select', { 'aria-label': 'grip like a measured road', title: 'grip like a measured road: these are road grips read from Assetto Corsa tracks, nothing more. Picking one fills the grip box' });
   gripLike.replaceChildren(...GL.entries().map((e) => new win.Option(e.label, e.value)));
   const gripNote = el('p', { class: 'message', 'aria-label': 'what the grip means', style: 'font-size:12px;margin:2px 0' });
+  // at 100 (AC's own road, what every track has unless told otherwise) the line says nothing: "Grip 100%" under a field that reads 100 was a note with no news
+  const gripWords = (v) => (String(v).trim() === '100' ? '' : GL.note(v));
   let shownGrip = '100';
-  const showGrip = () => { shownGrip = String(shell.headGrip()); gripF.value = shownGrip; gripNote.textContent = GL.note(shownGrip); };
+  const showGrip = () => { shownGrip = String(shell.headGrip()); gripF.value = shownGrip; gripNote.textContent = gripWords(shownGrip); };
   const gripOpt = () => (gripF.value === '' || gripF.value === shownGrip ? '' : gripF.value);   // untouched = blank = the new piece keeps the head's grip
   const colourOn = el('input', { type: 'checkbox', 'aria-label': 'colour by grip', title: 'colour the track by grip: blue below 100%, white at 100%, orange above; the hover label says each piece\'s grip' });
   // D385: typing ONE side changes only that side: the left typed alone sends the right as the head has it (the core would otherwise set both from e)
@@ -355,7 +357,7 @@ function mount(root, shell, mountOpts = {}) {
   tube.oninput = tube.onchange = () => { exclusive(tube); ghost(); fillWidthLike(); };   // a tube's entries read round and across (D232)
   width.oninput = width.onchange = () => { ghost(); showTubeNote(); };
   wlike.onchange = () => { if (!wlike.value) return; width.value = wlike.value; wlike.value = ''; width.oninput(); };
-  gripF.oninput = gripF.onchange = () => { gripNote.textContent = GL.note(gripF.value); ghost(); };
+  gripF.oninput = gripF.onchange = () => { gripNote.textContent = gripWords(gripF.value); ghost(); };
   gripLike.onchange = () => { if (!gripLike.value) return; gripF.value = gripLike.value; gripLike.value = ''; gripF.oninput(); };   // a pick is a typed grip: the words, the ghost and the readout follow   // a pick is a typed width: the ghost and the readout follow
   // THE UNDO GUARD (D240 follow-up; B's look at ab748e5, C's open question): a number typed into an Extend field and not Extended is UN-APPLIED. The first Ctrl+Z puts THAT field back to what the
   // panel put there (the head's value as shown; for the length, what the last Extend left) and says it handled the key, so the track is not stepped and the typing is not lost to a refill;
@@ -976,6 +978,7 @@ function mount(root, shell, mountOpts = {}) {
   const spawnDrag = stage ? SPD.mount(stage, win, shell, { pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; }, yieldTo: (x, y) => !!(handles && HD.hitTest(handles.handles(), x, y)) }) : null;   // D285: the start line, the pack and the hotlap grabbed with the mouse. Mounted BEFORE the handles (the handles' press listener stays the last registered, as the tests' capture emulation assumes) and it steps aside for a handle under the pointer, whatever the order
   const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // D244: the drag handles' overlay
   if (spawnDrag) spawnDrag.late();   // (the start drag's hover and move listener goes after the handles': they set the cursor on every move)
+  if (labels && handles) labels.setAvoid(() => handles.handles().concat(handles.dots()).filter((h) => h.screen).map((h) => h.screen).concat(handles.tips ? handles.tips() : []));   // the road labels keep clear of the handles drawn over them
   const flights = stage ? FL.mount(stage, win) : null;   // D243: the flights as dashed arcs
   // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
   const onHandlesRequest = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(handles ? handles.handles().filter((h) => h.screen).map((h) => ({ id: h.id, kind: h.kind, side: h.side, x: h.screen.x, y: h.screen.y, dx: h.screen.dx, dy: h.screen.dy })) : []); };

@@ -30,8 +30,8 @@ function mount(stage, win) {
   layer.setAttribute('aria-label', 'piece values');
   // the user, 2026-10-12: the numbers "look goofy". A dashboard read: Bahnschrift (Windows' DIN face, on every Windows
   // 10 and 11) with fixed-width digits, so a number does not jitter as a handle drags it; each label small and grey above
-  // its value, and a thin rule between the values.
-  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;flex-direction:column;align-items:center;padding:4px 6px;border-radius:8px;background:color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent);color:var(--on-ink-strong, #ffffff);font:bold 15px/1.2 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
+  // its value, and a thin rule between the values. The number is the biggest thing in the strip (24 px, bold); its unit and its label beside it are small and light (11 px)
+  layer.style.cssText = `position:absolute;${SPOT_CSS};z-index:4;pointer-events:none;display:none;flex-direction:column;align-items:center;padding:4px 6px;border-radius:8px;background:color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent);color:var(--on-ink-strong, #ffffff);font:700 24px/1.1 Bahnschrift,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap`;
   row.style.cssText = 'display:flex';
   layer.append(row);
   stage.append(layer);
@@ -48,9 +48,11 @@ function mount(stage, win) {
       const s = doc.createElement('span'), label = doc.createElement('span'), value = doc.createElement('span');
       s.setAttribute('data-value', e.key);
       s.style.cssText = `display:flex;align-items:baseline;gap:5px;padding:0 10px${i ? ';border-left:1px solid var(--veil-rule, rgba(255,255,255,0.14))' : ''}`;
-      label.style.cssText = 'font-size:11px;font-weight:600;color:color-mix(in srgb, currentColor 66%, transparent);font-variant:small-caps;letter-spacing:.04em';   // the strip's own text colour (whatever the look makes it), mixed down: --dim at this size fell under 4.5:1 on it
+      label.style.cssText = 'font-size:11px;font-weight:300;color:color-mix(in srgb, currentColor 66%, transparent);font-variant:small-caps;letter-spacing:.04em';   // the strip's own text colour (whatever the look makes it), mixed down: --dim at this size fell under 4.5:1 on it
       label.textContent = e.label;
-      value.textContent = e.value;
+      // the number and its unit apart ("31.00 m" -> "31.00" and " m"), so the unit can be small; the text read as a whole is unchanged
+      const m = /^([-+−]?[\d.,]+)(.*)$/.exec(e.value);
+      if (m && m[2]) { const unit = doc.createElement('span'); unit.style.cssText = 'font-size:11px;font-weight:300'; unit.textContent = m[2]; const num = doc.createElement('span'); num.textContent = m[1]; value.append(num, unit); } else value.textContent = e.value;
       s.append(label, value);
       return s;
     }));

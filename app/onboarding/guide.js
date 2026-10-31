@@ -41,8 +41,8 @@ const STEPS = Object.freeze([
   { id: 'export', title: 'Export', target: '#install',
     text: 'Press "Export to Assetto Corsa". It writes the track straight into the game, in the Assetto Corsa folder chosen at the first start (found through Steam); exporting the same track again updates it. A track that is not closed yet goes in as an unfinished TEST, t180b_<name>_test, to drive it by hand. The File menu has Export… (into any folder you pick, nothing installed), the test export of an unfinished track, and See it in Assetto; Settings has the Assetto Corsa folder.',
     done: (st, seen) => seen.exported },
-  { id: 'grid', title: 'The grid and the mirror', target: '#camera',
-    text: 'Under the preview, Grid shows the ground or a 3D lattice once the track climbs; Mirror draws the symmetry axes and reads the mirror gap, the number "make it symmetrical" drives to zero. Drag the centre handle to move the axes. To fly the camera: W A S D, Space up and Left Ctrl down (Q and E too), Shift to go faster; turn it with the right button (the left button is for clicking pieces, handles and the brush).',
+  { id: 'grid', title: 'The grid and the mirror', target: '#camera',   // and the camera keys, which the "?" at the foot also shows
+    text: 'Under the preview, Grid shows the ground or a 3D lattice once the track climbs; Mirror draws the symmetry axes and reads the mirror gap, the number "make it symmetrical" drives to zero. Drag the centre handle to move the axes. To fly the camera: W A S D, Space up and Left Ctrl down (Q and E too), Shift to go faster; turn it with the right button (the left button is for clicking pieces, handles and the brush). The camera: C switches view, B is the build view, W A S D and Q E fly, right-drag or the arrows look, the wheel zooms; the "?" under the bar shows these keys.',
     done: null },
 ].map((s) => Object.freeze(s)));
 

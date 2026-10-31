@@ -5,6 +5,8 @@
    (layout_check.js). The meaning colours (--mine --bad --warn --ok, and every canvas hue) are not redefined. Fonts: the page's own (Windows). */
 
 [data-theme="glass"] {
+  /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
+  --bad-text: #f5a7a3; --warn-text: #ffad1a;
   --tex: url(tex/glass.png) 0 0 / calc(8 * var(--dpx)) calc(300 * var(--dpx)) repeat-x;   /* D399: this look's texture (index.html, --tex): an ordered (Bayer) dither that thins from the top of each surface; app/themes/tex/glass.png, scripts/texture_tiles.js */
   --bg: #06111b; --panel: #0a1824; --raise: #0f2232; --line: #2b5672; --hair: rgba(190, 230, 255, .34);
   --text: #f0f9ff; --dim: #a9c9dd; --accent: #8fe6ff; --accent-dim: rgba(143, 230, 255, .22);
@@ -24,10 +26,12 @@
 [data-theme="glass"] body { background: radial-gradient(140% 120% at 20% 0%, #0f2a3e 0%, #071420 45%, #030a12 100%); }
 
 /* THE BAR: a frosted ice slab, lit from above, its bottom edge a bright cut */
+/* the glow budget: a blurred shadow only on a hovered, focused, open or pressed control and on Export; static chrome (the bar, the column, menus, the camera bars, the band, the guide card) has hard edges */
+/* and no backdrop blur on menus or the camera bars: the column keeps its frost */
 [data-theme="glass"] header {
   background: var(--tex), linear-gradient(180deg, rgba(225, 246, 255, .14) 0%, rgba(150, 205, 235, .05) 40%, rgba(6, 20, 32, .96) 100%), var(--panel);
   border-bottom-color: var(--frost-edge);
-  box-shadow: inset 0 1px 0 var(--sheen), inset 0 -1px 0 rgba(0, 0, 0, .35), 0 6px 24px rgba(0, 40, 70, .55);
+  box-shadow: inset 0 1px 0 var(--sheen), inset 0 -1px 0 rgba(0, 0, 0, .35);
 }
 /* the sigil becomes a cut crystal: a diamond with a bright facet */
 [data-theme="glass"] header h1::before {
@@ -70,7 +74,7 @@
   background: var(--tex), linear-gradient(155deg, rgba(215, 242, 255, .12) 0%, rgba(110, 175, 215, .06) 18%, rgba(6, 22, 36, .88) 42%, rgba(4, 14, 24, .92) 100%);
   border-color: var(--frost-edge); border-radius: 0;
   backdrop-filter: blur(18px) saturate(160%) brightness(1.08); -webkit-backdrop-filter: blur(18px) saturate(160%) brightness(1.08);
-  box-shadow: inset 0 1px 0 var(--sheen), inset 1px 0 0 rgba(255, 255, 255, .22), 0 0 0 1px rgba(0, 10, 20, .5), 0 22px 60px rgba(0, 30, 60, .65), 0 0 40px rgba(110, 200, 255, .12);
+  box-shadow: inset 0 1px 0 var(--sheen), inset 1px 0 0 rgba(255, 255, 255, .22), 0 0 0 1px rgba(0, 10, 20, .5);
   clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%);
 }
 [data-theme="glass"] #palette, [data-theme="glass"] #side { background: transparent; }
@@ -84,8 +88,7 @@
 [data-theme="glass"] .more-menu {
   background: var(--tex), linear-gradient(165deg, rgba(220, 244, 255, .12) 0%, rgba(20, 52, 76, .80) 22%, rgba(5, 18, 30, .96) 60%), rgba(4, 14, 24, .9);
   border-color: var(--frost-edge); border-radius: 0;
-  backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: inset 0 1px 0 var(--sheen), 0 24px 60px rgba(0, 10, 20, .75);   /* a dark drop only: a cyan glow round the menu lit the text beside it */
+  box-shadow: inset 0 1px 0 var(--sheen);   /* no drop and no glow (a cyan glow round the menu lit the text beside it) */
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
 }
 [data-theme="glass"] .more-menu hr { border-top-color: rgba(190, 235, 255, .30); }
@@ -97,17 +100,17 @@
 /* THE CAMERA DOCK: a long frosted bar, lit on its top edge */
 [data-theme="glass"] #camera [role="toolbar"] {
   background: linear-gradient(180deg, rgba(220, 244, 255, .12), rgba(8, 26, 40, .94) 55%), rgba(4, 14, 24, .9); border-color: var(--frost-edge); border-radius: 0;
-  backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%);
-  box-shadow: inset 0 1px 0 var(--sheen), 0 12px 36px rgba(0, 30, 60, .6), 0 0 24px rgba(110, 200, 255, .16);
+  backdrop-filter: none; -webkit-backdrop-filter: none;   /* not the base rule's blur either */
+  box-shadow: inset 0 1px 0 var(--sheen);
   clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%, 0 14px);
 }
 [data-theme="glass"] #camera [role="toolbar"] button { background: transparent; box-shadow: none; border-color: transparent; }
 [data-theme="glass"] #camera [role="toolbar"] button[aria-pressed="true"], [data-theme="glass"] #camera [role="toolbar"] button.on { color: #ffffff; text-shadow: 0 0 10px rgba(143, 230, 255, .9); box-shadow: 0 -2px 0 var(--accent) inset; }
-[data-theme="glass"] #camera p { color: #d4ecfa; text-shadow: 0 0 6px #000, 0 0 2px #000; background: rgba(4, 14, 24, .86); box-shadow: 0 0 0 4px rgba(4, 14, 24, .86), inset 0 1px 0 rgba(200, 240, 255, .25); }   /* the hint gets a frosted backing of its own (no padding: its box stays) */
+[data-theme="glass"] #camera p { color: #d4ecfa; text-shadow: none; background: rgba(4, 14, 24, .86); box-shadow: 0 0 0 4px rgba(4, 14, 24, .86), inset 0 1px 0 rgba(200, 240, 255, .25); }   /* the hint gets a frosted backing of its own (no padding: its box stays) */
 
 /* THE 3D VIEW: the sky, the fog, the road's edges and ties and the ground grid are this skin's 3D tokens (above); the WebGL view draws them itself
    (D381), so the stand-in overlays of D379 (the vignette, the facet lines) are gone. */
-[data-theme="glass"] .preview-hud { color: #d4ecfa !important; text-shadow: 0 0 6px #000; }
+[data-theme="glass"] .preview-hud { color: #d4ecfa !important; text-shadow: none; }
 
 /* the save-on-close and export dialogs: a crystal card */
 [data-theme="glass"] .ask-veil { background: rgba(3, 14, 26, .58); backdrop-filter: blur(6px) saturate(140%); }
@@ -129,7 +132,7 @@
 [data-theme="glass"] .guide-card {
   background: linear-gradient(165deg, rgba(220, 244, 255, .12) 0%, rgba(14, 40, 60, .92) 24%, rgba(5, 18, 30, .96) 70%) !important;
   border-radius: 0 !important; color: var(--text) !important;
-  box-shadow: inset 0 0 0 1px var(--frost-edge), inset 0 2px 0 rgba(255, 255, 255, .35), 0 18px 50px rgba(0, 10, 20, .7) !important;
+  box-shadow: inset 0 0 0 1px var(--frost-edge), inset 0 2px 0 rgba(255, 255, 255, .35) !important;
   clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
 }
 /* "look here": the guide's outline follows the accent (the librarian's ruling on B's UNCLEAR six, plan :2362) */

@@ -74,6 +74,22 @@ function findingLine(kind, x) {
   return { text: `${kind}: ${reasonText(x.reason)}, ${at(x)}`, title: `${x.reason}${x.source ? ` · ${x.source}` : ''}` };
 }
 
+/** The checker's list, one line per reason: the sentence once and every place it holds ("at 100–200, 450 and 900–950 m"), in the order the
+ *  reasons first appear; the tooltip names the reason and its sources. A long track printed the same sentence once per place, four times in the
+ *  column. "holds above N km/h" stays one line per place: each has its own speed. */
+function findingGroups(kind, items) {
+  const groups = new Map(), out = [];
+  for (const x of items || []) {
+    if (x.reason === 'holds-above' && Number.isFinite(x.worst)) { out.push({ line: findingLine(kind, x) }); continue; }
+    let g = groups.get(x.reason);
+    if (!g) { g = { reason: x.reason, xs: [], sources: new Set() }; groups.set(x.reason, g); out.push({ group: g }); }
+    g.xs.push(x); if (x.source) g.sources.add(x.source);
+  }
+  const place = (x) => (x.s1 != null && x.s1 !== x.s0 ? `${x.s0.toFixed(0)}–${x.s1.toFixed(0)}` : `${x.s0.toFixed(0)}`);
+  const list = (ps) => (ps.length < 2 ? ps.join('') : `${ps.slice(0, -1).join(', ')} and ${ps[ps.length - 1]}`);
+  return out.map(({ line, group: g }) => line || { text: `${kind}: ${reasonText(g.reason)}, at ${list(g.xs.map(place))} m`, title: `${g.reason}${g.sources.size ? ` · ${[...g.sources].join(', ')}` : ''}` });
+}
+
 /** stop: { at, reasons: [id], sources: [src] } from handles.js clamp; the value the drag stopped at is at. */
 function stopLine(stop, unitText = '') {
   const words = [...new Set(stop.reasons.map((r) => reasonText(r)))].join('; ');
@@ -82,4 +98,4 @@ function stopLine(stop, unitText = '') {
 
 const refusalText = (message) => String(message).replace(/^[A-Z][A-Z_]+:\s*/, '');
 
-module.exports = { reasonText, lapText, lapWhereText, findingLine, stopLine, refusalText };
+module.exports = { reasonText, lapText, lapWhereText, findingLine, findingGroups, stopLine, refusalText };
