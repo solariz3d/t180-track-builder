@@ -42,7 +42,7 @@ file in both places.
 | `app/` (260 files) | the window: `index.html`, the shell, the panels, the preview, sounds and skins; `app/test/` holds the app's 127 test files. |
 | `test/` (200 files) | the core's tests, and `test/fixtures/` (fixture tracks and manifests of the export digests they are checked against). |
 | `scripts/` (11 files) | command-line tools around the core (below). |
-| `tools/` (2 files) | `kn5.cjs` `readKn5` (reads a kn5's meshes in world space) and `piecewise.cjs` (fits a track's line from a mesh); both are required by shipped code. |
+| `tools/` (3 files) | `kn5.cjs` `readKn5` (reads a kn5's meshes in world space) and `piecewise.cjs` (fits a track's line from a mesh); both are required by shipped code. `kn5-move-gate.cjs` `moveGate` (moves a sector gate of an already exported kn5 onto the nearest flat road by rewriting its two matrices in place, into a new track folder; D567) is a command-line patch nothing shipped requires, though `build.rs` bundles `tools/` whole. |
 | `src-tauri/` (16 files) | the native side (Tauri 2, Rust), its config, icons, and `release.cjs` (the installer build). |
 
 ## `src/`
