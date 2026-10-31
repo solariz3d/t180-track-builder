@@ -162,7 +162,9 @@ test('the player: nothing before the first press; after it, place, undo and the 
 
 test('the player: handle steps tick on whole numbers with the handle\'s own plan, and each handle keeps its own place in the melody', () => {
   const F = fakeWindow(), s = createSound(F.win, { engineFor: F.engineFor, log: () => {} }); F.fire('pointerdown');
-  const step = (kind, value) => { F.ctx().currentTime += 0.016; F.fire('t180:handle-step', { kind, value }); };
+  // AMENDED (D581, the rule changed: TICK_MS 4 → 35, the user 2026-10-31, "the drag tick sounds glitchy when he drags fast"): steps 16 ms apart would now drop
+  // ticks by design; they are 40 ms apart here so this row still tests the plans and the melody, and the cap has its own row below
+  const step = (kind, value) => { F.ctx().currentTime += 0.040; F.fire('t180:handle-step', { kind, value }); };
   step('length', 100.4); step('length', 100.8); step('length', 101.2); step('length', 102.1);
   step('width', 30.2); step('width', 31.1);
   step('turn', 0.4); step('turn', 1.3);
@@ -173,6 +175,21 @@ test('the player: handle steps tick on whole numbers with the handle\'s own plan
   assert.ok(ticks[3][2] < 0, 'turn panned left');
   F.fire('t180:handle-step', null); F.fire('t180:handle-step', { value: 3 }); assert.equal(F.calls.filter((c) => c[0] === 'tick').length, 4, 'a malformed event is ignored');
   s.unmount(); step('length', 104); assert.equal(F.calls.filter((c) => c[0] === 'tick').length, 4, 'unmounted: no more ticks');
+});
+
+// D581 (the user, 2026-10-31: "the drag tick sounds glitchy when he drags fast", and he wants a cap): ticks closer than 35 ms apart are DROPPED, not queued, so
+// a fast drag is at most about 28 ticks a second, a steady ratchet rather than a buzz; his ear decides the final number at install
+test('a fast drag: ticks come at least 35 ms apart, about 28 a second at most; the ones in between are dropped, never played late', () => {
+  const F = fakeWindow(), times = [];
+  const s = createSound(F.win, { engineFor: (c) => { const e = F.engineFor(c); return { ...e, tick: (p) => { times.push(c.currentTime * 1000); e.tick(p); } }; }, log: () => {} }); F.fire('pointerdown');
+  // a whole number crossed every 16 ms for one second: 62 steps that would each tick
+  for (let i = 1; i <= 62; i++) { F.ctx().currentTime += 0.016; F.fire('t180:handle-step', { kind: 'length', value: 100 + i + 0.5 }); }
+  const gaps = times.slice(1).map((t, k) => t - times[k]);
+  assert.ok(gaps.every((g) => g >= 35 - 1e-9), `every tick at least 35 ms after the last: ${gaps.map((g) => g.toFixed(0)).join(' ')}`);
+  assert.ok(times.length <= 29 && times.length >= 15, `about 28 a second at most: ${times.length} in ${(62 * 16)} ms`);
+  // nothing waits: after the drag stops, time passing plays nothing more
+  const played = times.length; F.ctx().currentTime += 2; F.fire('t180:handle-step', { kind: 'length', value: 162.6 }); assert.equal(times.length, played, 'no queued tick plays after the drag (162.6 crosses no whole number)');
+  s.unmount();
 });
 
 test('mute and volume: remembered, clamped, reach the engine, and a bad volume is refused; muted, nothing plays', () => {

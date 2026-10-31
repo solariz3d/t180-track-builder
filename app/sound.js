@@ -31,7 +31,9 @@
 'use strict';
 
 const KEYS = Object.freeze({ muted: 't180.sound.muted', volume: 't180.sound.volume' });
-const TICK_MS = 4;            // two ticks in one instant are one
+// a tick closer than TICK_MS to the last one is DROPPED, not queued (D581, the user 2026-10-31: the drag tick "sounds glitchy when he drags fast", and he wants a cap;
+// it was 4, so up to 250 a second): 35 ms is at most about 28 a second, a steady ratchet rather than a buzz. His ear decides the final number at install
+const TICK_MS = 35;
 // the tick's tine (D345: 3a26bc5's voice, restored): its peak, 0.16 there, lifted 3 dB to D334's loudness, so a drag sits at about -31 LUFS, under a place at -28
 const TINE = Object.freeze({ peak: 0.226 });
 // D349: the recorded voices. The four files in app/sounds/ (16-bit stereo 48 kHz), each rendered on one note: `ref`. A note n plays its slot's sample at rate

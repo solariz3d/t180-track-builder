@@ -37,6 +37,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- **Dragging fast no longer makes the tick sound buzz.** Ticks now come at most about 28 a second (one per 35 ms, where it was up to 250), so a quick drag sounds like a steady ratchet; a tick that would come too soon is skipped, never played late.
+
 - **A road texture flows smoothly through a tube that widens or narrows.** Where a closed tube changed width, the texture on its walls and roof was cut into short pieces every 2 m, each shifted sideways from the last, worse toward the roof. Each row now takes its own section's width, and a tube keeps one count of texture repeats round for its whole length, so the lines run on without a step. A tube of one width, and every other road, looks exactly as before.
 
 - **The preview keeps a tube's texture right after a sculpt elsewhere on the tube.** Narrowing or widening one part of a tube could leave the texture on another part, which the edit did not rebuild, laid with the old number of repeats round until the next full rebuild. It now follows at once.
