@@ -180,7 +180,7 @@ const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g
  * note and leaves out (the lap keeps its other gates).
  */
 const GATE_TILT_MAX_DEG = FLOOR_MAX_DEG, GATE_CLIMB_MAX_DEG = 20, GATE_STEP_M = 2;
-// a gate's width seen from above, as a share of the road's width across (src/markers/checks.js gate-width): inferred, the plan's 'say, half'
+// a gate's width seen from above, as a share of the road's width across (src/markers/checks.js gate-width): inferred, about half
 const GATE_TOPDOWN_MIN = 0.5;
 /**
  * Whether a sector gate may stand at s: the line between its two ends (the road's span less the inset, as resolveLayout puts them) tilts no more than
