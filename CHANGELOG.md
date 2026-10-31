@@ -11,6 +11,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **The view's name sits higher.** "Build view · plain road (L)" at the top left of the 3D view now lines up with the top of the left column wherever the values strip leaves it room; in a narrower window it sits just under the strip instead of a gap below it.
+
 - **Hover help comes in a card that matches your look.** Rest the pointer on anything that explains itself (the "early" boxes, the menu buttons, the checker's lines, every field) and its words appear after a moment in a small card drawn in the current look's own colours and shape, instead of Windows' plain yellow tooltip. It stays inside the window and goes away as soon as you move off, press, scroll or type.
 
 - **The "start" boxes in Extend are now "early", and each says what it does.** Hover a box to read what ticking it does for that row: a bank, cup, edge or width eases in from the start of the piece and is reached within about 235 m (or half a short piece), then held; a turn or climb rate, the edge start and the tube sweep are reached within the first 20 m. Unticked, the change spreads over the whole piece, as before.

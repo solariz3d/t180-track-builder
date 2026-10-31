@@ -62,10 +62,30 @@ function mount(stage, win) {
   // where the strip ends, for what the page places under it (the camera's label, app/index.html .preview-hud): it grows with the next-piece line. Read by a ResizeObserver,
   // after layout, where there is one: reading offsetHeight here forced a layout in the middle of every drag frame that set new values
   const put = (px) => { if (stage.style && typeof stage.style.setProperty === 'function') stage.style.setProperty('--values-bottom', px); };
-  const RO = win && typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(() => put(shown ? `${layer.offsetTop + layer.offsetHeight}px` : '0px')) : null;
+  // THE VIEW TAG'S HEIGHT (D581; the user, 2026-10-31: it "sits too low"): its top level with the column card's (#left) wherever it clears this strip by
+  // HUD_CLEAR_PX, otherwise HUD_UNDER_PX under the strip. The strip is centred and its width follows its values, so the test is made here, after layout, whenever
+  // the strip or the tag changes size (the tag's words change with the view) and when the window is resized (the strip moves without changing size).
+  // It sets --hud-top on the stage; the tag's rule (app/index.html .preview-hud) falls back to D409's placement under the strip where it is not set
+  const HUD_CLEAR_PX = 12, HUD_UNDER_PX = 6;
+  let hudSeen = null, hudTries = 0;
+  const placeHud = () => {
+    if (!stage.style || typeof stage.style.setProperty !== 'function' || !stage.querySelector) return;
+    const hud = stage.querySelector('.preview-hud'), col = doc.getElementById('left');
+    // the preview makes the tag after this strip mounts (and may remake it): until it is there, look again on the next frames (60 at most); once it is
+    // observed, its own size changes call this
+    if (!hud || !hud.offsetParent) { if (hudTries++ < 60 && win && typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(placeHud); return; }
+    hudTries = 0;
+    if (RO && hud !== hudSeen) { if (hudSeen) RO.unobserve(hudSeen); RO.observe(hud); hudSeen = hud; }
+    const box = hud.offsetParent.getBoundingClientRect(), t = hud.getBoundingClientRect(), b = shown ? layer.getBoundingClientRect() : null, c = col ? col.getBoundingClientRect() : null;
+    const top = !b || t.right + HUD_CLEAR_PX <= b.left ? (c ? c.top - box.top : null) : b.bottom - box.top + HUD_UNDER_PX;
+    if (top === null) stage.style.removeProperty('--hud-top'); else stage.style.setProperty('--hud-top', `${Math.round(top)}px`);
+  };
+  const RO = win && typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(() => { put(shown ? `${layer.offsetTop + layer.offsetHeight}px` : '0px'); placeHud(); }) : null;
   if (RO) RO.observe(layer);
+  const onResize = () => placeHud();
+  if (RO && win.addEventListener) win.addEventListener('resize', onResize);
   const below = () => { if (!shown) put('0px'); else if (!RO) put(`${layer.offsetTop + layer.offsetHeight}px`); };
-  return { set, entries: () => (shown ? shown.slice() : null), visible: () => !!shown, attach, layer, unmount() { if (RO) RO.disconnect(); layer.remove(); } };
+  return { set, entries: () => (shown ? shown.slice() : null), visible: () => !!shown, attach, layer, unmount() { if (RO) { RO.disconnect(); if (win.removeEventListener) win.removeEventListener('resize', onResize); } layer.remove(); } };
 }
 
 module.exports = { entries, sculptEntries, mount, SPOT_CSS };
