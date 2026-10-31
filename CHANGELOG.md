@@ -11,6 +11,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **Hover help comes in a card that matches your look.** Rest the pointer on anything that explains itself (the "early" boxes, the menu buttons, the checker's lines, every field) and its words appear after a moment in a small card drawn in the current look's own colours and shape, instead of Windows' plain yellow tooltip. It stays inside the window and goes away as soon as you move off, press, scroll or type.
+
 - **The "start" boxes in Extend are now "early", and each says what it does.** Hover a box to read what ticking it does for that row: a bank, cup, edge or width eases in from the start of the piece and is reached within about 235 m (or half a short piece), then held; a turn or climb rate, the edge start and the tube sweep are reached within the first 20 m. Unticked, the change spreads over the whole piece, as before.
 
 - **Three sizes of type.** Words are 12 px, headings 16 px, and the road's numbers 24 px (18 px on the road labels), where seven nearby sizes from 10 to 15 px made everything look about the same; the small labels beside the numbers stay 11 px. The height ruler's tags in Sculpt sit fully on their backing.

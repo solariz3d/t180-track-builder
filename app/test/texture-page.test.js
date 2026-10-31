@@ -21,6 +21,8 @@
 //   9  the warning texts read 4.5:1 or more on their own pixels in EVERY look: the checker's red, amber and lap lines (a 150 m piece turning 720°, which
 //      crosses itself and loads hard, gives both), and every text in Track ▸ Pit lane… with the lane on (its status note and fields). Each look's own
 //      --bad-text and --warn-text are what these read in; before them the lines wore the 3D road's paint colours (skyline's amber read 1.1:1)
+//  10  (D581) the hover card (app/hovertip.js) reads 4.5:1 or more on its own pixels in EVERY look: the pointer moved onto the bank's "early" box by a real
+//      mouse event, the card shown after its delay, every text in it read by the probe above
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -289,4 +291,32 @@ test('row 9: the warning texts (the checker\'s red, amber and lap lines, and Tra
   }
   t.diagnostic(report.join('; '));
   assert.deepEqual(under, [], 'warning texts under 4.5:1 on their own pixels');
+});
+
+// D581 (the user, 2026-10-31: "can u do a custom window for the hover prompts that goes with the theme?"): the card is the look's own menu panel, so its words
+// must read on it as the menus' do
+test('row 10 (D581): the hover card reads 4.5:1 or more on its own pixels in every look', { skip }, async (t) => {
+  const report = [], under = [];
+  for (const look of LOOKS) {
+    await load(look);
+    // the pointer onto the bank's "early" box, as a mouse moves (CDP), then held there past the card's delay
+    const at = await ev("const b = document.querySelector('#palette input[aria-label=\"bank at the start\"]'); b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2];");
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0] - 30, y: at[1] });
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at[0], y: at[1] });
+    await sleep(700);
+    const shown = await ev("const c = document.getElementById('hovertip'); return c && !c.hidden ? c.textContent : null;");
+    assert.ok(shown && /^Reach this bank early/.test(shown), `${look}: the card shows the box's words (${shown})`);
+    // the probe keeps a text only where elementFromPoint finds it, and the card never catches the pointer: for this reading alone it may (no pixel moves;
+    // the pointer is on the box, not the card). Its words are its own text node, keyed as TEXTS keys it
+    await ev("document.getElementById('hovertip').style.pointerEvents = 'auto'; return true;");
+    const inCard = new Set([`div#hovertip|${shown.trim().slice(0, 40)}`]);
+    const on = await contrasts(); let n = 0;
+    await ev("document.getElementById('hovertip').style.pointerEvents = ''; return true;");
+    for (const [k, list] of on) if (inCard.has(k)) list.forEach((w) => { n++; if (w < 4.5) under.push(`${look}: ${k.split('|')[1]} ${w.toFixed(2)}`); report.push(`${look} ${w.toFixed(2)}`); });
+    assert.ok(n >= 1, `${look}: the probe read the card's text (${n})`);
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 });
+    assert.deepEqual(errors, [], `${look}: no page errors`);
+  }
+  t.diagnostic(`the card's text, worst on its own pixels: ${report.join('; ')}`);
+  assert.deepEqual(under, [], 'hover card text under 4.5:1 on its own pixels');
 });

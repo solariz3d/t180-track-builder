@@ -96,6 +96,11 @@
   #win-min:hover, #win-max:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
   #win-close:hover { background: #b0303a; }
   #win-close:hover::before, #win-close:hover::after { border-color: #fff; }
+  /* THE HOVER CARD (app/hovertip.js, D581): every title's words in the look's own menu panel (.more-menu: each look's surface, border, radius and blur), placed
+     by the script, never in the pointer's way; this rule only undoes the menu's layout and gives it the look's accent as its top edge */
+  #hovertip { position: fixed; top: 0; left: 0; right: auto; z-index: 2000; display: block; min-width: 0; max-width: 360px; padding: 7px 10px; gap: 0;
+    font: 12px/1.4 var(--body); color: var(--text); white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; border-top-color: var(--accent); }
+  #hovertip[hidden] { display: none; }
   /* A QUESTION IN THE PAGE (app/askdialog.js): the save-on-close prompt, in the same black, bone and violet. */
   .ask-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(6, 6, 6, .62); backdrop-filter: blur(3px); }
   .ask-card { width: min(380px, calc(100vw - 48px)); background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); padding: 22px 24px 18px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6); }
@@ -448,6 +453,8 @@
   // the title bar AFTER the close handler, so its X always has a handler to reach (app/titlebar.js)
   let TB = null;
   try { TB = await loadCjs("app/titlebar.js", get); await TB.wireTitlebar(document, win); } catch (e) { console.error(`title bar not wired: ${e && e.message}`); }
+  // D581: every title's words in the look's own hover card, not Windows' tooltip (app/hovertip.js)
+  try { (await loadCjs('app/hovertip.js', get)).wireHovertip(document); } catch (e) { console.error(`hover card not wired: ${e && e.message}`); }
   // D508: the window is created hidden (no white window before the maximize); it is shown, maximized, once this page has painted its look (the head
   // script set it before the first paint). Not awaited: the builder starts meanwhile. Without titlebar.js the window is shown at once, and if this
   // page never runs at all, lib.rs shows it natively
