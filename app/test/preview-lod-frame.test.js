@@ -8,8 +8,8 @@
 //   2  above the road, 37% of the way along: p95 <= 6.9 ms (before: 1.9 ms)
 //   3  the work behind row 1, counted: in the opening view the preview draws at most 40% of the full mesh's triangles (before: all of them). Rows 1 and 2 depend on the
 //      GPU and on what else runs (before the change this machine read 13.3, 8.3 and 5.1 ms on row 1 in three runs); this row does not
-// Not here: a frame that answers a pointer move also runs the readout's pick over every station (app/preview/preview.js pickAcross), about 35 ms on 100 km; that is
-// the readout's, not the drawn road's.
+//   4  in the overhead view, the pointer moving over the track (the right button held, the look): p95 <= 6.9 ms. Each move runs the readout's pick (app/preview/preview.js
+//      pickAcross), which read every station of the track (before its cull: 17.9 ms on this row, 235 frames over)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -113,4 +113,21 @@ test('row 3: in the opening view the preview draws at most 40% of the triangles 
   t.diagnostic(`${st.triangles} of ${fullTris} triangles drawn, ${st.coarse} of ${st.chunks} chunks thinned`);
   assert.ok(fullTris > 1e6, `the full mesh has ${fullTris} triangles`);
   assert.ok(Number.isFinite(st.triangles) && st.triangles <= 0.4 * fullTris, `${st.triangles} of ${fullTris} triangles drawn`);
+});
+
+test('row 4: in the overhead view, with the pointer moving over the track, it holds one frame at 144 Hz (the hover pick included)', { skip }, async (t) => {
+  const r = await ev("const c = document.querySelector('#stage canvas').getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height / 2 };");
+  const mouse = (type, x, y, button, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button, buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
+  const runs = [];
+  for (let k = 0; k < 2; k++) {
+    await mouse('mouseMoved', r.x, r.y, 'none', 0); await mouse('mousePressed', r.x, r.y, 'right', 2); await sleep(100);
+    await ev('window.__ft.frames.clear(); window.__ft.on = true; return true;');
+    const t0 = Date.now(); while (Date.now() - t0 < 3000) { const d = Math.sin(((Date.now() - t0) / 1500) * Math.PI) * 300; await mouse('mouseMoved', r.x + d, r.y + d / 4, 'right', 2); await sleep(4); }
+    await ev('window.__ft.on = false; return true;'); await mouse('mouseReleased', r.x, r.y, 'right', 0); await sleep(300);
+    const ms = await ev('return [...window.__ft.frames.values()].map((f) => f.ms);'); assert.ok(ms.length >= 30, `only ${ms.length} frames in 3 s`);
+    runs.push({ p95: pct(ms, 0.95), over: ms.filter((m) => m > BUDGET).length, n: ms.length }); if (runs[k].p95 <= BUDGET) break;
+  }
+  t.diagnostic(said(runs));
+  assert.ok(runs[runs.length - 1].p95 <= BUDGET, `the overhead view with the pointer moving: ${said(runs)}`);
+  assert.deepEqual(errors, []);
 });
