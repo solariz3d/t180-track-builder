@@ -634,7 +634,8 @@ const NONE = { turn: false, climb: false, bank: false, width: false, cup: false 
 test('extendOptions "at start": a ticked field WITH a target goes in transition as { channel: 20 m }; unticked or untouched fields do not', () => {
   const base = { length: 100, ...BLANK };
   assert.deepEqual(extendOptions({ ...base, width: '45' }), { length: 100, targets: { w: 45 } }, 'nothing ticked: no transition, exactly as before');
-  assert.deepEqual(extendOptions({ ...base, width: '45', atStart: { ...NONE, width: true } }).transition, { w: 20 }, 'width at start: w reaches 45 within 20 m');
+  // AMENDED (the rule changed, 2026-10-30 22:23, the user: "the start should work the same for the width as well": a width at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, capped at half the piece, app/core/panel.js): on this 100 m piece, half of it
+  assert.deepEqual(extendOptions({ ...base, width: '45', atStart: { ...NONE, width: true } }).transition, { w: 50 }, 'width at start: F, held to half this 100 m piece');
   assert.equal(extendOptions({ ...base, atStart: { ...NONE, width: true } }).transition, undefined, 'ticked but untouched (no target): nothing');
   // AMENDED (the rule changed: a ticked bank, cup or edge ramps as long as the roll amber needs, capped at half the piece; was 20 m for every channel).
   // 30° of bank and 90° of cup from 0 want 70.7 m and 212 m; on this 100 m piece both stop at 50 m. Turn and width keep 20 m (the rows above and below).
@@ -642,8 +643,11 @@ test('extendOptions "at start": a ticked field WITH a target goes in transition 
   assert.deepEqual(extendOptions({ ...base, turn: '', bank: '30', cup: '90', atStart: { ...NONE, turn: true, bank: true, cup: true } }).transition, { phi: 100, c: 50 },
     'each ticked field with a target, by its own channel; turn has no target');
   assert.deepEqual(extendOptions({ ...base, length: 12, width: '45', atStart: { ...NONE, width: true } }).transition, { w: 12 }, 'a piece shorter than 20 m: its own length');
+  // the width takes F's own path now (2026-10-30), so the turn carries the 20 m span's hold to a short piece here
+  assert.deepEqual(extendOptions({ ...base, length: 12, turn: '10', atStart: { ...NONE, turn: true } }).transition, { kh: 12 }, 'a turn at start on a 12 m piece: its own length');
   const first = extendOptions({ ...base, width: '45', empty: true, atStart: { ...NONE, width: true } });
-  assert.deepEqual([first.first, first.transition], [{ w: 45 }, { w: 20 }], 'on an empty track the start (D194a) and the span both go in');
+  // AMENDED (the rule changed, 2026-10-30 22:23, the user: "the start should work the same for the width as well": a width at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, capped at half the piece, app/core/panel.js)
+  assert.deepEqual([first.first, first.transition], [{ w: 45 }, { w: 50 }], 'on an empty track the start (D194a) and the span both go in');
 });
 
 test('the panel: an "at start" box beside each field, OFF by default; ticking one redraws the ghost and readout inside its handler, and Extend sends it', async () => {
@@ -655,9 +659,10 @@ test('the panel: an "at start" box beside each field, OFF by default; ticking on
   assert.equal(S.stub.seen.at(-1).transition, undefined, 'typed, not ticked: the whole-piece blend (no transition)');
   boxes.width.checked = true; const n = S.stub.seen.length; boxes.width.onchange();
   assert.ok(S.stub.seen.length > n, 'ticking redrew the readout and ghost at once');
-  assert.deepEqual(S.stub.seen.at(-1).transition, { w: 20 }, 'and they asked the core for width at the start');
+  // AMENDED (the rule changed, 2026-10-30 22:23, the user: "the start should work the same for the width as well": a width at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, capped at half the piece, app/core/panel.js): half this 100 m piece
+  assert.deepEqual(S.stub.seen.at(-1).transition, { w: 50 }, 'and they asked the core for width at the start');
   P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
-  assert.deepEqual(S.stub.extended.at(-1).transition, { w: 20 }, 'Extend sends it');
+  assert.deepEqual(S.stub.extended.at(-1).transition, { w: 50 }, 'Extend sends it');
   assert.deepEqual(S.stub.extended.at(-1).targets, { w: 45 });
   P.panel.unmount();
 });

@@ -74,7 +74,8 @@ const swellPeak = (change, R) => (2 * Math.abs(change)) / laidOf(R);
 // 0.72 / 3.69 / 14.44 / 29.38 / 41.19° at 10 / 20 / 50 / 100 / 200 m, done by 234.5 m, the rate peaking at 0.366 °/m at 20 m. The ramp is F_RAMP_M at least;
 // a change the fade would carry past the amber takes the roll bar's length instead (SWELL_SPREAD: F, like the swell, peaks at 2·|change| over its laid
 // length), and the caps are as before: half the piece, which the bank's alone bends. A ramp laid in 40 m or less cannot hold a 20 m rise and is the swell.
-// Cup and edge take F as the bank does (src/core/extend.js startShapes); the quintic and START_SPREAD they had are what F replaces.
+// Cup and edge take F as the bank does (src/core/extend.js startShapes); the quintic and START_SPREAD they had are what F replaces. The WIDTH takes F too (the
+// user, 22:23: a 32 → 55 m width at start flared in a 20 m wedge): F_RAMP_M within the same half-piece cap; no roll bar applies to a width.
 const F_RAMP_M = 300, F_RISE_M = 20;
 /** The length a ramp asked for R m is laid in: src/core/extend.js rampControl's compression with RAMP_KNOTS_C2 = 8 subdivisions. */
 function laidOf(R) { return Math.max(R - (2 * R) / 8, R / 8); }
@@ -127,8 +128,9 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   const transition = {};
   const fromDeg = (ch) => { const v = head && Number.isFinite(head[ch]) ? head[ch] : 0; return ch === 'phi' ? v / DEG : v; };
   for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) {
-    transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length, SWELL_SPREAD, ch === 'phi') : Math.min(AT_START_M, out.length);
-    if (!XS_START.has(ch)) continue;
+    transition[ch] = XS_START.has(ch) ? crossStartM(fromDeg(ch), ch === 'phi' ? targets.phi / DEG : targets[ch], out.length, SWELL_SPREAD, ch === 'phi')
+      : ch === 'w' ? Math.min(F_RAMP_M, Math.max(Math.min(AT_START_M, out.length), out.length / 2)) : Math.min(AT_START_M, out.length);
+    if (!XS_START.has(ch) && ch !== 'w') continue;
     if (ch === 'phi') out.bankShape = startShapeOf(transition.phi);
     else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);
   }

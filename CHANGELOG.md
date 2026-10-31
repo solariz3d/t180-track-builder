@@ -33,7 +33,7 @@ All notable changes to this project are recorded here. The format follows
 
 - **Warnings read in every look.** The checker's red and amber lines were drawn in the road's own paint colours, which some looks' panels all but swallowed (amber on Skyline was nearly invisible). Each look now writes its warnings in its own red and amber, the same colours made lighter or darker until they read clearly on that look's panels.
 
-- **A bank, cup or edge "at start" leans in straight away, then eases into its value.** It starts turning within the first 20 m, then fades in gently over about 300 m: a 41° bank at start is at 3.7° by 20 m, 29° by 100 m, and done by about 235 m, rolling at most 0.37 °/m instead of 0.84. A very large change still takes longer, so the road never rolls faster than the track check allows.
+- **A bank, cup, edge or width ticked "at start" now eases in from the piece's first metre and settles over about 235 m.** It starts changing within the first 20 m, then fades in gently: a 41° bank at start is at 3.7° by 20 m and 29° by 100 m, rolling at most 0.37 °/m instead of 0.84, and a road widened from 32 to 55 m no longer flares out in a short wedge at the joint. A very large bank change still takes longer, so the road never rolls faster than the track check allows.
 
 - **The road is firmer under a car at very high load: cars that used to sink through the surface in the hardest corners now stay on it.** This applies to tracks exported from now on, in Assetto Corsa with Custom Shaders Patch; a track already installed keeps its old road until it is exported again.
 

@@ -83,7 +83,8 @@ test('swell: the bank with its box off, a cup or edge at start, and turn and wid
     // AMENDED (the rule changed, 2026-10-30, the user's "F looks good we can try it": a bank, cup or edge at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, or the roll bar's length where that is longer, app/core/panel.js crossStartM / startShapeOf): the cup and the edge at start move; the bank box-off and the width and turn at start are as before
     'cup 40 at start, bank 20 box off': ['d48e1846ddb8591777f891d652ec4fc6d4e1566455b6958b2cb2ffddfc817efb', { length: 600, bank: '20', cup: '40', atStart: { ...NONE, cup: true } }],
     'edge 30 at start': ['a4fe367294a6b66a2869adebb87e6106d387a66fe4caeaa7806640597e7e5ef2', { length: 600, edge: '30', atStart: { ...NONE, edge: true } }],
-    'width 30 and turn 10 at start': ['cbf84a1c224d63a0fec5f544bfa76f45ee046b3916b41d951781be00ce8b93ab', { length: 400, width: '30', turn: '10', atStart: { ...NONE, width: true, turn: true } }],
+    // AMENDED (the rule changed, 2026-10-30 22:23, the user: "the start should work the same for the width as well": a width at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, capped at half the piece, app/core/panel.js): the width moves; the turn keeps its 20 m
+    'width 30 and turn 10 at start': ['ce11ad255c2d7fafc74aa510c21c458e5e98dc19ae457364d0b7b8753390ac96', { length: 400, width: '30', turn: '10', atStart: { ...NONE, width: true, turn: true } }],
   };
   const base = flat('golden');
   for (const [k, [sha, f]] of Object.entries(GOLD)) assert.equal(crypto.createHash('sha256').update(D.serialize(lay(base, f).doc)).digest('hex'), sha, k);

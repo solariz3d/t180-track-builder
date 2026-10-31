@@ -68,11 +68,12 @@ test('at start: the cup and the edges come in no faster than the roll amber eith
   assert.equal(piece(straight(), { length: 100, bank: '54' }, { bank: true }).o.transition.phi, 100);
 });
 
-test('at start: turn, climb and width keep exactly 20 m; nothing ticked sends no transition, and the bytes Extend lays are as before', () => {
+// AMENDED (the rule changed, 2026-10-30 22:23, the user: "the start should work the same for the width as well": a width at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, capped at half the piece, app/core/panel.js): the width leaves this row (test/core_width_at_start_f.test.js has it); turn and climb keep 20 m
+test('at start: turn and climb keep exactly 20 m, the width takes F (half this 400 m piece, 200 m); nothing ticked sends no transition, and the bytes Extend lays are as before', () => {
   const d = straight(), h = headOf(d);
   const o = extendOptions({ length: 400, turn: '10', climb: '2', width: '30', atStart: { ...NONE, turn: true, climb: true, width: true }, head: h });
-  assert.deepEqual(o.transition, { kh: 20, kv: 20, w: 20 });
-  assert.equal(D.serialize(extend(d, o)), D.serialize(extend(d, { length: 400, targets: o.targets, transition: { kh: 20, kv: 20, w: 20 } })));
+  assert.deepEqual(o.transition, { kh: 20, kv: 20, w: 200 });
+  assert.equal(D.serialize(extend(d, o)), D.serialize(extend(d, { length: 400, targets: o.targets, transition: { kh: 20, kv: 20, w: 200 }, startShapes: o.startShapes })));
   const plain = extendOptions({ length: 400, bank: '20', width: '30', atStart: NONE, head: h });
   assert.equal(plain.transition, undefined, 'no box ticked: no transition');
   assert.equal(D.serialize(extend(d, plain)), D.serialize(extend(d, { length: 400, targets: plain.targets, bankShape: 'rounded' })));
