@@ -17,12 +17,19 @@ const { gripsOf, gripSurface } = require('./gripkeys.js');
 // INTENSITY / RIGID_WITH_BODIES / RIGID_WITH_BOXES, which the observed blocks also set (to 1 / 0 / 0), are NOT in
 // FINDINGS §4c and are left to CSP's defaults here; the hand-back names this as a difference to test if the soft road
 // does not reproduce.
+// SOFT_CFM IS NOT FINDINGS' VALUE (2026-10-30, at the user's yes). §4c's 0.0002 is the measured origin; the default is a
+// quarter of it, 0.00005, a firmer contact (CSP: "the higher it is, the softer is the collision"). On 0.0002, seven helix
+// passes on ELYSIUM by four cars held five times and went through the road twice: the breaks sank past -11 cm at 1.66
+// and 1.96 m/s, the holds at 0.63 m/s or less, and a break was followed by a throw of about 125 g. On 0.00005 the car that
+// broke held 64.88 g for 1.54 s with its body 4.5-5.4 cm above the road throughout. One pass, one car: it reopens if a car
+// bounces or launches at the helix entry on 0.00005 where it did not on 0.0002, or cannot hold 60 g on it that held it
+// on 0.0002.
 const SOFT_COLLISION_BLOCK = [
   '[COLLISION_PARAMS_...]',
   '; T-180 soft road (docs/FINDINGS.md §4c). CSP only: plain AC ignores this section.',
   'MESHES=1ROAD?',
   'SOFT_ERP=0.8',
-  'SOFT_CFM=0.0002',
+  'SOFT_CFM=0.00005',
   'BOUNCE=0.1',
   'FRICTION=0.05',
   'MAX_DEPTH=4',

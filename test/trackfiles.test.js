@@ -60,9 +60,11 @@ test('the two surfaces.ini variants differ ONLY by the soft-collision block', ()
   assert.ok(!/COLLISION_PARAMS/.test(hard), 'the no-block variant carries no collision section');
 });
 
-test('the block carries FINDINGS §4c\'s numbers, exactly', () => {
+// AMENDED BY NAME (2026-10-30, at the user's yes): SOFT_CFM is a quarter of FINDINGS §4c's 0.0002, the firmer road measured
+// to hold at the helix where the softer one let cars sink through; every other value is still §4c's.
+test('the block carries FINDINGS §4c\'s numbers, except SOFT_CFM at a quarter of §4c\'s 0.0002', () => {
   const kv = Object.fromEntries(T.SOFT_COLLISION_BLOCK.split('\n').filter((l) => /^[A-Z_]+=/.test(l)).map((l) => l.split('=')));
-  assert.deepStrictEqual(kv, { MESHES: '1ROAD?', SOFT_ERP: '0.8', SOFT_CFM: '0.0002', BOUNCE: '0.1', FRICTION: '0.05', MAX_DEPTH: '4' });
+  assert.deepStrictEqual(kv, { MESHES: '1ROAD?', SOFT_ERP: '0.8', SOFT_CFM: '0.00005', BOUNCE: '0.1', FRICTION: '0.05', MAX_DEPTH: '4' });
   assert.match(T.SOFT_COLLISION_BLOCK, /^\[COLLISION_PARAMS_\.\.\.\]$/m);
 });
 
