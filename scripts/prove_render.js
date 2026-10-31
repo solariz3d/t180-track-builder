@@ -1,31 +1,31 @@
 #!/usr/bin/env node
 // prove_render.js: drive the REAL app window, place a real track through the palette, and capture the window in each
-// camera mode with PrintWindow (scripts/prove_render.ps1). D169: "PROVE THE RENDERING in the real window".
+// camera mode with PrintWindow (scripts/prove_render.ps1). The request: "PROVE THE RENDERING in the real window".
 //
 //   node scripts/prove_render.js --exe <path to the built app .exe> --out <folder outside the repo>
 //        [--port N] [--timeout 600] [--shim-timers] [--plan <plan.json>]
 //   node scripts/prove_render.js --flow --exe … --out … [--export-seam]
 //
-// --export-seam (D181, with --flow): the app is launched with T180_TEST_EXPORT_FOLDER=<out>/export, and its Export button
+// --export-seam (with --flow): the app is launched with T180_TEST_EXPORT_FOLDER=<out>/export, and its Export button
 // takes that folder from the app's test_export_folder command INSTEAD of the native dialog, in the same code path the
-// dialog returns into (app/index.html; A's seam, gated by the launch environment: nothing in normal use sets it). The
-// native dialog cannot be driven: its folder box is not exposed to UI Automation (A's D180 §6).
+// dialog returns into (app/index.html; the app's seam, gated by the launch environment: nothing in normal use sets it). The
+// native dialog cannot be driven: its folder box is not exposed to UI Automation (measured).
 //
-// THE DEVTOOLS PORT IS OURS ALONE (D179: a seat's script once attached to another seat's browser left running on a fixed
+// THE DEVTOOLS PORT IS OURS ALONE (one run's script once attached to another run's browser left running on a fixed
 // port). With no --port a free one is taken from the OS; a --port given must be free before the app starts, or the run is
 // refused; and once connected, the process LISTENING on the port must be the app this run started or one of its
 // children (WebView2 runs as a child), or the run stops before sending anything.
 //
-// --plan (D179, the usability pass): the track to build and the views to capture, instead of PLAN and VIEWS. The file is
+// --plan (the usability pass): the track to build and the views to capture, instead of PLAN and VIEWS. The file is
 // { "steps": [{ "word", "font", "capture"?, "ghost"?: { "word", "capture" } }], "views"?: ["overhead", "chase", …] } (loadPlan
 // checks it). Views are still reached by VIEWS' own keys, in order; a view not listed is passed through, not captured.
 //
-// --shim-timers (D170, DISCLOSED in the report): before the page's scripts run, window.setTimeout / clearTimeout are
-// wrapped so they work when called as a method of another object. A's in-progress app/shell.js (D169) calls
+// --shim-timers (DISCLOSED in the report): before the page's scripts run, window.setTimeout / clearTimeout are
+// wrapped so they work when called as a method of another object. An in-progress app/shell.js once called
 // timers.setTimeout() on a { setTimeout, clearTimeout } object, which a browser rejects ("Illegal invocation"), so no word
-// can be placed in the window until A fixes it. The shim changes nothing else; the report says whether it was used.
+// could be placed in the window until it was fixed. The shim changes nothing else; the report says whether it was used.
 //
-// HOW IT DRIVES THE WINDOW, without a line in A's page: WebView2 reads WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS from the
+// HOW IT DRIVES THE WINDOW, without a line in the app's page: WebView2 reads WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS from the
 // environment of the process that creates it, so the app is started with --remote-debugging-port=<port> in that
 // variable, and this script speaks the DevTools protocol to the page (Node's own WebSocket; no dependency).
 //   · Words are placed by CLICKING the palette's own buttons (a real mouse event at the button's centre); the font is
@@ -57,16 +57,16 @@ function portOwner(port, root) {
   return { pid: chain[0], ours: chain.includes(Number(root)) };
 }
 /**
- * THE RUN'S OWN WEBVIEW2 PROFILE (D179). WebView2 shares one browser process per user-data folder, keyed to the app's
+ * THE RUN'S OWN WEBVIEW2 PROFILE. WebView2 shares one browser process per user-data folder, keyed to the app's
  * identifier: a second instance of the app joined the first one's browser and its DevTools port was silently ignored
  * (two runs found no page on their port; the app launched alone, a minute later, opened it). WEBVIEW2_USER_DATA_FOLDER
  * gives each run a fresh folder of its own (measured: the folder fills with EBWebView and the page opens on its port), so a
- * run never shares a browser with the user's app or another seat's, and never writes into the user's webview storage
+ * run never shares a browser with the user's app or another run's, and never writes into the user's webview storage
  * (the first-run guide's state, app/onboarding/firstrun.js, lives in its localStorage).
  */
 function profileDir(out) { const d = path.join(path.resolve(out), 'webview2-profile'); fs.rmSync(d, { recursive: true, force: true }); return d; }
 /**
- * THE USER'S AUTOSAVE IS PUT BACK (D179). The app writes its unsaved track to <app data>/autosave.t180auto from the Rust
+ * THE USER'S AUTOSAVE IS PUT BACK. The app writes its unsaved track to <app data>/autosave.t180auto from the Rust
  * side (src-tauri/src/lib.rs AUTOSAVE_FILE), which the WebView2 profile does not cover, so a run would overwrite the
  * user's own unsaved session. Before the launch it is copied into the run's out folder; after the run it is written back
  * byte for byte, or, if there was none, the one the run made is removed. Returns restore() -> 'restored' | 'removed' | 'none'.
@@ -98,9 +98,9 @@ function checkOwner(port, appPid) {
 const fs = require('fs'), path = require('path');
 
 /**
- * The track the D169 packet names: straight, sweep, half-pipe turn, wall-ride, jump. Font 'auto' = the word's own.
+ * The default track: straight, sweep, half-pipe turn, wall-ride, jump. Font 'auto' = the word's own.
  * `capture` takes the build view right after that word. `ghost` then shows the NEXT word as a ghost at the head (the
- * preview's 't180-ghost' event, D170) and captures the build view with it, and clears it before the next word is placed.
+ * preview's 't180-ghost' event) and captures the build view with it, and clears it before the next word is placed.
  */
 const PLAN = Object.freeze([
   { word: 'straight', font: 'auto' }, { word: 'sweep', font: 'auto' }, { word: 'turn', font: 'half-pipe' },
@@ -147,7 +147,7 @@ function parseArgs(argv) {
  *   head in frame        the head's NDC x and y are inside (−1, 1), in front of the camera (w > 0) and the far plane
  *   looks along growth   build view only: view direction · T ≥ 0.9
  *   dpr                  the canvas backing store is css size × DPR (rounded)
- *   ac look drawn        (D177) in the AC look: at least one batch was drawn with an AC shader, so they compiled here
+ *   ac look drawn        in the AC look: at least one batch was drawn with an AC shader, so they compiled here
  */
 function judge(mode, probe, cap) {
   const out = [];
@@ -156,7 +156,7 @@ function judge(mode, probe, cap) {
   const n = probe && probe.headNdc;
   out.push({ name: 'head in frame', pass: !!n && Math.abs(n[0]) < 1 && Math.abs(n[1]) < 1 && n[2] < 1, detail: n ? `head at NDC (${n.map((x) => x.toFixed(3)).join(', ')})` : 'head behind the camera or no track' });
   if (mode === 'build') out.push({ name: 'looks along growth', pass: !!probe && probe.lookAlongT >= 0.9, detail: probe ? `view · T = ${probe.lookAlongT && probe.lookAlongT.toFixed(4)}` : 'no probe' });
-  // D177: in the AC look, the AC programs compiled in this window's WebGL (createRenderer compiles them at mount) and drew
+  // in the AC look, the AC programs compiled in this window's WebGL (createRenderer compiles them at mount) and drew
   if (probe && probe.look === 'ac') out.push({ name: 'ac look drawn', pass: !!probe.stats && probe.stats.acDraws > 0, detail: `${probe.stats ? probe.stats.acDraws : 0} batches with AC shaders, ${probe.stats ? probe.stats.draws : 0} draws` });
   const c = probe && probe.canvas;
   if (probe && probe.ghostExpected) out.push({ name: 'ghost shown', pass: probe.ghost > 0, detail: `${probe.ghost} ghost batches` });
@@ -203,7 +203,7 @@ async function run(o) {
       await cdp.send('Page.reload', { ignoreCache: true }); await sleep(1500);
     }
     await until(() => cdp.evaluate(`document.querySelectorAll('#palette button.piece').length >= 7 && !!document.querySelector('#preview canvas')`), 'the palette and the preview');
-    // E's first-run guide (app/onboarding) would sit over the preview in every capture: hidden for THIS page only, by a style
+    // the first-run guide (app/onboarding) would sit over the preview in every capture: hidden for THIS page only, by a style
     // rule (its close button would record "closed" in storage; the run's own profile is thrown away anyway)
     report.guideHidden = await cdp.evaluate(`(() => { const st = document.createElement('style'); st.textContent = '.guide-card{display:none!important}'; document.head.append(st); return true; })()`);
     const click = async (sel, text) => {
@@ -211,7 +211,7 @@ async function run(o) {
       if (!r) throw new Error(`no ${sel} button "${text}"`);
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await cdp.send('Input.dispatchMouseEvent', { type, x: r.x, y: r.y, button: 'left', clickCount: 1 });
     };
-    /** Point at a palette piece without clicking: A's page shows that piece's ghost (app/index.html, 't180-ghost'). */
+    /** Point at a palette piece without clicking: the app's page shows that piece's ghost (app/index.html, 't180-ghost'). */
     const hover = async (text) => {
       const r = await cdp.evaluate(`(() => { const b = [...document.querySelectorAll('#palette button.piece')].find((x) => x.textContent === ${JSON.stringify(text)}); const q = b.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; })()`);
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: r.x, y: r.y });
@@ -247,7 +247,7 @@ async function run(o) {
       report.placed.push({ ...step, track: await cdp.evaluate(`[...document.querySelectorAll('#palette ol.track li')].map((l) => l.textContent)`) });
       if (step.capture) await shoot(step.capture, 'build');
       if (step.ghost) {
-        // the real path first: point at the palette piece, and A's page sends the shell's candidate as the ghost
+        // the real path first: point at the palette piece, and the app's page sends the shell's candidate as the ghost
         await hover(step.ghost.word); await sleep(400);
         let via = "palette hover (A's app/index.html)";
         if (!((await probe()) || {}).ghost) {                // fallback, reported: the preview's own event with the word
@@ -263,7 +263,7 @@ async function run(o) {
     report.messages = await cdp.evaluate(`[...document.querySelectorAll('#palette .message')].map((m) => m.textContent)`);
     await cdp.evaluate(`document.activeElement && document.activeElement.blur(); document.body.focus(); true`);   // keys go to the page, not a <select>
     const key = (k, modifiers = 0) => Promise.all(['keyDown', 'keyUp'].map((type) => cdp.send('Input.dispatchKeyEvent', { type, key: k, code: `Key${k.toUpperCase()}`, text: modifiers ? undefined : k, modifiers, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0) })));
-    // Ctrl+C must not move the camera (B's D168 defect 4)
+    // Ctrl+C must not move the camera (a defect a review found)
     const m0 = (await probe()).mode; await key('c', 2); await sleep(300); report.ctrlC = { before: m0, after: (await probe()).mode };
     for (const v of VIEWS) {
       for (const k of v.keys) { await key(k); await sleep(150); }

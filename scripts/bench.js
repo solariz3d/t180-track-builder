@@ -1,20 +1,20 @@
 #!/usr/bin/env node
-// bench.js: a TRACK-A-SCALE track, timed along the app's own edit path (ARCHITECTURE §11.1: track A is ONE loop of
-// 43.3 km; FINDINGS: 696 words).
+// bench.js: a TRACK-A-SCALE track, timed along the app's own edit path (track A is ONE loop of
+// 43.3 km; measured: 696 words).
 //
 //   node scripts/bench.js [--km 40] [--seed 17] [--json]
 //
-// THE EDIT PATH, as the app runs it on every change (headless, the same modules the window loads): A's shell (the
-// document, resolveFrom) → C's preview track model (app/preview/trackmodel.js: extend / sculpt / full) → E's validation
+// THE EDIT PATH, as the app runs it on every change (headless, the same modules the window loads): the shell (the
+// document, resolveFrom) → the preview track model (app/preview/trackmodel.js: extend / sculpt / full) → the validation
 // controller (app/validate-ui/panel.js: append / sculpt / full revalidation). Each is timed, and the total.
 //
-// "FAST ENOUGH", written BEFORE measuring. ARCHITECTURE states no latency figure (§1.5 says users hate "slow updates";
-// §9 gives only the IPC cost, about 200 ms for 10 MB). So these budgets are mine, INFERRED:
+// "FAST ENOUGH", written BEFORE measuring. The design states no latency figure (it says users hate "slow updates",
+// and gives only the IPC cost, about 200 ms for 10 MB). So these budgets are mine, INFERRED:
 //   · one DRAG STEP (a sculpt handle moved one step, the preview and the revalidation included): ≤ 50 ms, so a drag
 //     updates at 20 Hz or better and stays live under the hand;
 //   · PLACING one word at the head: ≤ 100 ms (the usual "instant" threshold for a discrete action);
 //   · a FULL REVALIDATE (a new speed or export setting): ≤ 1 s, a deliberate action that must not break flow;
-//   · MEMORY for a track-A-scale track: ≤ 1 GB for the whole UI process (WebView2 runs the geometry in it, §9).
+//   · MEMORY for a track-A-scale track: ≤ 1 GB for the whole UI process (WebView2 runs the geometry in it).
 // Each number printed says whether it is inside its budget. Wall times are medians of repeated runs on one machine,
 // shared with other work; they are indicative, not a benchmark suite.
 'use strict';
@@ -71,7 +71,7 @@ async function main(argv) {
   // 2. one drag step of a sculpt handle: a word near the head, and one in the middle (everything after it moves)
   const drag = {};
   // a straight mid-track only TRANSLATES what follows; a curved word mid-track also turns it, and on a pitched stretch the
-  // rotation-minimising frame then leaves every later piece banked by a hair, so the preview remeshes them (D166 §5)
+  // rotation-minimising frame then leaves every later piece banked by a hair, so the preview remeshes them
   const ws = r.shell.getState().history.present.words, midCurve = ws.findIndex((x, k) => k >= Math.floor(words / 2) && x.word !== 'straight');
   for (const [where, idx] of [['near the head', words - 3], ['in the middle (a straight)', ws.findIndex((x, k) => k >= Math.floor(words / 2) && x.word === 'straight')], ['in the middle (a curved word)', midCurve]]) {
     const w = r.shell.getState().history.present.words[idx], len0 = w.handles.length, steps = [], pv = [], vl = [];

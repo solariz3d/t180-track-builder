@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// build_platform_test.js: milestone 1's platform test (docs/ARCHITECTURE.md §10.1) as two installable AC track folders.
+// build_platform_test.js: milestone 1's platform test as two installable AC track folders.
 //
 //   node scripts/build_platform_test.js                 build into out/ (git-ignored)
 //   node scripts/build_platform_test.js --install       build, then copy into <AC>/content/tracks/
@@ -7,11 +7,11 @@
 //   node scripts/build_platform_test.js --ai-mode floor   the AI line on the floor centre (a control; default: wall)
 //
 // It glues three packets together: the scene from scripts/platform_test.js, the kn5 from src/export/kn5write.js, and
-// every other file from src/export/trackfiles.js. The §5c marker checks (src/export/markers.js) and the scene validator
+// every other file from src/export/trackfiles.js. The marker checks (src/export/markers.js) and the scene validator
 // (src/export/scene.js) run first; a red check stops the build before anything is written.
 //
-// THE TWO VARIANTS ARE TWO FOLDERS, NOT TWO LAYOUTS, and this is why. The registered soft-road prediction (FINDINGS §4c,
-// verbatim in ARCHITECTURE §10.1) compares the same geometry with and without the soft-collision block in
+// THE TWO VARIANTS ARE TWO FOLDERS, NOT TWO LAYOUTS, and this is why. The registered soft-road prediction
+// compares the same geometry with and without the soft-collision block in
 // data/surfaces.ini. All eleven T-180 tracks that carry the block keep it in the track ROOT's data/surfaces.ini. As
 // layouts, the block would sit in a layout's own data/ folder, and whether CSP reads [COLLISION_PARAMS_...] from a
 // layout's surfaces.ini is unverified here. A "no difference" result could then mean either "the block does nothing" or
@@ -35,10 +35,10 @@ const trackfiles = require('../src/export/trackfiles.js');
 const REPO = path.resolve(__dirname, '..');
 const OUT = path.join(REPO, 'out');
 const MARKER_FILE = '.t180b-builder.json';
-const DEFAULT_AC = 'G:\\SteamLibrary\\steamapps\\common\\assettocorsa';   // the path docs/FINDINGS.md:283 already names
+const DEFAULT_AC = 'G:\\SteamLibrary\\steamapps\\common\\assettocorsa';   // the usual Steam library path on this machine
 const KN5_NAME = 't180b_platform_test.kn5';
 // BOTH variants carry CSP's extended-physics switch (trackfiles.js EXTENDED_PHYSICS_SURFACE; R1): they must differ by the soft
-// block ALONE, or FINDINGS §4c's registered prediction would test two things at once.
+// block ALONE, or the registered soft-road prediction would test two things at once.
 const VARIANTS = [
   { folder: 't180b_platform_test', softCollision: true, title: 'T-180B Platform Test (soft road)' },
   { folder: 't180b_platform_test_noblock', softCollision: false, title: 'T-180B Platform Test (no soft-road block)' },
@@ -70,7 +70,7 @@ function build({ aiMode = 'wall' } = {}) {
   const red = mc.checks.filter((c) => !c.ok);
   if (red.length) throw new Error('marker checks are RED, nothing written:\n' + red.map((c) => `  ${c.id}: ${c.problems.join('; ')}`).join('\n'));
   const kn5 = Buffer.from(loadKn5Writer()(scene));
-  // self-test (ARCHITECTURE §6): our own reader must read the kn5 back
+  // self-test: our own reader must read the kn5 back
   const tmp = path.join(OUT, '.readback.kn5');
   fs.mkdirSync(OUT, { recursive: true }); fs.writeFileSync(tmp, kn5);
   let back; try { back = require('../tools/kn5.cjs').readKn5(tmp); } finally { fs.rmSync(tmp, { force: true }); }
@@ -85,7 +85,7 @@ function build({ aiMode = 'wall' } = {}) {
     fs.rmSync(dir, { recursive: true, force: true });   // out/ is ours alone
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, KN5_NAME), kn5);
-    const desc = { name: v.title, description: 'Milestone 1 platform test: a half-pipe, a wall-ride above 90 degrees and one small jump. Built by t180-track-builder.', length: dsn.length, width: 2 * (pt.CONST.WF + pt.CONST.LW) /* edge to edge across the surface, fixed on this track (platform_test.js: '2·WF + 2·LW') */, run: 'counterclockwise' /* C's loop turns left only (hand-back p-d165-geometry-C §1) */, tags: ['t180', 'original', 'test'], author: 't180-track-builder', version: '0.1' };
+    const desc = { name: v.title, description: 'Milestone 1 platform test: a half-pipe, a wall-ride above 90 degrees and one small jump. Built by t180-track-builder.', length: dsn.length, width: 2 * (pt.CONST.WF + pt.CONST.LW) /* edge to edge across the surface, fixed on this track (platform_test.js: '2·WF + 2·LW') */, run: 'counterclockwise' /* the loop turns left only */, tags: ['t180', 'original', 'test'], author: 't180-track-builder', version: '0.1' };
     const files = [KN5_NAME, ...trackfiles.writeTrackFiles(dir, scene, { softCollision: v.softCollision, extendedPhysics: true, kn5Files: [KN5_NAME], desc })];
     fs.mkdirSync(path.join(dir, 'ai'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'ai', 'fast_lane.ai'), ai);

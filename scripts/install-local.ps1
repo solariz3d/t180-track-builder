@@ -1,4 +1,4 @@
-# install-local.ps1: install a local build of the track builder on this machine, one install at a time (D418 part 4; from the D414 rolling build's install
+# install-local.ps1: install a local build of the track builder on this machine, one install at a time (from the rolling build's install
 # and stamped compare). It never closes the builder: while one is open it waits, and gives up only after -WaitSec. Then it backs the installed exe up as
 # .before-<Tag> (refusing if that backup exists), runs the installer silently with a hidden window, and checks the installed exe is the built exe with
 # only the bundle-type stamp the installer writes (the 3 bytes after __TAURI_BUNDLE_TYPE_VAR_ go from UNK to NSS). Prints the installed exe's sha256.

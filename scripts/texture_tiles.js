@@ -1,13 +1,13 @@
-// texture_tiles.js: D399. Draws each look's texture tile into app/themes/tex/<look>.png (RGBA, white or black specks at an alpha; a look's colours are
+// texture_tiles.js: Draws each look's texture tile into app/themes/tex/<look>.png (RGBA, white or black specks at an alpha; a look's colours are
 // never in them), from fixed seeds, so the same command writes the same bytes. Run: node scripts/texture_tiles.js
-// The tiles and their strengths are E's D397 concepts as measured there (exo_memory p-d397-texture-E_2026-10-19.md) and picked in D399:
+// The tiles and their strengths are the texture concepts as measured and picked:
 //   sigil    film grain 0.06: every pixel a random speck, white or black, alpha up to 0.06                          128 x 128, repeated
 //   skyline  paper grain 0.05: the same on 2 px cells (on Skyline's light panels the dark specks are the ones seen)  128 x 128, repeated
 //   glass    ordered dither 0.08: an 8 x 8 Bayer screen that thins from the top of a surface down to 300 px            8 x 300, repeated across
 //   aqua     soft fluid noise 0.08: smooth, domain-warped value noise that wraps at the tile's edges, white where high   256 x 256, repeated
-//            (0.10 pushed two texts under 4.5:1 and 0.09 sat on 4.50; 0.08 is the highest strength with room, D399)
+//            (0.10 pushed two texts under 4.5:1 and 0.09 sat on 4.50; 0.08 is the highest strength with room)
 //   aurora   dot matrix 0.10: a 1 px white dot every 3 px                                                                3 x 3, repeated
-//   skyline-night  (D405) Skyline's paper grain with every speck's colour flipped, so the specks seen on its navy panels are the light ones   128 x 128
+//   skyline-night  Skyline's paper grain with every speck's colour flipped, so the specks seen on its navy panels are the light ones   128 x 128
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const OUT = path.join(__dirname, '..', 'app', 'themes', 'tex');
