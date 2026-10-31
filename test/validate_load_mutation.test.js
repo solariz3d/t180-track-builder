@@ -31,7 +31,9 @@ const MUTANTS = [
   { id: 'L11 the sideways edge is 2.5 g, not the 3 g driven', pattern: 'row 3b', file: V, from: 'side > car.wallSwerve.sideG &&', to: 'side > car.wallSwerve.sideG - 0.5 &&' },
   // the words and the sources
   { id: 'L12 the chassis words read as a fault', pattern: 'row 4', file: LAB, from: 'It has held up to 63 g', to: 'It fails past 63 g' },
-  { id: 'L13 the stop\'s source loses D515', pattern: 'row 4', file: V, from: "'on-the-stops': 'D515 bands.txt", to: "'on-the-stops': 'bands.txt" },
+  // AMENDED BY NAME (2026-10-31, the landing that took the plain-words pass): the stop's source now says what was measured in plain words, and row 4
+  // checks that wording, so L13 drops the measured 25 g from it; its old anchor no longer occurs and would have read NOT APPLIED
+  { id: 'L13 the stop\'s source loses the measured 25 g', pattern: 'row 4', file: V, from: "'on-the-stops': 'measured: the suspension reaches its stops from about 25 g (", to: "'on-the-stops': 'measured: the suspension reaches its stops (" },
 ];
 
 function runMutant(m) {
