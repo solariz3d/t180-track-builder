@@ -7,11 +7,14 @@
 //      sends) runs out of heap, the control that the budget bites; sendFiles hands over the same bytes and finishes
 //   4  index.html sends every command that writes files (write_export, write_layouts_export, write_blender_export, install_track) through sendFiles, and
 //      makes no base64 of a file
+//   5  A BODY LARGER THAN ONE PIECE goes in pieces (a 566 MB body killed the page in one call, 2026-10-31): every call's body is at most the piece size, the
+//      pieces are stage_files calls in order whose bytes are packFiles' body, and the command follows with an empty body and the staged id; a body that fits
+//      is one call, as before
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs'), path = require('path'), { spawnSync } = require('child_process');
-const { packFiles, sendFiles } = require('../lib/nativefiles.js');
+const { packFiles, pieces, sendFiles } = require('../lib/nativefiles.js');
 
 /** The body read back, as src-tauri/src/lib.rs files_from_body reads it. */
 function unpack(body) {
@@ -54,12 +57,22 @@ if (${JSON.stringify(way)} === 'old') {
   out = JSON.stringify({ folder: 't180b_x', files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }).length;
 } else {
   const { sendFiles } = require(${JSON.stringify(path.join(__dirname, '..', 'lib', 'nativefiles.js'))});
-  const body = sendFiles((cmd, b) => b, 'install_track', { folder: 't180b_x' }, files);
-  const n = new DataView(body.buffer).getUint32(0, true); let same = body.length === 4 + n + 150 * 1048576;
-  for (let i = 4 + n; same && i < body.length; i += 4093) same = body[i] === (i - 4 - n < 140 * 1048576 ? 7 : 9);
-  out = same ? 'SAME' : 'DIFFERENT';
+  // the native side as it receives the pieces: each stage_files body is [4-byte length][JSON { id, at, total }][bytes], put back where it says
+  let body = null, biggest = 0, last = null;
+  const invoke = async (cmd, b, opts) => {
+    biggest = Math.max(biggest, b.length);
+    if (cmd !== 'stage_files') { last = { cmd, len: b.length, staged: opts && opts.headers && opts.headers['T180-Staged'] }; return 'written'; }
+    const hn = new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(0, true), h = JSON.parse(new TextDecoder().decode(b.subarray(4, 4 + hn)));
+    if (!body) body = new Uint8Array(h.total);
+    body.set(b.subarray(4 + hn), h.at);
+  };
+  sendFiles(invoke, 'install_track', { folder: 't180b_x' }, files).then(() => {
+    const n = new DataView(body.buffer).getUint32(0, true); let same = body.length === 4 + n + 150 * 1048576;
+    for (let i = 4 + n; same && i < body.length; i += 4093) same = body[i] === (i - 4 - n < 140 * 1048576 ? 7 : 9);
+    console.log('DONE ' + (same && last && last.cmd === 'install_track' && last.len === 0 && last.staged ? 'SAME' : 'DIFFERENT') + ' biggest ' + biggest);
+  });
 }
-console.log('DONE ' + out);`;
+if (out !== undefined) console.log('DONE ' + out);`;
 const run = (way) => spawnSync(process.execPath, ['--max-old-space-size=160', '-e', CHILD(way)], { encoding: 'utf8', timeout: 120000 });
 
 test('row 3: under a 160 MB heap, 150 MB of files: the old base64-in-JSON hand-over runs out of heap, sendFiles hands over the same bytes', () => {
@@ -68,7 +81,8 @@ test('row 3: under a 160 MB heap, 150 MB of files: the old base64-in-JSON hand-o
   assert.match(String(old.stderr), /heap out of memory|Invalid string length|Allocation failed/i, 'control: it ran out of heap');
   const now = run('new');
   assert.equal(now.status, 0, `sendFiles finished under the budget (stderr: ${String(now.stderr).slice(0, 300)})`);
-  assert.equal(String(now.stdout).trim(), 'DONE SAME', 'every byte handed over, in order');
+  assert.match(String(now.stdout).trim(), /^DONE SAME biggest \d+$/, 'every byte handed over, in order, then the command');
+  assert.ok(+String(now.stdout).trim().split(' ').pop() <= 32 * 1048576 + 1024, 'no call carried more than one piece');
 });
 
 test('row 4: index.html sends every command that writes files through sendFiles and makes no base64 of a file', () => {
@@ -78,4 +92,28 @@ test('row 4: index.html sends every command that writes files through sendFiles 
     assert.doesNotMatch(html, new RegExp(`call\\('${cmd}'`), `${cmd} is not called with JSON arguments`);
   }
   assert.doesNotMatch(html, /\bb64\(|btoa\(/, 'no file is turned into base64 text');
+});
+
+test('row 5: a body larger than one piece goes as stage_files pieces of at most that size, in order, whose bytes are the body; then the command with the staged id', async () => {
+  const files = [{ path: 'a.kn5', bytes: Uint8Array.from({ length: 1000 }, (_, i) => i % 251) }, { path: 'b.png', bytes: Uint8Array.from({ length: 333 }, (_, i) => 255 - (i % 13)) }, { path: 'c.ini', bytes: new Uint8Array(0) }];
+  const whole = packFiles({ folder: 't180b_x' }, files), calls = [];
+  const invoke = async (cmd, body, opts) => { calls.push({ cmd, body: Uint8Array.from(body), opts }); return cmd === 'install_track' ? 'installed' : body.length; };
+  assert.equal(await sendFiles(invoke, 'install_track', { folder: 't180b_x' }, files, { piece: 100 }), 'installed', "the command's answer comes back");
+  const stage = calls.filter((c) => c.cmd === 'stage_files'), last = calls[calls.length - 1];
+  assert.equal(stage.length, Math.ceil(whole.length / 100), 'one call per piece');
+  assert.ok(calls.every((c) => c.body.length <= 100 + 64), 'no call carries more than a piece and its small header');
+  let at = 0; const back = new Uint8Array(whole.length), ids = new Set();
+  for (const c of stage) {
+    const n = new DataView(c.body.buffer).getUint32(0, true), h = JSON.parse(new TextDecoder().decode(c.body.subarray(4, 4 + n))), p = c.body.subarray(4 + n);
+    assert.equal(h.at, at, 'the pieces come in order'); assert.equal(h.total, whole.length, "each piece names the whole body's length"); ids.add(h.id);
+    assert.ok(p.length <= 100, 'a piece is at most the piece size'); back.set(p, at); at += p.length;
+  }
+  assert.equal(at, whole.length); assert.deepEqual(Array.from(back), Array.from(whole), 'the pieces are the body, byte for byte');
+  assert.equal(ids.size, 1, 'one id for the whole body');
+  assert.deepEqual([last.cmd, last.body.length, last.opts && last.opts.headers && last.opts.headers['T180-Staged']], ['install_track', 0, [...ids][0]], 'then the command, with no body and the staged id');
+  const one = []; await sendFiles(async (cmd, body, opts) => { one.push([cmd, body.length, opts]); }, 'write_export', { dir: 'D', folder: 't180b_x' }, files, { piece: whole.length + 20 });
+  assert.deepEqual(one.map((c) => c[0]), ['write_export'], 'a body that fits goes in one call');
+  assert.equal(one[0][2], undefined, 'and with no staged id');
+  const all = [...pieces({ folder: 't180b_x' }, files, 7)]; assert.ok(all.every((p) => p.length <= 7));
+  assert.deepEqual(Array.from(Buffer.concat(all.map((p) => Buffer.from(p)))), Array.from(whole), 'pieces(), joined, is packFiles');
 });
