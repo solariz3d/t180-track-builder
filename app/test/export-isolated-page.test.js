@@ -20,7 +20,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // (src/geom/pitlane.js, the pit lane level from leave to rejoin) changes the lap's pit lane; pitlane.js put back to 9861c69's gives 00588932
 // again, so the isolation did not move it. The open TEST export has no pit lane and is unchanged. The row titles still say b6969da's;
 // they are left as they are because the mutation harness names its rows by them.
-const PIN = { lap: 'sha256 ab7ea68c80621a84 files 10', open: 'sha256 b59349993f6e9440 files 11' };   // export-isolated.test.js row 1, from 498e735; the lap moved once more, and both for the soft block's SOFT_CFM (see there)
+// AMENDED BY NAME (2026-10-31, the merge of the firm road and the edge apron): the pair moved with export-isolated.test.js row 1's, which says why
+const PIN = { lap: 'sha256 257d550e6870bdf1 files 10', open: 'sha256 2b6ad34e0f135050 files 11' };   // export-isolated.test.js row 1, from 498e735; the lap moved once more, then both for the soft block's SOFT_CFM and the edge apron (see there)
 const TYPES = { '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.html': 'text/html' };
 
 // The page: the app's modules from the served worktree, export-isolated.test.js's laps, and the same digest of an export's files
