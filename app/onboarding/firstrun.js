@@ -8,7 +8,7 @@
 //
 // WHERE IT LIVES. In the app the store is the webview's localStorage. Tauri gives WebView2 a user-data folder inside the
 // app's own data directory (%LOCALAPPDATA%\<identifier>\EBWebView), so the flag is in the app's data dir and nowhere
-// near the repository. If A adds native commands for it (the D177 hand-back proposes them), a store over those commands
+// near the repository. If native commands are added for it (as proposed), a store over those commands
 // has the same two methods and drops in here.
 // A store that throws (storage switched off) is treated as "not remembered": the guide shows, and the app is not broken.
 'use strict';

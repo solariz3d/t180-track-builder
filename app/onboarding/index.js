@@ -1,19 +1,18 @@
 // index.js: the guided first track, mounted as mount(root, shell) like every panel (app/README.md, "The seam").
-// PROPOSED MOUNT POINT FOR A (app/index.html): `<div id="guide" style="position: absolute; inset: 0; pointer-events:
-// none; z-index: 5;"></div>` in <main id="stage">, and ['onboarding', 'guide'] in the page's list of panels (the D177
-// hand-back has the exact diff).
+// PROPOSED MOUNT POINT (app/index.html): `<div id="guide" style="position: absolute; inset: 0; pointer-events:
+// none; z-index: 5;"></div>` in <main id="stage">, and ['onboarding', 'guide'] in the page's list of panels.
 //
 // A small card over the stage, never a modal: the step's title, what to do and why, "2 of 6", and Back / Skip (or Next,
 // on the reading step) / ✕. The part of the window a step is about is outlined. Doing the move advances the guide by
 // itself (guide.js observe); the user can close it at any step, and the app is the same with it closed. On FIRST RUN
-// (firstrun.js) it opens; after that it stays closed behind a "Show the guide" button. D239: the steps are the equation
+// (firstrun.js) it opens; after that it stays closed behind a "Show the guide" button. The steps are the equation
 // builder's, and the piece builder's first-run defaults (its font and tempo pickers, the starter phrase) went with it.
 'use strict';
 const { STEPS, createGuide } = require('./guide.js');
 const { firstRun, webStore } = require('./firstrun.js');
 
-// THE PLACE ON SCREEN (fixed after the D177 window pass: the first card was a 75 px column over the camera bar). The
-// mount point is a layer over the stage that lets clicks through (A's page: `inset: 0; pointer-events: none`); the card
+// THE PLACE ON SCREEN (fixed after a check in the window: the first card was a 75 px column over the camera bar). The
+// mount point is a layer over the stage that lets clicks through (the page's: `inset: 0; pointer-events: none`); the card
 // takes its own clicks, has a fixed width, and sits TOP-RIGHT in the stage: clear of the palette on the left and of the
 // camera bar and its key hints along the bottom.
 const CSS = `
