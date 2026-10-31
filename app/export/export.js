@@ -141,9 +141,9 @@ async function makeExporter(get, { author = null, runner: given } = {}) {
     // the equation core's track (D186): src/geom segments from src/core/adapter.js, through the SAME exporter
     // (fromwords.js exportSegments: the same validation, self-check, markers, read-back and AI line); the check stays on
     // markers: the grid layout (app/core/coreshell.js startLayout), or undefined for the export's default
-    runSegments(segments, meta, { variant = 'block', textures = null, markers, test = false, author: a } = {}) {   // test (D243a): the TEST export of an unfinished track
+    runSegments(segments, meta, { variant = 'block', textures = null, markers, test = false, author: a, edgeApronM } = {}) {   // test (D243a): the TEST export of an unfinished track
       shim.reset();
-      const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, author: authorNow(a), ...(test ? { test: true } : {}) });
+      const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, author: authorNow(a), ...(edgeApronM !== undefined ? { edgeApronM } : {}), ...(test ? { test: true } : {}) });
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
     // D437b: runSegments in the export's own process. The job is packed NOW, from the arguments as they are, before anything is awaited

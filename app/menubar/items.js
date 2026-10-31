@@ -2,6 +2,7 @@
 // their wiring and are moved in as they are ({ node }); the parts' entries (C's Edit selection, A's File ▸ Developer) are passed in and placed under a heading.
 //
 //   fileItems(ctx, { developer })        the slot under File's own controls: Developer ▸ (A's trackmenu.developerItems: Open example…) when there is any
+//   apronField(doc, shell)               D572: Track ▸ Edge apron, the track's apron width in metres, set through the shell (one undo step), with its help line
 //   editItems(ctx, { selection })        Undo, Redo, then the selection's entries (C's piecesui.items, which bring their own Selection heading), when there are any
 //   viewItems(ctx)                       Drag handles and Colour by grip (saved settings), Show the guide
 //   settingsItems(ctx, { soundRow, acFolder, acAllow, blenderItem })   sound, the theme (D394), how the turn and climb are read, the grid step, mirror on insert, the checker's wall
@@ -20,6 +21,26 @@ const choice = (key, options) => options.map(([value, label, title]) => ({ label
 
 function fileItems(ctx, { developer = [] } = {}) {
   return developer.length ? [{ separator: true }, { section: 'Developer' }, ...developer] : [];
+}
+
+// D572: Track ▸ Edge apron (app/core/trackmenu.js), the width of the apron every export of this track lays outside the road's open edges (src/export/apron.js), saved with the track
+// (app/core/coreshell.js setEdgeApron). Built each time Track opens, so it shows the open track's width; a width the shell refuses puts back the width kept.
+// The help line is the librarian's ruling (2026-10-30): at 0 the side face is scenery, not physics
+const APRON_HELP = '0 closes the gap visually only; a wheel can still drop under.';
+function apronField(doc, shell) {
+  const label = doc.createElement('label'), span = doc.createElement('span'), input = doc.createElement('input'), help = doc.createElement('span');
+  label.className = 'author-row apron-row'; span.textContent = 'Edge apron (m)';
+  label.title = 'a strip outside each open edge of the road, sloping down, so a wheel that drops off the edge rides back up instead of hanging under the road. Saved with the track; 2.0 m unless set';
+  input.type = 'number'; input.min = '0'; input.max = '10'; input.step = '0.1'; input.value = String(shell.edgeApron());
+  input.setAttribute('aria-label', 'edge apron width in metres');
+  help.className = 'apron-help'; help.textContent = APRON_HELP;
+  input.onchange = () => {
+    const t = String(input.value || '').trim(), w = Number(t);
+    if (t !== '' && Number.isFinite(w)) shell.setEdgeApron(w);
+    input.value = String(shell.edgeApron());
+  };
+  label.append(span, input, help);
+  return label;
 }
 
 function editItems(ctx, { selection = [] } = {}) {
@@ -90,4 +111,4 @@ function acNodes(container) {
   };
 }
 
-module.exports = { fileItems, editItems, viewItems, settingsItems, acNodes, authorName, authorField, DEFAULTS };
+module.exports = { fileItems, editItems, viewItems, settingsItems, acNodes, authorName, authorField, apronField, APRON_HELP, DEFAULTS };

@@ -52,9 +52,9 @@ function runJob(env, job, onStage = () => {}) {
     if (typeof adapter.offsetPath !== 'function') throw new Error('the export lifts its path, and this src/core/adapter.js has no offsetPath');
     meta.liftPath = (p) => adapter.offsetPath(liftDoc, job.segments, p);
   }
-  const { variant = 'block', textures = null, markers, test = false, author } = job.opts || {};
+  const { variant = 'block', textures = null, markers, test = false, author, edgeApronM } = job.opts || {};
   shim.reset();
-  const result = fromwords.exportSegments(job.segments, meta, { outDir: OUT, variant, textures: textures ? unpackSet(textures) : null, markers, author, ...(test ? { test: true } : {}), onStage });
+  const result = fromwords.exportSegments(job.segments, meta, { outDir: OUT, variant, textures: textures ? unpackSet(textures) : null, markers, author, ...(edgeApronM !== undefined ? { edgeApronM } : {}), ...(test ? { test: true } : {}), onStage });
   return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
 }
 
