@@ -20,6 +20,8 @@ class El {
   constructor(tag, doc) { this.tagName = tag.toUpperCase(); this.ownerDocument = doc; this.children = []; this.attrs = {}; this.style = {}; this._text = ''; this.listeners = {}; this.parent = null; }
   append(...k) { for (const c of k) { if (c == null) continue; c.parent = this; this.children.push(c); } }
   remove() { if (this.parent) { this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; } }
+  // AMENDED (the stub was missing a DOM method the page uses): the values overlay clears and refills its row with replaceChildren (app/core/valuesoverlay.js), as the other fake DOMs here have it
+  replaceChildren(...k) { for (const c of this.children) c.parent = null; this.children = []; this.append(...k); }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return this.attrs[k]; }
   set textContent(t) { this._text = String(t); this.children = []; }
