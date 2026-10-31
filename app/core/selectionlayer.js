@@ -1,27 +1,27 @@
-// selectionlayer.js: THE SELECTED PIECES ON THE TRACK (D240, saved pieces, the UI half; the user: "highlight/select pieces on the track"). A canvas over the preview
+// selectionlayer.js: THE SELECTED PIECES ON THE TRACK (saved pieces, the UI half; the user: "highlight/select pieces on the track"). A canvas over the preview
 // (#preview), redrawn every animation frame like the labels (the camera eases, so the highlight moves with it): the selected pieces' centreline, drawn bright over the road
 // with a dark outline, and a dot at each end of the run. The preview is not changed: its pose comes from the 't180:view' event and the track from 't180:track-request'
 // (app/preview/index.js), exactly as app/core/labels.js reads them.
 //
 //   selectionLines(track, ids, pose, W, H) -> [{ id, points: [{ x, y }] }]   pure: the screen polylines (css px of the preview) of the pieces `ids`, broken where the track
 //                                                                              passes behind the camera; at most ~120 points a piece
-//   bandLine(track, band, pose, W, H) -> [{ x, y, w }]                          pure: D421 part 3, THE FALLOFF BAND of a Sculpt drag on screen: the stations of
+//   bandLine(track, band, pose, W, H) -> [{ x, y, w }]                          pure: THE FALLOFF BAND of a Sculpt drag on screen: the stations of
 //                                                                              [s0 − r, s0 + r] (round the start line on a closed lap), each with the brush's weight
 //                                                                              w = smootherstep(1 − |s − s0| / r) (src/core/sculpt.js's falloff), at most ~160 points
-//   endMarks(track, band, pose, W, H) -> [{ x, y, nx, ny }]                     pure: D425 part 4, THE REACH'S TWO ENDS [ ] at s0 − r and s0 + r: each a point on screen and the unit
+//   endMarks(track, band, pose, W, H) -> [{ x, y, nx, ny }]                     pure: THE REACH'S TWO ENDS [ ] at s0 − r and s0 + r: each a point on screen and the unit
 //                                                                              vector across the road there (a tick is drawn along it); an end past an open lap's start or end has none
-//   pieceSpan(track, s) -> { id, s0, r } | null                                pure: D425 part 4, Stretch's reach: the piece holding station s, as a band from its first joint to its last
-//   keyed(fn) -> f(track, band, pose, W, H)                                    D425 part 4: fn again only when the track, the band, the camera or the size changed (f.runs() counts)
+//   pieceSpan(track, s) -> { id, s0, r } | null                                pure: Stretch's reach: the piece holding station s, as a band from its first joint to its last
+//   keyed(fn) -> f(track, band, pose, W, H)                                    fn again only when the track, the band, the camera or the size changed (f.runs() counts)
 //   mount(stage, shell, win) -> { lines(), band(), marks(), unmount() }        lines(), band() and marks() are what was drawn last (for the tests and the window proof)
 //
-// D425 part 4 (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §1 cue 1 and §3): THE REACH ON HOVER. In Sculpt with no drag open, the panel's 't180:sculpt-hover'
+// THE REACH ON HOVER. In Sculpt with no drag open, the panel's 't180:sculpt-hover'
 // ({ s0, r, tool } of the station under the pointer, app/core/panel.js) is drawn as the band at half its drag alpha with its two end marks; Stretch's reach is the piece under the pointer,
 // drawn the selection's way in the band's colour, its joints marked. At the press the band fixes where it is and goes to full alpha, as before, and keeps its marks. The band's stations
 // are found once per drag, not per frame (keyed): with the camera still and the band fixed, every frame ran the same filter over all the lap's stations (5,001 on 10 km), sort and projections
 'use strict';
 
 const M = require('../camera/math.js');
-const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
+const { tokensOf } = require('../lib/tokens.js');   // the skin's colours (app/lib/tokens.js)
 
 function selectionLines(track, ids, pose, W, H) {
   if (!track || !track.path || !Array.isArray(track.segments) || !ids || !ids.length || !pose || !(W > 0 && H > 0)) return [];
@@ -114,7 +114,7 @@ function mount(stage, shell, win) {
     if (!canvas.isConnected && stage.isConnected !== false) stage.append(canvas);   // the preview's mount clears #preview after the panel mounted (as the labels' layer)
     const st = shell.getState(), info = shell.selectionInfo ? shell.selectionInfo() : null, W = stage.clientWidth, H = stage.clientHeight;
     const b = st && st.sculpt && st.brush ? { s0: st.brush.s0, r: Number.isFinite(st.brush.rUsed) ? st.brush.rUsed : st.brush.r } : null;   // the band: fixed where the drag began
-    const hov = st && st.sculpt && !st.brush ? ask('t180:sculpt-hover') : null;   // D425 part 4: no drag open: the reach where the pointer is (the panel answers null off the road)
+    const hov = st && st.sculpt && !st.brush ? ask('t180:sculpt-hover') : null;   // no drag open: the reach where the pointer is (the panel answers null off the road)
     const view = info || b || hov ? ask('t180:view') : null, track = info || b || hov ? ask('t180:track-request') : null, pose = view && view.pose;
     drawn = info && pose && track ? selectionLines(track, info.ids, pose, W, H) : [];
     const span = hov && hov.tool === 'stretch' && track ? pieceSpan(track, hov.s0) : null;   // Stretch moves a piece, not a radius: its reach is the piece

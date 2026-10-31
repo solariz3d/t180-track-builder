@@ -1,4 +1,4 @@
-// inputlog.js: the late-input log (D340, plan :904-909). The camera sometimes coasts about 3 s after its keys are let go, mid-drive, where nobody reads the HUD;
+// inputlog.js: the late-input log (plan :904-909). The camera sometimes coasts about 3 s after its keys are let go, mid-drive, where nobody reads the HUD;
 // so each late key event the preview finds (app/preview/preview.js checkLate) is also kept on disk, to be read afterwards. This is the page's half: a buffer
 // that never writes on the key's own path. add() only formats the line and schedules a flush; the flush hands everything pending to `write` in ONE call, one
 // write in flight at a time (lines that arrive meanwhile go in the next); past `maxPending` the oldest lines are dropped and the next write starts with

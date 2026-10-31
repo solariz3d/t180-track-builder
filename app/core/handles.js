@@ -1,10 +1,10 @@
-// handles.js: DRAG HANDLES on the preview (D244 and D244b, asked for with a marked-up screenshot: every control shows an arrow where to drag, on both sides like width or turn, and dragging the highlighted part
+// handles.js: DRAG HANDLES on the preview (and asked for with a marked-up screenshot: every control shows an arrow where to drag, on both sides like width or turn, and dragging the highlighted part
 // changes the value up or down).
 //
 // TWO PLACES, one machinery:
-//   EXTEND (D244): small marks with a double arrow on the GHOST of the piece Extend would add: length, width, bank, cup, turn and climb, each that has sides on BOTH sides. A drag sets
+//   EXTEND: small marks with a double arrow on the GHOST of the piece Extend would add: length, width, bank, cup, turn and climb, each that has sides on BOTH sides. A drag sets
 //        the matching Extend field as if it were typed (the field's own handler runs, so the ghost, the readout and the cup-or-tube rule follow); nothing reaches Undo until Extend.
-//   SCULPT (D244b; D421 part 3: a selected RUN, its marks on the run's middle piece and its drag over the whole run, shell.sculptInfo from/to): the same marks on the selected placed piece (bank, cup, width, both edges). A drag reshapes it in place (shell.beginSculpt / sculptTo / endSculpt: the
+//   SCULPT (part 3: a selected RUN, its marks on the run's middle piece and its drag over the whole run, shell.sculptInfo from/to): the same marks on the selected placed piece (bank, cup, width, both edges). A drag reshapes it in place (shell.beginSculpt / sculptTo / endSculpt: the
 //        shape channels only, the centreline guarded), and is ONE undo step.
 //
 // The numbers are all here, pure and tested (app/test/handles.test.js):
@@ -15,31 +15,31 @@
 //   targetFor(kind, base, d, ctx, mods) -> the new absolute value, in the Extend field's own unit (m, or degrees), clamped, rounded, with Shift (fine) and Ctrl (snap)
 //   hitTest(list, x, y, r)         -> the nearest handle within r px, or null
 //   mount(stage, win, host)        the overlay canvas: draws the handles every animation frame, hover shows the name and value, a drag calls host.apply
-//   brushFormat(channel, delta)    D425 part 4: a Sculpt brush's change at its centre, as the strip and the glyph both say it ("turn rate +0.12 °/100 m")
-//   placeDots(dots, VP, W, H)      D519 Part 2: the dot rows on the selected run, at the thinned stations (app/core/zonegrab.js dotStations), with their screen axes
+//   brushFormat(channel, delta)    a Sculpt brush's change at its centre, as the strip and the glyph both say it ("turn rate +0.12 °/100 m")
+//   placeDots(dots, VP, W, H)      the dot rows on the selected run, at the thinned stations (app/core/zonegrab.js dotStations), with their screen axes
 'use strict';
 
 const M = require('../camera/math.js');
-const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
-const ZG = require('./zonegrab.js');   // D519 Part 2: the dot rows' stations
+const { tokensOf } = require('../lib/tokens.js');   // the skin's colours (app/lib/tokens.js)
+const ZG = require('./zonegrab.js');   // the dot rows' stations
 
 const DEG = Math.PI / 180;
 /**
  * One row per kind. `at` is where along the piece (0 its start, 1 its far end), `lat` how far out sideways in halves of the road's width (0 the centreline, 1 the edge), `axis` which of the
  * road's own directions a drag runs along (T along the road, L sideways, U up), and `sides` the signs of the sideways positions (+1 the LEFT side). `sign`: how a side's drag counts:
  * 'out' = away from the centre is positive (width, cup), 'left' = toward the left is positive on both sides (turn), 'up' = the left edge going up and the right edge going down are positive (bank).
- * `perPx` is the value change per PIXEL of the pointer's travel along the handle's on-screen axis (D251: the same at any zoom; it was per metre of the world, so zoomed out one pixel jumped a lot). The numbers are TODAY's per-metre speeds divided by the px a metre takes at the default Build camera (measured in the window), so the feel is the same there; LENGTH is 5x that (asked for); the Extend fields'
+ * `perPx` is the value change per PIXEL of the pointer's travel along the handle's on-screen axis (the same at any zoom; it was per metre of the world, so zoomed out one pixel jumped a lot). The numbers are TODAY's per-metre speeds divided by the px a metre takes at the default Build camera (measured in the window), so the feel is the same there; LENGTH is 5x that (asked for); the Extend fields'
  * units (the core's channels are the same, degrees and metres). `zero`: a kind whose natural rest is 0 (bank, turn, climb): the drag holds there, and a double-click resets to it.
  */
-const BACK_AT = 0.02;   // D509: the back of the piece, a hair in from its join with the head (below)
+const BACK_AT = 0.02;   // the back of the piece, a hair in from its join with the head (below)
 const EXTEND_KINDS = Object.freeze({
-  // D250 item 3 put LENGTH and WIDTH at the piece's NEAR end; from 2026-10-14 they were at its FRONT, and D509 put WIDTH back at the near end (below). The width marks sit at the TARGET half-width
+  // LENGTH and WIDTH were first at the piece's NEAR end; from 2026-10-14 they were at its FRONT, and on 2026-10-28 WIDTH went back to the near end (below). The width marks sit at the TARGET half-width
   // (`target: true`: the field's value, not the head's width the piece starts from), so they follow the pointer as the width changes. (Then: turn and climb three
-  // quarters along, bank and cup mid-piece; the places today are D509's, below.)
+  // quarters along, bank and cup mid-piece; the places today are below.)
   // 2026-10-14: LENGTH and WIDTH moved to the FRONT of the piece (its far end, where the piece grows to), a suggestion from a track maker who tried the
   // builder: the white length mark at the centreline there, dragged FORWARD to lengthen (`sign: 'forward'`, it follows the front end as it moves), and the red
   // width marks at that end's edges.
-  // D509 (2026-10-28, the user, with a screenshot: "I want the width and cupping at the back so the controls are at the front and back of the piece"): the piece's
+  // (2026-10-28, the user, with a screenshot: "I want the width and cupping at the back so the controls are at the front and back of the piece"): the piece's
   // controls at its two ends and its middle. FRONT (at 1): length at the centre, turn at the edges. MIDDLE (at 0.5): bank at the edges, climb at the centre.
   // BACK (at BACK_AT): width at the edges, cup just inside. BACK_AT is a hair in from 0, so the marks stand on the new piece and not on its join with the head:
   // 0.02 is 2 m of the default 100 m piece, about 24 px at the default camera (11.78 px a metre), twice a mark's 12 px hit radius clear of the seam.
@@ -48,7 +48,7 @@ const EXTEND_KINDS = Object.freeze({
   // by half the difference (outside when widening, on the road when narrowing). Sculpt keeps its width mark at the far end (panel.js sculptModel `at`)
   length: Object.freeze({ label: 'length', unit: 'm', colour: '#ffffff', at: 1, lat: 0, axis: 'T', sides: Object.freeze([0]), sign: 'forward', perPx: 0.42, min: 1, max: 5000, step: 0.01, snap: 10 }),
   // 2026-10-14, the second move: WIDTH to the middle of the piece, BANK three quarters along, TURN at the front edges (the length mark stays at the front centre);
-  // D509: width to the back
+  // width to the back
   width: Object.freeze({ label: 'width', unit: 'm', colour: '#ff5a5a', at: BACK_AT, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', target: true, perPx: 0.068, min: 0.5, max: 400, step: 0.01, snap: 5 }),
   bank: Object.freeze({ label: 'bank', unit: '°', colour: '#4d86ff', at: 0.5, lat: 1, axis: 'U', sides: Object.freeze([1, -1]), sign: 'up', perPx: 0.45, zero: true, min: -720, max: 720, step: 0.01, snap: 5 }),
   cup: Object.freeze({ label: 'cup', unit: '°', colour: '#3ddc6e', at: BACK_AT, lat: 0.3, axis: 'L', sides: Object.freeze([1, -1]), sign: 'out', perPx: 0.24, min: 0, max: 150, step: 0.01, snap: 5 }),
@@ -57,24 +57,24 @@ const EXTEND_KINDS = Object.freeze({
   // pointer's own left and right (a drag to the right is a right turn, from any view), not the road's left as it happens to lie on screen
   turn: Object.freeze({ label: 'turn', unit: '°/100 m', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.01, snap: 5 }),
   climb: Object.freeze({ label: 'climb', unit: '°/100 m', colour: '#ffd23d', at: 0.5, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -45, max: 45, step: 0.01, snap: 5 }),
-  // D331 (plan :417-426, turns are scrubbed with these): with the turn and climb fields read as CORNERS (app/core/panel.js "turn & climb as", the default) the
+  // (plan :417-426, turns are scrubbed with these): with the turn and climb fields read as CORNERS (app/core/panel.js "turn & climb as", the default) the
   // panel offers these two in place of turn and climb. They sit and move as those do, with A2's precise rules unchanged (Shift one pixel = 0.01, the wheel and the
   // arrows one step, Ctrl snaps to 5), but the value is the corner's DEGREES, and it is labelled so. The climb's range is a pitch change of a full loop either way
   turnDeg: Object.freeze({ label: 'turn', unit: '°', colour: '#b968ff', at: 1, lat: 1, axis: 'L', sides: Object.freeze([1, -1]), sign: 'left', screen: 'x', perPx: 0.083, zero: true, min: -Infinity, max: Infinity, step: 0.01, snap: 5 }),
   climbDeg: Object.freeze({ label: 'climb', unit: '°', colour: '#ffd23d', at: 0.5, lat: 0, axis: 'U', sides: Object.freeze([0]), sign: 'up1', perPx: 0.082, zero: true, min: -360, max: 360, step: 0.01, snap: 5 }),
 });
-// D258, THE FREE JUMP'S LANDING (asked for: drag it in the 3D view AND type it in number boxes). `free: true` kinds sit at the LANDING's start (model.free.pos), not along a piece, and their axes are the
+// THE FREE JUMP'S LANDING (asked for: drag it in the 3D view AND type it in number boxes). `free: true` kinds sit at the LANDING's start (model.free.pos), not along a piece, and their axes are the
 // TAKE-OFF's heading frame (T0 forward, L0 left, U0 up), because that is the frame the landing's pose is given in (src/core/document.js flightPiece), so the arrow moves the number of its box. Each mark sits `leadM` m out along its own
 // arrow from the landing's start, so the four are not on one point and can be picked apart (forward 10 m ahead, sideways 8 m to the left, height 6 m up); the HEADING mark sits 15 m ahead along the landing's own
 // direction (T1) and drags sideways along its own left (L1): turning the landing about its start.
-// The speeds are per pixel like the Extend handles' (D251), first guesses to be tuned by hand: forward 0.15 m, sideways 0.1 m, height 0.05 m, heading 0.1 degree a pixel.
+// The speeds are per pixel like the Extend handles', first guesses to be tuned by hand: forward 0.15 m, sideways 0.1 m, height 0.05 m, heading 0.1 degree a pixel.
 const LANDING = Object.freeze({
   landfwd: Object.freeze({ label: 'forward', unit: 'm', colour: '#ffffff', free: true, axis: 'T', frame: 'T0', lead: 'T0', leadM: 10, perPx: 0.15, min: -2000, max: 2000, step: 0.01, snap: 5 }),
   landleft: Object.freeze({ label: 'sideways', unit: 'm', colour: '#ff9f43', free: true, axis: 'L', frame: 'L0', lead: 'L0', leadM: 8, zero: true, perPx: 0.1, min: -1000, max: 1000, step: 0.01, snap: 1 }),
   landup: Object.freeze({ label: 'height', unit: 'm', colour: '#ffd23d', free: true, axis: 'U', frame: 'U0', lead: 'U0', leadM: 6, zero: true, perPx: 0.05, min: -500, max: 500, step: 0.01, snap: 0.5 }),
   landturn: Object.freeze({ label: 'heading', unit: '°', colour: '#b968ff', free: true, axis: 'L', frame: 'L1', lead: 'T1', leadM: 15, zero: true, perPx: 0.1, min: -180, max: 180, step: 0.01, snap: 5 }),
 });
-// D425 part 4 (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §1-§5): THE SCULPT BRUSH'S CHANNELS, the one place the strip (app/core/panel.js, its names and units)
+//: THE SCULPT BRUSH'S CHANNELS, the one place the strip (app/core/panel.js, its names and units)
 // and the glyph read: one name per channel, so the road and the strip say the same word; the unit, and the factor from the shell's delta to it; and the colour of Build's handle for the same thing
 // (Smooth's glyph takes the colour of the channel it smooths)
 const BRUSH_CHANNELS = Object.freeze({
@@ -92,9 +92,9 @@ const BRUSH_CHANNELS = Object.freeze({
   lateral: Object.freeze({ label: 'sideways', unit: 'm', k: 1, colour: '#ffb020' }),
   length: Object.freeze({ label: 'length', unit: 'm', k: 1, colour: '#ffffff' }),
 });
-// D425 part 4: THE BRUSH GLYPH, one Build mark at the brush's centre in the tool's colour (Build's for the same thing, design §5; two marks for Width, Cup and Wall rise, at the edges as
+// THE BRUSH GLYPH, one Build mark at the brush's centre in the tool's colour (Build's for the same thing; two marks for Width, Cup and Wall rise, at the edges as
 // Build's are), its arrow the POINTER's direction the drag reads (`screen`: 'y' up and down, 'x' left and right). `brush: true`: placed from model.brush (the station hovered, or the
-// station a drag opened at) and NEVER hit, so a press anywhere in the band is the tool as before (design §1.2). `hollow`: a Sculpt-only kind, no Build handle of its own. `words`: [the way
+// station a drag opened at) and NEVER hit, so a press anywhere in the band is the tool as before. `hollow`: a Sculpt-only kind, no Build handle of its own. `words`: [the way
 // that adds, the way that takes away] (Smooth: one, its drag is clamped at 0); `tag`: the Alt note beside the words; `alt`: the kind Alt turns it into
 const brushKind = (o) => Object.freeze({ brush: true, lat: 0, axis: 'U', sides: Object.freeze([0]), screen: 'y', hollow: false, ...o });
 const BRUSH_KINDS = Object.freeze({
@@ -114,23 +114,23 @@ const BRUSH_KINDS = Object.freeze({
 const ORDER = Object.freeze(['length', 'width', 'bank', 'cup', 'turn', 'climb']);
 const KINDS = Object.freeze({ ...EXTEND_KINDS, ...LANDING, ...BRUSH_KINDS });
 const LANDING_ORDER = Object.freeze(['landfwd', 'landleft', 'landup', 'landturn']);
-// D330 (2026-10-15, reported: scrubbing a turn from a 1000 m straight jumped 0.08 instead of 0.01, so every handle has to be precisely scrubbable): the PRECISE
+// (2026-10-15, reported: scrubbing a turn from a 1000 m straight jumped 0.08 instead of 0.01, so every handle has to be precisely scrubbable): the PRECISE
 // gesture. While this modifier is held one pixel of drag is exactly one step (0.01), with no hold, for every handle: every value is reachable. It is ONE constant, so the gesture can be changed in one place
 // ('shift' or 'alt'; Ctrl is the snap). The wheel over a handle and the arrow keys while one is held are exactly one step too.
 const PRECISE_MOD = 'shift';
 const DOUBLE_MS = 400;       // two presses on one handle this close are a double-click
 const WARP_PX = 120;         // 2026-10-14: how far the hidden cursor may go from the grab before it is put back there (the drag never runs out of screen)
 const WARP_WAIT_MS = 250;    // and how long a drag waits to see it arrive back before it asks again
-const WARP_MISSES = 3;       // D330: how many times IN A ROW the cursor may fail to come back (or the window refuse) before the drag stops putting it back; one miss never does
-const SPEED_SLOW = 0.1;      // D335: pointer speed (px per ms) at and below which a drag is exact: one pixel is the kind's step (0.01)
+const WARP_MISSES = 3;       // how many times IN A ROW the cursor may fail to come back (or the window refuse) before the drag stops putting it back; one miss never does
+const SPEED_SLOW = 0.1;      // pointer speed (px per ms) at and below which a drag is exact: one pixel is the kind's step (0.01)
 const SPEED_FAST = 1.0;      // and at and above which it is the kind's own perPx a pixel; between the two the rate is eased (smoothstep), as a pointer's acceleration is
 const SPEED_WINDOW_MS = 60;  // the speed is the pointer's path over this long, so one fast event in a slow scrub (or the reverse) does not jump the rate
-const DETENT_PX = 6;         // D251: the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
+const DETENT_PX = 6;         // the pointer travel a drag holds at 0 (bank, turn, climb) and at the value it started from
 const EDGE_ON_PX_PER_M = 0.05;   // an axis shorter than this on screen (a view straight along it) is edge-on: the pointer's own motion is used instead. A FAR handle's axis is short too (the far end of a ghost seen from behind: 0.3 px/m, found in the window) but has a direction, so it is not edge-on
 const HIT_PX = 12;
-// D519 Part 2 (O's design §3): THE DOTS, visible handles onto the zone grab on the selected run: rows across the road (the centre, the rims, and on a cup piece
+//: THE DOTS, visible handles onto the zone grab on the selected run: rows across the road (the centre, the rims, and on a cup piece
 // halfway out), at stations thinned to DOT_MIN_M (or the radius) and DOT_MIN_PX apart, at most DOT_CAP a row. Hollow, HIT_PX to press; a press on one is the zone
-// grab opened at that dot (the panel's, through dotAt), never a handle's drag. The colours are D425's: the centre white (height), a rim red (width) and green on its
+// grab opened at that dot (the panel's, through dotAt), never a handle's drag. The colours are the brush's: the centre white (height), a rim red (width) and green on its
 // inner half when that side has an edge or a cup to lift, the cup rows green.
 const DOT_MIN_M = 100, DOT_MIN_PX = 2 * HIT_PX, DOT_CAP = 40, DOT_R = 6;
 
@@ -156,14 +156,14 @@ function placeHandles(model) {
   const out = [];
   for (const kind of model.kinds) {
     const K = KINDS[kind]; if (!K) continue;
-    if (K.brush) {   // D425 part 4: the glyph, at the brush's station (model.brush = { samples, s, half, sides?, lat? }), standing on the road; never hit (hitTest skips `brush`)
+    if (K.brush) {   // the glyph, at the brush's station (model.brush = { samples, s, half, sides?, lat? }), standing on the road; never hit (hitTest skips `brush`)
       const B = model.brush; if (!B) continue;
       const m = sampleNear(B.samples, B.s); if (!m) continue;
       const lat = Number.isFinite(B.lat) ? B.lat : K.lat;
       for (const side of B.sides || K.sides) out.push({ id: `${kind}:${side}`, kind, side, pos: add(m.pos, m.L, lat * (B.half || 0) * side), axis: [m.U[0] || 0, m.U[1] || 0, m.U[2] || 0], brush: true });
       continue;
     }
-    if (K.free) {   // D258: at the landing's start, in the take-off's heading frame (model.free = { pos, T0, L0, U0, T1, L1 })
+    if (K.free) {   // at the landing's start, in the take-off's heading frame (model.free = { pos, T0, L0, U0, T1, L1 })
       const F = model.free; if (!F || !F.pos || !F[K.frame]) continue;
       const pos = K.lead && F[K.lead] ? add(F.pos, F[K.lead], K.leadM) : F.pos.slice(), dir = F[K.frame];
       out.push({ id: `${kind}:0`, kind, side: 0, pos, axis: [dir[0] || 0, dir[1] || 0, dir[2] || 0] });
@@ -182,7 +182,7 @@ function placeHandles(model) {
 }
 
 /**
- * D519 Part 2: the dots. `dots` = { stations, run: { s0, s1 }, radius, rows: [{ u, colour, inner? }], at(s, u) -> { pos, U, L } | null } (at: the road's surface at share u
+ * the dots. `dots` = { stations, run: { s0, s1 }, radius, rows: [{ u, colour, inner? }], at(s, u) -> { pos, U, L } | null } (at: the road's surface at share u
  * across it at station s, with its normal and outward across direction). The stations are thinned on the centreline's screen positions; each kept station has a dot in
  * every row: { id, dot: true, s, u, side, colour, inner, pos, screen: { x, y }, axes: { U: [dx, dy], L: [dx, dy] } (px a metre) }. Dots behind the camera are dropped.
  */
@@ -197,7 +197,7 @@ function placeDots(dots, VP, W, H) {
   }
   return out;
 }
-/** D519 Part 2: the dot nearest (x, y) within r px, or null. */
+/** the dot nearest (x, y) within r px, or null. */
 function dotHit(list, x, y, r = HIT_PX) {
   let best = null, bd = Infinity;
   for (const h of list) { if (!h.dot || !h.screen) continue; const d = (h.screen.x - x) ** 2 + (h.screen.y - y) ** 2; if (d <= r * r && d < bd) { bd = d; best = h; } }
@@ -223,7 +223,7 @@ function dragPixels(axis, dx, dy, kind) {
   return K && K.axis === 'U' ? -dy : dx;
 }
 
-/** D335: the share of a kind's perPx that a pixel is worth at pointer speed `v` (px per ms): the kind's step over perPx when slow (so one pixel is 0.01), 1 when fast, eased between. */
+/** the share of a kind's perPx that a pixel is worth at pointer speed `v` (px per ms): the kind's step over perPx when slow (so one pixel is 0.01), 1 when fast, eased between. */
 function scrubGain(kind, v) {
   const K = KINDS[kind]; if (!K) throw new Error(`handles: no kind "${kind}"`);
   const lo = Math.min(1, K.step / K.perPx), t = Math.min(1, Math.max(0, ((Number.isFinite(v) ? v : 0) - SPEED_SLOW) / (SPEED_FAST - SPEED_SLOW)));
@@ -231,7 +231,7 @@ function scrubGain(kind, v) {
 }
 
 /**
- * The new absolute value of a field for a drag of `px` pixels along the handle's on-screen axis from `base` (D251: pixels, so the speed is the same at any zoom). With the PRECISE modifier (Shift) one pixel is exactly one step (D330: 0.01, no hold),
+ * The new absolute value of a field for a drag of `px` pixels along the handle's on-screen axis from `base` (pixels, so the speed is the same at any zoom). With the PRECISE modifier (Shift) one pixel is exactly one step (0.01, no hold),
  * Ctrl snaps to round numbers (5 degrees, 10 m of length, 5 m of width). Without Ctrl the drag HOLDS for DETENT_PX of travel at the value it started from and, for bank, turn and climb, at 0: it reads exactly that
  * value while the pointer is inside the hold. Rounded to the kind's step (0.01) with or without the precise modifier; always clamped to the kind's range.
  */
@@ -241,7 +241,7 @@ function targetFor(kind, base, px, ctx = {}, mods = {}) {
   let v = base + px * r;
   if (mods.ctrl) v = round(v, K.snap);
   else if (precise) v = round(v, K.step);   // one pixel, one step: nothing held back, nothing skipped, through 0 as well
-  else if (ctx.hold === false) v = round(v, K.step);   // D335: the overlay's own drags hold nothing: a slow pixel is 0.01 and nothing is skipped
+  else if (ctx.hold === false) v = round(v, K.step);   // the overlay's own drags hold nothing: a slow pixel is 0.01 and nothing is skipped
   else {
     // THE HOLDS ARE DEAD TRAVEL (2026-10-14, reported: on a 1000 m piece a turn drag jumped from 0 straight to 0.5, then moved in steps): the DETENT_PX inside a hold
     // no longer count, so leaving it continues from the held value at the next step (0.1, 0.2, ...). Before, the value was measured from where the drag started,
@@ -269,20 +269,20 @@ function hitTest(list, x, y, r = HIT_PX) {
 /** "bank 12.00°", "width 31.00 m", "turn 0.00°/100 m": the name and the value, to two decimals. */
 function format(kind, value) {
   const K = KINDS[kind];
-  // D259 (reported: the bank went on past 360 forever instead of resetting to 0, and the same for -360): the bank label keeps within one turn, sign kept (370 reads 10)
+  // (reported: the bank went on past 360 forever instead of resetting to 0, and the same for -360): the bank label keeps within one turn, sign kept (370 reads 10)
   const v = kind === 'bank' ? wrapTurn(Number(value)) : Number(value);
   return `${K.label} ${v.toFixed(2)}${K.unit === 'm' ? ' m' : K.unit}`;   // two decimals (2026-10-15: every number reads to 0.00)
 }
-/** D425 part 4: a brush's change at its centre in its channel's own unit, signed: "turn rate +0.12 °/100 m", "bank −12.00 °", "edge start +0.05"; '' for no channel or no number. */
+/** a brush's change at its centre in its channel's own unit, signed: "turn rate +0.12 °/100 m", "bank −12.00 °", "edge start +0.05"; '' for no channel or no number. */
 function brushFormat(channel, delta) {
   const C = BRUSH_CHANNELS[channel]; if (!C || !Number.isFinite(delta)) return '';
   const v = delta * C.k;
   return `${C.label} ${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}${C.unit ? ` ${C.unit}` : ''}`;
 }
-/** D259: a bank in degrees kept within ONE turn, its sign kept: 370 -> 10, -370 -> -10, 300 stays 300, 360 -> 0; no "-0". */
+/** a bank in degrees kept within ONE turn, its sign kept: 370 -> 10, -370 -> -10, 300 stays 300, 360 -> 0; no "-0". */
 function wrapTurn(x) { const w = x % 360; return Object.is(w, -0) ? 0 : w; }
 
-/** D425 part 4: the glyph's hover words, the way that adds first: "lift ↑ / ↓ sink · Alt ↔", "left ← / → right", "smoother ↑". */
+/** the glyph's hover words, the way that adds first: "lift ↑ / ↓ sink · Alt ↔", "left ← / → right", "smoother ↑". */
 function brushWords(kind) {
   const K = BRUSH_KINDS[kind]; if (!K) return '';
   const adds = K.screen === 'x' ? '←' : '↑', takes = K.screen === 'x' ? '→' : '↓';
@@ -314,7 +314,7 @@ function mount(stage, win, host) {
     if (!model || !pose || !(W > 0 && H > 0)) { drawn = []; return; }
     const VP = M.viewProj(pose, W / H);
     drawn = placeHandles(model).map((h) => ({ ...h, screen: screenAxis(VP, W, H, h.pos, h.axis) }));
-    if (model.dots && !drag) drawn = placeDots(model.dots, VP, W, H).concat(drawn);   // D519 Part 2: under the handles and the glyph; hidden while a handle is dragged
+    if (model.dots && !drag) drawn = placeDots(model.dots, VP, W, H).concat(drawn);   // under the handles and the glyph; hidden while a handle is dragged
   };
   const draw = () => {
     const ctx = canvas.getContext ? canvas.getContext('2d') : null; if (!ctx) return;
@@ -344,7 +344,7 @@ function mount(stage, win, host) {
       }
     }
   };
-  // D519 Part 2: a dot, a hollow ring; a rim's inner half green when that side has an edge or a cup to lift
+  // a dot, a hollow ring; a rim's inner half green when that side has an edge or a cup to lift
   const drawDot = (ctx, h) => {
     const s = h.screen, ink = T.css('--ink', '#0b0d11');
     ctx.lineWidth = 4; ctx.strokeStyle = ink; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, 0, 2 * Math.PI); ctx.stroke();
@@ -354,7 +354,7 @@ function mount(stage, win, host) {
       ctx.strokeStyle = h.inner; ctx.beginPath(); ctx.arc(s.x, s.y, DOT_R, a - Math.PI / 2, a + Math.PI / 2); ctx.stroke();
     }
   };
-  // D425 part 4: THE BRUSH GLYPH. Build's mark and double arrow, the arrow along the pointer's own axis (the drag reads the pointer, not the road), hollow for a Sculpt-only kind; one box a
+  // THE BRUSH GLYPH. Build's mark and double arrow, the arrow along the pointer's own axis (the drag reads the pointer, not the road), hollow for a Sculpt-only kind; one box a
   // kind beside it: during the tool's drag the value (model.brush.text, the strip's own words), on hover the words for each way, the Alt tag and the family's line (model.brush.note)
   const drawBrush = (ctx, h, W, H, boxed) => {
     const s = h.screen, K = KINDS[h.kind], B = model.brush || {}, colour = B.colour || K.colour, ink = T.css('--ink', '#0b0d11'), size = 7, reach = 22;
@@ -367,14 +367,14 @@ function mount(stage, win, host) {
     }
     ctx.fillStyle = K.hollow ? ink : colour; ctx.strokeStyle = K.hollow ? colour : ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(s.x - size, s.y - size / 2, size * 2, size); ctx.fill(); ctx.stroke();
     if (boxed.has(h.kind)) return; boxed.add(h.kind);
-    const lines = B.open ? [B.text || ''] : [B.words || brushWords(h.kind), B.note || ''];   // D519 Part 2: the zone grab's own words on hover
+    const lines = B.open ? [B.text || ''] : [B.words || brushWords(h.kind), B.note || ''];   // the zone grab's own words on hover
     const shown = lines.filter(Boolean); if (!shown.length) return;
     ctx.font = 'bold 12px system-ui, "Segoe UI", sans-serif';
     const w = Math.max(...shown.map((t) => ctx.measureText(t).width)) + 12, hgt = 6 + 18 * shown.length, bx = clamp(s.x + 30, 4, W - w - 4), by = clamp(s.y - 12 - hgt, 4, H - hgt - 4);
     tipBoxes.push({ x: bx, y: by, w, h: hgt }); ctx.fillStyle = T.alpha('--veil', 0.92, '#0b0d11'); ctx.fillRect(bx, by, w, hgt); ctx.strokeStyle = colour; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, w, hgt);
     ctx.fillStyle = T.css('--on-ink', '#eef1f6'); ctx.textBaseline = 'middle'; shown.forEach((t, i) => ctx.fillText(t, bx + 6, by + 12 + 18 * i));
   };
-  // D407: THE LAYOUT IS DONE WHEN SOMETHING IT READS CHANGED, not every frame (it ran on every frame, the model, every handle placed and drawn: about a third of an idle frame's script, the measurement of
+  // THE LAYOUT IS DONE WHEN SOMETHING IT READS CHANGED, not every frame (it ran on every frame, the model, every handle placed and drawn: about a third of an idle frame's script, the measurement of
   // 2026-10-19). What a frame draws follows from the model's numbers (the ghost's stations, the fields' values and widths, the mode), the camera, the stage's size, and the hover and drag; when all of
   // them are what they were, the canvas already shows it.
   let lastKey = null;
@@ -391,7 +391,7 @@ function mount(stage, win, host) {
     if (sameKey(k, lastKey)) return;
     lastKey = k; layout(m, pose); draw();
   };
-  // D335: each pointer step adds to two sums of pixels along the handle's axis AS IT IS NOW (the road rolls under the pointer, so the axis the mark moves on turns: measured against the
+  // each pointer step adds to two sums of pixels along the handle's axis AS IT IS NOW (the road rolls under the pointer, so the axis the mark moves on turns: measured against the
   // axis at the grab the bank stalled near 165 degrees and would have gone back). `pxFine` is the raw pixels (Shift: one is a step); `px` is the pixels weighted by the pointer's speed
   // (scrubGain), so a slow scrub is 0.01 a pixel and a flick is the kind's own perPx.
   const track = (x, y, t, ctrl) => {
@@ -403,9 +403,9 @@ function mount(stage, win, host) {
     d.pxFine += raw; d.px += raw * g;
   };
   const stamp = (e) => (e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now());
-  // the drag tick (app/sound.js): one event each time a handle's value moves a step. D345: every path that moves a value sends it from here, the drag (and the
+  // the drag tick (app/sound.js): one event each time a handle's value moves a step. every path that moves a value sends it from here, the drag (and the
   // arrows, through apply) and the wheel, which sent nothing: a scroll was silent and sound.js's last value went stale, so the next drag ticked from it
-  // `single` (D345 addition 2): a DELIBERATE single step, the wheel's notch, an arrow's nudge or a reset, which sound.js ticks whatever its size; a drag's steps
+  // `single` (addition 2): a DELIBERATE single step, the wheel's notch, an arrow's nudge or a reset, which sound.js ticks whatever its size; a drag's steps
   // carry no flag and tick only on a whole number. singleNext marks the arrow's step, which goes through apply like a drag's
   let singleNext = false;
   const stepped = (kind, was, value, single = false) => {
@@ -430,17 +430,17 @@ function mount(stage, win, host) {
     host.begin(h); stage.style.cursor = 'none';
     if (stage.setPointerCapture && e.pointerId !== undefined) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* the pointer is gone */ } }
   };
-  // D270 (reported: no "to show your cursor press ESC" window): NO POINTER LOCK. D251 locked the pointer on a press so a drag never stopped at the screen edge, but Chromium draws that notice itself whenever a
+  // (reported: no "to show your cursor press ESC" window): NO POINTER LOCK. The pointer used to be locked on a press so a drag never stopped at the screen edge, but Chromium draws that notice itself whenever a
   // page locks the pointer, and no WebView2 or Tauri setting turns it off. A grab now holds the pointer with setPointerCapture (above: it keeps reporting its position outside the stage), hides the cursor for
   // the drag, and on release puts it back at the handle that was grabbed through the native window (Tauri's setCursorPosition, when there is one; a browser or a test host has none and the cursor simply stays
-  // where the drag ended). Esc ends the drag where it is, as a release does. The value is the pointer's own position, so the per-pixel speeds are D251's to the pixel.
+  // where the drag ended). Esc ends the drag where it is, as a release does. The value is the pointer's own position, so the per-pixel speeds hold to the pixel.
   const putCursorBack = (d) => {
     const T = win.__TAURI__, w = T && T.window && T.window.getCurrentWindow && T.window.getCurrentWindow(), P = T && T.dpi && T.dpi.LogicalPosition;
     if (!d.moved || !w || !w.setCursorPosition || !P) return;
     const failed = (err) => console.warn('handles: the cursor could not be put back at the handle:', err && err.message ? err.message : err);   // cosmetic: the drag is already over
     try { const r = w.setCursorPosition(new P(d.cx, d.cy)); if (r && typeof r.catch === 'function') r.catch(failed); } catch (err) { failed(err); }
   };
-  // D330: while a handle is held each arrow key is exactly one step of its value (Up and Right add, Down and Left take away), on top of wherever the drag is; the page does not get the key
+  // while a handle is held each arrow key is exactly one step of its value (Up and Right add, Down and Left take away), on top of wherever the drag is; the page does not get the key
   const NUDGE = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 };
   onKeyDown = (e) => {
     if (!drag || !e) return;
@@ -454,7 +454,7 @@ function mount(stage, win, host) {
   // A DRAG NEVER RUNS OUT OF SCREEN (2026-10-14, reported: zoomed out, a length drag stopped at about 400 to 600 m and would go no further in one go). The hidden
   // cursor ran into the edge of the screen unseen (0.42 m a pixel over 1,000 to 1,400 px). Whenever it has gone WARP_PX from where it was grabbed, it is put back
   // there through the native window (as on release) and the travel so far is kept in `acc`, so the value is the whole travel.
-  // D330 (2026-10-15, reported: "sometimes my mouse move gets interrupted ... i have to let go of click, and click the drag again"). The first rule waited for an event showing the cursor within 2 px of the
+  // (2026-10-15, reported: "sometimes my mouse move gets interrupted ... i have to let go of click, and click the drag again"). The first rule waited for an event showing the cursor within 2 px of the
   // grab and ignored every move until then; if none came in WARP_WAIT_MS it gave the travel back and stopped putting the cursor back for the rest of the grab, so the drag then stalled at the screen
   // edge. Simulated (headless, no browser) both a busy window thread (the warp applied late) and plain hand motion (the first event after the warp is already more than 2 px away: any drag
   // faster than 2 px an event) switched it off for good on the second warp. Now:
@@ -500,7 +500,7 @@ function mount(stage, win, host) {
     apply(true); const h = drag.h, d = drag; if (drag.value !== drag.base0) { pre = { kind: h.kind, from: drag.base0, to: drag.value }; lastClick = null; } else lastClick = { id: h.id, t: e && typeof e.timeStamp === 'number' ? e.timeStamp : Date.now() };
     drag = null; stage.style.cursor = ''; putCursorBack(d); host.end(h);
   };
-  // D251: a double-click ON a handle resets it: 0 for bank, turn and climb; the value before the last drag for length, width and cup (kept only while the field still reads what that drag set, so a value typed
+  // a double-click ON a handle resets it: 0 for bank, turn and climb; the value before the last drag for length, width and cup (kept only while the field still reads what that drag set, so a value typed
   // since, or another piece, is not "put back" to a stale one). Taken in the capture phase like the press, so the camera's own double-click does not also fire.
   const resetHandle = (h) => {
     const m = model; if (!m) return;
@@ -513,7 +513,7 @@ function mount(stage, win, host) {
     const [x, y] = rel(e), h = hitTest(drawn, x, y); if (!h) return;
     e.preventDefault(); e.stopImmediatePropagation(); resetHandle(h);   // (the same reset again after the press has done it is a no-op)
   };
-  // D330: the wheel over a handle is one step of its value a notch (up adds), and the camera does not also zoom. One undo step a notch, as a double-click's reset is.
+  // the wheel over a handle is one step of its value a notch (up adds), and the camera does not also zoom. One undo step a notch, as a double-click's reset is.
   const onWheel = (e) => {
     if (drag || !e.deltaY) return;
     const [x, y] = rel(e), h = hitTest(drawn, x, y), m = model; if (!h || !m) return;
@@ -525,9 +525,9 @@ function mount(stage, win, host) {
   stage.addEventListener('pointerdown', onDown, true); stage.addEventListener('wheel', onWheel, { capture: true, passive: false }); stage.addEventListener('dblclick', onDouble, true); stage.addEventListener('pointermove', onMove); stage.addEventListener('pointerup', onUp); stage.addEventListener('pointercancel', onUp);
   raf = win.requestAnimationFrame(frame);
   return {
-    handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), tips: () => tipBoxes.slice(), hovered: () => hover, dragging: () => !!drag,   // D519 Part 2: the dots are listed apart from the handles
-    /** D519 Part 2: the dot under (x, y), css px of the stage, or null: { s, u, side, axes } for the zone grab to open at. */
-    dotAt: (x, y) => { const h = dotHit(drawn, x, y); return h ? { s: h.s, u: h.u, side: h.side, axes: h.axes, at: h.pos ? h.pos.slice() : null } : null; },   // D520: `at`, the dot's world point, where the grab plane passes
+    handles: () => drawn.filter((h) => !h.dot), dots: () => drawn.filter((h) => h.dot), tips: () => tipBoxes.slice(), hovered: () => hover, dragging: () => !!drag,   // the dots are listed apart from the handles
+    /** the dot under (x, y), css px of the stage, or null: { s, u, side, axes } for the zone grab to open at. */
+    dotAt: (x, y) => { const h = dotHit(drawn, x, y); return h ? { s: h.s, u: h.u, side: h.side, axes: h.axes, at: h.pos ? h.pos.slice() : null } : null; },   // `at`, the dot's world point, where the grab plane passes
     unmount() { win.cancelAnimationFrame(raf); if (frameReq) win.cancelAnimationFrame(frameReq); stage.removeEventListener('pointerdown', onDown, true); stage.removeEventListener('wheel', onWheel, true); stage.removeEventListener('dblclick', onDouble, true); if (doc.removeEventListener) doc.removeEventListener('keydown', onKeyDown); stage.removeEventListener('pointermove', onMove); stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp); canvas.remove(); stage.style.cursor = ''; },
   };
 }

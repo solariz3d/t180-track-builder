@@ -1,4 +1,4 @@
-// buildmenu.js: the BUILD menu's items (D355 part 2, pane C), for the top-right bar (pane B's app/menubar/), in contract M's shapes:
+// buildmenu.js: the BUILD menu's items, for the top-right bar (app/menubar/), in the shapes that bar takes:
 //   { label, run }   { label, checked, toggle }   { label, panel: mountFn }   { section }   { separator }
 // The commands are the core panel's own (app/core/panel.js): the bar asks the mounted panel for them with the 't180:build-request' event, the way the panel already
 // asks the preview ('t180:ghost-request', 't180:track-request'), because the bar and the panel are loaded apart (app/lib/cjs.js gives each load its own modules).
@@ -20,8 +20,8 @@ function ask(ctx = {}) {
   return got;
 }
 
-// D421 part 3 (design §5, the user's call 4): SCULPT MODE is the first item, a tick, since a Build | Sculpt switch in the top bar does not fit (app/test/menubar-page.test.js
-// rows 8 and 17 measured it: 87 px over at 900 px, 16 px at 1400; the plan's fallback). It sets the shell's st.sculpt and nothing else (mid-drag the shell refuses: "finish
+// (the user's call): SCULPT MODE is the first item, a tick, since a Build | Sculpt switch in the top bar does not fit (app/test/menubar-page.test.js
+// rows 8 and 17 measured it: 87 px over at 900 px, 16 px at 1400; hence the menu). It sets the shell's st.sculpt and nothing else (mid-drag the shell refuses: "finish
 // the brush drag first"); Tab does the same. It replaced the "Brush" toggle that stood before Close the loop. IN SCULPT every command that places or closes is disabled,
 // its reason "in Sculpt" in the tooltip.
 const IN_SCULPT = 'in Sculpt';

@@ -65,8 +65,8 @@ function checkJump({ D, dh, thetaRad, v, landingRoad = [], jumpG = MACH6.jumpG, 
 }
 
 /**
- * The landing ramp a jump needs so that BOTH landings touch down on road (ARCHITECTURE.md:75-78; the librarian's item 3,
- * 2026-09-27: "a jump word should carry its landing ramp"). The ramp starts at the landing lip, D ahead and dh above the
+ * The landing ramp a jump needs so that BOTH landings touch down on road (ARCHITECTURE.md:75-78:
+ * a jump word should carry its landing ramp). The ramp starts at the landing lip, D ahead and dh above the
  * take-off lip, and runs straight at pitch landRad. On a straight ramp the touchdown is exact: the flight
  * y = x·tanθ − k·x² (k = g_eff·G / (2v²cos²θ), flightY above) meets y = dh + (x − D)·tan(land) at the larger root of
  *   k·x² − (tanθ − tan land)·x + (dh − D·tan land) = 0.

@@ -9,7 +9,7 @@
 //     sectors: [ { word, along }, … ],     optional AC_TIME_1 and AC_TIME_2 gates
 //   }
 //   resolveLayout(layout, path, segments) -> { markers: [{ name, kind, n, s, u, h }], notes: [], missing: [] }
-//   defaultLayout(path, segments, opts) -> layout      the grid dropped on the longest straight (D167's placement)
+//   defaultLayout(path, segments, opts) -> layout      the grid dropped on the longest straight
 //   gridSlots(grid) -> [{ n, backM, u }]              numbered from pole (AC_START_0), each behind the line by backM
 //   runUpM(v, car) / speedAfterM(d, car)              the hotlap run-up, from the measured thrust (FINDINGS.md:494)
 //
@@ -35,7 +35,7 @@ const Prof = require('../geom/profile.js');
 //   '1-column'     one column on the centreline, nose to tail: defaultLayout's fallback when the floor fits one slot but not two columns (a closed
 //                  tube's floor is a few metres whatever its width); resolveLayout says so in an amber note
 const PATTERNS = Object.freeze({ '2-staggered': { cols: 2, stagger: true }, '2-abreast': { cols: 2, stagger: false }, '3-abreast': { cols: 3, stagger: false }, '1-column': { cols: 1, stagger: false } });
-// DEFAULTS, inferred (choices, not measurements), matching D167's generated placement: pole 10 m behind the line, slots
+// DEFAULTS, inferred (choices, not measurements), matching the generated placement: pole 10 m behind the line, slots
 // 8 m apart along (a staggered pair every 16 m), 3 m either side of the centre; 2 pit boxes 8 m apart; 1.5 m up.
 const DEFAULTS = Object.freeze({ height: 1.5, gateInsetM: 0.5, lineMarginM: 15, poleBackM: 10, rowGapM: 16, colGapM: 6, count: 4, pits: 2, pitSpacingM: 8, pattern: '2-staggered' });
 const SLOT_HALF_LENGTH = 2.4, SLOT_HALF_WIDTH = 1.0;   // src/export/markers.js DEFAULTS (inferred there: T-180 size not measured)
@@ -137,10 +137,10 @@ function resolveLayout(layout, path, segments) {
   return { markers, notes, missing };
 }
 
-// THE GRID'S FLOOR (D182, pane C): the central band where the cross-section tilts no more than FLOOR_MAX_DEG from the centre's
+// THE GRID'S FLOOR: the central band where the cross-section tilts no more than FLOOR_MAX_DEG from the centre's
 // normal. It was "exactly ψ = 0", which the measured fonts (src/geom/fonts.js) never are: they rise from the centre, as the
 // library's roads do, so no grid could stand on a default road. Measured on the learning library (the tilt under every
-// AC_START_n dummy, projected on the read's start section; pane C's scratchpad d182/gridtilt.js): the steepest slot per track
+// AC_START_n dummy, projected on the read's start section): the steepest slot per track
 // is 6.1° at the median, every slot is at most 12.4° on 12 of 17 layouts, and 5 put a slot at 17-31° (the bowl tracks,
 // track B, track I). 15° holds every slot of those 12, and the measured fonts' floor is then at least ½ the road.
 const FLOOR_MAX_DEG = 15;
@@ -156,7 +156,7 @@ function floorHalf(P) {
   };
   return Math.min(reach(1), reach(-1));
 }
-// ONE SLOT (D226): the single-column fallback needs the floor's half width to clear a slot's half width by this much (a slot is 2 m across and
+// ONE SLOT: the single-column fallback needs the floor's half width to clear a slot's half width by this much (a slot is 2 m across and
 // stands on the centreline, so nothing else is needed; the two-column grid's 0.5 m outer margin has no outer column to protect here).
 const ONE_SLOT_MARGIN_M = 0.1;
 const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1].every((x) => x === 0);
@@ -164,7 +164,7 @@ const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g
 /**
  * The default layout: the line near the far end of the LONGEST straight, the grid behind it, the pits behind the grid.
  * Throws { code: 'NO_START_STRAIGHT' } when no straight is long or wide enough.
- * o.firstPiece (D284, the user 2026-10-10: "every piece i put down, the start line moves up again and again"): the line goes near the far end of the
+ * o.firstPiece (the user 2026-10-10: "every piece i put down, the start line moves up again and again"): the line goes near the far end of the
  * run's FIRST piece (the segments carrying the run's first id) instead of the run's, and never nearer the run's start than the grid and pits need. On an
  * OPEN track the far end of the run is often the build head, so appending a Straight to it lengthened the run and carried the line along every time;
  * the run's first piece does not change on an append. A closed track does not pass it, so a finished track's start is where it always was.
@@ -180,7 +180,7 @@ const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g
  * note and leaves out (the lap keeps its other gates).
  */
 const GATE_TILT_MAX_DEG = FLOOR_MAX_DEG, GATE_CLIMB_MAX_DEG = 20, GATE_STEP_M = 2;
-// a gate's width seen from above, as a share of the road's width across (src/markers/checks.js gate-width): inferred, the plan's 'say, half'
+// a gate's width seen from above, as a share of the road's width across (src/markers/checks.js gate-width): inferred, about half
 const GATE_TOPDOWN_MIN = 0.5;
 /**
  * Whether a sector gate may stand at s: the line between its two ends (the road's span less the inset, as resolveLayout puts them) tilts no more than

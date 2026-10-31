@@ -29,7 +29,7 @@ const MATERIAL = Object.freeze({ name: 't180b_paint', shader: 'ksPerPixel', alph
 /** One patch s ∈ [sA, sB] × u ∈ [uA, uB], as grid quads on the surface. Returns { P, N, UV, I } (plain arrays). */
 function patch(path, segments, starts, sA, sB, uA, uB) {
   const nU = Math.max(2, Math.ceil((uB - uA) / ACROSS_STEP) + 1), rows = [sA, sB];
-  const P = [], N = [], UV = [], I = [], SU = [];   // SU (D279 follow-up): each vertex's (s, u), so the export can give a pit box the road's own coordinates
+  const P = [], N = [], UV = [], I = [], SU = [];   // SU: each vertex's (s, u), so the export can give a pit box the road's own coordinates
   for (const [r, s] of rows.entries()) for (let j = 0; j < nU; j++) {
     const u = uA + (uB - uA) * j / (nU - 1), sf = surfaceAt(path, segments, s, u, starts);
     P.push(...add(sf.pos, mul(sf.n, LIFT))); N.push(...sf.n); UV.push(j / (nU - 1), r); SU.push(s, u);
@@ -53,7 +53,7 @@ function box(path, segments, starts, s, u) {
 
 function paintFor(placed, path, segments, { material = 0, lane = null } = {}) {
   const starts = segStarts(path, segments), laneStarts = lane ? segStarts(lane.path, lane.segments) : null, meshes = [], items = [], skipped = [];
-  // D279 follow-up: for each PIT box, its vertices' (s, u) in vertex order and whether it lies on the lane (src/export/pitboxes.js dresses it as the road)
+  // for each PIT box, its vertices' (s, u) in vertex order and whether it lies on the lane (src/export/pitboxes.js dresses it as the road)
   const su = new Map();
   const add1 = (name, from, kind, s, u, parts, onLane = false) => {
     meshes.push(node(name, parts, material)); items.push({ name, from, kind, s, u });

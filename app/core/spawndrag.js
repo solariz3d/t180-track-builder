@@ -1,11 +1,11 @@
-// spawndrag.js: DRAG THE START ON THE PREVIEW (D285; the user, 06:11: "i want to be able to just click the hotlap spawn and move it by mouse … Also click dragging the start line and
+// spawndrag.js: DRAG THE START ON THE PREVIEW (the user, 06:11: "i want to be able to just click the hotlap spawn and move it by mouse … Also click dragging the start line and
 // then the pack of cars at the start line too, so i can click and move both intuitively"). The marks are the ones app/core/spawnslayer.js draws; a press ON one grabs it:
 //   · the START LINE slides along the FIRST piece (spawns.line.along, clamped to it), following the road under the cursor
 //   · a GRID SLOT moves the whole pack toward or away from the line: the gap from the line to the pole slot (spawns.grid.poleBackM). The two staggered columns and the panel's
 //     spacing are kept; moving the line carries the pack because every slot is measured back from the line
 //   · the HOTLAP spawn goes anywhere on a road piece: the piece and the distance under the cursor (spawns.hotlap.piece / along)
 // The first drag on an AUTOMATIC track writes the spawns the automatic layout comes to first ("start placed by hand", the same as ticking the panel's box), inside the same undo step.
-// ONE DRAG = ONE UNDO STEP (shell.beginSpawnsDrag / spawnsDragTo / endSpawnsDrag, the landing drag's pattern). NO POINTER LOCK (D270): the press takes setPointerCapture, the cursor stays.
+// ONE DRAG = ONE UNDO STEP (shell.beginSpawnsDrag / spawnsDragTo / endSpawnsDrag, the landing drag's pattern). NO POINTER LOCK: the press takes setPointerCapture, the cursor stays.
 // The press is taken in the capture phase like the handles' and stops the camera and the piece picking, only where the pointer is ON a mark. The pit boxes are not draggable here.
 //
 // Pure and tested (app/test/core-spawndrag.test.js):
@@ -174,7 +174,7 @@ function mount(stage, win, shell, host) {
   const onMove = (e) => {
     const [x, y] = rel(e);
     if (drag) { waiting = { x, y }; if (!frameReq) frameReq = win.requestAnimationFrame(flush); return; }
-    // D421 part 5: a sculpt drag owns the pointer, so no mark can be grabbed and none is looked for (spawnsInfo builds the whole lap's path for each new track: the drag's every step)
+    // a sculpt drag owns the pointer, so no mark can be grabbed and none is looked for (spawnsInfo builds the whole lap's path for each new track: the drag's every step)
     if (state().brush) { if (hovering) { stage.style.cursor = ''; hovering = false; } return; }
     const h =host.yieldTo && host.yieldTo(x, y) ? null : hitAt(x, y);
     if (h) { stage.style.cursor = 'grab'; hovering = true; } else if (hovering) { stage.style.cursor = ''; hovering = false; }

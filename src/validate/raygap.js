@@ -1,6 +1,6 @@
 // raygap.js: gaps in the PHYSICS road under the Mach 6's downforce ray (RED, reason 'downforce-ray-gap').
 //
-// WHY (R1, docs/research/04_ac_physics_drivability.md §4, SOURCED there from the installed car's
+// WHY (read from the installed car's
 // mach6_active/data/script.lua:424-433): the car's downforce comes from ONE ray to the track, cast from 0.4 m above the
 // car's origin and 1.0 m ahead of it, 1.0 m long, straight down the car's up axis. Suction is full when the road is
 // within 0.5 m of the ray's start and gone at 0.9 m, and a MISS gives zero downforce (the miss value is inferred there
@@ -29,7 +29,7 @@
 // Each gap is reported at the nearest path station: { s, u, widthM, at } (widthM: the first probe distance that found
 // road, an upper bound on the gap's width at that edge; at: the edge's midpoint in world space).
 //
-// D446 (a track, TEST 10 banked, refused on export with two of these at s 2574 and 2928 of one piece): road beyond an edge
+// A track (TEST 10 banked, refused on export with two of these at s 2574 and 2928 of one piece): road beyond an edge
 // counts only when it is the SAME PASS, the road resuming. There the probe past one edge of a banked piece that curls back on
 // itself found the OTHER pass's lip, 355 m on along the lap and 0.64 m away, and read the space between the two edges as a slit.
 // Nothing is lost under the car there: past either edge it is off the road whether or not the other pass is beside it. So a hit
@@ -47,7 +47,7 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const unit = (a) => { const l = len(a); return l > 0 ? [a[0] / l, a[1] / l, a[2] / l] : a; };
 const PROBES = [0.1, 0.25, 0.5];   // plus the ray's reach, from the car's limits
 const FACING = Math.cos(45 * Math.PI / 180);
-const SAME_PASS_M = 30;   // D446: road found past an edge is the same pass when its station is this close along the lap (or the road's width, if more)
+const SAME_PASS_M = 30;   // road found past an edge is the same pass when its station is this close along the lap (or the road's width, if more)
 
 /** The distance from point p to triangle (a, b, c): Ericson, Real-Time Collision Detection §5.1.5, the closest point by Voronoi region. */
 function pointTriangle(p, a, b, c) {
@@ -70,10 +70,10 @@ function pointTriangle(p, a, b, c) {
 /**
  * rayGaps(meshes, stations, ray, opts): meshes = [{ positions (world, flat), indices }] of the drivable physics road;
  * stations = the path's samples ({ s, pos, L, T }); ray = MACH6.downforceRay; opts.lapM = a closed lap's length (s is then
- * measured round it), opts.near = an array that receives the edges whose probe met another pass (D446). Returns
+ * measured round it), opts.near = an array that receives the edges whose probe met another pass. Returns
  * [{ s, u, widthM, at }], one per gap edge, in s order.
  */
-// D266 (the user's 6 × 1000 m tube crashed the page on Close): the same check in TYPED ARRAYS. The first form kept a JS array per vertex, per triangle and
+// The same check (the user's 6 × 1000 m tube crashed the page on Close) in TYPED ARRAYS. The first form kept a JS array per vertex, per triangle and
 // per normal, an object per edge and string keys for every bucket ("x,y,z", "a,b"): 1.47 GB of JavaScript heap on a 2.4-million-triangle tube, where a
 // browser renderer holds every heap of the page and its workers in 4 GB (V8's shared pointer-compression cage). The vertices, triangles, normals, edges and
 // both grids are now flat typed arrays (outside the V8 heap), the buckets hashed by their integer coordinates. NOTHING ELSE CHANGED: the same weld (the first
@@ -108,7 +108,7 @@ function rayGaps(meshes, stations, ray, opts = {}) {
   const WELD = 0.005;
   const lapM = Number.isFinite(opts.lapM) && opts.lapM > 0 ? opts.lapM : null, near = Array.isArray(opts.near) ? opts.near : null;
   /** How far apart two stations are along the road: round a closed lap when its length is given. */
-  const alongM = (a, b) => { const d = Math.abs(a - b); return lapM === null ? d : Math.min(d, lapM - d); };   // s 0 and s = lapM are one place (P's D446 review: d % lapM read them a lap apart)
+  const alongM = (a, b) => { const d = Math.abs(a - b); return lapM === null ? d : Math.min(d, lapM - d); };   // s 0 and s = lapM are one place (d % lapM read them a lap apart)
   let nIdx = 0, nPos = 0; for (const m of meshes) { nIdx += m.indices.length; nPos += m.positions.length / 3; }
   // the weld: a vertex is the FIRST earlier vertex within WELD, searched bucket by bucket (i, j, k from −1 to 1) and in each bucket in the order added
   const P = new Float64Array(nPos * 3), buckets = tripleIndex(Math.max(16, nPos)), next = new Int32Array(nPos).fill(-1);
@@ -172,7 +172,7 @@ function rayGaps(meshes, stations, ray, opts = {}) {
     }
   }
   /**
-   * Does the car's ray at q (cast from upM above q along up, lengthM downward) hit a road triangle other than skip, ON THE SAME PASS as station st (D446:
+   * Does the car's ray at q (cast from upM above q along up, lengthM downward) hit a road triangle other than skip, ON THE SAME PASS as station st (
    * within `bound` of it along the lap)? A hit on another pass does not count; the first is kept in `other` for the near-touch.
    */
   let other = null;
@@ -198,13 +198,13 @@ function rayGaps(meshes, stations, ray, opts = {}) {
           const qv = cross(tv, e1), v = dot(d, qv) * inv; if (v < 0 || u + v > 1) continue;
           const h = dot(e2, qv) * inv; if (!(h > 0 && h <= L)) continue;
           if (samePass(i, st, bound)) return true;
-          if (!other) other = i;   // another pass of the lap: not road beyond a gap (D446)
+          if (!other) other = i;   // another pass of the lap: not road beyond a gap
         }
       }
     }
     return false;
   };
-  /** D446: the least distance from point m to the road of ANOTHER pass than station st's, over the grid cells within one cell of m (the closest approach, edge to that road). */
+  /** the least distance from point m to the road of ANOTHER pass than station st's, over the grid cells within one cell of m (the closest approach, edge to that road). */
   const closestOther = (m, st, bound) => {
     const c0 = m.map((v) => Math.floor(v / CS)); let best = Infinity;
     for (let x = c0[0] - 1; x <= c0[0] + 1; x++) for (let y = c0[1] - 1; y <= c0[1] + 1; y++) for (let z = c0[2] - 1; z <= c0[2] + 1; z++) {

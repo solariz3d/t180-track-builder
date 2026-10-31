@@ -1,4 +1,4 @@
-// widthlike.js: the "width like…" drop-down's entries (D232), from src/doc/widths.json (numbers only).
+// widthlike.js: the "width like…" drop-down's entries, from src/doc/widths.json (numbers only).
 //
 //   entries(tube, tracks) -> [{ value, label }]   the first is the placeholder (value ''), then one per known track WHOSE READ CLOSES, narrowest first: value = the median as text.
 //                                          A track whose read did not close the lap (`read_closes: false`: the 21 m road and the 34 m (32–53) one) is in the JSON, honestly flagged, and
@@ -7,11 +7,11 @@
 //                                          label "24 m road (21–28)": the median, then the 10th to 90th percentile of what that road's reads measure.
 //                                          For a TUBE piece (the tube sweep t = 360) the figures are the distance ROUND the tube, and the entry adds how wide that
 //                                          is across: "24 m round (21–28), a tube 7.6 m across".
-//   tubeNote(w)   -> string                (D267) the few words under the field of a tube, "≈ 14.3 m across"; tubeTip(w) is the explanation, the field's tooltip. Before D267 this was the line under the drop-down for a tube: w is the distance ROUND it (the circumference, u runs −w/2 to +w/2 round the
+//   tubeNote(w)   -> string                the few words under the field of a tube, "≈ 14.3 m across"; tubeTip(w) is the explanation, the field's tooltip. this was the line under the drop-down for a tube: w is the distance ROUND it (the circumference, u runs −w/2 to +w/2 round the
 //                                          ring, src/texture/flow.js), so a tube's width across is w/π.
 //   isTube(sweep) -> bool                  the sweep field's value (degrees) says a closed pipe: 360.
 //
-// A UNIT TRAP (the plan, D232): on the known tracks "width" is the flat road across. In the builder a closed tube's `w` is the CIRCUMFERENCE, so a 31 m tube is
+// A UNIT TRAP: on the known tracks "width" is the flat road across. In the builder a closed tube's `w` is the CIRCUMFERENCE, so a 31 m tube is
 // about 9.9 m across. The reader's width is ray hits left to right (whole metres; FINDINGS §7f lists its biases): a reference, not a rule.
 'use strict';
 const W = require('../../src/doc/widths.json');
@@ -27,7 +27,7 @@ function label(t, tube) {
 function entries(tube = false, tracks = W.tracks) {
   return [{ value: '', label: tube ? 'width like… (m round)' : 'width like…' }, ...tracks.filter((t) => t.read_closes !== false).map((t) => ({ value: String(t.median_m), label: label(t, tube) }))];
 }
-/** D267: the few words under the width field of a tube ("≈ 14.3 m across"); nothing for a width that is not a number above 0. The explanation is tubeTip, the field's tooltip. */
+/** the few words under the width field of a tube ("≈ 14.3 m across"); nothing for a width that is not a number above 0. The explanation is tubeTip, the field's tooltip. */
 function tubeNote(w) { const n = Number(w); return Number.isFinite(n) && n > 0 ? `≈ ${across(n)} m across` : ''; }
 function tubeTip(w) {
   const n = Number(w);

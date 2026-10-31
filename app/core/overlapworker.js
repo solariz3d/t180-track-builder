@@ -1,4 +1,4 @@
-// overlapworker.js: the WEB WORKER the overlap check runs in (D240 follow-up: a preview must not freeze the page). It loads app/core/overlapjob.js through the app's own CommonJS loader
+// overlapworker.js: the WEB WORKER the overlap check runs in (follow-up: a preview must not freeze the page). It loads app/core/overlapjob.js through the app's own CommonJS loader
 // (app/lib/cjs.js, with the exporter's in-memory node shim the core's modules need, as the page gives coreshell.js) and answers ONE kind of message:
 //   in:  { id, doc, designSpeedKmh, closed }     the proposed document (plain data) and what the check needs
 //   out: { id, ok: true, result, timing }         overlapjob.runJob's result: { overlaps, others, amber } (plain data); timing { loadMs, waitedMs, jobMs } in ms

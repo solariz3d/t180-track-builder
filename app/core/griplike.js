@@ -1,5 +1,5 @@
-// griplike.js: THE GRIP FIELD'S WORDS AND THE "GRIP LIKE…" DROP-DOWN'S ENTRIES (D261, the user, 21:18: "LIKE how we took the width reference of other tracks, perhaps do the same with the friction
-// for users to see which tracks they want to emulate grip"; shaped like app/core/widthlike.js, D232). The numbers are src/doc/grips.json (E's survey of installed road surfaces'
+// griplike.js: THE GRIP FIELD'S WORDS AND THE "GRIP LIKE…" DROP-DOWN'S ENTRIES (the user, 21:18: "LIKE how we took the width reference of other tracks, perhaps do the same with the friction
+// for users to see which tracks they want to emulate grip"; shaped like app/core/widthlike.js). The numbers are src/doc/grips.json (a survey of installed road surfaces'
 // FRICTION as a percent of AC's own road; numbers only).
 //
 //   entries(tracks) -> [{ value, label }]   the first is the placeholder (value ''), then one per known track, in the file's order (the T-180 tracks first, then the others):
@@ -7,7 +7,7 @@
 //                                          measured figure is not whole: the field only takes whole percents, so the label says what it will fill)
 //   check(text)     -> { ok, grip, why }   the field's text: a whole percent from GRIP_MIN to GRIP_MAX (50 to 150), else why not in plain words (49 and 151 are refused, 100.5 is not whole)
 //   note(text)      -> string              the line under the field: what the number is (100% is AC's road), "untested: drive it" outside TESTED_MIN..TESTED_MAX (60 to 110, the user's range
-//                                          decision 2026-10-06; E's survey: the installed tracks run 60 to 110), and always that the checker does not model grip
+//                                          decision 2026-10-06; the survey: the installed tracks run 60 to 110), and always that the checker does not model grip
 //   GRIP_MIN, GRIP_MAX, TESTED_MIN, TESTED_MAX
 'use strict';
 const G = require('../../src/doc/grips.json');
@@ -27,7 +27,7 @@ function check(text) {
   if (n < GRIP_MIN || n > GRIP_MAX) return { ok: false, grip: null, why: `A grip is from ${GRIP_MIN} to ${GRIP_MAX} percent (${n} is outside it).` };
   return { ok: true, grip: n, why: null };
 }
-/** D267 ("too much damn text"): the few words under the field: "Grip 85%", "Grip 130% · untested", or why the value is refused. What 100% is, and what "untested" means, are the field's tooltip (tip). The sentence about the checker is CUT. */
+/** (the user: "too much damn text") the few words under the field: "Grip 85%", "Grip 130% · untested", or why the value is refused. What 100% is, and what "untested" means, are the field's tooltip (tip). The sentence about the checker is CUT. */
 function note(text) {
   const c = check(text);
   if (!c.ok) return c.why;

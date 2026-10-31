@@ -1,4 +1,4 @@
-// flightlayer.js: THE FLIGHTS ON THE TRACK AS A DASHED LINE (D243's layer, simplified by D258, the free jump). A canvas over the preview (#preview), redrawn every animation frame like the labels and the
+// flightlayer.js: THE FLIGHTS ON THE TRACK AS A DASHED LINE (layer, simplified for the free jump). A canvas over the preview (#preview), redrawn every animation frame like the labels and the
 // selection (the camera eases, so the line moves with it). It draws the centreline of every flight on screen, and of the ghost while one shows (the Jump button's candidate): the curve the free
 // flight takes from the take-off to the landing. NOTHING is computed about the air (no arc, no fall, no ramp: the user drives the jump in AC and moves the landing), so the line is only there to show
 // that the two pieces are joined. The preview itself is not changed: its pose comes from 't180:view', the placed track from 't180:track-request' and the ghost from 't180:ghost-request'.
@@ -9,7 +9,7 @@
 'use strict';
 
 const M = require('../camera/math.js');
-const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
+const { tokensOf } = require('../lib/tokens.js');   // the skin's colours (app/lib/tokens.js)
 
 /** The flights on a path: a 'gap' segment's own samples, with the station before and the one after so the line reaches both pieces. */
 function flightsOfPath(path, segments) {

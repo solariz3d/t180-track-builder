@@ -1,5 +1,5 @@
-// coreshell.js: the app's state and actions for the EQUATION CORE (the core spec's build step (d), D186, pane C). No DOM and no
-// Tauri, so it runs headless under node --test and unchanged in the webview (app/lib/cjs.js). Since D239 it is the app's ONLY builder
+// coreshell.js: the app's state and actions for the EQUATION CORE (the core spec's build step (d)). No DOM and no
+// Tauri, so it runs headless under node --test and unchanged in the webview (app/lib/cjs.js). it is the app's ONLY builder
 // (the user: "can we keep only the equation mode?"): app/shell.js, the old piece builder's shell, is kept only as a test driver for
 // the shared preview and validation (its keys moved to app/core/keys.js; app/README.md says why).
 //
@@ -8,21 +8,21 @@
 //   shell.beginBrush({ mode, channel, s0, r })   shell.brushTo(delta)   shell.endBrush()      one undo step per drag
 //   shell.close()
 //   await shell.exportTo(dir)   shell.openExample(fitText, readText, name)   await shell.save(name)   await shell.open(name)
-//   shell.buildExport(opts)   shell.exportDoc()   shell.commitDoc(doc)                       (D239: install and share codes use them)
-//   await shell.buildExportAsync(opts)   the same export, run in its own process when the page has one (D437b: exporter.runSegmentsAsync); Export and Install use it
-//   shell.exportArgs(opts)   the export's arguments [segments, meta, opts], writing nothing (D437b: both builds start from it)
-//   shell.restore()   await shell.discardRecovery()   await shell.flushAutosave()   await shell.cleanExit()   (D239: autosave)
-//   (D272: save also writes the undo history beside the track, open reads it back: see UNDO_CAP below)
-//   await shell.backupNow(reason)   await shell.listVersions()   await shell.openVersion(file)   (D239 amendment: previous versions;
+//   shell.buildExport(opts)   shell.exportDoc()   shell.commitDoc(doc)                       (install and share codes use them)
+//   await shell.buildExportAsync(opts)   the same export, run in its own process when the page has one (exporter.runSegmentsAsync); Export and Install use it
+//   shell.exportArgs(opts)   the export's arguments [segments, meta, opts], writing nothing (both builds start from it)
+//   shell.restore()   await shell.discardRecovery()   await shell.flushAutosave()   await shell.cleanExit()   (autosave)
+//   (save also writes the undo history beside the track, open reads it back: see UNDO_CAP below)
+//   await shell.backupNow(reason)   await shell.listVersions()   await shell.openVersion(file)   (amendment: previous versions;
 //   every Save also moves the file it overwrites into track-backups, natively: src-tauri/src/backups.rs)
 //
-// AUTOSAVE AND CRASH RESTORE (D239, carried from the piece builder, app/shell.js, the same rules). While the track has unsaved changes it
+// AUTOSAVE AND CRASH RESTORE (carried from the piece builder, app/shell.js, the same rules). While the track has unsaved changes it
 // is written (debounced by `autosaveMs`) through storage.saveAutosave as { schema: 1, kind: 'core', name, doc } with the document's
 // canonical text. Saving under a name, or cleanExit(), clears it. On the next start an autosave left behind is OFFERED as
 // state.recovery, never applied behind the user's back: restore() takes it, discardRecovery() clears it. A damaged autosave's bytes are
 // kept as a "damaged autosave" backup before this session may autosave over it (or, if they cannot be kept, it is left as it was and this
 // session does not autosave), and the app starts anyway, saying so. THE OLD PIECES AUTOSAVE: the native side keeps ONE autosave file, and a piece-builder
-// autosave left from before D239 (it has no `kind`) cannot be opened here; rather than let the first core autosave overwrite it, it is
+// autosave left from (it has no `kind`) cannot be opened here; rather than let the first core autosave overwrite it, it is
 // copied aside as an ordinary saved word track (storage.saveDoc, the name in the message), and only then is the file this builder's.
 //
 // THE SEAM IS THE PIECE BUILDER'S (app/README.md "The seam"), so the preview, the cameras and validation are reused unchanged:
@@ -31,12 +31,12 @@
 //   state.history.present is the CORE document (src/core/document.js), with its own undo history.
 // Every edit goes through the core (src/core: extend, sculpt, close); the shell never edits a document itself.
 // A FAILED ACTION changes nothing and says why (state.message), as app/shell.js does.
-// SAVED PIECES, THE UI HALF (D240; the core is src/core/piece.js):
+// SAVED PIECES, THE UI HALF (the core is src/core/piece.js):
 //   shell.selectPiece(i, { extend })   shell.clearSelection()   shell.selectionInfo()   await shell.savePiece(name)   await shell.listPieces()   await shell.insertPiece(name, { mirror })
 //   await shell.renamePiece(from, to)   await shell.deletePieceFile(name)   shell.deleteSelection()   shell.proposeDelete()   await shell.applyDelete()   shell.cancelDelete()
-//   shell.cutSelection()   await shell.applyCut()   shell.cancelCut()   (D361: the selected pieces cut out, the track left open at the gap)
-//   await shell.smoothRamps()   (D465: Track ▸ Smooth ramps: the bank, cup and edge ramps re-laid C2, the route kept; a backup first, one undo step)
-//   await shell.bankLap()       (D473: Track ▸ Bank the lap: a closed lap banked as Close banks the lap it closes, the route kept; a backup first, one undo step)
+//   shell.cutSelection()   await shell.applyCut()   shell.cancelCut()   (the selected pieces cut out, the track left open at the gap)
+//   await shell.smoothRamps()   (Track ▸ Smooth ramps: the bank, cup and edge ramps re-laid C2, the route kept; a backup first, one undo step)
+//   await shell.bankLap()       (Track ▸ Bank the lap: a closed lap banked as Close banks the lap it closes, the route kept; a backup first, one undo step)
 // TIMING: state.lastStep = { op, ms } for the last edit, the document operation plus the adapter's segments (spec test 6's
 // "per step" is measured by the bench on the same calls, not on this field).
 'use strict';
@@ -50,7 +50,7 @@ const SH = require('../../src/core/sharp.js');
 const SC = require('../../src/core/sculpt.js');
 const { sculpt, pieceOffsets } = SC;
 /**
- * D259 (the user, 18:24: "same for -360 if it banks the other way, instead of continuing another revolution past 360 it should reset back to 0"): a bank brush or a
+ * (the user, 18:24: "same for -360 if it banks the other way, instead of continuing another revolution past 360 it should reset back to 0"): a bank brush or a
  * Sculpt bank drag that would take the bank at its centre past one full turn wraps it back from 0, its sign kept (350 + 20 -> 10, -350 - 20 -> -10, 300 stays 300).
  * The bank there is read on the drag's BASE document (b.s0 is the piece's middle for Sculpt), and the delta sent on is the one that lands on the wrapped value.
  * The stored winding is not rewritten otherwise: a drag that stays inside one turn is applied exactly as given.
@@ -62,44 +62,44 @@ function bankWithinTurn(b, delta) {
   return Math.abs(b0 + delta) < TURN ? delta : w - b0;
 }
 const { close } = require('../../src/core/close.js');
-// D242: a preview's overlap check (the middle delete's; Close's preview went in D339) builds the track's mesh and validates it as the export does (src/export/fromwords.js). D240 follow-up: it lives in
+// a preview's overlap check (the middle delete's; Close's preview went in the one-press Close) builds the track's mesh and validates it as the export does (src/export/fromwords.js). It lives in
 // app/core/overlapjob.js, ONE pure function that the shell runs on the page (no runner given: tests) or that a Web Worker runs (app/core/overlapworker.js), so a preview never freezes the page
 const { overlapCheck } = require('./overlapjob.js');
 // 2026-10-15: the close itself (Finish to start, a window, the whole lap) and how far each piece moves are app/core/closejob.js, ONE pure job the shell runs on the page
 // (no closeRunner given: tests) or that a Web Worker runs (app/core/closeworker.js), so working out a preview never holds the window (4.1 s on a 24 km track)
 const CJ = require('./closejob.js');
-const RG = require('../validate-ui/redgroups.js');   // D242: every red in plain words, grouped, with where
-const EW = require('./exportwords.js');   // D464: the export's warnings in the user's words
-const overlapPlacesText = (ck, segs, o) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs, o).flatMap((g) => g.places) });   // D248: "N places", merged as the red list shows them
+const RG = require('../validate-ui/redgroups.js');   // every red in plain words, grouped, with where
+const EW = require('./exportwords.js');   // the export's warnings in the user's words
+const overlapPlacesText = (ck, segs, o) => RG.placesText({ places: RG.groupReds(ck.overlaps, segs, o).flatMap((g) => g.places) });   // "N places", merged as the red list shows them
 const AD = require('../../src/core/adapter.js');
 const { toSegments } = AD;
-const GHOST_CHORDS = 48, GHOST_TURN = 0.03, GHOST_PROBES = 16;   // D404: the drag's ghost: at most 48 chords, none turning the heading by more than 0.03 rad (1.7 degrees), the curvature read at 17 stations
-const PC = require('../../src/core/piece.js');   // D240: saved pieces (save a run, put one at the head, mirror it, delete pieces)
+const GHOST_CHORDS = 48, GHOST_TURN = 0.03, GHOST_PROBES = 16;   // the drag's ghost: at most 48 chords, none turning the heading by more than 0.03 rad (1.7 degrees), the curvature read at 17 stations
+const PC = require('../../src/core/piece.js');   // saved pieces (save a run, put one at the head, mirror it, delete pieces)
 const BS = require('../../src/core/bankswing.js');   // Bank the bend: one bank swing laid across a stretch of road
-const SR = require('../../src/core/smoothramps.js');   // D465: Track ▸ Smooth ramps
-const { bankLapWith, budgetNote } = require('../../src/core/finish.js');   // D473: Track ▸ Bank the lap
+const SR = require('../../src/core/smoothramps.js');   // Track ▸ Smooth ramps
+const { bankLapWith, budgetNote } = require('../../src/core/finish.js');   // Track ▸ Bank the lap
 const RAMP_WORD = Object.freeze({ phi: 'bank', c: 'cup', e: 'edge', er: 'right edge' });
-// A's offset channels h and l (the chair's ruling 1, D186): offsetPath(doc, segments, path) lifts a path and recomputes its frame.
+// the offset channels h and l: offsetPath(doc, segments, path) lifts a path and recomputes its frame.
 // Not at 17c2301; when the adapter exports it, the shell hands it on as `resolved.lift`, so the preview and the export
 // read the road AS BRUSHED (the segments alone do not carry the offsets).
 const offsetPath = typeof AD.offsetPath === 'function' ? AD.offsetPath : null;
-// THE READOUT (L130, A's src/core/readout.js): a piece's length and the change it makes in turn, climb and bank, for the panel
+// THE READOUT (src/core/readout.js): a piece's length and the change it makes in turn, climb and bank, for the panel
 // (the ghost, candidateReadout) and the labels on the track (every placed piece, pieceReadout)
 const RD = require('../../src/core/readout.js');
-// THE HEAD'S STATE (D193): what the track is doing at its open end, for Extend's fields to SHOW instead of blanks. On an empty track it
+// THE HEAD'S STATE: what the track is doing at its open end, for Extend's fields to SHOW instead of blanks. On an empty track it
 // is the state extend() starts the first piece from (src/core/extend.js: level, straight, the family's measured width and rate)
 const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
-const XS = require('./xsec.js');   // the cross-section channels' names (D225): the edge curve and the tube
-const CL = require('./centreline.js');   // D244b: the Sculpt guard (the centreline must not move)
-const JU = require('../../src/core/jump.js');   // D258: the free jump (E): a free flight and the landing you place by hand
+const XS = require('./xsec.js');   // the cross-section channels' names: the edge curve and the tube
+const CL = require('./centreline.js');   // the Sculpt guard (the centreline must not move)
+const JU = require('../../src/core/jump.js');   // the free jump: a free flight and the landing you place by hand
 const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
 const LD = require('./landing.js');
-const GL = require('./griplike.js');   // D261: the grip field's checks and words   // the landing's number boxes: values and units
+const GL = require('./griplike.js');   // the grip field's checks and words   // the landing's number boxes: values and units
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
-const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted (D239)
+const PREFIX = 'eq-';                 // core documents are stored under this prefix; the old piece builder's word tracks (no prefix) stay on disk, unlisted
 const BRUSH_MODES = Object.freeze(['local', 'rate']);
-// D272 (the user, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool"): THE UNDO HISTORY SURVIVES SAVE AND RESTART.
+// (the user, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool"): THE UNDO HISTORY SURVIVES SAVE AND RESTART.
 // Save writes a SIDECAR, storage.saveUndo(PREFIX + name, text), beside the track (natively eq-<name>.t180undo; the track file is unchanged, so share codes, exports and older builds read it as ever):
 // { schema: 1, kind: 'core-undo', present, past: [...], future: [...] }, every document D.serialize'd, the last UNDO_CAP steps (the past's newest, the future's nearest). Open restores it ONLY when its
 // `present` is the opened file byte for byte; a mismatch (the file was replaced, pasted, edited elsewhere, or saved by an older build) drops it silently, never mixed; a sidecar that is damaged opens
@@ -132,11 +132,11 @@ function unpackHistory(sideText, presentText, d) {
     return { history: Object.freeze({ ...D.createHistory(d), past: Object.freeze(past), future: Object.freeze(future) }) };
   } catch (e) { return { bad: e.message }; }
 }
-// D244b, SCULPT: the channels that shape a placed piece without steering the track (bank, width, wall rise, cup, edge angle, edge start, tube sweep). Turn (kh), climb (kv) and the height and sideways offsets
+// SCULPT: the channels that shape a placed piece without steering the track (bank, width, wall rise, cup, edge angle, edge start, tube sweep). Turn (kh), climb (kv) and the height and sideways offsets
 // are NOT in it: they carry everything after them. In Sculpt the brush takes these only, and every step is checked against the centreline (app/core/centreline.js)
 const SCULPT_CHANNELS = Object.freeze(['phi', 'c', 'w', 'e', 's', 'r', 't', 'er']);
-// D421 Part 2, SCULPT AS ITS OWN MODE (the user's GO, 2026-10-20 14:53, on P's design exo_memory/loop/design_d421_sculpt_P_2026-10-20.md §3): the tools, named by what the hand does, each
-// resolved to the brush's (mode, channel) and its FAMILY, which sets the guard. SHAPE: the centreline does not move, and the D244b guard stays on. LOCAL: the road inside the window moves and the
+// SCULPT AS ITS OWN MODE (the user's go, 2026-10-20 14:53, on the design's §3): the tools, named by what the hand does, each
+// resolved to the brush's (mode, channel) and its FAMILY, which sets the guard. SHAPE: the centreline does not move, and the shape guard stays on. LOCAL: the road inside the window moves and the
 // road after it does not (the offset channels are zero outside it). ROUTE: the road after the window moves (a rate or a length changed); on a closed lap it is re-closed on RELEASE, never per step.
 // Smooth takes the channel of the tool used last, and its family follows that channel.
 const SCULPT_TOOLS = Object.freeze({
@@ -155,9 +155,9 @@ const SCULPT_TOOLS = Object.freeze({
   sweep: Object.freeze({ mode: 'rate', channel: 't', family: 'shape' }),
   smooth: Object.freeze({ mode: 'smooth', channel: null, family: null }),
 });
-/** The family a channel's edit belongs to (D421): the rates steer the road after them, the offsets move only the road under the window, the rest shape it. */
+/** The family a channel's edit belongs to: the rates steer the road after them, the offsets move only the road under the window, the rest shape it. */
 const familyOf = (ch) => (ch === 'kh' || ch === 'kv' ? 'route' : ch === 'height' || ch === 'lateral' || ch === 'h' || ch === 'l' ? 'local' : 'shape');
-/** D464 (E's D461 report, item 5): how much of a route tool's drag the re-closed lap still holds in the window: the drag's own change (its rate channel, or Stretch's piece
+/** how much of a route tool's drag the re-closed lap still holds in the window: the drag's own change (its rate channel, or Stretch's piece
  *  lengths) projected onto what the close left, 1 = all of it, 0 = none. At the seam the close can only re-solve the piece the tool changed, so the drag is taken back; the release
  *  says so instead of only "closed again". null when the pieces cannot be compared (the drag changed nothing measurable, or the arrays differ). */
 function keptShare(base, open, closed, idx, tool) {
@@ -174,12 +174,12 @@ function keptShare(base, open, closed, idx, tool) {
   }
   return den > 0 ? num / den : null;
 }
-/** D467: the release's message when the lap's start pieces closed it and the drag was kept whole. */
+/** the release's message when the lap's start pieces closed it and the drag was kept whole. */
 function startMovedWords(tool, report) {
   const word = tool === 'climb' ? 'climb' : tool === 'stretch' ? 'stretch' : 'bend';
   return `the lap is closed again: to keep your ${word}, the start of the lap moved (${report})`;
 }
-/** D464: the release's message. Under half kept, the drag was undone and the user is told what to do; under 0.9, how much was taken back; otherwise as before. */
+/** the release's message. Under half kept, the drag was undone and the user is told what to do; under 0.9, how much was taken back; otherwise as before. */
 function closedAgainWords(tool, kept, report) {
   const word = tool === 'climb' ? 'climb' : tool === 'stretch' ? 'stretch' : 'bend';
   if (kept != null && kept < 0.5) return `the lap is closed again: your ${word} was undone to close the lap; ${word} further from the start, or open the lap first (${report})`;
@@ -188,11 +188,11 @@ function closedAgainWords(tool, kept, report) {
 }
 /** Smooth works on the document's own channel: the Grab tools' 'height' and 'lateral' are its h and l. */
 const coreChannel = (ch) => (ch === 'height' ? 'h' : ch === 'lateral' ? 'l' : ch);
-// E's BRUSH (p-d186-brush-E): src/core/sculpt.js brush(doc, { mode: 'hill' | 'swerve' | 'value' | 'rate', channel, s0, r, delta })
-// -> { doc, note? }. It is used when sculpt.js exports it (not at 17c2301, where this was written; E's D186 adds it), and may be
+// THE CORE'S BRUSH: src/core/sculpt.js brush(doc, { mode: 'hill' | 'swerve' | 'value' | 'rate', channel, s0, r, delta })
+// -> { doc, note? }. It is used when sculpt.js exports it (not at 17c2301, where this was written), and may be
 // injected (`brushFn`, tests). The LOCAL brush is its hill (channel 'height') and swerve ('lateral'); they need the document's
-// offset channels h and l (A's, pending the chair's decision), and until then E's brush refuses them by name (NOT_YET), which the
-// shell shows as the message. With no E brush at all the local mode is not offered, and the rate brush is D185's sculpt().
+// offset channels h and l (pending a decision), and until then the core's brush refuses them by name (NOT_YET), which the
+// shell shows as the message. With no E brush at all the local mode is not offered, and the rate brush is the older sculpt().
 
 // The default timers CALL the globals rather than hold them as methods (a browser's setTimeout refuses to run as a method of another
 // object, "Illegal invocation", WebView2; app/test/timers-regression.test.js found it in the piece builder).
@@ -201,13 +201,13 @@ const exportError = (code, message) => Object.assign(new Error(message), { name:
 
 async function createCoreShell({ storage = null, exporter = null, brushFn = typeof SC.brush === 'function' ? SC.brush : null, stretchFn = typeof SC.stretch === 'function' ? SC.stretch : null, smoothFn = typeof SC.smooth === 'function' ? SC.smooth : null, now = () => Date.now(), autosaveMs = 1500, timers = callTimers, overlapRunner = null, closeRunner = null } = {}) {
   const ok = (msg) => ({ message: msg, messageKind: 'ok' });
-  // AUTOSAVE (D239): what the last session left behind, read once at the start (the header says what happens to each kind)
+  // AUTOSAVE: what the last session left behind, read once at the start (the header says what happens to each kind)
   const canAutosave = !!storage && typeof storage.saveAutosave === 'function';
   let recovery = null, startMessage = null;
   if (canAutosave && typeof storage.openAutosave === 'function') {
     const left = await storage.openAutosave();
     if (left) {
-      // A DAMAGED autosave (B's D239 look, F1: "left alone" held only until the session's first autosave overwrote it): its bytes are kept
+      // A DAMAGED autosave ("left alone" held only until the session's first autosave overwrote it): its bytes are kept
       // as a backup first ("damaged autosave", native backup_track), and only then may this session autosave; if they cannot be kept, the
       // file is left as it is and this session does not autosave over it, exactly as for a Pieces autosave that cannot be kept aside.
       const keepDamaged = async (why) => {
@@ -237,20 +237,20 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     mode: 'core', history: D.createHistory(D.createDoc('untitled')), resolved: { segments: [], closed: false }, resolveError: null,
     message: startMessage, messageKind: startMessage ? 'error' : null, name: null, dirty: false, lastEdited: null, lastStep: null, keptBend: null, brush: null, landingDrag: null, spawnsDrag: null, exportReds: null,
     localBrush: !!brushFn, recovery: recovery && !recovery.blocked ? recovery : null,
-    selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // D240: the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
-    cutProposal: null,   // D361: a pending cut (cutSelection's preview), dropped with the document it was made on
+    selection: null, deleteProposal: null, libraryStamp: 0, proposalCheck: null,   // the pieces picked on the track, a pending middle delete, and a counter the library list redraws on
+    cutProposal: null,   // a pending cut (cutSelection's preview), dropped with the document it was made on
     bankProposal: null,   // a pending Bank the bend (proposeBankSwing's preview), dropped with the document it was made on
-    sculpt: false,   // D244b: the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
-    lastToolChannel: null,   // D421: the channel of the Sculpt tool used last, which Smooth works on
+    sculpt: false,   // the Sculpt switch: the brush and the handles on a placed piece change its shape only, never the route
+    lastToolChannel: null,   // the channel of the Sculpt tool used last, which Smooth works on
     closePending: null,   // 2026-10-15: a close the worker is working out, { base, finish, startedAt }: no preview yet (closeRunner)
   };
   // a Pieces autosave that could not be kept aside is never overwritten: this session simply does not autosave
   const mayAutosave = canAutosave && !(recovery && recovery.blocked);
   const subs = new Set();
-  let currentJob = null;   // D240 follow-up: the overlap check running for the preview on screen: { entry, job }
+  let currentJob = null;   // the overlap check running for the preview on screen: { entry, job }
   /** spawnsInfo's answer for document d (memoised by spawnsInfo; `auto` as it normalises it). */
   let spawnsMemo = null;
-  // D407: the automatic start's path, GROWN when a piece is added (a placement built the whole track's path again, 13 ms on a 12-piece track with a 1,000 m piece, the measurement of 2026-10-19).
+  // the automatic start's path, GROWN when a piece is added (a placement built the whole track's path again, 13 ms on a 12-piece track with a 1,000 m piece, the measurement of 2026-10-19).
   // An open track whose segments begin with the last one's (the very same objects) at the same start is that path, copied and extended (geom's extendPath gives what buildPath gives, to the bit);
   // anything else is built in full. The path handed out is never grown in place (the copy is), so an answer already given does not change under its reader.
   let spawnPathMemo = null;
@@ -290,16 +290,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   let autoDue = false, autoTimer = null;
   const set = (patch) => {
     if ('message' in patch && !('messageKind' in patch)) patch = { ...patch, messageKind: patch.message ? 'error' : null };
-    // D242: a close PREVIEW belongs to the document it was made from; any change of document drops it, so no stale ghost or Apply survives an edit, an undo or an open
+    // a close PREVIEW belongs to the document it was made from; any change of document drops it, so no stale ghost or Apply survives an edit, an undo or an open
     if (patch.history && st.closeProposal && !('closeProposal' in patch) && patch.history.present !== st.closeProposal.base) patch = { ...patch, closeProposal: null };
-    // D240: a SELECTION of pieces and a delete PREVIEW likewise belong to the document they were made on (piece numbers mean nothing on another)
+    // a SELECTION of pieces and a delete PREVIEW likewise belong to the document they were made on (piece numbers mean nothing on another)
     if (patch.history && st.selection && !('selection' in patch) && patch.history.present !== st.selection.base) patch = { ...patch, selection: null };
     if (patch.history && st.deleteProposal && !('deleteProposal' in patch) && patch.history.present !== st.deleteProposal.base) patch = { ...patch, deleteProposal: null };
     if (patch.history && st.cutProposal && !('cutProposal' in patch) && patch.history.present !== st.cutProposal.base) patch = { ...patch, cutProposal: null };
     if (patch.history && st.bankProposal && !('bankProposal' in patch) && patch.history.present !== st.bankProposal.base) patch = { ...patch, bankProposal: null };
     const before = st.history.present;
     st = Object.freeze({ ...st, ...patch });
-    // D240 follow-up: the overlap check belongs to the preview it was started for; when that preview goes (Cancel, an edit, an Undo, another selection) the check is STOPPED (the worker terminated)
+    // the overlap check belongs to the preview it was started for; when that preview goes (Cancel, an edit, an Undo, another selection) the check is STOPPED (the worker terminated)
     if (st.proposalCheck && st.proposalCheck.proposal !== st.closeProposal && st.proposalCheck.proposal !== st.deleteProposal) { abortCheck(); st = Object.freeze({ ...st, proposalCheck: null }); }
     if (mayAutosave && st.dirty && st.history.present !== before) {
       autoDue = true;
@@ -310,7 +310,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   async function writeAutosave() {
     if (!autoDue) return;
     autoDue = false;
-    const h = st.history, payload = JSON.stringify({ schema: 1, kind: 'core', name: st.name, doc: textOf(h.present), ...(h.past.length || h.future.length ? { undo: packHistory(h, textOf(h.present)) } : {}) });   // D272: its history rides along
+    const h = st.history, payload = JSON.stringify({ schema: 1, kind: 'core', name: st.name, doc: textOf(h.present), ...(h.past.length || h.future.length ? { undo: packHistory(h, textOf(h.present)) } : {}) });   // its history rides along
     try { await storage.saveAutosave(payload); } catch (e) { set({ message: `autosave failed: ${e.message}` }); }
   }
   async function clearAutosave() {
@@ -318,7 +318,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (autoTimer) { timers.clearTimeout(autoTimer); autoTimer = null; }
     if (mayAutosave && typeof storage.clearAutosave === 'function') await storage.clearAutosave();
   }
-  // ── D240 follow-up: THE OVERLAP CHECK OFF THE UI THREAD (the user reads a 10 s freeze as broken: Close's preview took 13.4 s on TEST 1, a middle delete's 8.5 to 10.3 s on 13 km) ──
+  // ── THE OVERLAP CHECK OFF THE UI THREAD (the user reads a 10 s freeze as broken: Close's preview took 13.4 s on TEST 1, a middle delete's 8.5 to 10.3 s on 13 km) ──
   // With an overlapRunner (the page's: a Web Worker) a preview is shown AT ONCE (the ghost and the per-piece displacement) and its overlap check runs off the thread: state.proposalCheck is
   // { proposal, status 'checking' | 'done' | 'failed', result, error, startedAt, ms, via }, Apply is refused until it is 'done', and Cancel (or any change that drops the preview) terminates the worker.
   // With no runner (the tests, and a page that cannot make a worker is handled below) the check is run on the spot, exactly as it always was, and the proposal carries it as .check.
@@ -343,18 +343,18 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return entry;   // the caller puts it in the SAME state change as the preview (a panel drawn for the preview must already see its check)
   }
   const doc = () => st.history.present;
-  // 2026-10-15: THE CLOSE OFF THE THREAD (closeRunner): the job being worked out for closeBest (D339), { job }, and its stop
+  // 2026-10-15: THE CLOSE OFF THE THREAD (closeRunner): the job being worked out for closeBest, { job }, and its stop
   let closeJob = null;
-  // D343: the open track's reds as the page's live checker found them, per document (app/validate-ui/index.js noteCheck): a press reuses them instead of checking
+  // the open track's reds as the page's live checker found them, per document (app/validate-ui/index.js noteCheck): a press reuses them instead of checking
   // the open track again (64 s of a 25 km press). Only a check with CSP on counts, as the press checks with it on
   const checked = new WeakMap();
   function abortClose() { const j = closeJob; closeJob = null; if (j) { try { j.job.cancel(); } catch (e) { /* already finished */ } } }
   /** The boxes' values ({ forward, left, up, heading, pitch, bank }, in m and degrees) as the pose the core takes (radians). */
   const landingPose = (ui) => Object.assign({}, ...Object.entries(ui || {}).map(([k, v]) => LD.poseOf(k, v)));
-  // D258: the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
-  // D331 B: the turn field read as a corner (extendOpts.turnDeg) is placed by Extend alone (TB.extendCorner). Jump, Level and To floor solve or place the piece
+  // the Jump button's document: the current piece placed as Extend would place it (extendOpts, or null: take off from the track's end as it is), a free flight to the default landing, a 60 m straight
+  // the turn field read as a corner (extendOpts.turnDeg) is placed by Extend alone (TB.extendCorner). Jump, Level and To floor solve or place the piece
   // their own way and would drop it, so they refuse it by name, and the turn typed is never silently lost
-  // D516: Level and To floor place a corner turn exactly (src/core/level.js builds on Turn by's piece and solves only the climb), so they pass `turnOk` and
+  // Level and To floor place a corner turn exactly (src/core/level.js builds on Turn by's piece and solves only the climb), so they pass `turnOk` and
   // refuse only a climb corner, the climb being what they solve; Jump still refuses both
   const noCorner = (o, what, turnOk = false) => {
     if (o && ((!turnOk && 'turnDeg' in o) || 'climbDeg' in o)) {
@@ -368,7 +368,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   // track); the cache returns an unchanged piece's last segments, so a placement converts only what changed (adapter.js toSegments `cache`)
   const segCache = new WeakMap();
   const segmentsOf = (d, more) => (d.pieces.length ? toSegments(d, { cache: segCache, ...more }) : []);
-  // D404 (the user: "even turning a 1000m straight isnt smooth and laggy as hell"): while a handle is DRAGGED the ghost of the next piece is rebuilt on every move, and a
+  // (the user: "even turning a 1000m straight isnt smooth and laggy as hell"): while a handle is DRAGGED the ghost of the next piece is rebuilt on every move, and a
   // piece is cut into chords of 2 m, so its cost grew with its length (1,000 m: 20 ms a move; 5,000 m: 100 ms). The ghost's piece is now cut into at most GHOST_CHORDS chords
   // (never shorter than the 2 m it always was, and never so long that the heading turns more than GHOST_TURN radians in one), so a drag costs about the same at 1,000 m as
   // at 20,000 m; the piece that is placed, the export and the full ghost built when the drag stops are cut as before. A drag is a preview, and the release is exact.
@@ -376,7 +376,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     let kmax = 0; for (let j = 0; j <= GHOST_PROBES; j++) { const v = D.valuesAt(P, (P.length * j) / GHOST_PROBES); kmax = Math.max(kmax, Math.abs(v.kh), Math.abs(v.kv)); }
     return Math.max(2, Math.min(P.length / GHOST_CHORDS, kmax > 0 ? GHOST_TURN / kmax : Infinity));
   };
-  // THE START POSE travels with the segments (found by test 1, D186): the geometry's shape depends on the start PITCH, so a path
+  // THE START POSE travels with the segments (found by test 1): the geometry's shape depends on the start PITCH, so a path
   // grown from the origin at pitch 0 is not the document's lap. A real track opened as an example starts where its first station is.
   const startOf = (d) => ({ pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch });
   const resolvedOf = (d) => { const segments = segmentsOf(d); return { resolved: Object.freeze({ segments, closed: !!d.closed, start: startOf(d), lift: offsetPath && segments.length ? (p) => offsetPath(d, segments, p) : undefined }), resolveError: null }; };
@@ -395,23 +395,23 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   });
   const lastRoad = (d) => { for (let i = d.pieces.length - 1; i >= 0; i--) if (d.pieces[i].type === 'road') return i; return -1; };
   // the WHOLE-LAP close's protected stretch (the old one-click close, and the whole-lap route of closeBest): the stretch edited last AND the user's straights,
-  // since close.js spreads the correction over every piece it is not told to avoid, and left alone it bent a 300 m straight to a 370 m radius (D186 C)
+  // since close.js spreads the correction over every piece it is not told to avoid, and left alone it bent a 300 m straight to a 370 m radius
   const wholeLapEdited = (d) => { const last = lastRoad(d); return [...new Set([...(st.lastEdited || [last]), ...straightPieces(d)])]; };
-  // the brush, as E's hand-back gives its API: height -> hill, sideways -> swerve; a rate channel (kh, kv) -> rate, which re-closes a
-  // closed lap itself; bank, width, rise -> value. Without E's brush, the rate brush is D185's sculpt().
+  // the brush, as the core gives its API: height -> hill, sideways -> swerve; a rate channel (kh, kv) -> rate, which re-closes a
+  // closed lap itself; bank, width, rise -> value. Without the core's brush, the rate brush is the older sculpt().
   const brushed = (b, delta) => {
     if (b.mode === 'follow') return followed(b, delta);
     if (b.mode === 'stretch') return stretched(b, delta);
     if (b.mode === 'smooth') return smoothed(b, delta);
-    const at = { s0: b.s0, r: b.r, delta, ...(b.sharp ? { sharp: true } : {}) };   // sharp: E's opt-in (ruling 2), off by default
+    const at = { s0: b.s0, r: b.r, delta, ...(b.sharp ? { sharp: true } : {}) };   // sharp: an opt-in, off by default
     if (b.mode === 'local') return brushFn(b.base, { mode: b.channel === 'lateral' ? 'swerve' : 'hill', ...at });
     if (brushFn) return brushFn(b.base, { mode: b.channel === 'kh' || b.channel === 'kv' ? 'rate' : 'value', channel: b.channel, ...at });
     return sculpt(b.base, { channel: b.channel, ...at });
   };
 
-  // D421: STRETCH, a route tool on a length: the window's road (one piece, or the selected run) made `delta` metres longer by C's core in ONE call (src/core/sculpt.js
+  // STRETCH, a route tool on a length: the window's road (one piece, or the selected run) made `delta` metres longer by core in ONE call (src/core/sculpt.js
   // stretch(doc, which, L1, { keepRate }): which is a piece index or { from, to }, L1 the road's new length; one factor for the whole run, the bend kept by its area-keeping
-  // factor unless keepRate, the joints rebuilt; p-d421-sculptcore-C_2026-10-20.md). The pieces it changed are what the release re-closes around.
+  // factor unless keepRate, the joints rebuilt). The pieces it changed are what the release re-closes around.
   const stretched = (b, delta) => {
     const L = b.pieces.reduce((a, i) => a + b.base.pieces[i].length, 0);
     if (!(L + delta > 0)) throw new D.CoreError('BAD_STRETCH', `Stretch: the run is ${L.toFixed(1)} m; it cannot be made ${(L + delta).toFixed(1)} m long`);
@@ -419,9 +419,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const res = stretchFn(b.base, which, L + delta, { keepRate: !!b.keepRate });
     return { doc: res.doc, changed: (res.pieces || b.pieces).map((piece) => ({ piece })) };
   };
-  // D520: THE GRAB THAT FOLLOWS (exo_memory/loop/plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md): the drag's delta is a SET { h, l, w, phi, c } from the panel's follow
+  // THE GRAB THAT FOLLOWS: the drag's delta is a SET { h, l, w, phi, c } from the panel's follow
   // (app/core/zonegrab.js), and the core brushes it in one step (src/core/sculpt.js brush `channels`). The pressed point lands on the pointer only when each channel's VALUE at the
-  // press changes by what follow asked, so each is divided by the value one unit of brush gives there (D335's reading, at s0 itself; once per base, channel and radius).
+  // press changes by what follow asked, so each is divided by the value one unit of brush gives there (reading, at s0 itself; once per base, channel and radius).
   const followRatios = new WeakMap();
   const followRatio = (b, ch) => {
     let m = followRatios.get(b.base); if (!m) followRatios.set(b.base, m = {});
@@ -439,16 +439,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const channels = {}; for (const [ch, v] of Object.entries(delta)) if (v !== 0) channels[ch] = v / followRatio(b, ch);
     if (!Object.keys(channels).length) return { doc: b.base, changed: [] };
     const res = brushFn(b.base, { mode: 'value', channels, s0: b.s0, r: b.r, sharp: !!b.sharp });
-    // D522: the grab is sharp by itself, so Sharp's own sentence (for the tick the user turns on) is not said at every step; any other note is
+    // the grab is sharp by itself, so Sharp's own sentence (for the tick the user turns on) is not said at every step; any other note is
     const note = res && res.note ? res.note.split(' · ').filter((x) => x !== SC.SHARP_NOTE).join(' · ') || null : null;
     return res ? { ...res, note } : res;
   };
-  // D421: SMOOTH, one channel's Laplacian relax under the window (design §3.7), the drag's delta its strength; the core returns a document or { doc, changed, note }
+  // SMOOTH, one channel's Laplacian relax under the window, the drag's delta its strength; the core returns a document or { doc, changed, note }
   const smoothed = (b, lambda) => { const res = smoothFn(b.base, coreChannel(b.channel), b.s0, b.r, lambda); return res && res.doc ? res : { doc: res, changed: [] }; };
-  /** D421 (P's review item 5): the road piece holding lap distance s, and how far into it: { piece, u }, or null. A run's handles read their values here, at the run's centre,
-   *  and its D335 ratio is read here too, because on an EVEN run the middle piece's own middle sits half a radius from the centre (measured: a two-piece run landed half the value asked). */
+  /**: the road piece holding lap distance s, and how far into it: { piece, u }, or null. A run's handles read their values here, at the run's centre,
+   *  and its ratio is read here too, because on an EVEN run the middle piece's own middle sits half a radius from the centre (measured: a two-piece run landed half the value asked). */
   const centreOf = (d, s) => { const off = pieceOffsets(d); for (let i = 0; i < d.pieces.length; i++) if (d.pieces[i].type === 'road' && s >= off[i] && s <= off[i] + d.pieces[i].length) return { piece: i, u: s - off[i] }; return null; };
-  /** D421: a tool's window: the selected RUN (or one piece) as s0 and r, or the radius on the road as given. { s0, r, pieces } or a refusal { message }. */
+  /** a tool's window: the selected RUN (or one piece) as s0 and r, or the radius on the road as given. { s0, r, pieces } or a refusal { message }. */
   const toolWindow = (d, { s0, r, piece, run }) => {
     const span = run || (Number.isInteger(piece) ? { from: piece, to: piece } : null);
     if (!span) return { s0, r, pieces: piecesIn(d, s0 - r, s0 + r) || [] };
@@ -458,9 +458,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const lo = off[span.from], hi = off[span.to] + d.pieces[span.to].length;
     return { s0: (lo + hi) / 2, r: (hi - lo) / 2, pieces: roads };
   };
-  // D421: THE RELEASE OF A ROUTE TOOL ON A CLOSED LAP (design §4.3 step 3). The drag ran on the lap OPEN (no close() per step); endBrush only starts this job and returns. The window's own
-  // close first (D242: only the window's pieces move, every other piece bit-identical), in the close worker when there is one; refused, the whole-lap close once with the window protected
-  // (the rate brush's old rule); refused again, the drag is DROPPED whole and the message says so (the user's call 2). The re-closed lap lands as the drag's present: ONE undo step.
+  // THE RELEASE OF A ROUTE TOOL ON A CLOSED LAP. The drag ran on the lap OPEN (no close() per step); endBrush only starts this job and returns. The window's own
+  // close first (only the window's pieces move, every other piece bit-identical), in the close worker when there is one; refused, the whole-lap close once with the window protected
+  // (the rate brush's old rule); refused again, the drag is DROPPED whole and the message says so (the user's call). The re-closed lap lands as the drag's present: ONE undo step.
   let releaseJob = null;
   const runCloseJob = (args) => {
     const onPage = () => { try { return { out: CJ.runClose(args) }; } catch (e) { if (e && e.name === 'CoreError') return { refused: e.message }; throw e; } };
@@ -472,35 +472,35 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
   };
   const releaseRoute = (b) => {
     const open = doc();
-    // P's review item 4: nothing changed (no step, or a step that left the open lap as it was): the lap as it was, no close and no undo step
+    // nothing changed (no step, or a step that left the open lap as it was): the lap as it was, no close and no undo step
     if (!b.changedPieces || !b.changedPieces.length || D.serialize(open) === D.serialize(b.base)) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: null });
     const win = b.changedPieces, entry = { b, job: null };
     releaseJob = entry;
     set({ brush: { ...b, closing: true }, message: null });
     const closes = (r) => !!(r && r.out && r.out.converged && r.out.doc);
     const stillOurs = () => releaseJob === entry && st.brush && st.brush.closing && st.history.present === open;
-    // D421c (the librarian's ruling on O's window measure, exo_memory/handback/p-d421c-window-O_2026-10-20.md): the closing equations hold the lap's SEAM joint, which only the
+    // The closing equations hold the lap's SEAM joint, which only the
     // two road pieces beside the start line can move, so a window away from the seam is refused however wide (+1 to +8 each side all refused on sculpt-frame row 3's lap, ~90 ms a
-    // try; it replaced P's item 8, the window grown by one piece each side). The tries: the window; the window and the lap's last road piece; and the first too; then the whole lap.
+    // try; it replaced the window grown by one piece each side). The tries: the window; the window and the lap's last road piece; and the first too; then the whole lap.
     // A try that is the one before it (the window already holds that piece) is not run again.
     const road = open.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), lastR = road[road.length - 1], firstR = road[0];
     const withSeam = (...more) => [...new Set([...win, ...more])].sort((x, y) => x - y);
-    // D467 (the librarian's ruling on E's D463 §6(2), the designer's call deferred to it at 19:00): AWAY FROM THE SEAM (a window holding neither the first nor the last road piece)
-    // the lap's START PIECES are tried first, the window left as the drag made it, so the user's bend is kept whole (E's measure: 100% kept, against 51-55% by the window tries,
-    // which re-solve the bent piece). This reverses D421c's window-first order there, as ruled. At the seam the tries are D421c's, unchanged.
-    // D467 RE-RULED (C's review): that try is taken only when its result passes the bar (closejob.js barMiss: the road outside the window moves no further than the
-    // drag moved it, the start straight still fits, no new red); a miss is refused by name, CLOSE_BAR, and the tries below run as D421c ordered them.
+    // AWAY FROM THE SEAM (a window holding neither the first nor the last road piece)
+    // the lap's START PIECES are tried first, the window left as the drag made it, so the user's bend is kept whole (measured: 100% kept, against 51-55% by the window tries,
+    // which re-solve the bent piece). This reverses the window-first order there. At the seam the tries are the window's, unchanged.
+    // That try is taken only when its result passes the bar (closejob.js barMiss: the road outside the window moves no further than the
+    // drag moved it, the start straight still fits, no new red); a miss is refused by name, CLOSE_BAR, and the tries below run in the window order.
     const startTry = firstR !== lastR && !win.includes(firstR) && !win.includes(lastR) ? [firstR, lastR] : null;
     const tries = [...(startTry ? [startTry] : []), ...[win, withSeam(lastR), withSeam(lastR, firstR)].filter((w, k, all) => !k || w.length !== all[k - 1].length)];
     const whole = (rs) => runCloseJob({ doc: open, whole: true, edited: win }).then((r) => (closes(r) || r.cancelled ? r : { failed: [...rs, r] }));
-    // D467 re-ruled (C's review): the start-pieces try is taken only when its result passes the bar (closejob.js barMiss); a miss is a refusal like any other
+    // the start-pieces try is taken only when its result passes the bar (closejob.js barMiss); a miss is a refusal like any other
     const jobFor = (w) => (w === startTry ? { doc: open, window: w, bar: { base: b.base, edited: win } } : { doc: open, window: w });
     const attempt = (k, rs) => (k === tries.length ? whole(rs) : runCloseJob(jobFor(tries[k])).then((r) => (closes(r) ? { ...r, tried: tries[k] } : r.cancelled || !stillOurs() ? r : attempt(k + 1, [...rs, r]))));
     entry.promise = attempt(0, [])
       .then((r) => {
         if (r.cancelled || !stillOurs()) {   // dropped (Esc), or the document replaced meanwhile
           if (releaseJob !== entry) return st;   // Esc: cancelBrush has already cleared it
-          releaseJob = null;   // P's review item 2: the history was replaced under the job (adopt, newDoc, an open): the brush it held is cleared, so no tool stays refused
+          releaseJob = null;   // the history was replaced under the job (adopt, newDoc, an open): the brush it held is cleared, so no tool stays refused
           return st.brush && st.brush.closing ? set({ brush: null, message: 'the track changed while the lap was being closed again, so that re-close was dropped' }) : st;
         }
         releaseJob = null;
@@ -509,9 +509,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
           return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: `ROUTE_NO_CLOSE: the lap could not be closed again after this ${b.tool}, so the drag was dropped and the track is as it was (the window: ${why})` });
         }
         const closed = r.out.doc, h = D.endDrag(D.dragTo(st.history, closed));
-        const byStart = !!startTry && r.tried === startTry;   // D467: the start pieces closed it, so the drag is as the user made it, and those pieces moved
-        const said = byStart ? startMovedWords(b.tool, r.out.report) : closedAgainWords(b.tool, keptShare(b.base, open, closed, win, b.tool), r.out.report);   // D464: a drag the close took back is said, not only "closed again"
-        const keptBend = byStart ? Object.freeze({ doc: closed, pieces: Object.freeze([...startTry]) }) : null;   // D467: the preview hatches these pieces while this is the document
+        const byStart = !!startTry && r.tried === startTry;   // the start pieces closed it, so the drag is as the user made it, and those pieces moved
+        const said = byStart ? startMovedWords(b.tool, r.out.report) : closedAgainWords(b.tool, keptShare(b.base, open, closed, win, b.tool), r.out.report);   // a drag the close took back is said, not only "closed again"
+        const keptBend = byStart ? Object.freeze({ doc: closed, pieces: Object.freeze([...startTry]) }) : null;   // the preview hatches these pieces while this is the document
         return set({ history: h, ...resolvedOf(closed), brush: null, dirty: true, lastEdited: win, keptBend, lastStep: { op: `brush:${b.tool}:close`, ms: now() - entry.t0 }, ...ok(said) });
       }, (e) => {
         if (!stillOurs()) { if (releaseJob === entry) { releaseJob = null; if (st.brush && st.brush.closing) return set({ brush: null }); } return st; }
@@ -522,8 +522,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return st;
   };
 
-  // D335: what a Sculpt drag really gives at the piece's middle per unit of delta. The brush adds its delta to the control points under a falloff, so the VALUE at the middle peaks a little under
-  // the delta (0.995 of it on a 100 m piece): a bank drag to 180 left 179.10 while the handle said 180.00. The brush is linear (E's value mode is this same sculpt), so one unit run on the drag's base gives the ratio; the drag's
+  // what a Sculpt drag really gives at the piece's middle per unit of delta. The brush adds its delta to the control points under a falloff, so the VALUE at the middle peaks a little under
+  // the delta (0.995 of it on a 100 m piece): a bank drag to 180 left 179.10 while the handle said 180.00. The brush is linear (the core's value mode is this same sculpt), so one unit run on the drag's base gives the ratio; the drag's
   // delta is divided by it and lands on the value asked for. Worked out once a drag (cached on its base document); 1 where it cannot be read.
   const sculptRatios = new WeakMap();
   const sculptRatio = (b) => {
@@ -539,9 +539,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     return (m[id] = k);
   };
 
-  // D385: the RIGHT edge er beside the left (e) in headState and pieceState, so the panel's "right edge °" shows its own side (the panel cannot read the document:
-  // src/core/document.js pulls node's fs, D263). Where the document has no er, the right follows the left, as src/core/extend.js makes it
-  /** D421: open a TOOL drag: resolve the tool, its channel and family; the window; the guard by family. */
+  // the RIGHT edge er beside the left (e) in headState and pieceState, so the panel's "right edge °" shows its own side (the panel cannot read the document:
+  // src/core/document.js pulls node's fs). Where the document has no er, the right follows the left, as src/core/extend.js makes it
+  /** open a TOOL drag: resolve the tool, its channel and family; the window; the guard by family. */
   const openTool = ({ tool, channel, s0, r, sharp, piece, run, keepRate }) => {
     const T = SCULPT_TOOLS[tool];
     if (!T) return set({ message: `BAD_TOOL: "${tool}" is not a Sculpt tool (${Object.keys(SCULPT_TOOLS).join(', ')})` });
@@ -552,16 +552,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (T.mode === 'stretch' && !stretchFn) return set({ message: 'NOT_YET: Stretch needs the core\'s stretch (D421 Part 1)' });
     if (T.mode === 'smooth' && !smoothFn) return set({ message: 'NOT_YET: Smooth needs the core\'s smooth (D421 Part 1)' });
     const d = doc();
-    if (T.mode === 'stretch' && !Number.isInteger(piece) && !run) {   // P's review item 1: the piece under the brush, as B's hint says
+    if (T.mode === 'stretch' && !Number.isInteger(piece) && !run) {   // the piece under the brush, as the hint says
       const c = Number.isFinite(s0) ? centreOf(d, s0) : null;
       if (!c) return set({ message: 'Stretch: there is no road under the brush to stretch' });
       piece = c.piece;
     }
     const w = toolWindow(d, { s0, r, piece, run });
     if (w.message) return set({ message: w.message });
-    // ROUTE on a CLOSED lap: the drag runs on the lap OPEN, so the brush never closes it per step (design §4.3); the release closes it again
+    // ROUTE on a CLOSED lap: the drag runs on the lap OPEN, so the brush never closes it per step; the release closes it again
     const closedRoute = family === 'route' && d.closed, base = closedRoute ? Object.freeze({ ...d, closed: false }) : d;
-    // the guard by family: SHAPE keeps D244b's (every step and at the end); local and route have none
+    // the guard by family: SHAPE keeps the shape guard (every step and at the end); local and route have none
     const guard = family === 'shape' ? { sculpt: true, baseResolved: st.resolved, sculptPiece: Number.isInteger(piece) && !run ? piece : undefined, ...(run ? { ratioAt: centreOf(d, w.s0) || undefined } : {}) } : {};
     const mode = T.mode === 'smooth' ? 'smooth' : T.mode;
     return attempt(() => set({
@@ -577,7 +577,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     subscribe(f) { subs.add(f); return () => subs.delete(f); },
     brushModes: () => BRUSH_MODES.filter((m) => m !== 'local' || !!brushFn),
     /**
-     * D244b, SCULPT (the user, 09:17: "a separate mode to sculpt pieces once they are already put down, so they don't change the structure of the rest of the track, it's mostly
+     * SCULPT (the user, 09:17: "a separate mode to sculpt pieces once they are already put down, so they don't change the structure of the rest of the track, it's mostly
      * just banking and cupping tweaks"). On: the brush offers only sculptChannels() and every step is checked against the centreline; beginSculpt reshapes the ONE selected road piece
      * (or `piece`) in place, with the brush centred on it and as wide as it is, so the joints are untouched and stay C1; one drag is one undo step.
      */
@@ -586,7 +586,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     beginSculpt({ channel, piece, sharp = false, tool, keepRate = false, from, to } = {}) {
       if (!st.sculpt) return set({ message: 'SCULPT_OFF: turn Sculpt on first' });
       const d = doc(); let i = piece;
-      // D421: a RUN given as from..to (B's page, the handles on a run): the run is the window; a tool's family sets the guard, and with no tool it is a shape channel's, guarded as D244b
+      // a RUN given as from..to (the page's handles on a run): the run is the window; a tool's family sets the guard, and with no tool it is a shape channel's, guarded as shape
       if (Number.isInteger(from) && Number.isInteger(to) && from !== to) {
         if (from < 0 || to >= d.pieces.length || from > to) return set({ message: `SCULPT_PIECE: pieces ${from} to ${to} are not a run of this track` });
         if (tool !== undefined) return api.beginBrush({ tool, run: { from, to }, sharp, keepRate });
@@ -595,7 +595,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         if (st.brush) return set({ message: 'a brush drag is already open' });
         return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode: 'rate', channel, s0: w.s0, r: w.r, sharp: !!(sharp && brushFn), base: d, delta: 0, pieces: w.pieces, baseHistory: st.history, sculpt: true, baseResolved: st.resolved, sculptPiece: undefined, ratioAt: centreOf(d, w.s0) || undefined }, message: null }));
       }
-      // D421: with a tool, the window may be the selected RUN (design §3.6): the run, centred on its middle, as wide as it; the selection's longWay rule already keeps it inside the lap
+      // with a tool, the window may be the selected RUN: the run, centred on its middle, as wide as it; the selection's longWay rule already keeps it inside the lap
       if (tool !== undefined && i === undefined) {
         const s = st.selection; if (!s || s.base !== d) return set({ message: 'select a piece or a run first: click it on the track' });
         if (s.from !== s.to) return api.beginBrush({ tool, run: { from: s.from, to: s.to }, sharp, keepRate });
@@ -611,7 +611,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     sculptInfo() {
       const s = st.selection, d = doc();
       if (!st.sculpt || !s || s.base !== d) return null;
-      // D421: a RUN's handles stand on its middle road piece (design §3.6); one piece is the run of one
+      // a RUN's handles stand on its middle road piece; one piece is the run of one
       let m = Math.floor((s.from + s.to) / 2); if (!d.pieces[m] || d.pieces[m].type !== 'road') { m = -1; for (let k = s.from; k <= s.to; k++) if (d.pieces[k] && d.pieces[k].type === 'road' && (m < 0 || Math.abs(k - (s.from + s.to) / 2) < Math.abs(m - (s.from + s.to) / 2))) m = k; }
       const P = m >= 0 ? d.pieces[m] : null; if (!P || P.type !== 'road') return null;
       const at = (ch, u) => D.channelAt(P, ch, u).v, mid = P.length / 2;
@@ -623,8 +623,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     sculptTo: (delta) => api.brushTo(delta),
     endSculpt: () => api.endBrush(),
     /**
-     * D258, THE FREE JUMP (the user: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error driving it
-     * themselves"; the core is src/core/jump.js, E's). jump(extendOpts) is the Jump button: the current piece placed as Extend would place it (extendOpts: what Extend takes, or null to take off from the
+     * THE FREE JUMP (the user: "instead of clicking extend, it says jump ... it then lets the user move around a blank straight piece ... through testing in the game trial and error driving it
+     * themselves"; the core is src/core/jump.js). jump(extendOpts) is the Jump button: the current piece placed as Extend would place it (extendOpts: what Extend takes, or null to take off from the
      * track's end as it is), then a free flight to a default landing (40 m ahead, the same height, lined up) and a 60 m straight landing: ONE undo step. The core refuses by name (NO_TAKEOFF, CLOSED,
      * JUMP_AFTER_JUMP, BAD_FLIGHT, ...) and the message is that refusal in plain words (app/core/jumpwords.js). candidateJump is the ghost of it for the preview (flagged `jump`, so the
      * Extend handles stay off it); it throws the core's CoreError, which the panel puts through the same words.
@@ -665,14 +665,14 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return attempt(() => set({ history: D.endDrag(st.history), landingDrag: null, lastEdited: null }));
     },
 
-    /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute); `turnDeg` (D331 B, the turn field
+    /** EXTEND at the build head: one new piece continuing the last (src/core/extend.js). `targets` set channels (absolute); `turnDeg` (B, the turn field
      *  read as a corner) makes the piece turn exactly that many degrees and end straight (src/core/turnby.js extendCorner). */
     extend: (opts) => commit('extend', () => TB.extendCorner(doc(), opts), { lastEdited: [doc().pieces.length] }),
-    /** D271 LEVEL: extend with the fields' piece, its climb solved so it ends straight and level (pitch 0); src/core/level.js. One undo step, like extend. */
+    /** LEVEL: extend with the fields' piece, its climb solved so it ends straight and level (pitch 0); src/core/level.js. One undo step, like extend. */
     extendLevel: (opts) => commit('level', () => { noCorner(opts, 'Level', true); return LV.extendLevel(doc(), opts); }, { lastEdited: [doc().pieces.length] }),
-    /** D271 TO FLOOR: …and on the floor (height 0). Too short a piece is refused by name with the length that works (FLOOR_TOO_SHORT), as the message. */
+    /** TO FLOOR: …and on the floor (height 0). Too short a piece is refused by name with the length that works (FLOOR_TOO_SHORT), as the message. */
     extendToFloor: (opts) => commit('toFloor', () => { noCorner(opts, 'To floor', true); return LV.extendToFloor(doc(), opts); }, { lastEdited: [doc().pieces.length] }),
-    /** D280 TURN BY: extend with the fields' piece, its turn solved so it turns EXACTLY `deg` degrees (+ = left) and ends straight (turn rate 0); src/core/turnby.js.
+    /** TURN BY: extend with the fields' piece, its turn solved so it turns EXACTLY `deg` degrees (+ = left) and ends straight (turn rate 0); src/core/turnby.js.
      *  One undo step, like extend; too short a piece is refused by name with the length that works (TURN_TOO_SHORT), as the message. */
     extendTurnBy: (opts, deg) => commit('turnBy', () => TB.extendTurnBy(doc(), opts, (Number(deg) * Math.PI) / 180), { lastEdited: [doc().pieces.length] }),
     /** TURN TO GRID (2026-10-12, the user: "its hard to get a straight aligned to the grid from a free flowing spiral turn"): the heading at the end of the track,
@@ -685,11 +685,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (Math.abs(turn) < 1e-6) return set({ message: `the end is already on the ${stepDeg}° grid (heading ${api.endHeadingDeg().toFixed(2)}°): use Straight` });
       return api.extendTurnBy(opts, turn);
     },
-    /** D282 SHARP: a corner of `deg` degrees (+ = left) at radius R m, ramped in and out over `ramp` m, exiting dead straight; src/core/sharp.js. Its two pieces
+    /** SHARP: a corner of `deg` degrees (+ = left) at radius R m, ramped in and out over `ramp` m, exiting dead straight; src/core/sharp.js. Its two pieces
      *  are ONE undo step; a radius too tight for the width is refused by name with the tightest that works (SHARP_TOO_TIGHT), as the message, and nothing changes. */
     extendSharp: (opts, { deg, R, ramp }) => commit('sharp', () => SH.extendSharp(doc(), opts, { angle: (Number(deg) * Math.PI) / 180, R: Number(R), ramp: Number(ramp) }), { lastEdited: [doc().pieces.length, doc().pieces.length + 1] }),
     /**
-     * REMOVE THE HEAD (Ctrl+Backspace, the piece builder's key moved to this page, D239 note): the last piece goes, as ONE undo step. An
+     * REMOVE THE HEAD (Ctrl+Backspace, the piece builder's key moved to this page): the last piece goes, as ONE undo step. An
      * empty track is refused by name. On a closed loop the loop is OPEN again (what Close changed in the other pieces stays; Ctrl+Z puts
      * the closed lap back whole), and the message says so.
      */
@@ -702,23 +702,23 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     /** The GHOST of an extension: the track as it would be, not committed (the preview's 't180-ghost' candidate). */
     candidate: (opts, { coarse = false } = {}) => {
-      if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts); return { segments: segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }), closed: false, start: startOf(dc) }; }   // D404: the drag's ghost
+      if (coarse) { const n0 = doc().pieces.length, dc = TB.extendCorner(doc(), opts); return { segments: segmentsOf(dc, { segMFor: (P, pi) => (pi >= n0 && P.type === 'road' ? ghostSegM(P) : undefined) }), closed: false, start: startOf(dc) }; }   // the drag's ghost
       const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d), closed: false, start: startOf(d) };
     },
     /** The ghost's readout: what extend(opts) would place, before it is placed (A: the same numbers as after). Throws on bad fields. */
     candidateReadout: (opts) => RD.candidateReadout(doc(), opts),
-    /** D331 A: what easing the ghost's piece out would add (readout.js candidateCorner), apart from candidateReadout, whose numbers are the placed piece's. Through the
+    /** what easing the ghost's piece out would add (readout.js candidateCorner), apart from candidateReadout, whose numbers are the placed piece's. Through the
      *  shell, because the panel loads in the webview with no node built-in and the core's readout pulls src/core/document.js (core-pieces-ui.test.js row 17). */
     candidateCorner: (opts) => RD.candidateCorner(doc(), opts),
     /**
      * The head's END state in the core's units: kh, kv (rad/m), phi (rad), w (m), c (degrees; a legacy piece's is the edge it renders).
-     * And the cross-section channels (D225, app/core/xsec.js): the edge angle and the tube sweep in degrees, the edge start as a share,
+     * And the cross-section channels (app/core/xsec.js): the edge angle and the tube sweep in degrees, the edge start as a share,
      * each the default (0, 0.64, 0) where the document has no such channel: a piece without an edge, a pre-/4 document, or a core without them.
      * An empty track gives the first piece's START (extend.js's own: bowl, level, straight, WIDTHS.bowl, the edge that renders). Read only.
      */
     headState() {
       const e = D.endState(doc());
-      // the head piece: the last ROAD piece (a flight carries the road's state), whose `tube` says whether the sweep is the head's (RULING 2)
+      // the head piece: the last ROAD piece (a flight carries the road's state), whose `tube` says whether the sweep is the head's
       const roads = doc().pieces.filter((p) => p.type === 'road'), headIsTube = !!(roads.length && roads[roads.length - 1].tube);
       if (e) return withRight({ kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, headIsTube) }, e);
       const fam = 'bowl';   // extend.js: `family || (last ? last.family : 'bowl')`
@@ -732,14 +732,14 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const e = D.pieceEnd(P);
       return withRight({ kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, !!P.tube), length: P.length, tube: !!P.tube }, e);
     },
-    /** D519 Part 2: what the ROAD piece at track distance `s` is, for Sculpt's zone grab (app/core/zonegrab.js zoneAt's `piece`): { id, cup, edge, tube, family, s (an edge
+    /** what the ROAD piece at track distance `s` is, for Sculpt's zone grab (app/core/zonegrab.js zoneAt's `piece`): { id, cup, edge, tube, family, s (an edge
      *  piece's edge start there, else null), walls (a half-pipe whose wall rise there is above 0) }, or null where there is no road piece. Read only. */
     zoneInfo(s) {
       const d = doc(), c = Number.isFinite(s) ? centreOf(d, s) : null; if (!c) return null;
       const P = d.pieces[c.piece];
       return { id: P.id, cup: !!P.cup, edge: !!P.edge, tube: !!P.tube, family: P.family, s: P.edge ? D.channelAt(P, 's', c.u).v : null, walls: P.family === 'half-pipe' && D.channelAt(P, 'r', c.u).v > 0 };
     },
-    /** D519 Part 2: why a brush on `channel` centred at s0 with radius r would be refused because a piece under it lacks that channel (src/core/sculpt.js checkReach's
+    /** why a brush on `channel` centred at s0 with radius r would be refused because a piece under it lacks that channel (src/core/sculpt.js checkReach's
      *  rule), in the hover's words, or null. The window is the radius as given (the brush may widen it; a press then says why in the message line). Read only. */
     zoneRefusal(channel, s0, r) {
       const flag = D.OPTIONAL[channel]; if (!flag || !Number.isFinite(s0) || !(r > 0)) return null;
@@ -749,7 +749,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** Every placed piece's readout, in order: computed ONCE per document (the labels read it every frame). */
     // 2026-10-14 (ELYSIUM: ~260 ms of every placed piece on the window's thread, every one of the 43 labels read again): a ROAD piece's readout reads
     // its own piece, the pose entering it and its corners alone, so a piece whose object, entering pose and corners are the ones it had keeps its readout.
-    // D421c (row 3's re-close frame, 85-91 ms of it here): the readouts are read all at once (src/core/readout.js pieceReadouts: the document checked once,
+    // (row 3's re-close frame, 85-91 ms of it here): the readouts are read all at once (src/core/readout.js pieceReadouts: the document checked once,
     // the pose carried on), and the carry is by POSE, not by the pieces before it, so a Grab's window no longer reads every piece after it again.
     // (A history read back from its file gives each step its own start object: the poses compare by value, so that carries too.)
     pieceReadouts() {
@@ -761,7 +761,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /**
      * THE BRUSH, one drag = one undo step. beginBrush fixes the brush (its mode, channel, centre s0 and radius r, all on the
      * document as it was when the drag began); brushTo(delta) applies the WHOLE delta to that base, so a drag never
-     * accumulates rounding; endBrush commits. mode 'local' is E's height/lateral brush (channel 'height' | 'lateral');
+     * accumulates rounding; endBrush commits. mode 'local' is the core's height/lateral brush (channel 'height' | 'lateral');
      * 'rate' is src/core/sculpt.js on one channel (kh, kv, phi, w, r).
      */
     beginBrush({ mode = brushFn ? 'local' : 'rate', channel, s0, r, sharp = false, piece, tool, run, keepRate = false }) {
@@ -769,18 +769,18 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!BRUSH_MODES.includes(mode)) return set({ message: `brush mode "${mode}" is not one of ${BRUSH_MODES.join(', ')}` });
       if (mode === 'local' && !brushFn) return set({ message: 'the height/lateral brush is not in this build yet (E, p-d186-brush-E): use the rate brush' });
       if (st.brush) return set({ message: 'a brush drag is already open' });
-      // D185's sculpt cannot re-close; E's rate brush does, so this guard is only for the fallback
+      // the older sculpt cannot re-close; the core's rate brush does, so this guard is only for the fallback
       if (!brushFn && doc().closed && mode === 'rate' && (channel === 'kh' || channel === 'kv')) return set({ message: 'the loop is closed: a heading or pitch rate brush would open it. Undo the close, or brush height, bank or width' });
-      // D244b: in Sculpt only the shape channels, as a value brush; anything that would steer the track is refused by name before the drag opens
+      // in Sculpt only the shape channels, as a value brush; anything that would steer the track is refused by name before the drag opens
       if (st.sculpt && (mode !== 'rate' || !SCULPT_CHANNELS.includes(channel))) return set({ message: `SCULPT_CHANNEL: Sculpt offers only the shape channels (${SCULPT_CHANNELS.join(', ')}); ${mode === 'local' ? `the ${channel} brush` : `"${channel}"`} would move the track after it. Turn Sculpt off to use it` });
       const sculpting = st.sculpt ? { sculpt: true, baseHistory: st.history, baseResolved: st.resolved, sculptPiece: piece } : {};
       return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode, channel, s0, r, sharp: !!(sharp && brushFn), base: doc(), delta: 0, ...sculpting }, message: null }));
     },
     /**
-     * D520, THE GRAB THAT FOLLOWS (the user, 15:12: "the mouse click gives a singular point you then drag to sculpt the track simple as that"): a Sculpt drag whose delta is a SET of
+     * THE GRAB THAT FOLLOWS (the user, 15:12: "the mouse click gives a singular point you then drag to sculpt the track simple as that"): a Sculpt drag whose delta is a SET of
      * value channels { h, l, w, phi, c } (the panel's follow, app/core/zonegrab.js), brushed in one step on the press's window [s0 − r, s0 + r]; brushTo takes the set, endBrush is one
      * undo step, Esc drops it. Moves only the road under the window, as Grab always did (no centreline guard: h and l are the offsets). Refused by name with Sculpt off, without the
-     * core's brush, with a drag open, or off the road. D522 (plan_d522_grab_one_side_within_the_radius decision 2; the user, 15:39: "i noticed the rest of the track behind it
+     * core's brush, with a drag open, or off the road. (The user, 15:39: "i noticed the rest of the track behind it
      * changed, can we somehow isolate the change"): the grab is SHARP by itself (src/core/sculpt.js: the knots under the window refined first, so the brush acts at the radius
      * asked instead of widening it to 3 knot spans); `sharp` is read no more, so the strip's Sharp tick keeps governing the other tools only.
      */
@@ -795,56 +795,56 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     brushTo(delta0) {
       const b = st.brush; if (!b) return set({ message: 'no brush drag is open' });
       if (b.closing) return set({ message: 'the lap is being closed again after this drag: a moment' });
-      const wrapped = b.channel === 'phi' ? bankWithinTurn(b, delta0) : delta0;   // D259: the bank at the drag's centre keeps within one turn, its sign kept
-      const delta = b.sculpt && (Number.isInteger(b.sculptPiece) || b.ratioAt) ? wrapped / sculptRatio(b) : wrapped;   // D335: so the middle of a Sculpt piece reads the value asked for
+      const wrapped = b.channel === 'phi' ? bankWithinTurn(b, delta0) : delta0;   // the bank at the drag's centre keeps within one turn, its sign kept
+      const delta = b.sculpt && (Number.isInteger(b.sculptPiece) || b.ratioAt) ? wrapped / sculptRatio(b) : wrapped;   // so the middle of a Sculpt piece reads the value asked for
       return attempt(() => {
         const t0 = now(), res = brushed(b, delta), d = res.doc, r = resolvedOf(d), ms = now() - t0;
-        // D244b: the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
-        if (b.sculpt) { const moved = CL.routeMovedDetail(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `Sculpt can't do that: ${CL.plainWhy(moved)}. The drag stays at its last good step.`); }   // (D243 F3: the reason in plain words, not the internal field)
-        // the radius the brush really used (E's brush widens a narrow one; the chair's RULING 2: always shown), and any note of its
-        // the radius really used: E's brush reports it as radiusUsed (sculpt.js), shown whenever it widened (ruling 2)
+        // the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
+        if (b.sculpt) { const moved = CL.routeMovedDetail(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `Sculpt can't do that: ${CL.plainWhy(moved)}. The drag stays at its last good step.`); }   // (F3: the reason in plain words, not the internal field)
+        // the radius the brush really used (the core's brush widens a narrow one; always shown), and any note of its
+        // the radius really used: the core's brush reports it as radiusUsed (sculpt.js), shown whenever it widened
         const used = Number.isFinite(res.radiusUsed) ? res.radiusUsed : Number.isFinite(res.rUsed) ? res.rUsed : null;
         const widened = used !== null && used > b.r + 1e-9 ? `brush widened to ${used.toFixed(0)} m (asked ${b.r.toFixed(0)} m), so the track outside it stays exactly as it was` : null;
-        // a rate brush on a closed lap re-closes (E): a re-close that failed left the track OPEN, and says so
+        // a rate brush on a closed lap re-closes: a re-close that failed left the track OPEN, and says so
         const reclose = res.close && !res.close.converged ? `the loop could not re-close after this brush, so it is open now: ${res.close.report}` : null;
-        // D244b: a Sculpt drag on a piece shorter than the brush's smallest window (120 m) is "widened" by E's rule, but the change stays inside the piece (measured: the neighbours are the very same objects),
+        // a Sculpt drag on a piece shorter than the brush's smallest window (120 m) is "widened" by the core's rule, but the change stays inside the piece (measured: the neighbours are the very same objects),
         // so that note is only worth saying when a piece other than the sculpted one really changed
         const spilled = b.sculpt && Number.isInteger(b.sculptPiece) ? (res.changed || []).filter((c) => c.piece !== b.sculptPiece).map((c) => c.piece) : [];
         const note = b.sculpt && Number.isInteger(b.sculptPiece) && !spilled.length ? null : [widened, res.note, reclose, spilled.length ? `Sculpt also changed ${spilled.map((i) => d.pieces[i].id).join(', ')} at the joint` : null].filter(Boolean).join(' · ') || null;
         const h = D.dragTo(st.history, d);
-        // D244b: a Sculpt step keeps the same pieces in the same places, so the piece the handles are on stays selected (a selection otherwise belongs to the document it was made on);
-        // 0.4.29: so does a grab's step (beginFollow), or its run's dots vanished after the first step (O's review, item 2)
+        // a Sculpt step keeps the same pieces in the same places, so the piece the handles are on stays selected (a selection otherwise belongs to the document it was made on);
+        // 0.4.29: so does a grab's step (beginFollow), or its run's dots vanished after the first step
         const keep = (b.sculpt || b.mode === 'follow') && st.selection ? { selection: Object.freeze({ ...st.selection, base: h.present }) } : {};
         return set({ history: h, ...r, ...keep, brush: { ...b, delta, rUsed: used, ...(b.tool ? { changedPieces: (res.changed || []).map((c) => c.piece) } : {}) }, dirty: true, lastStep: { op: `brush:${b.mode}`, ms }, message: note, messageKind: note ? 'ok' : null });
       });
     },
     endBrush() {
       const b = st.brush; if (!b) return st;
-      if (b.closing) return st;   // D421: its re-close is already running
-      if (b.family === 'route' && b.closedBase) return releaseRoute(b);   // D421: the pointer-up only starts the job
-      // D244b: the direct check when a Sculpt drag ends: both centrelines built and compared bit for bit; a drag that moved it is dropped whole
+      if (b.closing) return st;   // its re-close is already running
+      if (b.family === 'route' && b.closedBase) return releaseRoute(b);   // the pointer-up only starts the job
+      // the direct check when a Sculpt drag ends: both centrelines built and compared bit for bit; a drag that moved it is dropped whole
       if (b.sculpt) { const moved = CL.pathMoved(CL.snapshot(b.baseResolved), st.resolved); if (moved) return set({ history: b.baseHistory, ...resolvedOf(b.baseHistory.present), brush: null, message: 'SCULPT_MOVES_CENTRELINE: Sculpt dropped this drag: when it ended, the track\'s centreline had moved (checked point by point), so the track is as it was.' }); }
       // the brushed pieces are what close() goes round (the brush's window)
       // (endDrag keeps the same present, so a Sculpt selection, re-based at each step, still belongs to it)
       return attempt(() => set({ history: D.endDrag(st.history), brush: null, lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }));
     },
     /** One brush stroke with no drag (keys, tests): one undo step. */
-    /** D421: the radius changed during an open drag (the wheel, [ and ]): it sets the drag's r and takes NO step itself. The page drives the re-run with its brushTo in the same
-     *  frame (B's page; P's review item 8), which applies the whole delta to the SAME base at the new r, so nothing accumulates and a frame steps once. */
+    /** the radius changed during an open drag (the wheel, [ and ]): it sets the drag's r and takes NO step itself. The page drives the re-run with its brushTo in the same
+     *  frame (the page), which applies the whole delta to the SAME base at the new r, so nothing accumulates and a frame steps once. */
     brushRadius(r) {
       const b = st.brush; if (!b) return set({ message: 'no brush drag is open' });
       if (b.closing) return set({ message: 'the lap is being closed again after this drag: a moment' });
       if (!(Number(r) > 0)) return set({ message: `the brush radius must be more than 0 m (got ${r})` });
       return set({ brush: { ...b, r: Number(r) }, message: null });
     },
-    /** D421: Esc drops an open drag: the document as it was when the drag began, and no undo step; a re-close still running is dropped with it. */
+    /** Esc drops an open drag: the document as it was when the drag began, and no undo step; a re-close still running is dropped with it. */
     cancelBrush() {
       const b = st.brush; if (!b) return st;
       if (releaseJob) { const j = releaseJob; releaseJob = null; if (j.job) try { j.job.cancel(); } catch (e) { /* gone already */ } }
       const h = b.baseHistory || D.endDrag({ ...st.history, present: st.history.dragBase });
       return set({ history: h, ...resolvedOf(h.present), brush: null, message: null });
     },
-    /** D421: the release re-close of a route tool on a closed lap, as a promise of the state when it has landed (tests; the page reads the state). */
+    /** the release re-close of a route tool on a closed lap, as a promise of the state when it has landed (tests; the page reads the state). */
     brushRelease: () => (releaseJob && releaseJob.promise) || Promise.resolve(st),
     sculptOnce: (b) => commit(`brush:${b.mode || 'rate'}`, () => brushed({ mode: 'rate', ...b, base: doc() }, b.delta).doc, { lastEdited: piecesIn(doc(), b.s0 - b.r, b.s0 + b.r) }),
 
@@ -854,7 +854,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (lastRoad(doc()) < 0) return set({ message: 'there is no road to close yet: extend first' });
       return attempt(() => {
         // the correction goes round the stretch edited last AND the user's straights: close.js spreads it over every piece it
-        // is not told to avoid, and left alone it bent a 300 m straight to a 370 m radius (measured, D186 C). Guarded, the
+        // is not told to avoid, and left alone it bent a 300 m straight to a 370 m radius (measured). Guarded, the
         // straight keeps |κ| ≤ 1.2e-4 rad/m on that lap: nearly, not exactly, straight (the joints tie it to its neighbours)
         const edited = wholeLapEdited(doc());
         const t0 = now(), res = close(doc(), { edited });
@@ -865,11 +865,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
 
     /**
-     * D339, CLOSE IS ONE PRESS (the ruling: "one single press and the algo runs it"; the choice of how and the preview step are gone). The core runs every way of
+     * CLOSE IS ONE PRESS ("one single press and the algo runs it"; the choice of how and the preview step are gone). The core runs every way of
      * closing the loop it has and picks one (app/core/closejob.js runCloseBest): the closed lap must PROVE and add no new red; then no new road; then the least
      * movement. It is applied AT ONCE as one undo step, and the message says what it did ("closed: bent the last 2 pieces (508 m) by up to 4.0 m"); the lap proof
      * is the guard the preview's Apply used to be. When none proves, nothing changes and the message says why, with the closest way's reason.
-     * The document AS IT IS NOW goes to track-backups first (backupNow 'pre-close', the D239 amendment: hours of work on TEST 1 were lost to one Close, with no
+     * The document AS IT IS NOW goes to track-backups first (backupNow 'pre-close': hours of work on TEST 1 were lost to one Close, with no
      * copy from before it), so a Close can be undone after the app is closed; a copy that fails refuses the close by name, and nothing changes.
      * With a closeRunner (the page's Web Worker) the work is off the window's thread: state.closePending until it lands (an edit meanwhile drops it by name;
      * cancelClose stops it). A runner that cannot start, or a job that fails, closes on the page instead. Returns a promise of the state when it has landed.
@@ -908,7 +908,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       });
     },
     cancelClose: () => { abortClose(); return set({ closePending: null, message: null }); },
-    /** D343: the live checker's finished answer for document `d` (its reds, and whether CSP was on), kept for a press on that very document. */
+    /** the live checker's finished answer for document `d` (its reds, and whether CSP was on), kept for a press on that very document. */
     noteCheck(d, { csp = true, red = null } = {}) { if (d && typeof d === 'object' && Array.isArray(red)) checked.set(d, { csp: !!csp, red: red.map((x) => ({ reason: x.reason, s: x.s ?? x.s0 ?? 0 })) }); },
     /**
      * The overlap check of a preview (a closeProposal or a deleteProposal), for the panels: { status: 'done' | 'checking' | 'failed' | 'none', result, error, via, elapsedMs }. A preview made with no runner
@@ -922,7 +922,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
 
     /**
-     * D240, SAVED PIECES, THE UI HALF (the core is src/core/piece.js; the user: "can we keep only the equation mode? And then we can save pieces from that we make", and
+     * SAVED PIECES, THE UI HALF (the core is src/core/piece.js; the user: "can we keep only the equation mode? And then we can save pieces from that we make", and
      * 10:xx: "highlight/select pieces on the track; the selection offers Save as piece or Delete").
      *
      * SELECT: piece i (a click on the track), or with `extend` the run from the piece selected first to i (a shift-click). A selection belongs to the document it was made on:
@@ -933,9 +933,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       const d = doc();
       if (!Number.isInteger(i) || i < 0 || i >= d.pieces.length) return set({ message: `there is no piece ${i}: the track has pieces 0 to ${d.pieces.length - 1}` });
       const anchor = extend && st.selection && st.selection.base === d ? st.selection.anchor : i;
-      // D250 item 4 (the user: "Short way across start"): on a CLOSED lap a shift-click takes the SHORTER way round, by road length; across the start line it is from > to
+      // (the user: "Short way across start"): on a CLOSED lap a shift-click takes the SHORTER way round, by road length; across the start line it is from > to
       // (from..last, then 0..to), which src/core/piece.js saveRun keeps; a tie (within 1e-6 m: the lengths are decimal sums) stays the run that does not cross the line.
-      // A's look: the short way only where it CAN be kept. When the run across the line is refused (MIXED_RUN: a cup at one side and a plain piece at the other, as on
+      // the short way only where it CAN be kept. When the run across the line is refused (MIXED_RUN: a cup at one side and a plain piece at the other, as on
       // TEST 1; SEAM_RUN) and the run inside the lap can be saved, the inside run is selected, and the line says why (longWay)
       let from = Math.min(anchor, i), to = Math.max(anchor, i), longWay = null;
       if (d.closed && from !== to) {
@@ -956,7 +956,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     clearSelection: () => set({ selection: null, deleteProposal: null, cutProposal: null, bankProposal: null, message: null }),
     /**
-     * D261, GRIP of the selected pieces (the user: "change which piece has different grip"; the core is src/core/document.js setGrip, E's): `g` a whole percent 50 to 150 (a number or the field's
+     * GRIP of the selected pieces (the user: "change which piece has different grip"; the core is src/core/document.js setGrip): `g` a whole percent 50 to 150 (a number or the field's
      * text; anything else is refused in plain words, nothing changes). Only ROAD has grip, so a flight in the selection is left as it is. ONE undo step; the selection stays on the pieces.
      * 100 is AC's own road and writes no grip at all.
      */
@@ -1023,7 +1023,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /**
      * Where the cars start, for the panel and the preview: { spawns, firstLength, placed, check, notes, missing } from the hand-placed layout, or null when the
      * track has no spawns (or nothing resolves yet). `placed` is src/markers placeAll's: every marker with its world position, or an `error`.
-     * `{ auto: true }` (D285, the preview's drag marks) answers for the AUTOMATIC start too, the placement the export would make, so there is a line to grab.
+     * `{ auto: true }` (the preview's drag marks) answers for the AUTOMATIC start too, the placement the export would make, so there is a line to grab.
      */
     spawnsInfo(opts = {}) {
       const d = doc();
@@ -1038,7 +1038,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return info;
     },
     /**
-     * THE START, FOR DRAGGING (D285; the user: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars"): the road the
+     * THE START, FOR DRAGGING (the user: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars"): the road the
      * start sits on, in the path's own metres, so the preview can turn a pointer position into a place on the road. { path, starts, first: { id, s0, len }, roads:
      * [{ id, s0, s1 }] (every road piece, in lap order), spawns } or null when nothing resolves; `spawns` is the doc's block, or, on an automatic track, the block the
      * automatic layout comes to (what the first drag writes), or `error` says why it cannot (the automatic line is not on the first piece, where a hand-placed one must be).
@@ -1062,7 +1062,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return out;
     },
     /**
-     * A DRAG of the start (D285): beginSpawnsDrag opens it (on an automatic track it first writes the spawns the automatic layout comes to: "start placed by hand"),
+     * A DRAG of the start: beginSpawnsDrag opens it (on an automatic track it first writes the spawns the automatic layout comes to: "start placed by hand"),
      * spawnsDragTo(sp) sets the spawns block from the document as it was when the drag began, endSpawnsDrag is ONE undo step for the whole drag, conversion included.
      */
     beginSpawnsDrag() {
@@ -1092,7 +1092,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!s || s.base !== d) return null;
       let saveProblem = null;
       try { PC.saveRun(d, s.from, s.to, { name: 'selection' }); } catch (e) { if (e.name !== 'CoreError') throw e; saveProblem = e.message; }
-      const byId = new Map(d.pieces.map((P) => [P.id, P]));   // the selection's own pieces in lap order (D250: a run across a closed lap's start line is from > to)
+      const byId = new Map(d.pieces.map((P) => [P.id, P]));   // the selection's own pieces in lap order (a run across a closed lap's start line is from > to)
       return { from: s.from, to: s.to, count: s.ids.length, ids: s.ids, lengthM: s.ids.reduce((a, id) => a + (byId.get(id).type === 'road' ? byId.get(id).length : 0), 0), atEnd: s.to === d.pieces.length - 1, closed: !!d.closed, longWay: s.longWay || null, saveProblem };
     },
     async savePiece(name) {
@@ -1131,7 +1131,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!storage || typeof storage.openPiece !== 'function' || typeof storage.savePiece !== 'function' || typeof storage.deletePiece !== 'function') return set({ message: 'saved pieces are not available here' });
       let text, orig;
       try { orig = await storage.openPiece(from); text = PC.serialize({ ...PC.parse(orig), name: to }); } catch (e) { return set({ message: `could not rename the piece "${from}": ${e && e.message || e}` }); }
-      // A CASE-ONLY rename (Run to run; D240 follow-up, C's look F2): Windows names are case-blind, so "run" IS the file "Run" and saving under it is refused as a name in use. It is the same file: the new text goes
+      // A CASE-ONLY rename (Run to run): Windows names are case-blind, so "run" IS the file "Run" and saving under it is refused as a name in use. It is the same file: the new text goes
       // to a temporary name first, the old file is removed, the new name is written, the temporary one removed; a failure on the way puts the old file back (or keeps the temporary copy and says so), so the piece is never lost
       if (from !== to && from.toLowerCase() === to.toLowerCase()) {
         const tmp = `${to}-r`;
@@ -1201,7 +1201,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     cancelDelete: () => set({ deleteProposal: null, message: null }),
 
     /**
-     * D361, CUT THE SELECTED PIECES OUT (the user, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"). src/core/piece.js
+     * CUT THE SELECTED PIECES OUT (the user, 2026-10-17: "step 1 select and cut, two open ends, and then the user chooses how to connect them"). src/core/piece.js
      * cutRun takes them out and leaves the track OPEN at the gap, moving nothing kept (a closed lap is turned so the piece after the cut comes first). As the middle delete:
      * cutSelection PREVIEWS it (state.cutProposal; the track unchanged), applyCut copies the track to its backups first ('pre-cut'), refuses by name if that copy fails, and
      * commits ONE undo step; cancelCut drops it, and so does any change of the track or of the selection. No overlap check: nothing kept moves, so the cut adds no overlap.
@@ -1269,7 +1269,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     cancelBankSwing: () => set({ bankProposal: null, message: null }),
 
     /**
-     * D465, TRACK ▸ SMOOTH RAMPS: the track's bank, cup and edge ramps re-laid by the C2 quintic (src/core/smoothramps.js), so a track laid before 0.4.20 gets the
+     * TRACK ▸ SMOOTH RAMPS: the track's bank, cup and edge ramps re-laid by the C2 quintic (src/core/smoothramps.js), so a track laid before 0.4.20 gets the
      * smooth joints a new piece has; the route does not move. Only when asked: opening a track never does it. The track AS IT IS NOW goes to track-backups first
      * ('pre-smooth'), and a copy that fails refuses by name with nothing changed; then ONE undo step. An empty track, or one with no ramp to re-lay or none
      * that would change, is left as it is, and the message says so.
@@ -1291,9 +1291,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
 
     /**
-     * D473, TRACK ▸ BANK THE LAP: a lap that is already closed banked as Close banks the lap it closes (src/core/finish.js bankLapWith, D447), so a lap closed
+     * TRACK ▸ BANK THE LAP: a lap that is already closed banked as Close banks the lap it closes (src/core/finish.js bankLapWith), so a lap closed
      * before Close banked (a flat closer) gets its bank without being opened. The bank rolls the road about its centre line, so the route does not move: a result
-     * whose kh, kv or lengths differ is refused by name. The track AS IT IS NOW goes to track-backups first ('pre-bank', D477: it changes every curve on the lap and
+     * whose kh, kv or lengths differ is refused by name. The track AS IT IS NOW goes to track-backups first ('pre-bank', it changes every curve on the lap and
      * Undo lasts the session), and a copy that fails refuses by name with nothing changed; then ONE undo step. An open lap, or one with nothing to bank, is left as
      * it is, and the message says so; what the bank held back (the level rule's loops and steep ramps, a piece that would lean out, a flip) is said in plain words.
      */
@@ -1330,7 +1330,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     newDoc(name = 'untitled') { const d = D.createDoc(name); return set({ history: D.createHistory(d), ...resolvedOf(d), name: null, dirty: false, lastEdited: null, message: null, exportReds: null }); },
 
     /**
-     * A REAL TRACK AS A LOCAL EXAMPLE: D184's position fit (`tools/piecewise.cjs --write`, t180b.pieces/1) and the read it was
+     * A REAL TRACK AS A LOCAL EXAMPLE: the position fit (`tools/piecewise.cjs --write`, t180b.pieces/1) and the read it was
      * fitted from, both picked by the user from their own reads/ folder. It opens OPEN (close it with one click), with a fresh
      * history, unsaved. Another author's layout: it is never part of the program, and nothing here writes it anywhere.
      */
@@ -1346,9 +1346,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** The document as it exports and installs: its name is the one it was saved under (the Save field), else its own. */
     exportDoc() { const d = doc(); return st.name && st.name !== d.name ? { ...d, name: st.name } : d; },
     /**
-     * BUILD THE EXPORT, writing nothing (D239: the Export button and Install to AC both use it, so an installed track is the exported one,
+     * BUILD THE EXPORT, writing nothing (the Export button and Install to AC both use it, so an installed track is the exported one,
      * byte for byte): the start layout, then src/export/fromwords.js exportSegments through the exporter. A track that cannot export
-     * throws an ExportError with a code (OPEN_LOOP, NO_START_STRAIGHT, or the exporter's own, e.g. RED with .red). `opts.test` (D243a) is the
+     * throws an ExportError with a code (OPEN_LOOP, NO_START_STRAIGHT, or the exporter's own, e.g. RED with .red). `opts.test` is the
      * test export of an OPEN track (TEST_CLOSED on a closed one).
      */
     buildExport(opts = {}) {
@@ -1356,7 +1356,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       return exporter.runSegments(...api.exportArgs(opts));
     },
     /**
-     * D437b (the user's white window, 2026-10-22: the export ran out of memory on the page's own thread and took the page with it): buildExport's export, run by
+     * (the user's white window, 2026-10-22: the export ran out of memory on the page's own thread and took the page with it): buildExport's export, run by
      * exporter.runSegmentsAsync in a process of its own when the page can give it one (app/export/exportrunner.js), so a failure there ends with a message and the page
      * stays drawn; on the page where it cannot. The track is read NOW, when it is asked for: an edit made while it runs is not in it. The core's offset lift goes as
      * the document it lifts by (meta.liftDoc), because a function cannot cross into another process. Rejects with an ExportError, as buildExport throws one
@@ -1369,7 +1369,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     /** The export's arguments for exporter.runSegments, [segments, meta, opts], from the open track as it is now; it throws the refusals above. Nothing is written. */
     exportArgs(opts = {}) {
-      // D243a: opts.test is the TEST export of an unfinished OPEN track (the page's own button, never the default): it is written open, its grid laid on
+      // opts.test is the TEST export of an unfinished OPEN track (the page's own button, never the default): it is written open, its grid laid on
       // the open path, its reds listed as warnings. A CLOSED track is refused it by name: the lap would be built open, with the end wall at its seam
       if (opts.test && doc().closed) throw exportError('TEST_CLOSED', 'this track is closed: use Export (the test export is for an unfinished, open track)');
       if (!doc().closed && !opts.test) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');
@@ -1386,27 +1386,27 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** EXPORT through the existing exporter (src/export/fromwords.js exportSegments, app/export/export.js), into `dir`. */
     async exportTo(dir, opts = {}) {
       if (!exporter) return set({ message: 'export is not available here' });
-      // D234 (the user: "when ever I export by myself, the track is errored in content manager before starting"): the target is resolved FIRST, then the track is refused or
+      // (the user: "when ever I export by myself, the track is errored in content manager before starting"): the target is resolved FIRST, then the track is refused or
       // exported, and the EMPTY folder the user made in the picker is removed WHATEVER the outcome (an open loop, a red, a narrow grid, a failure, a success): it was made for an
       // export, and Content Manager lists an empty track folder as damaged. A folder with anything in it is refused by resolveTarget and never touched. `stop` is every way out
       // that is not a success: it removes the folder, says so in the message, and keeps the message as exportRefusal so the page can show it where it cannot be missed.
-      const t = await exporter.resolveTarget(dir, storage);   // D226: an EMPTY folder directly in content\tracks exports to content\tracks and is then removed
+      const t = await exporter.resolveTarget(dir, storage);   // an EMPTY folder directly in content\tracks exports to content\tracks and is then removed
       if (t.refused) return set({ message: t.refused.reason, exportReds: null, exportRefusal: t.refused.reason });
       dir = t.dir;
       let tidied = null; const tidy = async () => (tidied === null ? (tidied = await exporter.removeEmptyNote(storage, t)) : tidied);
       const stop = async (patch) => { const message = patch.message + await tidy(); return set({ ...patch, message, exportRefusal: message }); };
       try {
       let out;
-      set({ message: 'exporting…' });   // D437b: the export runs on its own now, and the page stays usable while it does
+      set({ message: 'exporting…' });   // the export runs on its own now, and the page stays usable while it does
       try { out = await api.buildExportAsync(opts); } catch (e) {
         if (e.name !== 'ExportError') throw e;
-        // D242: a red refusal names EVERY red in plain words, grouped, with where (the message was the export's own, every reason by its id: the user read
+        // a red refusal names EVERY red in plain words, grouped, with where (the message was the export's own, every reason by its id: the user read
         // "downforce-ray-gap" first and nothing about 28 more that all said the road runs into itself)
         return stop({ message: e.code === 'RED' && Array.isArray(e.red) ? `not exported: ${RG.groupsText(RG.groupReds(e.red, st.resolved.segments, { closed: st.resolved.closed }))}` : e.message, exportReds: e.code === 'RED' ? e.red : null });
       }
       if (!storage || typeof storage.writeExport !== 'function') return stop({ message: 'there is nowhere to write the export here' });
       for (const f of out.folders) await storage.writeExport(dir, f.folder, f.files);
-      const shown = EW.exportWarningsWords(out.result.warnings);   // D464: the builders' notes off the screen, the rest in words
+      const shown = EW.exportWarningsWords(out.result.warnings);   // the builders' notes off the screen, the rest in words
       const w = (shown.length ? ` (${shown.length} warning${shown.length > 1 ? 's' : ''}: ${shown.join(' · ')})` : '') + await tidy();
       return set({ ...ok(`exported ${out.folders.map((f) => f.folder).join(', ')} to ${dir}${w}`), exportReds: null, exportRefusal: null, lastExport: { dir, folders: out.folders.map((f) => f.folder) } });
       } catch (e) { await tidy(); throw e; }   // a failure nobody planned for (a write that throws): the empty folder still goes
@@ -1417,16 +1417,16 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!NAME_RE.test(name || '')) return set({ message: `a track name is 1 to 60 letters, digits, spaces, _ or -, starting with a letter or digit; got ${JSON.stringify(name)}` });
       const body = D.serialize(doc());
       await storage.saveDoc(PREFIX + name, body);
-      // D272: then its undo history, beside it. AFTER the track, and a failure here never fails the save: the track is kept, and the one line says what was not.
+      // then its undo history, beside it. AFTER the track, and a failure here never fails the save: the track is kept, and the one line says what was not.
       let note = null;
       if (typeof storage.saveUndo === 'function') {
         try { await storage.saveUndo(PREFIX + name, packHistory(st.history, body)); } catch (e) { note = `saved ${name}, but its undo history could not be kept (${e && e.message || e}): after reopening it, Ctrl+Z will not reach back past this save`; }
       }
-      await clearAutosave();   // saved under a name: nothing is left to recover (D239, as the piece builder did)
+      await clearAutosave();   // saved under a name: nothing is left to recover (as the piece builder did)
       return set({ name, dirty: false, message: note });
     },
     /**
-     * A PASTED TRACK (D239, a share code): it REPLACES the open one as one undo step, so the old track is one Ctrl+Z away. The document
+     * A PASTED TRACK (a share code): it REPLACES the open one as one undo step, so the old track is one Ctrl+Z away. The document
      * is checked first; a bad one is refused by name and nothing changes.
      */
     commitDoc: (d) => attempt(() => { D.checkDoc(d); return set({ history: D.commit(st.history, d), ...resolvedOf(d), dirty: true, lastEdited: null, message: null, exportReds: null, lastStep: { op: 'paste', ms: 0 } }); }),
@@ -1436,7 +1436,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     restore() {
       if (!st.recovery) return set({ message: 'there is no unsaved track to restore' });
       const { doc: d, name, docText, undoText } = st.recovery;
-      let history = D.createHistory(d), note = null;   // D272: the autosave's history, when it has one and it is this document's
+      let history = D.createHistory(d), note = null;   // the autosave's history, when it has one and it is this document's
       if (undoText !== undefined && undoText !== null) {
         const r = typeof undoText === 'string' ? unpackHistory(undoText, docText, d) : { bad: 'it is not text' };
         if (r.history) history = r.history; else note = `the autosave's undo history could not be used (${r.mismatch ? 'it is not this track\'s' : r.bad}): the track was restored without it`;
@@ -1447,11 +1447,11 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     /** The window is closing on purpose: nothing is left to recover. */
     async cleanExit() { await clearAutosave(); },
     /**
-     * BACKUP NOW (D239 amendment: the user lost TEST 1 to one Close, with no copy from before it). Writes the document AS IT IS NOW
+     * BACKUP NOW (amendment: the user lost TEST 1 to one Close, with no copy from before it). Writes the document AS IT IS NOW
      * to the track's backups (native backup_track: track-backups/<eq-name>.<local time>.t180track, newest 20 kept), under the saved
      * name or, unsaved, under "unsaved". `reason` is said in the result. Resolves { file, reason }, or null where there is no native
      * side to write to (headless, a browser); a write that FAILS rejects, so the caller can refuse the operation it was guarding.
-     * closeBest (D339's one-press Close, the panel's one close path) awaits it first and refuses the close if it rejects.
+     * closeBest (one-press Close, the panel's one close path) awaits it first and refuses the close if it rejects.
      */
     async backupNow(reason = '') {
       if (!storage || typeof storage.backupDoc !== 'function') return null;
@@ -1460,7 +1460,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
     /**
      * The open track's previous versions, newest first: [{ file, when, bytes, length, closed }] (when null for a hand-made one). An UNSAVED
-     * track lists the unsaved pool, "eq-unsaved" (B's D239 look, F3a: its copy from before Close was written there and could not be opened);
+     * track lists the unsaved pool, "eq-unsaved" (its copy from before Close was written there and could not be opened);
      * that pool is shared by every unsaved track, which the times tell apart.
      */
     async listVersions() {
@@ -1485,7 +1485,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (!storage) return set({ message: 'opening is not available here' });
       const text = await storage.openDoc(PREFIX + name), d = attempt(() => D.parse(text));
       if (!d) return st;
-      // D272: its undo history from the sidecar, if there is one and it is this file's; reading it never blocks the open
+      // its undo history from the sidecar, if there is one and it is this file's; reading it never blocks the open
       let history = D.createHistory(d), note = null;
       if (typeof storage.openUndo === 'function') {
         try {
@@ -1505,8 +1505,8 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
 }
 
 /**
- * The cross-section under a path sample, as the mesh draws it: the segment's profile, or, where the segment carries a blend (a cup's do,
- * D190), the blend evaluated at the sample. A segment without a blend gives its own profile object. (A reader of the cross-section under a path sample: the tests of the cup and chord readers take it from here.)
+ * The cross-section under a path sample, as the mesh draws it: the segment's profile, or, where the segment carries a blend (a cup's does),
+ * the blend evaluated at the sample. A segment without a blend gives its own profile object. (A reader of the cross-section under a path sample: the tests of the cup and chord readers take it from here.)
  */
 function profilerOf(path, segments) {
   const Prof = require('../../src/geom/profile.js'), starts = []; let a = path.samples[0].s;
@@ -1515,7 +1515,7 @@ function profilerOf(path, segments) {
 }
 
 /**
- * D361: what a cut does, in the words the line shows (a cutSelection preview, then applyCut's message): the pieces that go, where the track now starts and ends, and what became of
+ * what a cut does, in the words the line shows (a cutSelection preview, then applyCut's message): the pieces that go, where the track now starts and ends, and what became of
  * the start line, the hotlap and the pit lane (src/core/piece.js cutRun's notes). A note that is 'kept' or absent says nothing.
  */
 function cutWords(p) {
@@ -1528,7 +1528,7 @@ function cutWords(p) {
 }
 
 /**
- * D240: how far each road or jump piece AFTER a deleted run moves: [{ piece (its number in `b`), id, maxM }], the largest distance between its centreline in `a` and in `b`,
+ * how far each road or jump piece AFTER a deleted run moves: [{ piece (its number in `b`), id, maxM }], the largest distance between its centreline in `a` and in `b`,
  * station for station (a piece keeps its length, so it keeps its stations). The pieces before the gap are the same in both and read 0.
  */
 function displacementAfterDelete(a, b) {
@@ -1546,7 +1546,7 @@ function displacementAfterDelete(a, b) {
   return out;
 }
 /**
- * D240: a saved piece's PLAN VIEW for its thumbnail: the piece laid on an empty track, its centreline's ground plan (x, z) scaled to fit 100 x 60 with a margin, at most 48 points.
+ * a saved piece's PLAN VIEW for its thumbnail: the piece laid on an empty track, its centreline's ground plan (x, z) scaled to fit 100 x 60 with a margin, at most 48 points.
  * null when it cannot be laid out (the library still lists it).
  */
 function thumbOf(piece) {
@@ -1563,7 +1563,7 @@ function thumbOf(piece) {
 /** The road pieces the user built exactly straight and level (κh, κv and φ all exactly 0): close.js is told to go round them. */
 function straightPieces(doc) { return doc.pieces.map((P, i) => (P.type === 'road' && ['kh', 'kv', 'phi'].every((ch) => P.channels[ch].every((c) => c === 0)) ? i : -1)).filter((i) => i >= 0); }
 
-// D467: startLayout and its constants live in app/core/startlayout.js now (moved verbatim), so the close job can run the exporter's start-straight check without the shell
+// startLayout and its constants live in app/core/startlayout.js now (moved verbatim), so the close job can run the exporter's start-straight check without the shell
 const { STRAIGHT_K, startLayout } = require('./startlayout.js');
 
 /**

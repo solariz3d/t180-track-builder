@@ -7,13 +7,13 @@
 //
 // For each handle of word `id`, the range around its current value over which that word stays out of RED, and the
 // range over which it also stays out of AMBER. Every bound is found by running the SAME validation (src/validate/
-// index.js, so the SAME FINDINGS limits) on the document with that one handle changed, rebuilt through A's resolve and
-// C's buildPath. So "just inside validates clean, just outside turns red" holds by construction, and the bound is exact to
+// index.js, so the SAME FINDINGS limits) on the document with that one handle changed, rebuilt through resolve and
+// buildPath. So "just inside validates clean, just outside turns red" holds by construction, and the bound is exact to
 // the handle's own quantum (src/doc/serial.js: 1 mm, 0.001°, 0.0001), the finest value a sculpt can reach.
 //
 // WHY THE DOCUMENT, NOT (path, segments, index). INTERFACES §4b sketches handleBounds(path, segments, index). But
-// segments carry no handles (A's resolve turns one word into its ease-in, body and ease-out segments), so a changed
-// handle cannot be rebuilt from them. A's own hook, src/doc/library.js handleInfo(doc, id, boundsFn), calls
+// segments carry no handles (resolve turns one word into its ease-in, body and ease-out segments), so a changed
+// handle cannot be rebuilt from them. The library's own hook, src/doc/library.js handleInfo(doc, id, boundsFn), calls
 // boundsFn(doc, id), and this matches it: pass (doc, id) => handleBounds(doc, id, opts).handles.
 //
 // `below` / `above` say what stops the bound: { kind: 'red', reasons: [...], sources: [...] } from validation, or
