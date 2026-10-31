@@ -1,4 +1,4 @@
-// core-bank-lap-twice.test.js (C, D474 review of d473-e a4bfe52): RED ROW, no fix. Track ▸ Bank the lap pressed a second time on a lap it has just banked changes
+// core-bank-lap-twice.test.js (a review of a4bfe52): RED ROW, no fix. Track ▸ Bank the lap pressed a second time on a lap it has just banked changes
 // nothing. On core-bank-lap.test.js row 2's looped lap it banks p3 again (+0.86° a press, sampled, for three more presses): bankLapRun reads a piece whose bank
 // stayed within ROLL_FREE (5°) as upright (src/core/finish.js `flat`), and bankPlan's targets are the whole share bank of its kh, added by banked() onto the
 // bank it already has. Dropped into app/test/ it runs as it stands; from elsewhere: T=<t180 tree> node --test core-bank-lap-twice.test.js

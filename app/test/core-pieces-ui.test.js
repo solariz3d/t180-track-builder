@@ -1,5 +1,5 @@
 // core-pieces-ui.test.js: node --test app/test/core-pieces-ui.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D240, THE UI HALF OF SAVED PIECES (the core is src/core/piece.js, tested by test/core_piece.test.js; this is the app: app/core/coreshell.js, piecesui.js, selectionlayer.js, the
+// THE UI HALF OF SAVED PIECES (the core is src/core/piece.js, tested by test/core_piece.test.js; this is the app: app/core/coreshell.js, piecesui.js, selectionlayer.js, the
 // preview's proposal ghost, and the native side's file commands through a storage in memory). FEEL tier: targeted rows, no mutation harness (the user's 09-29 rule). Rows:
 //   1   select: a piece, a shift-click run (the first piece selected stays the anchor), out of range refused, any change of the document drops the selection
 //   2   Save as piece: what is stored is exactly the core's text; a name already used is refused and the stored one is untouched; a bad name and a mixed run are refused by name
@@ -61,7 +61,7 @@ function lap() {
 }
 const tick = () => new Promise((r) => setImmediate(r));
 
-// D250 item 4 (the user: "Short way across start"; C's look F1 on 62f5d39: the last piece then p1 selected the whole lap)
+// (the user: "Short way across start"; a review on 62f5d39 found the last piece then p1 selected the whole lap)
 test('row 1c: on a CLOSED lap a shift-click across the start line takes the SHORT way: the pieces either side of the line; Save keeps them, Delete says CLOSED', async () => {
   const st = store(), s = await createCoreShell({ brushFn: null, storage: st, autosaveMs: 0 }); s.adopt(lap());
   const d = s.getState().history.present, n = d.pieces.length; assert.equal(d.closed, true);
@@ -74,7 +74,7 @@ test('row 1c: on a CLOSED lap a shift-click across the start line takes the SHOR
   s.selectPiece(1); s.selectPiece(3, { extend: true }); i = s.selectionInfo(); assert.deepEqual([i.from, i.to], [1, 3], 'a run shorter inside the lap stays inside it');
   const o = await track(); o.selectPiece(4); o.selectPiece(0, { extend: true }); i = o.selectionInfo(); assert.deepEqual([i.from, i.to, i.count], [0, 4, 5], 'control: an OPEN track never wraps');
 });
-// A's look at f13cded, finding A: on TEST 1 (a cup at the end of the lap, a plain piece at its start) EVERY run across the line is MIXED_RUN, so the short way cost him
+// A review at f13cded found: on TEST 1 (a cup at the end of the lap, a plain piece at its start) EVERY run across the line is MIXED_RUN, so the short way cost him
 // 191 shift-click pairs he could save before. The short way is taken only where it can be kept; otherwise the inside run, and the line says why
 test('row 1d: where the run across the start line CANNOT be saved (a cup at one side of it, a plain piece at the other) and the inside run can, the inside run is selected and the line says why', async () => {
   const H = lap(), o = JSON.parse(D.serialize(H)), n = o.pieces.length, last = o.pieces[n - 1], prevEnd = D.pieceEnd(H.pieces[n - 2]).c.v;
@@ -90,7 +90,7 @@ test('row 1d: where the run across the start line CANNOT be saved (a cup at one 
   assert.deepEqual([i.from > i.to, i.longWay], [true, null], 'control: the inside run (the cup and plain pieces) cannot be saved either, so the short way is kept');
   s.selectPiece(1); s.selectPiece(3, { extend: true }); assert.equal(s.selectionInfo().longWay, null, 'control: inside is the short way already');
 });
-// A's look, finding B: the tie compared float sums; lengths 327.7, 170.3, 327.7, 257.4 make an EXACT tie read as 755.3999999999999 < 755.4
+// The same review found: the tie compared float sums; lengths 327.7, 170.3, 327.7, 257.4 make an EXACT tie read as 755.3999999999999 < 755.4
 test('row 1e: a tie stays inside the lap even when the lengths are decimals whose sums differ in the last bit (A\'s tiefloat case)', async () => {
   let d = D.createDoc('tie'); for (const L of [327.7, 170.3, 327.7, 257.4]) d = extend(d, { length: L, family: 'bowl' });
   const s = await createCoreShell({ brushFn: null, storage: store(), autosaveMs: 0 }); s.adopt({ ...d, closed: true });
@@ -168,7 +168,7 @@ test('row 5 (REQUIRED, through the app): a track built by saving a run and addin
   const H = lap(), st = store(), ex = await makeExporter(get);
   const a = await createCoreShell({ brushFn: null, storage: st, exporter: ex, autosaveMs: 0 }); a.adopt(H);
   const want = a.buildExport({}).folders;
-  // D250 item 4: on a closed lap a shift-click takes the SHORT way round, so "the rest of the lap" (more than half of it) is saved as two runs that each stay inside it
+  // on a closed lap a shift-click takes the SHORT way round, so "the rest of the lap" (more than half of it) is saved as two runs that each stay inside it
   const n = H.pieces.length;
   a.selectPiece(1); a.selectPiece(3, { extend: true }); assert.deepEqual([a.selectionInfo().from, a.selectionInfo().to], [1, 3]); await a.savePiece('middle of the lap'); assert.equal(a.getState().messageKind, 'ok', a.getState().message);
   a.selectPiece(4); a.selectPiece(n - 1, { extend: true }); assert.deepEqual([a.selectionInfo().from, a.selectionInfo().to], [4, n - 1]); await a.savePiece('end of the lap'); assert.equal(a.getState().messageKind, 'ok', a.getState().message);
@@ -322,20 +322,20 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs2 = frames.splice(0); for (const f of fs2) f(0); } };
 }
-async function mountPanel(st = store(), { bin = false, turnAsRate = true, shellOpts = {} } = {}) {   // D519 Part 2: shellOpts, for a row that needs the local brush
+async function mountPanel(st = store(), { bin = false, turnAsRate = true, shellOpts = {} } = {}) {   // shellOpts, for a row that needs the local brush
   const { doc, win, tick: frame } = fakeWindow();
-  let menuEl = null, binEl = null;   // D269: the top bar's Pieces menu (index.html: <details id="pieces"><div id="pieces-bin">), found by the panel by id as #preview is
+  let menuEl = null, binEl = null;   // the top bar's Pieces menu (index.html: <details id="pieces"><div id="pieces-bin">), found by the panel by id as #preview is
   if (bin) { menuEl = doc.createElement('details'); menuEl.setAttribute('id', 'pieces'); menuEl.open = false; binEl = doc.createElement('div'); binEl.setAttribute('id', 'pieces-bin'); menuEl.append(binEl); }
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
   const root = doc.createElement('div'), shell = await track(st, shellOpts);
   // the preview's side of the events the panel asks: a pick answers the station the test sets; the track is the shell's
-  const T = { s: 100, extra: null };   // D519 Part 2: extra, what the preview's pick adds (u, side, axes), for the zone grab's rows
+  const T = { s: 100, extra: null };   // extra, what the preview's pick adds (u, side, axes), for the zone grab's rows
   doc.addEventListener('t180-pick', (ev) => ev.detail.reply(T.s === null ? null : { s: T.s, pos: [0, 0, 0], px: 1, ...(T.extra || {}) }));
   doc.addEventListener('t180:track-request', (ev) => ev.detail.reply({ segments: shell.getState().resolved.segments, path: { samples: [] } }));
   const panel = require('../core/panel.js').mount(root, shell);
-  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the user's word, plan :367-369, ruled :373-385). Every row in
+  // AMENDED (2026-10-15): the turn field is read as a CORNER by default now (the user's word). Every row in
   // this file types the turn as a RATE (°/100 m), the field's meaning when it was written, so the helper puts "turn as" on rate, the switch the ruling keeps one
-  // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js (D331 B).
+  // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js.
   if (turnAsRate !== false) { const ta = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); ta.value = 'rate'; ta.onchange(); }
   const all = () => root.all(), button = (text) => all().find((e) => e.tagName === 'BUTTON' && e.textContent === text);
   const buttons = (text) => all().filter((e) => e.tagName === 'BUTTON' && e.textContent === text);
@@ -355,7 +355,7 @@ test('row 10: the panel: a click selects the piece under it and a shift-click th
   P1.click(400, { shiftKey: true }); assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [0, 1], 'the run from the first to the one clicked'); assert.match(P1.text('selection'), /^Selected: p1 to p2 \(2 pieces\)/);
   P1.click(400); assert.deepEqual([shell.selectionInfo().from, shell.selectionInfo().to], [1, 1], 'a plain click replaces it'); const kept = shell.getState().selection;
   P1.T.s = 700; P1.pointer('pointerdown', 50, 50); P1.pointer('pointerup', 80, 50); assert.equal(shell.getState().selection, kept, 'a drag (the camera\'s) selects nothing');
-  // AMENDED D421 part 3 (was: "with the brush armed the click is the brush's"; the plan removes the "brush on" box): in Sculpt a press that MOVES is the tool's drag and
+  // AMENDED (was: "with the brush armed the click is the brush's"; the "brush on" box was removed): in Sculpt a press that MOVES is the tool's drag and
   // selects nothing, and a press that does not move is a click, opens no brush and selects
   shell.setSculpt(true); P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').value = 'twist';
   const steps0 = shell.getState().history.past.length; P1.T.s = 100; P1.pointer('pointerdown', 50, 50); P1.pointer('pointermove', 50, 20); P1.pointer('pointerup', 50, 20);
@@ -395,7 +395,7 @@ test('row 10b: the panel: a middle delete shows the preview in words (what moves
   assert.equal(P3.button('Save as piece').disabled, true); assert.match(P3.text('why the selection cannot be saved'), /^Cannot be saved as a piece: MIXED_RUN/);
 });
 
-// ── D244 / D244b: the drag handles and Sculpt, through the panel on the same fake DOM (the pure rows are app/test/handles.test.js, the shell's Sculpt rows app/test/core-sculpt.test.js) ──
+// ── the drag handles and Sculpt, through the panel on the same fake DOM (the pure rows are app/test/handles.test.js, the shell's Sculpt rows app/test/core-sculpt.test.js) ──
 //   11  Extend's handles: they are on the ghost and only while there is one; a drag types its value into the matching field and nothing reaches the document or Undo until Extend; the two
 //       mirrored handles change the same field; a press is the handle's only ON a handle (the armed brush and the camera keep theirs); Extend then places what was dragged; the switch turns them off
 //   12  Sculpt through the panel: the brush offers only the shape channels; with ONE piece selected its handles appear; a drag of one reshapes that piece, is ONE undo step, and the centreline does not move
@@ -423,7 +423,7 @@ function stubPreview(P1) {
   return S;
 }
 /** One pointer event through the stage's listeners, in the real DOM's order (the handles' capture-phase press first) and stopping where it is stopped. */
-let STAMP = 0;   // each event a second apart: two presses on one handle are never taken for a double-click here unless a row says so (D251: two presses within 400 ms are)
+let STAMP = 0;   // each event a second apart: two presses on one handle are never taken for a double-click here unless a row says so (two presses within 400 ms are)
 function fire(P1, type, x, y, extra = {}) {
   const ev = { clientX: x, clientY: y, button: 0, pointerId: 1, timeStamp: (STAMP += 1000), stopped: false, preventDefault() {}, stopImmediatePropagation() { this.stopped = true; }, ...extra };
   for (const f of (P1.stage.listeners[type] || []).slice()) { f(ev); if (ev.stopped) break; }
@@ -437,16 +437,16 @@ async function handlePanel({ deaf = false, turnAsRate = true } = {}) {
   P1.frame(); P1.frame(); return Object.assign(P1, { S });
 }
 const handleOf = (P1, id) => P1.panel.handles.handles().find((h) => h.id === id);
-/** Drag the handle `id` by `px` PIXELS along its own on-screen axis (from where it was pressed; D251: the speed is per pixel, so a drag is told in pixels), release. */
+/** Drag the handle `id` by `px` PIXELS along its own on-screen axis (from where it was pressed; the speed is per pixel, so a drag is told in pixels), release. */
 function dragBy(P1, id, px, extra = {}) {
   const h = handleOf(P1, id), a = h.screen, k = px / a.len;
-  // D335: a drag's speed is read from the event times, so this one is a FLICK (the move 1 ms after the press: the kind's own per-pixel rate, which is what the rows below were written for)
+  // a drag's speed is read from the event times, so this one is a FLICK (the move 1 ms after the press: the kind's own per-pixel rate, which is what the rows below were written for)
   const t = fire(P1, 'pointerdown', a.x, a.y).timeStamp;
   fire(P1, 'pointermove', a.x + a.dx * k, a.y + a.dy * k, { timeStamp: t + 1, ...extra }); P1.frame();
   fire(P1, 'pointerup', a.x + a.dx * k, a.y + a.dy * k, { timeStamp: t + 2, ...extra });
 }
 
-// AMENDED D331 (plan :417-426, 2026-10-16): this row first held that the turn and climb handles are NOT offered as corners, because they drag a rate. The user
+// AMENDED (2026-10-16): this row first held that the turn and climb handles are NOT offered as corners, because they drag a rate. The user
 // scrubs turns with them, so the ruling gives them back: as corners they are their own kinds, turnDeg and climbDeg (app/core/handles.js), dragging the corner's
 // DEGREES and labelled in degrees; on rate they are the old turn and climb. Row 11e holds the drag itself.
 test('row 11d (D331 B, amended): as corners the ghost has the corner handles, turnDeg and climbDeg, labelled in degrees, even with the fields blank; "turn & climb as" rate gives the rate handles back', async () => {
@@ -462,7 +462,7 @@ test('row 11d (D331 B, amended): as corners the ghost has the corner handles, tu
   assert.ok(!ids().some((id) => id.startsWith('turnDeg:') || id.startsWith('climbDeg:')), 'and the corner ones go: ' + ids().join(' '));
   P1.panel.unmount();
 });
-// D331 (plan :420-423): A2's precise rules (D330, b32e82f) on the corner handles: with Shift one pixel is 0.01°, so a drag of n px is n × 0.01° of corner, and the
+// The precise rules (b32e82f) on the corner handles: with Shift one pixel is 0.01°, so a drag of n px is n × 0.01° of corner, and the
 // piece Extend places turns (or climbs) exactly that and ends at rate 0
 for (const [ch, field, id, px] of [['turn', 'turn °', 'turnDeg:1', 37], ['climb', 'climb °', 'climbDeg:0', 23]]) {
   test(`row 11e (D331): as a corner, a Shift drag of ${px} px on the ${ch} handle is ${px} × 0.01° of corner, and the placed piece ${ch}s exactly that and ends at rate 0`, async () => {
@@ -472,7 +472,7 @@ for (const [ch, field, id, px] of [['turn', 'turn °', 'turnDeg:1', 37], ['climb
     assert.equal(Math.abs(v), px * 0.01, `the ${ch} field reads ${fieldOf(P1, field).value}°`);
     P1.button('Extend').onclick(); P1.frame();
     // "exactly" is the solver's own tolerance, src/core/turnby.js TURN_TOL 1e-5 rad (0.00057°): measured 0.37042° for 0.37°. 0.001° is inside the 0.01° bar
-    // Turn by registered (D280 B1) and still tells 0.37 from 0.38
+    // Turn by registered and still tells 0.37 from 0.38
     const d = shell.getState().history.present, i = d.pieces.length - 1, r = shell.pieceReadouts()[i];
     assert.ok(Math.abs((ch === 'turn' ? r.turnDeg : r.climbDeg) - v) <= 1e-3, `the piece ${ch}s ${ch === 'turn' ? r.turnDeg : r.climbDeg}° against ${v}°`);
     assert.equal(D.pieceEnd(d.pieces[i])[ch === 'turn' ? 'kh' : 'kv'].v, 0, 'and ends at rate 0');
@@ -493,13 +493,13 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   const w0 = Number(width.value); dragBy(P1, 'width:1', 20); const wl = Number(width.value); width.value = String(w0); width.oninput(); P1.frame(); dragBy(P1, 'width:-1', 20); const wr = Number(width.value);
   assert.equal(wl, Math.round((w0 + 20 * 0.068) * 100) / 100); assert.equal(wr, wl, 'the right edge, 20 px outward, is the same width');
   // CHANGED 2026-10-14: LENGTH at the piece's FRONT, the width marks MID PIECE, the turn marks at the front edges (they were: length and width at the near end,
-  // D250 item 3); the width marks sit at the TARGET half-width, so they follow the drag
+  // earlier); the width marks sit at the TARGET half-width, so they follow the drag
   // the station a handle sits at, as the panel places it: the ghost station nearest s0 + at·(s1 − s0), s0 the placed track's end and s1 the ghost's
   const stationAt = (at) => { const r = shell.getState().resolved, placed = G.buildPath(r.segments, { step: 2, closed: false, start: r.start }).samples, s0 = placed[placed.length - 1].s, g = S.ghost.samples, s1 = g[g.length - 1].s, want = s0 + at * (s1 - s0); return g.reduce((b, m) => (Math.abs(m.s - want) < Math.abs(b.s - want) ? m : b)); };
   const lat = (h, st) => (h.pos[0] - st.pos[0]) * st.L[0] + (h.pos[1] - st.pos[1]) * st.L[1] + (h.pos[2] - st.pos[2]) * st.L[2];
   const along = (h, st) => (h.pos[0] - st.pos[0]) * st.T[0] + (h.pos[1] - st.pos[1]) * st.T[1] + (h.pos[2] - st.pos[2]) * st.T[2];
   width.value = String(w0); width.oninput(); P1.frame(); let now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
-  // AMENDED (D509): the width marks moved to the piece's BACK (d509-c 4f5a4c1, the user: "the width and cupping at the back so the controls are at the
+  // AMENDED: the width marks moved to the piece's BACK (4f5a4c1, the user: "the width and cupping at the back so the controls are at the
   // front and back of the piece"), at share 0.02 as handles.js places them; this row checked them at the middle
   const front = stationAt(1), back = stationAt(0.02);
   assert.ok(Math.hypot(now['length:0'].pos[0] - front.pos[0], now['length:0'].pos[2] - front.pos[2]) < 1e-6, 'length:0 is on the front station, the centreline');
@@ -509,7 +509,7 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   nearly(lat(now['width:1'], back), w0 / 2, 0.05); nearly(lat(now['width:-1'], back), -w0 / 2, 0.05); width.value = String(w0 + 4); width.oninput(); P1.frame(); now = Object.fromEntries(P1.panel.handles.handles().map((h) => [h.id, h]));
   nearly(lat(now['width:1'], stationAt(0.02)), (w0 + 4) / 2, 0.05); const turnNow = now['turn:1']; assert.ok(Math.abs(along(turnNow, stationAt(1))) <= 1.01 && Math.abs(lat(turnNow, stationAt(1))) > 0, 'the turn mark sits at the front, on the edge');
   width.value = String(w0); width.oninput(); P1.frame();
-  // bank: the left edge up, the right edge down are both positive; a drag is typed (Shift: one step a pixel, D330)
+  // bank: the left edge up, the right edge down are both positive; a drag is typed (Shift: one step a pixel)
   dragBy(P1, 'bank:1', 20); const b1 = Number(bank.value); assert.ok(b1 > 0, `bank rose: ${b1}`); bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:-1', 20); assert.equal(Number(bank.value), b1, 'the right edge dragged DOWN 20 px is the same bank');
   bank.value = '0'; bank.oninput(); P1.frame(); dragBy(P1, 'bank:1', 20, { shiftKey: true }); assert.equal(Number(bank.value), 0.2, `Shift (D330: the rule changed, it was a tenth of the speed): 20 px is 20 steps of 0.01, got ${bank.value}`);
   // turn: toward the left on either side; cup outward
@@ -522,7 +522,7 @@ test('row 11: Extend\'s handles: on the ghost and only while there is one; a dra
   P1.panel.unmount();
 });
 
-// AMENDED D421 part 3: the brush is Sculpt's (no "brush on" box), so in Build a press is never a brush: on a handle it is the handle's, anywhere else the camera's
+// AMENDED: the brush is Sculpt's (no "brush on" box), so in Build a press is never a brush: on a handle it is the handle's, anywhere else the camera's
 test('row 11b: no ghost, no handles; a press ON a handle is the handle\'s and the camera keeps a press anywhere else (in Build no press is a brush); the cup\'s handles go with the cup field; the switch turns them off', async () => {
   const P1 = await handlePanel(), { shell, S } = P1;
   assert.equal(P1.panel.handles.handles().length, 10);
@@ -548,8 +548,8 @@ test('row 11c: the preview mounts AFTER the panel, so the first ask for the ghos
   P1.panel.unmount();
 });
 
-// AMENDED D421 part 3 (the rule changed by name: Sculpt is a MODE, set by the tick Build ▸ Sculpt mode or Tab (D498: the comment named a Build | Sculpt switch that was never built), not a box beside the brush, and its strip offers the
-// tools by what the hand does, not the channels; which channels a tool may change is the shell's, by family, pane O's part 2)
+// AMENDED (the rule changed by name: Sculpt is a MODE, set by the tick Build ▸ Sculpt mode or Tab (this comment once named a Build | Sculpt switch that was never built), not a box beside the brush, and its strip offers the
+// tools by what the hand does, not the channels; which channels a tool may change is the shell's, by family)
 test('row 12: Sculpt through the panel: the strip offers the tools; ONE selected piece gets its handles; a drag reshapes that piece, is ONE undo step and the centreline does not move; Undo gives it back', async () => {
   const P1 = await handlePanel(), { shell } = P1;
   const tools = () => P1.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'sculpt tool').children.map((o) => o.value);
@@ -586,7 +586,7 @@ test('row 13: the preview\'s ghostInfo (what the handles read): none without a g
   const e = await createCoreShell({ brushFn: null, autosaveMs: 0 }), pe = headlessPreview(e); pe.showGhost(e.candidate({ length: 100 })); const first = pe.ghostInfo(); assert.equal(first.s0, 0, 'on an empty track the new piece starts at 0'); assert.ok(first.samples.length > 10); pe.dispose();
 });
 
-// ── D243 item 1: the Add-jump control through the panel (the pure and shell rows are app/test/jump-ui.test.js) ──
+// ── the Add-jump control through the panel (the pure and shell rows are app/test/jump-ui.test.js) ──
 //   14  the Jump block: its hint and the speed the ramp is sized for from the start; hover or typing shows the jump as a ghost (flagged, with the flight in words: which arc, the speed, where it comes down); a refused
 //       jump says why and shows none; the drag handles stay off a jump's ghost and come back; Add jump adds it (one step), the next Extend lays the road; a refusal in plain words in the status line
 //   15  the preview's ghostInfo carries the jump flag and the segments
@@ -595,7 +595,7 @@ test('row 14: the Jump button (D258, the free jump): beside Extend; the old Add-
   const P1 = await handlePanel(), { shell, S } = P1, labels = P1.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
   for (const gone of ['jump gap m', 'drop m (+ down)', 'landing °']) assert.ok(!labels.includes(gone), `${gone} is gone`);
   assert.equal(P1.button('Add jump'), undefined, 'no Add jump button'); const ext = P1.button('Extend'), jmp = P1.button('Jump'); assert.ok(jmp && ext);
-  // AMENDED D355 part 2 (position only): Jump moved from beside Extend to the Build menu (plan_t180_handoff :1383); its button is still the panel's, and what it does is checked below unchanged
+  // AMENDED (position only): Jump moved from beside Extend to the Build menu; its button is still the panel's, and what it does is checked below unchanged
   assert.ok(require('../core/buildmenu.js').items({ doc: P1.doc }).some((i) => i.label === 'Jump'), 'the Build menu offers Jump');
   assert.equal(P1.text('jump note'), '', 'D267: no help paragraph under the button'); assert.match(jmp.attrs.title, /free landing.*drive it in AC and move the landing until it works/, 'its sense is the button\'s tooltip');
   assert.equal(P1.panel.handles.handles().length, 10, 'the Extend handles are up'); jmp.onmouseenter();
@@ -697,7 +697,7 @@ test('row 14e (D278): a hover on Jump shows the jump ghost with no Extend handle
   P1.button('Jump').onmouseenter(); settle(); assert.deepEqual(idsOf(), ['landfwd:0', 'landleft:0', 'landup:0', 'landturn:0'], 'a jump\'s ghost carries none of Extend\'s handles');
   P1.button('Jump').onmouseleave(); settle(); assert.equal(idsOf().length, 14, 'the Extend handles come back with the ghost gone');
   // sculpt: the landing is not a sculpt target; the handles are the selected piece\'s or none
-  shell.setSculpt(true); settle(); assert.ok(!idsOf().some((i) => i.startsWith('land')), 'no landing arrows while sculpting');   // AMENDED D421 part 3: the mode, not the removed "sculpt on" box
+  shell.setSculpt(true); settle(); assert.ok(!idsOf().some((i) => i.startsWith('land')), 'no landing arrows while sculpting');   // AMENDED: the mode, not the removed "sculpt on" box
   P1.panel.unmount();
 });
 
@@ -807,7 +807,7 @@ test('row 18: the CHEAP ghost while a handle is dragged (D266 item 2): every ste
   P1.panel.unmount();
 });
 
-// D267 (the user, relaying a tester: "too much damn text on the left side that overwhelmed chase ... what tf is the copy code paste code t180 code here??? the values or degrees for the track needs to be in a better spot to be seen")
+// (the user, relaying a tester: "too much damn text on the left side that overwhelmed chase ... what tf is the copy code paste code t180 code here??? the values or degrees for the track needs to be in a better spot to be seen")
 const leafText = (P1) => P1.all().filter((e) => !(e.children && e.children.length) && e.textContent).map((e) => e.textContent).join('\n');
 test('row 19: no help paragraph stays in the left column (D267): the tube width, the grip, the turn-0 hint, the jump and the landing show only a few words or nothing, and the words are tooltips', async () => {
   const P1 = await handlePanel(), { shell } = P1, field = (t) => fieldOf(P1, t), tube = field('tube sweep °'), width = field('width m'), grip = P1.input('grip');
@@ -846,7 +846,7 @@ test('row 19b: the values of the piece being edited are drawn LARGE over the 3D 
 });
 
 test('row 19c: the share codes are in the File menu as "Copy track code" and "Paste track code…" (D267; D355 moved them from the ⋯ menu), not a section of the left column; the code itself is unchanged', async () => {
-  // D355: a POSITION check re-pointed: the ⋯ menu is gone and its controls are in File (m-file); what the codes do is checked below, unchanged
+  // a POSITION check re-pointed: the ⋯ menu is gone and its controls are in File (m-file); what the codes do is checked below, unchanged
   const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), menu = html.slice(html.indexOf('<details id="m-file"'), html.indexOf('</details>', html.indexOf('<details id="m-file"')));
   assert.ok(menu.includes('id="share"'), 'the share block is inside the File menu'); assert.ok(!/<aside id="side">[\s\S]*id="share"[\s\S]*<\/aside>/.test(html), 'and not in the left column');
   const src = fs.readFileSync(path.join(REPO, 'app/share/index.js'), 'utf8'); assert.ok(src.includes("textContent: 'Copy track code'") && src.includes("textContent: 'Paste track code…'"), 'the buttons are named for what they are'); assert.ok(!/paste a t180 code here/.test(src), 'the box does not say "t180 code"');
@@ -855,7 +855,7 @@ test('row 19c: the share codes are in the File menu as "Copy track code" and "Pa
   const r = await createShare(b).paste(code); assert.equal(r.kind, 'e', r.message); assert.equal(D.serialize(b.getState().history.present), D.serialize(a.getState().history.present));
 });
 
-// D269 (the user, 10:26: "take the saved pieces off the side, and add it somewhere to the top bar, and it will have like a drop down menu where all the saved pieces will be, think of like a sony vegas or something")
+// (the user, 10:26: "take the saved pieces off the side, and add it somewhere to the top bar, and it will have like a drop down menu where all the saved pieces will be, think of like a sony vegas or something")
 test('row 20: the saved pieces are a drop-down bin in the top bar, not a section of the left column (D269): a row per piece with its thumbnail, name and summary; Add at head, Add mirrored, Rename and Delete; a click on the row adds it; the empty words are in the menu; Save as piece stays with the selection', async () => {
   const st = store(), P1 = await mountPanel(st, { bin: true }), { shell } = P1, tick = () => new Promise((r) => setImmediate(r));
   // the library is not in the left column
@@ -890,7 +890,7 @@ test('row 20b: the Pieces menu opens and closes: it lists the pieces when opened
   menu.open = true; P1.doc.dispatchEvent({ type: 'pointerdown', target: P1.binRows()[0] }); assert.equal(menu.open, true, 'a press inside the menu keeps it open'); P1.doc.dispatchEvent({ type: 'pointerdown', target: P1.stage }); assert.equal(menu.open, false, 'a press outside (on the 3D view) closes it');
   menu.open = true; P1.doc.dispatchEvent({ type: 'pointerdown', target: menu }); assert.equal(menu.open, true, 'a press on the Pieces button itself is the browser\'s own toggle'); menu.open = false;
   P1.panel.unmount(); P1.doc.dispatchEvent({ type: 'keydown', key: 'Escape' });   // after unmount the listeners are gone: nothing throws
-  // the top bar: <details id="pieces"> between the Track and View menus (D355: a POSITION check re-pointed; it stood between Previous versions and the ⋯ menu,
+  // the top bar: <details id="pieces"> between the Track and View menus (a POSITION check re-pointed; it stood between Previous versions and the ⋯ menu,
   // which are now in File and gone); the bin inside it, unchanged
   const html = fs.readFileSync(path.join(REPO, 'app/index.html'), 'utf8'), bar = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
   assert.ok(/<details id="m-track"[\s\S]*<details id="pieces"[^>]*><summary[^>]*>Pieces ▾<\/summary><div class="more-menu" id="pieces-bin"><\/div><\/details>[\s\S]*<details id="m-view"/.test(bar), 'Pieces ▾ is in the top bar between Track and View');
@@ -904,7 +904,7 @@ test('row 15: the preview\'s ghostInfo says whether the ghost is a jump\'s and c
   pv.clearGhost(); assert.equal(pv.ghostInfo(), null); pv.dispose();
 });
 
-// D259, the user (18:21-18:24): the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way". The bank keeps within
+// The user (18:21-18:24): the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way". The bank keeps within
 // ONE turn and keeps its SIGN, shown and applied (370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40), in the Extend field and ghost handle, Sculpt's bank handle and the bank
 // brush; no nearest-equivalent rewrite; the stored winding of existing tracks and the core are untouched.
 const headBank = (shell) => shell.headState().phi * 180 / Math.PI;
@@ -939,8 +939,8 @@ test('row 18b: a length drag previews whole 2 m, and the release previews the ex
   P1.panel.unmount();
 });
 
-// D426 (the user, 2026-10-21 20:41, in 0.4.12-dev, on TEST 10: "within the preview, the ghost of the next piece disapears ... when i saved it, the ghost came back"). With no ghost on
-// show, the drag handles ask the preview for one again every RETRY_FRAMES (panel.js ghostModel), and each ask began the sliced exact build (D407) over from its first step. A ghost whose build
+// (the user, 2026-10-21 20:41, in 0.4.12-dev, on TEST 10: "within the preview, the ghost of the next piece disapears ... when i saved it, the ghost came back"). With no ghost on
+// show, the drag handles ask the preview for one again every RETRY_FRAMES (panel.js ghostModel), and each ask began the sliced exact build over from its first step. A ghost whose build
 // needs more than those frames (his 1,500 m, 100 m wide bowl: 3,002 steps, about 82 ms at 2.5 ms a frame) was begun again before it was whole, for ever. The real panel and the real preview
 // (app/preview/index.js) on the fake page: with no clock the preview builds one step a frame, so a 100 m ghost needs about 200 frames.
 test('row 18c: a ghost whose sliced build needs more frames than the retry is still shown: the handles do not ask again while the preview is building one (D426)', async () => {
@@ -963,7 +963,7 @@ test('row 18c: a ghost whose sliced build needs more frames than the retry is st
   mounted.unmount(); P1.panel.unmount();
 });
 
-// D430 (the user, 2026-10-22: "if a part of the equation is blank, it doesnt count as 0. if one is blank auto set it to 0"). Each field shows the head's value; a field
+// (the user, 2026-10-22: "if a part of the equation is blank, it doesnt count as 0. if one is blank auto set it to 0"). Each field shows the head's value; a field
 // the user EMPTIES counts as 0 (and the box shows 0 once the change is committed), for every field where 0 is a value. A field left as shown still continues
 const headOf = (shell) => { const h = shell.headState(); return { turn: h.kh * 100 / DEG, climb: h.kv * 100 / DEG, bank: h.phi / DEG, cup: h.c }; };
 const typeInto = (P1, label, v) => { const f = fieldOf(P1, label); f.value = String(v); f.oninput(); return f; };
@@ -1044,7 +1044,7 @@ test('D331 B: with the turn read as a corner (the default), a selected piece len
   assert.equal(Number(fieldOf(P1, 'climb °').value), r2(up), 'the climb field: the degrees it climbs, not its climb rate');
 });
 
-// ── D335 (plan :555-583): scrubbing the marks on a placed piece. The pointer follows the MARK, and the road rolls under it: the bank mark's screen axis turns about 100 degrees between 0 and 180 degrees of bank ──
+// ── scrubbing the marks on a placed piece. The pointer follows the MARK, and the road rolls under it: the bank mark's screen axis turns about 100 degrees between 0 and 180 degrees of bank ──
 /** A steady drag that follows the handle `id` as the road rolls (each step the pointer moves `step` px along where the mark's axis points NOW), `n` steps, each `dt` ms apart. Returns the sculpt bank at the piece's middle after each step. */
 function followMark(P1, id, n, step, dt, extra = {}) {
   const a = handleOf(P1, id).screen; let t = 0, x = a.x, y = a.y; const out = [];
@@ -1057,7 +1057,7 @@ function followMark(P1, id, n, step, dt, extra = {}) {
   return out;
 }
 async function sculptPanel() {
-  const P1 = await handlePanel(); P1.shell.setSculpt(true); P1.frame(); P1.click(400); P1.frame(); P1.frame(); return P1;   // AMENDED D421 part 3: the mode, not the removed "sculpt on" box
+  const P1 = await handlePanel(); P1.shell.setSculpt(true); P1.frame(); P1.click(400); P1.frame(); P1.frame(); return P1;   // AMENDED: the mode, not the removed "sculpt on" box
 }
 test('row 16 (D335): a steady bank drag on a placed piece\'s sculpt mark, the pointer following the mark as the road rolls, rises all the way, lands on 180 and never goes back (the axis fixed at the grab stalled it near 165)', async () => {
   const P1 = await sculptPanel(), v = followMark(P1, 'bank:1', 400, 1, 1);   // 400 px at 1 px a millisecond: a fast, steady hand
@@ -1073,7 +1073,7 @@ test('row 16b (D335): a slow bank drag on a sculpt mark is 0.01 degree a pixel w
   P1.panel.unmount();
 });
 
-// D421 part 3 (P's review 5): the closed-tube sweep refusal in plain words. The panel replaces src/core/document.js:412's "must stay within 0 to 360" by matching its
+// A review found: the closed-tube sweep refusal in plain words. The panel replaces src/core/document.js:412's "must stay within 0 to 360" by matching its
 // text, so a rename there would silently bring back the words that read as a fault; this row holds the coupling (nobody sees it until a closed tube is on the table)
 test('row 21: in Sculpt, a Tube sweep drag on a closed tube is refused in plain words: "Sculpt can\'t change the sweep of a closed tube…", not the core\'s', async () => {
   const P1 = await mountPanel(), { shell } = P1, { extendOptions } = require('../core/panel.js');
@@ -1088,7 +1088,7 @@ test('row 21: in Sculpt, a Tube sweep drag on a closed tube is refused in plain 
   assert.equal(shell.getState().history.present, d0, 'and the tube is as it was');
   P1.panel.unmount();
 });
-// D464 (D463 part 2 item 9, E's D461 report §2 item 9): Sculpt's how-to line and its value line are instructions, not errors. They were plain .message, which the page
+// A review found: Sculpt's how-to line and its value line are instructions, not errors. They were plain .message, which the page
 // paints in --bad (the colour the guide calls "known to break"); they carry the hint class now, painted in the text colour.
 test('row D464: Sculpt\'s how-to line and value line read as instructions, not errors: class hint, painted in the text colour', async () => {
   const P1 = await handlePanel(), { shell } = P1;
@@ -1103,10 +1103,10 @@ test('row D464: Sculpt\'s how-to line and value line read as instructions, not e
   P1.panel.unmount();
 });
 
-// D519 Part 2 (O's design, p-d519-design-O_2026-10-28.md §1, §3): THE ZONE GRAB in the panel. AMENDED D520 (plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md; the user, 15:12:
+// THE ZONE GRAB in the panel. AMENDED (2026-10-28; the user, 15:12:
 // "the mouse click gives a singular point you then drag to sculpt the track simple as that"): the rule this row pinned, the first move past the click picking ONE channel read along
-// one screen axis, is gone (the plan: "axisOf ... is no longer used by Grab"), so the row pins its replacement. A press on the road opens the follow (shell.beginFollow) at the press's
-// station; the drag is a SET of channels; and, built again from the document the drag made, the pressed point is under the pointer on the grab plane (the plan's falsifier) and a
+// one screen axis, is gone (axisOf is no longer used by Grab), so the row pins its replacement. A press on the road opens the follow (shell.beginFollow) at the press's
+// station; the drag is a SET of channels; and, built again from the document the drag made, the pressed point is under the pointer on the grab plane (the test that could fail) and a
 // rim press keeps the far rim. A press on a dot opens at the dot's station; off the road, or with no u, the press is Grab's one channel as before; never a re-route. The view is a
 // real one (app/camera/math.js) over the shell's own road, the preview's ray (preview.js rayAt) answering 't180-grab-ray'.
 test('row 25 (D519, amended D520): Grab on the road: the pressed point follows the pointer and a rim keeps the far rim (built again and read), a dot opens at its own station, off the road is Grab as before', async () => {

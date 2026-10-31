@@ -1,4 +1,4 @@
-// sculpt-cues.test.js: D425 part 4, the page side of the Sculpt cues (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §3, B's rows). The parts nobody can see by looking:
+// sculpt-cues.test.js: the page side of the Sculpt cues (rows from their design). The parts nobody can see by looking:
 // the band's stations found once per drag, not per frame (the saving that pays for the cues); where the reach's end marks fall; the piece Stretch reaches; the glyph never takes a press;
 // one value format for the road and the strip; the overlay's Sculpt cells. Pure, on a synthetic straight track; no browser.
 'use strict';

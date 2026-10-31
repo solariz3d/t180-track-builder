@@ -1,14 +1,14 @@
 // preview-async.test.js: node --test app/test/preview-async.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D240 follow-up, "the previews must not FREEZE" (the user reads a 10 s freeze as broken; E measured Close's preview at 13.4 s on TEST 1, a middle delete's took 8.5 to 10.3 s on 13 km):
+// "The previews must not FREEZE" (the user reads a 10 s freeze as broken; measured: Close's preview at 13.4 s on TEST 1, a middle delete's took 8.5 to 10.3 s on 13 km):
 // the preview of a Close and of a middle delete show their ghost and per-piece displacement AT ONCE, the overlap check runs off the page's thread (a Web Worker: app/core/overlapworker.js,
 // the pure job app/core/overlapjob.js, the runner app/core/overlaprunner.js), Apply is OFF until the result lands, and Cancel (or any change that drops the preview) stops it. FEEL tier:
 // targeted rows, no mutation harness. Rows:
 //   1  THE RESULT IS IDENTICAL: the job (what the worker runs, after a structured clone, as a postMessage does) equals the synchronous overlapCheck, on a coil and on TEST-1-sized tracks
 //      (a 14 km near-closed lap's Close, a 46-piece 13 km track's middle delete)
 //   2  the worker script itself, run in a sandbox with a fake `self` (importScripts, fetch of the real files, postMessage): it loads its modules through the app's loader and answers with the same result
-//   3  the runner (TWO WARM WORKERS, D240 warm-worker follow-up): made when the runner is, one part each, reused by the next job, cancel terminates both and makes two fresh ones, a failed part,
+//   3  the runner (TWO WARM WORKERS): made when the runner is, one part each, reused by the next job, cancel terminates both and makes two fresh ones, a failed part,
 //      a worker that errors, a Worker that cannot be made
-//   3c THE POOL FIX (B's look at 485c5b6, p-warm-B section 2): one part FAILS while the other is still computing, then the next job starts: the old job's late answer must never be taken for the
+//   3c THE POOL FIX (a review of 485c5b6 found it): one part FAILS while the other is still computing, then the next job starts: the old job's late answer must never be taken for the
 //      new job's (job 2 resolves with job 2's parts only); every message carries a job serial, any failure replaces the workers
 //   3b the check's TWO PARTS put together are EXACTLY the one-piece check, on a coil, a jump, a cup, a tube, a 13 km delete and a 14 km Close
 //   4  the shell, Close and delete both: the preview is there at once with its check 'checking'; Apply is refused until the result lands and then works (backup first); Cancel, an edit, an Undo,
@@ -53,7 +53,7 @@ async function openLap({ turns = 4, lastLen = 200, runner = null } = {}) {
   s.extend({ length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } });
   assert.equal(s.getState().message, null, s.getState().message); return s;
 }
-/** A NEAR lap, 8.87 m from closing (B's, core-close-preview.test.js), optionally with a runner. */
+/** A NEAR lap, 8.87 m from closing (as in core-close-preview.test.js), optionally with a runner. */
 async function nearLap(runner = null, far = null, extra = {}) {
   far = far || (await openLap()).getState().history.present;
   const open = D.checkDoc({ ...C.close(far, { edited: [0] }).doc, closed: false });
@@ -67,7 +67,7 @@ async function track(runner = null, st = null) {
   return s;
 }
 
-/** D339: the close preview is gone. What these rows took from it (the closed track and its synchronous overlap check) comes from the same parts it used:
+/** The close preview is gone. What these rows took from it (the closed track and its synchronous overlap check) comes from the same parts it used:
  *  closejob.js runClose (the route the preview ran; the last ~20% by default) and overlapjob.js overlapCheck (the check it ran when it had no runner).
  *  { refused } when the route refuses or does not close, as the preview then made none. */
 function closedCheck(s, opts = {}) {
@@ -187,10 +187,10 @@ test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece chec
   coil.cancelClose(); coil.selectPiece(0); coil.deleteSelection(); const dp = coil.getState().deleteProposal; assert.deepEqual(parts(dp.doc, false), clone(dp.check), 'a coil\'s delete');
   const DEG = Math.PI / 180, j = await mk(); j.extend({ length: 200, family: 'bowl' }); j.extend({ length: 100, transition: 40, targets: { kh: 1 / 300 } }); j.commitDoc(D.appendPiece(j.getState().history.present, D.flightPiece({ forward: -30, left: 60, heading: Math.PI }))); j.extend({ length: 150 }); j.extend({ length: 150, transition: 40, targets: { kh: 1 / 200 } }); j.extend({ length: 100 });
   // since the jumps core (fae3910) a flight is INTENDED, not red: the control's non-overlap red is a landing too short for the speed (core_jump row 3's), a 40 m jump taken at the 460 km/h design speed misses its landing ramp (checked: gap 40, drop 2, land -2 deg, 460: landing-misses-zone; 700: none)
-  // CHANGED D250 (pane E; the user: jumps are tuned by driving them): landing-misses-zone is a WARNING now, amber, so it is no longer in `others` (the reds).
+  // CHANGED (the user: jumps are tuned by driving them): landing-misses-zone is a WARNING now, amber, so it is no longer in `others` (the reds).
   // The control becomes the jump's warning, which the merge must carry too (`amber`, a count). A non-overlap RED for this row would need another kind; a
-  // core document cannot make a hole (every flight carries its ramp). Told to A in p-jumpwarn-E_2026-10-06.md.
-  // CHANGED D258 (the free jump, pane E): nothing is computed about where the car lands any more, so the jump's warning here is the free jump's own: its landing
+  // core document cannot make a hole (every flight carries its ramp).
+  // CHANGED (the free jump): nothing is computed about where the car lands any more, so the jump's warning here is the free jump's own: its landing
   // is placed BEHIND its take-off (60 m to the left, 30 m back, turned round), jump-gap-not-forward, amber
   j.setDesignSpeed(460); j.selectPiece(1); j.deleteSelection(); const jp = j.getState().deleteProposal; assert.ok(jp.check.amber > 0 && !jp.check.others.some((x) => x.reason === 'jump-gap-not-forward'), 'control: the jump track carries the jump\'s warning (amber), not a red: ' + JSON.stringify({ amber: jp.check.amber, others: jp.check.others.map((x) => x.reason) })); assert.deepEqual(parts(jp.doc, false, 460), clone(jp.check), 'a track with a jump');
   const cup = await mk(); cup.extend({ length: 300, family: 'bowl', first: { c: 45 } }); for (let i = 0; i < 4; i++) cup.extend({ length: Q, transition: 40, targets: { kh: 1 / R, c: 45 } }); cup.extend({ length: 100, transition: 40, targets: { kh: 0, c: 45 } });
@@ -205,7 +205,7 @@ test('row 3b: the check\'s TWO PARTS put together are EXACTLY the one-piece chec
   assert.throws(() => OJ.runJob({ doc: cp.doc, part: 'nope' }), /no such part/);
 });
 
-// D339: row 4a (Close's preview with a runner: Apply refused until the check landed) went with the preview: Close is one press, applied at once.
+// Row 4a (Close's preview with a runner: Apply refused until the check landed) went with the preview: Close is one press, applied at once.
 
 test('row 4b: the delete, with a runner: the same, and every way the preview can go (Cancel, an edit, an Undo, another selection, a newer preview) stops the running check', async () => {
   const run = fakeRunner(), st = { backups: [], async backupDoc(name, text) { st.backups.push(name); return 'f'; } }, s = await track(run, st), base = s.getState().history.present;
@@ -275,7 +275,7 @@ async function mountPanel(shell) {
 test('row 5: the delete\'s panel: "Checking for overlaps… N s", Apply disabled until the result lands, then the groups; Cancel stops the job', async () => {
   const run = fakeRunner(); let clock = 0;
   const s = await nearLap(run, null, { now: () => clock });
-  // D339: Close's box went with the preview (Close is one press, applied at once, with no overlap check to wait for)
+  // Close's box went with the preview (Close is one press, applied at once, with no overlap check to wait for)
   // the delete's box
   const t = await track(run), P2 = await mountPanel(t); t.selectPiece(1); P2.button('Delete selected').onclick(); const dj = run.jobs[run.jobs.length - 1];
   assert.match(P2.text('overlap check'), /^Checking the track for overlaps… 0 s\. Apply is off until this finishes; Cancel stops it\.$/); assert.equal(P2.button('Apply delete').disabled, true);

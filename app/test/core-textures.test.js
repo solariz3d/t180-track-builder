@@ -1,5 +1,5 @@
 // core-textures.test.js: node --test app/test/core-textures.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D228: the road surface of an equation-core track (app/core/textures.js): asphalt by default, the solid colour one click away, a picture of the
+// The road surface of an equation-core track (app/core/textures.js): asphalt by default, the solid colour one click away, a picture of the
 // user's own, and the set it announces is the one the core page's Export writes (app/core/coreshell.js exportTo -> exporter.runSegments).
 'use strict';
 const test = require('node:test');

@@ -1,12 +1,12 @@
 // settings.test.js: node --test app/test/settings.test.js
-// D355 contract S, app/settings.js: the six settings that used to reset at every start are saved. Rows:
+// app/settings.js: the six settings that used to reset at every start are saved. Rows:
 //   1  a setting survives a reload (a fresh settings object over the same store), saved as t180.settings.<key> in JSON, and nothing else is written
 //   2  nothing saved, or saved text that is not JSON: the fallback
 //   3  a store that throws on every read and write (a blocked localStorage), or none at all: nothing throws, and the value lasts the session
 //   4  on(key) hears each change of that key once, not a set to the same value, not another key; the function it returns stops it
 //   5  an unknown key, or a value that is not a boolean, a finite number or a string, is refused by name
 //   6  two copies of the module (app/lib/cjs.js loads a fresh copy per call) share one instance: a set through one is read, and heard, through the other
-//   7  (D394) theme takes one of its six names (music, aqua, skyline, glass, aurora, sigil); any other value is refused by name, and a saved name nothing knows
+//   7  theme takes one of its six names (music, aqua, skyline, glass, aurora, sigil); any other value is refused by name, and a saved name nothing knows
 //      reads as the fallback
 'use strict';
 const test = require('node:test');
@@ -19,7 +19,7 @@ const memStore = () => { const m = new Map(); return { m, getItem: (k) => (m.has
 
 test('row 1: a setting survives a reload, saved as t180.settings.<key> in JSON, and nothing else is written', () => {
   const store = memStore();
-  store.setItem('t180.sound.muted', '1'); store.setItem('t180.coreLook', 'solid');   // the keys saved before D355
+  store.setItem('t180.sound.muted', '1'); store.setItem('t180.coreLook', 'solid');   // the keys saved before app/settings.js
   const a = S.createSettings(store);
   a.set('turnClimbAs', 'rate'); a.set('gridStep', 45); a.set('mirrorOnInsert', true); a.set('csp', false);
   const b = S.createSettings(store);   // the next start
@@ -27,8 +27,8 @@ test('row 1: a setting survives a reload, saved as t180.settings.<key> in JSON, 
   assert.equal(store.getItem('t180.settings.gridStep'), '45'); assert.equal(store.getItem('t180.settings.turnClimbAs'), '"rate"');
   assert.deepEqual([...store.m.keys()].sort(), ['t180.coreLook', 't180.settings.csp', 't180.settings.gridStep', 't180.settings.mirrorOnInsert', 't180.settings.turnClimbAs', 't180.sound.muted']);
   assert.equal(store.getItem('t180.sound.muted'), '1'); assert.equal(store.getItem('t180.coreLook'), 'solid');
-  // AMENDED (D365): the rule changed by name: a seventh setting, author (Settings ▸ Author name), joins the six
-  // AMENDED (D394): the rule changed by name: an eighth setting, theme (Settings ▸ Theme), joins them; row 7 pins its values
+  // AMENDED: the rule changed by name: a seventh setting, author (Settings ▸ Author name), joins the six
+  // AMENDED: the rule changed by name: an eighth setting, theme (Settings ▸ Theme), joins them; row 7 pins its values
   assert.deepEqual([...S.KEYS].sort(), ['author', 'colourByGrip', 'csp', 'dragHandles', 'gridStep', 'mirrorOnInsert', 'theme', 'turnClimbAs']);
 });
 
@@ -83,7 +83,7 @@ test('row 6: two copies of the module share one instance: a set through one is r
   assert.equal(store.getItem('t180.settings.colourByGrip'), 'true');
 });
 
-// AMENDED (D405): the rule changed by name: a seventh name, skyline-night (Skyline Night)
+// AMENDED: the rule changed by name: a seventh name, skyline-night (Skyline Night)
 test('row 7 (D394): theme takes one of its seven names, saved and read back; any other value is refused by name; a saved name nothing knows gives the fallback', () => {
   const store = memStore(), s = S.createSettings(store);
   assert.deepEqual([...S.CHOICES.theme], ['music', 'aqua', 'skyline', 'skyline-night', 'glass', 'aurora', 'sigil']);

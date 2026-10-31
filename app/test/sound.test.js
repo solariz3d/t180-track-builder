@@ -19,12 +19,12 @@ test('soundFor: a placed piece, an undo and a closed loop each name their sound;
   assert.equal(soundFor(placed, placed), null); assert.equal(soundFor(null, placed), null); assert.equal(soundFor(placed, S(null)), null);
 });
 
-// AMENDED (D375): the 16 steps became four melodies of 64 (the user's pick of batch 9), so the step wraps at 64; the rule (one step per piece) is unchanged
+// AMENDED: the 16 steps became four melodies of 64 (the user's pick of batch 9), so the step wraps at 64; the rule (one step per piece) is unchanged
 test('stepOf: the melody step follows the piece count, one step per piece at any pace, round the 64', () => {
   assert.deepEqual([1, 2, 64, 65, 129].map(stepOf), [0, 1, 63, 0, 0]);
 });
 
-// D377: the place swell (the librarian's ruling, the user can veto): a place's level rises gently through the 64 steps to its peak over steps 45 to 52
+// The place swell (the user can veto it): a place's level rises gently through the 64 steps to its peak over steps 45 to 52
 // (indices 44..51, the lift and the register's top) and eases home by step 64, so the next round starts where this one did
 test('swellDb: a place rises from its floor at step 1 to its peak over steps 45 to 52 and eases back to the floor by step 64, gently, round the 64', () => {
   const db = [...Array(64)].map((_, i) => swellDb(i)), peak = Math.max(...db), floor = Math.min(...db);
@@ -38,10 +38,10 @@ test('swellDb: a place rises from its floor at step 1 to its peak over steps 45 
   for (const bad of [0.5, NaN, '3', null]) assert.throws(() => swellDb(bad), /sound: a melody step is a whole number/);
 });
 
-// D375: four melodies of 64 steps (G:\Consonance-tools\b9\mel9.js, batch 9: Yearning, Shoegaze, Light occult, Afterglow), each step today's shape
-// AMENDED (D377): the user's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js) and Aurora of batch 12 (mel12.js). The
+// Four melodies of 64 steps (G:\Consonance-tools\b9\mel9.js, batch 9: Yearning, Shoegaze, Light occult, Afterglow), each step today's shape
+// AMENDED: the user's four for 0.4.2: Aqua, Skyline and Glass of batch 11 (G:\Consonance-tools\b9\mel11.js) and Aurora of batch 12 (mel12.js). The
 // names change; the rule (four melodies of 64 steps of this shape) does not
-// AMENDED (D402): the rule changed by name: SIGIL's own melody, Obsidian, is the fifth
+// AMENDED: the rule changed by name: SIGIL's own melody, Obsidian, is the fifth
 test('the five melodies: 64 steps each of a bass, a chord of four and a melody note on top, each melody its own', () => {
   assert.deepEqual([...MELODY_NAMES], ['aqua', 'skyline', 'glass', 'aurora', 'sigil']);
   assert.equal(MELODIES.sigil.title, 'Obsidian');
@@ -57,8 +57,8 @@ test('the five melodies: 64 steps each of a bass, a chord of four and a melody n
   assert.equal(new Set(tops).size, 5, 'five different tunes');
 });
 
-// D375: one of the four is picked at each launch (the player's creation, once a page load), from `pick` (Math.random in the app), and never saved
-// AMENDED (D402): five melodies, so the draws that land on each are fifths
+// One of the four is picked at each launch (the player's creation, once a page load), from `pick` (Math.random in the app), and never saved
+// AMENDED: five melodies, so the draws that land on each are fifths
 test('a launch picks one of the five melodies from its random draw, hands it to the engine, saves nothing, and refuses a draw outside 0..1', () => {
   const got = [0, 0.26, 0.5, 0.7, 0.99].map((r) => {
     const F = fakeWindow(), seen = [];
@@ -68,7 +68,7 @@ test('a launch picks one of the five melodies from its random draw, hands it to 
     assert.deepEqual(Object.keys(F.store), [], 'nothing is saved, so the next launch draws again');
     return before;
   });
-  assert.deepEqual(got, ['aqua', 'skyline', 'glass', 'aurora', 'sigil']);   // AMENDED (D377): the four's names; AMENDED (D402): and SIGIL's, fifth
+  assert.deepEqual(got, ['aqua', 'skyline', 'glass', 'aurora', 'sigil']);   // AMENDED: the four's names; AMENDED: and SIGIL's, fifth
   let seed = 7; const seeded = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   const many = new Set(Array.from({ length: 40 }, () => createSound(fakeWindow().win, { pick: seeded, log: () => {} }).melody));
   assert.deepEqual([...many].sort(), [...MELODY_NAMES].sort(), 'over 40 seeded launches, every melody comes up');
@@ -110,7 +110,7 @@ test('tickPlan: climb rises in pitch with its value, bank arpeggiates and wraps,
   assert.ok(b[0] < b[1] && b[1] < b[2], 'banking further climbs the arpeggio'); assert.equal(b[3], b[0], 'after 15 steps it starts over');
 });
 
-// D374 (the user: "it doesnt do the climb effect"): with the fields read as corners (the panel's default) the climb and turn handles are climbDeg and
+// (the user: "it doesnt do the climb effect"): with the fields read as corners (the panel's default) the climb and turn handles are climbDeg and
 // turnDeg (app/core/handles.js KINDS), and those ticks walked the length melody; every handle kind labelled climb or turn makes that handle's sound
 test('tickPlan: every handle labelled climb pitches by its value, and every one labelled turn pans, the corner kinds as the rate ones', () => {
   const HD = require('../core/handles.js');
@@ -153,7 +153,7 @@ test('the player: nothing before the first press; after it, place, undo and the 
   const F = fakeWindow(), s = createSound(F.win, { engineFor: F.engineFor, log: () => {} });
   const d1 = doc(1), d2 = doc(2), d3 = doc(3);
   assert.equal(s.handle(S(H([d1], d2)), S(H([d1, d2], d3))), null, 'before any press: silent'); assert.equal(s.started, false);
-  F.fire('pointerdown'); assert.equal(s.started, true); assert.deepEqual(F.calls[0], ['level', 0.45]); // D382: the default volume is 0.45 (was 0.6)
+  F.fire('pointerdown'); assert.equal(s.started, true); assert.deepEqual(F.calls[0], ['level', 0.45]); // the default volume is 0.45 (was 0.6)
   assert.equal(s.handle(S(H([d1], d2)), S(H([d1, d2], d3))), 'place');
   assert.equal(s.handle(S(H([d1, d2], d3)), S(H([d1], d2, [d3]))), 'undo');
   assert.equal(s.handle(S(H([d1, d2], d3)), S(H([d1, d2, d3], doc(3, true)))), 'loopClosed');
@@ -185,7 +185,7 @@ test('mute and volume: remembered, clamped, reach the engine, and a bad volume i
   assert.equal(createSound(fakeWindow({ stored: { [KEYS.volume]: 'abc' } }).win, { log: () => {} }).volume, 0.45, 'an unreadable stored volume: the default (D382: 0.45, was 0.6)');
 });
 
-// D382 (the user: "the volume should be lowered a bit standard, not to where its quiet"): the default is 25% lower, 0.6 to 0.45. Only the default moves:
+// (the user: "the volume should be lowered a bit standard, not to where its quiet"): the default is 25% lower, 0.6 to 0.45. Only the default moves:
 // a saved volume is kept as it is, 0.6 included (moving saved levels is the user's call)
 test('the default volume: nothing saved plays at 0.45; a saved volume, 0.6 included, is kept as saved; a saved value that is not a number falls back to 0.45', () => {
   const F = fakeWindow(), s = createSound(F.win, { engineFor: F.engineFor, log: () => {} });
@@ -199,7 +199,7 @@ test('a window with no audio still mounts and stays silent; an engine that throw
   const F = fakeWindow({ audio: false }), s = createSound(F.win, { engineFor: F.engineFor, log: () => {} }); F.fire('pointerdown');
   assert.equal(s.started, false); assert.equal(s.handle(S(H([], doc(1))), S(H([doc(1)], doc(2)))), null);
   const logs = [], G = fakeWindow(), t = createSound(G.win, { engineFor: () => ({ setLevel() {}, step() { throw new Error('boom'); }, tick() {}, loopClosed() {} }), log: (m) => logs.push(m) });
-  // AMENDED (D349): starting audio now also loads the samples, and this fake window has no fetch, so that failure is logged first; the rule is unchanged: the throw is logged
+  // AMENDED: starting audio now also loads the samples, and this fake window has no fetch, so that failure is logged first; the rule is unchanged: the throw is logged
   G.fire('pointerdown'); t.handle(S(H([], doc(1))), S(H([doc(1)], doc(2)))); assert.match(logs.find((m) => /place/.test(m)) || '', /place could not play \(boom\)/);
 });
 

@@ -1,5 +1,5 @@
 // inputlog.test.js: node --test app/test/inputlog.test.js
-// D340, the late-input log on disk (plan :904-909): the camera's ~3 s coast happens mid-drive, so the late key events checkLate finds (app/preview/preview.js)
+// The late-input log on disk: the camera's ~3 s coast happens mid-drive, so the late key events checkLate finds (app/preview/preview.js)
 // also go to a file, to be read afterwards rather than off the HUD. The preview hands each record to its mount (onInputLate); the page buffers them
 // (app/core/inputlog.js) and appends them, asynchronously and never on the key's own path, through the native append_input_log (src-tauri/src/lib.rs), into
 // input-late.log in the app's data folder beside tracks\, capped in size there. A failed write is reported, never thrown. Rows:

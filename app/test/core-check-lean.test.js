@@ -14,7 +14,7 @@ const { walkScene, isDrivable } = require('../../src/export/markers.js');
 const { asFolds } = require('../../src/geom/bvh.js');
 
 const R = 180, Q = (Math.PI * R) / 2;
-/** D339: the close preview is gone. What these rows took from it (the closed track and its synchronous overlap check) comes from the same parts it used:
+/** The close preview is gone. What these rows took from it (the closed track and its synchronous overlap check) comes from the same parts it used:
  *  closejob.js runClose (the route the preview ran; the last ~20% by default) and overlapjob.js overlapCheck (the check it ran when it had no runner).
  *  { refused } when the route refuses or does not close, as the preview then made none. */
 function closedCheck(s, opts = {}) {
@@ -82,7 +82,7 @@ test('the overlap check (lean) answers exactly what the full mesh and full valid
   const roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
   const v = V.validate(p, segs, { csp: true, softCollision: true, folds: mesh.folds, roadMesh, fullSpeed: true });
   const OV = OJ.OVERLAP, want = { overlaps: v.red.filter((x) => OV.has(x.reason)), others: v.red.filter((x) => !OV.has(x.reason)), amber: v.amber.length,
-    lap: { ok: v.lap.ok, reason: v.lap.reason || null, first: v.lap.where && v.lap.where.length ? { s: v.lap.where[0].s, reason: v.lap.where[0].reason } : null, count: v.lap.where ? v.lap.where.length : 0 } };   // D331: the answer carries the lap proof's verdict (the rule changed: it was thrown away)
+    lap: { ok: v.lap.ok, reason: v.lap.reason || null, first: v.lap.where && v.lap.where.length ? { s: v.lap.where[0].s, reason: v.lap.where[0].reason } : null, count: v.lap.where ? v.lap.where.length : 0 } };   // the answer carries the lap proof's verdict (the rule changed: it was thrown away)
   assert.deepEqual(OJ.runJob({ doc: cp.doc, closed: true }), want, 'the one-piece check');
   assert.deepEqual(OJ.mergeParts(OJ.runJob({ doc: cp.doc, closed: true, part: 'rest' }), OJ.runJob({ doc: cp.doc, closed: true, part: 'rays' })), want, 'its two parts, put together');
 });

@@ -1,6 +1,6 @@
 // close-worker.test.js: node --test app/test/close-worker.test.js
 // 2026-10-15, CLOSE OFF THE WINDOW'S THREAD: Close's work held the window 4.1 s on a 24 km track. The work is one pure job (app/core/closejob.js), run in a Web
-// Worker (app/core/closeworker.js) through app/core/closerunner.js, as the track checker went in 7512f84. D339: Close is ONE press (closejob.js runCloseBest: every
+// Worker (app/core/closeworker.js) through app/core/closerunner.js, as the track checker went in 7512f84. Close is ONE press (closejob.js runCloseBest: every
 // route tried, one picked, applied at once), so the rows that held the preview and the "close using" box went with them (rows 7 and 8, and the preview halves of
 // 1, 2, 3 and 6). Rows:
 //   1  THE ANSWER IS IDENTICAL: through the worker (every message structured-cloned, as a postMessage does) one press closes the track exactly as on the page, near
@@ -13,7 +13,7 @@
 //   5  the worker SCRIPT, in a sandbox with the real files: it loads closejob.js through the app's loader and answers as runClose does (a single route, and the
 //      one press); a refusal and a bad job are answered, never a hang
 //   6  the panel: ONE Close button (no "close using" box, no Apply); while the worker works it says so and Cancel stops it; then the line says what was done
-//   7  (D343) a press hands the worker the reds the live checker found for THIS track with CSP on (shell.noteCheck), and no others
+//   7  a press hands the worker the reds the live checker found for THIS track with CSP on (shell.noteCheck), and no others
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -50,7 +50,7 @@ async function openLap({ turns = 4, lastLen = 200, closeRunner = null } = {}) {
   s.extend({ length: lastLen, transition: Math.min(40, lastLen), targets: { kh: 0 } });
   assert.equal(s.getState().message, null, s.getState().message); return s;
 }
-/** A NEAR lap, 8.87 m from closing (B's, core-close-preview.test.js). */
+/** A NEAR lap, 8.87 m from closing (as in core-close-preview.test.js). */
 async function nearLap(closeRunner = null) {
   const far = (await openLap()).getState().history.present;
   const open = D.checkDoc({ ...C.close(far, { edited: [0] }).doc, closed: false });

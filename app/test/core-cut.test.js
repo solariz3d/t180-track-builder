@@ -1,5 +1,5 @@
 // core-cut.test.js: node --test app/test/core-cut.test.js   (under the heavy-run lock)
-// D361 part 1 (pane C): CUT in the app. The core is src/core/piece.js cutRun (test/core_cut.test.js); this is the shell's preview, Apply and Cancel (app/core/coreshell.js) and
+// CUT in the app. The core is src/core/piece.js cutRun (test/core_cut.test.js); this is the shell's preview, Apply and Cancel (app/core/coreshell.js) and
 // Edit ▸ Selection's "Cut here" with the selection box's Apply cut / Cancel cut (app/core/piecesui.js), on the small fake DOM of app/test/core-buildmenu.test.js. Rows:
 //   1  Cut here on a closed lap's middle run shows a PREVIEW (the track unchanged); Apply copies the track to its backups first, then cuts as ONE undo step: open, the kept pieces
 //      rotated; Undo gives the closed lap back

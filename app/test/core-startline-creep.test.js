@@ -1,5 +1,5 @@
 // core-startline-creep.test.js: node --test app/test/core-startline-creep.test.js
-// D284 (the user, 2026-10-10: "every piece i put down, the start line moves up again and again"). On an OPEN track the automatic start went 15 m
+// The user (2026-10-10: "every piece i put down, the start line moves up again and again"). On an OPEN track the automatic start went 15 m
 // before the far end of the longest straight run (src/markers/layout.js defaultLayout), and appending a Straight to that straight lengthens the run, so
 // the line followed the head. Now an open track's automatic line stays on the run's FIRST piece (its end, less the margin), and a hand-placed line never
 // moves. Through the app's core shell: spawnsInfo is what the panel and the preview draw, startLayout what the export uses.

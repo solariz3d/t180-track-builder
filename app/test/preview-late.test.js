@@ -1,6 +1,6 @@
 // preview-late.test.js: node --test app/test/preview-late.test.js
-// D340: the camera "coasts in that direction for like 3 seconds till it stops" (plan :782-783) after W, A, Shift and a right-button look are let go. Measured
-// headless on the 27 km track (hand-back §1): every key-up reached the page within 3 ms under every load tried, the longest page task 244 ms; so the 3 s is not
+// The camera "coasts in that direction for like 3 seconds till it stops" (the user) after W, A, Shift and a right-button look are let go. Measured
+// headless on the 27 km track: every key-up reached the page within 3 ms under every load tried, the longest page task 244 ms; so the 3 s is not
 // reproduced there, and what remains is the host, which a headless page cannot see. THE INSTRUMENT, for the real window: every key event is checked as it is
 // handled against the time the OS stamped it (e.timeStamp, on the page's own clock). One handled more than 250 ms late is kept (preview.view().inputLate, the
 // last 20) and said in the HUD for 8 s, with what the page did meanwhile, from its own frame times:

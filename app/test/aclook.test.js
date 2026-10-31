@@ -1,6 +1,6 @@
-// Tests for the AC look in the preview (D177, ARCHITECTURE §5.2): app/preview/aclook.js (the material → uniform mapping,
+// Tests for the AC look in the preview: app/preview/aclook.js (the material → uniform mapping,
 // the one reference light, what each batch is drawn with), app/preview/acshaders.js (the GLSL, checked statically here;
-// it is compiled for real in the app window, see the D177 hand-back), app/preview/renderer.js's AC path (against a
+// it is compiled for real in the app window, checked by hand there), app/preview/renderer.js's AC path (against a
 // recording fake GL), and the list test: the preview draws the materials and textures the export writes, read back from
 // real kn5 bytes (app/preview/kn5look.js). node --test, no dependencies.
 'use strict';
@@ -80,7 +80,7 @@ test('shade: a surface facing away from the sun gets ambient only (no diffuse, n
   A.shade(u, [1, 1, 1], n, A.LIGHT.toSun, [0, 1, 0]).forEach((v, c) => assert.ok(Math.abs(v - (A.LIGHT.ambientDown[c] + A.LIGHT.ambientRange[c] * hemi)) < 1e-12));
 });
 
-// ── the GLSL, statically (a real compile needs a GL context: the app window, see the hand-back) ─────────────────────
+// ── the GLSL, statically (a real compile needs a GL context: the app window, checked by hand there) ─────────────────
 const declared = (src, kind, name) => new RegExp(`\\b${kind}\\b[^;]*\\b${name}\\b`).test(src);
 test('shaders: every uniform the renderer sets is declared in each program it sets it for', () => {
   const common = ['ksAmbient', 'ksDiffuse', 'ksSpecular', 'ksSpecularEXP', 'ksEmissive', 'ksAlphaRef', 'uAlphaTested', 'uToSun', 'uSun', 'uAmbientDown', 'uAmbientRange', 'uEye', 'uFog', 'uFogDensity'];
@@ -170,7 +170,7 @@ let LOOP = null;
 const loop = () => {
   if (!LOOP) {
     const doc = closedSample(), b = buildExport(doc), dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-aclook-'));
-    // CHANGED D260: the export joins the road cells into chunks (src/export/acready.js mergeForAc), so a cell's NAME is no longer in the kn5 AC loads.
+    // CHANGED: the export joins the road cells into chunks (src/export/acready.js mergeForAc), so a cell's NAME is no longer in the kn5 AC loads.
     // The cells are compared name for name against the same export written unmerged (`mergeMeshes: false`), and the kn5 AC loads must carry every
     // one of those cells' triangles with the same material (cellTris below).
     const back = (bytes, n) => { const f = path.join(dir, n); fs.writeFileSync(f, bytes); return readKn5(f); };
@@ -196,7 +196,7 @@ function cellTris(k, names) {
   }
   return m;
 }
-// CHANGED D260: "in the kn5" is checked by geometry (the cells are joined into chunks, see loop())
+// CHANGED: "in the kn5" is checked by geometry (the cells are joined into chunks, see loop())
 test('list: every mesh the preview draws is in the kn5, under the same name, with the same material', () => {
   const L = loop();
   assert.deepStrictEqual(L.t.batches.filter((b) => L.meshes.get(b.key) !== L.list.byMesh[b.key]).map((b) => `${b.key}: ${L.list.byMesh[b.key]} vs ${L.meshes.get(b.key)}`), [], 'the export\'s cells, name for name');
@@ -221,7 +221,7 @@ test('list: the preview\'s material and texture list EQUALS the kn5\'s', { todo:
   assert.deepStrictEqual([L.list.materials.map((m) => m.name).sort(), [...L.meshes.keys()].sort()], [L.kn5.materials.map((m) => m.name).sort(), L.t.batches.map((b) => b.key).sort()]);
 });
 
-// ── the textured path: A's texture set, a made texture, read back through the kn5 the set writes ────────────────────
+// ── the textured path: the texture set, a made texture, read back through the kn5 the set writes ────────────────────
 function texturedCase() {
   let d = D.createDoc('Textured');
   for (const w of ['straight', 'straight']) d = D.appendWord(d, w, { speed: 30 });
@@ -288,10 +288,10 @@ test('preview: L toggles the look between the AC shaders and the colour per word
   press('L'); win.step(); const c = p.view().look;
   p.dispose();
   assert.deepStrictEqual([keyAction('l'), keyAction('l', { ctrlKey: true }), a, b, c],
-    [{ look: true }, null, ['ac', true, 'Build view · AC look (L)'], ['words', 0, 'Build view · word colours (L)'], 'ac']);   // AMENDED (D502 part 2): the rule changed by name, the user's copy pick of 2026-10-27: the camera label starts with a capital, as a sentence
+    [{ look: true }, null, ['ac', true, 'Build view · AC look (L)'], ['words', 0, 'Build view · word colours (L)'], 'ac']);   // AMENDED: the rule changed by name, the user's copy pick of 2026-10-27: the camera label starts with a capital, as a sentence
 });
 
-// D179, the usability pass: the ties fade with distance (they hatched the road dark from overhead), and the canvas is
+// The usability pass: the ties fade with distance (they hatched the road dark from overhead), and the canvas is
 // cleared darker than the fog colour (a tube's ceiling had merged into the background)
 function lineGL() {
   const log = { fades: [], blend: [], clear: null }; let id = 0;

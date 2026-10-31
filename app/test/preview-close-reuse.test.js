@@ -1,7 +1,7 @@
 // preview-close-reuse.test.js: node --test app/test/preview-close-reuse.test.js
 // 2026-10-15, reported: Close with "new road from the end to the start" froze the window white on a 24 km track. The preview built the proposal's ghost
 // and, after Apply, the closed track IN FULL (6.4 s and 6.7 s), though Finish to start adds road and moves nothing placed. Both now keep the placed
-// mesh and make only the new road and the closing joint (geom.reuseMesh, grow). This row holds that what is drawn is what a full build draws. D339: Close is one
+// mesh and make only the new road and the closing joint (geom.reuseMesh, grow). This row holds that what is drawn is what a full build draws. Close is one
 // press (no preview), so the row closes with it, on an end only new road closes; the preview-ghost row went with the preview.
 'use strict';
 const test = require('node:test');
@@ -28,7 +28,7 @@ test('the closed track after Close, built from the open one, is the closed track
   assert.ok(kept.batches.length === fresh.batches.length, `${kept.batches.length} batches vs ${fresh.batches.length}`);
   assert.ok(worstGap(flat(kept.batches), flat(fresh.batches)) < 1e-6, 'every vertex where a full build puts it');
   assert.ok(kept.path.closed, 'and it is the closed loop');
-  // D453 (amended by name; its rule changed, it is not weakened): Close now BANKS the placed curves it closes (D447), so it no longer "moves nothing placed". The row's
+  // AMENDED by name (its rule changed, it is not weakened): Close now BANKS the placed curves it closes, so it no longer "moves nothing placed". The row's
   // premise is now: every placed segment whose geometry Close did not change is kept, and the ones it changed are remade, counted from the two resolved states by the
   // track model's own segment key (segkey.js). Before (0c73322..7717b81) a banking Close kept 0 of 950, the straights too: the reuse was all or nothing on the prefix.
   const { keyOf } = require('../preview/segkey.js'), same = open.segments.filter((g, j) => keyOf(g) === keyOf(closedResolved.segments[j])).length, changed = open.segments.length - same;
@@ -36,10 +36,10 @@ test('the closed track after Close, built from the open one, is the closed track
   assert.equal(kept.mesh.stats.reused, same, `every placed segment Close did not change is kept (${same}), the ${changed} it changed remade: kept ${kept.mesh.stats.reused}`);
 });
 
-// D453: CLOSE'S REBUILD ON A 24 KM TRACK, timed. A rectangle of 6 km straight sides laid as 1 km pieces with three upright 90° corners (R 300), its fourth side 2 km short:
-// Close lays new road and banks the three corners (D447), and nothing else placed changes. Node, through createTrackModel, best of three, as a share of a full build of the
+// CLOSE'S REBUILD ON A 24 KM TRACK, timed. A rectangle of 6 km straight sides laid as 1 km pieces with three upright 90° corners (R 300), its fourth side 2 km short:
+// Close lays new road and banks the three corners, and nothing else placed changes. Node, through createTrackModel, best of three, as a share of a full build of the
 // closed track in the same run (so the machine's load cancels): at ff88d85 (no banking Close) 0.24–0.26 (231–281 ms against 968–1,075); at 7717b81 (every placed segment
-// remade) 0.91–1.16; with D453 0.27–0.38 (p-d453-O_2026-10-24_evidence/close-rebuild-rect.out). The bound is twice ff88d85's share: the freeze he reported was a full rebuild.
+// remade) 0.91–1.16; with the segment-key reuse 0.27–0.38. The bound is twice ff88d85's share: the freeze he reported was a full rebuild.
 test('Close\'s rebuild of a 24 km track it closes with new road costs at most half a full build: the placed straights are kept', async () => {
   const D = require('../../src/core/document.js'), { extend } = require('../../src/core/extend.js'), { extendTurnBy } = require('../../src/core/turnby.js');
   let d = D.createDoc('rect'); d = extend(d, { length: 300, family: 'bowl' });

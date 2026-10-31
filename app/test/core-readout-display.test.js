@@ -1,7 +1,7 @@
 // core-readout-display.test.js: node --test app/test/core-readout-display.test.js
-// THE READOUT DISPLAY (L130, pane C): the strings (app/core/labels.js formatReadout), the label layout (the head's keep-out, no
-// overlaps), the anchors, the shell's readouts (A's src/core/readout.js), and the PANEL mounted on a small fake DOM, read back
-// as the TEXT it shows. E's sealed check (readout_check_registration_2026-09-29.md) is scored by a non-author seat; these are the
+// THE READOUT DISPLAY: the strings (app/core/labels.js formatReadout), the label layout (the head's keep-out, no
+// overlaps), the anchors, the shell's readouts (src/core/readout.js), and the PANEL mounted on a small fake DOM, read back
+// as the TEXT it shows. A separate sealed check is scored by a reviewer who did not write this code; these are the
 // author's own tests of the same properties, not that score.
 'use strict';
 const test = require('node:test');
@@ -44,7 +44,7 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, tick: () => { const fs = frames.splice(0); for (const f of fs) f(0); }, flush: () => { const ts = timers.splice(0); for (const f of ts) if (f) f(); } };
 }
-/** D242: the pointer over the preview, as the browser sends it: a pointermove (css px of the stage) or a pointerleave on #preview. */
+/** The pointer over the preview, as the browser sends it: a pointermove (css px of the stage) or a pointerleave on #preview. */
 const hover = (P, x, y) => { for (const f of (P.stage.listeners.pointermove || []).slice()) f({ clientX: x, clientY: y, button: 0, preventDefault() {} }); };
 const leave = (P) => { for (const f of (P.stage.listeners.pointerleave || []).slice()) f({}); };
 async function mountPanel(wrap = (s) => s, shellOpts = {}, { turnAsRate = true } = {}) {
@@ -52,26 +52,26 @@ async function mountPanel(wrap = (s) => s, shellOpts = {}, { turnAsRate = true }
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.clientWidth = 900; stage.clientHeight = 600; stage.isRoot = true;
   const root = doc.createElement('div'), shell = wrap(await createCoreShell({ brushFn: null, ...shellOpts }));
   const panel = require('../core/panel.js').mount(root, shell);
-  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the user's word, plan :367-369, ruled :373-385). Every row in
+  // AMENDED (2026-10-15): the turn field is read as a CORNER by default now (the user's word). Every row in
   // this file types the turn as a RATE (°/100 m), the field's meaning when it was written, so the helper puts "turn as" on rate, the switch the ruling keeps one
-  // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js (D331 B).
+  // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js.
   if (turnAsRate !== false) { const ta = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); ta.value = 'rate'; ta.onchange(); }
   const label = (text) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === text);
   const field = (text) => label(text).children[1];
   const cell = (k) => root.all().find((e) => e.attrs['data-readout'] === k).textContent;
   const type = (text, v) => { const f = field(text); f.value = String(v); f.oninput(); };
-  // the options the PANEL uses (D193: a field left as shown sends no target, so the raw field text is no longer the options)
+  // the options the PANEL uses (a field left as shown sends no target, so the raw field text is no longer the options)
   const opts = () => panel.options();
   return { doc, win, tick, flush, stage, root, shell, panel, label, field, cell, type, opts };
 }
 
-// THE STUB (D190): A's core, which adds the channel c, cupFromDeg / cupToDeg and Extend's target c, does not exist at c964c2d. These
+// THE STUB: the core that adds the channel c, cupFromDeg / cupToDeg and Extend's target c does not exist at c964c2d. These
 // tests stand in for it with stubCup(shell), which wraps the REAL shell and does exactly three things, nothing else:
 //   1. it removes targets.c before the real core sees it (c964c2d refuses an unknown channel), and keeps what c was asked for;
-//   2. it adds cupFromDeg / cupToDeg to the real readouts from its own record: a legacy piece reads 11.679 (the rendered edge E's seal
-//      row 7 names for F3), and a piece given a cup reads the target PLUS 0.871 (the Extend fit ringing past it, E's V5), so a panel
+//   2. it adds cupFromDeg / cupToDeg to the real readouts from its own record: a legacy piece reads 11.679 (the rendered edge a
+//      sealed check names for F3), and a piece given a cup reads the target PLUS 0.871 (the Extend fit ringing past it, as measured), so a panel
 //      that shows the typed value instead of the document's is caught;
-//   3. it refuses a target outside [0, 150] by name, as the core's document guard will (E's row 2); the panel must not clamp first.
+//   3. it refuses a target outside [0, 150] by name, as the core's document guard will; the panel must not clamp first.
 // It also records every options object the panel hands the core (sent), so a test can read what went in.
 const LEGACY_EDGE = 11.679, RING = 0.871;
 function stubCup(real) {
@@ -94,7 +94,7 @@ test('the strings: two decimals (2026-10-15: "everything to 0.00"), the unit wri
   assert.equal(LB.fmtDeg(0.006), '+0.01°'); assert.equal(LB.fmtDeg(-3), '−3.00°'); assert.equal(LB.fmtDeg(720), '+720.00°');
   assert.equal(LB.fmtDeg(-33.345), '−33.35°', 'half away from zero'); assert.equal(LB.fmtDeg(2.225), '+2.23°');
   assert.equal(LB.fmtDeg(31.45), '+31.45°', 'a typed two-decimal value reads as typed');
-  // the guard is for COMPUTED values (A's integrals): a half that came out 2e-13 short still rounds as the half it is
+  // the guard is for COMPUTED values (the core's integrals): a half that came out 2e-13 short still rounds as the half it is
   assert.equal(LB.fmtDeg(0.025 - 2e-13), '+0.03°'); assert.equal(LB.fmtDeg(-(12.445 - 2e-12)), '−12.45°');
   assert.equal(LB.fmtM(150), '150.00 m'); assert.equal(LB.fmtM(0.004), '0.00 m'); assert.equal(LB.fmtM(118.48), '118.48 m');
   const f = LB.formatReadout({ lengthM: 60, turnDeg: 45, climbDeg: 8, bankFromDeg: 10, bankToDeg: -5 });
@@ -113,7 +113,7 @@ test('the layout: never over the head\'s keep-out, never two labels overlapping,
   assert.ok(crowd.culled.length > 0 && crowd.drawn.length + crowd.culled.length === 40, 'what does not fit is culled, and said');
 });
 
-// FOUND IN THE REAL WINDOW (L130, fourth capture): at the nearest zoom the head's keep-out is ~105 px and the head's own label is
+// FOUND IN THE REAL WINDOW (fourth capture): at the nearest zoom the head's keep-out is ~105 px and the head's own label is
 // anchored ON the head, so every near place lay inside the keep-out and the label was culled
 test('the layout: a label anchored on a large head keep-out is placed clear of it, not culled', () => {
   const view = { width: 655, height: 525, head: { x: 330, y: 400, r: 100 } };
@@ -123,9 +123,9 @@ test('the layout: a label anchored on a large head keep-out is placed clear of i
   assert.ok(!(d.x < keep.x + keep.w && keep.x < d.x + d.w && d.y < keep.y + keep.h && keep.y < d.y + d.h), 'and clear of the keep-out');
 });
 
-// B'S SCORE (D187): the head's own label was MISSING in 6 of 15 states (E's M5 (d): "at least the label of the piece ending at the
+// A REVIEW'S SCORE: the head's own label was MISSING in 6 of 15 states (the sealed check's rule: "at least the label of the piece ending at the
 // head is drawn"). Near the view's edge every ring around its anchor can fail; the head's label is then placed elsewhere in the
-// view, never culled, and still clear of the head (E's M4: the head's point and 6 px inside no label).
+// view, never culled, and still clear of the head (the check's rule: the head's point and 6 px inside no label).
 test('the layout: the head\'s own label is never culled, even where no ring around its anchor fits; it stays clear of the head', () => {
   const view = { width: 320, height: 240, head: { x: 10, y: 10, r: 24 } };
   const r = LB.layout([{ piece: 'head', text: 'head', x: 10, y: 10, w: 290, h: 47, priority: -1, head: true }], view);
@@ -138,7 +138,7 @@ test('the layout: the head\'s own label is never culled, even where no ring arou
   assert.ok(both.drawn.some((x) => x.piece === 'head'), 'the head\'s label is drawn beside another');
 });
 
-// D409 (E's D405 shot check): the head's label sat under the grid bar, all but its top line hidden. The page's panels over the view are a keep-out
+// A screenshot check found: the head's label sat under the grid bar, all but its top line hidden. The page's panels over the view are a keep-out
 // like the head's: a label is never placed under one, and the head's own label, which is never culled, finds a place clear of them too
 test('the layout: no label is placed under a panel over the view, the head\'s own label included', () => {
   const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -153,9 +153,9 @@ test('the layout: no label is placed under a panel over the view, the head\'s ow
   assert.equal(before.drawn.length, 1, 'no panels: the head\'s label is still drawn');
 });
 
-// R11's own test since D187: the head's piece now gets a label however little of it is in view, so only a piece that is NOT the
+// The head's piece now gets a label however little of it is in view, so only a piece that is NOT the
 // head's shows whether a label slides along its piece to the part that is on screen
-// D242 (amended by name): piece labels are on HOVER only, so this piece is hovered (the preview's pick answers a station in it) to be labelled at all
+// (amended by name): piece labels are on HOVER only, so this piece is hovered (the preview's pick answers a station in it) to be labelled at all
 test('a piece whose middle is behind the camera is labelled, when hovered, on the part of it that is in view', async () => {
   const P = await mountPanel(), { toPath } = require('../../src/core/adapter.js');
   let track = null, view = null;
@@ -192,7 +192,7 @@ test('the head\'s own piece is labelled even when none of it is on screen (the c
   P.panel.unmount();
 });
 
-// B'S SCORE (D187): contrast under 4.5 : 1 on labels over bright road. E's M5 (b) is measured in pixels: every pixel in the label's
+// A REVIEW'S SCORE: contrast under 4.5 : 1 on labels over bright road. The sealed check's contrast rule is measured in pixels: every pixel in the label's
 // rectangle that differs from its median background counts as INK, and the median ink pixel is held against the background. So the
 // box must hold only its background and its text: an opaque background (no road bleeding in), no border and no rounded corners (the
 // road showed through them), and text far from the background.
@@ -222,7 +222,7 @@ test('the label box holds only an opaque background and its text: no border, squ
   P.panel.unmount();
 });
 
-// D381 (pane B): a skin per melody. The label box takes the skin's --ink and --on-ink-strong, still OPAQUE whatever alpha a skin writes, and a skin change
+// A skin per melody. The label box takes the skin's --ink and --on-ink-strong, still OPAQUE whatever alpha a skin writes, and a skin change
 // recolours the boxes the layer already made
 test('a skin change recolours the label boxes already made, and their background stays opaque', async () => {
   const P = await mountPanel(), { toPath } = require('../../src/core/adapter.js');
@@ -279,7 +279,7 @@ test('the panel: a field set extend refuses shows — (and says why in the title
   P.panel.unmount();
 });
 
-// D242 (amended by name; the user, 23:46: "it should be only when you hover over the pieces"): this test used to assert ONE LABEL PER ROAD PIECE. Now the
+// (amended by name; the user, 23:46: "it should be only when you hover over the pieces"): this test used to assert ONE LABEL PER ROAD PIECE. Now the
 // head's own piece is always labelled and any other only while the pointer is over it; the text, the head's keep-out, the flight and the empty track are as before
 test('the labels on the track: the head\'s own piece always, any other only when hovered; the text A\'s numbers, clear of the head; a flight and an empty track draw none and throw nothing', async () => {
   const P = await mountPanel();
@@ -320,8 +320,8 @@ test('the labels on the track: the head\'s own piece always, any other only when
   P.panel.unmount();
 });
 
-// FOUND IN THE REAL WINDOW (L130, second capture): the build view looks ahead from 15 m behind the head, so the head's own piece's
-// MIDDLE is behind the camera and it drew no label at all (E's M5 (d): the head's piece is labelled at every zoom). A label now
+// FOUND IN THE REAL WINDOW (second capture): the build view looks ahead from 15 m behind the head, so the head's own piece's
+// MIDDLE is behind the camera and it drew no label at all (the sealed check's rule: the head's piece is labelled at every zoom). A label now
 // slides along its piece to the part that is on screen.
 test('the head\'s own piece is labelled in the build view, where its middle is behind the camera', async () => {
   const P = await mountPanel(), { toPath } = require('../../src/core/adapter.js'), { headCamera } = require('../../src/geom/index.js');
@@ -338,10 +338,10 @@ test('the head\'s own piece is labelled in the build view, where its middle is b
   P.panel.unmount();
 });
 
-// FOUND IN THE REAL WINDOW (L130): (1) the preview extends its path IN PLACE, so labels cached by the path object kept the first
+// FOUND IN THE REAL WINDOW: (1) the preview extends its path IN PLACE, so labels cached by the path object kept the first
 // piece's anchors forever (1 label for 5 pieces); (2) the preview's mount clears #preview after the panel mounted, which detached
 // the label layer (every label measured 0 x 0 and none was painted). Both reproduced here with the preview's own track model.
-// D242 (amended by name): this test asserted every one of the 5 pieces labelled or culled; labels are on HOVER now, so it hovers a piece that exists only after
+// (amended by name): this test asserted every one of the 5 pieces labelled or culled; labels are on HOVER now, so it hovers a piece that exists only after
 // the path was extended in place (the 4th, 690–910 m) and asserts that it and the head's piece are drawn, which is what "follows the path" needs
 test('the labels follow a path the preview extends IN PLACE (a hovered later piece is labelled), and survive the preview clearing #preview after they mounted', async () => {
   const P = await mountPanel(), { createTrackModel } = require('../preview/trackmodel.js'), tm = createTrackModel();
@@ -365,7 +365,7 @@ test('the labels follow a path the preview extends IN PLACE (a hovered later pie
   P.panel.unmount();
 });
 
-// ── D190, THE CUP (E's seal row 7, the UI half). A's core is stubbed: see stubCup above for exactly what it stands in for ──
+// ── THE CUP (the UI half). The core is stubbed: see stubCup above for exactly what it stands in for ──
 
 test('extendOptions: the cup field is the target c, in DEGREES, typed as it is (0 is a target; empty continues; never clamped here)', () => {
   const base = { length: 100, turn: '', climb: '', bank: '', width: '' };
@@ -378,14 +378,14 @@ test('extendOptions: the cup field is the target c, in DEGREES, typed as it is (
 
 test('the Extend panel has a "cup °" field beside bank, 0 to 150, and Extend hands its value to the core as c', async () => {
   const S = { stub: null }, P = await mountPanel((s) => (S.stub = stubCup(s)));
-  // AMENDED D355 part 2 (position only): the cup field moved from right after bank into "More shape", folded under bank (plan_t180_handoff :1384); the rest of this row is unchanged
+  // AMENDED (position only): the cup field moved from right after bank into "More shape", folded under bank; the rest of this row is unchanged
   // AMENDED (the left column laid out for space): "More shape" is gone, so the cup field is right after bank again, in the one list of fields
   const pickers = P.root.all().filter((e) => e.tagName === 'LABEL' && e.children[0]).map((e) => e.children[0].textContent);
   assert.equal(pickers[pickers.indexOf('bank °') + 1], 'cup °', `cup is the field after bank (fields: ${pickers.join(', ')})`);
   const f = P.field('cup °'); assert.equal(f.attrs.min, '0'); assert.equal(f.attrs.max, '150');
   P.type('length m', 100); P.type('cup °', 90);   // (the fake DOM keeps a field's initial value as an attribute: type the length)
   const btn = P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend'); btn.onclick();
-  // (D193: after Extend the fields show the new head and the readout asks again, so the click's options are the last EXTEND call's)
+  // (after Extend the fields show the new head and the readout asks again, so the click's options are the last EXTEND call's)
   assert.equal(S.stub.extended.at(-1).targets.c, 90, 'the click extends with c = 90');
   P.panel.unmount();
 });
@@ -417,7 +417,7 @@ test('the cup cell follows the cup field inside its input handler, and a cup the
   P.panel.unmount();
 });
 
-// AMENDED D421 part 3: the brush's channel select is gone (the plan removes it; Sculpt's tools are named by the hand). The brush's channel list is now Smooth's, in the
+// AMENDED: the brush's channel select is gone (removed; Sculpt's tools are named by the hand). The brush's channel list is now Smooth's, in the
   // Sculpt strip, and the Cup tool is the cup's drag; the title is kept, since core-mutation's U8 names this test
 test('the brush\'s channel list gains cup (channel c), with a drag rate in degrees', async () => {
   const P = await mountPanel();
@@ -430,7 +430,7 @@ test('the brush\'s channel list gains cup (channel c), with a drag rate in degre
   P.panel.unmount();
 });
 
-// AMENDED D421 part 3: as the row above, Smooth's channel list; the Edge tool's "which edge" and the Tube sweep tool under "more" are their drags. The old last check
+// AMENDED: as the row above, Smooth's channel list; the Edge tool's "which edge" and the Tube sweep tool under "more" are their drags. The old last check
   // ("not in the local brush") went with the mode select: there is no local brush list any more
 test('the brush\'s channel list offers the cross-section channels e, s and t (D225), each with a drag rate', async () => {
   const P = await mountPanel();
@@ -447,7 +447,7 @@ test('the brush\'s channel list offers the cross-section channels e, s and t (D2
   P.panel.unmount();
 });
 
-// ── D193, THE FIELDS SHOW THE HEAD (the user, 02:25: "show the original value the first piece starts as instead of it being blank") ──
+// ── THE FIELDS SHOW THE HEAD (the user, 02:25: "show the original value the first piece starts as instead of it being blank") ──
 const Dc = require('../../src/core/document.js'), { extend: extendDoc } = require('../../src/core/extend.js'), { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 const DEGt = Math.PI / 180, BLANK = { turn: '', climb: '', bank: '', width: '', cup: '' };
 const FIELDS = { turn: 'turn °/100m', climb: 'climb °/100m', bank: 'bank °', width: 'width m', cup: 'cup °' };
@@ -469,7 +469,7 @@ test('after Extend and Redo the fields show the head\'s END state in their own u
   const P = await mountPanel();
   const start = shownAll(P);
   P.type('length m', 120); P.type('turn °/100m', 20); P.type('bank °', 10); P.type('width m', 25); P.type('cup °', 60);
-  const typed = shownAll(P);   // D242 item 7: what Undo gives back
+  const typed = shownAll(P);   // what Undo gives back
   P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
   assert.equal(P.shell.getState().history.present.pieces.length, 1, P.shell.getState().message || 'extended');
   const after = shownAll(P);
@@ -503,14 +503,14 @@ test('a CHANGED value is a target in the core\'s units; a value typed back to ex
   P.type('bank °', -7.5); assert.ok(Math.abs(P.opts().targets.phi + 7.5 * DEGt) < 1e-15, 'bank: ° to rad');
   P.type('width m', 28); assert.equal(P.opts().targets.w, 28, 'width: m');
   P.type('cup °', 90); assert.equal(P.opts().targets.c, 90, 'cup: degrees, as typed');
-  // AMENDED D430 (the user, 2026-10-22: "if one is blank auto set it to 0"): this line held that a cleared field is blank and continues (D193). The rule changed: a field
+  // AMENDED (the user, 2026-10-22: "if one is blank auto set it to 0"): this line held that a cleared field is blank and continues. The rule changed: a field
   // the user empties is 0 (core-pieces-ui.test.js rows 22-22c); a field left as shown still sends no target (the typed-back-to-20 line above)
   P.type('bank °', ''); assert.equal(P.opts().targets.phi, 0, 'a cleared field is 0, not continue');
   P.type('turn °/100m', ''); assert.equal(P.opts().targets.kh, 0, 'a cleared turn is 0, not the head\'s 20');
   P.panel.unmount();
 });
 
-// CHECKED, NOT ASSUMED (the chair): a blank field CONTINUES a channel (its end value AND slope, src/core/extend.js), and a target equal to
+// CHECKED, NOT ASSUMED: a blank field CONTINUES a channel (its end value AND slope, src/core/extend.js), and a target equal to
 // the shown value would NOT: it bends a channel still changing at the head, and any cup target turns a legacy piece into a cup piece. So a
 // field left as shown sends no target. This test builds a head where turn and bank are still changing, and shows both halves.
 test('a field left as shown builds the SAME piece, ghost and readout as a blank, even where turn and bank are still changing at the head; a literal target would not', async () => {
@@ -536,7 +536,7 @@ test('a field left as shown builds the SAME piece, ghost and readout as a blank,
   P.panel.unmount();
 });
 
-// ── D194a, THE FIRST PIECE IS WHAT WAS TYPED FROM ITS START (the user, 02:39: "the standard width stays the same while toward the front it
+// ── THE FIRST PIECE IS WHAT WAS TYPED FROM ITS START (the user, 02:39: "the standard width stays the same while toward the front it
 // grows bigger ... would alway make a bottle neck of width at the start of the track"). On an empty track the typed values are the first
 // piece's START as well as its targets, so every typed channel is constant from s = 0; an untyped one keeps its default start ──
 const AD = require('../../src/core/adapter.js');
@@ -572,7 +572,7 @@ test('the first piece is the typed BANK, TURN and CLIMB from s = 0', async () =>
   P.panel.unmount();
 });
 
-// the chair: a typed cup makes the first piece a CUP piece from its start; E's seal row 1 (the profile's edge ψ = c on BOTH sides, 0.05°)
+// a typed cup makes the first piece a CUP piece from its start; the sealed check's row 1 (the profile's edge ψ = c on BOTH sides, 0.05°)
 // must then hold from s = 0, on every segment the adapter hands the geometry
 test('a typed CUP makes the first piece a cup piece from its start, and the rendered edge equals c on both sides from s = 0 (seal row 1)', async () => {
   const P = await mountPanel(), d = placeFirst(P, { 'length m': 120, 'cup °': 90 }), P0 = d.pieces[0];
@@ -614,12 +614,12 @@ test('a lap whose first piece was typed (width 40, cup 30) closes, and exports t
   P.panel.unmount();
 });
 
-// ── D194b, "AT START" (the user: both "blend to the new value across the piece" and "the whole piece the same width"). A ticked field's
+// ── "AT START" (the user: both "blend to the new value across the piece" and "the whole piece the same width"). A ticked field's
 // target goes to the core in `transition` as a per-channel map in metres: reach it within one knot span (20 m, or the piece if shorter),
-// then hold. A's core (transition as a number OR a map) is not in this tree, so the panel tests stub it: see stubTransition ──
+// then hold. The core that takes transition as a number OR a map is not in this tree, so the panel tests stub it: see stubTransition ──
 // THE STUB: stubTransition(shell) wraps the REAL shell and does exactly two things: it records every options object handed to extend,
 // candidate and candidateReadout (`seen`, and `extended` for extend alone), and it REMOVES `transition` before the real core sees it
-// (4ccdd58's core refuses a map: BAD_TRANSITION). So these tests show what the panel SENDS; what A's core does with it is not tested here.
+// (4ccdd58's core refuses a map: BAD_TRANSITION). So these tests show what the panel SENDS; what that core does with it is not tested here.
 function stubTransition(real) {
   const seen = [], extended = [], bare = (o) => { const { transition, ...rest } = o; return rest; };
   return Object.assign(Object.create(real), {
@@ -680,12 +680,12 @@ test('"at start" on a field left as shown sends nothing (no target, D193); the b
   P.panel.unmount();
 });
 
-// ── D238 (the user, 22:01: "can you remove the water sim feature?"): nothing about the water in the builder ───────────────────────────────────────────────────────────────────────────────────────────
+// ── (the user, 22:01: "can you remove the water sim feature?"): nothing about the water in the builder ───────────────────────────────────────────────────────────────────────────────────────────
 test('no water: the panel has no Water section, the shell no pour and no water state, an edit pours and draws nothing, and no file of the app names the water', async () => {
   const fs = require('fs'), path = require('path');
   const P = await mountPanel(), els = P.root.all();
-  // AMENDED D355 part 2 (position only): Brush and Close moved to the Build menu (plan_t180_handoff :1382-1387), and Start & grid, Pit lane and Local example to pane A's Track menu
-  // and File ▸ Developer, which make their own (the seam ruling, :1421-1424), so those headings are gone from this column; the rule of this row, no Water section, is unchanged
+  // AMENDED (position only): Brush and Close moved to the Build menu, and Start & grid, Pit lane and Local example to the Track menu
+  // and File ▸ Developer, which make their own, so those headings are gone from this column; the rule of this row, no Water section, is unchanged
   // AMENDED (the column laid out for space): the "Equation track" heading is gone, the track line is the column's first line; the rule of this row is unchanged
   assert.deepEqual(els.filter((e) => e.tagName === 'H3').map((e) => e.textContent), ['Extend at the head', 'Selected pieces', 'Pieces library'], 'the panel\'s sections (D240 added the two for saved pieces; D355 moved Brush and Close to the Build menu and Start & grid, Pit lane and Local example to the Track menu): no Water');
   const words = els.flatMap((e) => [e.textContent, e.attrs['aria-label'], e.attrs.title]).filter(Boolean).join(' ');
@@ -704,8 +704,8 @@ test('no water: the panel has no Water section, the shell no pour and no water s
   walk(app); assert.deepEqual(found, [], `files of the app that still name the water: ${found.join(', ')}`);
 });
 
-// ── D239 amendment (the user lost TEST 1 to one Close, with no copy from before it): Close keeps a copy FIRST ──────────
-// D339: Close is ONE press (no preview, no Apply): the press writes the copy before it commits the close
+// ── An amendment (the user lost TEST 1 to one Close, with no copy from before it): Close keeps a copy FIRST ──────────
+// Close is ONE press (no preview, no Apply): the press writes the copy before it commits the close
 const closeLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
 /** A coil (two circles on one another): no way of closing it proves, so a press refuses. */
 const coilLap = (s) => { const R = 180, Q = Math.PI * R / 2; s.extend({ length: 300, family: 'bowl' }); for (let i = 0; i < 8; i++) s.extend({ length: Q, transition: 40, targets: { kh: 1 / R } }); s.extend({ length: 60, transition: 40, targets: { kh: 0 } }); };
@@ -750,7 +750,7 @@ test('if that copy cannot be written, the press changes nothing and says why', a
   P.panel.unmount();
 });
 
-// ── D271, LEVEL and TO FLOOR (the user: "a way to snap the track to the floor to be true flat … its hard to calculate by hand") ──
+// ── LEVEL and TO FLOOR (the user: "a way to snap the track to the floor to be true flat … its hard to calculate by hand") ──
 test('D271: Level ends the piece straight and level; To floor too short says the length that works, which then works; each is one undo step', async () => {
   const P = await mountPanel(), A = require('../../src/core/adapter.js'), DEGR = Math.PI / 180;
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
@@ -769,7 +769,7 @@ test('D271: Level ends the piece straight and level; To floor too short says the
   P.panel.unmount();
 });
 
-// ── D280, TURN BY (the user: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt") ──
+// ── TURN BY (the user: "have a subtle problem with 90 degree turns not coming out straight, it should be but isnt") ──
 test('D280: Turn by places a piece that turns exactly the typed angle and ends straight; a Straight after it turns 0.0°; one undo step; too short names the length', async () => {
   const P = await mountPanel(), RD = require('../../src/core/readout.js');
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
@@ -804,7 +804,7 @@ test('Turn to grid: the line under the buttons says how far the end is off the g
   P.panel.unmount();
 });
 
-// ── D282, SHARP (the user: "i also want to be able to make track H 90 degrees too"): a second turn type beside the broad curve ──
+// ── SHARP (the user: "i also want to be able to make track H 90 degrees too"): a second turn type beside the broad curve ──
 test('D282: Sharp places a corner of the typed angle at the typed radius as ONE undo step; too tight a radius names the tightest at this width and places nothing', async () => {
   const P = await mountPanel(), RD = require('../../src/core/readout.js');
   const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), status = () => P.shell.getState().message || '';
@@ -812,7 +812,7 @@ test('D282: Sharp places a corner of the typed angle at the typed radius as ONE 
   P.type('length m', 200); button('Extend').onclick();
   P.type('sharp °', -90); P.type('sharp radius m', 30); P.type('sharp ramp m', 4); button('Sharp').onclick();
   // the corner is exact on the PATH the app draws and exports (src/core/sharp.js); the readout's exact integral of the spline reads up to ~0.14° more on a 4 m ramp,
-  // the adapter's 2 m trapezoid (exo_memory/handback/p-sharp-E_2026-10-09.md), so the angle is read where it is driven
+  // the adapter's 2 m trapezoid (measured), so the angle is read where it is driven
   const Ad = require('../../src/core/adapter.js'), S = Ad.toPath(doc()).path.samples, hd = (x) => Math.atan2(x.T[0], x.T[2]) * 180 / Math.PI, a = S.reduce((p, x) => (Math.abs(x.s - 200) < Math.abs(p.s - 200) ? x : p));
   assert.equal(doc().pieces.length, 3, status()); assert.ok(Math.abs(hd(S[S.length - 1]) - hd(a) + 90) <= 0.01, `Sharp on the path: ${(hd(S[S.length - 1]) - hd(a)).toFixed(5)}°`);
   P.type('length m', 100); button('Straight').onclick(); assert.equal(Math.abs(turnOf(3)).toFixed(1), '0.0', `the Straight after it: ${turnOf(3)}°`);
@@ -823,10 +823,10 @@ test('D282: Sharp places a corner of the typed angle at the typed radius as ONE 
   P.panel.unmount();
 });
 
-// ── D242 item 6, STRAIGHTS AFTER A TURN (the user: "impossible to create a perfect straight") ──
+// ── STRAIGHTS AFTER A TURN (the user: "impossible to create a perfect straight") ──
 test('D242: after a 30°/100m turn, Straight extends a piece whose turn and climb are 0 from 20 m on, and puts the "at start" boxes back; turn 0 without "at start" shows the hint', async () => {
   const P = await mountPanel(), Dm = require('../../src/core/document.js');
-  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), hint = () => P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title, base = P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title;   // D267: the hint is the "at start" box's tooltip, not a paragraph
+  const button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t), hint = () => P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title, base = P.root.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title;   // the hint is the "at start" box's tooltip, not a paragraph
   P.type('length m', 200); P.type('turn °/100m', 30); button('Extend').onclick();
   assert.equal(P.shell.getState().history.present.pieces.length, 1, P.shell.getState().message);
   assert.equal(P.root.all().find((e) => e.attrs['aria-label'] === 'straight hint'), undefined, 'D267: no paragraph under the buttons'); P.type('turn °/100m', 0); assert.match(hint(), /turn 0 eases over the whole piece: tick "at start" \(or press Straight\) to be straight from 20 m on/); assert.match(hint(), /^at start: reach this turn/, 'the box\'s own words come first');
@@ -879,7 +879,7 @@ test('the piece labels equal a fresh read after a placement, an undo, a redo, a 
   s.adopt({ ...d, start: { ...d.start, heading: d.start.heading + 0.3, pitch: 0.05 } }); check('the start moved');
 });
 
-// D331 (ledger D332), readouts A and D: the panel's readout of the piece Extend would add shows the CORNER it belongs to (the turn since the road was last
+// The panel's readout of the piece Extend would add shows the CORNER it belongs to (the turn since the road was last
 // straight, whether it ends turning, and what "turn 0 at start" would then add: src/core/readout.js corner, cornerNext) and its bank against GRAVITY (the
 // road's real tilt, which past an inversion is not the bank field's number).
 test('the panel shows the corner (its turn, "ends turning at …", what turn 0 at start would add) and the gravity bank, for the piece Extend would add', async () => {
@@ -901,7 +901,7 @@ test('the panel shows the corner (its turn, "ends turning at …", what turn 0 a
   Q.panel.unmount();
 });
 
-// D331 B (ledger D332; the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). The turn field is read as a
+// (the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). The turn field is read as a
 // CORNER by default: typed 90, the piece Extend places turns the map heading by exactly 90° and ends straight; "turn as" rate is the old field, one switch away.
 test('D331 B: by default the turn field is a corner: it shows nothing at the head, a typed 90 is the ghost\'s and the placed piece\'s exact 90.00°, ending straight', async () => {
   const P = await mountPanel(undefined, {}, { turnAsRate: false });
@@ -917,12 +917,12 @@ test('D331 B: by default the turn field is a corner: it shows nothing at the hea
   const d = P.shell.getState().history.present, i = d.pieces.length - 1, Q = d.pieces[i];
   assert.ok(Math.abs(RD.pieceReadout(d, i).turnDeg - 90) <= 0.01, `the placed piece turns ${RD.pieceReadout(d, i).turnDeg}°`);
   assert.equal(Q.channels.kh[Q.channels.kh.length - 1], 0, 'and ends straight');
-  turnAs.value = 'rate'; turnAs.onchange(); P.shell.undo();   // D242 item 7: Undo gives the undone piece's fields back, the way its turn was read included
+  turnAs.value = 'rate'; turnAs.onchange(); P.shell.undo();   // Undo gives the undone piece's fields back, the way its turn was read included
   assert.equal(turnAs.value, 'corner'); assert.equal(P.field('turn °').value, '90', 'the corner it was made with');
   P.panel.unmount();
 });
-// AMENDED (D516): the rule changed by name: Level and To floor place a turn read as a corner exactly (src/core/level.js, test/core_level.test.js rows 6-8), so
-// only Jump still refuses it; Level's refusal of a climb corner is the D331 climb row's below
+// AMENDED: the rule changed by name: Level and To floor place a turn read as a corner exactly (src/core/level.js, test/core_level.test.js rows 6-8), so
+// only Jump still refuses it; Level's refusal of a climb corner is the climb row's below
 test('D331 B: "turn as" rate is the old field (°/100 m, the head\'s rate shown); switching back puts the field back; Jump refuses a corner by name and places nothing', async () => {
   const P = await mountPanel(undefined, {}, { turnAsRate: false });
   const turnAs = P.root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'), button = (t) => P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === t);
@@ -940,7 +940,7 @@ test('D331 B: "turn as" rate is the old field (°/100 m, the head\'s rate shown)
   }
   P.panel.unmount();
 });
-// D331, the climb too (the user: "i wonder, the climb might need to do the same?"; plan :387-399): the climb field follows the same switch
+// The climb too (the user: "i wonder, the climb might need to do the same?"): the climb field follows the same switch
 test('D331 climb: by default the climb field is a corner: blank at the head, a typed 10 is the ghost\'s and the placed piece\'s exact 10.00°, at a steady pitch after; the climb corner cell reads it', async () => {
   const P = await mountPanel(undefined, {}, { turnAsRate: false });
   P.shell.extend({ length: 100, family: 'bowl' }); P.shell.extend({ length: 60, targets: { kv: 0.003 } });   // a head still climbing

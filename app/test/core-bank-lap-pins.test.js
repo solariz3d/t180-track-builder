@@ -1,10 +1,10 @@
 // core-bank-lap-pins.test.js: node --test app/test/core-bank-lap-pins.test.js
-// D477 (pane P): THE SINGLE PRESS IS BYTE FOR BYTE D473's. Bank the lap's second press was made to change nothing by planning against the bank the lap carries
-// (src/core/finish.js bankPlan `carried`, bankLapRun's fixed point), and the plan ruled that Close's own press (app/core/closejob.js runCloseBest, which banks the
-// lap it closes through the same bankLapWith) keeps its output byte-equal. These rows pin that: the sha256 of the serialized document, as a4bfe52 (D473 part 2)
+// THE SINGLE PRESS IS BYTE FOR BYTE a4bfe52's. Bank the lap's second press was made to change nothing by planning against the bank the lap carries
+// (src/core/finish.js bankPlan `carried`, bankLapRun's fixed point), and it was ruled that Close's own press (app/core/closejob.js runCloseBest, which banks the
+// lap it closes through the same bankLapWith) keeps its output byte-equal. These rows pin that: the sha256 of the serialized document, as a4bfe52
 // produced it, for bankLapWith over four public laps closed by close(), and for closejob's press on the two of them that close that way. The laps' own digests are
 // pinned beside them, so a change in extend or close reads as "the lap changed", not "the bank changed". Re-pin by name, with a note here, when the bank plan is
-// meant to change (D447's rate or acceleration bound, the share, the sweeps); a pin that moves otherwise is the press changing what it banks.
+// meant to change (its rate or acceleration bound, the share, the sweeps); a pin that moves otherwise is the press changing what it banks.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -42,7 +42,7 @@ function t10Open(loopM, loopDeg) {
 }
 const closed = (open) => { const c = close(open, { edited: [open.pieces.length - 1] }); assert.equal(c.converged, true, c.report); return c.doc; };
 
-// a4bfe52's digests (T=C:/…/t180-wt-e473 node pins.js, exo_memory/handback/p-d477-P_2026-10-26_evidence/pins-old.out)
+// a4bfe52's digests (computed on a checkout of a4bfe52)
 const PINS = {
   flat: { lap: '40000038fa963aeaefb1a66cdc231094cef4a71c5e5888b67f8af14613f2925a', bank: '4893c25fdd539ef6c211fca5c68b82c9e26119c22e85c5d227eb743eef36749f', press: 'c5cff905d422e75f00d85149f095d3e22f6b304120fc155d5ae6679e605a2d4f' },
   loop: { lap: '2571f9567d124a470f531b9fd251f0500284cc6b1eca25bc52ded5a456e53d08', bank: 'a712f84f84d977e8bd70fb8b3b9b7111c64cb838df53625d74411ef891f83aa3', press: 'a712f84f84d977e8bd70fb8b3b9b7111c64cb838df53625d74411ef891f83aa3' },

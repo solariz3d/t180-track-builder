@@ -1,12 +1,12 @@
 // export-words.test.js: node --test app/test/export-words.test.js
-// D464 (D463 part 2 item 6, E's D461 report §2 item 6): THE EXPORT'S WARNINGS IN THE USER'S WORDS. The export core (src/export) writes its warnings for the
-// builders: source files, design-doc sections, a seat's letter. app/core/exportwords.js turns each into what a person can act on before the app shows it:
+// THE EXPORT'S WARNINGS IN THE USER'S WORDS (a review of the export's warnings asked for it). The export core (src/export) writes its warnings for the
+// builders: source files, design-doc sections, an author's initial. app/core/exportwords.js turns each into what a person can act on before the app shows it:
 // the CSP need stays (in plain words), the internal mesh-name note goes (the kn5 already gets unique names; nothing for the user to do), and no line keeps
-// a file name, a doc section or a seat. The core's own strings are not changed (the export folder and its pinned bytes stay as they are). Rows:
+// a file name, a doc section or an author. The core's own strings are not changed (the export folder and its pinned bytes stay as they are). Rows:
 //   1  the CSP-only warning says the track needs Custom Shaders Patch and that plain AC can crash, with no doc, section or ini key
 //   2  the mesh-node-name note is dropped
 //   3  the other warnings keep their meaning with their references taken off; plain ones pass unchanged
-//   4  a whole list: what is shown names no source file, doc section or seat, and the count is of what is shown
+//   4  a whole list: what is shown names no source file, doc section or author, and the count is of what is shown
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

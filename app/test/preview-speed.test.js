@@ -1,11 +1,11 @@
 // preview-speed.test.js: node --test app/test/preview-speed.test.js   (under the heavy-run lock, --max-old-space-size=4096; about a minute)
-// D235 part 2 (the user: "make the changes render faster while you change it from one to the next? Sometimes it lags and is so slow"). The preview path ONLY; the export
+// The user: "make the changes render faster while you change it from one to the next? Sometimes it lags and is so slow"). The preview path ONLY; the export
 // never sees any of this (core_cup_fixtures is the proof, run beside it). Rows:
 //   1  coarsen: the row grid thinned, the road's two edges kept, rows that shared a grid still share one, an unchanged segment is the same object, and detail 1 is the same array
 //   2  the track model: a coarse detail meshes far fewer vertices; the detail back to 1 equals a fresh full build; the real segments are returned; the very same document
 //      builds nothing again (a closed loop used to rebuild in full on every state change); a change of detail on an open track is a full rebuild
 //   3  batchesOf(mesh, from) is batchesOf(mesh) filtered to the new pieces, and the ghost uses it
-//   4  the preview (CHANGED D421): a brush drag keeps full detail and draws the drag's frame; the release's exact build runs in the next animation frame, once
+//   4  the preview (CHANGED): a brush drag keeps full detail and draws the drag's frame; the release's exact build runs in the next animation frame, once
 //   5  the panel: pointer moves are coalesced to one brushTo per animation frame (the latest position), and the release applies the last one still waiting
 'use strict';
 const test = require('node:test');
@@ -79,8 +79,8 @@ test('row 3: batchesOf(mesh, from) is the batches of the pieces from there on, e
   const g = tm.ghostFor(cand); assert.ok(g.batches.length > 0 && g.batches.every((b) => b.piece >= tr.segments.length), 'the ghost has the new piece\'s batches and the seam onto it, and nothing of the placed track');
 });
 
-// CHANGED D421 (part 4, the degrade ladder; design exo_memory/loop/design_d421_sculpt_P_2026-10-20.md §4.3): the rule this row held, "a brush drag makes the preview COARSE and full detail
-// comes back 250 ms after it ends" (D235), is replaced. A drag now draws its FRAME from the placed track at full detail (trackmodel.js dragFrame: nothing placed rebuilt), and the release's
+// CHANGED (the degrade ladder): the rule this row held, "a brush drag makes the preview COARSE and full detail
+// comes back 250 ms after it ends", is replaced. A drag now draws its FRAME from the placed track at full detail (trackmodel.js dragFrame: nothing placed rebuilt), and the release's
 // exact build runs in the NEXT animation frame, not in the state change that ended the drag and not on a timer; the drag's last frame stays on show until then.
 test('row 4: a brush drag keeps full detail and draws the drag\'s frame (nothing placed rebuilt); the release\'s exact build runs in the next animation frame, once, and is the full build', async () => {
   const s = await tubeShell(), timers = new Map(); let nextId = 1, rafs = [];
@@ -90,7 +90,7 @@ test('row 4: a brush drag keeps full detail and draws the drag\'s frame (nothing
   const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
   const p = P.createPreview({ canvas, shell: s, win }), v = () => p.view(), frame = () => { const run = rafs; rafs = []; for (const f of run) f(16); };
   const placed = v().track, calls = [], real = p.model.update.bind(p.model); p.model.update = (r, o) => { const out = real(r, o); calls.push(out.how); return out; };
-  // CHANGED D421c: the release builds through updateSteps (update()'s own work, run a slice at a time when the window has a clock; this test's has none, so all in one frame): counted the same way
+  // CHANGED: the release builds through updateSteps (update()'s own work, run a slice at a time when the window has a clock; this test's has none, so all in one frame): counted the same way
   const realSteps = p.model.updateSteps.bind(p.model); p.model.updateSteps = function* (r, o) { const out = yield* realSteps(r, o); calls.push(out.how); return out; };
   s.beginBrush({ mode: 'rate', channel: 'phi', s0: 100, r: 60 }); s.brushTo(0.01); s.brushTo(0.02);
   assert.equal(v().detail, 1, 'dragging: full detail, not coarse'); assert.equal(v().track.how, 'drag', 'the drag\'s frame is on show');
@@ -128,7 +128,7 @@ test('row 5: the panel coalesces pointer moves to ONE brushTo per animation fram
   const real = await createCoreShell({ brushFn: null }); real.extend({ length: 300 }); real.extend({ length: 100 });
   const calls = []; const shell = Object.assign(Object.create(real), { brushTo(d) { calls.push(d); return real.brushTo(d); } });
   const root = doc.createElement('div'); require('../core/panel.js').mount(root, shell);
-  // AMENDED D421 part 3 (the brush's "on" box, mode and channel are gone): Sculpt, the Twist tool (the bank, as before); the brush opens on the first move past 5 px, not on the press
+  // AMENDED (the brush's "on" box, mode and channel are gone): Sculpt, the Twist tool (the bank, as before); the brush opens on the first move past 5 px, not on the press
   const by = (label) => root.all().find((e) => e.attrs['aria-label'] === label); real.setSculpt(true); by('sculpt tool').value = 'twist';
   const ev = (y) => ({ button: 0, clientX: 10, clientY: y, preventDefault() {} }), at = (type, e) => (stage.listeners[type] || []).forEach((f) => f(e));
   at('pointerdown', ev(300)); assert.equal(real.getState().brush, null, 'a press alone opens nothing (it may be a click)');
@@ -162,7 +162,7 @@ test('row 6: the fast change key is the JSON key\'s equality, hashed: equal cont
   assert.ok(tf < tj, `control: the hash is faster than JSON.stringify (${tf.toFixed(1)} ms against ${tj.toFixed(1)} ms for ${before.length} segments)`);
 });
 
-// ── D236: the cup and plain segments coarse too, and a closed loop rebuilt from the pieces that changed ──────────────────────────────────────────────────────────────────────
+// ── the cup and plain segments coarse too, and a closed loop rebuilt from the pieces that changed ──────────────────────────────────────────────────────────────────────
 const G = require('../../src/geom/index.js');
 const SCULPT = require('../../src/core/sculpt.js');
 const gq = Math.PI * 180 / 2;

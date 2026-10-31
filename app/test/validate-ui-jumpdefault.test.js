@@ -1,5 +1,5 @@
-// D179: THE FIRST JUMP MUST NOT BE RED BY DEFAULT. A jump with no speed of its own sizes its landing ramp for the design
-// speed (A's src/doc: vocab.js LANDING, resolve.js landingRamp, shell.js setDesignSpeed); validation checks it at the same
+// THE FIRST JUMP MUST NOT BE RED BY DEFAULT. A jump with no speed of its own sizes its landing ramp for the design
+// speed (src/doc: vocab.js LANDING, resolve.js landingRamp, shell.js setDesignSpeed); validation checks it at the same
 // speed (app/validate-ui). The jump is the LAST word in these tests, so only its own ramp can catch the car: the case a
 // new user meets on placing a jump at the build head. Run: node --test --test-concurrency=4 app/test/validate-ui-jumpdefault.test.js
 'use strict';
@@ -25,10 +25,10 @@ async function firstJump() {
 const slide = ({ shell, ctl }, kmh) => { shell.setDesignSpeed(kmh); ctl.setDesignSpeed(kmh); };
 const reds = (ctl) => ctl.state.result.red;
 const rampOf = (shell) => shell.getState().resolved.segments.find((g) => g.part === 'land');
-// the range and step the design-speed slider had (app/validate-ui/speed.js, removed in D256: 50 km/h to MACH6.vmaxKmh, step 5); a host can still pin any of them
+// the range and step the design-speed slider had (app/validate-ui/speed.js, since removed: 50 km/h to MACH6.vmaxKmh, step 5); a host can still pin any of them
 const MIN = 50, MAX = MACH6.vmaxKmh, STEP = 5;
 
-// CHANGED D256 BUILD (the user chose "always max"): the app's controller has no design speed of its own now (full speed), so this row PINS the
+// CHANGED (the user chose "always max"): the app's controller has no design speed of its own now (full speed), so this row PINS the
 // ramp's default, 460 km/h, the speed it is about; the next row is the app's own default
 test('the default jump at the default design speed (460 km/h, FINDINGS.md:476) is clean: no red, both landings caught', async () => {
   const { shell } = await firstJump(), ctl = createValidationController(shell, { designSpeedKmh: MACH6.designSpeedKmh });
@@ -56,7 +56,7 @@ test('resolve with no speed given sizes the ramp for the same default, so every 
 
 test(`the slider swept over its whole range (${MIN}–${MAX} km/h, its own step of ${STEP}): clean wherever the car clears the gap, and nowhere else`, async () => {
   // "clears the gap" is computed independently of the ramp: both falls come down past the gap (jumps.js landingRamp's
-  // touchdowns) off the default jump, whatever the vocabulary makes it (12 m / 0.7 m before D182; 81 m / 14 m measured). Below that speed no ramp can help,
+  // touchdowns) off the default jump, whatever the vocabulary makes it (12 m / 0.7 m before the words were measured; 81 m / 14 m measured). Below that speed no ramp can help,
   // and the red says why; above it the ramp resized to the slider must catch both landings at EVERY step.
   const J = D.WORDS ? D.WORDS.jump : require('../../src/doc/vocab.js').WORDS.jump;
   const clears = (kmh) => landingRamp({ D: J.gap, dh: -J.drop, thetaRad: 0, landRad: J.land, v: kmh / 3.6 }).touchdowns.every((t) => t.x != null);
@@ -68,25 +68,25 @@ test(`the slider swept over its whole range (${MIN}–${MAX} km/h, its own step 
     slide(t, k);
     const r = reds(t.ctl);
     if (clears(k)) { if (r.length) dirty.push(`${k} km/h: ${r.map((x) => x.reason).join(', ')}`); else clean.push(k); }
-    // CHANGED D250 (the user: jumps are tuned by driving them): where the car does not clear the gap the jump WARNS (amber), and nothing is red
+    // CHANGED (the user: jumps are tuned by driving them): where the car does not clear the gap the jump WARNS (amber), and nothing is red
     else { assert.deepStrictEqual(r, [], `${k} km/h: not red (a warning since D250)`); assert.ok(t.ctl.state.result.amber.some((x) => x.reason === 'landing-misses-zone'), `${k} km/h: the car does not clear the gap, so the jump warns`); }
     assert.deepStrictEqual([Math.round(rampOf(t.shell).landing.speed * 3.6), rampOf(t.shell).landing.speedFrom], [k, 'design'], `${k} km/h: the ramp follows the slider, and says so`);
   }
   assert.deepStrictEqual(dirty, [], 'red at a speed where the car clears the gap');
-  // clean at EXACTLY the speeds that clear the gap (the ripple, p-d182-ripple-E: this was "more than 80 steps", the 12 m
+  // clean at EXACTLY the speeds that clear the gap (after the vocabulary was re-measured: this was "more than 80 steps", the 12 m
   // jump's own figure; the measured 81 m jump clears from 435 km/h), and at the slider's maximum
   assert.deepStrictEqual(clean, speeds.filter(clears), `clean at ${clean[0]}–${clean[clean.length - 1]} km/h (${clean.length} steps)`);
   assert.strictEqual(clean[clean.length - 1], MAX);
 });
 
-// CHANGED D250: the row's subject stands (a jump sculpted past what the car can clear is named, with the heaviest fall); it is read from the AMBER
+// CHANGED: the row's subject stands (a jump sculpted past what the car can clear is named, with the heaviest fall); it is read from the AMBER
 // ranges now, a warning, and asserted not red
 test('a jump sculpted past what the car can clear WARNS (amber, D250), and says so: the landings that miss, the heaviest fall', async () => {
   // the ramp cannot be sculpted (it is the jump's own, sized by resolve); what a user CAN make too much for the speed is
   // the flight: a gap sculpted far longer than 460 km/h carries the car
   const { shell, ctl } = await firstJump();
   const jump = shell.getState().history.present.words.find((w) => w.word === 'jump');
-  // named (the ripple, p-d182-ripple-E): an 80 m gap off a 0.7 m drop, which the 6.3 g landing cannot reach at 460 km/h.
+  // named (after the vocabulary was re-measured): an 80 m gap off a 0.7 m drop, which the 6.3 g landing cannot reach at 460 km/h.
   // The measured default jump is itself 81 m with a 14 m drop, so "sculpted past" has to say what it was sculpted to
   shell.sculpt(jump.id, { handles: { gap: 80, drop: 0.7, land: -2 * DEG } });
   assert.strictEqual(shell.getState().message, null, shell.getState().message);

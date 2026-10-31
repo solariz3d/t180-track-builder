@@ -1,8 +1,8 @@
 // export-isolated-mutation.test.js: node --test app/test/export-isolated-mutation.test.js
-// D437b, the export in its own process, mutated (as core-mutation.test.js does it). Each mutation copies app/ (core, preview, camera, export, install, lib,
+// The export in its own process, mutated (as core-mutation.test.js does it). Each mutation copies app/ (core, preview, camera, export, install, lib,
 // testhook, validate-ui, and export-isolated.test.js), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED export-isolated.test.js
 // there (its host threads load the copy's files too). "Applied" means the patch text was found exactly once; "caught" means the named row FAILED on the mutant.
-// A CONTROL runs the unmutated copy first. A run whose file died natively tested nothing and reads NOT TESTED (test/inner_run.js, D352). The originals are
+// A CONTROL runs the unmutated copy first. A run whose file died natively tested nothing and reads NOT TESTED (test/inner_run.js). The originals are
 // never touched. The real browser's half (a real out-of-memory, the page still drawn) is export-isolated-page.test.js, not mutated here.
 'use strict';
 const test = require('node:test');

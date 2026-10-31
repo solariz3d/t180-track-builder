@@ -1,5 +1,5 @@
 // core-undo-persist.test.js: node --test app/test/core-undo-persist.test.js
-// D272 (the user, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool"): the undo history survives Save, closing the
+// The user, 11:55: "when you save a track, but then close program, reopen and go back to it, you cannot undo pieces of the track ... not cool". The undo history survives Save, closing the
 // program and reopening. Save writes a SIDECAR, eq-<name>.t180undo, beside the track (past and future, D.serialize'd, the last 200 steps; the track file itself unchanged); Open restores it only when its
 // present equals the opened file byte for byte, else drops it (silently on a mismatch, with one status line when it is corrupt); the autosave carries its history the same way. Fake storage here (the
 // native side is src-tauri/src/lib.rs, tested there); no real window.
@@ -8,7 +8,7 @@
 //   3  the cap: the last 200 steps of the past, the 200 nearest of the future
 //   4  the track file's bytes are identical with and without the feature, and written BEFORE the sidecar; a sidecar write that fails never fails the save
 //   5  the autosave keeps its history: Restore after a crash can undo; a damaged history in it restores the track without one and says so
-//   6  a second Save replaces the sidecar; Save As leaves the old name's alone; the size at the cap on a real track's copy is measured in the hand-back, not asserted here
+//   6  a second Save replaces the sidecar; Save As leaves the old name's alone; the size at the cap on a real track's copy is measured separately, not asserted here
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

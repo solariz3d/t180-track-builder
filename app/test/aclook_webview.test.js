@@ -1,4 +1,4 @@
-// aclook_webview.test.js (D224): the preview's look resolves in the app's REAL loading path, where there is no node.
+// aclook_webview.test.js: the preview's look resolves in the app's REAL loading path, where there is no node.
 //
 // WHY THIS EXISTS. 5debee8 made app/preview/aclook.js resolveLook call src/export/acready.js ensureDiffuse, which built its texture with
 // Buffer.from(...). Every other aclook test runs the module under node, where Buffer exists, so all of them passed; in the app the

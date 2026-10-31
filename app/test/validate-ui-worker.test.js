@@ -7,7 +7,7 @@
 //      a failed check and a worker error reach onFail; a page without Worker throws (the panel then checks on the page)
 //   3  the worker script checks only the NEWEST of the documents that arrive while it is busy, and keeps one job between messages
 //   4  the panel with a worker: "checking…" until the answer, then the verdict; a document the worker cannot take falls back to the page
-//   5  (D350) the reds the panel hands Close: a finished answer's, for the document it checked, and none from an answer made in a drag or with a check put off
+//   5  the reds the panel hands Close: a finished answer's, for the document it checked, and none from an answer made in a drag or with a check put off
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

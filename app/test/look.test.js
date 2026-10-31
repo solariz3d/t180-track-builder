@@ -1,15 +1,15 @@
-// look.test.js: node --test app/test/look.test.js. D170, "feels like a coaster builder" (the review of the
-// D169 captures, items 1, 2, 6 and 7). Stated before these tests were written:
+// look.test.js: node --test app/test/look.test.js. "Feels like a coaster builder" (the review of the
+// earlier captures, items 1, 2, 6 and 7). Stated before these tests were written:
 //   · LIGHT: shade(n) = ambient + key·max(n·key, 0) + fill·max(n·fill, 0), two-sided. On known normals: the floor gets
 //     exactly that sum; a floor and a vertical wall differ by at least 0.15, and so do a bank facing the key light and one
 //     facing away, so one colour reads as different surfaces. The fragment shader carries the same constants.
 //   · EDGE LINES: the edge lines run through the profile's two EDGE vertices (u min and u max) and the centre line through
-//     u = 0 (D433b; it was the vertex nearest u = 0), each lifted 3 cm along its normal; in world space an edge vertex lies within 1e-4 m (+ the
+//     u = 0 (it was the vertex nearest u = 0), each lifted 3 cm along its normal; in world space an edge vertex lies within 1e-4 m (+ the
 //     lift) of the geometry's own surface at that u. A tie crosses the road at least every 10 m.
 //   · OVERHEAD FIT: with the track's box and the view's aspect, every vertex of every batch projects inside the view
 //     (|x|, |y| ≤ 1, in front of the camera, before the far plane), for a wide and a tall view; the head is in frame.
 //   · GHOST: shown and cleared; built on copies (the placed track is untouched); the ghost of a word equals, array for
-//     array, what placing that word then builds, also through A's real shell.place(). A candidate that does not extend
+//     array, what placing that word then builds, also through the real shell.place(). A candidate that does not extend
 //     the placed track is refused.
 //   · GRID: every grid vertex is at y = 0, and the grid covers the track's box.
 'use strict';
@@ -68,7 +68,7 @@ test('edge lines: through the two edge vertices and the centre vertex, lifted 3 
   const near = (a, c) => Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]) < 1e-6;
   const first = (j) => Array.from(L.edges.slice(j * 6, j * 6 + 3));
   assert.ok(near(first(0), vtx(0, 0)) && near(first(2), vtx(0, K - 1)), 'edges at k = 0 and k = K − 1');
-  // CHANGED D433b: the centre line is at u = 0, lerped between the two vertices either side of it (it was the vertex nearest u = 0, up to 0.095 m off the middle)
+  // CHANGED: the centre line is at u = 0, lerped between the two vertices either side of it (it was the vertex nearest u = 0, up to 0.095 m off the middle)
   const { k0, t } = L.centre, a = vtx(0, k0), c = vtx(0, k0 + 1);
   assert.ok(b.us[k0] <= 0 && b.us[k0 + 1] > 0 && Math.abs(b.us[k0] + (b.us[k0 + 1] - b.us[k0]) * t) < 1e-12, 'the centre\'s u is 0, between two vertices');
   assert.ok(near(first(1), a.map((x, d) => x + (c[d] - x) * t)), 'the centre line at u = 0');
@@ -109,7 +109,7 @@ for (const aspect of [1.7, 0.6]) {
 
 // ── ghost ──
 /** The same batches, array for array (exact). Reports the first mismatch: a deepEqual of these arrays takes minutes to
- *  print its diff when they differ, which turns a failure into a timeout (seen in D168 and again here). */
+ *  print its diff when they differ, which turns a failure into a timeout (seen before and again here). */
 function sameBatches(a, b) {
   assert.deepEqual(a.map((x) => x.key), b.map((x) => x.key), 'the same batches');
   for (let i = 0; i < a.length; i++) for (const f of ['model', 'positions', 'normals', 'indices']) {
@@ -122,7 +122,7 @@ test('ghost: the ghost of a segment tail equals what placing it builds, and the 
   const keep = before.batches.map((b) => [b.positions, Array.from(b.model)]);
   const pathWas = { n: before.path.samples.length, L: before.path.lengthM, end: before.path.samples[before.path.samples.length - 1] };
   const g = tm.ghostFor({ segments: all.slice(0, 7) });
-  // D407 (amended, by A): a placement now TAKES the ghost's path and mesh, so placing after the ghost no longer shows a ghost that grew the live path; the rule this test states, the
+  // AMENDED: a placement now TAKES the ghost's path and mesh, so placing after the ghost no longer shows a ghost that grew the live path; the rule this test states, the
   // placed track untouched by the ghost, is checked on the path itself (B10 in mutation.test.js was caught by the placement below, and is caught here now)
   assert.deepEqual({ n: before.path.samples.length, L: before.path.lengthM, end: before.path.samples[before.path.samples.length - 1] }, pathWas, 'the placed path is untouched by the ghost');
   assert.ok(g.batches.length > 0 && g.batches.every((b) => b.piece === 6), 'only the new piece (and its seam)');
@@ -145,7 +145,7 @@ test('ghost through A\'s real shell: the candidate for a word equals what shell.
   const store = { saveDoc: async () => {}, openDoc: async () => '', listDocs: async () => [], saveLibrary: async () => {}, openLibrary: async () => null };
   const s = await createShell({ storage: store }), tm = TM.createTrackModel();
   s.place('straight'); s.setPicker('font', 'half-pipe'); s.place('turn'); tm.update(s.getState().resolved);
-  // the picker NAMES a font that no default would give (D182, B12): the head is a half-pipe, so font continuity (a new word
+  // the picker NAMES a font that no default would give (mutant B12): the head is a half-pipe, so font continuity (a new word
   // takes the previous word's font) gives half-pipe, and the old per-class default gave bowl; a candidate that ignored the
   // picker would therefore differ from what place() builds, whichever vocabulary is in force
   s.setPicker('font', 'flat');
@@ -222,8 +222,8 @@ test('head marker: it grows with the camera distance (2%, never under 3 m), and 
   assert.equal(ring.length, 24, 'four sides');
   for (let i = 0; i < ring.length; i += 3) { const d = [0, 1, 2].map((k) => ring[i + k] - h.pos[k]); assert.ok(Math.abs(dot(d, h.U)) < 1e-3, 'in the road plane'); assert.ok(Math.hypot(...d) >= 64 - 1e-3, 'around the head, not on it'); }
 });
-// D225 (E's seal X2 ii, the librarian's ruling): the mast points along the ROAD's up (head.U), not world y, so it stays inside a tube and
-// right side up when inverted. This test said "straight up" (world y) until that ruling; it now holds the mast to U with the same 10 m.
+// The mast points along the ROAD's up (head.U), not world y, so it stays inside a tube and
+// right side up when inverted. This test said "straight up" (world y) until that was ruled wrong; it now holds the mast to U with the same 10 m.
 test('head marker: a 10 m mast from the head along the road\'s up', () => {
   const p = G.buildPath(words(2)), mk = LK.headMarker(p.head).positions;
   assert.deepEqual(Array.from(mk.slice(0, 3)), Array.from(new Float32Array(p.head.pos)));

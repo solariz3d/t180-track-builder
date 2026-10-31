@@ -1,6 +1,6 @@
 // export-isolated.test.js: node --test app/test/export-isolated.test.js
-// D437b, THE EXPORT OFF THE PAGE. The user's white window (2026-10-22 19:38) was the page's renderer dying of a V8 heap out-of-memory inside the
-// export (exo_memory/handback/p-d437-P_2026-10-22.md): the export ran synchronously on the page's main thread (coreshell.js buildExport into
+// THE EXPORT OFF THE PAGE. The user's white window (2026-10-22 19:38) was the page's renderer dying of a V8 heap out-of-memory inside the
+// export: the export ran synchronously on the page's main thread (coreshell.js buildExport into
 // export.js runSegments), so when it ran out of memory the page went with it. The export now runs in its own process when the page has one to
 // give (app/export/exportrunner.js: a sandboxed iframe, which Chromium puts in a process of its own, with the export in a worker inside it; a
 // bare Web Worker shares the page's process and a heap OOM there kills the page too, measured in headless Chrome and Edge 155), and ends with a
@@ -67,13 +67,13 @@ function digestOf(out) {
   return `sha256 ${h.digest('hex').slice(0, 16)} files ${n}`;
 }
 // b6969da's bytes for the two exports, from row 1 run there (node --test --test-name-pattern="row 1" app/test/export-isolated.test.js, PRINT_D437B=1)
-// local-0.4.15 (seat A, D441 landing): the lap pin moved from b6969da's 00588932b76e738a to 36ba2c6869a3d1d0 because D438 (9233a93,
+// local-0.4.15: the lap pin moved from b6969da's 00588932b76e738a to 36ba2c6869a3d1d0 because a pit lane change (9233a93,
 // src/geom/pitlane.js, the pit lane level from leave to rejoin) changes the lap's pit lane; pitlane.js put back to 9861c69's gives 00588932
 // again, so the isolation did not move it. The open TEST export has no pit lane and is unchanged. The row titles still say b6969da's;
 // they are left as they are because the mutation harness names its rows by them.
-// D460 (pane C, d460-c): the lap pin moved from 36ba2c6869a3d1d0 (v0.4.19, 496c347, read there with PRINT_D437B=1) to 9f3a7040bf4356e9 because the seam
+// Later: the lap pin moved from 36ba2c6869a3d1d0 (v0.4.19, 496c347, read there with PRINT_D437B=1) to 9f3a7040bf4356e9 because the seam
 // zipper pairs by lateral position (src/geom/mesh.js meshSeam) and the weld drops a standing seam triangle (src/export/acready.js); the lap's seams change
-// their index arrays only (cmpmesh.js in exo_memory/handback/p-d459-fins-C_2026-10-25_evidence). The open TEST export is unchanged.
+// their index arrays only (compared mesh by mesh). The open TEST export is unchanged.
 // AMENDED BY NAME (2026-10-30, at the user's yes): both pins moved from 9f3a7040bf4356e9 / a257c20e84e68897 to the values below because
 // data/surfaces.ini's soft block now writes SOFT_CFM=0.00005 (src/export/trackfiles.js, its header says why). That constant is used only in
 // surfacesIni, and row 1 at the parent commit (60c7688, PRINT_D437B=1) still prints the old pair, so the one ini line is the whole change.

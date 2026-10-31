@@ -1,5 +1,5 @@
 // export-isolated-page.test.js: node --test app/test/export-isolated-page.test.js
-// D437b, THE EXPORT IN ITS OWN PROCESS, IN A REAL BROWSER (headless Chrome, --mute-audio through soundrender.js launchChrome; never a window). The page is
+// THE EXPORT IN ITS OWN PROCESS, IN A REAL BROWSER (headless Chrome, --mute-audio through soundrender.js launchChrome; never a window). The page is
 // the worktree served over a local port; it loads the core shell, the road surface and the exporter through the app's own loader (app/lib/cjs.js), as
 // app/index.html does, and builds export-isolated.test.js's test lap. Rows:
 //   1  a page with a document and Web Workers exports through its own process without being told to (app/export/export.js makes the runner: a hidden
@@ -16,11 +16,11 @@ const { chromePath, launchChrome, connect } = require('./soundrender.js');
 const CHROME = chromePath();
 const REPO = path.resolve(__dirname, '..', '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// local-0.4.15 (seat A, D441 landing): the lap pin moved from b6969da's 00588932b76e738a to 36ba2c6869a3d1d0 because D438 (9233a93,
-// src/geom/pitlane.js, the pit lane level from leave to rejoin) changes the lap's pit lane; pitlane.js put back to 9861c69's gives 00588932
+// local-0.4.15: the lap pin moved from b6969da's 00588932b76e738a to 36ba2c6869a3d1d0 because 9233a93
+// (src/geom/pitlane.js, the pit lane level from leave to rejoin) changes the lap's pit lane; pitlane.js put back to 9861c69's gives 00588932
 // again, so the isolation did not move it. The open TEST export has no pit lane and is unchanged. The row titles still say b6969da's;
 // they are left as they are because the mutation harness names its rows by them.
-const PIN = { lap: 'sha256 ab7ea68c80621a84 files 10', open: 'sha256 b59349993f6e9440 files 11' };   // export-isolated.test.js row 1, from 498e735; the lap moved for D460, and both for the soft block's SOFT_CFM (see there)
+const PIN = { lap: 'sha256 ab7ea68c80621a84 files 10', open: 'sha256 b59349993f6e9440 files 11' };   // export-isolated.test.js row 1, from 498e735; the lap moved once more, and both for the soft block's SOFT_CFM (see there)
 const TYPES = { '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.html': 'text/html' };
 
 // The page: the app's modules from the served worktree, export-isolated.test.js's laps, and the same digest of an export's files

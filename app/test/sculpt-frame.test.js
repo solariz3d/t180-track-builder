@@ -1,19 +1,19 @@
 // sculpt-frame.test.js: node --test app/test/sculpt-frame.test.js   (rows 1-4 are TIMED: they run only while BOTH heavy-run slots are held, this run's and one more live holder; row 5 always runs)
-// D421 (the user: "You can sculpt the pieces you already put down, so its a mode you switch ... tweaking and bending the track like say stretching it or manipulating it in many ways"; the design,
-// exo_memory/loop/design_d421_sculpt_P_2026-10-20.md §4.4, rows 1-5): THE FRAME COST OF A SCULPT DRAG on a placed track, on the real page (app/index.html) in HEADLESS Chrome (never a window, muted:
-// soundrender.js passes --mute-audio), served from this checkout, frames uncapped as in drag-frame.test.js. The bar is the user's 165 Hz display, 6.0 ms (the D404 ruling).
+// The user: "You can sculpt the pieces you already put down, so its a mode you switch ... tweaking and bending the track like say stretching it or manipulating it in many ways"; the design's
+// rows 1-5: THE FRAME COST OF A SCULPT DRAG on a placed track, on the real page (app/index.html) in HEADLESS Chrome (never a window, muted:
+// soundrender.js passes --mute-audio), served from this checkout, frames uncapped as in drag-frame.test.js. The bar is the user's 165 Hz display, 6.0 ms (as ruled for that display).
 // THE TRACK is made here in node by the shell itself (createCoreShell: extend, close) and handed to the page as the autosave a last session left behind (a stand-in for the native side answers
 // open_autosave with it and keeps what the page autosaves), then taken with the page's own "Restore it". So every row starts from the same document, bit for bit.
 // THE DRAG is the brush on the road: the camera to the station, the page's own t180-pick finds a point of the road near it, and a real pointer press there, 3 s of moves up and down, a release.
-// The tool is chosen by sculptTool(): in the Sculpt mode (D421 part 3: Tab, then a digit, 1 Grab, 3 Bend, 5 Twist, and a radius field) when the page has it; on a page without it (ea54ac3, the red
+// The tool is chosen by sculptTool(): in the Sculpt mode (Tab, then a digit, 1 Grab, 3 Bend, 5 Twist, and a radius field) when the page has it; on a page without it (ea54ac3, the red
 // base) the old brush strip's mode and channel that are that tool (Grab = height, Bend = rate kh, Twist = rate phi).
 // A WORK frame is one in which the page's own animation-frame callbacks, plus the pointer events handled since the frame began, took more than 1 ms. A case is run again once if it misses, as in
 // drag-frame.test.js (a case passes when either run does; every run's figures are in the message). Skipped, with the reason, where there is no Chrome. Rows:
 //   1  Twist on a 1-piece window of a 12-piece track, every look: the work frames' p95 <= 6.0 ms
 //   2  Grab, r = 200 m across three pieces of a 10 km open lap: p95 <= 6.0 ms
 //   3  Bend on a 10 km CLOSED lap: p95 <= 6.0 ms during the drag, the release's handler <= 6.0 ms, and the re-closed exact road (closed, a station every 2 m) whole within 10 s
-//   4  the closed tube oval (a 360 deg tube all the way round, the D235 / D236 oval): p95 <= 6.0 ms during the drag, no frame or task over 120 ms during it or for 10 s after, the exact road whole within 10 s.
-//      The design names Twist; the user's call 3 (plan_d421_sculpt_build_2026-10-20.md: "a closed tube past 300 deg: width, bank and sweep stay refused") refuses Twist on this oval, so 4a drags
+//   4  the closed tube oval (a 360 deg tube all the way round, the closed tube oval of the tube tests): p95 <= 6.0 ms during the drag, no frame or task over 120 ms during it or for 10 s after, the exact road whole within 10 s.
+//      The design names Twist; the user's call 3 ("a closed tube past 300 deg: width, bank and sweep stay refused") refuses Twist on this oval, so 4a drags
 //      Grab on it (the heavy mesh) and 4b Twist on the same oval at a 280 deg sweep, the heaviest one Twist may touch
 //   5  the release is the exact road: after letting go, the stations are every 2 m again and the document is, bit for bit, the one the shell's sculptOnce gives for the same brush and delta
 'use strict';
@@ -31,15 +31,15 @@ const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the sculpt drag
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.css': 'text/css' };
 const LOOKS = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'];
-const BUDGET = 6.0;          // ms: the user's display is 165 Hz (6.06 ms a frame), the D404 ruling
+const BUDGET = 6.0;          // ms: the user's display is 165 Hz (6.06 ms a frame), as ruled for that display
 const STALL = 120;           // ms: past the ordinary range nothing may take longer (release-frame.test.js row 2)
 const WHOLE_MS = 10000;      // the exact road whole within 10 s (the design's rows 3 and 4)
 const RUNS = 2;
 const DRAG_MS = 3000;
 const DEG = Math.PI / 180;
 
-// TIMED ROWS ONLY UNDER BOTH SLOTS (the chair, D421 part 5: "Its timing rows run only with BOTH lock slots held by a live process"): the heavy-run lock's two slot files, each held by a live
-// process, one of them this run (its token, CONSONANCE_HEAVY_RUN_TOKEN, which heavy-run.js gives every child of its holder). A timing taken beside another seat's heavy run measures that run.
+// TIMED ROWS ONLY UNDER BOTH SLOTS ("Its timing rows run only with BOTH lock slots held by a live process"): the heavy-run lock's two slot files, each held by a live
+// process, one of them this run (its token, CONSONANCE_HEAVY_RUN_TOKEN, which heavy-run.js gives every child of its holder). A timing taken beside another heavy run measures that run.
 function dataDir() {
   if (process.env.CONSONANCE_DATA) return process.env.CONSONANCE_DATA;
   try { const c = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.consonance.json'), 'utf8')); if (c && typeof c.data_dir === 'string') return c.data_dir; } catch (e) { /* no config: no lock to read */ }
@@ -113,7 +113,7 @@ async function load(look, track) {
   errors = []; await send('Page.navigate', { url: `${base}/app/index.html` });
   for (let i = 0; i < 200; i++) { await sleep(200); try { if (await ev("await new Promise((r) => setTimeout(r, 1000)); return !!document.querySelector('#palette input[aria-label]') && document.querySelectorAll('#stage canvas').length >= 2 && [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Restore it');")) break; } catch (e) { /* loading */ } }
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: id });
-  await ev("document.title = 'zz-headless-test'; return true;");   // D484: a headless page is always titled so; the page's own <title> replaced any set before
+  await ev("document.title = 'zz-headless-test'; return true;");   // a headless page is always titled so; the page's own <title> replaced any set before
   await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Skip'); if (b && b.offsetParent) b.click(); return true;");
   assert.ok(await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Restore it'); if (!b) return false; b.click(); return true;"), `${track}: the page offered the track to restore`);
   const n = D.parse(text).pieces.length;
@@ -122,7 +122,7 @@ async function load(look, track) {
   await ev('window.__saved = null; return true;');
 }
 /** the road on show (the preview's own path): its stations' largest gap, closed or not, the pieces, and whether it is whole (a station every 2 m, and the coarse detail gone where the preview says) */
-// and not the DRAG's road (D421c, E's p-d421c-p2-E_2026-10-21.md §5): while the release is built (and a closed lap re-closed), the reply is the road from before the drag, how 'drag',
+// and not the DRAG's road (found when the release became a job): while the release is built (and a closed lap re-closed), the reply is the road from before the drag, how 'drag',
 // closed with a station every 2 m, so without this the row read "whole" about 110 ms after the release, before the exact road was in
 const roadNow = () => ev(`let t = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { t = x; } } }));
   if (!t || !t.path || !t.path.samples || !t.path.samples.length) return null;
@@ -134,8 +134,8 @@ const mouse = (type, x, y, extra = {}) => send('Input.dispatchMouseEvent', { typ
 const key = async (k, code, vk) => { await send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); };
 const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1) + 0.5))]; };
 
-// THE TOOLS: the Sculpt mode's digit (D421 part 3) and, for a page without the mode, the old brush strip's mode and channel; `ch` is the brush channel a pointer pixel is scaled by (panel.js PER_PX)
-// `axis`: the pointer axis the tool reads in the Sculpt mode (B's page, p-d421-sculptmode-B_2026-10-20.md §5: Bend reads x, left is more; the rest read y, up is more); the old brush strip reads y for every channel
+// THE TOOLS: the Sculpt mode's digit and, for a page without the mode, the old brush strip's mode and channel; `ch` is the brush channel a pointer pixel is scaled by (panel.js PER_PX)
+// `axis`: the pointer axis the tool reads in the Sculpt mode (the page's Sculpt mode: Bend reads x, left is more; the rest read y, up is more); the old brush strip reads y for every channel
 const TOOLS = { grab: { digit: '1', mode: 'local', channel: 'height', ch: 'height' }, bend: { digit: '3', mode: 'rate', channel: 'kh', ch: 'kh', axis: 'x' }, twist: { digit: '5', mode: 'rate', channel: 'phi', ch: 'phi' } };
 async function sculptTool(tool, r) {
   const T = TOOLS[tool];
@@ -226,7 +226,7 @@ for (const [row, track, tool, why] of [['4a', 'tube360', 'grab', 'Grab on the 36
   });
 }
 
-// AMENDED (0.4.29): since D519 Part 2 and D520 a Grab pressed ON the road is the follow (a set of channels solved from the pointer's ray: app/core/zonegrab.js follow), not
+// AMENDED (0.4.29): since the follow grab a Grab pressed ON the road is the follow (a set of channels solved from the pointer's ray: app/core/zonegrab.js follow), not
 // Grab's one height channel times PER_PX, so the shell's sculptOnce of the height channel is no longer what the page does, and this row went red at e2922e7. Its rule (the release
 // is the exact road, and bit for bit the shell's own stroke) is unchanged, so it drags Twist, which keeps its one channel wherever it is pressed (core-pieces-ui row 25b). The
 // follow's own release is pinned through the shell in zonegrab rows 14b-14n.

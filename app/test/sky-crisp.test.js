@@ -1,12 +1,12 @@
 // sky-crisp.test.js: node --test app/test/sky-crisp.test.js
-// D410, widened in D416: every night sky is drawn at the user's own pixels. The canvas is native (preview.js backingSize: css x devicePixelRatio), so a
+// Every night sky is drawn at the user's own pixels. The canvas is native (preview.js backingSize: css x devicePixelRatio), so a
 // star or an edge is sharp only if the sky's GLSL sizes it in device pixels; sized in sky angles or grid cells it is a pixel only by luck, and on a
 // scaled monitor it grows. The sky pass hands every style the angle of one device pixel (uPx). Each night style's own GLSL is compiled into the
 // renderer's own sky pass (SKY_VS and skyFS) in HEADLESS Chrome (never a window), with its look's colours read from its CSS, looking up, at the backing
 // store of a 2560 x 1440 css view at DPR 1 (2560 x 1440 device px) AND at DPR 1.5 (3840 x 2160, a scaled monitor), so "native" is proved at two pixel
-// densities. Skipped where there is no Chrome. The looks: Glass's river of stars (river, D416), the prism sky (D410's Glass sky, still a style), Aurora's
+// densities. Skipped where there is no Chrome. The looks: Glass's river of stars (river), the prism sky (Glass's earlier sky, still a style), Aurora's
 // curtains (aurora), Skyline Night's city (city) and Aqua's sea, whose stars are its motes (caustics). Rows:
-//   1  (AMENDED D429: Aurora's measured with its curtains' colours zeroed, see the row) the stars are points, per style, at both densities: over every star found in the open sky (12 degrees up and higher, away from the moon, and
+//   1  (AMENDED: Aurora's measured with its curtains' colours zeroed, see the row) the stars are points, per style, at both densities: over every star found in the open sky (12 degrees up and higher, away from the moon, and
 //      for the sea under Snell's window), the median width at half its peak is at most 1.5 px and the 90th percentile at most 1.8 px. Measured from
 //      the star's second moments over 13 x 13 px less its sky (a plane through the window's rim, so a sloped sky is not read as width), the measure
 //      that is fair to a point between pixels, and only on stars with no
@@ -15,7 +15,7 @@
 //   3  the renderer's sky pass sends uPx, the angle of one device pixel at the middle of the view (2 |up| / height), whatever the window's size
 //   4  the prism sky is still calm: the stars vary in brightness and stay sparse (at most one in 2,000 of the view's pixels is a star)
 //   5  the prism band has fine structure: what varies faster than 2 degrees is at least a quarter of what varies slower
-//   6  the stars can be seen (D416, the user looks at them): in the river, the aurora and the city, the median star stands at least 10 levels over
+//   6  the stars can be seen (the user looks at them): in the river, the aurora and the city, the median star stands at least 10 levels over
 //      its sky and the brightest tenth at least 30 (registered before measuring)
 // With SKY_SHOT_DIR set, each style's DPR 1 view is also written there as <style>-up-<SKY_SHOT_LABEL>.png, at full size (the before and after shots).
 'use strict';
@@ -146,7 +146,7 @@ test.before(async () => {
   let tgt, send; ({ ch, dir, tgt } = await launchChrome(CHROME, ['--enable-unsafe-swiftshader'], 't180crisp-'));
   ({ ws, send } = await connect(tgt.webSocketDebuggerUrl));
   ev = async (expr) => { const d = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 600)}`); return d.result.result.value; };
-  await ev("document.title = 'zz-headless-test'; true");   // D484: a headless page is always titled so, first thing
+  await ev("document.title = 'zz-headless-test'; true");   // a headless page is always titled so, first thing
   await ev(PAGE);
 });
 test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } if (ch) ch.kill(); await sleep(300); try { dir && fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } });
@@ -177,7 +177,7 @@ async function look(style, den, starsOnly = false) {
   seen.set(k, r); return r;
 }
 
-// AMENDED (D429): a style with `starsOnly` (Aurora) has row 1 measure its stars with the curtains' and corona's colours (--sky-a, --sky-b) zeroed. D403's
+// AMENDED: a style with `starsOnly` (Aurora) has row 1 measure its stars with the curtains' and corona's colours (--sky-a, --sky-b) zeroed. The
 // curtains have fine rays, and the star finder took about 2,400 ray peaks for stars (3,655 found, p90 5.69 px); with the curtains zeroed it finds
 // 1,251 stars, p90 1.19 px. The stars are added over the sky whatever it holds, so their width is the same; row 6 still sees them over the curtains
 for (const style of Object.keys(LOOKS)) {

@@ -1,5 +1,5 @@
 // install-retire.test.js: node --test app/test/install-retire.test.js
-// D372 amendment: when Export to Assetto Corsa moved a track's stale ghost and HUD laps aside (the shape changed; src-tauri/src/lib.rs install_with_retire
+// Amendment: when Export to Assetto Corsa moved a track's stale ghost and HUD laps aside (the shape changed; src-tauri/src/lib.rs install_with_retire
 // hands back `retired`, the new paths, and `retire_error`), the install message says so, and where; a move that failed is said plainly too. Rows:
 //   1  retired holds a ghost folder and a lap file: the message names both new paths, says the shape changed and that moving them back restores them
 //   2  retired empty: today's message, byte for byte (the same as a native side that hands back only a count, or nothing)
@@ -11,7 +11,7 @@ const { createInstaller } = require('../install/install.js');
 
 const GHOST = 'C:\\Users\\u\\Documents\\Assetto Corsa\\GhostCar\\t180b_x.retired-2026-10-17_180000Z';
 const LAP = 'C:\\Users\\u\\Documents\\Assetto Corsa\\CMRT-Essential-HUD\\t180b_x.retired-2026-10-17_180000Z\\t180b_x[#]T-180 Mach 6[v1]fast.lap';
-/** an installer whose native install_track answers `answer` (as the native command does since D372), over a closed track named X */
+/** an installer whose native install_track answers `answer` (as the native command does now), over a closed track named X */
 function installer(answer) {
   const native = { getAcRoot: async () => 'G:\\assettocorsa', installTrack: async () => answer };
   const build = () => ({ folders: [{ folder: 't180b_x', files: [{ path: 't180b_x.kn5', bytes: new Uint8Array(1) }] }], result: { warnings: [] } });

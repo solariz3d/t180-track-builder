@@ -1,6 +1,6 @@
 // sound-bands.test.js: node --test app/test/sound-bands.test.js. The builder's sounds as they come out of the real engine (app/sound.js), rendered in
 // HEADLESS Chrome (app/test/soundrender.js: an OfflineAudioContext, never a window), each clip's loudness (ITU-R BS.1770-4 integrated, LUFS) and sample
-// peak held inside its band. The bands come from the D334 listening pass (2026-10-16): there a drag on any handle measured -30.0 to -30.7 LUFS,
+// peak held inside its band. The bands come from a listening pass (2026-10-16): there a drag on any handle measured -30.0 to -30.7 LUFS,
 // a place -28.3, an undo -30.4 and the loop close -20.2; the old tick, which read as "bubbles underwater", measured -45.7 alone. The engine's
 // reverbs are random noise, so a clip moves a few tenths of a LU between renders: the bands allow for that.
 // Skipped, with the reason, where no Chrome can be found (set CHROME_PATH).
@@ -24,15 +24,15 @@ const chrome = S.chromePath();
 const SAMPLES_DIR = process.env.SOUND_SAMPLES || path.join(__dirname, '..', 'sounds');
 const noChrome = { skip: chrome ? false : 'no Chrome found (set CHROME_PATH): the engine needs a real Web Audio to render' };
 
-// AMENDED (D349): the sounds as shipped are now the four samples (app/sounds), so this row renders the engine with them; its bands and its order are
+// AMENDED: the sounds as shipped are now the four samples (app/sounds), so this row renders the engine with them; its bands and its order are
 // unchanged. The synth voices, which play until the samples are in, keep the same bands in the row after it
 test('every sound sits inside its loudness and peak band, the ticks under a place, a place under the loop close', noChrome, async () => {
   inBands(await S.renderClips(fs.readFileSync(SRC, 'utf8'), S.CLIPS, { samples: SAMPLES_DIR }));
 });
-// D375: a launch plays one of four melodies, each on its own place and undo files (batch 10, the drop-in), so each one's place and undo, with the samples,
+// A launch plays one of four melodies, each on its own place and undo files (batch 10, the drop-in), so each one's place and undo, with the samples,
 // sits in the same bands as the row above measures for the first. One row per melody, so a red names the melody
-// AMENDED (D377): the user's four for 0.4.2, batch 11's three and batch 12's Aurora, in place of batch 10's
-// AMENDED (D402): and SIGIL's own, Obsidian, on PL Phantoms (batch 13), fifth
+// AMENDED: the user's four for 0.4.2, batch 11's three and batch 12's Aurora, in place of batch 10's
+// AMENDED: and SIGIL's own, Obsidian, on PL Phantoms (batch 13), fifth
 for (const [melody, instrument] of [['aqua', 'Big Bells'], ['skyline', 'Runtheharm'], ['glass', 'VeloHarm'], ['aurora', 'Linear Arithmetic'], ['sigil', 'Phantoms']]) {
   test(`${melody} (${instrument}): its place and undo, with the samples, sit inside their bands`, noChrome, async () => {
     const keys = ['place_step1', 'place_steps_1to4', 'undo_steps_4to1'], out = [];
@@ -43,7 +43,7 @@ for (const [melody, instrument] of [['aqua', 'Big Bells'], ['skyline', 'Runtheha
     }
     assert.deepEqual(out, [], 'outside the band');
   });
-  // D377: the place swell. A walk of all 64 places (0.7 s apart, as E's arcmeasure on batch 11) cut into its eight phrases of 8: before the swell every
+  // The place swell. A walk of all 64 places (0.7 s apart, as batch 11's loudness measurement used) cut into its eight phrases of 8: before the swell every
   // phrase sat within 1.8 LU of the others, the loudest often the first (phrases 6-7 over 1 and 8 by 0.55 LU at most, Glass's -0.5). Now phrases 6 and 7
   // (steps 41 to 56, the lift and the peak) are at least 0.7 LU over phrases 1 and 8, on the mean of each pair (the bands leave room for about 0.8 in
   // Glass); and every one of the 64 places, alone, still sits inside the one-place band
@@ -62,7 +62,7 @@ for (const [melody, instrument] of [['aqua', 'Big Bells'], ['skyline', 'Runtheha
 test('the synth voices (before the samples are in, or if they fail to load) sit inside the same bands, in the same order', noChrome, async () => {
   inBands(await S.renderClips(fs.readFileSync(SRC, 'utf8')));
 });
-// D349 addition: soundrender seeds the engine's noise, so the same clip renders to the same samples every time and the bands above are measured on one
+// Soundrender seeds the engine's noise, so the same clip renders to the same samples every time and the bands above are measured on one
 // fixed sound, not on a new draw of reverb noise each run (which put a clip over its line in about 1 run of 4)
 // Not bit for bit: Chrome's convolver sums in an order that moves the last float bits between runs (measured: two seeded renders differ by at most 1.1e-6,
 // under -110 dB, and read the same LUFS and peak to 0.01). So the same seed must agree within 1e-4 (-80 dBFS); unseeded, the reverb noise differs by ~1e-1

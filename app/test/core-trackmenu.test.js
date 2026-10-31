@@ -1,7 +1,7 @@
 // core-trackmenu.test.js: node --test app/test/core-trackmenu.test.js
-// D355 part 3: THE TRACK MENU (app/core/trackmenu.js). Start & grid…, Pit lane… and Road surface ▸ are panels opened from the Track menu, holding the
+// THE TRACK MENU (app/core/trackmenu.js). Start & grid…, Pit lane… and Road surface ▸ are panels opened from the Track menu, holding the
 // same controls the left column held (app/core/spawnsui.js, pitui.js, textures.js); "Local example" is File ▸ Developer ▸ Open example…. The menu bar
-// (app/menubar/, another pane's) renders what items(ctx) returns (contract M); these tests are that renderer's side: they call a panel's mount function
+// (app/menubar/) renders what items(ctx) returns; these tests are that renderer's side: they call a panel's mount function
 // with a host element, drive the controls, and unmount. Headless, on the small fake DOM the spawns tests use, with the real shell on a closed bowl lap.
 'use strict';
 const test = require('node:test');
@@ -55,8 +55,8 @@ async function menu() {
   return { shell, doc, win, ctx, track, item, open, done, state: () => shell.getState().history.present };
 }
 
-// D465 amended this row by name: it read "and nothing that is a command"; Track ▸ Smooth ramps is the menu's first command (0.4.20), after a separator
-// AMENDED (D473): it read "then a separator and Smooth ramps, its one command"; Bank the lap is its second command, enabled on a closed lap only
+// AMENDED this row by name: it read "and nothing that is a command"; Track ▸ Smooth ramps is the menu's first command (0.4.20), after a separator
+// AMENDED: it read "then a separator and Smooth ramps, its one command"; Bank the lap is its second command, enabled on a closed lap only
 test('the Track menu lists Start & grid…, Pit lane… and Road surface ▸ as panels, in that order, then a separator and its two commands, Smooth ramps and Bank the lap', async () => {
   const M = await menu();
   try {

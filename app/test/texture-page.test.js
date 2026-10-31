@@ -1,23 +1,23 @@
 // texture-page.test.js: node --test app/test/texture-page.test.js
-// D399: EACH LOOK'S OWN TEXTURE (and, since D409, NO PICTURE OVER THE EMPTY BUILDER), tested on the real page (app/index.html) in HEADLESS Chrome (never a window), served
+// EACH LOOK'S OWN TEXTURE (and NO PICTURE OVER THE EMPTY BUILDER), tested on the real page (app/index.html) in HEADLESS Chrome (never a window), served
 // from this checkout, each look chosen through Settings ▸ Theme's saved value (t180.settings.theme). Skipped, with the reason, where there is no Chrome
 // (CHROME_PATH or the usual place). Rows:
 //   1  each look's texture tile (app/themes/tex/<look>.png, through the --tex token) is the top background layer of the header, the left panel and an
 //      open menu, and the tile loads; the 3D view (#stage, #preview and its canvas) carries none
 //   2  the texture costs no text its contrast: with a six-piece track placed, in the builder and with the File menu open, no text that reads at least
-//      4.5:1 (WCAG) with the texture switched off (--tex: none) reads under it with the texture on. The probe is E's D389/D397 one: each visible text's glyph
+//      4.5:1 (WCAG) with the texture switched off (--tex: none) reads under it with the texture on. The probe is the contrast probe: each visible text's glyph
 //      boxes and colour, then the glyphs hidden and the surfaces shot again, the text against the 2nd and 98th percentile background pixel in its boxes
-//   3  (D409) the empty builder shows no picture over the 3D view: with no pieces, in every look, there is no #empty-art and no <pre> in #stage.
-//      D399's track in characters stood still on the screen while the camera moved, which read as a fault (the user, 0.4.8); it is taken out, not moved
-//   5  (A's review 12) at display scales 1.25 and 1.5 each fine tile (SIGIL, Skyline, Glass, Aurora) is drawn one tile pixel per device pixel, so it lands
+//   3  the empty builder shows no picture over the 3D view: with no pieces, in every look, there is no #empty-art and no <pre> in #stage.
+//      The earlier track in characters stood still on the screen while the camera moved, which read as a fault (the user, 0.4.8); it is taken out, not moved
+//   5  (a review, item 12) at display scales 1.25 and 1.5 each fine tile (SIGIL, Skyline, Glass, Aurora) is drawn one tile pixel per device pixel, so it lands
 //      unresampled (resampled, Aurora's dots smeared into uneven two-pixel smudges)
-//   6  (D409, E's D405 shot check) no label in the 3D view sits under a panel: with six pieces placed and the chase camera, the camera label (.preview-hud)
+//   6  (from a shot check) no label in the 3D view sits under a panel: with six pieces placed and the chase camera, the camera label (.preview-hud)
 //      and the piece's readout box ([aria-label="piece readouts"]) overlap neither the top readout ([aria-label="piece values"]) nor the camera and grid
-//      bars (#camera's toolbars) by a pixel, in all five looks, at windows 1400 x 860 and 2560 x 1440 (E measured 2,058 and 10,944 px² at 1400)
-//   7  (D417) Extend is reachable without scrolling: the panel's first actions row is Extend, Straight, Undo, Redo, Extend sits above "Extend at the head",
+//      bars (#camera's toolbars) by a pixel, in all five looks, at windows 1400 x 860 and 2560 x 1440 (measured before the fix: 2,058 and 10,944 px² at 1400)
+//   7  Extend is reachable without scrolling: the panel's first actions row is Extend, Straight, Undo, Redo, Extend sits above "Extend at the head",
 //      and each of the four is on the panel once, in every look
-//   8  (D405) Skyline Night: every enabled text reads 4.5:1 or more against its own pixels, in the builder and with the File menu open (a text outside the
-//      menu that the menu partly covers is left out, by name). It was titled row 6 beside D409's row 6 until D419
+//   8  Skyline Night: every enabled text reads 4.5:1 or more against its own pixels, in the builder and with the File menu open (a text outside the
+//      menu that the menu partly covers is left out, by name). It was titled row 6 beside the other row 6 until renumbered
 //   9  the warning texts read 4.5:1 or more on their own pixels in EVERY look: the checker's red, amber and lap lines (a 150 m piece turning 720°, which
 //      crosses itself and loads hard, gives both), and every text in Track ▸ Pit lane… with the lane on (its status note and fields). Each look's own
 //      --bad-text and --warn-text are what these read in; before them the lines wore the 3D road's paint colours (skyline's amber read 1.1:1)
@@ -31,7 +31,7 @@ const { decode } = require('./png.js');
 const REPO = path.join(__dirname, '..', '..');
 const CHROME = chromePath();
 const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the textures are tested in headless Chrome';
-const LOOKS = ['sigil', 'aqua', 'skyline', 'glass', 'aurora', 'skyline-night'];   // D405: Skyline Night joins every row
+const LOOKS = ['sigil', 'aqua', 'skyline', 'glass', 'aurora', 'skyline-night'];   // Skyline Night joins every row
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.css': 'text/css' };
 
@@ -45,7 +45,7 @@ test.before(async () => {
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${srv.address().port}/app/index.html`;
-  // D504: through the shared launcher, so this Chrome is under the machine's browser cap, on a free port the launcher checks is its own (D400)
+  // Through the shared launcher, so this Chrome is under the machine's browser cap, on a free port the launcher checks is its own
   let tgt; ({ ch, dir, tgt } = await launchChrome(CHROME, ['--hide-scrollbars', '--window-size=1400,860'], 't180tex-'));
   ws = new WebSocket(tgt.webSocketDebuggerUrl); await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error('the DevTools socket failed')); });
   let id = 0; const pend = new Map();
@@ -64,7 +64,7 @@ async function load(look) {
   await ev(`localStorage.clear(); localStorage.setItem('t180.settings.theme', ${JSON.stringify(JSON.stringify(look))}); return true;`);
   await send('Page.navigate', { url: base });
   for (let i = 0; i < 150; i++) { await sleep(200); try { if (await ev("return document.documentElement.dataset.menubar === 'ready';")) break; } catch (e) { /* loading */ } }
-  await ev("document.title = 'zz-headless-test'; return true;");   // D484: a headless page is always titled so; the page's own <title> replaced any set before
+  await ev("document.title = 'zz-headless-test'; return true;");   // a headless page is always titled so; the page's own <title> replaced any set before
   assert.equal(await ev("return document.documentElement.dataset.menubar || 'not mounted';"), 'ready', `${look}: the menus mounted (page errors: ${errors.join(' | ') || 'none'})`);
   await ev("const b = [...document.querySelectorAll('#guide button')].find((x) => x.textContent.trim() === '✕'); if (b) b.click(); return true;"); await sleep(300);
 }
@@ -90,7 +90,7 @@ test('row 1: each look\'s tile is the top background layer of the header, the le
   }
 });
 
-// the probe (app_cdp.js, D381-D389, with its HUD correction; tex.js, D397)
+// the probe (app_cdp.js, with its HUD correction; tex.js)
 const TEXTS = `const out = [];
   for (const e of document.body.querySelectorAll('*')) {
     const own = [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || ((e.tagName === 'INPUT' || e.tagName === 'TEXTAREA') && e.value && !['range', 'checkbox', 'radio'].includes(e.type));
@@ -178,9 +178,9 @@ test('row 5: at display scales 1.25 and 1.5, each fine tile is drawn one tile pi
   t.diagnostic(got.join('; '));
 });
 
-// D405: Skyline Night is a new look, so it is held to the whole rule, not only to "the texture pushes nothing under": every enabled text on the page reads
+// Skyline Night is a new look, so it is held to the whole rule, not only to "the texture pushes nothing under": every enabled text on the page reads
 // at 4.5:1 or more against its own pixels (the probe above, the texture on), in the builder with a track placed and with the File menu open. Skyline's
-// figure is reported beside it, not asserted (it is not this lap's look)
+// figure is reported beside it, not asserted (it is not the look under test)
 test('row 8 (D405): Skyline Night: every enabled text is 4.5:1 or more on its own pixels, in the builder and with the File menu open', { skip }, async (t) => {
   const report = [], under = [];
   for (const look of ['skyline-night', 'skyline']) {
@@ -234,7 +234,7 @@ test('row 6 (D409): no label in the 3D view sits under the top readout or the ca
   } finally { await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false }); t.diagnostic(got.join('; ')); }
 });
 
-// D417 (the user's screenshot, 16:02): Extend is reachable without scrolling. The panel's FIRST actions row reads Extend, Straight, Undo, Redo, in that
+// The user's screenshot, 16:02: Extend is reachable without scrolling. The panel's FIRST actions row reads Extend, Straight, Undo, Redo, in that
 // order, and Extend sits above the "Extend at the head" heading; each button is on the panel once
 const ACTIONS = `const pal = document.getElementById('palette'), first = pal.querySelector('.actions');
   const head = [...pal.querySelectorAll('h3')].find((h) => h.textContent.trim() === 'Extend at the head');

@@ -1,16 +1,16 @@
 // release-frame.test.js: node --test app/test/release-frame.test.js   (under the heavy-run lock; about two minutes)
-// D407 (the user: "even turning a 1000m straight isnt smooth and laggy as hell"; the measurement of 2026-10-19, exo_memory/handback/p-d407-measure-A_2026-10-19.md): LETTING GO of a handle
+// The user: "even turning a 1000m straight isnt smooth and laggy as hell". Measured 2026-10-19: LETTING GO of a handle
 // built the exact ghost of the piece at once, inside the pointer-up: 60 ms at 1,000 m, 280 at 5,000, a second at 20 km, the page frozen meanwhile; and a number typed into a field of the
 // panel cost 13 ms. On the real page (app/index.html) in HEADLESS Chrome (never a window, muted), served from this checkout, frames uncapped as in drag-frame.test.js. The bar is the user's
-// 165 Hz display, 6.0 ms (docs/ARCHITECTURE.md §9b). The cost of an action is the LONGEST piece of main-thread work it causes: the pointer-up handler itself (taken between a capture
-// listener and a bubble listener on the window) and each animation frame's callbacks after it. Each case is run again once if it misses, so a seat running something beside it does
+// 165 Hz display, 6.0 ms. The cost of an action is the LONGEST piece of main-thread work it causes: the pointer-up handler itself (taken between a capture
+// listener and a bubble listener on the window) and each animation frame's callbacks after it. Each case is run again once if it misses, so another process running beside it does
 // not fail the row (a case passes when either run does; every run's figures are in the message). Skipped, with the reason, where there is no Chrome. Rows:
 //   1  letting go of a 1,000 m turn handle and of a 1,000 m length handle, in every look: nothing it causes takes more than 6.0 ms (before: 60 ms in the handler)
 //   2  past the ordinary range it does not stall: letting go of a 20,000 m turn, nothing takes more than 120 ms (before: 1,058 ms in one handler), and the exact ghost is whole within 10 s
 //   3  the exact ghost arrives and nothing blinks: after letting go of a 2,000 m turn the ghost is on show at every frame until the exact one (a station every 2 m) takes its place, within 1 s
 //   4  a number typed into the Turn field on a 12-piece track (aqua): each change costs at most 6.0 ms at the 95th percentile, as the longest frame it causes, the handler
-//      counted with the first frame after it (before: 13 ms). D485: the D484 ruling (lighthouse exo_memory/loop/plan_d481_drag_lag_2026-10-26.md, "D484 collated, 04:05", Part 2) moved
-//      this row from the handler plus every frame summed to the per-frame rule rows 1-3 use: since D407 the exact ghost is built a 2.5 ms slice a frame, and the sum added the slices back
+//      counted with the first frame after it (before: 13 ms). A ruling of 2026-10-26 moved
+//      this row from the handler plus every frame summed to the per-frame rule rows 1-3 use: since the release fix the exact ghost is built a 2.5 ms slice a frame, and the sum added the slices back
 //      together (p95 5.2 to 7.7 ms on every release 0.4.19 to 0.4.22, either side of the bar at random, while no frame was over 4.5). The sum is still printed, not asserted, so a growth in
 //      the total work of a change stays in sight
 'use strict';
@@ -25,7 +25,7 @@ const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the release is 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.css': 'text/css' };
 const LOOKS = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'];
-const BUDGET = 6.0;          // ms: the user's display is 165 Hz (6.06 ms a frame), the D404 ruling
+const BUDGET = 6.0;          // ms: the user's display is 165 Hz (6.06 ms a frame), the ruled bar
 const RUNS = 2;
 
 let srv, ch, ws, dir, base, send, ev, errors = [];
@@ -62,7 +62,7 @@ async function load(look) {
   errors = []; await send('Page.navigate', { url: `${base}/app/index.html` });
   for (let i = 0; i < 200; i++) { await sleep(200); try { if (await ev("await new Promise((r) => setTimeout(r, 1500)); return !!document.querySelector('#palette input[aria-label]') && document.querySelectorAll('#stage canvas').length >= 2;")) break; } catch (e) { /* loading */ } }
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: id });
-  await ev("document.title = 'zz-headless-test'; return true;");   // D484: a headless page is always titled so; the page's own <title> replaced any set before
+  await ev("document.title = 'zz-headless-test'; return true;");   // a headless page is always titled so; the page's own <title> replaced any set before
   await ev("const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Skip'); if (b && b.offsetParent) b.click(); return true;");
 }
 const FIELD = (re) => `[...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || '') && !/start/i.test(e.getAttribute('aria-label') || ''))`;
@@ -100,7 +100,7 @@ async function release(look, length, kind, settleMs) {
   const amp = kind === 'turn' ? 200 : 150, t0 = Date.now(); let x = h.x, y = h.y;
   while (Date.now() - t0 < 1500) { const d = Math.abs(Math.sin(((Date.now() - t0) / 1000) * Math.PI)) * amp; x = kind === 'turn' ? h.x + dx * d : h.x; y = kind === 'turn' ? h.y : h.y + dy * d; await mouse('mouseMoved', x, y, { buttons: 1 }); await sleep(4); }
   // the drag ends where it began (on the stage) and is let go there: a release over the camera bar at the stage's foot is not the stage's (a drag loses its pointer
-  // capture about 100 ms in, as it did in 0.4.8, so such a release never reaches the handles; found by this test, reported with D407 and not changed here)
+  // capture about 100 ms in, as it did in 0.4.8, so such a release never reaches the handles; found by this test, reported with the release fix and not changed here)
   x = h.x; y = h.y; await mouse('mouseMoved', x, y, { buttons: 1 });
   assert.ok(await ev(`const e = document.elementFromPoint(${x}, ${y}); return !!e && e.tagName === 'CANVAS' && !!e.closest('#stage');`), `${look} ${length} m ${kind}: the release point is on the stage`);
   await sleep(150);   // the last move's frame is done

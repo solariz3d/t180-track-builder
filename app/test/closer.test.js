@@ -1,8 +1,8 @@
-// closer.test.js: node --test app/test/closer.test.js   (D192: "when I try to close track builder the X does nothing")
+// closer.test.js: node --test app/test/closer.test.js   (the user: "when I try to close track builder the X does nothing")
 // The window's ONE close handler (app/closer.js). The Tauri side is modelled from its source (tauri-2.12.0): a window with ANY script
 // close listener has its close PREVENTED and waits for the listener to call destroy(); the script wrapper `onCloseRequested` awaits the
 // handler and calls destroy() only if it returned (a throwing handler leaves the window open); and the listener registry belongs to the
-// webview, so a page reload keeps the old page's registration with its callback gone. The REAL window is proved separately (the hand-back:
+// webview, so a page reload keeps the old page's registration with its callback gone. The REAL window is proved separately (by hand:
 // WM_CLOSE to an off-screen build, before and after). Here the same five cases run against the page as it WAS and as it is now.
 'use strict';
 const test = require('node:test');
@@ -32,7 +32,7 @@ function tauri() {
   };
   return t;
 }
-/** The page BEFORE D192: only the pieces builder registered a handler, async, awaiting its cleanup. */
+/** The page BEFORE that fix: only the pieces builder registered a handler, async, awaiting its cleanup. */
 function oldPage(t, mode, cleanup) { const win = t.page(); if (mode === 'pieces') win.onCloseRequested(async () => { await cleanup(); }); }
 /** The page NOW: the one handler is registered before the mode branch; the mode sets the cleanup. */
 function newPage(t, mode, cleanup, opts = {}) { let closeCleanup = null; installCloseHandler(t.page(), () => closeCleanup, { log: () => {}, ...opts }); if (mode === 'pieces') closeCleanup = cleanup; }
@@ -102,7 +102,7 @@ test('the cleanup is read at CLOSE time: a mode that sets it after registration 
 
 // ── the page's wiring (the real window proves it end to end; this keeps the structure from regressing) ──
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-// D239: the mode branch is gone (one builder); the invariant it guarded stays: the handler is registered before the builder starts
+// The mode branch is gone (one builder); the invariant it guarded stays: the handler is registered before the builder starts
 test('app/index.html registers the close handler BEFORE the builder starts, so a builder that fails to start still has it', () => {
   const at = HTML.indexOf('installCloseHandler'), start = HTML.indexOf('  await startCore();');
   assert.ok(at > 0 && start > 0 && at < start, `installCloseHandler at ${at}, the builder's start at ${start}`);
@@ -146,7 +146,7 @@ test('a second X while the prompt is open is ignored: one prompt, one close', as
   const first = t.x(), second = t.x(); release(); await Promise.all([first, second]);
   assert.deepEqual([asks, t.destroyCalls], [1, 1]);
 });
-// D239: one builder, so closeDirty is set once (it was set in the core and the pieces branch, 2)
+// One builder, so closeDirty is set once (it was set in the core and the pieces branch, 2)
 test('app/index.html gives the closer the prompt, and the builder says whether there is unsaved work', () => {
   assert.match(HTML, /installCloseHandler\(win, \(\) => closeCleanup, \{ ask: closeAsk, save: closeSave \}\)/);
   assert.equal((HTML.match(/closeDirty = \(\) => !!shell\.getState\(\)\.dirty;/g) || []).length, 1, 'set by the equation builder');

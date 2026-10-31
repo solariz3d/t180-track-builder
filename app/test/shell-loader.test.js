@@ -20,7 +20,7 @@ test('the shell loaded through the loader builds the same track, byte for byte, 
   assert.notEqual(viaLoader, viaNode, 'a separate copy, as the webview has');
 });
 
-// RETIRED D239: 'the palette module loads too, and its model matches' (app/palette/palette.js, the Pieces page's palette, is removed)
+// RETIRED:'the palette module loads too, and its model matches' (app/palette/palette.js, the Pieces page's palette, is removed)
 
 test('a node built-in is refused loudly, naming the module and the file that asked for it', async () => {
   const files = { 'x/a.js': "module.exports = require('fs');" };

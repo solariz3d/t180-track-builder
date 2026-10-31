@@ -1,4 +1,4 @@
-// core-eqonly.test.js: D239 (the user: "can we keep only the equation mode?"): the Pieces page's four features, carried onto the
+// core-eqonly.test.js: (the user: "can we keep only the equation mode?"): the Pieces page's four features, carried onto the
 // EQUATION track and tested against the real core shell (app/core/coreshell.js): autosave with crash restore, share codes (an old Pieces
 // code refused by name), Install to AC (the Export button's own build), and the getting-started guide; and the page holds one builder.
 // Run: node --test --test-concurrency=1 app/test/core-eqonly.test.js
@@ -71,7 +71,7 @@ test('Discard clears the offer and the file; Save under a name clears the autosa
   await b.cleanExit(); assert.equal(st.auto, null, 'a clean exit leaves nothing to recover');
 });
 
-// RESTATED (B's D239 look, F1): "left on disk" held only until the first autosave. With nowhere to keep it aside (this storage has no
+// RESTATED (a review's first finding): "left on disk" held only until the first autosave. With nowhere to keep it aside (this storage has no
 // backups), it now stays on disk for the WHOLE session: an edit and a flush write nothing over it.
 test('a damaged autosave that cannot be kept aside is left on disk for the whole session, and the app starts anyway, saying so', async () => {
   const bad = '{"schema":1,"kind":"core","doc":"not a document"}', st = storage({ autosave: bad });
@@ -81,7 +81,7 @@ test('a damaged autosave that cannot be kept aside is left on disk for the whole
   assert.deepEqual([s.getState().recovery, st.auto, st.autoWrites, st.cleared], [null, bad, 0, 0]);
 });
 
-// ── B's D239 look, F1: a DAMAGED autosave's bytes survive the session's first autosave ──
+// ── a review's first finding: a DAMAGED autosave's bytes survive the session's first autosave ──
 for (const [what, bad] of [['not JSON', '{"schema":1,"kind":"core","doc":'], ['a core autosave whose document does not parse', '{"schema":1,"kind":"core","doc":"not a document"}'], ['JSON that is not a record', 'null']]) {
   test(`a damaged autosave (${what}) is kept as a "damaged autosave" backup BEFORE the session autosaves over it`, async () => {
     const st = backupStore({}); st.auto = bad;
@@ -148,7 +148,7 @@ test('a pasted code whose document is not a valid equation track is refused, and
   assert.equal(text(s), before);
 });
 
-// found in the real window (D239): the page loaded share WITHOUT the node shim, so the core's parse could not load (tools/piecewise.cjs
+// found in the real window: the page loaded share WITHOUT the node shim, so the core's parse could not load (tools/piecewise.cjs
 // requires fs) and every pasted equation code failed, reported as CODE_MALFORMED by a catch that was too broad
 test('the share panel, loaded as the page loads it (with the core\'s node shim), opens an equation code', async () => {
   const html = fs.readFileSync(path.join(REPO, 'app', 'index.html'), 'utf8');
@@ -182,7 +182,7 @@ test('Install to AC writes exactly the files Export writes, byte for byte, under
   for (const [i, [p, b]] of strip(installs[0].files).entries()) assert.ok(b.equals(strip(st.writes[0].files)[i][1]), `${p} differs`);
 });
 
-// ── D239 amendment: SAVE KEEPS THE PREVIOUS VERSION (the user lost TEST 1 to one Close). The move on Save, the 20 kept and the prune
+// ── amendment: SAVE KEEPS THE PREVIOUS VERSION (the user lost TEST 1 to one Close). The move on Save, the 20 kept and the prune
 // are native and tested there (src-tauri/src/backups.rs, cargo test); these are the shell's and the page's halves. ──
 /** The native backups in memory: backup_track's copies, list_track_backups, open_track_backup. */
 function backupStore({ fail = false } = {}) {
@@ -255,7 +255,7 @@ test('the page: Save sends the local time for the backup\'s name, the three back
   for (const c of ['backup_track', 'list_track_backups', 'open_track_backup']) assert.match(rs, new RegExp(`generate_handler!\\[[^\\]]*\\b${c}\\b`), `${c} is registered`);
 });
 
-// ── D239 note (the user's undo request): the keys MOVED from app/shell.js to the equation page, Ctrl+Backspace included ──
+// ── note (the user's undo request): the keys MOVED from app/shell.js to the equation page, Ctrl+Backspace included ──
 /** A page document for bindKeys: keydown listeners, and key events that record preventDefault. */
 function keyPage() {
   const ls = new Set(), doc = { addEventListener: (t, f) => { if (t === 'keydown') ls.add(f); }, removeEventListener: (t, f) => { if (t === 'keydown') ls.delete(f); } };
@@ -276,7 +276,7 @@ test('each shortcut fires on the equation page: Ctrl+Z undo, Ctrl+Shift+Z and Ct
   unbind(); assert.equal(P.listeners.size, 0, 'the unbind removes the listener');
 });
 
-// RESTATED (D242 item 8a): "a field" became "a TEXT field". Undo and redo now act on the track from a number field, a checkbox or a
+// RESTATED: "a field" became "a TEXT field". Undo and redo now act on the track from a number field, a checkbox or a
 // select (app/test/keys-anywhere.test.js); this fake field matches every selector with "input" in it, so it is a text field.
 test('no shortcut fires while a TEXT field has focus, and a bare Backspace does nothing', async () => {
   const { bindKeys } = require('../core/keys.js'), s = await createCoreShell({ brushFn: null }), P = keyPage();
@@ -311,8 +311,8 @@ test('the guide\'s steps are the equation builder\'s: extend, brush, close, colo
   assert.deepEqual(STEPS.map((s) => s.id), ['extend', 'brush', 'close', 'colours', 'export', 'grid']);
   assert.ok(STEPS.every((s) => s.title && s.text && s.target));
   // (the grid step's "centre handle" is the symmetry guides' own, app/preview/guideslayer.js, not a piece builder's handle)
-  // AMENDED D463 (E's stranger report §2 item 2): "sculpt" left this list. It was the piece builder's word; since D421 Sculpt mode is the equation
-  // builder's own, and step 2 now names it.
+  // AMENDED (a newcomer's read of the guide): "sculpt" left this list. It was the piece builder's word; Sculpt mode now is the equation
+  // belongs to the equation builder, and step 2 now names it.
   assert.ok(STEPS.every((s) => !/\b(words?|phrases?|connector)\b/i.test(s.text)), 'none of the piece builder\'s wording is left');
 });
 

@@ -1,6 +1,6 @@
 // redgroups.test.js: node --test app/test/redgroups.test.js
-// D242 item 4: a refusal shows EVERY red in plain words, grouped, with where (s in km and the piece). The reds below are TEST 1's kinds and places
-// (E's diagnosis, loop/test1_raygap_diagnosis_2026-10-04.md: 6 downforce-ray-gap, 13 self-intersection, 13 stacked, 1 roll-rate, 1 lap-proof), on a
+// A refusal shows EVERY red in plain words, grouped, with where (s in km and the piece). The reds below are TEST 1's kinds and places
+// (as diagnosed on 2026-10-04: 6 downforce-ray-gap, 13 self-intersection, 13 stacked, 1 roll-rate, 1 lap-proof), on a
 // synthetic layout of segments, so nothing of the user's is read.
 'use strict';
 const test = require('node:test');
@@ -39,7 +39,7 @@ test('where: s in km and the piece it is on (a range spanning two pieces names b
   assert.equal(g.find((x) => x.key === 'roll-rate').title, 'the road rolls too fast'); assert.equal(g.find((x) => x.key === 'lap-proof').title, 'the lap does not prove');
 });
 
-// D248 amended this row BY NAME: it asserted every red's OWN place text in the message; places are now merged (E's note B), so it asserts
+// AMENDED BY NAME: this row asserted every red's OWN place text in the message; places are now merged (near-duplicates per piece), so it asserts
 // one line per PLACE, every red inside exactly one of them, and the count in places (was "(32)", the reds)
 test('groupsText names one line per PLACE and every red lies inside exactly one of them: none is dropped, the count is of places', () => {
   const g = RG.groupReds(REDS, SEGS), text = RG.groupsText(g);
@@ -47,13 +47,13 @@ test('groupsText names one line per PLACE and every red lies inside exactly one 
     const holders = grp.places.filter((p) => it.s0 >= p.s0 && it.s1 <= p.s1);   // a group's places never overlap (overlapping reds always merge)
     assert.equal(holders.length, 1, `${it.reason} ${it.km} lies in exactly one place`); assert.ok(text.includes(RG.placeText(holders[0])), `and that place is in the text`);
   }
-  // 13: the ray red at 6.022 km (p7) touches 5.98–6.02 km (p6–p7) on the piece that place ends on, so it is that place (the first D248 rule,
+  // 13: the ray red at 6.022 km (p7) touches 5.98–6.02 km (p6–p7) on the piece that place ends on, so it is that place (the first merge rule,
   // same STARTING piece only, said 14; the real-window check showed that rule leaves a red inside a two-piece place on its own line)
   assert.match(text, /^the road overlaps itself \(13 places\): at 1\.40–1\.43 km \(p2\), at 1\.48–1\.51 km \(p2\)/);
   assert.equal(g[0].count, 32, 'the group still counts every red');
 });
 
-// D248 (E's note B on the D242 look): near-duplicate places merged, per piece, per group
+// near-duplicate places merged, per piece, per group (a review of the grouped reds asked for it)
 test('D248: overlapping reds on one piece are ONE place (a self-intersection, a stacked red and a ray red at 1.47–1.51 km), and a click goes to its start', () => {
   const g = RG.groupReds([{ reason: 'self-intersection', s0: 1474, s1: 1506 }, { reason: 'stacked-within-2m', s0: 1478, s1: 1506 }, { reason: 'downforce-ray-gap', s0: 1480, s1: 1480 }], SEGS);
   assert.equal(g.length, 1); const [p] = g[0].places;
@@ -70,14 +70,14 @@ test('D248: TOUCHING reds merge (a gap of 2 m, one station), a gap of 3 m does n
   assert.deepEqual(across.places.map((p) => p.piece), ['p1', 'p2'], 'one place per piece');
 });
 
-// found by the D248 real-window check: a coil's close preview read "at 1.08–1.16 km (p4–p5), at 1.15 km (p5)", one place on two lines, because
+// found by the merge's real-window check: a coil's close preview read "at 1.08–1.16 km (p4–p5), at 1.15 km (p5)", one place on two lines, because
 // the second red STARTS on a later piece than the first, though it lies inside it
 test('D248: a red inside a place that spans two pieces is the same place (a red on p3 inside 1.99–2.06 km on p2–p3); touching after it on its END piece merges too', () => {
   const g = RG.groupReds([{ reason: 'self-intersection', s0: 1990, s1: 2060 }, { reason: 'stacked-within-2m', s0: 2050, s1: 2050 }, { reason: 'self-intersection', s0: 2062, s1: 2070 }], SEGS)[0];
   assert.deepEqual(g.places.map(RG.placeText), ['at 1.99–2.07 km (p2–p3)']); assert.equal(g.places[0].s, 1990, 'the click target is the merged start');
 });
 
-// F1 (C's look at 05f0c2c, handback/p-redmerge-C_2026-10-06.md:33-36): pieceAt puts a boundary s on the NEXT piece, and that was read as a
+// F1 (a review of 05f0c2c): pieceAt puts a boundary s on the NEXT piece, and that was read as a
 // place's END piece, so a red ending exactly on a boundary was labelled as spanning both pieces and the touch rule merged across the boundary
 test('F1: a red that ENDS exactly on a piece boundary is on its own piece only (0.98–1.00 km is p1, not p1–p2)', () => {
   const g = RG.groupReds([{ reason: 'self-intersection', s0: 980, s1: 1000 }], SEGS)[0];
@@ -91,7 +91,7 @@ test('F1: reds that meet AT a boundary, or touch across it, stay two places (980
   assert.deepEqual(two([960, 980], [980, 1000]), ['at 0.96–1.00 km (p1)'], 'meeting on one piece is one place');
 });
 
-// F2 (C's look at A's handles, handback/p-handles-C_2026-10-06.md:85): pieceAt wrapped s = L to the FIRST piece even on an OPEN track, so a red at
+// F2 (a review of the handles): pieceAt wrapped s = L to the FIRST piece even on an OPEN track, so a red at
 // the very end read "(p1)" and, after F1, stood as its own place beside the range that ends there
 test('F2: on an OPEN track, s at or past the end is the LAST piece (8.00 km is p8); a closed lap still wraps it to p1', () => {
   assert.equal(RG.pieceAt(SEGS, 8000, { closed: false }), 'p8'); assert.equal(RG.pieceAt(SEGS, 8500, { closed: false }), 'p8');

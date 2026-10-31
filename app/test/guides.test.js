@@ -1,5 +1,5 @@
 // guides.test.js: node --test app/test/guides.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D237 (the user: "a 3D grid to some how see the track and make it all symmetrical ... a 2D grid if the track has no height, but as soon as the track turns up or downward the
+// (the user: "a 3D grid to some how see the track and make it all symmetrical ... a 2D grid if the track has no height, but as soon as the track turns up or downward the
 // grid becomes 3D"). The preview path ONLY: nothing here reaches src/ or the export (core_cup_fixtures, run beside it, is the proof, and the last test reads the diff of what
 // was touched). Stated before the tests were written, and each is a test of an outcome:
 //   rows 1-4   the grid: a flat track draws the ground grid only; a track with height draws the lattice, which spans its lowest to its highest point; the line count stays bounded
@@ -229,12 +229,12 @@ test('row 14: the camera panel\'s buttons send the events the preview takes, fol
 
 test('row 15: the whole lap is the preview\'s: nothing in src/, the export or the document changed (the diff against the base), and the sealed fixtures are untouched', () => {
   const root = path.resolve(__dirname, '..', '..');
-  let changed; try { changed = execFileSync('git', ['diff', '--name-only', '510510e9', 'fa5fd93', '--', 'src', 'app/export', 'test/fixtures', 'src-tauri'], { cwd: root, encoding: 'utf8' }).trim(); } catch (e) { return; }   // not a checkout with those commits: nothing to compare. D242 (B): D237's lap is 510510e9..fa5fd93; diffing the working tree failed every later lap that edits src/ (D242's close.js)
+  let changed; try { changed = execFileSync('git', ['diff', '--name-only', '510510e9', 'fa5fd93', '--', 'src', 'app/export', 'test/fixtures', 'src-tauri'], { cwd: root, encoding: 'utf8' }).trim(); } catch (e) { return; }   // not a checkout with those commits: nothing to compare. The guides' change is 510510e9..fa5fd93; diffing the working tree failed every later change that edits src/ (close.js, for one)
   assert.equal(changed, '', `touched: ${changed}`);
   assert.ok(fs.existsSync(path.join(root, 'app', 'preview', 'guides.js')));
 });
 
-// ── D237b (B's two findings on the mirror): the gap search is exact and cheap, the tree is built once per path, and the ghost's line count is bounded ──────────────────────────────────────────────
+// ── (two review findings on the mirror): the gap search is exact and cheap, the tree is built once per path, and the ghost's line count is bounded ──────────────────────────────────────────────
 const egg = (h, n = 3000) => path_((i) => { const t = i / n * 2 * Math.PI; return [300 * Math.cos(t), h * Math.sin(2 * t), 150 * Math.sin(t) * (1 + 0.3 * Math.cos(t))]; }, n, true);
 const ell = (n = 3000) => path_((i) => (i < n / 2 ? [i * 0.5, 0, 0] : [(n / 2) * 0.5, 0, (i - n / 2) * 0.5]), n, false);
 const brute = (pts, closed, c, kind) => {   // the reference: every mirrored point against every segment, written out again here
@@ -289,7 +289,7 @@ test('row 19: the mirror ghost\'s line count is BOUNDED however long the track i
   assert.ok(Math.abs(sp - 50) <= 6 && Math.abs(shortDash(small) - 2) < 0.2, `a 200 m ghost keeps the old 2 m dashes (about 50 pieces of 2 m): the clamp only bites on long ghosts (${sp} pieces, ${shortDash(small).toFixed(2)} m each)`);
 });
 
-// ── D237b, B's regression: the track model edits an OPEN track's path IN PLACE (extendPath, rebuildPathFrom), so a tree memoised per path OBJECT went stale after an extend or a brush ─────────────
+// ── a regression a review found: the track model edits an OPEN track's path IN PLACE (extendPath, rebuildPathFrom), so a tree memoised per path OBJECT went stale after an extend or a brush ─────────────
 const SC = require('../../src/core/sculpt.js');
 const truthOf = (t, c, kind) => brute(t.path.samples.map((s) => s.pos.slice()), !!t.path.closed, c, kind);
 /** One step: plan the way preview.js does (the model's bounds and path), and compare the gap with the brute force over the SAME samples and centre. */

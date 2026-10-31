@@ -1,4 +1,4 @@
-// Tests for the ONE SHARED PATH (D177, the librarian's ruling: "ONE shared path between the preview and validation"):
+// Tests for the ONE SHARED PATH (the rule: "ONE shared path between the preview and validation"):
 // app/preview/trackmodel.js keeps the track's path and reports what changed (how, g, fromS), app/preview/preview.js
 // hands it on (onTrack; app/preview/index.js publishes it as 't180:track'), and validation reads that path instead of
 // growing a second one. node --test, no dependencies.

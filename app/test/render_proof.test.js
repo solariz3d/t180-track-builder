@@ -1,9 +1,9 @@
-// render_proof.test.js: node --test app/test/render_proof.test.js. D169: the preview's frame loop against a stand-in
+// render_proof.test.js: node --test app/test/render_proof.test.js. The preview's frame loop against a stand-in
 // canvas, window and WebGL (no GPU, no DOM), plus the probe the window proof reads. Stated before the code:
 //   · DPR: the canvas backing store is round(css size × devicePixelRatio) per side, the renderer draws at that size, and
 //     a change of DPR or of the css size resizes it on the next frame. A missing or nonsense DPR counts as 1; a side
 //     never exceeds 8192 (then both sides scale down together, keeping the aspect).
-//   · Ctrl, Alt and Meta with C or B do NOT switch the camera (B's D168 defect 4: Ctrl+C is copy); plain C and B do.
+//   · Ctrl, Alt and Meta with C or B do NOT switch the camera (a reported defect: Ctrl+C is copy); plain C and B do.
 //   · A preview that cannot mount throws a PreviewMountError naming the reason, and leaves that reason visible in its root.
 //   · The probe reports the mode, the head, where the head lands on screen (NDC), and how far the view looks along T.
 'use strict';
@@ -27,7 +27,7 @@ function fakeGL() {
     getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport(x, y, w, h) { calls.viewport.push([w, h]); }, clearColor() {}, clear() {}, enable() {}, disable() {},
     uniformMatrix4fv() {}, uniform3f() {}, uniform1f() {}, uniform2f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     createBuffer: () => ({}), bindBuffer() {}, bufferData() {}, deleteBuffer() {}, deleteProgram() {}, drawElements() {}, drawArrays() {},
-    // the texture calls the AC look makes (D177)
+    // the texture calls the AC look makes
     TEXTURE_2D: 19, TEXTURE0: 20, RGBA: 21, UNSIGNED_BYTE: 22, uniform1i() {}, activeTexture() {}, createTexture: () => ({}), bindTexture() {},
     texImage2D() {}, texParameteri() {}, generateMipmap() {}, deleteTexture() {},
   };
@@ -110,7 +110,7 @@ test('probe: the head lands in the middle of the build view, which looks along t
   assert.ok(r.lookAlongT > 0.9, `view · T = ${r.lookAlongT}`);
   assert.deepEqual(r.canvas, { width: 800, height: 500, cssWidth: 800, cssHeight: 500, dpr: 1 });
 });
-// D170 changed this requirement (review item 2): the overhead now fits the WHOLE track, so the head is in
+// CHANGED requirement (after a review): the overhead now fits the WHOLE track, so the head is in
 // frame but no longer straight below; app/test/look.test.js checks that the fit contains every vertex.
 test('probe: in overhead (fit to the whole track) the head is in frame', () => {
   const { gl } = fakeGL(), win = fakeWindow(1), canvas = fakeCanvas(800, 500, gl);

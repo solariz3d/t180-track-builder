@@ -129,8 +129,8 @@ test('edges: a missing head, an unknown mode and a rig without the build view ar
   assert.throws(() => C.createRig().setMode('orbit'), /unknown mode/);
 });
 
-// D182: the build view FRAMES the road. T-180 roads are 31-37 m wide at the median and 67 m at the tight class's p90
-// (FINDINGS §7f). Stated before the test: every point of a 67 m cross-section at the head, walls included, projects
+// The build view FRAMES the road. T-180 roads are 31-37 m wide at the median and 67 m at the tight class's p90
+// (measured over the T-180 tracks). Stated before the test: every point of a 67 m cross-section at the head, walls included, projects
 // inside the view at the aspects 16:9, 1:1 and 9:16; the fixed 15 m / 6 m pose does NOT (so the test can fail); and a
 // road narrow enough for 15 m / 6 m keeps exactly that pose.
 const { fontProfile } = require('../../src/geom/fonts.js');
@@ -275,8 +275,8 @@ test('the lens changes the pose\'s fov and nothing else, in every view (the eye,
   }
 });
 
-// ── D189, the user's feel: flying was slower the more the view looked down when W or S was held with Q or E ("0.0123× at −89°",
-//    E's measurement). Forward follows the view's pitch, up is the WORLD's up, so the two are not perpendicular and their sum is
+// ── the user's feel: flying was slower the more the view looked down when W or S was held with Q or E ("0.0123× at −89°",
+//    measured). Forward follows the view's pitch, up is the WORLD's up, so the two are not perpendicular and their sum is
 //    shorter than either. Stated: free.move(fwd, right, up) moves the eye by exactly hypot(fwd, right, up) METRES, in the direction
 //    of  d·fwd + r·right + U·up  (d the view direction, r = d × up normalised, U world up), at every pitch and yaw and for every
 //    combination of axes. Where forward and up nearly cancel (W+E looking almost straight down) that direction is the part that does
@@ -309,7 +309,7 @@ test('the lens changes the pose\'s fov and nothing else, in every view (the eye,
     assert.ok(Math.abs(len(m) - 3) < 1e-9, len(m) + ' m, not ~0.04 m');
     assert.ok(dot(unit(m), [Math.sin(0.7), 0, Math.cos(0.7)]) > 0.999, 'along the horizontal heading, the non-cancelled part');
   });
-  // D257: Left Ctrl's descent is undone when a shortcut joins it, while W's travel stays, so the preview must know how far the UP axis really went
+  // Left Ctrl's descent is undone when a shortcut joins it, while W's travel stays, so the preview must know how far the UP axis really went
   // inside a combined move; on a pitched view forward and up are not perpendicular and move() scales the sum, so that is up · scaleOf(...), not up
   test('scaleOf(fwd, right, up) is the factor move() applies: on a pitched view the eye moves exactly (d·fwd + up·UP)·scaleOf', () => {
     const rig = enterFree(); setView(rig, 0.4, -35 * Math.PI / 180); const e0 = rig.free.state().eye, B = basis(rig), s = rig.free.scaleOf(2, 0, -2);

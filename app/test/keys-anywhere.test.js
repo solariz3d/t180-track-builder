@@ -1,4 +1,4 @@
-// keys-anywhere.test.js: D242 item 8a (the user: "make it like photoshop or video editing programs, cntrl z and what ever to go forward
+// keys-anywhere.test.js: (the user: "make it like photoshop or video editing programs, cntrl z and what ever to go forward
 // and back"). Undo and redo act on the TRACK from anywhere, a number field included; a text-entry field keeps them for its own text;
 // Ctrl+S and Ctrl+Backspace are unchanged (in any field they stay the field's: Ctrl+Backspace deletes a word, never the track's head).
 // Run: node --test --test-concurrency=1 app/test/keys-anywhere.test.js
@@ -85,7 +85,7 @@ test('the Undo and Redo buttons name their keys in their tooltips', () => {
   assert.match(src, /text: 'Redo', title: 'Redo \(Ctrl\+Y or Ctrl\+Shift\+Z\)'/);
 });
 
-// D421 part 3 (design §5): Tab switches Build | Sculpt, but never from a field: in the track name or the share code box Tab is the browser's (to the next field),
+// Tab switches Build | Sculpt, but never from a field: in the track name or the share code box Tab is the browser's (to the next field),
 // and in a number field too (the plan names keys.js's inText; inField is the stricter reading, so the Extend fields can still be walked with Tab)
 test('Tab in a text field (or any field) leaves Sculpt as it was and stays the browser\'s; outside a field it switches the mode', async () => {
   for (const target of [el('input'), el('input', 'text'), el('textarea'), el('input', 'number'), el('select')]) {
@@ -99,7 +99,7 @@ test('Tab in a text field (or any field) leaves Sculpt as it was and stays the b
   assert.deepEqual([P.press('Tab', {}, BODY).prevented, !!s.getState().sculpt], [true, false], 'Tab again: Build');
 });
 
-// D498 item 1 (A's review of 6650ac2, p-d497-A §3): after a click a button keeps the focus, and Tab there is the browser's (the focus moves on). Only the page itself
+// (a review of 6650ac2): after a click a button keeps the focus, and Tab there is the browser's (the focus moves on). Only the page itself
 // (nothing focused, the body) or the stage takes Tab for Sculpt. Before, Tab with a focused button toggled Sculpt and the focus never moved
 test('Tab with a button focused (after a click) moves the focus as the browser does and does not toggle Sculpt; with nothing focused it still toggles', async () => {
   const { s, P } = await twoPieces();

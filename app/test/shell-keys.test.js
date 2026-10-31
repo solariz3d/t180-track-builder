@@ -1,6 +1,6 @@
 // shell-keys.test.js: node --test app/test/*.test.js
 // The app's keys, as a pure mapping from a key event to an action (app/shell.js keyAction). Backspace alone does
-// NOTHING: removing the head takes Ctrl+Backspace (B's read: a bare Backspace removed the head by accident).
+// NOTHING: removing the head takes Ctrl+Backspace (a review found a bare Backspace removed the head by accident).
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

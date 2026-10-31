@@ -1,5 +1,5 @@
 // core-spawndrag.test.js: node --test app/test/core-spawndrag.test.js
-// D285 part 1: DRAG THE START ON THE PREVIEW (the user, 06:11: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars at the start line
+// DRAG THE START ON THE PREVIEW (the user, 06:11: "click the hotlap spawn and move it by mouse … click dragging the start line and then the pack of cars at the start line
 // too"). FEEL tier: rows and fake hosts, no real window. The real shell, the real panel (app/core/panel.js mounts app/core/spawndrag.js on the stage) and the real exporter, on a
 // closed bowl lap; the stage is a fake that fires pointer events capture-first like a browser, so "the camera never sees the press" is a row and not a hope.
 'use strict';
@@ -68,8 +68,8 @@ async function mounted({ build = null, pose = null, hAbove = 60, at = 250 } = {}
   const bubbled = [];
   stage.addEventListener('pointerdown', (e) => bubbled.push(e), false);   // what the camera and the piece picking would see
   const panel = require('../core/panel.js').mount(root, s);
-  // AMENDED D355 seam fix (where the section is mounted, not what it does): Start & grid left the core panel for pane A's Track menu (app/core/trackmenu.js,
-  // plan_t180_handoff :1421-1424), which mounts spawnsui itself with { shell, el, win }; it is mounted the same way here, into this test's root, and no row's assertion changes
+  // AMENDED, seam fix (where the section is mounted, not what it does): Start & grid left the core panel for the Track menu (app/core/trackmenu.js),
+  // which mounts spawnsui itself with { shell, el, win }; it is mounted the same way here, into this test's root, and no row's assertion changes
   const el = (tag, attrs = {}, ...kids) => { const e = doc.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; };
   root.append(...require('../core/spawnsui.js').mount({ shell: s, el, win }).nodes);
   tick();

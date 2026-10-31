@@ -1,4 +1,4 @@
-// Incremental validation (D177, the librarian's ruling 18:10): an edit revalidates only what it can change, over ONE
+// Incremental validation: an edit revalidates only what it can change, over ONE
 // shared path, and the result equals a full revalidate EXACTLY. Seeded property tests print their seed on failure.
 // Run: node --test --test-concurrency=4 app/test/validate-ui-incval.test.js
 'use strict';
@@ -18,13 +18,13 @@ const { viewOf } = require('../validate-ui/pathview.js');
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
 /** mulberry32: the same seed, the same edits. */
 const prng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
-// CHANGED D256 BUILD: the reference is the controller's own default, FULL SPEED now (no slider), where it was the picker's 460 km/h
+// CHANGED: the reference is the controller's own default, FULL SPEED now (no slider), where it was the picker's 460 km/h
 const OPTS = { csp: true, fullSpeed: true };
 const WORDS = ['straight', 'sweep', 'turn', 'tight', 'tight', 'wall-ride', 'jump'];
 
 /**
  * A shell with the preview's track model subscribed FIRST (as the window mounts it) and the controller after it. The
- * shared path is what C's seam replies ('t180:track-request': the model's own update result, { path, segments, … }).
+ * shared path is what the track model's seam replies ('t180:track-request': the model's own update result, { path, segments, … }).
  */
 async function rig({ share }) {
   const shell = await createShell({ storage: mem(), autosaveMs: 0 });
@@ -37,7 +37,7 @@ async function rig({ share }) {
 /**
  * The reference: a FULL validate of the path the controller validated, with the lap as the controller asks. "Exactly" is
  * about VALIDATION: the incremental result equals a full validate of the same stations, bit for bit. Whether a path grown
- * or re-placed in place equals a fresh buildPath is the geometry's claim (C's rigid re-placement, src/geom/path.js, holds
+ * or re-placed in place equals a fresh buildPath is the geometry's claim (the rigid re-placement, src/geom/path.js, holds
  * it to RIGID_TOL 1e-12, not to the bit), so the path is taken as it is, and checked against a fresh build for its
  * stations' count, segments and positions (samePath).
  */
@@ -58,7 +58,7 @@ function samePath(shell, p, at) {
 
 const levelsOf = (map) => map.stations.map((e) => Array.from(e.levels));
 /**
- * The controller's state against a full validate of the same path (D179 drag window included):
+ * The controller's state against a full validate of the same path (the drag window included):
  *   · no pending stretch: the result equals a full validate exactly, and so do the colours;
  *   · a pending stretch (a drag is open): the result equals a full validate BOUNDED at the same point exactly; every
  *     station before it has the colour an UNBOUNDED full validate gives it (nothing stale), and every station from it on
@@ -171,7 +171,7 @@ test('a shared path the preview REBUILT (a new object) is viewed afresh, never s
   assert.deepStrictEqual(ctl.state.result, reference(shell, ctl).result);
 });
 
-// ── the drag window (D179): the dragged word and the next are live, the rest is pending until the drag ends ──
+// ── the drag window: the dragged word and the next are live, the rest is pending until the drag ends ──
 test('a drag held OPEN on a mid-track word: every tick is windowed and exact where settled, and ending it equals a full validate', async () => {
   for (const seed of [21, 22, 23]) {
     const { shell, ctl } = await rig({ share: true }), rnd = prng(seed);
@@ -189,7 +189,7 @@ test('a drag held OPEN on a mid-track word: every tick is windowed and exact whe
     assert.ok(windowed >= 3, `seed ${seed}: only ${windowed} of 4 ticks were windowed`);
   }
 });
-// AMENDED (D432): the 2 m stack is information since D432 and only a CLIP is red (the clip test in src/validate/index.js stacked(), which this live checker
+// AMENDED: the 2 m stack is information now and only a CLIP is red (the clip test in src/validate/index.js stacked(), which this live checker
 // runs, having no mesh). The rule is the same, held for what is red now: a settled station that CLIPS road the drag moved shows RED during the drag
 test('never a stale "clean": a settled station clipping road that the drag moved shows RED during the drag, and the moved road shows PENDING', async () => {
   // the tight left spiral stacks on itself; dragging an early word swings the whole tail over the road before it
@@ -269,7 +269,7 @@ test('a path that cannot be viewed exactly is refused (null), so the controller 
 });
 
 // ── the stacking check, against the point-by-point algorithm it replaced ──
-/** HEAD's stacked() before D177, kept here as the reference: every surface point in a 2 m grid, every pair measured. */
+/** stacked() as it was before incremental validation, kept here as the reference: every surface point in a 2 m grid, every pair measured. */
 function referenceStacked(path, segments, car = MACH6, sep = 25) {
   const S = path.samples, cell = car.stackedM, L = path.lengthM, out = new Map(), grid = new Map(), pts = [];
   const isRoad = (i) => segments[S[i].seg].kind !== 'gap', key = (a, b, c) => `${a},${b},${c}`;
@@ -343,8 +343,8 @@ test('a closed loop: every drag tick defers the lap, and ending the drag proves 
   assert.strictEqual(shell.getState().history.present.closed, true, shell.getState().message);
   const proven = ctl.state.result.lap;
   assert.notStrictEqual(proven.reason, 'deferred');
-  // a SPEED drag: it keeps the loop closed (a length drag opens it by the change, which A's document does not re-close:
-  // routed in the D177 hand-back) and changes every load and the lap time, so the proof after it is not the old one
+  // a SPEED drag: it keeps the loop closed (a length drag opens it by the change, which the document does not re-close:
+  // reported when incremental validation was added) and changes every load and the lap time, so the proof after it is not the old one
   const first = shell.getState().history.present.words[1], before = shell.getState().resolved;
   shell.beginDrag(); shell.dragTo(first.id, { speed: 90 });
   assert.notStrictEqual(shell.getState().resolved, before, 'the drag changed the document');
