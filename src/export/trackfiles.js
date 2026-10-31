@@ -23,7 +23,7 @@ const { gripsOf, gripSurface } = require('./gripkeys.js');
 // and 1.96 m/s, the holds at 0.63 m/s or less, and a break was followed by a throw of about 125 g. On 0.00005 the car that
 // broke held 64.88 g for 1.54 s with its body 4.5-5.4 cm above the road throughout. One pass, one car: it reopens if a car
 // bounces or launches at the helix entry on 0.00005 where it did not on 0.0002, or cannot hold 60 g on it that held it
-// on 0.0002. The record: exo_memory/handback/p-d563-wheel-under-O_2026-10-30.md (the seven passes and §STIFF).
+// on 0.0002.
 const SOFT_COLLISION_BLOCK = [
   '[COLLISION_PARAMS_...]',
   '; T-180 soft road (docs/FINDINGS.md §4c). CSP only: plain AC ignores this section.',
