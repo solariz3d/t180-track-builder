@@ -2,19 +2,19 @@
 //
 //   const inst = createInstaller({ build, native, getDoc, getTextures })
 //   await inst.root()             -> the Assetto Corsa folder, or null (native get_ac_root: the remembered one, else the one found
-//                                    through Steam and then remembered, D250)
+//                                    through Steam and then remembered)
 //   await inst.chooseRoot(path)   -> remember it (native set_ac_root refuses a folder without content\tracks)
 //   await inst.install({ test })  -> { ok, message, folder }: build the export with every check ON, then
 //                                    write into <AC>\content\tracks\<folder> (native install_track: t180b_ only, and never
-//                                    over a folder the builder did not make). D264: an OPEN track (the build refuses OPEN_LOOP)
+//                                    over a folder the builder did not make). An OPEN track (the build refuses OPEN_LOOP)
 //                                    is installed as the TEST export instead, t180b_<name>_test, and the message says so;
 //                                    { test: true } (the ⋯ menu's Test export) asks for the test export straight away
-//                                    D372: when the track's SHAPE changed since its last install, install_track moved its old ghost and HUD laps aside
+//                                    When the track's SHAPE changed since its last install, install_track moved its old ghost and HUD laps aside
 //                                    (src-tauri/src/lib.rs install_with_retire: { files, retired, retire_error }); the message then says so and where, and a
 //                                    move that failed is said too. Nothing moved: the message is as it was
-// THE BUILD (D239): `build(opts)` is the open track's own export, the core shell's buildExport (app/core/coreshell.js), the SAME call
+// THE BUILD: `build(opts)` is the open track's own export, the core shell's buildExport (app/core/coreshell.js), the SAME call
 // the Export button makes, so what is installed is what Export writes, byte for byte; getDoc() gives the name it installs under. It may return a promise
-// (D437b: buildExportAsync, the export in its own process); a refusal is a rejected ExportError then, and is said the same way.
+// (buildExportAsync, the export in its own process); a refusal is a rejected ExportError then, and is said the same way.
 // THE NAME. Every folder the builder writes is t180b_<track name> (src/export/fromwords.js folderName): the prefix is
 // added automatically, and the message says so, so a user who names a track "monza" is told it installs as t180b_monza
 // and can never overwrite ks_monza.
@@ -24,7 +24,7 @@
 //   await see.run(folder, layout) -> refuses without calling the native side while the setting is off
 // The launch itself is native (src-tauri/src/ac.rs): OFF by default, and never run by the builder's tests.
 'use strict';
-const EW = require('../core/exportwords.js');   // D464: the export's warnings in the user's words
+const EW = require('../core/exportwords.js');   // the export's warnings in the user's words
 
 const PREFIX_NOTE = 'the builder names every track t180b_…, so it can never overwrite a track it did not make';
 
@@ -39,8 +39,8 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
       if (!root) return { ok: false, needsRoot: true, message: 'Assetto Corsa was not found through Steam: pick your Assetto Corsa folder (the one that holds content\\tracks); it is remembered' };
       const name = String(getDoc().name || '').trim();
       if (!name || /^untitled$/i.test(name)) return { ok: false, message: 'name the track first (Save, with a name): it installs as t180b_<name>, and an unnamed track would replace the last unnamed one' };
-      // D264 (the user, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the test that isnt finished"):
-      // an OPEN track is not refused here: it is built as D243a's TEST export (open, run-off and wall, reds as warnings, folder t180b_<name>_test), the same build
+      // (the user, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the test that isnt finished"):
+      // an OPEN track is not refused here: it is built as the TEST export (open, run-off and wall, reds as warnings, folder t180b_<name>_test), the same build
       // the ⋯ menu's Test export makes. A closed track builds as before; a closed track asked for the test export is refused by the build (TEST_CLOSED).
       const refused = (e) => { if (e.name !== 'ExportError') throw e; return { ok: false, message: e.message, reds: e.code === 'RED' ? e.red : null }; };
       const textures = getTextures();
@@ -55,18 +55,18 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
         let r;
         try { r = await native.installTrack(f.folder, f.files); } catch (e) { return { ok: false, message: `not installed: ${e.message || e}` }; }
         names.push(f.folder);
-        if (r && typeof r === 'object') { if (Array.isArray(r.retired)) retired.push(...r.retired); if (r.retire_error) retireErrors.push(String(r.retire_error)); }   // D372
+        if (r && typeof r === 'object') { if (Array.isArray(r.retired)) retired.push(...r.retired); if (r.retire_error) retireErrors.push(String(r.retire_error)); }   // old ghost and HUD laps moved aside, or why not
       }
       const doc = getDoc();
-      // D250: the line says where it went (the whole folder) and that exporting again updates that same folder
+      // the line says where it went (the whole folder) and that exporting again updates that same folder
       const where = names.map((n) => `${root}\\content\\tracks\\${n}`).join(', ');
-      // D250 item 2: a jump the car may fly past is installed, and said (the user tunes jumps by driving them); the export's other warnings stay where they were
-      // D446: and two parts of the road whose edges come within 1 m (validate's near-touch), said where the export's outcome is read
-      // D464 (the librarian's ruling on E's D463 §6(3)): and the CSP need, since this button is the main path and the first-start card shows once; every line in the user's words
+      // a jump the car may fly past is installed, and said (the user tunes jumps by driving them); the export's other warnings stay where they were
+      // and two parts of the road whose edges come within 1 m (validate's near-touch), said where the export's outcome is read
+      // and the CSP need (a review's finding), since this button is the main path and the first-start card shows once; every line in the user's words
       const jumps = EW.exportWarningsWords(((out.result && out.result.warnings) || []).filter((w) => /^(jump|near-touch|csp-only): /.test(w)));
-      // D264: the test export says what it is, and how many reds it carries (the exporter's own TEST EXPORT warning)
+      // the test export says what it is, and how many reds it carries (the exporter's own TEST EXPORT warning)
       const unfinished = test ? `; this track is not closed, so it was exported as an unfinished TEST: the road ends in a run-off and a wall; reds are listed as warnings${((out.result && out.result.warnings) || []).filter((w) => /^TEST EXPORT/.test(w)).map((w) => ` (${w})`).join('')}` : '';
-      // D372: Assetto Corsa keeps a ghost and the CMRT HUD its laps by the track's NAME, so after a change of shape they were moved aside; never silent, either way
+      // Assetto Corsa keeps a ghost and the CMRT HUD its laps by the track's NAME, so after a change of shape they were moved aside; never silent, either way
       const laps = retired.length ? `. The track's shape changed, so its old ghost and HUD laps were moved aside (Assetto Corsa keeps them by the track's name, and they would race the old road): ${retired.join(', ')}; move them back to restore them` : '';
       const lapsFailed = retireErrors.length ? `. The track's shape changed, but its old ghost and HUD laps could not be moved aside (${retireErrors.join('; ')}): they still race the old road until they are moved or deleted by hand` : '';
       return { ok: true, folder: names[0], message: `exported "${doc.name || 'untitled'}" into Assetto Corsa as ${names.join(', ')} in ${where}${unfinished}; exporting this track again updates that folder (${PREFIX_NOTE})${jumps.length ? `. ${jumps.join('. ')}` : ''}${laps}${lapsFailed}` };
