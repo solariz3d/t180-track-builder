@@ -1,5 +1,5 @@
-// exportjob.js: THE EXPORT AS ONE JOB THAT CROSSES A postMessage (D437b: the user's white window was the page dying of a V8 heap out-of-memory inside
-// the export, which ran on the page's own thread; exo_memory/handback/p-d437-P_2026-10-22.md). The page packs the export's arguments as plain data,
+// exportjob.js: THE EXPORT AS ONE JOB THAT CROSSES A postMessage (the user's white window was the page dying of a V8 heap out-of-memory inside
+// the export, which ran on the page's own thread). The page packs the export's arguments as plain data,
 // the export's own process (app/export/exportrunner.js, app/export/exportworker.js) unpacks them and runs src/export/fromwords.js exportSegments
 // UNCHANGED, the same call app/export/export.js runSegments makes, so the files are the same bytes either way (app/test/export-isolated.test.js).
 //

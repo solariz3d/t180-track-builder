@@ -1,7 +1,7 @@
-// exportrunner.js: runs the export IN A PROCESS OF ITS OWN, so an export that runs out of memory ends with a message and the page stays drawn (D437b,
-// the user: "figure out that crash to prevent it from ever happening"). The shape is the close runner's (app/core/closerunner.js): one warm host, a job
+// exportrunner.js: runs the export IN A PROCESS OF ITS OWN, so an export that runs out of memory ends with a message and the page stays drawn (the
+// user: "figure out that crash to prevent it from ever happening"). The shape is the close runner's (app/core/closerunner.js): one warm host, a job
 // at a time, every message carrying the job's serial. The HOST is not a bare Web Worker:
-//   MEASURED (headless Chrome, and headless Edge 155, the engine of the user's WebView2 155.0.4283.62; exo_memory/handback/p-d437b-B_2026-10-22.md):
+//   MEASURED (headless Chrome, and headless Edge 155, the engine of the user's WebView2 155.0.4283.62):
 //   a dedicated worker shares its page's renderer process, and a V8 heap out-of-memory in the worker kills that process, page and all. A SANDBOXED iframe
 //   (sandbox="allow-scripts", an opaque origin) is given a renderer process of its own, and the same out-of-memory in a worker inside it ends only that
 //   process: the page answers, its canvas still drawn. So the host is a hidden sandboxed iframe, and the export runs in a worker inside it
