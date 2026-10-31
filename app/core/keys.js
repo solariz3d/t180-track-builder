@@ -1,4 +1,4 @@
-// keys.js: the app's keys, MOVED here from app/shell.js as they were (note, the user's undo request: removing the Pieces mode
+// keys.js: the app's keys, MOVED here from app/shell.js as they were (the user's undo request: removing the Pieces mode
 // must not remove its keys). The equation page binds them to the core shell (app/index.html); app/shell.js re-exports keyAction so its
 // own tests and drivers are unchanged. Undo and redo work inside a field too (below).
 'use strict';
