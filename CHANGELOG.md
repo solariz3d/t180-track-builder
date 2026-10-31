@@ -47,6 +47,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- **Export to Assetto Corsa no longer crashes the builder on a long track.** On ELYSIUM (25 km) the page ran out of memory handing the finished files to Windows, because they were sent as text: a 219 MB track file became more than 600 MB of text. They now go as plain bytes, so the page needs no extra memory for them, and tracks of 50 km and more, whose text was too long to make at all, can be exported and installed. The same goes for File ▸ Export, Export layouts and Export for Blender.
+
+- **Opening a long track uses about 0.9 GB less memory.** The track checker, which runs beside the page, was building a full 3D model of the whole road it never looks at; on ELYSIUM that was about 0.9 GB of the memory the page and its helpers share, and seconds of work every time the track was opened or changed. It now builds only the line it checks.
+
 - **Dragging fast no longer makes the tick sound buzz.** Ticks now come at most about 28 a second (one per 35 ms, where it was up to 250), so a quick drag sounds like a steady ratchet; a tick that would come too soon is skipped, never played late.
 
 - **A road texture flows smoothly through a tube that widens or narrows.** Where a closed tube changed width, the texture on its walls and roof was cut into short pieces every 2 m, each shifted sideways from the last, worse toward the roof. Each row now takes its own section's width, and a tube keeps one count of texture repeats round for its whole length, so the lines run on without a step. A tube of one width, and every other road, looks exactly as before.
