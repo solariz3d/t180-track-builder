@@ -163,7 +163,7 @@ function resolveTail(doc, i0, segsBefore, stBefore, marksBefore, designKmh) {
 
 function openCheck(doc) {
   checkDoc(doc);
-  if (doc.closed) throw new ResolveError('CLOSE_NOT_BUILT', 'the document is closed, and the closing connector (ARCHITECTURE §2 "Closing the loop") is not built yet; resolve an open document');
+  if (doc.closed) throw new ResolveError('CLOSE_NOT_BUILT', 'the document is closed, and resolving a closed loop is not built yet; resolve an open document');
 }
 
 /**

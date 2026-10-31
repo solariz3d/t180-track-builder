@@ -73,7 +73,7 @@ test('load above the proven 90 g is AMBER, with its FINDINGS source; at or below
   const cold = validate(X.pathOf(X.leftTurn(R, Math.PI / 2)), [X.seg({ speed: vFor(89.5), profile: prof })]);
   const a = hot.amber.find((x) => x.reason === 'load-above-proven');
   assert.ok(a, 'amber fires above 90 g');
-  assert.match(a.source, /FINDINGS\.md:105/);
+  assert.match(a.source, /more load than any track has been measured to hold/);   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
   assert.strictEqual(a.u, -6);
   assert.ok(!cold.amber.some((x) => x.reason === 'load-above-proven'), 'no amber at 89.5 g');
   assert.deepStrictEqual(reasons(hot.red), [], 'load is never red');
@@ -92,7 +92,7 @@ test('the 25 g suspension stop is INFORMATION, from 25 g on, never red or amber 
   const { R, prof, vFor } = turnAtLoad();
   const at = validate(X.pathOf(X.leftTurn(R, Math.PI / 2)), [X.seg({ speed: vFor(25.01), profile: prof })]);
   const below = validate(X.pathOf(X.leftTurn(R, Math.PI / 2)), [X.seg({ speed: vFor(24.9), profile: prof })]);
-  assert.ok(at.info.some((x) => x.reason === 'on-the-stops' && /FINDINGS\.md:103/.test(x.source)));
+  assert.ok(at.info.some((x) => x.reason === 'on-the-stops' && /suspension reaches its stops from about 25 g/.test(x.source)));   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
   assert.ok(!below.info.some((x) => x.reason === 'on-the-stops'));
 });
 
@@ -107,7 +107,7 @@ test('fold: a profile wider than the turn radius folds on the inside (1 − κ·
   const wide = { font: 'flat', u: [-5, 0, 12], psi: [0, 0, 0], material: 'ROAD' };
   const r = validate(X.pathOf(X.leftTurn(10, Math.PI / 2)), [X.seg({ speed: 30, profile: wide })]);
   const f = r.red.find((x) => x.reason === 'fold');
-  assert.ok(f, 'fold fires'); assert.strictEqual(f.u, 12); assert.match(f.source, /ARCHITECTURE\.md:57/);
+  assert.ok(f, 'fold fires'); assert.strictEqual(f.u, 12); assert.match(f.source, /folds over itself/);   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
   // boundary: an inside edge at 9.9 m on a 10 m radius does not fold
   const ok = validate(X.pathOf(X.leftTurn(10, Math.PI / 2)), [X.seg({ speed: 30, profile: { font: 'flat', u: [-5, 0, 9.9], psi: [0, 0, 0] } })]);
   assert.ok(!ok.red.some((x) => x.reason === 'fold'));
@@ -136,7 +136,7 @@ test('gap-in-road: two road stations further apart than their s says (a hole in 
 
 test('missing-soft-collision is red only when the export turns the block off (FINDINGS.md:89)', () => {
   const p = X.pathOf(X.straight(10)), g = [X.seg({ speed: 30 })];
-  assert.ok(validate(p, g, { softCollision: false }).red.some((x) => x.reason === 'missing-soft-collision' && /FINDINGS\.md:89/.test(x.source)));
+  assert.ok(validate(p, g, { softCollision: false }).red.some((x) => x.reason === 'missing-soft-collision' && /needs the soft-collision block/.test(x.source)));   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
   assert.ok(!validate(p, g).red.some((x) => x.reason === 'missing-soft-collision'));
 });
 
@@ -171,7 +171,7 @@ test('stacked-within-2m: a second pass 1.5 m above the first is information, not
 test('seam-past-envelope is AMBER past 5.9° between neighbouring stations (FINDINGS.md:24), quiet at 5°', () => {
   const turnEvery = (deg) => X.pathOf(X.loop(10, { step: 10 * deg * Math.PI / 180 }), false);
   const sharp = validate(turnEvery(6), [X.seg({ speed: 40 })]), fine = validate(turnEvery(5), [X.seg({ speed: 40 })]);
-  assert.ok(sharp.amber.some((x) => x.reason === 'seam-past-envelope' && /FINDINGS\.md:24/.test(x.source)));
+  assert.ok(sharp.amber.some((x) => x.reason === 'seam-past-envelope' && /sharper than any measured on real tracks/.test(x.source)));   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
   assert.ok(!fine.amber.some((x) => x.reason === 'seam-past-envelope'));
 });
 
@@ -179,7 +179,7 @@ test('every red and amber carries a source (INTERFACES §3: "A red or amber with
   // the inside edge folds (red), the outside wall past 90 g is amber, the block is off and the export is not CSP (red)
   const r = validate(X.pathOf(X.leftTurn(10, Math.PI / 2)), [X.seg({ speed: 400, profile: { font: 'wall', u: [-6, -1, 0, 12], psi: [Math.PI / 2, 0, 0, 0] } })], { softCollision: false, csp: false });
   assert.ok(r.red.length && r.amber.length);
-  for (const x of [...r.red, ...r.amber]) assert.ok(typeof x.source === 'string' && /(FINDINGS|ARCHITECTURE)\.md:\d/.test(x.source), JSON.stringify(x));
+  for (const x of [...r.red, ...r.amber]) assert.ok(typeof x.source === 'string' && x.source.length > 0 && !/(FINDINGS|ARCHITECTURE)\.md|docs\/|§|\bD\d{3}\b/.test(x.source), JSON.stringify(x));   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
 });
 
 // ── the lap ──

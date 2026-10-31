@@ -28,7 +28,7 @@ test('row 1: bank, cup and an edge on the raised side stacked in a turn: amber o
   assert.ok(a[0].s0 <= 1 && a[0].s1 >= 299, `the whole piece: ${a[0].s0}..${a[0].s1}`);
   assert.ok(a[0].u > 0, `the left rim, the raised side (u ${a[0].u})`);
   assert.ok(a[0].worst > STACK_CURL_DEG, `worst ${a[0].worst}°`);
-  assert.match(a[0].source, /D463/);
+  assert.match(a[0].source, /a test drive: bank, cup and edge stacked rode rough/);   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
   assert.ok(!v.red.some((x) => x.reason === 'bank-cup-edge'), 'a warning, never red');
 });
 
@@ -59,7 +59,7 @@ test('row 5: the bar: a 10° edge on the turn stays under 8° across the car and
 test('row 6: the panel line is in the user\'s terms with the id and source in its hover title; revalidate gives the same warning', () => {
   const { v, path, segments } = run(TURN), line = findingLine('amber', stack(v)[0]);
   assert.match(line.text, /^amber: bank, cup and edge stack here and the turn may ride rough at speed, at \d+–\d+ m$/);
-  assert.match(line.title, /^bank-cup-edge · D463/);
+  assert.match(line.title, /^bank-cup-edge · a test drive/);   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
   assert.ok(!/k[e]eper/i.test(line.text + line.title), 'no room word in the panel');   // spelled with a class so the release scan of added lines reads 0
   assert.deepEqual(stack(revalidate(v, path, segments, 150, {})), stack(v));
 });

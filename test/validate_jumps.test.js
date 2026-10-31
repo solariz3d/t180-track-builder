@@ -140,7 +140,7 @@ for (const [what, gapM] of [['a gap of 0 (landing lip straight below the take-of
     assert.doesNotThrow(() => { r = validate(path, segs); });
     const bad = r.red.filter((x) => x.reason === 'jump-gap-not-forward');
     assert.strictEqual(bad.length, 1, JSON.stringify(r.red));
-    assert.match(bad[0].source, /ARCHITECTURE\.md:72/);
+    assert.match(bad[0].source, /a jump check needs a gap/);   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
     close(bad[0].worst, -gapM, 1e-9, 'worst is how far the landing lip is behind the take-off lip');
     assert.deepStrictEqual([r.jumps[0].badGap, r.jumps[0].landings], [true, []]);
   });

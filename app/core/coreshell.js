@@ -548,9 +548,9 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     if (st.brush) return set({ message: 'a brush drag is already open' });
     const ch = T.mode === 'smooth' ? channel || st.lastToolChannel : T.channel, family = T.mode === 'smooth' ? (ch ? familyOf(ch) : null) : T.family;
     if (T.mode === 'smooth' && !ch) return set({ message: 'SMOOTH_CHANNEL: smooth which channel? Use a tool first, or pick the channel in the strip' });
-    if (T.mode === 'local' && !brushFn) return set({ message: 'the height/lateral brush is not in this build yet (E, p-d186-brush-E): use the rate brush' });
-    if (T.mode === 'stretch' && !stretchFn) return set({ message: 'NOT_YET: Stretch needs the core\'s stretch (D421 Part 1)' });
-    if (T.mode === 'smooth' && !smoothFn) return set({ message: 'NOT_YET: Smooth needs the core\'s smooth (D421 Part 1)' });
+    if (T.mode === 'local' && !brushFn) return set({ message: 'the height/lateral brush is not in this build yet: use the rate brush' });
+    if (T.mode === 'stretch' && !stretchFn) return set({ message: 'NOT_YET: Stretch is not in this build yet' });
+    if (T.mode === 'smooth' && !smoothFn) return set({ message: 'NOT_YET: Smooth is not in this build yet' });
     const d = doc();
     if (T.mode === 'stretch' && !Number.isInteger(piece) && !run) {   // P's review item 1: the piece under the brush, as B's hint says
       const c = Number.isFinite(s0) ? centreOf(d, s0) : null;
@@ -767,7 +767,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     beginBrush({ mode = brushFn ? 'local' : 'rate', channel, s0, r, sharp = false, piece, tool, run, keepRate = false }) {
       if (tool !== undefined) return openTool({ tool, channel, s0, r, sharp, piece, run, keepRate });
       if (!BRUSH_MODES.includes(mode)) return set({ message: `brush mode "${mode}" is not one of ${BRUSH_MODES.join(', ')}` });
-      if (mode === 'local' && !brushFn) return set({ message: 'the height/lateral brush is not in this build yet (E, p-d186-brush-E): use the rate brush' });
+      if (mode === 'local' && !brushFn) return set({ message: 'the height/lateral brush is not in this build yet: use the rate brush' });
       if (st.brush) return set({ message: 'a brush drag is already open' });
       // D185's sculpt cannot re-close; E's rate brush does, so this guard is only for the fallback
       if (!brushFn && doc().closed && mode === 'rate' && (channel === 'kh' || channel === 'kv')) return set({ message: 'the loop is closed: a heading or pitch rate brush would open it. Undo the close, or brush height, bank or width' });
@@ -786,7 +786,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      */
     beginFollow({ s0, r } = {}) {
       if (!st.sculpt) return set({ message: 'SCULPT_OFF: turn Sculpt on first' });
-      if (!brushFn) return set({ message: 'NOT_YET: the grab needs the core\'s brush on a set of channels (D520)' });
+      if (!brushFn) return set({ message: 'NOT_YET: the grab is not in this build yet' });
       if (st.brush) return set({ message: 'a brush drag is already open' });
       if (!Number.isFinite(s0) || !(Number(r) > 0)) return set({ message: `the grab needs a place on the road and a radius above 0 m (got ${s0}, ${r})` });
       const d = doc(); if (!centreOf(d, s0)) return set({ message: 'Grab: there is no road under the press' });

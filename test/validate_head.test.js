@@ -36,7 +36,7 @@ test('an open track whose head is the flight of a jump is RED, head-in-the-air, 
   const { segs, path } = jumpTrack({ ramp: false });
   const r = validate(path, segs, { designSpeed: DESIGN });
   assert.deepStrictEqual(reasons(r), ['head-in-the-air']);
-  assert.match(r.red[0].source, /ARCHITECTURE\.md:82/);
+  assert.match(r.red[0].source, /the open end is the flight of a jump, over no road/);   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
   assert.strictEqual(r.jumps[0].pending, true);
 });
 
@@ -71,7 +71,7 @@ test('a ramp too short for the clean-flight landing is a WARNING (amber, D250): 
   assert.ok(!reasons(r).includes('landing-misses-zone'), 'it is not a red');
   const warn = r.amber.find((x) => x.reason === 'landing-misses-zone');
   assert.strictEqual(warn.worst, 3.2);
-  assert.match(warn.source, /ARCHITECTURE\.md:75-78/);
+  assert.match(warn.source, /the landing ramp should catch both landings/);   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
 });
 
 test('too slow for the override-dive landing (6.3 g needs more speed than it has): a warning (amber, D250), 6.3 g named; not red', () => {

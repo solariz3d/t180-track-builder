@@ -111,33 +111,33 @@ function sustainedLoad(rawLines, S, v, isRoad, car, end, wrapL = 0) {
 }
 
 const SRC = Object.freeze({
-  'gap-in-road': 'ARCHITECTURE.md:82; FINDINGS.md:110',
-  'missing-soft-collision': 'ARCHITECTURE.md:83; FINDINGS.md:89, :110',
-  fold: 'ARCHITECTURE.md:57, :84; FINDINGS.md:110 (flipped road pieces)',
-  'self-intersection': 'ARCHITECTURE.md:58, :84',
-  'stacked-within-2m': 'ARCHITECTURE.md:85',
-  'low-overhead': 'ARCHITECTURE.md:85 (D435: less than 1 m of room under another road)',
-  'near-touch': 'ARCHITECTURE.md:85 (D446: two passes whose edges come within 1 m, side by side; information)',
-  'wall-ride-from-wall-object': 'ARCHITECTURE.md:86',
-  'steep-without-raycast': 'ARCHITECTURE.md:87 (community-reported)',
-  'load-above-proven': 'FINDINGS.md:105, :112-113',
-  'load-sustained': 'D341: the ELYSIUM replay of 2026-10-16 (56-62 g held for about 2 s: seven passes held, one went through the road); src/validate/limits.js sustainedG, sustainedS',
-  'seam-past-envelope': 'FINDINGS.md:24, :110-111',
-  'on-the-stops': 'D515 bands.txt (the suspension height\'s plateau from 25 g: past it a step or a gap reaches the chassis); FINDINGS.md:103-104 (about 20 g, the earlier reading)',
-  'load-on-the-chassis': 'D515 bands.txt (the box reaches the road mesh at about 47 g) and peaks.txt (the line\'s load ran 6.2-9.2 g low at the peaks): 40 g predicted; held to 63 g for about 7 s on a continuous soft road (D515), 62 g went through the road once (D341); src/validate/limits.js chassisG',
-  'wall-swerve': 'D515 §5 rule 5 (piece 11: an 85° wall at 819 km/h, the climb −5.05° → 0° over 100 m, swerved the car 3.16 g sideways and the load into the road fell to −1.67 g; it recovered): 3 g sideways, that swerve (D517 part 2); the 1 g into the road is inferred; src/validate/limits.js wallSwerve',
-  'head-in-the-air': 'ARCHITECTURE.md:82 (a hole: the open end is the flight of a jump, over no road)',
-  'landing-misses-zone': 'ARCHITECTURE.md:75-78 (the landing ramp should catch both landings); a WARNING since D250: the user tunes jumps by driving them',
-  'downforce-ray-gap': 'FINDINGS.md:110 (gaps in the road mesh are RED); docs/research/04_ac_physics_drivability.md §4 (the Mach 6\'s downforce is one ray to the road, 1 m ahead of the car: a gap under it takes ALL the downforce)',
-  'joint-step': 'FINDINGS.md:110 (a step in the road mesh is a gap: the D190 round-3 ruling (c) reds a lap seam or a cup joint that steps more than 1 mm)',
-  'bank-cup-edge': 'D463 (the user, 2026-10-25, TEST 10: bank, cup and edge stacked rode rough at speed, the same turns without the edges did not): the cross-slope change over the car\'s 2 m on the raised side passes 8° where all three stack',
-  'roll-rate': 'D225 seal V7 / S3 (exo_memory/loop/cross_section_seal_registration_2026-10-03.md): the roll rate over a 20 m chord, the bar the track B lap measured (RED 1.2144°/m, AMBER 0.9338°/m)',
-  'tube-too-narrow': 'D225 ruling R1 (corrected): a closed tube narrower than 9.74 m cannot hold the chase camera (the 3 m eye, plus the seal\'s 0.1 m margin, must fit under the ceiling 2R = w/π)',
-  'edge-past-cap': 'D225 seal V2 / E2: the total edge angle of an edge piece is capped at CUP_MAX 150° (180° on an open tube): the walls of a bowl past it touch',
-  'leaves-surface': 'ARCHITECTURE.md:68-69 (the load on the centreline is below zero: the car leaves the road); on an OPEN track since D256, where a closed one has it in the lap proof',
-  'holds-above': 'D256 (exo_memory/loop/design_speed_measure_2026-10-06.md): the centreline faces the ground here and holds the car only above this speed (km/h), from fN(v) = (κ⃗·n)v²/(1 − κ⃗·o) + g(n·ŷ)',
-  'no-speed-holds': 'D256: the centreline faces the ground and nothing curves it toward the car, so no speed holds the car on it',
-  'jump-gap-not-forward': 'ARCHITECTURE.md:72 (a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check); a WARNING on the equation core\'s free jump since D258: the user placed the landing there',
+  'gap-in-road': 'a gap in the road mesh: the car can fall through it',
+  'missing-soft-collision': 'the T-180 needs the soft-collision block on its road surfaces',
+  fold: 'a road surface that folds over itself (flipped road pieces)',
+  'self-intersection': 'a road surface that passes through another',
+  'stacked-within-2m': 'roads stacked closer than 2 m',
+  'low-overhead': 'less than 1 m of room under another road',
+  'near-touch': 'two passes whose edges come within 1 m, side by side; information',
+  'wall-ride-from-wall-object': 'a wall-ride built on a wall object',
+  'steep-without-raycast': 'surfaces this steep need CSP\'s wall raycasting (community-reported)',
+  'load-above-proven': 'more load than any track has been measured to hold',
+  'load-sustained': 'a recorded run: 56-62 g held for about 2 s; seven passes held, one went through the road',
+  'seam-past-envelope': 'a seam sharper than any measured on real tracks',
+  'on-the-stops': 'measured: the suspension reaches its stops from about 25 g (an earlier reading gave about 20 g); past it a step or a gap reaches the chassis',
+  'load-on-the-chassis': 'measured: the car\'s body reaches the road mesh at about 47 g, and the line\'s load read 6.2-9.2 g low at the peaks, so 40 g is predicted; 63 g has held for about 7 s on a continuous soft road, and 62 g went through the road once',
+  'wall-swerve': 'a measured run: an 85° wall at 819 km/h, the climb going from −5.05° to 0° over 100 m, swerved the car 3.16 g sideways while its load into the road fell to −1.67 g, and it recovered; the bar is 3 g sideways, and the 1 g into the road is inferred',
+  'head-in-the-air': 'a hole: the open end is the flight of a jump, over no road',
+  'landing-misses-zone': 'the landing ramp should catch both landings; a warning, because jumps are tuned by driving them',
+  'downforce-ray-gap': 'a gap in the road mesh: the car\'s downforce is one ray to the road, 1 m ahead of it, so a gap under it takes all the downforce',
+  'joint-step': 'a step in the road mesh is a gap: a lap seam or a cup joint that steps more than 1 mm is red',
+  'bank-cup-edge': 'a test drive: bank, cup and edge stacked rode rough at speed, and the same turns without the edges did not; the cross-slope change over the car\'s 2 m on the raised side passes 8° where all three stack',
+  'roll-rate': 'the roll rate over a 20 m chord, against the fastest roll a measured lap rode (red 1.2144°/m, amber 0.9338°/m)',
+  'tube-too-narrow': 'a closed tube narrower than 9.74 m cannot hold the chase camera (its 3 m eye, plus a 0.1 m margin, must fit under the ceiling 2R = w/π)',
+  'edge-past-cap': 'the total edge angle of an edge piece is capped at 150° (180° on an open tube): past it the walls of a bowl touch',
+  'leaves-surface': 'the load on the centreline is below zero: the car leaves the road; an open track is checked here, a closed one in the lap proof',
+  'holds-above': 'the centreline faces the ground here and holds the car only above this speed (km/h), from fN(v) = (κ⃗·n)v²/(1 − κ⃗·o) + g(n·ŷ)',
+  'no-speed-holds': 'the centreline faces the ground and nothing curves it toward the car, so no speed holds the car on it',
+  'jump-gap-not-forward': 'a jump check needs a gap: here the landing lip is not ahead of the take-off lip, so there is no flight to check; a warning on the free jump, because the landing was placed there',
 });
 
 // THE DOWNFORCE STEP a jump carries (R1, research §4): the car's downforce is a ray 1 m ahead of it, so it goes to zero
@@ -431,7 +431,7 @@ function core(path, segments, opts, from, carried, upto) {
   if (opts.softCollision === false) red.push({ s: S[0].s, s1: S[n - 1].s, u: null, reason: 'missing-soft-collision' });
   if (Array.isArray(opts.folds)) {
     for (const f of opts.folds) if (end === n || f.s < S[end].s) red.push({ s: f.s, u: f.u == null ? null : f.u, reason: f.other ? 'self-intersection' : 'fold', worst: f.margin == null ? null : -f.margin });
-  } else notChecked.push('self-intersection: needs buildMesh folds[] (a BVH between cells, ARCHITECTURE.md:58); pass opts.folds');
+  } else notChecked.push('self-intersection: not checked, because the road mesh\'s fold list was not given');
   // gaps in the PHYSICS road the downforce ray can fall into (raygap.js): needs the built road, which the export has
   // D446: measured round a closed lap, and an edge whose probe met only ANOTHER pass is no gap; it is kept as a near-touch, reported in info below
   const nearRaw = [];

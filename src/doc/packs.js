@@ -59,8 +59,8 @@ function imageProblem(name, role, bytes) {
     const dds = bytes.length >= 4 && bytes[0] === 0x44 && bytes[1] === 0x44 && bytes[2] === 0x53 && bytes[3] === 0x20;
     if (dds) {
       let fourCC = null; try { fourCC = readDdsHeader(bytes).fourCC; } catch (e) { if (!e.code) throw e; }
-      if (role === 'normal' && fourCC && /^(DXT|BC|ATI)/.test(fourCC)) return bad('COMPRESSED_NORMAL', `image ${name}: a block-compressed (${fourCC}) normal map; AC does not support compressed normal maps (§5b)`);
-      return bad('PACK_BAD_IMAGE', `image ${name}: a DDS; a pack carries PNG or JPG images, which the builder converts to DDS itself (§5b)`);
+      if (role === 'normal' && fourCC && /^(DXT|BC|ATI)/.test(fourCC)) return bad('COMPRESSED_NORMAL', `image ${name}: a block-compressed (${fourCC}) normal map; AC does not support compressed normal maps`);
+      return bad('PACK_BAD_IMAGE', `image ${name}: a DDS; a pack carries PNG or JPG images, which the builder converts to DDS itself`);
     }
     return bad('PACK_BAD_IMAGE', `image ${name}: not a PNG or a JPG`);
   }

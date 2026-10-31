@@ -20,7 +20,7 @@ function edgeHolds(d, id, h, bounds, side, opts = {}) {
   const b = bounds.handles[h], stop = side === 'max' ? b.above : b.below;
   assert.strictEqual(stop.kind, 'red', `${h} ${side}: expected a red limit, got ${JSON.stringify(stop)}`);
   // AMENDED (D517): the edge's sources include the ambers there, and D515's (the chassis line, the wall swerve) cite the lap that measured them, not a .md line
-  assert.ok(stop.sources.every((s) => /(FINDINGS|ARCHITECTURE)\.md:\d|^D\d{3}\b/.test(s)), JSON.stringify(stop.sources));
+  assert.ok(stop.sources.every((s) => typeof s === 'string' && s.length > 0 && !/(FINDINGS|ARCHITECTURE)\.md|docs\/|§|\bD\d{3}\b/.test(s)), JSON.stringify(stop.sources));   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
   const q = QUANTUM[UNIT[h]], at = b[side], out = at + (side === 'max' ? q : -q);
   const o = { ...opts, scope: bounds.scope };
   assert.strictEqual(probe(d, id, h, at, o).ok, true, `${h} = ${at} (the bound) must validate clean`);

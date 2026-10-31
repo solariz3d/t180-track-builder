@@ -59,7 +59,7 @@ test('validate: a slit in the built road is RED "downforce-ray-gap", in plain wo
   const r = v.red.find((x) => x.reason === 'downforce-ray-gap');
   assert.ok(r, JSON.stringify(v.red));
   assert.ok(Math.abs(r.s0 - 30) <= 2, `at s ${r.s0}`);
-  assert.match(SRC['downforce-ray-gap'], /research\/04_ac_physics_drivability\.md §4/);
+  assert.match(SRC['downforce-ray-gap'], /the car's downforce is one ray to the road, 1 m ahead of it/);   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
   assert.match(L.reasonText('downforce-ray-gap'), /loses all its downforce/);
 });
 
@@ -130,7 +130,7 @@ test('D446: validate on a built curled bowl, two passes whose lips come within 1
   const t = v.info.filter((x) => x.reason === 'near-touch');
   assert.ok(t.length > 0 && t.every((x) => x.worst > 0 && x.worst <= MACH6.nearEdgeM), JSON.stringify(t));
   assert.ok(t.some((x) => x.s0 > 100 && x.s0 < 300), `on the first leg: ${JSON.stringify(t)}`);
-  assert.match(SRC['near-touch'], /ARCHITECTURE.md:85/);
+  assert.match(SRC['near-touch'], /two passes whose edges come within 1 m/);   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
   assert.match(L.reasonText('near-touch'), /two parts of the road come within 1 m of each other edge to edge/);
 });
 

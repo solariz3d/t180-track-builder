@@ -286,7 +286,7 @@ test('row 8: a malformed file is refused BY NAME, case by case (the good one sti
   { const o = good(); for (const P of o.pieces) P.channels.c = P.channels.w.slice(); refuses(o, 'BAD_PIECE_START', /needs a finite c/); }   // every piece is a cup but the start has no c
   { const o = goodCup(); o.pieces[0].channels.t = o.pieces[0].channels.c.slice(); refuses(o, 'BAD_PIECE_CHANNEL', /cup or a tube, not both/); } { const o = goodCup(); o.pieces[0].channels.e = o.pieces[0].channels.c.slice(); refuses(o, 'BAD_PIECE_CHANNEL', /both e and s/); }
   { const o = goodCup(); delete o.pieces[0].channels.c; refuses(o, 'MIXED_RUN'); }   // one piece loses its cup: the run is mixed
-  { const o = good(); o.pieces[1].channels.w = o.pieces[1].channels.w.map((v) => v + 3); refuses(o, 'JOINT', /joint is C1/); }
+  { const o = good(); o.pieces[1].channels.w = o.pieces[1].channels.w.map((v) => v + 3); refuses(o, 'JOINT', /joint must meet smoothly/); }   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
   { const o = goodCup(); o.pieces[1].channels.c = o.pieces[1].channels.c.map((v, i) => (i < 3 ? v : v + 200)); refuses(o, 'BAD_CUP'); }
   // CHANGED D258 (the free jump): a flight in a piece file is its landing's pose (forward, left, up, heading, pitch, bank); the old gap/drop/land shape is OLD_FLIGHT
   const fl = (o = {}) => ({ type: 'flight', forward: 20, left: 0, up: 0, heading: 0, pitch: 0, bank: 0, ...o });

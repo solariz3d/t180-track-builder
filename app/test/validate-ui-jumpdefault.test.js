@@ -93,7 +93,7 @@ test('a jump sculpted past what the car can clear WARNS (amber, D250), and says 
   const r = ctl.state.result.amber.filter((x) => x.reason === 'landing-misses-zone');
   assert.strictEqual(r.length, 1, JSON.stringify(ctl.state.result.amber));
   assert.ok(!reds(ctl).some((x) => x.reason === 'landing-misses-zone'), 'not red');
-  assert.ok(r[0].source && /ARCHITECTURE/.test(r[0].source), 'it carries its source');
+  assert.ok(r[0].source && !/(FINDINGS|ARCHITECTURE)\.md|docs\/|§|\bD\d{3}\b/.test(r[0].source), 'it carries its source, in plain words');   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
   assert.strictEqual(r[0].worst, 6.3, 'the heaviest fall that misses is named');
   assert.ok(ctl.state.result.jumps[0].landings.some((L) => !L.caught));
 });
