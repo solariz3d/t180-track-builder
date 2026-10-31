@@ -41,10 +41,19 @@ function onRoad(doc, floor, widths) {
   return { mesh, segs, set, flow: flowUvs(mesh, segs, set) };
 }
 /** Each row of a cell: the metres from its first vertex (the mesh's own u is arc / 10) and the new u. */
+// AMENDED (the rule changed: each row of a segment now takes its own section's across arc in src/texture/flow.js, the first row the segment before's end, the
+// coincident row; mesh.js stores one arc per segment, its end, so the mesh's own u gave every row of a widening road its END width). A cell's first row is measured
+// from the last row of the cell before when that cell holds as many vertices a row, which is the arc the flow now lays it with.
 function rows(mesh, flow, cell) {
   const node = kidOf(mesh, cell), nu = flow.get(node), ou = node.uvs, v = new Map();
   for (let i = 0; i < nu.length; i += 2) { const key = nu[i + 1].toFixed(4); if (!v.has(key)) v.set(key, []); v.get(key).push({ a: ou[i] * 10, u: nu[i] }); }
-  return [...v.values()].map((r) => { const a0 = r[0].a; return r.map((q) => ({ a: q.a - a0, u: q.u })); });
+  const out = [...v.values()], K = out[0].length, first = /_0$/.test(cell.name);
+  const prevCell = first ? mesh.cells.filter((c) => !c.seam && c.piece === cell.piece - 1).pop() : null, before = prevCell ? kidOf(mesh, prevCell) : null;   // the segment before's last cell (a seam cell may stand between them in the list)
+  if (before && before.uvs.length % (2 * K) === 0) {   // a middle row (a cell of three) takes the blend of the two by its distance along, read from its v
+    const last = before.uvs.length / 2 - K, keys = [...v.keys()].map(Number), t = (r) => (keys[r] - keys[0]) / (keys[keys.length - 1] - keys[0]);
+    for (let r = 0; r < out.length - 1; r++) out[r] = out[r].map((q, k) => { const s0 = before.uvs[(last + k) * 2] * 10; return { a: r === 0 ? s0 : s0 + (q.a - s0) * t(r), u: q.u }; });
+  }
+  return out.map((r) => { const a0 = r[0].a; return r.map((q) => ({ a: q.a - a0, u: q.u })); });
 }
 
 test('row 1: the layout takes a whole number of centre repeats, the one that keeps a cell\'s stretch smallest over the width range', () => {
