@@ -74,11 +74,15 @@ function vertex(sm, P, u) {
   return { p: add(sm.pos, q), n: add(mul(sm.L, nl), mul(sm.U, nu)), q };
 }
 // a frozen (sealed) profile's cross-section at the samples Us is the same numbers for every chord of a piece, only the frame (sm) differs, and offsetAt/normalAt were run again for every
-// vertex of every chord (a third of the full ghost's cost, the measurement of 2026-10-19). They are worked out once per profile object and samples and kept (at most SHAPES_MAX samples per profile);
+// vertex of every chord (a third of the full ghost's cost, the measurement of 2026-10-19). They are worked out once per profile object and samples and kept (at most SHAPES_MAX samples per profile)
+// for the newest SHAPES_PROFILES profiles. Kept for every profile alive, they were about 126 MB on the user's 24 km ELYSIUM, where every 2 m chord has its own frozen profile and
+// meets it on two rows only; a drag's ghost meets the same few hundred again on every move, and those stay.;
 // the vertex arithmetic below is vertex()'s, in the same order, so every double is the same. An unfrozen profile (a ramp's blend) is not kept.
-const SHAPES = new WeakMap(), SHAPES_MAX = 8;
+const SHAPES = new Map(), SHAPES_MAX = 8, SHAPES_PROFILES = 1024;
 function shapeOf(P, Us) {
-  let m = SHAPES.get(P); if (!m) SHAPES.set(P, m = new Map());
+  let m = SHAPES.get(P);
+  if (m) { SHAPES.delete(P); SHAPES.set(P, m); }   // the newest last: the oldest is dropped first
+  else { SHAPES.set(P, m = new Map()); if (SHAPES.size > SHAPES_PROFILES) SHAPES.delete(SHAPES.keys().next().value); }
   let k = Us; if (!Object.isFrozen(Us)) { k = ''; for (let i = 0; i < Us.length; i++) k += (Object.is(Us[i], -0) ? '-0' : Us[i]) + ','; }   // the mesher's shared (frozen) samples array is its own key
   let s = m.get(k);
   if (!s) { s = { X: [], Y: [], nl: [], nu: [] }; for (const u of Us) { const [X, Y] = offsetAt(P, u), [nl, nu] = normalAt(P, u); s.X.push(X); s.Y.push(Y); s.nl.push(nl); s.nu.push(nu); } if (m.size >= SHAPES_MAX) m.delete(m.keys().next().value); m.set(k, s); }
@@ -110,14 +114,30 @@ function options(opts) {
     maxAcross: opts.maxAcross === undefined ? 1 : opts.maxAcross, rampM: opts.rampM === undefined ? 20 : opts.rampM, raw: { ...opts },
   };
 }
-/** A piece's handles, as text: the ONLY input its mesh depends on besides its start pitch and bank. */
-// the text is JSON.stringify(seg) without its ids, made part by part so that a DEEPLY FROZEN part (a profile or row grid the core froze, which cannot change) is
-// written once and kept by identity: a drag's ghost is 48 fresh chords on every move, each about 10 kB of text, and nearly all of it is the same frozen profile. A part that is
-// not frozen all the way down (an array changed in place, a fresh blend object) is written afresh every time, as before (test/geom_mesh_stalekey.test.js). The text is the
-// same as JSON.stringify's: plain objects and arrays are written here in its order and form, anything else by JSON.stringify itself.
+/** A piece's handles, as a key: the ONLY input its mesh depends on besides its start pitch and bank. */
+// The key stands for JSON.stringify(seg) without its ids, made part by part so that a DEEPLY FROZEN part (a profile or row grid the core froze, which cannot change) is
+// keyed once and kept by identity: a drag's ghost is 48 fresh chords on every move, each about 10 kB of text, and nearly all of it is the same frozen profile. A part that is
+// not frozen all the way down (an array changed in place, a fresh blend object) is keyed afresh every time, as before (test/geom_mesh_stalekey.test.js).
+// A KEY, NOT THE TEXT (the user's 24 km ELYSIUM ran the page out of memory, 2026-10-31): the text was kept per piece and again per frozen part, 168 million characters on
+// that track and about 380 MB of heap that outlived the mesh, for as long as the segments lived. Now a plain object or array is written as JSON's text would be, but with
+// each plain part in it replaced by that part's own key, and the result hashed to 128 bits ('#' and 26 base-36 characters). A part's key is a function of its text alone,
+// frozen or not, and a key never contains the characters JSON writes between parts, so two segments share a key when their texts are the same, and otherwise only by
+// a 128-bit hash collision (the track model's change key, app/preview/segkey.js, is 64 bits, for the same decision). test/geom_mesh_handlekey.test.js.
 const dropId = (k, v) => (k === 'id' ? undefined : v);
 const plainPart = (v) => v !== null && typeof v === 'object' && typeof v.toJSON !== 'function' && (Array.isArray(v) || Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
-const DEEP = new WeakMap(), PART_TEXT = new WeakMap();
+const DEEP = new WeakMap(), PART_KEY = new WeakMap();
+// cyrb128 (four 32-bit lanes, public domain): the 128-bit hash of a string, as '#' and 26 base-36 characters
+function hash128(str) {
+  let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+  for (let i = 0, k; i < str.length; i++) {
+    k = str.charCodeAt(i);
+    h1 = h2 ^ Math.imul(h1 ^ k, 597399067); h2 = h3 ^ Math.imul(h2 ^ k, 2869860233); h3 = h4 ^ Math.imul(h3 ^ k, 951274213); h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067); h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233); h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213); h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+  h1 ^= (h2 ^ h3 ^ h4); h2 ^= h1; h3 ^= h1; h4 ^= h1;
+  const w = (x) => (x >>> 0).toString(36).padStart(7, '0');
+  return '#' + w(h1) + w(h2) + w(h3) + w(h4).slice(1);
+}
 /** v is a plain object or array, frozen, whose every own property is a value (no getter) and every part is the same; a true answer is remembered (it cannot change) */
 function frozenDeep(v) {
   if (v === null || typeof v !== 'object') return true;
@@ -126,17 +146,18 @@ function frozenDeep(v) {
   for (const k of Object.keys(v)) { const d = Object.getOwnPropertyDescriptor(v, k); if (!('value' in d) || !frozenDeep(d.value)) return false; }
   DEEP.set(v, true); return true;
 }
-/** the JSON text of v under a key that is not 'id' (undefined where JSON leaves it out) */
-function partText(v) {
+/** the key of v under a key that is not 'id' (undefined where JSON leaves it out): a value that is not a plain part is its JSON text; a plain part, its hash as above */
+function partKey(v) {
   if (!plainPart(v)) return JSON.stringify(v, dropId);
-  const keep = frozenDeep(v); if (keep && PART_TEXT.has(v)) return PART_TEXT.get(v);
+  const keep = frozenDeep(v); if (keep && PART_KEY.has(v)) return PART_KEY.get(v);
   let s;
-  if (Array.isArray(v)) { s = '['; for (let i = 0; i < v.length; i++) { const t = partText(v[i]); s += (i ? ',' : '') + (t === undefined ? 'null' : t); } s += ']'; }
-  else { s = '{'; let first = true; for (const k of Object.keys(v)) { if (k === 'id') continue; const t = partText(v[k]); if (t === undefined) continue; s += (first ? '' : ',') + JSON.stringify(k) + ':' + t; first = false; } s += '}'; }
-  if (keep) PART_TEXT.set(v, s);
+  if (Array.isArray(v)) { s = '['; for (let i = 0; i < v.length; i++) { const t = partKey(v[i]); s += (i ? ',' : '') + (t === undefined ? 'null' : t); } s += ']'; }
+  else { s = '{'; let first = true; for (const k of Object.keys(v)) { if (k === 'id') continue; const t = partKey(v[k]); if (t === undefined) continue; s += (first ? '' : ',') + JSON.stringify(k) + ':' + t; first = false; } s += '}'; }
+  s = hash128(s);
+  if (keep) PART_KEY.set(v, s);
   return s;
 }
-const handleKey = (seg) => partText(seg);
+const handleKey = (seg) => partKey(seg);
 const pitchOf = (sm) => Math.asin(Math.max(-1, Math.min(1, sm.T[1])));
 // A resolved word emits up to three segments sharing one id (parts in/body/out, docs/INTERFACES.md §1), so a piece is
 // named by (id, part): without the part, node names repeat, and bvh.js's name→cell map collapses them.
