@@ -387,8 +387,89 @@ pub fn files_from_body(body: &[u8]) -> Result<(FilesHead, Vec<(String, Vec<u8>)>
     Ok((head, files))
 }
 
-/// The files a command was sent: its raw body read by files_from_body. JSON arguments are refused (the page sends bytes).
-fn files_of(request: &tauri::ipc::Request<'_>) -> Result<(FilesHead, Vec<(String, Vec<u8>)>), String> {
+// A BODY IN PIECES. One call's body crosses the webview's own message pipe, and a 566 MB body (a 50 km track's export) killed the page there
+// (2026-10-31); so the page sends a body larger than its piece size through stage_files, piece by piece in order, into the one slot below, and
+// then the command with an empty body and the header T180-Staged: <id>, which takes the staged body whole.
+
+/// The body being staged: its id, the length it will have, and the bytes so far.
+pub struct StagedBody {
+    id: String,
+    total: usize,
+    bytes: Vec<u8>,
+}
+
+/// The one staging slot (the page exports one thing at a time; a new body replaces an unfinished one).
+#[derive(Default)]
+pub struct Staged(std::sync::Mutex<Option<StagedBody>>);
+
+#[derive(serde::Deserialize)]
+struct PieceHead {
+    id: String,
+    at: u64,
+    total: u64,
+}
+
+/// The largest body that may be staged: well over a 100 km track's export (1.2 GB measured), and a bound on what a page can make the native side hold.
+pub const STAGED_MAX: u64 = 8 * 1024 * 1024 * 1024;
+
+/// One stage_files piece ([u32 LE header length][JSON { id, at, total }][the bytes]) into the slot: a piece at 0 starts a new body; every later piece must
+/// continue the body with that id exactly where it ends, and none may run past its total. Returns the bytes staged so far.
+pub fn stage_piece(slot: &mut Option<StagedBody>, body: &[u8]) -> Result<usize, String> {
+    if body.len() < 4 {
+        return Err("a staged piece is shorter than its header length".into());
+    }
+    let n = u32::from_le_bytes([body[0], body[1], body[2], body[3]]) as usize;
+    let text = body.get(4..4 + n).ok_or("a staged piece's header runs past its end")?;
+    let h: PieceHead = serde_json::from_slice(text).map_err(|e| format!("a staged piece's header does not read: {e}"))?;
+    if h.id.is_empty() || h.id.len() > 64 || !h.id.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(format!("{:?} is not a staging id", h.id));
+    }
+    if h.total > STAGED_MAX {
+        return Err(format!("a staged body of {} bytes is over the {} allowed", h.total, STAGED_MAX));
+    }
+    let piece = &body[4 + n..];
+    if h.at == 0 {
+        *slot = Some(StagedBody { id: h.id.clone(), total: h.total as usize, bytes: Vec::with_capacity(h.total as usize) });
+    }
+    let s = slot.as_mut().filter(|s| s.id == h.id).ok_or_else(|| format!("no body is being staged as {}", h.id))?;
+    if h.at != s.bytes.len() as u64 || h.total != s.total as u64 {
+        return Err(format!("a piece at {} of {} does not continue the staged body ({} of {} bytes)", h.at, h.total, s.bytes.len(), s.total));
+    }
+    if s.bytes.len() + piece.len() > s.total {
+        return Err(format!("a piece runs past the staged body's {} bytes", s.total));
+    }
+    s.bytes.extend_from_slice(piece);
+    Ok(s.bytes.len())
+}
+
+/// The staged body with this id, whole, taken out of the slot. One that is not whole, or another id's, is refused (and another id's stays).
+pub fn take_staged(slot: &mut Option<StagedBody>, id: &str) -> Result<Vec<u8>, String> {
+    match slot.take() {
+        Some(s) if s.id == id && s.bytes.len() == s.total => Ok(s.bytes),
+        Some(s) if s.id == id => Err(format!("the staged body {id} has {} of its {} bytes", s.bytes.len(), s.total)),
+        other => {
+            *slot = other;
+            Err(format!("no body was staged as {id}"))
+        }
+    }
+}
+
+#[tauri::command]
+fn stage_files(staged: tauri::State<'_, Staged>, request: tauri::ipc::Request<'_>) -> Result<usize, String> {
+    match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => stage_piece(&mut *staged.0.lock().map_err(|_| "the staging slot is unusable")?, b),
+        _ => Err("a staged piece must come as bytes (app/lib/nativefiles.js)".into()),
+    }
+}
+
+/// The files a command was sent: its raw body, or with the header T180-Staged the body staged under that id, read by files_from_body. JSON arguments are
+/// refused (the page sends bytes).
+fn files_of(request: &tauri::ipc::Request<'_>, staged: &Staged) -> Result<(FilesHead, Vec<(String, Vec<u8>)>), String> {
+    if let Some(id) = request.headers().get("t180-staged") {
+        let id = id.to_str().map_err(|_| "the staged id is not text")?;
+        let body = take_staged(&mut *staged.0.lock().map_err(|_| "the staging slot is unusable")?, id)?;
+        return files_from_body(&body);
+    }
     match request.body() {
         tauri::ipc::InvokeBody::Raw(b) => files_from_body(b),
         _ => Err("the files must come as bytes (app/lib/nativefiles.js), not as JSON".into()),
@@ -434,8 +515,8 @@ pub fn write_export_to(dir: &Path, folder: &str, files: &[(String, Vec<u8>)]) ->
 }
 
 #[tauri::command]
-fn write_export(request: tauri::ipc::Request<'_>) -> Result<usize, String> {
-    let (head, files) = files_of(&request)?;
+fn write_export(staged: tauri::State<'_, Staged>, request: tauri::ipc::Request<'_>) -> Result<usize, String> {
+    let (head, files) = files_of(&request, &staged)?;
     write_export_to(Path::new(dir_of(&head)?), &head.folder, &files)
 }
 
@@ -513,8 +594,8 @@ struct LayoutsWritten {
 }
 
 #[tauri::command]
-fn write_layouts_export(request: tauri::ipc::Request<'_>) -> Result<LayoutsWritten, String> {
-    let (head, files) = files_of(&request)?;
+fn write_layouts_export(staged: tauri::State<'_, Staged>, request: tauri::ipc::Request<'_>) -> Result<LayoutsWritten, String> {
+    let (head, files) = files_of(&request, &staged)?;
     let (written, removed) = write_layouts_export_to(Path::new(dir_of(&head)?), &head.folder, &files)?;
     Ok(LayoutsWritten { written, removed })
 }
@@ -687,8 +768,8 @@ pub fn install_with_retire(root: &Path, docs: &Path, folder: &str, files: &[(Str
 }
 
 #[tauri::command]
-fn install_track(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<Installed, String> {
-    let (head, files) = files_of(&request)?;
+fn install_track(app: tauri::AppHandle, staged: tauri::State<'_, Staged>, request: tauri::ipc::Request<'_>) -> Result<Installed, String> {
+    let (head, files) = files_of(&request, &staged)?;
     let root = ac::recall_ac_root(&data_dir(&app)?)?.ok_or("no Assetto Corsa folder picked yet")?;
     let docs = app.path().document_dir().map_err(|e| format!("no Documents folder: {e}"))?.join("Assetto Corsa");
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
@@ -712,9 +793,9 @@ struct BlenderWritten { folder: String, written: usize, fbx: Option<String>, obj
 /// Write the glb and README into `dir/folder`; with `fbx`, then run Blender (found as find_blender finds it) to add <name>.fbx. A failed FBX
 /// step leaves the written files and says why in fbx_error; the write's own failure is the command's error. Off the page's thread: Blender takes seconds.
 #[tauri::command]
-async fn write_blender_export(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<BlenderWritten, String> {
+async fn write_blender_export(app: tauri::AppHandle, staged: tauri::State<'_, Staged>, request: tauri::ipc::Request<'_>) -> Result<BlenderWritten, String> {
     let data = data_dir(&app)?;
-    let (head, decoded) = files_of(&request)?;
+    let (head, decoded) = files_of(&request, &staged)?;
     let (dir, folder, fbx) = (dir_of(&head)?.to_string(), head.folder.clone(), head.fbx);
     tauri::async_runtime::spawn_blocking(move || {
         let target = blender::write_blender_folder(Path::new(&dir), &folder, &decoded)?;
@@ -763,6 +844,7 @@ fn see_it_in_assetto(app: tauri::AppHandle, track: String, layout: String) -> Re
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(Staged::default())   // the slot a long export's body is staged in (stage_files)
         // The window is created hidden (tauri.conf.json "visible": false) and the page shows it once it has painted (app/titlebar.js revealWindow).
         // If the page never runs at all, the window is shown here after a few seconds, so a broken page is never an invisible app
         .setup(|app| {
@@ -779,7 +861,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
-            save_autosave, open_autosave, clear_autosave, write_export, write_layouts_export, folder_is_empty, remove_empty_folder,
+            save_autosave, open_autosave, clear_autosave, write_export, write_layouts_export, stage_files, folder_is_empty, remove_empty_folder,
             get_ac_root, find_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
             test_export_folder, find_blender, set_blender_path, write_blender_export, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo, append_input_log
         ])
@@ -897,6 +979,42 @@ mod tests {
         assert_eq!(files, vec![("t180b_x.kn5".to_string(), vec![1, 2, 3, 255]), ("empty.ini".to_string(), vec![]), ("ai/fast_lane.ai".to_string(), vec![7, 0])]);
         let (h, files) = files_from_body(&pack(r#"{"folder":"t180b_y","fbx":true,"files":[]}"#, &[])).unwrap();
         assert_eq!((h.dir, h.folder.as_str(), h.fbx, files.len()), (None, "t180b_y", true, 0));
+    }
+
+    /// A stage_files piece as app/lib/nativefiles.js stageBody makes it.
+    fn piece(id: &str, at: usize, total: usize, bytes: &[u8]) -> Vec<u8> {
+        pack(&format!(r#"{{"id":"{id}","at":{at},"total":{total}}}"#), &[bytes])
+    }
+
+    #[test]
+    fn a_body_staged_in_pieces_comes_back_whole_once() {
+        let whole = pack(r#"{"folder":"t180b_x","files":[{"path":"a.kn5","len":5}]}"#, &[&[1, 2, 3, 4, 5]]);
+        let mut slot = None;
+        let (a, b) = whole.split_at(7);
+        assert_eq!(stage_piece(&mut slot, &piece("abc1", 0, whole.len(), a)).unwrap(), 7);
+        assert!(take_staged(&mut slot, "abc1").unwrap_err().contains("has 7 of its"), "a body not yet whole is refused");
+        assert_eq!(stage_piece(&mut slot, &piece("abc1", 0, whole.len(), a)).unwrap(), 7, "a piece at 0 starts the body again");
+        assert_eq!(stage_piece(&mut slot, &piece("abc1", 7, whole.len(), b)).unwrap(), whole.len());
+        assert!(take_staged(&mut slot, "zzz9").unwrap_err().contains("no body was staged as zzz9"), "another id's body is not handed out");
+        let got = take_staged(&mut slot, "abc1").unwrap();
+        assert_eq!(got, whole);
+        let (h, files) = files_from_body(&got).unwrap();
+        assert_eq!((h.folder.as_str(), files), ("t180b_x", vec![("a.kn5".to_string(), vec![1, 2, 3, 4, 5])]));
+        assert!(take_staged(&mut slot, "abc1").is_err(), "taken once");
+    }
+
+    #[test]
+    fn a_staged_piece_out_of_order_past_its_total_or_under_another_id_is_refused() {
+        let mut slot = None;
+        stage_piece(&mut slot, &piece("abc1", 0, 10, &[1, 2, 3])).unwrap();
+        assert!(stage_piece(&mut slot, &piece("abc1", 5, 10, &[4])).unwrap_err().contains("does not continue"), "a gap");
+        assert!(stage_piece(&mut slot, &piece("abc1", 3, 12, &[4])).unwrap_err().contains("does not continue"), "another total");
+        assert!(stage_piece(&mut slot, &piece("abc1", 3, 10, &[0; 8])).unwrap_err().contains("runs past"), "past the total");
+        assert!(stage_piece(&mut slot, &piece("other", 3, 10, &[4])).unwrap_err().contains("no body is being staged as other"));
+        assert!(stage_piece(&mut slot, &piece("a b", 0, 10, &[4])).unwrap_err().contains("is not a staging id"));
+        assert!(stage_piece(&mut slot, &piece("big", 0, (STAGED_MAX + 1) as usize, &[4])).unwrap_err().contains("over the"));
+        assert!(stage_piece(&mut slot, &[1, 0]).is_err(), "a piece shorter than its header length");
+        assert_eq!(stage_piece(&mut slot, &piece("abc1", 3, 10, &[4, 5])).unwrap(), 5, "the body is still there after the refusals");
     }
 
     #[test]

@@ -393,7 +393,7 @@
   const sendFiles = async (cmd, head, files) => {
     if (!tauri) throw new Error('not running inside the app: no native side');
     NF = NF || await loadCjs('app/lib/nativefiles.js', get);
-    return NF.sendFiles((c, body) => tauri.invoke(c, body), cmd, head, files);
+    return NF.sendFiles((c, body, options) => tauri.invoke(c, body, options), cmd, head, files);   // options: a long body's staged id (nativefiles.js)
   };
   // the page's LOCAL time as yyyy-mm-dd_hhmmss: a backup's name (src-tauri/src/backups.rs checks the form; the user reads it)
   const localStamp = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
