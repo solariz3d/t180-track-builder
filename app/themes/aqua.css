@@ -136,6 +136,12 @@
   border-color: var(--rim); border-top-color: var(--accent); border-radius: 18px;
   box-shadow: inset 0 1px 0 var(--wet), 0 24px 70px rgba(0, 20, 30, .8), 0 0 40px rgba(63, 224, 245, .25);
 }
+/* D575 (the user, 0.4.31: "Don't save" and "Save" nearly invisible): index.html colours a dialog's main button --accent and its quiet one --dim, which suit
+   a dark button; on this skin's pale gel pill they read 1.06 and 1.20 : 1. The main choice stays a gel pill in the pill's dark ink, marked by the white rim and
+   glow a hovered pill wears; the quiet one is words on the water, as the camera dock's buttons are */
+[data-theme="aqua"] .ask-row .ask-main { color: var(--gel-text); border-color: #ffffff; box-shadow: inset 0 1px 0 #ffffff, 0 0 10px rgba(63, 224, 245, .8); }
+[data-theme="aqua"] .ask-row .ask-quiet { background: transparent; box-shadow: none; border-color: transparent; color: var(--dim); }
+[data-theme="aqua"] .ask-row button.ask-quiet:hover:not([disabled]) { background: rgba(63, 224, 245, .18); border-color: transparent; box-shadow: none; color: #ffffff; }
 [data-theme="aqua"] .guide-card {
   background: radial-gradient(110% 22px at 50% 0%, rgba(255, 255, 255, .16), transparent 100%), linear-gradient(180deg, rgba(5, 70, 88, .97) 0%, rgba(3, 48, 62, .97) 30%, rgba(2, 36, 46, .98) 100%) !important;
   border-radius: 18px !important; color: var(--text) !important;
