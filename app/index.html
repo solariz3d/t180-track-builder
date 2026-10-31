@@ -102,6 +102,18 @@
   #hovertip { --tip-font: var(--display); position: fixed; top: 0; left: 0; right: auto; z-index: 2000; display: block; min-width: 0; max-width: 360px; padding: 7px 10px; gap: 0;
     font: 400 13px/1.4 var(--tip-font); color: var(--text); white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; border-top-color: var(--accent); }
   #hovertip[hidden] { display: none; }
+  /* THE EXPORT BANNER (app/core/exportbanner.js): one for every export route, in the look's own menu panel (.more-menu), fixed under the values band and centred on
+     the window, as the band is. Exporting… with its seconds while it runs, then Done in the look's accent or the failure in its warning red; it never takes focus, and once the
+     export is over a click on it (or the next action anywhere) closes it */
+  #exportbanner { position: fixed; top: 118px; left: 50%; right: auto; transform: translateX(-50%); z-index: 1500; display: flex; flex-direction: column; gap: 3px;
+    min-width: 300px; max-width: min(720px, calc(100vw - 48px)); padding: 10px 16px 11px; border-top: 2px solid var(--accent); font: 400 13px/1.4 var(--display);
+    color: var(--text); overflow-wrap: anywhere; cursor: default; }
+  #exportbanner[hidden] { display: none; }
+  #exportbanner .eb-head { font-size: 16px; font-weight: 600; letter-spacing: .02em; color: var(--text); }
+  #exportbanner.done .eb-head { color: var(--accent); }
+  #exportbanner.failed { border-top-color: var(--bad-text, var(--bad)); }
+  #exportbanner.failed .eb-head { color: var(--bad-text, var(--bad)); }
+  #exportbanner.done, #exportbanner.failed { cursor: pointer; }
   /* A QUESTION IN THE PAGE (app/askdialog.js): the save-on-close prompt, in the same black, bone and violet. */
   .ask-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(6, 6, 6, .62); backdrop-filter: blur(3px); }
   .ask-card { width: min(380px, calc(100vw - 48px)); background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); padding: 22px 24px 18px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6); }
@@ -464,6 +476,9 @@
   try { TB = await loadCjs("app/titlebar.js", get); await TB.wireTitlebar(document, win); } catch (e) { console.error(`title bar not wired: ${e && e.message}`); }
   // D581: every title's words in the look's own hover card, not Windows' tooltip (app/hovertip.js)
   try { (await loadCjs('app/hovertip.js', get)).wireHovertip(document); } catch (e) { console.error(`hover card not wired: ${e && e.message}`); }
+  // the export banner, one for every export route (app/core/exportbanner.js); without it each route still says its result in the status line
+  let banner = { run() {}, done() {}, fail() {}, follow() {}, clear() {} };
+  try { const box = document.createElement('div'); box.id = 'exportbanner'; document.body.append(box); banner = (await loadCjs('app/core/exportbanner.js', get)).createExportBanner(box); } catch (e) { console.error(`export banner not wired: ${e && e.message}`); }
   // D508: the window is created hidden (no white window before the maximize); it is shown, maximized, once this page has painted its look (the head
   // script set it before the first paint). Not awaited: the builder starts meanwhile. Without titlebar.js the window is shown at once, and if this
   // page never runs at all, lib.rs shows it natively
@@ -587,10 +602,13 @@
       try {
         const seam = await call('test_export_folder'), dir = seam || await call('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Export the track into…' } });
         if (!dir) return;
-        status.textContent = 'exporting…';
+        status.textContent = 'exporting…'; banner.run(`into ${dir}`);
+        const before = shell.getState().lastExport;
         await shell.exportTo(dir, { textures: textureSet });   // the self-intersection check is always on (app/export/export.js); the set is the road surface the preview draws (D228)
-        await notExportedAlert(shell.getState(), seam);
-      } catch (e) { status.textContent = `export failed: ${e.message || e}`; }
+        const st = shell.getState();
+        if (st.lastExport && st.lastExport !== before && !st.exportRefusal) banner.done(st.message); else banner.fail(st.exportRefusal || st.message);
+        await notExportedAlert(st, seam);
+      } catch (e) { status.textContent = `export failed: ${e.message || e}`; banner.fail(status.textContent); }
     };
     // D361: File ▸ Export layouts… (app/menubar/layoutsexport.js): two or more saved tracks as one AC track folder, a layout each. Its own copy of the exporter,
     // loaded with its own node shim, so it never touches the Export button's. If it cannot load, the button says why instead of doing nothing
@@ -601,8 +619,8 @@
       const lx = LX.createLayoutsExport({ C, layouts: layoutsSrc, shim: lxShim, storage });
       const pickLayoutsFolder = async (title) => (await call('test_export_folder')) || call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
       $('exportlayouts').onclick = async () => {
-        try { await LX.exportLayoutsFlow({ lx, shell, ask: (tracks) => LD.askLayouts(document, { tracks }), pickFolder: pickLayoutsFolder, exporter, storage, say: (t) => { status.textContent = t; }, textures: textureSet, author: authorNow() }); }
-        catch (e) { status.textContent = `export layouts failed: ${e.message || e}`; }
+        try { await LX.exportLayoutsFlow({ lx, shell, ask: (tracks) => LD.askLayouts(document, { tracks }), pickFolder: pickLayoutsFolder, exporter, storage, say: (t) => { status.textContent = t; banner.follow(t); }, textures: textureSet, author: authorNow() }); }
+        catch (e) { status.textContent = `export layouts failed: ${e.message || e}`; banner.fail(status.textContent); }
       };
     } catch (e) { const why = (e && e.message) || String(e); $('exportlayouts').onclick = () => { status.textContent = `Export layouts could not start: ${why}`; }; }
     // File ▸ Export for Blender… (app/menubar/blenderexport.js): the open track as a .glb in a folder of its own, and the .fbx through the user's own Blender
@@ -614,8 +632,8 @@
       const pickBlenderFolder = async (title) => (await call('test_export_folder')) || call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
       const writeBlender = (dir, folder, files, fbx) => sendFiles('write_blender_export', { dir, folder, fbx }, files);
       $('exportblender').onclick = async () => {
-        try { await BX.exportBlenderFlow({ bx, shell, ask: (q) => BX.askBlender(document, q), pickFolder: pickBlenderFolder, findBlender: () => call('find_blender'), write: writeBlender, say: (t) => { status.textContent = t; }, textures: textureSet, author: authorNow() }); }
-        catch (e) { status.textContent = `export for Blender failed: ${e.message || e}`; }
+        try { await BX.exportBlenderFlow({ bx, shell, ask: (q) => BX.askBlender(document, q), pickFolder: pickBlenderFolder, findBlender: () => call('find_blender'), write: writeBlender, say: (t) => { status.textContent = t; banner.follow(t); }, textures: textureSet, author: authorNow() }); }
+        catch (e) { status.textContent = `export for Blender failed: ${e.message || e}`; banner.fail(status.textContent); }
       };
     } catch (e) { const why = (e && e.message) || String(e); $('exportblender').onclick = () => { status.textContent = `Export for Blender could not start: ${why}`; }; }
     // D243a: the TEST export of an unfinished track, its own button (never the default Export). D264: it goes into Assetto Corsa by the install's path
@@ -651,7 +669,7 @@
     };
     const pickFolder = (title) => call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
     await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get, coreOpts), shell);
-    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet, more: $('more-install'), card: setupSlot, testButton: $('testexport') }) })), shell);
+    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet, more: $('more-install'), card: setupSlot, testButton: $('testexport'), banner }) })), shell);
     await panels.mountPanel($('guide'), 'onboarding', () => loadCjs('app/onboarding/index.js', get), shell);
     // D355: THE MENUS (app/menubar/). File, Edit, View and Settings are this page's; Build, Track, File ▸ Developer and Edit's selection entries are the parts'
     // modules (contract M: items(ctx)), each loaded on its own: one that is not there yet, or fails, gives its menu a placeholder and the rest still work

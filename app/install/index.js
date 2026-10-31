@@ -8,12 +8,13 @@
 //   "See it in Assetto": DISABLED while the setting "See it in Assetto (launches the game)" is off, which is the default.
 //   On an OPEN track Export to Assetto Corsa installs the TEST export (t180b_<name>_test, install.js); `testButton` (the page's ⋯ "Test export
 //   (unfinished)…") goes into AC by the same path, asking for the AC folder only when it is not known.
+//   `banner` (app/core/exportbanner.js, the page's export banner): Exporting… while the export runs, then Done with where it went, or the failure.
 'use strict';
 const { createInstaller, createLauncher, PREFIX_NOTE } = require('./install.js');
 
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-function mount(root, shell, { native, pickFolder, getTextures, more = null, card: cardEl = null, testButton = null }) {
+function mount(root, shell, { native, pickFolder, getTextures, more = null, card: cardEl = null, testButton = null, banner = null }) {
   // buildExportAsync, the export in a process of its own (app/export/exportrunner.js): the user's white window was this press running out of memory on the page
   const inst = createInstaller({ build: (opts) => shell.buildExportAsync(opts), native, getDoc: () => shell.exportDoc(), getTextures });
   const see = createLauncher({ native });
@@ -30,16 +31,20 @@ function mount(root, shell, { native, pickFolder, getTextures, more = null, card
   let last = null;
   const pick = async () => { const p = await pickFolder('Your Assetto Corsa folder (the one with content\\tracks)'); if (!p) return null; const r = await inst.chooseRoot(p); say(r.ok ? `Assetto Corsa folder: ${r.root}` : r.message); if (r.ok) dropCard(); return r.ok ? r.root : null; };
   change.onclick = pick;
+  const into = (opts) => (opts && opts.test ? 'into Assetto Corsa, as a test of the unfinished track' : 'into Assetto Corsa');
   const run = async (opts) => {
+    if (banner) banner.run(into(opts));
     let r = await inst.install(opts);
-    if (r.needsRoot && (await pick())) r = await inst.install(opts);
+    if (r.needsRoot) { if (banner) banner.clear(); if (await pick()) { if (banner) banner.run(into(opts)); r = await inst.install(opts); } }
     say(r.message); if (r.ok) last = r.folder;
     if (!r.needsRoot) dropCard();   // Export found and remembered AC (get_ac_root), so the startup card has nothing left to ask
-    // the note above is cut to its box, so the whole result also shows in the banner row, uncut, until ✕ closes it
-    if (cardEl && r.message) cardEl.replaceChildren(el('div', { className: 'bar result' }, [el('span', { textContent: r.message }), ' ', el('button', { textContent: '✕', title: 'close this message', onclick: () => cardEl.replaceChildren() })]));
+    // the note above is cut to its box, so the whole result also shows in the page's export banner, uncut, until a click or the next action
+    if (banner && r.message) { if (r.ok) banner.done(r.message); else banner.fail(r.message); }
   };
-  install.onclick = () => run();
-  if (testButton) testButton.onclick = () => run({ test: true });   // the ⋯ menu's Test export, into AC by the same path
+  // a failure nobody planned for still ends the banner, with its reason, and is thrown on as before
+  const guarded = async (opts) => { try { return await run(opts); } catch (e) { if (banner) banner.fail(`not exported: ${(e && e.message) || e}`); throw e; } };
+  install.onclick = () => guarded();
+  if (testButton) testButton.onclick = () => guarded({ test: true });   // the ⋯ menu's Test export, into AC by the same path
   const refresh = async () => { const on = await see.enabled(); allow.checked = on; seeIt.disabled = !on || !last; };
   allow.onchange = async () => { await native.setSeeItSetting(allow.checked); await refresh(); };
   seeIt.onclick = async () => { const r = await see.run(last); say(r.ok ? `Assetto Corsa closed (exit ${r.code})` : r.message); };
