@@ -37,6 +37,8 @@ All notable changes to this project are recorded here. The format follows
 
 - **The preview keeps a tube's texture right after a sculpt elsewhere on the tube.** Narrowing or widening one part of a tube could leave the texture on another part, which the edit did not rebuild, laid with the old number of repeats round until the next full rebuild. It now follows at once.
 
+- **A jump can take off from a lip you raised with the brush; it no longer has to be flat road.** The flight leaves from the lip as you shaped it, at its height and along its slope, and the landing is placed from there.
+
 ## [0.4.30] - 2026-10-29
 
 ### Added

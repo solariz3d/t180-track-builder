@@ -184,7 +184,8 @@ test('row 4b: refused by name: a legacy run after a cup or a tube (PIECE_KIND), 
   const jumpRun = PC.saveRun(withJump, 1, 2, { name: 'jump and road' }); assert.equal(jumpRun.pieces[0].type, 'flight');
   assert.throws(() => PC.insert(D.createDoc('e'), jumpRun), (e) => e.code === 'BAD_DOC' && /follow a road/.test(e.message));
   let hill = extend(D.createDoc('h'), { length: 400, family: 'bowl' }); hill = SC.brush(hill, { mode: 'hill', s0: 380, r: 60, delta: 5 }).doc;
-  assert.throws(() => PC.insert(hill, jumpRun), (e) => e.code === 'FLIGHT_OFFSET', 'a jump cannot follow a hill that has not faded to 0: the document says so by name');
+  // CHANGED: a jump after a hill that has not faded was refused by name (FLIGHT_OFFSET); it takes off from the lifted lip now (test/core_jump.test.js row 8)
+  assert.doesNotThrow(() => PC.insert(hill, jumpRun), 'a saved jump re-adds after a hill that has not faded to 0');
 });
 
 test('row 5: the mirror: a mirrored run\'s path is the mirror image of the original\'s (x flips; height, distance along and the bank\'s size do not), with a bank, a hill and a swerve in it; and at a head it is still a valid track', () => {

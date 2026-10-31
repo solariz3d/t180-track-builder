@@ -321,6 +321,21 @@ function sameValue(a, b) {
   return ka.length === kb.length && ka.every((x, i) => x === kb[i] && sameValue(a[x], b[x]));
 }
 
+/**
+ * The lip of road piece R as the lift builds it (offsetPath), in a flight's own frame (x left, y up, z forward; heading 0, the route's pitch p0 at the lip): its
+ * end moved by l along the heading's left and h along world up, and the lifted tangent there, d1 = T + h′·up + l′·left − kh·l·forward (offsetPath's d1 at the end),
+ * as a heading and a pitch. Null when h, l and their slopes are all 0 at the end: then the lift leaves the lip where the route put it.
+ */
+function lipOf(R, p0) {
+  if (!R || R.type !== 'road') return null;
+  const h = D.channelAt(R, 'h', R.length), l = D.channelAt(R, 'l', R.length);
+  if (!(h.v || h.d1 || l.v || l.d1)) return null;
+  const kh = D.valuesAt(R, R.length).kh, d1 = [l.d1, Math.sin(p0) + h.d1, Math.cos(p0) - kh * l.v];
+  return { x: [l.v, h.v, 0], theta: Math.atan2(d1[0], d1[2]), p: Math.asin(d1[1] / Math.hypot(d1[0], d1[1], d1[2])) };
+}
+/** What a flight's segment reads of the piece before it (lipOf's inputs), as one string for the segment cache's key. */
+const lipKey = (R) => (R && R.type === 'road' ? ['h', 'l'].map((ch) => { const v = D.channelAt(R, ch, R.length); return `${v.v},${v.d1}`; }).join(';') + `;${D.valuesAt(R, R.length).kh}` : '');
+
 function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpeedKmh, cupRuns = true, cache = null } = {}) {
   D.checkDoc(doc);
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
@@ -341,7 +356,11 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
   const legacyLast = (P) => legacyAt(P, nOf(P) - 1).end;   // and the last row of its last
   const piece = (P, pi) => {
     if (P.type === 'flight') {
-      const to = { x: [P.left, P.up, P.forward], theta: P.heading, p: P.pitch };
+      // the take-off is the lip AS BUILT (lipOf): with an offset there, the flight starts at the lifted lip along the lifted road's tangent, and the landing is
+      // that pose plus the flight's own (forward and left turned with it, up along world up, its heading added). A lip with no offset is the segment as it always was
+      const lip = lipOf(doc.pieces[pi - 1], pitch), c = lip ? Math.cos(lip.theta) : 1, s = lip ? Math.sin(lip.theta) : 0;
+      const to = lip ? { x: [lip.x[0] + P.left * c + P.forward * s, lip.x[1] + P.up, lip.x[2] - P.left * s + P.forward * c], theta: lip.theta + P.heading, p: P.pitch, from: lip }
+        : { x: [P.left, P.up, P.forward], theta: P.heading, p: P.pitch };
       segs.push({ id: P.id, word: 'core', part: 'gap', kind: 'gap', length: flightLength(pitch, to), k0: 0, k1: 0, kp0: 0, kp1: 0, roll0: roll, roll1: P.bank, heartline: 0, profile: null, blend: null, speed: null, to });
       pitch = P.pitch; roll = P.bank;
       lastProfile = null; lastLegacy = false; lastKind = null; lastPlain = null;   // the landing's cross-section starts afresh: nothing morphs across the air
@@ -381,7 +400,8 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
     const P = doc.pieces[pi], nextP = doc.pieces[pi + 1];
     const tailTo = P.type === 'road' && P.cup && cupRuns && nextP && nextP.type === 'road' && !nextP.cup && !nextP.tube && !nextP.edge ? nextP : null;
     return [pi === 0, pi ? doc.pieces[pi - 1].type : null, tailTo, seam, seam && pi === firstRoad, seam && pi === lastRoad,
-      seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, mOf(P), tailTo ? mOf(tailTo) : null, seam ? mOf(doc.pieces[firstRoad]) : null, seam ? mOf(doc.pieces[lastRoad]) : null, designKmh, cupRuns];   // the chord length of every piece this one's segments read (a tail fade, the lap seam) is an input too
+      seam ? doc.pieces[firstRoad] : null, seam ? doc.pieces[lastRoad] : null, pitch, roll, lastProfile, lastLegacy, lastKind, lastPlain, mOf(P), tailTo ? mOf(tailTo) : null, seam ? mOf(doc.pieces[firstRoad]) : null, seam ? mOf(doc.pieces[lastRoad]) : null, designKmh, cupRuns,   // the chord length of every piece this one's segments read (a tail fade, the lap seam) is an input too
+      P.type === 'flight' ? lipKey(doc.pieces[pi - 1]) : null];   // a flight takes off from the lip as built: the piece before it's offsets at its end
   };
   doc.pieces.forEach((P, pi) => {
     if (!cache) { piece(P, pi); return; }
@@ -482,4 +502,4 @@ function offsetPath(doc, segments, path) {
   return { ...path, samples, segEnd, head };
 }
 
-module.exports = { toSegments, toPath, profileAt, cupProfile, tubeProfile, edgeProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath, heartlineLift, heartlineOf, EDGE_MIN_N, TUBE_N, HEARTLINE_FROM };
+module.exports = { toSegments, toPath, lipOf, profileAt, cupProfile, tubeProfile, edgeProfile, legacyEdgeDeg: D.legacyEdgeDeg, offsetPath, heartlineLift, heartlineOf, EDGE_MIN_N, TUBE_N, HEARTLINE_FROM };

@@ -69,7 +69,12 @@ function checkSegments(segments, from = 0) {
       const t = g.to;
       if (!t || !Array.isArray(t.x) || t.x.length !== 3 || !t.x.every(Number.isFinite) || !Number.isFinite(t.theta) || !Number.isFinite(t.p)) throw new Error(`${at}: to needs x [left, up, forward], theta and p`);
       if (!(Math.abs(t.p) < Math.PI / 2)) throw new Error(`${at}: to.p must be inside (−90°, 90°), got ${t.p}`);
-      if (!(len(t.x) > 0)) throw new Error(`${at}: a flight's end must be away from its start`);
+      if (t.from !== undefined) {
+        const f = t.from;
+        if (!f || !Array.isArray(f.x) || f.x.length !== 3 || !f.x.every(Number.isFinite) || !Number.isFinite(f.theta) || !Number.isFinite(f.p)) throw new Error(`${at}: to.from needs x [left, up, forward], theta and p`);
+        if (!(Math.abs(f.p) < Math.PI / 2)) throw new Error(`${at}: to.from.p must be inside (−90°, 90°), got ${f.p}`);
+        if (!(len(sub(t.x, f.x)) > 0)) throw new Error(`${at}: a flight's end must be away from its start`);
+      } else if (!(len(t.x) > 0)) throw new Error(`${at}: a flight's end must be away from its start`);
     }
   }
 }
@@ -148,7 +153,7 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
 // unchanged. (Under the rotation-minimising frame, D177's first build, R0 also carried the frame's twist, and a turn edit on
 // a slope regrew the whole tail.)
 const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline, g.heartline1, g.rollRate0, g.rollRate1].map((v) => (v === undefined ? '' : num(v))).join(',')   // an absent field is empty, a 0 is "0": the new fields change the key only where a segment sets them
-  + (g.to ? `|to:${g.to.x.join(',')},${g.to.theta},${g.to.p}` : '');   // D258: a free flight's end pose is part of its shape
+  + (g.to ? `|to:${g.to.x.join(',')},${g.to.theta},${g.to.p}` : '') + (g.to && g.to.from ? `|from:${g.to.from.x.join(',')},${g.to.from.theta},${g.to.from.p}` : '');   // D258: a free flight's end pose is part of its shape
 const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1], c * v[2] - sn * v[0]];
 const same3 = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
@@ -161,10 +166,22 @@ const same3 = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
  * The segment's `length` is the s it spans (flightLength gives the curve's own); the stations are spread over it by the curve's parameter.
  */
 function flightCurve(p0, to) {
+  if (to.from) return flightCurveFrom(to);
   const X = [to.x[0], to.x[1], to.x[2]], c = len(X), T0 = mul(tangent(0, p0), c), T1 = mul(tangent(to.theta, to.p), c);
   const at = (t) => { const t2 = t * t, t3 = t2 * t; return add(add(mul(T0, t3 - 2 * t2 + t), mul(X, -2 * t3 + 3 * t2)), mul(T1, t3 - t2)); };
   const d1 = (t) => { const t2 = t * t; return add(add(mul(T0, 3 * t2 - 4 * t + 1), mul(X, -6 * t2 + 6 * t)), mul(T1, 3 * t2 - 2 * t)); };
   const d2 = (t) => add(add(mul(T0, 6 * t - 4), mul(X, -12 * t + 6)), mul(T1, 6 * t - 2));
+  return { X, at, d1, d2 };
+}
+/**
+ * A flight that takes off from a lip the brush moved (src/core/adapter.js): `to.from` = { x, theta, p } is where the curve STARTS, in the same local coordinates as
+ * `to.x` (x the lifted lip, theta and p the lifted road's tangent there), instead of the origin along the start pitch. The same cubic Hermite, with its start point.
+ */
+function flightCurveFrom(to) {
+  const f = to.from, P0 = [f.x[0], f.x[1], f.x[2]], X = [to.x[0], to.x[1], to.x[2]], c = len(sub(X, P0)), T0 = mul(tangent(f.theta, f.p), c), T1 = mul(tangent(to.theta, to.p), c);
+  const at = (t) => { const t2 = t * t, t3 = t2 * t; return add(add(add(mul(P0, 2 * t3 - 3 * t2 + 1), mul(T0, t3 - 2 * t2 + t)), mul(X, -2 * t3 + 3 * t2)), mul(T1, t3 - t2)); };
+  const d1 = (t) => { const t2 = t * t; return add(add(add(mul(P0, 6 * t2 - 6 * t), mul(T0, 3 * t2 - 4 * t + 1)), mul(X, -6 * t2 + 6 * t)), mul(T1, 3 * t2 - 2 * t)); };
+  const d2 = (t) => add(add(add(mul(P0, 12 * t - 6), mul(T0, 6 * t - 4)), mul(X, -12 * t + 6)), mul(T1, 6 * t - 2));
   return { X, at, d1, d2 };
 }
 /** The arc length of a free flight's curve from start pitch p0 (5-point Gauss–Legendre on 64 pieces). */

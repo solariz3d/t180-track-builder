@@ -5,6 +5,7 @@
 // pure modules, fake hosts for the panel; NO real window (no pointer lock or focus while the user is at the PC: the rule of 2026-10-06). Rows:
 //   1  shell.jump: the take-off as Extend would place it, a free flight, a 60 m landing, ONE undo step, the default landing 40 m ahead, lined up; the null take-off; the ghost is flagged a jump's
 //   1b every refusal in plain words (no code name), nothing changed, no undo step
+//   1c a jump from a lip raised with the brush: the shell places it (it was refused while a jump needed a faded lip), one undo step, and the ghost is that flight
 //   2  the landing while it is the head: its values in the boxes' units; moveLanding is one undo step; a drag (begin / to / end) is ONE undo step from the document it began on, a step the core refuses
 //      leaves it at the last good one; LANDING_NOT_HEAD after an Extend, in words, and deleting back to it moves it again
 //   3  the handles' frames: the arrows ARE the pose's axes (forward moves the landing along the take-off's heading, sideways along its left, height straight up), on a turning and on a climbing take-off
@@ -48,7 +49,6 @@ const REFUSALS = [
   ['NO_TAKEOFF', async () => createCoreShell({ brushFn: null, autosaveMs: 0 }), null, /^A jump needs road to take off from: press Extend first, then Jump\.$/],
   ['CLOSED', async () => { const c = await createCoreShell({ brushFn: null, autosaveMs: 0 }); let d = extend(D.createDoc('lap'), { length: 300, family: 'bowl' }); for (let i = 0; i < 4; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / R } }); d = extend(d, { length: 60, transition: 40, targets: { kh: 0 } }); const r = close(d, { edited: [0] }); assert.ok(r.converged); c.commitDoc(r.doc); return c; }, { length: 50 }, /^The loop is closed, so there is no open end to add a jump to\. Undo the close first\.$/],
   ['JUMP_AFTER_JUMP', async () => { const s = await base(); s.commitDoc(D.appendPiece(s.getState().history.present, D.flightPiece({ forward: 30, left: 0, up: 0, heading: 0, pitch: 0, bank: 0 }))); return s; }, null, /^The track already ends in a jump\. Extend from its landing first/],
-  ['FLIGHT_OFFSET', async () => { const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 300, family: 'bowl' }); s.extend({ length: 100, targets: { kv: 0.002 } }); s.beginBrush({ mode: 'local', channel: 'height', s0: 380, r: 60 }); s.brushTo(3); s.endBrush(); assert.equal(s.getState().message, null); return s; }, null, /^The road at the end still carries a height or sideways offset \(from the local brush/],
 ];
 test('row 1b: every refusal of the core is said in plain words, with nothing changed and no undo step', async () => {
   for (const [name, make, o, re] of REFUSALS) {
@@ -126,4 +126,15 @@ test('row 4: the flight layer: each flight\'s centreline from the take-off stati
   const t = await base(); t.jump({ length: 60 }); t.extend({ length: 200 }); const c = t.candidateJump({ length: 50 }), gp = { path: G.buildPath(c.segments, { step: 2, closed: false, start: c.start }), segments: c.segments };
   ghost = { samples: gp.path.samples, segments: gp.segments, jump: true, s0: 0 }; tick(); assert.equal(layer.flights().length, 2, 'the ghost\'s path: the placed flight and the candidate'); assert.equal(layer.lines().length, 2);
   ghost = null; tick(); assert.equal(layer.flights().length, 1, 'no ghost: the placed track again'); layer.unmount(); assert.equal(canvas.gone, true);
+});
+test('row 1c: a jump takes off from a lip RAISED with the brush: the shell places it, ONE undo step, and the ghost is the very same flight', async () => {
+  const s = await createCoreShell({ autosaveMs: 0 }); s.extend({ length: 300, family: 'bowl' }); s.extend({ length: 100, targets: { kv: 0.002 } });
+  s.beginBrush({ mode: 'local', channel: 'height', s0: 380, r: 60 }); s.brushTo(3); s.endBrush(); assert.equal(s.getState().message, null);
+  const head = s.getState().history.present, P = head.pieces[head.pieces.length - 1], h = D.channelAt(P, 'h', P.length);
+  assert.ok(Math.abs(h.v) > 0.1, 'control: the lip is raised: ' + h.v + ' m');
+  const ghost = s.candidateJump(null), n = s.getState().history.past.length; s.jump(null);
+  assert.equal(s.getState().messageKind === 'error', false, 'placed, not refused: ' + s.getState().message); assert.equal(s.getState().history.past.length, n + 1, 'one undo step');
+  const d = s.getState().history.present; assert.deepEqual(d.pieces.slice(-2).map((x) => x.type), ['flight', 'road']);
+  assert.deepEqual(ghost.segments.map((g) => g.to || null), s.getState().resolved.segments.map((g) => g.to || null), 'the ghost flies the same flight, from the lifted lip');
+  assert.ok(ghost.segments.some((g) => g.to && g.to.from), 'and that flight starts at the lip as built');
 });

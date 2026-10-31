@@ -16,8 +16,7 @@
 // The landing is movable only while it is the head (the user: "the user will make the landing and perfect it before expanding it on outward after the
 // jump … there is no need for this idea of tweaking a jump that tweaks the rest of the track"). Deleting back to it makes it the head, and movable, again.
 //
-// Refused by name: an empty track (NO_TAKEOFF), a closed one (CLOSED), a track that ends in a jump (JUMP_AFTER_JUMP, D.checkDoc), a road that still
-// carries a height or sideways offset at the lip (FLIGHT_OFFSET), a pose that is not one (BAD_FLIGHT, FLIGHT_TOO_SHORT), a landing that is not the head
+// Refused by name: an empty track (NO_TAKEOFF), a closed one (CLOSED), a track that ends in a jump (JUMP_AFTER_JUMP, D.checkDoc), a pose that is not one (BAD_FLIGHT, FLIGHT_TOO_SHORT), a landing that is not the head
 // (LANDING_NOT_HEAD).
 'use strict';
 
