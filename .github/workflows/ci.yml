@@ -1,0 +1,45 @@
+# ci.yml: the tests, on GitHub's Windows runners. It publishes nothing: no secrets, no release, no upload.
+#   fast:     every push and pull request: scripts/test-fast.cjs (the suite minus the mutation harnesses and the
+#             frame-timing pages; the file's header says why each is left out).
+#   mutation: weekly and on demand: the mutation harnesses (scripts/test-fast.cjs --mutation), tens of minutes.
+# Node is pinned to the version the suite is run on (Node 24: CHANGELOG.md and test/inner_run.js rely on its test runner).
+name: tests
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096   # the core tests' own headers ask for it
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.14.1'
+      - name: Fast subset
+        run: node scripts/test-fast.cjs
+
+  mutation:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.14.1'
+      - name: Mutation harnesses
+        run: node scripts/test-fast.cjs --mutation

@@ -7,6 +7,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- **The tests run on GitHub.** Every push and pull request runs the fast part of the suite on a Windows runner (`.github/workflows/ci.yml`, `node scripts/test-fast.cjs`); the slow mutation harnesses run weekly and on demand. So anyone can see the suite pass, not only take our word for it. The workflow publishes nothing.
+
 - **File ▸ Export for Blender…: open your track in Blender.** It writes the track as a `.glb` into a folder of its own, with a README: in Blender, File ▸ Import ▸ glTF 2.0 opens it textured, in metres and the right way round (a right-hand corner still turns right), with every road piece, underside and marker named as the game names them. Tick "Only the selected pieces" to export just those. When Blender is found (Steam's, or the one you pick in Settings ▸ Blender…) it can also make the `.fbx` for ksEditor, running hidden in the background; that FBX holds the game's own vertices in metres. Nothing is written into the game.
 
 ### Changed
