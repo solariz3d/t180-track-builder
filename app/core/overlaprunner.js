@@ -1,11 +1,11 @@
-// overlaprunner.js: runs the overlap check OFF the page's thread (D240 follow-up: "the previews must not freeze"), on TWO WARM WORKERS (D240 warm-worker follow-up). The core shell is given a
+// overlaprunner.js: runs the overlap check OFF the page's thread ("the previews must not freeze"), on TWO WARM WORKERS. The core shell is given a
 // runner and asks it for a job:
 //
 //   runner.start({ doc, designSpeedKmh, closed }) -> { promise, cancel(), timing }
 //     promise  resolves with the check's result ({ overlaps, others, amber }), or rejects (a worker failed; or { cancelled: true } after cancel)
 //     cancel() terminates the workers at once (whatever they were computing is dropped) and puts two fresh warm ones in their place; so does ANY failure of a part (the other
 //              worker may still be computing the failed job's other part: it must not answer the next job). Every message also carries the job's serial and a reply that is not the
-//              current job's is ignored: the exact guard, with the replacement as the belt (B's look at 485c5b6, p-warm-B_2026-10-05.md section 2)
+//              current job's is ignored: the exact guard, with the replacement as the belt
 //     timing   { loadMs, waitedMs, jobMs, restMs, raysMs } in ms, set before the promise resolves (the slower of the two workers' numbers, and each part's own check time)
 //
 // createWorkerRunner is the page's. THE WORKERS ARE MADE WHEN THE RUNNER IS (at page start), and load their modules while they sit idle; a job reuses them (their modules and their compiled code
@@ -40,7 +40,7 @@ function createWorkerRunner({ win, url = 'core/overlapworker.js', WorkerCtor = w
           w.onmessage = (e) => {
             if (settled) return;
             const m = e.data || {};
-            if (m.id !== `${mySerial}:${part}`) return;   // not this job's answer (B's look at 485c5b6: a failed job's other part finishing late): never taken for this one
+            if (m.id !== `${mySerial}:${part}`) return;   // not this job's answer (a failed job's other part finishing late): never taken for this one
             if (!m.ok) return fail(new Error(m.error || 'the overlap check failed'), true);   // and the workers are replaced on ANY failure: one may still be busy with this job's other part
             got[part] = m;
             if (--pending > 0) return;

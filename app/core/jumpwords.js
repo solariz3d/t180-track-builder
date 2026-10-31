@@ -1,4 +1,4 @@
-// jumpwords.js: THE JUMP'S NAMED REFUSALS, IN PLAIN WORDS (D243 item 1, kept for D258's free jump: "its named refusals are shown in plain words"). `e` is a CoreError from src/core/jump.js or
+// jumpwords.js: THE JUMP'S NAMED REFUSALS, IN PLAIN WORDS (kept for the free jump: "its named refusals are shown in plain words"). `e` is a CoreError from src/core/jump.js or
 // src/core/document.js (code and message). Never the code name; an unknown refusal keeps the core's own sentence minus its code, so nothing is hidden.
 'use strict';
 

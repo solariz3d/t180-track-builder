@@ -1,8 +1,8 @@
 // closerunner.js: works out Close's preview OFF the page's thread (2026-10-15: Finish to start held the window 4.1 s on a 24 km track), on ONE WARM WORKER
 // (app/core/closeworker.js, made when the runner is, so its modules load while it sits idle). The core shell is given a runner and asks it for a job:
 //
-//   runner.start({ doc, fraction, last, whole, finish, edited, best, openReds, window }) -> { promise, cancel() }   (best: D339's one press, closejob.js runCloseBest; openReds: D343;
-//     window: D421, the piece indices a route tool's release may move)
+//   runner.start({ doc, fraction, last, whole, finish, edited, best, openReds, window }) -> { promise, cancel() }   (best: the one press, closejob.js runCloseBest; openReds: the page's
+//     reds; window: the piece indices a route tool's release may move)
 //     promise  resolves with { out, ms } (closejob.js runClose's answer, after the postMessage) or { refused: { code, message } } (the core refused the close),
 //              or rejects (the worker failed; or { cancelled: true } after cancel)
 //     cancel() terminates the worker at once (whatever it was computing is dropped) and makes a fresh one; so does any failure
@@ -33,7 +33,7 @@ function createCloseRunner({ win, url = 'core/closeworker.js', WorkerCtor = win 
           res(m.ok ? { out: m.out, ms: m.ms } : { refused: m.refused });
         };
         mine.onerror = (e) => fail(new Error((e && e.message) || 'the close worker failed'));
-        mine.postMessage({ serial: mySerial, doc, fraction, last: !!last, whole: !!whole, finish: !!finish, edited, best: !!best, openReds, ...(window ? { window } : {}), ...(bar ? { bar } : {}) });   // D421: only when asked, so every other job's message is what it was
+        mine.postMessage({ serial: mySerial, doc, fraction, last: !!last, whole: !!whole, finish: !!finish, edited, best: !!best, openReds, ...(window ? { window } : {}), ...(bar ? { bar } : {}) });   // only when asked, so every other job's message is what it was
       });
       job.cancel = () => fail(Object.assign(new Error('cancelled'), { cancelled: true }));
       running = job;

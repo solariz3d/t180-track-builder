@@ -1,11 +1,11 @@
-// valuesoverlay.js: THE VALUES OF THE PIECE BEING EDITED, LARGE, OVER THE 3D VIEW (D267, the user, 10:15, relaying a tester: "the values or degrees for the track needs to be in a better spot to be seen").
+// valuesoverlay.js: THE VALUES OF THE PIECE BEING EDITED, LARGE, OVER THE 3D VIEW (the user, 10:15, relaying a tester: "the values or degrees for the track needs to be in a better spot to be seen").
 // A DOM layer over the preview (#preview) at the top: length, turn, climb, bank and width of the piece the fields describe, in big type, updated by the panel every time the readout is (as a handle is
 // dragged, a field is typed in, the track changes), and hidden while there is no such piece (a closed loop). The numbers are the panel's own (src/core/readout.js through app/core/labels.js
 // formatReadout; the width is the width field): nothing is computed here.
 //
 //   SPOT_CSS                    where it sits: the ONE constant to change if the user meant another spot (inferred from "a better spot to be seen")
 //   entries(f, widthText)       -> [{ key, label, value }]   f = labels.formatReadout(r) ({ length, turn, climb, bank }), widthText the width as shown ("31 m")
-//   sculptEntries(s)            -> [{ key, label, value }]   D425 part 4, IN SCULPT (P's design §1 cue 5): s = { tool, name, value, radius, moves }, the tool, its value at the centre under
+//   sculptEntries(s)            -> [{ key, label, value }]   IN SCULPT: s = { tool, name, value, radius, moves }, the tool, its value at the centre under
 //                                                            the channel's name, the radius and what moves ("road after" / "stays"); the panel's own words, nothing computed here
 //   mount(stage, win)           -> { set(entries | null), entries(), visible(), attach(node), unmount() }   attach: a node shown under the values, in the same strip, while they show
 'use strict';

@@ -1,7 +1,6 @@
-// keys.js: the app's keys, MOVED here from app/shell.js as they were (D239 note, the user's undo request: removing the Pieces mode
+// keys.js: the app's keys, MOVED here from app/shell.js as they were (note, the user's undo request: removing the Pieces mode
 // must not remove its keys). The equation page binds them to the core shell (app/index.html); app/shell.js re-exports keyAction so its
-// own tests and drivers are unchanged. D242 item 8a (below): undo and redo now work inside a field too; the History list (8b) waits
-// for D240 (plan_t180_safe_close_reds_2026-10-04.md item 8).
+// own tests and drivers are unchanged. Undo and redo work inside a field too (below).
 'use strict';
 
 /**
@@ -9,7 +8,7 @@
  * REMOVING THE HEAD TAKES Ctrl+Backspace (or Cmd+Backspace). A bare Backspace does nothing: it is the key most often hit
  * by accident, and a confirm step would interrupt every deliberate removal, which is one undo step anyway. So the guard
  * is a modifier, not a dialog. Letters without Ctrl belong to the panels (the cameras use them).
- * UNDO AND REDO WORK FROM ANYWHERE (D242 item 8a, the user: "make it like photoshop or video editing programs, cntrl z and what ever
+ * UNDO AND REDO WORK FROM ANYWHERE (the user: "make it like photoshop or video editing programs, cntrl z and what ever
  * to go forward and back"): Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z act on the TRACK with the focus in a number field, a checkbox or a select
  * too. Only a TEXT-ENTRY field (`inText`: the track's name, the share code box) keeps them for its own text, as an editor's text box
  * does. Ctrl+S and Ctrl+Backspace are unchanged: in ANY field (`inField`) they stay the field's, so Ctrl+Backspace there deletes a
@@ -28,10 +27,10 @@ function keyAction({ key, ctrlKey, metaKey, shiftKey, inField, inText }) {
 }
 
 /**
- * D421 part 3, SCULPT'S KEYS (design §5, the user's GO of 2026-10-20 14:53): Tab toggles Sculpt mode (Blender's Tab; Build ▸ Sculpt mode is the same switch), Esc drops an open brush drag, [ and ] narrow
+ * SCULPT'S KEYS (design §5, the user's go of 2026-10-20 14:53): Tab toggles Sculpt mode (Blender's Tab; Build ▸ Sculpt mode is the same switch), Esc drops an open brush drag, [ and ] narrow
  * and widen the radius, and 1-9 pick the tool (1 Grab, 2 Stretch, 3 Bend, 4 Climb, 5 Twist, 6 Width, 7 Cup, 8 Edge, 9 Smooth). No letters (above: the cameras use them),
  * and never with Ctrl, Alt or Shift held (Shift+Tab moves the focus back). IN A FIELD every one of them is the field's: a digit or a bracket is typed, Tab moves to the
- * next field, Esc is the field's own. (The plan names keys.js's inText for Tab; inField is the stricter reading: a number field's Tab is how the Extend fields are walked.)
+ * next field, Esc is the field's own. (inField, not inText, decides Tab here, the stricter reading: a number field's Tab is how the Extend fields are walked.)
  * Kept apart from keyAction, which app/shell.js re-exports to the piece builder, whose own binding knows none of these. Pure: tested headless.
  *   -> 'toggleSculpt' | 'dropDrag' | 'radiusDown' | 'radiusUp' | { tool: 1..9 } | null
  */
@@ -50,7 +49,7 @@ function sculptKey({ key, ctrlKey, metaKey, altKey, shiftKey, inField }) {
 const TEXT_ENTRY = 'textarea, input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]';
 
 /**
- * D240 follow-up (B's look at ab748e5, C's open question): a half-typed number that was never Extended is thrown away by the first Ctrl+Z, which also steps the track. So Ctrl+Z first
+ * A half-typed number that was never Extended is thrown away by the first Ctrl+Z, which also steps the track. So Ctrl+Z first
  * ASKS THE PANEL ('t180-undo-guard', answered by app/core/panel.js): if a field holds an un-applied edit, the panel puts that field back and says it handled the key, and the track is not
  * stepped; the next Ctrl+Z (nothing un-applied now) undoes the track. A page with no panel, or a document that cannot dispatch, never handles it: Ctrl+Z undoes the track as before.
  */
@@ -61,7 +60,7 @@ function panelHandled(doc) {
 }
 
 /**
- * D421 part 3: what a Sculpt key does on the page. Tab is the shell's switch (setSculpt: refused mid-drag, "finish the brush drag first"). The others are the
+ * what a Sculpt key does on the page. Tab is the shell's switch (setSculpt: refused mid-drag, "finish the brush drag first"). The others are the
  * panel's (it holds the tool, the radius and the pointer drag): asked with 't180-sculpt-key' { detail: { act, handled() } }. A key is taken from the page (its
  * default prevented) only when something used it: Esc with no drag open, or a digit in Build, stays the page's. Returns whether it was used.
  */
@@ -80,7 +79,7 @@ function bindKeys(doc, shell, { save }) {
   const onKey = (e) => {
     const t = e.target, is = (sel) => !!t && typeof t.matches === 'function' && t.matches(sel);
     const inField = is('input, select, textarea') || !!(t && t.isContentEditable);
-    // D498 item 1 (A's review of 6650ac2): after a click a button (or a link, a summary) keeps the focus, and Tab there is the browser's: it moves the focus on.
+    // After a click a button (or a link, a summary) keeps the focus, and Tab there is the browser's: it moves the focus on.
     // So for Tab only, any focused element but the page itself (no element, the body, the html) or the stage counts as a field
     const tag = t && typeof t.tagName === 'string' ? t.tagName.toLowerCase() : '';
     const onPage = !tag || tag === 'body' || tag === 'html' || (typeof t.closest === 'function' && !!t.closest('#stage'));

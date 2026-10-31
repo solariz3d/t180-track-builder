@@ -1,9 +1,9 @@
-// piecesui.js: SAVED PIECES in the panel (D240, the UI half; the core is src/core/piece.js, the state and actions are the core shell's, app/core/coreshell.js). DOM only.
+// piecesui.js: SAVED PIECES in the panel (the UI half; the core is src/core/piece.js, the state and actions are the core shell's, app/core/coreshell.js). DOM only.
 //
 //   SELECT on the track: a click on a piece selects it, a shift-click selects the run from the piece selected first; a click on nothing clears. (A pointer that moved more than
 //          CLICK_PX between press and release was a camera drag and selects nothing; with the brush armed the click is the brush's.) The selection is drawn on the track
 //          (app/core/selectionlayer.js) and offers SAVE AS PIECE (a name, written to the app's pieces folder) and DELETE.
-//   DELETE: at the open end the pieces simply go (one undo step). In the MIDDLE it is PREVIEWED first (the librarian's ruling: the two sides are joined again by moving everything
+//   DELETE: at the open end the pieces simply go (one undo step). In the MIDDLE it is PREVIEWED first (the two sides are joined again by moving everything
 //          after the gap along, C measured it 357 of 357 times): the track as it would be is the see-through ghost, the list says how far each piece moves, an overlap check
 //          of the result is shown, and Apply (which writes the track to its backups first) or Cancel decides.
 //   THE LIBRARY: every saved piece with its name, length, turn, climb and a plan thumbnail; Add at head (optionally mirrored left/right), Rename, Delete. A file that cannot
@@ -11,8 +11,8 @@
 'use strict';
 
 const SL = require('./selectionlayer.js');
-const GV = require('./gripvals.js');   // D261/D263: gripOf (src/core/document.js needs node's fs; this has no requires)
-const GL = require('./griplike.js');   // D261: the grip words and the "grip like…" entries
+const GV = require('./gripvals.js');   // gripOf (src/core/document.js needs node's fs; this has no requires)
+const GL = require('./griplike.js');   // the grip words and the "grip like…" entries
 const LB = require('./labels.js');
 const RG = require('../validate-ui/redgroups.js');
 
@@ -30,7 +30,7 @@ function describe(item) {
 }
 
 /**
- * EDIT's selection items (D355 part 2, contract M), for the top-right bar (pane B's app/menubar/): Save as piece…, Set grip…, Delete selected, Cut here (D361), Clear selection. They are the
+ * EDIT's selection items, for the top-right bar (app/menubar/): Save as piece…, Set grip…, Delete selected, Cut here, Clear selection. They are the
  * mounted panel's own controls, asked for with the 't180:selection-request' event (the bar and the panel are loaded apart). ctx.doc (or ctx.document) is the page's document.
  * Nothing selected: each is `disabled: true` (extra to contract M; its run does nothing either). No panel mounted: no items.
  */
@@ -47,7 +47,7 @@ function items(ctx = {}) {
     { label: 'Save as piece…', panel: (box) => s.lend('save', box), disabled: off || !!s.saveProblem },
     { label: 'Set grip…', panel: (box) => s.lend('grip', box), disabled: off },
     { label: 'Delete selected', run: when(s.del), disabled: off },
-    { label: 'Cut here', run: when(s.cut), disabled: off },   // D361: the pieces cut out, the track left open at the gap (a preview first)
+    { label: 'Cut here', run: when(s.cut), disabled: off },   // the pieces cut out, the track left open at the gap (a preview first)
     { label: 'Clear selection', run: when(s.clear), disabled: off },
   ];
 }
@@ -63,7 +63,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
   const saveBtn = el('button', { text: 'Save as piece', title: 'keep the selected pieces in the library, relative to where they start', onclick: () => { void shell.savePiece(nameIn.value.trim()); } });
   const delBtn = el('button', { text: 'Delete selected', title: 'at the end of the track the pieces simply go; in the middle you see what it does first', onclick: () => shell.deleteSelection() });
   const clearBtn = el('button', { text: 'Clear selection', onclick: () => shell.clearSelection() });
-  // D261 (the user: "change which piece has different grip"): the selected pieces' grip, a whole percent 50 to 150 (100 is AC's own road); "grip like…" fills the field from a known track
+  // (the user: "change which piece has different grip") the selected pieces' grip, a whole percent 50 to 150 (100 is AC's own road); "grip like…" fills the field from a known track
   const gripIn = el('input', { type: 'number', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'selection grip', title: 'grip of the selected road pieces, a whole percent from 50 to 150; 100 is AC\'s own road. Blank: the pieces differ' });
   const gripLike = el('select', { 'aria-label': 'selection grip like', title: 'grip like a known track: the measured road friction of installed tracks; picking one fills the grip box' });
   gripLike.replaceChildren(...GL.entries().map((e) => new win.Option(e.label, e.value)));
@@ -73,14 +73,14 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
   const applyBtn = el('button', { text: 'Apply delete', title: 'delete as previewed (the track is copied to its backups first; one undo step)', onclick: () => { void shell.applyDelete(); } });
   const cancelBtn = el('button', { text: 'Cancel delete', title: 'drop the preview: nothing changes', onclick: () => shell.cancelDelete() });
   const proposalBox = el('div', { 'aria-label': 'delete preview', class: 'head' });
-  // D361: a CUT's preview (app/core/coreshell.js cutSelection): what goes, where the open track starts and ends, and what became of the start line, hotlap and pit lane; Apply or Cancel
+  // a CUT's preview (app/core/coreshell.js cutSelection): what goes, where the open track starts and ends, and what became of the start line, hotlap and pit lane; Apply or Cancel
   const applyCutBtn = el('button', { text: 'Apply cut', title: 'cut as previewed (the track is copied to its backups first; one undo step)', onclick: () => { void shell.applyCut(); } });
   const cancelCutBtn = el('button', { text: 'Cancel cut', title: 'drop the preview: nothing changes', onclick: () => shell.cancelCut() });
   const cutBox = el('div', { 'aria-label': 'cut preview', class: 'head' });
   const drawCut = (p) => { applyCutBtn.style.display = cancelCutBtn.style.display = p ? '' : 'none'; cutBox.replaceChildren(...(p ? [el('p', { text: `Cut preview: ${p.removed.length === 1 ? p.removed[0] : `${p.removed[0]} to ${p.removed[p.removed.length - 1]}`} would be cut out. The track opens there: it starts where ${p.kept[0]} began and ends at the end of ${p.kept[p.kept.length - 1]}; nothing kept moves. Connect the ends with Extend or Close after.` })] : [])); };
   const focus = (s) => fire('t180-camera-focus', { s });
   const placeButton = (it, text) => el('button', { text, title: `${it.what}${it.detail ? `: ${it.detail}` : ''}: show it`, class: 'linkish', onclick: () => focus(it.s) });
-  let tick = 0;   // D240 follow-up: while the overlap check runs off the thread the line counts the seconds, redrawn twice a second
+  let tick = 0;   // while the overlap check runs off the thread the line counts the seconds, redrawn twice a second
   const drawProposal = (p) => {
     if (tick) { win.clearTimeout(tick); tick = 0; }
     applyBtn.style.display = cancelBtn.style.display = p ? '' : 'none';
@@ -107,7 +107,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
 
   // ── the library ──
   const mirror = el('input', { type: 'checkbox', 'aria-label': 'mirror on insert', title: 'add the piece as its left/right mirror image' });
-  // D355: mirror on insert is one of the six settings (contract S, key mirrorOnInsert): it starts from S, follows S.on (the Settings menu), and this box, which the Pieces
+  // mirror on insert is one of the six settings (contract S, key mirrorOnInsert): it starts from S, follows S.on (the Settings menu), and this box, which the Pieces
   // menu shows, writes it, so it is kept for the next start
   let offMirror = null;
   if (settings) {
@@ -142,7 +142,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
         el('button', { text: 'Add mirrored', title: `put ${it.name} where the track ends as its left/right mirror image (one undo step)`, 'aria-label': `add ${it.name} at the head, mirrored`, onclick: () => addAtHead(it.name, true) }));
       buttons.push(el('button', { text: 'Rename', 'aria-label': `rename ${it.name}`, onclick: () => { renaming = it.name; confirming = null; redrawList(); } }), el('button', { text: 'Delete', 'aria-label': `delete the saved piece ${it.name}`, onclick: () => { confirming = it.name; renaming = null; redrawList(); } }));
     }
-    // D269: a click on the row (not on one of its buttons or boxes) adds the piece at the head, as Add at head does (the Pieces menu is a bin: click what you want)
+    // a click on the row (not on one of its buttons or boxes) adds the piece at the head, as Add at head does (the Pieces menu is a bin: click what you want)
     const rowClick = (e) => { if (it.error || renaming === it.name || confirming === it.name) return; if (e && e.target && /^(BUTTON|INPUT|SELECT|TEXTAREA|A)$/.test(e.target.tagName)) return; addAtHead(it.name, mirror.checked); };
     return el('div', { class: 'piece-row', 'data-piece': it.name, title: it.error ? '' : `click to add ${it.name} at the head`, onclick: rowClick, style: `display:flex;gap:8px;align-items:center;margin:6px 0;${it.error ? '' : 'cursor:pointer;'}` }, thumb(it), el('div', { style: 'min-width:0' }, ...body, el('div', { class: 'actions' }, ...buttons)));
   };
@@ -155,7 +155,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
     return Promise.resolve(shell.listPieces()).then((r) => { if (seq !== listSeq) return; items = r; redrawList(); }, (e) => { if (seq !== listSeq) return; items = []; listBox.replaceChildren(); listNote.textContent = `the library could not be read: ${e && e.message || e}`; });
   };
 
-  // ── the menu (D269) ──
+  // ── the menu ──
   // The library is a drop-down bin in the TOP BAR (app/index.html: <details id="pieces"><summary>Pieces ▾</summary><div id="pieces-bin">; the panel puts these nodes there). Opening it lists the saved pieces fresh; Esc, or a press
   // anywhere outside it, closes it (a press on the Pieces button is the browser's own toggle). Without that element (a headless host) the library stays where it was, in the panel.
   const menu = doc.getElementById ? doc.getElementById('pieces') : null;
@@ -202,7 +202,7 @@ function mount({ root, stage, shell, win, el, armed = () => false, send = null, 
     if (st.libraryStamp !== libStamp) { const first = libStamp === null; libStamp = st.libraryStamp; if (!first && st.message && /^saved the piece/.test(st.message)) nameIn.value = ''; refreshList(); }
   };
   const unsub = shell.subscribe(draw); draw(shell.getState());
-  // D355: the parts Edit's "…" items borrow (lend), each in a slot of its own in the selection box so it goes back where it was
+  // the parts Edit's "…" items borrow (lend), each in a slot of its own in the selection box so it goes back where it was
   const LENT = {
     save: el('div', {}, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'name' }), nameIn)), el('div', { class: 'actions' }, saveBtn), why),
     grip: el('div', {}, el('div', { class: 'pickers' }, el('label', { class: 'picker' }, el('span', { text: 'grip %' }), gripIn), el('label', { class: 'picker' }, el('span', { text: 'grip like…' }), gripLike)), el('div', { class: 'actions' }, gripBtn)),

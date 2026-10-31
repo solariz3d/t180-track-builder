@@ -5,14 +5,14 @@
 //   · the PIT boxes (automatic until the pit module) in grey, and the HOTLAP spawn in orange with the speed it reaches by the line
 //   · a red box for any slot the checks put off the road or overlapping, with the checks' words in the panel (app/core/spawnsui.js)
 // The marks come from the shell's spawnsInfo (the same placement the export writes), computed only when the track or its spawns change, not every frame.
-// Drawn for the AUTOMATIC start too since D285 (the same marks the export would place), because they are what the mouse grabs (app/core/spawndrag.js).
+// Drawn for the AUTOMATIC start too (the same marks the export would place), because they are what the mouse grabs (app/core/spawndrag.js).
 //
 //   slotCorners(m, halfL, halfW)            -> [p0, p1, p2, p3]     pure: a marker's car box on the road, world space
 //   marks(info)                             -> [{ kind, label, corners | line, bad }]   pure: what to draw for a spawnsInfo
 //   mount(stage, shell, win)                -> { drawn(), unmount() }
 'use strict';
 const M = require('../camera/math.js');
-const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
+const { tokensOf } = require('../lib/tokens.js');   // the skin's colours (app/lib/tokens.js)
 const { T180 } = require('../../src/markers/layout.js');
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
@@ -55,13 +55,13 @@ function mount(stage, shell, win) {
   stage.append(canvas);
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
   let raf = 0, sized = '', drawn = [], items = [], forDoc = null, forResolved = null, stale = false;
-  // D421 part 5 (C's profile, p-d421-freeze-C_2026-10-20.md §5: 778 ms of a 16-step drag on 10 km): spawnsInfo builds the whole lap's path, so a change only marks the marks
+  // A profile once found 778 ms of a 16-step drag on 10 km here: spawnsInfo builds the whole lap's path, so a change only marks the marks
   // stale and the next frame asks; while a sculpt drag is open (st.brush) they stay those of the track as the drag began, and the frame after the release asks, not the pointer-up
   const refresh = (st) => {
     if (st.history.present === forDoc && st.resolved === forResolved) return;
     forDoc = st.history.present; forResolved = st.resolved; stale = true;
   };
-  const restale = () => { if (!stale || shell.getState().brush) return; stale = false; items = marks(shell.spawnsInfo({ auto: true })); };   // D285: the automatic start too, so there is a line, a pack and a hotlap to grab (app/core/spawndrag.js)
+  const restale = () => { if (!stale || shell.getState().brush) return; stale = false; items = marks(shell.spawnsInfo({ auto: true })); };   // the automatic start too, so there is a line, a pack and a hotlap to grab (app/core/spawndrag.js)
   const unsub = shell.subscribe(refresh); refresh(shell.getState());
   const frame = () => {
     raf = win.requestAnimationFrame(frame);

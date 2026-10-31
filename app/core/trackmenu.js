@@ -1,9 +1,9 @@
-// trackmenu.js: THE TRACK MENU's items (D355, the user: the controls that were on the left move into drop-down menus along the top right, "the same
+// trackmenu.js: THE TRACK MENU's items (the user: the controls that were on the left move into drop-down menus along the top right, "the same
 // aesthetic as we have it now"). The menu bar (app/menubar/) renders what a menu module's items(ctx) returns (contract M: { label, run }, { label, checked,
 // toggle }, { label, panel: mountFn }, { section }, { separator }); this module is the Track side of it.
 //
 //   items(ctx)           the Track menu: Start & grid…, Pit lane…, Road surface ▸ (each a panel holding the same controls the left column held), then
-//                        Smooth ramps (D465: a command, the shell's smoothRamps, which says what it did in the status line), and Bank the lap (D473: a
+//                        Smooth ramps (a command, the shell's smoothRamps, which says what it did in the status line), and Bank the lap (a
 //                        command, the shell's bankLap, enabled on a closed lap only)
 //   developerItems(ctx)  File ▸ Developer: Open example… (the "Local example" section, a real track's fit and read from the user's own reads folder)
 //   ctx = { shell, document, window }   (el is optional: the bar may pass its own element maker; else the page's own is used)
@@ -68,7 +68,7 @@ function items(ctx) {
   ];
 }
 
-/** File ▸ Developer: the local example (a real track's D184 fit and its read; never in the program). */
+/** File ▸ Developer: the local example (a real track's fit and its read; never in the program). */
 function developerItems(ctx) {
   const c = page(ctx, 'developerItems'), { shell, el } = c;
   const field = (label, input) => el('label', { class: 'picker' }, el('span', { text: label }), input);

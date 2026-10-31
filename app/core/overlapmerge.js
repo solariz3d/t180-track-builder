@@ -1,12 +1,12 @@
-// overlapmerge.js: how the overlap check's TWO PARTS make one answer (D240 warm-worker follow-up). The check is two independent pieces of work on the same mesh: the mesh's own self-check with
+// overlapmerge.js: how the overlap check's TWO PARTS make one answer. The check is two independent pieces of work on the same mesh: the mesh's own self-check with
 // everything the validator reads from the path ("rest": about a third of the time), and the downforce-ray gap search on the built road ("rays": the rest). Two workers run them at once and this
 // puts their answers together. It is EXACT because src/validate/index.js hands its findings to ranges(), whose order is a total one (reason, s, u): "so the ranges do not depend on the order
 // findings were produced in". Pure, with no dependencies, so the page can load it without the geometry (the runner does) and the tests can compare it with the one-piece check.
-//   parts: rest = { red, amber, lap }   the validator's ranges with the folds and NO road mesh, the amber count and the lap proof's verdict (D331; the lap does not read the road mesh or the folds)
+//   parts: rest = { red, amber, lap }   the validator's ranges with the folds and NO road mesh, the amber count and the lap proof's verdict (the lap does not read the road mesh or the folds)
 //          rays = { red }          the 'downforce-ray-gap' ranges the validator finds with the road mesh and NO folds
 'use strict';
 
-// D432: 'stacked-within-2m' left this set when it stopped being red (src/validate/index.js reports it in info): two passes closer than 2 m that do not meet are not an overlap
+// 'stacked-within-2m' left this set when it stopped being red (src/validate/index.js reports it in info): two passes closer than 2 m that do not meet are not an overlap
 const OVERLAP = new Set(['self-intersection', 'downforce-ray-gap']);
 const uu = (x) => (x.u == null ? -Infinity : x.u);
 const order = (a, b) => (a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : a.s0 - b.s0 || uu(a) - uu(b));

@@ -1,4 +1,4 @@
-// zonegrab.js: SCULPT GRABS THE ROAD ITSELF (D519 Part 2, O's design exo_memory/handback/p-d519-design-O_2026-10-28.md §1 and §3). With the Grab tool, the place a press
+// zonegrab.js: SCULPT GRABS THE ROAD ITSELF. With the Grab tool, the place a press
 // lands across the road names the channel a drag changes, and the drag's direction picks between a zone's two (a lift, or out and in), the way a 3-D program's
 // vertex drag does. Never a re-route: no zone names kh, kv or length (Bend, Climb and Stretch stay on their keys). Pure, and tested (app/test/zonegrab.test.js):
 //   zoneAt(u, piece, mods)                 -> { zone, U, L, alt } | null   the zone at share u across the road, the channel a lift (U) and an out-and-in (L) drag change
@@ -6,7 +6,7 @@
 //   dotStations(stations, run, project, o) -> [s, ...]                    the stations of the dot rows on the selected run, thinned in metres and on screen
 //   glyphOf(zone, u, alt)                  -> { kind, place }              the glyph a zone shows on hover (app/core/handles.js's brush kinds) and where it stands across
 //   acrossAt(path, segments, m, u)         -> { pos, U, L } | null         a point on the road's own surface at share u across it, with its normal and outward direction
-// D520 (the user, 15:12: "the mouse click gives a singular point you then drag to sculpt the track simple as that"; plan_d520_sculpt_point_follows_the_mouse): Grab no longer
+// (the user, 15:12: "the mouse click gives a singular point you then drag to sculpt the track simple as that"): Grab no longer
 // locks an axis. The pressed point follows the pointer on the grab plane, and the road around it follows with the radius as the softness:
 //   planePoint(ray, at, forward)           -> [x, y, z] | null             where the pointer's ray meets the plane through the hit facing the camera
 //   frameAt(path, segments, s, u)          -> frame | null                 the road's frame and section at the press, what follow reads
@@ -15,7 +15,7 @@
 
 const { sealed, readAt, offsetAt, psiAt } = require('../../src/geom/profile.js');
 
-const CENTRE = 0.2;    // |u| under this is the centre (O's §1: keeps D425's cup glyph, at 0.3, in the cup zone; ±3.2 m of a 32 m road)
+const CENTRE = 0.2;    // |u| under this is the centre (keeps the cup glyph, at 0.3, in the cup zone; ±3.2 m of a 32 m road)
 const RIM = 0.9;       // |u| from here is the rim (the outer 1.6 m of a 32 m road, around Build's width mark at lat 1)
 const REACH = 1.25;    // |u| past the rim the pick still counts as the road (the pick's tolerance); beyond it, no zone
 const EDGE_ON_PX = 4;  // a lift axis shorter than this on screen, px per metre, is the road seen edge-on: the drag is out and in
@@ -109,14 +109,14 @@ function glyphOf(z, u, alt = false) {
   return { kind, place: kind === 'brush-width' || kind === 'brush-cup' ? {} : { sides: [u < 0 ? -1 : 1], lat: Math.abs(u) } };
 }
 
-// ── D520: THE GRABBED POINT FOLLOWS THE MOUSE ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── THE GRABBED POINT FOLLOWS THE MOUSE ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const UP_MIN = 0.05;     // the road's unrolled up must keep this much of world up (a pitch under ~87°): h is along world up, so past it a lift cannot reach the plane
 const SQUEEZE_MIN = 0.1; // a rim drag never takes the road under this share of its width (the point then lags rather than fold the road)
 
 /**
- * The grab plane (plan item 1): the plane through `at` facing the camera (`forward`, the camera's view direction, is its normal), `ray` = { origin, dir } the
+ * The grab plane: the plane through `at` facing the camera (`forward`, the camera's view direction, is its normal), `ray` = { origin, dir } the
  * pointer's ray in world (dir toward the scene). Returns the point where the ray meets it, or null when the ray runs along it or points away. A pointer that has
  * not moved lands on `at` exactly.
  */
@@ -150,16 +150,16 @@ function frameAt(path, segments, s, u) {
  * section's plane (R, U0), and:
  *   - within the centre band (|u| < HINGE_U: there is no side at the centreline) the section slides whole, l by the across and h by the up (h is along WORLD up, so
  *     h = the up / (U0 · world up));
- *   - D522 (the user, 15:39: "it should only affect one side of the track, which would be where the mouse is being clicked, not both sides"; plan_d522 decision 1):
+ *   - (the user, 15:39: "it should only affect one side of the track, which would be where the mouse is being clicked, not both sides"):
  *     anywhere else, the FAR rim stays where it is and the pressed point follows: the chord from the far rim to the point turns (phi) and stretches (w, the section
  *     scaled about the far rim), and the centre moves with it (l, h). So the side pressed moves most and the far half tilts less and less toward the far rim, which
- *     does not move. The section is the same shape at any width (its knots are shares of it), so this holds at any bank: O's catch, D519 §6, that l is
+ *     does not move. The section is the same shape at any width (its knots are shares of it), so this holds at any bank: l is
  *     world-horizontal and a banked road's rims are not, is why the hinge is solved through the bank and not as w += e, l += e/2. A point pulled toward the far rim
  *     keeps SQUEEZE_MIN of the chord along where it was, so the road never folds over (the chord turns under a quarter turn a drag).
- * `piece` is not read since D522 (D520's cup turn for a press partway out is replaced by the hinge); it is kept so callers need not change.
+ * `piece` is not read (cup turn for a press partway out is replaced by the hinge); it is kept so callers need not change.
  * Null when the road's up has no world-up part to lift with (pitched past ~87°).
  */
-const HINGE_U = 0.1;   // D522 (plan decision 1): |u| from here hinges about the far rim; under it the section slides whole
+const HINGE_U = 0.1;   // |u| from here hinges about the far rim; under it the section slides whole
 function follow(delta, frame, piece = {}) {
   if (!frame || !Array.isArray(delta) || delta.length !== 3 || !delta.every(Number.isFinite)) return null;
   const { T, R, U0, cos, sin, w, oP, oF } = frame, upY = U0[1];

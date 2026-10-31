@@ -1,9 +1,9 @@
-// labels.js: THE READOUT on the track (L130, pane C; the plan's Part 2, "C: the display"). A small label at every placed road
+// labels.js: THE READOUT on the track. A small label at every placed road
 // piece, in the view: its length and the CHANGE it makes in turn, climb and bank, the numbers of src/core/readout.js (A). The
 // user, 01:2x: "see the degrees of change when adjusting the banking, pitch, and roll and even turns"; "DISTANCE OF EACH PIECE
 // IN METERS SO YOU CAN SEE WITH THE DEGREE UI".
 //
-// ON HOVER ONLY (D242; the user, 23:46: "when there are lots of pieces, the tags take up a lot of space, it should be only when you hover over the pieces"): ONE
+// ON HOVER ONLY (the user, 23:46: "when there are lots of pieces, the tags take up a lot of space, it should be only when you hover over the pieces"): ONE
 // label for the piece under the pointer (the preview's 't180-pick', asked only when the pointer moves), plus the head's own piece, which is always labelled. No other
 // piece is labelled, so the layout's work is those one or two labels, not every piece every frame.
 //
@@ -13,8 +13,8 @@
 // - NEVER OVER THE BUILD HEAD: the head and its marker are kept clear; a label that would cover them is moved, and if it cannot
 //   be, it is not drawn. The head's own label, which is always drawn, keeps at least the head's point and 7 px clear.
 // - NEVER OVER EACH OTHER: labels are placed in priority order (the head's own piece first, then the nearest on screen) and a
-//   label with no clear place is left out (culled). The head's own piece's label is placed first and is NEVER culled (D187).
-// - FOR THE TESTS (E's seal): labels() returns what was DRAWN, [{ piece, text, rect: { x, y, w, h } }] in css px of the preview,
+//   label with no clear place is left out (culled). The head's own piece's label is placed first and is NEVER culled.
+// - FOR THE TESTS: labels() returns what was DRAWN, [{ piece, text, rect: { x, y, w, h } }] in css px of the preview,
 //   and the 't180:labels' event answers the same.
 //
 //   formatReadout(r)  -> { length, turn, climb, bank }: the strings, one decimal, the unit written, a sign on angles (0.0° bare)
@@ -24,7 +24,7 @@
 'use strict';
 
 const M = require('../camera/math.js');
-const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
+const { tokensOf } = require('../lib/tokens.js');   // the skin's colours (app/lib/tokens.js)
 
 const MINUS = '−';
 /** Round half away from zero at 0.01, with a guard for binary fractions (33.345 is 33.3449999… in binary). Two decimals since 2026-10-15 ("everything to 0.00"). */
@@ -40,7 +40,7 @@ const fmtM = (x) => (Number.isFinite(x) ? `${round2(x).toFixed(2)} m` : '—');
 function formatReadout(r) {
   return { length: fmtM(r.lengthM), turn: fmtDeg(r.turnDeg), climb: fmtDeg(r.climbDeg), bank: fmtDeg(r.bankToDeg - r.bankFromDeg) };
 }
-// D261: a piece whose grip is not 100% says so ("· grip 85%"), and while the grip view is on every piece does
+// a piece whose grip is not 100% says so ("· grip 85%"), and while the grip view is on every piece does
 const labelText = (r, gripView = false) => { const f = formatReadout(r), g = Number.isFinite(r.gripPct) && (r.gripPct !== 100 || gripView) ? ` · grip ${r.gripPct}%` : ''; return [f.length, `turn ${f.turn} · climb ${f.climb} · bank ${f.bank}${g}`]; };
 
 const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -50,8 +50,8 @@ const hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && 
  * above its anchor, then below, then to the sides, then farther out; the first place that is inside the view, clear of the head's
  * keep-out square and clear of every label already placed is taken. A label with none is culled, EXCEPT the head's own (an item
  * with `head: true`), which is never culled (headPlace). Returns { drawn, culled }.
- * D409: `view.panels` = [{ x, y, w, h }], the page's panels over the view (the top readout, the camera and grid bars; mount reads
- * them): a label is never placed under one (E's D405 shot check: the head's box sat 10,944 px² under the grid bar, only "100.00" showing).
+ * `view.panels` = [{ x, y, w, h }], the page's panels over the view (the top readout, the camera and grid bars; mount reads
+ * them): a label is never placed under one (a screenshot once had the head's box 10,944 px² under the grid bar, only "100.00" showing).
  */
 const OFFSETS = [[0, -1], [0, 1], [1, 0], [-1, 0], [1, -1], [-1, -1], [1, 1], [-1, 1]];
 function layout(items, view) {
@@ -74,7 +74,7 @@ function layout(items, view) {
       }
       if (placed) break;
     }
-    // THE HEAD'S OWN LABEL IS NEVER CULLED (E's M5 (d); B's score, D187: missing in 6 of 15 states). It is placed first, so the
+    // THE HEAD'S OWN LABEL IS NEVER CULLED (it was once missing in 6 of 15 states). It is placed first, so the
     // others make way for it, never the reverse; and when no ring fits, headPlace looks for a place anywhere in the view.
     if (!placed && it.head) placed = headPlace(it, view, keep);
     if (placed) drawn.push({ piece: it.piece, text: it.text, rect: placed }); else culled.push(it.piece);
@@ -84,7 +84,7 @@ function layout(items, view) {
 /**
  * A place for the head's own label when no ring around its anchor fits: every place in the view on an 8 px grid (and flush with
  * its far edges), nearest the anchor first, clear of the head's keep-out; failing that, clear of only the head itself (its point
- * and 7 px: E's M4 needs 6); and last, pulled inside the view. It always returns a place.
+ * and 7 px: the legibility check needs 6); and last, pulled inside the view. It always returns a place.
  */
 function headPlace(it, view, keep) {
   const W = view.width, H = view.height, w = it.w, h = it.h, spots = [];
@@ -97,7 +97,7 @@ function headPlace(it, view, keep) {
   const d2 = (s) => (s.x + w / 2 - it.x) ** 2 + (s.y + h / 2 - it.y) ** 2;
   spots.sort((a, b) => d2(a) - d2(b));
   const core = view.head ? { x: view.head.x - 7, y: view.head.y - 7, w: 14, h: 14 } : null;
-  // D409: with panels over the view (view.panels), a first pass also keeps clear of them; a view the panels leave no room in falls back to the pass without
+  // with panels over the view (view.panels), a first pass also keeps clear of them; a view the panels leave no room in falls back to the pass without
   const panels = Array.isArray(view.panels) ? view.panels : [];
   for (const strict of panels.length ? [true, false] : [false]) {
     for (const avoid of [keep, core]) for (const s of spots) { const r = { x: s.x, y: s.y, w, h }; if ((!avoid || !hits(r, avoid)) && !(strict && panels.some((p) => hits(r, p)))) return r; }
@@ -108,7 +108,7 @@ function headPlace(it, view, keep) {
 /**
  * Where each road piece's label may be anchored: the piece's stations, the one nearest its MIDDLE first, then outward (at most 40,
  * spread evenly along the piece). The label takes the first that is on screen, so when the middle is behind the camera or out of
- * view (the build view looks ahead from 15 m behind the head) it slides to the part of the piece that is in view (L130: the head's
+ * view (the build view looks ahead from 15 m behind the head) it slides to the part of the piece that is in view (the head's
  * own piece drew no label in the build view).
  */
 function anchorsOf(track) {
@@ -126,10 +126,10 @@ function anchorsOf(track) {
   return out;
 }
 
-// D428 (P's review item 6): ONE PICK PER POINTER POSITION for the page. The labels and Sculpt's hover (app/core/panel.js) both want the road under the pointer, and each sent its own
+// ONE PICK PER POINTER POSITION for the page. The labels and Sculpt's hover (app/core/panel.js) both want the road under the pointer, and each sent its own
 // 't180-pick', which projects every station of the track (5,001 on 10 km): two full projections a move. Both ask here; the first to ask for a position picks, the other reads it.
 // Keyed by the pointer EVENT the position came from, so a new move picks again whatever its position, as the labels' own pick always did; and by the TRACK it was picked on (its segments,
-// which are new whenever the road changes), so a still pointer over a new track picks again (D242's rule, which the event key alone broke: sculpt-subscribers row 4, found at local-0.4.14)
+// which are new whenever the road changes), so a still pointer over a new track picks again (rule, which the event key alone broke: sculpt-subscribers row 4, found at local-0.4.14)
 const lastPick = new WeakMap();
 /** The preview's pick at stage px (x, y) of the pointer event key on the track whose segments are gen, asked once per event and track per page: { s, ... } or null. */
 function sharedPick(doc, win, x, y, key, gen) {
@@ -147,15 +147,15 @@ function pieceAt(segments, s) {
 }
 
 function mount(stage, shell, win) {
-  const T = tokensOf(win);   // D381: the box's colours are the skin's; its background stays opaque whatever a skin writes (solid), for the M5 score
+  const T = tokensOf(win);   // the box's colours are the skin's; its background stays opaque whatever a skin writes (solid), so the text reads on any skin
   const doc = stage.ownerDocument, layer = doc.createElement('div');
   layer.setAttribute('aria-label', 'piece readouts');
   layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden';
   stage.append(layer);
   const ask = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
-  // D409: the page's panels over the view, in css px of the stage and 6 px wider each way: the top readout (app/core/valuesoverlay.js) and the camera and
+  // the page's panels over the view, in css px of the stage and 6 px wider each way: the top readout (app/core/valuesoverlay.js) and the camera and
   // grid bars (app/camera/index.js, in #camera beside the stage). None on a page without them. They show, hide and resize, so they are read again, but at
-  // most every 200 ms: reading boxes forces a layout, and a drag redraws every frame (D404's frame budget)
+  // most every 200 ms: reading boxes forces a layout, and a drag redraws every frame (the drag's frame budget)
   const PANELS = '[aria-label="piece values"], #camera [role="toolbar"]';
   let panelsAt = -Infinity, panelsNow = [];
   const panelsOf = () => {
@@ -177,7 +177,7 @@ function mount(stage, shell, win) {
   // setAvoid(fn) hands the layout a reader of their screen points and words boxes (css px of the stage), each kept clear as a panel is: a point 10 px round it, a box 6 px
   let avoidOf = null;
   const avoided = () => { if (!avoidOf) return []; const pts = avoidOf(); return Array.isArray(pts) ? pts.filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)).map((p) => (Number.isFinite(p.w) && Number.isFinite(p.h) ? { x: p.x - 6, y: p.y - 6, w: p.w + 12, h: p.h + 12 } : { x: p.x - 10, y: p.y - 10, w: 20, h: 20 })) : []; };
-  // D242: the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
+  // the pointer over the preview (css px of the stage), and the piece under it (asked of the preview only when the pointer has moved)
   let pointer = null, pickedFor = null, hoverId = null;
   const onPointer = (e) => { const r = stage.getBoundingClientRect ? stage.getBoundingClientRect() : { left: 0, top: 0 }; pointer = { x: e.clientX - r.left, y: e.clientY - r.top, e }; };   // (e: the event, the key of the shared pick)
   const onLeave = () => { pointer = null; };
@@ -187,8 +187,8 @@ function mount(stage, shell, win) {
     if (!pool[i]) {
       const e = doc.createElement('div');
       // the length 18 px semibold and the rest 12 px light, white on an OPAQUE near-black: the length's ink is ≥ 11 device px tall and its contrast far above 4.5 : 1 over any road
-      // (E's M5). Measured by pixels, everything in the box that is not background counts as ink, so the box holds ONLY its
-      // background and its text (B's score, D187: a border, rounded corners the road showed through, and a background the road
+      // (the legibility check). Measured by pixels, everything in the box that is not background counts as ink, so the box holds ONLY its
+      // background and its text (a measure once found a border, rounded corners the road showed through, and a background the road
       // bled into put grey "ink" in the box and dragged the median below 4.5 : 1). The 2 px ring of the same colour outside the
       // box keeps the road off the box's own edge pixels.
       const bg = T.solid('--ink', '#0b0d11');
@@ -198,7 +198,7 @@ function mount(stage, shell, win) {
     }
     return pool[i];
   };
-  // D381: a skin change recolours the boxes already made (the pool keeps them for the session)
+  // a skin change recolours the boxes already made (the pool keeps them for the session)
   const unskin = T.onChange(() => {
     const bg = T.solid('--ink', '#0b0d11'), fg = T.solid('--on-ink-strong', '#ffffff');
     for (const e of pool) if (e) { e.style.color = fg; e.style.background = bg; e.style.boxShadow = `0 0 0 2px ${bg}`; }
@@ -212,16 +212,16 @@ function mount(stage, shell, win) {
 
   function frame() {
     raf = win.requestAnimationFrame(frame);
-    // the preview's mount clears #preview AFTER the panel mounted this layer (found in the real window, L130): put it back
+    // the preview's mount clears #preview AFTER the panel mounted this layer (found in the real window): put it back
     if (!layer.isConnected) stage.append(layer);
     const view = on ? ask('t180:view') : null, track = on ? ask('t180:track-request') : null, st = shell.getState();
     const W = stage.clientWidth, H = stage.clientHeight;
     let placed = { drawn: [], culled: [] };
     if (view && view.pose && track && track.path && W > 0 && H > 0) {
       // keyed by the SEGMENTS, which are a new array on every change: the preview extends its path object IN PLACE, so keyed by
-      // the path the anchors stayed the first piece's forever (found in the real window, L130: 1 label for 5 pieces)
-      if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; pickedFor = undefined; }   // D242: a new track: the piece under a still pointer is asked again
-      // D421 part 5 (C's profile, p-d421-freeze-C_2026-10-20.md §5: 485 ms of a 16-step drag on 10 km): while a sculpt drag is open (st.brush) the labels keep the readouts of the track as
+      // the path the anchors stayed the first piece's forever (found in the real window: 1 label for 5 pieces)
+      if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; pickedFor = undefined; }   // a new track: the piece under a still pointer is asked again
+      // A profile once found 485 ms of a 16-step drag on 10 km here: while a sculpt drag is open (st.brush) the labels keep the readouts of the track as
       // the drag began (the strip shows the value being dragged); the first frame after the release reads the let-go track
       const reads = st.brush && heldReads ? heldReads : (heldReads = shell.pieceReadouts ? shell.pieceReadouts() : []), VP = M.viewProj(view.pose, W / H);
       const toScreen = (p) => { const c = M.apply(VP, p); return c[3] > 0 ? { x: (c[0] / c[3] * 0.5 + 0.5) * W, y: (1 - (c[1] / c[3] * 0.5 + 0.5)) * H, z: c[2] / c[3] } : null; };
@@ -233,23 +233,23 @@ function mount(stage, shell, win) {
           const e = view.pose.eye, d = Math.hypot(e[0] - view.head.pos[0], e[1] - view.head.pos[1], e[2] - view.head.pos[2]), size = Math.max(3, 0.02 * d);
           const off = toScreen([view.head.pos[0], view.head.pos[1] + size, view.head.pos[2]]), rPx = off ? Math.hypot(off.x - hp.x, off.y - hp.y) : 0;
           // capped at a fifth of the view: at the nearest zoom the marker fills the screen, and an uncapped keep-out left the head's
-          // own label nowhere to go (L130's capture at zoom 0.05); the head's centre stays clear either way
+          // own label nowhere to go (a capture at zoom 0.05); the head's centre stays clear either way
           head = { x: hp.x, y: hp.y, r: Math.min(Math.max(24, rPx + 8), 0.2 * Math.min(W, H)) };
         }
       }
       const headId = st.history.present.pieces.length ? st.history.present.pieces[st.history.present.pieces.length - 1].id : null;
-      // D429: not while a sculpt drag is open: each step's new segments reset pickedFor, and the pick scans the whole path (64-141 ms a drag on 10 km); the hover stays as the drag began
+      // not while a sculpt drag is open: each step's new segments reset pickedFor, and the pick scans the whole path (64-141 ms a drag on 10 km); the hover stays as the drag began
       if (pointer !== pickedFor && !st.brush) { pickedFor = pointer; hoverId = null; if (pointer) { const hit = sharedPick(doc, win, pointer.x, pointer.y, pointer.e, track.segments); hoverId = hit && Number.isFinite(hit.s) ? pieceAt(track.segments, hit.s) : null; } }
       const items = [];
       reads.forEach((r) => {
         if (!r || r.type !== 'road') return;                      // a flight has no label
-        if (r.id !== headId && r.id !== hoverId) return;           // D242: on hover only (and the head's own piece)
+        if (r.id !== headId && r.id !== hoverId) return;           // on hover only (and the head's own piece)
         const cands = anchors.get(r.id); if (!cands) return;
         // the first candidate (the middle, then outward) that lands in view, in front of the camera and before the far plane
         let p = null;
         for (const a of cands) { const q = toScreen(a); if (q && q.z <= 1 && q.x >= 0 && q.y >= 0 && q.x <= W && q.y <= H) { p = q; break; } }
         const isHead = r.id === headId;
-        // the head's own piece is labelled even when none of it is on screen (E's M5 (d)): pinned at the edge nearest the head, or
+        // the head's own piece is labelled even when none of it is on screen: pinned at the edge nearest the head, or
         // in the top-left corner when the head is behind the camera
         if (!p && isHead) p = hp ? { x: Math.max(0, Math.min(W, hp.x)), y: Math.max(0, Math.min(H, hp.y)) } : { x: 0, y: 0 };
         if (!p) return;

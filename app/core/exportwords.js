@@ -1,4 +1,4 @@
-// exportwords.js: the export's warnings in the user's words, for the message the app shows (D464; D463 part 2 item 6, E's D461 report §2 item 6).
+// exportwords.js: the export's warnings in the user's words, for the message the app shows.
 //
 //   exportWarningWords(w)     -> the warning as a person can act on it, or null when it is the builders' note only
 //   exportWarningsWords(ws)   -> the list as shown: each in words, the builders' notes left out

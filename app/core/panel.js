@@ -1,54 +1,54 @@
-// panel.js: the EQUATION CORE's controls (D186, pane C), in the left column where the piece builder's palette is. DOM only; every
+// panel.js: the EQUATION CORE's controls, in the left column where the piece builder's palette is. DOM only; every
 // action is the core shell's (app/core/coreshell.js), every number it shows is the shell's state.
 //
 //   EXTEND at the build head: keep going (no handle), or turn / climb / bank / cup / width targets over a length. Hovering the button
 //          shows the ghost (the preview's 't180-ghost' candidate), so what a click adds is seen before it is added.
-//   SCULPT on the preview (D421 part 3; the brush, D186, became its tools): in Sculpt mode (Build ▸ Sculpt mode, or Tab) a drag on the track is the tool
+//   SCULPT on the preview (the brush, became its tools): in Sculpt mode (Build ▸ Sculpt mode, or Tab) a drag on the track is the tool
 //          picked in the Sculpt strip (Grab, Stretch, Bend, Climb, Twist, Width, Cup, Edge, Smooth; Wall rise and Tube sweep under "more ▾"). The pick is the
 //          preview's ('t180-pick'); the drag's distance is the change at the brush's centre; one drag is one undo step; the wheel or [ ] change the radius.
 //   CLOSE as one click.
-//   THE READOUT (L130): beside Extend's fields, the piece they describe, BEFORE it is placed: its length and the change it makes
-//          in turn, climb and bank (A's src/core/readout.js, candidateReadout), redrawn inside every field's input handler; and on
+//   THE READOUT: beside Extend's fields, the piece they describe, BEFORE it is placed: its length and the change it makes
+//          in turn, climb and bank (src/core/readout.js, candidateReadout), redrawn inside every field's input handler; and on
 //          the track, a label at every placed piece with the same numbers (app/core/labels.js). The strings are the same function's
 //          (labels.js formatReadout), so what the ghost promised is what the placed piece's label says.
-//   OPEN A LOCAL EXAMPLE: a real track's D184 fit and its read, picked from the user's own reads/ folder (never in the program).
+//   OPEN A LOCAL EXAMPLE: a real track's fit and its read, picked from the user's own reads/ folder (never in the program).
 'use strict';
 
 const LB = require('./labels.js');
 const { menuPick } = require('./menupick.js');   // the grid step's choice, which sits in Build ▸ Turn to grid…, drawn by the page: a native select's pop-up showed the menu behind it
-const XS = require('./xsec.js');   // the cross-section channels (D225): edge angle, edge start, tube sweep
-const PU = require('./piecesui.js');   // D240: saved pieces: select on the track, Save as piece, the library, a previewed middle delete
-const HD = require('./handles.js');   // D244: the drag handles on the Extend ghost, and (Sculpt, D244b) on a placed piece
+const XS = require('./xsec.js');   // the cross-section channels: edge angle, edge start, tube sweep
+const PU = require('./piecesui.js');   // saved pieces: select on the track, Save as piece, the library, a previewed middle delete
+const HD = require('./handles.js');   // the drag handles on the Extend ghost, and (Sculpt) on a placed piece
 const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
 const LD = require('./landing.js');
-const GL = require('./griplike.js');   // D261: the grip field's checks and words, the "grip like…" entries
-const GR = require('./griplayer.js');   // D261: the track coloured by grip
-// (the start line, the grid pack and the hotlap, placed by hand, and the pit lane: app/core/spawnsui.js and pitui.js, mounted by the Track menu since D355)
+const GL = require('./griplike.js');   // the grip field's checks and words, the "grip like…" entries
+const GR = require('./griplayer.js');   // the track coloured by grip
+// (the start line, the grid pack and the hotlap, placed by hand, and the pit lane: app/core/spawnsui.js and pitui.js, mounted by the Track menu)
 const SPL = require('./spawnslayer.js');  // the hand-placed start, drawn on the preview
 const SPD = require('./spawndrag.js');
-const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // D285: and dragged there
-const VO = require('./valuesoverlay.js');   // D267: the values of the piece being edited, large over the 3D view   // D258: the free jump's landing: where its handles are, and its number boxes
-const FL = require('./flightlayer.js');   // D258: the flights drawn as a dashed line across the air
-const ZG = require('./zonegrab.js');   // D519 Part 2: Sculpt grabs the road itself (the zone at the press, the drag's axis, the dot rows)
-const SL = require('./selectionlayer.js');   // D425 part 4: pieceSpan, the piece under a station (Stretch's glyph stands at its far joint)
+const GT = require('../../src/core/gridturn.js');   // 2026-10-12: Turn to grid, and the end heading line    // and dragged there
+const VO = require('./valuesoverlay.js');   // the values of the piece being edited, large over the 3D view   // the free jump's landing: where its handles are, and its number boxes
+const FL = require('./flightlayer.js');   // the flights drawn as a dashed line across the air
+const ZG = require('./zonegrab.js');   // Sculpt grabs the road itself (the zone at the press, the drag's axis, the dot rows)
+const SL = require('./selectionlayer.js');   // pieceSpan, the piece under a station (Stretch's glyph stands at its far joint)
 
 // the change per pixel of vertical drag, in each brush channel's unit (up = more)
-// (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150: D190, E's seal row 7)
-// (D421 part 3: length is Stretch's, metres of piece a pixel; smooth is Smooth's strength a pixel)
+// (c, the CUP, is the cross-section's edge angle in DEGREES, 0–150)
+// (part 3: length is Stretch's, metres of piece a pixel; smooth is Smooth's strength a pixel)
 const PER_PX = Object.freeze({ kh: 2e-5, kv: 2e-5, phi: 0.002, w: 0.05, r: 0.02, c: 0.2, e: 0.2, er: 0.2, s: 0.002, t: 0.5, height: 0.03, lateral: 0.03, length: 0.5, smooth: 0.004 });
-// D425 part 4: one name per channel, read from handles.js BRUSH_CHANNELS, which the glyph on the road reads too (so the road and the strip say the same word)
+// one name per channel, read from handles.js BRUSH_CHANNELS, which the glyph on the road reads too (so the road and the strip say the same word)
 const CHANNEL_NAMES = Object.freeze(Object.fromEntries(Object.entries(HD.BRUSH_CHANNELS).map(([c, x]) => [c, x.label])));
 const DEG = Math.PI / 180;
 
 /**
  * The extend options the controls describe (pure: tested headless). Empty fields continue the channel. On an EMPTY track (`empty`) the
  * typed values are also the first piece's START (`first`, src/core/extend.js), so the whole first piece is what was typed from s = 0; without
- * it every channel started at its default and ramped (D194a, the user: "would alway make a bottle neck of width at the start of the track").
+ * it every channel started at its default and ramped (the user: "would alway make a bottle neck of width at the start of the track").
  * An untyped field is in neither, so that channel keeps its default start.
  */
-// AT THE START (D194b): a ticked field's target is reached within AT_START_M, one knot span (src/core/document.js KNOT_M; the piece's length
+// AT THE START: a ticked field's target is reached within AT_START_M, one knot span (src/core/document.js KNOT_M; the piece's length
 // if that is shorter: the core needs a transition no longer than the piece), then held for the rest of the piece. Unticked, it blends over
-// the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres (A's D194b contract).
+// the whole piece as before. The core takes `transition` as a number OR a per-channel map in metres.
 const AT_START_M = 20;
 // The CROSS-SECTION at the start (the user, 2026-10-29, a 20° bank at start over 20 m: "keep what it does, but make the transition a lot more smoother gradient"): a
 // ticked bank, cup or edge comes in no faster than the checker's own roll amber (src/validate/index.js ROLL_AMBER_DEG_M, read at a 20 m chord), so its ramp is
@@ -88,7 +88,7 @@ function crossStartM(from, to, length, spread = SWELL_SPREAD, bends = false) {
   return Math.min(Math.ceil(want * 10 - 1e-9) / 10, cap);
 }
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
-// THE TURN AS A CORNER (D331 B; the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). turnAs 'corner' (the
+// THE TURN AS A CORNER (B; the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). turnAs 'corner' (the
 // panel's default) reads the turn field as the piece's exact heading change in degrees, ending straight: `turnDeg`, which src/core/turnby.js extendCorner places
 // with Turn by's symmetric ease (so it has no "at start" ramp of its own). A typed 0 still eases to a rate of 0, because a "corner of 0°" after a road still
 // turning would bend back the other way. turnAs 'rate' (and this function's default, for its other callers) is the old meaning: degrees per 100 m, a target rate.
@@ -103,27 +103,27 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
   if (t !== null && !corner) targets.kh = t * DEG / 100;          // degrees of heading per 100 m
   if (c !== null && !climbCorner) targets.kv = c * DEG / 100;          // degrees of pitch per 100 m
   // degrees of bank, + = left side up. NOT wrapped to ±180: 360 is a full turn of roll, -540 one and a half the other way (the spiral,
-  // E's seal S1: the core's φ channel winds continuously, and a wrap here would turn a 360° spiral into no roll at all)
+  // the core's φ channel winds continuously, and a wrap here would turn a 360° spiral into no roll at all)
   if (b !== null) targets.phi = b * DEG;
   if (w !== null) targets.w = w;                        // m
-  // the CUP (D190): the channel c holds DEGREES, so the typed value goes in as it is. It is NOT clamped here: the core's guard
-  // binds the DOCUMENT to [0, 150] and refuses by name (E's seal row 2 and V5), and a clamp here would hide that guard
+  // the CUP: the channel c holds DEGREES, so the typed value goes in as it is. It is NOT clamped here: the core's guard
+  // binds the DOCUMENT to [0, 150] and refuses by name, and a clamp here would hide that guard
   if (k !== null) targets.c = k;
-  // THE CROSS-SECTION (D225, E's seal; names in xsec.js). Like the cup, NOT clamped: the core's guards bind the document and refuse by name
+  // THE CROSS-SECTION. Like the cup, NOT clamped: the core's guards bind the document and refuse by name
   // (E2: e ≥ 0 and the total ≤ 150; V4: s in [0.5, 0.95]; T1: the sweep in [0, 360] and the held slot near 360; T3: an open tube's
   // t/2 + e ≤ 180), and a clamp here would hide them (E2's plant KE2-2). The edge angle and the sweep are DEGREES, as c is; the start a share.
   const e = num(edge), sl = num(start), tb = num(tube);
   if (e !== null) targets[XS.CHANNEL.edge] = e;
-  const er = num(edgeR); if (er !== null) targets.er = er;   // the RIGHT edge (2026-10-12): blank follows the edge angle, so a typed one splits the sides (src/core/extend.js); the panel's opts sends it with a left typed alone (D385)
+  const er = num(edgeR); if (er !== null) targets.er = er;   // the RIGHT edge (2026-10-12): blank follows the edge angle, so a typed one splits the sides (src/core/extend.js); the panel's opts sends it with a left typed alone
   if (sl !== null) targets[XS.CHANNEL.start] = sl;
   if (tb !== null) targets[XS.CHANNEL.tube] = tb;
   const out = { length: Number(length), targets };
-  if (b !== null) out.bankShape = 'rounded';   // D521: the bank Extend lays starts banking at the joint (src/core/extend.js roundedLinear); Close and Finish keep theirs
+  if (b !== null) out.bankShape = 'rounded';   // the bank Extend lays starts banking at the joint (src/core/extend.js roundedLinear); Close and Finish keep theirs
   // a bank, cup or edge at start is candidate F (crossStartM, startShapeOf): set below, with its ramp
   if (corner) out.turnDeg = t;
-  if (climbCorner) out.climbDeg = c;   // D331, the climb too (plan :387-399): the exact pitch change, ending at a climb rate of 0
-  if (num(grip) !== null) out.grip = num(grip);   // D261: a grip typed in the field (blank: the new piece keeps the last road's); the core refuses a value that is not a whole percent 50 to 150
-  // only a field WITH a target can be "at the start" (an untouched field has none, D193); none ticked: no `transition`, exactly as before
+  if (climbCorner) out.climbDeg = c;   // the climb too (plan :387-399): the exact pitch change, ending at a climb rate of 0
+  if (num(grip) !== null) out.grip = num(grip);   // a grip typed in the field (blank: the new piece keeps the last road's); the core refuses a value that is not a whole percent 50 to 150
+  // only a field WITH a target can be "at the start" (an untouched field has none); none ticked: no `transition`, exactly as before
   const transition = {};
   const fromDeg = (ch) => { const v = head && Number.isFinite(head[ch]) ? head[ch] : 0; return ch === 'phi' ? v / DEG : v; };
   for (const [f, ch] of Object.entries(FIELD_CHANNEL)) if (atStart[f] && targets[ch] !== undefined) {
@@ -133,15 +133,15 @@ function extendOptions({ length, turn, climb, bank, width, cup, edge, edgeR, sta
     else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);
   }
   if (Object.keys(transition).length) out.transition = transition;
-  if (empty && Object.keys(targets).length) out.first = { ...targets };   // D194a: on an empty track the typed values are the first piece's start
+  if (empty && Object.keys(targets).length) out.first = { ...targets };   // on an empty track the typed values are the first piece's start
   return out;
 }
 /** A cup angle as the readout shows it: the bank cell's rounding (one decimal, half away from zero), no sign on a depth. */
 const fmtCup = (x) => LB.fmtDeg(x).replace(/^\+/, '');
-/** An edge start as the readout shows it: a share, two decimals, half away from zero (one decimal would read C's 0.64 as 0.6). */
+/** An edge start as the readout shows it: a share, two decimals, half away from zero (one decimal would read the crease's 0.64 as 0.6). */
 const fmtShare = (x) => (Math.round(Math.abs(x) * 100 + 1e-7) / 100 * Math.sign(x) || 0).toFixed(2);
 /**
- * D331: the corner cell. "+90.00° · ends turning at +171.37°/100 m · turn 0 at start adds +9.64°": the turn since the road was last straight, then whether
+ * the corner cell. "+90.00° · ends turning at +171.37°/100 m · turn 0 at start adds +9.64°": the turn since the road was last straight, then whether
  * this piece ends turning (and at what rate), then what easing it out would add (src/core/readout.js corner, cornerNext). "none (straight)" when the
  * piece is in no corner; — when the core does not report one.
  */
@@ -155,7 +155,7 @@ function fmtCorner(r, n) {
   else if (n) parts.push('the corner goes on');
   return parts.join(' · ');
 }
-/** D331, the climb too: the climb corner's cell, "+12.00° · ends climbing at +1.72°/100 m" or "… · ends at a steady pitch", or "none (steady pitch)". */
+/** the climb too: the climb corner's cell, "+12.00° · ends climbing at +1.72°/100 m" or "… · ends at a steady pitch", or "none (steady pitch)". */
 function fmtClimbCorner(r) {
   if (!('climbCorner' in r)) return '—';
   if (!r.climbCorner) return 'none (steady pitch)';
@@ -165,8 +165,8 @@ function fmtClimbCorner(r) {
 /** "from → to" for a pair of readout values, or — when the core does not report them (a core without the channel) */
 const pairOf = (r, [from, to], fmt) => (Number.isFinite(r[from]) && Number.isFinite(r[to]) ? `${fmt(r[from])} → ${fmt(r[to])}` : '—');
 
-// THE SETTINGS (D355, contract S: app/settings.js, pane B's: get(key, fallback), set(key, value), on(key, fn)). The panel starts its switches from S and follows S.on; the
-// Settings and View menus are where they are changed now, so the panel's own (held) copies of those switches never write S back; the two writes it does make (D356)
+// THE SETTINGS (app/settings.js: get(key, fallback), set(key, value), on(key, fn)). The panel starts its switches from S and follows S.on; the
+// Settings and View menus are where they are changed now, so the panel's own (held) copies of those switches never write S back; the two writes it does make
 // are the grid step picked in Build ▸ Turn to grid… and the turn-and-climb mode an Undo gives back. Until app/settings.js is in this tree
 // the settings hold for the session only, which is what S itself does on a blocked store.
 function sessionSettings() {
@@ -184,7 +184,7 @@ function mount(root, shell, mountOpts = {}) {
   const doc = root.ownerDocument, win = doc.defaultView;
   const el = (tag, attrs = {}, ...kids) => { const e = doc.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; };
   const field = (label, input) => el('label', { class: 'picker' }, el('span', { text: label }), input);
-  // a channel field with its "at start" box after the input (D194b); the input stays the label's second child
+  // a channel field with its "at start" box after the input; the input stays the label's second child
   // the at-start box sits at the END of its field's row, "start" in the muted colour, the whole sentence in its tooltip; `extra` (width like…, grip like…) goes between
   // the input and the box, a small ▾ picker on the same row. The input stays the label's second child
   const fieldAt = (label, input, k, extra = null) => el('label', { class: 'picker inline' }, typeof label === 'string' ? el('span', { text: label }) : label, input, ...(extra ? [extra] : []),
@@ -197,36 +197,36 @@ function mount(root, shell, mountOpts = {}) {
   const len = num(100, 10, 'metres added'), turn = num('', 1, 'degrees of heading per 100 m, + = left. Shows the turn at the head; left as shown, the track keeps turning as now'),
     climb = num('', 1, 'degrees of pitch per 100 m, + = up. Shows the climb at the head; left as shown, the track keeps climbing as now'), bank = num('', 1, 'degrees of bank, + = left side up. Shows the bank at the head; left as shown, it keeps it'),
     width = num('', 1, 'road width in m. Shows the width at the head; left as shown, it keeps it');
-  // the CUP (D190): how deep the road's cross-section is, as its edge angle — 0 flat, ~15 today's bowl, ~31 today's half-pipe,
+  // the CUP: how deep the road's cross-section is, as its edge angle — 0 flat, ~15 today's bowl, ~31 today's half-pipe,
   // 90 vertical walls, 150 a partial tube. Independent of bank: bank still rolls the whole section
   const cup = el('input', { type: 'number', value: '', step: '1', min: '0', max: '150', title: 'cup: the edge angle of the cross-section in degrees, 0 (flat) to 150; 90 = vertical walls. Bank still rolls the whole section. Shows the cup at the head; left as shown, it keeps it' });
-  // THE FIELDS SHOW THE HEAD (D193, the user: "show the original value the first piece starts as instead of it being blank"). Each
+  // THE FIELDS SHOW THE HEAD (the user: "show the original value the first piece starts as instead of it being blank"). Each
   // channel field shows the head's END state in its own units (the first piece's start on an empty track), refreshed whenever the
   // document changes (Extend, Undo, Redo, open, a brush). A field whose text is exactly what was shown sends NO target, the same as a
   // blank did: the core CONTINUES a channel (value + slope, src/core/extend.js), and a target equal to the value is not that — it
   // bends a channel that was still changing, and any cup target turns a legacy piece into a cup piece. Only a changed value is a target.
-  // THE CROSS-SECTION (D225): the edge curve (an extra angle on the outer band, from the edge start out; 0 = off) and the tube (the sweep of
+  // THE CROSS-SECTION: the edge curve (an extra angle on the outer band, from the edge start out; 0 = off) and the tube (the sweep of
   // a circular section, 360 = a closed pipe). The bank field above takes any number of degrees, 360 included (the spiral): it has no min or max
-  // D385 (the user, 2026-10-18: "there is the right edge but not the left edge tweak"): the LEFT and the RIGHT edge, each its own side. Each shows its side at the
+  // (the user, 2026-10-18: "there is the right edge but not the left edge tweak"): the LEFT and the RIGHT edge, each its own side. Each shows its side at the
   // head; typing one changes only that side (opts below sends the other side's head value with it, since the core sets both from e alone: src/core/extend.js :83-86)
-  // D406: no min on the two edges, since an edge may be below 0 (it turns down); the floor depends on the profile under it (src/core/document.js EDGE_FLOOR),
+  // no min on the two edges, since an edge may be below 0 (it turns down); the floor depends on the profile under it (src/core/document.js EDGE_FLOOR),
   // so the core refuses a value past it by name
   const edge = el('input', { type: 'number', value: '', step: '1', title: 'left edge: how many degrees MORE the LEFT side\'s very edge tilts than the plain profile would, rising smoothly from the edge start out; 0 = off; below 0 it turns DOWN, toward flat and up to 30° past it. Bank still rolls the whole section. Shows the left edge at the head; left as shown, it keeps it; typed, only the left side changes' }),
     // the user, 2026-10-12: bank the outside of a turn harder and turn the inside down, so the inside line is not banked
     edgeR = el('input', { type: 'number', value: '', step: '1', title: 'right edge: how many degrees MORE the RIGHT side\'s very edge tilts than the plain profile would, like the left edge (below 0 it turns down). Shows the right edge at the head; left as shown, it keeps it; typed, only the right side changes. For a right turn: a big left edge (the outside) and a small right edge (the inside), so the inside line is not banked' }),
     start = el('input', { type: 'number', value: '', step: '0.01', min: '0.5', max: '0.95', title: 'edge start: where the edge curve begins, as a share of the half-width from the centre (0.64 = the outer 36% each side curves more; 0.5 to 0.95). Shows it at the head; left as shown, it keeps it' }),
     tube = el('input', { type: 'number', value: '', step: '1', min: '0', max: '360', title: 'tube sweep: the cross-section as an arc of this many degrees, 0 (none) to 360 (a closed pipe). Shows the sweep at the head; left as shown, it keeps it' });
-  // (D385: the right edge is the shell's er; a shell without it, the right follows the left, as the core makes it)
+  // (the right edge is the shell's er; a shell without it, the right follows the left, as the core makes it)
   const HEAD = { turn: [turn, (h) => h.kh * 100 / DEG], climb: [climb, (h) => h.kv * 100 / DEG], bank: [bank, (h) => HD.wrapTurn(h.phi / DEG)], width: [width, (h) => h.w], cup: [cup, (h) => h.c],
     edge: [edge, (h) => h[XS.CHANNEL.edge]], edgeR: [edgeR, (h) => (Number.isFinite(h.er) ? h.er : h[XS.CHANNEL.edge])], start: [start, (h) => h[XS.CHANNEL.start]], tube: [tube, (h) => h[XS.CHANNEL.tube]] };
-  // THE WIDTH REFERENCE (D232, the user: "a drop down that tells you the width of different known t-180 tracks, such as track H, track N, track G"):
+  // THE WIDTH REFERENCE (the user: "a drop down that tells you the width of different known t-180 tracks, such as track H, track N, track G"):
   // picking a known track puts its measured median into the width field, like typing it (so on an empty track it is the first piece's start, which is the
   // new-track default). For a TUBE (the sweep field at 360) the figures are the distance round and the entry says how wide that is across.
   const WL = require('./widthlike.js');
   const wlike = el('select', { 'aria-label': 'width like a measured road', title: 'width like a measured road: these are road widths measured from Assetto Corsa tracks, nothing more. Each entry is the usual width, with the range most of that road stays in, in brackets. Picking one sets the width field' });
   const wnote = el('p', { class: 'message', 'aria-label': 'what the width means for a tube', style: 'font-size:12px;margin:2px 0' });
   const widthTitle = width.getAttribute('title');
-  const showTubeNote = () => { const t = WL.isTube(tube.value); wnote.textContent = t ? WL.tubeNote(width.value) : ''; const tip = t ? `${widthTitle} ${WL.tubeTip(width.value)}` : widthTitle; width.setAttribute('title', tip); wnote.setAttribute('title', t ? WL.tubeTip(width.value) : ''); };   // D267: the explanation is the tooltip
+  const showTubeNote = () => { const t = WL.isTube(tube.value); wnote.textContent = t ? WL.tubeNote(width.value) : ''; const tip = t ? `${widthTitle} ${WL.tubeTip(width.value)}` : widthTitle; width.setAttribute('title', tip); wnote.setAttribute('title', t ? WL.tubeTip(width.value) : ''); };   // the explanation is the tooltip
   const fillWidthLike = () => {
     const tubeNow = WL.isTube(tube.value);
     wlike.replaceChildren(...WL.entries(tubeNow).map((e) => new win.Option(e.label, e.value))); wlike.value = '';
@@ -234,7 +234,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   const shown = {};
   const show = (x) => { const v = Math.round(x * 100) / 100; return String(Object.is(v, -0) ? 0 : v); };   // two decimals, no trailing zeros, no "-0"
-  // THE TURN AS A CORNER (D331 B, the default; extendOptions above). As a corner the turn field holds the degrees the new piece turns and shows nothing at the
+  // THE TURN AS A CORNER (B, the default; extendOptions above). As a corner the turn field holds the degrees the new piece turns and shows nothing at the
   // head (a corner has no "value at the head": left blank, the track keeps turning as now); as a rate it is the old field, the head's turn in °/100 m. The switch
   // is kept from piece to piece, like the "at start" boxes. The CLIMB field follows the same switch (plan :387-399): as a corner, the degrees the pitch changes
   const turnAs = el('select', { 'aria-label': 'turn and climb as', title: 'how the turn and climb fields are read: as a CORNER, the exact degrees the piece turns on the map (90 lines up with the grid, banked or flat) and the exact degrees its pitch changes, easing in and out and ending at a rate of 0; as a RATE, degrees per 100 m the piece eases to (it ends still turning, or still climbing, at that rate)' });
@@ -248,7 +248,7 @@ function mount(root, shell, mountOpts = {}) {
     }
   };
   const showHead = () => { const h = shell.headState(); for (const [k, [input, of]] of Object.entries(HEAD)) { shown[k] = show(of(h)); input.value = shown[k]; } showTurnHead(h); for (const [k, f] of [['cup', cup], ['tube', tube]]) { f.disabled = false; f.setAttribute('title', baseTitle[k]); } fillWidthLike(); };   // (baseTitle is set below, before the first draw)
-  // A PIECE IS A CUP OR A TUBE, never both (A's contract: `c` and `t` targets together are refused BAD_TARGET). CHOSEN: the field changed
+  // A PIECE IS A CUP OR A TUBE, never both (contract: `c` and `t` targets together are refused BAD_TARGET). CHOSEN: the field changed
   // LAST wins. Changing one puts the other back to what it shows (so it sends no target) and DISABLES it, with a tooltip saying why; putting
   // the changed one back to its shown value enables the other again, and so does every new document (showHead).
   const ONE_OF = 'a piece is a cup or a tube, not both: put the other field back to its shown value to use this one';
@@ -258,26 +258,26 @@ function mount(root, shell, mountOpts = {}) {
     if (HEAD[mine][0].value !== shown[mine]) { other.value = shown[ko]; other.disabled = true; other.setAttribute('title', ONE_OF); }
     else { other.disabled = false; other.setAttribute('title', baseTitle[ko]); }
   };
-  // D430 (the user, 2026-10-22: "if one is blank auto set it to 0"): a field the user EMPTIED (blank where it showed a value) is 0, for the fields where 0 is a value.
+  // (the user, 2026-10-22: "if one is blank auto set it to 0"): a field the user EMPTIED (blank where it showed a value) is 0, for the fields where 0 is a value.
   // Not the length and width (0 is refused by the core), the right edge (blank follows the left edge, rightTarget below) or the grip (blank: the head's, gripOpt);
   // as corners the turn and climb show blank at rest (showTurnHead), so a blank there is untouched and still continues
   const ZERO_WHEN_EMPTIED = new Set(['turn', 'climb', 'bank', 'cup', 'edge', 'tube']);
   const emptied = (k) => ZERO_WHEN_EMPTIED.has(k) && HEAD[k][0].value === '' && shown[k] !== '';
   const asTyped = (k) => (emptied(k) ? '0' : HEAD[k][0].value === shown[k] ? '' : HEAD[k][0].value);   // untouched = blank = continue
-  // D259 (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank keeps
+  // (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360 if it banks the other way"). The bank keeps
   // within ONE turn and keeps its sign, shown AND applied (HD.wrapTurn: 370 -> 10, -370 -> -10, 300 stays 300, 400 -> 40): the field shows it (HEAD above), a drag
   // writes it, and a typed value is sent wrapped and otherwise as typed (absolute, as the core keeps its winding; extendOptions unchanged). No nearest-equivalent rewrite.
   const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return Number.isFinite(T) ? String(HD.wrapTurn(T)) : t; };
-  // "at start" (D194b): one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
+  // "at start": one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
   const atStart = Object.fromEntries(Object.keys(HEAD).map((k) => [k, el('input', { type: 'checkbox', 'aria-label': `${k} at the start`,
     title: ['bank', 'cup', 'edge', 'edgeR'].includes(k)
       ? `at start: reach this ${k} as early as the road can roll to it (${AT_START_M} m at least, never faster than the checker's roll limit) and hold it (off: ease to it over the whole piece)`
       : `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
-  // the turn field's label says which way it is read (D331 B); switching puts the field back to what it shows, so nothing typed in the other unit is applied
+  // the turn field's label says which way it is read; switching puts the field back to what it shows, so nothing typed in the other unit is applied
   const turnLabel = el('span', { text: 'turn °' }), turnField = fieldAt(turnLabel, turn, 'turn'), climbLabel = el('span', { text: 'climb °' }), climbField = fieldAt(climbLabel, climb, 'climb');
   turnAs.onchange = () => { showTurnHead(shell.headState()); applied.turn = turn.value; applied.climb = climb.value; ghost(); };
-  // GRIP (D261, the user: a different grip per piece; the core is src/core/document.js, E's). A whole percent 50 to 150 (100 is AC's own road), shown as the head's; left as shown the new piece keeps it, a changed
+  // GRIP (the user: a different grip per piece; the core is src/core/document.js). A whole percent 50 to 150 (100 is AC's own road), shown as the head's; left as shown the new piece keeps it, a changed
   // value is the new piece's grip. "grip like…" fills it from a known track (src/doc/grips.json). The words say what the number is, "untested: drive it" outside 60 to 110, and that the checker does not model grip.
   const gripF = el('input', { type: 'number', value: '100', step: '1', min: String(GL.GRIP_MIN), max: String(GL.GRIP_MAX), 'aria-label': 'grip', title: GL.tip() });
   const gripLike = el('select', { 'aria-label': 'grip like a measured road', title: 'grip like a measured road: these are road grips read from Assetto Corsa tracks, nothing more. Picking one fills the grip box' });
@@ -289,17 +289,17 @@ function mount(root, shell, mountOpts = {}) {
   const showGrip = () => { shownGrip = String(shell.headGrip()); gripF.value = shownGrip; gripNote.textContent = gripWords(shownGrip); };
   const gripOpt = () => (gripF.value === '' || gripF.value === shownGrip ? '' : gripF.value);   // untouched = blank = the new piece keeps the head's grip
   const colourOn = el('input', { type: 'checkbox', 'aria-label': 'colour by grip', title: 'colour the track by grip: blue below 100%, white at 100%, orange above; the hover label says each piece\'s grip' });
-  // D385: typing ONE side changes only that side: the left typed alone sends the right as the head has it (the core would otherwise set both from e)
+  // typing ONE side changes only that side: the left typed alone sends the right as the head has it (the core would otherwise set both from e)
   const rightTarget = () => { const r = asTyped('edgeR'); return r !== '' || asTyped('edge') === '' ? r : String(HEAD.edgeR[1](shell.headState())); };
   const opts = () => extendOptions({ grip: gripOpt(), length: len.value, turn: asTyped('turn'), climb: asTyped('climb'), bank: bankTarget(), width: asTyped('width'), cup: asTyped('cup'), edge: asTyped('edge'), edgeR: rightTarget(), start: asTyped('start'), tube: asTyped('tube'),
     atStart: Object.fromEntries(Object.entries(atStart).map(([k, box]) => [k, box.checked])),
     empty: !shell.getState().history.present.pieces.length, turnAs: turnAs.value, head: shell.headState() });
-  // D242 item 7 (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
+  // (the user, 09:03): UNDO GIVES BACK THE UNDONE PIECE'S VALUES. Each Extend from this panel remembers the fields it was made with, keyed by the
   // document it made; when Undo steps from that document back to the one it was made from, the fields are put back (the length, every field as typed or left as
   // shown, the at-start ticks), so Extend again rebuilds the same piece. Redo, a brush and open show the head, as before
   const madeWith = new WeakMap();
   const fieldsNow = () => ({ len: len.value, values: Object.fromEntries(Object.keys(HEAD).map((k) => [k, HEAD[k][0].value])), ticks: Object.fromEntries(Object.entries(atStart).map(([k, b]) => [k, b.checked])), turnAs: turnAs.value });
-  // D385 (the user, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values"): AS CORNERS, after an Extend the turn and climb fields
+  // (the user, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values"): AS CORNERS, after an Extend the turn and climb fields
   // KEEP the degrees typed for the piece just placed (the new document's draw has just shown the head, blank), so Extend again places the same corner, each ending straight.
   // A blank or a typed 0 is not carried (the field stays blank, as before). Only Extend carries (and Straight, whose 0 never is): Jump, Level, To floor, Turn by, Turn to grid
   // and Sharp show the head as before
@@ -310,15 +310,15 @@ function mount(root, shell, mountOpts = {}) {
     if (any) { readout(); hintNow(); }
   };
   const extendHere = () => { const before = shell.getState().history.present, made = fieldsNow(); shell.extend(opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) { madeWith.set(after, { before, made }); carryCorner(made); } };
-  // D356 (E's review 5, row 2): the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
+  //: the mode Undo gives back is saved through S too, or the hidden box and the Settings menu would read two different modes
   const putBack = (m) => { if (m.turnAs && m.turnAs !== turnAs.value) { turnAs.value = m.turnAs; showTurnHead(shell.headState()); S.set('turnClimbAs', m.turnAs); } len.value = appliedLen = m.len; for (const k of Object.keys(HEAD)) HEAD[k][0].value = m.values[k]; for (const [k, b] of Object.entries(atStart)) b.checked = !!m.ticks[k]; if (cup.value !== shown.cup) exclusive(cup); else if (tube.value !== shown.tube) exclusive(tube); };
   // the ghost: a candidate the shell cannot build, or the preview cannot draw, says why (it used to vanish without a word)
-  // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall (E's M5 (d))
-  // cup reads from → to: the DOCUMENT's values (A's cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
-  // the typed target, which the core's fit may ring past and its guard may refuse (E's seal row 7)
-  let values = null;   // D267: the values of the piece being edited, large over the 3D view (app/core/valuesoverlay.js); mounted where the stage is found, below
-  let sculptShown = null;   // D425 part 4: the text of the Sculpt cells the overlay shows now (in Sculpt the overlay is the brush's: showSculptValues)
-  // D331 (ledger D332): 'corner' (the turn since the road was last straight; whether this piece ends turning, and what easing it out would then add) and
+  // THE READOUT of the piece the fields describe: 16 px bold rows, so its ink is at least 11 device px tall
+  // cup reads from → to: the DOCUMENT's values (cupFromDeg / cupToDeg, which for a legacy piece are its rendered edge), never
+  // the typed target, which the core's fit may ring past and its guard may refuse
+  let values = null;   // the values of the piece being edited, large over the 3D view (app/core/valuesoverlay.js); mounted where the stage is found, below
+  let sculptShown = null;   // the text of the Sculpt cells the overlay shows now (in Sculpt the overlay is the brush's: showSculptValues)
+  // 'corner' (the turn since the road was last straight; whether this piece ends turning, and what easing it out would then add) and
   // 'gravity' (the bank against gravity, from → to: the road's real tilt, where the bank field reads in the flipped form past an inversion)
   const RO = ['length', 'turn', 'climb', 'bank', 'cup', 'edge', 'start', 'tube', 'corner', 'climbCorner', 'gravity'], roCells = Object.fromEntries(RO.map((k) => [k, el('span', { 'data-readout': k })]));
   const roName = (k) => (k === 'length' ? 'length' : k === 'cup' ? 'cup from → to' : k === 'edge' ? 'edge from → to' : k === 'start' ? 'edge start from → to' : k === 'tube' ? 'tube from → to'
@@ -334,8 +334,8 @@ function mount(root, shell, mountOpts = {}) {
     if (m) return n(m[1]); if (k === 'corner' || k === 'climbCorner') return 'none'; return `${n(v)}°`; };
   const roShown = {};   // the text each cell shows now
   const sameOf = (k, v) => { const m = /^(.*) → (.*)$/.exec(v); if (m) return m[1] === m[2]; if (k === 'corner' || k === 'climbCorner') return /^none/.test(v); return /^[+−-]?0(\.0+)?°?$/.test(v); };
-  // D421c part 1: IN SCULPT the readout is not computed: every brush step is a new document (draw, below), and Extend's candidateReadout and candidateCorner cost
-  // 2.3-3.4 ms of each step's frame (A's profile, sculpt-frame rows 2 and 3) for a piece Extend cannot add in Sculpt. The cells show '—' with the reason, as on a
+  // IN SCULPT the readout is not computed: every brush step is a new document (draw, below), and Extend's candidateReadout and candidateCorner cost
+  // 2.3-3.4 ms of each step's frame for a piece Extend cannot add in Sculpt. The cells show '—' with the reason, as on a
   // closed loop; leaving Sculpt is a new state, so draw reads them again then
   const readout = () => {
     let f = null, why = '';
@@ -343,43 +343,43 @@ function mount(root, shell, mountOpts = {}) {
       if (shell.getState().sculpt) why = 'in Sculpt';
       else if (shell.getState().history.present.closed) why = 'the loop is closed';
       else { const r = shell.candidateReadout(opts()); f = { ...LB.formatReadout(r), cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`,
-        // the cross-section cells read the DOCUMENT (the core's readout), never the typed field (E's seal E7, KE7-1)
+        // the cross-section cells read the DOCUMENT (the core's readout), never the typed field
         edge: pairOf(r, XS.READOUT.edge, fmtCup), start: pairOf(r, XS.READOUT.start, fmtShare), tube: pairOf(r, XS.READOUT.tube, fmtCup),
         climbCorner: fmtClimbCorner(r), corner: fmtCorner(r, 'corner' in r && r.corner && r.corner.endsTurningDegPer100m !== null ? shell.candidateCorner(opts()) : null), gravity: pairOf(r, ['gravityBankFromDeg', 'gravityBankToDeg'], LB.fmtDeg) }; }
     } catch (e) { why = e.message; }
     // each cell and chip is written only when its text changes: a drag sets the same words on most frames, and every write was style and layout work in that frame
     for (const k of RO) { const v = f ? f[k] : '—'; if (roShown[k] === v) continue; roShown[k] = v; roCells[k].textContent = v; const same = !!f && sameOf(k, f[k]); roChips[k].setAttribute('class', same ? 'chip same' : 'chip'); roChips[k].children[2].textContent = same ? shortOf(k, f[k]) : ''; roChips[k].title = f ? `${chipName(k)}: ${f[k]}` : ''; }
     const disp = f ? '' : 'none'; if (roBox.style.display !== disp) roBox.style.display = disp;   // only while there is a next piece to describe (not in Sculpt, not on a closed loop)
-    if (values && !shell.getState().sculpt) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // D267: the same numbers, large over the 3D view
+    if (values && !shell.getState().sculpt) values.set(f ? VO.entries(f, Number.isFinite(Number(width.value)) && width.value !== '' ? `${Number(width.value).toFixed(2)} m` : '') : null);   // the same numbers, large over the 3D view
     roBox.title = why;
   };
-  let scrubbing = false;   // D266 item 2: an Extend handle is being dragged: the ghost is built CHEAP until the release (handlesHost.end builds the full one)
+  let scrubbing = false;   // an Extend handle is being dragged: the ghost is built CHEAP until the release (handlesHost.end builds the full one)
   let scrubKind = null;    // which handle (2026-10-14: a LENGTH drag previews whole 2 m chords, below)
   // A PIECE IS CUT INTO EQUAL CHORDS of about 2 m (src/core/adapter.js), so a length of 1103.7 m makes every chord 1.99946 m and every one changes on the next move:
   // nothing of the last cheap ghost could be reused (app/preview/trackmodel.js). While the LENGTH handle is dragged the preview is built at the nearest whole 2 m,
   // so the chords stay 2 m and only the end is new. The field, the readout and the piece placed keep the exact value; the release builds the exact ghost.
   const previewLength = (o) => (scrubbing && scrubKind === 'length' && o.length > 2 ? { ...o, length: Math.round(o.length / 2) * 2 } : o);
-  let releasing = false;   // D407: true while a drag's LAST position is typed in, just before end(): its ghost(RELEASE) builds the exact ghost, so the cheap one between is not built
+  let releasing = false;   // true while a drag's LAST position is typed in, just before end(): its ghost(RELEASE) builds the exact ghost, so the cheap one between is not built
   const ghost = () => {
     if (releasing) return;
-    hintNow();   // D242: the straight hint follows the turn field and its box
+    hintNow();   // the straight hint follows the turn field and its box
     readout();   // first, and synchronously: the numbers follow the fields with no timer and no frame wait
     let why = null;
-    try { send('t180-ghost', { candidate: shell.candidate(previewLength(opts()), { coarse: scrubbing }), cheap: scrubbing, sliced: !scrubbing, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }   // D407: every ghost but a drag's (a field typed, a hover, the release) is built a slice a frame by the preview (sliced)
+    try { send('t180-ghost', { candidate: shell.candidate(previewLength(opts()), { coarse: scrubbing }), cheap: scrubbing, sliced: !scrubbing, reply: (r) => { if (r && r.error) why = r.error; } }); } catch (e) { why = e.message; }   // every ghost but a drag's (a field typed, a hover, the release) is built a slice a frame by the preview (sliced)
     if (why) { send('t180-ghost-clear'); msg.textContent = `no preview of this piece: ${why}`; msg.className = 'message'; }
   };
   // the ghost follows the fields as they change, not only a fresh hover (a pointer resting on the button fires no new mouseenter,
-  // so the ghost showed the piece before the last edit, or none: found in the window proof, D186)
-  // (the cup's handler is the cup-or-tube one below, D225: the cup is not in this list, where its handler would only be replaced)
+  // so the ghost showed the piece before the last edit, or none: found in the window proof)
+  // (the cup's handler is the cup-or-tube one below, the cup is not in this list, where its handler would only be replaced)
   for (const f of [len, turn, climb, bank, width, ...Object.values(atStart)]) f.oninput = f.onchange = ghost;
-  for (const f of [edge, edgeR, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way (D225)
+  for (const f of [edge, edgeR, start, tube]) f.oninput = f.onchange = ghost;   // the cross-section fields follow the same way
   for (const f of [cup, tube]) f.oninput = f.onchange = () => { exclusive(f); ghost(); };   // cup OR tube: the rule first, then the ghost
-  tube.oninput = tube.onchange = () => { exclusive(tube); ghost(); fillWidthLike(); };   // a tube's entries read round and across (D232)
+  tube.oninput = tube.onchange = () => { exclusive(tube); ghost(); fillWidthLike(); };   // a tube's entries read round and across
   width.oninput = width.onchange = () => { ghost(); showTubeNote(); };
   wlike.onchange = () => { if (!wlike.value) return; width.value = wlike.value; wlike.value = ''; width.oninput(); };
   gripF.oninput = gripF.onchange = () => { gripNote.textContent = gripWords(gripF.value); ghost(); };
   gripLike.onchange = () => { if (!gripLike.value) return; gripF.value = gripLike.value; gripLike.value = ''; gripF.oninput(); };   // a pick is a typed grip: the words, the ghost and the readout follow   // a pick is a typed width: the ghost and the readout follow
-  // THE UNDO GUARD (D240 follow-up; B's look at ab748e5, C's open question): a number typed into an Extend field and not Extended is UN-APPLIED. The first Ctrl+Z puts THAT field back to what the
+  // THE UNDO GUARD: a number typed into an Extend field and not Extended is UN-APPLIED. The first Ctrl+Z puts THAT field back to what the
   // panel put there (the head's value as shown; for the length, what the last Extend left) and says it handled the key, so the track is not stepped and the typing is not lost to a refill;
   // the next Ctrl+Z, with nothing un-applied, undoes the track. The field is the focused one, or else the one touched last (the focus may have moved off it).
   // what the panel left in the fields at its last refill (a new document: the head as shown, or an undone Extend's own values; the length: what the last Extend or Undo left): a field that differs is un-applied
@@ -388,7 +388,7 @@ function mount(root, shell, mountOpts = {}) {
   const baselineOf = (f) => (f === len ? appliedLen : applied[Object.keys(HEAD).find((k) => HEAD[k][0] === f)]);
   const unapplied = (f) => !!f && FIELDS.includes(f) && !f.disabled && f.value !== baselineOf(f);
   for (const f of FIELDS) { const prev = f.oninput; f.oninput = f.onchange = (e) => { lastTouched = f; return prev ? prev(e) : undefined; }; }
-  // D430: an emptied field shows the 0 it sends once the change is committed (on change, not while typing, so clearing a box to type a new number is not interrupted)
+  // an emptied field shows the 0 it sends once the change is committed (on change, not while typing, so clearing a box to type a new number is not interrupted)
   for (const k of ZERO_WHEN_EMPTIED) { const f = HEAD[k][0], prev = f.onchange; f.onchange = (e) => { if (emptied(k)) f.value = '0'; return prev(e); }; }
   const onUndoGuard = (e) => {
     const f = [doc.activeElement, lastTouched].find(unapplied);
@@ -400,7 +400,7 @@ function mount(root, shell, mountOpts = {}) {
   doc.addEventListener('t180-undo-guard', onUndoGuard);
   const extendBtn = el('button', { text: 'Extend', title: 'add a piece at the open end; fields left as shown keep going the way the track goes',
     onclick: () => { send('t180-ghost-clear'); extendHere(); }, onmouseenter: () => { if (!shell.getState().sculpt) ghost(); }, onmouseleave: () => { if (!handlesOn.checked || shell.getState().sculpt) send('t180-ghost-clear'); } });   // with the drag handles on, the ghost stays up: its handles are what you drag
-  // D242 item 6, STRAIGHT IN ONE CLICK (the user: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
+  // STRAIGHT IN ONE CLICK (the user: "impossible to create a perfect straight"): Extend at turn 0 eases to it over the WHOLE piece unless the turn's
   // "at start" box is ticked. This button extends with turn 0 and climb 0, both reached within the first AT_START_M metres and held there, then puts the boxes back
   // as they were (they are a kept preference, not this button's to change)
   const straightBtn = el('button', { text: 'Straight', title: `a straight piece of the length above: turn 0 and climb 0, reached within its first ${AT_START_M} m and held exactly`, onclick: () => {
@@ -409,13 +409,13 @@ function mount(root, shell, mountOpts = {}) {
     send('t180-ghost-clear'); extendHere();
     atStart.turn.checked = was.turn; atStart.climb.checked = was.climb;
   } });
-  // D271, LEVEL and TO FLOOR (the user: "a way to snap the track to the floor to be true flat … its hard to calculate by hand"): the climb is a RATE, so climb 0 keeps
+  // LEVEL and TO FLOOR (the user: "a way to snap the track to the floor to be true flat … its hard to calculate by hand"): the climb is a RATE, so climb 0 keeps
   // the slope the road has. These extend with the fields' piece and let the core solve its climb (src/core/level.js): Level ends it straight and level, To floor
   // also at height 0; a piece too short for that is refused by name with the length that works (the message line says it)
   const levelHere = (fn) => { const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell[fn](opts()); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made }); };
   const levelBtn = el('button', { text: 'Level', title: 'a piece of the length above that ends straight and LEVEL (pitch 0): its climb is solved for you, and a turn typed as a corner is placed exactly', onclick: () => levelHere('extendLevel') });
   const floorBtn = el('button', { text: 'To floor', title: 'a piece of the length above that ends straight, level and ON THE FLOOR (height 0), a turn typed as a corner placed exactly: too short a piece is refused with the length that works', onclick: () => levelHere('extendToFloor') });
-  // D280, TURN BY (the user: "90 degree turns not coming out straight"): the turn field is a RATE, and a piece eased to a rate ENDS at it, so the next piece
+  // TURN BY (the user: "90 degree turns not coming out straight"): the turn field is a RATE, and a piece eased to a rate ENDS at it, so the next piece
   // starts still turning. This extends with the fields' piece and lets the core solve its turn (src/core/turnby.js): exactly the angle typed beside it, ending
   // with turn rate 0; too short a piece is refused by name with the length that works
   const turnBy = num(90, 1, 'the angle the piece turns, degrees (+ = left, − = right)'); turnBy.oninput = turnBy.onchange = () => {};
@@ -433,12 +433,12 @@ function mount(root, shell, mountOpts = {}) {
     const h = shell.endHeadingDeg(), step = Number(gridStep.value) || 90, off = GT.offGridDeg(h, step), shown = ((h % 360) + 360) % 360;
     headingNote.textContent = Math.abs(off) < 0.005 ? `end heading ${shown.toFixed(2)}°, on the ${step}° grid` : `end heading ${shown.toFixed(2)}°, ${Math.abs(off).toFixed(2)}° off the ${step}° grid`;
   };
-  // D356 (E's review 5, row 1): the step is picked in Build ▸ Turn to grid…, a visible control, so picking it is the setting (as a number, the Settings menu's own form)
+  //: the step is picked in Build ▸ Turn to grid…, a visible control, so picking it is the setting (as a number, the Settings menu's own form)
   gridStep.onchange = () => { S.set('gridStep', Number(gridStep.value) || 90); showHeading(); };
   const gridBtn = el('button', { text: 'Turn to grid', title: 'a piece of the length above that turns onto the nearest grid direction (the step beside it) and ends straight, so the straight after it runs along the grid: too short a piece is refused with the length that works', onclick: () => {
     const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendTurnToGrid(opts(), Number(gridStep.value) || 90); appliedLen = len.value; const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
-  // D282, SHARP (the user: "i also want to be able to make track H 90 degrees too"): a SECOND turn type beside the broad curve, which it leaves as it is. A
+  // SHARP (the user: "i also want to be able to make track H 90 degrees too"): a SECOND turn type beside the broad curve, which it leaves as it is. A
   // corner of the angle typed, held at the radius typed, ramped in and out over a few metres (track H's are 0–8 m) and exiting dead straight
   // (src/core/sharp.js). The length field does not apply: the corner's length is its angle times its radius. Too tight a radius for the width is refused by name
   const sharpDeg = num(90, 1, 'the angle of the sharp corner, degrees (+ = left, − = right)'), sharpR = num(22, 0.5, 'the radius the sharp corner holds, m'), sharpRamp = num(4, 1, 'how many metres the sharp corner takes to tighten, and to straighten after it');
@@ -447,20 +447,20 @@ function mount(root, shell, mountOpts = {}) {
     const before = shell.getState().history.present, made = fieldsNow(); send('t180-ghost-clear'); shell.extendSharp(opts(), { deg: sharpDeg.value, R: sharpR.value, ramp: sharpRamp.value }); const after = shell.getState().history.present; if (after !== before) madeWith.set(after, { before, made });
   } });
   // and the hint when the turn field asks for 0 after a turn without "at start": that eases over the whole piece, so it is not straight until its end
-  // D267: no paragraph under the buttons; the sense is the "at start" box's tooltip
+  // no paragraph under the buttons; the sense is the "at start" box's tooltip
   const turnStartTitle = atStart.turn.getAttribute('title');
   const hintNow = () => { const typed = asTyped('turn'); const hint = typed !== '' && Number(typed) === 0 && Number(cornerMode() ? show(shell.headState().kh * 100 / DEG) : shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; atStart.turn.setAttribute('title', hint ? `${turnStartTitle} ${hint}` : turnStartTitle); };
 
-  // SCULPT (D421 part 3, design §3 and §5, the user's GO 2026-10-20 14:53). Sculpt is a MODE (st.sculpt), set by Build ▸ Sculpt mode (app/core/buildmenu.js) or by Tab; it replaced
-  // the brush's "on" box, its mode and channel selects and D244b's "sculpt (shape only)" box. In Sculpt a press on the road and a drag is the chosen TOOL, named by what the hand does.
-  // The shell resolves a tool to its mode, channel and family (beginBrush's `tool`, pane O, D421 part 2); `mode` and `channel` go beside it as today's brush names them.
+  // SCULPT (design §3 and §5, the user's GO 2026-10-20 14:53). Sculpt is a MODE (st.sculpt), set by Build ▸ Sculpt mode (app/core/buildmenu.js) or by Tab; it replaced
+  // the brush's "on" box, its mode and channel selects and its "sculpt (shape only)" box. In Sculpt a press on the road and a drag is the chosen TOOL, named by what the hand does.
+  // The shell resolves a tool to its mode, channel and family (beginBrush's `tool`); `mode` and `channel` go beside it as today's brush names them.
   // A press that moves no more than CLICK_PX is a click, not a drag: no brush opens, so it leaves no step and says nothing, and it selects (app/core/piecesui.js asks
   // brushedPress()). The brush opens when the press first moves past it, centred where the press was.
   const ROUTE_CH = new Set(['kh', 'kv', 'length']), LOCAL_CH = new Set(['height', 'lateral']);
   const familyWords = (ch) => (ROUTE_CH.has(ch) ? 'moves the road after it' : LOCAL_CH.has(ch) ? 'the road after it stays where it is' : 'the road itself does not move');
   // one row a tool, in the order of the keys 1-9 (app/core/keys.js sculptKey); `axis`: the pointer's direction a drag reads (y: up is more; x: left is more)
   const TOOLS = Object.freeze([
-    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'press the road and drag: that side follows the mouse and the far edge stays put, all within the radius; the road outside the radius stays' }),   // D522: one side, within the radius (as long as the hint it replaced, so it wraps where that did and the strip keeps its height)
+    Object.freeze({ key: 'grab', label: 'Grab', tool: 'grab-up', channel: 'height', axis: 'y', side: Object.freeze({ tool: 'grab-side', channel: 'lateral', axis: 'x' }), hint: 'press the road and drag: that side follows the mouse and the far edge stays put, all within the radius; the road outside the radius stays' }),   // one side, within the radius (as long as the hint it replaced, so it wraps where that did and the strip keeps its height)
     Object.freeze({ key: 'stretch', label: 'Stretch', tool: 'stretch', channel: 'length', axis: 'y', hint: 'drag up to make the piece under the brush longer, down to shorten it, keeping its bend (Alt at the press: keeping its rate); moves the road after it' }),
     Object.freeze({ key: 'bend', label: 'Bend', tool: 'bend', channel: 'kh', axis: 'x', hint: 'drag left or right to turn the road harder or straighter here; moves the road after it' }),
     Object.freeze({ key: 'climb', label: 'Climb', tool: 'climb', channel: 'kv', axis: 'y', hint: 'drag up or down to tilt the road here; for a hill that stays put, use Grab; moves the road after it' }),
@@ -485,13 +485,13 @@ function mount(root, shell, mountOpts = {}) {
   edgeSide.replaceChildren(new win.Option('left edge', 'edge'), new win.Option('right edge', 'edge-right'), new win.Option('edge start', 'edge-start')); edgeSide.value = 'edge';
   const smoothCh = el('select', { 'aria-label': 'smooth channel', title: 'what Smooth smooths: the channel of the last tool used, unless you pick another here' });
   smoothCh.replaceChildren(...SMOOTH_CH.map((c) => new win.Option(CHANNEL_NAMES[c], c))); smoothCh.value = 'phi';
-  // D522 (plan_d522_grab_one_side_within_the_radius decision 3): Grab's own radius is 30 m by default, a local push; the other tools keep 60 m. Each keeps what it was set to
+  // Grab's own radius is 30 m by default, a local push; the other tools keep 60 m. Each keeps what it was set to
   // when the tool changes (syncRadius, below); the strip's control, the wheel and [ ] set it as before
   const RADIUS_DEFAULT = Object.freeze({ grab: 30, tools: 60 });
   const radius = num(RADIUS_DEFAULT.grab, 10, 'brush radius, m');
   const radiusClass = () => (toolNow().key === 'grab' ? 'grab' : 'tools');
   const radiusNow = () => { const v = Number(radius.value); return radius.value !== '' && v > 0 ? v : RADIUS_DEFAULT[radiusClass()]; };   // an emptied field: the default, not a refusal
-  // SHARP (E's opt-in, the chair's ruling 2): its spill is declared right here, in the words of E's own SHARP_NOTE. D421: "exact size", under "more ▾"
+  // SHARP (an opt-in): its spill is declared right here, in the words of the core's own SHARP_NOTE. "exact size", under "more ▾"
   const sharp = el('input', { type: 'checkbox', 'aria-label': 'sharp brush', title: 'Sharp brush: acts at exactly the size you set by adding finer control points first. It can nudge the track just outside the brush by up to 0.1 mm. Leave it off for an exactly local edit.' });
   const handlesOn = el('input', { type: 'checkbox', 'aria-label': 'drag handles', title: 'drag handles: marks on the ghost of the piece Extend would add (and in Sculpt on the selected run\'s middle piece); drag one to change its value, Shift for fine steps, Ctrl to snap to round numbers. Off: the ghost shows only while the pointer is on Extend' });
   handlesOn.checked = true;
@@ -503,8 +503,8 @@ function mount(root, shell, mountOpts = {}) {
     if (x.key === 'smooth') { const ch = SMOOTH_CH.includes(smoothCh.value) ? smoothCh.value : 'phi'; return { ...x, channel: ch, hint: `drag up to smooth the ${CHANNEL_NAMES[ch]} under the brush (which: more ▾); ${familyWords(ch)}` }; }
     return x;
   };
-  // D519 Part 2 (O's design, exo_memory/handback/p-d519-design-O_2026-10-28.md §1, §4): THE ZONE. With Grab, where across the road a press lands is its zone (app/core/zonegrab.js
-  // zoneAt, from the pick's u and the piece's kind, shell.zoneInfo). D520 (plan_d520_sculpt_point_follows_the_mouse): the zone no longer picks a channel by the drag's first
+  //: THE ZONE. With Grab, where across the road a press lands is its zone (app/core/zonegrab.js
+  // zoneAt, from the pick's u and the piece's kind, shell.zoneInfo). The zone no longer picks a channel by the drag's first
   // direction; the pressed point follows the pointer (followOf, below), and the zone says only how the road around it gives. The other keys keep their one channel.
   const toolOf = (key) => TOOLS.find((x) => x.key === key);
   const zoneGrabOn = () => toolNow().key === 'grab';
@@ -514,9 +514,9 @@ function mount(root, shell, mountOpts = {}) {
     const info = shell.zoneInfo(hit.s), z = info ? ZG.zoneAt(hit.u, info, { alt: !!alt }) : null;
     return z ? { ...z, info } : null;
   };
-  // the hover box's first line, per zone; the second is the family's line, or why the cup cannot turn here. D520: the grab follows the pointer (zonegrab.js follow), so a zone
+  // the hover box's first line, per zone; the second is the family's line, or why the cup cannot turn here. the grab follows the pointer (zonegrab.js follow), so a zone
   // says what follows the point there, not which channel a direction picks
-  // D522: off the centre band (zonegrab.js HINGE_U) the press's side follows and the far rim stays; in it, the whole road
+  // off the centre band (zonegrab.js HINGE_U) the press's side follows and the far rim stays; in it, the whole road
   const zoneWords = (z, u) => (Math.abs(u) >= ZG.HINGE_U ? 'this side follows the pointer · the far edge stays' : 'the road follows the pointer · any way');
   const stage = doc.getElementById('preview');
   values = stage ? VO.mount(stage, win) : null;
@@ -524,10 +524,10 @@ function mount(root, shell, mountOpts = {}) {
   const KNOT_M = AT_START_M;      // one knot span (src/core/document.js KNOT_M, as AT_START_M above): what a wheel notch or [ ] changes the radius by
   let drag = null, brushedPress = false, liveTool = null;
   const rel = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  // D425 part 4 (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §1, §3): THE HOVER. In Sculpt with no drag open the pointer over the road is picked on every move (as the
+  //: THE HOVER. In Sculpt with no drag open the pointer over the road is picked on every move (as the
   // labels pick it), and the station, the radius and the tool go to the page's layers through 't180:sculpt-hover' (app/core/selectionlayer.js draws the reach, handles.js the glyph). The radius
   // is read when asked, so [ ] resize the reach under the pointer. A press clears it in the handler that opens the drag, so the drag's first frame draws the drag's own cues; leaving the stage clears it
-  // D428 (P's review items 4-6): a move keeps only the pointer; the station is picked when a layer first asks, through the pick the labels share (labels.js sharedPick), so a move costs one
+  //: a move keeps only the pointer; the station is picked when a layer first asks, through the pick the labels share (labels.js sharedPick), so a move costs one
   // pick, not two. The reach stays across the press until the brush takes over (openBrush clears it), so nothing blinks between the press and the first step; and Alt is read from the key
   // as well as the pointer, so pressing it with the pointer still turns the glyph
   let hover = null;
@@ -541,10 +541,10 @@ function mount(root, shell, mountOpts = {}) {
   };
   const onAltKey = (e) => { if (hover && e && e.key === 'Alt') hover.alt = e.type === 'keydown'; };
   doc.addEventListener('keydown', onAltKey); doc.addEventListener('keyup', onAltKey);
-  const onBlur = () => { if (hover) hover.alt = false; };   // D498 item 5: Alt released while the window is not focused never sends keyup
+  const onBlur = () => { if (hover) hover.alt = false; };   // Alt released while the window is not focused never sends keyup
   const winEvents = !!(win && typeof win.addEventListener === 'function');   // a window with no event API (a test's fake) gets no blur listener
   if (winEvents) win.addEventListener('blur', onBlur);
-  // D519 Part 2: with Grab the hover carries its zone (kept for the pick, Alt and the radius, so a still pointer asks the shell nothing again) and a refused channel's reason
+  // with Grab the hover carries its zone (kept for the pick, Alt and the radius, so a still pointer asks the shell nothing again) and a refused channel's reason
   const hoverZone = () => {
     const k = `${hover.alt}|${radiusNow()}|${toolNow().key}`; if (hover.zk === k) return hover.zone;
     const z = zoneOf(hover.hit, false); hover.zk = k; hover.zone = z ? { ...z, why: null } : null; return hover.zone;
@@ -557,10 +557,10 @@ function mount(root, shell, mountOpts = {}) {
     brushedPress = false;
     if (!shell.getState().sculpt || e.button !== 0 || drag || shell.getState().brush) return;
     const [x, y] = rel(e);   // (a press on a handle never gets here: handles.js takes it in the capture phase and stops it)
-    let hit = null; const dot = handles && typeof handles.dotAt === 'function' ? handles.dotAt(x, y) : null;   // D519 Part 2: a press on a dot is the zone grab opened at that dot
+    let hit = null; const dot = handles && typeof handles.dotAt === 'function' ? handles.dotAt(x, y) : null;   // a press on a dot is the zone grab opened at that dot
     if (dot) hit = { s: dot.s, u: dot.u, side: dot.side, axes: dot.axes, at: dot.at }; else send('t180-pick', { x, y, reply: (h) => { hit = h; } });
     if (!hit) return;
-    const f = followOf(hit, x, y);   // D520: Grab on the road: the pressed point follows the pointer; off the road, or with no view to follow in, the press is the key's tool, as before
+    const f = followOf(hit, x, y);   // Grab on the road: the pressed point follows the pointer; off the road, or with no view to follow in, the press is the key's tool, as before
     if (f) {
       drag = { x, y, s0: hit.s, follow: f, T: toolOf('grab'), delta: null, open: false }; e.preventDefault();
       if (stage.setPointerCapture && e.pointerId !== undefined) stage.setPointerCapture(e.pointerId);
@@ -571,7 +571,7 @@ function mount(root, shell, mountOpts = {}) {
     if (stage.setPointerCapture && e.pointerId !== undefined) stage.setPointerCapture(e.pointerId);
   };
   /**
-   * D520 (plan_d520_sculpt_point_follows_the_mouse item 1): THE GRAB PLANE. With Grab, a press on the road keeps what the drag needs: the pointer's ray under the camera as it
+   * THE GRAB PLANE. With Grab, a press on the road keeps what the drag needs: the pointer's ray under the camera as it
    * is at the press (the preview's 't180-grab-ray'), the hit's world point and the plane through it facing the camera, the road's frame and section there (zonegrab.js
    * frameAt) and the piece's kind. Null when any is missing.
    */
@@ -581,7 +581,7 @@ function mount(root, shell, mountOpts = {}) {
     const r0 = ray(x, y), frame = ZG.frameAt(tr.path, tr.segments, hit.s, hit.u), P0 = r0 && ZG.planePoint(r0, hit.at, r0.forward); if (!frame || !P0) return null;
     return { ray, at: hit.at.slice(), forward: r0.forward, P0, frame, piece: z.info || {} };
   };
-  /** D520: the follow's channel changes for the pointer at (x, y): the pointer's point on the grab plane less the press's (so a press a few px off a dot does not jump), carried by zonegrab.js follow. */
+  /** the follow's channel changes for the pointer at (x, y): the pointer's point on the grab plane less the press's (so a press a few px off a dot does not jump), carried by zonegrab.js follow. */
   const followAt = (x, y) => {
     const f = drag.follow, r = f.ray(x, y), P = r && ZG.planePoint(r, f.at, f.forward); if (!P) return drag.delta;
     return ZG.follow([0, 1, 2].map((k) => P[k] - f.P0[k]), f.frame, f.piece) || drag.delta;
@@ -589,20 +589,20 @@ function mount(root, shell, mountOpts = {}) {
   /** The press became a drag: the brush opens on the document as it is now. False (and no drag) when the shell refuses it; its message says why. */
   const openBrush = (x, y) => {
     const T = drag.T;
-    if (drag.follow) shell.beginFollow({ s0: drag.s0, r: radiusNow() });   // D522: sharp by itself (coreshell.js beginFollow), so the Sharp tick is not passed
+    if (drag.follow) shell.beginFollow({ s0: drag.s0, r: radiusNow() });   // sharp by itself (coreshell.js beginFollow), so the Sharp tick is not passed
     else shell.beginBrush({ tool: T.tool, mode: LOCAL_CH.has(T.channel) ? 'local' : 'rate', channel: T.channel, s0: drag.s0, r: radiusNow(), sharp: sharp.checked, ...(drag.keepRate ? { keepRate: true } : {}) });
     if (!shell.getState().brush) { drag = null; return false; }
     if (T.key !== 'smooth' && SMOOTH_CH.includes(T.channel)) smoothCh.value = T.channel;   // Smooth smooths the last tool's channel (design §3.7)
-    liveTool = T; drag.open = true; brushedPress = true; hover = null;   // D428: the brush's own cues take over from the hover's
+    liveTool = T; drag.open = true; brushedPress = true; hover = null;   // the brush's own cues take over from the hover's
     return true;
   };
   const deltaAt = (x, y) => {
     if (drag.follow) return followAt(x, y);
     const v = (drag.axis === 'x' ? drag.x - x : drag.y - y) * drag.per; return drag.smooth ? Math.max(0, v) : v;
   };
-  // D235 (nothing coalesced the pointer moves: each one ran a whole brush step, and a closed tube's takes seconds, so the moves queued behind it): at most ONE brushTo per
-  // animation frame, with the LATEST position; the release applies the last position that is still waiting, then ends the drag. D421: a radius change (the wheel, [ ]) during
-  // the drag goes into the same frame: the new r first (shell.brushRadius, pane O: the brush state's r, re-run from the same base), then the one brushTo
+  // (nothing coalesced the pointer moves: each one ran a whole brush step, and a closed tube's takes seconds, so the moves queued behind it): at most ONE brushTo per
+  // animation frame, with the LATEST position; the release applies the last position that is still waiting, then ends the drag. a radius change (the wheel, [ ]) during
+  // the drag goes into the same frame: the new r first (shell.brushRadius: the brush state's r, re-run from the same base), then the one brushTo
   let waiting = null, waitingR = null, frame = 0;
   const step = () => {
     if (waitingR !== null) { const r = waitingR; waitingR = null; if (typeof shell.brushRadius === 'function') shell.brushRadius(r); }
@@ -626,18 +626,18 @@ function mount(root, shell, mountOpts = {}) {
   /** The radius field to `r` (one knot span at least); during an open drag it is also the drag's, in the next frame. */
   const setRadius = (r) => { const v = Math.max(KNOT_M, Math.round(r)); radius.value = String(v); if (drag && drag.open) { waitingR = v; if (!frame) frame = win.requestAnimationFrame(flush); } showSculptValues(shell.getState()); return v; };
   // the wheel during a drag: one knot span a notch, up wider (Blender's proportional editing; Maya's B-drag). Caught before it reaches the camera (capture, and not passed on)
-  // nor the handles' own capture listener on this same stage, registered after this one (handles.js onWheel): so stopImmediatePropagation, the form handles.js uses (P's review 1)
+  // nor the handles' own capture listener on this same stage, registered after this one (handles.js onWheel): so stopImmediatePropagation, the form handles.js uses
   const wheel = (e) => { if (!drag || !drag.open) return; e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); setRadius(radiusNow() + (e.deltaY < 0 ? KNOT_M : -KNOT_M)); };
   // Esc: the open drag dropped whole, the track as it was before the press (the shell's cancelBrush when it has one; else the whole delta back to 0, which endDrag records as no step)
   const dropBrush = () => { if (typeof shell.cancelBrush === 'function') shell.cancelBrush(); else { shell.brushTo(0); shell.endBrush(); } };
   if (stage) { stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); stage.addEventListener('pointerleave', leave); stage.addEventListener('wheel', wheel, { capture: true, passive: false }); }
 
-  // DRAG HANDLES (D244) and SCULPT (D244b). The overlay (app/core/handles.js) asks this host what to draw and what a drag means. EXTEND: the handles are on the ghost of the piece the fields describe, and a
+  // DRAG HANDLES and SCULPT. The overlay (app/core/handles.js) asks this host what to draw and what a drag means. EXTEND: the handles are on the ghost of the piece the fields describe, and a
   // drag types its value into the matching field (the field's own handler runs, so the ghost, the readout and the cup-or-tube rule follow; nothing is a document edit until Extend). SCULPT: the handles are on
   // the ONE selected placed piece, and a drag is the shell's sculpt (one undo step, the shape channels only, the centreline guarded).
   const askOf = (name) => { let got = null; doc.dispatchEvent(new win.CustomEvent(name, { detail: { reply: (x) => { got = x; } } })); return got; };
   const HANDLE_FIELD = { length: len, width, bank, cup, turn, climb }, SCULPT_CH = { cup: 'c', width: 'w', bank: 'phi' };   // (not in the order of the Extend options: a mutation harness anchors on that line)
-  // D331 (plan :417-426): with the turn and climb read as corners, their handles are the corner kinds, which drag the corner's degrees into the same fields; a blank
+  // (plan :417-426): with the turn and climb read as corners, their handles are the corner kinds, which drag the corner's degrees into the same fields; a blank
   // field (the head, as a corner) starts the drag from 0
   const CORNER_KIND = { turn: 'turnDeg', climb: 'climbDeg' }; Object.assign(HANDLE_FIELD, { turnDeg: turn, climbDeg: climb });
   let triedDoc = null, sinceTry = 0; const RETRY_FRAMES = 30;   // the document the ghost was last asked for on behalf of the handles, and the frames since
@@ -648,14 +648,14 @@ function mount(root, shell, mountOpts = {}) {
     let info = askOf('t180:ghost-request');
     if (info && info.jump) return null;   // the ghost on screen is a JUMP's (the Add-jump control): not Extend's, so no Extend handles on it
     // no ghost: ask for it once per document, and again about every half second (the preview mounts AFTER this panel, so the first ask can go to nobody; a ghost that cannot be built is not rebuilt every frame)
-    // D426: but not again while the preview is still BUILDING the one asked for (a sliced exact ghost, D407): each ask began it over, so a ghost needing more than RETRY_FRAMES of slices (the
+    // but not again while the preview is still BUILDING the one asked for (a sliced exact ghost): each ask began it over, so a ghost needing more than RETRY_FRAMES of slices (the
     // user's TEST 10: 1,500 m of 100 m wide bowl, 3,002 steps) never arrived. A preview that does not answer is not building
     if (!info) { sinceTry++; if (triedDoc !== d || (sinceTry >= RETRY_FRAMES && askOf('t180:ghost-building') !== true)) { triedDoc = d; sinceTry = 0; ghost(); info = askOf('t180:ghost-request'); } }
     if (!info || !info.samples.length) return null;
     const s1 = info.samples[info.samples.length - 1].s; if (!(s1 - info.s0 > 0.5)) return null;
     // the road's half-width at a share of the piece: from the head's width to the field's, read when asked (a press must not see the width of the frame before)
     const half = (f) => { const w1 = fieldNum(width), w0 = d.pieces.length ? (fieldNum({ value: shown.width }) ?? w1) : w1; return ((w0 ?? 0) + ((w1 ?? w0 ?? 0) - (w0 ?? 0)) * f) / 2; };
-    // the turn and climb handles: as rates (°/100 m) the old kinds, which need a number in the field; as corners (D331) the corner kinds, offered on a blank field too
+    // the turn and climb handles: as rates (°/100 m) the old kinds, which need a number in the field; as corners the corner kinds, offered on a blank field too
     const corner = (k) => cornerMode() && HD.KINDS[k].unit === '°' && Object.values(CORNER_KIND).includes(k);
     const kinds = HD.ORDER.map((k) => (cornerMode() && CORNER_KIND[k] ? CORNER_KIND[k] : k)).filter((k) => !HANDLE_FIELD[k].disabled && (corner(k) || fieldNum(HANDLE_FIELD[k]) !== null));
     const wt = fieldNum(width);   // the width mark sits at the TARGET width (the field), so it follows the drag from the near end
@@ -671,7 +671,7 @@ function mount(root, shell, mountOpts = {}) {
     const dots = st.brush || !zoneGrabOn() ? null : dotsOf(tr, si, list);
     return { mode: 'sculpt', info: si, samples: list, s0: list[0].s, s1: list[list.length - 1].s, half: (f) => si.halfAt(f), at: { width: 1 }, kinds, base: (k) => valueOf[k], ctx: (k) => ({ half: si.halfAt(HD.KINDS[k].at) }), ...(dots ? { dots } : {}) };
   };
-  // D519 Part 2 (O's design §3): THE DOT ROWS on the selected run, for handles.js placeDots: the centre, the two rims and, on a cup piece, halfway out; at the run's stations
+  //: THE DOT ROWS on the selected run, for handles.js placeDots: the centre, the two rims and, on a cup piece, halfway out; at the run's stations
   // a knot span apart (src/core/document.js KNOT_M, the control points' spacing), which placeDots thins on screen. Kept while the track, the run and the radius are the same, so the
   // overlay's frame key is unchanged and the dots are placed once per pose and run (never per drag step: they are left out while a brush is open, and the drag's glyph shows)
   let dotsMemo = null;
@@ -690,8 +690,8 @@ function mount(root, shell, mountOpts = {}) {
     return dots;
   };
   let sculptDrag = null;
-  // D258: THE LANDING (the free jump): while it is the head, its four handles (forward, sideways, height, heading) are on the track, and a drag is the shell's landing drag (one undo step; the same
-  // numbers as the boxes below the Jump button). D278 (the user: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and
+  // THE LANDING (the free jump): while it is the head, its four handles (forward, sideways, height, heading) are on the track, and a drag is the shell's landing drag (one undo step; the same
+  // numbers as the boxes below the Jump button). (The user: "after placing jump piece, it doesnt go back to regular track manipulation with the base equation, it stays the heading, sideways, and
   // height"): they used to TAKE THE PLACE of the Extend ghost's handles, and the landing stays the head until a piece is extended from it, so right after a Jump the only handles were the landing's and the
   // only way back to the Extend ghost's was to commit an Extend. They now stand BESIDE them (the landing's at the landing's start, the Extend ghost's on the piece that would follow the landing road): the
   // base equation's controls are there at once, and the landing stays tunable until an Extend fixes it, as before.
@@ -703,7 +703,7 @@ function mount(root, shell, mountOpts = {}) {
     return { mode: 'landing', samples: [], s0: 0, s1: 1, half: () => 0, kinds: HD.LANDING_ORDER, free, base: (k) => L.pose[LAND_FIELD[k]], ctx: () => ({}) };
   };
   let landDrag = false;
-  // D425 part 4 (design §1 cues 2 and 3, §3): THE BRUSH GLYPH's model, handles.js's kinds 'brush-*': on hover at the station picked, during the tool's drag at the station it opened at (the page's
+  // (design §1 cues 2 and 3, §3): THE BRUSH GLYPH's model, handles.js's kinds 'brush-*': on hover at the station picked, during the tool's drag at the station it opened at (the page's
   // track stands still during a drag, app/preview/preview.js, so the glyph does too); Grab with Alt (held on hover, or at the press) is its other axis, sideways. The drag's value as the strip
   // says it, and on hover the family's line. Where it stands is kept for the track, the station and the tool, so a still pointer finds nothing again
   const NO_SAMPLES = Object.freeze([]);
@@ -712,7 +712,7 @@ function mount(root, shell, mountOpts = {}) {
   const brushModel = () => {
     const st = shell.getState(); if (!st.sculpt) return null;
     const open = drag && drag.open && st.brush && liveTool ? drag : null, h = open ? null : sculptHover(); if (!open && !h) return null;
-    const T = open ? liveTool : toolNow(), s = open ? drag.s0 : h.s0, z = open ? null : h.zone, zg = z ? ZG.glyphOf(z, h.u, h.altHeld) : null, kind = zg ? zg.kind : brushKindOf(T, open ? T.channel === 'lateral' : h.alt);   // D519 Part 2: on hover with Grab, the zone's glyph
+    const T = open ? liveTool : toolNow(), s = open ? drag.s0 : h.s0, z = open ? null : h.zone, zg = z ? ZG.glyphOf(z, h.u, h.altHeld) : null, kind = zg ? zg.kind : brushKindOf(T, open ? T.channel === 'lateral' : h.alt);   // on hover with Grab, the zone's glyph
     if (!HD.KINDS[kind]) return null;
     const tr = askOf('t180:track-request'); if (!tr || !tr.path || !Array.isArray(tr.path.samples) || !tr.path.samples.length || !Array.isArray(tr.segments)) return null;
     if (!glyphAt || glyphAt.tr !== tr.path || glyphAt.s !== s || glyphAt.key !== T.key) {
@@ -724,13 +724,13 @@ function mount(root, shell, mountOpts = {}) {
       open: !!open, text: open ? roadWords(st.brush, T) : '', note: open ? '' : z ? z.why || familyWords('height') : familyWords(T.channel), ...(z ? { words: zoneWords(z, h.u) } : {}) };
     return { mode: 'brush', samples: NO_SAMPLES, s0: 0, s1: 0, half: () => 0, kinds: [kind], brush, base: () => 0, ctx: () => ({}) };
   };
-  // the glyph beside the selected run's handles: each kind answers for itself, as the landing's beside Extend's (D278)
+  // the glyph beside the selected run's handles: each kind answers for itself, as the landing's beside Extend's
   const withGlyph = (S) => { const B = brushModel(); if (!B) return S; if (!S) return B; return { ...S, mode: 'sculpt+brush', kinds: [...S.kinds, ...B.kinds], brush: B.brush, base: (k) => (HD.KINDS[k].brush ? 0 : S.base(k)), ctx: (k) => (HD.KINDS[k].brush ? {} : S.ctx(k)) }; };
   const handlesHost = {
     model: () => {
       const L = landingModel(); if (!L) return withGlyph(sculptModel()) || ghostModel();
       const G = ghostModel(); if (!G) return L;   // no Extend ghost (a jump's ghost is on screen, or none can be built yet): the landing's four alone
-      // D278: the Extend ghost's model with the landing's four added; each kind answers for itself (a landing handle's value is the landing's, an Extend handle's is its field's)
+      // the Extend ghost's model with the landing's four added; each kind answers for itself (a landing handle's value is the landing's, an Extend handle's is its field's)
       return { ...G, mode: 'extend+landing', kinds: [...L.kinds, ...G.kinds], free: L.free, base: (k) => (LAND_FIELD[k] ? L.base(k) : G.base(k)), ctx: (k) => (LAND_FIELD[k] ? L.ctx(k) : G.ctx(k)) };
     },
     pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; },
@@ -739,9 +739,9 @@ function mount(root, shell, mountOpts = {}) {
       if (LAND_FIELD[h.kind]) { if (landDrag) shell.landingTo({ [LAND_FIELD[h.kind]]: value }); return; }
       if (sculptDrag) { const delta = value - sculptDrag.base; shell.sculptTo(h.kind === 'bank' ? delta * HD.DEG : delta); return; }
       if (shell.getState().sculpt) return;
-      const f = HANDLE_FIELD[h.kind]; f.value = h.kind === 'bank' ? show(HD.wrapTurn(value)) : String(value); if (f.oninput) { releasing = !!final && scrubbing; try { f.oninput(); } finally { releasing = false; } }   // typed: the field's own handler follows it (D259: the bank within one turn)
+      const f = HANDLE_FIELD[h.kind]; f.value = h.kind === 'bank' ? show(HD.wrapTurn(value)) : String(value); if (f.oninput) { releasing = !!final && scrubbing; try { f.oninput(); } finally { releasing = false; } }   // typed: the field's own handler follows it (the bank within one turn)
     },
-    end: () => { if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } if (scrubbing) { scrubbing = false; scrubKind = null; ghost(); } },   // the release: the full ghost (built a slice a frame by the preview: D407)
+    end: () => { if (landDrag) { landDrag = false; shell.endLanding(); } if (sculptDrag) { sculptDrag = null; shell.endSculpt(); } if (scrubbing) { scrubbing = false; scrubKind = null; ghost(); } },   // the release: the full ghost (built a slice a frame by the preview)
   };
   handlesOn.onchange = () => { triedDoc = null; if (!handlesOn.checked && !shell.getState().sculpt) send('t180-ghost-clear'); };
   // Sculpt's keys (app/core/keys.js sculptKey): Esc drops an open drag (the tool's or a handle's); in Sculpt [ ] the radius and 1-9 the tool. Tab is the shell's own switch
@@ -750,7 +750,7 @@ function mount(root, shell, mountOpts = {}) {
     if (k.act === 'dropDrag') {
       if (drag) { const open = drag.open; if (frame) { win.cancelAnimationFrame(frame); frame = 0; } waiting = null; waitingR = null; drag = null; liveTool = null; brushedPress = true; if (open) dropBrush(); k.handled(); return; }
       if (sculptDrag && shell.getState().brush) { sculptDrag = null; dropBrush(); k.handled(); return; }   // the handle's overlay goes on until its release, which then does nothing
-      // a route tool's re-close still running after the release (pane O: st.brush.closing): Esc drops it, as cancelBrush does (P's review §2 item 3)
+      // a route tool's re-close still running after the release (st.brush.closing): Esc drops it, as cancelBrush does
       const b = shell.getState().brush; if (b && b.closing && typeof shell.cancelBrush === 'function') { shell.cancelBrush(); k.handled(); }
       return;
     }
@@ -761,7 +761,7 @@ function mount(root, shell, mountOpts = {}) {
   };
   doc.addEventListener('t180-sculpt-key', onSculptKey);
 
-  // JUMP, THE USER'S WAY (D258; the core is src/core/jump.js, E's). The Jump button sits beside Extend: it places the piece the fields describe exactly as Extend would (the take-off: the climb is the
+  // JUMP, THE USER'S WAY (the core is src/core/jump.js). The Jump button sits beside Extend: it places the piece the fields describe exactly as Extend would (the take-off: the climb is the
   // fields' own), then a free flight to a default landing (a 60 m straight, 40 m ahead, the same height, lined up). While the landing is the head it is moved by the four handles on it (forward, sideways,
   // height, heading) and by these boxes: forward, sideways (+ left), height (+ up) in m, heading, pitch, bank in degrees (shell.moveLanding: one undo step each). Extend from the landing fixes it; deleting
   // back to it makes it the head again. A move the core refuses (LANDING_NOT_HEAD, a landing under 1 m from the take-off) says why in plain words. Nothing is solved or drawn for the air: drive it in AC.
@@ -779,7 +779,7 @@ function mount(root, shell, mountOpts = {}) {
   // the landing's number boxes: shown only while a landing is the head; a typed value (change) is one undo step; a box being typed in is not rewritten from the track
   const landBoxes = Object.fromEntries(LD.BOXES.map((b) => [b.field, el('input', { type: 'number', step: String(b.step), 'aria-label': `landing ${b.field}`, title: b.title })]));
   for (const b of LD.BOXES) { const box = landBoxes[b.field]; box.onchange = () => { if (box.value === '' || !Number.isFinite(Number(box.value))) { fillLanding(); return; } shell.moveLanding({ [b.field]: Number(box.value) }); }; }
-  const landingBox = el('div', { 'aria-label': 'landing', style: 'display:none', title: LANDING_HINT }, el('div', { class: 'pickers' }, ...LD.BOXES.map((b) => field(b.label, landBoxes[b.field]))));   // D267: the hint is the block's tooltip (title), not a paragraph
+  const landingBox = el('div', { 'aria-label': 'landing', style: 'display:none', title: LANDING_HINT }, el('div', { class: 'pickers' }, ...LD.BOXES.map((b) => field(b.label, landBoxes[b.field]))));   // the hint is the block's tooltip (title), not a paragraph
   const fillLanding = () => {
     const L = shell.landing(); landingBox.style.display = L ? '' : 'none';
     if (!L) return;
@@ -788,7 +788,7 @@ function mount(root, shell, mountOpts = {}) {
   let jumpNoteFor = null;
 
   // CLOSE, EXAMPLE
-  // D339: Close is ONE press (the ruling: no choice of how, no preview). The core tries every way of closing the loop and applies the one that passes the lap
+  // Close is ONE press (the ruling: no choice of how, no preview). The core tries every way of closing the loop and applies the one that passes the lap
   // proof with no new red, adds no road if it can, and moves the track least (app/core/closejob.js runCloseBest); the line under the button says what it did, or
   // why nothing changed. Undo gives the open track back. A long track takes a while (the checker runs on each way it tries), so it runs off the window's thread
   const closeBtn = el('button', { text: 'Close the loop', title: 'closes the loop the least-changing way the lap proof passes, at once; Undo gives the open track back', onclick: () => {
@@ -813,15 +813,15 @@ function mount(root, shell, mountOpts = {}) {
     const closed = closeAsked && h.present.closed && h.past.length && h.past[h.past.length - 1] === closeAsked && st.message && st.messageKind === 'ok';
     proposalBox.replaceChildren(...(refused ? [el('p', { 'aria-label': 'close refused', text: st.message, style: 'color: var(--bad)' })] : closed ? [el('p', { 'aria-label': 'close done', text: st.message })] : []));
   };
-  // D355 seam fix (plan_t180_handoff :1421-1424): Open example…, Start & grid… and Pit lane… are pane A's Track menu's (app/core/trackmenu.js), which mounts its own
+  // Open example…, Start & grid… and Pit lane… are the Track menu's (app/core/trackmenu.js), which mounts its own
   // spawnsui / pitui and its own file boxes when a panel opens and unmounts them when it closes; this panel no longer makes them (two live copies would each follow the shell)
 
   const msg = el('p', { class: 'message', role: 'status' }), info = el('p', { class: 'head' }), sculptHint = el('p', { class: 'message hint', 'aria-label': 'sculpt hint', style: 'font-size:12px;margin:2px 0' });
   const pieces = PU.mount({ root, stage, shell, win, el, armed: () => brushedPress, send, settings: S });
-  // D269: the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
+  // the saved pieces are a drop-down bin in the top bar (app/index.html #pieces-bin), not a section of this column; without that element they stay here
   const bin = doc.getElementById ? doc.getElementById('pieces-bin') : null; if (bin) bin.replaceChildren(...pieces.nodes.library.slice(1));
-  // D355 part 2, THE SLIM LEFT SIDE (the user: "we can try it, but keep it the same aesthetic as we have it now"; plan_t180_handoff :1382-1387). The commands moved to
-  // the top-right menus: Build (app/core/buildmenu.js), pane B's Settings and View, and pane A's Track and File ▸ Developer (which make their own controls). Each moved control is still THIS panel's, the same
+  // THE SLIM LEFT SIDE (the user: "we can try it, but keep it the same aesthetic as we have it now"). The commands moved to
+  // the top-right menus: Build (app/core/buildmenu.js), Settings and View, and Track and File ▸ Developer (which make their own controls). Each moved control is still THIS panel's, the same
   // node with the same handlers, HELD out of sight below; a menu's popover borrows it while open (lend) and gives it back, so what it does is unchanged.
   const held = el('div', { 'aria-label': 'held for the menus', hidden: '', style: 'display:none' });
   const LENT = {
@@ -834,10 +834,10 @@ function mount(root, shell, mountOpts = {}) {
     el('div', { class: 'actions' }, jumpBtn, levelBtn, floorBtn, closeBtn));   // Build's commands (their buttons, so a click is what it always was)
   /** A popover's mountFn: today's fields and button into `box`; the function returned puts them back. */
   const lend = (name, box) => { const n = LENT[name]; if (!n) throw new Error(`BAD_LEND: no fields named ${name}`); box.append(n); return () => { if (n.parent !== held && n.parentNode !== held) held.append(n); }; };
-  // THE SCULPT STRIP (D421 part 3; it replaced the brush strip): the tool, the radius, "more ▾", the tool's one-line hint and, during a drag, the change at the centre and the
+  // THE SCULPT STRIP (it replaced the brush strip): the tool, the radius, "more ▾", the tool's one-line hint and, during a drag, the change at the centre and the
   // widening note. Shown only in Sculpt. Its class stays brush-strip: the page moves it under the bar (app/index.html) and lays it out. Exposed as sculptStrip
   // its HEIGHT IS FIXED, one line, empty or not: it gains its text as a drag opens, and a line that grew then pushed the stage down under the held pointer (19.39 px: every
-  // delta gained that, and the road jumped as the drag began; A's sculpt-frame row 5, p-d421-sculptframe-A_2026-10-20.md §6). Never wraps: a long note is cut, its whole text the tooltip
+  // delta gained that, and the road jumped as the drag began; app/test/sculpt-frame.test.js row 5). Never wraps: a long note is cut, its whole text the tooltip
   const valueLine = el('p', { class: 'message hint', 'aria-label': 'sculpt value', style: 'font-size:12px;margin:2px 0;height:1.4em;line-height:1.4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' });
   const moreTools = el('details', { class: 'sculpt-more' }, el('summary', { text: 'more ▾', style: 'cursor:pointer' }),
     el('div', { class: 'pickers' }, field('exact size (may nudge ≤ 0.1 mm outside)', sharp), field('other tool', otherTool), field('Edge changes', edgeSide), field('Smooth smooths', smoothCh)));
@@ -856,15 +856,15 @@ function mount(root, shell, mountOpts = {}) {
     el('div', { class: 'pickers' }, field('peak bank °', swingPeak), field('peak at', swingAt), field('lead-in m', swingIn), field('run-out m', swingOut), field('exit bank °', swingExit)),
     el('div', { class: 'actions' }, swingPreview, swingApply, swingCancel));
   const sculptStrip = el('div', { 'aria-label': 'sculpt strip', class: 'brush-strip' }, el('div', { class: 'pickers' }, field('tool', toolSel), field('radius m', radius), moreTools, bankBend), sculptHint, valueLine);
-  // SMOOTH'S RADIUS (O's measurement, p-d421-shell-O_2026-10-20.md addendum: at a bump's own radius Smooth moves ONE control point, nothing to see; 10 at r 160, 29 at r 300):
+  // SMOOTH'S RADIUS (measured: at a bump's own radius Smooth moves ONE control point, nothing to see; 10 at r 160, 29 at r 300):
   // picking Smooth puts 3x the last tool's radius in the field, so the smooth reaches past the bump it is taking out and scales with it (a fixed 300 m would swallow a
   // 60 m bump's neighbours and fall short of a 500 m bend); leaving Smooth puts the other tools' radius back. The field only: an open drag keeps its r
   let smoothing = false, toolsR = null, rClass = 'grab';
-  const keptR = { grab: RADIUS_DEFAULT.grab, tools: RADIUS_DEFAULT.tools };   // D522: each class's radius while the other is shown
+  const keptR = { grab: RADIUS_DEFAULT.grab, tools: RADIUS_DEFAULT.tools };   // each class's radius while the other is shown
   const syncRadius = () => {
     const now = toolNow().key === 'smooth';
     if (!now && smoothing) { smoothing = false; if (toolsR !== null) radius.value = String(toolsR); }   // leaving Smooth: the tools' radius again
-    const c = radiusClass(); if (c !== rClass) { keptR[rClass] = radiusNow(); rClass = c; radius.value = String(keptR[c]); }   // D522: Grab's radius and the other tools' each kept
+    const c = radiusClass(); if (c !== rClass) { keptR[rClass] = radiusNow(); rClass = c; radius.value = String(keptR[c]); }   // Grab's radius and the other tools' each kept
     if (now && !smoothing) { smoothing = true; toolsR = radiusNow(); radius.value = String(3 * toolsR); }
   };
   const showTool = () => {
@@ -876,20 +876,20 @@ function mount(root, shell, mountOpts = {}) {
   toolSel.onchange = () => { otherTool.value = ''; showTool(); };
   otherTool.onchange = edgeSide.onchange = smoothCh.onchange = showTool;
   // the change a drag has made at its centre, in the channel's own unit (the shell holds the delta it applied), and Smooth's strength
-  // (D425 part 4: the units are handles.js BRUSH_CHANNELS', read by the glyph too; roadWords is what the glyph says, valueWords the strip's "at the centre")
+  // (part 4: the units are handles.js BRUSH_CHANNELS', read by the glyph too; roadWords is what the glyph says, valueWords the strip's "at the centre")
   const FOLLOW_CH = Object.freeze({ h: 'height', l: 'lateral', w: 'w', phi: 'phi', c: 'c' });
   const roadWords = (b, T) => {
-    if (b && b.mode === 'follow') return b.delta ? Object.keys(FOLLOW_CH).filter((k) => Number.isFinite(b.delta[k]) && Math.abs(b.delta[k]) > 1e-9).map((k) => HD.brushFormat(FOLLOW_CH[k], b.delta[k])).join(' · ') : '';   // D520: what the point's drag changed there
+    if (b && b.mode === 'follow') return b.delta ? Object.keys(FOLLOW_CH).filter((k) => Number.isFinite(b.delta[k]) && Math.abs(b.delta[k]) > 1e-9).map((k) => HD.brushFormat(FOLLOW_CH[k], b.delta[k])).join(' · ') : '';   // what the point's drag changed there
     if (!b || !T || !Number.isFinite(b.delta)) return '';
     if (T.key === 'smooth') return `smoothing the ${CHANNEL_NAMES[T.channel]}, strength ${b.delta.toFixed(2)}`;
     return HD.brushFormat(T.channel, b.delta);
   };
   const valueWords = (b, T) => { const v = roadWords(b, T); return v && T.key !== 'smooth' ? `${v} ${b.mode === 'follow' ? 'at the point' : 'at the centre'}` : v; };
-  // D425 part 4 (design §1 cue 5 (ii)): THE VALUE LINE, in this order: the tool's word for the way the drag goes, the value at the centre, the widened note, the pieces in the window and, on a
+  // (design §1 cue 5 (ii)): THE VALUE LINE, in this order: the tool's word for the way the drag goes, the value at the centre, the widened note, the pieces in the window and, on a
   // closed lap under a route tool, the two the release may also move (the lap's last road piece and its first: the seam tries, app/core/coreshell.js)
   const valueLineOf = (st, T) => {
     const b = st.brush, K = HD.KINDS[brushKindOf(T, T.channel === 'lateral')], d = b.delta;
-    // D522: a grab says which way the road gives (one side, or the whole road at the centre) and the radius it moves within, the radius really used
+    // a grab says which way the road gives (one side, or the whole road at the centre) and the radius it moves within, the radius really used
     const way = b.mode === 'follow' ? `${drag && drag.follow && Math.abs(drag.follow.frame.u) >= ZG.HINGE_U ? 'this side; the far edge stays' : 'the whole road'}, within ${(Number.isFinite(b.rUsed) ? b.rUsed : b.r).toFixed(0)} m`
       : K && Number.isFinite(d) && d !== 0 ? (d > 0 ? K.words[0] : K.words[1] || '') : '';
     const widened = Number.isFinite(b.rUsed) && b.rUsed > b.r + 1e-9 ? `brush widened to ${b.rUsed.toFixed(0)} m (asked ${b.r.toFixed(0)} m)` : '';
@@ -898,7 +898,7 @@ function mount(root, shell, mountOpts = {}) {
     const roads = b.closedBase ? b.closedBase.pieces.map((p, i) => (p.type === 'road' ? i : -1)).filter((i) => i >= 0) : [];
     return [way, valueWords(b, T), widened, ps ? (lo === hi ? `piece ${idOf(lo)}` : `pieces ${idOf(lo)}–${idOf(hi)}`) : '', roads.length ? `release may move ${idOf(roads[roads.length - 1])}, ${idOf(roads[0])}` : ''].filter(Boolean).join(' · ');
   };
-  // D425 part 4 (design §1 cue 5 (iii)): THE BIG VALUES OVERLAY IN SCULPT, four cells: the tool, its value at the centre under the channel's name, the radius and what moves; set only when the text changed
+  // (design §1 cue 5 (iii)): THE BIG VALUES OVERLAY IN SCULPT, four cells: the tool, its value at the centre under the channel's name, the radius and what moves; set only when the text changed
   const numberOf = (ch, delta) => { const t = HD.brushFormat(ch, delta), C = HD.BRUSH_CHANNELS[ch]; return t && C ? t.slice(C.label.length + 1) : ''; };
   const showSculptValues = (st) => {
     if (!values || !st || !st.sculpt) return;
@@ -908,7 +908,7 @@ function mount(root, shell, mountOpts = {}) {
     const key = JSON.stringify(list); if (key === sculptShown) return;
     sculptShown = key; values.set(list);
   };
-  // C's leftover, in P's words (p-d421-review-P_2026-10-20.md §0): a sweep step on a CLOSED tube reaches the core's validator (src/core/document.js, "the tube sweep must stay within
+  // A sweep step on a CLOSED tube reaches the core's validator (src/core/document.js, "the tube sweep must stay within
   // 0 to 360°"), which reads as a fault; the Tube sweep tool says what it is instead
   const TUBE_SHUT = 'Sculpt can\'t change the sweep of a closed tube: at 360° it is already shut, and a little less would leave a slit between its tips that the car falls through.';
   // (the words are src/core/document.js:412's alone, which only a sweep step reaches: extend.js and adapter.js say "must be from 0 to 360 degrees")
@@ -952,7 +952,7 @@ function mount(root, shell, mountOpts = {}) {
     const d = st.history.present, L = st.resolved.segments.reduce((a, g) => a + g.length, 0);
     if (d !== shownFor) {   // a new document (Extend, Undo, Redo, open, a brush): the fields show its head, and an UNDONE Extend's own values (item 7)
       const m = shownFor ? madeWith.get(shownFor) : null, undone = !!m && m.before === d;   // only an Undo steps from a document back to the one it was made from
-      // D278: the Extend handles stand beside the landing's, so a landing move (typed or dragged) is a new document that must NOT wipe what was typed or dragged into the Extend fields: those that differ from what
+      // the Extend handles stand beside the landing's, so a landing move (typed or dragged) is a new document that must NOT wipe what was typed or dragged into the Extend fields: those that differ from what
       // the panel last put there are kept (they stay un-applied, as before the move); every other field shows the head, as ever
       const keep = st.lastStep && st.lastStep.op === 'landing' && !undone ? FIELDS.filter(unapplied).map((fl) => [fl, fl.value]) : [];
       showGrip(); showHead(); if (undone) putBack(m.made); for (const k of Object.keys(HEAD)) applied[k] = HEAD[k][0].value;
@@ -968,7 +968,7 @@ function mount(root, shell, mountOpts = {}) {
       const ps = shell.pieceState(one);
       if (ps) {
         for (const [k, [input, of]] of Object.entries(HEAD)) input.value = show(of(ps));
-        if (cornerMode()) { const at = d.pieces.findIndex((p) => p.id === one); const r = shell.pieceReadouts()[at]; turn.value = show(r.turnDeg); climb.value = show(r.climbDeg); }   // D331 B: as corners, the piece lends the degrees it turns and climbs
+        if (cornerMode()) { const at = d.pieces.findIndex((p) => p.id === one); const r = shell.pieceReadouts()[at]; turn.value = show(r.turnDeg); climb.value = show(r.climbDeg); }   // as corners, the piece lends the degrees it turns and climbs
         len.value = show(ps.length);
         for (const [k, fl] of [['cup', cup], ['tube', tube]]) { fl.disabled = false; fl.setAttribute('title', baseTitle[k]); }
         if (ps.tube) exclusive(tube); else if (cup.value !== shown.cup) exclusive(cup);
@@ -982,8 +982,8 @@ function mount(root, shell, mountOpts = {}) {
     msg.textContent = plainMessage(st.message) || ''; msg.className = st.messageKind === 'ok' ? 'message ok' : 'message';
     readout();   // the track changed, so the piece the fields would add changed
     hintNow(); fillLanding();
-    if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // D267: a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)
-    // D421 part 3: the Sculpt strip only in Sculpt; entering Sculpt takes Extend's ghost away (its handles are off in Sculpt: ghostModel); the selection box only with a selection
+    if (d !== jumpNoteFor) { jumpNoteFor = d; sayJump(); }   // a new document: the note is empty again (it shows only a refusal's words; the standing hint is the button's tooltip)
+    // the Sculpt strip only in Sculpt; entering Sculpt takes Extend's ghost away (its handles are off in Sculpt: ghostModel); the selection box only with a selection
     if (!!st.sculpt !== wasSculpt) { wasSculpt = !!st.sculpt; sculptShown = null; if (wasSculpt) send('t180-ghost-clear'); else { triedDoc = null; hover = null; } }
     sculptStrip.style.display = st.sculpt ? '' : 'none'; showSel(st);
     if (st.sculpt) showTool();
@@ -993,17 +993,17 @@ function mount(root, shell, mountOpts = {}) {
   // the labels on the track: a DOM layer over the preview (app/core/labels.js); none when there is no preview to lay them on
   const labels = stage ? LB.mount(stage, shell, win) : null;
   const gripLayer = stage ? GR.mount(stage, shell, win) : null;
-  const spawnsLayer = stage ? SPL.mount(stage, shell, win) : null;   // the hand-placed start, drawn when the track has one   // D261: the track coloured by grip, off until "colour by grip" is ticked
+  const spawnsLayer = stage ? SPL.mount(stage, shell, win) : null;   // the hand-placed start, drawn when the track has one   // the track coloured by grip, off until "colour by grip" is ticked
   colourOn.onchange = () => { if (gripLayer) gripLayer.setVisible(colourOn.checked); if (labels) labels.setGripView(colourOn.checked); };
-  const spawnDrag = stage ? SPD.mount(stage, win, shell, { pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; }, yieldTo: (x, y) => !!(handles && HD.hitTest(handles.handles(), x, y)) }) : null;   // D285: the start line, the pack and the hotlap grabbed with the mouse. Mounted BEFORE the handles (the handles' press listener stays the last registered, as the tests' capture emulation assumes) and it steps aside for a handle under the pointer, whatever the order
-  const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // D244: the drag handles' overlay
+  const spawnDrag = stage ? SPD.mount(stage, win, shell, { pose: () => { const v = askOf('t180:view'); return v ? v.pose : null; }, yieldTo: (x, y) => !!(handles && HD.hitTest(handles.handles(), x, y)) }) : null;   // the start line, the pack and the hotlap grabbed with the mouse. Mounted BEFORE the handles (the handles' press listener stays the last registered, as the tests' capture emulation assumes) and it steps aside for a handle under the pointer, whatever the order
+  const handles = stage ? HD.mount(stage, win, handlesHost) : null;   // the drag handles' overlay
   if (spawnDrag) spawnDrag.late();   // (the start drag's hover and move listener goes after the handles': they set the cursor on every move)
   if (labels && handles) labels.setAvoid(() => handles.handles().concat(handles.dots()).filter((h) => h.screen).map((h) => h.screen).concat(handles.tips ? handles.tips() : []));   // the road labels keep clear of the handles drawn over them
-  const flights = stage ? FL.mount(stage, win) : null;   // D243: the flights as dashed arcs
+  const flights = stage ? FL.mount(stage, win) : null;   // the flights as dashed arcs
   // 't180:handles-request' { detail: { reply(list) } }: where the handles are on screen now ([{ id, kind, side, x, y, dx, dy }], css px of the preview), read only, for the window proof as the other requests are
   const onHandlesRequest = (e) => { if (e.detail && typeof e.detail.reply === 'function') e.detail.reply(handles ? handles.handles().filter((h) => h.screen).map((h) => ({ id: h.id, kind: h.kind, side: h.side, x: h.screen.x, y: h.screen.y, dx: h.screen.dx, dy: h.screen.dy })) : []); };
   doc.addEventListener('t180:handles-request', onHandlesRequest);
-  // D355: FOUR OF THE SIX KEYS of S are this panel's switches (the fifth, mirrorOnInsert, is app/core/piecesui.js's; the sixth, csp, the checker's). Each starts from
+  // FOUR OF THE SIX KEYS of S are this panel's switches (the fifth, mirrorOnInsert, is app/core/piecesui.js's; the sixth, csp, the checker's). Each starts from
   // what S holds (a value S does not hold, or one that is not valid, keeps today's default) and follows S.on; a change runs the switch's own handler, as a click would
   const SETTINGS = {
     turnClimbAs: (v) => { const w = v === 'rate' ? 'rate' : 'corner'; if (turnAs.value !== w) { turnAs.value = w; turnAs.onchange(); } },

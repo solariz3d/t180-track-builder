@@ -1,4 +1,4 @@
-// griplayer.js: THE TRACK COLOURED BY GRIP (D261, the user: "a preview view that colours pieces by grip, with the value in the hover label"; the hover label is app/core/labels.js, which adds
+// griplayer.js: THE TRACK COLOURED BY GRIP (the user: "a preview view that colours pieces by grip, with the value in the hover label"; the hover label is app/core/labels.js, which adds
 // "grip 85%" to a piece's readout when its grip is not 100 or this view is on). A canvas over the preview (#preview), redrawn every animation frame like the labels and the selection
 // (the camera eases, so the colours move with it), OFF until the panel's "colour by grip" box is ticked. Every road piece's centreline is drawn over the road, thick, in the colour of its
 // grip: BLUE below 100% (less grip), WHITE at 100% (AC's own road), ORANGE above (more grip), the full colour at 50% and 150%. The lines are app/core/selectionlayer.js's (the same
@@ -9,8 +9,8 @@
 //   mount(stage, shell, win)               -> { lines(), setVisible(on), visible(), unmount() }
 'use strict';
 const SL = require('./selectionlayer.js');
-const { tokensOf } = require('../lib/tokens.js');   // D381: the skin's colours (app/lib/tokens.js)
-const GV = require('./gripvals.js');   // D263: the core's document.js needs node's fs and the UI must load in the webview loader without it
+const { tokensOf } = require('../lib/tokens.js');   // the skin's colours (app/lib/tokens.js)
+const GV = require('./gripvals.js');   // the core's document.js needs node's fs and the UI must load in the webview loader without it
 
 const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 const hex = (c) => `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
