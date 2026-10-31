@@ -9,7 +9,7 @@ can be put on them, but the walls, tubes and jumps are built for a T-180.
 **Requires Custom Shaders Patch (CSP).** The exported tracks use CSP's extended physics; plain Assetto Corsa can crash
 loading them.
 
-<!-- SCREENSHOT PLACEHOLDER: one screenshot of the builder with a track and the drag handles on the Extend ghost goes here. -->
+![The builder in its default look: a track laid piece by piece, and the next piece shown as a ghost with its drag handles](media/builder.png)
 
 ## Install
 
