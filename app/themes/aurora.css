@@ -1,4 +1,4 @@
-/* AURORA (D381, pane B; designed in D379): the builder under the northern lights, for the Aurora melody. A night skin: deep indigo glass, soft green and
+/* AURORA: the builder under the northern lights, for the Aurora melody. A night skin: deep indigo glass, soft green and
    violet glows, and curtains of light drifting slowly over the night behind the track. Styling only: no box property (width, height, margin, padding,
    border width, font, letter-spacing, position) is set here, so every element keeps its place (app/test/theme.test.js reads this file for them).
    Windows fonts only (the page's own). The warning hues are SIGIL's own on a surface as dark as SIGIL's (--bad lifted to read on indigo).
@@ -7,7 +7,7 @@
 [data-theme="aurora"] {
   /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
   --bad-text: #f28d88; --warn-text: #ffad1a;
-  --tex: url(tex/aurora.png) 0 0 / calc(3 * var(--dpx)) calc(3 * var(--dpx)) repeat;   /* D399: this look's texture (index.html, --tex): a dot matrix, one dot every 3 px; app/themes/tex/aurora.png, scripts/texture_tiles.js */
+  --tex: url(tex/aurora.png) 0 0 / calc(3 * var(--dpx)) calc(3 * var(--dpx)) repeat;   /* this look's texture (index.html, --tex): a dot matrix, one dot every 3 px; app/themes/tex/aurora.png, scripts/texture_tiles.js */
   --bg: #04050d; --panel: #080a1a; --raise: #0e1130; --line: #252a5c; --hair: rgba(150, 200, 255, .18);
   --text: #eaf6ff; --dim: #b6c4e4; --accent: #6ff5c0; --accent-dim: rgba(111, 245, 192, .16);
   --mine: #d9a55a; --bad: #ef6a52; --warn: #e3b448; --ok: #8fc9a2;
@@ -15,7 +15,7 @@
   --ink: #070920; --on-ink: #eaf6ff; --on-ink-strong: #ffffff; --veil: #080a1e; --veil-rule: rgba(184, 146, 255, .3);
   --guide-bg: rgba(8, 10, 30, .9); --guide-text: #eaf6ff; --guide-label: #b6c4e4;
   --sky: color(srgb 0.03 0.035 0.11); --fog: color(srgb 0.07 0.08 0.2); --road-edge: color(srgb 0.55 1 0.82); --road-tie: color(srgb 0.04 0.05 0.14); --ground-grid: color(srgb 0.3 0.24 0.58);
-  /* D384: the polar night is the WebGL view's own skybox, app/preview/sky/aurora.js, fixed in the world as the camera turns: stars, and curtains
+  /* the polar night is the WebGL view's own skybox, app/preview/sky/aurora.js, fixed in the world as the camera turns: stars, and curtains
      green at their lower edge (--sky-a) and violet above (--sky-b); the night pales at the horizon to --sky-c, the same colour as --fog, so the far
      road fogs into the sky it meets */
   --sky-style: aurora; --sky-a: color(srgb 0.31 1 0.69); --sky-b: color(srgb 0.67 0.43 1); --sky-c: color(srgb 0.07 0.08 0.2);
@@ -23,7 +23,7 @@
   color-scheme: dark;
 }
 
-@keyframes aurora-breathe { 0%, 100% { background-position: 0 0, 0 0, 0 0, 0 0; } 50% { background-position: 0 0, 30% 0, 70% 0, 0 0; } }   /* D399: the tile (first) stays still */
+@keyframes aurora-breathe { 0%, 100% { background-position: 0 0, 0 0, 0 0, 0 0; } 50% { background-position: 0 0, 30% 0, 70% 0, 0 0; } }   /* the tile (first) stays still */
 
 [data-theme="aurora"], [data-theme="aurora"] body { background: radial-gradient(140% 90% at 50% -10%, #12164a 0%, #070920 45%, #03040b 100%); }
 [data-theme="aurora"] ::selection { background: rgba(160, 120, 255, .35); }
@@ -59,7 +59,7 @@
 /* fields */
 [data-theme="aurora"] input[type="number"], [data-theme="aurora"] input[type="text"], [data-theme="aurora"] input:not([type]), [data-theme="aurora"] textarea,
 [data-theme="aurora"] .save-piece input, [data-theme="aurora"] .picker select, [data-theme="aurora"] select { background: rgba(6, 8, 26, .85); color: var(--text); border-color: rgba(150, 200, 255, .24); border-radius: 8px; }
-[data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button { background-color: var(--dim); }   /* D513: the spin chevrons in this skin's colours (their shape is in index.html) */
+[data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button { background-color: var(--dim); }   /* the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
 [data-theme="aurora"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #c9a8ff; }
 [data-theme="aurora"] input:focus, [data-theme="aurora"] select:focus, [data-theme="aurora"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(111, 245, 192, .16), 0 0 12px var(--green-glow); }
@@ -72,7 +72,7 @@
 /* THE LEFT PANEL: a pane of night glass with a slow curtain of light in its top */
 [data-theme="aurora"] #left {
   background: var(--tex), radial-gradient(70% 220px at 20% 0%, rgba(111, 245, 192, .2), transparent 70%), radial-gradient(60% 200px at 85% 0%, rgba(160, 120, 255, .3), transparent 70%), var(--night-glass);
-  background-size: calc(3 * var(--dpx)) calc(3 * var(--dpx)), 140% 100%, 140% 100%, 100% 100%; animation: aurora-breathe 18s ease-in-out infinite;   /* D399: the tile's size first */
+  background-size: calc(3 * var(--dpx)) calc(3 * var(--dpx)), 140% 100%, 140% 100%, 100% 100%; animation: aurora-breathe 18s ease-in-out infinite;   /* the tile's size first */
   border-color: rgba(150, 200, 255, .2); border-radius: 16px;
   box-shadow: inset 0 1px 0 rgba(111, 245, 192, .22);
   backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
@@ -91,7 +91,7 @@
 [data-theme="aurora"] #camera p { color: var(--dim) !important; background: rgba(4, 5, 16, .72); border-radius: 8px; text-shadow: none; }
 [data-theme="aurora"] .preview-hud { color: var(--text) !important; background: rgba(4, 5, 16, .72) !important; border-radius: 6px; }
 
-/* THE CURTAINS are the 3D view's own sky now (D384: --sky-style above, app/preview/sky/aurora.js), drawn at infinity so they stay put as the camera
+/* THE CURTAINS are the 3D view's own sky now (--sky-style above, app/preview/sky/aurora.js), drawn at infinity so they stay put as the camera
    turns; their drift stops under prefers-reduced-motion there. #preview::after is the page's own vignette again. */
 
 /* the guide card, the piece values, the question in the page */
