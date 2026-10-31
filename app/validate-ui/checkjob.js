@@ -27,7 +27,10 @@ const { graphModel } = require('./graph.js');
 
 /** A mesh with nothing in it: the track model's path is what the check reads, and meshing 24 km would cost the worker seconds for nothing. */
 const emptyMesh = () => ({ scene: { root: { children: [] }, materials: [] }, cells: [], _state: { pieces: [], seams: [], nseg: 0 } });
-const PATH_ONLY = Object.freeze({ ...G, buildMesh: emptyMesh, extendMesh: (m) => m, sculptMesh: (m) => m, reuseMesh: () => emptyMesh() });
+// and their generator twins: the track model builds through buildMeshSteps / reuseMeshSteps / extendMeshSteps when the geometry has them, so passing G's
+// real ones through meshed the whole track here (0.9 GB on ELYSIUM, measured 2026-10-31, beside the page's own mesh in the same process)
+const PATH_ONLY = Object.freeze({ ...G, buildMesh: emptyMesh, extendMesh: (m) => m, sculptMesh: (m) => m, reuseMesh: () => emptyMesh(),
+  *buildMeshSteps() { return emptyMesh(); }, *extendMeshSteps(m) { return m; }, *reuseMeshSteps() { return emptyMesh(); } });
 
 const offsetPath = typeof AD.offsetPath === 'function' ? AD.offsetPath : null;
 
