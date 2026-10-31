@@ -1,9 +1,9 @@
-// schema.js: every layer type as a PARAMETER SET (ARCHITECTURE §5b: "Every layer is a parameter set, so a texture is
+// schema.js: every layer type as a PARAMETER SET (the design: "Every layer is a parameter set, so a texture is
 // also text: shareable, editable, regenerable at any resolution"). Each key has a kind, a range and a default; the
 // canonical text writes every key in this order, so the same texture is always the same bytes.
 //
 // COORDINATES. u runs ACROSS the road (0 = right edge, 1 = left edge, the profile's width) and v runs ALONG it (one tile
-// of the tiling length, §5b "Mapping is automatic"). Every size and position is a FRACTION of the tile, never pixels, so
+// of the tiling length; "Mapping is automatic"). Every size and position is a FRACTION of the tile, never pixels, so
 // the text regenerates at any resolution. Directions are named by the road: a stripe that runs 'along' the road varies
 // across u (a lane line); one that runs 'across' varies along v (a zebra band).
 //
