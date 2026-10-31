@@ -139,7 +139,7 @@ function moveGate(src, stations, { gate = 2, nearS, closed = true, heightM = DEF
     // the gate as it will read back: measured height over the road along its own up, the road's normal there, its u across
     const placed = [[names[0], mL], [names[1], mR]].map(([name, m]) => {
       const pos = m.slice(12, 15), up = m.slice(4, 7), fwd = m.slice(8, 11), hit = under(ray, pos, up);
-      return { name, kind: 'sector', s: st.s, u: dot(sub(pos, st.pos), lat), h: hit ? hit.t - UNDER_FROM_M : NaN, fwd, T, normal: hit ? hit.n : up, span: [-ed.right, ed.left], error: hit ? undefined : 'no road under it' };
+      return { name, kind: 'sector', s: st.s, u: dot(sub(pos, st.pos), lat), h: hit ? hit.t - UNDER_FROM_M : NaN, surface: hit ? sub(pos, mul(up, hit.t - UNDER_FROM_M)) : pos, fwd, T, normal: hit ? hit.n : up, span: [-ed.right, ed.left], error: hit ? undefined : 'no road under it' };
     });
     const res = checkPlaced(placed, { pits: { count: 0 } }, { lengthM: lap, closed });
     // only this gate's problems: the set holds no start gate or grid, which the same checks would otherwise report missing
