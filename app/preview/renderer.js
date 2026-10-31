@@ -19,8 +19,9 @@
 //                   per-word colours instead. A sampler whose texture is not in extras.textures gets one white texel.
 //   r.setTheme({ sky, fog, edge, tie, grid, skyStyle, skyA, skyB, skyC })   a skin's 3D colours and its sky (themeFrom(tokens) reads them)
 //   extras.time = seconds, for the sky's drift (the preview hands 0 under prefers-reduced-motion)
-//   r.stats()  -> { uploads, buffers, draws, lines, acDraws, textures, chunks }      uploads = bufferData + texImage2D calls;
-//                 chunks = the placed track's merged chunks drawn last frame (CHUNKS below)
+//   r.stats()  -> { uploads, buffers, draws, lines, acDraws, textures, chunks, coarse, triangles }      uploads = bufferData + texImage2D calls;
+//                 chunks = the placed track's merged chunks drawn last frame (CHUNKS below); coarse = how many of the draws were thinned (LOD_NEAR below);
+//                 triangles = the surface triangles drawn last frame
 //   createRenderer(gl, { chunkVertices })   the most vertices in one chunk (default and maximum 65,535: Uint16 indices)
 //   r.dispose()
 //
@@ -208,6 +209,51 @@ function chunkLines(c) {
 // the window (row-vector, world = local · model · xform). Its chunk is baked with the batch's own placed matrix as always, so it is reused from one step to the next, and only
 // the matrix it is drawn under changes: re-baking every chunk of a 10 km lap's moved road on every step was most of a drag frame (2026-10-20, a page profile of a sculpt drag on a 10 km lap)
 const chunkModel = (c) => (c.list && c.list[0] && c.list[0].xform) || c.model;
+// THE COARSE ROAD FAR AWAY (the user, 2026-10-31: "in the previewer, the track doesnt have to be full fidelity topography until it is exported to ease strain on
+// preview"). With `lod` asked for (the preview's placed track), a chunk whose nearest point is LOD_NEAR m or more from the eye is drawn from a THINNED index list over
+// its own vertices: in each cell every LOD_STEP[level]-th row and column, and always the first and last of each (the cell's ends and the road's two rims), so the road keeps
+// its outline and meets the next cell where it did. A chunk nearer than LOD_NEAR, a moved chunk (a drag's window) and the ghost are drawn whole: the triangles the
+// export meshes. Only what is drawn changes: the vertices, the mesh, the path, the checker and the readouts are the same objects as before. The ties fade out by
+// TIE_FADE[1] m, so a chunk wholly beyond it draws no ties (the same picture, fewer lines).
+const LOD_NEAR = 200, LOD_FAR = 800;
+const LOD_STEP = Object.freeze([null, Object.freeze({ rows: 2, cols: 3 }), Object.freeze({ rows: 4, cols: 6 })]);
+/** The world box of a chunk's baked positions (once per chunk). */
+function chunkBox(c) {
+  if (!c.box) {
+    const P = c.positions, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let k = 0; k < P.length; k += 3) for (let d = 0; d < 3; d++) { const v = P[k + d]; if (v < lo[d]) lo[d] = v; if (v > hi[d]) hi[d] = v; }
+    c.box = { lo, hi };
+  }
+  return c.box;
+}
+/** How far the eye is from a chunk's box, in metres (0 inside it). */
+function boxDistance(c, eye) {
+  const { lo, hi } = chunkBox(c); let s = 0;
+  for (let d = 0; d < 3; d++) { const v = eye[d] < lo[d] ? lo[d] - eye[d] : eye[d] > hi[d] ? eye[d] - hi[d] : 0; s += v * v; }
+  return Math.sqrt(s);
+}
+const pick = (n, step) => { const out = []; for (let i = 0; i < n; i += step) out.push(i); if (out[out.length - 1] !== n - 1) out.push(n - 1); return out; };
+/** The thinned index list of chunk c at a level (1 or 2), made once. A cell is thinned when it is a grid of rows by `cols` vertices meshed as quads (mesh.js meshPiece);
+ *  anything else in the chunk (a seam's zipper, a batch with no grid) keeps its own triangles. */
+function coarseIndices(c, level) {
+  if (!c.lod) c.lod = [];
+  if (c.lod[level]) return c.lod[level];
+  const st = LOD_STEP[level], out = []; let v = 0;
+  for (const b of c.list) {
+    const nv = b.positions.length / 3, K = b.cols, R = K > 1 ? nv / K : 0;
+    if (!b.seam && Number.isInteger(R) && R >= 2 && b.indices.length === (R - 1) * (K - 1) * 6) {
+      const rows = pick(R, st.rows), cols = pick(K, st.cols);
+      for (let i = 0; i + 1 < rows.length; i++) for (let j = 0; j + 1 < cols.length; j++) {
+        const A = v + rows[i] * K + cols[j], B = v + rows[i] * K + cols[j + 1], C = v + rows[i + 1] * K + cols[j], D = v + rows[i + 1] * K + cols[j + 1];
+        out.push(A, C, B, B, C, D);   // wound as the mesh's own quads (A, C, B) and (B, C, D)
+      }
+    } else for (let k = 0; k < b.indices.length; k++) out.push(b.indices[k] + v);
+    v += nv;
+  }
+  return (c.lod[level] = Uint16Array.from(out));
+}
+/** The level a chunk is drawn at from `eye`: 0 (whole) near, 1, 2 far; always 0 for a moved chunk. */
+const levelOf = (c, eye) => { if (!eye || chunkModel(c) !== c.model) return 0; const d = boxDistance(c, eye); return d < LOD_NEAR ? 0 : d < LOD_FAR ? 1 : 2; };
 const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.73, 0.66, 1.0] });   // 2026-10-14, Sigil: the accent violet (#b9a8ff); was sky blue, which tinted the whole view
 const GHOST_ALPHA = 0.42;
 // From a usability pass: the ties are one near-black line per station; from overhead or far
@@ -264,7 +310,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   const surf = program(VS, FS), line = program(LVS, LFS);
   line.fade = gl.getUniformLocation(line.p, 'uFade');
   const buffers = new Map();   // typed array → { buf, gen }
-  let gen = 0, uploads = 0, draws = 0, lines = 0, chunkCount = 0;
+  let gen = 0, uploads = 0, draws = 0, lines = 0, chunkCount = 0, coarse = 0, tris = 0;
   function bufferFor(arr, target) {
     let e = buffers.get(arr);
     if (!e) { const buf = gl.createBuffer(); gl.bindBuffer(target, buf); gl.bufferData(target, arr, gl.STATIC_DRAW); uploads++; e = { buf, gen }; buffers.set(arr, e); }
@@ -306,7 +352,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     }
     e.gen = gen; return e.t;
   }
-  function drawAc(chunks, vp, pose, images) {
+  function drawAc(chunks, vp, pose, images, lod = false) {
     const L = ACLOOK.LIGHT;
     for (const b of chunks) {
       const m = b.group;
@@ -332,24 +378,26 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       bufferFor(b.normals, gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.nrm, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.uvs, gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.uv, 2, gl.FLOAT, false, 0, 0);
       bufferFor(chunkTangents(b), gl.ARRAY_BUFFER); gl.vertexAttribPointer(pr.tan, 3, gl.FLOAT, false, 0, 0);
-      bufferFor(b.indices, gl.ELEMENT_ARRAY_BUFFER);
+      const lv = lod ? levelOf(b, pose.eye) : 0, ix = lv ? coarseIndices(b, lv) : b.indices;
+      bufferFor(ix, gl.ELEMENT_ARRAY_BUFFER);
       gl.uniformMatrix4fv(pr.model, false, chunkModel(b));
-      gl.drawElements(gl.TRIANGLES, b.indices.length, gl.UNSIGNED_SHORT, 0); draws++; acDraws++;
+      gl.drawElements(gl.TRIANGLES, ix.length, gl.UNSIGNED_SHORT, 0); draws++; acDraws++; tris += ix.length / 3; if (lv) coarse++;
       gl.disableVertexAttribArray(pr.nrm); gl.disableVertexAttribArray(pr.uv); gl.disableVertexAttribArray(pr.tan);
     }
     gl.activeTexture(gl.TEXTURE0);
   }
   const use = (pr, vp) => { gl.useProgram(pr.p); gl.uniformMatrix4fv(pr.vp, false, vp); gl.uniform3f(pr.fog, fog[0], fog[1], fog[2]); gl.uniform1f(pr.fogD, fogDensity); };
-  function drawSurfaces(chunks, vp, alpha, tint) {
+  function drawSurfaces(chunks, vp, alpha, tint, eye = null) {
     use(surf, vp); gl.uniform1f(surf.alpha, alpha);
     gl.enableVertexAttribArray(surf.pos); gl.enableVertexAttribArray(surf.nrm);
     for (const b of chunks) {
       bufferFor(b.positions, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.pos, 3, gl.FLOAT, false, 0, 0);
       bufferFor(b.normals, gl.ARRAY_BUFFER); gl.vertexAttribPointer(surf.nrm, 3, gl.FLOAT, false, 0, 0);
-      bufferFor(b.indices, gl.ELEMENT_ARRAY_BUFFER);
+      const lv = levelOf(b, eye), ix = lv ? coarseIndices(b, lv) : b.indices;
+      bufferFor(ix, gl.ELEMENT_ARRAY_BUFFER);
       gl.uniformMatrix4fv(surf.model, false, chunkModel(b));
       const c = tint || b.colour; gl.uniform3f(surf.colour, c[0], c[1], c[2]);
-      gl.drawElements(gl.TRIANGLES, b.indices.length, gl.UNSIGNED_SHORT, 0); draws++;
+      gl.drawElements(gl.TRIANGLES, ix.length, gl.UNSIGNED_SHORT, 0); draws++; tris += ix.length / 3; if (lv) coarse++;
     }
     gl.disableVertexAttribArray(surf.nrm);
   }
@@ -360,7 +408,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     bufferFor(arr, gl.ARRAY_BUFFER); gl.vertexAttribPointer(line.pos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.LINES, 0, arr.length / 3); lines++;
   }
-  function drawRoadLines(chunks, vp, alpha, blending = false) {
+  function drawRoadLines(chunks, vp, alpha, blending = false, eye = null) {
     use(line, vp); gl.enableVertexAttribArray(line.pos);
     // the ties fade with distance, which needs blending; the ghost pass has it on already
     if (!blending) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
@@ -371,7 +419,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       // already: no draw, no geometry and no upload added (a second blended pass of the moved road's surfaces cost row 3 about 0.5-0.8 ms a frame in headless Chrome, 2026-10-22)
       const tint = c.list && c.list[0] && c.list[0].tint;
       drawLines(L.edges, IDENTITY, tint || edge, alpha);
-      drawLines(L.ties, IDENTITY, tie, alpha, TIE_FADE);
+      if (!(eye && chunkModel(c) === c.model && boxDistance(c, eye) >= TIE_FADE[1])) drawLines(L.ties, IDENTITY, tie, alpha, TIE_FADE);   // wholly past the fade: nothing to see
     }
     if (!blending) gl.disable(gl.BLEND);
   }
@@ -413,7 +461,8 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     },
     draw(batches, pose, { width, height }, extras = {}) {
       if (!(width > 0 && height > 0)) throw new Error('renderer: the canvas has no size');
-      gen++; draws = 0; lines = 0; acDraws = 0; chunkCount = 0;
+      gen++; draws = 0; lines = 0; acDraws = 0; chunkCount = 0; coarse = 0; tris = 0;
+      const lodEye = extras.lod ? pose.eye : null;   // the coarse road far away, for the placed track only (LOD_NEAR above)
       const look = extras.look || 'ac';
       if (look !== 'ac' && look !== 'words') throw new Error(`renderer: unknown look ${look}`);
       gl.viewport(0, 0, width, height);
@@ -428,10 +477,10 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       if (look === 'ac' && typeof extras.materialOf === 'function') {
         const materialOf = extras.materialOf;
         chunks = chunksOf(batches, (b) => { const m = materialOf(b); if (!m) throw new Error(`renderer: no material for ${b.key}`); return m; }, materialOf);
-        drawAc(chunks, vp, pose, extras.textures);
-      } else { chunks = chunksOf(batches, colourKey, 'colour'); drawSurfaces(chunks, vp, 1, null); }
+        drawAc(chunks, vp, pose, extras.textures, !!lodEye);
+      } else { chunks = chunksOf(batches, colourKey, 'colour'); drawSurfaces(chunks, vp, 1, null, lodEye); }
       chunkCount = chunks.length;
-      if (extras.lines !== false) drawRoadLines(chunks, vp, 1);
+      if (extras.lines !== false) drawRoadLines(chunks, vp, 1, false, lodEye);
       if (extras.ghost && extras.ghost.length) {       // see-through, over the placed track, without writing depth
         const ghost = chunksOf(extras.ghost, () => 'ghost', 'ghost');
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
@@ -459,7 +508,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       for (const [arr, e] of buffers) if (e.gen !== gen) { gl.deleteBuffer(e.buf); buffers.delete(arr); }   // no longer drawn
       for (const [arr, e] of texes) if (e.gen !== gen) { gl.deleteTexture(e.t); texes.delete(arr); }
     },
-    stats: () => ({ uploads, buffers: buffers.size, draws, lines, acDraws, textures: texes.size, chunks: chunkCount }),
+    stats: () => ({ uploads, buffers: buffers.size, draws, lines, acDraws, textures: texes.size, chunks: chunkCount, coarse, triangles: tris }),
     dispose() {
       for (const e of buffers.values()) gl.deleteBuffer(e.buf); buffers.clear();
       for (const e of texes.values()) gl.deleteTexture(e.t); texes.clear(); if (white) gl.deleteTexture(white);
@@ -469,4 +518,4 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   };
 }
 
-module.exports = { createRenderer, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };
+module.exports = { createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };

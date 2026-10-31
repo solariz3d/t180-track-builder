@@ -412,7 +412,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
       renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track, sculptCues(track, hoverNow(), startMovedOf(shell.getState()))), depthLines: plan ? plan.depth : null,
-        look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, time: skyTime(t) });
+        look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, lod: true, time: skyTime(t) });   // lod: the placed road is drawn coarser far from the eye (renderer.js LOD_NEAR); the export, the checker and the readouts never see it
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
     if (hud) hud.textContent = `${rig.mode.charAt(0).toUpperCase()}${rig.mode.slice(1)} view · ${look === 'ac' ? (sigil ? 'plain road' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}${exactJob && exactJob.building ? ' · building the road…' : ''}${lateShown && t < lateShown.until ? ` · ${lateShown.rec.type === 'keyup' ? 'key-up' : 'key-down'} ${lateShown.rec.code} came ${(lateShown.rec.lateMs / 1000).toFixed(1)} s late (${lateShown.rec.cause})` : ''}`;
@@ -506,7 +506,11 @@ function overlayOf(plan, track, cues = null) {
 // hatch of the last piece, built once from the placed path, is drawn under the drag's move (its `model`), so a step adds no line list. Lines are read from the shared path's stations.
 const WASH_ALPHA = 0.18, HATCH = Object.freeze([1, 0.55, 0.15]), HATCH_ALPHA = 0.6, HATCH_FIRST_ALPHA = 0.3, LINE_LIFT = 0.05;
 const halfMemo = new WeakMap();
-const halfWidth = (g) => { if (!g || !g.profile) return 0; if (!Object.isFrozen(g)) return spanOf(readAt(g, 0)) / 2; if (!halfMemo.has(g)) halfMemo.set(g, spanOf(readAt(g, 0)) / 2); return halfMemo.get(g); };
+// the width is read from a SEALED copy of the cross-section (profile.js sealed): its offsets come from running sums, the same additions in the same order as the plain
+// profile's, so the same doubles (app/test/pick-cull.test.js row 1), at O(n log n) a segment where the plain one summed from the centre for every knot, O(n²): 137 knots a
+// chord on the user's ELYSIUM, about 1.5 ms a segment and 20 s for the whole track the first time the pointer swept it
+const widthOf = (g) => spanOf(sealed(readAt(g, 0))) / 2;
+const halfWidth = (g) => { if (!g || !g.profile) return 0; if (!Object.isFrozen(g)) return widthOf(g); if (!halfMemo.has(g)) halfMemo.set(g, widthOf(g)); return halfMemo.get(g); };
 /** Lines across the road at the path's stations of segments [ja, jb) with s >= sFrom, every `every`-th one: GL LINES pairs (a Float32Array), or null when there is none. */
 function acrossLines(path, segments, ja, jb, sFrom = -Infinity, every = 1) {
   const out = [];
@@ -603,15 +607,56 @@ const PICK_KEEP = 4;   // the candidates kept for the refine
  * 1. Candidates: every sample's centreline and its two rims (pos ± half-width·L) on screen; a candidate's distance is the pointer's to the line rim–centre–rim; the
  *    PICK_KEEP nearest within maxPx are kept (a press on the rim that pickAt misses is caught here).
  * 2. Each is refined on ACROSS_N points across its own section, then once at the half step either side of the nearest. Null when nothing lies within maxPx.
+ * THE CULL (the user's 24 km ELYSIUM: the first hover over the whole track worked out every segment's half-width, 20 s, and a 100 km track projected 50,000 stations
+ * on every pointer move, 23 to 50 ms). The stations are taken in blocks of CULL_N (cullBlocks), each with a box that holds every candidate step 1 could make from it:
+ * its centreline points widened by the largest half-width any of its segments can have (halfBound). When the box is wholly in front of the eye, every point in it
+ * projects inside the screen rectangle of its eight corners, so when that rectangle is more than maxPx (and a pixel more, for rounding) from the pointer, every
+ * station in the block would be passed over, and the block is skipped without reading them. Anything else is read station by station, as before, in the same
+ * order: the answer is the same (app/test/pick-cull.test.js). `cull: false` reads every station (the test's reference).
  */
-function pickAcross(path, segments, pose, x, y, w, h, maxPx = 40) {
+function pickAcross(path, segments, pose, x, y, w, h, maxPx = 40, { cull = true } = {}) {
   if (!(w > 0 && h > 0) || !path || !Array.isArray(path.samples)) return null;
   const VP = M.viewProj(pose, w / h);
   const scr = (p) => { const c = M.apply(VP, p); return c[3] > 0 ? [(c[0] / c[3] * 0.5 + 0.5) * w, (1 - (c[1] / c[3] * 0.5 + 0.5)) * h] : null; };
   const toSeg = (a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], q = vx * vx + vy * vy, t = q > 0 ? Math.max(0, Math.min(1, ((x - a[0]) * vx + (y - a[1]) * vy) / q)) : 0; return Math.hypot(a[0] + vx * t - x, a[1] + vy * t - y); };
-  const keep = [];
-  for (const m of path.samples) {
-    const c = scr(m.pos); if (!c) continue;
+  const keep = [], S = path.samples;
+  // a block is far when its box is wholly in front of the eye and the screen rectangle of its corners is more than maxPx + 1 from the pointer
+  const V = VP, far = (bk) => {   // the corners projected as M.apply does, without making arrays: a pick reads up to a few thousand boxes
+    if (!(bk.r < Infinity)) return false;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let k = 0; k < 8; k++) {
+      const px = k & 1 ? bk.hi[0] + bk.r : bk.lo[0] - bk.r, py = k & 2 ? bk.hi[1] + bk.r : bk.lo[1] - bk.r, pz = k & 4 ? bk.hi[2] + bk.r : bk.lo[2] - bk.r;
+      const cw = V[3] * px + V[7] * py + V[11] * pz + V[15]; if (!(cw > 0)) return false;
+      const sx = ((V[0] * px + V[4] * py + V[8] * pz + V[12]) / cw * 0.5 + 0.5) * w, sy = (1 - ((V[1] * px + V[5] * py + V[9] * pz + V[13]) / cw * 0.5 + 0.5)) * h;
+      if (sx < x0) x0 = sx; if (sx > x1) x1 = sx; if (sy < y0) y0 = sy; if (sy > y1) y1 = sy;
+    }
+    return Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(y0 - y, 0, y - y1)) > maxPx + 1;
+  };
+  // PASS 1: the stations the boxes cannot rule out, in order, with their centres on screen. A station's distance is at most its centre's (the rims can only bring it
+  // nearer), so the PICK_KEEP-th smallest centre distance T bounds the last distance kept: the keep below ends as the PICK_KEEP smallest by (distance, order), so a
+  // station whose distance is more than T, or more than maxPx, is in no answer, and leaving it out changes nothing
+  const seen = [];
+  for (const gr of (cull ? cullBlocks(path, segments) : [{ r: Infinity, blocks: [{ a: 0, b: S.length, r: Infinity }] }])) {
+    if (far(gr)) continue;
+    for (const bk of gr.blocks) {
+      if (far(bk)) continue;
+      for (let i = bk.a; i < bk.b; i++) { const m = S[i], c = scr(m.pos); if (c) seen.push({ m, c }); }
+    }
+  }
+  let cut = maxPx;
+  if (cull && seen.length >= PICK_KEEP) { const cd = seen.map(({ c }) => Math.hypot(c[0] - x, c[1] - y)).sort((p, q) => p - q), T = cd[PICK_KEEP - 1]; if (T < cut) cut = T; }
+  // PASS 2, the test as it always was, in the same order. Before the exact half-width (its profile maths), a LOWER BOUND on the station's distance: its rims at the
+  // bounded half-width hb project to the ends of the screen segments from the centre that the exact rims lie on (in front of the eye, a 3D segment projects to a 2D one),
+  // so the pointer is no nearer to the exact rim-centre-rim line than to that one; a station whose bound is past the cut is passed over without reading its width
+  for (const { m, c } of seen) {
+    if (cull) {
+      const hb = halfBound(segments && segments[m.seg]);
+      if (hb > 0 && hb < Infinity) {
+        let lb = Math.hypot(c[0] - x, c[1] - y);
+        for (const k of [1, -1]) { const r = scr([0, 1, 2].map((j) => m.pos[j] + k * hb * m.L[j])); lb = r ? Math.min(lb, toSeg(c, r)) : NaN; }
+        if (Number.isFinite(lb) && lb > cut + 1e-6) continue;
+      }
+    }
     const hw = halfWidth(segments && segments[m.seg]);
     let d = Math.hypot(c[0] - x, c[1] - y);
     if (hw > 0) for (const k of [1, -1]) { const r = scr([0, 1, 2].map((i) => m.pos[i] + k * hw * m.L[i])); if (r) d = Math.min(d, toSeg(c, r)); }
@@ -629,6 +674,54 @@ function pickAcross(path, segments, pose, x, y, w, h, maxPx = 40) {
   const { m, u, A } = best, at = A ? A.pos : m.pos.slice(), a0 = scr(at);
   const axis = (v) => { const e = v && scr([0, 1, 2].map((k) => at[k] + v[k])); return e && a0 ? [e[0] - a0[0], e[1] - a0[1]] : [0, 0]; };
   return { s: m.s, pos: m.pos.slice(), px: best.d, u, at, axes: { U: axis(A ? A.U : m.U), L: axis(A ? A.L : m.L) }, side: u < 0 ? -1 : 1 };
+}
+
+const CULL_N = 32, CULL_G = 32;   // stations a block, blocks a group (a group's box holds its blocks')
+/**
+ * The most halfWidth(g) can be, without its profile maths: halfWidth is half the width of the cross-section readAt(g, 0) gives, which is the segment's profile or a blend
+ * of it with blend.from, whose edges lie between the two profiles' own. Along the section |dX/du| = |cos ψ| <= 1, so no point of it lies further across than the largest
+ * |u| of either profile, and the half-width is at most that. Infinity where a profile has no knots to read (the block is then never skipped); 0 with no profile, as halfWidth.
+ */
+const boundMemo = new WeakMap();
+function halfBound(g) {
+  if (!g || !g.profile) return 0;
+  if (Object.isFrozen(g) && boundMemo.has(g)) return boundMemo.get(g);
+  let r = 0;
+  for (const P of [g.profile, g.blend && g.blend.from]) {
+    if (!P) continue;
+    if (!Array.isArray(P.u) || !P.u.length) { r = Infinity; break; }
+    for (const u of P.u) { const a = Math.abs(u); if (!(a <= r)) r = Number.isFinite(a) ? a : Infinity; }
+  }
+  if (Object.isFrozen(g)) boundMemo.set(g, r);
+  return r;
+}
+/** A path's stations in blocks of CULL_N: { a, b, lo, hi, r } (the stations [a, b), the box of their centreline points, the largest halfBound among their segments), and
+ *  the blocks in groups of CULL_G, { lo, hi, r, blocks }, a group's box and r the largest of its blocks', so a pick skips most of a long track a group at a time. Made
+ *  once for a path and its segments; made again when the path has another number of stations or its first or last station moved (an extend or a sculpt in place). */
+const cullMemo = new WeakMap();
+function cullBlocks(path, segments) {
+  const S = path.samples, n = S.length, p0 = n ? S[0].pos : null, p1 = n ? S[n - 1].pos : null, was = cullMemo.get(path);
+  const same = (a, b) => a === b || (!!a && !!b && a[0] === b[0] && a[1] === b[1] && a[2] === b[2]);
+  if (was && was.segments === segments && was.n === n && same(was.p0, p0) && same(was.p1, p1)) return was.groups;
+  const blocks = [];
+  for (let a = 0; a < n; a += CULL_N) {
+    const b = Math.min(n, a + CULL_N), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; let r = 0;
+    for (let i = a; i < b; i++) {
+      const m = S[i], p = m.pos;
+      for (let d = 0; d < 3; d++) { if (!(p[d] >= lo[d])) lo[d] = p[d]; if (!(p[d] <= hi[d])) hi[d] = p[d]; }
+      const g = halfBound(segments && segments[m.seg]); if (!(g <= r)) r = g;
+    }
+    if (![...lo, ...hi, r].every((v) => !Number.isNaN(v))) r = Infinity;   // a station that is not a number: never skip its block
+    blocks.push({ a, b, lo, hi, r });
+  }
+  const groups = [];
+  for (let j = 0; j < blocks.length; j += CULL_G) {
+    const list = blocks.slice(j, j + CULL_G), lo = [0, 1, 2].map((d) => Math.min(...list.map((bk) => bk.lo[d]))), hi = [0, 1, 2].map((d) => Math.max(...list.map((bk) => bk.hi[d])));
+    const r = list.some((bk) => !(bk.r < Infinity)) ? Infinity : Math.max(...list.map((bk) => bk.r));
+    groups.push({ lo, hi, r: [...lo, ...hi].some((v) => Number.isNaN(v)) ? Infinity : r, blocks: list });
+  }
+  cullMemo.set(path, { segments, n, p0: p0 && p0.slice(), p1: p1 && p1.slice(), groups });
+  return groups;
 }
 
 /**

@@ -74,16 +74,18 @@ const SEALED = new Map(), SEALED_MAX = 64;
 // and by IDENTITY for a profile that is frozen with its knots (the core's, which cannot change): a drag's ghost meshes its 48 chords on every move, and with an edge typed
 // each chord's 137 knots were written out as text for the key above (numKey: 83 ms of a 3 s drag's 974 ms of rebuilds). A profile frozen with its knots is told by
 // its object; any other is keyed by value, as before. A profile that normalize() refuses is never kept, so it is refused every time.
-const SEALED_BY = new WeakMap();
+// At most SEALED_BY_MAX of them, the newest kept: kept for every profile alive, they were about 420 MB of heap on the user's 24 km ELYSIUM (2026-10-31), where every 2 m chord has its own
+// frozen profile and the mesher reads each on one piece only; a drag's ghost reads the same few hundred again on every move, and those stay.
+const SEALED_BY = new Map(), SEALED_BY_MAX = 1024;
 const valuesOnly = (o, keys) => keys.every((k) => { const d = Object.getOwnPropertyDescriptor(o, k); return !d || 'value' in d; });
 const knotsFrozen = (p) => Object.isFrozen(p) && Object.isFrozen(p.u) && Object.isFrozen(p.psi) && valuesOnly(p, ['u', 'psi', 'font', 'material']) && valuesOnly(p.u, Object.keys(p.u)) && valuesOnly(p.psi, Object.keys(p.psi));
 function sealedNormal(profile) {
   if (!profile || !Array.isArray(profile.u) || !Array.isArray(profile.psi)) return sealed(normalize(profile));
-  const held = SEALED_BY.get(profile); if (held) return held;
+  const held = SEALED_BY.get(profile); if (held) { SEALED_BY.delete(profile); SEALED_BY.set(profile, held); return held; }
   const k = (profile.font || 'custom') + '|' + (profile.material || 'ROAD') + '|' + numKey(profile.u) + '|' + numKey(profile.psi);
   let r = SEALED.get(k);
   if (!r) { r = sealed(normalize(profile)); if (SEALED.size >= SEALED_MAX) SEALED.delete(SEALED.keys().next().value); SEALED.set(k, r); }
-  if (knotsFrozen(profile)) SEALED_BY.set(profile, r);
+  if (knotsFrozen(profile)) { SEALED_BY.set(profile, r); if (SEALED_BY.size > SEALED_BY_MAX) SEALED_BY.delete(SEALED_BY.keys().next().value); }
   return r;
 }
 /** Offset [X, Y] of the surface point at u, exactly (piecewise closed form). */
