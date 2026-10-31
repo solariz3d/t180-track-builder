@@ -788,7 +788,7 @@ function mount(root, shell, mountOpts = {}) {
   let jumpNoteFor = null;
 
   // CLOSE, EXAMPLE
-  // Close is ONE press (the ruling: no choice of how, no preview). The core tries every way of closing the loop and applies the one that passes the lap
+  // Close is ONE press (no choice of how, no preview). The core tries every way of closing the loop and applies the one that passes the lap
   // proof with no new red, adds no road if it can, and moves the track least (app/core/closejob.js runCloseBest); the line under the button says what it did, or
   // why nothing changed. Undo gives the open track back. A long track takes a while (the checker runs on each way it tries), so it runs off the window's thread
   const closeBtn = el('button', { text: 'Close the loop', title: 'closes the loop the least-changing way the lap proof passes, at once; Undo gives the open track back', onclick: () => {

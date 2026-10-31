@@ -1,5 +1,5 @@
 // labels.js: THE READOUT on the track. A small label at every placed road
-// piece, in the view: its length and the CHANGE it makes in turn, climb and bank, the numbers of src/core/readout.js (A). The
+// piece, in the view: its length and the CHANGE it makes in turn, climb and bank, the numbers of src/core/readout.js. The
 // user, 01:2x: "see the degrees of change when adjusting the banking, pitch, and roll and even turns"; "DISTANCE OF EACH PIECE
 // IN METERS SO YOU CAN SEE WITH THE DEGREE UI".
 //

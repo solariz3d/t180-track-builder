@@ -91,7 +91,7 @@ const RD = require('../../src/core/readout.js');
 const { WIDTHS, RATES } = require('../../src/geom/fonts.js');
 const XS = require('./xsec.js');   // the cross-section channels' names: the edge curve and the tube
 const CL = require('./centreline.js');   // the Sculpt guard (the centreline must not move)
-const JU = require('../../src/core/jump.js');   // the free jump (E): a free flight and the landing you place by hand
+const JU = require('../../src/core/jump.js');   // the free jump: a free flight and the landing you place by hand
 const JW = require('./jumpwords.js');   // the core's jump refusals in plain words
 const LD = require('./landing.js');
 const GL = require('./griplike.js');   // the grip field's checks and words   // the landing's number boxes: values and units
@@ -718,7 +718,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
      */
     headState() {
       const e = D.endState(doc());
-      // the head piece: the last ROAD piece (a flight carries the road's state), whose `tube` says whether the sweep is the head's (RULING 2)
+      // the head piece: the last ROAD piece (a flight carries the road's state), whose `tube` says whether the sweep is the head's
       const roads = doc().pieces.filter((p) => p.type === 'road'), headIsTube = !!(roads.length && roads[roads.length - 1].tube);
       if (e) return withRight({ kh: e.kh.v, kv: e.kv.v, phi: e.phi.v, w: e.w.v, c: e.c.v, ...XS.headOf(e, headIsTube) }, e);
       const fam = 'bowl';   // extend.js: `family || (last ? last.family : 'bowl')`
@@ -802,10 +802,10 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         // the exact, cheap guard at every step: nothing the path is made of may have moved (the drag stays at its last good step)
         if (b.sculpt) { const moved = CL.routeMovedDetail(b.base, b.baseResolved.segments, d, r.resolved.segments, b.baseResolved.start, r.resolved.start); if (moved) throw new D.CoreError('SCULPT_MOVES_CENTRELINE', `Sculpt can't do that: ${CL.plainWhy(moved)}. The drag stays at its last good step.`); }   // (F3: the reason in plain words, not the internal field)
         // the radius the brush really used (the core's brush widens a narrow one; always shown), and any note of its
-        // the radius really used: the core's brush reports it as radiusUsed (sculpt.js), shown whenever it widened (ruling 2)
+        // the radius really used: the core's brush reports it as radiusUsed (sculpt.js), shown whenever it widened
         const used = Number.isFinite(res.radiusUsed) ? res.radiusUsed : Number.isFinite(res.rUsed) ? res.rUsed : null;
         const widened = used !== null && used > b.r + 1e-9 ? `brush widened to ${used.toFixed(0)} m (asked ${b.r.toFixed(0)} m), so the track outside it stays exactly as it was` : null;
-        // a rate brush on a closed lap re-closes (E): a re-close that failed left the track OPEN, and says so
+        // a rate brush on a closed lap re-closes: a re-close that failed left the track OPEN, and says so
         const reclose = res.close && !res.close.converged ? `the loop could not re-close after this brush, so it is open now: ${res.close.report}` : null;
         // a Sculpt drag on a piece shorter than the brush's smallest window (120 m) is "widened" by the core's rule, but the change stays inside the piece (measured: the neighbours are the very same objects),
         // so that note is only worth saying when a piece other than the sculpted one really changed
@@ -865,7 +865,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     },
 
     /**
-     * CLOSE IS ONE PRESS (the ruling: "one single press and the algo runs it"; the choice of how and the preview step are gone). The core runs every way of
+     * CLOSE IS ONE PRESS ("one single press and the algo runs it"; the choice of how and the preview step are gone). The core runs every way of
      * closing the loop it has and picks one (app/core/closejob.js runCloseBest): the closed lap must PROVE and add no new red; then no new road; then the least
      * movement. It is applied AT ONCE as one undo step, and the message says what it did ("closed: bent the last 2 pieces (508 m) by up to 4.0 m"); the lap proof
      * is the guard the preview's Apply used to be. When none proves, nothing changes and the message says why, with the closest way's reason.
