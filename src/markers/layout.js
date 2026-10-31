@@ -124,11 +124,14 @@ function resolveLayout(layout, path, segments) {
   }
   markers.push({ name: 'AC_HOTLAP_START_0', kind: 'hotlap', s: sHot, u: 0, h, runUpM: need, speedKmh: kmh });
   }
+  // the gates are numbered as placed, so a lap whose first sector gate was omitted (lapSectors: no flat road near it) still has an AC_TIME_1
+  let nSector = 0;
   (layout.sectors || []).forEach((a, i) => {
+    if (a.omitted) { notes.push({ id: 'sector-omitted', level: 'amber', text: a.omitted }); return; }
     const s = anchorS(a, segments, starts);
     if (s == null) { missing.push({ what: `sector ${i + 1}`, word: a.word }); return; }
-    const sp = surfaceAt(path, segments, s, 0, starts).span;
-    markers.push({ name: `AC_TIME_${i + 1}_L`, kind: 'sector', s, u: sp[1] - layout.gateInsetM, h }, { name: `AC_TIME_${i + 1}_R`, kind: 'sector', s, u: sp[0] + layout.gateInsetM, h });
+    const sp = surfaceAt(path, segments, s, 0, starts).span, n = ++nSector;
+    markers.push({ name: `AC_TIME_${n}_L`, kind: 'sector', s, u: sp[1] - layout.gateInsetM, h }, { name: `AC_TIME_${n}_R`, kind: 'sector', s, u: sp[0] + layout.gateInsetM, h });
   });
   if (s1 < s0) notes.push({ id: 'empty', level: 'amber', text: 'no track' });
   return { markers, notes, missing };
@@ -170,8 +173,32 @@ const isStraight = (g) => g.kind === 'road' && g.word === 'straight' && [g.k0, g
  * THE SECTOR GATES of a closed lap (2026-10-14; ELYSIUM's export had only the start gate, and its two sector gates were added by hand at about a third and two
  * thirds of the lap): AC_TIME_1 and AC_TIME_2 a third and two thirds of the way round from the start line, each as an anchor { word, along } (anchorS's
  * convention). A third that falls in the air (a jump's flight) moves forward onto the next road. [] for an open track (its gates are the point-to-point pair).
+ *
+ * ON FLAT ROAD (2026-10-30; ELYSIUM: two thirds of its lap fell on an 85° bank, the gate's ends 30 m apart in height and 3.4 m apart seen from above, and
+ * the user's laps through it did not count). Each gate goes to the station NEAREST its target where the road is flat enough (gateFlatAt), searched both
+ * ways a GATE_STEP_M at a time up to a quarter of the lap; with none, that gate is { omitted: <the reason in words> }, which resolveLayout says as an amber
+ * note and leaves out (the lap keeps its other gates).
  */
-function lapSectors(path, segments, sLine) {
+const GATE_TILT_MAX_DEG = FLOOR_MAX_DEG, GATE_CLIMB_MAX_DEG = 20, GATE_STEP_M = 2;
+// a gate's width seen from above, as a share of the road's width across (src/markers/checks.js gate-width): inferred, the plan's 'say, half'
+const GATE_TOPDOWN_MIN = 0.5;
+/**
+ * Whether a sector gate may stand at s: the line between its two ends (the road's span less the inset, as resolveLayout puts them) tilts no more than
+ * GATE_TILT_MAX_DEG from level, and seen from above it spans at least GATE_TOPDOWN_MIN of the road's width; the road climbs or falls less than GATE_CLIMB_MAX_DEG; and the gate is not inside a ring, i.e. the road under its middle
+ * faces up (not the top of a loop) and neither end is on a section past vertical (a tube's roof). Over a jump's flight there is no road: false.
+ */
+function gateFlatAt(path, segments, s, inset, starts = segStarts(path, segments)) {
+  let c;
+  try { c = surfaceAt(path, segments, s, 0, starts); } catch (e) { if (e.code === 'NO_ROAD') return false; throw e; }
+  const uL = c.span[1] - inset, uR = c.span[0] + inset, a = surfaceAt(path, segments, s, uL, starts).pos, b = surfaceAt(path, segments, s, uR, starts).pos;
+  const v = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], len = Math.hypot(v[0], v[1], v[2]), DEG = Math.PI / 180;
+  if (!(len > 0) || Math.abs(v[1]) / len > Math.sin(GATE_TILT_MAX_DEG * DEG)) return false;   // the gate's tilt from level
+  if (Math.hypot(v[0], v[2]) < GATE_TOPDOWN_MIN * (c.span[1] - c.span[0])) return false;     // its width seen from above
+  if (Math.abs(c.T[1]) >= Math.sin(GATE_CLIMB_MAX_DEG * DEG)) return false;                     // the climb
+  if (!(c.n[1] > 0)) return false;                                                               // the road faces down: inside a loop
+  return [uL, uR].every((u) => Prof.normalAt(c.P, u)[1] > 0);                                   // an end past vertical: inside a tube
+}
+function lapSectors(path, segments, sLine, { gateInsetM = DEFAULTS.gateInsetM } = {}) {
   if (!path.closed || !(path.lengthM > 0)) return [];
   const starts = segStarts(path, segments), s0 = path.samples[0].s, L = path.lengthM;
   const wrap = (s) => ((s - s0) % L + L) % L + s0;
@@ -181,7 +208,14 @@ function lapSectors(path, segments, sLine) {
     const id = segments[k].id, first = segments.findIndex((g) => g.id === id);
     return { word: id, along: Math.max(0, s - starts[first]) };
   };
-  return [1, 2].map((i) => at(wrap(sLine + (i * L) / 3)));
+  const flat = (s) => gateFlatAt(path, segments, s, gateInsetM, starts);
+  return [1, 2].map((i) => {
+    const target = wrap(sLine + (i * L) / 3);
+    for (let d = 0; d <= L / 4; d += GATE_STEP_M) {
+      for (const sg of d ? [1, -1] : [1]) { const s = wrap(target + sg * d); if (flat(s)) return at(s); }
+    }
+    return { omitted: `sector gate ${i} is left out: the road is not flat enough for a gate within a quarter of the lap of ${i === 1 ? 'a third' : 'two thirds'} of the way round (a gate needs the road level across within ${GATE_TILT_MAX_DEG}°, climbing less than ${GATE_CLIMB_MAX_DEG}°, and not inside a loop or a tube)` };
+  });
 }
 
 function defaultLayout(path, segments, o = {}) {
@@ -221,4 +255,4 @@ function defaultLayout(path, segments, o = {}) {
   return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: lapSectors(path, segments, sLine) };
 }
 
-module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, T180, PACK, FLOOR_MAX_DEG, ONE_SLOT_MARGIN_M, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf, lapSectors };
+module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, T180, PACK, FLOOR_MAX_DEG, ONE_SLOT_MARGIN_M, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf, lapSectors, gateFlatAt, GATE_TOPDOWN_MIN, GATE_TILT_MAX_DEG, GATE_CLIMB_MAX_DEG, GATE_STEP_M };

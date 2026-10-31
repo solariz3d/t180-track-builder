@@ -165,3 +165,19 @@ test('a nested dummy gets its parent transform (world = local × parent)', () =>
   assert.deepStrictEqual(p, [13, 1.5, 0]);
   assert.strictEqual(checkMarkers(sc, { expectedPits: 3 }).ok, true);
 });
+
+// 2026-10-30: every AC_TIME gate stands level across the road within 15° (ELYSIUM's AC_TIME_2 stood on an 85° bank, its ends 30 m apart in height, and
+// laps through it did not count). The check reads any n, not only the start gate
+test('a sector gate tilted more than 15° from level across the road is flagged, and a level one passes', () => {
+  const withGate = (yL, yR) => scene((m) => ({ ...m, AC_TIME_1_L: marker('AC_TIME_1_L', 5, yL, -20), AC_TIME_1_R: marker('AC_TIME_1_R', -5, yR, -20) }));
+  assert.strictEqual(check(withGate(1.5, 1.5), 'gate-tilt').ok, true, 'a level sector gate passes');
+  const steep = check(withGate(1.5 + 30, 1.5), 'gate-tilt');   // 30 m apart in height, 10 m across: 72° from level
+  assert.strictEqual(steep.ok, false);
+  assert.match(steep.problems.join(' '), /AC_TIME_1 tilts 72° from level/);
+  assert.strictEqual(check(withGate(1.5 + 10 * Math.tan(14 * Math.PI / 180), 1.5), 'gate-tilt').ok, true, '14° passes');
+  assert.strictEqual(check(withGate(1.5 + 10 * Math.tan(16 * Math.PI / 180), 1.5), 'gate-tilt').ok, false, '16° is flagged');
+});
+test('the start gate is held to the same 15°', () => {
+  const r = check(scene((m) => ({ ...m, AC_TIME_0_L: marker('AC_TIME_0_L', 5, 1.5 + 5, 30) })), 'gate-tilt');
+  assert.strictEqual(r.ok, false); assert.match(r.problems.join(' '), /AC_TIME_0 tilts 27°/);
+});

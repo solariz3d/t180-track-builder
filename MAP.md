@@ -76,7 +76,7 @@ file in both places.
 - `kn5write.js`: the scene → a `.kn5` file (`writeKn5`). `trackfiles.js`: every other file of the folder (`surfacesIni`, `modelsIni`, `uiTrack`, `mapParams`, `mapPng`).
 - `ailine.js`: the AI line (`generateAiLine`, `readAiLine`). *why: see header* `scene.js`: the one scene shape every exporter builds to (`validateScene`).
 - `acready.js`: the last step before the kn5 (`flattenForAc`, `weldSeams`, `mergeForAc`). `layouts.js`: several tracks as one folder with a layout each (`exportProject`).
-- `gripkeys.js` (grip per piece), `pitlane.js` (the lane in the scene), `pitboxes.js`, `markers.js` (`checkMarkers`), `catch.js` (a catch surface under the road), `underskin.js` (the underside).
+- `gripkeys.js` (grip per piece), `pitlane.js` (the lane in the scene), `pitboxes.js`, `markers.js` (`checkMarkers`, including every gate level across within 15°), `catch.js` (a catch surface under the road), `underskin.js` (the underside).
 
 **`src/doc/`, the older word-document model and shared data.** Words, phrases and fonts (`vocab.js`, `phrasebook.js`, `library.js`), resolve and serialise (`resolve.js`, `serial.js`, `history.js`), share codes (`code.js` `encode`, `decode`), the pit lane and texture slots as document data (`pitlane.js`, `textures.js`), projects of layouts (`project.js`), texture packs (`packs.js`), a track as one equation (`equation.js` `equationToDoc`). The data files `widths.json` and `grips.json` feed the "width like…" and "grip like…" lists; `corpus.json` holds the measured word defaults (`vocabgen.js` `generate`).
 
@@ -84,7 +84,7 @@ file in both places.
 
 **`src/texmaker/`, the procedural texture maker.** Text ↔ parameters (`text.js`, `schema.js`), pixels (`make.js` `makeTexture`), starting presets (`presets.js`).
 
-**`src/markers/`, start, grid and pit markers.** `index.js` `placeAll`, `layout.js` (the layout in track coordinates), `place.js` `placeMarker`, `paint.js` `paintFor` (the visible paint), `checks.js` `checkPlaced`.
+**`src/markers/`, start, grid and pit markers.** `index.js` `placeAll`, `layout.js` (the layout in track coordinates; `lapSectors` puts a closed lap's sector gates on the nearest flat road, `gateFlatAt`), `place.js` `placeMarker`, `paint.js` `paintFor` (the visible paint), `checks.js` `checkPlaced` (including every sector gate at least half the road wide seen from above).
 
 **`src/lookmatch/`, comparing the preview's look with a reference render.** `raster.js` `renderView` (a CPU render), `metric.js` `compareImages`, `kn5scene.js` `readScene`, `dds.js` `decodeDds`, `cameras.js` `resolveView`.
 
