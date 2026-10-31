@@ -1,5 +1,5 @@
-// phrasebook.js: the STARTER PHRASEBOOK, built-in phrases for the first ten minutes (ARCHITECTURE §2: "Phrase: a saved
-// word sequence … spiral climb, bowl hairpin, S"; §11.7: "Onboarding: the first ten minutes (a guided first track,
+// phrasebook.js: the STARTER PHRASEBOOK, built-in phrases for the first ten minutes (the design: "Phrase: a saved
+// word sequence … spiral climb, bowl hairpin, S"; "Onboarding: the first ten minutes (a guided first track,
 // defaults, a starter phrasebook)").
 //
 //   PHRASES                          [{ name, words: [{ word, dir, font, tempo, handles? }], source: [quoted lines], note }]
@@ -10,8 +10,8 @@
 // track E's angles (see its note), where the length follows the angle so the radius stays the word's own. Every phrase
 // resolves, builds and validates with no red at its default tempo (test/phrasebook.test.js).
 //
-// WHERE EACH COMES FROM, quoted in `source`. Only track E's grammar is stated in FINDINGS as a sequence; the other three
-// are named by ARCHITECTURE §2, and their words, fonts and tempos come from what FINDINGS measured. Where a value is a
+// WHERE EACH COMES FROM, quoted in `source`. Only track E's grammar was measured as a sequence; the other three
+// are named by the design, and their words, fonts and tempos come from what was measured. Where a value is a
 // choice, `note` says so.
 'use strict';
 
@@ -28,8 +28,8 @@ function angled(word, deg, tempo) {
 }
 
 // THE ORDER is the palette's, and a user who clicks the starter phrases in turn chains them in it. Chained as
-// step flow → bowl hairpin → S → spiral climb (the order until D180), the spiral's flat first turn crossed the step
-// flow's road 0.4 m above it (stacked-within-2m at 476–521 and 2513–2559 m, A's D180 check of the installed app). Of the
+// step flow → bowl hairpin → S → spiral climb (the earlier order), the spiral's flat first turn crossed the step
+// flow's road 0.4 m above it (stacked-within-2m at 476–521 and 2513–2559 m, a check of the installed app). Of the
 // 24 orders of the four, 22 chain clean; this one keeps step flow first (the guide's suggested first piece) and is
 // clean (test/phrasebook.test.js). Every phrase after every other is clean too, but for bowl hairpin → bowl hairpin: two
 // flat 180° hairpins the same way come back over their own start, which no default can avoid.

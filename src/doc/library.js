@@ -1,5 +1,5 @@
 // library.js: the piece library, and the sculpt hook (the user, 12:22: "but you can also sculp pieces, and then even
-// create and save your own unqiue pieces"; ARCHITECTURE §2 handles and phrases; docs/INTERFACES.md §4b).
+// create and save your own unqiue pieces"; the design's handles and phrases).
 //
 //   builtinLibrary() -> lib            one built-in piece per word, from the program itself
 //   palette(lib) -> [{ id, name, builtin, kind, words }]      what the build palette shows: built-ins first
@@ -13,21 +13,21 @@
 // content (word, font, tempo, speed, handles). A phrase is two or more of them.
 // ROLL IS STORED RELATIVE. A piece's first road word starts at roll 0, and placing it adds the head's roll. A piece saved
 // after an inversion therefore places anywhere without a roll step.
-// NAMES. §2 says users make and share their own phrases; it says nothing about names. So a name that is a built-in
+// NAMES. The design says users make and share their own phrases; it says nothing about names. So a name that is a built-in
 // word's, in any case, is REFUSED, and so is one a saved piece already has: a palette entry must mean one thing.
 // THE TEXT is the document's canonical form (serial.js), so a piece pasted as text round-trips byte-exact. A saved
 // library holds the user's pieces only; the built-ins come from the program, so a newer builder's built-ins are not
 // frozen into old files.
-// PHYSICS BOUNDS are validation's (INTERFACES §4b handleBounds). The model computes none: handleInfo passes a provider's
+// PHYSICS BOUNDS are validation's (handleBounds). The model computes none: handleInfo passes a provider's
 // answer through untouched, and says `physics: null` without one. Whether a drag stops at red or only turns red is the
-// app's call (§4b leaves it open).
+// app's call (the interface leaves it open).
 'use strict';
 
 const { WORDS } = require('./vocab.js');
 const S = require('./serial.js');
 const { DocError, UNIT, RANGE, quantise, checkWordBody, wordText, loadWord, onlyKeys, deepFreeze, SCHEMA, GENERATOR } = S;
 const { appendWord, appendPhrase, defaultWord, headRoll } = require('./document.js');
-const { PHRASES, phrasebookPieces, placePhrase } = require('./phrasebook.js');   // the starter phrasebook (ARCHITECTURE §11.7)
+const { PHRASES, phrasebookPieces, placePhrase } = require('./phrasebook.js');   // the starter phrasebook
 
 const SI_UNIT = { m: 'm', deg: 'rad', ratio: 'ratio' };
 const key = (s) => s.trim().toLowerCase();

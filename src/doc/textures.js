@@ -1,21 +1,21 @@
-// textures.js: the document's texture SLOTS (ARCHITECTURE §5b: "Each part of the cross-section gets its own material:
+// textures.js: the document's texture SLOTS (the design: "Each part of the cross-section gets its own material:
 // floor, walls, lines, kerbs, edge glow. A font can carry default textures, and any word can override them.").
 //
 // A word holds `textures`: its OVERRIDES only, { <slot>: { <setting>: value } }, possibly {}. Its effective slots are its
 // font's defaults with those laid over them. Settings, in canonical order (the text writes them in this order):
 //   texture     a texture's name (see NAME_RE), or null for none (the strip's plain material colour)
-//   make        a MADE texture: the procedural maker's canonical text (src/texmaker, ARCHITECTURE §5b "Make your own"),
+//   make        a MADE texture: the procedural maker's canonical text (src/texmaker, "Make your own"),
 //               or null. A slot takes an image (texture) or a made texture, not both. Stored as TEXT, canonicalised on
 //               entry (texmaker serialize(parse(t))), and rendered to pixels only at export and in the preview.
-//   size        px: the side a made texture is rendered at, a power of two from 16 to 8192 (AC's limit, §5b); 1024
+//   size        px: the side a made texture is rendered at, a power of two from 16 to 8192 (AC's limit); 1024
 //               by default (inferred: a 5.6 MB DDS with its mips, see src/texture/warnings.js)
-//   tileLength  m: one repeat of the texture along the track (§5b "tiling length")
-//   fit         'tile' (repeat every tileWidth m across), 'fit' (stretch once across the strip's own width) or 'edge' (D371: the edge bands keep edgeBand m at any width,
+//   tileLength  m: one repeat of the texture along the track (the "tiling length")
+//   fit         'tile' (repeat every tileWidth m across), 'fit' (stretch once across the strip's own width) or 'edge' (the edge bands keep edgeBand m at any width,
 //               the centre is whole repeats; built from the track's width range once it is closed, src/texture/edge.js)
 //   tileWidth   m: one repeat across, when fit is 'tile'; the width the texture was drawn for, when fit is 'edge'
 //   edgeBand    m: the band at each edge that keeps its size, when fit is 'edge' (under half of tileWidth)
 //   offset      m: where the first repeat starts, along
-//   dir         'along' or 'across': which way the texture's own v runs (§5b "direction")
+//   dir         'along' or 'across': which way the texture's own v runs (the "direction")
 // Lengths are quantised like every other length of the document (0.1 mm, serial.js). A jump has no surface, so it
 // takes no overrides: its landing ramp wears the take-off road's cross-section, and with it that road's textures.
 // Nothing here reads the disk: a texture NAME is resolved to pixels by src/texture/set.js from the assets the app holds.
@@ -29,7 +29,7 @@ const DEFAULT = Object.freeze({ texture: null, make: null, size: 1024, tileLengt
 const LENGTHS = ['tileLength', 'tileWidth', 'edgeBand', 'offset'];
 const RANGE = { tileLength: [0.1, 1000], tileWidth: [0.1, 1000], edgeBand: [0.01, 500], offset: [-10000, 10000] };
 
-// Font defaults (§5b "a font can carry default textures"). v1 ships no textures of its own, so every font's slots
+// Font defaults (the design: "a font can carry default textures"). v1 ships no textures of its own, so every font's slots
 // start with no texture and 10 m tiling; the procedural maker (part 2) is where built-in textures come from.
 const FONT_DEFAULTS = Object.freeze(Object.fromEntries(['flat', 'half-pipe', 'bowl', 'wall-ride', 'tube'].map((f) =>
   [f, Object.freeze(Object.fromEntries(SLOTS.map((s) => [s, DEFAULT])))])));

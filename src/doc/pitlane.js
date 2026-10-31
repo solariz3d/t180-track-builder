@@ -1,8 +1,8 @@
-// pitlane.js: the document's PIT LANE (ARCHITECTURE §11.1: "a pit lane as a side road leaving and rejoining the loop";
-// §5c: "the pit lane is a side road leaving and rejoining the loop").
+// pitlane.js: the document's PIT LANE (the design: "a pit lane as a side road leaving and rejoining the loop";
+// and again for the markers: "the pit lane is a side road leaving and rejoining the loop").
 //
-// The loop stays ONE ordered list of words (§11.1, the user: "there are no shortcuts"). The lane is not a second loop
-// and not a junction in it: it is a side road ANCHORED to the loop, the way the markers are (src/markers, E's D171
+// The loop stays ONE ordered list of words (the user: "there are no shortcuts"). The lane is not a second loop
+// and not a junction in it: it is a side road ANCHORED to the loop, the way the markers are (src/markers, the markers'
 // interface), so it follows its words when they are sculpted. `doc.pitLane` is null, or:
 //
 //   { side: 'L' | 'R',                      which side of the road it leaves on
@@ -16,7 +16,7 @@
 // So the lane has three parts of its own, in order: DIVERGE (its inner edge leaves the road's edge, easing out to
 // offsetM), RUN (offsetM beside the road), MERGE (easing back until its inner edge is the road's edge again). Those are
 // the lane's words; their lengths are the two handles above (the run is what is left between the anchors).
-// This differs from E's proposal (with the markers' lane placement, src/markers/index.js: `{ leave, rejoin, side, offsetM, width, speedKmh? }`) only by
+// This differs from the markers' proposal (with the markers' lane placement, src/markers/index.js: `{ leave, rejoin, side, offsetM, width, speedKmh? }`) only by
 // adding divergeM and mergeM: the ease is a shape the user sets, and leaving it implicit would hide a length the
 // geometry needs and the export depends on. A free-form lane (its own turns and climbs) would need a lane that leaves
 // the road's coordinates and a closing solve like closeLoop's to come back; pit lanes run beside the road, so it is
@@ -24,7 +24,7 @@
 //
 // Checked here: the SHAPE, the ranges and the quanta. NOT checked here: that the anchors' words exist and the parts fit
 // between them. A word may be removed while the lane still names it, and editing must never be blocked by that; the
-// geometry refuses such a lane by name (src/geom/pitlane.js PIT_ANCHOR_MISSING, PIT_TOO_SHORT), as E's markers do.
+// geometry refuses such a lane by name (src/geom/pitlane.js PIT_ANCHOR_MISSING, PIT_TOO_SHORT), as the markers do.
 'use strict';
 
 const KEYS = ['side', 'leave', 'rejoin', 'offsetM', 'width', 'divergeM', 'mergeM', 'speedKmh'];

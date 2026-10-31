@@ -1,4 +1,4 @@
-// connector.js: close the loop (ARCHITECTURE §2 :50-51: "a connector solved from the end conditions (G1/G2 clothoid
+// connector.js: close the loop (the design: "a connector solved from the end conditions (G1/G2 clothoid
 // fitting). Candidates are ranked by their worst physics margin, not shortest length"; the design ruling
 // 2026-09-27: the connector belongs to the document layer).
 //

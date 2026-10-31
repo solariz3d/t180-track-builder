@@ -1,4 +1,4 @@
-// grammar.js: what usually comes NEXT, from the measured library (FINDINGS §7 "track E's corners open and close in steps:
+// grammar.js: what usually comes NEXT, from the measured library (measured: "track E's corners open and close in steps:
 // `sweep → turn → tight → turn → sweep`, never straight into tight … The builder's transitions should obey it").
 //
 //   suggestNext(doc, grammar, k = 3) -> { after, suggestions: [{ word, n, share }] }
