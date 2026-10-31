@@ -1,4 +1,4 @@
-// layoutsdialog.js: the question File ▸ Export layouts… asks (D361 part 2), in the builder's own look (app/askdialog.js's card).
+// layoutsdialog.js: the question File ▸ Export layouts… asks, in the builder's own look (app/askdialog.js's card).
 // node --test app/test/layoutsdialog.test.js
 //
 //   askLayouts(doc, { tracks }) -> Promise<{ name, picks: [{ track, layout, name, main }] } | null>   (null: cancelled)
