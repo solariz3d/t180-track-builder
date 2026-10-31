@@ -30,7 +30,9 @@ test('swell: on his piece the bank\'s rate rises to one peak and falls, with no 
   let peak = 0; for (let s = 0; s <= R; s += 0.25) peak = Math.max(peak, rate(s));
   // the longest stretch where the rate is at least a tenth of its peak and changes by less than 0.005 deg/m over 2 m
   let flat = 0, run = 0; for (let s = 0; s + 2 <= R; s += 0.25) { if (rate(s) > 0.1 * peak && Math.abs(rate(s + 2) - rate(s)) < 0.005) { run += 0.25; flat = Math.max(flat, run); } else run = 0; }
-  assert.ok(flat < 5, `the rate holds flat for ${flat} m (peak ${peak.toFixed(3)} deg/m)`);
+  // AMENDED (the swell is laid longer, 3.4 × |change| / the amber, was 2.6): a wider bump's top is flatter in absolute terms (6.75 m under the 0.005 bar on a 150.7 m ramp),
+  // so the bound is a share of the ramp, was 5 m: the old rounded-linear plateau was 14.5 m of 97.5 (15%), the swell's top is under 5%
+  assert.ok(flat < 0.06 * R, `the rate holds flat for ${flat} m of a ${R} m ramp (peak ${peak.toFixed(3)} deg/m)`);
   // one peak: once the rate starts to fall by more than 0.002 over 2 m it never rises again by more than that
   let falling = false, rises = 0; for (let s = 0; s + 2 <= R + 5; s += 0.25) { const d = rate(s + 2) - rate(s); if (d < -0.002) falling = true; else if (falling && d > 0.002) rises++; }
   assert.equal(rises, 0, 'the rate rises again after it has started to fall');
@@ -48,7 +50,8 @@ test('swell: the kink (the rate\'s largest change over 2 m) is at most half of w
 test('swell: the bank is moving by 10 m and well under way by 20 m, peaks under the checker\'s roll amber, reaches -41.38 at the ramp\'s end and holds it', () => {
   const { o, doc, P } = his(), R = o.transition.phi, at = (s) => D.channelAt(P, 'phi', s).v / DEG;
   assert.equal(o.bankShape, 'swell');
-  assert.ok(Math.abs(at(10)) > 0.3 && Math.abs(at(20)) > 2, `bank at 10 m: ${at(10)}, at 20 m: ${at(20)}`);
+  // AMENDED (the swell is laid longer and gentler, 3.4 × |change| / the amber, was 2.6: 0.20° by 10 m and 1.63° by 20 m, were 0.46 and 3.52)
+  assert.ok(Math.abs(at(10)) > 0.15 && Math.abs(at(20)) > 1.2, `bank at 10 m: ${at(10)}, at 20 m: ${at(20)}`);
   const peak = rollPeak(doc); assert.ok(peak < BAR, `roll peak ${peak.toFixed(4)} against ${BAR}`);
   for (const s of [R, R + 1, 500, 1000]) assert.ok(Math.abs(at(s) + 41.38) < 0.01, `bank at ${s} m: ${at(s)}`);
 });
