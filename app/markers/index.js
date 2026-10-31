@@ -1,15 +1,15 @@
-// index.js: the markers panel (ARCHITECTURE §5c), mounted as mount(root, shell) like every panel (app/README.md, "The
-// seam"). PROPOSED MOUNT POINT FOR A (app/index.html is A's): an element `<section id="markers">` in the side panel, and
+// index.js: the markers panel, mounted as mount(root, shell) like every panel (app/README.md, "The
+// seam"). PROPOSED MOUNT POINT (app/index.html): an element `<section id="markers">` in the side panel, and
 // ['markers', 'markers'] added to the page's list of panels loaded through app/lib/cjs.js.
 //
 // What it shows: the grid (pattern, count, pole distance, row and column gaps), each slot (nudge along or across), the
-// pit boxes (count, spacing), the hotlap's target speed (default the design speed, 460 km/h, FINDINGS.md:476) and the
+// pit boxes (count, spacing), the hotlap's target speed (default the design speed, 460 km/h) and the
 // run-up it gives, optional sectors 1 and 2 (placed a third and two thirds of the way round), the marker height, and
-// §5c's checks, red and amber, with every problem named.
+// the marker checks, red and amber, with every problem named.
 // WHAT IT GIVES THE PREVIEW AND THE EXPORT: after every update, root dispatches a bubbling CustomEvent 't180:markers'
 // with detail { layout, placed, paint, check }. The preview can draw `paint.meshes` (scene-node arrays, on the surface)
-// and a gizmo at each `placed[i].pos`; the export should pass `layout` as exportTrack's opts.markers (A's
-// app/export/export.js). Neither is wired yet: both are A's and C's files this lap.
+// and a gizmo at each `placed[i].pos`; the export should pass `layout` as exportTrack's opts.markers
+// (app/export/export.js). Neither is wired yet.
 'use strict';
 const { createMarkersController } = require('./panel.js');
 const { PATTERNS, runUpM } = require('../../src/markers/index.js');

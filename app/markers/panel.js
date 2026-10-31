@@ -1,16 +1,16 @@
-// panel.js: the markers panel's logic, with no DOM (tested headless against A's real shell). index.js mounts it.
+// panel.js: the markers panel's logic, with no DOM (tested headless against the real shell). index.js mounts it.
 //
 //   const ctl = createMarkersController(shell, { onUpdate })
 //   ctl.state -> { layout, custom, placed, paint, check, error }       after every change that moved the track
 //   ctl.edit(fn)          fn(layout) -> layout: any change (pattern, count, gaps, pits, hotlap speed, sectors, height).
 //                         From the first edit the layout is CUSTOM: it is kept, anchored to its words, through later
-//                         edits of the track, so the markers stay on the road (§5c). Until then it is re-derived from the
+//                         edits of the track, so the markers stay on the road. Until then it is re-derived from the
 //                         words each time (the default: the grid on the longest straight).
-//   ctl.editSlot(n, { backM?, u? })     one grid slot, slot by slot (§5c: "editable slot by slot")
+//   ctl.editSlot(n, { backM?, u? })     one grid slot, slot by slot ("editable slot by slot")
 //   ctl.reset()           back to the default layout
 //
 // Where the layout goes from here is a seam (see app/markers/index.js): the export takes it as exportTrack's
-// opts.markers, and the document should carry it (a proposal for A, D171 hand-back).
+// opts.markers, and the document should carry it (a proposal).
 'use strict';
 const { buildPath } = require('../../src/geom/index.js');
 const Markers = require('../../src/markers/index.js');
