@@ -6,10 +6,10 @@
 // kn5-side work:
 // - V is flipped: kn5 stores the image's top row at v = 0, the scene holds v = 0 at the bottom, so it writes 1 - v.
 // - Matrices: the scene already holds them in kn5's stored order, so they are written as given, with no transpose.
-//   (The "transposed matrices" in docs/research/01 is the step from Blender's column convention to this order.)
+//   (Blender's column convention is the transpose of this order.)
 // - Winding: the scene's triangles are CCW seen from outside, the order real tracks store (measured on two reference
 //   tracks: 938,068 of 938,072 and 94,283 of 94,375 triangles wind CCW about their stored normals), so the indices are
-//   written as given. (docs/research/01's "(1, 2, 0)" is a rotation of (0, 1, 2); it does not reverse a triangle.)
+//   written as given. (A "(1, 2, 0)" order is a rotation of (0, 1, 2); it does not reverse a triangle.)
 // - Tangents are computed here (the scene carries none): per-vertex sums of each triangle's d(position)/du,
 //   orthogonalised against the normal, as the reference tracks store them.
 // - The bounding sphere is computed here: the centre of the vertices' box, and the farthest vertex from it.

@@ -26,7 +26,7 @@ function normalize(profile) {
 }
 const psiAt = (P, u) => {
   if (u <= P.u[0]) return P.psi[0]; if (u >= P.u[P.u.length - 1]) return P.psi[P.psi.length - 1];
-  // the first i >= 1 with P.u[i] >= u (the linear scan it replaces found the same i; a binary search keeps a 500-knot edge profile cheap, D225)
+  // the first i >= 1 with P.u[i] >= u (the linear scan it replaces found the same i; a binary search keeps a 500-knot edge profile cheap)
   let lo = 1, hi = P.u.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (P.u[m] < u) lo = m + 1; else hi = m; }
   const i = lo, t = (u - P.u[i - 1]) / (P.u[i] - P.u[i - 1]); return P.psi[i - 1] + (P.psi[i] - P.psi[i - 1]) * t;
 };
@@ -56,7 +56,7 @@ function sumsOf(P) {
   return m;
 }
 /**
- * D343: a FROZEN copy of profile P (P itself when it is frozen already), so offsetAt takes its running sums above. For a profile a caller builds and then reads at
+ * A FROZEN copy of profile P (P itself when it is frozen already), so offsetAt takes its running sums above. For a profile a caller builds and then reads at
  * many u (a cup blend at a station, a joint's two cross-sections): an unfrozen one is summed from the centre out to every u, each time; on a 25 km cup track that was
  * 18 of the checker's 23 s. The copy has the same fields and the same numbers, and the running sums add the same pieces in the same order, so every figure is
  * the same. The copy is the caller's own: no profile anyone else holds is frozen by it.
@@ -66,13 +66,13 @@ function sealed(P) {
   return Object.freeze({ ...P, u: Object.freeze(P.u.slice()), psi: Object.freeze(P.psi.slice()) });
 }
 /**
- * D407: normalize + sealed, remembered BY CONTENT. The mesher normalised the piece's profile afresh for every chord (a new, unfrozen object, so every offsetAt ran the slow unfrozen sum:
+ * normalize + sealed, remembered BY CONTENT. The mesher normalised the piece's profile afresh for every chord (a new, unfrozen object, so every offsetAt ran the slow unfrozen sum:
  * 25% of the full ghost, the measurement of 2026-10-19). The same knots, angles, font and material give the same frozen normalised profile (validated once, on the first), so its
  * running sums are made once. A profile that normalize() refuses is refused every time. At most SEALED_MAX are kept, the oldest dropped first.
  */
 const SEALED = new Map(), SEALED_MAX = 64;
-// D483: and by IDENTITY for a profile that is frozen with its knots (the core's, which cannot change): a drag's ghost meshes its 48 chords on every move, and with an edge typed
-// each chord's 137 knots were written out as text for the key above (numKey: 83 ms of a 3 s drag's 974 ms of rebuilds, D483 §2). A profile frozen with its knots is told by
+// and by IDENTITY for a profile that is frozen with its knots (the core's, which cannot change): a drag's ghost meshes its 48 chords on every move, and with an edge typed
+// each chord's 137 knots were written out as text for the key above (numKey: 83 ms of a 3 s drag's 974 ms of rebuilds). A profile frozen with its knots is told by
 // its object; any other is keyed by value, as before. A profile that normalize() refuses is never kept, so it is refused every time.
 const SEALED_BY = new WeakMap();
 const valuesOnly = (o, keys) => keys.every((k) => { const d = Object.getOwnPropertyDescriptor(o, k); return !d || 'value' in d; });
@@ -121,7 +121,7 @@ function samplesAcross(P, { maxAcross = 1, maxSeam = Math.PI / 180, count } = {}
 }
 samplesAcross.runs = 0;   // how many times the 4,000-sample walk has run (the work counted by app/test/release-ghost.test.js)
 /**
- * D407: samplesAcross, remembered BY CONTENT. A piece's cross-section is nearly one thing for all of its 2 m chords (500 chords in a 1,000 m ghost, 5 different cross-sections among them,
+ * samplesAcross, remembered BY CONTENT. A piece's cross-section is nearly one thing for all of its 2 m chords (500 chords in a 1,000 m ghost, 5 different cross-sections among them,
  * each chord running the walk above again: 45% of the full ghost's cost, the measurement of 2026-10-19), and the walk is a function of the knots, the angles and the limits alone, so the
  * answer is kept under exactly those numbers (a -0 is told from a 0): an edited profile is a different key, and nothing can change under the cache. At most SAMPLES_MAX answers are kept
  * (the oldest dropped first). samplesAcrossFor hands back the caller's own copy; samplesShared (the mesher's) hands back the one kept answer, its array FROZEN, so the same chords share one
@@ -145,7 +145,7 @@ function spanOf(P) { const X = P.u.map((u) => offsetAt(P, u)[0]); return Math.ma
 /** Largest |ψ| on the profile, for reporting (rad). */
 const maxPsi = (P) => Math.max(...P.psi.map(Math.abs));
 
-// ── FONT RAMPS (the librarian's ruling on D166 §5: "Fonts RAMP; they never jump ... The geometry blends width, wall
+// ── FONT RAMPS ("fonts RAMP; they never jump ... The geometry blends width, wall
 // height and ψ(u) along s, smoothstep in s") ──
 // Two profiles are matched at FRACTIONS of each side's width: f ∈ [−1, 0] runs from the right edge to the centreline,
 // f ∈ [0, 1] from the centreline to the left edge, and u = f · edge on that side. At weight w (0 = A, 1 = B):
@@ -191,18 +191,18 @@ function blendSamples(A, B, { maxAcross = 1, maxSeam = Math.PI / 180 } = {}) {
   return out;
 }
 /**
- * Fractions across for meshing a WHOLE PIECE of chord segments (D225): the same measure as blendSamples, but the turning term is the largest |Δψ| of ANY profile in
+ * Fractions across for meshing a WHOLE PIECE of chord segments: the same measure as blendSamples, but the turning term is the largest |Δψ| of ANY profile in
  * `list`, so one fraction array serves every segment of the piece and the rows two neighbouring segments share are the same cross-section at the same fractions
  * (the mesh then emits no seam zip between them). The list is subsampled to at most `cap` profiles, keeping the first and last.
  */
-// D421 (O's shell cut): the answer is a pure function of the subsampled, normalised profiles' u and psi and of maxAcross and maxSeam, and a sculpt step on a tube
+// the answer is a pure function of the subsampled, normalised profiles' u and psi and of maxAcross and maxSeam, and a sculpt step on a tube
 // converts the same profiles again and again (20 Grab steps on a tube lap: 842 ms of a 1,551 ms profile was this function's own time). Kept by VALUE, exactly: the key holds every number
 // as its shortest exact text (-0 apart), and each caller gets its own copy. Exact (test/core_stepcache.test.js).
 const FRACTIONS = new Map(), FRACTIONS_MAX = 64;
 const keyNum = (x) => (Object.is(x, -0) ? '-0' : String(x));
 function commonFractions(list, { maxAcross = 1, maxSeam = Math.PI / 180, cap = 40 } = {}) {
   const step = Math.max(1, Math.ceil(list.length / cap)), ps = list.filter((_, i) => i % step === 0 || i === list.length - 1).map((p) => normalize(p));
-  let lastU = null, uText = '';   // D484: a run of profiles on the same knots (an edge piece's chord ends) writes its u out once; the same text
+  let lastU = null, uText = '';   // a run of profiles on the same knots (an edge piece's chord ends) writes its u out once; the same text
   const key = [keyNum(maxAcross), keyNum(maxSeam), ...ps.map((p) => { if (!sameNums(lastU, p.u)) { lastU = p.u; uText = p.u.map(keyNum).join(','); } return `${uText};${p.psi.map(keyNum).join(',')}`; })].join('|');
   const hit = FRACTIONS.get(key); if (hit) return hit.slice();
   const out = fractionsOf(ps, maxAcross, maxSeam);
@@ -211,7 +211,7 @@ function commonFractions(list, { maxAcross = 1, maxSeam = Math.PI / 180, cap = 4
 }
 /** Equal numbers by Object.is, element for element (a null or a different length is not equal). */
 const sameNums = (a, b) => !!a && !!b && a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
-// D484 (C's D483 profile: an edge ghost's chord ends missed the cache on every new length, and this loop was the largest part of the drag): the measure at each fine
+// (measured: an edge ghost's chord ends missed the cache on every new length, and this loop was the largest part of the drag): the measure at each fine
 // fraction is psiAt(ps[k], uAt(Es[k], f)) for every profile. Profiles on the SAME knots (an edge piece's chord ends differ in ψ alone) have the same u at f and so
 // the same clamp, span and weight in psiAt; those are found once per such group, and each profile takes its own ψ there by psiAt's own expressions. The value at
 // a fraction is kept for the next step, where psiAt read the same arguments again. The max over k is the max of the same numbers, so m is the same, bit for bit.
@@ -256,7 +256,7 @@ const smoothstep = (t) => { const x = Math.max(0, Math.min(1, t)); return x * x 
 /**
  * The cross-section of a road segment at distance d into it, as the mesh builds it: the segment's own profile, or, where it carries a
  * `blend: { from, s0, length }`, the mix from `from` at weight smoothstep((s0 + d)/length). A reader of segment.profile that is not the mesh
- * must use this, or it sees a blended segment's TARGET for the whole segment (D190: the cup's segments carry blends; markers/place.js and
+ * must use this, or it sees a blended segment's TARGET for the whole segment (the cup's segments carry blends; markers/place.js and
  * geom/pitlane.js evaluate the same blend for their own purposes).
  */
 function atSegment(seg, d) {
@@ -269,10 +269,10 @@ function atSegment(seg, d) {
 /**
  * The cross-section a READER of a segment (not the mesh) takes at distance d into it: the blend evaluated for a CUP segment (`seg.cup`), the
  * segment's own profile for every other. A word document's font-transition blends have always been ignored by the readers (they judge the
- * target font for the whole word); D190 does not change that, so the paused piece builder's validation, layout and export read as before.
+ * target font for the whole word); cup blends do not change that, so the paused piece builder's validation, layout and export read as before.
  */
 function readAt(seg, d) { return readsBlend(seg) ? atSegment(seg, d) : normalize(seg.profile); }
-/** The segments whose blend a reader evaluates: a cup's, and a legacy CHORD (D196: the core's width or r changing inside a segment); never a word document's font transition. */
+/** The segments whose blend a reader evaluates: a cup's, and a legacy CHORD (the core's width or r changing inside a segment); never a word document's font transition. */
 function readsBlend(seg) { return !!(seg && (seg.cup || seg.chord)); }
 
 /**
@@ -281,7 +281,7 @@ function readsBlend(seg) { return !!(seg && (seg.cup || seg.chord)); }
  * within the chord). 0 for identical profiles.
  */
 function stepBetween(A, B) {
-  A = sealed(normalize(A)); B = sealed(normalize(B));   // D343: read at every fraction, so frozen copies (sealed)
+  A = sealed(normalize(A)); B = sealed(normalize(B));   // read at every fraction, so frozen copies (sealed)
   const EA = edgesOf(A), EB = edgesOf(B), fs = [...new Set([...fractions(A), ...fractions(B), 0])];
   let worst = 0;
   for (const f of fs) { const pa = offsetAt(A, uAt(EA, f)), pb = offsetAt(B, uAt(EB, f)); worst = Math.max(worst, Math.hypot(pa[0] - pb[0], pa[1] - pb[1])); }

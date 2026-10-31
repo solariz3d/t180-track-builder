@@ -1,4 +1,4 @@
-// jump.js: A JUMP THE USER'S WAY (D258, pane E; it replaces D243's solved gap and generated landing ramp). The user: "the user will initiate a
+// jump.js: A JUMP THE USER'S WAY (it replaces an earlier solved gap and generated landing ramp). The user: "the user will initiate a
 // jump by instead of clicking extend, it says jump … it then lets the user move around a blank straight piece just like the first piece for them to
 // then place down in the space they need it to be through testing in the game trial and error driving it themselves". So a jump is a FREE FLIGHT
 // (document.js flightPiece: the landing's start pose relative to the take-off end) and a LANDING, an ordinary road piece that starts at that pose.
@@ -58,7 +58,7 @@ function jumpHere(doc, extendOpts = null, { landing = {}, landingM = LANDING_M }
   const takeoff = extendOpts ? extend(doc, extendOpts) : doc;
   const withFlight = jump(takeoff, landing), F = withFlight.pieces[withFlight.pieces.length - 1];
   const lastRoad = takeoff.pieces.filter((P) => P.type === 'road').pop() || {};
-  return D.appendPiece(withFlight, landingPiece(F, lastRoad.family, landingM, D.gripOf(lastRoad)));   // D261: the landing keeps the take-off's grip
+  return D.appendPiece(withFlight, landingPiece(F, lastRoad.family, landingM, D.gripOf(lastRoad)));   // the landing keeps the take-off's grip
 }
 
 function landingOf(doc) {

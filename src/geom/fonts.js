@@ -1,4 +1,4 @@
-// fonts.js: the MEASURED FONTS (D182, pane C). A font is a cross-section shape, ψ(u) (profile.js), and these three are
+// fonts.js: the MEASURED FONTS. A font is a cross-section shape, ψ(u) (profile.js), and these three are
 // measured, not drawn: the learning library's road words, grouped by the shape the reader names them
 // (tools/fontshape.cjs; the numbers it gave are src/geom/fontshape.json).
 //
@@ -19,7 +19,7 @@
 //   · NO LIP: each font's steepest rise across the width, at its family's median width, lies inside the p10-p90 of the
 //     real words' steepest rise (test/geom_fonts.test.js): bowl 1.8°/m (real 0.6-6.1), half-pipe 4.2 (3.8-4.8),
 //     flat 0.14 (0.05-0.71).
-//   · A RIM RISES AT A RATE, NOT TO AN ANGLE (measured, D182): the half-pipe's real rise is about the same in degrees per
+//   · A RIM RISES AT A RATE, NOT TO AN ANGLE (measured): the half-pipe's real rise is about the same in degrees per
 //     METRE at every width (median 4.7 at 24 m, 4.6 at 30-33 m, 3.6 above 36 m), so a narrow real rim reaches a lower
 //     angle (track H's 24 m pipes: 25.7° at the edge; track E's 32 m: 30.7°). The angles above scale with the width,
 //     so on a narrow road they would rise faster than any real rim. So each quarter's rise is CAPPED at the family's

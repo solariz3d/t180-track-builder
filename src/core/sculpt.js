@@ -1,4 +1,4 @@
-// sculpt.js: the core's BRUSH (D185, pane E; the spec's GO §3). Add Δ·f(|s − s₀|/r) to ONE channel over the brush window,
+// sculpt.js: the core's BRUSH. Add Δ·f(|s − s₀|/r) to ONE channel over the brush window,
 // f the quintic smootherstep falloff (ref 10 §1), applied to the B-spline control points the window covers (ref 10 §2).
 //
 // Local by construction: a control point changes only when its WHOLE support [tᵢ, tᵢ₊₄] lies inside the window, so every
@@ -38,12 +38,12 @@ function brushControls(c, t, { s0, r, delta }) {
   return { ctrl, changed };
 }
 
-// D421: the adapter's per-piece segment cache (toSegments `cache`, exact: test/core_segcache.test.js), so offsets cost only the pieces that changed. A drag reruns the
+// the adapter's per-piece segment cache (toSegments `cache`, exact: test/core_segcache.test.js), so offsets cost only the pieces that changed. A drag reruns the
 // brush on the SAME base document at every step, and the brushed document shares every untouched piece with it. The cache keys a piece by its identity, so it
 // is used only on a document whose pieces are frozen (every document the core returns, frozen all the way down); an unfrozen one, read from a file say, could
 // be written in place, and is converted afresh.
 const SEG_CACHE = new WeakMap();
-// D421 (O's shell cut): a hill's or swerve's peak ratio (below, in brush) is a pure function of the document, the channel, s0 and r, and a drag asks it of the SAME
+// a hill's or swerve's peak ratio (below, in brush) is a pure function of the document, the channel, s0 and r, and a drag asks it of the SAME
 // base at every step (on a 10 km Grab, about half the step: the window read was 217 of 419 ms over 40 steps, profiled). Kept per document, under the rule SEG_CACHE keeps: only a
 // document frozen with every piece frozen, which cannot be written in place. Exact (test/core_stepcache.test.js); a refusal is never kept.
 const RATIO_CACHE = new WeakMap(), RATIO_MAX = 16;
@@ -86,10 +86,10 @@ function sculpt(doc, { channel, s0, r, delta }) {
   if (!D.CHANNELS.includes(channel)) throw new D.CoreError('BAD_CHANNEL', `sculpt: channel "${channel}" (known: ${D.CHANNELS.join(', ')})`);
   if (!(r > 0) || !Number.isFinite(s0) || !Number.isFinite(delta)) throw new D.CoreError('BAD_BRUSH', `sculpt: needs r > 0 and finite s0, delta (got r ${r}, s0 ${s0}, delta ${delta})`);
   // THE SMALLEST BRUSH: a control point's support is 4 knot spans, so a window narrower than that holds none and would change
-  // nothing. A brush narrower than 3 spans is widened to 3 (E's rule; the hand-back's declared deviation): then 2–3 control points
+  // nothing. A brush narrower than 3 spans is widened to 3 (a declared deviation): then 2–3 control points
   // carry the bump, and the change stays inside the asked window widened by 2 spans on each side whenever r ≥ one span.
   // The span is the largest knot span UNDER THE WINDOW, not in the whole piece, so the rule narrows after a local refinement
-  // (A's catch, D186: document.js refineKnots).
+  // (document.js refineKnots).
   const off = pieceOffsets(doc), rUsed = widened(doc, off, s0, r, 3);
   const res = doc.pieces.map((P, p) => {
     if (P.type !== 'road' || off[p] + P.length < s0 - rUsed || off[p] > s0 + rUsed) return null;
@@ -106,12 +106,12 @@ function widened(doc, off, s0, r, spans) {
   for (let k = 0; k <= doc.pieces.length; k++) { const w = Math.max(r, spans * spanUnder(doc, off, s0 - rUsed, s0 + rUsed)); if (w === rUsed) break; rUsed = w; }
   return rUsed;
 }
-/** A brush on an optional channel reaches only the pieces that carry it (D225). */
+/** A brush on an optional channel reaches only the pieces that carry it. */
 function checkReach(P, channel) {
   if (D.OPTIONAL[channel] && channel !== 'c' && !P[D.OPTIONAL[channel]]) throw new D.CoreError('NOT_' + D.OPTIONAL[channel].toUpperCase(), 'a ' + channel + ' brush reaches piece ' + P.id + ', which has no ' + D.OPTIONAL[channel] + ': extend with a ' + (channel === 't' ? 't' : 'e or s') + ' target first, or brush only ' + D.OPTIONAL[channel] + ' pieces (D225)');
   if (channel === 'c' && !P.cup) throw new D.CoreError('NOT_CUP', 'a cup brush reaches piece ' + P.id + ', which has no cup (a legacy piece renders the old profile): extend with a cup target first, or brush only cup pieces');
 }
-/** Road pieces a and b (a before b) are C1-linked in `channel`: no flight between them (D258: the landing starts at the user's pose), and an optional channel on both. */
+/** Road pieces a and b (a before b) are C1-linked in `channel`: no flight between them (the landing starts at the user's pose), and an optional channel on both. */
 const isLinked = (doc, a, b, channel) => a >= 0 && !doc.pieces.slice(a + 1, b).some((P) => P.type === 'flight') && (!D.OPTIONAL[channel] || !!(doc.pieces[a][D.OPTIONAL[channel]] && doc.pieces[b][D.OPTIONAL[channel]]));
 /**
  * The joints of a brushed channel, then the pieces. `res[p]`: { ctrl, changed } for a piece the brush reached (null otherwise). A road-road joint whose four control
@@ -119,7 +119,7 @@ const isLinked = (doc, a, b, channel) => a >= 0 && !doc.pieces.slice(a + 1, b).s
  * pieces the same objects; changed values quantised).
  */
 function settle(doc, channel, res) {
-  // the joints: road piece a, then road piece b (a flight between them breaks the C1 link in EVERY channel since D258: the landing starts at the user's pose)
+  // the joints: road piece a, then road piece b (a flight between them breaks the C1 link in EVERY channel: the landing starts at the user's pose)
   let a = -1;
   for (let b = 0; b < doc.pieces.length; b++) {
     if (doc.pieces[b].type !== 'road') continue;
@@ -151,17 +151,17 @@ function settle(doc, channel, res) {
   return { pieces, changed };
 }
 
-// ── THE BRUSH MODES (D186) ──────────────────────────────────────────────────────────────────────────────────────────────
+// ── THE BRUSH MODES ────────────────────────────────────────────────────────────────────────────────────────────────────
 // "Push a hill up" must be LOCAL: the track past the brush unchanged, with no re-close. A brush on the pitch RATE cannot be:
 // its ∫Δκv tilts everything after it. Nor can a hill made THROUGH the rate, κv = h″: the height and pitch come back, but the road
 // over the hill is longer in arc length, so the track past it moves back by ∫(1 − cos h′) ds (measured on 17c2301: 22 cm for a
-// 5 m hill over r = 100 m; the D186 hand-back §1). So a hill and a swerve are brushes on the document's OFFSET channels, height
+// 5 m hill over r = 100 m). So a hill and a swerve are brushes on the document's OFFSET channels, height
 // `h` and lateral `l`: value channels like phi, w and r, which the adapter adds to the position. Zero outside the window, so the
 // track past it is untouched by construction. Whether the document carries them is A's (src/core/README.md); until it does, a
 // hill or a swerve is refused by name, and nothing is faked through the rate.
 /**
- * THE SHARP BRUSH'S DECLARED SPILL (the chair's D186 ruling 2: opt-in, and its cost stated in the UI and the docs). Measured on the
- * 21 sharp brushes at r = 20 m of the D186 hand-back §10 (every channel, 25/50/75% of generated track 0): outside W⁺ every channel
+ * THE SHARP BRUSH'S DECLARED SPILL (opt-in, and its cost stated in the UI and the docs). Measured on the
+ * 21 sharp brushes at r = 20 m (every channel, 25/50/75% of generated track 0): outside W⁺ every channel
  * changed by at most 0.355 of its quantum, and the track past W⁺ moved by at most 70 µm (6.98e-5 m). Declared with margin below.
  * SHARP_NOTE is the sentence the app shows when the user turns sharp on.
  */
@@ -180,15 +180,15 @@ const MODES = Object.freeze({
  * re-closed with the brushed stretch protected (close's `edited`), and a re-close that fails leaves the track OPEN and says so.
  */
 function brush(doc, { mode = 'hill', channel, channels, s0, r, delta, sharp = false } = {}) {
-  if (channels !== undefined) return brushSet(doc, { mode, channels, s0, r, sharp });   // D520: a SET of value channels in one step (below)
+  if (channels !== undefined) return brushSet(doc, { mode, channels, s0, r, sharp });   // a SET of value channels in one step (below)
   const M = MODES[mode];
-  // SHARP (opt-in): refine the knots under the brush first (A's refineKnots, Boehm), so it acts at the asked radius instead of
-  // widening. Its cost, measured (the D186 hand-back §3): the new control points are re-quantised in EVERY channel, so values up to
+  // SHARP (opt-in): refine the knots under the brush first (refineKnots, Boehm), so it acts at the asked radius instead of
+  // widening. Its cost, measured: the new control points are re-quantised in EVERY channel, so values up to
   // 2.7e-5 change outside the window and the track past it moves by up to 70 µm. So it is never the default.
   if (sharp) {
     if (typeof D.refineKnots !== 'function') throw new D.CoreError('NOT_YET', 'brush: a sharp brush needs document.js refineKnots (A)');
     const h = (2 * r) / 6, lo = s0 - r - 3 * h, hi = s0 + r + 3 * h, off = pieceOffsets(doc);
-    // (a piece that only touches [lo, hi] at its end or its start has no span to refine: refineKnots refuses the zero-width range, BAD_RANGE [L, L], D421)
+    // (a piece that only touches [lo, hi] at its end or its start has no span to refine: refineKnots refuses the zero-width range, BAD_RANGE [L, L])
     doc.pieces.forEach((P, p) => { if (P.type !== 'road' || off[p] + P.length <= lo || off[p] >= hi) return; doc = D.refineKnots(doc, P.id, Math.max(0, lo - off[p]), Math.min(P.length, hi - off[p]), h).doc; });
   }
   if (!M) throw new D.CoreError('BAD_MODE', `brush: mode "${mode}" (known: ${Object.keys(MODES).join(', ')})`);
@@ -205,7 +205,7 @@ function brush(doc, { mode = 'hill', channel, channels, s0, r, delta, sharp = fa
     if (kept && kept.has(key)) d = delta / kept.get(key);
     else {
     const unit = sculpt(doc, { channel: ch, s0, r, delta: 1 }), ru = unit.radiusUsed;
-    // D421: each document's offsets once, not at every reading (each reading segmented the whole track: 3.4 s a step on 2 km, 21 s on 10 km)
+    // each document's offsets once, not at every reading (each reading segmented the whole track: 3.4 s a step on 2 km, 21 s on 10 km)
     const offU = pieceOffsets(unit.doc), off0 = pieceOffsets(doc);
     let got = 0; for (let s = Math.max(0, s0 - ru); s <= s0 + ru; s += 0.25) { let v; try { v = valueAt(unit.doc, ch, s, offU) - valueAt(doc, ch, s, off0); } catch (e) { continue; } if (Math.abs(v) > Math.abs(got)) got = v; }
     if (!(Math.abs(got) > 1e-6)) throw new D.CoreError('BAD_BRUSH', `brush: a ${mode} at ${s0} m moves no control point (${unit.note || 'a joint the window only half covers'})`);
@@ -221,8 +221,8 @@ function brush(doc, { mode = 'hill', channel, channels, s0, r, delta, sharp = fa
 }
 
 /**
- * D520, A SET OF CHANNELS IN ONE STEP (Sculpt's grabbed point follows the mouse: the press's point stays under the pointer, so one drag moves height, lateral, width
- * and bank together; exo_memory/loop/plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md item 3). `channels` = { ch: delta, ... }, value channels only, mode 'value'.
+ * A SET OF CHANNELS IN ONE STEP (Sculpt's grabbed point follows the mouse: the press's point stays under the pointer, so one drag moves height, lateral, width
+ * and bank together). `channels` = { ch: delta, ... }, value channels only, mode 'value'.
  * Each channel is brushed exactly as a single 'value' brush is, one after another on the document the one before made, in the document's channel order: the
  * channels are separate control-point arrays, so the order changes nothing (test/core_sculpt_set.test.js). A channel whose delta is 0 is left alone; sharp
  * refines the knots once, with the first channel. Returns what brush returns, `changed` carrying each entry's `channel`, and the widest radius used.
@@ -246,7 +246,7 @@ function brushSet(doc, { mode, channels, s0, r, sharp }) {
   return { doc: out, changed, radiusUsed: used === null ? r : used, note: notes.length ? notes.join(' · ') : null, mode: 'value', ...(sharp && !first ? { sharp: SHARP_BOUND } : {}) };
 }
 
-// ── D421, THE SCULPT MODE's two new tools (P's design, exo_memory/loop/design_d421_sculpt_P_2026-10-20.md §3.2 and §3.7) ─────────────────────────────────────
+// ── THE SCULPT MODE's two new tools ─────────────────────────────────────
 const RATE_CHANNELS = Object.freeze(['kh', 'kv']);
 /** The shortest piece Stretch makes (m), and the shortest knot span it leaves (m: refineKnots' own floor, so a refined piece is never squeezed past it). */
 const STRETCH_MIN_M = 1, STRETCH_SPAN_MIN_M = 0.01;
@@ -289,7 +289,7 @@ function stretch(doc, which, L1, { keepRate = false } = {}) {
   // KEEP THE BEND (the default): the piece turns and climbs what it did. ∫c ds of a clamped cubic is Σ cᵢ (tᵢ₊₄ − tᵢ) / 4, so the rate's middle control points are
   // scaled by the one g that keeps that sum. Its two ends keep their value AND slope (the start as the joint before builds it, the end as it was), so the rate the
   // neighbours meet is unchanged and the piece after keeps its start. A plain L0 / L1 on every point would leave the first two at the old rate and turn short (4.6% on a
-  // 200 m corner stretched to 300 m), and holding the end values alone sent the end slope to 14 rad/m² on a corner shrunk to 1 m (D421 C, both measured). Where the
+  // 200 m corner stretched to 300 m), and holding the end values alone sent the end slope to 14 rad/m² on a corner shrunk to 1 m (both measured). Where the
   // middle carries no net turn (an S whose halves cancel) there is no such g, and it is scaled by L0 / L1; a piece of one span has no middle and keeps its rates.
   const area = (c, t, from, to) => { let x = 0; for (let i = from; i <= to; i++) x += (c[i] * (t[i + 4] - t[i])) / 4; return x; };
   const keepBend = (P0, B, ch, linked) => {

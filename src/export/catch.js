@@ -1,4 +1,4 @@
-// catch.js: a PHYSICAL CATCH under the road (D341, plan :876-884).
+// catch.js: a PHYSICAL CATCH under the road.
 //
 //   withCatch(scene, mesh, segments, mode) -> scene     the export's scene with a second road surface CATCH_OFFSET_M under each chosen core road cell
 //   catchCells(cells, segments, mode)      -> [index]   which of mesh.cells get one (pure)

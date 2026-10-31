@@ -16,7 +16,7 @@
 // form (Fresnel integrals), and this quadrature's error is far below a micrometre per metre (inferred: the fifth-order
 // rule on a smooth integrand).
 //
-// FRAME (D177, the librarian's ruling on p-d177-rigid-C §2: OPTION 2; a DEVIATION from ARCHITECTURE §3's
+// FRAME (a DEVIATION from ARCHITECTURE §3's
 // "rotation-minimising frames", recorded in docs/INTERFACES.md). The frame is the curve model's own GRAVITY frame: the
 // unrolled left is the heading's left, H(θ) = (cos θ, 0, −sin θ), which is horizontal and perpendicular to
 // T = (cos p · sin θ, sin p, cos p · cos θ) at EVERY pitch, ±90° and inversions included (θ keeps its meaning over the
@@ -26,7 +26,7 @@
 // (+ = left side up, smoothstep between roll0 and roll1) is then applied about T. (T, L, U) is right-handed and
 // L = U × T, as INTERFACES §2 and the T1 markers define left. On a CLOSED loop the frame closes with the heading, so there
 // is no closing twist (path.twist is 0; the RMF's twist used to be spread over s).
-// Until D177 the frame was rotation-minimising (the double reflection of Wang et al. 2008, still exported below).
+// The frame was once rotation-minimising (the double reflection of Wang et al. 2008, still exported below).
 //
 // HEARTLINE. The curve integrated is the heartline. The road's centre is the heartline minus heartline·U (+ = the
 // heartline above the road), as INTERFACES §1 "heartline … + = up" reads.
@@ -41,7 +41,7 @@
 // connector's job (ARCHITECTURE §2), so a closed loop is rebuilt in full.
 //
 // SCULPTING (rebuildPathFrom) regrows only the changed segments and RE-PLACES the unchanged tail rigidly when it can
-// (D177; see BLOCKS AND THE PLACEMENT CHAIN below), bit-identical to a full build. An open path's samples are therefore
+// (see BLOCKS AND THE PLACEMENT CHAIN below), bit-identical to a full build. An open path's samples are therefore
 // views: read-only, same fields.
 'use strict';
 
@@ -112,15 +112,15 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
   const dTdth = [Math.cos(p) * Math.cos(theta), 0, -Math.cos(p) * Math.sin(theta)], dTdp = [-Math.sin(p) * Math.sin(theta), Math.cos(p), -Math.sin(p) * Math.cos(theta)];
   const kvec = add(mul(dTdth, kY), mul(dTdp, kP));
   // THE ROLL. By default the geometry's smoothstep from roll0 to roll1 (zero roll RATE at both ends of every segment). A segment that carries rollRate0 and rollRate1 (rad per metre,
-  // D225: the spiral of a closed tube) rolls by the cubic Hermite through both end values and both end rates, so the roll is C1 across segments: a road centre at a radius from the roll
+  // the spiral of a closed tube) rolls by the cubic Hermite through both end values and both end rates, so the roll is C1 across segments: a road centre at a radius from the roll
   // axis is not thrown sideways at every joint (ref 09 §10). A segment without them is bit for bit as before.
   let phi;
   if (g.rollRate0 === undefined || g.rollRate1 === undefined) phi = num(g.roll0) + (num(g.roll1) - num(g.roll0)) * smooth(u / L);
   else { const t = u / L, t2 = t * t, t3 = t2 * t; phi = (2 * t3 - 3 * t2 + 1) * num(g.roll0) + (t3 - 2 * t2 + t) * L * g.rollRate0 + (-2 * t3 + 3 * t2) * num(g.roll1) + (t3 - t2) * L * g.rollRate1; }
   const U0 = cross(T, R), Lr = add(mul(R, Math.cos(phi)), mul(U0, Math.sin(phi))), Ur = cross(T, Lr);
-  // THE HEARTLINE: constant over the segment, or (heartline1 given, D225) linear from heartline at its start to heartline1 at its end, so it is continuous across segments
+  // THE HEARTLINE: constant over the segment, or (heartline1 given) linear from heartline at its start to heartline1 at its end, so it is continuous across segments
   const hl = g.heartline1 === undefined ? num(g.heartline) : num(g.heartline) + (g.heartline1 - num(g.heartline)) * u / L;
-  // D268: a core segment (heartline1 given: adapter.js xsecSegments, a closed tube's roll axis) keeps the road's centre ON THE CURVE the user drew while it is not rolled:
+  // a core segment (heartline1 given: adapter.js xsecSegments, a closed tube's roll axis) keeps the road's centre ON THE CURVE the user drew while it is not rolled:
   // the axis is hl ABOVE the curve (along the unrolled up U0) and a roll turns the road about it, so the centre is x + hl·(U0 − U). Before, it was x − hl·U, which put the
   // floor of every closed tube hl = w/2π below the curve, so opening a tube back to a road lifted the floor that far inside the piece (the user's "hump", 7 m at 44 m wide).
   // A word's heartline (constant, no heartline1: INTERFACES §1, the rider's heart above the track) is as before.
@@ -130,7 +130,7 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
     grade: run > 1e-12 ? T[1] / run : (T[1] > 0 ? Infinity : -Infinity), _R: R, _x: x };
 }
 
-// ── BLOCKS AND THE PLACEMENT CHAIN (D177, rigid downstream edits, exact) ──────────────────────────────────────────────
+// ── BLOCKS AND THE PLACEMENT CHAIN (rigid downstream edits, exact) ───────────────────────────────────────────────────
 // Every segment is grown ONCE, in its own LOCAL coordinates: from the origin, at heading 0, at its real start pitch p0
 // and its start frame R0 expressed in those coordinates. That is a BLOCK: its samples (records), its local end state, its
 // sample count. Nothing in a block depends on where the segment is placed or which way it faces, because with the
@@ -150,15 +150,15 @@ function sampleAt(g, gi, s, u, th0, p0, A, B) {
 // WHEN IT IS NOT RIGID: a pitch edit (the next block's p0 changes, and under world-up yaw its shape really changes). A
 // sculpt regrows the tail's blocks ONE AT A TIME until the next block's local start (p0, R0) is bit for bit its old one,
 // and re-places the rest; with the gravity frame R0 is always (1, 0, 0), so that is the first block whose start pitch is
-// unchanged. (Under the rotation-minimising frame, D177's first build, R0 also carried the frame's twist, and a turn edit on
+// unchanged. (Under the rotation-minimising frame the chain first used, R0 also carried the frame's twist, and a turn edit on
 // a slope regrew the whole tail.)
 const blockKey = (g) => [g.length, g.k0, g.k1, g.kp0, g.kp1, g.roll0, g.roll1, g.heartline, g.heartline1, g.rollRate0, g.rollRate1].map((v) => (v === undefined ? '' : num(v))).join(',')   // an absent field is empty, a 0 is "0": the new fields change the key only where a segment sets them
-  + (g.to ? `|to:${g.to.x.join(',')},${g.to.theta},${g.to.p}` : '') + (g.to && g.to.from ? `|from:${g.to.from.x.join(',')},${g.to.from.theta},${g.to.from.p}` : '');   // D258: a free flight's end pose is part of its shape
+  + (g.to ? `|to:${g.to.x.join(',')},${g.to.theta},${g.to.p}` : '') + (g.to && g.to.from ? `|from:${g.to.from.x.join(',')},${g.to.from.theta},${g.to.from.p}` : '');   // a free flight's end pose is part of its shape
 const ry = (v, c, sn) => [c * v[0] + sn * v[2], v[1], c * v[2] - sn * v[0]];
 const same3 = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
 /**
- * D258, A FREE FLIGHT (the user places the landing by hand): a segment with `to` = { x: [left, up, forward], theta, p } ENDS at that pose, in its own
+ * A FREE FLIGHT (the user places the landing by hand): a segment with `to` = { x: [left, up, forward], theta, p } ENDS at that pose, in its own
  * local coordinates (heading 0 at its start, the start pitch p0): x is where the landing starts (left along the heading's horizontal left, up along world up,
  * forward along the heading's horizontal forward), theta its heading (+ = left) and p its pitch. Between, the centreline is the cubic Hermite from the start
  * (tangent T(0, p0)) to x (tangent T(theta, p)), both tangents scaled by the chord: no road is there, it only carries the stations, the AI line and the
@@ -306,10 +306,10 @@ function growInto(path, segments, from, to, inp, work) {
   while (!r.done) r = it.next();
   return r.value;
 }
-/** growInto as a generator (D407): the same blocks in the same order, a yield after each, so the exact ghost's path can be grown a slice a frame. growInto is this run to the end. */
+/** growInto as a generator: the same blocks in the same order, a yield after each, so the exact ghost's path can be grown a slice a frame. growInto is this run to the end. */
 function* growIntoSteps(path, segments, from, to, inp, work) {
   for (let gi = from; gi < to; gi++) {
-    const blk = growBlock(segments[gi], gi, inp.p0, inp.R0, path.step, gi === segments.length - 1, work, path.substep);   // D404: path.substep is only ever set on a preview ghost's own path
+    const blk = growBlock(segments[gi], gi, inp.p0, inp.R0, path.step, gi === segments.length - 1, work, path.substep);   // path.substep is only ever set on a preview ghost's own path
     blk.pl = inp.pl;
     path.blocks[gi] = blk; path.segFirst[gi] = path.samples.length; path.starts[gi] = worldStart(blk);
     for (const r of blk.recs) path.samples.push(new SampleView(r, blk));
@@ -327,7 +327,7 @@ function finish(path, segments, work) {
 }
 
 /**
- * buildPath(segments, { step = 0.5, closed = false, start, substep }). `substep` (D404, the drag's ghost only): the largest internal integration step in metres, 0.25 by default.
+ * buildPath(segments, { step = 0.5, closed = false, start, substep }). `substep` (the drag's ghost only): the largest internal integration step in metres, 0.25 by default.
  * Stations every `step` metres, plus every segment boundary. On a closed loop the end must meet the start in position
  * (within `closeTol`, default 1e-3 m) and tangent, or it throws: closing the loop is the document's connector's job
  * (ARCHITECTURE §2), not the geometry's.
@@ -337,7 +337,7 @@ function buildPath(segments, opts = {}) {
   while (!r.done) r = it.next();
   return r.value;
 }
-/** buildPath as a generator (D407): a yield after each block; buildPath is this run to the end, so the path is the same to the bit. */
+/** buildPath as a generator: a yield after each block; buildPath is this run to the end, so the path is the same to the bit. */
 function* buildPathSteps(segments, opts = {}) {
   checkSegments(segments);
   const step = opts.step === undefined ? 0.5 : opts.step;
@@ -349,7 +349,7 @@ function* buildPathSteps(segments, opts = {}) {
   if (closed) {
     // the loop must meet itself in position and tangent; the closing is the document's connector's job (ARCHITECTURE §2).
     // With the gravity frame the frame closes exactly when the heading does, so there is no closing twist to spread
-    // (path.twist stays 0; until D177 the rotation-minimising frame's twist was spread over s here)
+    // (path.twist stays 0; under the rotation-minimising frame its twist was spread over s here)
     const a0 = path.samples[0], b0 = path.samples[path.samples.length - 1], tol = opts.closeTol === undefined ? 1e-3 : opts.closeTol;
     const gap = len(sub(a0._x, b0._x)), tgap = len(sub(a0.T, b0.T));
     if (gap > tol || tgap > 1e-6) throw new Error(`buildPath: closed loop does not close (position ${gap.toExponential(2)} m, tangent ${tgap.toExponential(2)})`);
@@ -367,7 +367,7 @@ function extendPath(path, segments, fromSeg) {
   while (!r.done) r = it.next();
   return r.value;
 }
-/** extendPath as a generator (D407): it yields after each new block and returns what extendPath returns; extendPath is this run to the end, so the path is the same to the bit. */
+/** extendPath as a generator: it yields after each new block and returns what extendPath returns; extendPath is this run to the end, so the path is the same to the bit. */
 function* extendPathSteps(path, segments, fromSeg) {
   if (path.closed) throw new Error('extendPath: a closed loop has no open end; rebuild it');
   const from = fromSeg === undefined ? path._nseg : fromSeg;

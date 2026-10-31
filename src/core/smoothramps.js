@@ -1,6 +1,6 @@
-// smoothramps.js: Track ▸ Smooth ramps (D465, 2026-10-25). Re-lays the bank, cup and edge ramps of a track that was laid before 0.4.20 with the C2 quintic
+// smoothramps.js: Track ▸ Smooth ramps (2026-10-25). Re-lays the bank, cup and edge ramps of a track that was laid before 0.4.20 with the C2 quintic
 // extend.js now lays them with, so a saved track gets the smooth joints too. A saved document stores control points, not the words that laid it, so it does
-// NOT reshape on load (D459 3b, P §0): this is the one way an existing track gets them, and it runs only when the user asks.
+// NOT reshape on load: this is the one way an existing track gets them, and it runs only when the user asks.
 //
 //   smoothRamps(doc)  -> { doc, ramps, moved, left }
 //     doc     the new document (the same object when nothing moved)
@@ -9,8 +9,8 @@
 //     left    the channels that change across a piece but are not a ramp this can re-lay: { id, ch, why }
 //
 // WHAT IS A RAMP HERE: a road piece's phi, c, e or er (extend.js C2_CHANNELS) that goes from one held value to another: its first two control points level
-// (it leaves at rest) and its last two level (it arrives at rest), the two values different. That is what Extend lays for a target (P's requintic.js, D459
-// 3b §4: 13 channels of 9 pieces on TEST 10). It is laid FROM THE PIECE'S START, as Extend lays every ramp, TO WHERE THE PIECE REACHES ITS END VALUE: the knot
+// (it leaves at rest) and its last two level (it arrives at rest), the two values different. That is what Extend lays for a target (measured:
+// 13 channels of 9 pieces on TEST 10). It is laid FROM THE PIECE'S START, as Extend lays every ramp, TO WHERE THE PIECE REACHES ITS END VALUE: the knot
 // past which every control point holds it (a ramp typed with a transition keeps it; a ramp over the whole piece stays over the whole piece). A piece that held
 // its value first and dropped late (the cup home of a lap closed before 0.4.20) is laid over the whole piece, as P's tool did.
 //
@@ -79,7 +79,7 @@ function smoothRamps(doc) {
       if (!r) continue;
       if (r.why) { left.push({ id: P.id, ch, why: r.why }); continue; }
       // moved: by more than half the channel's quantum. extend.js's edge clamp can leave a point unrounded (150 − 128.113932 = 21.886067999999995), which the
-      // re-lay rounds; that is the same ramp, and counting it would copy, commit and report a change of 5e-15° (found by row 10's track, D465)
+      // re-lay rounds; that is the same ramp, and counting it would copy, commit and report a change of 5e-15° (found by row 10's track)
       const now = relay(P, ch, r), q = 10 ** -D.DEC[ch], moved = now.some((x, i) => Math.abs(x - P.channels[ch][i]) > q / 2);
       ramps.push({ id: P.id, ch, from: r.v0, to: r.v1, over: r.Lt, moved });
       if (moved) (channels = channels || { ...P.channels })[ch] = now;

@@ -113,7 +113,7 @@ function generateAiLine(dsn, secs, opts = {}) {
   let tt = Float64Array.from(raw);
   for (let pass = 0; pass < 3; pass++) {
     const nxt = new Float64Array(n);
-    for (let i = 0; i < n; i++) { let a = 0; for (let d = -half; d <= half; d++) a += tt[opts.open ? Math.min(n - 1, Math.max(0, i + d)) : (i + d + n) % n]; nxt[i] = a / (2 * half + 1); }   // an OPEN line (D243a test export) does not wrap: its ends average their own side only
+    for (let i = 0; i < n; i++) { let a = 0; for (let d = -half; d <= half; d++) a += tt[opts.open ? Math.min(n - 1, Math.max(0, i + d)) : (i + d + n) % n]; nxt[i] = a / (2 * half + 1); }   // an OPEN line (the test export) does not wrap: its ends average their own side only
     tt = nxt;
   }
 
@@ -155,7 +155,7 @@ function encodeAiLine(line) {
   }
   const spacing = P.slice(1).map((p, k) => dist(p.pos, P[k].pos)).sort((a, b) => a - b), med = spacing[spacing.length >> 1];
   const close = dist(P[n - 1].pos, P[0].pos);
-  // an OPEN line (line.open, the D243a test export of an unfinished track) is written as it is: point-to-point layouts ship open lines (Kunos' ks_drag and
+  // an OPEN line (line.open, the test export of an unfinished track) is written as it is: point-to-point layouts ship open lines (Kunos' ks_drag and
   // five hillclimb/touge layouts in the local install, measured: their last point is 517–5,363 m from the first)
   if (!line.open && (!(close > 0) || close > 3 * med)) throw new AiLineError('NOT_CLOSED', `the last point is ${close} m from the first (median spacing ${med} m); a lap line closes one spacing short of its start`);
   const b = Buffer.alloc(HEADER_BYTES + n * POINT_BYTES + 4 + n * EXTRA_BYTES + 4);

@@ -4,7 +4,7 @@
 //   buildPitLane(mainPath, mainSegments, pitLane, { stepM = 1 })
 //     -> { path, segments, joins: { leave: { s, sLane }, rejoin: { s, sLane } }, parts: { diverge, run, merge },
 //          at(s) -> { inner, centre, edge, L, U, g } }            at(s): the lane at MAIN-road s, exactly, for checks
-//   laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5, main }) -> { intersections, stacked, stats }   main (D437a): the main mesh's { soup, bvh }, from its self-check
+//   laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5, main }) -> { intersections, stacked, stats }   main: the main mesh's { soup, bvh }, from its self-check
 //
 // SHAPE. The lane is built in the MAIN road's own coordinates, so it follows every word it runs beside. At main s:
 //   e(s)  = the main road's surface point at its lane-side EDGE (the profile the mesh builds there: the font, or the font
@@ -12,17 +12,17 @@
 //   g(s)  = the gap from that edge to the lane's inner edge: 0 at the leave, easing out over divergeM of main road to
 //           offsetM, offsetM along the run, easing back to 0 over mergeM. The ease is profile.js smoothstep, the one the
 //           font ramps use: zero slope at both ends, so the lane's inner edge leaves the road's edge TANGENTIALLY.
-//   φ(s)  = the lane's TILT about the road's T: 0, leave to rejoin (D438), so the lane lies level in the road's own
+//   φ(s)  = the lane's TILT about the road's T: 0, leave to rejoin, so the lane lies level in the road's own
 //           across-plane (it follows the road's bank and grade) at the height of the edge it leaves from
 //   A(s)  = the edge's outward across-direction tilted by φ: σ·L·cos φ + U·sin φ (= σ·L at φ = 0)
 //   inner = e + A·g,  centre = e + A·(g + width/2)      σ = +1 on the left (+u), −1 on the right
 // JOINS WITH NO STEP. At the leave and the rejoin g = 0 and g' = 0, so the lane's inner edge IS the road's edge (same
 // point) and runs along it (same tangent: inner' = e' + A'g + Ag' = e').
-// D438 (2026-10-22, on TEST TRACK 10: the lane "flips up towards the beginning and end, it should be smooth even"): this
+// The lane once tilted (on a test track it "flips up towards the beginning and end, it should be smooth even"): this
 // was G1 across that edge, φ = ψe·(1 − g/offsetM), the lane leaving in the edge's own plane. Off a 30° edge (a cup 10°,
 // edge 20°) that lifted the lane's outer edge 4.2 m at both joins and laid it back level over the diverge and merge. Now
 // the lane is even; across the shared edge line the cross-slope steps from the edge's ψe to 0, the road's own lip.
-// D182 (pane C): this was "the lane is flat, and the edge must be flat (≤ 1°)". The measured fonts (src/geom/fonts.js) rise
+// Before the fonts were measured this was "the lane is flat, and the edge must be flat (≤ 1°)". The measured fonts (src/geom/fonts.js) rise
 // from the centre, 15.5° at the bowl's edge and 30.6° at the half-pipe's, so no lane could leave a default road. Now an
 // edge is refused only past JOIN_MAX (35°, the reader's own lip: a fold sharper than 35° in a metre is an edge, not road,
 // tools/read_track.cjs), still as PIT_JOIN_NOT_FLAT. The lane never overlaps the road's surface, so there is no stacked
@@ -94,7 +94,7 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
     const T = unit(lerp(a.T, b.T, t)), L = unit(lerp(a.L, b.L, t)), U = unit(lerp(a.U, b.U, t)), pos = lerp(a.pos, b.pos, t);
     const kv = lerp(a.kvec, b.kvec, t);
     const [X, Y] = Prof.offsetAt(P, uE), edge = add(pos, add(mul(L, X), mul(U, Y))), g = gapAt(s), psiEdge = Prof.psiAt(P, uE);
-    const phi = 0, c = Math.cos(phi), sn = Math.sin(phi);   // D438: level in the road's own across-plane, leave to rejoin (it was psiEdge · (1 − g/offsetM): tilted to the edge at the joins)
+    const phi = 0, c = Math.cos(phi), sn = Math.sin(phi);   // level in the road's own across-plane, leave to rejoin (it was psiEdge · (1 − g/offsetM): tilted to the edge at the joins)
     const A = add(mul(L, sg * c), mul(U, sn)), Ll = add(mul(L, c), mul(U, sg * sn)), Ul = add(mul(U, c), mul(L, -sg * sn));   // the lane's across (+u = L side) and up
     return { s, T, L, U, pos, kvec: kv, edge, psiEdge, phi, Ll, Ul, g, inner: add(edge, mul(A, g)), centre: add(edge, mul(A, g + w / 2)) };
   }
@@ -133,12 +133,12 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
 /**
  * The lane's mesh against the main road's, with the self-check's own tests (bvh.js triTri and segTri, on the finished
  * float32 mesh): every lane triangle against every main triangle it could meet, and every lane vertex's normal segment
- * (stackedM each way) against the main road (D432: `stacked` is a measure the export reports as info, not red; `intersections` are red). EXEMPT, and only this: a lane triangle of the DIVERGE (MERGE) part against
+ * (stackedM each way) against the main road (`stacked` is a measure the export reports as info, not red; `intersections` are red). EXEMPT, and only this: a lane triangle of the DIVERGE (MERGE) part against
  * a main triangle within exemptM of that part's span of main road, where the two share their edge line by design.
  * Everything else is tested, including the diverge against any OTHER pass of the main road (a bridge overhead).
  */
 function laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5, main = null } = {}) {
-  // D437a: `main` is the main mesh's { soup, bvh } as its own self-check built them (src/geom/bvh.js selfCheck's `main`); given, they are used, not built again
+  // `main` is the main mesh's { soup, bvh } as its own self-check built them (src/geom/bvh.js selfCheck's `main`); given, they are used, not built again
   const A = main && main.soup ? main.soup : soup(mainMesh), Bm = main && main.bvh ? main.bvh : build(A), Ls = soup(laneMesh);
   const bL = lane.path.segEnd[0].s, bR = lane.path.segEnd[1].s;          // lane s where the diverge ends and the merge starts
   const zone = (sl) => (sl <= bL + 1e-9 ? lane.parts.diverge : sl >= bR - 1e-9 ? lane.parts.merge : null);

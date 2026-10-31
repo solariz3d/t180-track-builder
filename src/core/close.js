@@ -1,4 +1,4 @@
-// close.js: CLOSE THE LOOP in one click (D185, pane E; the spec's GO §4). A weighted least-norm correction to the channels'
+// close.js: CLOSE THE LOOP in one click. A weighted least-norm correction to the channels'
 // control points, iterated Gauss–Newton on the closure residual (ref 10 §3; the step is ref 04 §3,
 // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹r, VMLS §16.1.1).
 //
@@ -6,10 +6,10 @@
 // toPath), so the lap closes in the geometry the app draws and exports; the net heading is 2πk and the net pitch 0, on the
 // adapter's segment rule, so the tangent closes (ref 02 §2); the bank ends where it began, mod 2π, so the frame closes (a closed
 // curve's frame need not close by itself, ref 04 §4, WANG08); and every channel's value and slope continue round the seam, so
-// the seam is a joint like any other: C1 in every channel (src/core/README.md), G2 in the line. D459 3c (2026-10-25): and the cross-section channels the
+// the seam is a joint like any other: C1 in every channel (src/core/README.md), G2 in the line. Since 2026-10-25 the cross-section channels the
 // wheels ride on (the bank, the cup, the edges: continuity.js C2_CHANNELS) continue their CURVATURE round the seam and across every joint the close
 // moves, so a closed lap is C2 there as the words lay it (extend.js, the quintic): a closure that met value and slope only left a curvature step at the
-// seam on 19 of 20 of the seeded sweep's closed laps (exo_memory/handback/p-d459-c2-P_2026-10-25.md §5). A curvature row is linear in the first and
+// seam on 19 of 20 of the seeded sweep's closed laps. A curvature row is linear in the first and
 // last three control points (the closed forms of continuity.js endDerivatives), so it joins the system as the value and slope rows do; a window whose
 // pieces have too few free points for the extra row is refused by name as before (a piece needs six control points, two interior knots, for all four).
 //
@@ -17,7 +17,7 @@
 // moved). A joint's two coefficients on the next piece are not free: the first IS the previous piece's last, and the second is
 // set by its end slope (README), so they follow the parameters they depend on.
 //
-// Reused from D184 (tools/piecewise.cjs): `basis` (ref 03 §1) and `denseSolve`. NOT reused: its constrained fitter
+// Reused from the position fit (tools/piecewise.cjs): `basis` (ref 03 §1) and `denseSolve`. NOT reused: its constrained fitter
 // `fitSystem`, which minimises distance to DATA under joint rows; the close has no data, only a dense Jacobian of the lap's
 // integral, and its step is the least-norm one (ref 04 §3), which `fitSystem` does not compute.
 'use strict';
@@ -25,31 +25,31 @@ const { basis, denseSolve } = require('../../tools/piecewise.cjs');
 const D = require('./document.js');
 const { toPath, toSegments, lipOf } = require('./adapter.js');
 const { jointSteps } = require('../geom/profile.js');
-const CN = require('./continuity.js');   // D459 3c: the curvature at a piece's ends, in closed form
+const CN = require('./continuity.js');   // the curvature at a piece's ends, in closed form
 
-// D258: the road AFTER a jump is the user's LANDING: it starts at the flight's pose, level and at the flight's bank, and is not C1 with the take-off
+// the road AFTER a jump is the user's LANDING: it starts at the flight's pose, level and at the flight's bank, and is not C1 with the take-off
 // (document.js landingProblem), so the close holds its first two control points in EVERY channel: the landing's pose and start are his, never solved
 
-const EDGE_SEAM_TOL = 0.01;   // D225: an edge turned off by extend ends within a hair of 0 (the fit); under 0.01° (and 0.01°/m) it steps the lap seam by under a millimetre, so it is not an edge at the seam
-const SEAM_MAX_M = 1e-3;   // D190 round 3: a lap seam steps at most 1 mm on the curve
+const EDGE_SEAM_TOL = 0.01;   // an edge turned off by extend ends within a hair of 0 (the fit); under 0.01° (and 0.01°/m) it steps the lap seam by under a millimetre, so it is not an edge at the seam
+const SEAM_MAX_M = 1e-3;   // a lap seam steps at most 1 mm on the curve
 
 const TAU = 2 * Math.PI;
-// D431 (the user, TEST 10: "a bump as the gen came out a bit higher than the end of the track"; "fix the close loop generation itself to be more accurate and
+// (The user, TEST 10: "a bump as the gen came out a bit higher than the end of the track"; "fix the close loop generation itself to be more accurate and
 // smooth"): A WINDOWED CLOSE TAKES THE SMALLEST CHANGE TO THE ROAD, not to the control points. Its step was least-norm in the control points, each counted once,
 // and at a joint the piece after takes its first two points from the piece before (parameters), so a joint's points drive two pieces' worth of curve at the price
 // of one and the step loaded the correction onto them: on TEST 10's finish the climb rate spiked at both joints of the new road (-0.58 | -0.58, -1.19 against
-// -0.30 either side: a crest) and the turn rate with it. A windowed close (Finish to start, the seam tries, D242's window) now measures a change by what it
+// -0.30 either side: a crest) and the turn rate with it. A windowed close (Finish to start, the seam tries, a local close's window) now measures a change by what it
 // does to each channel's curve along the road, ∫ (Δ channel)² + ℓ²(Δ channel')² ds over the window's pieces (the B-spline Gram matrices, through the joints' links), plus
 // GRAM_EPS of the plain norm so it is never singular. The rows it must meet are the same, so the lap closes to the same bars; only which closing change is
 // taken differs. A metric of smoothness instead (second differences) was measured and refused: it removed the spikes by bending the finish's straights, up
-// to 28 m sideways (exo_memory/handback/p-d431-O_2026-10-22.md §4). The whole-lap close (no window) is unchanged. test/core_close_joint.test.js.
+// to 28 m sideways. The whole-lap close (no window) is unchanged. test/core_close_joint.test.js.
 // The measure also counts the change's SLOPE along the road, over GRAM_ELL_M: ∫ (Δ)² + ℓ²(Δ')² ds. Without it the step met the seam's value-and-slope rows with a
 // zig-zag in the last knots, which barely changes the curve and so costs almost nothing (TEST 10's seam: kv -1.19, -1.68, -0.84, -2.57, 0). ℓ = 50 m (chosen
 // from a sweep, 0 to 100 m, on TEST 10 and a 212 m climb: 10 m left a seam spike of 0.53°/100 m, 20 m 0.11; at 50 m no spike past 0.05 anywhere and the
 // finish's straights within 0.1 and 0.8 m of where they were; 100 m bends the long straight 2 m further).
 const GRAM_STEP_M = 2, GRAM_EPS = 1e-9, GRAM_ELL_M = 50;
 /**
- * D239 (pane C): the step's linear solve, with the one way it can fail named. A SINGULAR closure system (a lap of straights: no channel
+ * The step's linear solve, with the one way it can fail named. A SINGULAR closure system (a lap of straights: no channel
  * can bend the track round to meet its start) used to escape as the solver's plain Error, which the app's shell does not catch, so the
  * user saw nothing. It is a CoreError now, which the shell shows as its message. Any other error from the solver is not this case and
  * is thrown as it was.
@@ -74,13 +74,13 @@ const hStart = (P) => (P.knots.length ? P.knots[0] : P.length);                 
  * m = 3(c_{n−1} − c_{n−2})/h_a, c₁ = c₀ + m·h_b/3). `expand[ch][p][i]` lists (column, coefficient) pairs.
  */
 /**
- * D225: the channels in play. Every channel but the edge and tube ones is always a column (as before); e and s are columns only when some road piece carries an edge, t only
+ * The channels in play. Every channel but the edge and tube ones is always a column (as before); e and s are columns only when some road piece carries an edge, t only
  * when one carries a tube, so a document without them solves exactly as it did. linkable(): the joint's first two coefficients follow the previous piece only where BOTH pieces carry
  * the channel (the cup's rule, and the same for e, s and t).
  */
 function activeChannels(doc) { return D.CHANNELS.filter((ch) => ch === 'c' || !D.OPTIONAL[ch] || doc.pieces.some((P) => P.type === 'road' && P[D.OPTIONAL[ch]])); }
 function linkable(ch, A, B) { const f = D.OPTIONAL[ch]; if (!f) return true; if (ch === 'c') return !!(A.cup && B.cup); return !!(A[f] && B[f]); }
-/** The seam's kinds (D225): which optional channels continue round the lap (both end pieces carry them). */
+/** The seam's kinds: which optional channels continue round the lap (both end pieces carry them). */
 function seamOf(doc) {
   const road = doc.pieces.filter((P) => P.type === 'road'), F = road[0], L = road[road.length - 1];
   return { F, L, cupBoth: !!(F.cup && L.cup), edgeBoth: !!(F.edge && L.edge), tubeBoth: !!(F.tube && L.tube) };
@@ -99,20 +99,20 @@ function checkSeamKinds(doc) {
   }
 }
 function parameters(doc, edited, free = null) {
-  const cols = [], expand = {}, fixedOf = (p) => !!free && !free.has(p);   // D242: a LOCAL close's columns outside its window are fixed (never moved)
+  const cols = [], expand = {}, fixedOf = (p) => !!free && !free.has(p);   // a LOCAL close's columns outside its window are fixed (never moved)
   for (const ch of activeChannels(doc)) {
     expand[ch] = doc.pieces.map(() => null);
     let prev = -1, flightSince = false;
     doc.pieces.forEach((P, p) => {
       if (P.type !== 'road') {
-        // D243: A JUMP. (The road before it may end with h and l set: the flight takes off from that lip as built, adapter.js lipOf. No closing row reaches
+        // A JUMP. (The road before it may end with h and l set: the flight takes off from that lip as built, adapter.js lipOf. No closing row reaches
         // those control points, since the seam rows touch only the lap's first and last road pieces and a lap ending in a jump is refused, so they never move.)
         if (P.type === 'flight') flightSince = true;
         return;
       }
       const n = P.channels[ch].length, e = new Array(n);
       for (let i = 0; i < n; i++) {
-        // D258: the LANDING's first two control points are held in every channel (above), never linked to the road before the jump
+        // the LANDING's first two control points are held in every channel (above), never linked to the road before the jump
         if (prev >= 0 && i < 2 && flightSince) { e[i] = [[cols.length, 1]]; cols.push({ ch, p, i, edited: edited.has(p), fixed: true }); continue; }
         if (prev >= 0 && i < 2 && linkable(ch, doc.pieces[prev], P)) {   // the cup joins only cup to cup (a legacy piece's c is a placeholder); e, s and t the same
           const A = expand[ch][prev], na = A.length, rho = hStart(P) / hEnd(doc.pieces[prev]);
@@ -128,7 +128,7 @@ function parameters(doc, edited, free = null) {
   return { cols, expand };
 }
 /**
- * D431: the windowed close's metric over the FREE columns, W = ∫ (aᵀa + ℓ²a'ᵀa') ds + GRAM_EPS·I per channel, a(s) the row of each column's share in the channel's value
+ * The windowed close's metric over the FREE columns, W = ∫ (aᵀa + ℓ²a'ᵀa') ds + GRAM_EPS·I per channel, a(s) the row of each column's share in the channel's value
  * at s (its B-spline basis through expand, so a joint's linked points count for both pieces they shape), sampled every GRAM_STEP_M along each road piece a free
  * column reaches. W couples only the columns of one channel, so it is kept as one Cholesky factor per channel. Returns winvRow(row) = W⁻¹·row over all N
  * columns (a fixed column: 0).
@@ -166,7 +166,7 @@ function gramMetric(doc, expand, cols) {
     return out;
   };
 }
-/** The document with every channel rebuilt from the parameter vector x (joints follow; nothing quantised). `keep` (D242, a local close): pieces returned
+/** The document with every channel rebuilt from the parameter vector x (joints follow; nothing quantised). `keep` (a local close): pieces returned
  *  AS THEY ARE, the very same objects, because no free column reaches them, so they stay bit-identical rather than recomputed from their own values. */
 function apply(doc, expand, x, quantise, keep = null) {
   return { ...doc, pieces: doc.pieces.map((P, p) => {
@@ -185,7 +185,7 @@ function apply(doc, expand, x, quantise, keep = null) {
 function positionJacobian(doc, step = 1) {
   let th = doc.start.heading, p = doc.start.pitch; const G = [];
   doc.pieces.forEach((P, pi) => {
-    // D258: A FREE JUMP (src/core/adapter.js toSegments): the landing starts at forward·F(θ) + left·Lh(θ) + up·ŷ from the take-off, in the take-off's
+    // A FREE JUMP (src/core/adapter.js toSegments): the landing starts at forward·F(θ) + left·Lh(θ) + up·ŷ from the take-off, in the take-off's
     // HEADING frame (F = (sin θ, 0, cos θ), Lh = (cos θ, 0, −sin θ)), whatever its pitch; then the heading turns by the flight's heading and the pitch IS the
     // landing's. So in heading the jump is one step, ∂/∂θ = forward·Lh(θ) − left·F(θ); in pitch it CUTS the chain (nothing before it reaches the end through pitch)
     if (P.type === 'flight') {
@@ -217,7 +217,7 @@ function positionJacobian(doc, step = 1) {
   let sT = [0, 0, 0], sP = [0, 0, 0];
   for (let i = G.length - 1; i >= 0; i--) {
     const g = G[i];
-    if (g.flight) { sT = sT.map((v, k) => v + g.Tt[k]); sP = [0, 0, 0]; continue; }   // D258: the free jump's offset turns with the take-off's heading; no pitch before it reaches the end
+    if (g.flight) { sT = sT.map((v, k) => v + g.Tt[k]); sP = [0, 0, 0]; continue; }   // the free jump's offset turns with the take-off's heading; no pitch before it reaches the end
     add('kh', g.pi, g.kh0, g.Tt.map((v) => 0.5 * g.h * v)); add('kv', g.pi, g.kv0, g.Tp.map((v) => 0.5 * g.h * v));
     add('kh', g.pi, g.khm, sT.map((v) => g.h * v)); add('kv', g.pi, g.kvm, sP.map((v) => g.h * v));
     sT = sT.map((v, k) => v + g.Tt[k]); sP = sP.map((v, k) => v + g.Tp[k]);
@@ -234,7 +234,7 @@ function netRows(doc, { cache = null } = {}) {
   const segs = toSegments(doc, { cache }), byId = new Map(doc.pieces.map((P, p) => [P.id, p]));
   let s = new Map();
   for (const g of segs) {
-    // D258: A JUMP sets the pitch to its landing's (adapter.js), so the net pitch is counted again from there: the lap's end pitch is the last jump's
+    // A JUMP sets the pitch to its landing's (adapter.js), so the net pitch is counted again from there: the lap's end pitch is the last jump's
     // landing pitch plus the road after it, and no kv before that jump reaches it. Its heading TURN adds to the net heading (a constant: the user's)
     if (g.part === 'gap') { const F = doc.pieces[byId.get(g.id)]; out.kv = new Map(); out.kvBase = F.pitch - doc.start.pitch; out.khBase += g.to.theta; continue; }   // to.theta: the flight's turn, and a moved lip's tilt with it (adapter.js lipOf)
     if (g.part !== 'body') continue;
@@ -248,7 +248,7 @@ function netRows(doc, { cache = null } = {}) {
 }
 
 /**
- * The seam between a cup end and a legacy end (D190 round 3): the cup's value there is HELD at the edge the legacy piece renders (its rendered
+ * The seam between a cup end and a legacy end: the cup's value there is HELD at the edge the legacy piece renders (its rendered
  * edge is the legacy piece's c, `D.pieceEnd`, or `D.legacyEdgeDeg` at its start). Null when both ends are the same kind (cup to cup closes c as a channel).
  * `value` is the cup's c minus that edge; `piece` and `index` say which control point moves it.
  */
@@ -261,7 +261,7 @@ function heldCup(F, L) {
 /** The residual, measured on the adapter's path and the document itself (ref 10 §3). */
 /** The channels whose VALUE must meet round the seam: heading, pitch, width and rise always; the cup, the edge pair and the tube sweep where both ends carry them. */
 const valueChannels = (sm) => ['kh', 'kv', 'w', 'r', ...(sm.cupBoth ? ['c'] : []), ...(sm.edgeBoth ? ['e', 's', 'er'] : []), ...(sm.tubeBoth ? ['t'] : [])];
-// D343: a document is immutable (frozen, src/core/document.js), so its residual is computed once and remembered: one press asked it of the same open track four
+// a document is immutable (frozen, src/core/document.js), so its residual is computed once and remembered: one press asked it of the same open track four
 // times (finish.js isNear, its gap, and twice inside finishToStart), each building the whole path again (about 2 s apiece on a 25 km track). The remembered
 // answer is frozen, so no reader can change what the next one gets. A document that is not frozen is computed every time, as before.
 const residualMemo = new WeakMap();
@@ -275,7 +275,7 @@ function residualOf(doc, { cache = null, c2Pairs = [], c2Channels = CN.C2_CHANNE
   if (!doc.pieces.some((P) => P.type === 'road')) throw new D.CoreError('EMPTY', 'close: no road to close');
   const S = toPath({ ...doc, closed: false }, { cache }).path.samples, a = S[0], z = S[S.length - 1];
   const road = doc.pieces.filter((P) => P.type === 'road'), F = road[0], L = road[road.length - 1];
-  const rows = netRows(doc, { cache }), net = { kh: rows.khBase, kv: rows.kvBase };   // kvBase: a jump's landing pitch, when the lap has one (D243); khBase: the jumps' heading turns (D258)
+  const rows = netRows(doc, { cache }), net = { kh: rows.khBase, kv: rows.kvBase };   // kvBase: a jump's landing pitch, when the lap has one; khBase: the jumps' heading turns
   for (const ch of ['kh', 'kv']) for (const [key, w] of rows[ch]) { const [p, i] = key.split(':').map(Number); net[ch] += w * doc.pieces[p].channels[ch][i]; }
   // THE FLIPPED FRAME (2026-10-14, ELYSIUM: the end met the start to 18 cm and 0.57°, and Close refused, setting out to roll it 180°). Over the top of a loop
   // the frame is carried as (heading + π, π − pitch, bank + π): the same orientation, written the other way. When the net pitch is nearer π than 0, the seam
@@ -286,16 +286,16 @@ function residualOf(doc, { cache = null, c2Pairs = [], c2Channels = CN.C2_CHANNE
   const pitch = flip ? Math.PI - net.kv : net.kv, pTurns = Math.round(pitch / TAU);
   const r = [z.pos[0] - a.pos[0], z.pos[1] - a.pos[1], z.pos[2] - a.pos[2], net.kh - half - TAU * turns, pitch - TAU * pTurns, bank - half - TAU * m];
   const names = ['x', 'y', 'z', 'net heading − 2πk', 'net pitch', 'bank at the seam'];
-  const sm = seamOf(doc), cupBoth = sm.cupBoth;   // the cup continues round the seam only when both ends are cup pieces (a mixed seam is reported, not solved); e, s, t likewise (D225)
+  const sm = seamOf(doc), cupBoth = sm.cupBoth;   // the cup continues round the seam only when both ends are cup pieces (a mixed seam is reported, not solved); e, s, t likewise
   for (const ch of valueChannels(sm)) { r.push(L.channels[ch].at(-1) - F.channels[ch][0]); names.push(`${ch} value at the seam`); }
-  const held = heldCup(F, L);   // a cup meeting a legacy piece round the seam is held at the legacy piece's RENDERED edge (D190 R3)
+  const held = heldCup(F, L);   // a cup meeting a legacy piece round the seam is held at the legacy piece's RENDERED edge
   if (held) { r.push(held.value); names.push('cup edge at the seam (held at the legacy end rendered edge)'); }
   for (const ch of D.CHANNELS) {
     if (!seamJoined(ch, sm)) continue;
     const cl = L.channels[ch], n = cl.length, cf = F.channels[ch];
     r.push((3 * (cl[n - 1] - cl[n - 2])) / hEnd(L) - (3 * (cf[1] - cf[0])) / hStart(F)); names.push(`${ch} slope at the seam`);
   }
-  // D459 3c: the C2 channels' curvature round the seam, and across every joint the close moves (c2Pairs: the pairs of consecutive road pieces close() names)
+  // the C2 channels' curvature round the seam, and across every joint the close moves (c2Pairs: the pairs of consecutive road pieces close() names)
   for (const ch of c2Channels) { if (!seamJoined(ch, sm) || (ch === 'c' && held)) continue; r.push(CN.endDerivatives(L, ch).end.k - CN.endDerivatives(F, ch).start.k); names.push(`${ch} curvature at the seam`); }
   for (const [a, b, ch] of c2Pairs) { const A = doc.pieces[a], B = doc.pieces[b]; r.push(CN.endDerivatives(A, ch).end.k - CN.endDerivatives(B, ch).start.k); names.push(`${ch} curvature at ${A.id}|${B.id}`); }   // the end's less the start's, as curvRow's coefficients are
   return { r, names, turns, flip, gapM: Math.hypot(r[0], r[1], r[2]), tangentRad: Math.acos(Math.max(-1, Math.min(1, a.T[0] * z.T[0] + a.T[1] * z.T[1] + a.T[2] * z.T[2]))), pathEnd: z, pathStart: a };
@@ -308,8 +308,8 @@ function residualOf(doc, { cache = null, c2Pairs = [], c2Channels = CN.C2_CHANNE
  * report "NOT CLOSED …"), and still returns its best document with closed false, so nothing silently claims a closure.
  */
 function close(doc, opts = {}) {
-  // D469 (P; C's D467 review §5): THE CUP'S CURVATURE ROWS RESPECT c ≥ 0. Where the seam's cup row (3c) meets a flat cup at p1 against a fade that ends C1 on the
-  // other side (TEST 10's p23: 15 15 0 0, laid before D459), the least-norm step bends p1's cup BELOW 0 to match the curvature (−2.0° on TEST 10), and the document
+  // THE CUP'S CURVATURE ROWS RESPECT c ≥ 0. Where the seam's cup row meets a flat cup at p1 against a fade that ends C1 on the
+  // other side (TEST 10's p23: 15 15 0 0, laid before the C2 quintic), the least-norm step bends p1's cup BELOW 0 to match the curvature (−2.0° on TEST 10), and the document
   // refuses the step as it is measured (residualOf → toPath → checkDoc: BAD_CUP). The cup cannot go below 0, so the row is left out and the cup stays C1 at the
   // seam, the way cupHome falls back to its straight fade where the quintic would be too fast; the other channels keep their rows, and the report says so. Once:
   // the second pass has no cup row to drop, and whatever it refuses is the close's own
@@ -325,21 +325,21 @@ function close(doc, opts = {}) {
 function closeOnce(doc, opts = {}) {
   D.checkDoc(doc); doc = D.fillCup(doc);
   checkSeamKinds(doc);
-  // D243, D258: a track WITH JUMPS closes like any other (the landing's pose is the user's and stays as it is; see parameters, positionJacobian and netRows).
+  // a track WITH JUMPS closes like any other (the landing's pose is the user's and stays as it is; see parameters, positionJacobian and netRows).
   // The one shape refused is a lap that ENDS in a jump: its seam would join the air to the lap's start
   if (doc.pieces.length && doc.pieces[doc.pieces.length - 1].type === 'flight') throw new D.CoreError('FLIGHT_AT_END', 'close: the track ends in a jump, so the lap would join the air to its start; place the landing and extend road after it, then close');
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0);
   const cupBoth = !!(doc.pieces[roadIdx[0]].cup && doc.pieces[roadIdx[roadIdx.length - 1]].cup);
   const held = heldCup(doc.pieces[roadIdx[0]], doc.pieces[roadIdx[roadIdx.length - 1]]);
-  // D242: a LOCAL close (opts.window, the piece indices allowed to move): only their control points are variables, every other piece is kept as it is
+  // a LOCAL close (opts.window, the piece indices allowed to move): only their control points are variables, every other piece is kept as it is
   const local = opts.window !== undefined && opts.window !== null, win = local ? windowOf(doc, opts.window) : null, free = win ? win.set : null;
   const edited = local ? new Set() : new Set(opts.edited || [roadIdx[roadIdx.length - 1]]), wEdit = opts.wEdit || 1e6, tolM = opts.tolM || 1e-3, maxIter = opts.maxIter || 30;
-  // D459 3c: the channels whose curvature the closure carries round the seam and across the joints it moves. Every one by default (the Close button's bends, the
-  // sweep). Finish passes fewer: its bank plan owns the bank at its own joints (D447: C1, bounded by BANK_ACCEL) and cupHome owns the cup's fade (3b)
+  // the channels whose curvature the closure carries round the seam and across the joints it moves. Every one by default (the Close button's bends, the
+  // sweep). Finish passes fewer: its bank plan owns the bank at its own joints (C1, bounded by BANK_ACCEL) and cupHome owns the cup's fade
   const c2Channels = opts.c2Channels === undefined ? CN.C2_CHANNELS : opts.c2Channels;
   const { cols, expand } = parameters(doc, edited, free), N = cols.length, winv = cols.map((c) => (c.fixed ? 0 : c.edited ? 1 / wEdit : 1));
   const keep = local ? keptPieces(doc, expand, cols) : null;   // the pieces no free column reaches: returned as the very same objects
-  const winvRow = local ? gramMetric(doc, expand, cols) : null;   // D431: a windowed close takes the smallest change to the road (gramMetric); the whole lap keeps the plain metric
+  const winvRow = local ? gramMetric(doc, expand, cols) : null;   // a windowed close takes the smallest change to the road (gramMetric); the whole lap keeps the plain metric
   const refuse = (why) => new D.CoreError('CLOSE_WINDOW', `close: can't close using only ${win.text}: ${why}. Widen the window or reshape the end`);
   const solve = (M, rhs) => { try { return solveOrRefuse(M, rhs); } catch (e) { if (local && e.code === 'CLOSE_SINGULAR') throw refuse('the closing equations cannot be met by moving only these pieces'); throw e; } };
   let x = Float64Array.from(cols, (c) => doc.pieces[c.p].channels[c.ch][c.i]);
@@ -354,7 +354,7 @@ function closeOnce(doc, opts = {}) {
     else if (which === 'slope') { const a = 3 / hEnd(doc.pieces[L]), b = 3 / hStart(doc.pieces[F]); put(L, nL - 1, a); put(L, nL - 2, -a); put(F, 1, -b); put(F, 0, b); }
     else curvRow(ch, L, F, row);
     return row; };
-  // D459 3c: the curvature row across a joint A|B (A's end against B's start), from the closed forms of continuity.js: k(L) = 6/h₁·[(Pₙ₋₁ − Pₙ₋₂)/h₁ − (Pₙ₋₂ − Pₙ₋₃)/h₂] with
+  // the curvature row across a joint A|B (A's end against B's start), from the closed forms of continuity.js: k(L) = 6/h₁·[(Pₙ₋₁ − Pₙ₋₂)/h₁ − (Pₙ₋₂ − Pₙ₋₃)/h₂] with
   // h₁ the last span and h₂ the last two spans; k(0) = 6/g₁·[(P₂ − P₁)/g₂ − (P₁ − P₀)/g₁] with g₁ the first span and g₂ the first two
   const curvRow = (ch, A, B, row) => { const put = (p, i, s) => { for (const [c, coef] of expand[ch][p][i]) row[c] += s * coef; };
     const PA = doc.pieces[A], UA = D.knotVector(PA), nA = PA.channels[ch].length, h1 = PA.length - UA[nA - 1], h2 = PA.length - UA[nA - 2];
@@ -380,9 +380,9 @@ function closeOnce(doc, opts = {}) {
     for (const ch of valueChannels(seamOf(doc))) J.push(valueRow(ch, 'value'));
     if (held) { const row = new Float64Array(N), Pi = held.end === 'last' ? roadIdx[roadIdx.length - 1] : roadIdx[0], ii = held.end === 'last' ? doc.pieces[Pi].channels.c.length - 1 : 0; for (const [c, coef] of expand.c[Pi][ii]) row[c] += coef; J.push(row); }
     for (const ch of D.CHANNELS) { if (!seamJoined(ch, seamOf(doc))) continue; J.push(valueRow(ch, 'slope')); }
-    for (const ch of c2Channels) { if (!seamJoined(ch, seamOf(doc)) || (ch === 'c' && held)) continue; J.push(valueRow(ch, 'curv')); }   // D459 3c: the seam's curvature rows
+    for (const ch of c2Channels) { if (!seamJoined(ch, seamOf(doc)) || (ch === 'c' && held)) continue; J.push(valueRow(ch, 'curv')); }   // the seam's curvature rows
     for (const [a, b, ch] of c2Pairs) { const row = new Float64Array(N); curvRow(ch, a, b, row); J.push(row); }   // and the moved joints'
-    // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹ r (ref 04 §3); W diagonal (winv) for the whole lap, the window's Gram metric for a windowed close (D431)
+    // δ = −W⁻¹Jᵀ(JW⁻¹Jᵀ)⁻¹ r (ref 04 §3); W diagonal (winv) for the whole lap, the window's Gram metric for a windowed close
     const WJ = J.map((row) => (winvRow ? winvRow(row) : row.map((v, k) => winv[k] * v)));
     const M = J.map((a) => WJ.map((b) => { let s = 0; for (let k = 0; k < N; k++) s += a[k] * b[k]; return s; }));
     const y = solve(M, m.r.map((v) => -v)), delta = new Float64Array(N);
@@ -395,7 +395,7 @@ function closeOnce(doc, opts = {}) {
   // converged: the closed path's own bar (src/geom/path.js closeTol 1e-3 m): a stored gap past it was reported closed (it was 0.01) and then could not be built (2026-10-14, 1.65 mm on ELYSIUM)
   const stored = apply(doc, expand, x, true, keep), ms = residual(stored, { cache, c2Pairs, c2Channels }), converged = done(m) && ms.gapM < 1e-3;
   const cupNote = opts.cupRowLeftOut ? "; the cup's curvature row at the seam was left out (it would have taken the cup below 0), so the cup is C1 there" : '';
-  // D242: a local close that does not close is a REFUSAL by name, never a best try handed back: the window could not do it, and nothing outside it may help
+  // a local close that does not close is a REFUSAL by name, never a best try handed back: the window could not do it, and nothing outside it may help
   if (local && !converged) throw refuse(`it gets no closer than ${ms.gapM.toFixed(3)} m (tangent ${ms.tangentRad.toExponential(1)} rad) in ${it} step(s)`);
   let out;
   try { out = freeze(D.checkDoc({ ...stored, closed: converged })); } catch (e) {
@@ -423,7 +423,7 @@ function closeOnce(doc, opts = {}) {
 }
 
 /**
- * D242, THE LOCAL CLOSE's window (the user, TEST 1: "completing the loop altered the rest of the track equation": the whole-lap close moved
+ * THE LOCAL CLOSE's window (the user, TEST 1: "completing the loop altered the rest of the track equation": the whole-lap close moved
  * every control point, the 1,000 m opening straight's heading rate by 0.00204 rad/m, and the lap ran into itself). `spec` is the piece indices
  * allowed to move. Only road pieces count; at least one must be given. Returns { set, ids, fromS (the window's start along the lap),
  * lengthM, text } where text names it for a person ("the last 1,234 m (p44–p46)").
@@ -451,7 +451,7 @@ function keptPieces(doc, expand, cols) {
   return keep;
 }
 /**
- * The DEFAULT window for the app's Close (D242): the trailing road pieces that cover at least `fraction` of the lap (default 0.2, the plan's
+ * The DEFAULT window for the app's Close: the trailing road pieces that cover at least `fraction` of the lap (default 0.2, as asked:
  * "the last ~20%"), always at least the last road piece. `{ last: true }` is the last road piece alone; `{ fraction: 1 }` is every road piece
  * (the whole lap, kept for when the user asks for it). Returns piece indices.
  */

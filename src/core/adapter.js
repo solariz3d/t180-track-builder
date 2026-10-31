@@ -2,18 +2,18 @@
 // mesh, validation and export are reused unchanged.
 //
 //   toSegments(doc, { segM = 2, segMFor, designKmh, cupRuns = true, cache }) -> src/geom segments (each carries its profile; a cup's, and a legacy segment whose
-//                                               width or r changes (D196, a CHORD, `chord: true`), also a blend: see legacySeg). `cache`, a WeakMap
+//                                               width or r changes (a CHORD, `chord: true`), also a blend: see legacySeg). `cache`, a WeakMap
 //                                               the caller keeps (the window's shell, so placing a piece does not rebuild every piece before it):
 //                                               a piece whose own object, neighbours, seam role and incoming state are all what they were last
 //                                               time returns its last segments (FROZEN, shared between documents) instead of building them again.
 //                                               The result equals the uncached one exactly (test/core_segcache.test.js); without `cache`, unchanged.
-//                                               D421c: a NEW piece object that differs from the one last cached for its id only in the lift channels h
+//                                               a NEW piece object that differs from the one last cached for its id only in the lift channels h
 //                                               and l (a Grab's step), with the same inputs, reuses that piece's segments: no segment reads h or l
 //                                               (test/core_segcache_lift.test.js).
 //   toPath(doc, { step = 0.5, segM = 2, designKmh }) -> { segments, path }; path = buildPath(segments, { step, closed, start }),
 //                                               samples { s, seg, pos, T, L, U, kvec, roll, bankG, grade }
-//   profileAt(family, w, r)                    the LEGACY cross-section at a station (ref 09 §3), unchanged since D186
-//   cupProfile(family, w, c)                   the CUP cross-section (D190, ref 09 §9): the edge angle is c degrees on both sides
+//   profileAt(family, w, r)                    the LEGACY cross-section at a station (ref 09 §3), unchanged since the core began
+//   cupProfile(family, w, c)                   the CUP cross-section (ref 09 §9): the edge angle is c degrees on both sides
 //
 // A ROAD piece becomes consecutive segments of at most segM metres. Each is the geometry's own clothoid: heading rate
 // k and pitch rate kp run linearly from the channel's values at its two ends, and roll runs between them by the
@@ -29,7 +29,7 @@
 // Where a cup follows a LEGACY piece the first MORPH_M metres also fade out the legacy shape's difference from the cup shape (morphZone), so the
 // joint has no step inside the road either. cupRuns: false is the other scheme (each segment's profile the local end profile, a seam zip wherever
 // c changes, the edge up to 0.95° off c inside a segment): kept for comparison; see README "the cup".
-// A FLIGHT piece (D258, the free flight) becomes ONE gap segment that ends at the landing's pose (src/geom/path.js `to`: the take-off's heading frame,
+// A FLIGHT piece (the free flight) becomes ONE gap segment that ends at the landing's pose (src/geom/path.js `to`: the take-off's heading frame,
 // forward, left, up; the landing's heading turn and pitch); its roll goes from the take-off's bank to the landing's. No ramp is generated: the road
 // after it is the user's landing, which starts there. The cross-section starts afresh after the air (nothing morphs across a flight).
 'use strict';
@@ -47,7 +47,7 @@ const DEG = Math.PI / 180;
 function profileAt(family, w, r) {
   if (!Object.prototype.hasOwnProperty.call(FLOORS, family)) throw new D.CoreError('BAD_FAMILY', `family "${family}"`);
   if (!(w > 0)) throw new D.CoreError('BAD_WIDTH', `the road's width must be positive, got ${w} m`);
-  // D407: one FROZEN profile per family, width and rate (a -0 rate told from a 0), kept: a 2,000 m ghost asked for 3,000 of them, mostly the same, each built and then frozen again (a
+  // one FROZEN profile per family, width and rate (a -0 rate told from a 0), kept: a 2,000 m ghost asked for 3,000 of them, mostly the same, each built and then frozen again (a
   // quarter of the candidate's cost, the measurement of 2026-10-19). The numbers are made by the same code as before; nothing changes a profile after it is made (every segment is frozen)
   const key = family + '|' + w + '|' + (Object.is(r, -0) ? '-0' : r);
   let hit = PROFILES.get(key);
@@ -67,12 +67,12 @@ function profileMade(family, w, r) {
   };
 }
 
-const CUP_TOL = 0.5 * 10 ** -D.DEC.c;   // D469: half the cup's stored quantum (DEC.c decimals): what rounds to 0 is 0
+const CUP_TOL = 0.5 * 10 ** -D.DEC.c;   // half the cup's stored quantum (DEC.c decimals): what rounds to 0 is 0
 /** The CUP cross-section at width w (m) and edge angle c (degrees), ref 09 §9: ψ at the four quarters of each half-width is c·Fᵢ/F_edge, both sides. */
 function cupProfile(family, w, c) {
   if (!Object.prototype.hasOwnProperty.call(FLOORS, family)) throw new D.CoreError('BAD_FAMILY', 'family "' + family + '"');
   if (!(w > 0)) throw new D.CoreError('BAD_WIDTH', 'the road\'s width must be positive, got ' + w + ' m');
-  // D469 (P; C's D467 review §5): a close measures its path on the UNROUNDED solve, where a flat cup's control point comes back as −1e-15, and this refused it
+  // a close measures its path on the UNROUNDED solve, where a flat cup's control point comes back as −1e-15, and this refused it
   // (TEST 10: the start try [p1, p23] fell through to [p5, p23]). A value within half the stored quantum of 0 is 0; a stored document's own check is document.js's
   if (!Number.isFinite(c) || c < -CUP_TOL) throw new D.CoreError('BAD_CUP', 'the cup must be a number of degrees from 0, got ' + c);
   if (c < 0) c = 0;
@@ -87,7 +87,7 @@ function cupProfile(family, w, c) {
 
 const smooth = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));   // the mesh's weight (src/geom/profile.js smoothstep); also G, the edge curve's shape (ref 09 §10)
 
-// ── D225, THE CROSS-SECTION LAP: the tube, the edge curve, and the pieces that carry them (ref 09 §10) ──────────────────────────────
+// ── THE CROSS-SECTION LAP: the tube, the edge curve, and the pieces that carry them (ref 09 §10) ──────────────────────────────
 const EDGE_MIN_N = 64;      // outer-zone intervals of an edge profile: at least this, and ceil(1.5·e_max) above 43° (the polyline's own sag is e·G″max/(8n²) ≤ 0.05° at n ≥ 47 for e = 150)
 const TUBE_N = 12;          // knots per side of a tube profile: ψ is linear in u, so the polyline is exact at any count; the validator and the stack check read these lines
 const HEARTLINE_FROM = 300; // a tube's roll axis leaves the road centre at this sweep and reaches the tube's own axis at 360 (smoothstep): the heartline is continuous, never a step (seal S2 ii). 300 = 2·CUP_MAX: the last sweep a cup can take over from (its edge is t/2 <= 150), so a tube handing over to a cup or a plain piece has heartline 0 at the joint
@@ -109,7 +109,7 @@ function edgeProfile(base, e, s, nE, er = e, frame = edgeFrame(base, s, nE)) {  
   const psi = u.map((x, i) => { const r = R[i]; return mid[i] + (r > s ? (x < 0 ? er : e) * DEG * smooth((r - s) / (1 - s)) : 0); });
   return { font: P.font === 'tube' ? 'tube-edge' : 'edge', u: u.slice(), psi, material: P.material };   // the font says which cap applies (validate: edge-past-cap)
 }
-/** D484: what an edge profile takes from its base, its start s and nE alone, not from e: the knots u, each one's share r of its side, and ψ_mid there. xsecSegments
+/** What an edge profile takes from its base, its start s and nE alone, not from e: the knots u, each one's share r of its side, and ψ_mid there. xsecSegments
  *  makes it once per piece for each base it meets (a piece of one width and rate has one), so a chord end adds only its e·G; the same numbers by the same expressions. */
 function edgeFrame(base, s, nE) {
   const P = normalize(base), hr = -P.u[0], hl = P.u[P.u.length - 1], us = [...P.u];
@@ -125,7 +125,7 @@ function baseProfileOf(P, x) { return P.tube ? tubeProfile(x.w, x.t) : P.cup ? c
 const heartlineOf = (P, x) => (P.tube ? (x.w / (2 * Math.PI)) * smooth((x.t - HEARTLINE_FROM) / (D.TUBE_MAX - HEARTLINE_FROM)) : 0);
 
 /**
- * The segments of a TUBE or EDGE piece, or of a piece entering from a different kind of cross-section (D225). Every segment is a CHORD: its profile is the one at its END, blended
+ * The segments of a TUBE or EDGE piece, or of a piece entering from a different kind of cross-section. Every segment is a CHORD: its profile is the one at its END, blended
  * from the one at its START, so the rows at its two ends are the ends' own cross-sections (a moving edge slice is not linear in s, ref 09 §10, so no blend pair can be shared
  * along a run as the cup's is). ONE fraction array serves the whole piece (profile.js commonFractions, mesh.js seg.fractions), so the row a segment ends on and the next one
  * starts on are the same vertices: no seam zip inside the piece. Entering from another kind (legacy, cup or tube), the first MORPH_M metres blend from the previous piece's
@@ -134,8 +134,8 @@ const heartlineOf = (P, x) => (P.tube ? (x.w / (2 * Math.PI)) * smooth((x.t - HE
  */
 function xsecSegments(P, n, at, join) {
   const s = (j) => (P.length * j) / n, E = Array.from({ length: n + 1 }, (_, j) => at(s(j))), edge = !!P.edge;
-  const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => Math.max(Math.abs(x.e), Math.abs(x.er)))))) : 0;   // sized by the steeper side, a side that turns down (D406) by its size
-  const frames = new Map();   // D484: one edgeFrame per base and start, not one per chord end (the legacy base is one kept object per width and rate, profileAt)
+  const nE = edge ? Math.max(EDGE_MIN_N, Math.ceil(1.5 * Math.max(...E.map((x) => Math.max(Math.abs(x.e), Math.abs(x.er)))))) : 0;   // sized by the steeper side, a side that turns down by its size
+  const frames = new Map();   // one edgeFrame per base and start, not one per chord end (the legacy base is one kept object per width and rate, profileAt)
   const frameOf = (b, s) => { let byS = frames.get(b); if (!byS) frames.set(b, (byS = new Map())); let f = byS.get(s); if (!f) byS.set(s, (f = edgeFrame(b, s, nE))); return f; };
   const own = (x) => { const b = baseProfileOf(P, x); return edge ? edgeProfile(b, x.e, x.s, nE, x.er, frameOf(b, x.s)) : b; };
   const Lm = join ? Math.min(MORPH_M, P.length) : 0, J = join ? normalize(join.profile) : null;
@@ -157,7 +157,7 @@ function unsmooth(y) {
 }
 
 /**
- * The profile and blend of each of a cup piece's n segments (D190 row 1b). at(s) gives the channels; segment j spans s_j to s_{j+1}.
+ * The profile and blend of each of a cup piece's n segments. at(s) gives the channels; segment j spans s_j to s_{j+1}.
  * A RUN is consecutive segments over which the width stays put. Its ends make ONE pair: A at the run's lowest c and B at its highest.
  * At a fixed width the cup profile is linear in c (ref 09 §9), so blend(A, B, x) IS the cup profile at c = (1 − x)·c_lo + x·c_hi, and
  * a segment's blend puts the mesh's smoothstep weight on x at both of its ends (s0 and length solve smoothstep((s0 + d)/length) = x
@@ -203,7 +203,7 @@ function cupSegmentsRuns(P, n, at, join = null, tail = null) {
 }
 
 /**
- * THE MORPH OUT OF A LEGACY CROSS-SECTION (D190 R2). Where the r cap binds, the legacy piece's last profile is the CAPPED shape and the cup's
+ * THE MORPH OUT OF A LEGACY CROSS-SECTION. Where the r cap binds, the legacy piece's last profile is the CAPPED shape and the cup's
  * first is the proportional one at the same edge: they agree at the edge and differ inside the road (36.0 mm on a 12 m bowl, 148.2 mm on a 24 m
  * half-pipe, B's score). So the first metres of the cup carry the legacy profile's difference from the cup shape at c(0), fading by smoothstep
  * over MORPH_M metres: the first row IS the legacy piece's last row (no step), the edge stays c throughout, and past MORPH_M the road is the pure
@@ -224,7 +224,7 @@ function morphZone(P, n, E, s, join, out) {
 }
 
 /**
- * THE MORPH INTO A LEGACY CROSS-SECTION (D190 round 3, R3): the mirror of morphZone, for a cup that CLOSES a lap onto a legacy start (the zip at
+ * THE MORPH INTO A LEGACY CROSS-SECTION: the mirror of morphZone, for a cup that CLOSES a lap onto a legacy start (the zip at
  * s = 0 joins the cup's last row to the legacy start's first row: B measured 23.2 mm on a 16 m bowl and 148.2 mm on a 24 m half-pipe where the r
  * cap binds). close() holds c at the seam to the legacy start's rendered edge, so the two shapes agree at the edge and differ inside the road; the
  * last metres of the cup (at least MORPH_M, from the last segment boundary at or before length − MORPH_M, and never into the head morph) fade
@@ -270,7 +270,7 @@ function cupSegmentsLocal(P, n, at) {
 /** Two profiles are the same cross-section when every u and ψ agrees to 1e-12 (an r that does not bind the cap gives the same profile at any r). */
 const sameProfile = (A, B) => A.u.length === B.u.length && A.u.every((x, i) => Math.abs(x - B.u[i]) <= 1e-12) && A.psi.every((x, i) => Math.abs(x - B.psi[i]) <= 1e-12);
 /**
- * A LEGACY segment (D196). Where the width or the rise rate changes inside the segment so that its cross-section does, it is drawn as a CHORD, like the cup's
+ * A LEGACY segment. Where the width or the rise rate changes inside the segment so that its cross-section does, it is drawn as a CHORD, like the cup's
  * chord segments: the profile at its END, blended from the profile at its START (the mesh's smoothstep weight over the segment), so the rows at its two ends
  * are the ends' own cross-sections and neighbouring segments share their row: no staircase of width steps and no step at a joint (before: one profile at the
  * MIDDLE width per segment: 0.29 m steps between segments in fixture F4, 0.86 m in F8, 4.8 m for a 20 m ramp of 19 m). Where the two ends draw the same
@@ -291,12 +291,12 @@ function deepFreeze(v) {
   return v;
 }
 
-// D421 (a tube drag step rebuilt every piece after the brushed one, at every step): the cross-sections carried in from the piece before (inputsOf's lastProfile
+// (A tube drag step rebuilt every piece after the brushed one, at every step.) the cross-sections carried in from the piece before (inputsOf's lastProfile
 // and lastPlain) are keyed by VALUE. A rebuilt piece hands on a new object even when its last row is unchanged, and keyed by identity that missed for the
 // next piece, whose own last row was then new too, and so on to the lap's end. `piece` reads a carried cross-section only for its numbers and strings, so
 // equal values give the same segments, bit for bit.
 const BY_VALUE = new Set([10, 13]);
-// D421c (O): the LIFT channels, height and lateral. No segment reads them (the lift does: offsetPath, after the path is built), so a piece that differs from the
+// the LIFT channels, height and lateral. No segment reads them (the lift does: offsetPath, after the path is built), so a piece that differs from the
 // one last cached for its id in these alone has that piece's segments, number for number. A Grab drag makes exactly such pieces at every step (measured on
 // sculpt-frame row 2: 3 pieces a step, every segment identical, about 1.5 ms). The piece last cached for each id is kept beside the cache (LAST_BY_ID, per cache).
 const LIFT = new Set(['h', 'l']), LAST_BY_ID = new WeakMap();
@@ -341,12 +341,12 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
   if (!doc.pieces.length) throw new D.CoreError('EMPTY', 'an empty track has no path');
   if (!(segM > 0)) throw new D.CoreError('BAD_STEP', `segM must be positive, got ${segM}`);
   const segs = []; let pitch = doc.start.pitch, roll = 0, lastProfile = null, lastLegacy = false, lastKind = null, lastPlain = null;   // lastPlain: the last row without an edge (what a cup entering from a legacy piece fades from)
-  // A CLOSED lap whose two ends are not the same kind (D190 R3): the cup end fades into the legacy end's rendered profile (tailZone; or, when the
+  // A CLOSED lap whose two ends are not the same kind: the cup end fades into the legacy end's rendered profile (tailZone; or, when the
   // cup is the START, the first metres fade out of the legacy END's last profile: morphZone), so the zip at s = 0 has no step
   const roadIdx = doc.pieces.map((P, i) => (P.type === 'road' ? i : -1)).filter((i) => i >= 0), firstRoad = roadIdx[0], lastRoad = roadIdx[roadIdx.length - 1];
   const seam = doc.closed && roadIdx.length > 1 && !!doc.pieces[firstRoad].cup !== !!doc.pieces[lastRoad].cup && cupRuns;
   const chan = (P, s) => D.valuesAt(P, s);
-  // D404: `segMFor(P, i)` may give one piece its own chord length (the preview's ghost while a handle is dragged: a piece of 1,000 m is 500 chords of 2 m, and every
+  // `segMFor(P, i)` may give one piece its own chord length (the preview's ghost while a handle is dragged: a piece of 1,000 m is 500 chords of 2 m, and every
   // move of the pointer rebuilds all of them). Absent, or answering undefined, a piece is cut by segM, exactly as before: nothing that is placed or exported passes it.
   const at0 = segMFor ? new Map(doc.pieces.map((P, i) => [P, i])) : null;
   const mOf = (P) => { const m = segMFor ? segMFor(P, at0.get(P)) : undefined; return m === undefined ? segM : m; };
@@ -369,12 +369,12 @@ function toSegments(doc, { segM = 2, segMFor = null, designKmh = MACH6.designSpe
     const n = nOf(P), at = (s) => D.valuesAt(P, s);
     let a = at(0);
     if (pi === 0 || doc.pieces[pi - 1].type === 'flight') roll = a.phi;
-    const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // D225: a tube, an edge, or a cup entering from a tube is built by xsecSegments
+    const kind = D.kindOf(P), xs = kind === 'tube' || !!P.edge || (kind === 'cup' && lastKind === 'tube');   // a tube, an edge, or a cup entering from a tube is built by xsecSegments
     let join = P.cup && !xs && lastLegacy && lastProfile ? { profile: lastPlain || lastProfile } : null;   // a cup handed over from a legacy cross-section
     if (seam && pi === firstRoad && P.cup) join = { profile: legacyLast(doc.pieces[lastRoad]) };   // the lap's start is a cup that follows the legacy END round the seam
     // a cup piece followed by a LEGACY road piece (a file can hold one; Extend never makes one) fades into that piece's first profile, and so does the
     // lap's last cup piece into the legacy START: the last metres of the cup are the reverse morph (tailZone)
-    // D274 (the user: projecting a tube off a cup road "bugs the track, then eventually turns into a tube"): ONLY a next piece the LEGACY path builds. A tube,
+    // (The user: projecting a tube off a cup road "bugs the track, then eventually turns into a tube"): ONLY a next piece the LEGACY path builds. A tube,
     // or a piece with an edge, is built by xsecSegments, which morphs out of the previous piece's own last profile itself (MORPH_M); the fade here rendered such a
     // piece as a legacy bowl (legacyFirst) and bent the PLACED cup's last 10 m into it (17.9° of surface angle on FIRST TRACK) before the tube morphed out of that
     const nextP = doc.pieces[pi + 1];
@@ -431,7 +431,7 @@ function toPath(doc, { step = 0.5, segM = 2, designKmh, cupRuns, cache = null } 
 }
 
 /**
- * THE ROAD CENTRE'S CURVATURE where the roll axis is off the road (D225, seal S4). The path integrates the heartline curve, and its samples' kvec is that curve's curvature; the road
+ * THE ROAD CENTRE'S CURVATURE where the roll axis is off the road. The path integrates the heartline curve, and its samples' kvec is that curve's curvature; the road
  * centre of a closed tube is a HELIX round it, which the heartline curve (a straight line) does not show, so the validator would read the spiral's floor at 1 g (seal: 0 against the
  * helix's 0.0012/m). Every sample of a segment that carries a heartline gets the curvature vector of the road-centre polyline instead (three-point, uneven spacing, exact for a
  * quadratic): κ = (r″ − (r″·t)t)/|r′|². A path with no such segment is returned as it is.
@@ -469,7 +469,7 @@ const vcross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], 
  */
 function offsetPath(doc, segments, path) {
   const pieces = new Map(doc.pieces.map((P) => [P.id, P]));
-  // D421 (A's profile, p-d421-subscribers-A_2026-10-20.md §3: this lift was 383 ms of a 3 s height drag): a road piece whose h and l control points are ALL zero has value and both
+  // (Profiled: this lift was 383 ms of a 3 s height drag.) a road piece whose h and l control points are ALL zero has value and both
   // derivatives zero at every s, so every sample on it came back as the very same object, after two channel evaluations each. Such a piece is now skipped without them: the same
   // answer, bit for bit (test/core_offset_lift.test.js compares with the old lift), and the cost falls to the samples of the pieces that carry an offset.
   const offsetOn = new Set(doc.pieces.filter((P) => P.type === 'road' && D.OFFSETS.some((ch) => P.channels[ch].some((v) => v !== 0))).map((P) => P.id));

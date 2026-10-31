@@ -3,25 +3,25 @@
 // clothoid stays a clothoid. A handle sets a TARGET for one channel, reached over a transition by a blend
 // (1 − S(u))·cont(s) + S(u)·T. For the ROUTE channels (kh, kv, w, r, …) S is the Bloss cubic 3u² − 2u³ (ref 02 §4, ref 09 §2): zero slope change at
 // both ends. For the CROSS-SECTION channels the car's wheels ride on (the bank phi, the cup c, the edges e and er) S is the C2 quintic 6u⁵ − 15u⁴ + 10u³
-// (D459, 2026-10-25): zero slope AND zero curvature at both ends. The cubic's curvature is 6·Δ/L² at its ends, so under a wheel 8.4 m out a bank of 30° over
+// (since 2026-10-25): zero slope AND zero curvature at both ends. The cubic's curvature is 6·Δ/L² at its ends, so under a wheel 8.4 m out a bank of 30° over
 // 100 m arrived with a vertical-curvature step of 15 °/100 m (1.8 g at 300 km/h) at both of its joints, the bump the user felt on TEST 10 at every bank, cup and
 // edge joint; the quintic arrives with none (test/core_joint_c2.test.js). Its price: the quintic peaks at 1.875·Δ/L against the cubic's 1.5·Δ/L mid-ramp, so
 // a roll sized for the roll-rate amber is longer (finish.js ROLL_PEAK_OVER_MEAN).
 //
 //   extend(doc, { length, transition, targets: { kh, kv, phi, w, r, c, e, s, t }, family, knotM, grip })  -> a new document, one piece longer
-// grip (D261): the new piece's grip, a whole percent 50..150; left out, it is the last road piece's (the road keeps its surface until it is changed), 100 on an empty track.
+// grip: the new piece's grip, a whole percent 50..150; left out, it is the last road piece's (the road keeps its surface until it is changed), 100 on an empty track.
 //
-// D225 (ref 09 §10): e (the EDGE angle, degrees >= 0) and s (where the outer zone starts, 0.5 to 0.95 of the half-width) give a piece an edge; t (the TUBE sweep, degrees 0 to 360)
+// (ref 09 §10): e (the EDGE angle, degrees >= 0) and s (where the outer zone starts, 0.5 to 0.95 of the half-width) give a piece an edge; t (the TUBE sweep, degrees 0 to 360)
 // makes it a tube. A piece is a cup OR a tube (c and t together are refused, BAD_TARGET); a target c after a tube, or t after a cup, switches the kind, starting at the edge the
 // previous piece renders. A piece after an edge piece stays an edge piece while its edge is still active (e or its slope not 0), so "turning the edge off" is a target e = 0.
 //
-// `transition` is a number (metres, one for every channel, as ever) OR a per-channel map { w: 20, phi: 'start', … } (D194b): a channel missing from the
+// `transition` is a number (metres, one for every channel, as ever) OR a per-channel map { w: 20, phi: 'start', … }: a channel missing from the
 // map uses the piece's length; a value 'start' is the SHORT RAMP AT THE START, startRampM(length, knotM) = the first knot span (≤ 20 m, or the whole
 // piece if shorter). A channel with a short ramp reaches its target inside it and HOLDS it for the rest of the piece (the whole piece at the new width,
 // with no jump: a later piece's joint is C1). See rampKnots and rampControl for how a short ramp is kept from ringing.
 //
 // `targets` are ABSOLUTE channel values: kh and kv in rad/m (+ = left, + = nosing up), phi in rad (+ = left side up), w in
-// m, r in °/m, c (the CUP, D190) in degrees, 0 to 150. A channel with no target continues. A piece is a CUP piece when a c target is
+// m, r in °/m, c (the CUP) in degrees, 0 to 150. A channel with no target continues. A piece is a CUP piece when a c target is
 // given, or when it is extended after a cup piece (the cup then continues like any channel); otherwise it is a LEGACY piece, rendered by
 // the old profileAt, unchanged. The first piece of a track takes a cup with first: { c }; a cup that follows a legacy piece starts at the
 // edge that piece renders (D.pieceEnd), held. The fit of a short transition can ring past its target (measured: 174.65° for a 150° target
@@ -36,11 +36,11 @@ const { WIDTHS, RATES } = require('../geom/fonts.js');
 const bloss = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));   // ref 02 §4, IFC-BLOSS: the route channels' blend (C1 at its ends: S″(0) = 6, S″(1) = −6)
 const smoother = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * u * (u * (6 * u - 15) + 10));   // 6u⁵ − 15u⁴ + 10u³ (Perlin's smootherstep): S′ = S″ = 0 at both ends, C2
 /**
- * D521, THE BANK'S ROUNDED-LINEAR RAMP (the user, 2026-10-28 15:18 and 15:31, a 100 m piece banking 54° after a straight: "start banking where the red circle is at the start of the
+ * THE BANK'S ROUNDED-LINEAR RAMP (the user, 2026-10-28 15:18 and 15:31, a 100 m piece banking 54° after a straight: "start banking where the red circle is at the start of the
  * next piece vs where it does further down"; "i just want the banking to be more smooth without that bump for shorter turns"). The quintic's S′(0) = S″(0) = 0 makes a ramp's first
  * fifth nearly flat and its middle steep: on his piece 0.46° at 10 m, 2.9° at 20 m, then 1.01 °/m at 50 m. Rounded-linear: the bank's RATE rises from 0 to a plateau over
  * BANK_ROUND_M (or a quarter of the ramp, if that is shorter, so the plateau always exists), holds, and falls the same way at the end; the rate's rise is the Bloss cubic,
- * so the rate is C1 and the bank itself is C2 at both joints, as D459 requires of a cross-section channel (test/core_joint_c2.test.js). On his piece: 3.0° at 10 m, 9.0° at 20 m,
+ * so the rate is C1 and the bank itself is C2 at both joints, as every cross-section channel must be (test/core_joint_c2.test.js). On his piece: 3.0° at 10 m, 9.0° at 20 m,
  * a plateau of Δ/(L − ℓ) = 0.60 °/m. Only the bank, only when opts.bankShape is 'rounded' (the panel's Extend, app/core/panel.js extendOptions): Close, Finish and every other
  * caller of extend keep the quintic, so their bytes do not move.
  *   roundedLinear(u, a): u the share of the ramp, a = ℓ / ramp; S(0) = 0, S(1) = 1, S′ = S″ = 0 at both ends
@@ -105,7 +105,7 @@ function channelFn({ v, m }, target, Lt, ch, shape = null) {
   const cont = (s) => v + m * s;
   if (target === undefined || target === null) return cont;
   if (!Number.isFinite(target)) throw new D.CoreError('BAD_TARGET', `a target must be a finite number, got ${target}`);
-  const a = ch === 'phi' && (shape === 'rounded' || shape === 'swell') ? roundingOf(shape, Lt) / Lt : null;   // D521: the bank's rounded-linear ramp, asked for; the swell's
+  const a = ch === 'phi' && (shape === 'rounded' || shape === 'swell') ? roundingOf(shape, Lt) / Lt : null;   // the bank's rounded-linear ramp, asked for; the swell's
   const blend = C2_CHANNELS.has(ch) ? smoother : bloss;
   const S0 = (C2_CHANNELS.has(ch) || ch === 'w') && isShares(shape) ? (u) => rampShape(u, shape.rise, shape.fall) : a !== null ? (u) => roundedLinear(u, a) : blend;   // the two-share ramp, asked for by its shares
   return (s) => { const u = s / Lt, S = S0(u); return u >= 1 ? target : (1 - S) * cont(s) + S * target; };
@@ -116,7 +116,7 @@ function startRampM(length, knotM) { const K = D.evenKnots(length, knotM); retur
 
 /**
  * A short ramp cannot be LEAST-SQUARES fitted by a cubic spline with knots every ~20 m: the Bloss blend has zero slope at both ends but its curvature jumps,
- * which the fit follows by ringing (the C2 quintic of the cross-section channels rings less at its ends and the same in its middle; the ramp is built the same way). Measured (D195, probe1/2) on w 31 → 12 over a 100 m piece: a 20 m ramp fits to 1.5 m off the ideal, overshoots the target
+ * which the fit follows by ringing (the C2 quintic of the cross-section channels rings less at its ends and the same in its middle; the ramp is built the same way). Measured on w 31 → 12 over a 100 m piece: a 20 m ramp fits to 1.5 m off the ideal, overshoots the target
  * by 1.05 m and puts control points 5.1 m outside the range; a 10 m or 5 m ramp is worse; extra knots shrink it (0.28 m past the target at 4 subdivisions) but never
  * remove it; and the fitted hold is not flat (still 0.35 m off the target at twice the ramp). So a channel with a short ramp is NOT fitted: its control points
  * are the ideal ramp read at the KNOT AVERAGES ξᵢ = (uᵢ₊₁ + uᵢ₊₂ + uᵢ₊₃)/3, the variation-diminishing approximation (ref 10 §2, SOURCED: LYCHE-MORKEN Definition 5.25,
@@ -129,7 +129,7 @@ function startRampM(length, knotM) { const K = D.evenKnots(length, knotM); retur
  * R and holds it exactly afterwards (the control points from ξ ≥ R/2 ARE the target).
  */
 const RAMP_KNOTS = 4;
-/** D459: a C2 channel's short ramp is read at twice the subdivisions. With 4, the compressed quintic read at the Greville abscissae (ξ₃ at the ramp's end) and the zero-curvature
+/** A C2 channel's short ramp is read at twice the subdivisions. With 4, the compressed quintic read at the Greville abscissae (ξ₃ at the ramp's end) and the zero-curvature
  *  start (P₂ = P₀) left the whole change to one span: a 54° roll over 100 m read 1.62 °/m against 0.80 before; with 8 it reads the quintic's shape to a few tenths. */
 const RAMP_KNOTS_C2 = 8;
 function rampKnots(length, ramps, knotM, sub = RAMP_KNOTS) {
@@ -154,15 +154,15 @@ function rampControl(piece, ch, from, target, R, held, sub = RAMP_KNOTS, shape =
 }
 
 /**
- * D459: the fitted cubic spline does not carry the quintic's zero curvature at the ramp's two ends (a least-squares fit over knots every ~20 m read 0.0034 °/m²
+ * The fitted cubic spline does not carry the quintic's zero curvature at the ramp's two ends (a least-squares fit over knots every ~20 m read 0.0034 °/m²
  * at the start of a 30° bank over 100 m and 0.038 at the start of a 35° edge over 50 m, against the cubic's 0.0178 and 0.0823), so after the fit the one free
  * control point at each end is moved to make the channel's second derivative exactly 0 there: P[2] at the start (P[0] and P[1] carry the continued value and
  * slope and are not touched) and P[n − 3] at the end (P[n − 2] and P[n − 1] carry the end value and slope). The second derivative at an end is read exactly from
  * four samples on the end span (one-sided, exact for the cubic the span is), it is linear in those two points, and the 2 × 2 system is solved; with two interior
  * knots the two points reach both ends, with more they are independent. A piece with fewer than six control points has no free point for both ends and is left
  * as fitted; extend gives a piece with a cross-section target at least THREE interior knots (below), so one point stays free for the least-squares shape: with
- * two, the ramp is the one C2 cubic spline through its ends and peaks 1.20–1.24 times the quintic's rate (30° over 50 m); with three, 1.07–1.09 (measured,
- * D459 peak.js). The next piece continues value and slope by a line (curvature 0), so every joint of a bank, cup or edge ramp is C2 both ways.
+ * two, the ramp is the one C2 cubic spline through its ends and peaks 1.20–1.24 times the quintic's rate (30° over 50 m); with three, 1.07–1.09 (measured).
+ * The next piece continues value and slope by a line (curvature 0), so every joint of a bank, cup or edge ramp is C2 both ways.
  */
 function c2Ends(piece, ch) {
   const P = piece.channels[ch], n = P.length, L = piece.length, U = D.knotVector(piece), dec = D.DEC[ch];
@@ -178,12 +178,12 @@ function c2Ends(piece, ch) {
 }
 
 /**
- * D459: the least-squares fit of a cross-section ramp with its hold PINNED. document.js fitChannel holds the start pair only; the Bloss cubic needed nothing more (a
+ * The least-squares fit of a cross-section ramp with its hold PINNED. document.js fitChannel holds the start pair only; the Bloss cubic needed nothing more (a
  * cubic in s, it was fitted exactly, hold and all), but the fitted quintic rang in the hold and at the piece's end (0.02° on a 17° bank, 0.1° at the transition when
  * the hold alone was overwritten). Here every control point whose Greville abscissa lies past the transition, and the last two, are set to the target, and the
  * remaining free points are refitted to the ideal ramp by least squares with those held (the normal equations over samples every ~0.5 m).
  *
- * D482: BANDED, so a drag tick costs linear time in the length (it was cubic: 141 s for one 10 km extend with bank, cup and edge typed). A cubic B-spline basis
+ * BANDED, so a drag tick costs linear time in the length (it was cubic: 141 s for one 10 km extend with bank, cup and edge typed). A cubic B-spline basis
  * function is non-zero over 4 spans, so each sample adds to at most 4 × 4 entries of the normal equations, and two free points more than 3 apart never meet:
  * the matrix has 3 bands either side. Each sample's 4 basis values come from one basisN on the one knot vector (they are the very doubles channelValue gave on a
  * one-hot control point, whose sum adds only zeros to one N), and every entry sums its products in the same sample order, so the system is the same to the
@@ -191,8 +191,8 @@ function c2Ends(piece, ch) {
  * and the singular return are the same too; a back substitution replaces the Gauss–Jordan sweep above the diagonal, the one step whose rounding differs.
  */
 const BAND = 3;   // the basis degree: basisN is cubic
-/** D482: the fit's samples and each one's 4 basis values (from basisN) and first control point: a bank, cup and edge typed fit four channels (phi, c, e, er) on
- *  one knot vector, so a drag tick reads the basis once, not four times. D484: kept by the knot vector's VALUE (the length and every knot), the last few, so
+/** The fit's samples and each one's 4 basis values (from basisN) and first control point: a bank, cup and edge typed fit four channels (phi, c, e, er) on
+ *  one knot vector, so a drag tick reads the basis once, not four times. Kept by the knot vector's VALUE (the length and every knot), the last few, so
  *  they carry to the next piece wherever its knot vector is the same (a turn drag keeps the length, and the corner's solve extends at one length again and
  *  again). Knots every L/m move with the length, so a stretch carries nothing, and a new set is built by sampleBasis below, not one basisN per sample. */
 const SAMPLES = [], SAMPLES_MAX = 4;
@@ -205,7 +205,7 @@ function samplesOf(piece, U, L) {
   SAMPLES.unshift(made); if (SAMPLES.length > SAMPLES_MAX) SAMPLES.pop();
   return made;
 }
-/** D484: basisN(U, min(max(s, 0), L)) at every s of the ascending S, into flat arrays: the span by a walk (S ascends, so it is the binary search's span:
+/** basisN(U, min(max(s, 0), L)) at every s of the ascending S, into flat arrays: the span by a walk (S ascends, so it is the binary search's span:
  *  the last k in [3, nCP − 1] with s ≥ U[k], or nCP − 1 from U[nCP] on) and the Cox–de Boor recursion in basisN's own expressions and order, in two
  *  reused buffers instead of an array a degree and an object a sample. Every value is the same double (test/core_fit_banded.test.js holds the two equal). */
 function sampleBasis(U, S, L) {
@@ -295,7 +295,7 @@ function extend(doc, opts = {}) {
   if (first && first.c !== undefined && !(Number.isFinite(first.c) && first.c >= 0 && first.c <= D.CUP_MAX)) throw new D.CoreError('BAD_CUP', 'the first piece cup must be from 0 to ' + D.CUP_MAX + ' degrees, got ' + first.c);
   const given = (v) => v !== undefined && v !== null;
   for (const [where, o] of [['target', targets], ['first-piece', first || {}]]) {
-    // an edge may be below 0 (D406: the zone turns down); how far is the floor's, against the profile it sits on, below
+    // an edge may be below 0 (the zone turns down); how far is the floor's, against the profile it sits on, below
     if (given(o.e) && !Number.isFinite(o.e)) throw new D.CoreError('BAD_EDGE', `the ${where} edge angle e must be a number of degrees, got ${o.e}`);
     if (given(o.er) && !Number.isFinite(o.er)) throw new D.CoreError('BAD_EDGE', `the ${where} right edge angle er must be a number of degrees, got ${o.er}`);
     if (given(o.s) && !(Number.isFinite(o.s) && o.s >= D.S_MIN && o.s <= D.S_MAX)) throw new D.CoreError('BAD_EDGE', `the ${where} edge start s must be from ${D.S_MIN} to ${D.S_MAX} of the half-width, got ${o.s}`);
@@ -339,13 +339,13 @@ function extend(doc, opts = {}) {
   const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch), ch, shapeOf(ch))]));
   const c2Targets = [...C2_CHANNELS].filter((ch) => given(targets[ch]));
   // a shaped width at start is laid as the cross-section's are, in three quarters of its ramp (8 subdivisions), so F's 20 m rise is 20 m as laid
-  const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch) || (ch === 'w' && shapeOf(ch))) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // D459: the short-ramp subdivisions, 8 when a cross-section channel ramps short
-  // extra knots only where a ramp is short; D459: a piece with a bank, cup or edge target has at least three interior knots, so c2Ends has a free point at each end and one is left for the shape
+  const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch) || (ch === 'w' && shapeOf(ch))) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // the short-ramp subdivisions, 8 when a cross-section channel ramps short
+  // extra knots only where a ramp is short; a piece with a bank, cup or edge target has at least three interior knots, so c2Ends has a free point at each end and one is left for the shape
   const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM, sub) : c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;
   const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube, grip: grip === undefined ? D.gripOf(last) : grip });
   for (const ch of shortRamps) rampControl(piece, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch));   // not fitted: see rampControl
-  for (const ch of c2Targets) if (!shortRamps.includes(ch)) fitWithHold(piece, ch, channels[ch], Lof(ch), targets[ch]);   // D459: the fitted quintic, its hold and end pinned (fitWithHold)
-  // D459: the clamps below may move a channel's last two points ("an edge that ends at 0 ends flat"), so the ends are pinned to zero curvature AFTER them (c2Ends moves
+  for (const ch of c2Targets) if (!shortRamps.includes(ch)) fitWithHold(piece, ch, channels[ch], Lof(ch), targets[ch]);   // the fitted quintic, its hold and end pinned (fitWithHold)
+  // the clamps below may move a channel's last two points ("an edge that ends at 0 ends flat"), so the ends are pinned to zero curvature AFTER them (c2Ends moves
   // only P[2] and P[n − 3]) and the clamps run once more on what it moved: a point pushed past a cap or the floor is held there, and that one end stays C1 (a ramp from
   // rest at the cap: P[2] = P[0], inside; a continued slope at the cap can go past it: rare, and the sweep says where)
   const clamps = () => {
@@ -361,7 +361,7 @@ function extend(doc, opts = {}) {
   if (edge) {
     const C = piece.channels, legacyMid = !cup && !tube ? D.legacyEdgeDeg(fam, Math.max(...C.w), Math.max(...C.r)) : 0;
     const cap = (i) => (tube ? D.TUBE_EDGE_MAX - C.t[i] / 2 : cup ? D.CUP_MAX - C.c[i] : D.CUP_MAX - legacyMid);   // the total edge angle's cap, per control point (the convex hull, ref 03 §1b)
-    // and its floor (D406, document.js EDGE_FLOOR): the least a side may add to the profile's own rim angle there (a legacy road's least is at its least width and rise)
+    // and its floor (document.js EDGE_FLOOR): the least a side may add to the profile's own rim angle there (a legacy road's least is at its least width and rise)
     const legacyLeast = !cup && !tube ? D.legacyEdgeDeg(fam, Math.min(...C.w), Math.min(...C.r)) : 0;
     const floor = (i) => D.EDGE_FLOOR - (tube ? C.t[i] / 2 : cup ? C.c[i] : legacyLeast);
     // a TARGET the cap cannot hold is refused by name (only the fit's ringing is clamped, below): the typed e, or the at-start first.e, against what the total cap leaves there
@@ -374,15 +374,15 @@ function extend(doc, opts = {}) {
     under('edge target', targets.e, C.e.length - 1, 'at the end of this piece'); under('right edge target', targets.er, C.er.length - 1, 'at the end of this piece');
     if (!from0) { under("first piece's edge", f0.e, 0, 'at its start'); under("first piece's right edge", f0.er, 0, 'at its start'); }
     for (const ch of ['e', 'er']) {
-      // the fit's ringing never leaves [0, cap], as before, unless the side is asked below 0 (D406): then it may ring down to the lower of the value it starts at and its target,
+      // the fit's ringing never leaves [0, cap], as before, unless the side is asked below 0: then it may ring down to the lower of the value it starts at and its target,
       // never under the floor. The asked values, not the fitted end: a fit to a target of 0 can end a hair under it (-0.0069 measured), which must still clamp to 0
-      // and the mirror of that above (E's D406 review §4): a side asked only at or below 0, with some of it below, rings no higher than the higher of its two asked
+      // and the mirror of that above: a side asked only at or below 0, with some of it below, rings no higher than the higher of its two asked
       // values, so a side brought back up to 0 lands at 0 and ends flat (a numeric transition rang -45.5 -> 0 up to +8.28 and ended at +0.67). A side asked above 0
-      // keeps the cap, so its bytes do not move. The ceiling never falls under the floor (E's D406 short read §3): a side that only carries on while the floor rises
+      // keeps the cap, so its bytes do not move. The ceiling never falls under the floor: a side that only carries on while the floor rises
       // under it (a cup narrowing under e -45) is lifted to the floor, as the low end always did, not refused
       const lo = Math.min(0, C[ch][0], given(targets[ch]) ? targets[ch] : 0), top = Math.max(C[ch][0], given(targets[ch]) ? targets[ch] : C[ch][0]);
       const hi = (i) => (lo < 0 && top <= 0 ? Math.max(top, floor(i)) : Math.max(0, cap(i)));
-      // D468 (P's D466 §4): the joint's own two points, the head's value and slope continued, are the head's and not the fit's: a tail still sloping at a limit
+      // the joint's own two points, the head's value and slope continued, are the head's and not the fit's: a tail still sloping at a limit
       // took P₁ past lo or hi, the clamp moved it, and the piece was refused with the document's raw JOINT error. They are left to checkDoc, which refuses a point
       // past the cap or under the floor BY NAME (a tail still rising at the cap cannot be continued inside it: BAD_EDGE, as it should be)
       C[ch] = C[ch].map((x, i) => (held && i < 2 ? x : Math.min(hi(i), Math.max(Math.max(lo, floor(i)), x))));
@@ -392,9 +392,9 @@ function extend(doc, opts = {}) {
   }
   };
   clamps();
-  for (const ch of c2Targets) c2Ends(piece, ch);   // D459: zero curvature at both ends of a bank, cup or edge ramp
+  for (const ch of c2Targets) c2Ends(piece, ch);   // zero curvature at both ends of a bank, cup or edge ramp
   if (c2Targets.length) clamps();
-  // D521: a rounded bank over the fitted path needs knots where its rate turns (ℓ/2 and ℓ in from each end of the ramp): with knots every 20 m its first span is one cubic, which
+  // a rounded bank over the fitted path needs knots where its rate turns (ℓ/2 and ℓ in from each end of the ramp): with knots every 20 m its first span is one cubic, which
   // a C2 joint makes a·s³ whatever the ramp asks (1.41° at 10 m on his piece against 3.00). They are INSERTED (document.js insertKnots, Boehm) into the piece laid as today, so every
   // other channel keeps its curve (the turn, the width, a cup: the same curve, three points around each new knot re-quantised to their step); then the bank alone is refitted on them
   // a SHAPED bank at start (a short ramp): knots across its rise and its fall (shapeKnots), inserted into the piece as laid, then the bank alone read again on them;
