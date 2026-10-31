@@ -32,13 +32,21 @@ function layoutFor(doc) {
 test('a custom layout (a 3-abreast grid of 6, 3 pit boxes, sectors) is what the kn5 carries, and pitboxes counts it', () => {
   const base = layoutFor(LOOP);
   const layout = { ...base, grid: { ...base.grid, pattern: '3-abreast', count: 6, rowGapM: 12, colGapM: 5 }, pits: { ...base.pits, count: 3 },
-    sectors: [{ word: 'w3', along: 20 }, { word: 'w5', along: 20 }] };
+    // AMENDED: the rule changed by name: a gate tilted more than 15° from level is refused (src/export/markers.js gate-tilt), and w5 at 20 m is on the
+    // loop's 31° banked half, so sector 2 stands on w8, level again (sector 1, w3 at 20 m, tilts 14°); the row below keeps the banked spot, as a refusal
+    sectors: [{ word: 'w3', along: 20 }, { word: 'w8', along: 20 }] };
   const out = tmp(), r = exportTrack(LOOP, { outDir: out, markers: layout }), f = r.folders[0];
   const names = readKn5(path.join(f.dir, `${f.folder}.kn5`)).dummies.map((x) => x.name).filter((n) => /^AC_/.test(n)).sort();
   assert.deepStrictEqual(names, ['AC_HOTLAP_START_0', 'AC_PIT_0', 'AC_PIT_1', 'AC_PIT_2', 'AC_START_0', 'AC_START_1', 'AC_START_2', 'AC_START_3', 'AC_START_4', 'AC_START_5',
     'AC_TIME_0_L', 'AC_TIME_0_R', 'AC_TIME_1_L', 'AC_TIME_1_R', 'AC_TIME_2_L', 'AC_TIME_2_R']);
   const ui = JSON.parse(fs.readFileSync(path.join(f.dir, 'ui', 'ui_track.json'), 'utf8'));
   assert.strictEqual(+ui.pitboxes, 3);
+});
+
+test('a sector gate placed by hand on a banked corner refuses the export, naming gate-tilt, and writes nothing', () => {
+  const out = tmp(), layout = { ...layoutFor(LOOP), sectors: [{ word: 'w3', along: 20 }, { word: 'w5', along: 20 }] };
+  assert.throws(() => exportTrack(LOOP, { outDir: out, markers: layout }), (e) => e.code === 'MARKERS' && /gate-tilt: AC_TIME_2 tilts 3\d° from level/.test(e.message));
+  assert.deepStrictEqual(fs.readdirSync(out), []);
 });
 
 test('the paint is written into the kn5 as visual meshes, one per mark, none of them physics', () => {

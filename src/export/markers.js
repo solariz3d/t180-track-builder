@@ -16,7 +16,8 @@
 // DEFAULTS that are choices, not measurements, and can be overridden through `opts`:
 //   · height band 1–2 m (§5c's own numbers);
 //   · "along the road": |forward · surfaceNormal| ≤ sin 15°, and for grid slots and gates forward · raceDirection ≥ cos 30°;
-//   · a car slot is a box ±1.0 m across and ±2.4 m along the slot's forward axis (inferred: T-180 dimensions not measured).
+//   · a car slot is a box ±1.0 m across and ±2.4 m along the slot's forward axis (inferred: T-180 dimensions not measured);
+//   · every AC_TIME gate level across the road within 15° (the grid's floor rule, src/markers/layout.js FLOOR_MAX_DEG), plus 0.01° for float32.
 'use strict';
 
 const sub = (u, v) => [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
@@ -105,7 +106,7 @@ function surfaceUnder(p, road) {
 // raceHeading: which markers must point along the grid's race direction. Default: every racing marker, as before D171.
 // The export (D171) narrows it to the grid and the start gate: a hotlap run-up or a sector can sit on a curve, where
 // "along the road" is not the grid's direction; src/markers checks those along their own road.
-const DEFAULTS = { minHeight: 1, maxHeight: 2, surfaceTiltSin: Math.sin(15 * Math.PI / 180), raceCos: Math.cos(30 * Math.PI / 180), slotHalfWidth: 1.0, slotHalfLength: 2.4, raceHeading: /^AC_START_|^AC_TIME_|^AC_HOTLAP_START_/ };
+const DEFAULTS = { minHeight: 1, maxHeight: 2, surfaceTiltSin: Math.sin(15 * Math.PI / 180), gateTiltDeg: 15, gateTiltSlackDeg: 0.01, raceCos: Math.cos(30 * Math.PI / 180), slotHalfWidth: 1.0, slotHalfLength: 2.4, raceHeading: /^AC_START_|^AC_TIME_|^AC_HOTLAP_START_/ };
 const byIndex = (re) => (d) => { const m = re.exec(d.name); return m ? +m[1] : -1; };
 
 function collect(dummies) {
@@ -200,6 +201,20 @@ function checkSlots(m, road, o) {
   return { id: 'slots', ok: !problems.length, problems };
 }
 
+// EVERY GATE STANDS LEVEL ACROSS THE ROAD (2026-10-30): AC_TIME_n_L and _R, for every n, no more than gateTiltDeg apart from level. ELYSIUM's AC_TIME_2
+// stood on an 85° bank, its ends 30 m apart in height and 3.4 m apart seen from above, and laps through it did not count. src/markers/layout.js lapSectors
+// places the sector gates on road within the same 15°; gateTiltSlackDeg absorbs the kn5's float32 matrices, so a gate placed at the limit reads at it.
+function checkGateTilt(dummies, o) {
+  const problems = [], byName = new Map(dummies.map((d) => [d.name, d]));
+  for (const d of dummies) {
+    const g = /^AC_TIME_(\d+)_L$/.exec(d.name), r = g && byName.get(`AC_TIME_${g[1]}_R`);
+    if (!r) continue;
+    const v = sub(d.pos, r.pos), l = len(v), tilt = l > 0 ? (Math.asin(Math.min(1, Math.abs(dot(v, UP)) / l)) * 180) / Math.PI : 90;
+    if (tilt > o.gateTiltDeg + o.gateTiltSlackDeg) problems.push(`AC_TIME_${g[1]} tilts ${tilt.toFixed(0)}° from level across the road (its ends are ${Math.abs(dot(v, UP)).toFixed(1)} m apart in height): a car can pass beside it, and a lap that misses a sector gate does not count`);
+  }
+  return { id: 'gate-tilt', ok: !problems.length, problems };
+}
+
 function checkPitCount(m, expected) {
   const problems = [];
   const idx = m.pits.map(byIndex(/^AC_PIT_(\d+)$/));
@@ -217,7 +232,7 @@ function checkMarkers(scene, { expectedPits = null, ...opts } = {}) {
   const o = { ...DEFAULTS, ...opts };
   const { dummies, meshes } = walkScene(scene);
   const m = collect(dummies), road = meshes.filter((x) => isDrivable(x.name));
-  const checks = [checkStartAheadOfGrid(m), checkGateOrientation(m), checkHeightAndHeading(m, road, o), checkSlots(m, road, o), checkPitCount(m, expectedPits)];
+  const checks = [checkStartAheadOfGrid(m), checkGateOrientation(m), checkHeightAndHeading(m, road, o), checkSlots(m, road, o), checkPitCount(m, expectedPits), checkGateTilt(dummies, o)];
   return { ok: checks.every((c) => c.ok), checks };
 }
 

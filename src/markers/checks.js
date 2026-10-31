@@ -9,6 +9,8 @@
 //                         is never ahead of the one before it)
 //   gate-orientation      §5c "L and R gates are the right way round": L is left of R across the road, in track
 //                         coordinates (+u is left); the world-side test is T1's, on the built scene at export
+//   gate-width            every sector gate's (AC_TIME_1 and on) ends are at least half the road's width apart seen from above (2026-10-30: a gate
+//                         across a steep bank is wide along the surface and narrow in plan, and a car can pass beside it)
 //   height-and-heading    §5c "markers are 1–2 m above the surface, oriented along the road": h in [1, 2] m, forward
 //                         within 15° of the road's tangent and within 15° of the surface plane (15°: inferred, the same
 //                         tolerance src/export/markers.js uses)
@@ -21,7 +23,7 @@
 // AMBER (said, never refusing): the hotlap run-up is shorter than the design speed needs (open tracks), and a grid slot
 // that is not on a straight word (§5c: "dropped on a straight").
 'use strict';
-const { SLOT_HALF_LENGTH, SLOT_HALF_WIDTH } = require('./layout.js');
+const { SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, GATE_TOPDOWN_MIN } = require('./layout.js');
 const { _vec: { dot } } = require('./place.js');
 
 const COS15 = Math.cos(15 * Math.PI / 180), SIN15 = Math.sin(15 * Math.PI / 180);
@@ -67,6 +69,20 @@ function checkPlaced(placed, layout, path, missing = [], notes = [], segments = 
       if (!(l.u > r.u)) p.push(`AC_TIME_${k}_L is not left of _R across the road (u ${l.u.toFixed(2)} vs ${r.u.toFixed(2)} m): L and R are swapped`);
     }
     checks.push({ id: 'gate-orientation', problems: p });
+  }
+
+  { // every SECTOR gate spans the road seen from above (2026-10-30: ELYSIUM's AC_TIME_2 stood on an 85° bank, 30 m wide along the road's surface and 3.4 m
+    // seen from above, and laps through it did not count): its two ends at least GATE_TOPDOWN_MIN of the road's width apart in plan. Not the start gate: in
+    // a closed tube its ends stand at the roof, 1 m apart in plan, on every tube track the builder exports (test/export_tube_grid.test.js row 1); placing
+    // them on the floor is its own change, and until then this check would refuse every tube export
+    const p = [];
+    for (const l of placed) {
+      const g = /^AC_TIME_([1-9]\d*)_L$/.exec(l.name), r = g && find(`AC_TIME_${g[1]}_R`);
+      if (!r || l.error || r.error) continue;
+      const d = sub(l.surface, r.surface), plan = Math.hypot(d[0], d[2]), width = l.span[1] - l.span[0];
+      if (plan < GATE_TOPDOWN_MIN * width) p.push(`AC_TIME_${g[1]} is ${plan.toFixed(1)} m wide seen from above on a road ${width.toFixed(1)} m wide (at least ${(GATE_TOPDOWN_MIN * 100).toFixed(0)}% is needed): it stands across a bank or a wall, where a car can pass beside it`);
+    }
+    checks.push({ id: 'gate-width', problems: p });
   }
 
   { // 1–2 m above the surface, along the road
