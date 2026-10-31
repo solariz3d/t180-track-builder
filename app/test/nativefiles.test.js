@@ -92,6 +92,7 @@ test('row 4: index.html sends every command that writes files through sendFiles 
     assert.doesNotMatch(html, new RegExp(`call\\('${cmd}'`), `${cmd} is not called with JSON arguments`);
   }
   assert.doesNotMatch(html, /\bb64\(|btoa\(/, 'no file is turned into base64 text');
+  assert.match(html, /NF\.sendFiles\(\(c, body, options\) => tauri\.invoke\(c, body, options\)/, 'the staged id (the options) reaches the native side');
 });
 
 test('row 5: a body larger than one piece goes as stage_files pieces of at most that size, in order, whose bytes are the body; then the command with the staged id', async () => {

@@ -14,11 +14,16 @@ const BYTES = 'nativefiles.test.js', LEAN = 'core-check-lean.test.js';
 
 const MUTATIONS = [
   // the body (app/lib/nativefiles.js)
-  { id: 'N1 the header length is written big-endian', test: BYTES, file: 'lib/nativefiles.js', from: 'setUint32(0, text.length, true)', to: 'setUint32(0, text.length, false)', caughtBy: 'row 1:' },
+  { id: 'N1 the header length is written big-endian', test: BYTES, file: 'lib/nativefiles.js', from: 'new DataView(prefix.buffer).setUint32(0, text.length, true)', to: 'new DataView(prefix.buffer).setUint32(0, text.length, false)', caughtBy: 'row 1:' },
   { id: 'N2 the files\' bytes are left out of the body', test: BYTES, file: 'lib/nativefiles.js', from: 'out.set(f.bytes, at); at += f.bytes.length;', to: 'at += f.bytes.length;', caughtBy: 'row 1:' },
   { id: 'N3 a file without bytes is taken', test: BYTES, file: 'lib/nativefiles.js', from: 'if (!(f.bytes instanceof Uint8Array)) throw', to: 'if (false) throw', caughtBy: 'row 2:' },
   { id: 'N4 a head that carries files is taken', test: BYTES, file: 'lib/nativefiles.js', from: "if ('files' in head) throw", to: 'if (false) throw', caughtBy: 'row 2:' },
   { id: 'N5 the body holds each file twice', test: BYTES, file: 'lib/nativefiles.js', from: 'list.reduce((a, f) => a + f.len, 0)', to: 'list.reduce((a, f) => a + 2 * f.len, 0)', caughtBy: 'row 1:' },
+  { id: 'N10 a long body goes in one call', test: BYTES, file: 'lib/nativefiles.js', from: 'if (total <= piece) return invoke(cmd, packFiles(head, files));', to: 'if (true) return invoke(cmd, packFiles(head, files));', caughtBy: 'row 5:' },
+  { id: 'N11 the command is not told the staged id', test: BYTES, file: 'lib/nativefiles.js', from: "{ headers: { 'T180-Staged': id } }", to: '{}', caughtBy: 'row 5:' },
+  { id: 'N12 every piece says it starts at 0', test: BYTES, file: 'lib/nativefiles.js', from: 'stageBody(id, at, total, p)', to: 'stageBody(id, 0, total, p)', caughtBy: 'row 5:' },
+  { id: 'N13 a full piece is reused for the next', test: BYTES, file: 'lib/nativefiles.js', from: 'yield piece; piece = new Uint8Array(size); fill = 0;', to: 'yield piece; fill = 0;', caughtBy: 'row 5:' },
+  { id: 'N14 the page drops the staged id on its way to the native side', test: BYTES, file: 'index.html', from: '(c, body, options) => tauri.invoke(c, body, options)', to: '(c, body) => tauri.invoke(c, body)', caughtBy: 'row 4:' },
   // the page (app/index.html)
   { id: 'N6 Export to Assetto Corsa sends JSON again', test: BYTES, file: 'index.html', from: "installTrack: (folder, files) => sendFiles('install_track', { folder }, files),", to: "installTrack: (folder, files) => call('install_track', { folder, files }),", caughtBy: 'row 4:' },
   { id: 'N7 Export for Blender sends JSON again', test: BYTES, file: 'index.html', from: "sendFiles('write_blender_export', { dir, folder, fbx }, files)", to: "call('write_blender_export', { dir, folder, fbx, files })", caughtBy: 'row 4:' },
