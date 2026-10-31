@@ -19,7 +19,7 @@
 // Coplanar triangles (every vertex within `EPS_PLANE` of the other's plane: two roads crossing at one height ARE
 // coplanar) are tested in 2D: an edge pair crosses, or a vertex lies inside the other triangle. Touching counts.
 //
-// STACKED (§4 `:85`, "drivable surfaces stacked within about 2 m"; a measure, not a red, since D432: its consumers turn only `intersections`
+// STACKED (§4 `:85`, "drivable surfaces stacked within about 2 m"; a measure, not a red: its consumers turn only `intersections`
 // into reds, through asFolds; two passes that do not meet may be closer than 2 m): from every surface vertex, a segment along its
 // normal to `stackedM` on both sides; a triangle of another pass crossing it is a stack, with gap = the distance along
 // the normal. Every road mesh is drivable (walls are road, §4 `:86`). Sampled at the vertices, so between vertices
@@ -34,7 +34,7 @@ const EPS_PLANE = 1e-4;   // m: float32 vertices of a 100 m cell are good to ~1e
 const EPS_BARY = 1e-9;
 
 // ── the triangle soup ──
-// D437a: COUNTED, THEN FILLED. The soup was built in plain JS arrays by push and copied into typed arrays at the end, holding every vertex twice inside V8's heap
+// COUNTED, THEN FILLED. The soup was built in plain JS arrays by push and copied into typed arrays at the end, holding every vertex twice inside V8's heap
 // (378 B a vertex, measured on a 20 km straight; on the user's 27.6 km lap with a pit lane, built twice, the export ran out of heap here). One pass now counts the
 // vertices and indices, and the arrays are typed from the start, filled by index (their ArrayBuffers live outside the heap). Same values, same shape; vCell and
 // triCell are typed too (Int32Array), and every reader only indexes them.
@@ -63,7 +63,7 @@ function soup(mesh) {
   };
   // Each scene node is paired with its cell record BY POSITION (mesh.js assemble pushes them in the same order), never
   // by name: two pieces may share a name (a word's parts did, before names carried the part), and a lookup by name then
-  // gives a triangle ANOTHER piece's s, which makes neighbours in one pass look far apart and "meet" (D170 addendum).
+  // gives a triangle ANOTHER piece's s, which makes neighbours in one pass look far apart and "meet".
   for (let k = 0; k < kids.length; k++) {
     const node = kids[k], m = node.children[0], M = node.matrix, rec = mesh.cells[k];
     if (rec.name !== m.name) throw new Error(`selfCheck: scene node ${k} is ${m.name} but its cell record is ${rec.name}`);
@@ -83,15 +83,15 @@ function soup(mesh) {
 function build(S) {
   const T = S.tris.length / 3, box = new Float64Array(T * 6), cen = new Float64Array(T * 3), s0 = new Float64Array(T), s1 = new Float64Array(T);
   for (let t = 0; t < T; t++) {
-    // D437a: the triangle's box written straight into `box` (two small arrays a triangle were 3 million arrays of garbage on a 27.6 km lap)
+    // the triangle's box written straight into `box` (two small arrays a triangle were 3 million arrays of garbage on a 27.6 km lap)
     let a = Infinity, b = -Infinity; const o6 = t * 6;
     for (let d = 0; d < 3; d++) { box[o6 + d] = Infinity; box[o6 + 3 + d] = -Infinity; }
     for (let v = 0; v < 3; v++) { const i = S.tris[t * 3 + v]; for (let d = 0; d < 3; d++) { const x = S.pos[i * 3 + d]; if (x < box[o6 + d]) box[o6 + d] = x; if (x > box[o6 + 3 + d]) box[o6 + 3 + d] = x; } a = Math.min(a, S.s[i]); b = Math.max(b, S.s[i]); }
     for (let d = 0; d < 3; d++) cen[t * 3 + d] = (box[o6 + d] + box[o6 + 3 + d]) / 2;
     s0[t] = a; s1[t] = b;
   }
-  // D437a: THE NODES IN TYPED ARRAYS (they were JS objects: 114 B a triangle kept in the heap, 2 million of them on the user's 27.6 km lap, and at the room the page
-  // leaves an export that build ran out of memory). A leaf holds 2 to 4 triangles (a node splits above 4, into halves of at least 2), so there are fewer nodes than
+  // THE NODES IN TYPED ARRAYS (they were JS objects: 114 B a triangle kept in the heap, 2 million of them on the user's 27.6 km lap, and the page's export, building them,
+  // ran out of memory). A leaf holds 2 to 4 triangles (a node splits above 4, into halves of at least 2), so there are fewer nodes than
   // triangles; the split sorts the order array in place (sortBy below, stable, as the copy sorted before was), by the same rule, so the tree is the same tree
   const order = new Uint32Array(T), cap = Math.max(1, T), scratch = new Uint32Array(T); for (let i = 0; i < T; i++) order[i] = i;
   // the sort: a typed array's own sort with a comparator copies into the heap, so a stable bottom-up merge sort of order[from, to) by cen[·*3 + ax], in place through
@@ -241,7 +241,7 @@ function selfCheck(mesh, opts = {}) {
   const intersections = [...groups.values()].map(({ n, ...r }) => ({ ...r, pairs: n })).sort((a, b) => a.s - b.s || a.u - b.u);
   const stacked = [...sgroups.values()].sort((a, b) => a.s - b.s || a.u - b.u);
   if (trace) trace.soup = S;
-  // D437a: the soup and BVH ride along as `main` (NOT enumerable, so a result compares and serialises as before), for a caller that tests something else against
+  // the soup and BVH ride along as `main` (NOT enumerable, so a result compares and serialises as before), for a caller that tests something else against
   // this mesh: the export's pit-lane check (src/geom/pitlane.js laneCheck) built both a second time, 10 s and about 1 GB of heap on a 27.6 km lap
   const out = { intersections, stacked, stats };
   Object.defineProperty(out, 'main', { value: { soup: S, bvh: B }, enumerable: false });

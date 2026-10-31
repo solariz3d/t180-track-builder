@@ -16,7 +16,7 @@
 // So the same handles give the same vertex arrays wherever the piece is placed, up to the placement transform, and moving
 // a piece changes only its matrices. THE LIMIT, stated: path.js's curve model turns about WORLD up, so a piece's shape in
 // its own frame is invariant under translation and rotation about world up, at the same start pitch and start bank. At a
-// different start pitch, the same handles bend differently. That is the open question in the D166 hand-back (§5, §9):
+// different start pitch, the same handles bend differently. That is an open question:
 // curvature relative to the track would make pieces invariant under any placement.
 //
 // SEAMS. Where two neighbouring road pieces end and start with different cross-sections (different K, or a different
@@ -35,13 +35,13 @@
 // Self-intersection between NON-adjacent cells (§3 `:58`) and stacked surfaces (§4 `:85`) are src/geom/bvh.js,
 // run on the finished mesh (`selfCheck`), or here with the `selfCheck: true` option of buildMesh.
 //
-// FONT RAMPS (the librarian's ruling on D166 §5: "Fonts RAMP; they never jump"). Where a road piece follows a road piece
+// FONT RAMPS ("fonts RAMP; they never jump"). Where a road piece follows a road piece
 // of a different font, the ENTERING piece blends from the previous font to its own over its first `rampM` metres
-// (default 20, inferred per the ruling; shortened to the piece's length if it is shorter), smoothstep in s: width, wall
+// (default 20; shortened to the piece's length if it is shorter), smoothstep in s: width, wall
 // height and ψ(u) together (profile.js `blend`). The entry font is a handle of the entering piece, `profileIn`: the
 // document may set it (and `rampM`); otherwise it is taken from the previous road piece, so a saved piece is a pure
 // function of its own handles plus the font it is attached after. `rampM: 0` (per piece or as an option) turns it off.
-// THE DOCUMENT'S FIELD WINS (A's resolve, p-d167-ramp-connector-A §4): a segment carrying `blend: { from, s0, length }`
+// THE DOCUMENT'S FIELD WINS: a segment carrying `blend: { from, s0, length }`
 // blends from `from` at weight smoothstep((s0 + d) / length), capped at 1, where d is the distance into the segment and
 // s0 the segment's offset into its word, so one transition may span several segments. `blend: null` means no ramp, and
 // the geometry then adds none of its own; only a segment WITHOUT the field falls back to `profileIn` / inheritance.
@@ -73,7 +73,7 @@ function vertex(sm, P, u) {
   const q = add(mul(sm.L, X), mul(sm.U, Y));
   return { p: add(sm.pos, q), n: add(mul(sm.L, nl), mul(sm.U, nu)), q };
 }
-// D407: a frozen (sealed) profile's cross-section at the samples Us is the same numbers for every chord of a piece, only the frame (sm) differs, and offsetAt/normalAt were run again for every
+// a frozen (sealed) profile's cross-section at the samples Us is the same numbers for every chord of a piece, only the frame (sm) differs, and offsetAt/normalAt were run again for every
 // vertex of every chord (a third of the full ghost's cost, the measurement of 2026-10-19). They are worked out once per profile object and samples and kept (at most SHAPES_MAX samples per profile);
 // the vertex arithmetic below is vertex()'s, in the same order, so every double is the same. An unfrozen profile (a ramp's blend) is not kept.
 const SHAPES = new WeakMap(), SHAPES_MAX = 8;
@@ -111,7 +111,7 @@ function options(opts) {
   };
 }
 /** A piece's handles, as text: the ONLY input its mesh depends on besides its start pitch and bank. */
-// D483: the text is JSON.stringify(seg) without its ids, made part by part so that a DEEPLY FROZEN part (a profile or row grid the core froze, which cannot change) is
+// the text is JSON.stringify(seg) without its ids, made part by part so that a DEEPLY FROZEN part (a profile or row grid the core froze, which cannot change) is
 // written once and kept by identity: a drag's ghost is 48 fresh chords on every move, each about 10 kB of text, and nearly all of it is the same frozen profile. A part that is
 // not frozen all the way down (an array changed in place, a fresh blend object) is written afresh every time, as before (test/geom_mesh_stalekey.test.js). The text is the
 // same as JSON.stringify's: plain objects and arrays are written here in its order and form, anything else by JSON.stringify itself.
@@ -139,7 +139,7 @@ function partText(v) {
 const handleKey = (seg) => partText(seg);
 const pitchOf = (sm) => Math.asin(Math.max(-1, Math.min(1, sm.T[1])));
 // A resolved word emits up to three segments sharing one id (parts in/body/out, docs/INTERFACES.md §1), so a piece is
-// named by (id, part): without the part, node names repeat, and bvh.js's name→cell map collapses them (D167 read).
+// named by (id, part): without the part, node names repeat, and bvh.js's name→cell map collapses them.
 const safeId = (id, g, part) => String(id === undefined ? `p${g}` : part ? `${id}_${part}` : id).replace(/[^A-Za-z0-9]/g, '_');
 /** The frame a piece's vertices are stored in: its start sample's L, U, T and position. */
 const frameOf = (sm) => ({ o: sm.pos.slice(), L: sm.L.slice(), U: sm.U.slice(), T: sm.T.slice() });
@@ -166,9 +166,9 @@ function pieceSamples(path, g) {
   const own = path.samples.slice(a, b).filter((sm) => sm.seg === g && sm.s < path.segEnd[g].s - 1e-9);
   return [...own, path.segEnd[g]];
 }
-// D421c: A RAMP'S CROSS-SECTION AT A WEIGHT, kept. On a ramp every row blends its own cross-section and reads it vertex by vertex (offsetAt, normalAt); a sculpt drag's ghost meshes
+// A RAMP'S CROSS-SECTION AT A WEIGHT, kept. On a ramp every row blends its own cross-section and reads it vertex by vertex (offsetAt, normalAt); a sculpt drag's ghost meshes
 // the same window with the same ramps and stations on every step (row 4a: most of its frame). For a ramp whose from-profile, profile and row grid are all frozen (they cannot change),
-// the blend at a weight is made once and kept, frozen, so the row takes rowWith's frozen path (shapeOf: vertex()'s arithmetic in the same order, every double the same, D407).
+// the blend at a weight is made once and kept, frozen, so the row takes rowWith's frozen path (shapeOf: vertex()'s arithmetic in the same order, every double the same).
 // Anything not frozen is blended afresh every time, as before. The newest RAMP_MAX weights a ramp are kept.
 const RAMPS = new WeakMap(), RAMP_MAX = 64;
 function rampShape(from, P, fr, w, A) {
@@ -197,10 +197,10 @@ function meshPiece(g, seg, S, o, work) {
   }
   const ramp = seg.blend ? { from: seg.blend.from, s0: seg.blend.s0, length: seg.blend.length }
     : seg.profileIn !== undefined && rampM > 0 ? { from: seg.profileIn, s0: 0, length: Math.min(rampM, S[S.length - 1].s - S[0].s) } : null;
-  const A = ramp ? sealedNormal(ramp.from) : null;   // D483: the frozen normalised copy (the same numbers; kept by identity for a frozen profile, profile.js sealedNormal), not a new one per chord
+  const A = ramp ? sealedNormal(ramp.from) : null;   // the frozen normalised copy (the same numbers; kept by identity for a frozen profile, profile.js sealedNormal), not a new one per chord
   // a ramp: one vertex count for the whole piece, at matched fractions of the width; otherwise the font's own samples
-  const fr = A ? (Array.isArray(seg.fractions) && seg.fractions.length >= 2 ? seg.fractions : blendSamples(A, P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross })) : null;   // seg.fractions (D225): the piece's shared row grid, so neighbouring chord segments make the same rows
-  const Us = A ? usOf(P, fr) : samplesShared(P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross }).u, K = Us.length;   // D407: one walk per cross-section, not one per chord
+  const fr = A ? (Array.isArray(seg.fractions) && seg.fractions.length >= 2 ? seg.fractions : blendSamples(A, P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross })) : null;   // seg.fractions: the piece's shared row grid, so neighbouring chord segments make the same rows
+  const Us = A ? usOf(P, fr) : samplesShared(P, { maxSeam: o.maxSeam, maxAcross: o.maxAcross }).u, K = Us.length;   // one walk per cross-section, not one per chord
   if (K > MAXV / 2) throw new Error(`buildMesh: piece ${g}: ${K} vertices across one row leaves no room for two rows`);
   const shapeAt = (sm) => {                   // the cross-section at a sample: the font, or the blend on the ramp
     if (!A) return { P, Us };
@@ -262,7 +262,7 @@ function meshSeam(A, B, work) {
     uvs[i * 2] = (i < Ka ? A.Us[i] : B.Us[i - Ka]) / 10; uvs[i * 2 + 1] = 0;
   }
   // zipper: walk both rows by where each vertex sits across the road (its lateral parameter u, the Us its row was built from), so a triangle joins
-  // neighbours and lies in the surface; triangles wound as the strip quads (A, C, B) and (B, C, D). D460: by index fraction, rows of different counts
+  // neighbours and lies in the surface; triangles wound as the strip quads (A, C, B) and (B, C, D). By index fraction, rows of different counts
   // on a cupped or edged profile paired points metres apart and the zipper stood up in the cross-section plane, a fin up to 439 mm tall (TEST 10)
   const ua = (A.ends && A.ends.last.Us) || A.Us, ub = (B.ends && B.ends.first.Us) || B.Us;
   if (ua.length !== Ka || ub.length !== Kb) throw new Error(`meshSeam: a boundary row has ${Ka} | ${Kb} vertices but ${ua.length} | ${ub.length} lateral samples`);
@@ -329,7 +329,7 @@ function buildMesh(path, segments, opts = {}) {
   while (!r.done) r = it.next();
   return r.value;
 }
-/** buildMesh as a generator (D407): a yield after each piece and each seam (the whole-track self check, opt-in, is one step); buildMesh is this run to the end, so the mesh is the same to the byte. */
+/** buildMesh as a generator: a yield after each piece and each seam (the whole-track self check, opt-in, is one step); buildMesh is this run to the end, so the mesh is the same to the byte. */
 function* buildMeshSteps(path, segments, opts = {}) {
   const st = { o: options(opts), pieces: [], seams: [], workC: { n: 0 }, nseg: segments.length, closed: !!path.closed };
   const n = segments.length, joint = path.closed && n > 1;
@@ -353,7 +353,7 @@ function* buildMeshSteps(path, segments, opts = {}) {
 }
 
 /**
- * extendMeshSteps(prev, path, segments): extendMesh as a generator (D407). It does the same work in the same order (each new piece, then each seam, then the assembly) and yields after
+ * extendMeshSteps(prev, path, segments): extendMesh as a generator. It does the same work in the same order (each new piece, then each seam, then the assembly) and yields after
  * every piece and every seam, so a caller that must not hold the page for 50 ms (the full ghost built when a handle is let go) can run it in slices; the value it returns is extendMesh's.
  * It is the same steps as extendMesh below, one piece and one seam at a time (extendMesh keeps its own body, the lines the mutation harnesses anchor on); app/test/release-ghost.test.js
  * row 5 holds the two to the byte.
@@ -422,7 +422,7 @@ function sculptMesh(prev, path, segments, g) {
  * mesh itself never compares handles here, for a tube's segment is kilobytes of text). A piece that is the same, and starts at the same pitch and bank (its shape in its own
  * frame, as sculptMesh's reuse test), keeps its local arrays and only its placement moves; every other piece is meshed again, and so is every seam that touches one. The closed
  * loop's own joint (the last piece to the first) is always made again: the last piece's end is where the whole loop's drift shows. `prev` is not changed: moved pieces are copies.
- * The result equals buildMesh(path, segments, prev's options) to round-off (D236; app/test/preview-speed.test.js proves it on a closed cup loop, a closed tube and an open track).
+ * The result equals buildMesh(path, segments, prev's options) to round-off (app/test/preview-speed.test.js proves it on a closed cup loop, a closed tube and an open track).
  *
  * `from` (2026-10-14, the ghost while a length is dragged, app/preview/trackmodel.js): pieces and seams before `from` are taken from `prev` as they are (the caller's word that
  * the path up to there is the very same: the placed track under a ghost), and `prev` may then have a DIFFERENT number of segments, open tracks only: a piece past prev's end
@@ -458,7 +458,7 @@ function reuseMesh(prev, path, segments, same, { from = 0, grow = from > 0 } = {
   return assemble(st);
 }
 /**
- * reuseMeshSteps(prev, path, segments, same, opts): reuseMesh as a generator (D421c, as extendMeshSteps is for extendMesh, D407). The same work in the same order, with a yield after each
+ * reuseMeshSteps(prev, path, segments, same, opts): reuseMesh as a generator (as extendMeshSteps is for extendMesh). The same work in the same order, with a yield after each
  * piece that is meshed again (a kept piece is O(1) and yields nothing) and after each seam that is made, so a caller that must not hold the page while a closed lap is meshed again (a
  * whole-lap re-close moves every piece: about 120 ms on a 10 km lap) can run it in slices; the value it returns is reuseMesh's, to the byte (app/test/sculpt-release.test.js holds the two
  * equal). reuseMesh keeps its own body, the lines the mutation harnesses anchor on.
