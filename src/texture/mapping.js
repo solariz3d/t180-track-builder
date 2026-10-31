@@ -1,4 +1,4 @@
-// mapping.js: AUTOMATIC texture mapping for a road piece (ARCHITECTURE §5b: "Mapping is automatic: along the track by
+// mapping.js: AUTOMATIC texture mapping for a road piece (the design: "Mapping is automatic: along the track by
 // distance, and across by the profile's own width, so a texture flows correctly through turns, walls and loops. The
 // user gets handles for tiling length, stretch versus tile, offset and direction.").
 //

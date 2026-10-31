@@ -1,4 +1,4 @@
-// flow.js: the texture coordinates of an EQUATION-CORE track that wears a texture (D228).
+// flow.js: the texture coordinates of an EQUATION-CORE track that wears a texture.
 //
 //   flowCell(mesh, segments, set, cell, node) -> Float32Array uvs | null   one mesh cell's (or seam's) new texture coordinates; `node` is its
 //                                                                          mesh object (mesh.scene.root.children[k].children[0] for mesh.cells[k])
@@ -11,7 +11,7 @@
 // (src/core/adapter.js), so the same rule restarts the texture every 2 m: a hard break twenty times a tile. Here a textured core cell
 // takes v from the PATH'S OWN arc length, row by row (the row's s, continuous through every segment and every seam), and u from the
 // profile's own arc length (profile.js: u IS arc length, on a wall and on a tube's roof alike), so a texture flows through turns,
-// walls and the tube the way ARCHITECTURE §5b says.
+// walls and the tube as the design asks.
 //
 // THE CLOSED TUBE. A section that is a closed ring (ψ = ±180° at both edges, the tube at a sweep of 360°) runs u from −w/2 to +w/2
 // round the circumference w, floor at u = 0 and the ceiling at the two ends, where the ring closes. Laid at tileWidth metres a
@@ -21,11 +21,11 @@
 // by more than the rounding (tileWidth × [n/(w/tileWidth)], at most a few per cent: 3 repeats for a 31 m ring is 10.33 m each).
 // Only a ring that is closed in every row gets this: an open tube, a cup and a plain road keep u = arc / tileWidth.
 //
-// FIT (D364): a floor whose settings say fit 'fit' (src/doc/textures.js: stretch once across the strip's own width) takes u = arc / w, w the row's own
+// FIT: a floor whose settings say fit 'fit' (src/doc/textures.js: stretch once across the strip's own width) takes u = arc / w, w the row's own
 // width, so u runs from -0.5 to 0.5 across every row whatever the road's width, and follows a road that widens or narrows (ELYSIUM, 35 m to 60 m). A closed
-// ring with fit is one repeat round it. Until D364 this file read tileWidth only, so a track that changed width repeated its texture where it was wider.
+// ring with fit is one repeat round it. Before fit 'fit', this file read tileWidth only, so a track that changed width repeated its texture where it was wider.
 //
-// EDGE (D371, src/texture/edge.js): a floor whose settings say fit 'edge' takes the band-and-centre layout the set built from the track's width range: u runs\n// 0..fb over the outer edgeBand metres of each side and fb..1-fb over the rest, so the edge bands are the same size in metres on every row, and the centre is the whole\n// repeats the texture was composed with. A row of two bands or less, and a closed ring, take the plain fit.\n//\n// WHAT IT TOUCHES: only cells of a segment whose word is 'core' (the equation core's) with a textured FLOOR slot (an image or a made
+// EDGE (src/texture/edge.js): a floor whose settings say fit 'edge' takes the band-and-centre layout the set built from the track's width range: u runs\n// 0..fb over the outer edgeBand metres of each side and fb..1-fb over the rest, so the edge bands are the same size in metres on every row, and the centre is the whole\n// repeats the texture was composed with. A row of two bands or less, and a closed ring, take the plain fit.\n//\n// WHAT IT TOUCHES: only cells of a segment whose word is 'core' (the equation core's) with a textured FLOOR slot (an image or a made
 // texture, the rule src/texture/set.js withTextureSet already uses for the material). A word document's texture coordinates, and every
 // untextured track's, are exactly what mesh.js made; the export without a texture set is byte for byte what it was.
 'use strict';
@@ -58,7 +58,7 @@ function floorOf(seg, set) {
   return f && (f.texture || f.make) ? f : null;
 }
 
-/** u for one row of `K` vertices whose arc lengths are `arc[k]` (from the mesh's own u, ×10): `fit` (D364: once across the row's own width, -0.5 to 0.5, a ring included: one repeat round), else a ring's whole-number wrap, else the plain tile. */
+/** u for one row of `K` vertices whose arc lengths are `arc[k]` (from the mesh's own u, ×10): `fit` (once across the row's own width, -0.5 to 0.5, a ring included: one repeat round), else a ring's whole-number wrap, else the plain tile. */
 function rowU(arc, K, ring, tileWidth, fit, edge, ringN = null) {
   const out = new Float64Array(K);
   const w = arc[K - 1] - arc[0];

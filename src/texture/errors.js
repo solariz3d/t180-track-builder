@@ -5,7 +5,7 @@
 //   NOT_AN_IMAGE         neither a PNG nor a JPEG
 //   BAD_TEXTURE_NAME     a name the document would refuse (src/doc/textures.js NAME_RE)
 //   NO_SUCH_TEXTURE      a slot names a texture the set was not given
-//   COMPRESSED_NORMAL    a normal map asked to be block-compressed (§5b: "no compressed normal maps")
+//   COMPRESSED_NORMAL    a normal map asked to be block-compressed (AC supports no compressed normal maps)
 'use strict';
 class TextureError extends Error { constructor(code, message) { super(message); this.name = 'TextureError'; this.code = code; } }
 module.exports = { TextureError };

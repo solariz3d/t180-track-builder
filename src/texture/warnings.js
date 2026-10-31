@@ -1,4 +1,4 @@
-// warnings.js: what AC can't do, said before export (ARCHITECTURE §5b: "Warns about what AC can't do, e.g. compressed
+// warnings.js: what AC can't do, said before export (the design: "Warns about what AC can't do, e.g. compressed
 // normal maps aren't supported"; "Budget: a live count of texture memory and resolution per track").
 //
 //   checkTexture({ width, height }, { role, compress }) -> [{ level: 'refuse' | 'warn', code, message }]
@@ -6,12 +6,12 @@
 //                                                   over, warnings }
 //   ddsBytes(width, height) -> the bytes of this builder's DDS: 128 + 4·Σ (every mip level's texels), A8R8G8B8
 //
-// REFUSED: larger than 8192 on a side (AC's limit, §5b); a normal map with block compression asked for.
+// REFUSED: larger than 8192 on a side (AC's limit); a normal map with block compression asked for.
 // WARNED: a side that is not a power of two (mips of such a texture average uneven footprints, and older GPUs and
 // tools handle them worse); a texture whose alpha is not all 255 on a slot drawn opaque (the alpha is ignored).
-// THE BUDGET'S LEVELS. §5b gives the counter and no number: "Budget: a live count of texture memory and resolution per
-// track, because textures are the easiest way to make a track heavy" (docs/ARCHITECTURE.md:125). So the levels are
-// MEASURED, on the eleven T-180 tracks FINDINGS §1 studies (results/t180.json), as the texture bytes their kn5 files embed
+// THE BUDGET'S LEVELS. The design gives the counter and no number: "Budget: a live count of texture memory and resolution per
+// track, because textures are the easiest way to make a track heavy". So the levels are
+// MEASURED, on the eleven T-180 tracks studied, as the texture bytes their kn5 files embed
 // (read 2026-09-27 on this machine, texture blocks only): sorted, 0.8, 6.2, 14.9, 47.8, 50.5, 53.7, 93.7, 173.3, 191.7,
 // 236.9, 313.6 MiB. AMBER above the median (56,278,061 B: heavier than half of them), RED above the largest
 // (328,874,531 B: heavier than every one). Those are file bytes and theirs are mostly block-compressed, while this
@@ -22,7 +22,7 @@ const { MAX_SIDE } = require('./dds.js');
 
 const pow2 = (n) => n > 0 && (n & (n - 1)) === 0;
 const AMBER_BYTES = 56278061, RED_BYTES = 328874531;
-const DEFAULT_LIMIT = AMBER_BYTES;   // D172's name for the amber line, kept for its callers
+const DEFAULT_LIMIT = AMBER_BYTES;   // the earlier name for the amber line, kept for its callers
 /** This builder's DDS size (src/texture/dds.js): the 128-byte header, then 4 bytes a texel over the whole mip chain. */
 function ddsBytes(w, h) { let n = 0; for (;;) { n += w * h; if (w === 1 && h === 1) break; w = Math.max(1, w >> 1); h = Math.max(1, h >> 1); } return 128 + 4 * n; }
 
@@ -38,7 +38,7 @@ function checkTexture(img, { role = 'diffuse', compress = false, name = 'texture
 /**
  * Texture memory of a set: one row per texture (resolution, format, mips, bytes, the slots that use it), the bytes per
  * slot (a texture two slots share counts in each), the total (each texture once), and its level. `limitBytes` is the
- * amber line under its D172 name.
+ * amber line under its earlier name.
  */
 function budget(textures, { amberBytes, redBytes = RED_BYTES, limitBytes } = {}) {
   const amber = amberBytes !== undefined ? amberBytes : limitBytes !== undefined ? limitBytes : AMBER_BYTES;
