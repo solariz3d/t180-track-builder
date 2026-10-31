@@ -891,9 +891,9 @@ mod tests {
 
     #[test]
     fn the_files_body_reads_back_as_the_webview_packs_it() {
-        let head = r#"{"dir":"C:\\Spiele\\é","folder":"t180b_x","files":[{"path":"t180b_x.kn5","len":4},{"path":"empty.ini","len":0},{"path":"ai/fast_lane.ai","len":2}]}"#;
+        let head = r#"{"dir":"C:\\Tracks\\é","folder":"t180b_x","files":[{"path":"t180b_x.kn5","len":4},{"path":"empty.ini","len":0},{"path":"ai/fast_lane.ai","len":2}]}"#;
         let (h, files) = files_from_body(&pack(head, &[&[1, 2, 3, 255], &[], &[7, 0]])).unwrap();
-        assert_eq!((h.dir.as_deref(), h.folder.as_str(), h.fbx), (Some("C:\\Spiele\\é"), "t180b_x", false));
+        assert_eq!((h.dir.as_deref(), h.folder.as_str(), h.fbx), (Some("C:\\Tracks\\é"), "t180b_x", false));
         assert_eq!(files, vec![("t180b_x.kn5".to_string(), vec![1, 2, 3, 255]), ("empty.ini".to_string(), vec![]), ("ai/fast_lane.ai".to_string(), vec![7, 0])]);
         let (h, files) = files_from_body(&pack(r#"{"folder":"t180b_y","fbx":true,"files":[]}"#, &[])).unwrap();
         assert_eq!((h.dir, h.folder.as_str(), h.fbx, files.len()), (None, "t180b_y", true, 0));

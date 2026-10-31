@@ -23,8 +23,8 @@ function unpack(body) {
 
 test('row 1: the body is the header length, the header and the files\' bytes in order, and reads back to the same arguments and bytes', () => {
   const files = [{ path: 't180b_x/t180b_x.kn5', bytes: new Uint8Array([1, 2, 3, 255]) }, { path: 't180b_x/empty.ini', bytes: new Uint8Array(0) }, { path: 't180b_x/ui/ü.json', bytes: Buffer.from('{"a":1}') }];
-  const body = packFiles({ dir: 'C:\\Spiele\\Ordner é', folder: 't180b_x' }, files), back = unpack(body);
-  assert.deepEqual(back.head, { dir: 'C:\\Spiele\\Ordner é', folder: 't180b_x', files: files.map((f) => ({ path: f.path, len: f.bytes.length })) });
+  const body = packFiles({ dir: 'C:\\Tracks\\folder é', folder: 't180b_x' }, files), back = unpack(body);
+  assert.deepEqual(back.head, { dir: 'C:\\Tracks\\folder é', folder: 't180b_x', files: files.map((f) => ({ path: f.path, len: f.bytes.length })) });
   assert.deepEqual(back.files.map((f) => [f.path, Array.from(f.bytes)]), files.map((f) => [f.path, Array.from(f.bytes)]));
   assert.equal(back.rest, 0, 'nothing after the last file');
   const none = unpack(packFiles({ folder: 't180b_x' }, []));

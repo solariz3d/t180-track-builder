@@ -87,7 +87,7 @@ test('the overlap check (lean) answers exactly what the full mesh and full valid
   assert.deepEqual(OJ.mergeParts(OJ.runJob({ doc: cp.doc, closed: true, part: 'rest' }), OJ.runJob({ doc: cp.doc, closed: true, part: 'rays' })), want, 'its two parts, put together');
 });
 
-// 2026-10-31 (D583), measured on ELYSIUM: the track checker's worker held 1.4 GB in the built app, of which about 0.9 GB was a full mesh of the
+// 2026-10-31, measured on ELYSIUM: the track checker's worker held 1.4 GB in the built app, of which about 0.9 GB was a full mesh of the
 // whole track. PATH_ONLY stubbed buildMesh and its kin, but the track model builds through their generator twins (buildMeshSteps, reuseMeshSteps,
 // extendMeshSteps) when the geometry it is given has them, and PATH_ONLY passed the real ones through. Every mesh builder src/geom exports is counted here,
 // on a check of a closed lap and on growing an open one: none may run.
@@ -105,6 +105,7 @@ test('the track checker\'s worker job meshes nothing: no mesh builder of src/geo
     assert.equal(out.error, null, 'the check ran');
     const open = { ...cp.doc, closed: false };
     job.run({ doc: { ...open, pieces: open.pieces.slice(0, -1) } }); job.run({ doc: open });   // a full build of an open track, then a piece placed at its end
+    job.run({ doc: cp.doc });   // the lap closed again: the model reuses what it kept of the closed lap (reuseMeshSteps)
     assert.deepEqual(calls, {}, 'no mesh builder ran');
   } finally {
     for (const k of builders) G[k] = real[k];
