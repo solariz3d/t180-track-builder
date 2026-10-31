@@ -29,9 +29,9 @@ All notable changes to this project are recorded here. The format follows
 
 - **Warnings read in every look.** The checker's red and amber lines were drawn in the road's own paint colours, which some looks' panels all but swallowed (amber on Skyline was nearly invisible). Each look now writes its warnings in its own red and amber, the same colours made lighter or darker until they read clearly on that look's panels.
 
-- **The bank at start comes in over a longer, gentler swell.** It leans further into the piece and turns less steeply on the way: a 41° bank at start now swells in over about 150 m instead of 115 m, rolling at most 0.65 °/m instead of 0.84.
-
 - **A bank, cup or edge "at start" leans in straight away, then eases into its value.** It starts turning within the first 20 m, then fades in gently over about 300 m: a 41° bank at start is at 3.7° by 20 m, 29° by 100 m, and done by about 235 m, rolling at most 0.37 °/m instead of 0.84. A very large change still takes longer, so the road never rolls faster than the track check allows.
+
+- **The road is firmer under a car at very high load: cars that used to sink through the surface in the hardest corners now stay on it.** This applies to tracks exported from now on, in Assetto Corsa with Custom Shaders Patch; a track already installed keeps its old road until it is exported again.
 
 ### Fixed
 
@@ -40,8 +40,6 @@ All notable changes to this project are recorded here. The format follows
 - **The preview keeps a tube's texture right after a sculpt elsewhere on the tube.** Narrowing or widening one part of a tube could leave the texture on another part, which the edit did not rebuild, laid with the old number of repeats round until the next full rebuild. It now follows at once.
 
 - **A jump can take off from a lip you raised with the brush; it no longer has to be flat road.** The flight leaves from the lip as you shaped it, at its height and along its slope, and the landing is placed from there.
-
-### Fixed
 
 - **Sector gates now stand on flat road, and the export refuses a gate laid across a steep bank.** Each sector gate goes to the nearest stretch that is level across, not climbing steeply, and not inside a loop or a tube; if there is none nearby, the gate is left out and the export says so. The export also refuses any gate tilted more than 15° from level, or a sector gate narrower than half the road seen from above.
 
