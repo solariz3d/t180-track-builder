@@ -9,6 +9,8 @@ All notable changes to this project are recorded here. The format follows
 
 - **A wheel that drops off the edge of the road now has something under it.** Every exported track gets an edge apron: a darker strip 2 m wide outside each open edge, sloping down at 25°, so a wheel that runs wide lands on it and rides back up when you steer in, instead of slipping under the road and hanging there. It also closes the gap you could see from the side between the road and the dark underside. It is not laid on walls, inside closed tubes or beside the pit lane, and the road itself is unchanged.
 
+- **Choose how wide the edge apron is, track by track: File ▸ Edge apron.** It is 2.0 m unless you change it, from 0 to 10 m, and it is saved with the track; tracks saved before open at 2.0 m. At 0 there is no apron: the gap under the edge is closed to the eye only, and a wheel can still drop under.
+
 ## [0.4.30] - 2026-10-29
 
 ### Added

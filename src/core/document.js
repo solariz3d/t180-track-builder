@@ -321,6 +321,20 @@ function setSpawns(doc, sp) {
   return deepFreeze(checkDoc(sp == null ? rest : { ...rest, spawns: normSpawns(sp) }));
 }
 
+// ── THE EDGE APRON (D572: a wheel that drops off the edge came back in under the road). The width, across, of the apron the export lays outside every open road
+// edge (src/export/apron.js). Absent on a track that never set one (byte for byte as before), and absent means the exporter's own default (APRON_WIDTH_M, 2.0 m);
+// 0 is kept as 0: no apron, the side face only. The limits are the exporter's, so a width it would refuse is refused here first.
+const APRON_MAX_M = 10;
+function checkEdgeApron(w, at = 'edgeApronM') {
+  if (typeof w !== 'number' || !Number.isFinite(w) || w < 0 || w > APRON_MAX_M) throw new CoreError('BAD_APRON', `${at}: the edge apron's width must be from 0 to ${APRON_MAX_M} m, got ${JSON.stringify(w)}`);
+  return w;
+}
+/** The document with edge apron width `w` (metres), or with NO edgeApronM field when w is null (the export's default). */
+function setEdgeApron(doc, w) {
+  const { edgeApronM, ...rest } = doc;
+  return deepFreeze(checkDoc(w == null ? rest : { ...rest, edgeApronM: q(checkEdgeApron(w), DEC.m) }));
+}
+
 function roadPiece({ id, length, family = 'bowl', from = null, channels, knotM = KNOT_M, knots, cup = false, edge = false, tube = false, grip = GRIP_DEFAULT }) {
   checkGrip(grip);
   if (!(length > 0)) throw new CoreError('BAD_LENGTH', `a piece's length must be positive, got ${length}`);
@@ -453,6 +467,7 @@ function checkDoc(doc) {
   if (!Array.isArray(doc.pieces)) bad('pieces must be an array');
   if (doc.spawns !== undefined) checkSpawns(doc.spawns);
   if (doc.pitLane !== undefined) checkPitLane(doc.pitLane);
+  if (doc.edgeApronM !== undefined) checkEdgeApron(doc.edgeApronM);
   const ids = new Set(); let prev = null, flight = null;
   doc.pieces.forEach((P, i) => {
     const at = `piece ${i} (${P && P.id})`;
@@ -508,7 +523,8 @@ function serialize(doc) {
   const head = [`  "schema": ${JSON.stringify(doc.pieces.some(isNegEdge) ? SCHEMA_NEG : doc.pieces.some(isSplit) ? SCHEMA_SPLIT : doc.schema)}`, `  "generator": ${JSON.stringify(GENERATOR)}`, `  "name": ${JSON.stringify(doc.name)}`, `  "closed": ${doc.closed}`,
     `  "start": ${JSON.stringify({ pos: doc.start.pos, heading: doc.start.heading, pitch: doc.start.pitch })}`, `  "nextId": ${doc.nextId}`,
     ...(doc.spawns !== undefined ? [`  "spawns": ${JSON.stringify(normSpawns(doc.spawns))}`] : []),
-    ...(doc.pitLane !== undefined ? [`  "pitLane": ${JSON.stringify(normPitLane(doc.pitLane))}`] : [])];
+    ...(doc.pitLane !== undefined ? [`  "pitLane": ${JSON.stringify(normPitLane(doc.pitLane))}`] : []),
+    ...(doc.edgeApronM !== undefined ? [`  "edgeApronM": ${JSON.stringify(q(doc.edgeApronM, DEC.m))}`] : [])];
   const body = doc.pieces.length ? `  "pieces": [\n${doc.pieces.map((P) => `    ${pieceText(P)}`).join(',\n')}\n  ]` : '  "pieces": []';
   return `{\n${[...head, body].join(',\n')}\n}\n`;
 }
@@ -536,7 +552,8 @@ function parse(text) {
       channels: Object.fromEntries(CHANNELS.map((ch) => [ch, parseChannel(P, ch, upgrade)])) })));
   const s = o.start || {}, start = { pos: (s.pos || []).map((x) => q(x, DEC.m)), heading: q(s.heading, DEC.rad), pitch: q(s.pitch, DEC.rad) };
   return deepFreeze(checkDoc({ schema: SCHEMA, generator: GENERATOR, name: o.name, closed: o.closed, start, nextId: o.nextId, pieces: convertOldFlights(read, start),
-    ...(o.spawns !== undefined ? { spawns: normSpawns(o.spawns) } : {}), ...(o.pitLane !== undefined ? { pitLane: normPitLane(o.pitLane) } : {}) }));
+    ...(o.spawns !== undefined ? { spawns: normSpawns(o.spawns) } : {}), ...(o.pitLane !== undefined ? { pitLane: normPitLane(o.pitLane) } : {}),
+    ...(o.edgeApronM !== undefined ? { edgeApronM: q(checkEdgeApron(o.edgeApronM), DEC.m) } : {}) }));
 }
 
 /**
@@ -718,7 +735,7 @@ module.exports = {
   fromPositionFit,
   SCHEMA, SCHEMA_SPLIT, isSplit, SCHEMA_NEG, isNegEdge, EDGE_FLOOR, OLD_SCHEMAS, CHANNELS, OFFSETS, FAMILIES, DEC, KNOT_M, CUP_MAX, CUP_JOINT_DEG, legacyEdgeDeg, endIsCup, fillCup, CoreError,
   OPTIONAL, OPT_DEFAULT, EDGE_EPS, S_MIN, S_MAX, S_DEFAULT, TUBE_MAX, TUBE_EDGE_MAX, kindOf, endKind, tubeSlotMinDeg,
-  checkSpawns, normSpawns, setSpawns, SPAWN_COUNT_MAX, SPAWN_GAP_MAX, checkPitLane, normPitLane, setPitLane, PIT_DEFAULT, PIT_BOXES_MAX,
+  checkSpawns, normSpawns, setSpawns, SPAWN_COUNT_MAX, SPAWN_GAP_MAX, checkPitLane, normPitLane, setPitLane, PIT_DEFAULT, PIT_BOXES_MAX, checkEdgeApron, setEdgeApron, APRON_MAX_M,
   channelValue, createDoc, roadPiece, flightPiece, GRIP_MIN, GRIP_MAX, GRIP_DEFAULT, gripOf, checkGrip, withGrip, setGrip, FLIGHT_POSE, FLIGHT_MIN_M, LANDING_DEFAULT, afterFlight, appendPiece, endState, pieceEnd, channelAt, valuesAt, knotVector, evenKnots, fitChannel, checkDoc,
   serialize, parse, createHistory, commit, beginDrag, dragTo, endDrag, undo, redo,
 };
