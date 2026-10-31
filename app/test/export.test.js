@@ -89,9 +89,9 @@ test('the app\'s export is node\'s export: the same kn5, AI line and text files 
 
 test('a red track is refused, nothing is written, and the reds are shown with their sources', async () => {
   // 150 km/h: far below any take-off speed the 12 m jump's 6.3 g landing needs, so this track is red whatever the
-  // details of the jump check. At D169 it was 300 km/h, 13 km/h either side of the line depending on the jump check's
-  // version, and it flipped when validation changed (D170).
-  // CHANGED D250 (the user: jumps are tuned by driving them): the jump this row used is a WARNING now and the same lap EXPORTS (checked: 1 jump
+  // details of the jump check. It was once 300 km/h, 13 km/h either side of the line depending on the jump check's
+  // version, and it flipped when validation changed.
+  // CHANGED (the user: jumps are tuned by driving them): the jump this row used is a WARNING now and the same lap EXPORTS (checked: 1 jump
   // warning, nothing red), so the red track is an INVERSION taken at 150 km/h instead, which the lap proof fails on (leaves-surface): the row's subject,
   // a red track refused with every red's source shown, is unchanged
   const jl = closed('Inversion Loop', ['straight', 'straight', 'inversion', 'straight', 'tight', 'straight', 'tight'], 150);
@@ -160,7 +160,7 @@ test('the app\'s exporter writes a textured floor into the kn5 it hands the nati
   const get = async (p) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
   const ex = await makeExporter(get);
   let d = D.createDoc('Tex');
-  // the stadium closes by symmetry only with four 90° tights, level: NAMED, since from D182 the default tight is the
+  // the stadium closes by symmetry only with four 90° tights, level: NAMED, since the default tight is the
   // library's median corner (88.3°) and banks into the turn
   const tight90 = { font: 'flat', handles: { turn: Math.PI / 2, roll1: 0 } };
   for (const [w, o] of [['straight', { handles: { length: 600 } }], ['tight', tight90], ['tight', tight90], ['straight', { handles: { length: 600 } }], ['tight', tight90], ['tight', tight90]]) d = D.appendWord(d, w, { ...o, speed: 200 / 3.6 });
@@ -180,7 +180,7 @@ test('a track saved under a name exports as t180b_<that name>, not as the name i
   assert.deepEqual(st.writes.map((w) => w.folder), ['t180b_monza'], s.getState().message);
 });
 
-// ── D226: an EMPTY folder made directly in content\tracks is not another track: export to content\tracks and remove it ──
+// ── An EMPTY folder made directly in content\tracks is not another track: export to content\tracks and remove it ──
 // A temp folder tree stands in for the AC install (nothing real is touched): <tmp>/content/tracks/<picked>.
 const acTree = (...inside) => { const tracks = path.join(tmp(), 'content', 'tracks'); fs.mkdirSync(tracks, { recursive: true }); for (const n of inside) fs.mkdirSync(path.join(tracks, n), { recursive: true }); return tracks; };
 const listing = (d) => fs.readdirSync(d).sort();
@@ -244,7 +244,7 @@ test('D226 if the empty folder cannot be removed the export still stands, and th
   assert.match(s.getState().message, /could not remove the empty folder "T180 OVAL" \(access denied\): delete it by hand/); assert.ok(fs.existsSync(picked));
 });
 
-// D234 REVERSED this D226 rule. D226 left the picked empty folder where it was after a refused or failed export ("nothing is removed unless the export was written"), and the
+// A later change REVERSED this rule. It first left the picked empty folder where it was after a refused or failed export ("nothing is removed unless the export was written"), and the
 // user's own exports then left an empty track folder that Content Manager listed as damaged. The folder was made for an export: it goes whatever the outcome.
 test('D226 (reversed by D234) a refused export into an EMPTY picked folder removes the folder too, and says so; nothing is written', async () => {
   const tracks = acTree('T180 OVAL'), picked = path.join(tracks, 'T180 OVAL'), st = storage();
@@ -263,7 +263,7 @@ test('D226 a t180b_ folder, content\\tracks itself and a folder elsewhere export
   assert.deepEqual(st.emptyChecks, [], 'the folder check is asked only about a refused folder directly in content\\tracks');
 });
 
-// ── D234, the words page's shell: the same rule ──
+// ── The words page's shell: the same rule ──
 const GONE_W = /removed the empty folder "T180 TUBE V2" so Content Manager does not list it/;
 test('D234 (words) an OPEN track and a RED into an EMPTY picked folder: refused, shown, folder gone; a non-empty one untouched; a failed write still tidies; a success unchanged', async () => {
   const open = D.appendWord(D.appendWord(D.createDoc('Open'), 'straight'), 'turn');

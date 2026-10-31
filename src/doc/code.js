@@ -1,9 +1,9 @@
-// code.js: SHAREABLE CODES (ARCHITECTURE §1.1: "That makes tracks shareable (PolyTrack-style codes), diffable,
+// code.js: SHAREABLE CODES (the design: "That makes tracks shareable (PolyTrack-style codes), diffable,
 // undoable"). A whole document, a saved piece or phrase, or a texture pack, as ONE line of copy-paste text.
 //
 //   t180<kind><version>.<payload>.<check>
 //     kind     d = a track document, p = a piece or phrase (the library's piece file), k = a texture pack, e = an EQUATION track
-//              (D239: the core document, src/core/document.js; the builder now makes only these, and d and p are the old Pieces builder's)
+//              (the core document, src/core/document.js; the builder now makes only these, and d and p are the old Pieces builder's)
 //     version  1: the CODE format (the document inside carries its own schema, migrated or refused by src/doc)
 //     payload  the object's CANONICAL text (serialize), UTF-8, raw DEFLATE (src/texture/deflate.js: the same encoder in
 //              node and in the app, so one track has one code), in base64url (A–Z a–z 0–9 - _, no padding: URL-safe)
@@ -95,7 +95,7 @@ const packToCode = (pack) => encode('k', require('./packs.js').serializePack(pac
 function packFromCode(code) { const { text } = decode(code, 'k'); require('./packs.js').parsePack(text); return text; }
 const coreToCode = (doc) => encode('e', require('../core/document.js').serialize(doc));
 // A pasted code is untrusted: a document the core's parse refuses keeps its CoreError; one whose malformed field the parse trips over
-// before checking it ('"pieces": "no"' is a TypeError in src/core/document.js parse) is refused here as CODE_MALFORMED, by name (D239).
+// before checking it ('"pieces": "no"' is a TypeError in src/core/document.js parse) is refused here as CODE_MALFORMED, by name.
 // ONLY that: the module is required OUTSIDE the try, and any other error escapes loudly (a module that cannot load is the app's fault,
 // never the code's: the first version of this caught everything and reported a missing "fs" as a malformed code).
 function coreFromCode(code) {

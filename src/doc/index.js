@@ -1,4 +1,4 @@
-// index.js: the document model (ARCHITECTURE §2), in one require.
+// index.js: the document model, in one require.
 'use strict';
 const vocab = require('./vocab.js');
 const serial = require('./serial.js');

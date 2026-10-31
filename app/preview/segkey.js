@@ -1,4 +1,4 @@
-// segkey.js: a segment's CHANGE KEY, fast (D235 part 2). The track model decides what to rebuild by comparing each resolved segment with the one it meshed last time
+// segkey.js: a segment's CHANGE KEY, fast. The track model decides what to rebuild by comparing each resolved segment with the one it meshed last time
 // (app/preview/trackmodel.js). That key was JSON.stringify(segment), which for a core track is a few kilobytes of numbers per 2 m segment: about 60 ms on the long
 // open tube per ghost keystroke (and the same again inside every full update). This is the same equality, hashed: every number by its bits, every string by its
 // characters, arrays and objects by length / keys in order, with two 32-bit accumulators (a 64-bit key: a false "unchanged" would show a stale mesh, so it is
@@ -26,7 +26,7 @@ function feed(v) {
 function keyOf(seg) { h1 = 0x811c9dc5; h2 = 0x1b873593; feed(seg); return h1.toString(36) + '.' + h2.toString(36); }
 
 /**
- * D483: a and b have the same content as keyOf reads it, told without hashing: what the cheap ghost asks of the chords it meshed last time (app/preview/trackmodel.js),
+ * a and b have the same content as keyOf reads it, told without hashing: what the cheap ghost asks of the chords it meshed last time (app/preview/trackmodel.js),
  * where hashing 48 chords of about 10 kB each on every move of a drag with an edge typed was 176 ms of 974. It walks both together and stops at the first difference. It
  * may say "different" where the keys would agree (a NaN, a key that holds undefined, objects of different kinds): that costs a rebuild, never a stale mesh. It never says
  * "same" where they would differ: one object reached from both sides is taken as the same only when it is FROZEN all the way down (it cannot have changed since it was
@@ -41,7 +41,7 @@ function sameContent(a, b) {
   return true;
 }
 /**
- * D483: the content of v AS IT IS NOW, for sameContent to compare with later: what is frozen all the way down is kept as it is (it cannot change), plain objects and arrays
+ * The content of v AS IT IS NOW, for sameContent to compare with later: what is frozen all the way down is kept as it is (it cannot change), plain objects and arrays
  * are copied (so a change made in place afterwards, by anyone, does not reach the copy), and anything else becomes a mark that sameContent never takes as the same.
  */
 const UNSEEN = Symbol('not kept');

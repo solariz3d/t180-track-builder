@@ -1,4 +1,4 @@
-// menubar.js: THE MENUS ON THE TOP BAR (D355, contract M). Every menu is the page's existing drop-down, a <details class="more"> with a .more-menu under its
+// menubar.js: THE MENUS ON THE TOP BAR (contract M). Every menu is the page's existing drop-down, a <details class="more"> with a .more-menu under its
 // <summary> (app/index.html, the look Pieces ▾ and the old ⋯ menu had), so a menu looks and opens exactly as those did. This file only fills them and keeps
 // them tidy: it builds a menu's entries each time it opens (so a tick shows the setting as it is now), keeps one menu open at a time, and closes it on
 // Esc, on a press outside it, and after a command runs.
@@ -9,7 +9,7 @@
 //                                            group of ticks can act as a choice of one)
 //   { label, panel, title?, disabled? }      a button that opens a panel inside the menu: panel(holder, ctx) runs each time it opens, and what it returns (a
 //                                            function, or an object with unmount()) is called when it closes, when the menu closes, and before the menu is rebuilt
-//                                            (A's panels return { unmount }; C's lend returns the function that puts its fields back)
+//                                            (some panels return { unmount }; a lend returns the function that puts its fields back)
 //   { section }                              a heading, in the page's h3 style
 //   { separator }                            a hairline
 //   { node }                                 (the page's own use) an element already on the page, moved in as it is, so its id and wiring stay

@@ -26,7 +26,7 @@ const sustained = (r) => r.amber.filter((a) => a.reason === 'load-sustained');
 test('row 1: a load past the line held longer than the time is AMBER, never red, with its source, on the line that carries it', () => {
   const r = held(70, 1.2), a = sustained(r);
   assert.strictEqual(a.length, 1, JSON.stringify(r.amber.map((x) => x.reason)));
-  assert.match(a[0].source, /D341|FINDINGS/);
+  assert.match(a[0].source, /a recorded run: 56-62 g held for about 2 s/);   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
   assert.strictEqual(a[0].u, -6, 'the wall line carries it');
   assert.ok(Math.abs(a[0].worst - 70) < 0.5, `worst ${a[0].worst}`);
   assert.deepStrictEqual(r.red.map((x) => x.reason), [], 'advisory: never red');

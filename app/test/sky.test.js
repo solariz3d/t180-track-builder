@@ -1,17 +1,17 @@
 // sky.test.js: node --test app/test/sky.test.js
-// D384 part 1 (pane B): the skin skies become a skybox. The WebGL view draws the sky at infinity in a full-screen pass before the track, each pixel's
+// The skin skies become a skybox. The WebGL view draws the sky at infinity in a full-screen pass before the track, each pixel's
 // direction from the inverse of the camera's view-projection with the rotation only, so the sky stays put in the world as the camera turns. Stated first:
 //   · a sky feature moves on screen by exactly the camera's yaw (where a point infinitely far in that direction projects); moving or zooming without
 //     turning leaves every sky direction, and the pass's calls, unchanged
-//   · 'none' (SIGIL, the one skin left without a sky since D384 widened) draws the very calls cbd7a40 (v0.4.3) drew: no sky pass at all
+//   · 'none' (SIGIL, the one skin left without a sky since the skies were widened) draws the very calls cbd7a40 (v0.4.3) drew: no sky pass at all
 //   · an unknown style fails loudly, at setTheme and through the registry
 //   · the skin names its sky with --sky-style (and --sky-a/b/c, falling back to --sky); Skyline's is 'sun', and its screen-pinned overlay is gone
 //   · the drift stops under prefers-reduced-motion: the preview hands the pass t = 0
-//   · D384 widened: Glass names the new 'prism' sky (a registered style the page's loader loads); SIGIL alone names none. D416: Glass names the
+//   · widened: Glass names the new 'prism' sky (a registered style the page's loader loads); SIGIL alone names none. Later, Glass names the
 //     'river' sky instead, and the prism stays a built style
-//   · D391: every style keeps the two GLSL rules (no smoothstep with literal edge0 >= edge1, no sin hash), and the check is not vacuous
-//   · D393: A's probe forms pin the rules' edges (the hash by its fract(sin( shape, exponent literals judged, a sine wave of a dot product kept)
-//   · D398: the shared pass dithers every style by one 8-bit step (its banding is measured in app/test/sky-dither.test.js, in headless Chrome)
+//   · every style keeps the two GLSL rules (no smoothstep with literal edge0 >= edge1, no sin hash), and the check is not vacuous
+//   · a review's probe forms pin the rules' edges (the hash by its fract(sin( shape, exponent literals judged, a sine wave of a dot product kept)
+//   · the shared pass dithers every style by one 8-bit step (its banding is measured in app/test/sky-dither.test.js, in headless Chrome)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -70,7 +70,7 @@ test('the sky pass runs before the track, over the whole view, without writing d
   assert.match(R.SKY_VS, /uFwd \+ aPos\.x \* uRight \+ aPos\.y \* uUp/, 'the vertex shader builds each ray from the basis');
 });
 
-// AMENDED (0.4.29): D524 (0eb6f25, the user's road lines breaking into dashes far off) pulls each line vertex toward the camera (renderer.js LINE_BIAS), so the line vertex
+// AMENDED (0.4.29): a fix (0eb6f25, the user's road lines breaking into dashes far off) pulls each line vertex toward the camera (renderer.js LINE_BIAS), so the line vertex
 // shader is no longer cbd7a40's. The rule this row pins is that 'none' draws no sky and changes nothing else, so it now expects cbd7a40's calls with that one shader source
 // swapped for today's, and checks the swap happens exactly once; every other call is cbd7a40's as before. The fixture file is unchanged.
 const LINE_VS_CBD = 'void main(){ gl_Position = uVP * uModel * vec4(aPos, 1.0); vDepth = gl_Position.w; }';
@@ -87,7 +87,7 @@ test('an unknown sky style fails loudly, at setTheme and in the registry; a styl
   assert.throws(() => r.setTheme({ skyStyle: 'clouds' }), /no style named "clouds"/);
   assert.throws(() => r.setTheme({ skyStyle: 3 }), /no style named 3/);
   assert.throws(() => SKY.patternSource('Sun'), /no style named "Sun"/);
-  // AMENDED (D405): the rule changed by name: a sixth style, city (Skyline Night's). AMENDED (D416): a seventh, river (Glass's new sky)
+  // AMENDED: the rule changed by name: a sixth style, city (Skyline Night's). AMENDED: a seventh, river (Glass's new sky)
   assert.deepEqual([...SKY.STYLES], ['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']);
   assert.equal(SKY.patternSource('none'), null);
   assert.match(SKY.patternSource('sun'), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/);
@@ -115,7 +115,7 @@ test('the skin names its sky with --sky-style, and its sky colours with --sky-a/
   assert.equal(R.themeFrom(tokens({ '--sky-style': ' "aurora" ' })).skyStyle, 'aurora', 'quotes and spaces are not part of the name');
   const css = fs.readFileSync(path.join(ADIR, 'themes', 'skyline.css'), 'utf8');
   assert.match(css, /\[data-theme="skyline"\]\s*\{[^}]*--sky-style:\s*sun;/, 'Skyline names the sun');
-  // the screen-pinned haze is gone; the rule that stays only keeps the base's dark lens vignette off a light sky, as D379 did
+  // the screen-pinned haze is gone; the rule that stays only keeps the base's dark lens vignette off a light sky, as an earlier change did
   const after = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/#preview::after\s*\{([^}]*)\}/g)].map((m) => m[1].trim());
   assert.deepEqual(after, ['background: none;'], 'Skyline\'s screen-pinned sky overlay is gone: its view overlay draws nothing');
 });
@@ -128,7 +128,7 @@ test('D405: Skyline Night names the city sky, a built style that keeps the GLSL 
   assert.match(css, /\[data-theme="skyline-night"\]\s*\{[^}]*--sky-style:\s*city;/, 'Skyline Night names the city');
 });
 
-// AMENDED (D416): the rule changed by name: Glass names its new sky, the river; the prism (its sky from D384 widened to D416) stays a built style
+// AMENDED: the rule changed by name: Glass names its new sky, the river; the prism (its previous sky) stays a built style
 test('Glass names the river sky, a built style that keeps the GLSL rules; the prism stays built; SIGIL alone names none', () => {
   for (const s of ['river', 'prism']) assert.match(SKY.patternSource(s), /vec3\s+skyPattern\s*\(\s*vec3\s+dir\s*,\s*float\s+t\s*\)/, `${s} is built`);
   assert.deepEqual(SKY.contractProblems('river', SKY.patternSource('river')), [], 'river keeps the D391 rules');
@@ -161,7 +161,7 @@ test('the drift stops under prefers-reduced-motion: the preview hands the sky pa
   assert.ok(moving.length >= 3 && moving[moving.length - 1] > moving[0], `the sky drifts in time (${moving})`);
   assert.ok(still.length >= 3 && still.every((t) => t === 0), `reduced motion: every frame at t = 0 (${still})`);
 });
-// D391 (E's 0.4.4 review, findings 1 and 3; the librarian's ruling, exo_memory/librarian/2026-10-18.md 13:33): the sky contract's two GLSL rules.
+// From the 0.4.4 review (2026-10-18): the sky contract's two GLSL rules.
 // A literal smoothstep whose edge0 >= edge1 is undefined in GLSL ES 1.00, and a sin hash (fract(sin(dot(p, ...)) * k)) feeds sin arguments in the
 // tens of thousands, which GPUs reduce differently. Every style is checked as its module writes it (not through patternSource, which now refuses them).
 test('D391: every sky style keeps the GLSL rules: no smoothstep with literal edge0 >= edge1, no sin hash', () => {
@@ -178,7 +178,7 @@ test('D391: the GLSL rule check refuses each broken form and keeps the good ones
     assert.deepEqual(SKY.contractProblems('t', good), [], `kept: ${good}`);
   }
 });
-// D393 (A's review 7 of D391, findings 1 and 2; the librarian's ruling, exo_memory/librarian/2026-10-18.md 13:59): the rules' edges, pinned by A's probe forms.
+// From a review of those rules (2026-10-18): the rules' edges, pinned by the review's probe forms.
 // The hash rule keys on the hash's SHAPE, fract(sin(...)), whatever the argument; a plain sine wave of a dot product is not a hash and passes. Exponent
 // literals are literals, so their edges are judged like any other; edges written as names or expressions are not judged.
 test('D393: A\'s probe forms: the dot-less and the via-variable sin hash and exponent-literal reversed edges are refused; a sine wave of a dot product passes', () => {

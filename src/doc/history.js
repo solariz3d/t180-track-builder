@@ -1,4 +1,4 @@
-// history.js: undo as the document's history (ARCHITECTURE §2: "Undo is the document's history (immutable snapshots or
+// history.js: undo as the document's history (the design: "Undo is the document's history (immutable snapshots or
 // patches), and a whole drag is one entry"). Snapshots: every document is frozen (document.js), so keeping the object
 // IS keeping the state, and undo hands back the very object, byte-identical when serialised.
 //

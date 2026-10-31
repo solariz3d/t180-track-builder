@@ -1,5 +1,5 @@
 // drag-ghost.test.js: node --test app/test/drag-ghost.test.js   (under the heavy-run lock)
-// D404 (the user: "even turning a 1000m straight isnt smooth and laggy as hell"): a handle drag rebuilt the ghost of the next piece on every pointer move, in 2 m chords, so a
+// (the user: "even turning a 1000m straight isnt smooth and laggy as hell"): a handle drag rebuilt the ghost of the next piece on every pointer move, in 2 m chords, so a
 // 1,000 m piece cost about 20 ms a move and a 5,000 m one 100 ms. While a handle is dragged the ghost is now cut into a few dozen chords with a few dozen path stations (the
 // shell's candidate(opts, { coarse }) and the track model's cheap ghost); what is placed, what is exported and the full ghost built when the drag stops are what they were.
 // The work here is counted, not timed (the frame times are app/test/drag-frame.test.js). Rows:
@@ -10,9 +10,9 @@
 //   4  the cheap ghost: its path has at most 64 stations (plus its chords) on a 5,000 m piece, it is a ghost of the same piece (end where the full one's is), the placed path and mesh are
 //      untouched, a full ghost after it is the full ghost, and the handles sit where the full ghost's would put them
 //   5  the maths under it, and the documents it makes: a placed track and three corner solves hash to what c2d7cb5 made (the fit shares its system across channels, the solve its start); the maths under it: basisN is basis (the same doubles), channelValue is channelAt(...).v, extendCorner answers the same fields with the same object and a changed field with a new one
-//   6  (E's review §0, §1e) a kept answer is never handed back across a non-finite number: on one document, kh null is accepted and kept, and kh NaN after it is refused
+//   6  (from a review) a kept answer is never handed back across a non-finite number: on one document, kh null is accepted and kept, and kh NaN after it is refused
 //      (BAD_TARGET) as on a fresh document, through extendCorner (its memo) and through Turn by alone (solve's start memo); Infinity and -Infinity likewise
-//   7  (E's review §1b) a document frozen at the top only, its pieces array still open, keeps no answer: an edit in place is answered afresh
+//   7  (from a review) a document frozen at the top only, its pieces array still open, keeps no answer: an edit in place is answered afresh
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

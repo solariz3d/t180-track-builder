@@ -227,7 +227,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   stage('building the mesh and checking it for self-intersection');
   const mesh = buildMesh(p, segs, { ...(o.mesh || {}), selfCheck });
   const warnings = [];
-  if (!selfCheck) warnings.push('self-intersection NOT checked: selfCheck is false (ARCHITECTURE.md:58, :84)');
+  if (!selfCheck) warnings.push('self-intersection NOT checked: the self-check was turned off');
 
   // validation first: a red refuses, amber warns
   // the built physics road, in world space, for the downforce-ray gap check (src/validate/raygap.js; R1)
@@ -245,7 +245,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   }
   if (v.lap && v.lap.ok === false) {
     const w = v.lap.where, ss = w.map((x) => x.s);
-    red.push({ reason: 'lap-proof', s0: Math.min(...ss), s1: Math.max(...ss), source: 'ARCHITECTURE.md:88-89', where: w, detail: w.map((x) => `${x.reason} at s ${x.s.toFixed(1)} m`).join(', ') });
+    red.push({ reason: 'lap-proof', s0: Math.min(...ss), s1: Math.max(...ss), source: 'a closed lap must hold the car all the way round', where: w, detail: w.map((x) => `${x.reason} at s ${x.s.toFixed(1)} m`).join(', ') });
   }
   const testReds = test ? red.map(rangeText) : [];   // TEST: every red is listed, none blocks
   if (red.length && !test) throw new ExportError('RED', `validation is red, nothing written: ${red.map(rangeText).join('; ')}`, { red });
@@ -314,7 +314,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const dupMarkers = [...names].filter(([k, c]) => c > 1 && /^AC_/.test(k)).map(([k]) => k);
   if (dupMarkers.length) throw new ExportError('MARKERS', `marker names appear twice: ${dupMarkers.join(', ')}`);
   const dup = [...names].filter(([, c]) => c > 1);
-  if (dup.length) warnings.push(`${dup.length} mesh-node names repeat in the builder's scene (e.g. ${dup[0][0]} ×${dup[0][1]}); the kn5 gets unique names (acready.js), INTERFACES §2, C's mesh.js safeId`);
+  if (dup.length) warnings.push(`${dup.length} mesh-node names repeat in the builder's scene (e.g. ${dup[0][0]} ×${dup[0][1]}); the kn5 gets unique names, so AC still loads every mesh`);
   try { validateScene(scene); } catch (e) { throw new ExportError('BAD_SCENE', e.message); }
   // the race-direction heading test only where the grid's direction applies: the grid and the start gate (the hotlap and
   // sectors sit wherever the run-up and the words put them, and are checked along their own road by src/markers)
@@ -417,7 +417,7 @@ function writeExport(b, { outDir, variant, t180 }) {
   const folders = vs.map((v) => writeFolder(b, outDir, v));
   const warnings = [...b.warnings];
   if (t180) warnings.push(trackfiles.CSP_ONLY_WARNING);
-  if (t180 && vs.some((v) => !v.softCollision)) warnings.push('noblock: the folder WITHOUT the soft-collision block is RED by ARCHITECTURE §4 (a missing soft-collision block); written only as the §10.1 soft-road control, on request');
+  if (t180 && vs.some((v) => !v.softCollision)) warnings.push('noblock: this folder has no soft-collision block, which the checker reds; it is written only on request, as a test without the soft road');
   return { folders, geometry: b.geometry, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: sha256(b.ai), aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.placed.filter((m) => !m.error).map((m) => ({ name: m.name, kind: m.kind, s: m.s, u: m.u, h: m.h })), paint: b.markers.paint.items, layout: b.markers.layout, warnings };
 }
 

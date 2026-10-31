@@ -1,8 +1,8 @@
 // Headless tests for app/validate-ui: the colour along the track, its live update at the build head, and the jump's
 // two landings. They drive the real src/doc, src/geom and src/validate. Run: node --test "app/test/*.test.js"
 'use strict';
-// The ripple (p-d182-ripple-E): this file names the words it relies on (test/pre_d182_words.js: the pre-D182 words), because it
-// tests a BEHAVIOUR, not the defaults. Under D182's measured words a straight is a 31 m bowl with 60° walls and a turn banks.
+// This file names the words it relies on (test/pre_d182_words.js: the words before they were measured), because it
+// tests a BEHAVIOUR, not the defaults. Under the measured words a straight is a 31 m bowl with 60° walls and a turn banks.
 const { appendOld } = require('../../test/pre_d182_words.js');
 const test = require('node:test');
 const assert = require('node:assert');
@@ -25,7 +25,7 @@ function build(words, speed) {
 const levelsOf = (map) => map.stations.map((e) => Array.from(e.levels));
 
 // ── the mapping, at every threshold ──
-// AMENDED (D517): the stop moved 20 → 25 g, the plateau D515 measured (src/validate/limits.js suspensionStopG)
+// AMENDED: the stop moved 20 → 25 g, the measured plateau (src/validate/limits.js suspensionStopG)
 test('load → colour: below the 25 g suspension stop is clear, and exactly 25 g is info', () => {
   assert.strictEqual(MACH6.suspensionStopG, 25);
   assert.deepStrictEqual([loadLevel(24.999999), loadLevel(25)], [LEVEL.CLEAR, LEVEL.INFO]);
@@ -44,7 +44,7 @@ test('load → colour reads the car it is given, not constants', () => {
   const car = { ...MACH6, suspensionStopG: 10, provenG: 50 };
   assert.deepStrictEqual([9.9, 10, 50, 50.1].map((g) => loadLevel(g, car)), [LEVEL.CLEAR, LEVEL.INFO, LEVEL.INFO, LEVEL.AMBER]);
 });
-// CHANGED 2026-09-27 (D179): was PALETTE.length === 4. The drag window added a fifth level, PENDING; the test's claim,
+// CHANGED 2026-09-27: was PALETTE.length === 4. The drag window added a fifth level, PENDING; the test's claim,
 // one colour per level, is now counted from LEVEL, and pending must not look like clear (it was not checked, not found clean)
 test('the palette has one colour per level, red and amber distinct, and pending unlike clear', () => {
   assert.strictEqual(PALETTE.length, Object.keys(LEVEL).length);
@@ -148,7 +148,7 @@ test('each caught arc ends exactly at validation\'s touchdown x, and the landing
   assert.ok(ja.zone.s0 > jp.s + jp.gap - 1, 'the zone is on the landing road, past the gap');
 });
 test('a landing the flight misses has no touchdown and no zone', () => {
-  // CHANGED 2026-09-27 (D170): was 300 km/h, "the 6.3 g one needs 86.4 m/s", a figure from validation's one-station-long
+  // CHANGED 2026-09-27: was 300 km/h, "the 6.3 g one needs 86.4 m/s", a figure from validation's one-station-long
   // gap (13 m for a 12 m jump). Measured from the lip, the 6.3 g landing needs 287 km/h, so 300 now lands both. 250 misses it.
   const { segs, path } = jumpTrack(250);
   const r = validate(path, segs, {}), [ja] = jumpArcs(r, path);
@@ -170,7 +170,7 @@ test('with no speed model, each landing is drawn at its own minimum speed, which
     }
   });
 });
-// CHANGED 2026-09-27 (D170): a jump word now carries its landing ramp (A's model, D170), so a jump at the head is no
+// CHANGED 2026-09-27: a jump word now carries its landing ramp (the document model's change), so a jump at the head is no
 // longer waiting. A flight that ends the path is still possible below the model; it is built here from resolve's
 // segments with any landing ramp removed.
 test('a jump still waiting for its landing at the open head is not drawn', () => {
@@ -181,7 +181,7 @@ test('a jump still waiting for its landing at the open head is not drawn', () =>
   assert.deepStrictEqual(jumpArcs(r, path), []);
 });
 
-// D177 window pass and A's D180 check of the installed app: the panel shows findings in PLAIN WORDS; the rule id and
+// From a pass over the window and a check of the installed app: the panel shows findings in PLAIN WORDS; the rule id and
 // its source are kept, in the tooltip. No shown string carries a rule id or a ".md:" line.
 const L = require('../validate-ui/labels.js'), { SRC: RULES } = require('../../src/validate/index.js');
 const IDS = Object.keys(RULES);

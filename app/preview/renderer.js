@@ -1,8 +1,8 @@
 // renderer.js: draws the track batches (app/preview/batches.js) with WebGL. Started from blackbox's renderer
 // (ui/glcore.js): a shader that fails to compile says so loudly instead of leaving a silent black canvas, and the camera
 // math is column-major (app/camera/math.js). The track only: no environment. The ground grid at y = 0 and the
-// head marker are editor UI (the D170 review, item 7), not scenery. A skin may name a SKY (D384, below), drawn at infinity behind the track.
-// THE AC LOOK (D177) started from the same blackbox files: ui/glcore.js's per-material uniforms (ksSpecular /
+// head marker are editor UI, not scenery. A skin may name a SKY (below), drawn at infinity behind the track.
+// THE AC LOOK started from the same blackbox files: ui/glcore.js's per-material uniforms (ksSpecular /
 // ksSpecularEXP / ksEmissive / ksAlphaRef from the kn5, a hemisphere ambient, the eye for the half vector) and ui/kn5.js's
 // reading of the property block (ten floats, A B C D); the lighting itself is actools' (app/preview/acshaders.js).
 //
@@ -11,12 +11,12 @@
 //       extras = { grid, marker, ghost, lines = true, overlay }   grid / marker from look.js (world lines); ghost = batches drawn
 //                                                         see-through, with their own lines, after the placed track;
 //                                                         overlay = [{ positions (world line pairs), colour, alpha? }] drawn last,
-//                                                         over everything (D237: the mirror ghost)
+//                                                         over everything (the mirror ghost)
 //       extras.look = 'ac' (the default) with extras.materialOf(batch) -> the EXPORTED material ({ name, shader, props,
 //                   samplers, alphaTested }) and extras.textures (a Map, texture file -> { width, height, rgba }): each
 //                   batch is drawn with its AC shader (acshaders.js, the Ms-PL port) and the uniforms aclook.js
 //                   uniformsFor gives, under aclook.js's ONE reference light. look 'words', or no materialOf, draws the
-//                   D170 per-word colours instead. A sampler whose texture is not in extras.textures gets one white texel.
+//                   per-word colours instead. A sampler whose texture is not in extras.textures gets one white texel.
 //   r.setTheme({ sky, fog, edge, tie, grid, skyStyle, skyA, skyB, skyC })   a skin's 3D colours and its sky (themeFrom(tokens) reads them)
 //   extras.time = seconds, for the sky's drift (the preview hands 0 under prefers-reduced-motion)
 //   r.stats()  -> { uploads, buffers, draws, lines, acDraws, textures, chunks }      uploads = bufferData + texImage2D calls;
@@ -24,7 +24,7 @@
 //   createRenderer(gl, { chunkVertices })   the most vertices in one chunk (default and maximum 65,535: Uint16 indices)
 //   r.dispose()
 //
-// LIGHT (D170 item 1): the lighting is look.js `shade`, compiled into the fragment shader from the same constants, so a
+// LIGHT: the lighting is look.js `shade`, compiled into the fragment shader from the same constants, so a
 // floor, a bank and a wall of one colour read as different surfaces. The ROAD LINES (edges, centre, ties across) come
 // from look.js `linesFor`, in each cell's own frame, drawn with its model matrix.
 //
@@ -66,7 +66,7 @@ void main(){
   float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0);
   gl_FragColor = vec4(mix(uFog, uColour * lit, fog), uAlpha);
 }`;
-// D524 (the user, "test bump": "in the previewer it looks glitchy from the white lines"): a line is lifted 3 cm along the road's normal (look.js LIFT), and seen
+// (the user, "test bump": "in the previewer it looks glitchy from the white lines"): a line is lifted 3 cm along the road's normal (look.js LIFT), and seen
 // nearly edge-on (a camera low over a long road, or a bump's tilted rows) those 3 cm part line and road by under a millimetre along the view ray, below what the
 // depth buffer tells apart at 150 m, so the lines came out dashed. Each line vertex is pulled toward the camera by LINE_BIAS in normalised depth (z -= LINE_BIAS w):
 // with the near plane at 0.5 m (app/camera/math.js) that is LINE_BIAS d² metres at distance d (2 mm at 10 m, 7 cm at 60 m, 45 cm at 150 m, 20 m at 1 km), growing
@@ -85,16 +85,16 @@ uniform vec3 uColour; uniform float uAlpha; uniform vec3 uFog; uniform float uFo
 /* uFade = (near, far): the line fades out between them (D179: ties at a distance); far <= near: no fade */
 void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = uFade.y > uFade.x ? clamp((uFade.y - vDepth) / (uFade.y - uFade.x), 0.0, 1.0) : 1.0; gl_FragColor = vec4(mix(uFog, uColour, fog), uAlpha * f); }`;
 
-// THE SKY (D384; the user, 2026-10-18: the skin's sky should stay put in the world as you move around, not follow the camera). A full-screen pass
+// THE SKY (the user, 2026-10-18: the skin's sky should stay put in the world as you move around, not follow the camera). A full-screen pass
 // drawn after the clear and before everything else, without depth: each pixel's ray is the camera's ROTATION only (skyBasis, from the inverse of the
 // view-projection with the eye at the origin), so turning moves the sky across the screen and moving or zooming does not. The pattern is the skin's style
 // (app/preview/sky/<style>.js: vec3 skyPattern(vec3 dir, float t)); 'none' draws no pass, which is today's frame call for call.
-// D398: the pass breaks its own 8-bit banding. A long, slow gradient written to 8 bits per channel shows as steps (down a column of open sky, one colour
+// The pass breaks its own 8-bit banding. A long, slow gradient written to 8 bits per channel shows as steps (down a column of open sky, one colour
 // ran up to 174 px); the pass adds a 4x4 ordered (Bayer) offset on the pixel, half a step either way of one 8-bit step, so the steps break into a
 // screen too fine to see. It is a fix, not a look: the quiet band near the horizon moves by at most 0.009 of its ratio to the fog
 // (app/test/sky-dither.test.js). The pattern is the pass's own (pass_bayer2/4), so every style gets it and none carries a copy.
 // The index is built from small whole numbers only (each pixel's x and y mod 4: pass_bayer2 is the 2x2 index 0, 2, 3, 1, and the 4x4 is four times the
-// low bits' index plus the high bits'), because a form with the row squared lost levels in float32 above about 2,364 px (A's review 11); and it is
+// low bits' index plus the high bits'), because a form with the row squared lost levels in float32 above about 2,364 px (found in review); and it is
 // centred, (k + 0.5) / 16 for k = 0..15, so the offset runs from -15/32 to +15/32 of a step and averages zero.
 const SKY_VS = `
 attribute vec2 aPos;
@@ -169,7 +169,7 @@ function groupBatches(batches, keyOf, maxV = CHUNK_V) {
   const out = []; let cur = null;
   for (const b of batches) {
     const k = keyOf(b), nv = b.positions.length / 3;
-    const moved = !!b.xform;   // D421 part 4: a batch MOVED as one piece (its xform) is never merged with one that is not, so the chunk keeps its baked arrays and is drawn under the move
+    const moved = !!b.xform;   // a batch MOVED as one piece (its xform) is never merged with one that is not, so the chunk keeps its baked arrays and is drawn under the move
     if (!cur || cur.key !== k || cur.moved !== moved || cur.nv + nv > maxV) { cur = { key: k, moved, list: [], nv: 0 }; out.push(cur); }
     cur.list.push(b); cur.nv += nv;
   }
@@ -204,13 +204,13 @@ function chunkLines(c) {
   }
   return c.lines;
 }
-// D421 part 4 (a sculpt drag moves the road after the brushed stretch as one piece, app/preview/trackmodel.js): a batch may carry `xform`, a rigid move of the whole road after
+// (a sculpt drag moves the road after the brushed stretch as one piece, app/preview/trackmodel.js): a batch may carry `xform`, a rigid move of the whole road after
 // the window (row-vector, world = local · model · xform). Its chunk is baked with the batch's own placed matrix as always, so it is reused from one step to the next, and only
-// the matrix it is drawn under changes: re-baking every chunk of a 10 km lap's moved road on every step was most of a drag frame (2026-10-20, a page profile of D421 row 3)
+// the matrix it is drawn under changes: re-baking every chunk of a 10 km lap's moved road on every step was most of a drag frame (2026-10-20, a page profile of a sculpt drag on a 10 km lap)
 const chunkModel = (c) => (c.list && c.list[0] && c.list[0].xform) || c.model;
 const COLOURS = Object.freeze({ edge: [0.93, 0.93, 0.88], tie: [0.06, 0.07, 0.09], grid: [0.2, 0.23, 0.28], marker: [1.0, 0.62, 0.15], ghost: [0.73, 0.66, 1.0] });   // 2026-10-14, Sigil: the accent violet (#b9a8ff); was sky blue, which tinted the whole view
 const GHOST_ALPHA = 0.42;
-// D179, the usability pass (p-d179-lookpass-C §1): the ties are one near-black line per station; from overhead or far
+// From a usability pass: the ties are one near-black line per station; from overhead or far
 // away they outnumber the pixels and hatch the lit road dark (measured: 42–51% of the overhead's drawn pixels near-black),
 // so they fade out between 60 and 250 m (the edges stay). And the canvas is cleared darker than the FOG colour: surfaces
 // facing away from the sun (a tube's ceiling, L* about 14) were only ΔE00 about 6 from a background that was the fog colour.
@@ -219,15 +219,15 @@ const TIE_FADE = Object.freeze([60, 250]);
 const CLEAR = Object.freeze([0.024, 0.023, 0.021]);   // 2026-10-14, Sigil: a warm near-black (was a blue-black, 0.03 0.035 0.045); still darker than the fog
 
 const FOG = Object.freeze([0.07, 0.08, 0.1]);
-// D381: a skin's 3D colours, read from the page's tokens (app/lib/tokens.js); each falls back to the literal here, which is SIGIL's token value too
-// D384: and its sky, --sky-style (none when the page has none) with --sky-a, --sky-b and --sky-c, each falling back to the skin's --sky
+// a skin's 3D colours, read from the page's tokens (app/lib/tokens.js); each falls back to the literal here, which is SIGIL's token value too
+// and its sky, --sky-style (none when the page has none) with --sky-a, --sky-b and --sky-c, each falling back to the skin's --sky
 const themeFrom = (T) => { const sky = T.floats('--sky', CLEAR); return { sky, fog: T.floats('--fog', FOG), edge: T.floats('--road-edge', COLOURS.edge), tie: T.floats('--road-tie', COLOURS.tie), grid: T.floats('--ground-grid', COLOURS.grid),
   skyStyle: T.word('--sky-style', 'none'), skyA: T.floats('--sky-a', sky), skyB: T.floats('--sky-b', sky), skyC: T.floats('--sky-c', sky) }; };
 
 function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');
-  let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // D381: setTheme replaces these, the clear colour and the fog
-  let skyStyle = 'none', skyProg = null, skyBuf = null, skyA = null, skyB = null, skyC = null;   // D384: the sky; a colour left null is the clear colour
+  let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // setTheme replaces these, the clear colour and the fog
+  let skyStyle = 'none', skyProg = null, skyBuf = null, skyA = null, skyB = null, skyC = null;   // the sky; a colour left null is the clear colour
   if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -366,8 +366,8 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     if (!blending) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
     for (const c of chunks) {
       const L = chunkLines(c); if (!L) continue;
-      const IDENTITY = chunkModel(c);   // D421 part 4: the chunk's own matrix (the identity, or a moved road's xform); named so, the line below keeps the words a mutation harness anchors on (L17)
-      // D425: THE WASH of what a sculpt drag moves: a chunk whose batches carry `tint` (trackmodel.js dragFrame) has its edge lines drawn in that colour, the uniform each chunk sets
+      const IDENTITY = chunkModel(c);   // the chunk's own matrix (the identity, or a moved road's xform); named so, the line below keeps the words a mutation harness anchors on (L17)
+      // THE WASH of what a sculpt drag moves: a chunk whose batches carry `tint` (trackmodel.js dragFrame) has its edge lines drawn in that colour, the uniform each chunk sets
       // already: no draw, no geometry and no upload added (a second blended pass of the moved road's surfaces cost row 3 about 0.5-0.8 ms a frame in headless Chrome, 2026-10-22)
       const tint = c.list && c.list[0] && c.list[0].tint;
       drawLines(L.edges, IDENTITY, tint || edge, alpha);
@@ -375,7 +375,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     }
     if (!blending) gl.disable(gl.BLEND);
   }
-  // D410: uPx, the angle one device pixel spans at the middle of the view (2 |up| / height: up is the half-height ray offset at unit forward), so a
+  // uPx, the angle one device pixel spans at the middle of the view (2 |up| / height: up is the half-height ray offset at unit forward), so a
   // style can draw a point or an edge a pixel wide at any window size (prism's stars and moon limb)
   function drawSky(B, time, height) {
     const sp = skyProg, s = clear, a = skyA || clear, b = skyB || clear, c = skyC || clear;
@@ -390,7 +390,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   }
   return {
-    /** D381: a skin's 3D colours, { sky, fog, edge, tie, grid }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
+    /** A skin's 3D colours, { sky, fog, edge, tie, grid }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
     setTheme(t) {
       const ok = (v) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x >= 0 && x <= 1);
       for (const k of Object.keys(t || {})) {
@@ -398,7 +398,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
         if (!['sky', 'fog', 'edge', 'tie', 'grid', 'skyA', 'skyB', 'skyC'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
         if (!ok(t[k])) throw new Error(`renderer: the ${k} colour is three numbers from 0 to 1, got ${JSON.stringify(t[k])}`);
       }
-      // D384: the sky is compiled here, so an unknown style or a pattern that does not compile fails at the skin change, before anything is replaced
+      // the sky is compiled here, so an unknown style or a pattern that does not compile fails at the skin change, before anything is replaced
       if (t && t.skyStyle !== undefined && t.skyStyle !== skyStyle) {
         const src = SKY.patternSource(t.skyStyle), next = src ? program(SKY_VS, skyFS(src)) : null;
         if (next) {
@@ -439,19 +439,19 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
         drawRoadLines(ghost, vp, 0.8, true);
         gl.depthMask(true); gl.disable(gl.BLEND);
       }
-      // D237 (app/preview/guides.js): the 3D grid's lattice and the symmetry axes, faint blended lines that the track hides where it is nearer: depth-tested, no depth written
+      // (app/preview/guides.js) the 3D grid's lattice and the symmetry axes, faint blended lines that the track hides where it is nearer: depth-tested, no depth written
       if (extras.depthLines && extras.depthLines.length) {
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); use(line, vp); gl.enableVertexAttribArray(line.pos);
         for (const o of extras.depthLines) drawLines(o.positions, IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);
         gl.depthMask(true); gl.disable(gl.BLEND);
       }
       if (extras.marker) { gl.disable(gl.DEPTH_TEST); use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.marker.positions, IDENTITY, COLOURS.marker, 1); gl.enable(gl.DEPTH_TEST); }
-      // the OVERLAY (D237: the mirror ghost), world line pairs drawn over everything, each with its own colour
+      // the OVERLAY (the mirror ghost), world line pairs drawn over everything, each with its own colour
       if (extras.overlay && extras.overlay.length) {
         gl.disable(gl.DEPTH_TEST); use(line, vp); gl.enableVertexAttribArray(line.pos);
         for (const o of extras.overlay) {
-          if (o.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }   // D425: the sculpt wash and hatch are see-through (`blend`); the guides' entries are drawn as before
-          drawLines(o.positions, o.model || IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);   // D425: `model`, a line list moved with the road it lies on
+          if (o.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }   // the sculpt wash and hatch are see-through (`blend`); the guides' entries are drawn as before
+          drawLines(o.positions, o.model || IDENTITY, o.colour, o.alpha === undefined ? 1 : o.alpha);   // `model`, a line list moved with the road it lies on
           if (o.blend) gl.disable(gl.BLEND);
         }
         gl.enable(gl.DEPTH_TEST);

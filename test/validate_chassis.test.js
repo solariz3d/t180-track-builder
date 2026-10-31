@@ -130,7 +130,7 @@ test('row 4: the words read as a limit known to hold, not a fault, and each rule
   assert.match(swerve, /60°/); assert.match(swerve, /as hard as the hardest one driven \(3\.2 g, which recovered\)/); assert.match(swerve, /1 g/); assert.match(swerve, /estimate/);
   assert.match(stops, /25 g/); assert.match(stops, /step or a gap/);
   const hot = run(turnAt(13.3e-3), kmh(720)), sw = run(wall(85 * DEG, -5.05 * DEG, 0), kmh(819));
-  assert.match(hot.amber.find((x) => x.reason === 'load-on-the-chassis').source, /D515/);
-  assert.match(sw.amber.find((x) => x.reason === 'wall-swerve').source, /D515/);
-  assert.match(hot.info.find((x) => x.reason === 'on-the-stops').source, /D515.*FINDINGS\.md:103/);
+  assert.match(hot.amber.find((x) => x.reason === 'load-on-the-chassis').source, /reaches the road mesh at about 47 g/);   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
+  assert.match(sw.amber.find((x) => x.reason === 'wall-swerve').source, /swerved the car 3.16 g sideways/);   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
+  assert.match(hot.info.find((x) => x.reason === 'on-the-stops').source, /stops from about 25 g \(an earlier reading gave about 20 g\)/);   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
 });

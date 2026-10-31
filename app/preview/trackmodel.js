@@ -1,11 +1,11 @@
-// trackmodel.js: keeps the preview's path and mesh in step with the resolved document, in the UI process (ARCHITECTURE
-// §9: "The geometry core runs in the UI process … Mesh data must never cross Tauri IPC during a drag"). No GL, no DOM.
+// trackmodel.js: keeps the preview's path and mesh in step with the resolved document, in the UI process
+// (the geometry core runs in the UI process; mesh data must never cross Tauri IPC during a drag). No GL, no DOM.
 //
 //   const tm = createTrackModel();
 //   tm.update(resolved)  -> { path, mesh, how, batches, bounds, segments, g, fromS }
 //                           resolved = the shell's state.resolved (src/doc resolve). g is the first segment that changed
 //                           and fromS where it starts (the old end for an append); both null for 'full', 'same', 'empty'.
-// ONE SHARED PATH (D177, the librarian's ruling "one shared path between the preview and validation"): the path this
+// ONE SHARED PATH ("one shared path between the preview and validation"): the path this
 // model keeps IS the track's path. Validation reads it with segments/how/g/fromS instead of growing a second one
 // (app/preview/index.js publishes it as the 't180:track' event). Its step is STEP, the export's own
 // (src/export/fromwords.js `step: 2`), so the preview meshes the stations the kn5 is meshed from.
@@ -13,15 +13,15 @@
 // It does the least work the geometry allows for the change:
 //   'same'     nothing changed
 //   'extend'   words were appended at the open end: extendPath + extendMesh (the build head; cost does not grow with
-//              the track, D166 addendum 1)
+//              the track)
 //   'sculpt'   a word changed, same count or more: rebuildPathFrom + sculptMesh from the first changed segment (only
-//              what changed is remeshed; later pieces move, D166 addendum 2)
+//              what changed is remeshed; later pieces move)
 //   'full'     anything else: the first build, a removal or undo past the end, a closed loop, or a change of options
 // In every case the result equals a full build of the same segments (app/test/preview.test.js checks each path).
 // A document that does not resolve (state.resolved === null) keeps the last good track and says so.
 // Each result also carries `bounds`, the world box of every vertex (look.js worldBounds), for the overhead fit and the grid.
 //
-//   tm.ghostFor(candidate)   the GHOST of the next piece (the D170 review, item 6): `candidate` is the resolved
+//   tm.ghostFor(candidate)   the GHOST of the next piece: `candidate` is the resolved
 //                            document WITH the word appended (its segments extend the placed ones). The ghost is built
 //                            exactly as placing would build it (extendPath + extendMesh), on COPIES of the live path and
 //                            mesh, so the placed track is untouched; it returns the new pieces' batches and the seam onto
@@ -34,7 +34,7 @@ const { batchesOf } = require('./batches.js');
 const { coarsen, coarsenRun, mergeChords, sameSegment, CHEAP_FACTOR } = require('./coarse.js');
 const { worldBounds, linesFor } = require('./look.js');
 
-const { keyOf: hashOf, sameContent, snapshot } = require('./segkey.js');   // D235: the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
+const { keyOf: hashOf, sameContent, snapshot } = require('./segkey.js');   // the change key of a segment, hashed (it was JSON.stringify: tens of milliseconds a ghost keystroke on a long tube)
 // A FROZEN segment cannot change, so its key is hashed once and remembered: the equation core's shell reuses an unchanged piece's segments,
 // deep-frozen (src/core/adapter.js toSegments `cache`), and keying all 3,077 of a 9-piece track's on every placement was about 55 ms of it.
 // Any other segment is hashed every time, as before.
@@ -47,20 +47,20 @@ const keyOf = (seg) => {
 };
 /** m between path stations: the export's (src/export/fromwords.js buildExport `step: 2`) and validation's. */
 const STEP = 2;
-/** D404: a CHEAP ghost (a handle being dragged) puts at most this many path stations on its new pieces, so the mesh it builds on every move of the pointer costs the same at
+/** A CHEAP ghost (a handle being dragged) puts at most this many path stations on its new pieces, so the mesh it builds on every move of the pointer costs the same at
  *  1,000 m as at 20,000 m; a ghost shorter than CHEAP_STATIONS x STEP (128 m) is built as it always was. The release builds the full ghost. */
 const CHEAP_STATIONS = 64, CHEAP_SUBSTEP = 4;   // and integrates them in steps of CHEAP_SUBSTEP m (the path's own is 0.25: Gauss-Legendre over a metre is exact to far below a millimetre)
-/** D421 part 4: a SCULPT drag's window is drawn from about DRAG_CHORDS merged chords (coarse.js mergeChords, D404's GHOST_TURN for the heading), none shorter than DRAG_MIN_M unless the
- *  heading, pitch or roll cap ends it sooner, however long the window is (a short window of a tube, whose rows are heavy, was 61 chords of 2 m: 14 ms a step, probe2 of 2026-10-20). */
+/** A SCULPT drag's window is drawn from about DRAG_CHORDS merged chords (coarse.js mergeChords, the cheap ghost's GHOST_TURN for the heading), none shorter than DRAG_MIN_M unless the
+ *  heading, pitch or roll cap ends it sooner, however long the window is (a short window of a tube, whose rows are heavy, was 61 chords of 2 m: 14 ms a step, measured 2026-10-20). */
 const DRAG_CHORDS = 24, DRAG_MIN_M = 8, DRAG_TURN = 0.03, DRAG_ROLL = 0.05;
-/** D425 (P's design §1 cue 4, §5): WHAT MOVES is washed in the tool's colour, Build's handle colour for the same channel (app/core/handles.js): white for a length (Stretch), violet for the
+/** WHAT MOVES is washed in the tool's colour, Build's handle colour for the same channel (app/core/handles.js): white for a length (Stretch), violet for the
  *  turn rate (Bend, or Smooth on it), yellow for the climb rate (Climb, or Smooth on it). Only a route tool moves the road after its window. */
 const WASH = Object.freeze({ length: Object.freeze([1, 1, 1]), kh: Object.freeze([0.725, 0.408, 1]), kv: Object.freeze([1, 0.824, 0.239]) });
 /** The wash of a brush (state.brush, or the page's hover { tool, channel }): its colour, or null for a tool that moves nothing after its window. */
 const washOf = (b) => (!b ? null : b.mode === 'stretch' || b.tool === 'stretch' ? WASH.length : b.channel === 'kh' || b.tool === 'bend' ? WASH.kh : b.channel === 'kv' || b.tool === 'climb' ? WASH.kv : null);
 const RIGID_EPS = 1e-9;   // m and rad: a window end that moved less than this leaves the road after it where it is
 
-// D421 part 4: the rigid move of the road after a sculpted window, as the row-vector matrix a batch's node matrix is multiplied by (world = local · M, mesh.js matrixOf)
+// the rigid move of the road after a sculpted window, as the row-vector matrix a batch's node matrix is multiplied by (world = local · M, mesh.js matrixOf)
 const headingFrame = (sm) => { const T = sm.T, th = Math.atan2(T[0], T[2]), L = [Math.cos(th), 0, -Math.sin(th)]; return { o: sm.pos, T, L, U: [T[1] * L[2] - T[2] * L[1], T[2] * L[0] - T[0] * L[2], T[0] * L[1] - T[1] * L[0]] }; };
 function rigidMove(from, to) {
   // R maps the old frame's axes onto the new one's: R = Σ new_a ⊗ old_a over a = T, L, U; t = to.o − R · from.o
@@ -78,14 +78,14 @@ const plainSample = (x, s, seg) => ({ s, seg, pos: x.pos, T: x.T, L: x.L, U: x.U
 function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   const pathOpts = { step: STEP, ...po };
   // `path` is the BASE path the geometry grows incrementally; `shown` is what everything reads (the mesh, the cameras, the shared
-  // track): the base path LIFTED by resolved.lift when the document has offsets (D186: the equation core's hill and swerve, A's
+  // track): the base path LIFTED by resolved.lift when the document has offsets (the equation core's hill and swerve,
   // src/core/adapter.js offsetPath, which recomputes the frame from the lifted centreline). With no lift they are the same object.
   let path = null, shown = null, mesh = null, keys = [], liftKeys = [], closed = false, last = null, startKey = null, startOpt = null;
-  // D235: `detail` > 1 meshes a COARSER preview (app/preview/coarse.js thins each segment's row grid) while the track is being dragged; 1 is full detail, the export's.
+  // `detail` > 1 meshes a COARSER preview (app/preview/coarse.js thins each segment's row grid) while the track is being dragged; 1 is full detail, the export's.
   // A change of detail is a full rebuild. `lastResolved` is the state's document the last update was built from: the very same object builds nothing again.
   let detail = 1, detailMoved = false, lastResolved = null;
   let lastCheap = null;   // the last CHEAP ghost's mesh and its new chords as they were meshed (segkey.js snapshot), reused by the next one (ghostFor)
-  // D407: THE PLACEMENT TAKES THE GHOST'S WORK. The last FULL ghost (not cheap, full detail) of an extension of the placed track: the placed path and mesh it was grown from, and the path, mesh and
+  // THE PLACEMENT TAKES THE GHOST'S WORK. The last FULL ghost (not cheap, full detail) of an extension of the placed track: the placed path and mesh it was grown from, and the path, mesh and
   // batches it made. A placement whose segments are that ghost's, the very same objects, on the same placed path and mesh, with no offsets to lift, is what extendPath and extendMesh would make of
   // them (the ghost ran them on copies of the same placed track, so it is the same to the byte), so update() takes them instead of building them again (30 ms at 1,000 m, 60 at 2,000), and the
   // placed path and mesh it leaves are untouched, so the undo copy needs no copying. Anything else (a cheap ghost, a coarse detail, a lift, another document) and update() builds as before.
@@ -114,16 +114,16 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     return JSON.stringify([a.pos, a.T, b.pos, b.T]);
   };
   const meshSegs = (segs, lk) => segs.map((s, j) => (lk[j] === null ? s : { ...s, _lift: lk[j] }));
-  // D236: a CLOSED loop is rebuilt in full on every change (it has no open end to extend, and a later piece's placement depends on every earlier one), but its MESH need not be:
+  // a CLOSED loop is rebuilt in full on every change (it has no open end to extend, and a later piece's placement depends on every earlier one), but its MESH need not be:
   // the model keeps the last closed mesh made at each detail (`slots`: segment keys, lift keys, mesh), and a segment whose key is the one it was meshed from keeps its vertex arrays
   // (geom.reuseMesh), so a brush that reaches 60 m of a 6 km loop meshes 60 m, both while dragging (coarse) and when full detail comes back (the pre-drag full mesh is still in its slot).
   const slots = new Map();
   let builtDetail = 1;   // the detail the current mesh was made at
-  /** How many segments of the track as it was are unchanged in the new one, at the same index (0: nothing to keep, or the new track is shorter). D453: not only an
-   *  unchanged PREFIX: a banking Close (D447) changes every placed curve's bank, so a prefix rule kept 0 of 950 placed segments, the straights too; reuseMesh keeps
+  /** How many segments of the track as it was are unchanged in the new one, at the same index (0: nothing to keep, or the new track is shorter). Not only an
+   *  unchanged PREFIX: a banking Close changes every placed curve's bank, so a prefix rule kept 0 of 950 placed segments, the straights too; reuseMesh keeps
    *  each piece on its own flag (and its start's pitch and bank) and meshes the rest again, so a partial keep is as exact as a full one. */
   const keptFrom = (was, nk, lk) => { if (was.keys.length > nk.length) return 0; let g = 0; for (let j = 0; j < was.keys.length; j++) if (was.keys[j] === nk[j] && was.liftKeys[j] === lk[j]) g++; return g; };
-  // D421c: the full rebuild as a generator (the release after a whole-lap re-close meshes a 10 km lap again: about 200 ms in one frame). It runs the very calls full() ran, as their
+  // the full rebuild as a generator (the release after a whole-lap re-close meshes a 10 km lap again: about 200 ms in one frame). It runs the very calls full() ran, as their
   // steps (buildPathSteps, reuseMeshSteps, buildMeshSteps: each its plain twin run to the end, to the byte), and changes the model's state only at its end, so a caller may run it
   // a few milliseconds a frame (the preview after a sculpt release) with the track as it was still on show; update() runs it to the end at once, as before.
   const stepsOr = (steps, plain) => (typeof geom[steps] === 'function' ? geom[steps] : function* (...args) { return geom[plain](...args); });
@@ -136,7 +136,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     if (slot && typeof geom.reuseMesh === 'function' && slot.mesh && slot.keys.length === segs.length) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(slot.mesh, sh, ms, segs.map((_, j) => nk[j] === slot.keys[j] && lk[j] === slot.liftKeys[j]));
     // AN OPEN TRACK CLOSED BY ADDING ROAD (2026-10-15, Finish to start on the user's 24 km ELYSIUM: Apply rebuilt every piece, 6.5 s with the window frozen):
     // every placed piece is the same and lies where it lay, so its mesh is kept and only the new road and the closing joint are made (geom.reuseMesh, grow);
-    // D453: a Close that also banks placed curves (D447) remakes those pieces and the seams beside them, and keeps the rest
+    // a Close that also banks placed curves remakes those pieces and the seams beside them, and keeps the rest
     else if (isClosed && !was.closed && was.mesh && was.mesh._state && was.detail === detail && typeof geom.reuseMesh === 'function' && keptFrom(was, nk, lk) > 0) m = yield* stepsOr('reuseMeshSteps', 'reuseMesh')(was.mesh, sh, ms, segs.map((_, j) => j < was.keys.length && nk[j] === was.keys[j] && lk[j] === was.liftKeys[j]), { grow: true });
     else m = yield* stepsOr('buildMeshSteps', 'buildMesh')(sh, ms, meshOpts);
     path = p; shown = sh; liftKeys = lk; mesh = m;
@@ -145,7 +145,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     return 'full';
   }
 
-  // D407: a full ghost's road lines, made a batch at a time (look.js linesFor keeps them by the batch's positions), so the first frame that draws the ghost does not make them all at once (8 to 19 ms at 2,000 m)
+  // a full ghost's road lines, made a batch at a time (look.js linesFor keeps them by the batch's positions), so the first frame that draws the ghost does not make them all at once (8 to 19 ms at 2,000 m)
   function* warmLines(bs) { for (const b of bs) { linesFor(b); yield; } }
   const adoptable = (segs, lift) => {
     const ad = lastFull;
@@ -154,13 +154,13 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     return (lift ? lift(ad.p) : ad.p) === ad.p;   // no offsets anywhere: the ghost was not lifted, and neither is this
   };
   const unionBounds = (a, b) => (!a ? b : !b ? a : { min: a.min.map((v, d) => Math.min(v, b.min[d])), max: a.max.map((v, d) => Math.max(v, b.max[d])) });
-  // D421 part 4, THE SCULPT DRAG'S FRAME (design §4.3, the degrade ladder). While a brush drag is open nothing placed is rebuilt: the model keeps the path and mesh of the
+  // THE SCULPT DRAG'S FRAME (the degrade ladder). While a brush drag is open nothing placed is rebuilt: the model keeps the path and mesh of the
   // document the drag began on (the full detail, as it was), and each step is drawn from them:
   //   the WINDOW (the segments the step changed, found by identity against that base, and for a hill or swerve the span [s0 − r, s0 + r] its lift reaches) is hidden
   //     and drawn instead as a CHORD GHOST: its segments merged into at most DRAG_CHORDS chords (coarse.js mergeChords), the cheap ghost's row grid (coarsenRun), a path
   //     grown from the base path's own frame at the window's start, lifted by the document's own lift;
   //   the road AFTER the window, when the step moved the window's end (a route tool: a bend, a climb, a stretch), is moved as one rigid body, one matrix per batch, no
-  //     rebuild (the D236 placement); on a CLOSED lap that leaves the lap open while the drag lasts, and the gap from its new end to its start is returned as a line;
+  //     rebuild (as a closed loop's kept mesh is placed, above); on a CLOSED lap that leaves the lap open while the drag lasts, and the gap from its new end to its start is returned as a line;
   //   every other batch is the placed one, untouched.
   // Nothing here closes the lap, checks overlaps, or builds the whole track's segments: the shell gives the step's segments (its cache converts the changed pieces only)
   // and the release builds the exact road from them with update(), as before. The base's state is not changed, so that update diffs against the document the drag began on.
@@ -174,7 +174,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     if (!base || !last || !path || !mesh || !mesh._state || detail !== 1 || builtDetail !== 1 || !Array.isArray(resolved.segments) || !Array.isArray(base.segments)) return null;
     if (resolved === base) return { ...last, how: 'same' };
     if (dragShown && dragShown.resolved === resolved) return dragShown.out;
-    // a close or a new start is not a brush step; a closed lap OPENED for the drag is (the shell's route tools re-close it on release, D421 part 2): it is drawn open, from the closed lap's own path
+    // a close or a new start is not a brush step; a closed lap OPENED for the drag is (the shell's route tools re-close it on release): it is drawn open, from the closed lap's own path
     if ((!!resolved.closed && !base.closed) || JSON.stringify(resolved.start || null) !== JSON.stringify(base.start || null)) return null;
     const lapClosed = !!base.closed;
     const segs = resolved.segments, bs = base.segments, n = segs.length, m = bs.length;
@@ -236,7 +236,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
         if (g >= a && g < bB) continue;
         if (seam && (g === a || g === bB || (moved && closedLap && g === 0))) continue;
         out.push(moved && g >= bB ? { ...bt, xform: X, ...(tint ? { tint } : {}) } : bt);   // the placed matrix kept, the move beside it: the renderer draws the baked chunk under it (renderer.js chunkModel)
-        // D425: and washes it in the tool's colour (`tint`, one uniform for the chunk in the renderer): the road that moves is shown moving, with no geometry added
+        // and washes it in the tool's colour (`tint`, one uniform for the chunk in the renderer): the road that moves is shown moving, with no geometry added
       }
       for (const gb of ghostBatches) out.push(gb);
       return out;
@@ -247,11 +247,11 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
   }
   const tm = {
     /**
-     * update(resolved, { drag }) with `drag` the shell's open brush (state.brush, D421 part 4): the drag's frame (dragFrame above), nothing placed rebuilt; how 'drag', and
+     * update(resolved, { drag }) with `drag` the shell's open brush (state.brush): the drag's frame (dragFrame above), nothing placed rebuilt; how 'drag', and
      * `drag` on the result: { base (the placed track's own result), compose(list), gap (a closed lap's open end, a line) | null, window, moved, move (the matrix the road after the window is moved by) | null, chords }.
      */
     update(resolved, opts) { const it = tm.updateSteps(resolved, opts); let r = it.next(); while (!r.done) r = it.next(); return r.value; },
-    /** D421c: update() as a generator: it yields only inside a full rebuild (fullSteps), so the preview can build a lap after a whole-lap re-close a slice at a time; run to the end, it is update(). */
+    /** update() as a generator: it yields only inside a full rebuild (fullSteps), so the preview can build a lap after a whole-lap re-close a slice at a time; run to the end, it is update(). */
     *updateSteps(resolved, opts) {
       if (opts && opts.drag && resolved) { const f = dragFrame(resolved, opts.drag); if (f) return f; }
       dragShown = null;
@@ -259,7 +259,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       // the very same document as the last build (a state change that is not an edit: a message, a brush ending): nothing to build, a closed loop included
       if (last && resolved === lastResolved && !detailMoved) return { ...last, how: 'same' };
       const segs = detail > 1 ? coarsen(resolved.segments, detail) : resolved.segments, isClosed = !!resolved.closed, lift = typeof resolved.lift === 'function' ? resolved.lift : null;
-      // resolved.start (D186, the equation core): where the track starts, its heading and PITCH; a new start rebuilds in full
+      // resolved.start (the equation core): where the track starts, its heading and PITCH; a new start rebuilds in full
       const sk = resolved.start ? JSON.stringify(resolved.start) : null, startMoved = sk !== startKey; startKey = sk; startOpt = resolved.start || null;
       if (!Array.isArray(segs)) throw new Error('trackModel: resolved.segments is missing');
       if (!segs.length) { path = null; shown = null; mesh = null; keys = []; liftKeys = []; closed = isClosed; lastResolved = resolved; detailMoved = false; last = { path: null, mesh, how: 'empty', batches: [], segments: resolved.segments, g: null, fromS: null }; return last; }
@@ -322,20 +322,20 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
     setDetail(k) { const d = Number.isFinite(k) && k >= 2 ? Math.floor(k) : 1; if (d !== detail) { detail = d; detailMoved = true; } return detail; },
     get detail() { return detail; },
     /**
-     * D266 item 2: `cheap` builds the ghost while a handle is being DRAGGED: the NEW pieces' row grid thinned (coarse.js CHEAP_FACTOR: a 1000 m tube is about a twelfth of the vertices), the placed segments exactly as they are
+     * `cheap` builds the ghost while a handle is being DRAGGED: the NEW pieces' row grid thinned (coarse.js CHEAP_FACTOR: a 1000 m tube is about a twelfth of the vertices), the placed segments exactly as they are
      * (the candidate must still extend them), the same path (the handles read it). The full ghost is built when the drag stops. Nothing placed is touched either way.
      */
     ghostFor(candidate, opts) { const it = tm.ghostSteps(candidate, opts); let r = it.next(); while (!r.done) r = it.next(); return r.value; },
     /**
-     * D407: ghostFor as a generator, for a caller that must not hold the page while the whole ghost is built (the exact ghost made when a handle is let go: 60 ms at 1,000 m, 2 s at 20 km): it yields between
+     * ghostFor as a generator, for a caller that must not hold the page while the whole ghost is built (the exact ghost made when a handle is let go: 60 ms at 1,000 m, 2 s at 20 km): it yields between
      * the new pieces and the seams and returns what ghostFor returns; the same work in the same order, so the mesh is the same to the byte (ghostFor above is this run to the end).
      */
     *ghostSteps(candidate, { cheap = false } = {}) {
       const all = candidate && candidate.segments;
       const segs = candidate && detail > 1 ? coarsen(all, detail) : cheap && Array.isArray(all) ? [...all.slice(0, keys.length), ...coarsenRun(all.slice(keys.length), CHEAP_FACTOR)] : all;
       if (!Array.isArray(segs)) throw new Error('ghost: needs a resolved candidate { segments }');
-      const nk = segs.slice(0, keys.length).map(keyOf);   // the placed prefix the candidate must match (D483: the new chords are no longer keyed; the cheap ghost compares them with the last one's, below)
-      // D404: a cheap ghost whose new chords are COARSE (the shell's candidate(opts, { coarse }): longer than 2 m) puts at most CHEAP_STATIONS stations on them; one built from 2 m chords has
+      const nk = segs.slice(0, keys.length).map(keyOf);   // the placed prefix the candidate must match (the new chords are no longer keyed; the cheap ghost compares them with the last one's, below)
+      // a cheap ghost whose new chords are COARSE (the shell's candidate(opts, { coarse }): longer than 2 m) puts at most CHEAP_STATIONS stations on them; one built from 2 m chords has
       // a station at every chord end whatever the step, so it is built as it always was (and reuses the last one's chords, below)
       const newSegs = cheap ? segs.slice(keys.length) : [], newLen = newSegs.reduce((a, g) => a + (g.length || 0), 0), step = newLen > CHEAP_STATIONS * STEP && newLen > 2.5 * newSegs.length ? newLen / CHEAP_STATIONS : STEP;
       if (segs.length <= keys.length || keys.some((k, i) => k !== nk[i])) throw new Error('ghost: the candidate must extend the placed track (the same segments, then more)');
@@ -343,7 +343,7 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       // segments exactly as they were, so a new piece whose segment key is the last cheap ghost's at the same index keeps its mesh and only moves (geom.reuseMesh, `from`:
       // the placed track is taken as it is). Valid only on the same placed path; any full ghost, update or change of detail forgets it.
       const reuse = cheap && typeof geom.reuseMesh === 'function' && lastCheap && lastCheap.base === path && lastCheap.from === keys.length && lastCheap.step === step ? lastCheap : null;
-      // D483: a new chord is the same as the last cheap ghost's at its index when segkey.js sameContent says so (it was: when their hashed keys agreed; with an edge typed, hashing
+      // a new chord is the same as the last cheap ghost's at its index when segkey.js sameContent says so (it was: when their hashed keys agreed; with an edge typed, hashing
       // the chords was 176 ms of a 3 s drag's 974, and a drag whose step moves cannot reuse at all). The new chords are kept for the next one as they were when meshed (a snapshot:
       // the segments handed out with this ghost may be changed by a reader afterwards; the frozen profiles in them are shared, not copied), not their keys.
       const remember = (gm) => { lastCheap = cheap ? { base: path, from: keys.length, mesh: gm, segs: segs.map((g, j) => (j < keys.length ? null : snapshot(g))), step } : null; return gm; };
@@ -355,15 +355,15 @@ function createTrackModel({ geom = G, pathOpts: po = {}, meshOpts = {} } = {}) {
       const blocks = path.blocks.slice(); blocks[blocks.length - 1] = { ...blocks[blocks.length - 1] };
       const p = { ...path, samples: path.samples.slice(), starts: path.starts.slice(), segFirst: path.segFirst.slice(), segEnd: path.segEnd.slice(), blocks };
       const st = mesh._state, m = { ...mesh, _state: { ...st, pieces: st.pieces.slice(), seams: st.seams.slice() } };
-      p.step = step; if (step > STEP) p.substep = CHEAP_SUBSTEP;   // the ghost's own copy: the placed path keeps its stations (D404)
-      yield* geom.extendPathSteps(p, segs);   // D407: a slice at a time when run as steps
+      p.step = step; if (step > STEP) p.substep = CHEAP_SUBSTEP;   // the ghost's own copy: the placed path keeps its stations
+      yield* geom.extendPathSteps(p, segs);   // a slice at a time when run as steps
       const gm = yield* meshNew(p, () => geom.extendMeshSteps(m, p, segs)), from = keys.length;
       yield; const bs = batchesOf(gm, from); if (!cheap) yield* warmLines(bs);
       lastFull = !cheap && detail === 1 && segs === all ? { base: path, mesh0: mesh, from, segs, p, gm, bs } : null;
-      return { batches: bs, path: p, head: p.head, segments: segs };   // D235: only the NEW pieces' batches are built (it built every batch and kept the new ones)
+      return { batches: bs, path: p, head: p.head, segments: segs };   // only the NEW pieces' batches are built (it built every batch and kept the new ones)
     },
     /**
-     * D242: the GHOST of a close PROPOSAL (the shell's closeProposal: a closed track that rewrites pieces, not one that extends the placed track, so
+     * The GHOST of a close PROPOSAL (the shell's closeProposal: a closed track that rewrites pieces, not one that extends the placed track, so
      * ghostFor's copy-and-extend does not apply). The proposed track is built in full on its own (the placed track untouched), and the ghost is the
      * batches of the pieces from the first segment that differs from the placed one: for a local close, its window. { batches, path, head, segments, from }.
      */

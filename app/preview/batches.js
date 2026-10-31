@@ -5,7 +5,7 @@
 // re-uploads nothing for it), and its node matrix as the model matrix. The node matrix is row-vector (kn5's own order,
 // world = local · M); the same 16 numbers read column-major are the GL model matrix (app/camera/math.js).
 //
-// Colour is per placed word (ARCHITECTURE §4 "colour per word"), so the user sees where one piece ends: a stable hue
+// Colour is per placed word, so the user sees where one piece ends: a stable hue
 // from the piece id, alternating light and dark along the track. Seams take their later piece's colour, darkened.
 'use strict';
 
@@ -24,7 +24,7 @@ function batchesOf(mesh, fromPiece = 0) {
   for (let k = 0; k < kids.length; k++) {
     const node = kids[k];
     if (fromPiece > 0 && mesh.cells[k] && mesh.cells[k].piece < fromPiece) continue;   // the cells and the root's children are in one order (set.js withTextureSet pairs them the same way)
-    // D524 part 2 (the user's "test bump": white lines standing above the road like a ladder): each node's cell record is taken by POSITION, not looked up by name. A piece
+    // (the user's "test bump": white lines standing above the road like a ladder): each node's cell record is taken by POSITION, not looked up by name. A piece
     // split into parts names every part's cells alike (1ROAD_p1_body_0 for all 275 cells of a 500 m bump), so a lookup by name gave every batch the LAST cell's record:
     // its rowS (a tie on every row) and its cols and us (the lines read the vertices with another part's stride, joining rows they do not belong to)
     const m = node.children[0], cell = mesh.cells[k] && mesh.cells[k].name === m.name ? mesh.cells[k] : null;

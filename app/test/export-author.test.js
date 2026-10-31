@@ -1,4 +1,4 @@
-// export-author.test.js: node --test app/test/export-author.test.js. D365, the app's half: Settings ▸ Author name is the saved key
+// export-author.test.js: node --test app/test/export-author.test.js. The app's half: Settings ▸ Author name is the saved key
 // `author` (contract S), every export the page makes reads it (the exporter's author provider: Export, Test export and Install all
 // build through the same exporter), Export layouts carries it into each layout, and a blocked store gives today's author without throwing.
 'use strict';

@@ -1,5 +1,5 @@
 // zonegrab.test.js: node --test app/test/zonegrab.test.js
-// D519 Part 2, SCULPT GRABS THE ROAD ITSELF (O's design, exo_memory/handback/p-d519-design-O_2026-10-28.md §5): the pure functions, check-it tier.
+// SCULPT GRABS THE ROAD ITSELF: the pure functions, check-it tier.
 //   zoneAt       rows 1-9: the zone at a share across the road and the channels it names, by piece kind; never a re-route (property)
 //   axisOf       row 10: which axis a drag's first motion picks
 //   dotStations  row 11: the dot rows' stations, thinned in metres and on screen
@@ -136,9 +136,9 @@ test('row 13c: a cup section: u is the share along its arc, so a point halfway u
   const [x, y] = V.scr(A.pos), hit = pickAcross(V.path, V.segments, V.pose, x, y, W, H);
   assert.ok(Math.abs(hit.u - 0.5) <= 0.05, `u ${hit.u}`);
 });
-// ── D520: THE GRABBED POINT FOLLOWS THE MOUSE (plan_d520_sculpt_point_follows_the_mouse_2026-10-28.md). Each row presses a REAL road (a 200 m piece through the core and
+// ── THE GRABBED POINT FOLLOWS THE MOUSE. Each row presses a REAL road (a 200 m piece through the core and
 // its adapter), drags through the core shell as the panel does (beginFollow, brushTo with follow's set, endBrush), builds the road again and reads where the pressed
-// point and the far rim went. The falsifier the plan registers: the pressed point drifting from the pointer.
+// point and the far rim went. What would show it failing: the pressed point drifting from the pointer.
 const { createCoreShell } = require('../core/coreshell.js');
 const S0 = 100, RAD = 60, DEGR = Math.PI / 180;
 const road = (phiDeg, o = {}) => D.appendPiece(D.createDoc('p'), D.roadPiece({ length: 200, family: o.family || 'flat', ...(o.cup !== undefined ? { cup: true } : {}),
@@ -153,7 +153,7 @@ async function grabbed(doc, u, delta) {
   const want = surface(doc, u).map((x, k) => x + delta[k] - dotv(delta, F.T) * F.T[k]);
   return { d, F, out, sh, miss: gap(surface(out, u), want), far: gap(surface(out, u < 0 ? 1 : -1), surface(doc, u < 0 ? 1 : -1)) };
 }
-const MM = 5e-4;   // half a millimetre: the doubles stored to 0.1 mm (DEC.h, l, w) and the bank's smoothstep between the path's samples (measured 0.004 to 0.05 mm, D520 probe.js)
+const MM = 5e-4;   // half a millimetre: the doubles stored to 0.1 mm (DEC.h, l, w) and the bank's smoothstep between the path's samples (measured 0.004 to 0.05 mm with a probe script)
 
 test('row 14a (D520): the pointer\'s ray passes through the world point drawn under it, and the grab plane meets it there: a pointer that has not moved lands on the hit', () => {
   const pose = { eye: [10, 40, -30], target: [0, 0, 50], up: [0, 1, 0], fov: Math.PI / 3 }, VP = M.viewProj(pose, W / H);
@@ -165,7 +165,7 @@ test('row 14a (D520): the pointer\'s ray passes through the world point drawn un
   assert.equal(rayAt(pose, 1, 1, 0, H), null); assert.equal(ZG.planePoint({ origin: [0, 0, 0], dir: [1, 0, 0] }, [0, 0, 5], [0, 0, 1]), null, 'a ray along the plane meets it nowhere');
 });
 
-// AMENDED D522 (plan_d522_grab_one_side_within_the_radius decision 1; the user, 15:39: "it should only affect one side of the track ... not both sides"): D520 slid the whole
+// AMENDED (the user, 15:39: "it should only affect one side of the track ... not both sides"): the grab first slid the whole
 // section for any press off the rims; now only a press in the centre band (|u| < ZG.HINGE_U) does, and every other hinges about the far rim. So this row keeps its centre-band
 // press (u 0.05: l only) and its u 0.5 press now pins the hinge: the far rim stays and the near side follows.
 test('row 14b (D520, amended D522): a sideways drag in the centre band slides the road under the point, l only; at u 0.5 it hinges about the far rim; the point follows both', async () => {
@@ -182,7 +182,7 @@ test('row 14c (D520, plan item 2, "centre, up"): an upward drag at the centre li
   assert.ok(Math.abs(r.d.h - 2) < 1e-9 && Math.abs(r.d.l) < 1e-9, JSON.stringify(r.d)); assert.ok(r.miss < MM, `misses by ${r.miss}`);
 });
 
-// AMENDED D522 (decision 1, as row 14b): D520 turned the cup to lift a press partway out on a cup piece, and lifted a plain road whole; both now hinge about the far rim, which
+// AMENDED (as row 14b): the grab first turned the cup to lift a press partway out on a cup piece, and lifted a plain road whole; both now hinge about the far rim, which
 // moves both sides no more (the cup is a both-sides shape: turning it lifted the far side as well). The row pins that: no cup change, a bank, and the far rim kept.
 test('row 14d (D520, amended D522): partway out on a cup piece or a plain road an upward drag hinges about the far rim: no cup change, the far rim stays, the point follows', async () => {
   for (const o of [{ cup: 30, family: 'bowl' }, {}]) {
@@ -272,7 +272,7 @@ test('row 14k (D520): follow\'s boundaries: no frame, a delta that is not three 
   assert.equal(ZG.frameAt(path, segments, NaN, 0), null); assert.equal(ZG.frameAt({ samples: [] }, segments, S0, 0), null);
 });
 
-// 0.4.29 (O's before-release review, p-0429-review-O_2026-10-28.md item 2): the panel draws the dots and handles from shell.sculptInfo(), which reads the selection only while it
+// 0.4.29 (found in the before-release review): the panel draws the dots and handles from shell.sculptInfo(), which reads the selection only while it
 // belongs to the document shown. A follow step made a new document and left the selection on the old one, so after the first step the dots vanished until the run was clicked again.
 test('row 14n (0.4.29): a grab at a dot keeps the run selected: the handles read it at every step and after the release, on the document the grab made', async () => {
   const doc = road(0), sh = await createCoreShell({ autosaveMs: 0 }); sh.adopt(doc); sh.setSculpt(true); sh.selectPiece(0);

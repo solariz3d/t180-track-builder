@@ -1,5 +1,5 @@
-// Headless tests for app/validate-ui/panel.js (the validation panel's logic) against A's real shell, and for both of
-// E's panels loading through A's webview loader. Run: node --test "app/test/*.test.js"
+// Headless tests for app/validate-ui/panel.js (the validation panel's logic) against the real shell, and for both of
+// the panels loading through the webview loader. Run: node --test "app/test/*.test.js"
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -17,8 +17,8 @@ const { appendOld } = require('../../test/pre_d182_words.js');
 const REPO = path.resolve(__dirname, '..', '..');
 const mem = () => { const docs = new Map(); let lib = null; return { saveDoc: async (n, t) => docs.set(n, t), openDoc: async (n) => docs.get(n), listDocs: async () => [...docs.keys()], saveLibrary: async (t) => { lib = t; }, openLibrary: async () => lib }; };
 const levels = (map) => map.stations.map((e) => Array.from(e.levels));
-// CHANGED D256 BUILD: the controller's default is FULL SPEED now (no slider: an open track at 970 km/h, a closed one on its ghost
-// lap), so the reference validates with { fullSpeed: true }. Was, from D169 (2026-09-27): the picker's 460 km/h (FINDINGS.md:476).
+// CHANGED: the controller's default is FULL SPEED now (no slider: an open track at 970 km/h, a closed one on its ghost
+// lap), so the reference validates with { fullSpeed: true }. Was, from 2026-09-27: the picker's 460 km/h.
 /** What a fresh, full validation of the shell's current document colours: the reference every live state must equal. */
 function fresh(shell, csp = true) {
   const r = shell.getState().resolved, p = G.buildPath(r.segments, { step: STEP });
@@ -74,8 +74,8 @@ test('removing the head is a trim, its undo is an append, and both still equal a
 test('the CSP switch re-validates for vanilla AC: a 60° wall turns red, and back', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createValidationController(shell);
-  // named (the walled-bowl tests, p-d182-walltests-E): two pre-D182 half-pipe straights, a 16 m floor and 8 m walls rising to
-  // 60°, red for vanilla AC. The half-pipe the font picker gives now is the MEASURED one, with no wall (C's fonts, D182).
+  // named (the walled-bowl tests): two half-pipe straights from before the words were measured, a 16 m floor and 8 m walls rising to
+  // 60°, red for vanilla AC. The half-pipe the font picker gives now is the MEASURED one, with no wall.
   shell.adopt(['straight', 'straight'].reduce((d, w) => appendOld(D, d, w, { font: 'half-pipe' }), D.createDoc('t')));
   assert.strictEqual(summary(ctl.state).red, 0);
   ctl.setCsp(false);
@@ -85,7 +85,7 @@ test('the CSP switch re-validates for vanilla AC: a 60° wall turns red, and bac
   assert.strictEqual(summary(ctl.state).red, 0);
 });
 
-// CHANGED 2026-09-27 (D170): a jump word now carries its landing ramp (A's model, D170), so at the head it is either
+// CHANGED 2026-09-27: a jump word now carries its landing ramp (the document model's change), so at the head it is either
 // waiting (the model without the ramp) or already landed (with it). What holds either way: no arcs while it waits, and
 // both landings drawn once there is landing road.
 test('a jump placed at the open head is drawn once it has landing road (its own ramp, or the next word)', async () => {
@@ -110,11 +110,11 @@ test('changes arriving before the scheduled update are coalesced into one update
 
 test('E\'s panels load through A\'s webview loader (app/lib/cjs.js), and each exports mount(root, shell)', async () => {
   const fromDisk = async (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
-  for (const p of ['app/validate-ui/index.js'])   // D239: app/handles/index.js went with the Pieces page
+  for (const p of ['app/validate-ui/index.js'])   // app/handles/index.js went with the Pieces page
     assert.strictEqual(typeof (await loadCjs(p, fromDisk)).mount, 'function', p);
 });
 
-// D256 BUILD (the user, 12:56: "it should always be maxed out"; his decision 13:2x on E's measurement): the panel has NO speed control, and its
+// The user, 12:56: "it should always be maxed out" (decided 13:2x, after a measurement): the panel has NO speed control, and its
 // controller checks at full speed. Mounted on a fake page with an empty track (no loads, so no graph is drawn).
 test('D256: the validation panel has no design-speed slider and no off box; its one control is the CSP box, and it checks at full speed', async () => {
   const fake = require('./palette-fakedom.js'), restore = fake.install(), had = { CustomEvent: global.CustomEvent, raf: global.requestAnimationFrame };
@@ -136,5 +136,5 @@ test('D256: the validation panel has no design-speed slider and no off box; its 
   } finally { restore(); global.CustomEvent = had.CustomEvent; global.requestAnimationFrame = had.raf; }
 });
 
-// REMOVED D256 BUILD (the user chose "always max", 13:2x: the slider and its off box are gone): B's row 'D256: the design-speed value has a
+// REMOVED (the user chose "always max", 13:2x: the slider and its off box are gone): the row 'the design-speed value has a
 // FIXED box and the off box stays with its word, so the box does not move; off, on and off again all work' (6f2404d) went with the box.

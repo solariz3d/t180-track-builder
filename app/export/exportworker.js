@@ -1,4 +1,4 @@
-// exportworker.js: the WORKER the export runs in (D437b), inside the export's own process: app/export/exportrunner.js makes a sandboxed iframe, which
+// exportworker.js: the WORKER the export runs in, inside the export's own process: app/export/exportrunner.js makes a sandboxed iframe, which
 // Chromium gives a renderer process of its own, and the iframe makes this worker from its text. A sandboxed frame has an opaque origin and cannot fetch
 // the app's files, so the worker is BOOTED with their texts (the files the page's exporter loaded) and loads app/export/exportjob.js through the app's
 // own CommonJS loader (app/lib/cjs.js) from them, as app/core/closeworker.js loads closejob.js from the served files. Messages:

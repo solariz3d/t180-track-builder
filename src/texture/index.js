@@ -1,4 +1,4 @@
-// src/texture: track textures (ARCHITECTURE §5b), part 1: slots, automatic mapping, bring-your-own PNG/JPG → DDS with
+// src/texture: track textures, part 1: slots, automatic mapping, bring-your-own PNG/JPG → DDS with
 // mipmaps, the warnings, and the one texture set the preview and the export share. Dependency-free.
 'use strict';
 module.exports = {

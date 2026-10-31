@@ -1,4 +1,4 @@
-// project.js: a PROJECT of layouts (ARCHITECTURE §11.1: "layouts as separate documents (Aurora's two layouts are separate
+// project.js: a PROJECT of layouts (the design: "layouts as separate documents (Aurora's two layouts are separate
 // model files, not shared road)"). A project is a name and N layouts, each a full, independent document; nothing is
 // shared between them, so each is edited, undone and exported exactly as a lone document is.
 //

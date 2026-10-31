@@ -1,14 +1,14 @@
 // sculpt-drag-model.test.js: node --test app/test/sculpt-drag-model.test.js
-// D421 part 4, THE SCULPT DRAG'S FRAME in the preview's track model (app/preview/trackmodel.js update(resolved, { drag }), app/preview/coarse.js mergeChords and sameSegment;
-// design exo_memory/loop/design_d421_sculpt_P_2026-10-20.md §4.3): what a brush step draws, in node, with the real shell. The frame's TIME is app/test/sculpt-frame.test.js
-// (A's, on the real page). Rows:
+// THE SCULPT DRAG'S FRAME in the preview's track model (app/preview/trackmodel.js update(resolved, { drag }), app/preview/coarse.js mergeChords and sameSegment):
+// what a brush step draws, in node, with the real shell. The frame's TIME is app/test/sculpt-frame.test.js
+// (on the real page). Rows:
 //   1  mergeChords: a piece's 2 m chords become a few long ones, within the heading cap, never across two pieces or a gap; one chord stays the very same object
 //   2  a drag step builds nothing placed: how 'drag', the placed path and mesh are the very ones, every batch outside the window is the placed batch itself, the window is
 //      drawn from a few dozen chords, and after the drag the release equals a fresh build
 //   3  a route step on an OPEN track moves the road after the window as one piece: its batches carry the placed vertex arrays and lie within 2 cm of an exact build's
 //   4  a route step on a CLOSED lap leaves it open while the drag lasts: the joint's seam is hidden and the gap from the moved end to the start is a line of that length
 //   5  a hill (Grab, the lift): the window is the brush's span, and the ghost stands on the hill (its road is lifted where the exact build's is)
-//   6  coarsen keeps a frozen segment frozen (A's D421 §1.3), so the track model keys its coarse copy once
+//   6  coarsen keeps a frozen segment frozen (a measured finding), so the track model keys its coarse copy once
 //   7  the renderer draws a moved batch (xform) from its baked chunk under the move: a new move uploads nothing, and the picture is the moved matrices'
 // The preview's side (a drag never rebuilds, the release in the next animation frame) is app/test/preview-speed.test.js row 4.
 'use strict';
@@ -104,11 +104,11 @@ test('row 3: a route step on an OPEN track moves the road after the window as on
 test('row 4: a route step on a CLOSED lap leaves it open while the drag lasts: the joint\'s seam hidden, the gap a line from the moved end to the start', async () => {
   const s = await closedTrack(), d = s.getState().history.present;
   const st0 = s.getState().resolved;
-  // the step the release re-closes: a heading brush on the first straight, the shell's own segments for it with no per-step close (D421 part 2 removes that)
+  // the step the release re-closes: a heading brush on the first straight, the shell's own segments for it with no per-step close (the Sculpt shell removes that)
   const P = d.pieces[0], bent = { ...d, pieces: [{ ...P, channels: { ...P.channels, kh: P.channels.kh.map((v, i, a) => (i > 2 && i < a.length - 3 ? v + 0.0006 : v)) } }, ...d.pieces.slice(1)] };
   const { toSegments } = require('../../src/core/adapter.js');
   const segs = toSegments(bent);
-  // both forms of a step: the lap still marked closed (a shell that re-closes per step) and the lap OPENED for the drag (D421 part 2's route tools re-close on release only)
+  // both forms of a step: the lap still marked closed (a shell that re-closes per step) and the lap OPENED for the drag (the Sculpt shell's route tools re-close on release only)
   for (const closed of [true, false]) {
   const tm = createTrackModel(), base = tm.update(s.getState().resolved);
   const resolved = Object.freeze({ ...st0, closed, segments: Object.freeze(segs.map((g, j) => (j >= segs.length - 600 && st0.segments[j] && C.sameSegment(g, st0.segments[j]) ? st0.segments[j] : g))) });

@@ -1,5 +1,5 @@
 // core-smooth-ramps.test.js: node --test app/test/core-smooth-ramps.test.js
-// D465 (pane C): Track ▸ Smooth ramps in the app. The core is src/core/smoothramps.js (test/core_smooth_ramps.test.js); this is the shell's action
+// Track ▸ Smooth ramps in the app. The core is src/core/smoothramps.js (test/core_smooth_ramps.test.js); this is the shell's action
 // (app/core/coreshell.js smoothRamps): a copy of the track first, then ONE undo step, and plain words when there is nothing to do. Rows:
 //   1  on a track laid by 0.4.19 it copies the track to its backups first, as it was, then re-lays the ramps as one undo step; the message says what it did
 //   2  Ctrl+Z gives back the track's bytes exactly; Ctrl+Y the smoothed bytes

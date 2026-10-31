@@ -1,5 +1,5 @@
 // ghost-stalekey.test.js: node --test app/test/ghost-stalekey.test.js
-// D483 part 2: the cheap ghost (a handle being dragged) keeps a new chord's mesh when the chord is the same as the last cheap ghost's at its index. It told that by hashed
+// The cheap ghost (a handle being dragged) keeps a new chord's mesh when the chord is the same as the last cheap ghost's at its index. It told that by hashed
 // keys; it now compares the chords themselves (app/preview/segkey.js sameContent) against a snapshot of the last ones as they were meshed. Stated before the change: a chord
 // that changed never keeps the mesh made from what it was, whoever changed it and however; the unchanged chords are still kept (cheap-ghost.test.js row 6).
 'use strict';

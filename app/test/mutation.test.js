@@ -6,7 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
-const IR = require('../../test/inner_run.js');   // D352: a crashed inner run reads NOT TESTED
+const IR = require('../../test/inner_run.js');   // a crashed inner run reads NOT TESTED
 const ROOT = path.join(__dirname, '..', '..');
 
 const MUTATIONS = [
@@ -38,7 +38,7 @@ const MUTATIONS = [
     from: 'else if (g === keys.length) {', to: 'else if (false) {', caughtBy: 'track model: append' },
   { id: 'A14 the model matrix transposed', file: 'preview/batches.js',
     from: 'model: node.matrix,', to: 'model: [0, 1, 2, 3].flatMap((r) => [0, 1, 2, 3].map((c) => node.matrix[c * 4 + r])),', caughtBy: 'batches: the node matrix' },
-  // D169: DPR, modifier keys, the mount error, the probe, and the window proof's judge
+  // DPR, modifier keys, the mount error, the probe, and the window proof's judge
   { id: 'A15 the backing store ignores devicePixelRatio', file: 'preview/preview.js',
     from: 'backingSize(canvas.clientWidth, canvas.clientHeight, win.devicePixelRatio)', to: 'backingSize(canvas.clientWidth, canvas.clientHeight, 1)', caughtBy: 'DPR: the backing store is the css size' },
   { id: 'A16 the size cap drops the aspect (one side clamped alone)', file: 'preview/preview.js',
@@ -46,7 +46,7 @@ const MUTATIONS = [
   { id: 'A17 Ctrl/Alt/Meta ignored by keyAction', file: 'preview/preview.js',
     from: 'if (mods && (mods.ctrlKey || mods.altKey || mods.metaKey)) return null;', to: '', caughtBy: 'keys: Ctrl, Alt or Meta' },
   { id: 'A18 the frame loop passes no modifiers (Ctrl+C cycles the camera)', file: 'preview/preview.js',
-    from: 'a = keyAction(e.key, viaCtrl ? { ctrlKey: false, altKey: false, metaKey: false } : e);', to: 'a = keyAction(e.key);', caughtBy: 'keys in the frame loop' },   // D257: re-anchored (the call reads Left Ctrl's movement keys too)
+    from: 'a = keyAction(e.key, viaCtrl ? { ctrlKey: false, altKey: false, metaKey: false } : e);', to: 'a = keyAction(e.key);', caughtBy: 'keys in the frame loop' },   // re-anchored (the call reads Left Ctrl's movement keys too)
   { id: 'A19 a failed mount is swallowed', file: 'preview/index.js',
     from: 'throw new PreviewMountError(msg, e);', to: 'return null;', caughtBy: 'mount failure' },
   { id: 'A20 the probe skips the perspective divide', file: 'testhook/probe.js',
@@ -55,7 +55,7 @@ const MUTATIONS = [
     from: 'frac >= 0.01', to: 'frac >= 0', caughtBy: 'judge: each failure' },
   { id: 'A22 the judge never checks DPR', root: 'scripts', file: 'prove_render.js',
     from: 'c.width === Math.round(c.cssWidth * c.dpr)', to: 'c.width > 0', caughtBy: 'judge: each failure' },
-  // D170: light, road lines, the overhead fit, the ghost, the grid and the marker
+  // light, road lines, the overhead fit, the ghost, the grid and the marker
   { id: 'B1 no key light (only ambient and fill)', file: 'preview/look.js',
     from: 'keyK: 0.72,', to: 'keyK: 0,', caughtBy: 'light: a floor and a vertical wall' },
   { id: 'B2 one-sided light (an overhang goes dark)', file: 'preview/look.js',
@@ -63,7 +63,7 @@ const MUTATIONS = [
   { id: 'B3 the shader key strength drifts from look.js', file: 'preview/renderer.js',
     from: '${LIGHT.keyK.toFixed(6)} * max(dot(n, key), 0.0)', to: '0.5 * max(dot(n, key), 0.0)', caughtBy: 'light: the fragment shader carries' },
   { id: 'B4 the edge lines one vertex in from the edges', file: 'preview/look.js',
-    from: 'for (const k of [0, -1, K - 1])', to: 'for (const k of [1, -1, K - 2])', caughtBy: 'edge lines: through the two edge vertices' },   // CHANGED D433b: the anchor follows the source (the centre is -1, at u = 0); the same mutant
+    from: 'for (const k of [0, -1, K - 1])', to: 'for (const k of [1, -1, K - 2])', caughtBy: 'edge lines: through the two edge vertices' },   // CHANGED: the anchor follows the source (the centre is -1, at u = 0); the same mutant
   { id: 'B4b the centre line at the vertex left of u = 0, not at u = 0 (D433b)', file: 'preview/look.js',
     from: 'k0 = k; t = -b.us[k] / (b.us[k + 1] - b.us[k]); break;', to: 'k0 = k; t = 0; break;', caughtBy: 'edge lines: through the two edge vertices' },
   { id: 'B5 the lines not lifted off the surface (they would z-fight)', file: 'preview/look.js',
@@ -83,21 +83,21 @@ const MUTATIONS = [
   { id: 'B12 the candidate ignores the font picker', file: 'testhook/ghostword.js',
     from: "font: font === 'auto' || word === 'jump' ? undefined : font", to: 'font: undefined', caughtBy: 'ghost through A' },
   { id: 'B13 the grid floats above y = 0', file: 'preview/look.js',
-    from: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y, z0, x, y, z1);', to: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y + 0.5, z0, x, y + 0.5, z1);', caughtBy: 'grid: every vertex at y = 0' },   // D237: re-pointed, gridLines takes a height `y` (default 0); the mutant and the test that catches it are unchanged
+    from: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y, z0, x, y, z1);', to: 'for (let x = x0; x <= x1 + 1e-9; x += sp) p.push(x, y + 0.5, z0, x, y + 0.5, z1);', caughtBy: 'grid: every vertex at y = 0' },   // re-pointed, gridLines takes a height `y` (default 0); the mutant and the test that catches it are unchanged
   { id: 'B14 the ghost is never drawn', file: 'preview/renderer.js',
     from: 'drawSurfaces(ghost, vp, GHOST_ALPHA, COLOURS.ghost);', to: '', caughtBy: 'preview: showGhost draws the ghost' },   // re-pointed 2026-10-13: the ghost is drawn as merged chunks
   { id: 'B16 the head marker does not grow with distance (a speck from overhead)', file: 'preview/preview.js',
     from: 'Math.max(3, 0.02 * Math.hypot(', to: 'Math.max(3, 0 * Math.hypot(', caughtBy: 'head marker: it grows' },
   { id: 'B15 the head marker is never drawn', file: 'preview/renderer.js',
     from: 'if (extras.marker) {', to: 'if (false) {', caughtBy: 'preview: a frame draws the grid and the head marker' },
-  // D175: hardening (the soak, per-cell rebuild, no mesh over IPC)
-  { id: 'P1 a sculpt re-places the path but keeps the old mesh', file: 'preview/trackmodel.js', from: 'from = s0; fromS = path.starts[s0].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), s0);', to: 'from = s0; fromS = path.starts[s0].s;', caughtBy: 'soak:' },   // re-pointed D186 (C): the sculpt branch now meshes the LIFTED path from min(g, first lift change)
+  // hardening (the soak, per-cell rebuild, no mesh over IPC)
+  { id: 'P1 a sculpt re-places the path but keeps the old mesh', file: 'preview/trackmodel.js', from: 'from = s0; fromS = path.starts[s0].s; mesh = geom.sculptMesh(mesh, shown, meshSegs(segs, lk), s0);', to: 'from = s0; fromS = path.starts[s0].s;', caughtBy: 'soak:' },   // re-pointed later: the sculpt branch now meshes the LIFTED path from min(g, first lift change)
   { id: 'P2 every change rebuilds the whole track (no per-cell reuse)', file: 'preview/trackmodel.js', from: 'else if (nk.length >= keys.length) {', to: 'else if (false) {', caughtBy: 'per-cell rebuild: a length sculpt' },
   { id: 'P3 the preview reaches for the native side', file: 'preview/preview.js', from: 'const FLY = ', to: 'const leak = (s) => s && s.storage.saveDoc; const FLY = ', caughtBy: 'no mesh over IPC: app/preview and app/camera' },
-  // D173: the texture maker's editor and panel
+  // the texture maker's editor and panel
   { id: 'T1 the editor ignores the value it is given', file: 'texmaker/model.js', from: 'L[i] = { ...L[i], [key]: value };', to: 'L[i] = { ...L[i], [key]: L[i][key] };', caughtBy: 'editor: an accepted edit changes the canonical text' },
   { id: 'T2 the panel never calls onChange', file: 'texmaker/index.js', from: 'if (onChange) onChange(now);', to: '', caughtBy: 'panel: an accepted edit calls onChange' },
-  // D177: the AC look (app/preview/aclook.js, acshaders.js, the renderer's AC path, the preview's texture set)
+  // the AC look (app/preview/aclook.js, acshaders.js, the renderer's AC path, the preview's texture set)
   { id: 'L1 ksAmbient is read from ksDiffuse', file: 'preview/aclook.js', from: "ambient: propA(m, 'ksAmbient')", to: "ambient: propA(m, 'ksDiffuse')", caughtBy: 'mapping: ksAmbient, ksDiffuse' },
   { id: 'L2 a missing property reads 1, not 0', file: 'preview/aclook.js', from: 'return p ? p.value[0] : 0; };', to: 'return p ? p.value[0] : 1; };', caughtBy: 'mapping: a property the material lacks reads 0' },
   { id: 'L3 the multilayer R and G scales are swapped', file: 'preview/aclook.js', from: "multR: propA(m, 'multR'), multG: propA(m, 'multG')", to: "multR: propA(m, 'multG'), multG: propA(m, 'multR')", caughtBy: 'mapping: ksMultilayer takes' },
@@ -114,8 +114,8 @@ const MUTATIONS = [
   { id: 'L14 setTextureSet drops the set', file: 'preview/preview.js', from: 'set = s || null;', to: 'set = null;', caughtBy: 'preview: a texture set with a made floor' },
   { id: 'L15 a property is read from the wrong material', file: 'preview/aclook.js', from: 'const m = scene.materials[b.materialIndex];', to: 'const m = scene.materials[0] && { ...scene.materials[0], name: String(b.materialIndex) };', caughtBy: 'list: every mesh the preview draws is in the kn5' },
   { id: 'L16 L does not change the look (the colour per word is unreachable)', file: 'preview/preview.js', from: "if (a.look) { look = look === 'ac' ? 'words' : 'ac';", to: 'if (a.look) {', caughtBy: 'preview: L toggles the look' },
-  // D179, the usability pass
-  { id: 'L17 the ties never fade (they hatch the road dark at a distance)', file: 'preview/renderer.js', from: 'drawLines(L.ties, IDENTITY, tie, alpha, TIE_FADE);', to: 'drawLines(L.ties, IDENTITY, tie, alpha);', caughtBy: 'renderer: the ties fade out' },   // re-pointed 2026-10-13: the lines are drawn per merged chunk; AMENDED (D381): anchor follows the token-read colour; same mutant
+  // the usability pass
+  { id: 'L17 the ties never fade (they hatch the road dark at a distance)', file: 'preview/renderer.js', from: 'drawLines(L.ties, IDENTITY, tie, alpha, TIE_FADE);', to: 'drawLines(L.ties, IDENTITY, tie, alpha);', caughtBy: 'renderer: the ties fade out' },   // re-pointed 2026-10-13: the lines are drawn per merged chunk; AMENDED: anchor follows the token-read colour; same mutant
   // 2026-10-13, the merged CHUNKS (app/preview/renderer.js; the user: ELYSIUM at 11 fps)
   { id: 'K1 a kept chunk ignores the matrices of its cells (a moved piece is drawn where it was)', file: 'preview/renderer.js', from: ' && sameModel(m.m, b.model)', to: '', caughtBy: 'renderer: after a sculpt that moves later pieces, the drawn road equals' },
   { id: 'K2 the cells are never merged (one draw per cell again)', file: 'preview/renderer.js', from: 'cur.nv + nv > maxV', to: 'true', caughtBy: 'renderer: merged chunks draw the triangles' },
@@ -123,22 +123,22 @@ const MUTATIONS = [
   { id: 'K4 normals are baked as points (translated with the cell)', file: 'preview/renderer.js', from: 'bakePoints(N, v * 3, b.normals, b.model, 0);', to: 'bakePoints(N, v * 3, b.normals, b.model, 1);', caughtBy: 'renderer: merged chunks draw the triangles' },
   { id: 'K5 a chunk may outgrow its vertex limit', file: 'preview/renderer.js', from: 'cur.nv + nv > maxV', to: 'cur.nv + nv > maxV * 4', caughtBy: 'renderer: merged chunks draw the triangles' },
   { id: 'L18 the canvas is cleared to the fog colour again', file: 'preview/renderer.js', from: 'gl.clearColor(clear[0], clear[1], clear[2], 1);', to: 'gl.clearColor(fog[0], fog[1], fog[2], 1);', caughtBy: 'renderer: the canvas is cleared to CLEAR' },
-  // L130-R: the newest movement key, the takeover once, the wheel's deltaX, the key's action at key-down, the overhead sliding to the head
+  // the newest movement key, the takeover once, the wheel's deltaX, the key's action at key-down, the overhead sliding to the head
   { id: 'N3 a repeated key-down makes the key the newest again', file: 'preview/preview.js', from: 'if (!held.has(id)) held.set(id, a);', to: 'held.delete(id); held.set(id, a);', caughtBy: 'a held key that repeats' },
-  { id: 'N4 a key-up lets go of every key', file: 'preview/preview.js', from: '    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code);', to: '    held.clear(); boost = !!e.shiftKey; down.delete(e.code);', caughtBy: 'releasing the OLDER' },   // D257: re-anchored (onUp is several lines since D252)
+  { id: 'N4 a key-up lets go of every key', file: 'preview/preview.js', from: '    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code);', to: '    held.clear(); boost = !!e.shiftKey; down.delete(e.code);', caughtBy: 'releasing the OLDER' },   // re-anchored (onUp is several lines since the Space change)
   { id: 'N5 the takeover re-fires every frame a key is held (C and B are undone)', file: 'preview/preview.js', from: 'if (takeover) { if (rig.mode ===', to: 'if (held.size) { if (rig.mode ===', caughtBy: 'P3: C or B pressed while a movement key is held' },
-  // D187 (E's W1 and W2): the two lines of E's fix, each undone; the reproducers in preview.test.js must catch each
-  { id: 'E1 an OS key-repeat re-arms the takeover (W1: after C or B, a held W snaps back to free)', file: 'preview/preview.js', from: 'if (!e.repeat) takeover = true;   // an OS key-REPEAT', to: 'takeover = true;   // an OS key-REPEAT', caughtBy: 'W1: W held and REPEATING' },   // D257: re-anchored on the MOVE keys' line (D252's Space branch has the same words, and replace() mutated that one)
+  // W1 and W2 (found in review): the two lines of their fix, each undone; the reproducers in preview.test.js must catch each
+  { id: 'E1 an OS key-repeat re-arms the takeover (W1: after C or B, a held W snaps back to free)', file: 'preview/preview.js', from: 'if (!e.repeat) takeover = true;   // an OS key-REPEAT', to: 'takeover = true;   // an OS key-REPEAT', caughtBy: 'W1: W held and REPEATING' },   // re-anchored on the MOVE keys' line (the Space branch has the same words, and replace() mutated that one)
   { id: 'E2 deltaX counts without Shift (W2: a sideways trackpad swipe zooms, or moves the lens)', file: 'preview/preview.js', from: 'e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0', to: 'e.deltaY || e.deltaX || 0', caughtBy: 'W2: a trackpad swipe SIDEWAYS' },
   { id: 'N6 the wheel ignores deltaX (Shift+wheel is dead on a device that reports it there)', file: 'preview/preview.js', from: 'e.deltaY || (e.shiftKey ? e.deltaX : 0) || 0', to: 'e.deltaY || 0', caughtBy: 'P5: Shift+wheel is ×4' },
   { id: 'N7 the key action is looked up by the physical key name, not fixed at key-down', file: 'preview/preview.js', from: 'if (!held.has(id)) held.set(id, a);', to: 'if (!held.has(id)) held.set(id, keyAction(id) || {});', caughtBy: 'P2: a key that flies by its label' },
   { id: 'N8 the overhead never slides to the head (a black view on a curved track)', file: 'camera/cameras.js', from: 'const w = head ? Math.min(1, zoom) : 1,', to: 'const w = 1,', caughtBy: 'overhead zoomed in (0.05 to 50)' },
   { id: 'N9 the overhead slides to the head at half the rate', file: 'camera/cameras.js', from: 'const w = head ? Math.min(1, zoom) : 1,', to: 'const w = head ? Math.min(1, 2 * zoom) : 1,', caughtBy: 'overhead zoomed in (0.05 to 50)' },
   { id: 'N10 the overhead slides past the box centre when zoomed OUT', file: 'camera/cameras.js', from: 'const w = head ? Math.min(1, zoom) : 1,', to: 'const w = head ? zoom : 1,', caughtBy: 'overhead at zoom 1 and out is unchanged' },
-  // L132: the sprint ramp, focus, and the lens
+  // the sprint ramp, focus, and the lens
   { id: "N11 the sprint never ramps (×4 for as long as Shift is held)", file: "preview/preview.js", from: "const sprint = boost ? boostAt(boostT) : 1;", to: "const sprint = boost ? 4 : 1;", caughtBy: "keys: Shift held ramps the speed" },
   { id: "N12 the ramp never resets on release (a second press starts at ×20)", file: "preview/preview.js", from: "boostT = boost ? boostT + dt : 0;", to: "boostT = boostT + dt;", caughtBy: "releasing Shift returns to ×1" },
-  { id: "N13 a blur does not reset the ramp", file: "preview/preview.js", from: "boost = false; boostT = 0; drag = null; down.clear();", to: "boost = false; drag = null; down.clear();", caughtBy: "a blur resets the ramp" },   // D257: re-anchored (letGo resets more since D252)
+  { id: "N13 a blur does not reset the ramp", file: "preview/preview.js", from: "boost = false; boostT = 0; drag = null; down.clear();", to: "boost = false; drag = null; down.clear();", caughtBy: "a blur resets the ramp" },   // re-anchored (letGo resets more since the Space change)
   { id: "N14 the ramp is twice too slow (5 s to full)", file: "preview/preview.js", from: "secs: 2.5 }", to: "secs: 5 }", caughtBy: "the sprint curve" },
   { id: "N15 the ramp stops at ×10", file: "preview/preview.js", from: "to: 20,", to: "to: 10,", caughtBy: "the sprint curve" },
   { id: "N16 Enter blurs a text area too (it is a new line there)", file: "preview/preview.js", from: "e.target.matches(e.key === 'Enter' ? 'input, select' : 'input, select, textarea')", to: "e.target.matches('input, select, textarea')", caughtBy: "Enter in a text AREA" },
@@ -154,32 +154,32 @@ const MUTATIONS = [
   { id: "N26 the lens zooms the wrong way", file: "camera/cameras.js", from: "fovNow * Math.pow(LENS.step, -steps)", to: "fovNow * Math.pow(LENS.step, steps)", caughtBy: "the lens: a notch in narrows" },
   { id: "N27 the lens is not clamped at 10°", file: "camera/cameras.js", from: "Math.max(LENS.min, Math.min(LENS.max, fovNow", to: "Math.max(0.001, Math.min(LENS.max, fovNow", caughtBy: "the lens: a notch in narrows" },
   { id: "N28 the pose ignores the lens", file: "camera/cameras.js", from: "p.fov = fovNow; lastExact = p;", to: "lastExact = p;", caughtBy: "the lens changes the pose" },
-  // D188: movement per axis
+  // movement per axis
   { id: "D1 movement is newest-key-only again (a newer key zeroes the other axes: no diagonal)", file: 'preview/preview.js', from: "if (a.fly[i]) dir[i] = a.fly[i];", to: "dir[i] = a.fly[i];", caughtBy: "keys: W then D goes diagonally" },
   { id: "D2 on one axis the OLDER key wins", file: 'preview/preview.js', from: "if (a.fly[i]) dir[i] = a.fly[i];", to: "if (a.fly[i] && !dir[i]) dir[i] = a.fly[i];", caughtBy: "on one axis the NEWER key wins" },
   { id: "D3 both keys of an axis cancel (W and S held: stand still)", file: 'preview/preview.js', from: "if (a.fly[i]) dir[i] = a.fly[i];", to: "if (a.fly[i]) dir[i] += a.fly[i];", caughtBy: "on one axis the NEWER key wins" },
   { id: "D4 a diagonal is not normalised (√2 times a straight line)", file: 'preview/preview.js', from: "if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);", to: "rig.free.move(dir[0] * k, dir[1] * k, dir[2] * k);", caughtBy: "keys: W then D goes diagonally" },
-  { id: "D5 a diagonal is normalised to the wrong length (÷ n², not ÷ n)", file: 'preview/preview.js', from: "if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);", to: "if (n) rig.free.move(dir[0] / (n * n) * k, dir[1] / (n * n) * k, dir[2] / (n * n) * k);", caughtBy: "three axes at once" },   // D257: anchored on the move call (the descent count repeats these words)
+  { id: "D5 a diagonal is normalised to the wrong length (÷ n², not ÷ n)", file: 'preview/preview.js', from: "if (n) rig.free.move(dir[0] / n * k, dir[1] / n * k, dir[2] / n * k);", to: "if (n) rig.free.move(dir[0] / (n * n) * k, dir[1] / (n * n) * k, dir[2] / (n * n) * k);", caughtBy: "three axes at once" },   // anchored on the move call (the descent count repeats these words)
   { id: "D6 a newer key on an axis drops the older for good (no handover on release)", file: 'preview/preview.js', from: "if (!held.has(id)) held.set(id, a);", to: "if (!held.has(id)) { for (const [k2, v2] of held) if (v2.fly && a.fly && v2.fly.some((c, i) => c && a.fly[i])) held.delete(k2); held.set(id, a); }", caughtBy: "on its release the" },
-  { id: "D7 a key-up lets go of every key (the other axis stops too)", file: 'preview/preview.js', from: "    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code);", to: "    held.clear(); boost = !!e.shiftKey; down.delete(e.code);", caughtBy: "releasing one key of a diagonal" },   // D257: re-anchored (onUp is several lines since D252)
+  { id: "D7 a key-up lets go of every key (the other axis stops too)", file: 'preview/preview.js', from: "    held.delete(heldKey(e)); boost = !!e.shiftKey; down.delete(e.code);", to: "    held.clear(); boost = !!e.shiftKey; down.delete(e.code);", caughtBy: "releasing one key of a diagonal" },   // re-anchored (onUp is several lines since the Space change)
   { id: "D8 a repeated key-down makes the key the newer again", file: 'preview/preview.js', from: "if (!held.has(id)) held.set(id, a);", to: "held.delete(id); held.set(id, a);", caughtBy: "a held key that repeats" },
   { id: "D9 the arrow keys stop turning while a movement key is held", file: 'preview/preview.js', from: "if (a.turn) rig.free.look(", to: "if (a.turn && ![...held.values()].some((b) => b.fly)) rig.free.look(", caughtBy: "the arrow (look) keys are not movement keys" },
 ];
 
-// D412: `extra` is IR.narrowArgs(caughtBy) for a run narrowed to the named test; empty, the run is whole, as before
+// `extra` is IR.narrowArgs(caughtBy) for a run narrowed to the named test; empty, the run is whole, as before
 function runMutant(m, extra = []) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-app-mut-')), app = path.join(dir, 'app');
   try {
-    for (const d of ['camera', 'preview', 'testhook', 'texmaker', 'lib']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });   // D381: preview.js requires app/lib/tokens.js; the whole of app/lib, so a later require of theme.js or cjs.js finds it too
-    fs.mkdirSync(path.join(app, 'core')); fs.copyFileSync(path.join(ROOT, 'app', 'core', 'keys.js'), path.join(app, 'core', 'keys.js'));   // D257: preview.js asks app/core/keys.js which Ctrl+keys are shortcuts (keys.js requires nothing)
-    fs.copyFileSync(path.join(ROOT, 'app', 'core', 'zonegrab.js'), path.join(app, 'core', 'zonegrab.js'));   // 0.4.29: preview.js requires app/core/zonegrab.js since D519 (it requires only src/, copied below); without it the control failed
+    for (const d of ['camera', 'preview', 'testhook', 'texmaker', 'lib']) fs.cpSync(path.join(ROOT, 'app', d), path.join(app, d), { recursive: true });   // preview.js requires app/lib/tokens.js; the whole of app/lib, so a later require of theme.js or cjs.js finds it too
+    fs.mkdirSync(path.join(app, 'core')); fs.copyFileSync(path.join(ROOT, 'app', 'core', 'keys.js'), path.join(app, 'core', 'keys.js'));   // preview.js asks app/core/keys.js which Ctrl+keys are shortcuts (keys.js requires nothing)
+    fs.copyFileSync(path.join(ROOT, 'app', 'core', 'zonegrab.js'), path.join(app, 'core', 'zonegrab.js'));   // 0.4.29: preview.js requires app/core/zonegrab.js since the zone grab (it requires only src/, copied below); without it the control failed
     fs.mkdirSync(path.join(dir, 'scripts')); fs.copyFileSync(path.join(ROOT, 'scripts', 'prove_render.js'), path.join(dir, 'scripts', 'prove_render.js'));
     fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });   // all of src/: the modules reach across it (src/doc now requires src/validate)
-    fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });   // src/export/fromwords.js reads its kn5 back with tools/kn5.cjs (D177: the export is in the look's list test)
+    fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });   // src/export/fromwords.js reads its kn5 back with tools/kn5.cjs (the export is in the look's list test)
     const f = m.root === 'scripts' ? path.join(dir, 'scripts', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), applied = m.from === null || src.includes(m.from);
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, m.to));
-    const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
-    const files = [path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(__dirname, 'aclook.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')];   // D354: the run's test files, counted by the D353 check
+    const tap = path.join(dir, '.inner-run.tap');   // a TAP copy, the only place a dead file's exit code shows
+    const files = [path.join(__dirname, 'camera.test.js'), path.join(__dirname, 'preview.test.js'), path.join(__dirname, 'render_proof.test.js'), path.join(__dirname, 'look.test.js'), path.join(__dirname, 'texmaker-panel.test.js'), path.join(__dirname, 'aclook.test.js'), path.join(ROOT, 'test', 'perf.test.js'), path.join(ROOT, 'test', 'perf_soak.test.js'), path.join(ROOT, 'test', 'prove_render.test.js')];   // the run's test files, counted by the crash-after-a-failing-row check
     const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), ...extra, '--test-concurrency=4', ...files],
       { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), APP_DIR: app, SCRIPTS_DIR: path.join(dir, 'scripts') }, encoding: 'utf8', timeout: 300000 });
     if (r.error) throw r.error;
@@ -187,12 +187,12 @@ function runMutant(m, extra = []) {
     if (!/ℹ tests \d+/.test(out)) throw new Error('the mutant test run printed no summary:\n' + out.slice(0, 2000));
     // a todo's failure is not a failure, and "✖ failing tests:" is only the summary's header
     const failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l) && !/# TODO/.test(l)).map((l) => l.slice(2));
-    // D352: a file that died natively ran none of its tests; its own ✖ line is no catch, and a run with no catch but a dead file tested nothing
+    // a file that died natively ran none of its tests; its own ✖ line is no catch, and a run with no catch but a dead file tested nothing
     const crashed = IR.crashesIn(tap), caught = failed.some((l) => !crashed.some((c) => l.startsWith(c.file + ' (')) && l.includes(m.caughtBy));
     if (crashed.length && !caught) throw new Error(IR.notTested(crashed));
-    // D353: a crash after a failing row leaves no trace in the TAP, only the named test's silence; a file that exited on its own (a module that
+    // a crash after a failing row leaves no trace in the TAP, only the named test's silence; a file that exited on its own (a module that
     // threw on load, exit 1) reads as before, and a control (from: null) names no test
-    // D354 (pane E, review 4, F1): a file's own exit is a verdict only when the run had one file; in a run of more, another file's load throw
+    // (found in review) a file's own exit is a verdict only when the run had one file; in a run of more, another file's load throw
     // says nothing about the named test's file, so the silence reads NOT TESTED and names the files that ended on their own
     if (!caught && m.from !== null && !IR.reported(out, m.caughtBy)) {
       const exits = IR.fileExitsIn(tap);
@@ -204,14 +204,14 @@ function runMutant(m, extra = []) {
 
 // THE CONTROL: the same temp copy with NO mutation must pass every test. A copy missing a file would fail everything,
 // and every mutant would then look "caught"; this is the check that the catches mean something.
-// D412: the caughtBy patterns whose mutants may run narrowed, filled by the control below. A pattern missing here (the control did not run, or
+// the caughtBy patterns whose mutants may run narrowed, filled by the control below. A pattern missing here (the control did not run, or
 // its narrowed control failed, ran no row, or never reported the named test) keeps its mutants whole
 const NARROW = new Map();
 test('control: the unmutated temp copy passes every test the mutants are run against', (t) => {
   const control = { id: 'control', file: 'preview/look.js', from: null, to: null, caughtBy: '(no test is named this)' };
   const r = runMutant(control);
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
-  // D412: and narrowed once per distinct caughtBy; each must pass alone, or its mutants stay whole (said, not failed: whole is the safe reading)
+  // and narrowed once per distinct caughtBy; each must pass alone, or its mutants stay whole (said, not failed: whole is the safe reading)
   for (const p of new Set(MUTATIONS.map((m) => m.caughtBy))) {
     const n = runMutant({ ...control, caughtBy: p }, IR.narrowArgs(p));
     NARROW.set(p, n.failed.length === 0 && n.ran.tests > 0 && n.reported);
@@ -219,22 +219,22 @@ test('control: the unmutated temp copy passes every test the mutants are run aga
     else if (n.ran.tests > 1 || n.ran.suites) t.diagnostic(`D412 wide: "${p}" runs ${n.ran.tests} rows${n.ran.suites ? ` and ${n.ran.suites} suite(s)` : ''}`);
   }
 });
-// D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
+// a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
 // it looks for '.test.js', which every dead file's own ✖ line contains, so a dead file's line must not count as the catch
 test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
   const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'scripts' ? path.join(ROOT, 'scripts', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash stand-in', caughtBy: '.test.js', from: first, to: IR.STANDIN + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
   assert.match(said, IR.NOT_TESTED);
 });
-// D353: a crash AFTER an unrelated failing row leaves no file-level entry in the TAP, so only the named test's silence shows it. The second
+// a crash AFTER an unrelated failing row leaves no file-level entry in the TAP, so only the named test's silence shows it. The second
 // stand-in (test/inner_run.js STANDIN_AFTER_FAIL) fails a row and then dies, in every file that loads the first mutant's file; caughtBy is the real one
 test('a crash after an unrelated failing row reads NOT TESTED, never NOT CAUGHT (the second stand-in, D353)', () => {
   const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'scripts' ? path.join(ROOT, 'scripts', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash after a failing row', from: first, to: IR.STANDIN_AFTER_FAIL + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
   assert.match(said, IR.NOT_TESTED_ANY);
 });
-// D354: a mutant that makes a module throw on load, in a run of 9 files: another file's load throw says nothing about the named test's
-// file, so the silence reads NOT TESTED and names the files that threw (pane E, review 4, F1; the trade ruled at D354: an uncaught all-throw
+// a mutant that makes a module throw on load, in a run of 9 files: another file's load throw says nothing about the named test's
+// file, so the silence reads NOT TESTED and names the files that threw (found in review; the trade accepted: an uncaught all-throw
 // mutant here read NOT CAUGHT before)
 test('a load throw in a run of several files reads NOT TESTED and names the files (the load-throw stand-in, D354)', () => {
   const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'scripts' ? path.join(ROOT, 'scripts', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
@@ -243,7 +243,7 @@ test('a load throw in a run of several files reads NOT TESTED and names the file
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, (t) => {
-    const r = IR.narrowedFirst(runMutant, m, NARROW.get(m.caughtBy) === true);   // D412: narrowed first; any miss is re-run whole, and that verdict stands
+    const r = IR.narrowedFirst(runMutant, m, NARROW.get(m.caughtBy) === true);   // narrowed first; any miss is re-run whole, and that verdict stands
     t.diagnostic(`D412 path: ${r.narrowed ? 'narrowed' : 'whole'}`);   // which run gave the verdict: a duration cannot tell a slow narrowed run from a re-run
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" is not in app/${m.file}`);
     assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);

@@ -119,7 +119,7 @@ function checkPlaced(placed, layout, path, missing = [], notes = [], segments = 
   }
 
   const amber = notes.filter((n) => n.level === 'amber').map((n) => ({ id: n.id, text: n.text }));
-  if (segments) for (const m of by('grid')) if (!m.error && !isStraight(segments[m.seg])) amber.push({ id: 'grid-on-straight', text: `${m.name} is on a ${segments[m.seg].word}, not a straight (§5c: the grid is dropped on a straight)` });
+  if (segments) for (const m of by('grid')) if (!m.error && !isStraight(segments[m.seg])) amber.push({ id: 'grid-on-straight', text: `${m.name} is on a ${segments[m.seg].word}, not a straight (the grid belongs on a straight)` });
   for (const c of checks) c.ok = c.problems.length === 0;
   return { ok: checks.every((c) => c.ok), checks, amber };
 }

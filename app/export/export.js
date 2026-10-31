@@ -5,8 +5,8 @@
 //   const exporter = await makeExporter(get);            // get(path) -> text, as app/lib/cjs.js takes it
 //   exporter.checkTarget(dir)  -> { ok } | { ok: false, code, reason }
 //   exporter.run(doc, { variant })  -> { result, folders: [{ folder, files: [{ path, bytes }] }] }   (throws ExportError)
-//   exporter.runSegments(segments, { name, description?, via? }, { variant })   the same, for the equation core (D186)
-//   await exporter.runSegmentsAsync(segments, meta, opts)   the same answer, the export run IN A PROCESS OF ITS OWN (D437b, app/export/exportrunner.js) when
+//   exporter.runSegments(segments, { name, description?, via? }, { variant })   the same, for the equation core
+//   await exporter.runSegmentsAsync(segments, meta, opts)   the same answer, the export run IN A PROCESS OF ITS OWN (app/export/exportrunner.js) when
 //     the page can give it one, so an export that runs out of memory ends with a message naming the stage and the page stays drawn; on the page
 //     (runSegments) where it cannot (node, the tests). It rejects with an ExportError: the export's own refusal as it is, or EXPORT_FAILED (it threw)
 //     or EXPORT_LOST (its process died: "the export ran out of memory building the pit-lane check"), each saying nothing was written
@@ -16,12 +16,12 @@
 // (the ruling of 2026-09-27). A refused export shows its reds.
 //
 // NO GAME IS LAUNCHED AND NOTHING IS INSTALLED: the track goes to the picked folder and nowhere else.
-// THE AC GUARD (the overnight plan's Rule 1: never overwrite anything in the AC install; new tracks only under
+// THE AC GUARD (a standing rule: never overwrite anything in the AC install; new tracks only under
 // content\tracks\t180b_*). A picked folder inside any `…\content\tracks\<name>\…` is refused unless <name> starts with
 // t180b_. Picking `content\tracks` itself is allowed, because exportTrack only ever writes a t180b_* folder there, and
 // it refuses a folder of that name it did not write (NOT_OURS). The native side checks the same thing again. The test
 // is on the path, so it also guards a copy of the AC folders somewhere else, which errs on the safe side.
-// THE EMPTY FOLDER (D226): the user makes a folder named after the track directly in content\tracks ("T-180 TUBE OVAL") and picks it. It is
+// THE EMPTY FOLDER: the user makes a folder named after the track directly in content\tracks ("T-180 TUBE OVAL") and picks it. It is
 // refused, and the EMPTY folder it leaves behind makes Content Manager say "main layout is damaged". So a picked folder that sits DIRECTLY in
 // content\tracks, is not t180b_*, and is EMPTY is not another track: the export goes into content\tracks as the normal t180b_<name>, and
 // that empty folder is removed afterwards (resolveTarget, then the shells call storage.removeEmptyFolder; the native side checks all of it
@@ -86,18 +86,18 @@ async function removeEmptyNote(storage, t) {
 
 /**
  * Load the exporter into this realm with the node shim, the way the webview runs it. `get` fetches source text.
- * D365: `author` is a function giving the author name (Settings ▸ Author name), read at every export, so Export, Test export and Install all
+ * `author` is a function giving the author name (Settings ▸ Author name), read at every export, so Export, Test export and Install all
  * write it; none, a blank name, or a function that throws gives today's author (src/export/fromwords.js authorOf). An opts.author given to
  * run/runSegments wins.
  */
 /**
- * D437b: `runner` is the export's own process (app/export/exportrunner.js createExportRunner); left out, a page that has a document and Web Workers
+ * `runner` is the export's own process (app/export/exportrunner.js createExportRunner); left out, a page that has a document and Web Workers
  * makes one the first time it exports (the files it boots with are the ones this exporter loaded), and null exports on the page. A function is called
  * once, with sources() -> { worker, files }, and returns the runner (app/test/export-isolated-page.test.js wraps the worker's text this way).
  */
 async function makeExporter(get, { author = null, runner: given } = {}) {
   const shim = createShim();
-  const files = new Map();   // D437b: every file the exporter's modules were read from, for the export's own process (it cannot fetch them)
+  const files = new Map();   // every file the exporter's modules were read from, for the export's own process (it cannot fetch them)
   const keep = (p) => Promise.resolve(get(p)).then((t) => { files.set(p, t); return t; });
   const fromwords = await loadCjs('src/export/fromwords.js', keep, { builtins: shim.builtins, globals: { Buffer: shim.Buffer } });
   let runner = given, booted = null;
@@ -138,15 +138,15 @@ async function makeExporter(get, { author = null, runner: given } = {}) {
       const result = fromwords.exportTrack(doc, { outDir: OUT, variant, textures, author: authorNow(a) });   // no selfCheck: the check is always on
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
-    // the equation core's track (D186): src/geom segments from src/core/adapter.js, through the SAME exporter
+    // the equation core's track: src/geom segments from src/core/adapter.js, through the SAME exporter
     // (fromwords.js exportSegments: the same validation, self-check, markers, read-back and AI line); the check stays on
     // markers: the grid layout (app/core/coreshell.js startLayout), or undefined for the export's default
-    runSegments(segments, meta, { variant = 'block', textures = null, markers, test = false, author: a, edgeApronM } = {}) {   // test (D243a): the TEST export of an unfinished track
+    runSegments(segments, meta, { variant = 'block', textures = null, markers, test = false, author: a, edgeApronM } = {}) {   // test: the TEST export of an unfinished track
       shim.reset();
       const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, author: authorNow(a), ...(edgeApronM !== undefined ? { edgeApronM } : {}), ...(test ? { test: true } : {}) });
       return { result, folders: result.folders.map((f) => ({ folder: f.folder, files: shim.files(`${OUT}/${f.folder}`) })) };
     },
-    // D437b: runSegments in the export's own process. The job is packed NOW, from the arguments as they are, before anything is awaited
+    // runSegments in the export's own process. The job is packed NOW, from the arguments as they are, before anything is awaited
     async runSegmentsAsync(segments, meta, opts = {}) {
       const r = runnerNow();
       // on the page, an exporter made from this one with a runSegments of its own ({ ...ex, runSegments }: the tests' stand-in for a red) is honoured

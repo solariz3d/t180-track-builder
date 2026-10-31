@@ -1,5 +1,5 @@
 // overlap-lap.test.js: node --test app/test/overlap-lap.test.js
-// D331 (ELYSIUM's newest save): Close's preview said "No overlap and no red on the closed track" and the checker then said "lap FAILS", because the preview's check (overlapjob.js) ran the
+// On ELYSIUM's newest save, Close's preview said "No overlap and no red on the closed track" and the checker then said "lap FAILS", because the preview's check (overlapjob.js) ran the
 // validator, which proves the lap, and threw the lap away. The check now hands the lap proof's verdict on, in one piece and through the two-part workers. Rows:
 //   1  a closed track whose lap fails (the road the old Finish laid at a banked end, a synthetic fixture): the check says so, and where; one whose lap holds says so; an open track has no lap
 //   2  the two parts put together (mergeParts) are exactly the one-piece check, the lap verdict included

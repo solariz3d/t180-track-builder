@@ -61,7 +61,7 @@ test('a page with no title bar markup is left alone', async () => {
   assert.equal(await wireTitlebar({ getElementById: () => null }, fakeWin()), null);
 });
 
-// D508 (the white flash at startup): the window is created hidden (tauri.conf.json "visible": false) and the page shows it itself, once its
+// The white flash at startup: the window is created hidden (tauri.conf.json "visible": false) and the page shows it itself, once its
 // first frame has painted, so the white 1400 x 860 window WebView2 painted before the maximize is never seen. revealWindow(win, o)
 const { revealWindow } = require('../titlebar.js');
 /** frames and timers run by hand: frame() runs the waiting animation-frame callbacks, fire() the waiting timers */

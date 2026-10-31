@@ -1,4 +1,4 @@
-// Headless tests for app/texture (D172): the textures panel's logic against the real shell, and its loading through the
+// Headless tests for app/texture: the textures panel's logic against the real shell, and its loading through the
 // webview loader. Images are generated here. Run: node --test "app/test/*.test.js"
 'use strict';
 const test = require('node:test');
@@ -69,10 +69,10 @@ test('a file name becomes a texture name the document accepts', () => {
   assert.deepStrictEqual(['C:\\pics\\Kerb Stripes.PNG', 'x/._.jpg', 'Ünï.jpeg'].map(nameFromFile), ['kerb-stripes', 'texture', 'n']);
 });
 
-// RETIRED D239: 'the textures panel loads through the webview loader and exports mount(root, shell)' (app/texture/index.js, the Pieces
+// RETIRED:'the textures panel loads through the webview loader and exports mount(root, shell)' (app/texture/index.js, the Pieces
 // page's per-word textures panel, is removed; the equation page's road surface is app/core/textures.js, app/test/core-textures.test.js)
 
-// ── D175: made textures, packs, the budget ─────────────────────────────────────────────────────────────────────────
+// ── Made textures, packs, the budget ──────────────────────────────────────────────────────────────────────────────
 const TM = require('../../src/texmaker/index.js');
 test('a made texture in a slot replaces an image there, reaches the set, and shows in the live budget', async () => {
   const shell = await createShell({ storage: mem() });

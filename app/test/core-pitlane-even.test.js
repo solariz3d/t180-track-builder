@@ -1,8 +1,8 @@
 // core-pitlane-even.test.js: node --test app/test/core-pitlane-even.test.js
-// D438 (2026-10-22, on the TEST TRACK 10 replay: "look at the pits, the like flip up towards the beginning and end, it should be smooth even"). A pit lane
+// The user (2026-10-22, on the TEST TRACK 10 replay: "look at the pits, the like flip up towards the beginning and end, it should be smooth even"). A pit lane
 // beside a LEVEL straight whose edge is steep (his p1: a 35 m bowl, cup 10°, edge 20° from 0.7 of the half-width, so the right edge turns 30°) must lie
 // even from leave to rejoin: every vertex of the exported lane at the height of the road's edge it leaves from, the diverge and merge as level as the run.
-// Before D438 the lane was tilted to the road's edge angle at both joins (src/geom/pitlane.js φ = ψe at g = 0), so its outer edge rose 4 m at the leave
+// Before this fix the lane was tilted to the road's edge angle at both joins (src/geom/pitlane.js φ = ψe at g = 0), so its outer edge rose 4 m at the leave
 // and the rejoin and fell back level over the 80 m diverge and merge.
 'use strict';
 const test = require('node:test');

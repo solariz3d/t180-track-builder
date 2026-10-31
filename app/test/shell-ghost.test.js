@@ -1,5 +1,5 @@
 // shell-ghost.test.js: node --test app/test/*.test.js
-// The ghost of the next piece (the D170 review, item 6: "pick the word, see it ghosted, click to place"). The shell
+// The ghost of the next piece (a review, item 6: "pick the word, see it ghosted, click to place"). The shell
 // gives the preview a CANDIDATE: the resolved track as it would be with the piece placed, built by the same code as
 // place(), so the ghost is exactly what a click then builds. Nothing is committed: the history does not move.
 'use strict';

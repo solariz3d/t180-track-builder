@@ -7,7 +7,7 @@
 //   ctl.setSlot(id, slot, patch)   a word's slot override: { texture?, tileLength?, fit?, tileWidth?, offset?, dir? };
 //                                  one undo step (the shell's sculpt)
 //   ctl.clearSlot(id, slot)        drop the override: the slot goes back to its font's default
-//   ctl.setMade(id, slot, text, size)  a MADE texture (src/texmaker's canonical text) in the slot, at size px (D175);
+//   ctl.setMade(id, slot, text, size)  a MADE texture (src/texmaker's canonical text) in the slot, at size px;
 //                                  an image the slot held is dropped, as a slot holds one or the other
 //   ctl.savePack(id, { name, author })  -> the pack FILE's text: word id's whole look, with the images it names
 //   ctl.importPack(text)           a pack file: its images join the panel's (a clash refused, as the piece library's)

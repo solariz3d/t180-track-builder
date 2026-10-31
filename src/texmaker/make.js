@@ -1,10 +1,10 @@
-// make.js: a texture's text → pixels. ARCHITECTURE §5b "Make your own: a texture maker inside the program".
+// make.js: a texture's text → pixels. The design: "Make your own: a texture maker inside the program".
 //
 //   makeTexture(params, width, height) -> { width, height, rgba: Uint8Array (RGBA, rows top to bottom), emissive: Uint8Array | null }
 //
 // `params` is a texture (text or object; see text.js), checked first. The image's columns run across the road (u) and its
 // rows along it (v). `emissive` is an RGBA map holding only the glow layers marked `emissive`, or null when there are none
-// (AC takes emissive as a material property; the map is for the slot that wants it, A's call).
+// (AC takes emissive as a material property; the map is for the slot that wants it, the texture pipeline's call).
 //
 // THE SAME TEXT GIVES THE SAME BYTES, on every run and every engine: the arithmetic is + − × ÷, Math.floor, Math.round and
 // Math.imul integer hashing only. No sin, exp or pow, whose last bits the language does not pin down.

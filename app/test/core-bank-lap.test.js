@@ -1,17 +1,17 @@
 // core-bank-lap.test.js: node --test app/test/core-bank-lap.test.js
-// D473 part 2 (pane E): Track ▸ Bank the lap in the app. Since D447 Close banks the lap it closes; a lap closed before that (a flat closer) had no command that
+// Track ▸ Bank the lap in the app. Close now banks the lap it closes; a lap closed before that (a flat closer) had no command that
 // banks it. This is the shell's action (app/core/coreshell.js bankLap), on the core's finish.js bankLapWith. Rows:
 //   1  a closed lap with a flat closer is banked as ONE undo step, and the route does not move: kh and kv byte-equal on every piece
 //   2  a loop held back by the level rule is named in the status line, and a level curve on the same lap is banked
-// D477 (pane P; C's D474 review): a second press changes nothing, the level words by the plan-bank test, a copy of the track first. Rows:
+// After a review: a second press changes nothing, the level words by the plan-bank test, a copy of the track first. Rows:
 //   3  on a lap shaped like TEST 10 (his own bank into a corner he banked himself, a loop that turns beside the curves the press banks), a second press changes
 //      nothing: no undo step, every bank channel as the first press left it, and the status line says so (the first press left two pieces banked under 5°)
 //   4  a loop whose stored turn is under 1/600 is named in the status line when the level rule holds it back (the plan would have banked it about 48°)
 //   5  the press copies the track to its backups first, as it was; a second press, which changes nothing, writes no second copy
 //   6  a copy that cannot be written refuses by name, and nothing changes: no undo step, the lap as it was
-//   7  a bank he laid on purpose under 5° is kept: a straight at 3° is unchanged but for the roll-off tail of the curve after it (D468's tail, one point, raised
-//      and never lowered; a4bfe52 raises it too), and a gentle curve at 3° is never taken below 3° (the chair's row, D477 read)
-// The second press's row on core-bank-lap.test.js row 2's looped lap is C's red row, app/test/core-bank-lap-twice.test.js, as C wrote it.
+//   7  a bank he laid on purpose under 5° is kept: a straight at 3° is unchanged but for the roll-off tail of the curve after it (that curve's tail, one point, raised
+//      and never lowered; a4bfe52 raises it too), and a gentle curve at 3° is never taken below 3° (a row added on review)
+// The second press's row on core-bank-lap.test.js row 2's looped lap is a separate row written red first, app/test/core-bank-lap-twice.test.js, kept as written.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -22,7 +22,7 @@ const { extendTurnBy } = require('../../src/core/turnby.js');
 const { close } = require('../../src/core/close.js');
 
 const DEG = Math.PI / 180, R = 180, Q = (Math.PI * R) / 2, QQ = (300 * Math.PI) / 2;
-/** A lap closed by close() on its last piece, which does not bank (the press does): every curve upright, as a lap closed before D434. */
+/** A lap closed by close() on its last piece, which does not bank (the press does): every curve upright, as a lap closed before Close banked its laps. */
 function flatLap() {
   let d = extend(D.createDoc('flat closer'), { length: 300, family: 'bowl' });
   for (let i = 0; i < 4; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / R } });
@@ -40,7 +40,7 @@ function loopLap() {
 }
 /** TEST 10's shape in public words: his own 30° bank over 100 m into a corner he banked himself and a roll back, a loop that turns (loopDeg over loopM, climbing
  *  360°), then upright corners. `loopDeg` 40 over 600 m: the loop's stored turn is over 1/600 and two pieces beside it (p6, p10) are banked under 5° by the first
- *  press (the second re-banked them, +3.8° each, before D477); 25 over 700 m: the loop's stored turn peaks at 1.23e-3, under 1/600. */
+ *  press (the second re-banked them, +3.8° each, before the second press was fixed); 25 over 700 m: the loop's stored turn peaks at 1.23e-3, under 1/600. */
 function t10Lap(loopM, loopDeg) {
   let d = extend(D.createDoc('t10 shape'), { length: 200, family: 'bowl' });
   d = extend(d, { length: 100, transition: 40, targets: { phi: 30 * DEG } });

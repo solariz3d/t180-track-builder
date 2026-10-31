@@ -1,4 +1,4 @@
-// packs.js: TEXTURE PACKS (ARCHITECTURE §5b: "Texture packs: save and share sets (a font's full look), and import packs
+// packs.js: TEXTURE PACKS (the design: "Texture packs: save and share sets (a font's full look), and import packs
 // other users made"). A pack is ONE shareable file: canonical text with its images embedded.
 //
 //   makePack({ name, author, font, slots, images })  -> pack       slots: all five, full settings (src/doc/textures.js)
@@ -12,9 +12,9 @@
 //   BAD_PACK            not a pack, a key it does not have, a bad name, font or slot
 //   PACK_MISSING_IMAGE  a slot names an image the pack does not carry
 //   PACK_UNUSED_IMAGE   the pack carries an image no slot names (a pack is exactly its look)
-//   PACK_BAD_IMAGE      an image that is not a PNG or a JPG: §5b's route is "Drop in PNG or JPG images. The program
+//   PACK_BAD_IMAGE      an image that is not a PNG or a JPG: the design's route is "Drop in PNG or JPG images. The program
 //                       converts them to DDS". A DDS in a pack is refused; the builder makes its own.
-//   COMPRESSED_NORMAL   a normal map that is block-compressed (a DDS with a DXT/BC/ATI FourCC): §5b "Warns about what
+//   COMPRESSED_NORMAL   a normal map that is block-compressed (a DDS with a DXT/BC/ATI FourCC): the design "Warns about what
 //                       AC can't do, e.g. compressed normal maps aren't supported"
 //   NAME_TAKEN          on import, a pack of that name (trimmed, any case: as the piece library's names) is already
 //                       there, or an image of that name with DIFFERENT bytes is; the same bytes under the same name are
@@ -59,8 +59,8 @@ function imageProblem(name, role, bytes) {
     const dds = bytes.length >= 4 && bytes[0] === 0x44 && bytes[1] === 0x44 && bytes[2] === 0x53 && bytes[3] === 0x20;
     if (dds) {
       let fourCC = null; try { fourCC = readDdsHeader(bytes).fourCC; } catch (e) { if (!e.code) throw e; }
-      if (role === 'normal' && fourCC && /^(DXT|BC|ATI)/.test(fourCC)) return bad('COMPRESSED_NORMAL', `image ${name}: a block-compressed (${fourCC}) normal map; AC does not support compressed normal maps (§5b)`);
-      return bad('PACK_BAD_IMAGE', `image ${name}: a DDS; a pack carries PNG or JPG images, which the builder converts to DDS itself (§5b)`);
+      if (role === 'normal' && fourCC && /^(DXT|BC|ATI)/.test(fourCC)) return bad('COMPRESSED_NORMAL', `image ${name}: a block-compressed (${fourCC}) normal map; AC does not support compressed normal maps`);
+      return bad('PACK_BAD_IMAGE', `image ${name}: a DDS; a pack carries PNG or JPG images, which the builder converts to DDS itself`);
     }
     return bad('PACK_BAD_IMAGE', `image ${name}: not a PNG or a JPG`);
   }

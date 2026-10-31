@@ -1,5 +1,5 @@
 // sculpt-release.test.js: node --test app/test/sculpt-release.test.js
-// D421c part 2: THE RELEASE OF A SCULPT DRAG, BUILT A SLICE AT A TIME. After a route tool on a closed lap the shell re-closes it (a whole-lap close moves every piece), and the exact
+// THE RELEASE OF A SCULPT DRAG, BUILT A SLICE AT A TIME. After a route tool on a closed lap the shell re-closes it (a whole-lap close moves every piece), and the exact
 // road was built in one frame (about 200 ms on a 10 km lap). It is now built as steps: src/geom/mesh.js reuseMeshSteps, app/preview/trackmodel.js updateSteps, and the preview runs
 // them a few milliseconds a frame. Rows:
 //   1  reuseMeshSteps run to the end is reuseMesh, to the byte: a closed lap with some pieces kept and some meshed again, and an open track grown into a closed one

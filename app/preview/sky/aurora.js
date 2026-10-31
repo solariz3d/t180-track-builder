@@ -1,10 +1,10 @@
-// sky/aurora.js: the 'aurora' sky (D384), Aurora's. The contract is in app/preview/sky/index.js.
+// sky/aurora.js: the 'aurora' sky, Aurora's. The contract is in app/preview/sky/index.js.
 // A polar night. A field of fine stars, a few brighter, twinkling faintly; and two curtains of aurora hung round the sky, a green one and a higher,
 // fainter violet one. Each curtain is a ribbon that folds and sways slowly along its length, with fine vertical rays, its lower edge the brightest
 // part (where the light is made) and its top fading upward into violet. Where a fold bunches the ribbon, it glows a little brighter.
 // Quiet behind the work: under about 10 degrees of elevation, where the road sits against the sky, there are no curtains and no stars, and the night
 // pales only to the skin's --fog at the horizon (uSkyC is the skin's fog colour, so the far road fogs into the sky it meets).
-// Every edge is a smooth falloff, and the stars are points sized in device pixels (D416: a cone 1.25 px in radius, from the pass's uPx, so a star is
+// Every edge is a smooth falloff, and the stars are points sized in device pixels (a cone 1.25 px in radius, from the pass's uPx, so a star is
 // about a pixel across at any window size and pixel density; they were gaussians in grid cells, a median 2.2 px across at half their peak at 2560 x 1440, measured by app/test/sky-crisp.test.js). The motion is slow: the folds travel at under 0.004 rad/s and
 // the hems at under 0.006 rad/s, so nothing crosses the view in under four minutes; the twinkle changes brightness in place by at most 15%.
 // Everything round the sky is a function of whole multiples of the azimuth (sin(k az), k an integer), so the curtains close with no seam; they and

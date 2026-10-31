@@ -1,4 +1,4 @@
-// panels.js: mount one of C's or E's panels (app/README.md, "The seam") into its area, and make a failure VISIBLE.
+// panels.js: mount one of the app's panels (app/README.md, "The seam") into its area, and make a failure VISIBLE.
 //
 //   const r = await mountPanel(root, 'preview', () => loadCjs('app/preview/index.js', get), shell);   // { ok, error }
 //

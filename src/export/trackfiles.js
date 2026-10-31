@@ -73,7 +73,7 @@ const EXTENDED_PHYSICS_SURFACE = [
 ].join('\n');
 
 /** The warning that goes with the switch, wherever an export writes it (the app shows export warnings). */
-const CSP_ONLY_WARNING = 'csp-only: surfaces.ini sets WAV_PITCH=extended-0, CSP\'s extended physics (ARCHITECTURE §6). Assetto Corsa without Custom Shaders Patch can crash loading this track (CSP wiki, "Tracks – Enabling extended physics"; docs/research/04_ac_physics_drivability.md §2). Turn off "T-180 track" to export without it.';
+const CSP_ONLY_WARNING = 'csp-only: surfaces.ini sets WAV_PITCH=extended-0, CSP\'s extended physics. Assetto Corsa without Custom Shaders Patch can crash loading this track (CSP wiki, "Tracks – Enabling extended physics"). Turn off "T-180 track" to export without it.';
 
 /**
  * surfaces.ini. `softCollision`: the T-180 soft-collision block. `extendedPhysics`: CSP's extended-0 surface. Both default

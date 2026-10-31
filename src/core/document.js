@@ -499,7 +499,7 @@ function checkDoc(doc) {
     if (prev && flight) {   // a LANDING starts at its flight's pose, not C1 with the take-off: level, at the flight's bank, the rest its own
       const p = landingProblem(flight, P); if (p) throw new CoreError('LANDING', `${at}: ${p}`);
     } else if (prev) {
-      const p = jointProblem(pieceEnd(prev), P, kindOf(prev)); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint is C1 in every channel, ref 09 §1)`);
+      const p = jointProblem(pieceEnd(prev), P, kindOf(prev)); if (p) throw new CoreError('JOINT', `${at}: ${p} (every road joint must meet smoothly: the same value and slope in every channel)`);
     }
     if (!flight && deepFrozen(P) && (!prev || deepFrozen(prev))) ROAD_OK.set(P, prev || FIRST);
     prev = P; flight = null;

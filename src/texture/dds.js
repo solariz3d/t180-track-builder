@@ -1,11 +1,11 @@
-// dds.js: 8-bit RGBA → an UNCOMPRESSED DDS with a full mipmap chain (ARCHITECTURE §5b: "The program converts them to
+// dds.js: 8-bit RGBA → an UNCOMPRESSED DDS with a full mipmap chain (the design: "The program converts them to
 // DDS for AC (AC strongly prefers DDS, up to 8192²) and builds mipmaps"). Dependency-free.
 //
 // FORMAT (Microsoft, "DDS_HEADER" and "DDS_PIXELFORMAT" in the Direct3D 9/11 programming guide): the magic "DDS ", a
 // 124-byte header, then every mip level's pixels, largest first. Pixels are 32-bit A8R8G8B8, which in memory is B, G,
 // R, A per pixel (the masks below say so). Header flags CAPS | HEIGHT | WIDTH | PITCH | PIXELFORMAT | MIPMAPCOUNT;
 // caps TEXTURE | MIPMAP | COMPLEX. Uncompressed on purpose: block compression is lossy, and for normal maps AC does not
-// support it at all (§5b), so v1 writes every texture losslessly and leaves compression to a later, measured choice.
+// support it at all, so v1 writes every texture losslessly and leaves compression to a later, measured choice.
 //
 // MIPS: each level halves each side (never below 1) and every texel is the plain average of the 2×2 (or 2×1, 1×2, or,
 // on an odd side, 3-wide) block of the level above it that it covers, so no texel of the level above is dropped on a

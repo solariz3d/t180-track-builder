@@ -1,13 +1,13 @@
-// index.js: the texture maker's panel (ARCHITECTURE §5b "Make your own: a texture maker inside the program"): the layer
+// index.js: the texture maker's panel ("Make your own: a texture maker inside the program"): the layer
 // list with each layer's parameters, a live preview swatch, and the texture's canonical text.
 //
 //   const panel = mount(root, { start, onChange, swatchSize })
 //       start       a texture text, object or preset name (default 'asphalt')
-//       onChange    called with the canonical text after every accepted edit (A's slot keeps it, §5b "a texture is also
+//       onChange    called with the canonical text after every accepted edit (the texture slot keeps it: "a texture is also
 //                   text"); also sent as the document event 't180-texmaker-change' { detail: { text } }
 //   panel.editor    the editor (app/texmaker/model.js)      panel.unmount()
 //
-// WHERE A MOUNTS IT (proposed, A's files): the texture panel (app/texture/panel.js) gives each slot a "Make…" button that
+// WHERE IT MOUNTS (proposed): the texture panel (app/texture/panel.js) gives each slot a "Make…" button that
 // opens this panel on the slot's current maker text (or a preset), and on change stores the text in the slot and renders
 // it with makeTexture(text, w, h) into the same { width, height, rgba } path its PNG/JPG import already takes to DDS.
 // Nothing crosses IPC: the maker runs in the UI process, like the geometry.

@@ -1,21 +1,21 @@
-// redgroups.js: EVERY red, in plain words, grouped, with where (D242, the librarian's item 4; the user, TEST 1: his refusal showed only the
+// redgroups.js: EVERY red, in plain words, grouped, with where (the user, TEST 1: his refusal showed only the
 // first red, under the name "downforce-ray-gap", when 29 reds said one thing: the road runs into itself).
 //
 //   groupReds(reds, segments, { closed })  -> [{ key, title, count, items: [{ s, s0, s1, piece, km, what, reason, detail }], places: [...] }]
 //                                 the reds of a validation or a refused export (src/validate: { reason, s0, s1 } or { reason, s }), grouped by
 //                                 what they MEAN, the overlap first; `segments` (the adapter's, the lap's order) names the piece at each s;
-//                                 closed: false for an OPEN track (its end is the last piece; F2), default true (a closed lap wraps).
+//                                 closed: false for an OPEN track (its end is the last piece), default true (a closed lap wraps).
 //   groupsText(groups)         -> one line per group, for a status line or a dialog: "the road overlaps itself (12 places): at 1.40 km (p3), …"
 //   placesText(g)              -> "12 places": how many PLACES the group's reds make (g.count stays the number of reds)
 //   pieceAt(segments, s, { closed }) -> the id of the piece the lap is on at s
 //   kmText(s)                  -> "5.82 km"
 //
 // THE OVERLAP GROUP. self-intersection (the mesh passes through itself), stacked-within-2m (one road less than 2 m over another) and a
-// downforce-ray-gap that sits where one of those is (within OVERLAP_NEAR_M) all say the same thing: the road runs into itself. E's
-// diagnosis of TEST 1 (loop/test1_raygap_diagnosis_2026-10-04.md): every ray red was the edge of one road lying on ANOTHER road, never a
+// downforce-ray-gap that sits where one of those is (within OVERLAP_NEAR_M) all say the same thing: the road runs into itself. A
+// diagnosis of TEST 1 (2026-10-04) found every ray red was the edge of one road lying on ANOTHER road, never a
 // hole. A ray red with no overlap near it keeps its own words (a real gap in the road under the car).
 //
-// PLACES (D248, E's note B on the D242 look: "1.47–1.51 km (p3), 1.48–1.51 km (p3)" were two lines for one place). Each group also carries
+// PLACES (a review of the first grouped list: "1.47–1.51 km (p3), 1.48–1.51 km (p3)" were two lines for one place). Each group also carries
 // g.places: its reds merged where they overlap, or touch (a gap of at most TOUCH_M, one station of validation's 2 m step) on the piece the
 // place ends on, so they always share a piece, and the user reads one line per place. A place keeps where it starts (s, s0: a click goes there), where it ends, the pieces it
 // spans, every reason and plain description it merged, and how many reds it covers. The group is the kind the user reads ("the road
@@ -29,14 +29,14 @@ const kmText = (s) => `${(s / 1000).toFixed(2)} km`;
 /** A range for a person: "5.82–5.86 km" (one unit), or "5.82 km" when both ends round alike. */
 const kmRange = (s0, s1) => { const a = (s0 / 1000).toFixed(2), b = (s1 / 1000).toFixed(2); return a === b ? `${a} km` : `${a}–${b} km`; };
 /** The id of the piece the lap is on at s (segments in lap order, each with its id and length); a closed lap's s past its end wraps (the default).
- *  On an OPEN track (closed: false) nothing wraps: s at or past the end is the LAST piece (F2, C's look at A's handles: an end red read "(p1)"). */
+ *  On an OPEN track (closed: false) nothing wraps: s at or past the end is the LAST piece (a review found an end red read "(p1)"). */
 function pieceAt(segments, s, { closed = true } = {}) {
   if (!Array.isArray(segments) || !segments.length || !Number.isFinite(s)) return null;
   const L = segments.reduce((a, g) => a + g.length, 0); let x = L > 0 && closed ? ((s % L) + L) % L : s, acc = 0;
   for (const g of segments) { if (x < acc + g.length - 1e-9) return g.id; acc += g.length; }
   return segments[segments.length - 1].id;
 }
-/** The piece a range ENDS on: read just inside s1, so a range ending exactly on a boundary is on its own piece, not the next one (F1, C's look
+/** The piece a range ENDS on: read just inside s1, so a range ending exactly on a boundary is on its own piece, not the next one (a review
  *  at 05f0c2c: pieceAt puts a boundary s on the NEXT piece). A point (or sub-0.5 m) range is on the piece it starts on. */
 const endPiece = (segments, s0, s1, o) => pieceAt(segments, s1 > s0 + 0.5 ? s1 - 1e-6 : s0, o);
 const WHAT = {
@@ -68,7 +68,7 @@ function groupReds(reds, segments, o = {}) {
   return [...byKey.values()].sort((a, b) => order(a.key) - order(b.key) || a.key.localeCompare(b.key));
 }
 /** A group's items (sorted by s) merged into PLACES: overlapping by more than a point (so on a piece the place spans), or touching (a gap of at
- *  most TOUCH_M, meeting included) on the piece the place ends on. F1: two reds that only MEET at a piece boundary are on different pieces. A red inside a place that spans two pieces is that place (the D248 real-window check: "at 1.08–1.16 km (p4–p5),
+ *  most TOUCH_M, meeting included) on the piece the place ends on. Two reds that only MEET at a piece boundary are on different pieces. A red inside a place that spans two pieces is that place (a check in the real window: "at 1.08–1.16 km (p4–p5),
  *  at 1.15 km (p5)"); reds on different pieces that only touch stay two places. */
 function mergePlaces(items, segments, o = {}) {
   const out = [];
@@ -92,7 +92,7 @@ const placesText = (g) => { const n = (g.places || []).length; return `${n} plac
 /** The place of an item, for a person: "at 5.82 km (p20)", or "at 5.82–5.86 km (p20–p21)". */
 const placeText = (it) => `at ${it.km} (${it.pieceEnd && it.pieceEnd !== it.piece ? `${it.piece}–${it.pieceEnd}` : it.piece || '?'})`;
 function groupsText(groups) {
-  // each PLACE once per group (D248: overlapping or touching reds on one piece are one place to look at), and the count is of places
+  // each PLACE once per group (overlapping or touching reds on one piece are one place to look at), and the count is of places
   return groups.map((g) => `${g.title} (${placesText(g)}): ${g.places.map(placeText).join(', ')}`).join('; ');
 }
 

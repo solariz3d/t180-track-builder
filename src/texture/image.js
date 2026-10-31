@@ -1,4 +1,4 @@
-// image.js: bytes → { width, height, rgba }, whichever of the two formats §5b takes ("Drop in PNG or JPG images").
+// image.js: bytes → { width, height, rgba }, whichever of the two formats the design takes ("Drop in PNG or JPG images").
 // The format is sniffed from the bytes, never from a file name. Anything else is refused as NOT_AN_IMAGE, by name.
 'use strict';
 const { decodePng, isPng } = require('./png.js');

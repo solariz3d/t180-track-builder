@@ -1,19 +1,19 @@
 // resolve.js: resolve(doc) -> { segments, closed, constraints, head }, the explicit list the geometry consumes
-// (docs/INTERFACES.md §1). Pure and deterministic: the same document gives the same segments, number for number.
+// Pure and deterministic: the same document gives the same segments, number for number.
 //
-// HOW A ROAD WORD BECOMES SEGMENTS (ARCHITECTURE §2: "yaw and pitch curvature as ramped functions of s (clothoids, so
+// HOW A ROAD WORD BECOMES SEGMENTS (the design: "yaw and pitch curvature as ramped functions of s (clothoids, so
 // smooth joins come by construction), roll φ(s), and a heartline offset"):
 // - Its curvature OPENS over easeIn·L, from the curvature it arrives with to its peak, HOLDS, then CLOSES over
 //   easeOut·L back to 0. So joins are continuous in curvature by construction. easeOut = 0 hands the peak to the next
-//   word, which opens from it (track E's `sweep → turn → tight` steps: FINDINGS §7).
+//   word, which opens from it (track E's `sweep → turn → tight` steps, measured).
 // - The peak is solved so the word turns by exactly its `turn` handle: turn = k_in·a·L/2 + k·L·(1 − a/2 − b/2).
 //   Pitch works the same way from `climb`, so the pitch change across a word is exactly `climb`.
 // - It is emitted as up to three segments (parts 'in', 'body', 'out'; a zero-length part is left out), each linear in
-//   curvature, as INTERFACES §1's k0/k1 and kp0/kp1 are. All three carry the word's id.
+//   curvature, as the segment shape's k0/k1 and kp0/kp1 are. All three carry the word's id.
 // - Roll follows ONE smoothstep over the whole word, from roll0 to roll1. A part's roll0/roll1 are that smoothstep's
 //   values at the part's ends. The geometry smoothsteps again inside each part, so the roll is piecewise smoothstep,
-//   level at every part boundary: close to one smoothstep, not identical (a shape note for docs/INTERFACES.md).
-// - The profile (INTERFACES §1 `profile`): a floor of `width`, then on each side a wall of arc length `wall` (a handle),
+//   level at every part boundary: close to one smoothstep, not identical.
+// - The profile (the segment's `profile`): a floor of `width`, then on each side a wall of arc length `wall` (a handle),
 //   its turning angle rising linearly to ψR / ψL: u = [−(w/2 + wall), −w/2, 0, w/2, w/2 + wall], ψ = [ψR, 0, 0, 0, ψL].
 //
 // A JUMP becomes one segment of kind 'gap', with no surface. It flies straight in plan (no grip in the air, so the yaw
@@ -23,7 +23,7 @@
 // REFUSED, loudly (ResolveError): a roll step or a heartline step between words (both would tear the surface; a
 // heartline ramp has no field in the segment shape), a jump no clothoid can fly, a jump whose take-off or flight is at
 // or past vertical (JUMP_PAST_VERTICAL: the car would fly backwards; found by the soak, seed 17 op #4649), and a CLOSED document. Closing the
-// loop (§2: a G1/G2 connector ranked by physics margin) needs the path's end frame, and is not built in this lap.
+// loop (a G1/G2 connector ranked by physics margin) needs the path's end frame, and is not built here.
 'use strict';
 
 const { TEMPOS, FONTS, LANDING } = require('./vocab.js');
@@ -38,7 +38,7 @@ class ResolveError extends Error {
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 const TOL_ROLL = 1e-9, TOL_HEART = 1e-9;
 
-// D182: the three MEASURED fonts (bowl, half-pipe, flat) take their floor from the library's cross-sections
+// The three MEASURED fonts (bowl, half-pipe, flat) take their floor from the library's cross-sections
 // (src/geom/fonts.js: ψ at ¼, ½, ¾ and the edge of each half-width, then the wall handle above it). Any other font is as before.
 function profileOf(font, h) {
   if (isMeasured(font)) return fontProfile(font, h);
@@ -163,11 +163,11 @@ function resolveTail(doc, i0, segsBefore, stBefore, marksBefore, designKmh) {
 
 function openCheck(doc) {
   checkDoc(doc);
-  if (doc.closed) throw new ResolveError('CLOSE_NOT_BUILT', 'the document is closed, and the closing connector (ARCHITECTURE §2 "Closing the loop") is not built yet; resolve an open document');
+  if (doc.closed) throw new ResolveError('CLOSE_NOT_BUILT', 'the document is closed, and resolving a closed loop is not built yet; resolve an open document');
 }
 
 /**
- * resolve(doc, { designSpeedKmh }): a jump with no speed of its own sizes its landing ramp for designSpeedKmh (D179: the
+ * resolve(doc, { designSpeedKmh }): a jump with no speed of its own sizes its landing ramp for designSpeedKmh (the
  * app's speed slider), or for LANDING.DEFAULT_KMH when none is given. Nothing else reads it.
  */
 function designOf(opts) {
@@ -179,7 +179,7 @@ function designOf(opts) {
 function resolve(doc, opts) { openCheck(doc); return resolveTail(doc, 0, [], START, [], designOf(opts)); }
 
 /**
- * Incremental resolve (the build head, docs/INTERFACES.md §4): re-resolve only from the first entry that differs
+ * Incremental resolve (the build head): re-resolve only from the first entry that differs
  * from the previous document. Documents are immutable and edits reuse untouched entries, so "differs" is object
  * identity. The segments before that point are the previous result's own objects, unchanged. The result is equal,
  * field for field, to a full resolve (tested).

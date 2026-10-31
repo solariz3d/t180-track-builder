@@ -1,14 +1,14 @@
 // sky-caustics-aurora.test.js: node --test app/test/sky-caustics-aurora.test.js
-// D384 part 2: Aqua's 'caustics' sky and Aurora's 'aurora' sky, as style modules of app/preview/sky (the contract is in sky/index.js). Node has no
-// GPU, so this checks what can be read from the text; the drawn result is measured in the real app (the hand-back's shots from two headings).
+// Aqua's 'caustics' sky and Aurora's 'aurora' sky, as style modules of app/preview/sky (the contract is in sky/index.js). Node has no
+// GPU, so this checks what can be read from the text; the drawn result is measured in the real app (shots from two headings).
 // Rows:
 //   1  each style builds: the registry returns GLSL that defines vec3 skyPattern(vec3 dir, float t) (red while the module was a stub)
 //   2  each source keeps to the contract: helpers named with the style's prefix, reads only the uniforms the pass declares (uSky, uSkyA, uSkyB,
-//      uSkyC, and uPx since D410), declares no uniform, precision or #version of its own, and loops only to a constant bound (GLSL ES 1.0)
+//      uSkyC, and uPx), declares no uniform, precision or #version of its own, and loops only to a constant bound (GLSL ES 1.0)
 //   3  each skin names its style with --sky-style and sets every colour that style reads (one left unset would quietly fall back to --sky)
 //   4  the screen-pinned layers are gone: neither skin draws on #preview::after (the sky moved into the world)
-//   4b each skin's --sky-c is its --fog (D384 widened: under 10 degrees the sky pales only to the fog, so the far road fogs into the sky it meets)
-//   4c Aqua's --bad is SIGIL's red hue made lighter, at least 4.5:1 on --panel, --bg and --raise (D384, A's review 6 finding 2)
+//   4b each skin's --sky-c is its --fog (under 10 degrees the sky pales only to the fog, so the far road fogs into the sky it meets)
+//   4c Aqua's --bad is SIGIL's red hue made lighter, at least 4.5:1 on --panel, --bg and --raise (a review finding)
 //   5  the contract check is not vacuous: a helper without the prefix, a stray uniform, a declared uniform and a loop to a variable are each refused
 'use strict';
 const test = require('node:test');
@@ -18,7 +18,7 @@ const fs = require('fs'), path = require('path');
 const APP = path.join(__dirname, '..');
 const SKY = require(path.join(APP, 'preview', 'sky', 'index.js'));
 const SKINS = { caustics: 'aqua', aurora: 'aurora' };
-// AMENDED (D416): the pass has declared uPx since D410 (the angle of one device pixel), and D416 sizes Aqua's motes and Aurora's stars with it
+// AMENDED: the pass now declares uPx (the angle of one device pixel), and Aqua's motes and Aurora's stars with it
 const PASS_UNIFORMS = ['uSky', 'uSkyA', 'uSkyB', 'uSkyC', 'uPx'];
 const TOKEN_OF = { uSkyA: '--sky-a', uSkyB: '--sky-b', uSkyC: '--sky-c' };
 

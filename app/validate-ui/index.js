@@ -2,23 +2,23 @@
 //
 // What it shows, in #validation:
 //   · a summary: red and amber counts, the lap (open while building), the jumps;
-//   · NO speed control (D256, the user: "it should always be maxed out"): an open track's loads at the lap sim's cap, 970 km/h
+//   · NO speed control (the user: "it should always be maxed out"): an open track's loads at the lap sim's cap, 970 km/h
 //     (MACH6.vmaxKmh), a closed one on its ghost lap, the speed the export judges it at, so the two never disagree;
-//   · a CSP toggle: off validates for vanilla AC, where surfaces above 50° are red (ARCHITECTURE.md:87). D355: it is the saved setting `csp` (app/settings.js),
+//   · a CSP toggle: off validates for vanilla AC, where surfaces above 50° are red. It is the saved setting `csp` (app/settings.js),
 //     shared with Settings ▸ Checker ▸ Wall raycasting: it starts from what is saved, a click on it saves it, and a change made in the menu ticks it here and re-checks;
 //   · the load graph (graph.js): the hardest line's load along the track, the 20 g and 90 g limits, red and amber
-//     stretches shaded. HIDDEN while there is no load (no speed model). It replaced, in D170, a colour ribbon that
-//     painted an all-grey bar while there were no loads (the librarian's item 5);
+//     stretches shaded. HIDDEN while there is no load (no speed model). It replaced a colour ribbon that
+//     painted an all-grey bar while there were no loads (a reported issue);
 //   · every red and amber range with its reason and FINDINGS/ARCHITECTURE source; every jump with both landings.
 //
-// WHAT IT GIVES THE PREVIEW (a seam proposed here, not yet agreed with C): after every update, root dispatches a
+// WHAT IT GIVES THE PREVIEW (a seam proposed here, not yet agreed): after every update, root dispatches a
 // bubbling CustomEvent 't180:validation' with detail { path, result, map, levelAt(s, u), rgbaAt(s, u), arcs }. The
 // shell shares nothing derived (app/README.md), so the preview listens on document for it instead of re-validating.
 // It is mesh-free: colours are looked up per vertex by (s, u), and the arcs are short polylines.
 // Validation is batched to one run per animation frame (the controller's `schedule`), so a drag does not validate more
 // often than the screen draws.
 //
-// WHAT IT ASKS THE PREVIEW (D177, one shared path): before each update it dispatches C's 't180:track-request' on the
+// WHAT IT ASKS THE PREVIEW (one shared path): before each update it dispatches the preview's 't180:track-request' on the
 // document; the preview replies { path, segments, … }, its path and the segments it was built from. The controller
 // validates a 2 m view of that path (pathview.js; the identity while the preview's step is 2 m too) when `segments` is
 // the very array of the document being validated, and otherwise grows its own path, so an unanswered event costs
@@ -37,7 +37,7 @@ const { levelAt, rgbaAt, rangeLevel, PALETTE, LEVEL } = require('./colour.js');
 const { createCheckRunner } = require('./checkrunner.js');
 const { graphModel, drawGraph } = require('./graph.js');
 const { lapText, lapWhereText, findingLine, findingGroups } = require('./labels.js');
-const S = require('../settings.js');   // D355: the CSP box is the saved setting `csp`
+const S = require('../settings.js');   // the CSP box is the saved setting `csp`
 
 const css = (rgba) => `rgb(${Math.round(rgba[0] * 255)}, ${Math.round(rgba[1] * 255)}, ${Math.round(rgba[2] * 255)})`;
 // a red or amber line is TEXT: the look's text token (app/index.html --bad-text, --warn-text: the same hue, measured to read on its panel), the road's paint colour the fallback
@@ -47,7 +47,7 @@ const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.cr
 
 function mount(root, shell) {
   const head = el('div', { className: 'v-summary' });
-  const csp = el('input', { type: 'checkbox', checked: S.get('csp', true) !== false });   // D355: the saved setting (on when nothing is saved, as before)
+  const csp = el('input', { type: 'checkbox', checked: S.get('csp', true) !== false });   // the saved setting (on when nothing is saved, as before)
   const graph = el('canvas', { width: 480, height: 96, className: 'v-graph', style: 'width: 100%; height: 96px;' });
   const list = el('ul', { className: 'v-list' });
   root.append(el('label', {}, [csp, ' CSP (wall raycasting)']), head, graph, list);
@@ -61,7 +61,7 @@ function mount(root, shell) {
     head.style.color = state.error ? textCss(LEVEL.RED) : '';
     const gm = 'graph' in state ? state.graph : graphModel(state);   // the worker sends its graph ready-made
     graph.style.display = gm ? '' : 'none';   // hidden while there is no load to draw
-    // the canvas's backing store follows its SHOWN size (D177 window pass: drawn at 480 px and shown at ~265, its labels
+    // the canvas's backing store follows its SHOWN size (a check in the window: drawn at 480 px and shown at ~265, its labels
     // were too small to read); DPR-aware, so the 10 px labels are 10 css px on any screen
     const dpr = (typeof devicePixelRatio === 'number' && devicePixelRatio > 0) ? devicePixelRatio : 1, cw = graph.clientWidth;
     if (cw > 0 && graph.width !== Math.round(cw * dpr)) { graph.width = Math.round(cw * dpr); graph.height = Math.round(96 * dpr); }
@@ -72,7 +72,7 @@ function mount(root, shell) {
       for (const [kind, items, lvl] of [['red', r.red, LEVEL.RED], ['amber', r.amber, LEVEL.AMBER]]) {
         for (const f of findingGroups(kind, items)) list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${textCss(lvl)}` }));   // one line per reason with its places; the rule and its sources in the tooltip
       }
-      // D256: "holds above N km/h" (information): where the centreline faces the ground, the slowest speed that keeps the car on it
+      // "holds above N km/h" (information): where the centreline faces the ground, the slowest speed that keeps the car on it
       for (const x of r.info) if (x.reason === 'holds-above') { const f = findingLine('info', x); list.append(el('li', { textContent: f.text, title: f.title, style: `color: ${css(PALETTE[LEVEL.INFO])}` })); }
       if (r.lap && r.lap.ok === false) for (const w of r.lap.where) list.append(el('li', { textContent: `lap: ${lapWhereText(w)}, at ${w.s.toFixed(0)} m`, title: w.reason, style: `color: ${textCss(LEVEL.RED)}` }));
     }
@@ -91,18 +91,18 @@ function mount(root, shell) {
   const worker = mountWorker();
   if (worker) return worker;
   let ctl = null;
-  // D256: there is no design-speed slider any more; the controller checks at full speed (panel.js). The slider it replaced never sized the
-  // equation core's jump ramps either, whatever D179 said here: src/core/adapter.js toSegments sizes them at MACH6.designSpeedKmh, 460 km/h
-  // ONE PATH (D177): the preview's path, asked for through C's seam ('t180:track-request', { reply(track) }, answered
+  // there is no design-speed slider any more; the controller checks at full speed (panel.js). The slider it replaced never sized the
+  // equation core's jump ramps either, whatever an older note here said: src/core/adapter.js toSegments sizes them at MACH6.designSpeedKmh, 460 km/h
+  // ONE PATH: the preview's path, asked for through the preview's seam ('t180:track-request', { reply(track) }, answered
   // with { path, segments, closed, how, g, fromS }: app/preview/index.js); with no answer, or a path for another
   // document, the controller grows its own
   const sharedPath = () => { let got = null; document.dispatchEvent(new CustomEvent('t180:track-request', { detail: { reply: (x) => { got = x; } } })); return got; };
-  ctl = createValidationController(shell, { csp: csp.checked, onUpdate: render, schedule: raf, sharedPath });   // D355: from the saved setting
+  ctl = createValidationController(shell, { csp: csp.checked, onUpdate: render, schedule: raf, sharedPath });   // from the saved setting
   csp.onchange = () => ctl.setCsp(csp.checked);
   const offCsp = followCsp();
   return { dispose: () => { offCsp(); ctl.dispose(); } };
 
-  /** D355: the box and the saved setting follow each other: a click saves it; a change in Settings ticks the box and runs its own handler (a re-check), as a click would. */
+  /** the box and the saved setting follow each other: a click saves it; a change in Settings ticks the box and runs its own handler (a re-check), as a click would. */
   function followCsp() {
     const save = () => S.set('csp', csp.checked);
     csp.addEventListener('change', save);
@@ -115,13 +115,13 @@ function mount(root, shell) {
     const WorkerCtor = typeof Worker === 'function' ? Worker : null;
     if (!WorkerCtor) return null;
     let last = null, runner = null, broken = false, frame = 0, sentDoc = null, sentDrag = null, unsub = null;
-    const jobs = new Map();   // serial -> the document, CSP and drag it was sent with (D343)
+    const jobs = new Map();   // serial -> the document, CSP and drag it was sent with
     const show = (st) => { last = st; render(st); };
     try {
       runner = createCheckRunner({
         WorkerCtor,
         onAnswer: (out, { serial, pending }) => {
-          // D343: a finished answer (no drag, nothing deferred) is the open track's reds for that document: the shell keeps them for a Close press on it
+          // a finished answer (no drag, nothing deferred) is the open track's reds for that document: the shell keeps them for a Close press on it
           const job = jobs.get(serial); for (const k of [...jobs.keys()]) if (k <= serial) jobs.delete(k);   // older answers are dropped by the runner: their entries go too
           if (job && !job.dragging && out && !out.error && out.result && out.result.pendingFrom == null && typeof shell.noteCheck === 'function') shell.noteCheck(job.doc, { csp: job.csp, red: out.result.red });
           show({ ...out, path: trackPath(), map: null, checking: pending });

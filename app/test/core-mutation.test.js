@@ -1,5 +1,5 @@
 // core-mutation.test.js: node --test app/test/core-mutation.test.js
-// The equation core's app side (D186, pane C), mutated. Each mutation copies app/ (core, preview, camera, export, lib, testhook,
+// The equation core's app side, mutated. Each mutation copies app/ (core, preview, camera, export, lib, testhook,
 // and core-shell.test.js), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED core-shell.test.js
 // there, so its relative requires reach the mutant. "Applied" means the patch text was found exactly once; "caught" means the
 // named test FAILED on the mutant. A CONTROL runs the unmutated copy first. The originals are never touched.
@@ -7,41 +7,41 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
-const IR = require('../../test/inner_run.js');   // D352: a crashed inner run reads NOT TESTED
+const IR = require('../../test/inner_run.js');   // a crashed inner run reads NOT TESTED
 const ROOT = path.join(__dirname, '..', '..');
-// the tests every mutant is run against (L130 adds the readout display's)
-const TESTS = ['core-shell.test.js', 'core-readout-display.test.js', 'ghost-stalekey.test.js'];   // D483 adds the cheap ghost's stale-key rows
+// the tests every mutant is run against (the readout display's were added later)
+const TESTS = ['core-shell.test.js', 'core-readout-display.test.js', 'ghost-stalekey.test.js'];   // and the cheap ghost's stale-key rows
 
 const MUTATIONS = [
-  // D483: the cheap ghost compares its new chords with a SNAPSHOT of the last ones, and takes one object as the same only when it is frozen all the way down
+  // The cheap ghost compares its new chords with a SNAPSHOT of the last ones, and takes one object as the same only when it is frozen all the way down
   { id: 'G-D483a the chords kept for the next cheap ghost are the ones handed out (no snapshot)', file: 'preview/trackmodel.js', from: '(j < keys.length ? null : snapshot(g))', to: '(j < keys.length ? null : g)', caughtBy: 'a chord handed out with a cheap ghost' },
   { id: 'G-D483b one object reached from both sides is always the same', file: 'preview/segkey.js', from: "if (a === b) return a === null || typeof a !== 'object' || frozenDeep(a);", to: 'if (a === b) return true;', caughtBy: 'sameContent: one object reached from both sides' },
   { id: 'G-D483c a getter counts as a value', file: 'preview/segkey.js', from: "if (!('value' in d) || !frozenDeep(d.value)) return false; }", to: 'if (!frozenDeep(d.value)) return false; }', caughtBy: 'sameContent: one object reached from both sides' },
   { id: 'G-D483d the snapshot copies no object (a change in place reaches it)', file: 'preview/segkey.js', from: 'const out = {}; for (const k of Object.keys(v)) out[k] = snapshot(v[k]); return out;', to: 'return v;', caughtBy: 'snapshot: a change made in place' },
   { id: 'G-D483e every new chord is taken as the same as the last ghost has it', file: 'preview/trackmodel.js', from: 'j < reuse.segs.length && sameContent(g, reuse.segs[j])', to: 'j < reuse.segs.length', caughtBy: 'a chord handed out with a cheap ghost' },
-  // L130, the readout display (app/core/labels.js, app/core/panel.js)
+  // The readout display (app/core/labels.js, app/core/panel.js)
   { id: 'R1 the sign of an angle flipped', file: 'core/labels.js', from: "return `${v > 0 ? '+' : MINUS}", to: "return `${v > 0 ? MINUS : '+'}", caughtBy: 'the strings' },
   { id: 'R2 zero is signed', file: 'core/labels.js', from: "if (v === 0) return '0.00°';", to: '', caughtBy: 'the strings' },   // re-pointed 2026-10-15: two decimals
   { id: 'R3 bank shown as its end value, not the change', file: 'core/labels.js', from: 'bank: fmtDeg(r.bankToDeg - r.bankFromDeg)', to: 'bank: fmtDeg(r.bankToDeg)', caughtBy: 'the strings' },
   { id: 'R4 rounding without the binary guard', file: 'core/labels.js', from: 'Math.abs(x) * 100 + 1e-7', to: 'Math.abs(x) * 100', caughtBy: 'the strings' },   // re-pointed 2026-10-15: two decimals
   { id: 'R5 the head keep-out ignored', file: 'core/labels.js', from: 'if (keep && hits(rect, keep)) continue;', to: '', caughtBy: 'the layout' },
   { id: 'R6 labels may overlap', file: 'core/labels.js', from: 'if (drawn.some((d) => hits(rect, d.rect))) continue;', to: '', caughtBy: 'the layout' },
-  { id: 'R7 anchors cached by the path object', file: 'core/labels.js', from: 'if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; pickedFor = undefined; }', to: 'if (anchorsFor !== track.path) { anchors = anchorsOf(track); anchorsFor = track.path; pickedFor = undefined; }', caughtBy: 'the labels follow a path the preview extends IN PLACE' },   // D242: re-anchored (the line gained the hover re-pick)
+  { id: 'R7 anchors cached by the path object', file: 'core/labels.js', from: 'if (anchorsFor !== track.segments) { anchors = anchorsOf(track); anchorsFor = track.segments; pickedFor = undefined; }', to: 'if (anchorsFor !== track.path) { anchors = anchorsOf(track); anchorsFor = track.path; pickedFor = undefined; }', caughtBy: 'the labels follow a path the preview extends IN PLACE' },   // re-anchored (the line gained the hover re-pick)
   { id: 'R8 the layer is not put back in the page', file: 'core/labels.js', from: 'if (!layer.isConnected) stage.append(layer);', to: '', caughtBy: 'the labels follow a path the preview extends IN PLACE' },
   { id: 'R11 a label never slides off its piece\'s middle', file: 'core/labels.js', from: 'for (const a of cands) {', to: 'for (const a of cands.slice(0, 1)) {', caughtBy: 'a piece whose middle is behind the camera' },
-  // D187, B's M5 score: the head's own label is never culled, and the label box holds only an opaque background and its text
+  // From a review's M5 score: the head's own label is never culled, and the label box holds only an opaque background and its text
   { id: "R13 the head's label may be culled", file: 'core/labels.js', from: 'if (!placed && it.head) placed = headPlace(it, view, keep);', to: '', caughtBy: "the layout: the head's own label is never culled" },
   { id: 'R14 a head piece with nothing on screen has no label', file: 'core/labels.js', from: 'if (!p && isHead) p = hp ?', to: 'if (false) p = hp ?', caughtBy: "the head's own piece is labelled even when none of it is on screen" },
-  // re-pointed D381: the box's background is the skin's --ink, made opaque (T.solid); the mutant draws it translucent, as the literal mutant did
+  // re-pointed: the box's background is the skin's --ink, made opaque (T.solid); the mutant draws it translucent, as the literal mutant did
   { id: 'R15 the road bleeds through the label', file: 'core/labels.js', from: 'background:${bg};', to: "background:${T.alpha('--ink', 0.94, '#0b0d11')};", caughtBy: 'the label box holds only' },
   { id: 'R16 the label box has a border and round corners again', file: 'core/labels.js', from: 'border:0;border-radius:0;', to: 'border:1px solid #3a4250;border-radius:4px;', caughtBy: 'the label box holds only' },
   { id: "R17 the head's fallback place may cover the head", file: 'core/labels.js', from: 'for (const avoid of [keep, core])', to: 'for (const avoid of [null])', caughtBy: "the layout: the head's own label is never culled" },
-  // D409: the page's panels over the view are a keep-out (E's D405 shot check)
+  // The page's panels over the view are a keep-out (found by a screenshot check)
   { id: 'R18 a label may be placed under a panel', file: 'core/labels.js', from: 'if (panels.some((p) => hits(rect, p))) continue;', to: '', caughtBy: 'the layout: no label is placed under a panel' },
   { id: 'R12 no ring clears a large head keep-out', file: 'core/labels.js', from: 'if (view.head) { const d = Math.hypot(it.x - view.head.x, it.y - view.head.y); gaps.push(view.head.r + d + 12, 2 * view.head.r + d + 12); }', to: '', caughtBy: 'the layout: a label anchored on a large head keep-out' },
   { id: 'R9 the panel readout waits for the next state change', file: 'core/panel.js', from: 'readout();   // first, and synchronously', to: '//', caughtBy: 'the panel shows the ghost' },
   { id: 'R10 the ghost readout is the LAST placed piece, not the candidate', file: 'core/coreshell.js', from: 'candidateReadout: (opts) => RD.candidateReadout(doc(), opts),', to: "candidateReadout: (opts) => RD.pieceReadout(doc(), doc().pieces.length - 1),", caughtBy: 'the panel shows the ghost' },
-  // D190, the CUP UI (E's seal row 7, the UI half; K7-3 and K7-4 are the seal's own planted controls, here on the panel)
+  // The CUP UI (the cup seal's row 7, the UI half; K7-3 and K7-4 are the seal's own planted controls, here on the panel)
   { id: 'U1 the cup field is not sent to the core', file: 'core/panel.js', from: 'if (k !== null) targets.c = k;', to: '', caughtBy: 'extendOptions: the cup field is the target c' },
   { id: 'U2 the cup is sent in radians', file: 'core/panel.js', from: 'if (k !== null) targets.c = k;', to: 'if (k !== null) targets.c = k * DEG;', caughtBy: 'extendOptions: the cup field is the target c' },
   { id: 'U3 the panel clamps the cup, hiding the core guard', file: 'core/panel.js', from: 'if (k !== null) targets.c = k;', to: 'if (k !== null) targets.c = Math.min(150, Math.max(0, k));', caughtBy: 'extendOptions: the cup field is the target c' },
@@ -49,9 +49,9 @@ const MUTATIONS = [
   { id: 'U5 (K7-4) the cup cell wired to the bank values', file: 'core/panel.js', from: 'cup: `${fmtCup(r.cupFromDeg)} → ${fmtCup(r.cupToDeg)}`', to: 'cup: `${fmtCup(r.bankFromDeg)} → ${fmtCup(r.bankToDeg)}`', caughtBy: 'the readout shows cup from → to' },
   { id: 'U6 (K7-3) the cup shown in radians', file: 'core/panel.js', from: 'const fmtCup = (x) => LB.fmtDeg(x)', to: 'const fmtCup = (x) => LB.fmtDeg(x * DEG)', caughtBy: 'the readout shows cup from → to' },
   { id: 'U7 the cup field does not redraw the readout', file: 'core/panel.js', from: 'f.oninput = f.onchange = () => { exclusive(f); ghost(); };', to: 'f.oninput = f.onchange = () => { exclusive(f); };', caughtBy: 'the cup cell follows the cup field' },
-  { id: 'U8 the brush has no cup channel', file: 'core/panel.js', from: "['kh', 'kv', 'height', 'lateral', 'phi', 'w', 'c', 'e', 'er', 's', 'r', 't']", to: "['kh', 'kv', 'height', 'lateral', 'phi', 'w', 'e', 'er', 's', 'r', 't']", caughtBy: 'the brush\'s channel list gains cup' },   // AMENDED D421 part 3: the brush's channel list is Smooth's now (SMOOTH_CH); the old select is gone
+  { id: 'U8 the brush has no cup channel', file: 'core/panel.js', from: "['kh', 'kv', 'height', 'lateral', 'phi', 'w', 'c', 'e', 'er', 's', 'r', 't']", to: "['kh', 'kv', 'height', 'lateral', 'phi', 'w', 'e', 'er', 's', 'r', 't']", caughtBy: 'the brush\'s channel list gains cup' },   // AMENDED: the brush's channel list is Smooth's now (SMOOTH_CH); the old select is gone
   { id: 'U9 the cup field is not on the panel', file: 'core/panel.js', from: "fieldAt('cup °', cup, 'cup'), ", to: '', caughtBy: 'the Extend panel has a "cup °" field' },
-  // D194b, "at start": a ticked field with a target goes in transition as { channel: min(20 m, length) }; nothing else changes
+  // "At start": a ticked field with a target goes in transition as { channel: min(20 m, length) }; nothing else changes
   { id: 'V1 the at-start boxes are ignored', file: 'core/panel.js', from: 'if (Object.keys(transition).length) out.transition = transition;', to: '', caughtBy: 'extendOptions "at start"' },
   { id: 'V2 an untouched field is sent at start', file: 'core/panel.js', from: 'if (atStart[f] && targets[ch] !== undefined) {', to: 'if (atStart[f]) {', caughtBy: 'extendOptions "at start"' },   // re-anchored: the at-start line now opens a block
   // re-anchored: the at-start line now picks a cross-section ramp first; the turn, climb and width span is the line's last term
@@ -74,7 +74,7 @@ const MUTATIONS = [
   { id: 'C5 the heading brush may open a closed loop', file: 'core/coreshell.js',
     from: "if (!brushFn && doc().closed && mode === 'rate' && (channel === 'kh' || channel === 'kv'))", to: 'if (false)', caughtBy: 'close: one click' },
   { id: 'C7 export runs on an open track', file: 'core/coreshell.js',
-    from: "if (!doc().closed && !opts.test) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');", to: '', caughtBy: 'export: an open track is refused' },   // D234: re-pointed, the refusal now leaves through stop() (it removes the picked empty folder); D239: re-pointed again, the check now lives in buildExport, which Export and Install to AC share; D243a: re-anchored (the refusal is skipped for the test export, opts.test)
+    from: "if (!doc().closed && !opts.test) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');", to: '', caughtBy: 'export: an open track is refused' },   // re-pointed, the refusal now leaves through stop() (it removes the picked empty folder); re-pointed again, the check now lives in buildExport, which Export and Install to AC share; re-anchored (the refusal is skipped for the test export, opts.test)
   { id: 'C8 the list shows the piece builder\'s tracks too', file: 'core/coreshell.js',
     from: '.filter((n) => n.startsWith(PREFIX))', to: '', caughtBy: 'save and open use their own prefix' },
   { id: 'C12 turn is degrees per metre, not per 100 m', file: 'core/panel.js',
@@ -84,11 +84,11 @@ const MUTATIONS = [
   { id: 'C15 the pick sees through the back of the camera', file: 'preview/preview.js',
     from: 'const c = M.apply(VP, m.pos); if (!(c[3] > 0)) continue;', to: 'const c = M.apply(VP, m.pos);', caughtBy: 'the pick' },
   { id: 'C16 the ghost is not what extend builds', file: 'core/coreshell.js',
-    from: 'const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d)', to: 'const d = TB.extendCorner(doc(), { ...opts, targets: {} }); return { segments: segmentsOf(d)', caughtBy: 'the ghost of an extension' },   // D331 B: re-anchored (the ghost is placed as Extend places it, extendCorner: the turn and climb may be corners); the rule is unchanged
+    from: 'const d = TB.extendCorner(doc(), opts); return { segments: segmentsOf(d)', to: 'const d = TB.extendCorner(doc(), { ...opts, targets: {} }); return { segments: segmentsOf(d)', caughtBy: 'the ghost of an extension' },   // re-anchored (the ghost is placed as Extend places it, extendCorner: the turn and climb may be corners); the rule is unchanged
   { id: 'C17 export goes to the word exporter', file: 'export/export.js',
     from: 'const result = fromwords.exportSegments(segments, meta, { outDir: OUT, variant, textures, markers, author: authorNow(a), ...(edgeApronM !== undefined ? { edgeApronM } : {}), ...(test ? { test: true } : {}) });', to: 'const result = fromwords.exportTrack(segments, { outDir: OUT, variant, textures });', caughtBy: 'export: an open track is refused' },   // D243a: re-anchored (the call passes test through); D369: re-anchored again (D365 added the author to the call); D572: again (the call passes the edge apron's width), the mutation unchanged
   { id: 'C18 the close does not go round the user\'s straights', file: 'core/coreshell.js',
-    from: '...(st.lastEdited || [last]), ...straightPieces(d)', to: '...(st.lastEdited || [last])', caughtBy: 'close: one click' },   // D242: re-anchored (the stretch is wholeLapEdited(d), shared with proposeClose({ whole }))
+    from: '...(st.lastEdited || [last]), ...straightPieces(d)', to: '...(st.lastEdited || [last])', caughtBy: 'close: one click' },   // re-anchored (the stretch is wholeLapEdited(d), shared with proposeClose({ whole }))
   { id: 'C19 the export is handed no start layout', file: 'core/coreshell.js',
     from: "{ ...opts, markers }", to: '{ ...opts }', caughtBy: 'export: an open track is refused' },
   { id: 'C22 the widened radius is not shown', file: 'core/coreshell.js',
@@ -113,7 +113,7 @@ const MUTATIONS = [
     from: 'closed: !!d.closed, start: startOf(d),', to: 'closed: !!d.closed,', caughtBy: 'a lap that starts pitched' },
 ];
 
-// D412: `extra` is IR.narrowArgs(caughtBy) for a run narrowed to the named test; empty, the run is whole, as before
+// `extra` is IR.narrowArgs(caughtBy) for a run narrowed to the named test; empty, the run is whole, as before
 function runMutant(m, extra = []) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-mut-')), app = path.join(dir, 'app');
   try {
@@ -124,19 +124,19 @@ function runMutant(m, extra = []) {
     fs.cpSync(path.join(ROOT, 'tools'), path.join(dir, 'tools'), { recursive: true });
     const f = m.root === 'src' ? path.join(dir, 'src', m.file) : path.join(app, m.file), src = fs.readFileSync(f, 'utf8'), n = m.from === null ? 1 : src.split(m.from).length - 1, applied = n === 1;
     if (applied && m.from !== null) fs.writeFileSync(f, src.replace(m.from, () => m.to));
-    const tap = path.join(dir, '.inner-run.tap');   // D352: a TAP copy, the only place a dead file's exit code shows
+    const tap = path.join(dir, '.inner-run.tap');   // a TAP copy, the only place a dead file's exit code shows
     const r = spawnSync(process.execPath, ['--test', ...IR.reporterArgs(tap), ...extra, '--test-concurrency=4', ...TESTS.map((t) => path.join(app, 'test', t))],
       { env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')), encoding: 'utf8', timeout: 600000 });
     if (r.error) throw r.error;
     const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '');
     if (!/ℹ tests \d+/.test(out)) throw new Error('the mutant test run printed no summary:\n' + out.slice(0, 2000));
     const failed = out.split('\n').filter((l) => /^✖ /.test(l) && !/^✖ failing tests:/.test(l)).map((l) => l.slice(2));
-    // D352: a file that died natively ran none of its tests; its own ✖ line is no catch, and a run with no catch but a dead file tested nothing
+    // A file that died natively ran none of its tests; its own ✖ line is no catch, and a run with no catch but a dead file tested nothing
     const crashed = IR.crashesIn(tap), caught = failed.some((l) => !crashed.some((c) => l.startsWith(c.file + ' (')) && l.includes(m.caughtBy));
     if (crashed.length && !caught) throw new Error(IR.notTested(crashed));
-    // D353: a crash after a failing row leaves no trace in the TAP, only the named test's silence; a file that exited on its own (a module that
+    // A crash after a failing row leaves no trace in the TAP, only the named test's silence; a file that exited on its own (a module that
     // threw on load, exit 1) reads as before, and a control (from: null) names no test
-    // D354 (pane E, review 4, F1): a file's own exit is a verdict only when the run had one file; in a run of more, another file's load throw
+    // A later review found: a file's own exit is a verdict only when the run had one file; in a run of more, another file's load throw
     // says nothing about the named test's file, so the silence reads NOT TESTED and names the files that ended on their own
     if (!caught && m.from !== null && !IR.reported(out, m.caughtBy)) {
       const exits = IR.fileExitsIn(tap);
@@ -146,14 +146,14 @@ function runMutant(m, extra = []) {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-// D412: the caughtBy patterns whose mutants may run narrowed, filled by the control below. A pattern missing here (the control did not run, or
+// The caughtBy patterns whose mutants may run narrowed, filled by the control below. A pattern missing here (the control did not run, or
 // its narrowed control failed, ran no row, or never reported the named test) keeps its mutants whole
 const NARROW = new Map();
 test('control: the unmutated temp copy passes every core-shell test', (t) => {
   const control = { id: 'control', file: 'core/panel.js', from: null, to: null, caughtBy: '(no test is named this)' };
   const r = runMutant(control);
   assert.deepEqual(r.failed, [], `the unmutated copy fails: ${r.failed.join(' | ')}`);
-  // D412: and narrowed once per distinct caughtBy; each must pass alone, or its mutants stay whole (said, not failed: whole is the safe reading)
+  // And narrowed once per distinct caughtBy; each must pass alone, or its mutants stay whole (said, not failed: whole is the safe reading)
   for (const p of new Set(MUTATIONS.map((m) => m.caughtBy))) {
     const n = runMutant({ ...control, caughtBy: p }, IR.narrowArgs(p));
     NARROW.set(p, n.failed.length === 0 && n.ran.tests > 0 && n.reported);
@@ -161,30 +161,30 @@ test('control: the unmutated temp copy passes every core-shell test', (t) => {
     else if (n.ran.tests > 1 || n.ran.suites) t.diagnostic(`D412 wide: "${p}" runs ${n.ran.tests} rows${n.ran.suites ? ` and ${n.ran.suites} suite(s)` : ''}`);
   }
 });
-// D352: a crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
+// A crashed inner run is no verdict. The stand-in puts the machine's crash (test/inner_run.js STANDIN) at the top of the first mutant's file;
 // it looks for '.test.js', which every dead file's own ✖ line contains, so a dead file's line must not count as the catch
 test('a crashed inner run reads NOT TESTED, never a verdict (the crash stand-in, D352)', () => {
   const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'src' ? path.join(ROOT, 'src', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash stand-in', caughtBy: '.test.js', from: first, to: IR.STANDIN + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
   assert.match(said, IR.NOT_TESTED);
 });
-// D353: a crash AFTER an unrelated failing row leaves no file-level entry in the TAP, so only the named test's silence shows it. The second
+// A crash AFTER an unrelated failing row leaves no file-level entry in the TAP, so only the named test's silence shows it. The second
 // stand-in (test/inner_run.js STANDIN_AFTER_FAIL) fails a row and then dies, in every file that loads the first mutant's file; caughtBy is the real one
 test('a crash after an unrelated failing row reads NOT TESTED, never NOT CAUGHT (the second stand-in, D353)', () => {
   const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'src' ? path.join(ROOT, 'src', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'crash after a failing row', from: first, to: IR.STANDIN_AFTER_FAIL + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
   assert.match(said, IR.NOT_TESTED_ANY);
 });
-// D354: a mutant that makes a module throw on load, in a run of 2 files: another file's load throw says nothing about the named test's
-// file, so the silence reads NOT TESTED and names the files that threw (pane E, review 4, F1; the trade ruled at D354: an uncaught all-throw
+// A mutant that makes a module throw on load, in a run of 2 files: another file's load throw says nothing about the named test's
+// file, so the silence reads NOT TESTED and names the files that threw (found by a review, F1; the trade as ruled: an uncaught all-throw
 // mutant here read NOT CAUGHT before)
 test('a load throw in a run of several files reads NOT TESTED and names the files (the load-throw stand-in, D354)', () => {
   const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'src' ? path.join(ROOT, 'src', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'load throw', from: first, to: IR.LOAD_THROW + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
   assert.match(said, IR.NOT_TESTED_LOAD);
 });
-// D354, F1's shape (pane E, review 4): core-readout-display.test.js throws on load while core-shell.test.js fails a row and then dies before
-// its own rows; on D353 the first file's load throw turned the check off for the second, and it read NOT CAUGHT
+// The review's F1 shape: core-readout-display.test.js throws on load while core-shell.test.js fails a row and then dies before
+// its own rows; under the earlier crash-after-a-failing-row rule the first file's load throw turned the check off for the second, and it read NOT CAUGHT
 test('a load throw in one file does not hide a crash after a failing row in another: NOT TESTED (F1, D354)', () => {
   const m0 = MUTATIONS[0], first = fs.readFileSync(m0.root === 'src' ? path.join(ROOT, 'src', m0.file) : path.join(ROOT, 'app', m0.file), 'utf8').split(/\r?\n/)[0];
   const said = IR.reading(() => { const r = runMutant({ ...m0, id: 'load throw beside a crash', from: first, to: IR.STANDIN_LOAD_THEN_CRASH('core-readout-display.test.js') + first }); return r.caught ? 'caught' : `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`; });
@@ -192,7 +192,7 @@ test('a load throw in one file does not hide a crash after a failing row in anot
 });
 for (const m of MUTATIONS) {
   test(`mutation ${m.id}: applied, and caught by "${m.caughtBy}…"`, (t) => {
-    const r = IR.narrowedFirst(runMutant, m, NARROW.get(m.caughtBy) === true);   // D412: narrowed first; any miss is re-run whole, and that verdict stands
+    const r = IR.narrowedFirst(runMutant, m, NARROW.get(m.caughtBy) === true);   // narrowed first; any miss is re-run whole, and that verdict stands
     t.diagnostic(`D412 path: ${r.narrowed ? 'narrowed' : 'whole'}`);   // which run gave the verdict: a duration cannot tell a slow narrowed run from a re-run
     assert.ok(r.applied, `NOT APPLIED: "${m.from}" occurs ${r.n} times in app/${m.file}`);
     assert.ok(r.caught, `NOT CAUGHT; failing tests on the mutant: ${r.failed.join(' | ') || 'none'}`);

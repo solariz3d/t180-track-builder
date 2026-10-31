@@ -1,15 +1,15 @@
-// Headless tests for app/onboarding (D177, ARCHITECTURE §11.7): the guide's step machine, the moves it sees through the real
+// Headless tests for app/onboarding: the guide's step machine, the moves it sees through the real
 // shell, and the first-run flag. Run: node --test --test-concurrency=4 "app/test/*.test.js"
-// D239 (the user: "can we keep only the equation mode?"): the steps are the EQUATION builder's (extend, brush, close, colours, export,
+// (the user: "can we keep only the equation mode?"): the steps are the EQUATION builder's (extend, brush, close, colours, export,
 // grid), seen through the core shell (app/core/coreshell.js); the step-machine tests are restated on those ids, unchanged in what they
-// check. RETIRED D239, by name, each the piece builder's: 'five steps in order: place, sculpt, close, colours, export' (now six, the
+// check. RETIRED, by name, each the piece builder's: 'five steps in order: place, sculpt, close, colours, export' (now six, the
 // equation builder's: app/test/core-eqonly.test.js), 'placing 3 words (a starter phrase counts word by word) completes "place" and moves
 // on', 'ONE starter phrase ("step flow", five words) completes "place": a phrase counts word by word, not as one entry', 'a handle
 // dragged on a placed word completes "sculpt"; placing more words does not', 'closing the loop with the connector completes "close", and
 // the guide waits on the reading step' (the core's own: app/test/core-eqonly.test.js), 'the defaults are the program's own: the font and
-// tempo pickers, the design speed of FINDINGS.md:476', 'every default says where it comes from, and every line it cites says what it
+// tempo pickers, the design speed [of the measured tracks]', 'every default says where it comes from, and every line it cites says what it
 // quotes' (app/onboarding/defaults.js is removed: it set the piece palette's pickers), 'the guide names one starter phrase, its first
-// piece, once: it never leads into bowl hairpin after bowl hairpin (D180)' (the guide names no phrase).
+// piece, once: it never leads into bowl hairpin after bowl hairpin' (the guide names no phrase).
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');

@@ -1,11 +1,11 @@
 // vocabgen.js: the built-in words' defaults, GENERATED from the measured library (src/doc/corpus.json, schema
-// t180b.corpus/1: tools/corpus.cjs over the track reader's words of every installed T-180 layout, FINDINGS §7f). The
+// t180b.corpus/1: tools/corpus.cjs over the track reader's words of every installed T-180 layout). The
 // user, 2026-09-27 23:36, on the hand-set vocabulary: "the pieces are nowhere near what I want them to be, they arent
 // good for t-180s". So nothing here is chosen: every default is a MEDIAN (p50), every tempo a percentile BAND, and every
 // default font the cross-section the library uses most in that class.
 //
 // A PIECE'S SIZE is a whole CORNER for sweep, turn and tight (corpus.corners: consecutive curved words turning the same
-// way, keyed by the tightest class reached; the chair's correction, D182, after the runs proved to be one word each):
+// way, keyed by the tightest class reached; a correction, after the runs proved to be one word each):
 // the TOTAL TURN is the median corner's, and a tempo picks the corner's p10, p50 or p90. The straight and the wall-ride
 // are not part of a corner, so their size is their RUN's (corpus.runs). A piece's SHAPE comes from the WORDS
 // (corpus.classes): its radius, width, bank and font shares are the per-word figures. So a curved piece's length
@@ -30,7 +30,7 @@
 //
 // THE GRAMMAR. corpus.transitions, when present, counts how often each class is followed by each class over every read,
 // as transitions[from] = { n, counts: { to: count }, p } (numbers, not sequences: no track's layout is kept,
-// ARCHITECTURE §11.6); the counts are the master, and the shares are recomputed from them. grammar[from] lists the classes seen after
+// by design); the counts are the master, and the shares are recomputed from them. grammar[from] lists the classes seen after
 // `from`, most seen first, with counts and shares. It is only ever a SUGGESTION (src/doc/grammar.js). A corpus without
 // transitions gives grammar null, and the palette suggests nothing rather than guessing.
 'use strict';
@@ -114,7 +114,7 @@ function generate(corpus) {
   words.straight = { length: sl.p50, turn: 0, ...road('straight') };
   bands.straight = Object.fromEntries(BANDS.map((b) => [b, { length: sl[b] }]));
   for (const w of CURVED) {
-    // a CORNER's size for the three corner classes (E's corners: consecutive same-way sweep/turn/tight words, by the
+    // a CORNER's size for the three corner classes (corners: consecutive same-way sweep/turn/tight words, by the
     // tightest class reached); the wall-ride is not part of a corner, so its size is its run's
     const turn = bandsOf(corpus, w, 'heading_deg', CORNER_CLASSES.includes(w) ? 'corners' : 'runs');
     words[w] = { R: bandsOf(corpus, w, 'radius_m').p50, turn: turn.p50 * DEG, bank: bandsOf(corpus, w, 'bank_deg').p50 * DEG, ...road(w) };

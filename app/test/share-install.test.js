@@ -1,8 +1,8 @@
-// Headless tests for app/share and app/install (D176; D239: on the EQUATION track, the core shell app/core/coreshell.js, since the
+// Headless tests for app/share and app/install (on the EQUATION track, the core shell app/core/coreshell.js, since the
 // Pieces page is removed): codes through the real core shell; install and the launch button through a fake native side (the native
 // guards themselves are src-tauri/src/ac.rs's tests, on a temp fake AC tree). The launch is NEVER run: the native seeIt here is a
 // recorder, and the test asserts it is not called while the setting is off. Run: node --test "app/test/*.test.js"
-// RETIRED D239, by name (each was the piece builder's): 'a piece code joins the palette; a pack code goes to the textures panel' (a piece
+// RETIRED, by name (each was the piece builder's): 'a piece code joins the palette; a pack code goes to the textures panel' (a piece
 // code is now refused by name, app/test/core-eqonly.test.js; the pack half is kept below as its own test).
 'use strict';
 const test = require('node:test');
@@ -122,7 +122,7 @@ test('Install to AC hands the build the texture set the page holds, as Export do
   assert.deepStrictEqual(seen, { textures: 'THE-SET' });
 });
 
-// AMENDED (D464, the librarian's ruling on E's D463 §6(3)): the rule this row pinned, "the export's other warnings stay out of the install message", changed by the
+// AMENDED (a ruling on a later review): the rule this row pinned, "the export's other warnings stay out of the install message", changed by the
 // ordered fix: the main Export is the main path and the first-start card shows once, so the CSP need now rides in the install message too, in the user's words
 // (app/core/exportwords.js). An amber still stays out.
 test('D250: a jump the car may fly past is INSTALLED, and the message says so in plain words; the CSP need rides too, in words; the export\'s other warnings stay out of it', async () => {
@@ -172,7 +172,7 @@ test('no tooltip on the page carries a tab or a line break (the install one said
   assert.deepStrictEqual(titles.filter((t) => /[\t\r\n]/.test(t)), []);
 });
 
-// D250 amended this row BY NAME: the user asked for an obvious "export into AC" beside Export, so the button is "Export to Assetto Corsa" (was "Install to AC")
+// Amended this row BY NAME: the user asked for an obvious "export into AC" beside Export, so the button is "Export to Assetto Corsa" (was "Install to AC")
 test('the Export to Assetto Corsa button installs the track under the name it was saved as', async () => {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js');
   const restore = fake.install();
@@ -187,7 +187,7 @@ test('the Export to Assetto Corsa button installs the track under the name it wa
   } finally { restore(); }
 });
 
-// D250 (the user: "it should automatically create the folder in the assetto track folder in steam"): the native side finds AC through Steam
+// The user: "it should automatically create the folder in the assetto track folder in steam". The native side finds AC through Steam
 // when none is remembered (src-tauri/src/ac.rs root_or_find), so get_ac_root answers with a folder and the picker is never opened
 test('D250: with AC found through Steam the button exports with NO folder dialog, and the line says where it went and that exporting again updates it', async () => {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js');
@@ -211,9 +211,9 @@ test('D250: when AC is NOT found through Steam, the line says so and asks for th
   assert.deepStrictEqual([r.ok, r.needsRoot], [false, true]); assert.match(r.message, /not found through Steam/);
 });
 
-// D264 AMENDED THIS ROW BY NAME (the user, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the
+// AMENDED THIS ROW BY NAME (the user, 01:34: "it still says the loop is not closed: close it first (one click), then export when i am trying to export the
 // test that isnt finished"). It was "an open loop is not installed: the refusal is the Export button's own, and nothing is written". Export to Assetto Corsa on an
-// OPEN track now installs the TEST export (D243a's own build, t180b_<name>_test) and says so; Export… (any folder) still refuses the open loop (app/test/core-shell.test.js).
+// OPEN track now installs the TEST export (the open track's own build, t180b_<name>_test) and says so; Export… (any folder) still refuses the open loop (app/test/core-shell.test.js).
 test('D264: an open loop is installed as the unfinished TEST export, t180b_<name>_test, and the line says so; never as t180b_<name>', async () => {
   const native = fakeNative(); native.root = 'G:/games/assettocorsa';
   const s = await lap({ exporter: await makeExporter(get) }); await s.save('Monza');
@@ -225,8 +225,8 @@ test('D264: an open loop is installed as the unfinished TEST export, t180b_<name
   assert.ok(r.message.includes('G:/games/assettocorsa\\content\\tracks\\t180b_monza_test'), r.message);
 });
 
-// D252 second item (the user, 11:38: "why two export buttons"; 11:39: "it shouldnt be there, creates too much clutter, the AC folder, instead, in the EXE
-// startup, the user can choose where the track folder is in the beginning"). ONE main button, Export to Assetto Corsa; the AC folder and See it in Assetto
+// The user, 11:38: "why two export buttons"; 11:39: "it shouldnt be there, creates too much clutter, the AC folder, instead, in the EXE
+// startup, the user can choose where the track folder is in the beginning". ONE main button, Export to Assetto Corsa; the AC folder and See it in Assetto
 // go into the "more" (⋯) container; at startup, with no folder remembered, a one-time card offers the folder Steam found (Use it / Choose another…).
 function mountIn(native, pickFolder = async () => null) {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
@@ -276,7 +276,7 @@ test('D252: with a folder remembered the startup says nothing (no card)', async 
   try { await x.m.card; assert.strictEqual(x.note(), ''); assert.deepStrictEqual(x.buttons(x.root), ['Export to Assetto Corsa']); } finally { x.restore(); }
 });
 
-// C's findings 1 and 2 (p-spacefly-C_2026-10-06.md): the card stayed up after Export had found and remembered AC; a long install note pushed the open ⋯ menu
+// Two findings of a review (2026-10-06): the card stayed up after Export had found and remembered AC; a long install note pushed the open ⋯ menu
 // off the window's right edge
 test('D252 follow-up: once Export to Assetto Corsa has found and remembered AC, the startup card goes', async () => {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
@@ -284,20 +284,20 @@ test('D252 follow-up: once Export to Assetto Corsa has found and remembered AC, 
     const native = fakeNative(), found = 'G:/SteamLibrary/steamapps/common/assettocorsa';
     native.findAcRoot = async () => ({ remembered: native.root, found: native.root ? null : found });
     native.getAcRoot = async () => { if (!native.root) native.root = found; return native.root; };   // get_ac_root finds and remembers (ac.rs root_or_find)
-    // D437b amended BY NAME: Export to Assetto Corsa builds through shell.buildExportAsync now (the export in its own process); the stand-in was buildExport
+    // Amended BY NAME: Export to Assetto Corsa builds through shell.buildExportAsync now (the export in its own process); the stand-in was buildExport
     const shell = { buildExportAsync: async () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
     const root = new fake.Element('div'), more = new fake.Element('div'), card = new fake.Element('div');
     const m = mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more, card });
     await m.card; assert.match(card.textContent, /Assetto Corsa found at/, 'control: the card is up');
     await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
-    assert.strictEqual(native.root, found, 'Export found and remembered it'); assert.doesNotMatch(card.textContent, /Assetto Corsa found at|Use it|Choose another/, 'and the card is gone');   // AMENDED (D464): the banner row now holds the export's whole result (the D464 row below), so the card's question is gone rather than the row empty
+    assert.strictEqual(native.root, found, 'Export found and remembered it'); assert.doesNotMatch(card.textContent, /Assetto Corsa found at|Use it|Choose another/, 'and the card is gone');   // AMENDED: the banner row now holds the export's whole result (the banner-row test below), so the card's question is gone rather than the row empty
   } finally { restore(); }
 });
 test('D252 follow-up: a long install note is cut to its box with the whole text in its tooltip, and the ⋯ menu opens toward the window (right-aligned)', async () => {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
   try {
     const native = fakeNative(); native.root = 'G:/' + 'a-very-long-folder-name/'.repeat(6) + 'assettocorsa';
-    // D437b amended BY NAME: the stand-in shell builds through buildExportAsync, as app/install/index.js now calls it (was buildExport)
+    // Amended BY NAME: the stand-in shell builds through buildExportAsync, as app/install/index.js now calls it (was buildExport)
     const shell = { buildExportAsync: async () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
     const root = new fake.Element('div'); mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more: new fake.Element('div') });
     await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
@@ -310,9 +310,9 @@ test('D252 follow-up: a long install note is cut to its box with the whole text 
   assert.match(rule('.t-install-note'), /max-width/); assert.match(rule('.t-install-note'), /text-overflow:\s*ellipsis/);
 });
 
-// D264 (the user, 01:34; plan_t180_open_export_ac_2026-10-07.md): Export to Assetto Corsa on an OPEN track writes the TEST export into AC instead of refusing,
+// The user, 01:34: Export to Assetto Corsa on an OPEN track writes the TEST export into AC instead of refusing,
 // and ⋯ → Test export (unfinished)… goes into AC by the same path (the folder picker only if AC is not known). A closed track exports as before.
-// The native install here WRITES into a temp AC tree, so what lands on disk is read back; the native guards themselves are ac.rs's (cargo test, D264 row).
+// The native install here WRITES into a temp AC tree, so what lands on disk is read back; the native guards themselves are ac.rs's (cargo test, the open-export row).
 const os = require('os');
 function diskNative() {
   const ac = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-d264-')), tracks = path.join(ac, 'assettocorsa', 'content', 'tracks'); fs.mkdirSync(tracks, { recursive: true });
@@ -378,7 +378,7 @@ test('D264: the guards hold: ⋯ Test export on a CLOSED track is refused by nam
     }
   } finally { d.done(); }
 });
-// D464 (D463 part 2 item 7, E's D461 report §2 item 7): the main Export's result was cut to "ex…" in the header note (cut on purpose, so the bar never overflows:
+// A review found: the main Export's result was cut to "ex…" in the header note (cut on purpose, so the bar never overflows:
 // the row above). The whole result now also shows in the page's banner row, where the startup card sits, uncut, until the user closes it with ✕.
 test('D464: after Export to Assetto Corsa the whole result shows in the banner row, uncut, and ✕ clears it', async () => {
   const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();

@@ -1,4 +1,4 @@
-/* GLASS (D379, pane E): the skin for the Glass melody (SY VeloHarm, A Lydian). Crystal: frosted panes, sharp facets, cold sheen.
+/* GLASS: the skin for the Glass melody (SY VeloHarm, A Lydian). Crystal: frosted panes, sharp facets, cold sheen.
    One file, scoped to <html data-theme="glass">, over app/index.html at be4a527. It changes how things are drawn and never where they are:
    colour, gradients, translucency and blur, corner radius, shadows, inset gloss, clip-path facets and the overlay pseudo-elements. It never
    touches a size, a margin, a padding, a border WIDTH, a font, a letter-spacing or a weight, so every box keeps its place to the pixel
@@ -7,18 +7,18 @@
 [data-theme="glass"] {
   /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
   --bad-text: #f5a7a3; --warn-text: #ffad1a;
-  --tex: url(tex/glass.png) 0 0 / calc(8 * var(--dpx)) calc(300 * var(--dpx)) repeat-x;   /* D399: this look's texture (index.html, --tex): an ordered (Bayer) dither that thins from the top of each surface; app/themes/tex/glass.png, scripts/texture_tiles.js */
+  --tex: url(tex/glass.png) 0 0 / calc(8 * var(--dpx)) calc(300 * var(--dpx)) repeat-x;   /* this look's texture (index.html, --tex): an ordered (Bayer) dither that thins from the top of each surface; app/themes/tex/glass.png, scripts/texture_tiles.js */
   --bg: #06111b; --panel: #0a1824; --raise: #0f2232; --line: #2b5672; --hair: rgba(190, 230, 255, .34);
   --text: #f0f9ff; --dim: #a9c9dd; --accent: #8fe6ff; --accent-dim: rgba(143, 230, 255, .22);
   --frost: rgba(205, 238, 255, .14); --frost-edge: rgba(205, 240, 255, .58); --sheen: rgba(255, 255, 255, .55); --deep: rgba(4, 14, 24, .80);
-  /* D381: what the canvas layers, the overlays and the 3D view draw with (app/lib/tokens.js reads these; B's 2a). The sky is a deep cold blue, darker than
-     the fog and than the road's shadowed faces (renderer.js's D179 note); the road's edges ice-white, its ties and the ground grid cold blue. */
+  /* what the canvas layers, the overlays and the 3D view draw with (app/lib/tokens.js reads these). The sky is a deep cold blue, darker than
+     the fog and than the road's shadowed faces (renderer.js's note on it); the road's edges ice-white, its ties and the ground grid cold blue. */
   --ink: #04101a; --on-ink: #eaf6ff; --on-ink-strong: #ffffff; --veil: #071725; --veil-rule: rgba(190, 235, 255, .22);
   --guide-bg: rgba(10, 30, 46, .96); --guide-text: #f0f9ff; --guide-label: #a9c9dd;
   --sky: color(srgb 0.024 0.07 0.1); --fog: color(srgb 0.07 0.13 0.18); --road-edge: color(srgb 0.8 0.93 1); --road-tie: color(srgb 0.03 0.08 0.12); --ground-grid: color(srgb 0.2 0.36 0.46);
-  /* D384 widened (pane B): the sky at infinity behind the track, a cold clear night: the zenith near black, the horizon held near the fog, the stars'
-     cold white. D416: the river of stars (app/preview/sky/river.js), every star a point at the screen's own pixels; until then the prism sky
-     (app/preview/sky/prism.js, still a style), and until D384 no sky (none). */
+  /* the sky at infinity behind the track, a cold clear night: the zenith near black, the horizon held near the fog, the stars'
+     cold white. The river of stars (app/preview/sky/river.js), every star a point at the screen's own pixels; before it the prism sky
+     (app/preview/sky/prism.js, still a style), and before that no sky (none). */
   --sky-style: river; --sky-a: color(srgb 0.008 0.022 0.04); --sky-b: color(srgb 0.07 0.125 0.17); --sky-c: color(srgb 0.84 0.92 1);
 }
 
@@ -63,7 +63,7 @@
   background: linear-gradient(180deg, rgba(4, 16, 28, .92), rgba(10, 30, 46, .88)); border-color: rgba(190, 235, 255, .40); border-radius: 0; color: var(--text);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
 }
-[data-theme="glass"] input[type="number"]::-webkit-inner-spin-button { background-color: rgba(190, 235, 255, .75); }   /* D513: the spin chevrons in this skin's colours (their shape is in index.html) */
+[data-theme="glass"] input[type="number"]::-webkit-inner-spin-button { background-color: rgba(190, 235, 255, .75); }   /* the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="glass"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
 [data-theme="glass"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #ffffff; }
 [data-theme="glass"] input:focus, [data-theme="glass"] select:focus, [data-theme="glass"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(143, 230, 255, .35), 0 0 12px rgba(143, 230, 255, .45); }
@@ -109,7 +109,7 @@
 [data-theme="glass"] #camera p { color: #d4ecfa; text-shadow: none; background: rgba(4, 14, 24, .86); box-shadow: 0 0 0 4px rgba(4, 14, 24, .86), inset 0 1px 0 rgba(200, 240, 255, .25); }   /* the hint gets a frosted backing of its own (no padding: its box stays) */
 
 /* THE 3D VIEW: the sky, the fog, the road's edges and ties and the ground grid are this skin's 3D tokens (above); the WebGL view draws them itself
-   (D381), so the stand-in overlays of D379 (the vignette, the facet lines) are gone. */
+   so the earlier stand-in overlays (the vignette, the facet lines) are gone. */
 [data-theme="glass"] .preview-hud { color: #d4ecfa !important; text-shadow: none; }
 
 /* the save-on-close and export dialogs: a crystal card */
@@ -135,5 +135,5 @@
   box-shadow: inset 0 0 0 1px var(--frost-edge), inset 0 2px 0 rgba(255, 255, 255, .35) !important;
   clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
 }
-/* "look here": the guide's outline follows the accent (the librarian's ruling on B's UNCLEAR six, plan :2362) */
+/* "look here": the guide's outline follows the accent (a review's ruling) */
 [data-theme="glass"] .guide-target { outline-color: var(--accent) !important; }

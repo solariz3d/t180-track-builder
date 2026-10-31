@@ -1,12 +1,12 @@
 // undo-guard.test.js: node --test app/test/undo-guard.test.js   (under the heavy-run lock, --max-old-space-size=4096)
-// D240 follow-up, from B's look at ab748e5 (p-keys-B_2026-10-05.md:56) and C's open question (p-keys-C_2026-10-05.md): a number typed into an Extend field and NOT Extended is lost by the
+// A follow-up from a look at ab748e5 and an open question a review raised: a number typed into an Extend field and NOT Extended is lost by the
 // first Ctrl+Z, which refills the fields AND steps the track. The guard: while a field holds such an un-applied edit, the first Ctrl+Z puts THAT field back and does not step the track;
 // the next Ctrl+Z undoes the track. FEEL tier: targeted rows on a fake DOM, the real keys.js bindKeys and the real panel. Rows:
 //   1  a typed length, un-extended: Ctrl+Z reverts the field, the track stays; the next Ctrl+Z undoes the track
 //   2  a typed head field (turn), the same; the field returns to what the panel showed
 //   3  the focus is elsewhere (the body): the field touched last is the one put back
 //   4  a field typed back to what it showed holds nothing un-applied: Ctrl+Z undoes the track at once
-//   5  what Extend applied is not un-applied, and neither is what an Undo refills (D242 item 7): successive Ctrl+Z steps the track back each time
+//   5  what Extend applied is not un-applied, and neither is what an Undo refills: successive Ctrl+Z steps the track back each time
 //   6  Ctrl+Y and Ctrl+Shift+Z are not guarded; a text-entry field keeps its own Ctrl+Z (nothing asked of the panel); no panel: Ctrl+Z undoes the track as before
 'use strict';
 const test = require('node:test');
@@ -48,9 +48,9 @@ async function page() {
   const stage = doc.createElement('div'); stage.setAttribute('id', 'preview'); stage.isRoot = true;
   const shell = await createCoreShell({ brushFn: null, autosaveMs: 0 }); shell.extend({ length: 200 }); shell.extend({ length: 300 });
   const root = doc.createElement('div'), panel = require('../core/panel.js').mount(root, shell);
-  // AMENDED D331 B (ledger D332, 2026-10-15): the turn field is read as a CORNER by default now (the user's word, plan :367-369, ruled :373-385). Every row in
+  // AMENDED (2026-10-15): the turn field is read as a CORNER by default now (the user's word, and ruled so). Every row in
   // this file types the turn as a RATE (°/100 m), the field's meaning when it was written, so the helper puts "turn as" on rate, the switch the ruling keeps one
-  // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js (D331 B).
+  // step away; the rows' rules are unchanged under it. The corner default has its own rows in app/test/core-readout-display.test.js.
   { const ta = root.all().find((e) => e.tagName === 'SELECT' && e.attrs['aria-label'] === 'turn and climb as'); ta.value = 'rate'; ta.onchange(); }
   bindKeys(doc, shell, { save: () => {} });
   const field = (label) => root.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === label).children[1];

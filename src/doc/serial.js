@@ -1,4 +1,4 @@
-// serial.js: the document's canonical serialisation (ARCHITECTURE §2: "canonical serialisation with quantised numbers,
+// serial.js: the document's canonical serialisation (the design: "canonical serialisation with quantised numbers,
 // a schema version and a generator version"), and the checks every document passes, in memory or on load.
 //
 // IN MEMORY a document is SI (metres, radians, m/s) and frozen. Every number in it is already QUANTISED, so the
@@ -6,7 +6,7 @@
 // and resolve() of either gives identical segments.
 //
 // QUANTA (the text's units): lengths 0.1 mm · angles 0.00001° · ease ratios 0.0001 · speeds 0.01 km/h. Degrees and km/h
-// appear only here, never inside the program (docs/INTERFACES.md conventions). The quanta are that fine because the
+// appear only here, never inside the program (a project convention). The quanta are that fine because the
 // close-the-loop connector (connector.js) must close to the geometry's 1e-3 m: at 1 mm and 0.001°, one angle quantum on
 // a few hundred metres of lever moves the seam by millimetres.
 //
@@ -16,8 +16,8 @@
 // and its next save is canonical; canonical text round-trips exactly.
 //
 // SCHEMA VERSIONS. This is schema 3. Schema 1 (the first) had no texture slots; schema 2 gives every word `textures`, its
-// texture-slot overrides (src/doc/textures.js, ARCHITECTURE §5b); schema 3 gives the document `pitLane`, a side road
-// anchored to the loop or null (src/doc/pitlane.js, ARCHITECTURE §11.1). An older document is MIGRATED on load, step by
+// texture-slot overrides (src/doc/textures.js); schema 3 gives the document `pitLane`, a side road
+// anchored to the loop or null (src/doc/pitlane.js). An older document is MIGRATED on load, step by
 // step through MIGRATIONS: 1 -> 2 gives every word (and every word of a phrase) `textures: {}`, so it looks exactly as
 // its fonts' defaults make it; 2 -> 3 gives the document `pitLane: null`. The track it resolves to is unchanged. A newer schema is refused (written by a newer
 // builder); an older one with no migration, or a malformed one, is refused as unknown.

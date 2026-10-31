@@ -26,8 +26,8 @@
 // `head` is path.head (src/geom/path.js buildHead): { s, pos, T, L, U } with L = U × T, u + = left. `path` is needed
 // only by chase (it reads the road behind the head).
 //
-// THE BUILD VIEW FRAMES THE ROAD (D182: T-180 roads are 31-37 m wide at the median and 67 m at the tight p90, FINDINGS
-// §7f). `width` is the cross-section's span at the head (src/geom/profile.js spanOf). The build view keeps its 15 m / 6 m
+// THE BUILD VIEW FRAMES THE ROAD (measured: T-180 roads are 31-37 m wide at the median and 67 m at the tight p90).
+// `width` is the cross-section's span at the head (src/geom/profile.js spanOf). The build view keeps its 15 m / 6 m
 // on a narrow road and backs off, at the same angle, until the whole width sits inside FRAME of the view's half-width:
 // the edges pos ± L·width/2 lie at depth back·k along the view direction, k = (2 + r²) / √(4 + r²) with r = up / back
 // (the eye is at −T·back + U·up, looking at +T·back), so back ≥ (width / 2) / (FRAME · tan(fov / 2) · aspect · k).
@@ -84,7 +84,7 @@ function sampleAt(path, s) {
 }
 
 /**
- * OVERHEAD, FIT TO THE WHOLE TRACK (the D170 review, item 2). Straight down over the centre of the track's world
+ * OVERHEAD, FIT TO THE WHOLE TRACK (from a review). Straight down over the centre of the track's world
  * box, the growth direction still up the screen. The box's 8 corners are measured along the screen's up (f) and right
  * axes; the eye rises until both half-extents fit the field of view (with 8% margin) at the depth of the box's TOP, the
  * nearest any vertex can be. Every vertex of the box then lands inside the view (app/test/look.test.js projects them).
@@ -158,7 +158,7 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
   /** Entering free mode: take over the pose on screen (or the last exact one), so the view does not jump. */
   function enterFree(from) {
     const d = unit(sub(from.target, from.eye)) || [0, 0, 1], lim = 89 * Math.PI / 180;
-    // D252 follow-up (C's finding 4): a view looking STRAIGHT DOWN (overhead) entered free at pitch -90 degrees, along the world up the free view keeps, and every
+    // a review found: a view looking STRAIGHT DOWN (overhead) entered free at pitch -90 degrees, along the world up the free view keeps, and every
     // frame threw "lookAt: up is parallel to the view direction". The pitch is held within the 89 degrees look() keeps, and a view looking straight down or up
     // gives its heading by its own up (overhead: the growth direction up the screen), so the free view faces where that view had up.
     free.eye = from.eye.slice(); free.pitch = Math.max(-lim, Math.min(lim, Math.asin(Math.max(-1, Math.min(1, d[1])))));
@@ -210,7 +210,7 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
       /** Fly in the camera's own frame (metres): forward along the view, right, and world up. The move is EXACTLY hypot(fwd, right, up)
        *  metres, in the direction of the three axes' sum, so any combination of keys flies at the same speed as one. Forward follows the
        *  view's pitch and up is the world's up, so those two are not perpendicular and their plain sum shrinks toward nothing as the view
-       *  looks down (W + E: 0.0123× at −89°, D189). Where they nearly cancel the direction is the part that does not (the heading).
+       *  looks down (W + E: 0.0123× at −89°). Where they nearly cancel the direction is the part that does not (the heading).
        *  d, r and up are independent while the pitch is within ±89°, so the sum is never shorter than 0.0123 of the request. */
       move(fwd = 0, right = 0, up = 0) {
         if (mode !== 'free') return false;
@@ -218,7 +218,7 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
         const v = add(add(mul(d, fwd), mul(r, right)), mul(WORLD_UP, up)), L = Math.hypot(fwd, right, up), n = len(v);
         free.eye = add(free.eye, n > 0 && n > 1e-12 * L ? mul(v, L / n) : v); return true;   // a sum that is nothing at all stays nothing
       },
-      /** The factor move(fwd, right, up) scales the axes' sum by, without moving (1 for a single axis, or nothing). D257: so the preview knows how far the UP
+      /** The factor move(fwd, right, up) scales the axes' sum by, without moving (1 for a single axis, or nothing), so the preview knows how far the UP
        *  axis really went inside a combined move (Left Ctrl's descent, undone when a shortcut joins it, while W's travel stays). */
       scaleOf(fwd = 0, right = 0, up = 0) {
         const d = freeDir(), r = unit(cross(d, WORLD_UP)) || [1, 0, 0];
@@ -232,7 +232,7 @@ function createRig({ order = MODES, keys = KEYS, opts = DEFAULTS, start = 'build
         const lim = 89 * Math.PI / 180; free.yaw -= dYaw; free.pitch = Math.max(-lim, Math.min(lim, free.pitch + dPitch)); return true;
       },
       state: () => ({ eye: free.eye.slice(), yaw: free.yaw, pitch: free.pitch }),
-      /** D242: put the free camera at `eye`, looking at `target` (a click on a red in a list: the camera goes there). Free mode only. */
+      /** put the free camera at `eye`, looking at `target` (a click on a red in a list: the camera goes there). Free mode only. */
       lookFrom(eye, target) { if (mode !== 'free') return false; enterFree({ eye, target }); return true; },
     },
   };

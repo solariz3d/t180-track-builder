@@ -1,6 +1,6 @@
 // preview-stuck.test.js: node --test app/test/preview-stuck.test.js
-// D336: the camera kept flying in one direction after every key was let go ("sometimes movement will become stuck in one direction and i button mash to make it
-// stop", plan :587-589), while pressing the movement keys, Shift, and the right button to look. preview.js already lets go of every held key on blur and when the
+// The camera kept flying in one direction after every key was let go (the user: "sometimes movement will become stuck in one direction and i button mash to make it
+// stop"), while pressing the movement keys, Shift, and the right button to look. preview.js already lets go of every held key on blur and when the
 // page is hidden (the 2026-09-29 runaway camera), and reads a key-up by its physical key, so ANOTHER path loses a key-up.
 //
 // THE HARNESS drives the REAL preview mount (app/preview/preview.js createPreview) with a fake window and document, under a model of what the host (WebView2 and
@@ -133,7 +133,7 @@ function settles(seed, opts = { heldNetMs: 0 }, host, wait = 64) {
   return { still: moved(W.eye(), e0) < 1e-9, log };
 }
 
-// Found red before the fix (D336), kept so each path stays covered: the menu (H1) and the title bar (H2)
+// Found red before the fix, kept so each path stays covered: the menu (H1) and the title bar (H2)
 // (measured on 3a26bc5's preview.js: 71 of seeds 1-400 moving, 34 of them with the menu rule alone, 55 with the title-bar rule alone, 0 with neither; 757 and
 // 1226 need both, a right press that went down during a title-bar drag; all five below move on 3a26bc5)
 const SEEDS_RED = [1, 6, 8, 757, 1226];

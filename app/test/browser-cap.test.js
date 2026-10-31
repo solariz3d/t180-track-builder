@@ -1,5 +1,5 @@
 // browser-cap.test.js: node --test app/test/browser-cap.test.js
-// D504: A TEST RUN OPENS AT MOST N HEADLESS BROWSERS ON THE MACHINE. Every page test opened its own Chrome (5 to 9 processes each), 4 test files ran at once
+// A TEST RUN OPENS AT MOST N HEADLESS BROWSERS ON THE MACHINE. Every page test opened its own Chrome (5 to 9 processes each), 4 test files ran at once
 // and harnesses ran inner suites at 4 more, so one run held 11 browsers and 97 chrome.exe (7.2 GB) at 18:57 on 2026-10-27. soundrender.js takeSlot is the
 // cap: a slot is a file in a folder every process on the machine shares, taken before a Chrome is spawned and given back when it exits. Rows:
 //   1  N slots are taken at once; the next waits, and takes the slot the moment one is given back
@@ -91,7 +91,7 @@ test('row 6: launchChrome holds a slot while its Chrome lives and gives it back 
   const { ch, dir, tgt } = await launchChrome(CHROME, [], 't180cap-');
   let exited = false;
   try {
-    const p = await connect(tgt.webSocketDebuggerUrl); try { await p.send('Runtime.evaluate', { expression: "document.title = 'zz-headless-test'; true" }); } finally { p.ws.close(); }   // D484: a headless page is always titled so
+    const p = await connect(tgt.webSocketDebuggerUrl); try { await p.send('Runtime.evaluate', { expression: "document.title = 'zz-headless-test'; true" }); } finally { p.ws.close(); }   // a headless page is always titled so
     const held = mineNow();
     assert.equal(held.length, before + 1, 'one more slot names this process while the Chrome lives');
     assert.ok(held.some((h) => h.chrome === ch.pid), `the slot names the Chrome's pid ${ch.pid}: ${JSON.stringify(held)}`);

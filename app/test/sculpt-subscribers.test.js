@@ -1,7 +1,7 @@
 // sculpt-subscribers.test.js: node --test app/test/sculpt-subscribers.test.js
-// D421 part 5 step 2 (C's profile of a 10 km brush drag, exo_memory/handback/p-d421-freeze-C_2026-10-20.md §5: the page's own subscribers, not the brush, were the cost of a step): the layers
+// From a profile of a 10 km brush drag (the page's own subscribers, not the brush, were the cost of a step): the layers
 // that read the whole track on every change keep what they show while a sculpt drag is open, and read the track as it is once it is let go, in a frame after the release, not inside it.
-// On a small fake DOM with the REAL shell (createCoreShell, E's brush). Rows:
+// On a small fake DOM with the REAL shell (createCoreShell, the core's brush). Rows:
 //   1  the readout labels: while the drag is open the head's label reads the track as the drag began (pieceReadouts is not read again, 0 calls); after the release, the next frame
 //      reads the track as let go, and the head's label is that track's own readout
 //   2  the start-and-grid marks: while the drag is open spawnsInfo is not asked (0 calls) and the marks stay those of the track as the drag began; the release does not ask either
@@ -115,7 +115,7 @@ test('row 2b: the start\'s hover (app/core/spawndrag.js) does not ask for spawns
   hov.unmount();
 });
 
-// D429 (A's trace of sculpt-frame row 3, exo_memory/handback/p-d429-row3-A_2026-10-22.md): every brush step makes new segments, which reset the labels' hover, so the labels asked the
+// From a trace of sculpt-frame row 3: every brush step makes new segments, which reset the labels' hover, so the labels asked the
 // preview for the piece under a still pointer (a scan of the whole path) on almost every frame of a drag, 64-141 ms a drag on 10 km
 test('row 4: the labels do not ask the preview for the piece under the pointer while a sculpt drag is open, and ask once for the let-go track', async () => {
   const T = await page(); let picks = 0;

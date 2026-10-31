@@ -136,7 +136,7 @@ test('an open track is refused: an AC lap and the AI line need a closed loop', (
 
 test('an amber document exports, and the amber is in the warnings with its source (745 km/h through the 50 m tight)', () => {
   const r = exportTrack(withSpeed(SAMPLE, kmh(745)), { outDir: tmp() });
-  assert.ok(r.warnings.some((w) => /^amber: load-above-proven .*FINDINGS\.md/.test(w)), r.warnings.join('\n'));
+  assert.ok(r.warnings.some((w) => /^amber: load-above-proven .*more load than any track has been measured to hold/.test(w)), r.warnings.join('\n'));   // amended: the source is in plain words now, so no doc or decision reference reaches the screen
 });
 
 test('both variants: the same kn5 bytes, the soft-collision block only in the first, and the noblock red said', () => {
@@ -147,7 +147,7 @@ test('both variants: the same kn5 bytes, the soft-collision block only in the fi
   assert.ok(kn5[0].equals(kn5[1]));
   const ini = r.folders.map((f) => fs.readFileSync(path.join(f.dir, 'data', 'surfaces.ini'), 'utf8'));
   assert.deepStrictEqual(ini.map((t) => /COLLISION_PARAMS/.test(t)), [true, false]);
-  assert.ok(r.warnings.some((w) => /^noblock: .*RED/.test(w)));
+  assert.ok(r.warnings.some((w) => /^noblock: .*the checker reds/.test(w)));   // amended: the text is in plain words now, so no doc or decision reference reaches the screen
 });
 
 test('only block is written by default', () => {

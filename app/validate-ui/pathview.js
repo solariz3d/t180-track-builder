@@ -1,8 +1,8 @@
-// pathview.js: validation's stations as a VIEW of the preview's path (D177: ONE shared path; C's hardening §1 item 2:
+// pathview.js: validation's stations as a VIEW of the preview's path (ONE shared path; a hardening review:
 // "The validation controller also grows its OWN path next to the preview's").
 //
 //   viewOf(src, step, prev, g) -> view | null
-//     src    a buildPath result (C's src/geom/path.js) at a FINER step that divides `step` exactly (the preview's 0.5 m
+//     src    a buildPath result (src/geom/path.js) at a FINER step that divides `step` exactly (the preview's 0.5 m
 //            into validation's 2 m), with its segFirst[] (the index of each segment's first sample)
 //     prev   the previous view of the SAME src (grown in place since), or null; g the first segment that may have changed
 //     view   { lengthM, closed, twist, step, samples, head, src, first }   first[j]: the view index of segment j's first

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// lookmatch.js: the look-match reference views (ARCHITECTURE §5.3), the builder's side. D179.
+// lookmatch.js: the look-match reference views, the builder's side.
 //
 //   node scripts/lookmatch.js render --ac <Assetto Corsa folder> --out <folder OUTSIDE this repository> [--views id,id]
 //       renders every view of src/lookmatch/views.json (or the ones named) from the track's own kn5 files, in the

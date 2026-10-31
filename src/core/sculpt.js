@@ -108,7 +108,7 @@ function widened(doc, off, s0, r, spans) {
 }
 /** A brush on an optional channel reaches only the pieces that carry it. */
 function checkReach(P, channel) {
-  if (D.OPTIONAL[channel] && channel !== 'c' && !P[D.OPTIONAL[channel]]) throw new D.CoreError('NOT_' + D.OPTIONAL[channel].toUpperCase(), 'a ' + channel + ' brush reaches piece ' + P.id + ', which has no ' + D.OPTIONAL[channel] + ': extend with a ' + (channel === 't' ? 't' : 'e or s') + ' target first, or brush only ' + D.OPTIONAL[channel] + ' pieces (D225)');
+  if (D.OPTIONAL[channel] && channel !== 'c' && !P[D.OPTIONAL[channel]]) throw new D.CoreError('NOT_' + D.OPTIONAL[channel].toUpperCase(), 'a ' + channel + ' brush reaches piece ' + P.id + ', which has no ' + D.OPTIONAL[channel] + ': extend with a ' + (channel === 't' ? 't' : 'e or s') + ' target first, or brush only ' + D.OPTIONAL[channel] + ' pieces');
   if (channel === 'c' && !P.cup) throw new D.CoreError('NOT_CUP', 'a cup brush reaches piece ' + P.id + ', which has no cup (a legacy piece renders the old profile): extend with a cup target first, or brush only cup pieces');
 }
 /** Road pieces a and b (a before b) are C1-linked in `channel`: no flight between them (the landing starts at the user's pose), and an optional channel on both. */

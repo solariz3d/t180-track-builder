@@ -2,14 +2,14 @@
 // Used by app/test/sound-bands.test.js and by hand: node app/test/soundrender.js OUTDIR writes each clip as a 16-bit stereo 48 kHz WAV.
 //
 //   chromePath()                    the Chrome to use (CHROME_PATH, else the usual Windows place), or null when there is none
-//   launchChrome(exe, args, prefix) -> { ch, dir, port, tgt }   (D400) headless Chrome on a free port, attached only if that port's browser is the one it started;
-//                                   always muted (D409: --mute-audio, so a test never plays the builder's sounds aloud; an OfflineAudioContext still renders);
-//                                   it waits for one of the machine's T180_BROWSERS slots first (D504, 4 by default) and gives it back when that Chrome exits
-//   takeSlot(o) -> release()         (D504) one of N browser slots in SLOT_DIR (os.tmpdir()/t180-browsers); slotCount(env) is N
-//   connect(url, onEvent)           -> { ws, send }   (D400) a DevTools socket whose waiting sends are rejected when it closes, so a lost browser fails fast
+//   launchChrome(exe, args, prefix) -> { ch, dir, port, tgt }   headless Chrome on a free port, attached only if that port's browser is the one it started;
+//                                   always muted (--mute-audio, so a test never plays the builder's sounds aloud; an OfflineAudioContext still renders);
+//                                   it waits for one of the machine's T180_BROWSERS slots first (4 by default) and gives it back when that Chrome exits
+//   takeSlot(o) -> release()         one of N browser slots in SLOT_DIR (os.tmpdir()/t180-browsers); slotCount(env) is N
+//   connect(url, onEvent)           -> { ws, send }   a DevTools socket whose waiting sends are rejected when it closes, so a lost browser fails fast
 //   renderClips(src, clips, o)     -> { name: { L, R, sampleRate } }    src = app/sound.js's text; clips = { name: [seconds, body] }; o.samples = a folder; o.seed (default SEED)
 //                                   of the four slot WAVs (app/sounds): the engine is handed them (useSamples) before each clip, as the app does once they load;
-//                                   o.melody (D375) = which of the engine's melodies place and undo play (the engine's first when none is given)
+//                                   o.melody = which of the engine's melodies place and undo play (the engine's first when none is given)
 //   readWav(file)                   a 16-bit PCM WAV as { L, R, sampleRate } (mono is copied to both sides)
 //   peakDb(clip)                    the sample peak in dBFS
 //   lufs(clip)                      integrated loudness, ITU-R BS.1770-4 (K-weighting, 400 ms blocks with 75% overlap, gates at -70 LUFS and -10 LU)
@@ -38,9 +38,9 @@ function chromePath() {
 const SEED = 1;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// D400: THE CHROME A TEST TALKS TO IS THE ONE IT STARTED. A port drawn at random from 600 could be one another test's Chrome already held: the new Chrome
+// THE CHROME A TEST TALKS TO IS THE ONE IT STARTED. A port drawn at random from 600 could be one another test's Chrome already held: the new Chrome
 // could not bind it, the test drove the OTHER browser, and when that test closed its Chrome the socket went with it and a reply never came, so a row hung
-// until a time limit cancelled it (sky-dither's 1-of-2 failure, reproduced with every port forced to one and the second copy 300 ms late: A's D398 review).
+// until a time limit cancelled it (sky-dither's 1-of-2 failure, reproduced with every port forced to one and the second copy 300 ms late, in a review).
 /** A port the OS says is free now (listen on 0, read it, close), as scripts/prove_render.js takes one. */
 function freePort() { return new Promise((res, rej) => { const s = net.createServer(); s.once('error', rej); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); }); }
 /**
@@ -58,7 +58,7 @@ async function connect(url, onEvent = null) {
   });
   return { ws, send };
 }
-// D504: AT MOST N HEADLESS BROWSERS ON THE MACHINE. Each page test opened its own Chrome (5 to 9 processes), 4 files ran at once and harnesses ran inner
+// AT MOST N HEADLESS BROWSERS ON THE MACHINE. Each page test opened its own Chrome (5 to 9 processes), 4 files ran at once and harnesses ran inner
 // suites at 4 more: one run held 11 browsers and 97 chrome.exe (7.2 GB) on 2026-10-27. A slot is a file in SLOT_DIR, which every process on the machine
 // shares, holding { pid, started, token } and the Chrome's pid once it is spawned. It is taken ('wx', so two takers cannot both have it) before a Chrome is
 // spawned and given back when that Chrome exits, or when this process exits. A slot whose holder pid is gone is taken over. Two takers that find the same
@@ -112,7 +112,7 @@ async function takeSlot({ dir = SLOT_DIR, n = slotCount(), waitLogMs = 30000, ma
  * -> { ch, dir, port, tgt } (tgt = its first page target). On any failure this Chrome is killed and the error thrown.
  */
 async function launchChrome(exe, args, prefix) {
-  const release = await takeSlot();   // D504: one of the machine's N browser slots, given back when this Chrome exits
+  const release = await takeSlot();   // one of the machine's N browser slots, given back when this Chrome exits
   let port, dir, ch;
   try {
     port = await freePort(); dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -145,11 +145,11 @@ async function renderClips(src, clips = CLIPS, { samples = null, seed = SEED, me
   try {
     let send; try { ({ ws, send } = await connect(tgt.webSocketDebuggerUrl)); } catch (e) { throw new Error(`soundrender: ${e.message}`); }
     const ev = async (e) => { const d = await send('Runtime.evaluate', { expression: e, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`soundrender: page error ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 400)}`); return d.result.result.value; };
-    await ev("document.title = 'zz-headless-test'; true");   // D484: a headless page is always titled so, first thing
+    await ev("document.title = 'zz-headless-test'; true");   // a headless page is always titled so, first thing
     await ev(`window.__M = (() => { const module = { exports: {} }; ${src}\n; return module.exports; })(); window.__SAMP = null; true`);
     if (samples) {   // each slot's two channels go over in pieces, into one AudioBuffer per slot that every clip's context can play
       await ev('window.__SAMP = {}; true');
-      for (const slot of await ev('window.__M.SAMPLES.slots.slice()')) {   // D375: the files the engine itself loads (its SAMPLES.slots)
+      for (const slot of await ev('window.__M.SAMPLES.slots.slice()')) {   // the files the engine itself loads (its SAMPLES.slots)
         const w = readWav(path.join(samples, `${slot}.wav`)), CHN = 1 << 17;
         await ev(`window.__SAMP.${slot} = new AudioBuffer({ numberOfChannels: 2, length: ${w.L.length}, sampleRate: ${w.sampleRate} }); true`);
         for (const [c, x] of [[0, w.L], [1, w.R]]) for (let i = 0; i < x.length; i += CHN) {

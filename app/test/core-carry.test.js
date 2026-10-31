@@ -1,7 +1,7 @@
 // core-carry.test.js: node --test app/test/core-carry.test.js
-// D385 (pane C; the user, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values as the next piece after, which is
+// The user, 2026-10-18: a piece after a turn goes straight "because the pieces dont retain the same values as the next piece after, which is
 // what I want. So right now only the cup and width and banking and length is retained but not the climb and turn, also there is the right edge but not the
-// left edge tweak"; plan_t180_handoff_2026-10-15.md :2496-2522).
+// left edge tweak".
 //   PART 1, THE CARRY: in corner mode, after an Extend the turn and climb fields keep the degrees typed for the piece just placed, so Extend again places the
 //          same corner (a corner still ends straight). A cleared field or a typed 0 is as before (the track goes on as it goes). Undo gives back the undone
 //          piece's own values; a new document clears them; a selected piece lends its own corner. Rate mode is unchanged.

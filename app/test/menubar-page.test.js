@@ -1,5 +1,5 @@
 // menubar-page.test.js: node --test app/test/menubar-page.test.js
-// D355 part 1: THE MENUS ON THE TOP BAR, tested on the real page (app/index.html) in HEADLESS Chrome (never a window), served from this checkout. The page runs
+// THE MENUS ON THE TOP BAR, tested on the real page (app/index.html) in HEADLESS Chrome (never a window), served from this checkout. The page runs
 // as it does off Tauri (no native side), which is enough for the menus. Skipped, with the reason, where there is no Chrome (CHROME_PATH or the usual place). Rows:
 //   1  the bar, left to right: File, Edit, Build, Track, Pieces, View, Settings, then Export to Assetto Corsa; the ⋯ menu is gone; every control it held, and
 //      every other control the bar had, is still on the page by its id
@@ -15,24 +15,24 @@
 //   9  Settings ▸ Wall raycasting and the checker's own CSP box follow each other both ways, and the choice survives a reload
 //  10  (with the Track part) the road surface has one controller: no #textures section in the left column, one road-surface picker on the page, and the
 //      asphalt announced before the Track menu is ever opened
-//  11  (AMENDED D421 part 3: was "Build ▸ Brush shows the brush strip ..."; the plan removes Build ▸ Brush) Build ▸ Sculpt mode shows the Sculpt strip under the
+//  11  (AMENDED: was "Build ▸ Brush shows the brush strip ..."; the plan removes Build ▸ Brush) Build ▸ Sculpt mode shows the Sculpt strip under the
 //      bar, not in the left column; it stays there across an edit; Sculpt mode again hides it
 //  12  (with the Track part) a menu panel gives its controls back when the menu closes: Start & grid… open, the menu closed, and its controls are gone
-//  13  (D356) a part that fails to load says why in its menu: "This menu could not be built: <reason>", never a silent placeholder (app/core/buildmenu.js answered with a
+//  13  a part that fails to load says why in its menu: "This menu could not be built: <reason>", never a silent placeholder (app/core/buildmenu.js answered with a
 //      module that throws, through DevTools' Fetch domain); the other menus still work
-//  15  (D382) the sound slider in Settings shows 45 on a fresh start with nothing saved, and a saved volume (0.6) shows as saved, 60
-//  16  (D394) Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody's two files; after a reload, that look and that melody;
+//  15  the sound slider in Settings shows 45 on a fresh start with nothing saved, and a saved volume (0.6) shows as saved, 60
+//  16  Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody's two files; after a reload, that look and that melody;
 //      SIGIL's tooltip says its melody is still picked at random
-//  17  (D396) the bar fits at every width the window allows, from tauri.conf.json's minWidth (900) up: at 900, 1100, 1280 and 1400 px and on both sides of
+//  17  the bar fits at every width the window allows, from tauri.conf.json's minWidth (900) up: at 900, 1100, 1280 and 1400 px and on both sides of
 //      each fold nothing overflows, the window's own buttons (#winctl) are wholly inside the window, the empty grab strip (.drag) is at least 24 px, and every
-//      menu and Export to Assetto Corsa is on one line, left of them; the same at 125% scaling, where a window can be 979.2 or 1279.2 px wide (A's review 10)
-//  18  (D401; AMENDED: a new install opens in Sigil, and Random is listed after the named looks) Settings ▸ Theme offers Random (it was Music); a fresh start ticks
+//      menu and Export to Assetto Corsa is on one line, left of them; the same at 125% scaling, where a window can be 979.2 or 1279.2 px wide (found in review)
+//  18  (AMENDED: a new install opens in Sigil, and Random is listed after the named looks) Settings ▸ Theme offers Random (it was Music); a fresh start ticks
 //      Sigil; with Random saved, choosing it while open picks another look at once and that look's melody
 //      follows; it is still saved as music, and a saved music loads as Random
-//  18b (D401, B's D408 probe) row 18 with Math.random pinned: at 0.4 the start look is Random's pick, so its files are in and none is fetched again; at 0.6 they are fetched
-//  19  (D401, A's read §8) on a fresh start, nothing saved and Random already ticked, a click on Random picks another look at once and its melody follows,
+//  18b row 18 with Math.random pinned: at 0.4 the start look is Random's pick, so its files are in and none is fetched again; at 0.6 they are fetched
+//  19  on a fresh start, nothing saved and Random already ticked, a click on Random picks another look at once and its melody follows,
 //      and again on the next click; Random stays ticked and the theme is saved as music
-//  19b (D401) that first click on a fresh install picks ONCE: with Math.random pinned at 0.4 the start is Skyline and one pick is Glass (a second pick, which the first click
+//  19b that first click on a fresh install picks ONCE: with Math.random pinned at 0.4 the start is Skyline and one pick is Glass (a second pick, which the first click
 //      made when nothing was saved yet, lands back on Skyline)
 //  20  File ▸ Open… is a list the page draws, not a native select (whose pop-up showed the menu behind it through its rows in the frameless window): no select in any
 //      menu, nor in any of the menus' panels opened in turn; a choice unfolded in a menu is folded again when the menu closes; unfolded, its rows are the saved tracks; the arrow keys reach them; a click opens that track and closes the menu; Esc closes the menu and folds the list
@@ -58,7 +58,7 @@ test.before(async () => {
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${srv.address().port}/app/index.html`;
-  // D400: a free port, this Chrome's own (launchChrome checks the browser's pid), and a socket that rejects waiting sends when it closes
+  // a free port, this Chrome's own (launchChrome checks the browser's pid), and a socket that rejects waiting sends when it closes
   let tgt; ({ ch, dir, tgt } = await launchChrome(CHROME, ['--window-size=1400,860'], 't180menu-'));
   ({ ws, send } = await connect(tgt.webSocketDebuggerUrl, (d) => { if (d.method && onEvent) onEvent(d); if (d.method === 'Runtime.exceptionThrown') errors.push(d.params.exceptionDetails.exception ? d.params.exceptionDetails.exception.description : d.params.exceptionDetails.text); }));
   ev = async (expr) => { const d = await send('Runtime.evaluate', { expression: `(async () => { ${expr} })()`, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 500)}`); return d.result.result.value; };
@@ -72,12 +72,12 @@ async function load({ clear = true, blocked = false, random = null } = {}) {
   errors = [];
   let script = null, pin = null;
   if (blocked) script = (await send('Page.addScriptToEvaluateOnNewDocument', { source: "Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });" })).result.identifier;
-  // random: Math.random pinned to that number in the page about to load (B's D408 probe), so a test can choose the start look and Random's pick
+  // random: Math.random pinned to that number in the page about to load (a probe's method), so a test can choose the start look and Random's pick
   if (random !== null) pin = (await send('Page.addScriptToEvaluateOnNewDocument', { source: `Math.random = () => ${Number(random)};` })).result.identifier;
   if (clear && !blocked) { await send('Page.navigate', { url: base.replace('index.html', 'lib/cjs.js') }); await sleep(300); await ev('localStorage.clear(); return true;'); }
   await send('Page.navigate', { url: base });
   for (let i = 0; i < 150; i++) { await sleep(200); try { if (await ev("return document.documentElement.dataset.menubar === 'ready';")) break; } catch (e) { /* loading */ } }
-  await ev("document.title = 'zz-headless-test'; return true;");   // D484: a headless page is always titled so; the page's own <title> replaced any set before
+  await ev("document.title = 'zz-headless-test'; return true;");   // a headless page is always titled so; the page's own <title> replaced any set before
   if (script) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script });
   if (pin) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: pin });
   assert.equal(await ev("return document.documentElement.dataset.menubar || 'not mounted';"), 'ready', `the menus mounted (page errors: ${errors.join(' | ') || 'none'})`);
@@ -286,9 +286,9 @@ test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and
     await load();
     await open('m-settings');
     const shownS = await shown('m-settings');
-    // AMENDED (D502 part 2): the rule changed by name, the user's copy pick of 2026-10-27: Settings ▸ Theme shows SIGIL as "Sigil", in the others' case
+    // AMENDED: the rule changed by name, the user's copy pick of 2026-10-27: Settings ▸ Theme shows SIGIL as "Sigil", in the others' case
     for (const t of ['Random', 'Aqua', 'Skyline', 'Skyline Night', 'Glass', 'Aurora', 'Sigil']) assert.ok(shownS.includes(t), `Settings ▸ Theme holds ${t}: ${shownS.join(' | ')}`);
-    assert.equal(await ticked('m-settings', 'Sigil'), true, 'nothing saved: Sigil, a new install\'s look');   // AMENDED: a new install opens in Sigil (it was Random; D401: Music is called Random)
+    assert.equal(await ticked('m-settings', 'Sigil'), true, 'nothing saved: Sigil, a new install\'s look');   // AMENDED: a new install opens in Sigil (it was Random; Music is now called Random)
     const now = await ev("return document.documentElement.getAttribute('data-theme');");
     const target = now === 'glass' ? 'aurora' : 'glass', label = target === 'glass' ? 'Glass' : 'Aurora';
     await ev("document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); return true;");   // the sound starts on a press (app/sound.js)
@@ -308,11 +308,11 @@ test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and
     for (let i = 0; i < 50 && !urls.some((u) => /sounds\/undo_\w+\.wav$/.test(u)); i++) await sleep(100);
     assert.deepEqual(urls.filter((u) => /sounds\/(place|undo)_/.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort(), [`place_${target}.wav`, `undo_${target}.wav`], 'and its own melody');
     await open('m-settings');
-    // AMENDED (D402): the rule changed by name: SIGIL has its own melody, Obsidian, so its tooltip names it and choosing SIGIL plays it (its two files)
-    const sigilTip = await ev("return [...document.querySelectorAll('#m-settings label')].find((x) => x.textContent.trim() === 'Sigil').title;");   // AMENDED (D502 part 2): shown as Sigil
+    // AMENDED: the rule changed by name: SIGIL has its own melody, Obsidian, so its tooltip names it and choosing SIGIL plays it (its two files)
+    const sigilTip = await ev("return [...document.querySelectorAll('#m-settings label')].find((x) => x.textContent.trim() === 'Sigil').title;");   // AMENDED: shown as Sigil
     assert.match(sigilTip, /Obsidian/, `SIGIL names its own melody: ${sigilTip}`); assert.doesNotMatch(sigilTip, /random/, 'and no longer says its melody is random');
     urls.length = 0;
-    await clickText('m-settings', 'Sigil');   // AMENDED (D502 part 2): shown as Sigil
+    await clickText('m-settings', 'Sigil');   // AMENDED: shown as Sigil
     assert.equal(await ev("return document.documentElement.hasAttribute('data-theme');"), false, 'SIGIL: no data-theme');
     for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/undo_sigil.wav')); i++) await sleep(100);
     assert.deepEqual(urls.filter((u) => /\/sounds\//.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort(), ['place_sigil.wav', 'undo_sigil.wav'], 'and Obsidian follows: only its two files are fetched');
@@ -338,9 +338,9 @@ function fits(m, w) {
   }
 }
 // a second headless Chrome for row 17, started at a device scale of 1.25: only a browser started that way lays a frame out on whole device pixels, so a
-// 979 px frame is 979.2 CSS px wide; DevTools' Emulation at 1.25 keeps it at 979 (measured, D396). Its own page errors are kept apart from the main ones
+// 979 px frame is 979.2 CSS px wide; DevTools' Emulation at 1.25 keeps it at 979 (measured). Its own page errors are kept apart from the main ones
 async function scaledChrome(scale) {
-  // D400: a free port, this Chrome's own (launchChrome checks the browser's pid), and a socket that rejects waiting sends when it closes
+  // a free port, this Chrome's own (launchChrome checks the browser's pid), and a socket that rejects waiting sends when it closes
   const errs = []; let proc, udir, tgt;
   try { ({ ch: proc, dir: udir, tgt } = await launchChrome(CHROME, ['--window-size=1400,860', `--force-device-scale-factor=${scale}`], 't180menu-scaled-')); } catch (e) { throw new Error(`headless Chrome at scale ${scale}: ${e.message}`); }
   let sock, call; try { ({ ws: sock, send: call } = await connect(tgt.webSocketDebuggerUrl, (d) => { if (d.method === 'Runtime.exceptionThrown') errs.push(d.params.exceptionDetails.text); })); } catch (e) { proc.kill(); throw new Error(`the scaled DevTools socket failed: ${e.message}`); }
@@ -385,10 +385,10 @@ test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sid
 });
 
 // row 18's walk, as a function so row 18b can run it with Math.random pinned: Random first and the default, Glass, then Random picks another look and its melody follows.
-// The melody check is row 19's rule (B's D408 hand-back): a look whose two files this load already fetched keeps them (app/sound.js), so it is fetched only when they were not in
+// The melody check is row 19's rule (found by a probe): a look whose two files this load already fetched keeps them (app/sound.js), so it is fetched only when they were not in
 async function randomAfterGlass({ random = null } = {}) {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
-  // AMENDED (D402): no data-theme is SIGIL's look, which Random can land on now (app/lib/theme.js PICKS)
+  // AMENDED: no data-theme is SIGIL's look, which Random can land on now (app/lib/theme.js PICKS)
   const look = () => ev("return document.documentElement.getAttribute('data-theme') || 'sigil';");
   const soundFiles = () => urls.filter((u) => /sounds\/(place|undo)_/.test(u)).map((u) => u.replace(/^.*\/sounds\//, '')).sort();
   const fetched = async (name) => { for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/' + name)); i++) await sleep(100); };
@@ -413,8 +413,8 @@ async function randomAfterGlass({ random = null } = {}) {
     const had = urls.slice(); urls.length = 0;
     await clickText('m-settings', 'Random');
     const picked = await look();
-    // AMENDED (D405): the rule changed by name: Random may land on Skyline Night too, which plays Skyline's melody (its files are skyline's)
-    // AMENDED (D402): or SIGIL, on its own melody
+    // AMENDED: the rule changed by name: Random may land on Skyline Night too, which plays Skyline's melody (its files are skyline's)
+    // AMENDED: or SIGIL, on its own melody
     assert.ok(['aqua', 'skyline', 'aurora', 'skyline-night', 'sigil'].includes(picked), `choosing Random picks another look at once: ${picked}, after Glass`);
     const tune = picked === 'skyline-night' ? 'skyline' : picked;
     assert.equal(await ticked('m-settings', 'Random'), true); assert.equal(await ticked('m-settings', 'Glass'), false, 'a choice of one');
@@ -424,7 +424,7 @@ async function randomAfterGlass({ random = null } = {}) {
     assert.equal(await ev("return localStorage.getItem('t180.settings.theme');"), JSON.stringify('music'), 'saved under its old value, music, so saves from before and after read alike');
     await ev("localStorage.setItem('t180.settings.theme', JSON.stringify('music')); return true;");   // as 0.4.6 and 0.4.7 saved it
     await load({ clear: false });
-    assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night', 'sigil'].includes(await look()), 'a saved music starts on a random look');   // AMENDED (D405): or Skyline Night; AMENDED (D402): or SIGIL
+    assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night', 'sigil'].includes(await look()), 'a saved music starts on a random look');   // AMENDED: or Skyline Night; AMENDED: or SIGIL
     await open('m-settings');
     assert.equal(await ticked('m-settings', 'Random'), true, 'a saved music is shown as Random');
     assert.deepEqual(errors, []);
@@ -434,19 +434,19 @@ async function randomAfterGlass({ random = null } = {}) {
 test('row 18 (D401, AMENDED): Settings ▸ Theme offers Random, not Music, after the named looks; a fresh start is Sigil; with Random saved, choosing it picks another look at once and that look\'s melody follows; a saved music loads as Random', { skip }, async () => {
   await randomAfterGlass();
 });
-// AMENDED (D402): the rule changed by name: the head draws among five names (SIGIL's fifth last), and after Glass Random picks among aqua, skyline, aurora,
+// AMENDED: the rule changed by name: the head draws among five names (SIGIL's fifth last), and after Glass Random picks among aqua, skyline, aurora,
 // skyline-night and sigil; so the draw that starts on the look it then picks is 0.1 (Aqua), and one that does not is 0.5 (starts on Glass, picks Aurora)
 test('row 18b (D401, B\'s D408 probe): the same with Math.random pinned, so both branches run every time: at 0.1 the start look is the pick (its files already in), at 0.5 it is not', { skip }, async () => {
   const a = await randomAfterGlass({ random: 0.1 });
   assert.deepEqual([a.start, a.picked, a.cached], ['aqua', 'aqua', true], 'at 0.1: starts on Aqua, Random after Glass picks Aqua, whose files are in');
   const b = await randomAfterGlass({ random: 0.5 });
-  // AMENDED (D405): the rule changed by name: after Glass, Random picks from four looks, Skyline Night last (aqua, skyline, aurora, skyline-night), so 0.6 is Aurora
+  // AMENDED: the rule changed by name: after Glass, Random picks from four looks, Skyline Night last (aqua, skyline, aurora, skyline-night), so 0.6 is Aurora
   assert.deepEqual([b.start, b.picked, b.cached], ['glass', 'aurora', false], 'at 0.5: starts on Glass, Random after Glass picks Aurora, fetched');
 });
 // AMENDED: Random is no longer what a fresh start ticks (that is Sigil now); the row's rule, a click on a ticked Random picks again, runs from a SAVED Random
 test('row 19 (D401, A\'s read §8, AMENDED): Random saved and ticked: one click on Random picks another look and its melody, and so does the next', { skip }, async () => {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
-  const look = () => ev("return document.documentElement.getAttribute('data-theme') || 'sigil';");   // AMENDED (D402): no data-theme is SIGIL's look
+  const look = () => ev("return document.documentElement.getAttribute('data-theme') || 'sigil';");   // AMENDED: no data-theme is SIGIL's look
   const fetched = async (name) => { for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/' + name)); i++) await sleep(100); };
   try {
     await load(); await ev("localStorage.setItem('t180.settings.theme', JSON.stringify('music')); return true;"); await load({ clear: false });
@@ -461,8 +461,8 @@ test('row 19 (D401, A\'s read §8, AMENDED): Random saved and ticked: one click 
       await clickText('m-settings', 'Random');
       const picked = await look();
       assert.notEqual(picked, before, `click ${n} on a ticked Random picks another look: still ${picked}`);
-      // AMENDED (D405): or Skyline Night, on Skyline's melody (its files are skyline's)
-      // AMENDED (D402): or SIGIL, on its own melody
+      // AMENDED: or Skyline Night, on Skyline's melody (its files are skyline's)
+      // AMENDED: or SIGIL, on its own melody
       assert.ok(['aqua', 'skyline', 'glass', 'aurora', 'skyline-night', 'sigil'].includes(picked), `click ${n}: one of the six looks: ${picked}`);
       const tune = picked === 'skyline-night' ? 'skyline' : picked, before2 = had.some((u) => u.endsWith('sounds/undo_' + tune + '.wav'));
       if (!before2) await fetched('undo_' + tune + '.wav');
@@ -474,7 +474,7 @@ test('row 19 (D401, A\'s read §8, AMENDED): Random saved and ticked: one click 
     assert.deepEqual(errors, []);
   } finally { onEvent = null; await send('Network.disable'); }
 });
-// AMENDED (D402): the rule changed by name: five names, so at 0.4 the start is Glass, and one pick from Glass (among aqua, skyline, aurora, skyline-night, sigil) is
+// AMENDED: the rule changed by name: five names, so at 0.4 the start is Glass, and one pick from Glass (among aqua, skyline, aurora, skyline-night, sigil) is
 // Aurora; a second pick, from Aurora, would be Glass again, so the row still tells one pick from two
 // AMENDED: a fresh install starts on Sigil, whatever Math.random says, with Sigil ticked; the first click on Random (a change, undefined to music) picks once: from
 // Sigil at 0.4 that is Glass (of aqua, skyline, glass, aurora, skyline-night); two picks would land on Aurora, so the row still tells one pick from two

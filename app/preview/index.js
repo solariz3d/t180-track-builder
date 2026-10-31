@@ -5,35 +5,35 @@
 //   't180-camera-mode'  { detail: { mode, modes } }    the preview says which mode it is in (on mount and on every change)
 // And one for the window proof (app/testhook/probe.js, scripts/prove_render.js), answered read-only:
 //   't180-probe'        { detail: { reply(result) } }  the mode, the head on screen, the canvas size and DPR
-// And the GHOST of the next piece (D170; the palette's side is A's, proposed in the D170 hand-back):
+// And the GHOST of the next piece (the palette sends it):
 //   't180-ghost'        { detail: { candidate } | { word } }   show it: a resolved candidate (the document with the word
 //                                                              appended, not committed), or a built-in word, resolved here
 //                                                              the way shell.place() would (app/testhook/ghostword.js)
 //   't180-ghost-clear'                                         hide it
-// And the TEXTURE SET (D177), from the textures panel (app/texture/index.js, A's), bubbling to the document:
+// And the TEXTURE SET, from the textures panel (app/texture/index.js), bubbling to the document:
 //   't180:textures'     { detail: { set } }            the set the export writes from; the preview's AC look draws it
-// And the ONE SHARED PATH (D177), for validation (app/validate-ui, E's) instead of a second path of its own:
+// And the ONE SHARED PATH, for validation (app/validate-ui) instead of a second path of its own:
 //   't180:track'          { detail: { path, segments, closed, how, g, fromS } }   sent after every change that moved the
 //                          track (how 'extend' | 'sculpt' | 'full' | 'empty'; g the first changed segment, fromS where
 //                          it starts, the old end for an append). The path is the preview's own: READ IT, never edit it.
 //   't180:track-request'  { detail: { reply(track) } }   the current one, at once, for a reader mounted after the preview
-// And for the EQUATION CORE's panel (D186, app/core/panel.js):
-//   't180-camera-focus'   { detail: { s } }                the camera goes to free mode above and behind the station at s, looking at it (D242)
+// And for the EQUATION CORE's panel (app/core/panel.js):
+//   't180-camera-focus'   { detail: { s } }                the camera goes to free mode above and behind the station at s, looking at it
 //   't180-pick'           { detail: { x, y, reply(hit) } } the station under a canvas point (css px): { s, pos, px } or null
-//   't180-grab-ray'       { detail: { reply(ray) } }       D520: ray(x, y) -> { origin, dir, forward } under the pose shown now (Sculpt's grab plane), or null
-// And for the 3D GRID and the SYMMETRY GUIDES (D237, app/preview/guides.js, drawn here; the buttons are the camera panel's, app/camera/index.js):
+//   't180-grab-ray'       { detail: { reply(ray) } }       ray(x, y) -> { origin, dir, forward } under the pose shown now (Sculpt's grab plane), or null
+// And for the 3D GRID and the SYMMETRY GUIDES (app/preview/guides.js, drawn here; the buttons are the camera panel's, app/camera/index.js):
 //   't180:guides'          { detail: { grid?, mirror?, centre? } }   grid auto | ground | 3d | off; mirror off | x | z | both; centre { x, z } or null (the box's middle)
 //   't180:guides-state'    { detail: state }                          what is asked and what is drawn (preview.guides()), on mount and on every change
 //   't180:guides-request'  { detail: { reply(state) } }               the current one, at once, for a panel mounted after the preview
-// And for the READOUT labels (L130, app/core/labels.js), answered read-only from the preview's own view():
+// And for the READOUT labels (app/core/labels.js), answered read-only from the preview's own view():
 //   't180:view'           { detail: { reply(v) } }        { pose, mode, head } (head: the placed track's build head, or null)
-//   't180:ghost-request'  { detail: { reply(g) } }        D244, for the drag handles (and D243, the flights): the ghost of the next piece as { samples, segments, jump, s0 } (jump: it is an Add-jump candidate), or null when none shows (preview.ghostInfo)
-//   't180:ghost-building' { detail: { reply(b) } }        D426: true while an exact ghost is still being built a slice a frame (preview.ghostBuilding), so the handles do not ask for it again meanwhile
-// And ASKED of the panel (D425, the Sculpt cues), once a frame in Sculpt with no drag open:
+//   't180:ghost-request'  { detail: { reply(g) } }        for the drag handles (and the flights): the ghost of the next piece as { samples, segments, jump, s0 } (jump: it is an Add-jump candidate), or null when none shows (preview.ghostInfo)
+//   't180:ghost-building' { detail: { reply(b) } }        true while an exact ghost is still being built a slice a frame (preview.ghostBuilding), so the handles do not ask for it again meanwhile
+// And ASKED of the panel (the Sculpt cues), once a frame in Sculpt with no drag open:
 //   't180:sculpt-hover'   { detail: { reply(h) } }        h = { s0, r, tool, channel? } (the brush under the pointer: its station, radius and tool) or null
 //
 // A MOUNT THAT FAILS says why, twice: the reason is left visible in the panel ("The preview could not start: …"), and
-// mount throws a PreviewMountError with the same message, for the page to show where it likes (A's display half).
+// mount throws a PreviewMountError with the same message, for the page to show where it likes.
 'use strict';
 
 const { createPreview } = require('./preview.js');
@@ -50,7 +50,7 @@ function mount(root, shell) {
   const doc = root.ownerDocument, win = doc.defaultView;
   const canvas = doc.createElement('canvas'), hud = doc.createElement('div');
   canvas.style.cssText = 'display:block;width:100%;height:100%;outline:none';
-  hud.style.cssText = 'position:absolute;left:8px;bottom:6px;font:12px ui-monospace,Consolas,monospace;color:var(--dim);background:color-mix(in srgb, var(--veil, rgb(10,12,16)) 60%, transparent);padding:1px 5px;border-radius:3px;pointer-events:none';   // legible on the light AC road too (D177)
+  hud.style.cssText = 'position:absolute;left:8px;bottom:6px;font:12px ui-monospace,Consolas,monospace;color:var(--dim);background:color-mix(in srgb, var(--veil, rgb(10,12,16)) 60%, transparent);padding:1px 5px;border-radius:3px;pointer-events:none';   // legible on the light AC road too
   hud.className = 'preview-hud';   // a page can place it (app/index.html moves it clear of its floating panel)
   root.append(canvas, hud);
   const announce = (mode) => doc.dispatchEvent(new win.CustomEvent('t180-camera-mode', { detail: { mode, modes: MODES.slice() } }));
@@ -58,12 +58,12 @@ function mount(root, shell) {
   // the layer is made AFTER the preview starts (a window with no WebGL fails with that reason, before any DOM is added), and the preview is handed a handle that forwards to it
   const layer = { update: (f) => { if (real) real.update(f); }, dispose: () => { if (real) real.dispose(); } };
   const publish = (t) => doc.dispatchEvent(new win.CustomEvent('t180:track', { detail: t }));
-  // D425: the Sculpt hover, asked of the panel (its answer to 't180:sculpt-hover', { reply }), for the wash of what a route tool moves
+  // the Sculpt hover, asked of the panel (its answer to 't180:sculpt-hover', { reply }), for the wash of what a route tool moves
   const hoverAsk = () => { let got = null; doc.dispatchEvent(new win.CustomEvent('t180:sculpt-hover', { detail: { reply: (h) => { got = h; } } })); return got; };
   const publishGuides = (s) => doc.dispatchEvent(new win.CustomEvent('t180:guides-state', { detail: s }));
   try {
-    // gridMode 'auto' (D237): the ground grid while the track is flat, the 3D lattice once it has height; the buttons in the camera panel turn it off
-    // D340: each late key event (preview.js checkLate) is raised as 't180:input-late', which the page appends to input-late.log (app/core/inputlog.js)
+    // gridMode 'auto': the ground grid while the track is flat, the 3D lattice once it has height; the buttons in the camera panel turn it off
+    // each late key event (preview.js checkLate) is raised as 't180:input-late', which the page appends to input-late.log (app/core/inputlog.js)
     p = createPreview({ canvas, shell, win, hud, onMode: announce, onTrack: publish, gridMode: 'auto', layer, onGuides: publishGuides, onInputLate: (r) => doc.dispatchEvent(new win.CustomEvent('t180:input-late', { detail: r })), hover: hoverAsk });
     real = createGuidesLayer({ root, win, onCentre: (c) => { p.setGuides({ centre: c }); } });
   } catch (e) {
@@ -103,7 +103,7 @@ function mount(root, shell) {
   doc.addEventListener('t180-pick', pickNow);
   doc.addEventListener('t180-grab-ray', rayNow);
   doc.addEventListener('t180:view', viewNow);
-  // D242: a click on a red in a list moves the camera there ('t180-camera-focus', { s }: metres along the placed track)
+  // a click on a red in a list moves the camera there ('t180-camera-focus', { s }: metres along the placed track)
   const focusNow = (e) => { if (e.detail && Number.isFinite(e.detail.s)) p.focus(e.detail.s); };
   doc.addEventListener('t180-camera-focus', focusNow);
   return { preview: p, unmount() { doc.removeEventListener('t180-camera-focus', focusNow); doc.removeEventListener('t180:guides', setGuides); doc.removeEventListener('t180:guides-request', guidesNow); doc.removeEventListener('t180:textures', textures); doc.removeEventListener('t180:track-request', trackNow); doc.removeEventListener('t180:ghost-request', ghostNow); doc.removeEventListener('t180:ghost-building', buildingNow); doc.removeEventListener('t180-camera', ask); doc.removeEventListener('t180-probe', answer); doc.removeEventListener('t180-ghost', showGhost); doc.removeEventListener('t180-ghost-clear', hideGhost); doc.removeEventListener('t180-pick', pickNow); doc.removeEventListener('t180-grab-ray', rayNow); doc.removeEventListener('t180:view', viewNow); p.dispose(); root.replaceChildren(); } };

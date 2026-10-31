@@ -1,6 +1,6 @@
 // palette-panels.test.js: node --test app/test/*.test.js
-// Mounting C's and E's panels (app/palette/panels.js). A panel that FAILS to start shows a visible error in its own
-// area (C's note on the page: a broken preview showed nothing); one not written yet shows a quiet "not plugged in".
+// Mounting the palette's panels (app/palette/panels.js). A panel that FAILS to start shows a visible error in its own
+// area (a note on the page: a broken preview showed nothing); one not written yet shows a quiet "not plugged in".
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

@@ -1,6 +1,6 @@
 // shell-layout.test.js: node --test app/test/*.test.js
-// The page's layout rules that keep it from scrolling. The real evidence is a headless Edge measurement (the D169 and
-// D170 reports give the sizes); this pins the rules themselves, so an edit that drops one fails here first.
+// The page's layout rules that keep it from scrolling. The real evidence is a headless Edge measurement (two earlier
+// reports give the sizes); this pins the rules themselves, so an edit that drops one fails here first.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');

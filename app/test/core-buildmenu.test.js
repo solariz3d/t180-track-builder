@@ -1,22 +1,22 @@
 // core-buildmenu.test.js: node --test app/test/core-buildmenu.test.js   (under the heavy-run lock)
-// D355 part 2 (pane C): THE BUILD MENU AND THE SLIM LEFT SIDE. The top-right menus (pane B's bar, app/menubar/) render each menu module's items(ctx) (contract M:
-// { label, run }, { label, checked, toggle }, { label, panel: mountFn }, { section }, { separator }); the settings are app/settings.js (contract S: get, set, on). This
+// THE BUILD MENU AND THE SLIM LEFT SIDE. The top-right menus (the menu bar, app/menubar/) render each menu module's items(ctx) (the menu contract, M here:
+// { label, run }, { label, checked, toggle }, { label, panel: mountFn }, { section }, { separator }); the settings are app/settings.js (the settings contract, S here: get, set, on). This
 // file is the app's side of both for app/core/panel.js (Build: app/core/buildmenu.js) and app/core/piecesui.js (Edit's selection items), on the small fake DOM of
 // app/test/core-pieces-ui.test.js. FEEL tier: targeted rows, no mutation harness. Rows:
-//   1   Build lists its items in the brief's order, in contract M's shapes
+//   1   Build lists its items in the specified order, in M's shapes
 //   2   a command moved to Build still does what its button did: Straight, Level, To floor and Jump each place their piece (one undo step each)
 //   3   a "…" item opens a popover holding today's fields and button (the panel's own field style); its button works from there; closing it puts them back
-//   4   (AMENDED D421 part 3: was "Brush: the item says whether the brush is on and turns it on and off; the brush strip shows only while it is on"; the plan removes
-//       the item and the strip) Sculpt mode, the first item, says whether Sculpt is on and turns it on and off; the Sculpt strip (tool, radius, sharp under "more")
+//   4   (AMENDED: was "Brush: the item says whether the brush is on and turns it on and off; the brush strip shows only while it is on"; the brush's
+//       item and strip were removed) Sculpt mode, the first item, says whether Sculpt is on and turns it on and off; the Sculpt strip (tool, radius, sharp under "more")
 //       shows only in Sculpt, and in Sculpt Build's commands that place or close are disabled with the reason "in Sculpt"
 //   5   Close the loop from Build starts the close as the button did (the line says so); on a closed loop it is disabled and does nothing
-//   6   the left side keeps the brief's list, every field shown (AMENDED: "More shape" was a fold; it is gone), and nothing else shows there; the moved controls are still in the panel (held, out of sight)
+//   6   the left side keeps the specified list, every field shown (AMENDED: "More shape" was a fold; it is gone), and nothing else shows there; the moved controls are still in the panel (held, out of sight)
 //   7   the selection box shows only with a selection (and while a delete it started is previewed)
 //   8   Edit's selection items (piecesui via M): nothing selected, they are disabled; with a selection they save, set the grip, delete and clear
 //   9   the six keys through S: the panel starts from what S holds, follows S.on, and a setting survives a reload (a new store over the same storage)
 //  10   a blocked store (every storage access throws) throws nothing: the panel mounts and a setting holds for the session; with no settings module at all the panel still mounts
-//  11   D356: the grid step picked in Build ▸ Turn to grid… is saved through S (the real createSettings), and survives a reload
-//  12   D356: an Undo that gives back the undone piece's turn-and-climb mode saves it through S, so Settings and the panel agree
+//  11   the grid step picked in Build ▸ Turn to grid… is saved through S (the real createSettings), and survives a reload
+//  12   an Undo that gives back the undone piece's turn-and-climb mode saves it through S, so Settings and the panel agree
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -73,7 +73,7 @@ function fakeWindow() {
   doc.defaultView = win;
   return { doc, win, timers };
 }
-/** Contract S, as the brief writes it (pane B builds the real one, app/settings.js): get/set/on over `t180.settings.<key>`, every storage access in try/catch. */
+/** The settings contract S, as specified (the real one is app/settings.js): get/set/on over `t180.settings.<key>`, every storage access in try/catch. */
 function settingsOver(storage) {
   const mem = new Map(), fns = new Map();
   const K = (k) => `t180.settings.${k}`;
@@ -113,7 +113,7 @@ const pieces = (P) => P.shell.getState().history.present.pieces.length;
 
 test('row 1: Build lists its items in the brief\'s order, in contract M\'s shapes', async () => {
   const P = await mountPanel(), list = P.build();
-  // AMENDED D421 part 3: no "Brush" between Jump and Close the loop (the plan removes it), and Sculpt mode first (the switch that replaced it: the bar had no room)
+  // AMENDED: no "Brush" between Jump and Close the loop (the brush was removed), and Sculpt mode first (the switch that replaced it: the bar had no room)
   assert.deepEqual(list.filter((i) => i.label).map((i) => i.label), ['Sculpt mode', 'Straight', 'Level', 'To floor', 'Turn by…', 'Turn to grid…', 'Sharp corner…', 'Jump', 'Close the loop']);
   for (const i of list) {
     const shape = i.section !== undefined ? 'section' : i.separator ? 'separator' : typeof i.run === 'function' ? 'run' : typeof i.toggle === 'function' ? 'toggle' : typeof i.panel === 'function' ? 'panel' : 'none';
@@ -158,7 +158,7 @@ test('row 3: a "…" item opens a popover with today\'s fields and button in the
   P.panel.unmount();
 });
 
-// AMENDED D421 part 3 (the rule changed by name: the plan removes Build's "Brush" item and the brush strip's on box, mode and channel; Sculpt is a mode now)
+// AMENDED (the rule changed by name: Build's "Brush" item was removed, with the brush strip's on box, mode and channel; Sculpt is a mode now)
 test('row 4: Sculpt mode turns Sculpt on and off; the Sculpt strip (tool, radius, sharp) shows only in Sculpt, and in Sculpt Build\'s commands that place or close are disabled "in Sculpt"', async () => {
   const P = await mountPanel(), strip = P.byLabel('sculpt strip');
   assert.ok(strip, 'there is a Sculpt strip');
@@ -205,7 +205,7 @@ test('row 6: the left side keeps the brief\'s list, every field shown, and nothi
   // channel field with its at-start box at the end of its own row
   assert.ok(!P.all().some((e) => e.tagName === 'DETAILS' && e.children[0] && e.children[0].textContent === 'More shape'), 'no "More shape" fold');
   const inMore = shownSpans;
-  // AMENDED D385 (2026-10-18): "edge angle °" is now "left edge °", the same field renamed (app/test/core-carry.test.js)
+  // AMENDED (2026-10-18): "edge angle °" is now "left edge °", the same field renamed (app/test/core-carry.test.js)
   for (const f of ['cup °', 'width m', 'grip %', 'left edge °', 'right edge °', 'edge start', 'tube sweep °']) assert.ok(inMore.includes(f), `${f} is shown on the left`);
   const rowOf = (f) => P.all().find((e) => e.tagName === 'LABEL' && e.children[0] && e.children[0].textContent === f);
   for (const f of ['cup °', 'width m', 'left edge °', 'right edge °', 'edge start', 'tube sweep °']) assert.ok(rowOf(f).all().some((e) => e.tagName === 'INPUT' && /at the start$/.test(e.attrs['aria-label'] || '')), `${f} has its at-start box on its own row`);
@@ -215,7 +215,7 @@ test('row 6: the left side keeps the brief\'s list, every field shown, and nothi
   // every control that moved is still the panel's (the menus borrow them), so what it does is unchanged
   for (const l of ['turn and climb as', 'drag handles', 'colour by grip', 'grid step']) assert.ok(P.byLabel(l), `${l} is still in the panel`);
   for (const b of ['Jump', 'Level', 'To floor', 'Turn by', 'Turn to grid', 'Sharp', 'Close the loop']) assert.ok(P.button(b), `${b} is still in the panel`);
-  // (Open example…, Start & grid… and Pit lane… are pane A's Track menu's own, app/core/trackmenu.js: the seam ruling, plan_t180_handoff :1421-1424)
+  // (Open example…, Start & grid… and Pit lane… are the Track menu's own, app/core/trackmenu.js)
   assert.ok(!P.button('Open example') && !P.all().some((e) => e.tagName === 'H3' && /^(Start & grid|Pit lane|Local example)$/.test(e.textContent)), 'the panel makes none of the Track menu\'s controls');
   P.panel.unmount();
 });
@@ -232,7 +232,7 @@ test('row 7: the selection box shows only with a selection, and while a delete i
 
 test('row 8: Edit\'s selection items (piecesui via M): disabled with nothing selected; with a selection they save, set the grip, delete and clear', async () => {
   const P = await mountPanel();
-  // AMENDED D361 part 1 (the list's rule changed: the packet adds Edit ▸ Selection ▸ Cut here after Delete selected); the row's checks now cover Cut here too
+  // AMENDED (the list's rule changed: Cut adds Edit ▸ Selection ▸ Cut here after Delete selected); the row's checks now cover Cut here too
   const labels = ['Save as piece…', 'Set grip…', 'Delete selected', 'Cut here', 'Clear selection'];
   assert.deepEqual(P.edit().filter((i) => i.label).map((i) => i.label), labels);
   for (const l of labels) assert.equal(P.item(P.edit(), l).disabled, true, `${l}: nothing selected, disabled`);
@@ -286,7 +286,7 @@ test('row 10: a blocked store throws nothing: the panel mounts and a setting hol
   assert.equal(Q.byLabel('turn and climb as').value, 'corner'); Q.panel.unmount();
 });
 
-// D356 part 1 (Ponytail review 5 on D355, E's rows 1-2): the panel's own writes, on the REAL settings (app/settings.js createSettings). The stand-in above,
+// A review found: the panel's own writes, on the REAL settings (app/settings.js createSettings). The stand-in above,
 // settingsOver, tells its listeners on every set; the real one only on a change, and that is the difference the rows above could not see
 test('row 11: the grid step picked in Build ▸ Turn to grid… is saved: S holds it, the Settings menu hears it, and it is the step after a reload', async () => {
   const storage = memStorage(), S = createSettings(storage), heard = [];

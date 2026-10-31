@@ -1,4 +1,4 @@
-// share.js: COPY CODE and PASTE CODE (ARCHITECTURE §1.1: "That makes tracks shareable (PolyTrack-style codes)"), with no
+// share.js: COPY CODE and PASTE CODE ("That makes tracks shareable (PolyTrack-style codes)"), with no
 // DOM (tested headless against the real core shell, app/core/coreshell.js); index.js mounts it.
 //
 //   const share = createShare(shell, { clipboard, onPack })
@@ -7,7 +7,7 @@
 //   await share.paste(text)          -> { kind, message } after importing the pasted code:
 //                                       an equation track REPLACES the open one as one undo step (the old one is one Ctrl+Z away),
 //                                       a texture pack goes to onPack(text) (the textures panel)
-// D239 (the user: "can we keep only the equation mode?"): a code from the old Pieces page, a word track (t180d…) or a piece or
+// (the user: "can we keep only the equation mode?"): a code from the old Pieces page, a word track (t180d…) or a piece or
 // phrase (t180p…), is REFUSED BY NAME (CODE_PIECES): this builder makes equation tracks, and a word document read as one would be
 // a different track, not the one that was shared.
 // A code that does not decode is refused WHOLE (src/doc/code.js: CODE_CORRUPT, CODE_MALFORMED, …; a document that decodes but is

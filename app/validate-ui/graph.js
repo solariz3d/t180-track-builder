@@ -1,5 +1,5 @@
-// graph.js: the load graph in the validation panel (the librarian's item 5, 2026-09-27: "The right panel's graph area is
-// an empty grey bar"). Before D169 there were no loads, so the old colour ribbon painted every station the same grey.
+// graph.js: the load graph in the validation panel (reported 2026-09-27: "The right panel's graph area is
+// an empty grey bar"). Before loads were computed there were none, so the old colour ribbon painted every station the same grey.
 //
 //   graphModel(state, { car })  -> null while there is no load to show (no speed model: nothing to draw, so hidden)
 //                                  | { s: [...], fN: [...], top, lines: [{ g, label, source }], bands: [{ s0, s1, level }] }
@@ -29,7 +29,7 @@ function graphModel(state, { car = MACH6 } = {}) {
     s, fN, top,
     lines: [{ g: car.suspensionStopG, label: `${car.suspensionStopG} g stop`, source: 'FINDINGS.md:103-104' }, { g: car.provenG, label: `${car.provenG} g proven`, source: 'FINDINGS.md:105' }],
     bands: [...r.red.map((x) => ({ s0: x.s0, s1: x.s1, level: LEVEL.RED })), ...r.amber.map((x) => ({ s0: x.s0, s1: x.s1, level: LEVEL.AMBER })),
-      // D179: while a drag is open the stretch past the window is not checked yet; it is shaded PENDING to the track's end
+      // while a drag is open the stretch past the window is not checked yet; it is shaded PENDING to the track's end
       ...(pending ? [{ s0: r.pendingFrom, s1: sEnd, level: LEVEL.PENDING }] : [])],
     sEnd,
   };

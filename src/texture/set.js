@@ -1,5 +1,5 @@
-// set.js: THE TEXTURE SET, the one object the preview and the export both take their textures from (ARCHITECTURE §5b
-// with §5: "the preview and the export render with the same inputs").
+// set.js: THE TEXTURE SET, the one object the preview and the export both take their textures from (the design:
+// "the preview and the export render with the same inputs").
 //
 //   buildTextureSet(doc, assets, opts) -> set
 //     assets: { <name>: { bytes: PNG/JPG bytes, role?: 'diffuse' | 'normal' } }  (names as the document writes them)
@@ -14,7 +14,7 @@
 //
 // Only the textures some word's effective slots name are converted; an asset nothing uses is left out of the kn5.
 // A slot that names a texture the assets lack is refused (NO_SUCH_TEXTURE); a refusing warning (warnings.js) is thrown.
-// MADE TEXTURES (D175): a slot whose `make` holds the procedural maker's text (src/texmaker) is rendered here with
+// MADE TEXTURES: a slot whose `make` holds the procedural maker's text (src/texmaker) is rendered here with
 // makeTexture(text, size, size) and taken down the same DDS path as an image, so the preview and the export stay one
 // list. Its name is `made-<16 hex of an FNV-1a hash of the text>-<size>`: the same text at the same size is one texture
 // wherever it is used. Rendered DDS files are kept in a small cache (the last 32), because the panel rebuilds the set
@@ -71,7 +71,7 @@ function buildTextureSet(doc, assets = {}, opts = {}) {
     if (!slots) { byId.set(id, null); continue; }
     const entry = {};
     for (const s of SLOTS) {
-      // D371: an 'edge' floor is laid out from the track's width range (opts.widths, src/texture/edge.js); its texture is the drawing recomposed, named for the layout
+      // an 'edge' floor is laid out from the track's width range (opts.widths, src/texture/edge.js); its texture is the drawing recomposed, named for the layout
       const edge = slots[s].fit === 'edge' && (slots[s].make || slots[s].texture) ? EDGE.layout(opts.widths, slots[s]) : null, eTag = edge ? `|edge|${edge.N}|${edge.fb}|${edge.eb}` : '';
       const m = slots[s].make, t = m ? madeName(m + eTag, slots[s].size) : slots[s].texture && edge ? `${slots[s].texture}-edge-${hash16(eTag)}` : slots[s].texture, key = `${s}|${t || ''}`;
       if (m) made.set(t, { text: m, size: slots[s].size, edge });
@@ -129,7 +129,7 @@ function withTextureSet(scene, mesh, segments, set) {
     if (slots && slots.floor && (slots.floor.settings.texture || slots.floor.settings.make)) wear.set(node.children[0], slots.floor.material);
   });
   if (!wear.size) return scene;
-  const flow = flowUvs(mesh, segments, set);                // D228: a textured core cell's coordinates run on the path's own arc length (flow.js); every other cell keeps mesh.js's
+  const flow = flowUvs(mesh, segments, set);                // a textured core cell's coordinates run on the path's own arc length (flow.js); every other cell keeps mesh.js's
   const used = [...new Set(wear.values())], mats = scene.materials.slice(), index = new Map();
   for (const name of used) {
     const m = byMat.get(name); if (!m) throw new TextureError('BAD_TEXTURE_SET', `the set names material ${name} but does not carry it`);

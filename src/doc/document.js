@@ -1,9 +1,9 @@
-// document.js: making and editing documents (ARCHITECTURE §2 "Document: ordered words with stable IDs, plus
-// constraints"; docs/INTERFACES.md §4 "the build head"). Every operation returns a NEW frozen document; none mutates.
+// document.js: making and editing documents (the design: "Document: ordered words with stable IDs, plus
+// constraints"; the build head). Every operation returns a NEW frozen document; none mutates.
 //
 // STABLE IDS. A word's id is `w<n>`, from the document's own counter `nextId`, which only ever grows: removing the head
 // does not hand its id to the next word. So an id names one word for the document's whole life, across every edit,
-// and nothing about it depends on the clock or randomness (INTERFACES: all steps are deterministic).
+// and nothing about it depends on the clock or randomness (all steps are deterministic).
 //
 // DEFAULTS ARE WRITTEN IN. appendWord fills every handle from the vocabulary and the tempo at the moment of the append,
 // and stores them. The document never relies on a default at resolve time, so a later builder with different defaults
@@ -58,7 +58,7 @@ function defaultWord(word, { dir = 'L', tempo = 'standard', font, roll0 = 0 } = 
   // (src/geom/path.js bankG = asin(L.y)), so a left turn ends at -bank. It is reached in the HEAD'S REVOLUTION: after an
   // inversion the head is at 2π, and the turn leans from there, never unwinding a whole roll inside one word. A word
   // with no bank keeps the head's roll, plus its own full roll if it has one (the inversion). The width follows the
-  // font (vocab.js widthOf: C's measured widths, else the class median).
+  // font (vocab.js widthOf: the measured widths, else the class median).
   const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
   const roll1 = W.bank !== undefined ? roll0 + wrap(-sign * W.bank - roll0) : roll0 + (W.roll || 0);
   // THE BANK RAMPS (vocab.js BANK_RATE): roll follows one smoothstep over the word, steepest at 1.5 × |Δroll| / length.
@@ -96,7 +96,7 @@ function appendWord(doc, word, opts = {}) {
   return deepFreeze(checkDoc({ ...doc, generator: GENERATOR, nextId: doc.nextId + 1, words: [...doc.words, { id, ...w }] }));
 }
 
-/** Append a phrase (§2: "a saved word sequence"): items [{ word, opts }], resolved as ids `<id>/<n>`. */
+/** Append a phrase ("a saved word sequence"): items [{ word, opts }], resolved as ids `<id>/<n>`. */
 function appendPhrase(doc, phrase, items) {
   if (!Array.isArray(items) || items.length === 0) throw new DocError('BAD_PHRASE', 'a phrase needs at least one word');
   const id = `w${doc.nextId}`;
@@ -160,7 +160,7 @@ function editPitLane(doc, patch = {}) {
   return setPitLane(doc, { ...doc.pitLane, ...patch });
 }
 
-/** The document's open end: the last word's id, and whether the loop is closed (INTERFACES §4). */
+/** The document's open end: the last word's id, and whether the loop is closed. */
 function head(doc) { return { id: doc.words.length ? doc.words[doc.words.length - 1].id : null, closed: doc.closed }; }
 
 module.exports = { createDoc, appendWord, appendPhrase, removeHead, replaceHead, editWord, editPhraseWord, setPitLane, editPitLane, head, defaultWord, headRoll, handlesOf };

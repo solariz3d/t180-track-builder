@@ -21,7 +21,7 @@ const kmh = (v) => v / 3.6;
 
 test('Export shows the CSP-only warning in its message, and the exported surfaces.ini carries the switch', async () => {
   let d = D.createDoc('Csp App Loop');
-  // named words (the ripple, p-d182-ripple-E): the pre-D182 words; under the measured ones a 50 m tight on a 31 m road folds
+  // named words: the earlier, unmeasured words; under the measured ones a 50 m tight on a 31 m road folds
   for (const w of ['straight', 'straight', 'tight', 'straight', 'tight']) d = appendOld(D, d, w, { speed: kmh(200) });
   d = D.editWord(d, 'w3', { handles: { length: 50 } });
   const c = closeLoop(d); assert.ok(c.candidates.length, c.reason);
@@ -36,7 +36,7 @@ test('Export shows the CSP-only warning in its message, and the exported surface
   await s.exportTo(out);
   const st = s.getState();
   assert.equal(st.exportReds, null, st.message);
-  // AMENDED (D464): the warning is shown in the user's words (app/core/exportwords.js): the CSP need, with no doc, section or ini key; the core's own text stays in the core
+  // AMENDED: the warning is shown in the user's words (app/core/exportwords.js): the CSP need, with no doc, section or ini key; the core's own text stays in the core
   assert.match(st.message, /needs Custom Shaders Patch \(CSP\)/, st.message); assert.ok(!st.message.includes(CSP_ONLY_WARNING), st.message);
   assert.match(fs.readFileSync(path.join(out, st.lastExport.folders[0], 'data', 'surfaces.ini'), 'utf8'), /^WAV_PITCH=extended-0$/m);
 });

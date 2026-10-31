@@ -1,9 +1,9 @@
 // sculpt-wash.test.js: node --test app/test/sculpt-wash.test.js
-// D425 part 3 (P's design, exo_memory/handback/p-d425-sculpt-cues-P_2026-10-21.md §1 cue 4, §3's E rows): WHAT A SCULPT TOOL MOVES, drawn by the preview. A route tool (Stretch, Bend,
+// From the Sculpt cues' design (its cue 4 and the rows it asked for): WHAT A SCULPT TOOL MOVES, drawn by the preview. A route tool (Stretch, Bend,
 // Climb) moves all the road after its window: on hover that road is washed in the tool's colour, during the drag the moved batches carry a TINT the renderer draws their edge lines in
 // (no draw or geometry added), and on a closed lap the last and first road pieces are hatched in the marker orange. In node, with the real shell. Rows:
 //   1  a route step tints exactly the moved batches, in the tool's colour, with the placed arrays (Bend violet, Stretch white); a shape step (Twist) tints nothing
-//   2  the renderer draws each tinted chunk's edge lines in its tint, every other line as before, with no draw and no upload added (CHANGED D425, see the row)
+//   2  the renderer draws each tinted chunk's edge lines in its tint, every other line as before, with no draw and no upload added (CHANGED, see the row)
 //   3  hover: a route tool's wash is a line across the road at every station past the window's end and nowhere before it; a shape or local tool has none; the same hover builds nothing again
 //   4  a closed lap: the hover hatches the last and first road pieces (every other station); during a drag that opened the lap the last piece's hatch is drawn under the drag's move
 'use strict';
@@ -50,7 +50,7 @@ test('row 1: a route step tints exactly the moved batches in the tool\'s colour 
   assert.equal(fr.how, 'drag'); assert.equal(fr.batches.filter((b) => b.tint).length, 0, 'Twist moves nothing after its window: nothing is tinted');
 });
 
-// CHANGED D425 (this lap, before landing): the wash was a second blended pass of each moved chunk's surfaces; it cost row 3 of sculpt-frame about 0.5-0.8 ms a frame, so it is now the
+// CHANGED (before the cues first landed): the wash was a second blended pass of each moved chunk's surfaces; it cost row 3 of sculpt-frame about 0.5-0.8 ms a frame, so it is now the
 // colour of the moved road's edge lines, the uniform each chunk's lines set already. The rule this row holds is the same: the moved road is shown in the tool's colour, nothing is added
 test('row 2: the renderer draws each tinted chunk\'s edge lines in its tint and every other line as before, with no draw and no upload added', async () => {
   const { createRenderer, COLOURS } = require('../preview/renderer.js');
@@ -123,7 +123,7 @@ test('row 4: a closed lap: the hover hatches the last and first road pieces; a d
   assert.equal(dc[0].positions, last.positions, 'built once, from the placed path: the very lines of the hover');
   assert.equal(sculptCues(fr, null), dc, 'the same frame: nothing built again');
 });
-// D467 (the librarian's ruling on E's D463 §6(2)): after a release that kept the bend by moving the lap's START PIECES (coreshell.js keptBend; the preview's startMovedOf), the
+// After a release that kept the bend by moving the lap's START PIECES (coreshell.js keptBend; the preview's startMovedOf), the
 // first and last road pieces are hatched with no hover, both at full strength, since both moved; with a hover the wash comes first as before. Not kept: nothing, as before.
 test('row D467: the start pieces a release moved are hatched with no hover, both at full strength; nothing when they did not move', async () => {
   const s = await closedTrack(), tm = createTrackModel(), tr = tm.update(s.getState().resolved), P = tr.path, segs = tr.segments;
@@ -139,7 +139,7 @@ test('row D467: the start pieces a release moved are hatched with no hover, both
   const hk = sculptCues(tr, { s0: 200, r: 100, tool: 'bend' }, true);
   assert.equal(hk.length, 3, 'with a hover: the wash, then the two hatches'); assert.equal(hk[2].alpha, 0.6, 'the first piece at full strength, since it moved');
 });
-// D467: the preview's own frame draws that hatch: after a release that moved the start pieces, a frame draws line lists of exactly the hatches' sizes, and after an undo it does not.
+// The preview's own frame draws that hatch: after a release that moved the start pieces, a frame draws line lists of exactly the hatches' sizes, and after an undo it does not.
 // The renderer runs on a GL stand-in whose drawArrays is recorded (the vertex count of each call), as core-pieces-ui.test.js's headless preview does.
 test('row D467 frame: the preview draws the start pieces\' hatch after such a release, and not after an undo', async () => {
   const P = require('../preview/preview.js');
@@ -147,7 +147,7 @@ test('row D467 frame: the preview draws the start pieces\' hatch after such a re
   const win = { devicePixelRatio: 1, document: { hidden: false, activeElement: null, body: {}, addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {}, requestAnimationFrame: (fn) => { q.push(fn); return q.length; }, cancelAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {} };
   const gl = new Proxy({ getShaderParameter: () => true, getProgramParameter: () => true, createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}), getUniformLocation: (p, n) => n, getAttribLocation: () => 0, drawArrays: (m, f, n) => { counts.push(n); } }, { get: (t, k) => (k in t ? t[k] : () => 0) });
   const canvas = { clientWidth: 800, clientHeight: 500, width: 0, height: 0, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
-  // AMENDED (D467 re-ruled after C's review): the start pieces are taken only within the bar, which this file's lap does not pass, so the row uses a lap whose start
+  // AMENDED (re-ruled after a review): the start pieces are taken only within the bar, which this file's lap does not pass, so the row uses a lap whose start
   // pieces curve gently and whose start straight is in the middle, with a small bend (sculpt-tools.test.js curvedMidLap, built the same way)
   const s = await createCoreShell({ autosaveMs: 0 }), Q = (Math.PI * R) / 2;
   s.extend({ length: 300, family: 'bowl', targets: { kh: 1 / 600 } }); for (const len of [Q, Q]) s.extend({ length: len, transition: 40, targets: { kh: 1 / R } });
@@ -167,7 +167,7 @@ test('row D467 frame: the preview draws the start pieces\' hatch after such a re
   pv.dispose();
 });
 
-// D467, C's re-read (§8.3): the frame row as it was at 95d23f1, on this file's STRAIGHT-START lap (a 400 m straight, two half turns), restored beside the curved-start one:
+// From a review's re-read: the frame row as it was at 95d23f1, on this file's STRAIGHT-START lap (a 400 m straight, two half turns), restored beside the curved-start one:
 // it is green, and it is the one row where a straight-start lap's start pieces are taken in a real release, past the bar.
 test('row D467 frame (straight start): the preview draws the start pieces\' hatch after such a release, and not after an undo', async () => {
   const P = require('../preview/preview.js');
@@ -189,7 +189,7 @@ test('row D467 frame (straight start): the preview draws the start pieces\' hatc
   pv.dispose();
 });
 
-// D498 item 3 (A's review of 1dd7801, p-d497-A §3): the closed-lap hatch took the first and last SEGMENTS, while the seam tries a release makes (coreshell.js, firstR
+// Found in a review of 1dd7801: the closed-lap hatch took the first and last SEGMENTS, while the seam tries a release makes (coreshell.js, firstR
 // and lastR) take the first and last ROAD pieces. On a lap that ends on a flight the last segment is the flight's gap, so the hatch lay on the gap and the road piece
 // the release moves went unmarked. The lap: core_jump's jump lap, closed, its pieces rotated so the flight is last and its landing first (the same loop)
 test('row D498: on a closed lap that ends on a flight, the hatch marks the last ROAD piece (the one the seam tries move), not the flight', async () => {

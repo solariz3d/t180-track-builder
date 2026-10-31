@@ -1,6 +1,6 @@
 // core-shell.test.js: node --test app/test/core-shell.test.js
 // The equation core's shell (app/core/coreshell.js), its panel's pure parts (app/core/panel.js) and the preview's pick
-// (app/preview/preview.js pickAt), headless (D186, pane C). The export runs the real exporter through the in-memory shim, as
+// (app/preview/preview.js pickAt), headless. The export runs the real exporter through the in-memory shim, as
 // the webview does (app/export/export.js runSegments), with the self-intersection check on.
 'use strict';
 const test = require('node:test');
@@ -21,7 +21,7 @@ const made = [];
 test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 function memStorage() {
   const docs = new Map(), s = { writes: [], removed: [] };
-  // the native side's two folder commands (D226): only an EMPTY real folder directly in content/tracks, not t180b_*, reads empty or is removed
+  // the native side's two folder commands: only an EMPTY real folder directly in content/tracks, not t180b_*, reads empty or is removed
   const direct = (d) => { const p = String(d).replace(/\\/g, '/').split('/').filter(Boolean), i = p.findIndex((x, k) => x.toLowerCase() === 'content' && (p[k + 1] || '').toLowerCase() === 'tracks' && p.length === k + 3); return i >= 0 && !/^t180b_/i.test(p[i + 2]); };
   s.folderIsEmpty = async (d) => direct(d) && fs.existsSync(d) && fs.lstatSync(d).isDirectory() && fs.readdirSync(d).length === 0;
   s.removeEmptyFolder = async (d) => { if (!(await s.folderIsEmpty(d))) throw new Error('not an empty folder directly in content\\tracks: nothing removed'); fs.rmdirSync(d); s.removed.push(d); };
@@ -42,7 +42,7 @@ async function lap(opts = {}) {
   return s;
 }
 
-// found in the real window (D186): the core reaches tools/piecewise.cjs, which requires fs, and the webview's loader refuses a
+// found in the real window: the core reaches tools/piecewise.cjs, which requires fs, and the webview's loader refuses a
 // node built-in; node's own require hides that. The page (app/index.html startCore) gives it the exporter's in-memory shim.
 test('the core loads through the WEBVIEW\'s loader with the node shim, builds the same track as node\'s, and is refused without the shim', async () => {
   const { loadCjs } = require('../lib/cjs.js'), { createShim } = require('../export/node-shim.js');
@@ -76,7 +76,7 @@ test('extendOptions: empty fields continue; turn and climb are degrees per 100 m
   const o = extendOptions({ length: 50, turn: 18, climb: -9, bank: 10, width: 30 });
   assert.ok(Math.abs(o.targets.kh - Math.PI / 1000) < 1e-15); assert.ok(Math.abs(o.targets.kv + Math.PI / 2000) < 1e-15);
   assert.ok(Math.abs(o.targets.phi - Math.PI / 18) < 1e-15); assert.equal(o.targets.w, 30);
-  // D521: a typed bank asks the core for the rounded bank (it starts banking at the joint, src/core/extend.js roundedLinear); no bank typed, no shape asked
+  // A typed bank asks the core for the rounded bank (it starts banking at the joint, src/core/extend.js roundedLinear); no bank typed, no shape asked
   assert.equal(o.bankShape, 'rounded');
   assert.equal(extendOptions({ length: 50, turn: 18, climb: '', bank: '', width: '' }).bankShape, undefined);
 });
@@ -178,7 +178,7 @@ test('openExample refuses files that are not a fit and a read, and changes nothi
   s.openExample('{"schema":"nope"}', '{}'); assert.match(s.getState().message, /BAD_FIT/); assert.equal(text(s), before);
 });
 
-// THE LIFT (D186, the chair's ruling 1): A's offsets live in adapter.offsetPath, applied to a PATH, not in the segments. The
+// THE LIFT (as ruled): the h/l offsets live in adapter.offsetPath, applied to a PATH, not in the segments. The
 // track model must draw the lifted road and re-mesh when only the offsets change. A stand-in lift with offsetPath's contract (an
 // unlifted sample is the SAME object; a lifted one is new) raises the samples between two s by a smooth bump.
 const liftBy = (H, a, b) => (p) => {
@@ -216,13 +216,13 @@ test('the export lifts the path before it meshes it (meta.liftPath), so an expor
   assert.ok(top(base) < 1e-6); assert.ok(Math.abs(top(lifted) - 4) < 0.05, `the exported path is lifted (${top(lifted)})`);
 });
 
-// THE LANDED CORE (9714b83: A's h/l offsets and offsetPath, E's brush), end to end through the app's shell, NO fakes. SKIPPED on
+// THE LANDED CORE (9714b83: the h/l offsets and offsetPath, and the sculpt brush), end to end through the app's shell, NO fakes. SKIPPED on
 // a tree without them.
 const SC = require('../../src/core/sculpt.js'), AD = require('../../src/core/adapter.js');
 const LANDED = typeof SC.brush === 'function' && typeof AD.offsetPath === 'function' && D.CHANNELS.includes('h');
 test('landed core: a 1 m hill brushed in the app is in the preview\'s path and the export\'s', { skip: LANDED ? false : 'E\'s brush / A\'s offsets are not in this tree' }, async () => {
   const { createTrackModel } = require('../preview/trackmodel.js');
-  const s = await lap({ brushFn: SC.brush }); s.close(); const tm = createTrackModel(); tm.update(s.getState().resolved);   // lap() defaults to no E brush
+  const s = await lap({ brushFn: SC.brush }); s.close(); const tm = createTrackModel(); tm.update(s.getState().resolved);   // lap() defaults to no sculpt brush
   // 1 m over r 140 inside the 300 m straight: a crest the car holds (a 5 m / 100 m hill makes the export's lap proof refuse it,
   // 'leaves-surface': correct, and not what this test is about)
   s.beginBrush({ channel: 'height', s0: 150, r: 140 }); s.brushTo(1);
@@ -242,7 +242,7 @@ test('landed core: a narrow brush that E widened says so, with the radius it use
   assert.match(s.getState().message || '', /widened to \d+ m \(asked 10 m\)/); s.endBrush();
 });
 
-// found by TEST 1 (D186): a real track's document starts where its first station is, turned and PITCHED, and the geometry's shape
+// found by TEST 1: a real track's document starts where its first station is, turned and PITCHED, and the geometry's shape
 // depends on the start pitch. The export, the grid layout and the preview built from the origin, level, so a lap the close had shut
 // to 0.05 mm was 8.49 m open in the export (track J) and 1.7 km open (track H). The start pose now travels with the segments.
 test('a lap that starts pitched, turned and off the origin: the preview starts and ends where the adapter does, and it closes and exports', async () => {
@@ -290,7 +290,7 @@ test('D226 export (core): an EMPTY folder made directly in content\\tracks expor
   assert.match(s.getState().message, /removed the empty folder "T-180 TUBE OVAL"/);
 });
 
-// ── D234: the EMPTY folder the user made in the picker goes whatever the outcome (the user: "when ever I export by myself, the track is errored in content manager") ──
+// ── The EMPTY folder the user made in the picker goes whatever the outcome (the user: "when ever I export by myself, the track is errored in content manager") ──
 const acTreeCore = (...inside) => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 't180b-core-refused-')); made.push(root); const tracks = path.join(root, 'content', 'tracks'); fs.mkdirSync(tracks, { recursive: true }); for (const n of inside) fs.mkdirSync(path.join(tracks, n), { recursive: true }); return tracks; };
 /** A closed lap (the plain bowl lap) whose first piece may carry options, with the real exporter; `exporter` is swappable to stand in for a red. */
 async function closedLap(st, ex, first = undefined) {
@@ -319,7 +319,7 @@ test('D234 a REFUSED GRID (a tube too narrow for even one slot) and a RED lap in
     await s.exportTo(picked); refusedAndGone(s, st, picked, /not exported: .*too narrow for even one grid slot/); }
   { const tracks = acTreeCore('T180 TUBE V2'), picked = path.join(tracks, 'T180 TUBE V2'), st = memStorage();
     const red = { ...ex, runSegments() { throw new ex.ExportError('RED', 'the lap has a red', { red: [{ reason: 'steep-without-raycast', s0: 12, s1: 20, source: 'validation' }] }); } };   // a red lap, stood in for: the real reds are core_cup_export's
-    const s = await closedLap(st, red); await s.exportTo(picked); refusedAndGone(s, st, picked, /^not exported: a surface is steeper than 50°.* \(1 place\): at 0\.01–0\.02 km \(p1\)/); assert.equal(s.getState().exportReds.length, 1, 'the red box has the red'); }   // D242: the red refusal is in plain words, every red with where (was: the export's own "RED: the lap has a red"); D248: the count is of places (was "(1)")
+    const s = await closedLap(st, red); await s.exportTo(picked); refusedAndGone(s, st, picked, /^not exported: a surface is steeper than 50°.* \(1 place\): at 0\.01–0\.02 km \(p1\)/); assert.equal(s.getState().exportReds.length, 1, 'the red box has the red'); }   // the red refusal is in plain words, every red with where (was: the export's own "RED: the lap has a red"); the count is of places (was "(1)")
 });
 
 test('D234 a NON-EMPTY foreign folder is untouched in every case (open loop, refused grid, red): the target is refused first, nothing is removed or written', async () => {
@@ -342,7 +342,7 @@ test('D234 a successful export is unchanged: written to content\\tracks, the emp
   assert.deepEqual(st2.removed, [picked2], 'the failure was unplanned and the empty folder still went'); assert.ok(!fs.existsSync(picked2));
 });
 
-// ── D243a: the Test export (unfinished) through the SHELL, which is what the page's button calls (exportTo(dir, { test: true })), with the real exporter ──
+// ── The Test export (unfinished) through the SHELL, which is what the page's button calls (exportTo(dir, { test: true })), with the real exporter ──
 test('D243a the TEST export of an OPEN lap goes through the shell and the exporter: written open as a test folder, its reds listed, the loop not refused', async () => {
   const st = memStorage(), s = await lap({ storage: st, exporter: await makeExporter(fromDisk) });   // not closed
   assert.equal(s.getState().history.present.closed, false, 'control: the lap is open');
@@ -363,8 +363,8 @@ test('D243a the TEST export of a CLOSED lap is refused by name, and nothing is w
   assert.match(s.getState().message, /this track is closed: use Export/); assert.deepEqual(st.writes, [], 'nothing written');
   await s.exportTo(dir); assert.equal(s.getState().messageKind, 'ok', `control: a normal export of the closed lap goes through: ${s.getState().message}`);
 });
-// D464 (D463 part 2 item 6): the page's own Export (this shell, not app/shell.js) shows the export's warnings in the user's words: the CSP need, and no source
-// file, doc section, ini key or seat letter. The core's raw CSP text stays out of the message.
+// The page's own Export (this shell, not app/shell.js) shows the export's warnings in the user's words: the CSP need, and no source
+// file, doc section, ini key or builder's initial. The core's raw CSP text stays out of the message.
 test('D464: Export shows its warnings in the user\'s words: the CSP need, and none of the builders\' references', async () => {
   const { CSP_ONLY_WARNING } = require('../../src/export/trackfiles.js');
   const st = memStorage(), ex = await makeExporter(fromDisk);

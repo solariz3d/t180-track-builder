@@ -1,4 +1,4 @@
-/* SKYLINE (D381, pane B; designed in D379): the builder in open sky, for the Skyline melody. A light skin in the Frutiger Aero manner: white frosted
+/* SKYLINE: the builder in open sky, for the Skyline melody. A light skin in the Frutiger Aero manner: white frosted
    glass, glossy pill buttons, a bright sky behind the track, deep sky blue as the accent. Styling only: no box property (width, height, margin,
    padding, border width, font, letter-spacing, position) is set here, so every element keeps its place (app/test/theme.test.js reads this file for
    them). Windows fonts only (the page's own). The warning hues keep their hue and are deepened only so they read on a light surface. */
@@ -6,7 +6,7 @@
 [data-theme="skyline"] {
   /* the warning colours as text, measured on this look's panels (5.6:1 or better behind the checker's lines) */
   --bad-text: #911710; --warn-text: #5f3d00;
-  --tex: url(tex/skyline.png) 0 0 / calc(128 * var(--dpx)) calc(128 * var(--dpx)) repeat;   /* D399: this look's texture (index.html, --tex): a paper grain (2 px cells), its dark specks the ones seen on the light panels; app/themes/tex/skyline.png, scripts/texture_tiles.js */
+  --tex: url(tex/skyline.png) 0 0 / calc(128 * var(--dpx)) calc(128 * var(--dpx)) repeat;   /* this look's texture (index.html, --tex): a paper grain (2 px cells), its dark specks the ones seen on the light panels; app/themes/tex/skyline.png, scripts/texture_tiles.js */
   --bg: #eef6ff; --panel: #ffffff; --raise: #e3f0ff; --line: #b6d2ef; --hair: rgba(28, 92, 168, .26);
   --text: #0b2747; --dim: #33506f; --accent: #0757b3; --accent-dim: rgba(7, 87, 179, .14);
   --mine: #7a4f08; --bad: #a32b19; --warn: #735300; --ok: #1f6643;
@@ -14,7 +14,7 @@
   --ink: #0b2747; --on-ink: #eef6ff; --on-ink-strong: #ffffff; --veil: #0b2747; --veil-rule: rgba(28, 92, 168, .2);
   --guide-bg: rgba(255, 255, 255, .92); --guide-text: #0b2747; --guide-label: #eef6ff;
   --sky: color(srgb 0.36 0.62 0.93); --fog: color(srgb 0.74 0.86 0.98); --road-edge: color(srgb 1 1 1); --road-tie: color(srgb 0.05 0.16 0.33); --ground-grid: color(srgb 0.85 0.93 1);
-  /* the sky at infinity behind the track (D384, app/preview/sky/sun.js): deep zenith, pale horizon, the sun's white */
+  /* the sky at infinity behind the track (app/preview/sky/sun.js): deep zenith, pale horizon, the sun's white */
   --sky-style: sun; --sky-a: color(srgb 0.12 0.43 0.84); --sky-b: color(srgb 0.78 0.89 1); --sky-c: color(srgb 1 1 0.97);
   --glass: rgba(255, 255, 255, .8); --glow: rgba(120, 190, 255, .55);
   --pill: linear-gradient(180deg, #ffffff 0%, #eaf5ff 49%, #cfe6ff 51%, #e6f3ff 100%);
@@ -49,7 +49,7 @@
 /* fields */
 [data-theme="skyline"] input[type="number"], [data-theme="skyline"] input[type="text"], [data-theme="skyline"] input:not([type]), [data-theme="skyline"] textarea,
 [data-theme="skyline"] .save-piece input, [data-theme="skyline"] .picker select, [data-theme="skyline"] select { background: #ffffff; color: var(--text); border-color: #a6c8ea; border-radius: 7px; box-shadow: inset 0 1px 0 rgba(20, 80, 160, .14); }
-[data-theme="skyline"] input[type="number"]::-webkit-inner-spin-button { background-color: #4f7aa8; }   /* D513: the spin chevrons in this skin's colours (their shape is in index.html) */
+[data-theme="skyline"] input[type="number"]::-webkit-inner-spin-button { background-color: #4f7aa8; }   /* the spin chevrons in this skin's colours (their shape is in index.html) */
 [data-theme="skyline"] input[type="number"]::-webkit-inner-spin-button:hover { background-color: var(--accent); }
 [data-theme="skyline"] input[type="number"]::-webkit-inner-spin-button:active { background-color: #043a7a; }
 [data-theme="skyline"] input:focus, [data-theme="skyline"] select:focus, [data-theme="skyline"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(7, 87, 179, .18); }
@@ -85,7 +85,7 @@
 [data-theme="skyline"] #camera p { color: var(--text) !important; background: rgba(255, 255, 255, .92); border-radius: 9px; text-shadow: none; box-shadow: none; }
 [data-theme="skyline"] .preview-hud { color: var(--text) !important; background: rgba(255, 255, 255, .78) !important; border-radius: 6px; }
 
-/* the view: no lens vignette over a light sky (it was replaced in D379 by a sunlit haze pinned to the screen; the sun is now in the 3D sky, D384) */
+/* the view: no lens vignette over a light sky (it was first replaced by a sunlit haze pinned to the screen; the sun is now in the 3D sky) */
 [data-theme="skyline"] #preview::after { background: none; }
 
 /* the guide card (onboarding/index.js) as a white pane; its "look here" outline is the accent (the page's own rule) */

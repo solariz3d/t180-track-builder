@@ -1,4 +1,4 @@
-// guides.js: the 3D GRID and the SYMMETRY GUIDES of the preview (D237, the user: "a 3D grid to some how see the track and make it all symmetrical if you need it to be ...
+// guides.js: the 3D GRID and the SYMMETRY GUIDES of the preview (the user: "a 3D grid to some how see the track and make it all symmetrical if you need it to be ...
 // It will be a 2D Grid if the track has no height, but as soon as the track turns up or downward the grid becomes 3D."). Pure numbers, no GL, no DOM: the preview draws what
 // guidePlan returns. PREVIEW ONLY: nothing here reads or writes the document, src/ or the export; a mirror ghost is a picture of the centreline reflected, not an edit.
 //
@@ -75,7 +75,7 @@ function dashed(pts, dash) {
 }
 
 /**
- * THE REAL CENTRELINE IN A BOUNDING-BOX TREE, for the mirror gap's nearest-point search (D237b, B's finding: the grid of cells it replaces searched twelve rings and then measured
+ * THE REAL CENTRELINE IN A BOUNDING-BOX TREE, for the mirror gap's nearest-point search (a review found the grid of cells it replaces searched twelve rings and then measured
  * against EVERY segment, 95 to 230 ms per rebuild on an ordinary asymmetric track and over half a second on 7,000 points, on every brush step). A median-split tree over the
  * segments' 3D boxes: a query walks the nearer child first and drops any box farther than the best found, so it is exact (the same nearest distance as measuring against every
  * segment) and costs a few dozen box tests whether the mirrored point is on the track or kilometres from it. It depends on the path alone, not on the centre or the mirror, so it is
@@ -97,7 +97,7 @@ function buildTree(items, i0, i1) {
 }
 /**
  * The centreline's points and its segment tree, memoised per path AND its version (a closed path's closing edge is a segment too).
- * THE VERSION (D237b, B's regression): the track model grows and rewrites an OPEN track's path IN PLACE (src/geom/path.js extendPath, rebuildPathFrom), so the path OBJECT stays the
+ * THE VERSION (a regression a review found): the track model grows and rewrites an OPEN track's path IN PLACE (src/geom/path.js extendPath, rebuildPathFrom), so the path OBJECT stays the
  * same while its samples change, and a tree kept per object went stale (the gap read 285 m where it was 118). What marks an in-place change is \`path.head\`: finish() makes a
  * FRESH head object at the end of buildPath, extendPath and rebuildPathFrom, and nothing else changes the samples. (The last sample's identity is NOT a version: after a sculpt the
  * unchanged tail keeps its sample objects and only re-places them, so the end of the track moves while its sample is the same object; app/test/guides.test.js row 23 shows it, and
@@ -192,7 +192,7 @@ function guidePlan({ bounds, path = null, mode = 'auto', mirror = 'off', centre 
       const stride = Math.max(1, Math.ceil(pts.length / MIRROR_DRAW)), ghost = []; for (let i = 0; i < pts.length; i += stride) ghost.push(mirrorPoint(pts[i], c, mirror));
       if (stride > 1) ghost.push(mirrorPoint(pts[pts.length - 1], c, mirror)); if (closed) ghost.push(ghost[0]);
       let gl = 0; for (let i = 0; i + 1 < ghost.length; i++) gl += Math.hypot(ghost[i + 1][0] - ghost[i][0], ghost[i + 1][1] - ghost[i][1], ghost[i + 1][2] - ghost[i][2]);
-      add(plan.over, dashed(ghost, Math.max(Math.min(40, Math.max(2, Math.max(ext.x1 - ext.x0, ext.z1 - ext.z0) / 150)), gl / MAX_DASHES)), 'mirror');   // the dash grows with the ghost's length, so its pieces stay bounded (D237b)
+      add(plan.over, dashed(ghost, Math.max(Math.min(40, Math.max(2, Math.max(ext.x1 - ext.x0, ext.z1 - ext.z0) / 150)), gl / MAX_DASHES)), 'mirror');   // the dash grows with the ghost's length, so its pieces stay bounded
       const g = mirrorGap(pts, closed, c, mirror, indexFor(path)); plan.gap = g ? { kind: mirror, ...g } : null;
     }
   }

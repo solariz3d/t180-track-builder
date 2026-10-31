@@ -1,6 +1,6 @@
 // kn5look.js: read what a kn5 says about its LOOK: its textures (name, bytes) and its materials (name, shader, flags,
 // properties, samplers), the head of the file as src/export/kn5write.js writes it. For the test that the preview draws
-// exactly the materials and textures the export writes (ARCHITECTURE §5.1). tools/kn5.cjs reads meshes and material
+// exactly the materials and textures the export writes. tools/kn5.cjs reads meshes and material
 // names but not properties, samplers or texture bytes; this reads only those, and nothing of the node tree.
 //
 //   readLook(bytes) -> { version, textures: [{ name, bytes }], materials: [{ name, shader, alphaBlend, alphaTested,

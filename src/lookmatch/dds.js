@@ -1,6 +1,6 @@
 // dds.js: read an AC track's DDS texture into RGBA, for the look-match render (src/lookmatch/raster.js). src/texture/dds.js
 // reads the uncompressed DDS our own export writes; other authors' tracks also use DXT1 / DXT5 block compression and 24-bit
-// uncompressed files, measured on trackb and tracke (D179). Read-only; nothing is written.
+// uncompressed files, measured on trackb and tracke. Read-only; nothing is written.
 //
 //   decodeDds(bytes, maxSide = 1024) -> { width, height, rgba, level, format } | null
 //     The first mip level whose larger side is at most maxSide (all of them if the file has no smaller level): a bounded

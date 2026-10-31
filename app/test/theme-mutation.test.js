@@ -1,7 +1,7 @@
 // theme-mutation.test.js: node --test app/test/theme-mutation.test.js
-// D381 part 2a (pane B): the skin pick and the token reader, mutated; D384 part 1 (pane B): the sky pass too (S1-S13, run against sky.test.js).
-// D410 (pane B): Glass's crisp sky (P1-P4, run against sky-crisp.test.js; P2-P4 skip where there is no Chrome, as that file's rows do).
-// D416 (pane B): every night sky at the screen's own pixels (P5-P12; that file is sky-crisp.test.js now, every night style's rows at DPR 1 and 1.5).
+// The skin pick and the token reader, mutated; the sky pass too (S1-S13, run against sky.test.js).
+// Glass's crisp sky (P1-P4, run against sky-crisp.test.js; P2-P4 skip where there is no Chrome, as that file's rows do).
+// Every night sky at the screen's own pixels (P5-P12; that file is sky-crisp.test.js now, every night style's rows at DPR 1 and 1.5).
 // Each mutation copies app/ (all but its tests, plus theme.test.js and sky.test.js with its fixture), src/ and tools/ to a temp folder, applies ONE source patch, and runs the COPIED theme.test.js there. "Applied" means the patch text was
 // found exactly once; "caught" means the named test FAILED on the mutant. A CONTROL runs the unmutated copy first. The originals are never touched.
 'use strict';
@@ -11,21 +11,21 @@ const fs = require('fs'), os = require('os'), path = require('path'), { spawnSyn
 const ROOT = path.join(__dirname, '..', '..');
 
 const MUTATIONS = [
-  // CHANGED D405: applyTheme takes a look (LOOKS: the melodies' and Skyline Night); the anchor follows the line
+  // CHANGED: applyTheme takes a look (LOOKS: the melodies' and Skyline Night); the anchor follows the line
   { id: 'T1 any name sets a skin', file: 'lib/theme.js', from: "if (typeof melody === 'string' && LOOKS.includes(melody))", to: "if (typeof melody === 'string')", caughtBy: 'each melody sets its own skin' },
   { id: 'T2 the head rounds the pick', file: 'index.html', from: 'names[Math.floor(r * names.length)]', to: 'names[Math.round(r * (names.length - 1))]', caughtBy: 'the page sets the skin in its head' },
-  // CHANGED D402: the anchor follows the code (the head names five, SIGIL's fifth)
+  // CHANGED: the anchor follows the code (the head names five, SIGIL's fifth)
   { id: 'T3 the head names the melodies in another order', file: 'index.html', from: "names = ['aqua', 'skyline', 'glass', 'aurora', 'sigil']", to: "names = ['skyline', 'aqua', 'glass', 'aurora', 'sigil']", caughtBy: 'the page sets the skin in its head' },
-  // AMENDED (D394): the rule changed by name: the boot sets the skin through theme.js skinFor (a saved sigil shows SIGIL over the melody), so the patch that
+  // AMENDED: the rule changed by name: the boot sets the skin through theme.js skinFor (a saved sigil shows SIGIL over the melody), so the patch that
   // stops it following the player is made on that call; the same mutant, the same catching row
-  // CHANGED D405: the boot also hands over the head's look; the anchor follows the line
+  // CHANGED: the boot also hands over the head's look; the anchor follows the line
   { id: 'T4 the boot does not follow the player', file: 'index.html', from: 'TH0.skinFor(window.__t180Theme, sound.melody, window.__t180Look)', to: 'TH0.skinFor(window.__t180Theme, null, null)', caughtBy: 'the page sets the skin in its head' },
-  // D394: Settings ▸ Theme, read by the head and resolved by skinFor
+  // Settings ▸ Theme, read by the head and resolved by skinFor
   { id: 'T14 the head ignores a saved theme', file: 'index.html', from: 'if (names.indexOf(theme) >= 0) r = ', to: 'if (false) r = ', caughtBy: 'D394: the head reads the saved theme' },
-  // CHANGED D405: the head also takes skyline-night; the anchor follows the line. CHANGED: it also takes music by name (nothing saved is SIGIL now); the anchor follows
+  // CHANGED: the head also takes skyline-night; the anchor follows the line. CHANGED: it also takes music by name (nothing saved is SIGIL now); the anchor follows
   { id: 'T15 the head takes any saved text as a theme', file: 'index.html', from: "if (saved === 'music' || saved === 'sigil' || saved === 'skyline-night' || names.indexOf(saved) >= 0) theme = saved;", to: "theme = saved || 'sigil';", caughtBy: 'D394: the head reads the saved theme' },
-  { id: 'T16 sigil shows a skin', file: 'lib/theme.js', from: "if (choice === 'sigil') return null;", to: '', caughtBy: 'D394: Settings ▸ Theme has seven choices' },   // CHANGED D405: the row's title says seven now
-  // CHANGED D402: the anchor follows the code (melodyOf names SIGIL's own melody too)
+  { id: 'T16 sigil shows a skin', file: 'lib/theme.js', from: "if (choice === 'sigil') return null;", to: '', caughtBy: 'D394: Settings ▸ Theme has seven choices' },   // CHANGED: the row's title says seven now
+  // CHANGED: the anchor follows the code (melodyOf names SIGIL's own melody too)
   { id: 'T17 Skyline Night plays a melody of its own name', file: 'lib/theme.js', from: "(NIGHT[look] || (THEMES.includes(look) || look === SIGIL ? look : null))", to: "(THEMES.includes(look) || look === SIGIL || look in NIGHT ? look : null)", caughtBy: 'D405: Skyline Night is a sixth look' },
   { id: 'T18 the random start never lands on the night', file: 'index.html', from: "look === 'skyline' && theme !== 'skyline' && ", to: "false && ", caughtBy: 'D405: Skyline Night is a sixth look' },
   { id: 'T19 the boot turns a random night back into Skyline', file: 'lib/theme.js', from: 'return melodyOf(look) !== null && melodyOf(look) === melody ? look : melody;', to: 'return melody;', caughtBy: 'D405: Skyline Night is a sixth look' },
@@ -38,7 +38,7 @@ const MUTATIONS = [
   { id: 'T11 an unreadable token is not reported', file: 'lib/tokens.js', from: "if (v && !c && !said.has(name)) { said.add(name); say(", to: 'if (false) { say(', caughtBy: 'the reader falls back' },
   { id: 'T12 the 3D sky ignores the skin', file: 'preview/renderer.js', from: 'if (t.sky) clear = t.sky;', to: '', caughtBy: 'SIGIL\'s 3D frame is the same' },
   { id: 'T13 SIGIL\'s grid token drifts from the literal', file: 'index.html', from: '--ground-grid: color(srgb 0.2 0.23 0.28)', to: '--ground-grid: color(srgb 0.2 0.23 0.29)', caughtBy: 'SIGIL\'s tokens are today\'s literals' },
-  // D384: the sky pass (app/preview/renderer.js, app/preview/sky/, app/preview/preview.js, app/lib/tokens.js word())
+  // The sky pass (app/preview/renderer.js, app/preview/sky/, app/preview/preview.js, app/lib/tokens.js word())
   { id: 'S1 the sky follows the camera\'s position', test: 'sky.test.js', file: 'preview/renderer.js', from: 'eye: [0, 0, 0], target: pose.target.map((v, i) => v - pose.eye[i]) }', to: 'eye: pose.eye, target: pose.target }', caughtBy: 'moving or zooming without turning' },
   { id: 'S2 the rays turn the other way', test: 'sky.test.js', file: 'preview/renderer.js', from: 'right: r.map((v, i) => (v - c[i]) * s)', to: 'right: r.map((v, i) => (c[i] - v) * s)', caughtBy: 'a sky feature moves on screen' },
   { id: 'S3 the shader builds its rays without the basis', test: 'sky.test.js', file: 'preview/renderer.js', from: 'vRay = uFwd + aPos.x * uRight + aPos.y * uUp;', to: 'vRay = uFwd + aPos.x * uRight - aPos.y * uUp;', caughtBy: 'the sky pass runs before the track' },
@@ -53,17 +53,17 @@ const MUTATIONS = [
   { id: 'S12 the preview hands the sky no time', test: 'sky.test.js', file: 'preview/preview.js', from: ', time: skyTime(t) });', to: ' });', caughtBy: 'the drift stops under prefers-reduced-motion' },
   { id: 'S13 Skyline names no sky', test: 'sky.test.js', file: 'themes/skyline.css', from: '--sky-style: sun;', to: '', caughtBy: 'the skin names its sky' },
   { id: 'S14 Glass names no sky (D384 widened; D416: the river)', test: 'sky.test.js', file: 'themes/glass.css', from: '--sky-style: river;', to: '', caughtBy: 'Glass names the river sky' },
-  // CHANGED D405: the registry has city too; the anchor follows the line
+  // CHANGED: the registry has city too; the anchor follows the line
   { id: 'S15 the registry leaves prism out (D384 widened)', test: 'sky.test.js', file: 'preview/sky/index.js', from: "['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']", to: "['none', 'sun', 'caustics', 'aurora', 'city', 'river']", caughtBy: 'Glass names the river sky' },
-  // D398: the sky pass's one-step dither (the banding itself is measured in headless Chrome by sky-dither.test.js, which this harness does not copy)
+  // The sky pass's one-step dither (the banding itself is measured in headless Chrome by sky-dither.test.js, which this harness does not copy)
   { id: 'S16 the sky pass does not dither (D398)', test: 'sky.test.js', file: 'preview/renderer.js', from: 'clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0)', to: 'c', caughtBy: 'D398: the shared sky pass dithers' },
   { id: 'S17 Skyline Night names no sky (D405)', test: 'sky.test.js', file: 'themes/skyline-night.css', from: '--sky-style: city;', to: '', caughtBy: 'D405: Skyline Night names the city sky' },
-  // D410: Glass's sky is crisp (app/test/sky-crisp.test.js since D416, sky-prism-crisp.test.js before; rows 1, 2, 4, 5 and 6 draw in headless Chrome, so those mutants need it)
+  // Glass's sky is crisp (app/test/sky-crisp.test.js now, sky-prism-crisp.test.js before; rows 1, 2, 4, 5 and 6 draw in headless Chrome, so those mutants need it)
   { id: 'P1 the sky pass sends no uPx', test: 'sky-crisp.test.js', file: 'preview/renderer.js', from: "px: u('uPx')", to: 'px: null', caughtBy: 'row 3' },
   { id: 'P2 the moon\'s limb fades over 0.020 rad again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'float lw = 1.5 * prism_px();', to: 'float lw = 0.010;', caughtBy: 'row 2' },
   { id: 'P3 a star is the old gaussian', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: 'max(0.0, 1.0 - length(dd) / (1.25 * prism_px()))', to: 'exp(-dot(dd, dd) / (2.0 * 0.0020 * 0.0020))', caughtBy: 'row 1 (prism)' },
   { id: 'P4 the band has no filaments', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/prism.js', from: '(0.6 + 0.4 * toward) * fil;', to: '(0.6 + 0.4 * toward);', caughtBy: 'row 5' },
-  // D416: every night sky at the screen's own pixels, one mutant per new row
+  // Every night sky at the screen's own pixels, one mutant per new row
   { id: 'P5 an aurora star is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/aurora.js', from: 'max(0.0, 1.0 - length(dir - sd) / (1.25 * aurora_px()))', to: 'exp(-dot(dir - sd, dir - sd) * 180.0 * 180.0 / (2.0 * 0.13 * 0.13))', caughtBy: 'row 1 (aurora)' },
   { id: 'P6 a city star is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/city.js', from: 'max(0.0, 1.0 - length(dir - sd) / (1.25 * city_px()))', to: 'exp(-dot(dir - sd, dir - sd) * 150.0 * 150.0 / (2.0 * 0.13 * 0.13))', caughtBy: 'row 1 (city)' },
   { id: 'P7 a mote is a cell-sized gaussian again', test: 'sky-crisp.test.js', chrome: true, file: 'preview/sky/caustics.js', from: 'max(0.0, 1.0 - length(rd - sd) / (1.25 * caustics_px()))', to: 'exp(-dot(rd - sd, rd - sd) * 70.0 * 70.0 / (2.0 * 0.12 * 0.12))', caughtBy: 'row 1 (caustics)' },

@@ -1,7 +1,7 @@
-// sky/city.js: the 'city' sky (D405), Skyline Night's: Skyline's open sky after dark. The contract is in app/preview/sky/index.js.
+// sky/city.js: the 'city' sky, Skyline Night's: Skyline's open sky after dark. The contract is in app/preview/sky/index.js.
 // By elevation: a warm glow along the horizon (--sky-b, the city's light on the haze; held near the skin's fog for the first ten degrees, so the far road
 // melts into it), giving way through the skin's night (--sky) to a deep zenith (--sky-a). The glow is stronger toward three cities round the horizon, each a
-// broad soft swell in azimuth (whole multiples of the angle, so it closes with no seam). A few stars (--sky-c), points sized in device pixels (D416: a cone 1.25 px in
+// broad soft swell in azimuth (whole multiples of the angle, so it closes with no seam). A few stars (--sky-c), points sized in device pixels (a cone 1.25 px in
 // radius, from the pass's uPx; they were gaussians in grid cells, a median 2.7 px across at half their peak at 2560 x 1440, measured by app/test/sky-crisp.test.js), fewer near the glow, twinkling in place by at most 15%. Nothing moves across the sky; only the twinkle changes, and the glow breathes over minutes by under 5%.
 'use strict';
 

@@ -1,5 +1,5 @@
-// sky/index.js: the skin skies (D384), drawn by the WebGL view as a sky at infinity, so it stays put in the world as the camera turns.
-// A skin names its sky with the token --sky-style (app/themes/*.css); 'none' (SIGIL, since D384 widened the one skin without a sky) draws no sky pass,
+// sky/index.js: the skin skies, drawn by the WebGL view as a sky at infinity, so it stays put in the world as the camera turns.
+// A skin names its sky with the token --sky-style (app/themes/*.css); 'none' (SIGIL, the one skin without a sky) draws no sky pass,
 // only today's clear colour.
 //
 // THE CONTRACT for a style module, app/preview/sky/<style>.js:
@@ -11,14 +11,14 @@
 //   The pass declares these uniforms before the module's source, for it to read:
 //     uniform vec3 uSky;                       the skin's --sky (today's clear colour)
 //     uniform vec3 uSkyA, uSkyB, uSkyC;        the skin's --sky-a, --sky-b, --sky-c, each falling back to --sky
-//     uniform float uPx;                       D410: the angle, in radians, one device pixel spans at the middle of the view (2 |up| / height), for a
+//     uniform float uPx;                       the angle, in radians, one device pixel spans at the middle of the view (2 |up| / height), for a
 //                                              point or an edge drawn a pixel wide at any window size; a page that draws a style itself may leave it 0
 //   and its varying:
-//     varying vec3 vRay;                       D416: the pixel's ray before normalising, the unit forward plus the screen offset, so 1 / dot(vRay, vRay) is
+//     varying vec3 vRay;                       the pixel's ray before normalising, the unit forward plus the screen offset, so 1 / dot(vRay, vRay) is
 //                                              cos^2 of the angle off the view's axis (the night styles size a point by uPx * pow(dot(vRay, vRay), -0.75))
 //   The source may define helpers of its own; prefix their names with the style (sun_, prism_, caustics_, aurora_, city_, river_), so two never clash.
 //   A module that cannot build its sky throws from source(): the renderer compiles a style when setTheme names it, so it fails loudly there.
-//   TWO GLSL RULES (D391; made exact in D393 from A's review 7), checked on every source by contractProblems below, so a style breaking one is refused.
+//   TWO GLSL RULES (made exact after a review), checked on every source by contractProblems below, so a style breaking one is refused.
 //   Exactly what the check refuses (comments are skipped):
 //     · a smoothstep whose first two arguments are BOTH number literals (decimal or exponent, e.g. 0.6, .6, -0.6, 1e-1) with edge0 >= edge1: GLSL ES
 //       1.00 leaves it undefined (write smoothstep(0.0, 0.6, -h) for a ramp downward). Edges written as names or expressions are NOT judged.
@@ -27,15 +27,15 @@
 //       sin(dot(dir, axis) * k)) is not refused.
 'use strict';
 
-const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']);   // D405: city, Skyline Night's; D416: river, Glass's (prism stays a style)
+const STYLES = Object.freeze(['none', 'sun', 'prism', 'caustics', 'aurora', 'city', 'river']);   // city, Skyline Night's; river, Glass's (prism stays a style)
 // each required by name, written out: the page's loader (app/lib/cjs.js) fetches only the requires it can read in the source. Requiring a module costs
 // nothing until its source() is called, so a stub that is not built yet throws only when a skin names it.
 const MODULES = { sun: require('./sun.js'), prism: require('./prism.js'), caustics: require('./caustics.js'), aurora: require('./aurora.js'), city: require('./city.js'), river: require('./river.js') };
 
-/** D391: every way a style's GLSL breaks the two rules above, as readable lines (empty: it keeps them). Comments are not code, so they are skipped. */
+/** Every way a style's GLSL breaks the two rules above, as readable lines (empty: it keeps them). Comments are not code, so they are skipped. */
 function contractProblems(style, src) {
   const code = String(src).replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, ''), out = [];
-  const num = '\\s*(-?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*';   // a decimal or exponent literal (D393)
+  const num = '\\s*(-?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)\\s*';   // a decimal or exponent literal
   for (const m of code.matchAll(new RegExp(`\\bsmoothstep\\s*\\(${num},${num},`, 'g'))) {
     if (Number(m[1]) >= Number(m[2])) out.push(`${style}: smoothstep(${m[1]}, ${m[2]}, ...) has edge0 >= edge1, which GLSL ES leaves undefined`);
   }
@@ -43,7 +43,7 @@ function contractProblems(style, src) {
   return out;
 }
 
-/** The GLSL of a style's skyPattern, or null for 'none'; an unknown style throws, and so does a style that breaks a GLSL rule (D391). */
+/** The GLSL of a style's skyPattern, or null for 'none'; an unknown style throws, and so does a style that breaks a GLSL rule. */
 function patternSource(style) {
   if (!STYLES.includes(style)) throw new Error(`sky: no style named ${JSON.stringify(style)} (the styles are ${STYLES.join(', ')})`);
   if (style === 'none') return null;

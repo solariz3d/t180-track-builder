@@ -1,4 +1,4 @@
-// edge.js: the EDGE fit (D371): a floor texture whose edge bands keep their size in METRES at any road width, and whose centre is a whole number of repeats.
+// edge.js: the EDGE fit: a floor texture whose edge bands keep their size in METRES at any road width, and whose centre is a whole number of repeats.
 //
 //   widthRange(segments)            -> { min, max } | null   the narrowest and widest the road's cross-section gets (m, edge to edge, over every road
 //                                                            segment, its start shape included), null when there is no road
@@ -7,7 +7,7 @@
 //   compose(img, lay)               -> img   the built image: the drawing turned half a turn (below), then its two edge bands, and its centre repeated N times between them
 //   rowMap(arc, w, lay)             -> u in the built image for one point `arc` metres from a row's edge, the row being w metres wide
 //
-// WHY. 'fit' (D364) stretches the whole texture across the road's own width, so a texture drawn for 35 m has its edge glow 0.56 m wide on a 35 m road
+// WHY. 'fit' stretches the whole texture across the road's own width, so a texture drawn for 35 m has its edge glow 0.56 m wide on a 35 m road
 // and 0.96 m on a 60 m one, and 'tile' repeats it across a wider road. The user's idea (2026-10-17): make the texture once the track is closed, when its
 // whole width range is known, and let it work at every width without inconsistency. So the texture is drawn ONCE, for `tileWidth` metres across, and
 // this file lays it out:
@@ -19,7 +19,7 @@
 //     narrowest, and is never cut: an edge band and a whole cell meet, never half of one.
 // WHICH PART OF THE DRAWING IS THE EDGE. The fit and tile rules lay a drawing with the road's CENTRE at u = 0 (u = arc / width, -0.5 to 0.5, and the texture wraps), so the drawing's
 // own edges (u = 0 and 1) fall at the road's centre and its middle (u = 0.5) at the road's two edges: a glow drawn down the middle of the drawing is the road's edge glow, as it
-// has been since D358. The edge fit keeps that: it takes the drawing turned half a turn (u' = u + 0.5), whose ends are the road's two edges, and cuts the bands from those.
+// already was before this fit. The edge fit keeps that: it takes the drawing turned half a turn (u' = u + 0.5), whose ends are the road's two edges, and cuts the bands from those.
 // A road narrower than two bands has no centre: it takes the plain fit (u = arc / w). A closed ring takes it too (flow.js).
 'use strict';
 const { normalize } = require('../geom/profile.js');

@@ -1,6 +1,6 @@
 // palette-fakedom.js: just enough of the DOM for the palette's and panels' DOM halves to run under node, for the tests.
 // It follows the DOM where the bugs live: append / replaceChildren turn every non-Node argument into a text node of
-// String(argument), so a stray null becomes the text "null" here exactly as it does in the WebView (B's "nullnull").
+// String(argument), so a stray null becomes the text "null" here exactly as it does in the WebView (a review's "nullnull").
 'use strict';
 
 class Node {}

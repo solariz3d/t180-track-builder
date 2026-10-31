@@ -1,13 +1,13 @@
 // sky-dither.test.js: node --test app/test/sky-dither.test.js
-// D398: the sky pass breaks its own 8-bit banding with a one-step ordered dither (E's D397 page, the fix and not the look). Each style's own GLSL is
+// The sky pass breaks its own 8-bit banding with a one-step ordered dither (the fix proposed in an earlier review, not the look). Each style's own GLSL is
 // compiled into the renderer's own sky pass (app/preview/renderer.js SKY_VS and skyFS, unchanged here) in HEADLESS Chrome (never a window), with each
 // skin's colours read from its CSS, and the pixels are read back. Skipped, with the reason, where there is no Chrome (CHROME_PATH or the usual place). Rows:
 //   1  banding: down each column of open sky, looking level and looking up 50 degrees, the longest run of one identical 8-bit colour is at most 12 px
 //      for every style (before the dither: 26 to 174 px, so the gradient showed as steps)
 //   2  the quiet band: every pixel from -10 to 10 degrees of elevation, all the way round, stays within 1.30:1 (WCAG) of the skin's --fog, the dither included
-//      (D384 widened, D391's measure). The band is drawn with a vertex pair per column, so it really goes round: a control sky white over half the circle
-//      shows white in about half its columns (A's review of D403, §6: drawn as one quad, every column saw azimuth 0)
-//   3  the pattern keeps all 16 levels on a tall canvas: a 4 x 4 block at pixel rows 2400 and 4320 holds 16 different values (A's review 11, finding 1)
+//      (the sky contract's measure). The band is drawn with a vertex pair per column, so it really goes round: a control sky white over half the circle
+//      shows white in about half its columns (a review found it drawn as one quad, where every column saw azimuth 0)
+//   3  the pattern keeps all 16 levels on a tall canvas: a 4 x 4 block at pixel rows 2400 and 4320 holds 16 different values (a review finding)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -19,7 +19,7 @@ const SKY = require(path.join(ADIR, 'preview', 'sky', 'index.js'));
 
 const CHROME = chromePath();
 const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the sky is drawn in headless Chrome';
-const STYLES = { sun: 'skyline', prism: 'glass', caustics: 'aqua', aurora: 'aurora', city: 'skyline-night', river: 'glass' };   // D405: Skyline Night's city sky joins every row; D416: Glass's river too (the prism keeps Glass's colours)
+const STYLES = { sun: 'skyline', prism: 'glass', caustics: 'aqua', aurora: 'aurora', city: 'skyline-night', river: 'glass' };   // Skyline Night's city sky joins every row; Glass's river too (the prism keeps Glass's colours)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** A skin's sky colours from its CSS: --sky, --fog, and --sky-a/b/c each falling back to --sky (as themeFrom does). */
 function colours(skin) {
@@ -62,11 +62,11 @@ const pose = (pitchDeg) => { const p = pitchDeg * Math.PI / 180; return { eye: [
 let ch, ws, dir, ev;
 test.before(async () => {
   if (skip) return;
-  // D400: a free port, this Chrome's own (launchChrome checks the browser's pid), and a socket that rejects waiting sends when it closes
+  // A free port, this Chrome's own (launchChrome checks the browser's pid), and a socket that rejects waiting sends when it closes
   let tgt, send; ({ ch, dir, tgt } = await launchChrome(CHROME, ['--enable-unsafe-swiftshader'], 't180sky-'));
   ({ ws, send } = await connect(tgt.webSocketDebuggerUrl));
   ev = async (expr) => { const d = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (!d.result || d.result.exceptionDetails) throw new Error(`page: ${JSON.stringify(d.result ? d.result.exceptionDetails : d).slice(0, 500)}`); return d.result.result.value; };
-  await ev("document.title = 'zz-headless-test'; true");   // D484: a headless page is always titled so, first thing
+  await ev("document.title = 'zz-headless-test'; true");   // a headless page is always titled so, first thing
   await ev(PAGE);
 });
 test.after(async () => { try { ws && ws.close(); } catch (e) { /* closing */ } if (ch) ch.kill(); await sleep(300); try { dir && fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } });
@@ -84,7 +84,7 @@ test('row 1: no style\'s sky shows 8-bit steps: down each column of open sky, le
   for (const [style, [lv, up]] of Object.entries(runs)) assert.ok(lv <= 12 && up <= 12, `${style}: the longest flat run is ${lv} px looking level and ${up} px looking up (all: ${JSON.stringify(runs)})`);
 });
 
-// A's review of D403, §6 (the librarian's ruling, 2026-10-18 21:53): the band was drawn as one four-vertex quad, whose two columns of vertices sit at
+// A review (2026-10-18) found the band was drawn as one four-vertex quad, whose two columns of vertices sit at
 // azimuth 0 and 360, the same direction, so every column saw azimuth 0 and "all the way round" was not what row 2 checked. A control sky that is the
 // skin's own fog over the half of the circle nearest azimuth 0 and white over the far half must therefore show white in about half the band's columns
 const controlSky = (fog) => `vec3 skyPattern(vec3 dir, float t){ return abs(atan(dir.z, dir.x)) > 1.5707963 ? vec3(1.0) : vec3(${fog.map((v) => v.toFixed(6)).join(', ')}); }`;
@@ -104,7 +104,7 @@ test('row 2: the quiet band keeps its rule with the dither: every pixel from -10
   t.diagnostic(`the band's largest ratio to --fog: ${JSON.stringify(got)}`);
 });
 
-// D398 follow-up (A's review 11, finding 1): the pattern is computed from the pixel's own row, so on a tall canvas it must keep all 16 of its levels. The
+// A follow-up review finding: the pattern is computed from the pixel's own row, so on a tall canvas it must keep all 16 of its levels. The
 // pass's own helpers (everything in skyFS from pass_bayer2 up to main) are compiled on their own and read back over a 4 x 4 block of pixels at rows 2400
 // and 4320 (a 4K canvas): each block must hold 16 different levels. A form that squares the row (0.75 y^2) runs out of float32 precision above about 2,364 px
 test('row 3: the dither pattern keeps all 16 levels on a tall canvas, at pixel rows 2400 and 4320', { skip }, async (t) => {

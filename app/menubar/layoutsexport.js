@@ -1,4 +1,4 @@
-// layoutsexport.js: File ▸ Export layouts… (D361 part 2). Several SAVED tracks go out as ONE Assetto Corsa track folder, one
+// layoutsexport.js: File ▸ Export layouts…. Several SAVED tracks go out as ONE Assetto Corsa track folder, one
 // layout each, the way track N does it (src/export/layouts.js says the folder shape). node --test app/test/layoutsexport.test.js
 //
 //   const lx = createLayoutsExport({ C, layouts, shim, storage })   C = app/core/coreshell.js, layouts = src/export/layouts.js
@@ -29,7 +29,7 @@ function createLayoutsExport({ C, layouts, shim, storage }) {
     if (st.name !== pick.track) throw new E('OPEN_FAILED', `the saved track "${pick.track}" could not be opened${st.message ? `: ${st.message}` : ''}`);
     let got;
     try { got = sh.buildExport({ textures }); } catch (e) { e.message = `${pick.track}: ${e.message}`; throw e; }
-    // D365: the author name, as the Export button's exporter adds it
+    // the author name, as the Export button's exporter adds it
     try { return layouts.buildFromSegments(got.segments, got.meta, { ...got.opts, author }); } catch (e) { e.message = `${pick.track}: ${e.message}`; throw e; }
   }
   return {

@@ -1,17 +1,17 @@
 // T-180 Track Builder, native side (Tauri 2). The whole program — document model, geometry, validation, preview —
-// runs in the webview (ARCHITECTURE §9: no mesh data over IPC). What only native code can do is keep the user's files,
+// runs in the webview (no mesh data over IPC). What only native code can do is keep the user's files,
 // so this side is a handful of commands and nothing else:
 //   list_tracks · save_track(name, text, stamp) · open_track(name) · save_library(text) · open_library
 //   backup_track(name, text, stamp) · list_track_backups(name) · open_track_backup(file): SAVE KEEPS THE PREVIOUS VERSION (backups.rs)
 // A launch-time T180_TEST_APP_DATA (an existing absolute folder) moves every kept file there, for test runs (test_app_data).
-// A launch-time T180_TEST_STEAM_PATH (an existing absolute folder) is the Steam folder a test run looks in (ac.rs test_steam_path, D252).
+// A launch-time T180_TEST_STEAM_PATH (an existing absolute folder) is the Steam folder a test run looks in (ac.rs test_steam_path).
 //   save_autosave(text) · open_autosave · clear_autosave: the unsaved track, for crash recovery
 //   find_blender · set_blender_path(path) · write_blender_export(dir, folder, files, fbx): File ▸ Export for Blender (blender.rs): the glb and README
 //   into a folder of their own, and the FBX through the user's own Blender, headless
 //   write_export(dir, folder, files): an exported track into the folder the user picked (never an AC install's other tracks)
 //   get_ac_root · set_ac_root(path) · install_track(folder, files): INSTALL TO AC, into the remembered AC folder's
-//   content/tracks (ac.rs); with none remembered, get_ac_root finds AC through Steam and remembers it (D250, ac.rs root_or_find);
-//   find_ac_root: the startup card's question, { remembered, found } (D252, ac.rs root_status), which remembers nothing; get_see_it_setting · set_see_it_setting(on) · see_it_in_assetto(track, layout): the launch,
+//   content/tracks (ac.rs); with none remembered, get_ac_root finds AC through Steam and remembers it (ac.rs root_or_find);
+//   find_ac_root: the startup card's question, { remembered, found } (ac.rs root_status), which remembers nothing; get_see_it_setting · set_see_it_setting(on) · see_it_in_assetto(track, layout): the launch,
 //   OFF by default and never run by the builder's own tests (ac.rs header)
 // plus the dialog plugin for picking that folder.
 // Tracks live in <app data>/tracks/<name>.t180track and the user's pieces in <app data>/library.t180lib, as the
@@ -74,7 +74,7 @@ pub fn names_with_ext(dir: &Path, ext: &str) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-/// THE TEST APP-DATA SEAM (B's D239 look, F2; the real fix for C's 09:06 incident, when a window test run shared the user's folder while his
+/// THE TEST APP-DATA SEAM (found in a review; the real fix for a 09:06 incident, when a window test run shared the user's folder while his
 /// app started): when and ONLY when the app was LAUNCHED with T180_TEST_APP_DATA set to an existing absolute folder, every file the app keeps
 /// (tracks, backups, the autosave, the AC folder and the launch setting) lives there instead. Like T180_TEST_EXPORT_FOLDER, a page cannot set a
 /// process's environment and nothing in normal use sets this one, so normal use always gets the real app data folder.
@@ -108,7 +108,7 @@ fn list_tracks(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     track_names(&tracks_dir(&app)?)
 }
 
-// D240, SAVED PIECES: runs of pieces the user kept from their tracks, one `<name>.t180piece` each in the app's `pieces` folder (the text is the page's, schema
+// SAVED PIECES: runs of pieces the user kept from their tracks, one `<name>.t180piece` each in the app's `pieces` folder (the text is the page's, schema
 // t180b.piece/1, checked there by src/core/piece.js; this side only keeps and returns it). A name is a track's name (no path can ride in it). Saving never
 // overwrites unless `replace` is set (the page never sets it: a piece is deleted first, on purpose), so two pieces can never be lost to one name.
 pub fn piece_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
@@ -158,13 +158,13 @@ fn backups_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir(app)?.join(backups::DIR))
 }
 
-/// SAVE KEEPS THE PREVIOUS VERSION (D239 amendment, backups.rs): the file this save overwrites is first MOVED to track-backups as
+/// SAVE KEEPS THE PREVIOUS VERSION (backups.rs): the file this save overwrites is first MOVED to track-backups as
 /// <name>.<stamp>.t180track; if the new text then cannot be written, it is moved back, so a failed save never loses the track. Then
 /// this track's stamped backups are pruned to the newest 20. Returns the backup's file name, or null on a first save.
 #[tauri::command]
 fn save_track(app: tauri::AppHandle, name: String, text: String, stamp: Option<String>) -> Result<Option<String>, String> {
     let path = track_path(&app, &name)?;
-    let kept = backups::save(&path, &backups_dir(&app)?, &name, &backups::stamp_or_now(stamp.as_deref()), &text)?;   // F3b: a failed prune is logged, not a failed save
+    let kept = backups::save(&path, &backups_dir(&app)?, &name, &backups::stamp_or_now(stamp.as_deref()), &text)?;   // a failed prune is logged, not a failed save
     Ok(kept.and_then(|k| k.file_name().and_then(|f| f.to_str()).map(String::from)))
 }
 
@@ -200,7 +200,7 @@ fn open_track(app: tauri::AppHandle, name: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("could not open {}: {e}", path.display()))
 }
 
-// D272, THE UNDO SIDECAR: `<name>.t180undo` beside `<name>.t180track` in the tracks folder, the page's undo history for that track (JSON, schema core-undo; this side only keeps and returns the text, the page
+// THE UNDO SIDECAR: `<name>.t180undo` beside `<name>.t180track` in the tracks folder, the page's undo history for that track (JSON, schema core-undo; this side only keeps and returns the text, the page
 // checks it against the track before using it). It has its own extension, so track_names never lists it, a track's backups never copy it, and the track file is the same bytes with or without it. A name is a
 // track's name (no path can ride in it). A sidecar that is not there is Ok(None), not an error: most tracks have none.
 pub fn undo_file(dir: &Path, name: &str) -> Result<PathBuf, String> {
@@ -242,7 +242,7 @@ fn open_library(app: tauri::AppHandle) -> Result<Option<String>, String> {
     fs::read_to_string(&path).map(Some).map_err(|e| format!("could not open {}: {e}", path.display()))
 }
 
-// ---- D181 test seam (C, for the installed app's Export check): the folder the Export dialog would return, when and ONLY
+// ---- test seam (for the installed app's Export check): the folder the Export dialog would return, when and ONLY
 // when the app was LAUNCHED with T180_TEST_EXPORT_FOLDER set to an existing absolute folder. A page cannot set a process's
 // environment and nothing in normal use sets this one, so normal use always gets the native dialog (app/index.html
 // falls back to it on None). It returns a path and does nothing else: the export is the unchanged write_export.
@@ -270,7 +270,7 @@ fn open_autosave(app: tauri::AppHandle) -> Result<Option<String>, String> {
     fs::read_to_string(&path).map(Some).map_err(|e| format!("could not open {}: {e}", path.display()))
 }
 
-// ---- D340, THE LATE-INPUT LOG: the key events the page handled late (app/preview/preview.js checkLate), one JSON line each (app/core/inputlog.js), kept in
+// ---- THE LATE-INPUT LOG: the key events the page handled late (app/preview/preview.js checkLate), one JSON line each (app/core/inputlog.js), kept in
 // input-late.log in the app data folder, beside tracks\, so a coasting camera mid-drive can be read afterwards. The file is capped: an append that would take it
 // past INPUT_LOG_CAP keeps only the newest whole lines, about half the cap, then appends.
 const INPUT_LOG_FILE: &str = "input-late.log";
@@ -429,7 +429,7 @@ fn write_export(dir: String, folder: String, files: Vec<ExportFile>) -> Result<u
     write_export_to(Path::new(&dir), &folder, &decoded?)
 }
 
-// ---- File ▸ Export layouts… (D361 part 2, G3): the same write, then what the folder's PREVIOUS marker listed and this export
+// ---- File ▸ Export layouts…: the same write, then what the folder's PREVIOUS marker listed and this export
 // does not write is removed, so a layout left out of a re-export is gone from Content Manager (it lists every ui/*/ui_track.json).
 // Only paths that marker listed (src/export/layouts.js staleFiles is the same rule), only plain files, never through a link or a
 // junction, and then each folder they leave empty, never the track folder itself. A file somebody added is in no marker of ours
@@ -510,7 +510,7 @@ fn write_layouts_export(dir: String, folder: String, files: Vec<ExportFile>) -> 
 }
 
 /// `dir` is exactly `…/content/tracks/<name>` (nothing deeper) with a <name> that does not start with t180b_: the folder someone made by hand
-/// for a track (D226). Content Manager reads such a folder, when it is empty, as a broken track.
+/// for a track. Content Manager reads such a folder, when it is empty, as a broken track.
 pub fn direct_foreign_track(dir: &str) -> bool {
     let parts: Vec<&str> = dir.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
     (0..parts.len().saturating_sub(2)).any(|i| {
@@ -559,11 +559,11 @@ fn decode_files(files: Vec<ExportFile>) -> Result<Vec<(String, Vec<u8>)>, String
 
 #[tauri::command]
 fn get_ac_root(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    // D250: none remembered -> found through Steam (and remembered), so the first export into AC asks for nothing
+    // none remembered -> found through Steam (and remembered), so the first export into AC asks for nothing
     Ok(ac::root_or_find(&data_dir(&app)?, &ac::steam_path)?.map(|p| p.to_string_lossy().into_owned()))
 }
 
-/// D252: the startup card's question. The remembered AC folder, or else the one Steam finds; nothing is remembered (the card's Use it does that).
+/// The startup card's question. The remembered AC folder, or else the one Steam finds; nothing is remembered (the card's Use it does that).
 #[derive(serde::Serialize)]
 struct AcRootStatus { remembered: Option<String>, found: Option<String> }
 
@@ -578,7 +578,7 @@ fn set_ac_root(app: tauri::AppHandle, path: String) -> Result<String, String> {
     Ok(ac::remember_ac_root(&data_dir(&app)?, Path::new(&path))?.to_string_lossy().into_owned())
 }
 
-// ---- D372: A RE-EXPORT THAT CHANGES A TRACK'S SHAPE RETIRES ITS STALE GHOST AND HUD LAPS. Assetto Corsa keys a track's ghost by the FOLDER NAME
+// ---- A RE-EXPORT THAT CHANGES A TRACK'S SHAPE RETIRES ITS STALE GHOST AND HUD LAPS. Assetto Corsa keys a track's ghost by the FOLDER NAME
 // (Documents\Assetto Corsa\GhostCar\<folder>\), and the CMRT Essential HUD its laps the same way (Documents\Assetto Corsa\CMRT-Essential-HUD\
 // <folder>[#]<car>[v1]fast.lap, s1.lap), so after the road changed shape the old ghost drove through the air (ELYSIUM, 2026-10-17). The export's marker
 // carries the road's geometry hash (src/export/fromwords.js geometryOf); the install reads the PREVIOUS marker before it is overwritten, and when both
@@ -754,7 +754,7 @@ fn see_it_in_assetto(app: tauri::AppHandle, track: String, layout: String) -> Re
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        // D508: the window is created hidden (tauri.conf.json "visible": false) and the page shows it once it has painted (app/titlebar.js revealWindow).
+        // The window is created hidden (tauri.conf.json "visible": false) and the page shows it once it has painted (app/titlebar.js revealWindow).
         // If the page never runs at all, the window is shown here after a few seconds, so a broken page is never an invisible app
         .setup(|app| {
             if let Some(w) = app.get_webview_window("main") {
@@ -810,7 +810,7 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
-    // D340: the late-input log appends whole lines and, past its cap, keeps the newest whole lines (the oldest go), so it can never grow without bound
+    // The late-input log appends whole lines and, past its cap, keeps the newest whole lines (the oldest go), so it can never grow without bound
     #[test]
     fn the_input_log_appends_and_past_its_cap_keeps_the_newest_whole_lines() {
         let d = scratch("inputlog");
@@ -1054,7 +1054,7 @@ mod tests {
         fs::remove_dir_all(&d).unwrap();
     }
 
-    // ---- D372: a re-export that changes a track's shape retires its stale ghost and HUD laps (moved into a dated backup beside them, never deleted)
+    // ---- a re-export that changes a track's shape retires its stale ghost and HUD laps (moved into a dated backup beside them, never deleted)
     const GEO_A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const GEO_B: &str = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     fn geo_marker(geo: Option<&str>) -> Vec<u8> {

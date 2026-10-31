@@ -1,6 +1,6 @@
 # prove_render.ps1: capture ONE window, the one owned by the given process, with PrintWindow (the window renders itself
 # into our bitmap, PW_RENDERFULLCONTENT). It never reads screen pixels: a CopyFromScreen of a background window captures
-# whatever else is on the screen there (D168, B's first attempt), and that is exactly what this must never do.
+# whatever else is on the screen there (a first attempt did), and that is exactly what this must never do.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prove_render.ps1 -ProcId <pid> -Out <file.png>
 #       [-Rect "x,y,w,h"]      a rectangle in CLIENT pixels (e.g. the preview canvas), to count pixels in

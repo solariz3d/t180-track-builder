@@ -1,5 +1,5 @@
 // handles.test.js: node --test app/test/handles.test.js   (under the heavy-run lock)
-// D244, THE DRAG HANDLES (app/core/handles.js): where each handle sits on the ghost of a piece, how a pointer drag becomes a value, and the overlay that carries it. FEEL tier: targeted rows, no
+// THE DRAG HANDLES (app/core/handles.js): where each handle sits on the ghost of a piece, how a pointer drag becomes a value, and the overlay that carries it. FEEL tier: targeted rows, no
 // mutation harness (the 09-29 rule). The panel's wiring (a drag types into the Extend field, Sculpt on a placed piece) is in app/test/core-pieces-ui.test.js, rows 11 to 13.
 //   1  placement: length, width, bank, cup, turn and climb on a ghost piece; every kind that has a side is on BOTH sides, mirrored about the centreline
 //   2  the axes: a positive drag is outward for width and cup, left for turn (both sides), up on the left edge and down on the right for bank, along the road for length, up for climb
@@ -7,12 +7,12 @@
 //   4  value from drag: each kind's rate, its clamps, its rounding, Shift (a tenth of the speed) and Ctrl (snap to 5 degrees, 10 m, 5 m)
 //   5  the screen: where a handle is, one metre along its axis in px, behind the camera, an axis seen end-on
 //   6  hit test: the nearest handle inside the radius, none outside
-//  14  D258: the free jump's landing kinds: four marks at the landing, each out along its own arrow (the take-off's heading frame), their speeds, holds, snaps and resets
-//   8  D251: the speed is per PIXEL: the same drag in px gives the same value zoomed in or out
-//   9  D251: the detents: a drag holds about 6 px at the value it started from and, for bank, turn and climb, at 0
-//  10  D251: the value is rounded to the kind's step even with Shift, so a fine drag lands on 0.0, not 0.03
-//  11  D251: a double-click on a handle resets it: 0 for bank, turn, climb; the value before the drag for length, width, cup
-//  12  D251: the label shows the exact value the drag sets, and what a double-click would set
+//  14  the free jump's landing kinds: four marks at the landing, each out along its own arrow (the take-off's heading frame), their speeds, holds, snaps and resets
+//   8  the speed is per PIXEL: the same drag in px gives the same value zoomed in or out
+//   9  the detents: a drag holds about 6 px at the value it started from and, for bank, turn and climb, at 0
+//  10  the value is rounded to the kind's step even with Shift, so a fine drag lands on 0.0, not 0.03
+//  11  a double-click on a handle resets it: 0 for bank, turn, climb; the value before the drag for length, width, cup
+//  12  the label shows the exact value the drag sets, and what a double-click would set
 //   7  the overlay: a press ON a handle opens the drag and nothing else sees it; a press elsewhere is left alone (the brush and the camera keep their drags); at most one apply per frame; the release
 //      applies the last position and ends; hover sets the cursor; Shift and Ctrl travel with the pointer
 'use strict';
@@ -33,22 +33,22 @@ test('row 1: every kind is placed where it was marked, and every kind with a sid
   // CHANGED 2026-10-14: length and width moved from the near end to the FRONT of the piece (its far end, where it grows to)
   assert.deepEqual(h['length:0'].pos, [0, 0, 200], 'length: the centreline at the front (far) end');
   // CHANGED 2026-10-14 (the second move): width to the middle of the piece, bank three quarters along, turn at the front edges
-  // AMENDED (D509): the rule changed by name, the user's layout of 2026-10-28: width and cup at the BACK (share 0.02, a hair in from the join: s 40 + 3.2),
+  // AMENDED: the rule changed by name, the user's layout of 2026-10-28: width and cup at the BACK (share 0.02, a hair in from the join: s 40 + 3.2),
   // bank and climb in the middle, length and turn at the front
   assert.deepEqual([h['width:1'].pos, h['width:-1'].pos], [[10, 0, 43.2], [-10, 0, 43.2]], 'width: both edges, at the back');
   assert.deepEqual([h['bank:1'].pos, h['bank:-1'].pos], [[10, 0, 120], [-10, 0, 120]], 'bank: both edges, mid piece');
   assert.deepEqual([h['cup:1'].pos, h['cup:-1'].pos], [[3, 0, 43.2], [-3, 0, 43.2]], 'cup: just inside the centre, both sides, at the back');
   assert.deepEqual([h['turn:1'].pos, h['turn:-1'].pos], [[10, 0, 200], [-10, 0, 200]], 'turn: both edges at the front (far) end');
-  assert.deepEqual(h['climb:0'].pos, [0, 0, 120], 'climb: the centreline mid piece');   // AMENDED (D509): the middle
+  assert.deepEqual(h['climb:0'].pos, [0, 0, 120], 'climb: the centreline mid piece');   // AMENDED: the middle
   for (const k of ['width', 'bank', 'cup', 'turn']) assert.equal(h[`${k}:1`].pos[0], -h[`${k}:-1`].pos[0], `${k}: mirrored`);
 });
 test('row 1b: the road\'s width at the handle sets how far out an edge handle sits, and an unknown or absent kind places nothing', () => {
   const narrow = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, kinds: ['width'] }));
-  // AMENDED (D509): the rule changed by name, the user's layout of 2026-10-28: the width marks are at the back (share 0.02), where the road is 4 + 8 x 0.02 = 4.16 m out
+  // AMENDED: the rule changed by name, the user's layout of 2026-10-28: the width marks are at the back (share 0.02), where the road is 4 + 8 x 0.02 = 4.16 m out
   assert.deepEqual(narrow['width:1'].pos, [4.16, 0, 43.2], 'with no target given, at the back (share 0.02) is where the road is: 4.16 m from the centre');
   // the width mark sits at the TARGET half-width (the field's value) when one is given, so it follows the drag (it sets the width the piece ENDS at)
   const target = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, halfTarget: 9, kinds: ['width', 'bank'] }));
-  // AMENDED (D509): width at the back, bank mid piece (share 0.5: the road 8 m out)
+  // AMENDED: width at the back, bank mid piece (share 0.5: the road 8 m out)
   assert.deepEqual([target['width:1'].pos, target['width:-1'].pos], [[9, 0, 43.2], [-9, 0, 43.2]], 'at the back, at the target width'); assert.deepEqual(target['bank:1'].pos, [8, 0, 120], 'only a target kind uses it: bank still sits at the road\'s own edge, mid piece');
   const placed = byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, halfTarget: 9, at: { width: 1 }, kinds: ['width'] })); assert.deepEqual(placed['width:1'].pos, [9, 0, 200], 'an `at` override moves it (Sculpt keeps the width mark at the far end of the piece)');
   assert.deepEqual(byId(HD.placeHandles({ ...MODEL, half: (f) => 4 + 8 * f, at: { width: 1 }, kinds: ['width'] }))['width:1'].pos, [12, 0, 200], 'with no target, the road\'s own half-width at that share');
@@ -129,7 +129,7 @@ function fakeStage(ctx = null) {
   const stage = { clientWidth: W, clientHeight: Hh, style: {}, ownerDocument: { createElement: () => canvas }, getBoundingClientRect: () => ({ left: 0, top: 0 }), isConnected: true, append() {}, setPointerCapture() {},
     addEventListener(t, f, cap) { (listeners[t] = listeners[t] || []).push({ f, cap: !!cap }); }, removeEventListener(t, f) { listeners[t] = (listeners[t] || []).filter((x) => x.f !== f); } };
   const win = { devicePixelRatio: 1, requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, cancelAnimationFrame() {} };
-  // D335: a drag's speed is read from the events' times, so the harness gives every press, move and release a time: a move or release with none comes 1 ms after the one before (a flick, the
+  // a drag's speed is read from the events' times, so the harness gives every press, move and release a time: a move or release with none comes 1 ms after the one before (a flick, the
   // speed the old per-pixel rows were written for); a row that wants a slow hand gives its own timeStamp
   let clock = 0;
   const fire = (type, e) => { if (type === 'pointerdown') clock = e && typeof e.timeStamp === 'number' ? e.timeStamp : clock + 1000; else if ((type === 'pointermove' || type === 'pointerup') && !(e && typeof e.timeStamp === 'number')) e = { ...e, timeStamp: (clock += 1) }; else if (e && typeof e.timeStamp === 'number') clock = e.timeStamp;
@@ -174,7 +174,7 @@ test('row 7b: no model, no pose or a refused press: no handles are drawn and a p
   ov.unmount();
 });
 
-// D251: a drag rig: the overlay on a fake stage whose host keeps the fields as the panel's do (an apply sets the field, so the next press starts from it)
+// a drag rig: the overlay on a fake stage whose host keeps the fields as the panel's do (an apply sets the field, so the next press starts from it)
 const FAR = { eye: [0, 600, -400], target: [0, 0, 120], up: [0, 1, 0], fov: 60 * Math.PI / 180 };
 const B2 = { turn: 2, width: 31, length: 160, bank: 0 };
 function rig({ pose = POSE, kinds = ['width', 'turn', 'length', 'bank'], base = { width: 31, turn: 0, length: 160, bank: 0 }, ctx = null } = {}) {
@@ -204,7 +204,7 @@ test('row 8: the speed is per PIXEL: 20 px of drag changes a field by the same a
   assert.deepEqual([out.far.turn, out.far.width, out.far.length], [1.66, 32.36, 168.4], 'the same when zoomed out');
 });
 
-// AMENDED D335 (plan :555-583, 2026-10-16): the rule changed. A drag through the overlay holds nothing any more: the 6 px holds at the start and at 0 were dead travel, and a slow scrub is
+// AMENDED (2026-10-16): the rule changed. A drag through the overlay holds nothing any more: the 6 px holds at the start and at 0 were dead travel, and a slow scrub is
 // 0.01 a pixel exactly (the ask: pinpoint precise). The holds stay in targetFor for a caller that asks (ctx.hold not false); Ctrl still snaps. So the numbers are the new rule's.
 test('row 9 (D335, amended): no detents in a drag: it moves from the first pixel and goes through 0 without a hold; Ctrl snaps', () => {
   assert.equal(rig({ base: B2 }).drag('turn:1', -33), -0.74, '33 px down from 2 at 0.083 a pixel: straight through 0 to -0.74');
@@ -217,7 +217,7 @@ test('row 9 (D335, amended): no detents in a drag: it moves from the first pixel
   assert.equal(HD.DETENT_PX, 6, 'targetFor still holds 6 px for a caller that does not say hold: false');
 });
 
-// D330: the rule changed (Shift was a tenth of the speed with the 6 px hold; it is one pixel = one step, no hold), so the numbers are the new rule's; what the row is for stands: a fine drag lands ON the step
+// the rule changed (Shift was a tenth of the speed with the 6 px hold; it is one pixel = one step, no hold), so the numbers are the new rule's; what the row is for stands: a fine drag lands ON the step
 test('row 10: the value is rounded to the step with Shift too: a precise drag lands on the hundredth, never on a fraction of one', () => {
   const v0 = rig({ base: B2 }).drag('turn:1', -200, { shift: true }); assert.ok(Object.is(v0, 0), `a precise drag of 200 px from 2.00 is exactly 0, not ${v0}`);
   assert.equal(rig({ base: B2 }).drag('turn:1', -103.7, { shift: true }), 0.96, 'Shift: a pixel is a step, 103.7 px is 1.037: 0.96 to the hundredth, not 0.963');
@@ -245,7 +245,7 @@ test('row 12: the label shows the exact value the drag sets, and what a double-c
   R.S.fire('pointerup', { clientX: x, clientY: y }); R.drag('length:0', 40); const l = R.at('length:0'); texts.length = 0; R.S.fire('pointermove', { clientX: l.x, clientY: l.y }); R.S.tick(); assert.equal(texts[texts.length - 1], 'length 176.80 m · double-click: 160.00', 'length: a double-click would put back 160');
 });
 
-// D270 (reported: a window said "tauri.localhost to show your cursor press ESC" on the first click of the points on the track): NO POINTER LOCK. Chromium draws that
+// (reported: a window said "tauri.localhost to show your cursor press ESC" on the first click of the points on the track): NO POINTER LOCK. Chromium draws that
 // notice itself whenever a page locks the pointer and nothing in WebView2 or Tauri turns it off, so a grab holds the pointer with setPointerCapture, hides the cursor, and gives it back at the handle on release.
 // A stage that spies on requestPointerLock and a document that lists its listeners; win.__TAURI__ is the native window (setCursorPosition), present or not.
 function grabRig(native = 'ok') {   // native: 'ok' | 'none' | 'throw' | 'reject'
@@ -398,7 +398,7 @@ test('if the window refuses to move the cursor, the drag gives the travel back a
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-// D330 (2026-10-15, reported: "when scrubbing a turn from say a 1000m straight, it jumps to 0.08 instead of 0.01, and isnt a completely precise scrub or scroll. I need every one to be").
+// (2026-10-15, reported: "when scrubbing a turn from say a 1000m straight, it jumps to 0.08 instead of 0.01, and isnt a completely precise scrub or scroll. I need every one to be").
 // Every handle's step is 0.01 but a pixel of drag moved perPx (turn 0.083, climb 0.082, bank 0.45, length 0.42 ...): about 8 steps a pixel, so no drag could land on every 0.01, and Shift
 // (a tenth, 0.0083 a pixel for turn) did not either. PRECISE (one constant, the gesture): while it is held one pixel is exactly one step, with no hold, for every kind; the wheel over a
 // handle and the arrow keys while one is held move exactly one step.
@@ -480,7 +480,7 @@ test('D330 arrows: while a handle is held each arrow press is exactly one step o
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-// D330 (2026-10-15, reported: "sometimes my mouse move gets interrupted by something and ruins the smooth flow making the track longer, i have to let go of click, and click the drag again").
+// (2026-10-15, reported: "sometimes my mouse move gets interrupted by something and ruins the smooth flow making the track longer, i have to let go of click, and click the drag again").
 // A long drag puts the hidden cursor back at the grab every WARP_PX and keeps the travel in acc. The old rule: moves were ignored until an event showed the cursor within 2 px of the grab; if
 // none did within WARP_WAIT_MS the travel was given back and the drag stopped warping for good (then it stalls at the screen edge). Two ways to lose it, tested here with a hand and an OS:
 //   late: the window thread is busy, the warp is applied late and the events before it arrive late (the hypothesis)   fast: the hand is already 4 px away when the first event after the warp is seen
@@ -541,7 +541,7 @@ test('a window that refuses to move the cursor is tried WARP_MISSES times, never
   assert.ok(HD.WARP_MISSES >= 2, 'one refusal is not the end of warping');
 });
 
-// ── D335 (plan :555-583): the speed of the hand sets the rate, with no key. Slow is exact (one pixel is the kind's step, 0.01), a flick is the kind's own perPx a pixel, and between the two the rate is
+// ── the speed of the hand sets the rate, with no key. Slow is exact (one pixel is the kind's step, 0.01), a flick is the kind's own perPx a pixel, and between the two the rate is
 // eased as a pointer's acceleration is; Shift is always 0.01; the wheel and the arrows stay one step (their rows are above). The speed is read from the events' own times (a window of 60 ms).
 /** Press on the handle and move it `n` steps of `step` px along its axis, `dt` ms apart (each step its own event and frame), release; returns the value the field was left at. */
 function steady(R, id, n, step, dt, mods = {}) {
@@ -593,7 +593,7 @@ test('row 17g (D335): the speed is the hand\'s over a short window, so one quick
   assert.ok(Math.abs(R.cur.bank - 0.5) < 0.05, `50 px of a slow scrub with one quick pixel is about 0.5 degree (it is ${R.cur.bank})`);
 });
 
-// D519 Part 2 (O's design §3, §4): the zone grab's glyph, and the dot rows
+// the zone grab's glyph, and the dot rows
 const ZG = require('../core/zonegrab.js');
 test('row 18 (D519): one row a zone: the hover glyph\'s kind and its mark at the hit\'s u (a pair, cup or width, at its own place)', () => {
   const FLAT = { family: 'bowl' }, CUP = { family: 'bowl', cup: true }, EDGE = { family: 'bowl', edge: true, s: 0.64 };
@@ -622,7 +622,7 @@ test('row 18c (D519): a press within 12 px of a dot is left to the zone grab (no
   S.tick();
   const d = ov.dots().find((h) => h.u === 0); assert.ok(d, 'the dots are drawn'); assert.ok(ov.handles().every((h) => !h.dot), 'and listed apart from the handles');
   const ev = S.fire('pointerdown', { clientX: d.screen.x + 11, clientY: d.screen.y }); assert.equal(ev.stopped, false, 'the overlay does not take a press on a dot'); assert.deepEqual(calls, []);
-  // AMENDED D520: dotAt also names the dot's world point, `at` (the grab plane passes through it: the follow needs it where the pick would have given it)
+  // AMENDED: dotAt also names the dot's world point, `at` (the grab plane passes through it: the follow needs it where the pick would have given it)
   assert.deepEqual(ov.dotAt(d.screen.x + 11, d.screen.y), { s: d.s, u: 0, side: 1, axes: d.axes, at: d.pos }, 'within 12 px: the dot, its station, its share across and its world point');
   assert.equal(ov.dotAt(d.screen.x + 13, d.screen.y), null, 'farther: no dot');
   assert.equal(HD.hitTest(ov.dots(), d.screen.x, d.screen.y), null, 'a dot is never a handle\'s hit');

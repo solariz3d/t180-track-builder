@@ -1,6 +1,6 @@
 // core-readouts-carry.test.js: node --test app/test/core-readouts-carry.test.js
-// D421c part 3 (seat A; plan_d421c_cuts_2026-10-20.md :49-54; the profile p-d421c-profile-A_2026-10-20.md §2): EVERY PIECE'S READOUT AT ONCE (src/core/readout.js pieceReadouts),
-// for the labels (app/core/coreshell.js pieceReadouts). Row 3's longest frame was 406-443 ms, 85-91 of it the labels reading every piece again after the re-close: each piece's
+// EVERY PIECE'S READOUT AT ONCE (src/core/readout.js pieceReadouts),
+// for the labels (app/core/coreshell.js pieceReadouts). Profiled, row 3's longest frame was 406-443 ms, 85-91 of it the labels reading every piece again after the re-close: each piece's
 // readout checked the whole document and summed the pose from the start, so a 50-piece lap paid 50 checks and 1,225 pose sums. The batch checks once and carries the pose on.
 //   1  bit for bit: each readout is pieceReadout(doc, i)'s, on a closed lap, a lap with a jump, a tube, offsets (Grab's hill and swerve), and an empty track
 //   2  the carry: a road piece whose object, entering pose and corner are the very ones it had keeps its readout (the same object); everything else is read again

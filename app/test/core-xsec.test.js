@@ -1,21 +1,21 @@
 // core-xsec.test.js: node --test app/test/core-xsec.test.js
-// THE CROSS-SECTION in the app (lap D225, pane C): the Extend fields for the edge curve (edge angle, edge start) and the tube (sweep), the
+// THE CROSS-SECTION in the app: the Extend fields for the edge curve (edge angle, edge start) and the tube (sweep), the
 // bank field winding past ±180 (the spiral), their readout cells, the head marker along the road's U and inside a closed tube, a core refusal
-// shown by its name, and the validation words for the two new reds. E's seal (cross_section_seal_registration_2026-10-03.md) is scored by
-// B, a non-author; these are the author's own tests of the app's half.
+// shown by its name, and the validation words for the two new reds. The cross-section's sealed specification is scored separately by
+// a reviewer who did not write it; these are the author's own tests of the app's half.
 //
-// THE STUB (written before A's core exists in this tree, b3364df): A's core adds the channels, their readout keys and their guards. Until it
+// THE STUB (written before the core's cross-section exists in this tree, b3364df): the core adds the channels, their readout keys and their guards. Until it
 // lands, stubXsec(shell) wraps the REAL shell and does exactly these things, nothing else:
 //   1. it removes the cross-section targets (the keys in app/core/xsec.js CHANNEL) and their `transition` entries before the real core sees
 //      them (b3364df refuses an unknown channel), and records what each piece asked for;
 //   2. it adds the readout keys (xsec.js READOUT) to the real readouts from that record: a piece that asked for nothing reads the defaults
 //      (0, 0.64, 0); a piece given a target reads the target PLUS a ring (edge +0.871°, start +0.013, tube −0.871°), as the Extend fit may
-//      ring past a target (D190 V5), so a panel that shows the typed value instead of the document's is caught;
+//      ring past a target, so a panel that shows the typed value instead of the document's is caught;
 //   3. headState() adds the same document values for the head, so the fields read back what was placed;
-//   4. it refuses with A's CONTRACT names (p-xsec-A-contract_2026-10-03.md), as CoreErrors: BAD_TUBE for a held sweep in the slot
-//      (348.732°, 360°) on a 31 m road (E's T1 iii) or outside [0, 360]; BAD_EDGE for e < -30 (D406's floor) or s outside [0.5, 0.95]; BAD_TARGET for c and t
-//      together. Only the names and these simple bounds are the stub's: the real guards (the cap on the total, t1m(w)) are A's.
-// The real shell's own headState (no stub) is tested separately: on a core without the channels it reads the seal's defaults.
+//   4. it refuses with the core's contract names, as CoreErrors: BAD_TUBE for a held sweep in the slot
+//      (348.732°, 360°) on a 31 m road or outside [0, 360]; BAD_EDGE for e < -30 (the floor) or s outside [0.5, 0.95]; BAD_TARGET for c and t
+//      together. Only the names and these simple bounds are the stub's: the real guards (the cap on the total, t1m(w)) are the core's.
+// The real shell's own headState (no stub) is tested separately: on a core without the channels it reads the specification's defaults.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -89,7 +89,7 @@ function stubXsec(real) {
     if (t !== undefined && 'c' in targets) throw new D.CoreError('BAD_TARGET', 'a piece is a cup or a tube, not both (stub)');
     if (t !== undefined && (t < 0 || t > 360)) throw new D.CoreError('BAD_TUBE', `the sweep must be 0 to 360°, got ${t} (stub)`);
     if (t !== undefined && t > 348.732 && t < 360 && Math.abs(w - 31) < 0.5) throw new D.CoreError('BAD_TUBE', `a sweep of ${t}° on a ${w} m road leaves a slot narrower than the downforce ray (stub)`);
-    if (e !== undefined && e < -30) throw new D.CoreError('BAD_EDGE', `the edge angle is under the floor of -30°, got ${e} (stub)`);   // D406: below 0 is allowed
+    if (e !== undefined && e < -30) throw new D.CoreError('BAD_EDGE', `the edge angle is under the floor of -30°, got ${e} (stub)`);   // below 0 is allowed
     if (sl !== undefined && !(sl >= 0.5 && sl <= 0.95)) throw new D.CoreError('BAD_EDGE', `the edge start must be 0.5 to 0.95, got ${sl} (stub)`);
   };
   // (the real extend redraws the panel before it returns, so the piece's record is taken from `pending` the first time its id is seen)
@@ -105,7 +105,7 @@ function stubXsec(real) {
     candidate(o) { return real.candidate(strip(o).o); },
     extend(o) {
       sent.push(o); const { o: bare, got } = strip(o), from = lastEnd();
-      guard(got, real.headState().w, (o && o.targets) || {});   // (the stub throws; A's core throws inside the shell's attempt, which shows it: the real-core test below)
+      guard(got, real.headState().w, (o && o.targets) || {});   // (the stub throws; the real core throws inside the shell's attempt, which shows it: the real-core test below)
       pending = endOf(from, got); real.extend(bare); lastEnd(); pending = null;
     },
     headState() { return { ...real.headState(), ...lastEnd() }; },
@@ -164,7 +164,7 @@ test('xsec headState (A\'s core): a non-tube head shows tube sweep 0 ("none"); a
 });
 
 // ── the panel ──
-// AMENDED D385 (2026-10-18): the field these rows type was "edge angle °"; it is now "left edge °" (the user: "there is the right edge but not the left edge
+// AMENDED (2026-10-18): the field these rows type was "edge angle °"; it is now "left edge °" (the user: "there is the right edge but not the left edge
 // tweak"). Only the label moved: it is the same input on the same channel e, so every rule below is unchanged. Typed alone it now leaves the right side as it
 // was (app/test/core-carry.test.js), where these rows assert only e.
 test('xsec panel: the three fields are on the panel and show the head; left as shown they send nothing', async () => {
@@ -206,11 +206,11 @@ test('xsec panel: after Extend the fields read back what the document holds', as
   assert.equal(p.field('tube sweep °').value, '89.13');
   assert.equal(p.field('edge start').value, '0.64', 'an untouched start keeps the default');
 });
-// A's core reports the readout keys for every piece; each cell must be the core's own value, rounded as the cup cell is (E's seal E7)
+// The core reports the readout keys for every piece; each cell must be the core's own value, rounded as the cup cell is (as the specification requires)
 const fmtDegCell = (x) => require('../core/labels.js').fmtDeg(x).replace(/^\+/, ''), fmtShareCell = (x) => (Math.round(Math.abs(x) * 100 + 1e-7) / 100 * Math.sign(x) || 0).toFixed(2);
 test('xsec panel (A\'s core): each cross-section cell is the core\'s own readout of the candidate', async () => {
   for (const typed of [{}, { 'left edge °': 15, 'edge start': 0.7 }, { 'tube sweep °': 180 }, { 'tube sweep °': 300, 'left edge °': 20 }]) {
-    const p = await mountPanel();   // the REAL core (A's, in this tree): no stub
+    const p = await mountPanel();   // the REAL core (in this tree): no stub
     p.type('length m', 100); for (const [f, v] of Object.entries(typed)) p.type(f, v);
     const ro = p.root.all().find((e) => e.attrs.class === 'readout');
     assert.equal(ro.title, '', `the core accepted ${JSON.stringify(typed)}: "${ro.title}"`);
@@ -229,9 +229,9 @@ test('xsec panel: a core that reports no cross-section readout shows — in thos
 });
 test('xsec panel: a core refusal is shown by its name (BAD_TUBE, BAD_EDGE: A\'s contract)', async () => {
   const cases = [
-    ['BAD_TUBE', (p) => { p.type('width m', 31); p.type('tube sweep °', 352); }],   // held in the slot (T1 iii)
+    ['BAD_TUBE', (p) => { p.type('width m', 31); p.type('tube sweep °', 352); }],   // held in the slot
     ['BAD_TUBE', (p) => { p.type('tube sweep °', 400); }],                          // outside [0, 360]
-    ['BAD_EDGE', (p) => { p.type('left edge °', -35); }],                          // e under the floor (D406: -5 is a lip now)
+    ['BAD_EDGE', (p) => { p.type('left edge °', -35); }],                          // e under the floor (-5 is a lip now)
     ['BAD_EDGE', (p) => { p.type('edge start', 0.3); }],                            // s below 0.5
   ];
   for (const [name, set] of cases) {
@@ -271,9 +271,9 @@ test('xsec panel: a refusal the REAL core makes on Extend is shown in the panel 
   assert.match(p.message(), /^[A-Z][A-Z_]+: /, `the message carries the core's refusal name: "${p.message()}"`);
   assert.equal(p.shell.getState().history.present.pieces.length, 0, 'and nothing was placed');
 });
-// D259 AMENDED THIS ROW BY NAME (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360"): it was "xsec panel:
+// AMENDED THIS ROW BY NAME (the user, 18:21-18:24: the bank "continues after 360 forever instead of resetting back to 0 ... same for -360"): it was "xsec panel:
 // the bank field takes 360 and −540 and reads them back (S1 iv)". The field still takes any number (no min or max), but the bank keeps within ONE turn and keeps its sign,
-// shown and applied: 360 is 0 (no roll), -540 is -180. The core still winds whatever it is given (E's V5, unchanged).
+// shown and applied: 360 is 0 (no roll), -540 is -180. The core still winds whatever it is given (unchanged).
 test('xsec panel: the bank field takes any number and keeps it within one turn, its sign kept: 360 is 0 and -540 is -180 (D259)', async () => {
   const p = await mountPanel();
   const bank = p.field('bank °'), head = () => p.shell.headState().phi * 180 / Math.PI;
@@ -342,7 +342,7 @@ test('xsec validation words: the tube-too-narrow and roll-rate reds read in plai
     assert.ok(!f.text.includes(id), `${id}: the shown line carries the id`);
     assert.ok(f.title.includes(id), `${id}: the tooltip keeps the id`);
   }
-  // the corrected minimum (the librarian's RULING 1 corrected, A's TUBE_MIN_W at 9f92a324): the words say 9.74 m, not the first 9.43
+  // the corrected minimum (a later correction, the core's TUBE_MIN_W at 9f92a324): the words say 9.74 m, not the first 9.43
   assert.match(VL.reasonText('tube-too-narrow'), /narrower than 9\.74 m/);
 });
 
@@ -353,7 +353,7 @@ test('xsec the panel loads in the webview loader with no node built-in (D186)', 
   assert.equal(typeof P.extendOptions, 'function');
   assert.equal(P.extendOptions({ length: 10, edge: '5' }).targets[E], 5);
 });
-// D406 (the user, 2026-10-18: "it should be able to go into the negatives"): the two edge fields take a number below 0, which the core places (its floor is
+// The user, 2026-10-18: "it should be able to go into the negatives"): the two edge fields take a number below 0, which the core places (its floor is
 // the core's, against the profile under it: test/core_edgeneg.test.js)
 test('xsec panel: the left and right edge fields take a negative number, with no min, and Extend places it (D406)', async () => {
   const p = await mountPanel();

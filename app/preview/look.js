@@ -1,4 +1,4 @@
-// look.js: what makes the preview read as a track (D170, the D170 review of the D169 window captures, items 1, 2, 7).
+// look.js: what makes the preview read as a track (from a review of window captures of the preview).
 // Pure numbers, no GL, so each piece is tested headless; the renderer draws what this returns.
 //
 //   LIGHT, shade(n)          the lighting: one key light low and to the side, a weak fill from the other side, ambient.
@@ -40,10 +40,10 @@ function linesFor(b) {
   const hit = lineMemo.get(b.positions); if (hit) return hit;
   const K = b.cols, R = b.rowS.length, P = b.positions, N = b.normals;
   let kc = 0; for (let k = 1; k < K; k++) if (Math.abs(b.us[k]) < Math.abs(b.us[kc])) kc = k;
-  // D433b: the centre line at u = 0 itself, between the two row vertices either side of it (the mesher puts no vertex at u = 0, so the nearest one sat up to 0.095 m off the
+  // the centre line at u = 0 itself, between the two row vertices either side of it (the mesher puts no vertex at u = 0, so the nearest one sat up to 0.095 m off the
   // middle and stepped at the joints); a row with no vertex either side of 0 keeps the nearest
   let k0 = kc, t = 0; for (let k = 0; k + 1 < K; k++) if (b.us[k] <= 0 && b.us[k + 1] > 0) { k0 = k; t = -b.us[k] / (b.us[k + 1] - b.us[k]); break; }
-  // D407: written straight into the typed arrays (it built them by spreading three-number arrays into plain ones: 19 ms for a 2,000 m ghost's first frame, the measurement of 2026-10-19);
+  // written straight into the typed arrays (it built them by spreading three-number arrays into plain ones: 19 ms for a 2,000 m ghost's first frame, the measurement of 2026-10-19);
   // the same doubles in the same order, rounded to float32 as before, so every line is the same to the byte
   const v = (r, k) => { const i = (r * K + k) * 3; return [P[i] + N[i] * LIFT, P[i + 1] + N[i + 1] * LIFT, P[i + 2] + N[i + 2] * LIFT]; };
   const put = (A, o, p) => { A[o] = p[0]; A[o + 1] = p[1]; A[o + 2] = p[2]; };
@@ -94,7 +94,7 @@ function gridExtent(bounds) {
   while (Math.max(span(0), span(2)) / sp > 200) sp *= 5;
   return { sp, x0: Math.floor((bounds.min[0] - pad) / sp) * sp, x1: Math.ceil((bounds.max[0] + pad) / sp) * sp, z0: Math.floor((bounds.min[2] - pad) / sp) * sp, z1: Math.ceil((bounds.max[2] + pad) / sp) * sp };
 }
-/** `y` is the height of the grid (default 0: the ground; D237's 3D grid puts it at the track's lowest point). `extent` (gridExtent) may be passed when the caller has it already. */
+/** `y` is the height of the grid (default 0: the ground; the 3D grid puts it at the track's lowest point). `extent` (gridExtent) may be passed when the caller has it already. */
 function gridLines(bounds, y = 0, extent = null) {
   if (!bounds) return null;
   const { sp, x0, x1, z0, z1 } = extent || gridExtent(bounds);
@@ -108,7 +108,7 @@ function gridLines(bounds, y = 0, extent = null) {
  * square ring around the head in that plane, so it reads from overhead too (a vertical mast seen from above is a point).
  * `size` is the cross's half-length; the preview scales it with the camera's distance so it stays readable at any zoom.
  * Default 3 m: a 10 m mast and a 6 m cross.
- * THE MAST FOLLOWS THE ROAD'S U (D225, E's seal X2 ii and the librarian's ruling): it used to rise along WORLD y, so on an inverted road
+ * THE MAST FOLLOWS THE ROAD'S U: it used to rise along WORLD y, so on an inverted road
  * it pointed down through the floor and in a closed tube it left through the roof. `clear` (optional, preview.js clearanceAtHead) is
  * the room inside a CLOSED tube at the head, { up, lat } in metres: the mast is held below `up` and the cross and ring's sideways arms
  * inside `lat`, so the marker never leaves the tube. With no head.U (an old caller) the mast stands on world y as before.

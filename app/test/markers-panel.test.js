@@ -1,4 +1,4 @@
-// Headless tests for app/markers (D171): the markers panel's logic against A's real shell, and its loading through A's
+// Headless tests for app/markers: the markers panel's logic against the real shell, and its loading through the
 // webview loader. Run: node --test "app/test/*.test.js"
 'use strict';
 const test = require('node:test');
@@ -18,7 +18,7 @@ const by = (st, n) => st.placed.find((m) => m.name === n);
 test('the panel drops the default layout on the first straight long enough, and says what stops it before that', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createMarkersController(shell);
-  // named (p-d182-walltests-E): 100 m straights, the pre-D182 default. The measured default straight is 48 m, shorter than
+  // named: 100 m straights, the earlier default. The measured default straight is 48 m, shorter than
   // the 67.4 m the default grid needs, and this test is about the LAYOUT, not the straight's default length
   shell.adopt(['turn'].reduce((d, w) => appendOld(D, d, w), D.createDoc('t')));
   assert.match(ctl.state.error, /no straight word/);
@@ -30,7 +30,7 @@ test('the panel drops the default layout on the first straight long enough, and 
 test('once edited the layout is kept, and its markers ride along when an upstream word is sculpted', async () => {
   const shell = await createShell({ storage: mem() });
   const ctl = createMarkersController(shell);
-  // named (p-d182-walltests-E): 100 m straights, the pre-D182 default. The measured default straight is 48 m, shorter than
+  // named: 100 m straights, the earlier default. The measured default straight is 48 m, shorter than
   // the 67.4 m the default grid needs, and this test is about the LAYOUT, not the straight's default length
   shell.adopt(['straight', 'straight', 'straight'].reduce((d, w) => appendOld(D, d, w), D.createDoc('t')));
   ctl.edit((l) => { l.grid.pattern = '3-abreast'; l.grid.count = 6; l.grid.colGapM = 5; return l; });

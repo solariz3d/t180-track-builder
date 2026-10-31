@@ -1,19 +1,19 @@
 // drag-frame.test.js: node --test app/test/drag-frame.test.js   (under the heavy-run lock; about two minutes)
-// D404 (the user: "even turning a 1000m straight isnt smooth and laggy as hell", then: "I want it as optimized as we can get it. If anything I always want it as smooth as
+// The user: "even turning a 1000m straight isnt smooth and laggy as hell", then: "I want it as optimized as we can get it. If anything I always want it as smooth as
 // the users refresh rate"): THE FRAME COST OF A HANDLE DRAG, on the real page (app/index.html) in HEADLESS Chrome (never a window), served from this checkout, in each of the
 // five looks. A real pointer press on the turn handle of the Extend ghost, then the pointer is moved back and forth for 3 s, every animation frame timed (Chrome run without
 // its frame-rate limit and vsync, so a page that is fast runs far faster than a display). A WORK frame is one in which the page's own animation-frame callbacks ran more than
 // 1 ms: the frames a pointer move made the page rebuild the ghost in. The bar is the display's refresh rate: 144 Hz is 6.9 ms (165 Hz, this machine's display, is 6.06 ms).
-// Skipped, with the reason, where there is no Chrome (CHROME_PATH or the usual place). Each case is run again, up to twice, if it misses the bar, so a seat running something else
+// Skipped, with the reason, where there is no Chrome (CHROME_PATH or the usual place). Each case is run again, up to twice, if it misses the bar, so another process running
 // beside it does not fail the row (a case passes when any of its runs does; the figures of every run are in the message). Rows:
-//   1  a 1,000 m turn dragged: p95 of the work frames' script time <= 6.0 ms in every look (before D404: 20 ms median, 25 to 30 at the 95th percentile)
+//   1  a 1,000 m turn dragged: p95 of the work frames' script time <= 6.0 ms in every look (before the optimisation: 20 ms median, 25 to 30 at the 95th percentile)
 //   2  a 2,000 m turn dragged: p95 <= 6.0 ms in every look (before: 40 ms median)
 //   3  a 1,000 m and a 2,000 m piece stretched by its length handle: p95 <= 6.0 ms (before: 9 and 19 ms)
 //   4  past the ordinary range the drag adapts and does not stall: a 20,000 m turn's p95 stays under 40 ms (before: 650 ms; now about 8), at no fewer than 20 rebuilds a second
 //   5  the release is the exact road: during the drag the ghost has a few hundred path stations, and the moment the pointer is let go it has a station every 2 m again
-//   6  a 1,000 m piece with bank, cup and edge typed, stretched by its length handle: p95 <= 13.4 ms, 1.5 x the worst of 0.4.19's six measured runs (D481; 0.4.21: 536 to 557 ms)
-//   7  a 1,000 m piece with a left edge typed, turned after a placed piece: p95 <= 6.9 ms, one frame at 144 Hz (D483; before: 8.6 / 8.9 ms)
-//   8  the same piece stretched on an empty track: at most 120 work frames a second (before: 356 / 362, every frame) and p95 <= 10.0 ms, a PROPOSED bar (D483: the 6.9 ms
+//   6  a 1,000 m piece with bank, cup and edge typed, stretched by its length handle: p95 <= 13.4 ms, 1.5 x the worst of 0.4.19's six measured runs (0.4.21: 536 to 557 ms)
+//   7  a 1,000 m piece with a left edge typed, turned after a placed piece: p95 <= 6.9 ms, one frame at 144 Hz (before: 8.6 / 8.9 ms)
+//   8  the same piece stretched on an empty track: at most 120 work frames a second (before: 356 / 362, every frame) and p95 <= 10.0 ms, a PROPOSED bar (the 6.9 ms
 //      standard is not reached there; before: 9.7 / 10.6 ms)
 'use strict';
 const test = require('node:test');
@@ -27,7 +27,7 @@ const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the drag is tim
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.css': 'text/css' };
 const LOOKS = ['aqua', 'skyline', 'glass', 'aurora', 'sigil'];
-const BUDGET = 6.0;          // ms: the user's display is 165 Hz (6.06 ms a frame); 6.9 ms is one frame at 144 Hz, the floor for a machine of that kind (the librarian's ruling, D404, 2026-10-19)
+const BUDGET = 6.0;          // ms: the user's display is 165 Hz (6.06 ms a frame); 6.9 ms is one frame at 144 Hz, the floor for a machine of that kind (ruled 2026-10-19)
 const RUNS = 2;              // a case is run again once if it misses
 const DRAG_MS = 3000;
 
@@ -84,7 +84,7 @@ const stationsNow = () => ev("let n = null; document.dispatchEvent(new CustomEve
 async function drag(look, length, kind, ms = DRAG_MS, typed = {}, { placed = false } = {}) {
   await load(look);
   if (placed) { await setLength(100); await ev("[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Extend').click(); await new Promise((r) => setTimeout(r, 1200)); return true;"); }   // a 100 m piece is placed first
-  // D498 item 4 (A's review of 41e7595): each typed field must read back what was typed, so a renamed label or a field that refuses the value fails here, by name,
+  // A review of 41e7595 found: each typed field must read back what was typed, so a renamed label or a field that refuses the value fails here, by name,
   // instead of timing an untyped drag (the field is found again after the input event, since the panel may rebuild it)
   const typedField = (re) => `[...document.querySelectorAll('#palette input')].find((e) => e.type !== 'checkbox' && ${re}.test(e.getAttribute('aria-label') || e.title || ''))`;
   for (const [re, v] of Object.entries(typed)) {
@@ -154,7 +154,7 @@ test('row 5: the release is the exact road: a few hundred stations while the han
   assert.ok(r.afterStations > 900, `after the release: ${r.afterStations} stations (a station every 2 m is about 1,000 on a 2,000 m piece: the full ghost is back)`);
 });
 
-// D481 (the user: "as soon as I drag the straight more than 400m it lags very bad"): with bank, cup and edge typed, the stretch costs what it cost in 0.4.19. Measured on 0.4.19,
+// The user: "as soon as I drag the straight more than 400m it lags very bad". With bank, cup and edge typed, the stretch costs what it cost in 0.4.19. Measured on 0.4.19,
 // headless, BelowNormal, the machine quiet, by this file's own drag: p95 7.7, 7.7, 7.9, 8.9, 8.2, 8.2 ms; the bar is the worst of them with half again for margin. On 0.4.21: p95 557 and 536 ms, about 5
 // rebuilds a second. (0.4.19 itself is over one frame at 144 Hz here, so this row guards the regression, not the user's 6.9 ms standard; that is a separate finding.)
 const TYPED = { '/^degrees of bank/': 20, '/^cup:/': 30, '/^left edge/': 20 };
@@ -167,7 +167,7 @@ test('row 6: a 1,000 m piece with bank, cup and edge typed, stretched by its len
   assert.ok(v.ok, `${said('aqua', 1000, 'stretch with bank, cup and edge typed', BUDGET_TYPED, v)}, ${runs.map((r) => r.rate.toFixed(1)).join(' / ')} rebuilds a second`);
 });
 
-// D483 (the user's 6.9 ms standard, which row 6 does not reach): a left edge alone made every frame read the head's span afresh (preview.js widthAtHead: the dragged ghost's
+// The user's 6.9 ms standard, which row 6 does not reach: a left edge alone made every frame read the head's span afresh (preview.js widthAtHead: the dragged ghost's
 // head is not frozen, so it was not remembered, and spanOf on its 137 knots summed each one from the centre out) and every move write its 48 chords out as text and hash them
 // again (mesh.js handleKey, trackmodel.js: about 10 kB a chord). Measured before the fix, headless, BelowNormal, the machine quiet, by this file's own drag: p95 8.6 / 8.9 ms
 // after a placed piece, 9.7 / 10.6 ms on an empty track. After a placed piece the length handle barely moves on screen, so that case drags the turn handle along its own axis.
@@ -181,13 +181,13 @@ async function edgeRow(t, kind, placed, bar, rateMax = Infinity) {
   assert.deepEqual(errors, []);
 }
 test('row 7: a 1,000 m piece with a left edge typed, turned after a placed piece: p95 within one frame at 144 Hz (6.9 ms)', { skip }, async (t) => {
-  await edgeRow(t, 'turn', true, BUDGET_EDGE);   // after D483: 4.4 / 4.3 ms
+  await edgeRow(t, 'turn', true, BUDGET_EDGE);   // after the fix: 4.4 / 4.3 ms
 });
-// D484: ON AN EMPTY TRACK THE STANDARD IS NOW REACHED. After D483 the stretch measured p95 8.7 to 9.2 ms, and what was left was the core: each move read the edge ramp's
+// ON AN EMPTY TRACK THE STANDARD IS NOW REACHED. After the fix above the stretch measured p95 8.7 to 9.2 ms, and what was left was the core: each move read the edge ramp's
 // B-spline samples afresh (src/core/extend.js samplesOf, now built by one span walk and kept by the knot vector's values) and made the piece's edge cross-sections at every
 // chord end (src/core/adapter.js xsecSegments, now once per distinct start a piece; src/geom/profile.js commonFractions, once per distinct knot set). Measured headless,
-// BelowNormal, the machine quiet, by this file's own drag, d483-c and d484 alternately: p95 9.1 / 9.6 / 9.4 / 8.8 / 9.0 ms before, 6.2 / 6.6 / 6.3 / 6.1 / 6.0 after. The bar was
-// 10.0 ms (proposed, D483) and is now the standard. The rate half stands: before D483 the page did work on EVERY frame of this drag (356 / 362 work frames a second, the
+// BelowNormal, the machine quiet, by this file's own drag, the trees before and after alternately: p95 9.1 / 9.6 / 9.4 / 8.8 / 9.0 ms before, 6.2 / 6.6 / 6.3 / 6.1 / 6.0 after. The bar was
+// 10.0 ms (proposed) and is now the standard. The rate half stands: before the earlier fix the page did work on EVERY frame of this drag (356 / 362 work frames a second, the
 // head's span), and since only on a move of the pointer (about 58); at most 120 a second.
 test('row 8: a 1,000 m piece with a left edge typed, stretched on an empty track: the page works only on a move (at most 120 work frames a second), p95 within one frame at 144 Hz (6.9 ms)', { skip }, async (t) => {
   await edgeRow(t, 'stretch', false, BUDGET_EDGE, 120);

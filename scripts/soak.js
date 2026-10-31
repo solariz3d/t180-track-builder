@@ -5,8 +5,8 @@
 //   (the default suite runs a short soak; the full one is `T180_SOAK=10000 node --test --test-concurrency=4 test/perf_soak.test.js`,
 //    under the heavy-run lock)
 //
-// THE RIG: A's real shell (the document, undo, save and open through an in-memory store), with C's preview track model
-// subscribed as in the window. E's validation (src/validate) runs on the current track every 50 ops.
+// THE RIG: the real shell (the document, undo, save and open through an in-memory store), with the preview track model
+// subscribed as in the window. The validation (src/validate) runs on the current track every 50 ops.
 // THE OPERATIONS, seeded: place a palette word (random pickers), sculpt a random handle of a random word by a drag-sized
 // step (±25% of its value, ±0.5 rad for an angle) clamped to that handle's own range (src/doc/library.js handleInfo), undo, redo, remove the head, save, open, set a picker.
 // THE TRACK IS KEPT SHORT (6 words by default, --max-words; measured 0.18 s an op at 6, 0.37 at 12): past that, places turn into removals, so 10,000 ops stay
@@ -18,7 +18,7 @@
 //     (it must equal the one after it);
 //   · save then open gives the same text;
 //   · the preview's incremental track equals a full build of the same segments, every `fullEvery` ops (250) and at the end;
-//   · E's validate runs without throwing, every 50 ops.
+//   · validate runs without throwing, every 50 ops.
 // A FAILURE prints the seed, the op index and the op, and a command that replays exactly up to it.
 'use strict';
 const fs = require('fs');
@@ -57,7 +57,7 @@ function sameAsFull(model, resolved) {
   return null;
 }
 
-// progress (D181): a file to which, BEFORE each op, "<index> <op> rss=<MB> heap=<MB> external=<MB> arrayBuffers=<MB>" is written (overwritten
+// progress: a file to which, BEFORE each op, "<index> <op> rss=<MB> heap=<MB> external=<MB> arrayBuffers=<MB>" is written (overwritten
 // each time), so a native crash of node, which prints nothing, still leaves the op it was on and the memory it held
 async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery = 250, quiet = true, log = () => {}, progress = null } = {}) {
   SoakFailure.maxWords = maxWords;
@@ -81,8 +81,8 @@ async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery 
     try {
       if (op === 'place') { const p = pick(shell.palette().filter((x) => x.builtin)); shell.place(p.name); committed = !shell.getState().message; }
       else if (op === 'sculpt') {
-        // a sculpt edits a top-level WORD: since the phrasebook (D178) an entry can be a phrase, which neither the shell
-        // (sculpt → editWord) nor the handles panel (app/handles/panel.js:26) edits, so phrases are not picked (D179)
+        // a sculpt edits a top-level WORD: since the phrasebook an entry can be a phrase, which neither the shell
+        // (sculpt → editWord) nor the handles panel (app/handles/panel.js:26) edits, so phrases are not picked
         const ws = words().filter((e) => e.phrase === undefined); if (!ws.length) { op = 'sculpt (no word)'; }
         else {
           const w = pick(ws), info = L.handleInfo(shell.getState().history.present, w.id), keys = Object.keys(info.handles).filter((k) => info.handles[k].range);
@@ -106,8 +106,8 @@ async function runSoak({ seed = 1, ops = 10000, maxWords = MAX_WORDS, fullEvery 
     if (shell.getState().message && !committed) stats.refused++;
     stats.ops++; stats.byOp[op] = (stats.byOp[op] || 0) + 1;
     const after = text();
-    // AN EDIT THAT LEAVES THE DOCUMENT UNRESOLVABLE (the shell commits it and says why in resolveError; A's, routed in the
-    // D175 hand-back): counted, the first kept with its op, and then UNDONE as a user would, the undo checked byte-exact,
+    // AN EDIT THAT LEAVES THE DOCUMENT UNRESOLVABLE (the shell commits it and says why in resolveError):
+    // counted, the first kept with its op, and then UNDONE as a user would, the undo checked byte-exact,
     // so the rest of the soak goes on exercising a track that resolves.
     if (shell.getState().resolveError && committed) {
       stats.unresolvedOps++; if (!stats.firstUnresolved) stats.firstUnresolved = { index: i, op, error: shell.getState().resolveError.slice(0, 200) };

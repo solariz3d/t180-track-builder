@@ -1,5 +1,5 @@
 // handle-step.test.js: node --test app/test/handle-step.test.js
-// D345 ("the scroll sounds are broken"). The drag tick (app/sound.js) is driven by 't180:handle-step', which app/core/handles.js dispatched from ONE place, the drag
+// The user: "the scroll sounds are broken". The drag tick (app/sound.js) is driven by 't180:handle-step', which app/core/handles.js dispatched from ONE place, the drag
 // path's apply. The wheel over a handle (onWheel) changed the value without it, so a wheel notch was silent and sound.js's last value for that handle went stale: the
 // next drag's first step was measured from where the value was BEFORE the scroll, and could tick where no whole number was crossed. The arrow nudge (onKeyDown) goes
 // through apply, so it already sent the step (measured here, row 2). Now one helper, stepped(), sends it for all three. Rows:
@@ -51,7 +51,7 @@ function withSound(Wd) {
 
 test('row 1: a wheel notch over a handle dispatches exactly one step with the new value; a notch at a clamp dispatches none', () => {
   const Wd = world({ length: 160 }); Wd.wheel('length', true);
-  assert.deepEqual(Wd.steps, [{ kind: 'length', value: 160.01, single: true }]);   // AMENDED (D345 addition 2): the step now says it is a single one
+  assert.deepEqual(Wd.steps, [{ kind: 'length', value: 160.01, single: true }]);   // AMENDED: the step now says it is a single one
   const C = world({ cup: 150 }); C.wheel('cup', true); assert.equal(C.cur.cup, 150, 'at the clamp'); assert.deepEqual(C.steps, [], 'no change, no step');
 });
 test('row 1b: a double-click reset (a value moved, as the wheel moves one) dispatches one step with the value it reset to', () => {
@@ -59,16 +59,16 @@ test('row 1b: a double-click reset (a value moved, as the wheel moves one) dispa
   Wd.fire('pointerdown', { clientX: a.x, clientY: a.y, timeStamp: 5000 }); Wd.fire('pointerup', { clientX: a.x, clientY: a.y, timeStamp: 5010 });
   Wd.fire('pointerdown', { clientX: a.x, clientY: a.y, timeStamp: 5050 }); Wd.fire('pointerup', { clientX: a.x, clientY: a.y, timeStamp: 5060 });
   assert.equal(Wd.cur.turn, 0, 'the second press within the double-click time resets the turn to 0');
-  assert.deepEqual(Wd.steps, [{ kind: 'turn', value: 0, single: true }]);   // AMENDED (D345 addition 2): the step now says it is a single one
+  assert.deepEqual(Wd.steps, [{ kind: 'turn', value: 0, single: true }]);   // AMENDED: the step now says it is a single one
 });
 test('row 2: an arrow nudge on a held handle dispatches exactly one step with the new value', () => {
   const Wd = world({ length: 160 }), a = Wd.at('length');
   Wd.fire('pointerdown', { clientX: a.x, clientY: a.y }); const before = Wd.steps.length;
   Wd.key('ArrowUp');
-  assert.deepEqual(Wd.steps.slice(before), [{ kind: 'length', value: 160.01, single: true }]);   // AMENDED (D345 addition 2): the step now says it is a single one
+  assert.deepEqual(Wd.steps.slice(before), [{ kind: 'length', value: 160.01, single: true }]);   // AMENDED: the step now says it is a single one
   Wd.fire('pointerup', { clientX: a.x, clientY: a.y });
 });
-// AMENDED (D345 addition 2, plan :1115-1118: a deliberate single step always ticks): this row first held that a notch onto 100.01 gave no tick and a 60-notch scroll one.
+// AMENDED (a deliberate single step always ticks): this row first held that a notch onto 100.01 gave no tick and a 60-notch scroll one.
 // Under the ruling each notch ticks, so those counts are now one a notch; what the row is for is unchanged: after a scroll, a drag ticks only where IT crosses a whole number
 test('row 3: through sound.js, every notch ticks (onto a whole number and off it); a drag after a scroll ticks only where it crosses one itself', () => {
   const Wd = world({ length: 99.99 }), S = withSound(Wd);
@@ -81,7 +81,7 @@ test('row 3: through sound.js, every notch ticks (onto a whole number and off it
   D.doc.dispatchEvent({ type: 't180:handle-step', detail: { kind: 'length', value: 100.4 } });   // the next drag's first step, as handles.js sends it
   assert.equal(T.ticks.length, 60, 'the drag from 100.1 to 100.4 crosses nothing: no tick (with a stale 99.5 it ticked here)');
 });
-// D345 addition 2 (plan :1115-1118, a default the user can veto): a DELIBERATE single step always ticks and steps the melody one place, whatever its size: the wheel, an
+// A default the user can veto: a DELIBERATE single step always ticks and steps the melody one place, whatever its size: the wheel, an
 // arrow nudge and a reset send the step with `single: true`; a drag does not, and keeps the whole-number rule (a slow 0.01 scrub does not machine-gun)
 test('row 4: the wheel, an arrow nudge and a reset send their step with single: true; the steps of a drag carry no flag', () => {
   const Wd = world({ length: 160, turn: 2 }); Wd.wheel('length', true); assert.deepEqual(Wd.steps.pop(), { kind: 'length', value: 160.01, single: true });

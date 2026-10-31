@@ -1,5 +1,5 @@
-// platform_test.js: the 500 m platform test track of docs/ARCHITECTURE.md §10.1, built as plain world data in the
-// shared T1 scene shape (src/export/scene.js validates it; A's writer turns it into kn5 bytes, E writes the INI/PNG).
+// platform_test.js: the 500 m platform test track, built as plain world data in the
+// shared T1 scene shape (src/export/scene.js validates it; the kn5 writer turns it into kn5 bytes, the track-files writer writes the INI/PNG).
 //   node scripts/platform_test.js        prints a summary: length, closure, cells, the wall angle, the jump table
 //
 // WHAT IS BUILT (a stadium loop, run counter-clockwise seen from above, every turn a LEFT turn):
@@ -13,21 +13,21 @@
 //     chord, so the loop closes by construction: straight B is set to straight A's horizontal run, and R is solved so
 //     the path is 500 m.
 //   · The frame is gravity-referenced (forward = tangent, left = up × forward normalised, up = forward × left). It is NOT
-//     the rotation-minimising frame of ARCHITECTURE §3: that frame is the editor's. Here the tangent never pitches past
+//     the rotation-minimising frame: that frame is the editor's. Here the tangent never pitches past
 //     5°, there is no roll and no torsion, so the two coincide up to the pitch, and closure is exact.
-//   · The cross-section is one data type (ARCHITECTURE §2 "font"): a flat floor of 2·WF m plus a wall of arc length LW
+//   · The cross-section is one data type (a "font"): a flat floor of 2·WF m plus a wall of arc length LW
 //     on each side whose turning angle ψ is the font's knob (ψ = 0 is a flat shoulder). Every station has the same
 //     vertex count, so fonts blend (smoothstep over ±BLEND m at each word boundary) without re-meshing.
-//   · Seams: 0.5 m along (0.5 / 28.7 m ≈ 1.0° on the turns) and ψ/NW across (110° / 96 ≈ 1.15°), against FINDINGS §2's
-//     proven envelope of median seams 0.2–1.1° (FINDINGS.md:24).
+//   · Seams: 0.5 m along (0.5 / 28.7 m ≈ 1.0° on the turns) and ψ/NW across (110° / 96 ≈ 1.15°), against the measured
+//     proven envelope of median seams 0.2–1.1°.
 //   · ONE mesh per cell, physics and visual at once (1ROAD_<k>, renderable). A separate visual mesh buys nothing on an
-//     untextured test track. The wall-ride is road, not WALL (ARCHITECTURE §4: a WALL-object wall-ride is red).
+//     untextured test track. The wall-ride is road, not WALL (a WALL-object wall-ride is red).
 //   · Positions are WORLD coordinates with identity matrices. The track spans under 200 m, where float32 steps are about
-//     1.5e-5 m, so cell-relative vertices (ARCHITECTURE §3) are not needed here.
+//     1.5e-5 m, so cell-relative vertices are not needed here.
 'use strict';
 
 const DEG = Math.PI / 180, G = 9.81;
-const L_TOTAL = 500;          // m, ARCHITECTURE §10.1
+const L_TOTAL = 500;          // m
 const DS = 0.5;               // m, station spacing
 const WF = 5;                 // m, half floor width
 const LW = 8;                 // m, wall arc length each side
@@ -39,12 +39,12 @@ const FONTS = { flat: [0, 0], halfpipe: [60, 60], wallride: [30, 110] }; // [ψ 
 // ---- the jump (straight A). Sized in jumpDesign() below; see the summary for the arithmetic. ----
 const JUMP = {
   runIn: 15,                  // m, flat, clear of the font blend
-  kickerEase: 20, theta: 4,   // pitch 0 → θ over 20 m (vertical radius 20/θ ≈ 286 m, inside FINDINGS §2's 65–320 m median)
+  kickerEase: 20, theta: 4,   // pitch 0 → θ over 20 m (vertical radius 20/θ ≈ 286 m, inside the measured 65–320 m median)
   kickerHold: 15,             // m at θ; the lip is the end of this
   gap: 12, drop: 0.7,         // m horizontal, m lower landing lip
   landBeta: 2, landEase: 35,  // landing ramp pitch −β, eased back to 0 over 35 m; the hold is solved so height closes
   bandKmh: [250, 350],        // design take-off speeds
-  gLow: 3.2, gHigh: 6.3,      // the fall in the air, FINDINGS.md:337 (§7d) and ARCHITECTURE §4
+  gLow: 3.2, gHigh: 6.3,      // the fall in the air, measured
   clearMin: 0.5,              // m above the landing lip at the gap's far edge
   impactMax: 10,              // degrees, flight path vs road at touchdown: MY design limit, not a measured one
 };
@@ -255,7 +255,7 @@ function buildCellMesh(secs, [a, b], name, uvScale = 10) {
   return { type: 'mesh', name, material: 0, positions, normals, uvs, indices, castShadows: true, visible: true, transparent: false, renderable: true };
 }
 
-// ---------------------------------------------------------------- markers (track coordinates, ARCHITECTURE §5c)
+// ---------------------------------------------------------------- markers (track coordinates)
 function stationAt(dsn, s) {
   const st = dsn.stations, L = dsn.length; s = ((s % L) + L) % L;
   let i = Math.min(st.length - 1, Math.floor(s / DS)); while (i > 0 && st[i].s > s) i--; while (i < st.length - 1 && st[i + 1].s <= s) i++;
@@ -281,7 +281,7 @@ function markers(dsn) {
   return out;
 }
 
-// ---------------------------------------------------------------- the jump check (FINDINGS §7d, §7e, §8)
+// ---------------------------------------------------------------- the jump check
 /**
  * Fly the jump as a projectile falling at g_eff, from the lip at the take-off pitch θ, for every speed in the band
  * and for g_eff = 3.2 g (clean flight) and 6.3 g (override dive). Returns a row per case: the clearance over the
@@ -310,7 +310,7 @@ function jumpCheck(dsn, opts = {}) {
     const ok = clear >= j.clearMin && !!hit && hit.x <= xEnd && impact <= j.impactMax;
     rows.push({ kmh, g: gg, clear, xLand: hit ? hit.x : NaN, impact, ok });
   }
-  // FINDINGS §7d (FINDINGS.md:313): the deepest drop a flight can reach at horizontal distance d
+  // measured: the deepest drop a flight can reach at horizontal distance d
   const reach = (d) => d * Math.tan(10 * DEG) + 0.5 * 6.5 * G * (d / (375 / 3.6)) ** 2;
   const dropAtLip = lip.pos[1] - landLip.y;
   return { rows, ok: rows.every((r) => r.ok), lip: { x: 0, y: lip.pos[1], thetaDeg: th / DEG }, landLip: { x: landLip.x, y: landLip.y }, xEnd, reachable: dropAtLip <= reach(landLip.x), dropAtLip, reachBound: reach(landLip.x) };

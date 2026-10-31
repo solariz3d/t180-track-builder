@@ -2,10 +2,10 @@
 // export_words.js: a document of words, as text (src/doc serialize), becomes an AC track folder in out/.
 //
 //   node scripts/export_words.js <track.json>                          the folder with the soft-collision block
-//   node scripts/export_words.js <track.json> --variant both           also the _noblock control (ARCHITECTURE §10.1)
+//   node scripts/export_words.js <track.json> --variant both           also the _noblock control
 //   node scripts/export_words.js <track.json> --no-csp                 validate for vanilla AC (steep surfaces are red)
 //   node scripts/export_words.js <track.json> --out <dir>              somewhere other than out/
-//   node scripts/export_words.js <track.json> --no-self-check          skip C's self-intersection check (said in the output)
+//   node scripts/export_words.js <track.json> --no-self-check          skip the self-intersection check (said in the output)
 //
 // Nothing is installed and no game is launched (the user, 2026-09-27 12:17). The work is src/export/fromwords.js; a
 // red document, an open loop or an empty one is refused with its reasons and nothing is written.

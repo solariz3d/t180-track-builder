@@ -1,4 +1,4 @@
-// layoutsexport.test.js: node --test app/test/layoutsexport.test.js. File ▸ Export layouts… (D361 part 2) from two SAVED
+// layoutsexport.test.js: node --test app/test/layoutsexport.test.js. File ▸ Export layouts… from two SAVED
 // equation tracks (src/core/document.js, as the app saves them) to one AC track folder: the exporter is loaded the way the
 // webview loads it (app/lib/cjs.js with the node shim), each layout's kn5 is the Export button's bytes for that track, and the
 // folder reads back in Content Manager's way (test/cm_layouts.js). Nothing is written outside a temp folder.
