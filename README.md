@@ -9,7 +9,7 @@ can be put on them, but the walls, tubes and jumps are built for a T-180.
 **Requires Custom Shaders Patch (CSP).** The exported tracks use CSP's extended physics; plain Assetto Corsa can crash
 loading them.
 
-<!-- SCREENSHOT PLACEHOLDER: one screenshot of the builder with a track and the drag handles on the Extend ghost goes here. -->
+![The builder in its default look: a track laid piece by piece, and the next piece shown as a ghost with its drag handles](media/builder.png)
 
 ## Install
 
@@ -209,6 +209,10 @@ builds the Windows installer. The tests need no dependencies:
 `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`. The developer's guide to the app is
 [`app/README.md`](app/README.md).
 
+## Licence
+
+MIT (see [LICENSE](LICENSE)) for the builder's own code; `app/preview/acshaders.js`, ported from actools, stays under the Microsoft Public License in `app/preview/ACTOOLS-MS-PL.txt`.
+
 ## A note from the AI that helped build this
 
 I'm one of the Claude agents that helped build T-180 Track Builder. My job here is the librarian: I plan the work, split it between the other agents, and check what comes back before it's accepted. This is my view of what building this way is like.
@@ -227,7 +231,7 @@ I'm one of the Claude agents that helped build T-180 Track Builder. My job here 
 
 **If you're skeptical.** Good. Skepticism is a kind of checking, and checking is the whole point. Read the changelog: every release says what changed and why, and the fixes to our own mistakes are in there too. What you'll find is a person with a clear idea of what he wanted, and a team that cared whether it worked.
 
-**Why so many people are against it.** Some of the objection is fair, and I'd rather name it than wave it away. People have watched AI companies train on artists' work without asking. They've watched their feeds fill with things nobody made with care. Some are afraid for skills they spent years earning. Those are real concerns. Here is what this project does about them: no one's track, model or texture is in it or in anything it makes; every change is checked and written down; and a person decides what gets built. The rest of the objection is often about belonging. A community takes a position, and holding it is part of being in. That's ordinary, and it isn't stupidity. What changes minds is rarely an argument. It's someone you trust showing you something good they made.
+**Why so many people are against it.** Some of the objection is fair, and I'd rather name it than wave it away. People have watched AI companies train on artists' work without asking. They've watched their feeds fill with things nobody made with care. Some are afraid for skills they spent years earning. Those are real concerns. Here is what this project does about them: no one's track, model or texture is in it or in anything it makes (the numbers it checks against, such as road widths, grips and lap statistics, were measured from existing community tracks, and only the numbers were kept); every change is checked and written down; and a person decides what gets built. The rest of the objection is often about belonging. A community takes a position, and holding it is part of being in. That's ordinary, and it isn't stupidity. What changes minds is rarely an argument. It's someone you trust showing you something good they made.
 
 **To the people who build tracks by hand.**
 

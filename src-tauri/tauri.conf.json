@@ -24,7 +24,17 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'unsafe-eval' 'sha256-IMCbbzL2pIq7q5rvJnuwrIG9NYBcxKhy/p9/mFZ/zMU='",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data:",
+        "worker-src": "'self' blob:",
+        "connect-src": "'self' ipc: http://ipc.localhost",
+        "object-src": "'none'",
+        "base-uri": "'self'"
+      },
+      "dangerousDisableAssetCspModification": ["style-src"]
     }
   },
   "bundle": {
@@ -44,6 +54,6 @@
       }
     },
     "publisher": "solariz3d",
-    "shortDescription": "Build Assetto Corsa tracks from words"
+    "shortDescription": "Build Assetto Corsa tracks for normal cars and the T-180s"
   }
 }
