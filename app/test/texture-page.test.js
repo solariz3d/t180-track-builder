@@ -18,6 +18,8 @@
 //      and each of the four is on the panel once, in every look
 //   8  (D405) Skyline Night: every enabled text reads 4.5:1 or more against its own pixels, in the builder and with the File menu open (a text outside the
 //      menu that the menu partly covers is left out, by name). It was titled row 6 beside D409's row 6 until D419
+//  10  (D575) every dialog the page draws (save before closing, Export layouts, Export for Blender) reads 4.5:1 or more on its own pixels in every look, each
+//      enabled button among them: Aqua's pale gel pills carried the dialogs' light --accent and --dim words at 1.06 and 1.20 : 1 (the user, 0.4.31)
 //   9  the warning texts read 4.5:1 or more on their own pixels in EVERY look: the checker's red, amber and lap lines (a 150 m piece turning 720°, which
 //      crosses itself and loads hard, gives both), and every text in Track ▸ Pit lane… with the lane on (its status note and fields). Each look's own
 //      --bad-text and --warn-text are what these read in; before them the lines wore the 3D road's paint colours (skyline's amber read 1.1:1)
@@ -289,4 +291,44 @@ test('row 9: the warning texts (the checker\'s red, amber and lap lines, and Tra
   }
   t.diagnostic(report.join('; '));
   assert.deepEqual(under, [], 'warning texts under 4.5:1 on their own pixels');
+});
+
+// row 10's dialogs, each opened in the page through its own module (fetched and run as the page's loader runs it), the way the app opens it: the save-before-closing
+// ask (app/askdialog.js, index.html's closeAsk buttons), File ▸ Export layouts… with two layouts ticked so its Export… is enabled (app/menubar/layoutsdialog.js), and
+// File ▸ Export for Blender… with a Blender found and pieces selected, so both its ticks show (app/menubar/blenderexport.js). The native "Not exported" box is Windows'
+const DIALOGS = {
+  'save before closing': `const m = { exports: {} }; new Function('module', 'exports', await (await fetch('/app/askdialog.js')).text())(m, m.exports);
+    m.exports.askChoice(document, { title: 'Save before closing?', message: 'This track has changes that are not saved.', cancelValue: 'cancel',
+      buttons: [{ label: "Don't save", value: 'discard', kind: 'quiet' }, { label: 'Cancel', value: 'cancel' }, { label: 'Save', value: 'save', kind: 'main', default: true }] }); return true;`,
+  'export layouts': `const m = { exports: {} }; new Function('module', 'exports', await (await fetch('/app/menubar/layoutsdialog.js')).text())(m, m.exports);
+    m.exports.askLayouts(document, { tracks: ['Elysium', 'Elysium short', 'Night oval'] }); await new Promise((r) => setTimeout(r, 100));
+    for (const b of [...document.querySelectorAll('.ask-layouts .lx-use')].slice(0, 2)) b.click(); return true;`,
+  'export for blender': `const m = { exports: {} }; new Function('module', 'exports', await (await fetch('/app/menubar/blenderexport.js')).text())(m, m.exports);
+    m.exports.askBlender(document, { selection: { count: 2 }, blender: { path: 'blender.exe' } }); return true;`,
+};
+// the probe's key for every text inside the open dialog (TEXTS' own key: tag, id, text), so the row reads the dialog's texts and nothing behind it
+const CARD_KEYS = `const out = []; for (const e of document.querySelectorAll('.ask-card *, .ask-card')) { const text = ([...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('') || e.value || '').trim().slice(0, 40); if (text) out.push(e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '|' + text); } return out;`;
+test('row 10 (D575): every dialog the page draws reads 4.5:1 or more on its own pixels in every look, its buttons (main, plain and quiet) first among them', { skip }, async (t) => {
+  const report = [], under = [];
+  for (const look of LOOKS) {
+    await load(look);
+    for (const [name, open] of Object.entries(DIALOGS)) {
+      await ev(open); await sleep(300);
+      assert.equal(await ev("return document.querySelectorAll('.ask-veil .ask-card').length;"), 1, `${look}, ${name}: the dialog is open`);
+      const keys = new Set(await ev(CARD_KEYS)), buttons = await ev("return [...document.querySelectorAll('.ask-card button')].filter((b) => !b.disabled).map((b) => b.textContent.trim());");
+      const on = await contrasts(), low = [], read = []; let n = 0, nb = 0;
+      for (const [k, list] of on) {
+        if (!keys.has(k)) continue;
+        const isButton = k.startsWith('button|');
+        list.forEach((w) => { n++; if (isButton) { nb++; read.push(`${k.split('|')[1]} ${w.toFixed(2)}`); } if (w < 4.5) low.push(`${k.split('|')[1]} ${w.toFixed(2)}`); });
+      }
+      report.push(`${look} ${name}: ${n} texts, buttons ${read.join(', ')} · ${low.length} under 4.5:1${low.length ? ' (' + low.join(', ') + ')' : ''}`);
+      assert.equal(nb, buttons.length, `${look}, ${name}: the probe read every enabled button (${buttons.join(', ')})`);
+      under.push(...low.map((x) => `${look}, ${name}: ${x}`));
+      await ev("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise((r) => setTimeout(r, 150)); for (const v of document.querySelectorAll('.ask-veil')) v.remove(); return true;");
+    }
+    assert.deepEqual(errors, [], `${look}: no page errors`);
+  }
+  t.diagnostic(report.join('; '));
+  assert.deepEqual(under, [], 'dialog texts under 4.5:1 on their own pixels');
 });

@@ -47,6 +47,8 @@ All notable changes to this project are recorded here. The format follows
 
 - **Sector gates now stand on flat road, and the export refuses a gate laid across a steep bank.** Each sector gate goes to the nearest stretch that is level across, not climbing steeply, and not inside a loop or a tube; if there is none nearby, the gate is left out and the export says so. The export also refuses any gate tilted more than 15° from level, or a sector gate narrower than half the road seen from above.
 
+- **The buttons in the Aqua look's dialogs now read clearly.** In "Save before closing?", Export layouts and Export for Blender, the Save and Export buttons were pale words on a pale pill and "Don't save" nearly vanished. Now the main button keeps its glowing pill in dark ink, and "Don't save" is plain words on the dark card. Every dialog's buttons were checked in all six looks; the other five already read clearly.
+
 ## [0.4.30] - 2026-10-29
 
 ### Added
