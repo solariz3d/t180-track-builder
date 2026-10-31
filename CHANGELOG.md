@@ -11,6 +11,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **The "start" boxes in Extend are now "early", and each says what it does.** Hover a box to read what ticking it does for that row: a bank, cup, edge or width eases in from the start of the piece and is reached within about 235 m (or half a short piece), then held; a turn or climb rate, the edge start and the tube sweep are reached within the first 20 m. Unticked, the change spreads over the whole piece, as before.
+
 - **Three sizes of type.** Words are 12 px, headings 16 px, and the road's numbers 24 px (18 px on the road labels), where seven nearby sizes from 10 to 15 px made everything look about the same; the small labels beside the numbers stay 11 px. The height ruler's tags in Sculpt sit fully on their backing.
 
 - **The checker says each thing once.** A warning that holds in several places is one line with every place listed ("at 15645–16487, 17797–18651 and 19773–19789 m"), where the list used to repeat the same sentence for each.
