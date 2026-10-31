@@ -30,29 +30,35 @@ test('at start: bank 20° on a 1,000 m piece after a straight rolls under the ch
   assert.ok(peak < BAR, `the roll peaks at ${peak.toFixed(4)} °/m, the amber is ${BAR}`);
   for (const s of [R, R + 1, 500, 1000]) assert.ok(Math.abs(bankAt(doc, s) - 20) < 0.01, `bank at ${s} m: ${bankAt(doc, s)}°`);
   // AMENDED (the rule changed: a bank at start is one swell, laid over 3.4 × |change| / the amber, was 2.6 and before that 2.2; 20° is 72.9 m, was 55.7 and 47.2)
-  assert.ok(R < 80, `still early in a 1,000 m piece: ramp ${R} m`);
+  // AMENDED (the rule changed, 2026-10-30, the user's "F looks good we can try it": a bank, cup or edge at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, or the roll bar's length where that is longer, app/core/panel.js crossStartM / startShapeOf): 20° takes F's 300 m (was 72.9)
+  assert.equal(R, 300, `F's ramp: ${R} m`);
 });
 
 test('at start: 54° of bank comes in over about 197 m, under the amber; 5° keeps the 20 m floor', () => {
   const big = piece(straight(), { length: 1000, bank: '54' }, { bank: true });
   // AMENDED (the rule changed: the bank's swell is laid over 3.4 × |change| / the amber; 54° is 196.7 m, was 150.4 and 127.3)
-  assert.ok(big.o.transition.phi > 195.5 && big.o.transition.phi < 197.5, `54°: ramp ${big.o.transition.phi} m`);
+  // AMENDED (the rule changed, 2026-10-30, the user's "F looks good we can try it": a bank, cup or edge at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, or the roll bar's length where that is longer, app/core/panel.js crossStartM / startShapeOf): 54° wants 196.7 m of the roll bar, under F's 300, so it takes 300
+  assert.equal(big.o.transition.phi, 300, `54°: ramp ${big.o.transition.phi} m`);
   assert.ok(rollPeak(big.doc) < BAR, `54°: the roll peaks at ${rollPeak(big.doc)} °/m`);
   assert.ok(Math.abs(bankAt(big.doc, big.o.transition.phi) - 54) < 0.01);
   const small = piece(straight(), { length: 1000, bank: '5' }, { bank: true });
-  assert.equal(small.o.transition.phi, 20, '5°: the 20 m floor');
+  // AMENDED (the rule changed, 2026-10-30, the user's "F looks good we can try it": a bank, cup or edge at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, or the roll bar's length where that is longer, app/core/panel.js crossStartM / startShapeOf): 5° takes F's 300 m, not the 20 m floor
+  assert.equal(small.o.transition.phi, 300, '5°: F\'s 300 m');
 });
 
-test('at start: the change is measured from the head, so a road already banked 15° going to 20° keeps the 20 m floor', () => {
+// AMENDED (the rule changed, 2026-10-30, the user's "F looks good we can try it": a bank, cup or edge at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, or the roll bar's length where that is longer, app/core/panel.js crossStartM / startShapeOf): a small change now takes F's 300 m from any head, so the head's part shows where the roll bar is longer than F: 180° on a 2,000 m piece
+test('at start: the change is measured from the head, so a road already banked 15° going to 180° takes the roll bar\'s 600.8 m, where from flat it is 655.4', () => {
   const d0 = extend(straight(), { length: 300, targets: { phi: 15 * DEG }, bankShape: 'rounded' });
-  const { o } = piece(d0, { length: 1000, bank: '20' }, { bank: true });
-  assert.equal(o.transition.phi, 20);
+  assert.equal(piece(d0, { length: 2000, bank: '180' }, { bank: true }).o.transition.phi, 600.8);
+  assert.equal(piece(straight(), { length: 2000, bank: '180' }, { bank: true }).o.transition.phi, 655.4);
+  assert.equal(piece(d0, { length: 1000, bank: '20' }, { bank: true }).o.transition.phi, 300, '15° to 20°: F\'s 300 m');
 });
 
 test('at start: the cup and the edges come in no faster than the roll amber either; a short piece is never laid faster than before', () => {
   const d = straight(), h = headOf(d), { o } = piece(d, { length: 1000, cup: '40', edge: '30' }, { cup: true, edge: true });
   // measured from the head: a plain road's cup is the edge it renders (h.c), its edge angle 0
-  assert.ok(Math.abs(o.transition.c - 2.2 * (40 - h.c) / BAR) < 0.11 && Math.abs(o.transition.e - 2.2 * (30 - h.e) / BAR) < 0.11, `${JSON.stringify(o.transition)} from cup ${h.c}`);
+  // AMENDED (the rule changed, 2026-10-30, the user's "F looks good we can try it": a bank, cup or edge at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, or the roll bar's length where that is longer, app/core/panel.js crossStartM / startShapeOf): the cup and the edge take F's 300 m, or the roll bar's 3.4 × |change| / the amber where that is longer (they were 2.2 ×)
+  assert.deepEqual({ c: o.transition.c, e: o.transition.e }, { c: Math.max(300, Math.ceil(3.4 * (40 - h.c) / BAR * 10 - 1e-9) / 10), e: Math.max(300, Math.ceil(3.4 * (30 - h.e) / BAR * 10 - 1e-9) / 10) }, `${JSON.stringify(o.transition)} from cup ${h.c}`);
   // a piece under 40 m: the ramp is what "at start" laid before (20 m, or the piece if shorter), not half the piece, which would roll faster
   const short = piece(straight(), { length: 30, bank: '20' }, { bank: true });
   // AMENDED (the rule changed, 2026-10-30: the bank's half-piece cap bends to the roll bar's length where holding it would lay the swell faster than the amber, app/core/panel.js swellPeak): a 20° bank in a 30 m piece's 20 m would pass the amber, so it takes the whole piece; never shorter than before

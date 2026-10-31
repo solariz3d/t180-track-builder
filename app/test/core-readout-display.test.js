@@ -668,7 +668,8 @@ test('"at start" on a field left as shown sends nothing (no target, D193); the b
   // AMENDED (the rule changed: a bank at start ramps as long as the roll amber needs; 20° from the straight's 0° is 47.2 m, was 20 m)
   // AMENDED again (the rule changed: a bank at start is one swell, laid over 2.6 × |change| / the amber; 20° wants 55.7 m, so this 100 m piece's cap, half of it, binds: 50 m, was 47.2)
   // AMENDED (the rule changed, 2026-10-30: the bank's half-piece cap bends to the roll bar's length where holding it would lay the swell faster than the amber, app/core/panel.js swellPeak): 20° within this 100 m piece's 50 m cap would roll 1.07 °/m, so it takes the 72.9 m the roll bar asks
-  assert.deepEqual(S.stub.seen.at(-1).transition, { phi: 72.9 }, 'bank typed: now it goes');
+  // AMENDED (the rule changed, 2026-10-30, the user's "F looks good we can try it": a bank, cup or edge at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, or the roll bar's length where that is longer, app/core/panel.js crossStartM / startShapeOf): 20° wants F's 300 m; the 100 m piece's 50 m cap would roll past the amber and bends to the piece: 100 m
+  assert.deepEqual(S.stub.seen.at(-1).transition, { phi: 100 }, 'bank typed: now it goes');
   P.root.all().find((e) => e.tagName === 'BUTTON' && e.textContent === 'Extend').onclick();
   assert.equal(box.checked, true, 'kept after Extend, like a preference');
   assert.equal(S.stub.seen.at(-1).transition, undefined, 'after Extend the field shows the head again (untouched), so nothing is sent');

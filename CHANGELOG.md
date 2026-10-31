@@ -7,7 +7,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
-- **The bank at start comes in over a longer, gentler swell.** It leans further into the piece and turns less steeply on the way: a 41° bank at start now swells in over about 150 m instead of 115 m, rolling at most 0.65 °/m instead of 0.84.
+- **A bank, cup or edge "at start" leans in straight away, then eases into its value.** It starts turning within the first 20 m, then fades in gently over about 300 m: a 41° bank at start is at 3.7° by 20 m, 29° by 100 m, and done by about 235 m, rolling at most 0.37 °/m instead of 0.84. A very large change still takes longer, so the road never rolls faster than the track check allows.
 
 ## [0.4.30] - 2026-10-29
 

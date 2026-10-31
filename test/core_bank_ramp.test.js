@@ -82,8 +82,9 @@ const base = () => extend(D.createDoc('id'), { length: 1000, family: 'bowl' });
 const UNMOVED = [
   ['bank box-off (rounded, whole piece)', () => panel({ bank: '-41.38', cup: '15.5', width: '31' }, {}), '4baca63faf7640e94ef7839d71c3c2b628af9a8ef917a3b2e3d25b373fe07823'],
   ['bank box-off, 100 m', () => panel({ bank: '54' }, {}, 100), 'e22a3fb5423cd583442f9f8703fd7da5061d9b35ba4bd0b83d7feaa501e5961c'],
-  ['cup at start, bank box-off', () => panel({ bank: '-20', cup: '15.5' }, { cup: true }), '44763e2e8b4e96ee5cac5407cf0faa9d735befdd7f5045705280bcaeab4ecd85'],
-  ['edge at start', () => panel({ edge: '30' }, { edge: true }), 'cd86500ef86a20cc7ce6e53f5cac280bbac56a59ee04a7148d3f3ab77133531f'],
+  // AMENDED (the rule changed, 2026-10-30, the user's "F looks good we can try it": a bank, cup or edge at start is candidate F, a 20 m rise as laid then a fade over a 300 m ramp, or the roll bar's length where that is longer, app/core/panel.js crossStartM / startShapeOf): the cup and the edge at start move (they were the quintic over 2.2 × |change| / the amber); every case laid by extend alone is as before
+  ['cup at start, bank box-off', () => panel({ bank: '-20', cup: '15.5' }, { cup: true }), 'b5aa4467014c819f0047e2e0a843f3b3f4ede50cdc55f4bcddd581c51e34b5f3'],
+  ['edge at start', () => panel({ edge: '30' }, { edge: true }), '364c924828beebeb08e37066a701185eb97c9878263abbca20f5c62fdb7c0cfc'],
   ['width and turn at start', () => panel({ width: '20', turn: '20' }, { width: true, turn: true }), 'bc32275b4252118c551dd2c44dc361c14dd0c49a44f2cb460b2ab4c93ee98af9'],
   ['a bank at start with no shape', () => extend(base(), { length: 1000, targets: { phi: -0.5 }, transition: { phi: 150 } }), '4e1eb450b81b66f9383a79baa34810b73dcd7ed2648c42087e65b35b94959076'],
   ['the swell over the whole piece', () => extend(base(), { length: 300, targets: { phi: 0.6 }, bankShape: 'swell' }), '0bde7db3c1cdf0d8fa6b81590acd73fb4796fa80cceb8877266b4fce7794f27c'],
