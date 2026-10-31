@@ -17,7 +17,7 @@
 // road, because the apron starts on the road's own edge vertices.
 //
 // WHAT IS PHYSICS. Only the apron's TOP, the surface a wheel rides: named `<the cell's own prefix>APRON_<the cell's name>_L` or `_R`, so it is AC's ROAD (or the piece's
-// own grip surface, 1GRIPnnn_, gripkeys.js) with the road's FRICTION and IS_VALID_TRACK, a wheel there still counting as on the track, and the soft-collision block's
+// own grip surface, 1GRIPnnn_, by gripkeys.js's gripKey) with the road's FRICTION and IS_VALID_TRACK, a wheel there still counting as on the track, and the soft-collision block's
 // `MESHES=1ROAD?` (and `1GRIP?`) covers it (`?` is any symbols, gripkeys.js:7; catch.js's 1ROAD_CATCH_ relies on the same reading). The piece's name comes first so a merged
 // chunk is named for its piece. The JOIN and the SIDE FACE are SCENERY (`APRONSIDE_…`, no leading digit): as road surfaces their lower edges, just under the road, would be
 // open edges with road 0.1 m beyond them (the road's underside), which src/validate/raygap.js reads as a downforce-ray gap on every station; and a wall surface is not
@@ -34,6 +34,7 @@
 //   The mesh's column 0 is the road's right (−u) and column K − 1 its left (+u, the frame's L).
 'use strict';
 const { UNDERSKIN_OFFSET_M, ringCells } = require('./underskin.js');
+const { gripKey } = require('./gripkeys.js');
 
 const APRON_WIDTH_M = 2.0;     // the default: one measured excursion reached 0.86 m past the edge (p-d563), and 2 m covers it with room
 const APRON_SLOPE_DEG = 25;    // down from the road's lateral: 20° sits above a dropping wheel only for the first half metre, 30° starts to read as a wall
@@ -135,7 +136,10 @@ function withApron(scene, mesh, segments, opts = {}) {
     const c = kids[k], m = c && c.children && c.children[0], o = orig[k] && orig[k].children[0];
     // the scene's cell may carry its piece's grip prefix (gripkeys.js renames 1ROAD_ to 1GRIPnnn_); the rest of its name is the mesh's own
     if (!m || !o || !PREFIX_RE.test(m.name) || m.name.replace(PREFIX_RE, '') !== o.name.replace(PREFIX_RE, '')) throw new Error(`withApron: scene node ${k} is not the mesh's cell ${k} (${m && m.name} against ${o && o.name})`);
-    const K = mesh._state.pieces[mesh.cells[k].piece].K, prefix = PREFIX_RE.exec(m.name)[0], rest = m.name.replace(PREFIX_RE, '');
+    // the cell's own surface, by gripkeys.js's rule (1GRIPnnn_ for a piece whose grip is not 100, else 1ROAD_): computed here, so the apron can run BEFORE the catch and the
+    // grip keys (which rename only the road cells, by index) and the catch stays the last thing appended, its material last
+    const seg = segments[mesh.cells[k].piece], key = seg && seg.grip !== undefined ? gripKey(seg.grip) : null;
+    const K = mesh._state.pieces[mesh.cells[k].piece].K, prefix = key ? `1${key}_` : '1ROAD_', rest = m.name.replace(PREFIX_RE, '');
     for (const [side, tag] of [[0, 'R'], [K - 1, 'L']]) {
       if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) continue;
       const ap = apronOf(m, K, side, { widthM, slopeDeg }, { top: `${prefix}${APRON_TAG}_${rest}_${tag}`, side: `${SIDE_PREFIX}_${rest}_${tag}` });

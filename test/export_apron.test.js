@@ -70,6 +70,7 @@ test('row 2: the wedge is closed: the join\'s lower row is the skin\'s edge vert
   const { skinned, out } = build(flat(), { widthM: 2.0 });
   const skins = new Map(skinned.root.children.filter((c) => /^SKIN_/.test(c.name)).map((c) => [c.name.replace(/^SKIN_/, ''), c.children[0]]));
   const topBy = new Map(tops(out).map((a) => [a.name.replace(/^APRON/, ''), a]));
+  assert.ok(tops(out).length > 0); assert.equal(sides(out).length, tops(out).length, 'one join under every apron: the wedge is closed on every one');
   for (const sd of sides(out)) {
     const key = sd.name.replace(/^APRONSIDE/, ''), tp = topBy.get(key), right = key.startsWith('R'), sk = skins.get(cellOf(sd.name)), C = sk.positions.length / 3 / 2;
     assert.ok(tp, `${sd.name} has its apron top`);

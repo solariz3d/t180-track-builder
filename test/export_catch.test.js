@@ -90,7 +90,8 @@ test('row 4: \'all\' lays a closed underside under every road chunk, in 1ROAD_CA
     const meshHash = (m) => `${m.name} ${m.material} ${hash(m.pos)} ${hash(m.idx)}`;
     const off = exportOf(base, 'off'), all = exportOf(base, 'all'), koff = read(off), kall = read(all);
     const isCatch = (m) => /^1ROAD_CATCH_/.test(m.name);
-    const roadOff = koff.meshes.filter((m) => /^1ROAD_/.test(m.name) && !/^1ROAD_PIT/.test(m.name)), catches = kall.meshes.filter(isCatch);
+    // AMENDED D572 by name: the road's own meshes leave out the edge apron (src/export/apron.js, 1ROAD_APRON_…, outside the road) as they leave out the pit lane
+    const roadOff = koff.meshes.filter((m) => /^1ROAD_/.test(m.name) && !/^1ROAD_(PIT|APRON_)/.test(m.name)), catches = kall.meshes.filter(isCatch);
     assert.ok(catches.length > 0, 'catch meshes exist'); assert.ok(koff.meshes.every((m) => !isCatch(m)), 'and none without it');
     // nothing else changes: every non-catch mesh, byte for byte, in the same order
     assert.deepEqual(kall.meshes.filter((m) => !isCatch(m)).map(meshHash), koff.meshes.map(meshHash), 'every other mesh is the same, names and triangles');
@@ -108,7 +109,7 @@ test('row 4: \'all\' lays a closed underside under every road chunk, in 1ROAD_CA
     assert.ok(tri(catches) > 0.3 * tri(roadOff) && tri(catches) < 1.05 * tri(roadOff), `about the road's triangle count, decimated across: ${tri(catches)} against ${tri(roadOff)}`);
     // the unmerged export: one catch cell per core road cell, each 0.3 m under its road cell
     const rawOff = read(exportOf(base, 'off', false)), rawAll = read(exportOf(base, 'all', false));
-    const roadCells = rawOff.meshes.filter((m) => /^1ROAD_/.test(m.name) && !/^1ROAD_PIT/.test(m.name)), catchCells = rawAll.meshes.filter(isCatch);
+    const roadCells = rawOff.meshes.filter((m) => /^1ROAD_/.test(m.name) && !/^1ROAD_(PIT|APRON_)/.test(m.name)), catchCells = rawAll.meshes.filter(isCatch);   // AMENDED D572: as above
     const plain = catchCells.filter((m) => !/_join_/.test(m.name)); assert.equal(plain.length, roadCells.length, `one catch cell for each road cell (${catchCells.length - plain.length} more under the seam rows, which the road's own weld folds into its neighbours)`);
     assert.ok(catchCells.every((m) => m.name.startsWith('1ROAD_CATCH_')), 'named for the road surface: the ROAD key and the soft block\'s 1ROAD? both cover it');
     const byName = new Map(roadCells.map((m) => [m.name, m]));

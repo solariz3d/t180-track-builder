@@ -74,7 +74,10 @@ function digestOf(out) {
 // D460 (pane C, d460-c): the lap pin moved from 36ba2c6869a3d1d0 (v0.4.19, 496c347, read there with PRINT_D437B=1) to 9f3a7040bf4356e9 because the seam
 // zipper pairs by lateral position (src/geom/mesh.js meshSeam) and the weld drops a standing seam triangle (src/export/acready.js); the lap's seams change
 // their index arrays only (cmpmesh.js in exo_memory/handback/p-d459-fins-C_2026-10-25_evidence). The open TEST export is unchanged.
-const PIN = { lap: 'sha256 9f3a7040bf4356e9 files 10', open: 'sha256 a257c20e84e68897 files 11' };
+// D572 (pane E, d572-e): both pins moved, the lap's from 9f3a7040bf4356e9 to ace32da6e9890964 and the open TEST export's from a257c20e84e68897 to bfb1bda31e289ce1, because
+// every core export now lays an edge apron outside the road's open edges (src/export/apron.js). The apron is the only cause: the same tree with withApron returning its scene
+// unchanged gives 9f3a7040bf4356e9 and a257c20e84e68897 again (read with PRINT_D437B=1 on a scratch copy; p-d572-apron-E_2026-10-30.md).
+const PIN = { lap: 'sha256 ace32da6e9890964 files 10', open: 'sha256 bfb1bda31e289ce1 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

@@ -53,7 +53,8 @@ function exported(kind) {
   const mat = (n) => b.scene.materials[n.material], diffuse = (m) => { const x = (m.samplers || []).find((q) => q.name === 'txDiffuse'); return x ? x.texture : null; };
   return { b, set, kn5: readKn5(f), nodes, mat, diffuse,
     pits: nodes.filter((n) => /^PAINT_PIT_/.test(n.name)), other: nodes.filter((n) => /^PAINT_/.test(n.name) && !/^PAINT_PIT_/.test(n.name)),
-    road: nodes.filter((n) => /^1ROAD_/.test(n.name)) };
+    // AMENDED D572 by name: the edge apron (src/export/apron.js, 1ROAD_APRON_…, its own darker material) is a physics strip OUTSIDE the road, not the road's floor these rows compare
+    road: nodes.filter((n) => /^1ROAD_/.test(n.name) && !/^1ROAD_APRON_/.test(n.name)) };
 }
 const one = (a) => [...new Set(a)];
 

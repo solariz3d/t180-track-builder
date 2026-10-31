@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A wheel that drops off the edge of the road now has something under it.** Every exported track gets an edge apron: a darker strip 2 m wide outside each open edge, sloping down at 25°, so a wheel that runs wide lands on it and rides back up when you steer in, instead of slipping under the road and hanging there. It also closes the gap you could see from the side between the road and the dark underside. It is not laid on walls, inside closed tubes or beside the pit lane, and the road itself is unchanged.
+
 ## [0.4.30] - 2026-10-29
 
 ### Added

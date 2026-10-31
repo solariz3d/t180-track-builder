@@ -26,6 +26,11 @@
 // the road instead of standing up as a fin. That changes the mesh digest of F1 F4 F6 F8 (and F1's kn5) and NOTHING ELSE: their segs and path are the last
 // records', and the measure (buildMesh's scene node by node, and F1's written scene) says only seam index arrays changed, each the same length.
 // test/fixtures/manifest.d460.json records the four fixtures' digests before (the last record each was amended by) and after, with the measure.
+// AMENDED BY NAME FOR D572 (the user, 2026-10-30 17:50 and 18:43: a wheel off the edge clips under the road, and the gap between road and underside shows from the side):
+// every core export lays an edge apron outside the road's open edges (src/export/apron.js), appended after every node the scene holds, with one material of its own. That
+// changes the kn5 digest of the two CLOSED fixtures, F1 F2, and NOTHING ELSE: segs, path and mesh are unchanged in all nine, and the measure (the written kn5 read back mesh
+// by mesh, on this branch with the apron switched off and on) keeps every mesh of before byte for byte and adds only apron meshes and the t180b_apron material.
+// test/fixtures/manifest.d572.json records F1 F2's digests before (the last record each was amended by) and after, with the measure.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -57,6 +62,9 @@ const AMEND8 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.sectors.json')
 // D460 (the seam zipper pairs by lateral position): F1 F4 F6 F8's mesh, and F1's kn5, change; manifest.d460.json records it
 const AMEND9 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d460.json'), 'utf8'));
 const SEAM_CHANGED = ['F1-bowl-default-lap-closed', 'F4-halfpipe-width-31.5-to-12-along-s', 'F6-bowl-r-brushed', 'F8-mixed-families'];
+// D572 (the edge apron): F1 F2's kn5, and nothing else, change; manifest.d572.json records it
+const AMEND10 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d572.json'), 'utf8'));
+const APRON_CHANGED = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-closed'];
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
   const man = JSON.parse(JSON.stringify(MANIFEST));
@@ -69,6 +77,7 @@ function amendedManifest() {
   for (const [k, v] of Object.entries(AMEND7.fixtures)) { const { kn5Bytes, ...digests } = v.after_meshcap; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // the mesh cap
   for (const [k, v] of Object.entries(AMEND8.fixtures)) { const { kn5Bytes, ...digests } = v.after_sectors; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // the sector gates
   for (const [k, v] of Object.entries(AMEND9.fixtures)) { const { kn5Bytes, ...digests } = v.after_d460; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D460
+  for (const [k, v] of Object.entries(AMEND10.fixtures)) { const { kn5Bytes, ...digests } = v.after_d572; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D572
   return man;
 }
 
@@ -98,6 +107,9 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d460.json'))), '32edb216ae7bf2c642fd2eed02305e96c4da2b4da54f0ba482d8d6a47fe0cee0');   // D460
   assert.deepEqual(Object.keys(AMEND9.fixtures), SEAM_CHANGED);
   assert.deepEqual([...AMEND9.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !SEAM_CHANGED.includes(k)).sort());
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d572.json'))), '35412488b9aa9ce5f37de2c4b63bcb32880db3821f5b5512dfb802bed1ec1eb0');   // D572
+  assert.deepEqual(Object.keys(AMEND10.fixtures), APRON_CHANGED);
+  assert.deepEqual([...AMEND10.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !APRON_CHANGED.includes(k)).sort());
 });
 // CHANGED D258: F7 (the old jump, now a free flight to the end of its old ramp) differs in segs, path and mesh; the path is byte-identical in every OTHER fixture
 test('row 5a (amended D196, D222, D258): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, F7 in segs, path and mesh, and the three others are identical', () => {
@@ -239,5 +251,20 @@ test('D460 amendment record: only F1 F4 F6 F8 changed, only their mesh digest (a
     assert.equal(m.buildMesh_scene.any_other_array_changed, 0, `${k}: an array that is not a seam's indices changed`);
     assert.ok(m.buildMesh_scene.seam_index_arrays_changed_same_length > 0, `${k}: no seam's indices changed`);
     if (prev.kn5) { assert.notEqual(v.after_d460.kn5, v.before_d460.kn5, `${k}: the kn5 did not change`); assert.equal(m.export_written_scene.any_other_array_changed, 0, `${k}: the written scene changed outside its seams`); }
+  }
+});
+test('D572 amendment record: only F1 F2 changed, only their kn5, "before" is the record each was last amended by, and the measure keeps every mesh of before and adds only apron meshes', () => {
+  assert.deepEqual(Object.keys(AMEND10.fixtures), APRON_CHANGED);
+  for (const [k, v] of Object.entries(AMEND10.fixtures)) {
+    const { kn5Bytes, ...prev } = k === 'F1-bowl-default-lap-closed' ? AMEND9.fixtures[k].after_d460 : AMEND8.fixtures[k].after_sectors;   // the record each was last amended by
+    for (const d of Object.keys(prev)) assert.equal(v.before_d572[d], prev[d], `${k}: "before" is the last record's ${d}`);
+    for (const d of ['segs', 'path', 'mesh', 'meshParts']) assert.equal(v.after_d572[d], prev[d], `${k}: ${d} changed (the road must not move)`);
+    assert.notEqual(v.after_d572.kn5, v.before_d572.kn5, `${k}: the kn5 did not change`);
+    const m = v.measure;
+    assert.deepEqual(m.changed, ['kn5']);
+    assert.equal(m.kn5_meshes_kept_byte_for_byte, m.kn5_meshes_before, `${k}: a mesh of before is not in the kn5 byte for byte`);
+    assert.equal(m.kn5_meshes_after, m.kn5_meshes_before + m.kn5_meshes_added);
+    assert.ok(m.added_all_apron && m.added_apron_tops > 0 && m.added_apron_sides > 0, `${k}: the added meshes are the apron's`);
+    assert.deepEqual(m.materials_added, ['t180b_apron']); assert.equal(m.materials_kept_in_order, true);
   }
 });
