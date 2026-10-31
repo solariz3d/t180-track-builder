@@ -19,7 +19,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('http'), fs = require('fs'), os = require('os'), path = require('path');
+const http = require('http'), fs = require('fs'), path = require('path');
 const { chromePath, launchChrome, connect } = require('./soundrender.js');
 const { createCoreShell } = require('../core/coreshell.js');
 const { PER_PX } = require('../core/panel.js');
@@ -40,15 +40,14 @@ const DEG = Math.PI / 180;
 
 // TIMED ROWS ONLY UNDER BOTH SLOTS (the chair, D421 part 5: "Its timing rows run only with BOTH lock slots held by a live process"): the heavy-run lock's two slot files, each held by a live
 // process, one of them this run (its token, CONSONANCE_HEAVY_RUN_TOKEN, which heavy-run.js gives every child of its holder). A timing taken beside another seat's heavy run measures that run.
+// The lock's folder comes from CONSONANCE_DATA alone: the test reads no file outside this checkout, so a run that wants the timed rows names the folder
 function dataDir() {
-  if (process.env.CONSONANCE_DATA) return process.env.CONSONANCE_DATA;
-  try { const c = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.consonance.json'), 'utf8')); if (c && typeof c.data_dir === 'string') return c.data_dir; } catch (e) { /* no config: no lock to read */ }
-  return null;
+  return process.env.CONSONANCE_DATA || null;
 }
 const alive = (pid) => { if (!Number.isInteger(pid) || pid <= 0) return false; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 function bothSlots() {
   const dir = dataDir(), mine = process.env.CONSONANCE_HEAVY_RUN_TOKEN;
-  if (!dir) return 'not timed: no heavy-run data dir (CONSONANCE_DATA or ~/.consonance.json data_dir), so the two slots cannot be read';
+  if (!dir) return 'not timed: CONSONANCE_DATA does not name the heavy-run lock folder, so the two slots cannot be read';
   if (!mine) return 'not timed: this run does not hold a heavy-run slot (no CONSONANCE_HEAVY_RUN_TOKEN): run it under heavy-run.js hold(), with the second slot held too';
   const locks = ['heavy-run.lock', 'heavy-run.2.lock'].map((f) => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch (e) { return null; } });
   if (!locks.every((l) => l && alive(l.pid))) return `not timed: both heavy-run slots must be held by a live process (${locks.map((l, i) => `slot ${i + 1}: ${l ? `pid ${l.pid} ${alive(l.pid) ? 'alive' : 'dead'}` : 'free'}`).join(', ')})`;
