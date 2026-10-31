@@ -1,6 +1,6 @@
 // index.js: the share buttons, mounted as mount(root, shell, { clipboard, onPack }). "Copy track code" puts the track's code on
 // the clipboard (and shows it, selected, for a system without clipboard access); "Paste track code…" imports whatever code is
-// pasted into the box: an equation track (D239: a code from the old Pieces builder is refused by name, app/share/share.js).
+// pasted into the box: an equation track (a code from the old Pieces builder is refused by name, app/share/share.js).
 'use strict';
 const { createShare } = require('./share.js');
 
