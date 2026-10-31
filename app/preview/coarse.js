@@ -1,4 +1,4 @@
-// coarse.js: a COARSER PREVIEW of the equation core's track, for the moments the track is being dragged (D235 part 2, the user: "make the changes render
+// coarse.js: a COARSER PREVIEW of the equation core's track, for the moments the track is being dragged (the user: "make the changes render
 // faster while you change it from one to the next? Sometimes it lags and is so slow").
 //
 //   coarsen(segments, factor = FACTOR) -> segments      the same segments with their ROW GRID thinned: every `factor`-th fraction across the width, and always the first
@@ -19,7 +19,7 @@ const { normalize, blendSamples, commonFractions } = require('../../src/geom/pro
 
 const DEG = Math.PI / 180;
 const FACTOR = 6;
-const CHEAP_FACTOR = 12;   // D266 item 2: the ghost while a handle is dragged: a section step of about 12 degrees where the full ghost has 1
+const CHEAP_FACTOR = 12;   // the ghost while a handle is dragged: a section step of about 12 degrees where the full ghost has 1
 const planMemo = new Map();   // factor -> WeakMap(from profile -> WeakMap(profile -> fractions))
 const gridMemo = new Map();   // factor -> WeakMap(fractions array -> thinned array)
 const segMemo = new Map();    // factor -> WeakMap(segment -> coarse segment)
@@ -30,7 +30,7 @@ function thin(fr, factor) {
   if (!out) {
     out = []; for (let i = 0; i < fr.length; i += factor) out.push(fr[i]);
     if (out[out.length - 1] !== fr[fr.length - 1]) out.push(fr[fr.length - 1]);
-    Object.freeze(out);   // D421c: a thinned grid never changes; frozen, a ramp's blended cross-sections over it are kept (mesh.js rampShape)
+    Object.freeze(out);   // a thinned grid never changes; frozen, a ramp's blended cross-sections over it are kept (mesh.js rampShape)
     m.set(fr, out);
   }
   return out;
@@ -65,7 +65,7 @@ function coarsen(segments, factor = FACTOR) {
       const blend = g.blend || { from: g.profile, s0: 1, length: 1 };
       c = { ...g, blend, fractions: gridOf(blend.from, g.profile, factor) };
     } else return g;
-    if (Object.isFrozen(g)) Object.freeze(c);   // D421 (A's §1.3): a coarse copy of a frozen segment is frozen too, so trackmodel.js keys it once (its key memo holds frozen segments only)
+    if (Object.isFrozen(g)) Object.freeze(c);   // a coarse copy of a frozen segment is frozen too, so trackmodel.js keys it once (its key memo holds frozen segments only)
     m.set(g, c); return c;
   });
 }
@@ -137,7 +137,7 @@ function coarsenRun(segments, factor = CHEAP_FACTOR, { cap = 24 } = {}) {
 }
 
 /**
- * D421 part 4, the SCULPT drag's chord ghost (design §4.3 step 1, D404's method on a placed stretch): the window's 2 m chords MERGED into a few dozen longer ones, so its
+ * The SCULPT drag's chord ghost (the cheap ghost's method, used on a placed stretch): the window's 2 m chords MERGED into a few dozen longer ones, so its
  * ghost is meshed from about the same number of chords however long the window is. Consecutive road chords of one piece merge while the merged one turns the heading by
  * at most `maxTurn` rad, the pitch by at most `maxTurn`, rolls by at most `maxRoll` and is at most `maxLen` m long; its heading and pitch rates run linearly from the
  * first chord's start to the last one's end, and its roll from the first's to the last's, as one geometry segment does. The cross-section merges EXACTLY when the chords
@@ -202,7 +202,7 @@ function mergeChords(segments, opts = {}) {
 }
 
 /**
- * D421 part 4: two segments that would build the same road (their route numbers, their cross-section by value, their row grid and blend), though they are different
+ * Two segments that would build the same road (their route numbers, their cross-section by value, their row grid and blend), though they are different
  * objects: the shell converts a brushed PIECE again whole on every step, so the chords of it that the brush did not reach come back equal but new. The drag's frame
  * trims those off its window (trackmodel.js dragFrame), so the window is what the brush changed, not the whole piece.
  */

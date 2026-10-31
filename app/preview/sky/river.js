@@ -1,4 +1,4 @@
-// sky/river.js: the 'river' sky (D416), Glass's: a clear, still night with the river of the galaxy across it, every star drawn at the screen's own
+// sky/river.js: the 'river' sky, Glass's: a clear, still night with the river of the galaxy across it, every star drawn at the screen's own
 // pixels. The contract is in app/preview/sky/index.js.
 // By elevation: the horizon (--sky-b, held near the skin's fog for the first ten degrees) darkening through the skin's sky (--sky) to the zenith (--sky-a).
 // Over it, two fields of stars, each star a point sized in device pixels (a cone 1.25 px in radius, from the pass's uPx, so a star is about a pixel
@@ -8,7 +8,7 @@
 //     clumped along its length and cut by dark lanes, and a faint glow of the stars too small to see lies under it.
 // Quiet behind the work: under 12 degrees of elevation there is no star and no glow, only the gradient (sky-dither row 2 holds the band from -10 to
 // 10 degrees within 1.30:1 of the fog). Nothing moves: the twinkle changes a star's brightness in place, by at most 15%.
-// Unlike Aurora's curtains and Skyline Night's city glow, the light here is all points. The noise is a sin-free hash (D391), read in 3D on the sky
+// Unlike Aurora's curtains and Skyline Night's city glow, the light here is all points. The noise is a sin-free hash, read in 3D on the sky
 // sphere, so there is no seam anywhere.
 'use strict';
 

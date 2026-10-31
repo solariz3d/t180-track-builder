@@ -1,4 +1,4 @@
-// guideslayer.js: the DOM half of the 3D grid and the symmetry guides (D237): the LEVEL LABELS ("+20 m") on the lattice and the draggable CENTRE handle. A DOM layer over the
+// guideslayer.js: the DOM half of the 3D grid and the symmetry guides: the LEVEL LABELS ("+20 m") on the lattice and the draggable CENTRE handle. A DOM layer over the
 // preview, redrawn by the preview every frame (the camera eases, so these move with it). Everything else, the lines, is drawn by the renderer from app/preview/guides.js.
 //
 //   createGuidesLayer({ root, win, onCentre }) -> { update({ plan, pose, aspect, cssWidth, cssHeight }), dispose(), labels(), handle() }

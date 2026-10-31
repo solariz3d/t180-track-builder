@@ -1,4 +1,4 @@
-// sky/sun.js: the 'sun' sky (D384), Skyline's clear day with depth. The contract is in app/preview/sky/index.js.
+// sky/sun.js: the 'sun' sky, Skyline's clear day with depth. The contract is in app/preview/sky/index.js.
 // By elevation: the horizon's pale (--sky-b, held near the skin's fog for the first ten degrees, so the far road melts into it) deepening through the skin's
 // sky (--sky) to the zenith (--sky-a); a touch paler on the sun's side and deeper away from it. A sun fixed in the world, low in one quarter of it, with a
 // small soft disc, a corona and a faint wide bloom (--sky-c). Thin high cirrus streaks on the sun's side of the sky, drifting on one wind over minutes; and a

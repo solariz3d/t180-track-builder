@@ -1,6 +1,5 @@
-// aclook.js: the AC look in the preview (ARCHITECTURE §5.2: "The preview uses AC's shader set … ported with Content
-// Manager's Custom Showroom (actools, Ms-PL) as the reference"; §5.1: "Geometry and materials are exactly what is
-// exported"). Pure numbers, no GL: each AC material becomes the uniforms its shader takes, and the same function is the
+// aclook.js: the AC look in the preview. The preview uses AC's shader set, ported with Content Manager's Custom
+// Showroom (actools, Ms-PL) as the reference; its geometry and materials are exactly what is exported. Pure numbers, no GL: each AC material becomes the uniforms its shader takes, and the same function is the
 // one the tests check. The GLSL is app/preview/acshaders.js.
 //
 //   LIGHT                     the ONE reference light and time of day (stated, inferred; see below)
@@ -20,9 +19,9 @@
 // ksPerPixel; ksPerPixelNM and ksPerPixelNM_UV2 are NM; an unknown shader with a txNormal sampler is NM, otherwise
 // ksPerPixel. ksMULTILAYER: actools has NO class for it (it falls to the default, i.e. ksPerPixel). Its layer blend here is
 // INFERRED from the AC modding community's description (txMask's R/G/B/A weight txDetailR/G/B/A, each tiled by
-// multR/G/B/A; magicMult scales how much of the detail shows, 0 black, 1 as is): NOT verified against AC (§5.3 parked).
+// multR/G/B/A; magicMult scales how much of the detail shows, 0 black, 1 as is): NOT verified against AC (no look-match yet).
 //
-// THE REFERENCE LIGHT (stated, INFERRED: not measured in AC; the look-match number §5.3 is parked, the user 12:17 "No in
+// THE REFERENCE LIGHT (stated, INFERRED: not measured in AC; the look-match number is parked, the user 12:17 "No in
 // game testing needed"): one sun at 14:00 track time, elevation 42°, azimuth 225° (from +z towards +x), colour
 // (1.00, 0.95, 0.86); a hemisphere ambient, ambientDown (0.30, 0.33, 0.38) + ambientRange (0.22, 0.24, 0.30) ×
 // (n.y·0.5 + 0.5), after actools' gAmbientDown / gAmbientRange (Base.fx; the exact GetAmbient body was not found, so the
@@ -85,7 +84,7 @@ function shade(u, texRgb, n, toLight = LIGHT.toSun, toEye = [0, 1, 0]) {
  * `drawn` is [{ key, material }]. Returns { byMesh: { key: materialName }, materials: [material] (unique, first seen
  * order), textures: [name] (unique, sorted) }.
  */
-const { ensureDiffusePlain } = require('../../src/export/acready.js');   // the pure one: no Buffer in the webview (D224)
+const { ensureDiffusePlain } = require('../../src/export/acready.js');   // the pure one: no Buffer in the webview
 const { ddsLevel } = require('../../src/texture/dds.js');
 function lookList(drawn) {
   const byMesh = {}, mats = new Map();
@@ -97,12 +96,12 @@ function lookList(drawn) {
 
 /**
  * What each batch is drawn with: `scene` is the track mesh's scene (src/geom, the materials the export writes today);
- * `set` is A's texture set (src/texture/set.js) or null, and `images` its previewTextures() (level 0 read back from the
+ * `set` is the texture set (src/texture/set.js) or null, and `images` its previewTextures() (level 0 read back from the
  * DDS bytes the export writes). With a set, a batch whose segment's floor slot names a texture (an image or a made one)
  * wears that slot's material (the set's own material object, the one applyToScene appends); otherwise it wears the
  * scene's material at its index, so an untextured track shows exactly the kn5's t180b_road and not the set's untextured
- * t180b_floor, which the export does not write. NOTE (D177): src/export/fromwords.js does not apply the set yet, so for
- * a TEXTURED floor the preview is ahead of the kn5 until it does (routed to A). Returns { materialOf(batch), textures: Map(file -> { width, height, rgba }) }.
+ * t180b_floor, which the export does not write. NOTE: src/export/fromwords.js does not apply the set yet, so for
+ * a TEXTURED floor the preview is ahead of the kn5 until it does. Returns { materialOf(batch), textures: Map(file -> { width, height, rgba }) }.
  */
 function resolveLook(scene0, set = null, images0 = []) {
   if (!scene0 || !Array.isArray(scene0.materials)) throw new Error('aclook: resolveLook needs a scene with materials');

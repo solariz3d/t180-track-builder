@@ -1,10 +1,10 @@
-// sky/prism.js: the 'prism' sky (D384 widened), a cold clear night, the quietest of the skies; Glass's until D416 (Glass now names the river,
+// sky/prism.js: the 'prism' sky, a cold clear night, the quietest of the skies; once Glass's (Glass now names the river,
 // sky/river.js), and still a style. The contract is in app/preview/sky/index.js.
 // By elevation: the horizon (--sky-b, held near the skin's fog for the first ten degrees) darkening through the skin's sky (--sky) to the zenith (--sky-a).
 // A sparse field of pin-point stars (--sky-c), each about one device pixel across and each its own brightness, with a faint twinkle, fading out toward
 // the horizon as real stars do through the air. A pale, cold moon with a crisp limb, a faint face and a halo. Low on the horizon, a thin band of light
 // split into a faint spectrum, as if refracted through glass, brightest toward the moon, its strength wandering slowly round and broken along its length
-// into fine filaments. D410 (the user: "way too low res and blurry"): the stars were small gaussians about 5.4 px across at half their peak at 2560 x 1440,
+// into fine filaments. (the user: "way too low res and blurry"): the stars were small gaussians about 5.4 px across at half their peak at 2560 x 1440,
 // and the limb's ramp spanned about 27 px (about 16 from 10 % to 90 %), so the sky read as low resolution. Sizes are now in device pixels, from the pass's uPx (the angle of one device pixel; see
 // app/preview/sky/index.js): a star is a cone 1.25 px in radius (anti-aliased, about 1.2 px across at half its peak) and the limb a 1.5 px ramp, at any
 // window size. Nothing moves across the sky: the twinkle changes a star's brightness in place, and the band's strength wanders round over many minutes.

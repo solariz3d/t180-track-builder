@@ -1,15 +1,15 @@
-// sky/caustics.js: the 'caustics' sky (D384), Aqua's. The contract is in app/preview/sky/index.js.
+// sky/caustics.js: the 'caustics' sky, Aqua's. The contract is in app/preview/sky/index.js.
 // Looking up from the bottom of a clear sea. Overhead is Snell's window: the whole sky above the surface, squeezed into a bright, soft disc 97 degrees across
 // (light refracts in through the surface only within 48.6 degrees of straight up), its rim alive with slow caustic ripples. Around it the sea
 // lightens upward from deep teal, and faint shafts of light fall from the window and fade with depth. Below the horizon, deep teal.
 // Quiet behind the work: under about 10 degrees of elevation, where the road sits against the sky, the sea stays between the skin's --sky and its
 // --fog (uSkyC is the skin's fog colour, so the far road fogs into the sea it meets), and nothing moves there.
 // Every edge is a smooth falloff (no line anywhere), and the motion is slow: nothing crosses the view in under about two minutes (the speeds are
-// stated term by term below; the ripples change shape in place faster than they travel). Faint motes hang in the sea above 10 degrees, each a point sized in device pixels (D416:
-// a cone 1.25 px in radius, from the pass's uPx; they were gaussians in grid cells, a median 4.7 px across at half their peak at 2560 x 1440, measured by app/test/sky-crisp.test.js).
+// stated term by term below; the ripples change shape in place faster than they travel). Faint motes hang in the sea above 10 degrees, each a point sized in device pixels
+// (a cone 1.25 px in radius, from the pass's uPx; they were gaussians in grid cells, a median 4.7 px across at half their peak at 2560 x 1440, measured by app/test/sky-crisp.test.js).
 // Colours: uSky the deep sea (--sky), uSkyA the sky seen through the window (--sky-a), uSkyB the lit sea under the surface (--sky-b), uSkyC the
 // sea at the horizon, the skin's fog (--sky-c).
-// (The word for it is "sea" here: the builder's own files keep clear of the word for the removed flow simulation, D238; core-readout-display.test.js.)
+// (The word for it is "sea" here: the builder's own files keep clear of the word for the removed flow simulation; core-readout-display.test.js.)
 'use strict';
 
 const SOURCE = `
