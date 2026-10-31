@@ -1,10 +1,10 @@
-// index.js: the §5c markers, in one call (ARCHITECTURE §5c; D171).
+// index.js: the §5c markers, in one call (ARCHITECTURE §5c).
 //
 //   placeAll(layout, path, segments, { lane }) -> { layout, placed, paint, check, nodes }
 //     lane    optional { path, segments }: the PIT LANE's own road (§5c: "a side road leaving and rejoining the loop").
 //             With it, the pit boxes are placed along the lane from layout.pits.lane.along (metres into the lane),
-//             and checked and painted on the lane's surface. The lane's geometry is not built yet (C and A: the D171
-//             hand-back's proposed interface); without a lane the boxes sit on the main road, as before.
+//             and checked and painted on the lane's surface. The lane's geometry is not built yet (this is the
+//             proposed interface); without a lane the boxes sit on the main road, as before.
 //     placed  every marker in the world, with its track coordinates (s, u, h); a marker that cannot be placed carries
 //             `error` (off the track's ends, or over a jump's flight) instead of a position
 //     paint   the painted marks, generated from `placed` (paint.js)
@@ -12,7 +12,7 @@
 //     nodes   the marker dummies, in the scene-node shape (src/export/scene.js), for the kn5
 //   defaultLayout, gridSlots, runUpM, PATTERNS          re-exported from layout.js
 //
-// It needs only the resolved segments and C's path, and no node module, so it runs in the app's webview as it does
+// It needs only the resolved segments and the path, and no node module, so it runs in the app's webview as it does
 // under node (the export does, through app/export/node-shim.js).
 'use strict';
 const { resolveLayout, defaultLayout, gridSlots, runUpM, speedAfterM, PATTERNS, DEFAULTS, SLOT_HALF_LENGTH } = require('./layout.js');
@@ -30,7 +30,7 @@ function placeAll(layout, path, segments, { paintMaterial = 0, lane = null } = {
     if (layout.pits.lane && Number.isFinite(layout.pits.lane.along)) {   // set by hand: from `along` into the lane, backwards by the spacing (as it always was)
       for (let k = 0; k < n; k++) r.markers.push({ name: `AC_PIT_${k}`, kind: 'pit', n: k, s: s0 + layout.pits.lane.along - k * gap, u: layout.pits.u, h: layout.height, onLane: true });
     } else {
-      // D285 (the user, 2026-10-10: "the pit lane spacing starts half way through the pit … Pit 1 starts half way to the back of the pits"): the row was
+      // (the user, 2026-10-10: "the pit lane spacing starts half way through the pit … Pit 1 starts half way to the back of the pits"): the row was
       // laid from the lane's MIDPOINT backwards, so the front half of the lane stood empty. Now it is CENTRED on the lane's usable straight (its 'body',
       // between the entry and exit tapers; a lane with no parts is usable end to end), box 0 first after the entry and each next box `spacingM` further
       // on, so the gap before the first box equals the gap after the last. A row longer than the straight is still centred: it spills onto both tapers
