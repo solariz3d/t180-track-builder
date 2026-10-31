@@ -20,7 +20,7 @@ function ask(ctx = {}) {
   return got;
 }
 
-// (design §5, the user's call): SCULPT MODE is the first item, a tick, since a Build | Sculpt switch in the top bar does not fit (app/test/menubar-page.test.js
+// (the user's call): SCULPT MODE is the first item, a tick, since a Build | Sculpt switch in the top bar does not fit (app/test/menubar-page.test.js
 // rows 8 and 17 measured it: 87 px over at 900 px, 16 px at 1400; hence the menu). It sets the shell's st.sculpt and nothing else (mid-drag the shell refuses: "finish
 // the brush drag first"); Tab does the same. It replaced the "Brush" toggle that stood before Close the loop. IN SCULPT every command that places or closes is disabled,
 // its reason "in Sculpt" in the tooltip.

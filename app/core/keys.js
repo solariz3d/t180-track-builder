@@ -27,7 +27,7 @@ function keyAction({ key, ctrlKey, metaKey, shiftKey, inField, inText }) {
 }
 
 /**
- * SCULPT'S KEYS (design §5, the user's go of 2026-10-20 14:53): Tab toggles Sculpt mode (Blender's Tab; Build ▸ Sculpt mode is the same switch), Esc drops an open brush drag, [ and ] narrow
+ * SCULPT'S KEYS (the user's go of 2026-10-20 14:53): Tab toggles Sculpt mode (Blender's Tab; Build ▸ Sculpt mode is the same switch), Esc drops an open brush drag, [ and ] narrow
  * and widen the radius, and 1-9 pick the tool (1 Grab, 2 Stretch, 3 Bend, 4 Climb, 5 Twist, 6 Width, 7 Cup, 8 Edge, 9 Smooth). No letters (above: the cameras use them),
  * and never with Ctrl, Alt or Shift held (Shift+Tab moves the focus back). IN A FIELD every one of them is the field's: a digit or a bracket is typed, Tab moves to the
  * next field, Esc is the field's own. (inField, not inText, decides Tab here, the stricter reading: a number field's Tab is how the Extend fields are walked.)

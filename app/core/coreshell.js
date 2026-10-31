@@ -443,7 +443,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const note = res && res.note ? res.note.split(' · ').filter((x) => x !== SC.SHARP_NOTE).join(' · ') || null : null;
     return res ? { ...res, note } : res;
   };
-  // SMOOTH, one channel's Laplacian relax under the window (design §3.7), the drag's delta its strength; the core returns a document or { doc, changed, note }
+  // SMOOTH, one channel's Laplacian relax under the window, the drag's delta its strength; the core returns a document or { doc, changed, note }
   const smoothed = (b, lambda) => { const res = smoothFn(b.base, coreChannel(b.channel), b.s0, b.r, lambda); return res && res.doc ? res : { doc: res, changed: [] }; };
   /**: the road piece holding lap distance s, and how far into it: { piece, u }, or null. A run's handles read their values here, at the run's centre,
    *  and its ratio is read here too, because on an EVEN run the middle piece's own middle sits half a radius from the centre (measured: a two-piece run landed half the value asked). */
@@ -458,7 +458,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const lo = off[span.from], hi = off[span.to] + d.pieces[span.to].length;
     return { s0: (lo + hi) / 2, r: (hi - lo) / 2, pieces: roads };
   };
-  // THE RELEASE OF A ROUTE TOOL ON A CLOSED LAP (design §4.3 step 3). The drag ran on the lap OPEN (no close() per step); endBrush only starts this job and returns. The window's own
+  // THE RELEASE OF A ROUTE TOOL ON A CLOSED LAP. The drag ran on the lap OPEN (no close() per step); endBrush only starts this job and returns. The window's own
   // close first (only the window's pieces move, every other piece bit-identical), in the close worker when there is one; refused, the whole-lap close once with the window protected
   // (the rate brush's old rule); refused again, the drag is DROPPED whole and the message says so (the user's call). The re-closed lap lands as the drag's present: ONE undo step.
   let releaseJob = null;
@@ -559,7 +559,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     }
     const w = toolWindow(d, { s0, r, piece, run });
     if (w.message) return set({ message: w.message });
-    // ROUTE on a CLOSED lap: the drag runs on the lap OPEN, so the brush never closes it per step (design §4.3); the release closes it again
+    // ROUTE on a CLOSED lap: the drag runs on the lap OPEN, so the brush never closes it per step; the release closes it again
     const closedRoute = family === 'route' && d.closed, base = closedRoute ? Object.freeze({ ...d, closed: false }) : d;
     // the guard by family: SHAPE keeps the shape guard (every step and at the end); local and route have none
     const guard = family === 'shape' ? { sculpt: true, baseResolved: st.resolved, sculptPiece: Number.isInteger(piece) && !run ? piece : undefined, ...(run ? { ratioAt: centreOf(d, w.s0) || undefined } : {}) } : {};
@@ -595,7 +595,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
         if (st.brush) return set({ message: 'a brush drag is already open' });
         return attempt(() => set({ history: D.beginDrag(st.history), brush: { mode: 'rate', channel, s0: w.s0, r: w.r, sharp: !!(sharp && brushFn), base: d, delta: 0, pieces: w.pieces, baseHistory: st.history, sculpt: true, baseResolved: st.resolved, sculptPiece: undefined, ratioAt: centreOf(d, w.s0) || undefined }, message: null }));
       }
-      // with a tool, the window may be the selected RUN (design §3.6): the run, centred on its middle, as wide as it; the selection's longWay rule already keeps it inside the lap
+      // with a tool, the window may be the selected RUN: the run, centred on its middle, as wide as it; the selection's longWay rule already keeps it inside the lap
       if (tool !== undefined && i === undefined) {
         const s = st.selection; if (!s || s.base !== d) return set({ message: 'select a piece or a run first: click it on the track' });
         if (s.from !== s.to) return api.beginBrush({ tool, run: { from: s.from, to: s.to }, sharp, keepRate });
@@ -611,7 +611,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     sculptInfo() {
       const s = st.selection, d = doc();
       if (!st.sculpt || !s || s.base !== d) return null;
-      // a RUN's handles stand on its middle road piece (design §3.6); one piece is the run of one
+      // a RUN's handles stand on its middle road piece; one piece is the run of one
       let m = Math.floor((s.from + s.to) / 2); if (!d.pieces[m] || d.pieces[m].type !== 'road') { m = -1; for (let k = s.from; k <= s.to; k++) if (d.pieces[k] && d.pieces[k].type === 'road' && (m < 0 || Math.abs(k - (s.from + s.to) / 2) < Math.abs(m - (s.from + s.to) / 2))) m = k; }
       const P = m >= 0 ? d.pieces[m] : null; if (!P || P.type !== 'road') return null;
       const at = (ch, u) => D.channelAt(P, ch, u).v, mid = P.length / 2;

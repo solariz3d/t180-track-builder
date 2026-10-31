@@ -451,7 +451,7 @@ function mount(root, shell, mountOpts = {}) {
   const turnStartTitle = atStart.turn.getAttribute('title');
   const hintNow = () => { const typed = asTyped('turn'); const hint = typed !== '' && Number(typed) === 0 && Number(cornerMode() ? show(shell.headState().kh * 100 / DEG) : shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; atStart.turn.setAttribute('title', hint ? `${turnStartTitle} ${hint}` : turnStartTitle); };
 
-  // SCULPT (design §3 and §5, the user's GO 2026-10-20 14:53). Sculpt is a MODE (st.sculpt), set by Build ▸ Sculpt mode (app/core/buildmenu.js) or by Tab; it replaced
+  // SCULPT (the user's GO 2026-10-20 14:53). Sculpt is a MODE (st.sculpt), set by Build ▸ Sculpt mode (app/core/buildmenu.js) or by Tab; it replaced
   // the brush's "on" box, its mode and channel selects and its "sculpt (shape only)" box. In Sculpt a press on the road and a drag is the chosen TOOL, named by what the hand does.
   // The shell resolves a tool to its mode, channel and family (beginBrush's `tool`); `mode` and `channel` go beside it as today's brush names them.
   // A press that moves no more than CLICK_PX is a click, not a drag: no brush opens, so it leaves no step and says nothing, and it selects (app/core/piecesui.js asks
@@ -470,7 +470,7 @@ function mount(root, shell, mountOpts = {}) {
     Object.freeze({ key: 'edge', label: 'Edge', tool: 'edge', channel: 'e', axis: 'y', hint: 'drag up or down to change the edge here (which edge: more ▾); the road itself does not move' }),
     Object.freeze({ key: 'smooth', label: 'Smooth', tool: 'smooth', channel: null, axis: 'y', hint: null }),
   ]);
-  // under "more ▾": the two tools used less (design §3.5), the edge a drag changes, and the channel Smooth smooths
+  // under "more ▾": the two tools used less, the edge a drag changes, and the channel Smooth smooths
   const MORE_TOOLS = Object.freeze({
     wall: Object.freeze({ key: 'wall', label: 'Wall rise', tool: 'wall', channel: 'r', axis: 'y', hint: 'drag up or down to raise or lower the wall here; the road itself does not move' }),
     sweep: Object.freeze({ key: 'sweep', label: 'Tube sweep', tool: 'sweep', channel: 't', axis: 'y', hint: 'drag up or down to close the tube more or open it here; the road itself does not move' }),
@@ -592,7 +592,7 @@ function mount(root, shell, mountOpts = {}) {
     if (drag.follow) shell.beginFollow({ s0: drag.s0, r: radiusNow() });   // sharp by itself (coreshell.js beginFollow), so the Sharp tick is not passed
     else shell.beginBrush({ tool: T.tool, mode: LOCAL_CH.has(T.channel) ? 'local' : 'rate', channel: T.channel, s0: drag.s0, r: radiusNow(), sharp: sharp.checked, ...(drag.keepRate ? { keepRate: true } : {}) });
     if (!shell.getState().brush) { drag = null; return false; }
-    if (T.key !== 'smooth' && SMOOTH_CH.includes(T.channel)) smoothCh.value = T.channel;   // Smooth smooths the last tool's channel (design §3.7)
+    if (T.key !== 'smooth' && SMOOTH_CH.includes(T.channel)) smoothCh.value = T.channel;   // Smooth smooths the last tool's channel
     liveTool = T; drag.open = true; brushedPress = true; hover = null;   // the brush's own cues take over from the hover's
     return true;
   };
@@ -703,7 +703,7 @@ function mount(root, shell, mountOpts = {}) {
     return { mode: 'landing', samples: [], s0: 0, s1: 1, half: () => 0, kinds: HD.LANDING_ORDER, free, base: (k) => L.pose[LAND_FIELD[k]], ctx: () => ({}) };
   };
   let landDrag = false;
-  // (design §1 cues 2 and 3, §3): THE BRUSH GLYPH's model, handles.js's kinds 'brush-*': on hover at the station picked, during the tool's drag at the station it opened at (the page's
+  // THE BRUSH GLYPH's model, handles.js's kinds 'brush-*': on hover at the station picked, during the tool's drag at the station it opened at (the page's
   // track stands still during a drag, app/preview/preview.js, so the glyph does too); Grab with Alt (held on hover, or at the press) is its other axis, sideways. The drag's value as the strip
   // says it, and on hover the family's line. Where it stands is kept for the track, the station and the tool, so a still pointer finds nothing again
   const NO_SAMPLES = Object.freeze([]);
@@ -885,7 +885,7 @@ function mount(root, shell, mountOpts = {}) {
     return HD.brushFormat(T.channel, b.delta);
   };
   const valueWords = (b, T) => { const v = roadWords(b, T); return v && T.key !== 'smooth' ? `${v} ${b.mode === 'follow' ? 'at the point' : 'at the centre'}` : v; };
-  // (design §1 cue 5 (ii)): THE VALUE LINE, in this order: the tool's word for the way the drag goes, the value at the centre, the widened note, the pieces in the window and, on a
+  // THE VALUE LINE, in this order: the tool's word for the way the drag goes, the value at the centre, the widened note, the pieces in the window and, on a
   // closed lap under a route tool, the two the release may also move (the lap's last road piece and its first: the seam tries, app/core/coreshell.js)
   const valueLineOf = (st, T) => {
     const b = st.brush, K = HD.KINDS[brushKindOf(T, T.channel === 'lateral')], d = b.delta;
@@ -898,7 +898,7 @@ function mount(root, shell, mountOpts = {}) {
     const roads = b.closedBase ? b.closedBase.pieces.map((p, i) => (p.type === 'road' ? i : -1)).filter((i) => i >= 0) : [];
     return [way, valueWords(b, T), widened, ps ? (lo === hi ? `piece ${idOf(lo)}` : `pieces ${idOf(lo)}–${idOf(hi)}`) : '', roads.length ? `release may move ${idOf(roads[roads.length - 1])}, ${idOf(roads[0])}` : ''].filter(Boolean).join(' · ');
   };
-  // (design §1 cue 5 (iii)): THE BIG VALUES OVERLAY IN SCULPT, four cells: the tool, its value at the centre under the channel's name, the radius and what moves; set only when the text changed
+  // THE BIG VALUES OVERLAY IN SCULPT, four cells: the tool, its value at the centre under the channel's name, the radius and what moves; set only when the text changed
   const numberOf = (ch, delta) => { const t = HD.brushFormat(ch, delta), C = HD.BRUSH_CHANNELS[ch]; return t && C ? t.slice(C.label.length + 1) : ''; };
   const showSculptValues = (st) => {
     if (!values || !st || !st.sculpt) return;

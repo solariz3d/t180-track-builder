@@ -99,7 +99,7 @@ function acrossAt(path, segments, m, u) {
 }
 
 /**
- * The glyph a zone shows on hover (design §4): { kind (handles.js's brush kinds), place ({ sides, lat } for model.brush: the mark at the hit's u; {} for a pair at its own
+ * The glyph a zone shows on hover: { kind (handles.js's brush kinds), place ({ sides, lat } for model.brush: the mark at the hit's u; {} for a pair at its own
  * place, the width at the rims and the cup just inside them) }. Alt: sideways at the centre, bank off it. A zone's lift names the glyph where it has no pair: the cup's,
  * the sweep's (a tube), or bank.
  */

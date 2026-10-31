@@ -92,9 +92,9 @@ const BRUSH_CHANNELS = Object.freeze({
   lateral: Object.freeze({ label: 'sideways', unit: 'm', k: 1, colour: '#ffb020' }),
   length: Object.freeze({ label: 'length', unit: 'm', k: 1, colour: '#ffffff' }),
 });
-// THE BRUSH GLYPH, one Build mark at the brush's centre in the tool's colour (Build's for the same thing, design §5; two marks for Width, Cup and Wall rise, at the edges as
+// THE BRUSH GLYPH, one Build mark at the brush's centre in the tool's colour (Build's for the same thing; two marks for Width, Cup and Wall rise, at the edges as
 // Build's are), its arrow the POINTER's direction the drag reads (`screen`: 'y' up and down, 'x' left and right). `brush: true`: placed from model.brush (the station hovered, or the
-// station a drag opened at) and NEVER hit, so a press anywhere in the band is the tool as before (design §1.2). `hollow`: a Sculpt-only kind, no Build handle of its own. `words`: [the way
+// station a drag opened at) and NEVER hit, so a press anywhere in the band is the tool as before. `hollow`: a Sculpt-only kind, no Build handle of its own. `words`: [the way
 // that adds, the way that takes away] (Smooth: one, its drag is clamped at 0); `tag`: the Alt note beside the words; `alt`: the kind Alt turns it into
 const brushKind = (o) => Object.freeze({ brush: true, lat: 0, axis: 'U', sides: Object.freeze([0]), screen: 'y', hollow: false, ...o });
 const BRUSH_KINDS = Object.freeze({
