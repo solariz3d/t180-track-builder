@@ -89,17 +89,19 @@ const MUTANTS = [
   { id: 'W5 a shaped bank at start is laid on the knots of the ramp alone (the rise smoothed away)', pattern: 'within 0.25', edits: [[X, 'if (shapedShort.length) {', 'if (false) {']] },
   { id: 'W6 the fall gets no knots of its own', pattern: 'within 0.25', edits: [[X, 'out.push(Lc - (fall * Lc * (j - 1)) / SHAPE_SUB);', '']] },
   { id: 'W7 the knots are spread over the length asked, not the length laid', pattern: 'within 0.25', edits: [[X, 'shapeKnots(shapeOf(ch), Math.max(ramp[ch] - (2 * ramp[ch]) / sub, ramp[ch] / sub))', 'shapeKnots(shapeOf(ch), ramp[ch])']] },
-  { id: 'W8 the bank is not read again on the new knots', pattern: 'within 0.25', edits: [[X, 'rampControl(laid, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch)); c2Ends(laid, ch);', 'c2Ends(laid, ch);']] },
+  { id: 'W8 the bank is not read again on the new knots', pattern: 'within 0.25', edits: [[X, 'rampControl(laid, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch)); if (C2_CHANNELS.has(ch)) c2Ends(laid, ch);', 'if (C2_CHANNELS.has(ch)) c2Ends(laid, ch);']] },
   { id: 'W4 the shares are not checked (a rise and fall over 1 together is laid)', pattern: 'not a ramp', edits: [[X, 'if (!(rise > 0 && fall > 0 && rise + fall <= 1 + 1e-12)) throw', 'if (false) throw']] },
   // D573, candidate F the at-start default (ids A1-A6: F is the banded fit's) (test/core_at_start_f.test.js runs beside the others here)
   { id: 'A1 a cup or edge at start gets no shape in extend (the quintic again)', pattern: 'laid as F too', edits: [[X, '(startShapes && shortRamps.includes(ch) && startShapes[ch]) || null', 'null']] },
   { id: 'A2 the panel asks the swell\'s halves, not a 20 m rise', pattern: 'his piece', edits: [[P, 'return rise >= 0.5 ? { rise: 0.5, fall: 0.5 } : { rise, fall: 1 - rise };', 'return { rise: 0.5, fall: 0.5 };']] },
   { id: 'A3 the panel sends no start shape for the cup and the edge', pattern: 'laid as F too', edits: [[P, 'else (out.startShapes = out.startShapes || {})[ch] = startShapeOf(transition[ch]);', 'else {}']] },
   { id: 'A4 the right edge does not follow the edge\'s start shape', pattern: 'laid as F too', edits: [[X, 'if (startShapes.e && !startShapes.er) startShapes = { ...startShapes, er: startShapes.e };', '']] },
-  { id: 'A5 startShapes takes any channel', pattern: 'refuses what is not', edits: [[X, "if (!['c', 'e', 'er'].includes(ch)) throw", 'if (false) throw']] },
+  { id: 'A5 startShapes takes any channel', pattern: 'refuses what is not', edits: [[X, "if (!['c', 'e', 'er', 'w'].includes(ch)) throw", 'if (false) throw']] },
   { id: 'A6 the rise is measured on the ramp asked, not the length laid', pattern: 'his piece', edits: [[P, 'const rise = F_RISE_M / laidOf(R);', 'const rise = F_RISE_M / R;']] },
+  // D574, the width at start takes F too (test/core_width_at_start_f.test.js)
+  { id: 'A7 the width at start gets no start shape (the 20 m wedge again)', pattern: '32 → 55|mirrored|a 60 m piece', edits: [[P, "    if (!XS_START.has(ch) && ch !== 'w') continue;", '    if (!XS_START.has(ch)) continue;']] },
 ];
-const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js'];
+const FILES = ['core_ramp.test.js', 'core_joint_c2.test.js', 'core_fit_banded.test.js', 'core_bankswing.test.js', 'core_extend_at_start.test.js', 'core_bank_swell.test.js', 'core_bank_ramp.test.js', 'core_at_start_f.test.js', 'core_width_at_start_f.test.js'];
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-ramp-mut-'));
   for (const d of ['src', 'tools', 'app/core', 'app/camera', 'app/lib', 'app/validate-ui']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });   // the app folders app/core/panel.js loads

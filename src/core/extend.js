@@ -107,7 +107,7 @@ function channelFn({ v, m }, target, Lt, ch, shape = null) {
   if (!Number.isFinite(target)) throw new D.CoreError('BAD_TARGET', `a target must be a finite number, got ${target}`);
   const a = ch === 'phi' && (shape === 'rounded' || shape === 'swell') ? roundingOf(shape, Lt) / Lt : null;   // D521: the bank's rounded-linear ramp, asked for; the swell's
   const blend = C2_CHANNELS.has(ch) ? smoother : bloss;
-  const S0 = C2_CHANNELS.has(ch) && isShares(shape) ? (u) => rampShape(u, shape.rise, shape.fall) : a !== null ? (u) => roundedLinear(u, a) : blend;   // the two-share ramp, asked for by its shares
+  const S0 = (C2_CHANNELS.has(ch) || ch === 'w') && isShares(shape) ? (u) => rampShape(u, shape.rise, shape.fall) : a !== null ? (u) => roundedLinear(u, a) : blend;   // the two-share ramp, asked for by its shares
   return (s) => { const u = s / Lt, S = S0(u); return u >= 1 ? target : (1 - S) * cont(s) + S * target; };
 }
 
@@ -270,13 +270,14 @@ function extend(doc, opts = {}) {
   if (bankShape !== undefined && bankShape !== null && bankShape !== 'rounded' && bankShape !== 'swell' && !isShares(bankShape)) throw new D.CoreError('BAD_SHAPE', `bankShape is 'rounded', 'swell', { rise, fall } or left out, got ${bankShape}`);
   if (isShares(bankShape)) rampShape(0.5, bankShape.rise, bankShape.fall);   // the shares are checked before anything is laid
   const shape = bankShape === 'rounded' || bankShape === 'swell' || isShares(bankShape) ? bankShape : null;
-  // THE CUP AND EDGE AT START TAKE A SHAPE TOO (the user, 2026-10-30, choosing candidate F: "F looks good we can try it"): opts.startShapes { c, e, er }, each
+  // THE CUP AND EDGE AT START TAKE A SHAPE TOO (the user, 2026-10-30, choosing candidate F: "F looks good we can try it"), AND THE WIDTH (22:23: "the start should work
+  // the same for the width as well, so it gradually comes in"): opts.startShapes { c, e, er, w }, each
   // { rise, fall }, is laid as a shaped bank at start is (rampShape, knots across its rise and fall), but ONLY where that channel's ramp is short; a whole-piece
   // ramp keeps the quintic. Left out, nothing moves. A right edge with no shape of its own follows the edge's, as its ramp does.
   if (startShapes !== undefined && startShapes !== null) {
-    if (typeof startShapes !== 'object' || Array.isArray(startShapes)) throw new D.CoreError('BAD_SHAPE', `startShapes maps c, e and er to { rise, fall }, got ${startShapes}`);
+    if (typeof startShapes !== 'object' || Array.isArray(startShapes)) throw new D.CoreError('BAD_SHAPE', `startShapes maps c, e, er and w to { rise, fall }, got ${startShapes}`);
     for (const [ch, sh] of Object.entries(startShapes)) {
-      if (!['c', 'e', 'er'].includes(ch)) throw new D.CoreError('BAD_SHAPE', `startShapes takes c, e and er (the bank's is bankShape), got "${ch}"`);
+      if (!['c', 'e', 'er', 'w'].includes(ch)) throw new D.CoreError('BAD_SHAPE', `startShapes takes c, e, er and w (the bank's is bankShape), got "${ch}"`);
       if (!isShares(sh)) throw new D.CoreError('BAD_SHAPE', `the start shape of ${ch} is { rise, fall }, got ${sh}`);
       rampShape(0.5, sh.rise, sh.fall);   // the shares are checked before anything is laid
     }
@@ -337,7 +338,8 @@ function extend(doc, opts = {}) {
   if (from.tNext) from = { ...from, t: from.tNext };   // the tube this piece may start continues from tNext (endState reports t only at a tube head)
   const channels = Object.fromEntries(D.CHANNELS.map((ch) => [ch, channelFn(from[ch], targets[ch], Lof(ch), ch, shapeOf(ch))]));
   const c2Targets = [...C2_CHANNELS].filter((ch) => given(targets[ch]));
-  const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch)) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // D459: the short-ramp subdivisions, 8 when a cross-section channel ramps short
+  // a shaped width at start is laid as the cross-section's are, in three quarters of its ramp (8 subdivisions), so F's 20 m rise is 20 m as laid
+  const sub = shortRamps.some((ch) => C2_CHANNELS.has(ch) || (ch === 'w' && shapeOf(ch))) ? RAMP_KNOTS_C2 : RAMP_KNOTS;   // D459: the short-ramp subdivisions, 8 when a cross-section channel ramps short
   // extra knots only where a ramp is short; D459: a piece with a bank, cup or edge target has at least three interior knots, so c2Ends has a free point at each end and one is left for the shape
   const knots = shortRamps.length ? rampKnots(length, shortRamps.map((ch) => ramp[ch]), knotM, sub) : c2Targets.length && D.evenKnots(length, knotM === undefined ? D.KNOT_M : knotM).length < 3 ? D.evenKnots(length, length / 4) : undefined;
   const piece = D.roadPiece({ length, family: fam, from: held ? from : null, channels, knotM, knots, cup, edge, tube, grip: grip === undefined ? D.gripOf(last) : grip });
@@ -399,12 +401,12 @@ function extend(doc, opts = {}) {
   // a box-off ramp, a whole-piece one (below) and a bank at start with no shape never come here, so their bytes do not move
   // and a SHAPED cup or edge at start the same way (startShapes): the knots of every shaped short ramp in one insertion, then each of those channels read again
   let laid = piece;
-  const shapedShort = shortRamps.filter((ch) => C2_CHANNELS.has(ch) && shapeOf(ch));
+  const shapedShort = shortRamps.filter((ch) => (C2_CHANNELS.has(ch) || ch === 'w') && shapeOf(ch));
   if (shapedShort.length) {
     const ts = shapedShort.flatMap((ch) => shapeKnots(shapeOf(ch), Math.max(ramp[ch] - (2 * ramp[ch]) / sub, ramp[ch] / sub))).map((k) => +k.toFixed(4))
       .filter((k) => k > 0.5 && k < length - 0.5 && piece.knots.every((h) => Math.abs(h - k) > 1e-3));
     laid = D.insertKnots(piece, [...new Set(ts)].sort((a, b) => a - b));
-    for (const ch of shapedShort) { rampControl(laid, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch)); c2Ends(laid, ch); }
+    for (const ch of shapedShort) { rampControl(laid, ch, from[ch], targets[ch], ramp[ch], held, sub, shapeOf(ch)); if (C2_CHANNELS.has(ch)) c2Ends(laid, ch); }   // the width is a route channel: no C2 pin
   }
   if (shape && given(targets.phi) && !shortRamps.includes('phi')) {
     const Lt = Lof('phi'), ts = turnsOf(shape, Lt).map((k) => +k.toFixed(4)).filter((k) => k > 0.5 && k < length - 0.5 && laid.knots.every((h) => Math.abs(h - k) > 1e-3));
