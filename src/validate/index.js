@@ -327,7 +327,7 @@ function core(path, segments, opts, from, carried, upto) {
     const p = S[i], cs = constAt(p), Lv = p.L, Uv = p.U, K = p.kvec, Tv = p.T;
     // the two checks the user's decision added judge the EQUATION CORE's own roads only (word 'core', src/core/adapter.js), as the
     // roll-rate bar does below: the paused piece builder's word documents are not newly judged by them (its S phrase and its starter chain lift off at their
-    // own tempo on the centreline, measured and flagged in the hand-back, never judged before)
+    // own tempo on the centreline, measured and flagged, never judged before)
     const coreRoad = segments[p.seg].word === 'core';
     let aT = 0, centre = null, hardest = null;   // opts.leanLines: the station's two kept lines
     if (sp.v) { const a = S[Math.max(0, i - 1)], b = S[Math.min(n - 1, i + 1)]; const va = sp.v[Math.max(0, i - 1)], vb = sp.v[Math.min(n - 1, i + 1)]; if (b.s > a.s) aT = (vb * vb - va * va) / (2 * (b.s - a.s)); }
