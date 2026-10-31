@@ -890,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn the_files_body_reads_back_as_the_webview_packs_it() {
+    fn files_from_body_gives_back_the_head_and_every_file() {
         let head = r#"{"dir":"C:\\Tracks\\é","folder":"t180b_x","files":[{"path":"t180b_x.kn5","len":4},{"path":"empty.ini","len":0},{"path":"ai/fast_lane.ai","len":2}]}"#;
         let (h, files) = files_from_body(&pack(head, &[&[1, 2, 3, 255], &[], &[7, 0]])).unwrap();
         assert_eq!((h.dir.as_deref(), h.folder.as_str(), h.fbx), (Some("C:\\Tracks\\é"), "t180b_x", false));
