@@ -98,8 +98,9 @@
   #win-close:hover::before, #win-close:hover::after { border-color: #fff; }
   /* THE HOVER CARD (app/hovertip.js, D581): every title's words in the look's own menu panel (.more-menu: each look's surface, border, radius and blur), placed
      by the script, never in the pointer's way; this rule only undoes the menu's layout and gives it the look's accent as its top edge */
-  #hovertip { position: fixed; top: 0; left: 0; right: auto; z-index: 2000; display: block; min-width: 0; max-width: 360px; padding: 7px 10px; gap: 0;
-    font: 12px/1.4 var(--body); color: var(--text); white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; border-top-color: var(--accent); }
+  /* its face is --tip-font (the user, 01:26: "different font perhaps?"): the display face of the road numbers and the values band; var(--mono) is the one-word swap */
+  #hovertip { --tip-font: var(--display); position: fixed; top: 0; left: 0; right: auto; z-index: 2000; display: block; min-width: 0; max-width: 360px; padding: 7px 10px; gap: 0;
+    font: 400 13px/1.4 var(--tip-font); color: var(--text); white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; border-top-color: var(--accent); }
   #hovertip[hidden] { display: none; }
   /* A QUESTION IN THE PAGE (app/askdialog.js): the save-on-close prompt, in the same black, bone and violet. */
   .ask-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(6, 6, 6, .62); backdrop-filter: blur(3px); }
