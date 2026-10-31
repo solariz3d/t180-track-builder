@@ -412,7 +412,7 @@ function createPreview({ canvas, shell, win, hud = null, onMode = null, onTrack 
       shownPose = rig.update(c, dt);
       const L = look === 'ac' && track && track.mesh ? lookFor(track.mesh.scene) : null;
       renderer.draw(batchesFor(track), shownPose, { width: w, height: h }, { grid, marker: headMarker(c.head, markerSize(shownPose, c.head), clearanceAtHead(track && track.path ? track.segments : ghost && ghost.segments)), ghost: ghost ? ghost.batches : null, overlay: overlayOf(plan, track, sculptCues(track, hoverNow(), startMovedOf(shell.getState()))), depthLines: plan ? plan.depth : null,
-        look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, time: skyTime(t) });
+        look, materialOf: L ? L.materialOf : null, textures: L ? L.textures : null, lod: true, time: skyTime(t) });   // lod: the placed road is drawn coarser far from the eye (renderer.js LOD_NEAR); the export, the checker and the readouts never see it
       if (layer) layer.update({ plan, pose: shownPose, aspect: w / h, cssWidth: canvas.clientWidth, cssHeight: canvas.clientHeight });
     }
     if (hud) hud.textContent = `${rig.mode.charAt(0).toUpperCase()}${rig.mode.slice(1)} view · ${look === 'ac' ? (sigil ? 'plain road' : 'AC look') : 'word colours'} (L)${rig.fov !== rig.fovDefault ? ` · fov ${Math.round(rig.fov * 180 / Math.PI)}°` : ''}${err ? ` · ${err}` : ''}${exactJob && exactJob.building ? ' · building the road…' : ''}${lateShown && t < lateShown.until ? ` · ${lateShown.rec.type === 'keyup' ? 'key-up' : 'key-down'} ${lateShown.rec.code} came ${(lateShown.rec.lateMs / 1000).toFixed(1)} s late (${lateShown.rec.cause})` : ''}`;
