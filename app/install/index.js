@@ -13,9 +13,10 @@ const { createInstaller, createLauncher, PREFIX_NOTE } = require('./install.js')
 
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-function mount(root, shell, { native, pickFolder, getTextures, more = null, card: cardEl = null, testButton = null }) {
+function mount(root, shell, { native, pickFolder, getTextures, more = null, card: cardEl = null, testButton = null, confirmReplace = null }) {
   // buildExportAsync, the export in a process of its own (app/export/exportrunner.js): the user's white window was this press running out of memory on the page
-  const inst = createInstaller({ build: (opts) => shell.buildExportAsync(opts), native, getDoc: () => shell.exportDoc(), getTextures });
+  // confirmReplace: the page's overwrite question (app/core/overwrite.js), asked before a folder holding a different road is replaced
+  const inst = createInstaller({ build: (opts) => shell.buildExportAsync(opts), native, getDoc: () => shell.exportDoc(), getTextures, confirmReplace });
   const see = createLauncher({ native });
   const install = el('button', { textContent: 'Export to Assetto Corsa', title: `export straight into Assetto Corsa's content\\tracks, found through Steam; exporting the same track again updates its folder (${PREFIX_NOTE})` });
   const change = el('button', { textContent: 'Assetto Corsa folder…', title: 'the Assetto Corsa folder exports go into (the one with content\\tracks)' });

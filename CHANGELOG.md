@@ -7,6 +7,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- **Saving or exporting over another track now asks first.** Save under the name of a different saved track, and the builder asks whether to replace it, naming it and when it was last saved; Replace keeps the replaced one in Previous versions, and Cancel saves nothing at all. Saving the track you have open under its own name asks nothing, as before. Export to Assetto Corsa asks the same before it replaces a `t180b_` folder that holds a different road; exporting the same track again asks nothing. Before this, both replaced the other track without a word.
+
 - **The tests run on GitHub.** Every push and pull request runs the fast part of the suite on a Windows runner (`.github/workflows/ci.yml`, `node scripts/test-fast.cjs`); the slow mutation harnesses run weekly and on demand. So anyone can see the suite pass, not only take our word for it. The workflow publishes nothing.
 
 - **File ▸ Export for Blender…: open your track in Blender.** It writes the track as a `.glb` into a folder of its own, with a README: in Blender, File ▸ Import ▸ glTF 2.0 opens it textured, in metres and the right way round (a right-hand corner still turns right), with every road piece, underside and marker named as the game names them. Tick "Only the selected pieces" to export just those. When Blender is found (Steam's, or the one you pick in Settings ▸ Blender…) it can also make the `.fbx` for ksEditor, running hidden in the background; that FBX holds the game's own vertices in metres. Nothing is written into the game.

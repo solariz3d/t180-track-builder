@@ -406,6 +406,7 @@
     saveUndo: (name, text) => (tauri ? call('save_undo', { name, text }) : Promise.resolve()),   // D272: the track's undo history, beside it (eq-<name>.t180undo; src-tauri/src/lib.rs)
     openUndo: (name) => (tauri ? call('open_undo', { name }) : Promise.resolve(null)),
     listDocs: () => call('list_tracks'),
+    docSavedAt: (name) => (tauri ? call('track_saved_at', { name }) : Promise.resolve(null)),   // the saved track's own time, for the overwrite question
     // D240, saved pieces: one <name>.t180piece each in the app's pieces folder (src-tauri/src/lib.rs); a name already used is refused natively, never overwritten
     listPieces: () => (tauri ? call('list_pieces') : Promise.resolve([])),
     openPiece: (name) => call('open_piece', { name }),
@@ -447,6 +448,14 @@
     if (seam || !tauri || !st.exportRefusal || st.exportRefusal !== st.message) return;
     try { await call('plugin:dialog|message', { message: st.exportRefusal, title: 'Not exported', kind: 'error' }); } catch (e) { /* the red box shows it too */ }
   };
+  // THE OVERWRITE QUESTION (app/core/overwrite.js), in the same themed dialog: Save over another saved track, Export to Assetto Corsa over a different
+  // road. True only for Replace; Cancel, Escape and a click outside answer false, and nothing is written.
+  const askOverwrite = async (question) => {
+    const { askChoice } = await loadCjs('app/askdialog.js', get);
+    return (await askChoice(document, question)) === 'replace';
+  };
+  const confirmSave = async (t) => askOverwrite((await loadCjs('app/core/overwrite.js', get)).saveQuestion(t));
+  const confirmInstall = async (t) => askOverwrite((await loadCjs('app/core/overwrite.js', get)).installQuestion(t));
   const closeSave = async () => {
     await $('save').onclick();
     if (closeDirty()) { $('name').focus(); status.textContent = 'Type a name for the track, then save or close again.'; return false; }
@@ -576,7 +585,7 @@
       async (n) => { try { await shell.open(n); $('name').value = n; } catch (err) { status.textContent = err.message; } });
     const refreshList = () => openList.refresh();
     $('new').onclick = () => shell.newDoc();
-    $('save').onclick = async () => { try { await shell.save($('name').value.trim()); await refreshList(); } catch (e) { status.textContent = e.message; } };
+    $('save').onclick = async () => { try { await shell.save($('name').value.trim(), { confirmReplace: confirmSave }); await refreshList(); } catch (e) { status.textContent = e.message; } };
     // PREVIOUS VERSIONS of the open track: listed when the list is unfolded, one opens as an unsaved copy
     rowList($('versions'), async () => {
       let list; try { list = await shell.listVersions(); } catch (e) { throw new Error(`previous versions: ${e.message || e}`); }
@@ -646,12 +655,13 @@
     const native = {
       getAcRoot: () => call('get_ac_root'), setAcRoot: (path) => call('set_ac_root', { path }), findAcRoot: () => call('find_ac_root'),
       installTrack: (folder, files) => sendFiles('install_track', { folder }, files),
+      installedState: (folder) => call('installed_state', { folder }),   // what is installed under that folder now, for the overwrite question
       getSeeItSetting: () => (tauri ? call('get_see_it_setting') : Promise.resolve(false)), setSeeItSetting: (on) => call('set_see_it_setting', { on }),
       seeIt: (track, layout) => call('see_it_in_assetto', { track, layout }),
     };
     const pickFolder = (title) => call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
     await panels.mountPanel($('share'), 'share', () => loadCjs('app/share/index.js', get, coreOpts), shell);
-    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet, more: $('more-install'), card: setupSlot, testButton: $('testexport') }) })), shell);
+    await panels.mountPanel($('install'), 'install', () => loadCjs('app/install/index.js', get).then((m) => ({ mount: (root, sh) => m.mount(root, sh, { native, pickFolder, getTextures: () => textureSet, more: $('more-install'), card: setupSlot, testButton: $('testexport'), confirmReplace: confirmInstall }) })), shell);
     await panels.mountPanel($('guide'), 'onboarding', () => loadCjs('app/onboarding/index.js', get), shell);
     // D355: THE MENUS (app/menubar/). File, Edit, View and Settings are this page's; Build, Track, File ▸ Developer and Edit's selection entries are the parts'
     // modules (contract M: items(ctx)), each loaded on its own: one that is not there yet, or fails, gives its menu a placeholder and the rest still work

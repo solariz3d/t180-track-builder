@@ -25,10 +25,11 @@
 // The launch itself is native (src-tauri/src/ac.rs): OFF by default, and never run by the builder's tests.
 'use strict';
 const EW = require('../core/exportwords.js');   // the export's warnings in the user's words
+const OW = require('../core/overwrite.js');   // the overwrite question: when to ask before replacing an installed folder
 
 const PREFIX_NOTE = 'the builder names every track t180b_…, so it can never overwrite a track it did not make';
 
-function createInstaller({ build, native, getDoc, getTextures = () => null }) {
+function createInstaller({ build, native, getDoc, getTextures = () => null, confirmReplace = null }) {
   return {
     root: () => native.getAcRoot(),
     async chooseRoot(path) {
@@ -49,6 +50,18 @@ function createInstaller({ build, native, getDoc, getTextures = () => null }) {
         if (test || e.name !== 'ExportError' || e.code !== 'OPEN_LOOP') return refused(e);
         test = true;
         try { out = await build({ textures, test: true }); } catch (e2) { return refused(e2); }
+      }
+      // THE OVERWRITE QUESTION (app/core/overwrite.js): before ANY folder is written, each one already installed with a different road (or one whose
+      // road was never recorded) is asked about, through confirmReplace({ folder, written }); anything but a true answer, or no way to ask, installs
+      // nothing. The same road re-exported asks nothing. A native side without installedState (an older build) cannot be asked, and is not.
+      if (typeof native.installedState === 'function') {
+        for (const f of out.folders) {
+          let s;
+          try { s = await native.installedState(f.folder); } catch (e) { return { ok: false, message: `not exported: what is installed as ${f.folder} could not be read (${e.message || e}), so nothing was written` }; }
+          if (!OW.installNeedsAsk(s, OW.markerGeometry(f.files))) continue;
+          const yes = typeof confirmReplace === 'function' ? await confirmReplace({ folder: f.folder, written: (s && s.written) || null }) : false;
+          if (yes !== true) return { ok: false, cancelled: true, message: `not exported: Assetto Corsa already has ${f.folder} with a different road, and it was left as it is` };
+        }
       }
       const names = [], retired = [], retireErrors = [];
       for (const f of out.folders) {

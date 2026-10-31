@@ -313,6 +313,15 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
     const h = st.history, payload = JSON.stringify({ schema: 1, kind: 'core', name: st.name, doc: textOf(h.present), ...(h.past.length || h.future.length ? { undo: packHistory(h, textOf(h.present)) } : {}) });   // its history rides along
     try { await storage.saveAutosave(payload); } catch (e) { set({ message: `autosave failed: ${e.message}` }); }
   }
+  /** The saved track a save under `name` would write over, when it is not the open one: { name, savedAt } (savedAt in ms, or null), else null. */
+  async function replaceTarget(name) {
+    const want = name.toLowerCase(), open = st.name ? st.name.toLowerCase() : null;
+    if (open === want) return null;
+    const hit = (await storage.listDocs()).find((n) => n.startsWith(PREFIX) && n.slice(PREFIX.length).toLowerCase() === want);
+    if (!hit) return null;
+    const savedAt = typeof storage.docSavedAt === 'function' ? await storage.docSavedAt(hit) : null;
+    return { name: hit.slice(PREFIX.length), savedAt: Number.isFinite(savedAt) ? savedAt : null };
+  }
   async function clearAutosave() {
     autoDue = false;
     if (autoTimer) { timers.clearTimeout(autoTimer); autoTimer = null; }
@@ -1412,9 +1421,20 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       } catch (e) { await tidy(); throw e; }   // a failure nobody planned for (a write that throws): the empty folder still goes
     },
 
-    async save(name) {
+    /**
+     * THE OVERWRITE QUESTION (app/core/overwrite.js): a save under the name of a saved track that is NOT the open one asks first,
+     * through `confirmReplace({ name, savedAt })` (the page's themed dialog), and writes only on a true answer; anything else, or no way to ask,
+     * writes NOTHING (no track, no undo sidecar, no autosave cleared) and says so. Re-saving the open track asks nothing. Windows names are
+     * case-blind, so a name in another case is the same file. Replace keeps the replaced version in track-backups, as every save does.
+     */
+    async save(name, { confirmReplace = null } = {}) {
       if (!storage) return set({ message: 'saving is not available here' });
       if (!NAME_RE.test(name || '')) return set({ message: `a track name is 1 to 60 letters, digits, spaces, _ or -, starting with a letter or digit; got ${JSON.stringify(name)}` });
+      const target = await replaceTarget(name);
+      if (target) {
+        const yes = typeof confirmReplace === 'function' ? await confirmReplace(target) : false;
+        if (yes !== true) return set({ message: `not saved: a different track is already saved as "${target.name}", and it was left as it is` });
+      }
       const body = D.serialize(doc());
       await storage.saveDoc(PREFIX + name, body);
       // then its undo history, beside it. AFTER the track, and a failure here never fails the save: the track is kept, and the one line says what was not.
