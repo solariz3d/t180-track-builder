@@ -41,9 +41,10 @@ file in both places.
 | `src/` (96 files) | the core: the document, geometry, checker, export, textures, markers. No DOM. |
 | `app/` (260 files) | the window: `index.html`, the shell, the panels, the preview, sounds and skins; `app/test/` holds the app's 127 test files. |
 | `test/` (200 files) | the core's tests, and `test/fixtures/` (fixture tracks and manifests of the export digests they are checked against). |
-| `scripts/` (11 files) | command-line tools around the core (below). |
+| `scripts/` (12 files) | command-line tools around the core (below). |
 | `tools/` (3 files) | `kn5.cjs` `readKn5` (reads a kn5's meshes in world space) and `piecewise.cjs` (fits a track's line from a mesh); both are required by shipped code. `kn5-move-gate.cjs` `moveGate` (moves a sector gate of an already exported kn5 onto the nearest flat road by rewriting its two matrices in place, into a new track folder; D567) is a command-line patch nothing shipped requires, though `build.rs` bundles `tools/` whole. |
 | `src-tauri/` (16 files) | the native side (Tauri 2, Rust), its config, icons, and `release.cjs` (the installer build). |
+| `.github/` (1 file) | `workflows/ci.yml`: the tests on GitHub's Windows runners; publishes nothing. Every push and pull request runs the fast subset (`scripts/test-fast.cjs`); the mutation harnesses run weekly and on demand. |
 
 ## `src/`
 
@@ -111,7 +112,7 @@ file in both places.
 `bench.js` (a large track timed along the app's edit path), `soak.js` (thousands of seeded random edits, `runSoak`), `export_words.js`
 (a document file → a track folder in `out/`), `platform_test.js` and `build_platform_test.js` (a 500 m flat platform built as plain world data), `prove_render.js`
 (drives the real window and captures each camera), `lookmatch.js` (the look-match renders), `texture_tiles.js` (draws each look's
-texture tile). Each script's header says how to run it.
+texture tile), `test-fast.cjs` (the suite minus the mutation harnesses and the frame-timing pages: what CI runs on every push; `--mutation` runs only the harnesses). Each script's header says how to run it.
 
 ## `src-tauri/`
 

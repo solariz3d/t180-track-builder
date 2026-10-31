@@ -14,6 +14,8 @@ Node's own test runner; nothing to install (`package.json` has no dependencies).
 
 - Everything: `npm test`, which runs `node --test --test-concurrency=4 "test/*.test.js" "app/test/*.test.js"`.
   The full run includes the mutation harnesses (`*_mutation.test.js`) and takes tens of minutes.
+- The fast subset, what CI runs on every push: `node scripts/test-fast.cjs` (everything but the mutation harnesses and the
+  three frame-timing pages; `--list` prints it, `--mutation` runs only the harnesses). The workflow is `.github/workflows/ci.yml`.
 - One file: `node --test test/<name>.test.js` or `node --test app/test/<name>.test.js`.
 - Some app tests drive the real page in headless Chrome. They use `CHROME_PATH`, else Chrome's usual Windows install, and
   skip with the reason when there is no Chrome.
