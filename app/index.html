@@ -388,7 +388,13 @@
   const get = (p) => fetch(`../${p}`).then((r) => { if (!r.ok) throw new Error(`${r.status} ${p}`); return r.text(); });
   const tauri = window.__TAURI__ && window.__TAURI__.core;
   const call = (cmd, args) => (tauri ? tauri.invoke(cmd, args) : Promise.reject(new Error('not running inside the app: no native side')));
-  const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+  // an export's FILES go to the native side as bytes, the command's raw body (app/lib/nativefiles.js): as base64 text in JSON, ELYSIUM's kn5 filled the page's heap
+  let NF = null;
+  const sendFiles = async (cmd, head, files) => {
+    if (!tauri) throw new Error('not running inside the app: no native side');
+    NF = NF || await loadCjs('app/lib/nativefiles.js', get);
+    return NF.sendFiles((c, body) => tauri.invoke(c, body), cmd, head, files);
+  };
   // the page's LOCAL time as yyyy-mm-dd_hhmmss: a backup's name (src-tauri/src/backups.rs checks the form; the user reads it)
   const localStamp = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
   const storage = {
@@ -410,9 +416,9 @@
     saveAutosave: (text) => (tauri ? call('save_autosave', { text }) : Promise.resolve()),
     openAutosave: () => (tauri ? call('open_autosave') : Promise.resolve(null)),
     clearAutosave: () => (tauri ? call('clear_autosave') : Promise.resolve()),
-    writeExport: (dir, folder, files) => call('write_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }),
+    writeExport: (dir, folder, files) => sendFiles('write_export', { dir, folder }, files),
     // D361: File ▸ Export layouts…, the same write, then what the folder's previous marker listed and this export does not write is removed (src-tauri/src/lib.rs)
-    writeLayouts: (dir, folder, files) => call('write_layouts_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })) }),
+    writeLayouts: (dir, folder, files) => sendFiles('write_layouts_export', { dir, folder }, files),
     folderIsEmpty: (dir) => call('folder_is_empty', { dir }),   // D226: only an EMPTY folder directly in content\tracks, not t180b_*, reads true
     removeEmptyFolder: (dir) => call('remove_empty_folder', { dir }),   // and only that one can be removed (rmdir: never its contents)
   };
@@ -606,7 +612,7 @@
       const BX = await loadCjs('app/menubar/blenderexport.js', get);
       const bx = BX.createBlenderExport({ layouts: await loadCjs('src/export/layouts.js', get, bxOpt), blender: await loadCjs('src/export/blender.js', get, bxOpt) });
       const pickBlenderFolder = async (title) => (await call('test_export_folder')) || call('plugin:dialog|open', { options: { directory: true, multiple: false, title } });
-      const writeBlender = (dir, folder, files, fbx) => call('write_blender_export', { dir, folder, files: files.map((f) => ({ path: f.path, data: b64(f.bytes) })), fbx });
+      const writeBlender = (dir, folder, files, fbx) => sendFiles('write_blender_export', { dir, folder, fbx }, files);
       $('exportblender').onclick = async () => {
         try { await BX.exportBlenderFlow({ bx, shell, ask: (q) => BX.askBlender(document, q), pickFolder: pickBlenderFolder, findBlender: () => call('find_blender'), write: writeBlender, say: (t) => { status.textContent = t; }, textures: textureSet, author: authorNow() }); }
         catch (e) { status.textContent = `export for Blender failed: ${e.message || e}`; }
@@ -637,10 +643,9 @@
     else await panels.mountPanel($('textures'), 'texture', () => loadCjs('app/core/textures.js', get), shell);
     // Share codes (an equation track's code; an old Pieces code is refused by name), and Install to AC / See it in Assetto: the install
     // is the Export button's own build with the same road surface (shell.buildExport), and the launch is off by default (src-tauri/src/ac.rs)
-    const b64files = (files) => files.map((f) => ({ path: f.path, data: b64(f.bytes) }));
     const native = {
       getAcRoot: () => call('get_ac_root'), setAcRoot: (path) => call('set_ac_root', { path }), findAcRoot: () => call('find_ac_root'),
-      installTrack: (folder, files) => call('install_track', { folder, files: b64files(files) }),
+      installTrack: (folder, files) => sendFiles('install_track', { folder }, files),
       getSeeItSetting: () => (tauri ? call('get_see_it_setting') : Promise.resolve(false)), setSeeItSetting: (on) => call('set_see_it_setting', { on }),
       seeIt: (track, layout) => call('see_it_in_assetto', { track, layout }),
     };

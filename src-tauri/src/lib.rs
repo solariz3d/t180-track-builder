@@ -344,49 +344,59 @@ pub fn valid_rel_path(p: &str) -> bool {
         && p.split('/').all(|part| !part.is_empty() && part != "." && part != ".." && part.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')))
 }
 
-/// Standard base64 (with padding) to bytes. The export's files cross the bridge as base64 text.
-pub fn decode_base64(s: &str) -> Result<Vec<u8>, String> {
-    fn val(c: u8) -> Option<u32> {
-        match c {
-            b'A'..=b'Z' => Some((c - b'A') as u32),
-            b'a'..=b'z' => Some((c - b'a' + 26) as u32),
-            b'0'..=b'9' => Some((c - b'0' + 52) as u32),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    }
-    let b = s.as_bytes();
-    if b.len() % 4 != 0 {
-        return Err("base64 length is not a multiple of 4".into());
-    }
-    let mut out = Vec::with_capacity(b.len() / 4 * 3);
-    for (ci, chunk) in b.chunks(4).enumerate() {
-        let last = ci == b.len() / 4 - 1;
-        let pad = chunk.iter().rev().take_while(|&&c| c == b'=').count();
-        if pad > 2 || (pad > 0 && !last) {
-            return Err("base64 padding is misplaced".into());
-        }
-        let mut n: u32 = 0;
-        for (i, &c) in chunk.iter().enumerate() {
-            let v = if i >= 4 - pad { 0 } else { val(c).ok_or_else(|| format!("{:?} is not a base64 character", c as char))? };
-            n = (n << 6) | v;
-        }
-        out.push((n >> 16) as u8);
-        if pad < 2 {
-            out.push((n >> 8) as u8);
-        }
-        if pad < 1 {
-            out.push(n as u8);
-        }
-    }
-    Ok(out)
+// ---- The export's files cross the bridge as BYTES: the command's raw body (app/lib/nativefiles.js packFiles). As base64 text in JSON they filled
+// the page's heap on a long track (ELYSIUM's Export to Assetto Corsa, 2026-10-31), and a 50 km track's text was longer than a JavaScript string can be.
+// The body: [header length: u32, little-endian][header: UTF-8 JSON, the command's other arguments and files: [{ path, len }]][each file's bytes, in order].
+
+#[derive(serde::Deserialize, Debug)]
+struct FileLen {
+    path: String,
+    len: u64,
 }
 
-#[derive(serde::Deserialize)]
-struct ExportFile {
-    path: String,
-    data: String,
+/// A file-writing command's arguments, from its body's header: what each command needs of dir, folder and fbx, and the files' paths and lengths.
+#[derive(serde::Deserialize, Debug)]
+pub struct FilesHead {
+    #[serde(default)]
+    pub dir: Option<String>,
+    pub folder: String,
+    #[serde(default)]
+    pub fbx: bool,
+    files: Vec<FileLen>,
+}
+
+/// The header and the files of a body packFiles made. A body cut short, a header that does not read, or bytes left after the last file are refused.
+pub fn files_from_body(body: &[u8]) -> Result<(FilesHead, Vec<(String, Vec<u8>)>), String> {
+    if body.len() < 4 {
+        return Err(format!("the files' body is {} bytes, shorter than its header length", body.len()));
+    }
+    let n = u32::from_le_bytes([body[0], body[1], body[2], body[3]]) as usize;
+    let text = body.get(4..4 + n).ok_or_else(|| format!("the files' header says {n} bytes and the body has {}", body.len() - 4))?;
+    let head: FilesHead = serde_json::from_slice(text).map_err(|e| format!("the files' header does not read: {e}"))?;
+    let mut at = 4 + n;
+    let mut files = Vec::with_capacity(head.files.len());
+    for f in &head.files {
+        let end = usize::try_from(f.len).ok().and_then(|l| at.checked_add(l)).filter(|&e| e <= body.len())
+            .ok_or_else(|| format!("{} says {} bytes and the body ends {} bytes on", f.path, f.len, body.len() - at))?;
+        files.push((f.path.clone(), body[at..end].to_vec()));
+        at = end;
+    }
+    if at != body.len() {
+        return Err(format!("{} bytes are left after the last file", body.len() - at));
+    }
+    Ok((head, files))
+}
+
+/// The files a command was sent: its raw body read by files_from_body. JSON arguments are refused (the page sends bytes).
+fn files_of(request: &tauri::ipc::Request<'_>) -> Result<(FilesHead, Vec<(String, Vec<u8>)>), String> {
+    match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => files_from_body(b),
+        _ => Err("the files must come as bytes (app/lib/nativefiles.js), not as JSON".into()),
+    }
+}
+
+fn dir_of(head: &FilesHead) -> Result<&str, String> {
+    head.dir.as_deref().ok_or_else(|| "no folder to write into (dir)".into())
 }
 
 /// Write one exported folder under `dir`. Refuses a picked folder inside another track in an AC install, a folder name
@@ -424,9 +434,9 @@ pub fn write_export_to(dir: &Path, folder: &str, files: &[(String, Vec<u8>)]) ->
 }
 
 #[tauri::command]
-fn write_export(dir: String, folder: String, files: Vec<ExportFile>) -> Result<usize, String> {
-    let decoded: Result<Vec<(String, Vec<u8>)>, String> = files.into_iter().map(|f| decode_base64(&f.data).map(|b| (f.path, b))).collect();
-    write_export_to(Path::new(&dir), &folder, &decoded?)
+fn write_export(request: tauri::ipc::Request<'_>) -> Result<usize, String> {
+    let (head, files) = files_of(&request)?;
+    write_export_to(Path::new(dir_of(&head)?), &head.folder, &files)
 }
 
 // ---- File ▸ Export layouts…: the same write, then what the folder's PREVIOUS marker listed and this export
@@ -503,9 +513,9 @@ struct LayoutsWritten {
 }
 
 #[tauri::command]
-fn write_layouts_export(dir: String, folder: String, files: Vec<ExportFile>) -> Result<LayoutsWritten, String> {
-    let decoded: Result<Vec<(String, Vec<u8>)>, String> = files.into_iter().map(|f| decode_base64(&f.data).map(|b| (f.path, b))).collect();
-    let (written, removed) = write_layouts_export_to(Path::new(&dir), &folder, &decoded?)?;
+fn write_layouts_export(request: tauri::ipc::Request<'_>) -> Result<LayoutsWritten, String> {
+    let (head, files) = files_of(&request)?;
+    let (written, removed) = write_layouts_export_to(Path::new(dir_of(&head)?), &head.folder, &files)?;
     Ok(LayoutsWritten { written, removed })
 }
 
@@ -553,9 +563,6 @@ fn remove_empty_folder(dir: String) -> Result<(), String> {
 }
 
 // ---- Assetto Corsa: install, and the launch that is off by default (ac.rs) ----
-fn decode_files(files: Vec<ExportFile>) -> Result<Vec<(String, Vec<u8>)>, String> {
-    files.into_iter().map(|f| decode_base64(&f.data).map(|b| (f.path, b))).collect()
-}
 
 #[tauri::command]
 fn get_ac_root(app: tauri::AppHandle) -> Result<Option<String>, String> {
@@ -680,11 +687,12 @@ pub fn install_with_retire(root: &Path, docs: &Path, folder: &str, files: &[(Str
 }
 
 #[tauri::command]
-fn install_track(app: tauri::AppHandle, folder: String, files: Vec<ExportFile>) -> Result<Installed, String> {
+fn install_track(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<Installed, String> {
+    let (head, files) = files_of(&request)?;
     let root = ac::recall_ac_root(&data_dir(&app)?)?.ok_or("no Assetto Corsa folder picked yet")?;
     let docs = app.path().document_dir().map_err(|e| format!("no Documents folder: {e}"))?.join("Assetto Corsa");
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    install_with_retire(&root, &docs, &folder, &decode_files(files)?, &utc_stamp(secs))
+    install_with_retire(&root, &docs, &head.folder, &files, &utc_stamp(secs))
 }
 
 // ---- File ▸ Export for Blender (blender.rs) ----
@@ -704,9 +712,10 @@ struct BlenderWritten { folder: String, written: usize, fbx: Option<String>, obj
 /// Write the glb and README into `dir/folder`; with `fbx`, then run Blender (found as find_blender finds it) to add <name>.fbx. A failed FBX
 /// step leaves the written files and says why in fbx_error; the write's own failure is the command's error. Off the page's thread: Blender takes seconds.
 #[tauri::command]
-async fn write_blender_export(app: tauri::AppHandle, dir: String, folder: String, files: Vec<ExportFile>, fbx: bool) -> Result<BlenderWritten, String> {
+async fn write_blender_export(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<BlenderWritten, String> {
     let data = data_dir(&app)?;
-    let decoded = decode_files(files)?;
+    let (head, decoded) = files_of(&request)?;
+    let (dir, folder, fbx) = (dir_of(&head)?.to_string(), head.folder.clone(), head.fbx);
     tauri::async_runtime::spawn_blocking(move || {
         let target = blender::write_blender_folder(Path::new(&dir), &folder, &decoded)?;
         let mut w = BlenderWritten { folder: target.to_string_lossy().into_owned(), written: decoded.len(), fbx: None, objects: None, fbx_error: None };
@@ -870,16 +879,37 @@ mod tests {
         }
     }
 
+    /// A body as app/lib/nativefiles.js packFiles makes it.
+    fn pack(head: &str, files: &[&[u8]]) -> Vec<u8> {
+        let mut b = (head.len() as u32).to_le_bytes().to_vec();
+        b.extend_from_slice(head.as_bytes());
+        for f in files {
+            b.extend_from_slice(f);
+        }
+        b
+    }
+
     #[test]
-    fn base64_decodes_as_the_webview_encodes() {
-        assert_eq!(decode_base64("").unwrap(), b"");
-        assert_eq!(decode_base64("Zg==").unwrap(), b"f");
-        assert_eq!(decode_base64("Zm8=").unwrap(), b"fo");
-        assert_eq!(decode_base64("Zm9v").unwrap(), b"foo");
-        assert_eq!(decode_base64("AP8A/w==").unwrap(), vec![0, 255, 0, 255]);
-        assert!(decode_base64("Zm9").is_err());
-        assert!(decode_base64("Z=9v").is_err());
-        assert!(decode_base64("Zm9*").is_err());
+    fn the_files_body_reads_back_as_the_webview_packs_it() {
+        let head = r#"{"dir":"C:\\Spiele\\é","folder":"t180b_x","files":[{"path":"t180b_x.kn5","len":4},{"path":"empty.ini","len":0},{"path":"ai/fast_lane.ai","len":2}]}"#;
+        let (h, files) = files_from_body(&pack(head, &[&[1, 2, 3, 255], &[], &[7, 0]])).unwrap();
+        assert_eq!((h.dir.as_deref(), h.folder.as_str(), h.fbx), (Some("C:\\Spiele\\é"), "t180b_x", false));
+        assert_eq!(files, vec![("t180b_x.kn5".to_string(), vec![1, 2, 3, 255]), ("empty.ini".to_string(), vec![]), ("ai/fast_lane.ai".to_string(), vec![7, 0])]);
+        let (h, files) = files_from_body(&pack(r#"{"folder":"t180b_y","fbx":true,"files":[]}"#, &[])).unwrap();
+        assert_eq!((h.dir, h.folder.as_str(), h.fbx, files.len()), (None, "t180b_y", true, 0));
+    }
+
+    #[test]
+    fn a_files_body_cut_short_padded_or_unreadable_is_refused() {
+        let head = r#"{"folder":"t180b_x","files":[{"path":"a.kn5","len":4}]}"#;
+        assert!(files_from_body(&[1, 0]).unwrap_err().contains("shorter than its header length"));
+        assert!(files_from_body(&pack(head, &[&[1, 2, 3]])).unwrap_err().contains("a.kn5 says 4 bytes"));
+        assert!(files_from_body(&pack(head, &[&[1, 2, 3, 4, 5]])).unwrap_err().contains("1 bytes are left"));
+        assert!(files_from_body(&pack("{not json", &[])).unwrap_err().contains("does not read"));
+        let mut long = pack(head, &[&[1, 2, 3, 4]]);
+        long[0] = 255;
+        assert!(files_from_body(&long).unwrap_err().contains("the files' header says"));
+        assert!(files_from_body(&pack(r#"{"folder":"t180b_x","files":[{"path":"a","len":18446744073709551615}]}"#, &[])).is_err());
     }
 
     #[test]
