@@ -3,14 +3,14 @@
 // runs them all and `ok` is true only if every one passes. Nothing here writes files or guesses: a scene the checks
 // cannot read (no grid, no gate) FAILS the check that needs it, with the reason.
 //
-// CONVENTIONS, measured rather than assumed (2026-09-27, pane E, on the five reference tracks on D with tools/kn5.cjs):
+// CONVENTIONS, measured rather than assumed (2026-09-27, on the five reference tracks on D with tools/kn5.cjs):
 //   · A matrix is 16 floats in kn5's stored order: row vectors, translation at [12..14], world = local × parent
 //     (tools/kn5.cjs:28-29). A marker's forward axis is the third row, [8..10].
 //   · RACE DIRECTION comes from the grid, back slot → pole (AC_START_0), as tools/read_track.cjs:74-79 does, because
 //     some authors' marker axes point backwards (FINDINGS §7b). With one slot, the pole's own forward axis is used.
 //   · LEFT is cross(up, raceDirection) with up = (0,1,0). On trackb, tracke, trackk,
 //     t180_bowltrack and tracka, dot(AC_TIME_0_L − AC_TIME_0_R, cross(up, raceDirection)) > 0 on all five
-//     (hand-back p-d165-export-E, §2). So an L gate on that side is "the right way round".
+//     (measured). So an L gate on that side is "the right way round".
 //   · THE ROAD is every physics mesh named <digit><KEY> whose KEY is not WALL (ARCHITECTURE §6: `1ROAD…`).
 //
 // DEFAULTS that are choices, not measurements, and can be overridden through `opts`:
@@ -103,8 +103,8 @@ function surfaceUnder(p, road) {
   return best;
 }
 
-// raceHeading: which markers must point along the grid's race direction. Default: every racing marker, as before D171.
-// The export (D171) narrows it to the grid and the start gate: a hotlap run-up or a sector can sit on a curve, where
+// raceHeading: which markers must point along the grid's race direction. Default: every racing marker.
+// The export narrows it to the grid and the start gate: a hotlap run-up or a sector can sit on a curve, where
 // "along the road" is not the grid's direction; src/markers checks those along their own road.
 const DEFAULTS = { minHeight: 1, maxHeight: 2, surfaceTiltSin: Math.sin(15 * Math.PI / 180), gateTiltDeg: 15, gateTiltSlackDeg: 0.01, raceCos: Math.cos(30 * Math.PI / 180), slotHalfWidth: 1.0, slotHalfLength: 2.4, raceHeading: /^AC_START_|^AC_TIME_|^AC_HOTLAP_START_/ };
 const byIndex = (re) => (d) => { const m = re.exec(d.name); return m ? +m[1] : -1; };
@@ -126,7 +126,7 @@ function raceDirection(grid) {
 }
 
 /**
- * The race AXIS the checks use (D171): raceDirection with the across-the-road part removed, along the pole's own left
+ * The race AXIS the checks use: raceDirection with the across-the-road part removed, along the pole's own left
  * axis. The ORDER still gives the sign (back slot → pole), so a grid whose axes point backwards still fails; but a grid
  * whose back slot sits in another column than the pole (3 abreast: 12 m along and 10 m across, 40° off) no longer reads
  * as pointing off the road. raceDirection itself is kept as it was (exported, and pinned by test/markers.test.js).

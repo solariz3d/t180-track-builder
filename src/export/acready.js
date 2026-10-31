@@ -12,7 +12,7 @@
 //                        light. A copy with a grey diffuse bound rendered lit.
 //   mergeForAc(scene)    after weldSeams: consecutive road meshes (`1ROAD_…`, not the pit lane) and underside-skin meshes
 //                        (`UNDERSKIN_…`) of the same material and flags are joined into chunks, so AC draws a few dozen
-//                        meshes instead of one per cell (D260: an equation track's cells are its 2 m segments, so TEST 1
+//                        meshes instead of one per cell (an equation track's cells are its 2 m segments, so TEST 1
 //                        recovered exported 15,271 meshes of ~95 triangles each, and the user's frame rate dropped).
 //
 // None changes geometry: the flattened positions equal the nested scene's world positions (tested), and a merge only concatenates
@@ -75,7 +75,7 @@ function flattenForAc(scene) {
  * row is moved onto it, in the strip and in the next piece alike, so the pieces share that edge; then every strip triangle
  * thinner than SLIVER (its height over its longest edge) is dropped: thinness, not area, is what makes a wall. Triangles that bridge a real gap (a font change across part of the width) are kept, and
  * a strip left with no triangle is removed.
- * D460: a strip triangle that STANDS is dropped too, welded or not: its own normal more than STAND_DEG from the road normals its vertices carry, so it faces
+ * A strip triangle that STANDS is dropped too, welded or not: its own normal more than STAND_DEG from the road normals its vertices carry, so it faces
  * along the road like a wall instead of up out of it (TEST 10: a zipper paired by index fraction stood up to 439 mm in the cross-section plane). A bridge
  * across a real gap lies in the road and faces up, and is kept.
  */
@@ -89,8 +89,8 @@ function stands(P, N, a, b, c) {
   return Math.abs(f[0] * r[0] + f[1] * r[1] + f[2] * r[2]) / (lf * lr) < Math.cos(STAND_DEG * Math.PI / 180);
 }
 /**
- * findFins(scene): THE FIN GUARD (D460), run on the scene the export is about to write (world space, after weldSeams). It reads the mesh itself: a ray cast
- * down, as every surface check before it did (D436, D459 part 1), cannot see a sheet standing up in the cross-section plane, only its top edge. At a station
+ * findFins(scene): THE FIN GUARD, run on the scene the export is about to write (world space, after weldSeams). It reads the mesh itself: a ray cast
+ * down, as every surface check before it did, cannot see a sheet standing up in the cross-section plane, only its top edge. At a station
  * joint (a seam mesh), every triangle must
  *   · not STAND: its normal within STAND_DEG (60°) of the road normals its vertices carry, i.e. not within 30° of the road's own plane (the road's, not the
  *     world's: a loop or a tube is vertical and is fine), and
@@ -187,7 +187,7 @@ function weldSeams(scene) {
 
 /**
  * A solid-colour diffuse for every material that has none. Paint is near-white; everything else mid-grey. PURE: no node, texture data is a
- * plain Uint8Array. The PREVIEW (app/preview/aclook.js) calls this one in the webview, where there is no Buffer (D224: 5debee8 called the
+ * plain Uint8Array. The PREVIEW (app/preview/aclook.js) calls this one in the webview, where there is no Buffer (a build that called the
  * Buffer version from the preview and the first Extend drew nothing). The export uses ensureDiffuse below, which is this plus a Buffer wrap.
  */
 function ensureDiffusePlain(scene) {
@@ -215,7 +215,7 @@ function ensureDiffuse(scene) {
 
 /**
  * mergeForAc(scene, { maxVerts, chunkM }): run AFTER flattenForAc and weldSeams (world space, seams already welded: weldSeams finds a zipper by its
- * name, which a merge would lose). WHY (D260): each kn5 mesh is at least one draw call (inferred: AC on DirectX 11), and an equation track's
+ * name, which a merge would lose). WHY: each kn5 mesh is at least one draw call (inferred: AC on DirectX 11), and an equation track's
  * cells are its 2 m adapter segments (src/core/adapter.js toSegments, segM 2; src/geom/mesh.js assemble makes one mesh per piece cell), so a
  * 13 km lap came out as ~7,600 road meshes plus as many underside skins. Here consecutive meshes of one CLASS (road `1ROAD_…` except the pit lane
  * `1ROAD_PIT_…`, which keeps its own meshes; the skin `UNDERSKIN_…`) with the same material and flags (castShadows, visible, transparent, renderable:
@@ -225,12 +225,12 @@ function ensureDiffuse(scene) {
  * The merged meshes are named `1ROAD_<piece>_chunk_<n>` and `UNDERSKIN_<piece>_chunk_<n>`, after the piece of their FIRST mesh (a textured piece's
  * floor is its own material, so its road is a chunk of its own and still carries its name): a road chunk keeps the `1ROAD` physics prefix (surfaces.ini's ROAD, and
  * the soft-collision block's `MESHES=1ROAD?`), and a skin chunk stays a non-physics name. A chunk of ONE mesh is that mesh, unchanged (its name too).
- * D261: a piece whose grip is not 100 has road meshes `1GRIPnnn_…` (src/export/gripkeys.js). The physics prefix is part of the chunk's key, so a chunk is
+ * A piece whose grip is not 100 has road meshes `1GRIPnnn_…` (src/export/gripkeys.js). The physics prefix is part of the chunk's key, so a chunk is
  * one surface: `1GRIPnnn_<piece>_chunk_<n>` beside the ROAD chunks, never a mix of two grips. The skins are not physics and merge as before.
  * Everything else (markers, walls, paint, the pit lane, a test export's end wall) is kept as it is, in place: a chunk sits where its first mesh sat.
  * Tangents are writeKn5's, from each vertex's own triangles; a merge shares no vertex between meshes, so they are the same.
  */
-const MERGE_CLASSES = Object.freeze([{ re: /^(1ROAD_CATCH_)/ }, { re: /^(1(?:ROAD|GRIP\d{3})_)(?!PIT)/ }, { re: /^(UNDERSKIN_)/ }]);   // D341: the catch under the road (catch.js) is first: a class of its own, so it never renumbers the road's chunks   // group 1 is the chunk's name prefix (its surface key)
+const MERGE_CLASSES = Object.freeze([{ re: /^(1ROAD_CATCH_)/ }, { re: /^(1(?:ROAD|GRIP\d{3})_)(?!PIT)/ }, { re: /^(UNDERSKIN_)/ }]);   // the catch under the road (catch.js) is first: a class of its own, so it never renumbers the road's chunks   // group 1 is the chunk's name prefix (its surface key)
 // 32,768, half the 16-bit budget (2026-10-12, the user on TEST TRACK 10: the road went invisible from the 90° turns on, though the car still drove on it).
 // Its two largest chunks held 65,088 and 65,472 vertices, every other under 60,000; the same export with chunks capped at 32,768 drew the whole lap
 // (the user drove it: "works"). Inferred, not measured: AC or Custom Shaders Patch adds vertices of its own to a mesh on load, so one filled to the

@@ -1,7 +1,7 @@
 // fromwords.js: a document of words becomes a complete AC track folder, through code alone (ARCHITECTURE §5c, §6; the
 // overnight plan's step 4). No game is launched and nothing is placed by hand.
 //
-//   buildExport(doc, opts)            -> { scene, kn5, ai, path, segments, geometry, validation, markers, warnings, ... }  (writes nothing; geometry: D372's hash)
+//   buildExport(doc, opts)            -> { scene, kn5, ai, path, segments, geometry, validation, markers, warnings, ... }  (writes nothing; geometry: the road's geometry hash, below)
 //   exportTrack(doc, { outDir, variant = 'block', t180 = true, ...opts }) -> { folders: [{ variant, folder, dir, files }], kn5Sha, warnings, ... }
 //
 // THE PIPELINE, each part called and none edited:
@@ -20,7 +20,7 @@
 //   PIT_LANE           the document's pit lane cannot be built (src/geom/pitlane.js names why); its crossings are RED
 //   BAD_SCENE          T1's validateScene refused the scene
 //   MARKERS            a §5c marker check is red (every problem is listed)
-//   FINS               D460: the fin guard (acready.js findFins) found road standing up out of the surface, or off it, where two pieces meet, in the
+//   FINS               the fin guard (acready.js findFins) found road standing up out of the surface, or off it, where two pieces meet, in the
 //                      scene about to be written. A fault in the builder, never in the track: the zipper and the weld should make none (err.fins lists them)
 //   NOT_OURS           the target folder exists and was not written by this builder (no .t180b-builder.json)
 // AMBER EXPORTS, WITH A WARNING: every amber range, a lap that could not run (no speed model), each check validation
@@ -42,10 +42,10 @@
 // CSP can crash on that file. Off, it writes neither (a track for ordinary cars), and only the block variant exists.
 // The noblock control keeps the switch: it differs from the block folder by the block alone.
 //
-// THE MARKERS (§5c) are src/markers (D171): a LAYOUT in track coordinates, anchored to words, placed on the surface the
+// THE MARKERS (§5c) are src/markers: a LAYOUT in track coordinates, anchored to words, placed on the surface the
 // mesh builds, checked by §5c's red checks (a red refuses, MARKERS), and PAINTED (start line, grid and pit boxes, as
 // visual meshes generated from the markers). opts.markers is the layout (the app's markers panel); without one, the
-// default layout drops the grid on the longest straight exactly where D167 did (line 15 m before its end, slots 8 m
+// default layout drops the grid on the longest straight exactly where the first layout did (line 15 m before its end, slots 8 m
 // apart, 2 pit boxes behind), and the hotlap now starts the run-up that reaches the design speed at the line (§5c:
 // "so the car arrives at speed"; 352 m at 460 km/h). opts.grid, opts.pits and opts.height still set its count, pits
 // and height. T1's scene checks (./markers.js) still run on the built scene as a second, geometric check.
@@ -78,11 +78,11 @@ const PitLane = require('./pitlane.js');
 const PitBoxes = require('./pitboxes.js');
 const { withTextureSet } = require('../texture/set.js');
 const { withUnderskin } = require('./underskin.js');
-const { withCatch, catchCells, rangesOfAmber, CATCH_OFFSET_M } = require('./catch.js');   // D341: a physical catch under the road (src/export/catch.js)
+const { withCatch, catchCells, rangesOfAmber, CATCH_OFFSET_M } = require('./catch.js');   // a physical catch under the road (src/export/catch.js)
 const { withGripKeys } = require('./gripkeys.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
 const { placeMarker, surfaceAt } = require('../markers/place.js');
-// THE TEST EXPORT OF AN UNFINISHED TRACK (D243a, the user: "it should allow to export even without it being completed"). opts.test, never the default:
+// THE TEST EXPORT OF AN UNFINISHED TRACK (the user: "it should allow to export even without it being completed"). opts.test, never the default:
 // the path is OPEN, every red is a WARNING (listed in the folder's TEST_FILE and the message), the AI line is open, the ui name and folder say "test, unfinished",
 // point-to-point gates AC_AB_START/FINISH are added, and the road ends in a NAMED end block: TEST_RUNOFF_M of road after the finish gate, then a wall
 // (1WALL_T180_END, both faces). Why a run-off then a wall: every point-to-point layout in the local AC install runs its AI line 58–226 m past its finish
@@ -115,7 +115,7 @@ const unit = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return l > 0 ? mul
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /**
- * D372: THE ROAD'S GEOMETRY HASH. Assetto Corsa keys a track's ghost (Documents\Assetto Corsa\GhostCar\<folder>) and the CMRT HUD its laps by the FOLDER
+ * THE ROAD'S GEOMETRY HASH. Assetto Corsa keys a track's ghost (Documents\Assetto Corsa\GhostCar\<folder>) and the CMRT HUD its laps by the FOLDER
  * NAME, not the shape, so a re-export that changes the road left a ghost driving through the air (ELYSIUM, 2026-10-17). The marker carries this hash, and
  * the install moves those laps aside when it changes (src-tauri/src/ac.rs retire_stale_laps). It is the SHAPE alone: every sample of the final path (after
  * the equation core's lift), its position to the millimetre and its frame (T, L, U) to a millionth, and every segment's kind, length, heartline,
@@ -155,7 +155,7 @@ function stations(p) {
 /** A's AI generator reads a design { stations } and one right → left cross-section per station, centre vertex in the middle. */
 function aiInput(segs, p, K = 16) {
   const all = stations(p), dsn = { stations: [], length: p.lengthM }, secs = [];
-  const segS0 = []; { let a = p.samples[0].s; for (const g of segs) { segS0.push(a); a += g.length; } }   // where each segment starts, for a blend's distance (D190)
+  const segS0 = []; { let a = p.samples[0].s; for (const g of segs) { segS0.push(a); a += g.length; } }   // where each segment starts, for a blend's distance
   let lastKept = -1;
   all.forEach((sm, i) => {
     const g = segs[sm.seg];
@@ -173,10 +173,10 @@ function aiInput(segs, p, K = 16) {
 }
 
 const rangeText = (x) => `${x.reason}${x.detail ? ` [${x.detail}]` : ''} at s ${x.s0.toFixed(1)}–${x.s1.toFixed(1)} m${x.source ? ` (${x.source})` : ''}`;
-/** D250: the plain warning for a landing the car may fly past at the lap's speed (validation's landing-misses-zone, amber). */
+/** The plain warning for a landing the car may fly past at the lap's speed (validation's landing-misses-zone, amber). */
 const jumpWarning = (a) => `jump: this jump may fly past its landing at the lap's speed, at s ${a.s0.toFixed(0)}–${a.s1.toFixed(0)} m${a.worst != null ? ` (the ${a.worst} g fall misses)` : ''}; tune it by driving it in AC`;
 
-// D365, THE AUTHOR: ui_track.json's author is the person's name when one is given (opts.author: Settings ▸ Author name in the app), else
+// THE AUTHOR: ui_track.json's author is the person's name when one is given (opts.author: Settings ▸ Author name in the app), else
 // exactly today's BUILDER. The builder is credited either way: BUILDER is always one of the tags, and the description credits it as before.
 const BUILDER = 't180-track-builder';
 const MAX_AUTHOR = 64;
@@ -199,7 +199,7 @@ function buildExport(doc, opts = {}) {
 }
 
 /**
- * Everything after the words are resolved: the SAME route for any source of `src/geom` segments (D186: the equation core's
+ * Everything after the words are resolved: the SAME route for any source of `src/geom` segments (the equation core's
  * adapter, src/core/adapter.js toSegments, emits them too). `meta` = { name, pitLane?, via?, description?, liftPath?, start? }: the track's name
  * (the folder and ui_track.json), an optional pit lane, and how the segments were made (reported as resolvedVia). The
  * segments must close a loop (buildPath closed); everything else (validation, the mesh self-check, markers, the kn5 read back,
@@ -207,19 +207,19 @@ function buildExport(doc, opts = {}) {
  */
 function buildFromSegments(segs, meta = {}, opts = {}) {
   const o = { step: 2, csp: true, ...LAYOUT, ...opts };
-  // D437b: opts.onStage(words) is told each stage as the export reaches it ("building the pit-lane check"), so an export that runs in its own process
+  // opts.onStage(words) is told each stage as the export reaches it ("building the pit-lane check"), so an export that runs in its own process
   // (app/export/exportrunner.js) can say where it was when that process died. It reads nothing and changes nothing
   const stage = typeof o.onStage === 'function' ? o.onStage : () => {};
-  const author = authorOf(o.author);   // D365: checked first, so a bad name refuses before any of the work
+  const author = authorOf(o.author);   // checked first, so a bad name refuses before any of the work
   const doc = { name: meta.name, pitLane: meta.pitLane || null }, via = meta.via || 'segments';
   if (!Array.isArray(segs) || !segs.some((g) => g.kind === 'road')) throw new ExportError('EMPTY_DOC', 'the document resolves to no road');
   let p;
-  // meta.start (D186): where the lap starts and its heading and PITCH ({ pos, theta, p }, src/geom buildPath's start); a word
+  // meta.start: where the lap starts and its heading and PITCH ({ pos, theta, p }, src/geom buildPath's start); a word
   // document resolves from the origin, level, so it has none. The geometry's shape depends on the start pitch.
-  const test = o.test === true;   // D243a: the TEST export of an unfinished track (above), only when asked for
+  const test = o.test === true;   // the TEST export of an unfinished track (above), only when asked for
   stage('building the road\'s path');
   try { p = buildPath(segs, { step: o.step, closed: !test, ...(meta.start ? { start: meta.start } : {}) }); } catch (e) { throw new ExportError('NOT_CLOSED', e.message); }
-  // meta.liftPath (D186): a source whose segments do not carry the whole road (the equation core's offsets, A's adapter offsetPath)
+  // meta.liftPath: a source whose segments do not carry the whole road (the equation core's offsets, the adapter's offsetPath)
   // lifts the path here, before the mesh, validation, markers and the AI line read it
   if (typeof meta.liftPath === 'function') p = meta.liftPath(p);
   const selfCheck = o.selfCheck !== false;
@@ -232,10 +232,10 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // the built physics road, in world space, for the downforce-ray gap check (src/validate/raygap.js; R1)
   stage('validating the lap');
   const roadMesh = walkScene(mesh.scene).meshes.filter((m) => isDrivable(m.name) && m.indices && m.indices.length);
-  // D256 fullSpeed: a closed lap on its ghost lap (as before); the TEST export's OPEN path at the lap sim's cap, so its lift-off is listed
+  // fullSpeed: a closed lap on its ghost lap (as before); the TEST export's OPEN path at the lap sim's cap, so its lift-off is listed
   const v = validate(p, segs, { csp: o.csp, softCollision: true, folds: mesh.folds, roadMesh, fullSpeed: true });
   const red = [...v.red];
-  // the pit lane (D174): built beside the road, self-checked against it with the same tests; its findings are red
+  // the pit lane: built beside the road, self-checked against it with the same tests; its findings are red
   let pit = null;
   if (doc.pitLane) {
     stage('building the pit-lane check');
@@ -249,11 +249,11 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const testReds = test ? red.map(rangeText) : [];   // TEST: every red is listed, none blocks
   if (red.length && !test) throw new ExportError('RED', `validation is red, nothing written: ${red.map(rangeText).join('; ')}`, { red });
   if (test) warnings.push(`TEST EXPORT (unfinished): ${red.length} red finding(s) NOT blocking, listed in ${TEST_FILE}`);
-  // D250: a jump's reach is the user's to tune by driving it in AC (the user), so it WARNS, in plain words, and never blocks. Each line starts
+  // a jump's reach is the user's to tune by driving it in AC, so it WARNS, in plain words, and never blocks. Each line starts
   // "jump: " so the install message can carry the jump warnings alone (app/install/install.js). A missed landing is said once, from its amber range;
   // the lap proof adds only what no amber says (a landing too deep below the take-off to reach)
   for (const a of v.amber) warnings.push(a.reason === 'landing-misses-zone' ? jumpWarning(a) : `amber: ${rangeText(a)}`);
-  // D446: two passes' edges side by side within 1 m (src/validate/raygap.js, validate's info 'near-touch'): said once, in plain words, and never blocking
+  // two passes' edges side by side within 1 m (src/validate/raygap.js, validate's info 'near-touch'): said once, in plain words, and never blocking
   const touches = (v.info || []).filter((x) => x.reason === 'near-touch');
   if (touches.length) warnings.push(`near-touch: two parts of the road come within ${Math.min(...touches.map((x) => x.worst)).toFixed(2)} m of each other edge to edge, at ${touches.map((x) => `${(x.s0 / 1000).toFixed(2)} km`).join(', ')} (information: it does not stop the export)`);
   for (const w of (v.lap && v.lap.warn) || []) if (w.reason === 'landing-unreachable') warnings.push(`jump: this jump may land too deep below its take-off to be reached, at s ${w.s.toFixed(0)} m; tune it by driving it in AC`);
@@ -283,15 +283,15 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const scene0 = { ...mesh.scene, materials: [...mesh.scene.materials, mk.paint.material],
     root: { ...mesh.scene.root, children: [...mesh.scene.root.children, ...mk.nodes, ...mk.paint.meshes, ...testNodes] } };
   // opts.textures: the texture set the preview draws (src/texture/set.js); the export follows the preview's own rule
-  // D230: every core road cell gets an underside skin that casts shadows, and a closed tube's inside is dark (src/export/underskin.js); a word document's scene comes back as it is
-  // D261: a piece whose grip is not 100 drives on its own surface: its road cells are named 1GRIPnnn_… (src/export/gripkeys.js), after the skins take their names from 1ROAD_
-  // D279: the pit lane wears the road's floor (src/export/pitlane.js withLaneFloor), right after the road's cells take theirs
+  // every core road cell gets an underside skin that casts shadows, and a closed tube's inside is dark (src/export/underskin.js); a word document's scene comes back as it is
+  // a piece whose grip is not 100 drives on its own surface: its road cells are named 1GRIPnnn_… (src/export/gripkeys.js), after the skins take their names from 1ROAD_
+  // the pit lane wears the road's floor (src/export/pitlane.js withLaneFloor), right after the road's cells take theirs
   stage('texturing the road');
   const textured = withTextureSet(pit ? PitLane.withLane(scene0, pit.mesh) : scene0, mesh, segs, o.textures || null);
   const laned = pit ? PitLane.withLaneFloor(textured, pit.lane, segs, o.textures || null) : textured;
-  // D279 follow-up: the painted pit boxes wear the road under them, its material and its texture coordinates (src/export/pitboxes.js)
+  // the painted pit boxes wear the road under them, its material and its texture coordinates (src/export/pitboxes.js)
   const boxed = PitBoxes.withPitBoxFloor(laned, mk.paint, { path: p, segments: segs, lane: pit ? pit.lane : null, set: o.textures || null });
-  // D341: the catch under the road: 'loaded' (the default) where validation lists a sustained load, 'all', 'off', or { s0, s1 } ranges (src/export/catch.js). It is appended after the skins, so the road
+  // the catch under the road: 'loaded' (the default) where validation lists a sustained load, 'all', 'off', or { s0, s1 } ranges (src/export/catch.js). It is appended after the skins, so the road
   // cells keep their places for the grip keys, and a track with no sustained load exports the kn5 it did before
   const catchMode = o.underCatch === undefined || o.underCatch === 'loaded' ? rangesOfAmber(v.amber) : o.underCatch;
   let catchChosen;
@@ -315,11 +315,11 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
 
   // the kn5, read back by our own reader (ARCHITECTURE §6 self-test) before any folder is touched. Flattened and given
   // diffuse textures first, as AC needs (src/export/acready.js: without these the car fell through and the road was black)
-  // D260: then the road and its underside skin joined into chunks (acready.js mergeForAc): the same triangles, a few dozen draw calls instead of one per 2 m
+  // then the road and its underside skin joined into chunks (acready.js mergeForAc): the same triangles, a few dozen draw calls instead of one per 2 m
   // cell. `mergeMeshes: false` writes the unmerged meshes, for a before/after comparison only
   stage('writing the kn5');
   const welded = weldSeams(flattenForAc(scene));
-  // D460: the fin guard reads the mesh about to be written; a ray cast down cannot see a sheet standing up across the road, and the user would find one by
+  // the fin guard reads the mesh about to be written; a ray cast down cannot see a sheet standing up across the road, and the user would find one by
   // driving into it (TEST 10, s 3,700). The zipper and the weld make none; this refuses if one ever gets through
   const fins = findFins(welded);
   if (fins.length) throw new ExportError('FINS', `the road would stand up in a thin wall where two pieces meet (${fins.map((x) => x.message).join('; ')}). That is a fault in the builder, not in your track, and nothing was written. Please report it.`, { fins });
@@ -350,8 +350,8 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
 }
 
 /**
- * THE ROAD'S WIDTH for ui_track.json (AC tracks write e.g. "32m"; an empty "" was the root of a NaN downstream, B's
- * CORRECTION in p-d182-plike-reg-B). It is the LENGTH-WEIGHTED MEDIAN, over the road segments, of each segment's
+ * THE ROAD'S WIDTH for ui_track.json (AC tracks write e.g. "32m"; an empty "" was the root of a NaN downstream).
+ * It is the LENGTH-WEIGHTED MEDIAN, over the road segments, of each segment's
  * edge-to-edge width ACROSS ITS SURFACE (the profile's u span: floor plus both walls, u being arc length across, as
  * src/geom/profile.js defines it). Why this statistic:
  *   · edge to edge along the surface is how the track reader measures an AC track's width (tools/read_track.cjs: 1 m
@@ -381,7 +381,7 @@ function writeFolder(b, outDir, v) {
   fs.mkdirSync(path.join(dir, 'ai'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'ai', 'fast_lane.ai'), b.ai);
   files.push('ai/fast_lane.ai');
-  // D243a: a TEST export says so in the folder, with every red it did not block on
+  // a TEST export says so in the folder, with every red it did not block on
   if (b.test) { fs.writeFileSync(path.join(dir, TEST_FILE), ['TEST EXPORT OF AN UNFINISHED TRACK (t180-track-builder). Not a finished track: the loop is open, the AI line is open, and the reds below did NOT block it.', `Point-to-point gates AC_AB_START/FINISH; the finish is ${b.test.runoffM} m before the road's end (a run-off), and the road ends in a wall (${b.test.wall}).`, '', `${b.test.reds.length} red finding(s):`, ...b.test.reds.map((r) => `- ${r}`), ''].join(String.fromCharCode(13, 10))); files.push(TEST_FILE); }
   fs.writeFileSync(path.join(dir, MARKER_FILE), JSON.stringify({ tool: 't180-track-builder', module: 'src/export/fromwords.js', written: new Date().toISOString(), geometry: b.geometry, files }, null, 2) + '\n');
   return { variant: v.variant, folder, dir, files };
@@ -400,7 +400,7 @@ function exportSegments(segs, meta, { outDir, variant = 'block', t180 = true, ..
   if (!VARIANTS[variant]) throw new ExportError('BAD_VARIANT', `variant "${variant}" is not block, noblock or both`);
   if (!t180 && variant !== 'block') throw new ExportError('BAD_VARIANT', `variant "${variant}" is the T-180 soft-road control; it needs "T-180 track" on`);
   const b = buildFromSegments(segs, meta, opts);
-  if (typeof opts.onStage === 'function') opts.onStage('writing the track\'s files');   // D437b
+  if (typeof opts.onStage === 'function') opts.onStage('writing the track\'s files');
   return writeExport(b, { outDir, variant, t180 });
 }
 

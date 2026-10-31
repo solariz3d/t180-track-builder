@@ -1,4 +1,4 @@
-// gripkeys.js: GRIP PER PIECE in the export (D261, the export half). A road piece's grip (src/core/document.js gripOf: a whole percent of AC's road
+// gripkeys.js: GRIP PER PIECE in the export (the export half). A road piece's grip (src/core/document.js gripOf: a whole percent of AC's road
 // grip, 50 to 150, 100 when the piece carries none) reaches AC as a SURFACE: the physics mesh `1<KEY>…` drives on the [SURFACE_n] whose KEY it names
 // (AC's system/data/surfaces.ini: ROAD is FRICTION=1).
 //   · 100% writes nothing new: the piece's road meshes stay `1ROAD_…` on AC's own ROAD, so an all-100 track exports byte for byte as before.

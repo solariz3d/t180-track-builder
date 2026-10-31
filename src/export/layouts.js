@@ -2,13 +2,13 @@
 // layouts out (ARCHITECTURE §11.1: "layouts as separate documents (Aurora's two layouts are separate model files, not shared road)").
 //
 //   exportProject(project, { outDir, ...buildExport opts }) -> { folder, dir, files, removed, layouts: [{ layout, kn5Sha, ... }] }
-//   exportBuilt(entries, { outDir, name, prune }) -> the same, for layouts already built (D361: the app's saved tracks, each built
+//   exportBuilt(entries, { outDir, name, prune }) -> the same, for layouts already built (the app's saved tracks, each built
 //     by the Export button's own route): entries = [{ layout, name, main, b }], b = fromwords buildFromSegments' result
 //   layoutSet(folder, entries, { t180, softCollision }) -> { files: { rel: body }, layouts }   (pure: nothing written)
 //   staleFiles(previousMarkerText, newPaths) -> { stale, warning }                              (pure)
 //
-// THE AC LAYOUT CONVENTION, as a two-layout track on this machine lays it out (read locally, 2026-09-27 and again 2026-10-17,
-// exo_memory/handback/p-d360-acside-E_2026-10-17.md §1: content/tracks/trackn has models_long.ini and
+// THE AC LAYOUT CONVENTION, as a two-layout track on this machine lays it out (read locally, 2026-09-27 and again 2026-10-17:
+// content/tracks/trackn has models_long.ini and
 // models_medium.ini at its root, the folders long/{ai, data/*.ini, map.png} and ui/long/{ui_track.json,
 // preview.png, outline.png}; ks_silverstone the same). So, per layout L of folder F:
 //   F/F_L.kn5                  the layout's own model, a whole road (separate files, as Aurora's are: not shared road)

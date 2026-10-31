@@ -15,7 +15,7 @@ const { gripsOf, gripSurface } = require('./gripkeys.js');
 // all those tracks use (read locally on D, 2026-09-27: trackb, tracke, trackk); it is
 // CSP's own syntax, so it is written as-is. No other author's text is copied: the keys and values are FINDINGS'.
 // INTENSITY / RIGID_WITH_BODIES / RIGID_WITH_BOXES, which the observed blocks also set (to 1 / 0 / 0), are NOT in
-// FINDINGS §4c and are left to CSP's defaults here; the hand-back names this as a difference to test if the soft road
+// FINDINGS §4c and are left to CSP's defaults here; this is a difference to test if the soft road
 // does not reproduce.
 // SOFT_CFM IS NOT FINDINGS' VALUE (2026-10-30, at the user's yes). §4c's 0.0002 is the measured origin; the default is a
 // quarter of it, 0.00005, a firmer contact (CSP: "the higher it is, the softer is the collision"). On 0.0002, seven helix
@@ -44,7 +44,7 @@ const SURFACES_HEADER = [
 ].join('\n');
 
 // CSP'S EXTENDED-PHYSICS SWITCH (ARCHITECTURE §6: the soft-collision block "plus CSP's WAV_PITCH=extended-0 opt-in with a
-// CSP-only warning"; missed until R1, docs/research/04_ac_physics_drivability.md §2). SOURCED there from the CSP wiki
+// CSP-only warning"). SOURCED from the CSP wiki
 // (Tracks – Enabling extended physics): one surface in surfaces.ini with `WAV_PITCH=extended-0` marks the track as using
 // extended physics, and plain AC without CSP would crash on that value. MEASURED there: 25 of the 39 installed
 // surfaces.ini files with the soft block also carry it (track E, track B, track K, track C, track F, track A), on a
@@ -80,7 +80,7 @@ const CSP_ONLY_WARNING = 'csp-only: surfaces.ini sets WAV_PITCH=extended-0, CSP\
  * to on (a T-180 track). They are separate so the soft-road CONTROL (the noblock variant) differs from the block variant
  * by the block ALONE (FINDINGS §4c's registered prediction must not test two things at once); the app's "T-180 track"
  * toggle turns both on or both off.
- * `grips` (D261): the distinct piece grips other than 100 (gripkeys.js gripsOf). Each gets a GRIPnnn surface after the PIT one, and the soft-collision
+ * `grips`: the distinct piece grips other than 100 (gripkeys.js gripsOf). Each gets a GRIPnnn surface after the PIT one, and the soft-collision
  * block covers their meshes too (`MESHES=1ROAD?, 1GRIP?`). With none, the file is exactly what it was before grip existed.
  */
 function surfacesIni({ softCollision = true, extendedPhysics = true, grips = [] } = {}) {
