@@ -1,5 +1,5 @@
 // kn5-move-gate.cjs: moves a sector gate (AC_TIME_n_L / _R) of an EXISTING kn5 onto the nearest flat road, by rewriting the
-// two dummies' 16-float matrices in place; every other byte of the file stays as it was (D567, the keeper 2026-10-30: "i only
+// two dummies' 16-float matrices in place; every other byte of the file stays as it was (the user, 2026-10-30: "i only
 // see sector one being complete"; ELYSIUM's AC_TIME_2 stood on an 85° bank, 30.2 m apart vertically and 3.45 m top-down).
 // For a track already exported and raced, so it can be lapped on the exact road it has; a new export places its gates itself
 // (src/markers/layout.js lapSectors).
