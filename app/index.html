@@ -96,6 +96,12 @@
   #win-min:hover, #win-max:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
   #win-close:hover { background: #b0303a; }
   #win-close:hover::before, #win-close:hover::after { border-color: #fff; }
+  /* THE HOVER CARD (app/hovertip.js, D581): every title's words in the look's own menu panel (.more-menu: each look's surface, border, radius and blur), placed
+     by the script, never in the pointer's way; this rule only undoes the menu's layout and gives it the look's accent as its top edge */
+  /* its face is --tip-font (the user, 01:26: "different font perhaps?"): the display face of the road numbers and the values band; var(--mono) is the one-word swap */
+  #hovertip { --tip-font: var(--display); position: fixed; top: 0; left: 0; right: auto; z-index: 2000; display: block; min-width: 0; max-width: 360px; padding: 7px 10px; gap: 0;
+    font: 400 13px/1.4 var(--tip-font); color: var(--text); white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; border-top-color: var(--accent); }
+  #hovertip[hidden] { display: none; }
   /* A QUESTION IN THE PAGE (app/askdialog.js): the save-on-close prompt, in the same black, bone and violet. */
   .ask-veil { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(6, 6, 6, .62); backdrop-filter: blur(3px); }
   .ask-card { width: min(380px, calc(100vw - 48px)); background: var(--bg); border: 1px solid var(--hair); border-top: 1px solid var(--accent); padding: 22px 24px 18px; box-shadow: 0 18px 60px rgba(0, 0, 0, .6); }
@@ -240,8 +246,9 @@
   /* the depth behind the track: a soft vignette over the view (the road keeps its own lighting) */
   #preview::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 55% 38%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
   /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
+  /* D581: its top is --hud-top (app/core/valuesoverlay.js): level with the column card where it clears the strip, else just under it */
   /* the view tag has a backing like the values strip's, so it never sits on the scene (a grid line at the horizon took it to 3.7 : 1) */
-  .preview-hud { z-index: 2; left: 274px !important; top: calc(var(--values-bottom, 66px) + 14px); bottom: auto !important; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent) !important; color: var(--on-ink-strong, #ffffff) !important; padding: 2px 6px !important; border-radius: 6px !important; font-family: var(--mono) !important; font-size: 12px !important; }
+  .preview-hud { z-index: 2; left: 274px !important; top: var(--hud-top, calc(var(--values-bottom, 66px) + 14px)); bottom: auto !important; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent) !important; color: var(--on-ink-strong, #ffffff) !important; padding: 2px 6px !important; border-radius: 6px !important; font-family: var(--mono) !important; font-size: 12px !important; }
   #camera p { margin: 0; color: var(--dim); font-size: 12px; letter-spacing: .04em; background: color-mix(in srgb, var(--veil, #0b0d11) 86%, transparent); padding: 1px 6px; border-radius: 6px; }   /* a backing, not a glow, behind the words over the scene; padded, so the letters' own box stays on it (skyline's read 1.2 : 1 where they ran past its edge onto the ground) */
   /* the camera keys: a small "?" at the foot; the line shows while it is hovered or focused, or after a press (app/camera/index.js) */
   #camera .camera-keys { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -449,6 +456,8 @@
   // the title bar AFTER the close handler, so its X always has a handler to reach (app/titlebar.js)
   let TB = null;
   try { TB = await loadCjs("app/titlebar.js", get); await TB.wireTitlebar(document, win); } catch (e) { console.error(`title bar not wired: ${e && e.message}`); }
+  // D581: every title's words in the look's own hover card, not Windows' tooltip (app/hovertip.js)
+  try { (await loadCjs('app/hovertip.js', get)).wireHovertip(document); } catch (e) { console.error(`hover card not wired: ${e && e.message}`); }
   // D508: the window is created hidden (no white window before the maximize); it is shown, maximized, once this page has painted its look (the head
   // script set it before the first paint). Not awaited: the builder starts meanwhile. Without titlebar.js the window is shown at once, and if this
   // page never runs at all, lib.rs shows it natively

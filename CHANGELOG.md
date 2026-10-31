@@ -17,6 +17,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- **The view's name sits higher.** "Build view · plain road (L)" at the top left of the 3D view now lines up with the top of the left column wherever the values strip leaves it room; in a narrower window it sits just under the strip instead of a gap below it.
+
+- **Hover help comes in a card that matches your look.** Rest the pointer on anything that explains itself (the "early" boxes, the menu buttons, the checker's lines, every field) and its words appear after a moment in a small card drawn in the current look's own colours and shape, instead of Windows' plain yellow tooltip. It stays inside the window and goes away as soon as you move off, press, scroll or type.
+
+- **The "start" boxes in Extend are now "early", and each says what it does.** Hover a box to read what ticking it does for that row: a bank, cup, edge or width eases in from the start of the piece and is reached within about 235 m (or half a short piece), then held; a turn or climb rate, the edge start and the tube sweep are reached within the first 20 m. Unticked, the change spreads over the whole piece, as before.
+
 - **Three sizes of type.** Words are 12 px, headings 16 px, and the road's numbers 24 px (18 px on the road labels), where seven nearby sizes from 10 to 15 px made everything look about the same; the small labels beside the numbers stay 11 px. The height ruler's tags in Sculpt sit fully on their backing.
 
 - **The checker says each thing once.** A warning that holds in several places is one line with every place listed ("at 15645–16487, 17797–18651 and 19773–19789 m"), where the list used to repeat the same sentence for each.
@@ -40,6 +46,8 @@ All notable changes to this project are recorded here. The format follows
 - **The road is firmer under a car at very high load: cars that used to sink through the surface in the hardest corners now stay on it.** This applies to tracks exported from now on, in Assetto Corsa with Custom Shaders Patch; a track already installed keeps its old road until it is exported again.
 
 ### Fixed
+
+- **Dragging fast no longer makes the tick sound buzz.** Ticks now come at most about 28 a second (one per 35 ms, where it was up to 250), so a quick drag sounds like a steady ratchet; a tick that would come too soon is skipped, never played late.
 
 - **A road texture flows smoothly through a tube that widens or narrows.** Where a closed tube changed width, the texture on its walls and roof was cut into short pieces every 2 m, each shifted sideways from the last, worse toward the roof. Each row now takes its own section's width, and a tube keeps one count of texture repeats round for its whole length, so the lines run on without a step. A tube of one width, and every other road, looks exactly as before.
 

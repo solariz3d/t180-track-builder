@@ -820,7 +820,8 @@ test('row 19: no help paragraph stays in the left column (D267): the tube width,
   // grip: just the grip; the tooltip has what 100% is
   grip.value = '130'; grip.oninput(); assert.equal(P1.text('what the grip means'), 'Grip 130% · untested'); check('grip 130'); assert.match(grip.attrs.title, /100% is AC's own road.*untested: drive it/);
   // the turn-0 hint: the "at start" box's tooltip, no paragraph
-  P1.shell.extend({ length: 100, targets: { kh: 30 * Math.PI / 180 / 100 } }); P1.frame(); field('turn °/100m').value = '0'; field('turn °/100m').oninput(); check('turn 0'); assert.match(P1.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title, /turn 0 eases over the whole piece: tick "at start"/);
+  // AMENDED (D581, the rule changed: the box reads "early", so the hint says to tick "early")
+  P1.shell.extend({ length: 100, targets: { kh: 30 * Math.PI / 180 / 100 } }); P1.frame(); field('turn °/100m').value = '0'; field('turn °/100m').oninput(); check('turn 0'); assert.match(P1.all().find((e) => e.attrs['aria-label'] === 'turn at the start').attrs.title, /turn 0 eases over the whole piece: tick "early"/);
   // the jump and the landing: no text; their words are the button's and the block's tooltips
   P1.button('Jump').onclick(); P1.frame(); check('a landing'); assert.equal(P1.text('jump note'), ''); assert.match(P1.button('Jump').attrs.title, /drive it in AC/);
   P1.panel.unmount();

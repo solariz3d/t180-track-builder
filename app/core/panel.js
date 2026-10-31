@@ -89,7 +89,26 @@ function crossStartM(from, to, length, spread = SWELL_SPREAD, bends = false) {
   return Math.min(Math.ceil(want * 10 - 1e-9) / 10, cap);
 }
 const FIELD_CHANNEL = Object.freeze({ turn: 'kh', climb: 'kv', bank: 'phi', width: 'w', cup: 'c', edge: XS.CHANNEL.edge, edgeR: 'er', start: XS.CHANNEL.start, tube: XS.CHANNEL.tube });
-// THE TURN AS A CORNER (B; the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). turnAs 'corner' (the
+// THE "EARLY" BOX'S WORDS, ONE PER ROW, each what extendOptions does with that field ticked:
+//   bank, cup, left and right edge: F (crossStartM): F_RAMP_M laid in three quarters, 225 m, done by 234.5 m on the user's piece (the comment above), so "about 235 m";
+//     longer for a big change (the roll bar), within half the piece, which the bank's alone may pass;
+//   width: F with F_RAMP_M and the half-piece cap, no roll bar;
+//   turn and climb read as a rate, edge start, tube sweep: AT_START_M, or the whole piece if shorter. A turn or climb read as a corner (not 0) has no rate
+//   target (turnDeg / climbDeg, laid with Turn by's own ease), so the box does nothing to it.
+const EARLY_F = 'it eases in from the start of the piece and is reached within about 235 m (or half a short piece), then held';
+const EARLY_SHORT = `within the first ${AT_START_M} m of the piece (or the whole piece, if shorter)`;
+const EARLY_TITLE = Object.freeze({
+  turn: `Reach this turn early: the turn rate you typed is reached ${EARLY_SHORT}, then held. Unticked, it eases there over the whole piece. Read as a corner, a turn other than 0 is laid as a whole corner with its own ease, and this box does nothing.`,
+  climb: `Reach this climb early: the climb rate you typed is reached ${EARLY_SHORT}, then held. Unticked, it eases there over the whole piece. Read as a corner, a climb other than 0 is laid as a whole corner with its own ease, and this box does nothing.`,
+  bank: `Reach this bank early: ${EARLY_F}. A big change takes longer, so the road never rolls faster than the checker allows, and may then use more of the piece. Unticked, the change spreads over the whole piece.`,
+  cup: `Reach this cup early: ${EARLY_F}. A big change takes longer, so it never changes faster than the checker's roll limit. Unticked, the change spreads over the whole piece.`,
+  edge: `Reach this left edge early: ${EARLY_F}. A big change takes longer, so it never changes faster than the checker's roll limit. Unticked, the change spreads over the whole piece.`,
+  edgeR: `Reach this right edge early: ${EARLY_F}. A big change takes longer, so it never changes faster than the checker's roll limit. Unticked, the change spreads over the whole piece.`,
+  width: `Reach this width early: ${EARLY_F}. Unticked, the change spreads over the whole piece.`,
+  start: `Reach this edge start early: the edge moves to where you typed ${EARLY_SHORT}, then stays there. Unticked, it moves there over the whole piece.`,
+  tube: `Reach this tube sweep early: the sweep you typed is reached ${EARLY_SHORT}, then held. Unticked, it changes over the whole piece.`,
+});
+// THE TURN AS A CORNER (the user, 2026-10-15: turns should "convey the proper degrees to line up with the grid", banked or not). turnAs 'corner' (the
 // panel's default) reads the turn field as the piece's exact heading change in degrees, ending straight: `turnDeg`, which src/core/turnby.js extendCorner places
 // with Turn by's symmetric ease (so it has no "at start" ramp of its own). A typed 0 still eases to a rate of 0, because a "corner of 0°" after a road still
 // turning would bend back the other way. turnAs 'rate' (and this function's default, for its other callers) is the old meaning: degrees per 100 m, a target rate.
@@ -190,7 +209,7 @@ function mount(root, shell, mountOpts = {}) {
   // the at-start box sits at the END of its field's row, "start" in the muted colour, the whole sentence in its tooltip; `extra` (width like…, grip like…) goes between
   // the input and the box, a small ▾ picker on the same row. The input stays the label's second child
   const fieldAt = (label, input, k, extra = null) => el('label', { class: 'picker inline' }, typeof label === 'string' ? el('span', { text: label }) : label, input, ...(extra ? [extra] : []),
-    el('span', { class: 'at-start', title: atStart[k].getAttribute ? atStart[k].getAttribute('title') : '' }, atStart[k], el('span', { text: 'start' })));
+    el('span', { class: 'at-start', title: atStart[k].getAttribute ? atStart[k].getAttribute('title') : '' }, atStart[k], el('span', { text: 'early' })));
   const num = (value, step, title) => el('input', { type: 'number', value: String(value), step: String(step), title: title || '' });
   const send = (name, detail) => doc.dispatchEvent(new win.CustomEvent(name, { detail }));
 
@@ -272,10 +291,9 @@ function mount(root, shell, mountOpts = {}) {
   const bankTarget = () => { const t = asTyped('bank'); if (t === '') return t; const T = Number(t); return Number.isFinite(T) ? String(HD.wrapTurn(T)) : t; };
   // "at start": one small box per field, off by default (off = ease to the value over the whole piece, as always). It is kept from
   // piece to piece, like a preference; it does nothing for a field left as shown, which has no target
-  const atStart = Object.fromEntries(Object.keys(HEAD).map((k) => [k, el('input', { type: 'checkbox', 'aria-label': `${k} at the start`,
-    title: ['bank', 'cup', 'edge', 'edgeR'].includes(k)
-      ? `at start: reach this ${k} as early as the road can roll to it (${AT_START_M} m at least, never faster than the checker's roll limit) and hold it (off: ease to it over the whole piece)`
-      : `at start: reach this ${k} within the first ${AT_START_M} m of the piece and hold it (off: ease to it over the whole piece)` })]));
+  // (the user, 2026-10-31: the boxes "need a more informative name and a hover that explains them"): the box reads "early", and its tooltip is EARLY_TITLE's
+  // words for THAT row; the aria-label keeps "<field> at the start"
+  const atStart = Object.fromEntries(Object.keys(HEAD).map((k) => [k, el('input', { type: 'checkbox', 'aria-label': `${k} at the start`, title: EARLY_TITLE[k] })]));
   // the turn field's label says which way it is read; switching puts the field back to what it shows, so nothing typed in the other unit is applied
   const turnLabel = el('span', { text: 'turn °' }), turnField = fieldAt(turnLabel, turn, 'turn'), climbLabel = el('span', { text: 'climb °' }), climbField = fieldAt(climbLabel, climb, 'climb');
   turnAs.onchange = () => { showTurnHead(shell.headState()); applied.turn = turn.value; applied.climb = climb.value; ghost(); };
@@ -451,7 +469,7 @@ function mount(root, shell, mountOpts = {}) {
   // and the hint when the turn field asks for 0 after a turn without "at start": that eases over the whole piece, so it is not straight until its end
   // no paragraph under the buttons; the sense is the "at start" box's tooltip
   const turnStartTitle = atStart.turn.getAttribute('title');
-  const hintNow = () => { const typed = asTyped('turn'); const hint = typed !== '' && Number(typed) === 0 && Number(cornerMode() ? show(shell.headState().kh * 100 / DEG) : shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "at start" (or press Straight) to be straight from ${AT_START_M} m on` : ''; atStart.turn.setAttribute('title', hint ? `${turnStartTitle} ${hint}` : turnStartTitle); };
+  const hintNow = () => { const typed = asTyped('turn'); const hint = typed !== '' && Number(typed) === 0 && Number(cornerMode() ? show(shell.headState().kh * 100 / DEG) : shown.turn) !== 0 && !atStart.turn.checked ? `turn 0 eases over the whole piece: tick "early" (or press Straight) to be straight from ${AT_START_M} m on` : ''; atStart.turn.setAttribute('title', hint ? `${turnStartTitle} ${hint}` : turnStartTitle); };
 
   // SCULPT (the user's GO 2026-10-20 14:53). Sculpt is a MODE (st.sculpt), set by Build ▸ Sculpt mode (app/core/buildmenu.js) or by Tab; it replaced
   // the brush's "on" box, its mode and channel selects and its "sculpt (shape only)" box. In Sculpt a press on the road and a drag is the chosen TOOL, named by what the hand does.

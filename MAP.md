@@ -104,7 +104,7 @@ file in both places.
 - `app/markers/`, `app/texture/`, `app/texmaker/`: those panels' logic, each with no DOM (`createMarkersController`, `createTextureController`, `createEditor`).
 - `app/lib/`: `cjs.js` (loads the CommonJS files in the webview, `loadCjs`), `theme.js` (the look per melody), `tokens.js` (the look's colours for canvas and GL).
 - `app/themes/`: one stylesheet per look. `app/sounds/`: the recorded samples. `app/sound.js`: the sounds and melodies (`createSound`).
-- Top-level files: `settings.js` (saved settings, `createSettings`), `titlebar.js`, `closer.js` (the one close handler), `askdialog.js` (a question in the builder's look), `shell.js` (the older piece builder's shell, kept only as a test driver for the shared preview and checker; its keys moved to `app/core/keys.js`).
+- Top-level files: `settings.js` (saved settings, `createSettings`), `titlebar.js`, `closer.js` (the one close handler), `askdialog.js` (a question in the builder's look), `hovertip.js` (every title's words in a hover card in the look's own colours, not Windows' tooltip), `shell.js` (the older piece builder's shell, kept only as a test driver for the shared preview and checker; its keys moved to `app/core/keys.js`).
 - `app/testhook/`: read-only hooks the window proof uses (`probe.js`, `ghostword.js`). `app/README.md`: how panels mount ("the seam").
 
 ## `scripts/`
