@@ -373,7 +373,10 @@ test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sid
         const m = await sc.run(BAR("document.getElementById('f').contentDocument"));
         assert.ok(m.width > w && m.width < w + 1, `a ${w} px frame at 125% is a fraction of a pixel wider (${m.width})`);
         fits(m, m.width.toFixed(2));
-        assert.equal(Math.round(m.h1), Math.round(at[w].h1), `at ${m.width.toFixed(2)} px the title folds as at ${w} px (h1 ${Math.round(m.h1)} px, not ${Math.round(at[w].h1)})`);
+        // AMENDED (D573): within one fold the title is up to 0.4 px narrower at 125% (its glyphs land on whole device pixels: 59.125 against 59.53 at 1099, 15.6 against
+        // 16 at 979), so comparing ROUNDED widths failed whenever the width sat near a half pixel (it did once the title went to 12 px type); a fold shows or hides a
+        // whole span, tens of pixels, so under 1 px apart is the same fold
+        assert.ok(Math.abs(m.h1 - at[w].h1) < 1, `at ${m.width.toFixed(2)} px the title folds as at ${w} px (h1 ${m.h1.toFixed(2)} px, not ${at[w].h1.toFixed(2)})`);
       }
       assert.deepEqual(sc.errs, [], 'no page errors at 125%');
     } finally { await sc.close(); }
