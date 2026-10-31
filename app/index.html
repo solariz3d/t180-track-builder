@@ -104,7 +104,7 @@
   /* D361: File ▸ Export layouts… (app/menubar/layoutsdialog.js) */
   .author-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 10px; }
   .author-row input { min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--hair); border-radius: 2px; padding: 3px 5px; }
-  .apron-row .apron-help { grid-column: 1 / -1; font-size: 11px; color: var(--text); max-width: 260px; }   /* D572: File ▸ Edge apron's help line, under the field */
+  .apron-row .apron-help { grid-column: 1 / -1; font-size: 11px; color: var(--text); max-width: 260px; }   /* D572: Track ▸ Edge apron's help line, under the field */
   .ask-card.ask-layouts { width: min(680px, calc(100vw - 48px)); }
   .ask-layouts .lx-row { display: grid; grid-template-columns: 40px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) 40px; align-items: center; gap: 8px; margin: 0 0 6px; }
   .ask-layouts label.lx-row { grid-template-columns: 110px minmax(0, 1fr); margin-bottom: 14px; }
@@ -648,7 +648,7 @@
       // (settings.set tells its listeners only on a change; A's read of D401, §8). app/menubar/items.js calls this from the Random item
       ctx.repickTheme = () => onTheme('music');
       MB.mountBar(document, [
-        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c), apronRow: shell ? MI.apronField(document, shell) : null }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport')] },
+        { details: $('m-file'), slot: $('m-file-slot'), items: (c) => MI.fileItems(c, { developer: some(developer, 'Developer ▸ Open example…')(c) }), closers: [$('new'), $('save'), $('export'), $('exportlayouts'), $('testexport')] },
         { details: $('m-edit'), slot: $('m-edit-slot'), items: (c) => MI.editItems(c, { selection: some(selection, 'The selection\'s entries')(c) }) },
         { details: $('m-build'), slot: $('m-build-slot'), items: whole(build) },
         { details: $('m-track'), slot: $('m-track-slot'), items: whole(track) },

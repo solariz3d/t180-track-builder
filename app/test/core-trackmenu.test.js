@@ -60,7 +60,9 @@ async function menu() {
 test('the Track menu lists Start & grid…, Pit lane… and Road surface ▸ as panels, in that order, then a separator and its two commands, Smooth ramps and Bank the lap', async () => {
   const M = await menu();
   try {
-    assert.deepEqual(M.track.map((i) => i.label || (i.separator ? '—' : '?')), ['Start & grid…', 'Pit lane…', 'Road surface ▸', '—', 'Smooth ramps', 'Bank the lap']);
+    // AMENDED (D572): the Edge apron field follows Road surface, a node (the field and its help line, app/menubar/items.js apronField), the librarian's ruling 2026-10-30
+    assert.deepEqual(M.track.map((i) => i.label || (i.separator ? '—' : i.node ? 'node' : '?')), ['Start & grid…', 'Pit lane…', 'Road surface ▸', 'node', '—', 'Smooth ramps', 'Bank the lap']);
+    assert.ok([...M.track[3].node.children].some((e) => e.type === 'number'), 'the node is the Edge apron field');
     for (const i of M.track.slice(0, 3)) assert.equal(typeof i.panel, 'function', `${i.label} opens a panel`);
     assert.equal(typeof M.item('Smooth ramps').run, 'function', 'Smooth ramps is a command');
     assert.equal(M.item('Smooth ramps').panel, undefined);

@@ -1,9 +1,8 @@
 // items.js: what File, Edit, View and Settings hold (D355 part 1), as contract M entries (app/menubar/menubar.js). The page's own controls keep their ids and
 // their wiring and are moved in as they are ({ node }); the parts' entries (C's Edit selection, A's File ▸ Developer) are passed in and placed under a heading.
 //
-//   fileItems(ctx, { developer, apronRow })   the slot under File's own controls: Export ▸ Edge apron (D572) when given, then Developer ▸ (A's trackmenu.developerItems:
-//                                        Open example…) when there is any
-//   apronField(doc, shell)               D572: File ▸ Edge apron, the track's apron width in metres, set through the shell (one undo step), with its help line
+//   fileItems(ctx, { developer })        the slot under File's own controls: Developer ▸ (A's trackmenu.developerItems: Open example…) when there is any
+//   apronField(doc, shell)               D572: Track ▸ Edge apron, the track's apron width in metres, set through the shell (one undo step), with its help line
 //   editItems(ctx, { selection })        Undo, Redo, then the selection's entries (C's piecesui.items, which bring their own Selection heading), when there are any
 //   viewItems(ctx)                       Drag handles and Colour by grip (saved settings), Show the guide
 //   settingsItems(ctx, { soundRow, acFolder, acAllow })   sound, the theme (D394), how the turn and climb are read, the grid step, mirror on insert, the checker's wall
@@ -20,15 +19,12 @@ const tick = (label, key, title) => ({ label, title, checked: (ctx) => val(ctx, 
 /** a choice of one, as ticks: picking one sets it; unticking the one that is set keeps it (the menu is rebuilt and shows it ticked again) */
 const choice = (key, options) => options.map(([value, label, title]) => ({ label, title, checked: (ctx) => val(ctx, key) === value, toggle: (on, ctx) => { if (on) ctx.settings.set(key, value); } }));
 
-function fileItems(ctx, { developer = [], apronRow = null } = {}) {
-  return [
-    ...(apronRow ? [{ section: 'Export' }, { node: apronRow }] : []),
-    ...(developer.length ? [{ separator: true }, { section: 'Developer' }, ...developer] : []),
-  ];
+function fileItems(ctx, { developer = [] } = {}) {
+  return developer.length ? [{ separator: true }, { section: 'Developer' }, ...developer] : [];
 }
 
-// D572: File ▸ Edge apron, the width of the apron every export of this track lays outside the road's open edges (src/export/apron.js), saved with the track
-// (app/core/coreshell.js setEdgeApron). Built each time File opens, so it shows the open track's width; a width the shell refuses puts back the width kept.
+// D572: Track ▸ Edge apron (app/core/trackmenu.js), the width of the apron every export of this track lays outside the road's open edges (src/export/apron.js), saved with the track
+// (app/core/coreshell.js setEdgeApron). Built each time Track opens, so it shows the open track's width; a width the shell refuses puts back the width kept.
 // The help line is the librarian's ruling (2026-10-30): at 0 the side face is scenery, not physics
 const APRON_HELP = '0 closes the gap visually only; a wheel can still drop under.';
 function apronField(doc, shell) {
@@ -43,7 +39,7 @@ function apronField(doc, shell) {
     if (t !== '' && Number.isFinite(w)) shell.setEdgeApron(w);
     input.value = String(shell.edgeApron());
   };
-  label.appendChild(span); label.appendChild(input); label.appendChild(help);
+  label.append(span, input, help);
   return label;
 }
 

@@ -1,4 +1,4 @@
-// export-apron-setting.test.js: node --test app/test/export-apron-setting.test.js. D572 Part B: File ▸ Edge apron, the width of the apron the export lays outside every
+// export-apron-setting.test.js: node --test app/test/export-apron-setting.test.js. D572 Part B: Track ▸ Edge apron, the width of the apron the export lays outside every
 // open road edge (src/export/apron.js), saved with the track (src/core/document.js edgeApronM). The shell sets it as one undo step; every export the page makes reads it,
 // on the page and in the export's own process (app/export/exportjob.js); a track that never set it exports at the exporter's default, 2.0 m.
 'use strict';
@@ -57,9 +57,9 @@ test('the export\'s own process gets it too: the job carries the width and its e
   assert.ok(!z.includes('1ROAD_APRON_') && z.includes('APRONSIDE_'));
 });
 
-test('File ▸ Edge apron: the field shows the track\'s width, sets what is typed, says what 0 does, and shows the kept width when one is refused', async () => {
+test('Track ▸ Edge apron: the field shows the track\'s width, sets what is typed, says what 0 does, and shows the kept width when one is refused', async () => {
   const sh = await shellWith(LAP), made = [];
-  const doc = { createElement: (tag) => { const e = { tag, children: [], attrs: {}, value: '', textContent: '', appendChild(c) { this.children.push(c); return c; }, setAttribute(k, v) { this.attrs[k] = v; } }; made.push(e); return e; } };
+  const doc = { createElement: (tag) => { const e = { tag, children: [], attrs: {}, value: '', textContent: '', append(...c) { this.children.push(...c); }, setAttribute(k, v) { this.attrs[k] = v; } }; made.push(e); return e; } };
   const node = MI.apronField(doc, sh), input = made.find((e) => e.tag === 'input');
   assert.equal(input.value, '2'); assert.equal(input.type, 'number'); assert.equal(input.min, '0'); assert.equal(input.max, '10');
   assert.ok(made.some((e) => e.textContent === '0 closes the gap visually only; a wheel can still drop under.'), 'the help line, exactly');

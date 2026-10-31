@@ -993,7 +993,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       if (JSON.stringify(nd.pitLane) === JSON.stringify(d.pitLane)) return st;
       return commit('pitLane', () => nd, { lastEdited: null, ...ok(lane ? 'pit lane set' : 'pit lane removed') });
     },
-    /** D572: the edge apron's width in metres, as every export of this track lays it: the track's own (File ▸ Edge apron), else the exporter's default. */
+    /** D572: the edge apron's width in metres, as every export of this track lays it: the track's own (Track ▸ Edge apron), else the exporter's default. */
     edgeApron() { const w = doc().edgeApronM; return w === undefined ? require('../../src/export/apron.js').APRON_WIDTH_M : w; },
     /** D572: set the edge apron's width (0 to 10 m; 0 = no apron, the side face only), saved with the track. One undo step; a bad value is refused in plain words. */
     setEdgeApron(w) {
@@ -1373,7 +1373,7 @@ async function createCoreShell({ storage = null, exporter = null, brushFn = type
       // the open path, its reds listed as warnings. A CLOSED track is refused it by name: the lap would be built open, with the end wall at its seam
       if (opts.test && doc().closed) throw exportError('TEST_CLOSED', 'this track is closed: use Export (the test export is for an unfinished, open track)');
       if (!doc().closed && !opts.test) throw exportError('OPEN_LOOP', 'the loop is not closed: close it first (one click), then export');
-      // D572: the track's edge apron width (File ▸ Edge apron) when it set one; a track that never did leaves it out, so the exporter's default holds
+      // D572: the track's edge apron width (Track ▸ Edge apron) when it set one; a track that never did leaves it out, so the exporter's default holds
       if (doc().edgeApronM !== undefined) opts = { edgeApronM: doc().edgeApronM, ...opts };
       let markers;
       // SPAWNS (2026-10-09): a track whose start was placed by hand exports exactly that; one that never was keeps the automatic placement
