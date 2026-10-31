@@ -6,7 +6,7 @@
 //
 // The ANCHOR is one of the track's AC_ dummies ({ name, pos, fwd } as tools/kn5.cjs gives them). Its forward axis is made
 // horizontal and SIGNED by the track's race direction (src/export/markers.js raceDirection: back grid slot → pole),
-// because some authors' marker axes point backwards (FINDINGS §7b). left = up × forward, as src/export/markers.js defines
+// because some authors' marker axes point backwards (measured). left = up × forward, as src/export/markers.js defines
 // it. The camera sits at anchor + up·U + forward·F + right·R, and looks along F turned by yawDeg about up (+ = left) and
 // then by pitchDeg (+ = up).
 'use strict';

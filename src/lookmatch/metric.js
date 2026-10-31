@@ -1,4 +1,4 @@
-// metric.js: the look-match number (ARCHITECTURE §5.3: "Render the same views in the builder and measure the image
+// metric.js: the look-match number (the design: "Render the same views in the builder and measure the image
 // difference … The difference is a tracked number, not an impression"). PARKED until the user provides AC screenshots.
 //
 //   srgbToLab([r, g, b])            8-bit sRGB (D65) → CIELAB { L, a, b }
@@ -8,7 +8,7 @@
 //   compareImages(ref, ours, opts)   { meanDE, p95DE, maxDE, pixels } over two RGBA images of one size; a pixel whose
 //                                   alpha is below 128 in EITHER image is left out (a mask: sky, UI, anything not compared)
 //
-// WHY CIEDE2000, and not SSIM (D179): §5.3 tunes the LOOK (light, material colour, brightness) of a scene whose GEOMETRY
+// WHY CIEDE2000, and not SSIM: the look match tunes the LOOK (light, material colour, brightness) of a scene whose GEOMETRY
 // is the same in both images (the same kn5 seen from the same fixed camera). ΔE00 measures exactly that, per pixel, in
 // units with a meaning (about 1 is a just-noticeable difference, 2.3 the usual JND for flat patches). SSIM compares local
 // structure and is largely blind to the global tone and brightness shifts that the tuning is about, and its value has no
