@@ -380,20 +380,23 @@ test('D264: the guards hold: ⋯ Test export on a CLOSED track is refused by nam
 });
 // A review found: the main Export's result was cut to "ex…" in the header note (cut on purpose, so the bar never overflows:
 // the row above). The whole result now also shows in the page's banner row, where the startup card sits, uncut, until the user closes it with ✕.
-test('D464: after Export to Assetto Corsa the whole result shows in the banner row, uncut, and ✕ clears it', async () => {
-  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), restore = fake.install();
+// AMENDED: the whole result now shows in the page's export banner (app/core/exportbanner.js), the one every export route uses, instead of a bar of its own in the
+// banner row; Exporting… shows while it runs, and a click closes the result (the ✕ of the old bar)
+test('D464: after Export to Assetto Corsa the whole result shows in the export banner, uncut, and a click clears it', async () => {
+  const fake = require('./palette-fakedom.js'), { mount } = require('../install/index.js'), { createExportBanner } = require('../core/exportbanner.js'), restore = fake.install();
   try {
     const native = fakeNative(); native.root = 'G:/SteamLibrary/steamapps/common/assettocorsa';
-    const shell = { buildExportAsync: async () => ({ result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }), exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
-    const root = new fake.Element('div'), card = new fake.Element('div');
-    mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more: new fake.Element('div'), card });
+    let during = null;
+    const root = new fake.Element('div'), card = new fake.Element('div'), box = new fake.Element('div'), banner = createExportBanner(box, { doc: { createElement: (t) => new fake.Element(t) } });
+    const shell = { buildExportAsync: async () => { during = [banner.state, box.querySelector('.eb-head').textContent]; return { result: { warnings: [] }, folders: [{ folder: 't180b_x', files: [{ path: 'a', bytes: new Uint8Array(1) }] }] }; }, exportDoc: () => ({ ...D.createDoc('x'), name: 'X' }) };
+    mount(root, shell, { native, pickFolder: async () => null, getTextures: () => null, more: new fake.Element('div'), card, banner });
     await [...root.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === 'Export to Assetto Corsa').onclick();
+    assert.deepEqual(during, ['running', 'Exporting… 0 s'], 'the banner says Exporting… while the export runs');
     const note = [...root.walk()].find((e) => e.className === 't-install-note').textContent;
     assert.match(note, /^exported "X" into Assetto Corsa as t180b_x/, 'control: the note holds the result');
-    const bar = [...card.walk()].find((e) => e.className === 'bar result');
-    assert.ok(bar, 'the result is a bar in the banner row');
-    assert.ok(bar.textContent.includes(note), `the bar holds the whole result: ${bar.textContent}`);
-    const x = [...card.walk()].find((e) => e.tagName === 'BUTTON' && e.textContent === '✕');
-    assert.ok(x, 'a ✕ to close it'); x.onclick(); assert.strictEqual(card.textContent, '', 'and ✕ clears it');
+    assert.deepEqual([banner.state, box.hidden, box.querySelector('.eb-head').textContent], ['done', false, 'Done'], 'the banner says Done');
+    assert.equal(box.querySelector('.eb-text').textContent, note, 'the banner holds the whole result');
+    assert.equal(card.textContent, '', 'and no second bar in the banner row');
+    box.onclick(); assert.deepEqual([banner.state, box.hidden], ['idle', true], 'and a click clears it');
   } finally { restore(); }
 });

@@ -25,6 +25,8 @@
 //      --bad-text and --warn-text are what these read in; before them the lines wore the 3D road's paint colours (skyline's amber read 1.1:1)
 //  11  the hover card (app/hovertip.js) reads 4.5:1 or more on its own pixels in EVERY look: the pointer moved onto the bank's "early" box by a real
 //      mouse event, the card shown after its delay, every text in it read by the probe above
+//  12  the export banner (app/core/exportbanner.js) reads 4.5:1 or more on its own pixels in EVERY look, running, done and failed: the failure through
+//      File ▸ Export itself, the other two by the module on the same box
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -361,4 +363,31 @@ test('row 11 (D581): the hover card reads 4.5:1 or more on its own pixels in eve
   }
   t.diagnostic(`the card's text, worst on its own pixels: ${report.join('; ')}`);
   assert.deepEqual(under, [], 'hover card text under 4.5:1 on its own pixels');
+});
+// the export banner (app/core/exportbanner.js), one for every export route, in each of its three states: FAILED through the page's own File ▸ Export (no native
+// side here, so the export fails at its first call, as any failure reaches it), RUNNING and DONE by the module itself on the same box, as a route drives it.
+// T180_SHOTS=<folder> also saves each state's screenshot there as <look>-<state>.png
+test('row 12: the export banner reads 4.5:1 or more on its own pixels in every look, running, done and failed', { skip }, async (t) => {
+  const SRC = fs.readFileSync(path.join(REPO, 'app', 'core', 'exportbanner.js'), 'utf8'), SHOTS = process.env.T180_SHOTS || null;
+  const report = [], under = [];
+  for (const look of LOOKS) {
+    await load(look);
+    await ev("document.getElementById('export').click(); await new Promise((r) => setTimeout(r, 400)); return true;");
+    const failed = await ev("const b = document.getElementById('exportbanner'); return b && !b.hidden && b.className.includes('failed') ? b.textContent : null;");
+    assert.ok(failed && /^Export failed/.test(failed), `${look}: File ▸ Export's failure shows in the banner (${failed})`);
+    const states = [['failed', null], ['running', "window.__eb.run('into D:\\\\Tracks\\\\exports');"], ['done', "window.__eb.done('exported t180b_elysium to D:\\\\Tracks\\\\exports');"]];
+    for (const [state, drive] of states) {
+      if (drive) await ev(`if (!window.__eb) { const module = { exports: {} }; new Function('module', 'exports', ${JSON.stringify(SRC)})(module, module.exports);
+        window.__eb = module.exports.createExportBanner(document.getElementById('exportbanner'), { doc: { createElement: (t) => document.createElement(t) } }); } ${drive} return true;`);
+      const inBanner = new Set(await keysIn('#exportbanner'));
+      const on = await contrasts(); let n = 0;
+      for (const [k, list] of on) if (inBanner.has(k)) list.forEach((w) => { n++; if (w < 4.5) under.push(`${look} ${state}: ${k.split('|')[1]} ${w.toFixed(2)}`); report.push(`${look} ${state} ${w.toFixed(2)}`); });
+      assert.ok(n >= 2, `${look} ${state}: the probe read the banner's head and text (${n})`);
+      if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, `${look}-${state}.png`), await shot()); }
+    }
+    await ev('if (window.__eb) window.__eb.clear(); return true;');
+    assert.deepEqual(errors, [], `${look}: no page errors`);
+  }
+  t.diagnostic(`the banner's texts on their own pixels: ${report.join('; ')}`);
+  assert.deepEqual(under, [], 'export banner text under 4.5:1 on its own pixels');
 });
