@@ -228,6 +228,9 @@ const rowsWorld = (rows, M) => rows.map((q) => ({ ...q, E: toWorld(M, q.E), X: t
  *     the one farther from the road's edge at the leave.
  * Returns the rows in order (sideRows' shape, in world space), or null when the lane has no grid cell.
  */
+// two outline rows within SAME_M are one point: the lane's cells repeat their boundary row, and the two cells' transforms put the copies 1-3 µm apart in float32, past
+// a 1e-6 test (a lip cell of no width between them: 4 slivers on the pit test lap)
+const SAME_M = 1e-4;
 function outlineRows(mainRows, laneMesh, lane) {
   const cells = laneMesh.cells.map((cell, k) => ({ cell, k })).filter(({ cell }) => !cell.seam && laneMesh._state.pieces[cell.piece]);
   if (!cells.length) return null;
@@ -240,7 +243,7 @@ function outlineRows(mainRows, laneMesh, lane) {
   const laneRows = [];
   for (const { cell, k } of cells) {
     const K = laneMesh._state.pieces[cell.piece].K;
-    for (const q of rowsWorld(sideRows(meshOf(k), K, outer === 'last' ? K - 1 : 0), nodeOf(k).matrix)) if (!laneRows.length || len(sub(q.E, laneRows[laneRows.length - 1].E)) > 1e-6) laneRows.push(q);
+    for (const q of rowsWorld(sideRows(meshOf(k), K, outer === 'last' ? K - 1 : 0), nodeOf(k).matrix)) if (!laneRows.length || len(sub(q.E, laneRows[laneRows.length - 1].E)) > SAME_M) laneRows.push(q);
   }
   // the lane's FIRST and LAST rows (TAPER_MIN_W across), vertex by vertex, inner to outer and back: each a row of the strip pointing out as the lane's edge row
   // beside it does, so the strip's inner edge IS those rows' edges (a strip that crossed one in a single step left its edges open with apron beside them, which
@@ -248,21 +251,66 @@ function outlineRows(mainRows, laneMesh, lane) {
   const endRow = (kc, first, like) => {
     const K = laneMesh._state.pieces[laneMesh.cells[kc].piece].K, M = nodeOf(kc).matrix, m = meshOf(kc), R = m.positions.length / 3 / K, r = first ? 0 : R - 1, cols = Array.from({ length: K }, (_, c) => c);
     if (outer === 'first') cols.reverse();   // inner to outer
-    return cols.map((c) => { const i = r * K + c; return { ...like, E: toWorld(M, [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]), NE: turnWorld(M, [m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]]), uv: m.uvs ? [m.uvs[i * 2], m.uvs[i * 2 + 1]] : null, du: 0 }; });
+    return cols.map((c) => { const i = r * K + c; return { ...like, end: true, E: toWorld(M, [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]), NE: turnWorld(M, [m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]]), uv: m.uvs ? [m.uvs[i * 2], m.uvs[i * 2 + 1]] : null, du: 0 }; });
   };
   const rows = [];
-  const push = (q) => { if (!rows.length || len(sub(q.E, rows[rows.length - 1].E)) > 1e-6) rows.push(q); };
+  // a row on the same point as the last replaces it when the last is an end-row vertex and this one is not: the drawn lip (which skips end rows) keeps its row
+  const push = (q) => { const last = rows[rows.length - 1]; if (!last || len(sub(q.E, last.E)) > SAME_M) rows.push(q); else if (last.end && !q.end) rows[rows.length - 1] = q; };
   before.forEach(push);
   endRow(cells[0].k, true, laneRows[0]).forEach(push);
-  laneRows.forEach(push);
+  laneRows.forEach((q) => push({ ...q, lane: true }));
   endRow(cells[cells.length - 1].k, false, laneRows[laneRows.length - 1]).reverse().forEach(push);
   after.forEach(push);
   return rows;
 }
 
+const LIP_BLEND_M = 10;   // m of road over which the drawn lip turns from the road's edge to the lane's, either side of the lane
+/**
+ * The drawn lip's rows round the lane: { rows, corners }.
+ *   - a road row beside the lane's first or last that steps to it ACROSS (along its own lip direction: at the leave the two sit at one s, TAPER_MIN_W apart) is
+ *     dropped, and its CORNER (the road row before it, it, the lane's row) kept to be covered flat (cornerTris): the lip cell between two such rows lay in the lip's
+ *     own plane, over its underside (the user, 18:54: z-fighting at the lane's ends; 4 overlaps on the pit test lap even with the turn below);
+ *   - the road's rows within LIP_BLEND_M of the lane turn their lip direction (D, Dn) toward the lane's, by a smoothstep in their distance along the edge; switched
+ *     in one step between two rows 10 cm apart, the cupped road's lip twisted onto its underside (28 overlaps).
+ */
+function lipRowsAtLane(rows) {
+  const out = rows.slice(), corners = [], laneAt = (end) => (end ? out.length - 1 - [...out].reverse().findIndex((q) => q.lane) : out.findIndex((q) => q.lane));
+  if (laneAt(false) < 0) return { rows: out, corners };
+  const across = (q, l) => { const t = sub(l.E, q.E), d = len(t); return d > 1e-9 && Math.abs(dot(t, q.D)) > 0.7 * d; };
+  let f = laneAt(false);
+  if (f > 1 && !out[f - 2].lane && across(out[f - 1], out[f])) { corners.push([out[f - 2], out[f - 1], out[f]]); out.splice(f - 1, 1); }
+  let l = laneAt(true);
+  if (l + 2 < out.length && !out[l + 2].lane && across(out[l + 1], out[l])) { corners.push([out[l], out[l + 1], out[l + 2]]); out.splice(l + 1, 1); }
+  f = laneAt(false); l = laneAt(true);
+  // the turn spans LIP_BLEND_M, or the road the outline has on that side if less: its own end rows are the main lip's (outlineRows), so they keep their lip
+  const reach = (from, step) => { let d = 0; for (let i = from; i - step >= 0 && i - step < out.length && i >= 0 && i < out.length && !out[i].lane; i += step) d += len(sub(out[i].E, out[i - step].E)); return d; };
+  const turned = out.slice(), turn = (q, to, d, span) => { const t = Math.min(1, d / span), w = 1 - t * t * (3 - 2 * t); if (!(w > 0)) return q;
+    const D = unit(add(mul(q.D, 1 - w), mul(to.D, w))), Dn0 = add(mul(q.Dn, 1 - w), mul(to.Dn, w)), Dn = unit(sub(Dn0, mul(D, dot(Dn0, D)))); return { ...q, D, Dn }; };
+  for (const [from, step, to] of [[f - 1, -1, out[f]], [l + 1, 1, out[l]]]) {
+    const span = Math.min(LIP_BLEND_M, reach(from, step)); let d = 0;
+    for (let i = from; i >= 0 && i < out.length && !out[i].lane; i += step) { d += len(sub(out[i].E, out[i - step].E)); if (d >= span) break; turned[i] = turn(out[i], to, d, span); }
+  }
+  return { rows: turned, corners };
+}
+
+/** A mesh from grid() with flat triangles appended, each three [point, normal, uv], wound to face along the sum of its normals as grid winds its own. */
+function withTris(m, tris) {
+  if (!tris.length) return m;
+  const n0 = m.positions.length / 3, P = Array.from(m.positions), Nn = Array.from(m.normals), U = Array.from(m.uvs), idx = Array.from(m.indices);
+  tris.forEach((t, k) => {
+    t.forEach(([p, n, uv]) => { P.push(...p); Nn.push(...n); U.push(...uv); });
+    const a = n0 + 3 * k, x = cross(sub(t[1][0], t[0][0]), sub(t[2][0], t[0][0]));
+    if (dot(x, add(add(t[0][1], t[1][1]), t[2][1])) >= 0) idx.push(a, a + 1, a + 2); else idx.push(a, a + 2, a + 1);
+  });
+  if (P.length / 3 > 65535) throw new Error(`withApron: ${m.name} has ${P.length / 3} vertices, past a kn5 mesh's 16-bit indices`);
+  return { ...m, positions: Float32Array.from(P), normals: Float32Array.from(Nn), uvs: Float32Array.from(U), indices: Uint16Array.from(idx) };
+}
+
 /**
  * The outline's PHYSICS (apronOf's rule on every row: out along X, down along N by widthM·tan slope; two vertices a row, its top facing along N) and its VISUAL lip
- * and underside (visualRows): { physics, lip, under }.
+ * and underside (visualRows): { physics, lip, under }. The lane's end rows (`end`) are walked by the physics only (their edges must be the strip's, or the
+ * downforce-ray check reads them as gaps); the drawn lip steps from the road's last row straight to the lane's first, since a lip on rows a centimetre apart that
+ * all point the same way folds onto its own underside (D593, the user 18:54: 70 such overlaps at the lane's ends, and slivers).
  */
 function outlineMeshes(rows, widthM, slopeDeg, names) {
   const tan = Math.tan((slopeDeg * Math.PI) / 180), V = [], Nv = [], UV = [];
@@ -273,8 +321,13 @@ function outlineMeshes(rows, widthM, slopeDeg, names) {
     let n = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(O, q.E)))) : q.N; if (dot(n, q.N) < 0) n = mul(n, -1);
     V.push([q.E, O]); Nv.push([n, n]); UV.push([[0, along / APRON_TILE_M], [widthM / APRON_TILE_M, along / APRON_TILE_M]]);
   });
-  const vis = visualRows(rows, rows.map(() => widthM), slopeDeg, { lip: names.lip, under: names.under });
-  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), lip: vis.lip, under: vis.under };
+  // the drawn lip's rows round the lane: turned toward the lane's over LIP_BLEND_M either side, and a road row stepping across to the lane's dropped
+  // (lipRowsAtLane); a dropped corner is covered by one flat triangle on top and one under it, on the rows' own edge and skin points (lipRow's first column), so
+  // every edge of it is the road's, the lane's or the lip's. Physics untouched
+  const { rows: drawn, corners } = lipRowsAtLane(rows.filter((q) => !q.end)), vis = visualRows(drawn, drawn.map(() => widthM), slopeDeg, { lip: names.lip, under: names.under });
+  const th = (slopeDeg * Math.PI) / 180, firstCol = (q) => { const x = lipRow(q, widthM, th); return { L: [x.L[0], x.NL[0], x.UV[0]], U: [x.U[0], x.NU[0], x.UV[0]] }; };
+  const cs = corners.map((c) => c.map(firstCol));
+  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), lip: withTris(vis.lip, cs.map((c) => c.map((x) => x.L))), under: withTris(vis.under, cs.map((c) => c.map((x) => x.U))) };
 }
 
 /**

@@ -21,7 +21,8 @@
 //  15  the visual underside follows the lip (it bends with it) and meets the skin with the skin's own normal
 //  16  the physics apron is exactly apronOf's plank and is hidden (not visible, not renderable, no shadow); the lip has no physics prefix, the road's material and uvs
 //  17  the physics apron is byte for byte what the user drove, pinned at a93ae51, on a flat, a banked and a cupped edge
-//  18  the pit IS the track: no drawn and no physics triangle clips through another round the lane, and no drawn edge is left open round either of its ends
+//  18  the pit IS the track: no drawn and no physics triangle clips through another round the lane, none overlaps another in one plane, none is a sliver under
+//      1 cm, and no drawn edge is left open round either of its ends
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -397,6 +398,58 @@ function clipCount(meshes, lo, hi) {
   }
   return out;
 }
+// T-JUNCTIONS: an open edge with another open edge's vertex lying on it (within 1 mm, strictly between its ends) is split there; the pieces two open edges share
+// are not open (one long edge laid along several short ones closes them: the surface is continuous across that line, only its vertices differ)
+function closeTJunctions(open) {
+  const pts = [], key = (p) => p.map((x) => Math.round(x * 1000)).join(','), seen = new Map();
+  for (const [a, b] of open) for (const p of [a, b]) if (!seen.has(key(p))) { seen.set(key(p), pts.length); pts.push(p); }
+  const pieces = new Map();
+  for (const [a, b] of open) {
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]; if (!(L2 > 0)) continue;
+    const on = [[0, a], [1, b]];
+    for (const p of pts) { const t = ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / L2; if (!(t > 1e-6 && t < 1 - 1e-6)) continue; const q = [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t]; if (Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) <= 1e-3) on.push([t, p]); }
+    on.sort((x, y) => x[0] - y[0]);
+    for (let i = 0; i + 1 < on.length; i++) { const ka = key(on[i][1]), kb = key(on[i + 1][1]); if (ka === kb) continue; const k = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`; const e = pieces.get(k) || { n: 0, a: on[i][1], b: on[i + 1][1] }; e.n++; pieces.set(k, e); }
+  }
+  return [...pieces.values()].filter((e) => e.n === 1).map((e) => [e.a, e.b]);
+}
+// OVERLAPS and SLIVERS (the user, 18:54, "still geometry clipping inconsistencies", which the clip count could not see): over the drawn SURFACES round the lane,
+// two triangles of different meshes in one plane (each vertex within 2 mm of the other's plane, normals within 2°, either way round) overlapping by more than 1 cm²
+// (a surface drawn twice in one place: z-fighting), and triangles thinner than 1 cm (twice their area over their longest edge)
+function overlapsAndSlivers(meshes, lo, hi) {
+  const surf = meshes.filter((m) => m.renderable !== false && m.visible !== false && /^(1(?:ROAD|GRIP\d{3})_|APRON|UNDERSKIN)/.test(m.name)), tris = [], slivers = [];
+  surf.forEach((m, mi) => {
+    for (let t = 0; t < m.indices.length; t += 3) {
+      const v = [0, 1, 2].map((k) => [m.positions[m.indices[t + k] * 3], m.positions[m.indices[t + k] * 3 + 1], m.positions[m.indices[t + k] * 3 + 2]]);
+      if (v.every((p) => p.some((x, k) => x < lo[k] || x > hi[k]))) continue;
+      const n = cross3(sub(v[1], v[0]), sub(v[2], v[0])), a2 = Math.hypot(...n); if (!(a2 > 1e-12)) continue;
+      const longest = Math.max(Math.hypot(...sub(v[1], v[0])), Math.hypot(...sub(v[2], v[1])), Math.hypot(...sub(v[0], v[2])));
+      if (a2 / longest < 0.01) slivers.push(`${m.name} ${(a2 / longest).toFixed(4)} m at ${v[0].map((x) => x.toFixed(2))}`);
+      tris.push({ v, mi, u: n.map((x) => x / a2), bl: [0, 1, 2].map((k) => Math.min(v[0][k], v[1][k], v[2][k]) - 2e-3), bh: [0, 1, 2].map((k) => Math.max(v[0][k], v[1][k], v[2][k]) + 2e-3) });
+    }
+  });
+  const area2 = (P) => { let s2 = 0; for (let i = 0; i < P.length; i++) { const p = P[i], q = P[(i + 1) % P.length]; s2 += p[0] * q[1] - q[0] * p[1]; } return s2 / 2; };
+  const overlapArea = (A, B) => {
+    const e1 = (() => { const a = sub(A.v[1], A.v[0]); const l = Math.hypot(...a); return a.map((x) => x / l); })(), e2 = cross3(A.u, e1), to2 = (p) => { const d = sub(p, A.v[0]); return [dot3(d, e1), dot3(d, e2)]; };
+    const a = A.v.map(to2), sg = Math.sign(area2(a)); let poly = B.v.map(to2);
+    for (let i = 0; i < 3 && poly.length; i++) {
+      const p0 = a[i], p1 = a[(i + 1) % 3], side = (q) => sg * ((p1[0] - p0[0]) * (q[1] - p0[1]) - (p1[1] - p0[1]) * (q[0] - p0[0])), out = [];
+      for (let j = 0; j < poly.length; j++) { const c = poly[j], d = poly[(j + 1) % poly.length], sc = side(c), sd = side(d); if (sc >= 0) out.push(c); if ((sc >= 0) !== (sd >= 0)) { const t = sc / (sc - sd); out.push([c[0] + (d[0] - c[0]) * t, c[1] + (d[1] - c[1]) * t]); } }
+      poly = out;
+    }
+    return poly.length >= 3 ? Math.abs(area2(poly)) : 0;
+  };
+  const CELL = 2, grid = new Map(), cosA = Math.cos(2 * DEG), seen = new Set(), overlaps = [];
+  tris.forEach((t, id) => { for (let i = Math.floor(t.bl[0] / CELL); i <= Math.floor(t.bh[0] / CELL); i++) for (let j = Math.floor(t.bl[1] / CELL); j <= Math.floor(t.bh[1] / CELL); j++) for (let k = Math.floor(t.bl[2] / CELL); k <= Math.floor(t.bh[2] / CELL); k++) { const kk = `${i},${j},${k}`; if (!grid.has(kk)) grid.set(kk, []); grid.get(kk).push(id); } });
+  for (const list of grid.values()) for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length; y++) {
+    const A = tris[list[x]], B = tris[list[y]]; if (A.mi === B.mi) continue;
+    const pk = `${Math.min(list[x], list[y])}:${Math.max(list[x], list[y])}`; if (seen.has(pk)) continue; seen.add(pk);
+    if (A.bh.some((h, k) => h < B.bl[k]) || B.bh.some((h, k) => h < A.bl[k]) || Math.abs(dot3(A.u, B.u)) < cosA) continue;
+    if (B.v.some((p) => Math.abs(dot3(sub(p, A.v[0]), A.u)) > 2e-3) || A.v.some((p) => Math.abs(dot3(sub(p, B.v[0]), B.u)) > 2e-3)) continue;
+    const ar = overlapArea(A, B); if (ar > 1e-4) overlaps.push(`${surf[A.mi].name} × ${surf[B.mi].name} ${ar.toFixed(4)} m² at ${A.v[0].map((v) => v.toFixed(2))}`);
+  }
+  return { overlaps, slivers };
+}
 function holesAround(meshes, c, R) {
   const WELD = 2e-3, CUT = 2, ids = new Map(), pts = [], dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
   const idOf = (p) => { const k = p.map((x) => Math.floor(x / WELD)); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let l = -1; l <= 1; l++) for (const id of ids.get(`${k[0] + i},${k[1] + j},${k[2] + l}`) || []) if (dist(pts[id], p) <= WELD) return id; const id = pts.length; pts.push(p); const kk = k.join(','); if (!ids.has(kk)) ids.set(kk, []); ids.get(kk).push(id); return id; };
@@ -408,10 +461,12 @@ function holesAround(meshes, c, R) {
     const id = v.map(idOf);
     for (const [x, y] of [[id[0], id[1]], [id[1], id[2]], [id[2], id[0]]]) { if (x === y) continue; const k = x < y ? `${x}|${y}` : `${y}|${x}`; edges.set(k, (edges.get(k) || 0) + 1); }
   }
-  return [...edges].filter(([, n]) => n === 1).map(([k]) => k.split('|').map((i) => pts[+i])).filter(([a, b]) => dist(a, c) < R - CUT && dist(b, c) < R - CUT).map(([a, b]) => `${a.map((x) => x.toFixed(2))} → ${b.map((x) => x.toFixed(2))}`);
+  return closeTJunctions([...edges].filter(([, n]) => n === 1).map(([k]) => k.split('|').map((i) => pts[+i]))).filter(([a, b]) => dist(a, c) < R - CUT && dist(b, c) < R - CUT).map(([a, b]) => `${a.map((x) => x.toFixed(2))} → ${b.map((x) => x.toFixed(2))}`);
 }
 
-test('row 18: the pit IS the track: nothing clips (no drawn and no physics triangle through another, round the whole lane) and nothing gaps (no open edge drawn round either end)', () => {
+// AMENDED (D593, the user 18:54: "still geometry clipping inconsistencies"): the row counted clips and holes; it now also counts coplanar overlaps (z-fighting) and
+// slivers under 1 cm, which the clip count cannot see, all 0
+test('row 18: the pit IS the track: nothing clips, nothing overlaps in one plane, no sliver under 1 cm (all round the lane), and no open edge drawn round either end', () => {
   const doc = lap('apron pit-is-track lap'), lane = { side: 'L', leave: { word: doc.pieces[0].id, along: 40 }, rejoin: { word: doc.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
   const b = exportDoc(doc, {}, { pitLane: lane }), meshes = acMeshes(b);
   const laneMeshes = meshes.filter((m) => /^1ROAD_PIT_/.test(m.name)); assert.ok(laneMeshes.length > 0, 'control: the lane is in the scene');
@@ -420,6 +475,9 @@ test('row 18: the pit IS the track: nothing clips (no drawn and no physics trian
   const c = clipCount(meshes, lo, hi);
   assert.equal(c.drawn, 0, `drawn triangles clip through each other: ${c.where.join('; ')}`);
   assert.equal(c.physics, 0, `physics triangles clip through each other: ${c.where.join('; ')}`);
+  const os = overlapsAndSlivers(meshes, lo, hi);
+  assert.deepEqual(os.overlaps.slice(0, 4), [], `${os.overlaps.length} coplanar overlaps (z-fighting) round the lane`);
+  assert.deepEqual(os.slivers.slice(0, 4), [], `${os.slivers.length} slivers under 1 cm round the lane`);
   const at = (s) => { let best = b.path.samples[0]; for (const q of b.path.samples) if (Math.abs(q.s - s) < Math.abs(best.s - s)) best = q; return best.pos; };
   for (const [name, s] of [['leave', b.pitLane.joins.leave.s], ['rejoin', b.pitLane.joins.rejoin.s]]) {
     const holes = holesAround(meshes, at(s), 25);
