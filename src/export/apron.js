@@ -160,21 +160,24 @@ function grid(name, V, Nv, UV, flat) {
  * the skin's edge vertex S (E − UNDERSKIN_OFFSET_M·NE) and fades out the same way, so lip and underside meet at the outer row; its first column IS S, not a sum that rounds to it.
  */
 function visualRows(rows, w, slopeDeg, names) {
-  const th = (slopeDeg * Math.PI) / 180, C = APRON_COLS, lip = [], under = [], nLip = [], nUnder = [], uvs = [];
-  rows.forEach((q, r) => {
-    const S = sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)), fix = sub(S, add(q.E, mul(q.Dn, UNDERSKIN_OFFSET_M))), L = [], U = [], NL = [], NU = [], UV = [];
-    for (let c = 0; c <= C; c++) {
-      const phi = th * c / C, k = c / C, along = th > 0 ? w[r] / th : 0;
-      const p = th > 0 ? add(q.E, add(mul(q.D, along * Math.sin(phi)), mul(q.Dn, along * (1 - Math.cos(phi))))) : add(q.E, mul(q.D, w[r] * k));
-      const up = sub(mul(q.D, Math.sin(phi)), mul(q.Dn, Math.cos(phi)));
-      L.push(p); U.push(c === 0 ? S : add(add(p, mul(up, -UNDERSKIN_OFFSET_M * (1 - k))), mul(fix, 1 - k)));
-      NL.push(c === 0 ? q.NE : up); NU.push(c === 0 ? mul(q.NE, -1) : mul(up, -1));   // at the edge: the road's own normal on the lip, the skin's (its negation, skinOf) under it
-      UV.push(q.uv ? [q.uv[0] + q.du * w[r] * k, q.uv[1]] : [w[r] * k / APRON_TILE_M, 0]);
-    }
-    lip.push(L); under.push(U); nLip.push(NL); nUnder.push(NU); uvs.push(UV);
-  });
+  const th = (slopeDeg * Math.PI) / 180, lip = [], under = [], nLip = [], nUnder = [], uvs = [];
+  rows.forEach((q, r) => { const x = lipRow(q, w[r], th); lip.push(x.L); under.push(x.U); nLip.push(x.NL); nUnder.push(x.NU); uvs.push(x.UV); });
   const flat = w.map((x) => !(x > 0));
   return { lip: grid(names.lip, lip, nLip, uvs, flat), under: grid(names.under, under, nUnder, uvs, flat) };
+}
+
+/** One row of the visual lip, w wide, rolled th radians (visualRows above): its APRON_COLS + 1 lip points L and underside points U, their normals NL and NU, and uvs UV. */
+function lipRow(q, w, th) {
+  const C = APRON_COLS, S = sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)), fix = sub(S, add(q.E, mul(q.Dn, UNDERSKIN_OFFSET_M))), L = [], U = [], NL = [], NU = [], UV = [];
+  for (let c = 0; c <= C; c++) {
+    const phi = th * c / C, k = c / C, along = th > 0 ? w / th : 0;
+    const p = th > 0 ? add(q.E, add(mul(q.D, along * Math.sin(phi)), mul(q.Dn, along * (1 - Math.cos(phi))))) : add(q.E, mul(q.D, w * k));
+    const up = sub(mul(q.D, Math.sin(phi)), mul(q.Dn, Math.cos(phi)));
+    L.push(p); U.push(c === 0 ? S : add(add(p, mul(up, -UNDERSKIN_OFFSET_M * (1 - k))), mul(fix, 1 - k)));
+    NL.push(c === 0 ? q.NE : up); NU.push(c === 0 ? mul(q.NE, -1) : mul(up, -1));   // at the edge: the road's own normal on the lip, the skin's (its negation, skinOf) under it
+    UV.push(q.uv ? [q.uv[0] + q.du * w * k, q.uv[1]] : [w * k / APRON_TILE_M, 0]);
+  }
+  return { L, U, NL, NU, UV };
 }
 
 /** The VISUAL lip of one side of one grid cell (D593): { lip, under }, every row widthM. Called only where apronOf gave that side a physics top (so not a wall side), and drawn over it. */
@@ -313,14 +316,31 @@ function outlineMeshes(ol, widthM, slopeDeg, names) {
   strip(A, null, null); strip(B, Q1, Q2); strip(C, null, null);
   const visual = (rows) => { if (rows.length < 2) return; const v = visualRows(rows, rows.map(() => widthM), slopeDeg, { lip: 'x', under: 'x' }); lip.add(v.lip); under.add(v.under); };
   visual(A); visual(B); visual(C);
-  for (const [P, Q] of [[P1, Q1], [P2, Q2]]) {
+  // THE CONCAVE CORNERS. The physics: a fan from Q over the inner points. What is drawn: a fan from the outer point of the lip row the corner hangs from (A's last at the
+  // leave, C's first at the rejoin, or B's when that side is empty) over the WHOLE curled rows either side and the inner points between, so it meets both lips along their
+  // own rows. (A first form fanned the lip from the physics Q, 0.93 m down where the lips either side reach 0.43 m: it showed as a square tab at each corner.)
+  const th = (slopeDeg * Math.PI) / 180, NC = APRON_COLS;
+  for (const [P, Q, rowF, rowL, hangF] of [[P1, Q1, A.length ? A[A.length - 1] : null, B[0], A.length > 0], [P2, Q2, B[B.length - 1], C.length ? C[0] : null, !C.length]]) {
     const up = unit(P.inner.reduce((s, p) => add(s, p.N || unit(p.NE)), [0, 0, 0]));
-    const qp = phys.v(Q, up, [widthM / APRON_TILE_M, 0]), ql = lip.v(Q, up, [widthM / APRON_TILE_M, 0]), qu = under.v(Q, mul(up, -1), [widthM / APRON_TILE_M, 0]);
+    const qp = phys.v(Q, up, [widthM / APRON_TILE_M, 0]);
     let pp = null;
     for (const p of P.inner) {
-      const S = sub(p.E, mul(p.NE, UNDERSKIN_OFFSET_M)), now = { p: phys.v(p.E, up, p.uv || [0, 0]), l: lip.v(p.E, p.NE, p.uv || [0, 0]), u: under.v(S, mul(p.NE, -1), p.uv || [0, 0]) };
-      if (pp) { phys.tri(qp, pp.p, now.p, up); lip.tri(ql, pp.l, now.l, up); under.tri(qu, pp.u, now.u, mul(up, -1)); }
+      const now = phys.v(p.E, up, p.uv || [0, 0]);
+      if (pp !== null) phys.tri(qp, pp, now, up);
       pp = now;
+    }
+    const hang = hangF ? rowF : rowL, rF = rowF ? lipRow(rowF, widthM, th) : null, rL = rowL ? lipRow(rowL, widthM, th) : null, rH = lipRow(hang, widthM, th);
+    // the boundary round the fan, in order: rowF's curl from its outer row in to its edge (its edge is the first inner point), the inner points, rowL's curl out
+    const ring = [];
+    if (rF) for (let c = NC; c >= 1; c--) if (!(hang === rowF && c === NC)) ring.push({ l: rF.L[c], u: rF.U[c], nl: rF.NL[c], nu: rF.NU[c], uv: rF.UV[c] });
+    for (const p of P.inner) ring.push({ l: p.E, u: sub(p.E, mul(p.NE, UNDERSKIN_OFFSET_M)), nl: p.NE, nu: mul(p.NE, -1), uv: p.uv || [0, 0] });
+    if (rL) for (let c = 1; c <= NC; c++) if (!(hang === rowL && c === NC)) ring.push({ l: rL.L[c], u: rL.U[c], nl: rL.NL[c], nu: rL.NU[c], uv: rL.UV[c] });
+    const ql = lip.v(rH.L[NC], rH.NL[NC], rH.UV[NC]), qu = under.v(rH.U[NC], rH.NU[NC], rH.UV[NC]);
+    let prev = null;
+    for (const x of ring) {
+      const now = { l: lip.v(x.l, x.nl, x.uv), u: under.v(x.u, x.nu, x.uv) };
+      if (prev) { lip.tri(ql, prev.l, now.l, up); under.tri(qu, prev.u, now.u, mul(up, -1)); }
+      prev = now;
     }
   }
   return { physics: phys.node(names.physics), lip: lip.node(names.lip), under: under.node(names.under) };
