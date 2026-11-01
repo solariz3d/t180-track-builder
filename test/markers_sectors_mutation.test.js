@@ -16,6 +16,8 @@ const MUTANTS = [
   { id: 'S1 the tilt test is dropped (a gate may stand across a bank)', edits: [['markers/layout.js', 'if (!(len > 0) || Math.abs(v[1]) / len > Math.sin(GATE_TILT_MAX_DEG * DEG)) return false;', 'if (!(len > 0)) return false;']] },
   { id: 'S2 the search looks one way only (forward from each third)', edits: [['markers/layout.js', 'for (const sg of d ? [1, -1] : [1])', 'for (const sg of [1])']] },
   { id: 'S3 an omitted gate is left out silently (no note)', edits: [['markers/layout.js', "if (a.omitted) { notes.push({ id: 'sector-omitted', level: 'amber', text: a.omitted }); return; }", 'if (a.omitted) return;']] },
+  { id: 'S5 the search measures a gate at the road again, not at its dummies', edits: [['markers/layout.js', 'h: height }, starts).pos, b = placeMarker(path, segments, { s, u: uR, h: height }, starts).pos;', 'h: 0 }, starts).pos, b = placeMarker(path, segments, { s, u: uR, h: 0 }, starts).pos;']] },
+  { id: 'S6 the sector search takes no height (its dummies at the road)', edits: [['markers/layout.js', 'function lapSectors(path, segments, sLine, { gateInsetM = DEFAULTS.gateInsetM, height = DEFAULTS.height } = {}) {', 'function lapSectors(path, segments, sLine, { gateInsetM = DEFAULTS.gateInsetM, height = 0 } = {}) {']] },
   { id: 'S4 the markers check does not read a gate\'s width seen from above', edits: [['markers/checks.js', 'if (plan < GATE_TOPDOWN_MIN * width) p.push(', 'if (false) p.push(']] },
 ];
 

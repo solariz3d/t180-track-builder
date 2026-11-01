@@ -29,7 +29,7 @@
 // edit overrides that slot's backM and/or u, and leaves the others alone.
 'use strict';
 const { MACH6, accelAt } = require('../validate/limits.js');
-const { surfaceAt, segStarts } = require('./place.js');
+const { surfaceAt, segStarts, placeMarker } = require('./place.js');
 const Prof = require('../geom/profile.js');
 
 //   '1-column'     one column on the centreline, nose to tail: defaultLayout's fallback when the floor fits one slot but not two columns (a closed
@@ -183,14 +183,17 @@ const GATE_TILT_MAX_DEG = FLOOR_MAX_DEG, GATE_CLIMB_MAX_DEG = 20, GATE_STEP_M = 
 // a gate's width seen from above, as a share of the road's width across (src/markers/checks.js gate-width): inferred, about half
 const GATE_TOPDOWN_MIN = 0.5;
 /**
- * Whether a sector gate may stand at s: the line between its two ends (the road's span less the inset, as resolveLayout puts them) tilts no more than
+ * Whether a sector gate may stand at s: the line between its two ends (the road's span less the inset, `height` up, as resolveLayout and placeAll put them) tilts no more than
  * GATE_TILT_MAX_DEG from level, and seen from above it spans at least GATE_TOPDOWN_MIN of the road's width; the road climbs or falls less than GATE_CLIMB_MAX_DEG; and the gate is not inside a ring, i.e. the road under its middle
  * faces up (not the top of a loop) and neither end is on a section past vertical (a tube's roof). Over a jump's flight there is no road: false.
  */
-function gateFlatAt(path, segments, s, inset, starts = segStarts(path, segments)) {
+function gateFlatAt(path, segments, s, inset, starts = segStarts(path, segments), height = DEFAULTS.height) {
   let c;
   try { c = surfaceAt(path, segments, s, 0, starts); } catch (e) { if (e.code === 'NO_ROAD') return false; throw e; }
-  const uL = c.span[1] - inset, uR = c.span[0] + inset, a = surfaceAt(path, segments, s, uL, starts).pos, b = surfaceAt(path, segments, s, uR, starts).pos;
+  // THE GATE AS THE EXPORT CHECKS IT (2026-11-01, a lap whose third fell in a bank's exit): its ends are the two dummies placeAll writes, `height` up each
+  // end's own normal (place.js placeMarker), not the road under them. Measured at the road, a gate on a cupped or edged road passed at 14.55° and its
+  // dummies read 15.6°, over the export's bar (src/export/markers.js checkGateTilt, 15° + 0.01°), so the export refused it from every start line.
+  const uL = c.span[1] - inset, uR = c.span[0] + inset, a = placeMarker(path, segments, { s, u: uL, h: height }, starts).pos, b = placeMarker(path, segments, { s, u: uR, h: height }, starts).pos;
   const v = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], len = Math.hypot(v[0], v[1], v[2]), DEG = Math.PI / 180;
   if (!(len > 0) || Math.abs(v[1]) / len > Math.sin(GATE_TILT_MAX_DEG * DEG)) return false;   // the gate's tilt from level
   if (Math.hypot(v[0], v[2]) < GATE_TOPDOWN_MIN * (c.span[1] - c.span[0])) return false;     // its width seen from above
@@ -198,7 +201,7 @@ function gateFlatAt(path, segments, s, inset, starts = segStarts(path, segments)
   if (!(c.n[1] > 0)) return false;                                                               // the road faces down: inside a loop
   return [uL, uR].every((u) => Prof.normalAt(c.P, u)[1] > 0);                                   // an end past vertical: inside a tube
 }
-function lapSectors(path, segments, sLine, { gateInsetM = DEFAULTS.gateInsetM } = {}) {
+function lapSectors(path, segments, sLine, { gateInsetM = DEFAULTS.gateInsetM, height = DEFAULTS.height } = {}) {
   if (!path.closed || !(path.lengthM > 0)) return [];
   const starts = segStarts(path, segments), s0 = path.samples[0].s, L = path.lengthM;
   const wrap = (s) => ((s - s0) % L + L) % L + s0;
@@ -208,7 +211,7 @@ function lapSectors(path, segments, sLine, { gateInsetM = DEFAULTS.gateInsetM } 
     const id = segments[k].id, first = segments.findIndex((g) => g.id === id);
     return { word: id, along: Math.max(0, s - starts[first]) };
   };
-  const flat = (s) => gateFlatAt(path, segments, s, gateInsetM, starts);
+  const flat = (s) => gateFlatAt(path, segments, s, gateInsetM, starts, height);
   return [1, 2].map((i) => {
     const target = wrap(sLine + (i * L) / 3);
     for (let d = 0; d <= L / 4; d += GATE_STEP_M) {
@@ -252,7 +255,7 @@ function defaultLayout(path, segments, o = {}) {
   }
   const sPit = sLine - lastBack - c.pitSpacingM;
   const at = (s) => { let k = 0; segments.forEach((g, j) => { if (starts[j] <= s + 1e-9) k = j; }); const id = segments[k].id, first = segments.findIndex((g) => g.id === id); return { word: id, along: s - starts[first] }; };
-  return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: lapSectors(path, segments, sLine) };
+  return { version: 1, height: c.height, gateInsetM: c.gateInsetM, line: at(sLine), grid, pits: { at: at(sPit), count: c.pits, spacingM: c.pitSpacingM, u: 0, lane: null }, hotlap: { speedKmh: c.hotlapKmh != null ? c.hotlapKmh : null }, sectors: lapSectors(path, segments, sLine, { height: c.height }) };
 }
 
 module.exports = { PATTERNS, DEFAULTS, SLOT_HALF_LENGTH, SLOT_HALF_WIDTH, T180, PACK, FLOOR_MAX_DEG, ONE_SLOT_MARGIN_M, gridSlots, runUpM, speedAfterM, anchorS, resolveLayout, defaultLayout, floorHalf, lapSectors, gateFlatAt, GATE_TOPDOWN_MIN, GATE_TILT_MAX_DEG, GATE_CLIMB_MAX_DEG, GATE_STEP_M };
