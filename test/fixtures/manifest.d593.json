@@ -1,7 +1,7 @@
 {
  "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279, the mesh cap, the sector gates, D460 and D572; F1 F2 only, their kn5 digest only",
- "made_at": "pane O, 2026-10-31, D593 (the apron reads as part of the road), t180 branch d593-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: a93ae51 (the D572 apron as the user drove it; its kn5 is the D572 record's after, digest and bytes) and d593-o after b1e95a8.",
- "reason": "The edge apron now looks like part of the road (D593, the user, 2026-10-30 23:12Z and 2026-10-31). Its physics plank is kept byte for byte and hidden; a separate visual lip, in a material a little darker than the road (t180b_road_lipshade), rolls over the edge, and the old scenery join under the plank (APRONSIDE_) is now the lip's underside. So the two closed fixtures, which are exported, change their kn5, and nothing else: segs, path and mesh are unchanged in all nine, and in the kn5 every road, skin and paint node is the same bytes.",
+ "made_at": "pane O, 2026-11-01, D593 (the apron reads as part of the road), t180 branch d593-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: a93ae51 (the D572 apron as the user drove it; its kn5 is the D572 record's after, digest and bytes) and d593-o with the lip removed (the keeper, 2026-10-31 21:54-21:55).",
+ "reason": "The edge apron now looks like part of the road (D593, the user, 2026-10-30 23:12Z and 2026-10-31). Its physics plank is kept byte for byte and hidden, and the road ends at its own edge, FILLED: the old scenery join under the plank (APRONSIDE_) is now one side face from the road's edge row straight down to the skin's edge row, in a material a little darker than the road (t180b_road_lipshade). A drawn lip that rolled 2 m out was tried and removed (the user, 21:54-21:55 on 0.4.35: \"the edges are this thin blade it comes to a point\"). So the two closed fixtures, which are exported, change their kn5, and nothing else: segs, path and mesh are unchanged in all nine, and in the kn5 every road, skin and paint node is the same bytes.",
  "fixtures": {
   "F1-bowl-default-lap-closed": {
    "before_d593": {
@@ -17,15 +17,15 @@
     "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
     "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
     "meshParts": 3745,
-    "kn5": "dad376c11ac3c19b69cbe520f248cf236e12599c5d238c444ab7d04026459ac0",
-    "kn5Bytes": 9454376
+    "kn5": "430c9456eaad0b3fb45aafeea0e0bd93c19912d9b5571e5be7c6559e07e4e6a8",
+    "kn5Bytes": 7676824
    },
    "measure": {
     "changed": [
      "kn5"
     ],
     "kn5_meshes_before": 23,
-    "kn5_meshes_after": 27,
+    "kn5_meshes_after": 23,
     "materials_before": [
      "t180b_road",
      "t180b_paint",
@@ -115,18 +115,13 @@
       "geo": "968dc99fa7ecfcd9c78622325c0e4104f0c2230dec576c7b554f59a1348f8e9c"
      }
     ],
-    "replaced_by_the_lip_underside": [
+    "replaced_by_the_filled_face": [
      "APRONSIDE_p1_chunk_0",
      "APRONSIDE_p2_chunk_1",
      "APRONSIDE_p3_chunk_2",
      "APRONSIDE_p5_chunk_3"
     ],
-    "added_lip": [
-     "APRONLIP_p1_chunk_0",
-     "APRONLIP_p2_chunk_1",
-     "APRONLIP_p3_chunk_2",
-     "APRONLIP_p5_chunk_3"
-    ]
+    "added": []
    }
   },
   "F2-halfpipe-default-lap-closed": {
@@ -143,15 +138,15 @@
     "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
     "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
     "meshParts": 3745,
-    "kn5": "843c0d995d877044a536bbc8500fb45b5fce0ffd1d0ae4f57933929936ae0380",
-    "kn5Bytes": 11776349
+    "kn5": "5ff65100e08395588e02d8da9cd99cd90d413dc2fc3ad07f5b487bf2927939a2",
+    "kn5Bytes": 9998797
    },
    "measure": {
     "changed": [
      "kn5"
     ],
     "kn5_meshes_before": 24,
-    "kn5_meshes_after": 28,
+    "kn5_meshes_after": 24,
     "materials_before": [
      "t180b_road",
      "t180b_paint",
@@ -245,18 +240,13 @@
       "geo": "ed4ccb02042e11ba1a592740ea8437eaa0eb6a6e8a4755c97e73c9426e184039"
      }
     ],
-    "replaced_by_the_lip_underside": [
+    "replaced_by_the_filled_face": [
      "APRONSIDE_p1_chunk_0",
      "APRONSIDE_p2_chunk_1",
      "APRONSIDE_p3_chunk_2",
      "APRONSIDE_p5_chunk_3"
     ],
-    "added_lip": [
-     "APRONLIP_p1_chunk_0",
-     "APRONLIP_p2_chunk_1",
-     "APRONLIP_p3_chunk_2",
-     "APRONLIP_p5_chunk_3"
-    ]
+    "added": []
    }
   }
  },

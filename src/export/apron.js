@@ -26,21 +26,15 @@
 // and plain uvs (a tile of APRON_TILE_M).
 //
 // WHAT IS SEEN (D593). The user, 2026-10-31, on the first export with it: "at a first glance, the sides of the track look decent, but when you look at it closer, the texture
-// and geometry look bad... underneath that side its like a flat surface because of the cupping x banking"; and 17:17, of the same export: "the sides work very well compared
-// to hand made tracks for stopping wheel dropping off and clipping into the track". So the PHYSICS above is kept exactly (its vertices, names and material, byte for byte) and
-// only HIDDEN (visible, renderable and castShadows off, as catch.js hides its catch surface), and what is drawn is a separate VISUAL lip on every side that has a physics
-// apron (widthM > 0):
-//   the LIP (`APRONLIP_<the cell's name>_L/R`, scenery: no physics prefix) leaves the road's edge row along the EDGE'S OWN LAST SEGMENT, not the frame's lateral, and rolls
-//     down at a constant curvature to slopeDeg below that segment at its outer row, widthM along itself (APRON_COLS columns): on a cupped or banked edge it continues the
-//     curl instead of sticking out of it as a plank. It carries its own cell's ROAD material and the road's uvs continued past the edge (v the edge vertex's, u on at the
-//     road's rate across), and the road's own edge normal on its first column, so the texture and the shading run on over the edge;
-//   the UNDERSIDE (`APRONSIDE_…`, scenery: it replaces the flat join that was the "flat surface" seen from below) follows the lip, from the skin's edge
-//     vertex, with the skin's own normal there, to the lip's outer row.
-//   BOTH IN THE ROAD'S OWN MATERIAL, A LITTLE DARKER (the user, 2026-10-31 18:0x, the road's own asphalt darker; 18:17, "not so dark... slightly darker"): one copy of each road material
-//     a lip sits on, its samplers (so its texture) the same and its ambient, diffuse and specular LIP_SHADE of the road's, appended after the apron's own material so
-//     the physics' material index is the one it had. From above it reads as a thin dark line along the edge; up close, darker asphalt rolling over.
-//   The visual lip is not the physics surface: 0.86 m out on a flat edge the lip is 0.08 m below the edge carried on and the physics apron 0.40 m below the lateral, so a
-//   wheel that drops there is drawn into the lip by the difference (his eye in the game is the check).
+// and geometry look bad"; and 17:17, of the same export: "the sides work very well compared to hand made tracks for stopping wheel dropping off and clipping into the
+// track". What is drawn is THE PHYSICS ITSELF: the plank a wheel rides and the join under it are drawn as they are, vertex for vertex, so nothing a driver sees lies
+// anywhere a wheel does not. Two drawn forms over a hidden plank were tried and removed: a lip rolling 2 m out (the user, 21:54 on 0.4.35: "the edges are this thin
+// blade"), and the wheels sank through what was drawn, the gap between drawn and physics ("look how the car falls through visible geometry"; 21:58: "we need to
+// somehow revert back to what we had originally with the apron"). What stays of D593 here is the look he asked for: the apron's material (`t180b_apron`, the
+// one every apron node has always had) is now THE ROAD'S OWN ASPHALT A LITTLE DARKER (the user, 18:0x, the road's own asphalt darker; 18:17, "not so dark...
+// slightly darker"): a copy of the road material the first apron sits on, its samplers (so its texture) the same and its ambient, diffuse and specular LIP_SHADE of
+// the road's, under the apron's own name, so every apron node keeps its material index and name byte for byte. Its uvs are the plank's own, as they were (a tile
+// of APRON_TILE_M). With no road material, it is the plain dark one it was.
 //
 // WHERE: every core road cell's two sides, EXCEPT
 //   a closed ring (a tube swept to 360: underskin.js ringCells; it has no edge); a seam row (its zipper is not a grid; the strips either side meet at the joint, the cells'
@@ -48,7 +42,7 @@
 //   wall the car rides, not an edge it drops off); and the PIT LANE's side over the lane's span (`lane`: { side 'L' or 'R', s0, s1, mesh? }, the leave and the rejoin in the
 //   main road's s, widened PIT_PAD_M each way), where the lane and its infill join the road and the edge is not open. Given the lane's own mesh (`lane.mesh`, laneForExport's),
 //   that stretch is ONE OUTLINE instead (outlineRows, D593): the road's edge to the leave, round the lane's first row, along its outer edge, round its last row and back
-//   to the road's edge, with an apron (hidden physics, drawn lip) all the way, so it neither stops square at the span nor leaves the lane's own edges bare. A side whose edge
+//   to the road's edge, with an apron (the drawn physics plank and its join) all the way, so it neither stops square at the span nor leaves the lane's own edges bare. A side whose edge
 //   zone turns down (e < 0) is open and its apron starts at the zone's outer row, which is the mesh's last column. Flights (jump segments) have no cells and no apron.
 //   The mesh's column 0 is the road's right (−u) and column K − 1 its left (+u, the frame's L).
 'use strict';
@@ -60,14 +54,14 @@ const APRON_SLOPE_DEG = 25;    // down from the road's lateral: 20° sits above 
 const WALL_DEG = 60;           // a side rising this steeply or more is a wall, and gets no apron
 const APRON_TILE_M = 4;        // the uv tile, in metres
 const PIT_PAD_M = 5;           // each way past the pit lane's leave and rejoin
-const APRON_COLS = 6;          // the visual lip's columns across (a 2 m lip: one every 0.33 m, each turning about 4°)
-const APRON_TAG = 'APRON', SIDE_PREFIX = 'APRONSIDE', LIP_PREFIX = 'APRONLIP';
-const LIP_SHADE = 0.88;         // the lip's share of its road material's light (ambient, diffuse, specular): the road's own texture a little darker, lit and shadowed by
+const APRON_TAG = 'APRON', SIDE_PREFIX = 'APRONSIDE';
+const LIP_SHADE = 0.88;         // the drawn edge's share of its road material's light (ambient, diffuse, specular): the road's own texture a little darker, lit and shadowed by
                                // the game as the road is (the user, 18:17: "perhaps slightly darker, not like crazy dark"; it was 0.45, "not so dark")
-/** The road material `m` in the lip's darker shade: its name with _lipshade, its samplers as they are, ksAmbient, ksDiffuse and ksSpecular times LIP_SHADE. */
+/** The road material `m` in the drawn edge's darker shade (the name kept from the lip it was first made for): its name with _lipshade, its samplers as they are, ksAmbient, ksDiffuse and ksSpecular times LIP_SHADE. */
 const shadeOf = (m) => ({ ...m, name: `${m.name}_lipshade`, props: m.props.map((p) => (/^ks(Ambient|Diffuse|Specular)$/.test(p.name) ? { ...p, value: p.value.map((v) => v * LIP_SHADE) } : p)) });
 
-const apronMaterial = () => ({
+/** The apron's material: the road material `road` in its darker shade (shadeOf), under the apron's own name; with none, the plain dark one it was. */
+const apronMaterial = (road) => (road ? { ...shadeOf(road), name: 't180b_apron' } : {
   name: 't180b_apron', shader: 'ksPerPixel', alphaBlend: 0, alphaTested: false, depthMode: 0,
   props: [{ name: 'ksAmbient', value: [0.25] }, { name: 'ksDiffuse', value: [0.3] }, { name: 'ksSpecular', value: [0.05] },
     { name: 'ksSpecularEXP', value: [1] }, { name: 'ksEmissive', value: [0, 0, 0] }, { name: 'ksAlphaRef', value: [0] }],
@@ -81,7 +75,7 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 /**
  * One side of one grid cell, row by row: { E, X, N, NE, rim }. E the edge vertex; X the outward lateral (the edge minus the centre vertex, its component along the centre's
  * normal removed); N the centre vertex's normal (the section's up); NE the edge vertex's normal AS STORED (so E − UNDERSKIN_OFFSET_M·NE is the very vertex underskin.js
- * skinOf writes there); rim the side's last segment's angle above X, in degrees. For the visual lip (D593): D that segment's direction in the section (cos rim·X + sin rim·N)
+ * skinOf writes there); rim the side's last segment's angle above X, in degrees. For the drawn edge (D593; D and Dn were the lip's): D that segment's direction in the section (cos rim·X + sin rim·N)
  * and Dn the direction under it (sin rim·X − cos rim·N: −N on a flat edge); uv the edge vertex's own uv and du the road's u per metre outward across that last segment (no
  * `m.uvs`: uv null). The physics apron reads only E, X, N, NE and rim, computed as before.
  */
@@ -159,41 +153,6 @@ function grid(name, V, Nv, UV, flat) {
   return { type: 'mesh', name, material: -1, castShadows: true, visible: true, transparent: false, renderable: true, positions, normals, uvs, indices: Uint16Array.from(idx) };
 }
 
-/**
- * The VISUAL lip over a run of edge rows (sideRows' shape: E, D, Dn, NE, uv, du), each row w[r] wide: { lip, under }. `names`: { lip, under }.
- * In the section, from the edge E along D, turning toward Dn at a constant rate: at column c the turn is φ = θ·c/C and the point E + (w/θ)·(D sin φ + Dn (1 − cos φ)), a circular
- * arc of length w that leaves along the road's last segment and has rolled θ below it at its outer row. Its upward normal is up = D sin φ − Dn cos φ (−Dn at the edge: N on a
- * flat one). The underside is the arc moved along −up by a thickness from UNDERSKIN_OFFSET_M at the edge to 0 at the outer row, plus `fix`, which puts its first column on
- * the skin's edge vertex S (E − UNDERSKIN_OFFSET_M·NE) and fades out the same way, so lip and underside meet at the outer row; its first column IS S, not a sum that rounds to it.
- */
-function visualRows(rows, w, slopeDeg, names) {
-  const th = (slopeDeg * Math.PI) / 180, lip = [], under = [], nLip = [], nUnder = [], uvs = [];
-  rows.forEach((q, r) => { const x = lipRow(q, w[r], th); lip.push(x.L); under.push(x.U); nLip.push(x.NL); nUnder.push(x.NU); uvs.push(x.UV); });
-  const flat = w.map((x) => !(x > 0));
-  return { lip: grid(names.lip, lip, nLip, uvs, flat), under: grid(names.under, under, nUnder, uvs, flat) };
-}
-
-/** One row of the visual lip, w wide, rolled th radians (visualRows above): its APRON_COLS + 1 lip points L and underside points U, their normals NL and NU, and uvs UV. */
-function lipRow(q, w, th) {
-  const C = APRON_COLS, S = sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)), fix = sub(S, add(q.E, mul(q.Dn, UNDERSKIN_OFFSET_M))), L = [], U = [], NL = [], NU = [], UV = [];
-  for (let c = 0; c <= C; c++) {
-    const phi = th * c / C, k = c / C, along = th > 0 ? w / th : 0;
-    const p = th > 0 ? add(q.E, add(mul(q.D, along * Math.sin(phi)), mul(q.Dn, along * (1 - Math.cos(phi))))) : add(q.E, mul(q.D, w * k));
-    const up = sub(mul(q.D, Math.sin(phi)), mul(q.Dn, Math.cos(phi)));
-    L.push(p); U.push(c === 0 ? S : add(add(p, mul(up, -UNDERSKIN_OFFSET_M * (1 - k))), mul(fix, 1 - k)));
-    NL.push(c === 0 ? q.NE : up); NU.push(c === 0 ? mul(q.NE, -1) : mul(up, -1));   // at the edge: the road's own normal on the lip, the skin's (its negation, skinOf) under it
-    UV.push(q.uv ? [q.uv[0] + q.du * w * k, q.uv[1]] : [w * k / APRON_TILE_M, 0]);
-  }
-  return { L, U, NL, NU, UV };
-}
-
-/** The VISUAL lip of one side of one grid cell (D593): { lip, under }, every row widthM. Called only where apronOf gave that side a physics top (so not a wall side), and drawn over it. */
-function visualOf(m, K, side, { widthM = APRON_WIDTH_M, slopeDeg = APRON_SLOPE_DEG } = {}, names) {
-  if (!(K >= 3) || !(widthM > 0)) return null;
-  const rows = sideRows(m, K, side);
-  return visualRows(rows, rows.map(() => widthM), slopeDeg, names);
-}
-
 /** Whether a cell [c0, c1] (main s) overlaps the lane's span, widened PIT_PAD_M each way; a span with s0 > s1 wraps over a closed lap's start. */
 function inLaneSpan(cell, lane) {
   if (!lane) return false;
@@ -229,7 +188,7 @@ const rowsWorld = (rows, M) => rows.map((q) => ({ ...q, E: toWorld(M, q.E), X: t
  * Returns the rows in order (sideRows' shape, in world space), or null when the lane has no grid cell.
  */
 // two outline rows within SAME_M are one point: the lane's cells repeat their boundary row, and the two cells' transforms put the copies 1-3 µm apart in float32, past
-// a 1e-6 test (a lip cell of no width between them: 4 slivers on the pit test lap)
+// a 1e-6 test (a drawn cell of no width between them: 4 slivers on the pit test lap)
 const SAME_M = 1e-4;
 function outlineRows(mainRows, laneMesh, lane) {
   const cells = laneMesh.cells.map((cell, k) => ({ cell, k })).filter(({ cell }) => !cell.seam && laneMesh._state.pieces[cell.piece]);
@@ -254,7 +213,7 @@ function outlineRows(mainRows, laneMesh, lane) {
     return cols.map((c) => { const i = r * K + c; return { ...like, end: true, E: toWorld(M, [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]), NE: turnWorld(M, [m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]]), uv: m.uvs ? [m.uvs[i * 2], m.uvs[i * 2 + 1]] : null, du: 0 }; });
   };
   const rows = [];
-  // a row on the same point as the last replaces it when the last is an end-row vertex and this one is not: the drawn lip (which skips end rows) keeps its row
+  // a row on the same point as the last replaces it when the last is an end-row vertex and this one is not: the drawn edge (which skips end rows) keeps its row
   const push = (q) => { const last = rows[rows.length - 1]; if (!last || len(sub(q.E, last.E)) > SAME_M) rows.push(q); else if (last.end && !q.end) rows[rows.length - 1] = q; };
   before.forEach(push);
   endRow(cells[0].k, true, laneRows[0]).forEach(push);
@@ -264,98 +223,40 @@ function outlineRows(mainRows, laneMesh, lane) {
   return rows;
 }
 
-const LIP_BLEND_M = 10;   // m of road over which the drawn lip turns from the road's edge to the lane's, either side of the lane
 /**
- * The drawn lip's rows round the lane: { rows, corners }.
- *   - a road row beside the lane's first or last that steps to it ACROSS (along its own lip direction: at the leave the two sit at one s, TAPER_MIN_W apart) is
- *     dropped, and its CORNER (the road row before it, it, the lane's row) kept to be covered flat (cornerTris): the lip cell between two such rows lay in the lip's
- *     own plane, over its underside (the user, 18:54: z-fighting at the lane's ends; 4 overlaps on the pit test lap even with the turn below);
- *   - the road's rows within LIP_BLEND_M of the lane turn their lip direction (D, Dn) toward the lane's, by a smoothstep in their distance along the edge; switched
- *     in one step between two rows 10 cm apart, the cupped road's lip twisted onto its underside (28 overlaps).
- */
-function lipRowsAtLane(rows) {
-  // one uv space along the whole drawn edge (continuousUv), walked before a corner's row is dropped so the corner's rows are on it too
-  const out = continuousUv(rows), corners = [], laneAt = (end) => (end ? out.length - 1 - [...out].reverse().findIndex((q) => q.lane) : out.findIndex((q) => q.lane));
-  if (laneAt(false) < 0) return { rows: out, corners };
-  const across = (q, l) => { const t = sub(l.E, q.E), d = len(t); return d > 1e-9 && Math.abs(dot(t, q.D)) > 0.7 * d; };
-  let f = laneAt(false);
-  if (f > 1 && !out[f - 2].lane && across(out[f - 1], out[f])) { corners.push([out[f - 2], out[f - 1], out[f]]); out.splice(f - 1, 1); }
-  let l = laneAt(true);
-  if (l + 2 < out.length && !out[l + 2].lane && across(out[l + 1], out[l])) { corners.push([out[l], out[l + 1], out[l + 2]]); out.splice(l + 1, 1); }
-  f = laneAt(false); l = laneAt(true);
-  // the turn spans LIP_BLEND_M, or the road the outline has on that side if less: its own end rows are the main lip's (outlineRows), so they keep their lip
-  const reach = (from, step) => { let d = 0; for (let i = from; i - step >= 0 && i - step < out.length && i >= 0 && i < out.length && !out[i].lane; i += step) d += len(sub(out[i].E, out[i - step].E)); return d; };
-  const turned = out.slice(), turn = (q, to, d, span) => { const t = Math.min(1, d / span), w = 1 - t * t * (3 - 2 * t); if (!(w > 0)) return q;
-    const D = unit(add(mul(q.D, 1 - w), mul(to.D, w))), Dn0 = add(mul(q.Dn, 1 - w), mul(to.Dn, w)), Dn = unit(sub(Dn0, mul(D, dot(Dn0, D)))); return { ...q, D, Dn }; };
-  for (const [from, step, to] of [[f - 1, -1, out[f]], [l + 1, 1, out[l]]]) {
-    const span = Math.min(LIP_BLEND_M, reach(from, step)); let d = 0;
-    for (let i = from; i >= 0 && i < out.length && !out[i].lane; i += step) { d += len(sub(out[i].E, out[i - step].E)); if (d >= span) break; turned[i] = turn(out[i], to, d, span); }
-  }
-  return { rows: turned, corners };
-}
-
-const UV_JUMP_PER_M = 0.3;   // a step of a row's edge uv faster than this per metre of edge is a jump between two uv spaces (the road's runs at 0.1)
-/**
- * The drawn rows' edge uvs made CONTINUOUS (the user, 18:54: "a square notch" at the rejoin): the road and the lane's three parts each carry their own uv space,
- * and a lip that steps from one to the next in one row squeezed up to 82 texture repeats into a 2 m cell. Within a run a row keeps its own uv step; across a
- * jump it steps at the last run's rate per metre; and what is left at the end is spread along the edge between the first jump and the last, so the rows before
- * the first and after the last keep their own uvs (the outline's end rows are the main lip's). Between them every row also takes the across rate (du) of the
- * row before the first jump: the lane's own spans its whole uv width over its width, which at the taper's 10 cm is 8 repeats a metre. Rows without uvs are
- * returned as they are.
- */
-function continuousUv(rows) {
-  if (rows.length < 2 || rows.some((q) => !q.uv)) return rows;
-  const uv = [rows[0].uv.slice()], arc = [0], jumps = [];
-  let rate = null;
-  for (let i = 1; i < rows.length; i++) {
-    const d = len(sub(rows[i].E, rows[i - 1].E)), st = [rows[i].uv[0] - rows[i - 1].uv[0], rows[i].uv[1] - rows[i - 1].uv[1]];
-    arc.push(arc[i - 1] + d);
-    if (Math.hypot(st[0], st[1]) <= UV_JUMP_PER_M * d + 1e-6) { uv.push([uv[i - 1][0] + st[0], uv[i - 1][1] + st[1]]); if (d > 1e-6) rate = [st[0] / d, st[1] / d]; continue; }
-    jumps.push(i);
-    if (!rate) for (let j = i + 1; j < rows.length; j++) { const dj = len(sub(rows[j].E, rows[j - 1].E)), sj = [rows[j].uv[0] - rows[j - 1].uv[0], rows[j].uv[1] - rows[j - 1].uv[1]]; if (dj > 1e-6 && Math.hypot(sj[0], sj[1]) <= UV_JUMP_PER_M * dj + 1e-6) { rate = [sj[0] / dj, sj[1] / dj]; break; } }
-    const r = rate || [0, 0]; uv.push([uv[i - 1][0] + r[0] * d, uv[i - 1][1] + r[1] * d]);
-  }
-  if (!jumps.length) return rows;
-  const n = rows.length - 1, left = [rows[n].uv[0] - uv[n][0], rows[n].uv[1] - uv[n][1]], a0 = arc[jumps[0] - 1], a1 = arc[jumps[jumps.length - 1]];
-  const du = rows[jumps[0] - 1].du, iLast = jumps[jumps.length - 1];
-  return rows.map((q, i) => { const t = i >= iLast ? 1 : a1 > a0 ? Math.max(0, Math.min(1, (arc[i] - a0) / (a1 - a0))) : 0; return { ...q, uv: [uv[i][0] + left[0] * t, uv[i][1] + left[1] * t], du: i >= jumps[0] && i < iLast ? du : q.du }; });
-}
-
-/** A mesh from grid() with flat triangles appended, each three [point, normal, uv], wound to face along the sum of its normals as grid winds its own. */
-function withTris(m, tris) {
-  if (!tris.length) return m;
-  const n0 = m.positions.length / 3, P = Array.from(m.positions), Nn = Array.from(m.normals), U = Array.from(m.uvs), idx = Array.from(m.indices);
-  tris.forEach((t, k) => {
-    t.forEach(([p, n, uv]) => { P.push(...p); Nn.push(...n); U.push(...uv); });
-    const a = n0 + 3 * k, x = cross(sub(t[1][0], t[0][0]), sub(t[2][0], t[0][0]));
-    if (dot(x, add(add(t[0][1], t[1][1]), t[2][1])) >= 0) idx.push(a, a + 1, a + 2); else idx.push(a, a + 2, a + 1);
-  });
-  if (P.length / 3 > 65535) throw new Error(`withApron: ${m.name} has ${P.length / 3} vertices, past a kn5 mesh's 16-bit indices`);
-  return { ...m, positions: Float32Array.from(P), normals: Float32Array.from(Nn), uvs: Float32Array.from(U), indices: Uint16Array.from(idx) };
-}
-
-/**
- * The outline's PHYSICS (apronOf's rule on every row: out along X, down along N by widthM·tan slope; two vertices a row, its top facing along N) and its VISUAL lip
- * and underside (visualRows): { physics, lip, under }. The lane's end rows (`end`) are walked by the physics only (their edges must be the strip's, or the
- * downforce-ray check reads them as gaps); the drawn lip steps from the road's last row straight to the lane's first, since a lip on rows a centimetre apart that
- * all point the same way folds onto its own underside (D593, the user 18:54: 70 such overlaps at the lane's ends, and slivers).
+ * The outline's PHYSICS (apronOf's rule on every row: out along X, down along N by widthM·tan slope; two vertices a row, its top facing along N) and its JOIN (apronOf's
+ * too: from the outer row back to the skin's edge vertex, E − UNDERSKIN_OFFSET_M·NE, each normal turned away from the section's inside): { physics, side }. Both are
+ * drawn as they are. The lane's end rows (`end`) are walked like every other row, so the plank and its join go round the lane's ends as one strip (fanned: the
+ * across runs below).
  */
 function outlineMeshes(rows, widthM, slopeDeg, names) {
-  const tan = Math.tan((slopeDeg * Math.PI) / 180), V = [], Nv = [], UV = [];
+  const tan = Math.tan((slopeDeg * Math.PI) / 180), V = [], Nv = [], UV = [], J = [], Nj = [], UVj = [];
+  // ACROSS RUNS: at the leave and the rejoin the outline walks the lane's end row, TAPER_MIN_W across in K − 1 steps along the rows' own X, all at one s, so those
+  // cells lie in one plane with the section. Each with its own outer point, the plank there was a run of slivers (2 m long, 1.25 cm apart: 64 on the pit test lap)
+  // and its plank and join bands overlapped (3); with the end row cut to its two ends, the lane's end edge met the plank's in a T and the downforce ray fell
+  // through the seam. So every row of an across run takes the LANE row's outer point: its plank cells fan out from it to the end row's own vertices, and its join
+  // cells fan back from it to the skin's, in separate directions, watertight on the lane's edge
+  const Os = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -widthM * tan)));
+  const across = (r) => { const d = sub(rows[r + 1].E, rows[r].E), l = len(d); return l > 0 && l < 0.5 && Math.abs(dot(d, rows[r].X)) > 0.7 * l; };
+  for (let r = 0; r + 1 < rows.length; r++) {
+    if (!across(r)) continue;
+    let j = r; while (j + 1 < rows.length - 1 && across(j + 1)) j++;
+    const run = []; for (let i = r; i <= j + 1; i++) run.push(i);
+    const k = run.find((i) => rows[i].lane);
+    if (k !== undefined) for (const i of run) Os[i] = Os[k];
+    r = j;
+  }
   let along = 0;
   rows.forEach((q, r) => {
     if (r > 0) along += len(sub(q.E, rows[r - 1].E));
-    const O = add(add(q.E, mul(q.X, widthM)), mul(q.N, -widthM * tan)), T = sub((rows[r + 1] || q).E, (rows[r - 1] || q).E);
+    const O = Os[r], T = sub((rows[r + 1] || q).E, (rows[r - 1] || q).E);
     let n = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(O, q.E)))) : q.N; if (dot(n, q.N) < 0) n = mul(n, -1);
     V.push([q.E, O]); Nv.push([n, n]); UV.push([[0, along / APRON_TILE_M], [widthM / APRON_TILE_M, along / APRON_TILE_M]]);
+    const S = sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)), G = mul(add(add(q.E, O), S), 1 / 3), mid = mul(add(O, S), 0.5);
+    let nj = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(S, O)))) : mul(q.N, -1); if (dot(nj, sub(mid, G)) < 0) nj = mul(nj, -1);
+    J.push([O, S]); Nj.push([nj, nj]); UVj.push([[0, along / APRON_TILE_M], [len(sub(S, O)) / APRON_TILE_M, along / APRON_TILE_M]]);
   });
-  // the drawn lip's rows round the lane: turned toward the lane's over LIP_BLEND_M either side, and a road row stepping across to the lane's dropped
-  // (lipRowsAtLane); a dropped corner is covered by one flat triangle on top and one under it, on the rows' own edge and skin points (lipRow's first column), so
-  // every edge of it is the road's, the lane's or the lip's. Physics untouched
-  const { rows: drawn, corners } = lipRowsAtLane(rows.filter((q) => !q.end)), vis = visualRows(drawn, drawn.map(() => widthM), slopeDeg, { lip: names.lip, under: names.under });
-  const th = (slopeDeg * Math.PI) / 180, firstCol = (q) => { const x = lipRow(q, widthM, th); return { L: [x.L[0], x.NL[0], x.UV[0]], U: [x.U[0], x.NU[0], x.UV[0]] }; };
-  const cs = corners.map((c) => c.map(firstCol));
-  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), lip: withTris(vis.lip, cs.map((c) => c.map((x) => x.L))), under: withTris(vis.under, cs.map((c) => c.map((x) => x.U))) };
+  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), side: grid(names.side, J, Nj, UVj, rows.map(() => false)) };
 }
 
 /**
@@ -367,7 +268,7 @@ function outlineMeshes(rows, widthM, slopeDeg, names) {
  * crease CROSS below it: a first form did, 49 times on his ELYSIUM, the road's skin (hung along the cupped edge's own normal, 13 cm outward) through the lane's. The
  * lane lies level in the road's own frame (src/geom/pitlane.js), so its normal is the road frame's UP; every skin at a join vertex (every infill vertex: on the road's
  * side, the road cell's frame up; on the lane's side, the lane's own normal) hangs along that (`joinNormal`), the road's skin edge inside the lane's span is hung
- * again along it (its own `SKIN_` node replaced, its other vertices as they were), and the apron outline's underside starts there too. (A second form took the mean
+ * again along it (its own `SKIN_` node replaced, its other vertices as they were), and the apron outline's join ends there too. (A second form took the mean
  * of the road's and the lane's normals, only where a point was both a road and a lane vertex: the infill joins them at different points, so it reached almost none.)
  * Elsewhere each keeps its own normal, as underskin.js's skinOf does.
  * Returns { add: the lane's and the infill's skin nodes, replace: Map(scene child index -> the road skin node hung again), joinNormal(p) -> the normal at a join
@@ -441,11 +342,9 @@ function withApron(scene, mesh, segments, opts = {}) {
   const chosen = apronCells(mesh, segments);
   if (!chosen.size) return scene;
   const kids = scene.root.children, orig = mesh.scene.root.children, materials = scene.materials.slice(), matIndex = materials.length, add = [];
-  // the lip and its underside wear their road material's darker shade: one copy per road material, numbered after the apron's own (matIndex, pushed first at the end)
-  const shades = new Map(), shaded = [], shadeIndex = (i) => { if (!shades.has(i)) { shades.set(i, matIndex + 1 + shaded.length); shaded.push(shadeOf(materials[i])); } return shades.get(i); };
+  let roadMat = null;   // the road material the first apron sits on: the apron's material is its darker shade (apronMaterial)
   let replaced = null;   // the road's own skin nodes beside the pit lane, hung again along the joins' normals (pitSkins)
   const toOutline = [];   // the road rows of the cells the lane's padded span touches, on its side: they are the pit lane outline's (outlineRows), in world space
-  let outlineMat = null;
   for (const k of [...chosen].sort((a, b) => a - b)) {
     const c = kids[k], m = c && c.children && c.children[0], o = orig[k] && orig[k].children[0];
     // the scene's cell may carry its piece's grip prefix (gripkeys.js renames 1ROAD_ to 1GRIPnnn_); the rest of its name is the mesh's own
@@ -460,47 +359,41 @@ function withApron(scene, mesh, segments, opts = {}) {
           const rows = sideRows(m, K, side), cell = mesh.cells[k], R = rows.length;
           if (!rows.some((q) => q.rim >= WALL_DEG)) {
             rowsWorld(rows, c.matrix).forEach((q, r) => { const s = cell.s0 + (R > 1 ? (cell.s1 - cell.s0) * r / (R - 1) : 0); if (!toOutline.length || len(sub(q.E, toOutline[toOutline.length - 1].E)) > 1e-6) toOutline.push({ ...q, s }); });
-            if (outlineMat === null) outlineMat = m.material;
+            if (roadMat === null) roadMat = m.material;
           }
         }
         continue;
       }
       const ap = apronOf(m, K, side, { widthM, slopeDeg }, { top: `${prefix}${APRON_TAG}_${rest}_${tag}`, side: `${SIDE_PREFIX}_${rest}_${tag}` });
       if (!ap) continue;
-      if (!ap.top) {   // width 0: the side face, as it was
-        const { physics, ...node } = ap.side; void physics; node.material = matIndex;
-        add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRONSIDE${tag}_`), matrix: c.matrix, children: [node] });
-        continue;
+      if (roadMat === null) roadMat = m.material;
+      // the plank and its join, DRAWN as they are (0.4.34's apron, the physics the user drove), on the apron's material; at width 0 the side face alone
+      for (const [mm, dn] of [[ap.top, `APRON${tag}_`], [ap.side, `APRONSIDE${tag}_`]]) {
+        if (!mm) continue;
+        const { physics, ...node } = mm; void physics; node.material = matIndex;
+        add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, dn), matrix: c.matrix, children: [node] });
       }
-      // THE PHYSICS, as it was (its vertices, name and material), HIDDEN: not drawn and casting no shadow (catch.js hides its catch surface the same way)
-      { const { physics, ...node } = ap.top; void physics; node.material = matIndex; node.visible = false; node.renderable = false; node.castShadows = false;
-        add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRON${tag}_`), matrix: c.matrix, children: [node] }); }
-      // WHAT IS DRAWN: the visual lip and its underside (the flat join is not written)
-      const vis = visualOf(m, K, side, { widthM, slopeDeg }, { lip: `${LIP_PREFIX}_${rest}_${tag}`, under: `${SIDE_PREFIX}_${rest}_${tag}` });
-      add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRONLIP${tag}_`), matrix: c.matrix, children: [{ ...vis.lip, material: shadeIndex(m.material) }] });
-      add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRONSIDE${tag}_`), matrix: c.matrix, children: [{ ...vis.under, material: shadeIndex(m.material) }] });
     }
   }
-  // THE PIT LANE'S OUTLINE: new physics where there was none (the road's edge either side of the lane and the lane's outer edge), hidden like the rest, and its lip;
+  // THE PIT LANE'S OUTLINE: new physics where there was none (the road's edge either side of the lane and the lane's outer edge), drawn like the rest, and its join;
   // and the skin under the lane and the infill, so from below road and lane are one surface
   if (lane && lane.mesh && widthM > 0) {
     const skinMat = materials.findIndex((x) => x && x.name === 't180b_underskin');
     if (skinMat < 0) throw new Error('withApron: the scene has no underside skin material (t180b_underskin), which the skin under the pit lane takes; run withUnderskin first');
     const ps = pitSkins(scene, mesh, lane.mesh, lane, skinMat);
     add.push(...ps.add); replaced = ps.replace;
-    // the outline's rows at a join take the join's normal too, so its underside starts where every other skin there does
+    // the outline's rows at a join take the join's normal too, so its join ends where every other skin there does
     const ol0 = outlineRows(toOutline, lane.mesh, lane), ol = ol0 && ol0.map((q) => { const nj = ps.joinNormal(q.E); return nj ? { ...q, NE: nj } : q; });
     if (ol) {
       const tag = `PIT_${lane.side}`, name = (p) => `${p}_${tag}`;
-      const out = outlineMeshes(ol, widthM, slopeDeg, { physics: `1ROAD_${APRON_TAG}_${tag}`, lip: name(LIP_PREFIX), under: name(SIDE_PREFIX) });
-      add.push({ type: 'dummy', name: name('APRON'), matrix: IDENTITY.slice(), children: [{ ...out.physics, material: matIndex, visible: false, renderable: false, castShadows: false }] });
-      add.push({ type: 'dummy', name: name('APRONLIP'), matrix: IDENTITY.slice(), children: [{ ...out.lip, material: outlineMat === null ? matIndex : shadeIndex(outlineMat) }] });
-      add.push({ type: 'dummy', name: name('APRONSIDE'), matrix: IDENTITY.slice(), children: [{ ...out.under, material: outlineMat === null ? matIndex : shadeIndex(outlineMat) }] });
+      const out = outlineMeshes(ol, widthM, slopeDeg, { physics: `1ROAD_${APRON_TAG}_${tag}`, side: name(SIDE_PREFIX) });
+      add.push({ type: 'dummy', name: name('APRON'), matrix: IDENTITY.slice(), children: [{ ...out.physics, material: matIndex }] });
+      add.push({ type: 'dummy', name: name('APRONSIDE'), matrix: IDENTITY.slice(), children: [{ ...out.side, material: matIndex }] });
     }
   }
   if (!add.length) return scene;
-  materials.push(apronMaterial(), ...shaded);
+  materials.push(apronMaterial(roadMat === null ? null : materials[roadMat]));
   return { ...scene, materials, root: { ...scene.root, children: [...(replaced && replaced.size ? kids.map((c, i) => replaced.get(i) || c) : kids), ...add] } };
 }
 
-module.exports = { LIP_SHADE, shadeOf, withApron, apronOf, visualOf, visualRows, outlineRows, outlineMeshes, pitSkins, apronCells, sideRows, inLaneSpan, APRON_WIDTH_M, APRON_SLOPE_DEG, APRON_COLS, WALL_DEG, APRON_TILE_M, PIT_PAD_M, SIDE_PREFIX, LIP_PREFIX };
+module.exports = { LIP_SHADE, shadeOf, apronMaterial, withApron, apronOf, outlineRows, outlineMeshes, pitSkins, apronCells, sideRows, inLaneSpan, APRON_WIDTH_M, APRON_SLOPE_DEG, WALL_DEG, APRON_TILE_M, PIT_PAD_M, SIDE_PREFIX };
