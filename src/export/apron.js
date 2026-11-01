@@ -36,7 +36,7 @@
 //     road's rate across), and the road's own edge normal on its first column, so the texture and the shading run on over the edge;
 //   the UNDERSIDE (`APRONSIDE_…`, scenery: it replaces the flat join that was the "flat surface" seen from below) follows the lip, from the skin's edge
 //     vertex, with the skin's own normal there, to the lip's outer row.
-//   BOTH IN THE ROAD'S OWN MATERIAL, DARKER (the user, 2026-10-31 18:0x: the road's own asphalt in a darker shade, as if in shadow): one copy of each road material
+//   BOTH IN THE ROAD'S OWN MATERIAL, A LITTLE DARKER (the user, 2026-10-31 18:0x, the road's own asphalt darker; 18:17, "not so dark... slightly darker"): one copy of each road material
 //     a lip sits on, its samplers (so its texture) the same and its ambient, diffuse and specular LIP_SHADE of the road's, appended after the apron's own material so
 //     the physics' material index is the one it had. From above it reads as a thin dark line along the edge; up close, darker asphalt rolling over.
 //   The visual lip is not the physics surface: 0.86 m out on a flat edge the lip is 0.08 m below the edge carried on and the physics apron 0.40 m below the lateral, so a
@@ -62,7 +62,8 @@ const APRON_TILE_M = 4;        // the uv tile, in metres
 const PIT_PAD_M = 5;           // each way past the pit lane's leave and rejoin
 const APRON_COLS = 6;          // the visual lip's columns across (a 2 m lip: one every 0.33 m, each turning about 4°)
 const APRON_TAG = 'APRON', SIDE_PREFIX = 'APRONSIDE', LIP_PREFIX = 'APRONLIP';
-const LIP_SHADE = 0.45;         // the lip's share of its road material's light (ambient, diffuse, specular): the road's own texture, darker, as if in shadow
+const LIP_SHADE = 0.88;         // the lip's share of its road material's light (ambient, diffuse, specular): the road's own texture a little darker, lit and shadowed by
+                               // the game as the road is (the user, 18:17: "perhaps slightly darker, not like crazy dark"; it was 0.45, "not so dark")
 /** The road material `m` in the lip's darker shade: its name with _lipshade, its samplers as they are, ksAmbient, ksDiffuse and ksSpecular times LIP_SHADE. */
 const shadeOf = (m) => ({ ...m, name: `${m.name}_lipshade`, props: m.props.map((p) => (/^ks(Ambient|Diffuse|Specular)$/.test(p.name) ? { ...p, value: p.value.map((v) => v * LIP_SHADE) } : p)) });
 
