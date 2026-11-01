@@ -13,7 +13,7 @@ All notable changes to this project are recorded here. The format follows
   - `export-isolated-page`'s real out-of-memory row;
   - every row of `install_local`: Windows PowerShell started from the job's pwsh 7 cannot load Get-FileHash.
 
-  The check is `test/on_github.js` (GitHub sets `GITHUB_ACTIONS=true`).
+  The check is `test/on_github.js` (GitHub sets `GITHUB_ACTIONS=true`). There, `menubar-page` also waits up to 120 s for the page to mount, instead of 30 s.
 
 ## [0.4.36] - 2026-11-01
 
