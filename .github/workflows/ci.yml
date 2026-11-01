@@ -19,7 +19,7 @@ jobs:
   fast:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 120   # run 41282043829 was cut off at 45 with the subset unfinished; the wall time a finished run measures sets it
     env:
       NODE_OPTIONS: --max-old-space-size=4096   # the core tests' own headers ask for it
     steps:
