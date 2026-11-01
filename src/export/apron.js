@@ -215,139 +215,142 @@ const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const toWorld = (M, p) => [0, 1, 2].map((j) => p[0] * M[j] + p[1] * M[4 + j] + p[2] * M[8 + j] + M[12 + j]);
 const turnWorld = (M, v) => [0, 1, 2].map((j) => v[0] * M[j] + v[1] * M[4 + j] + v[2] * M[8 + j]);
 const rowsWorld = (rows, M) => rows.map((q) => ({ ...q, E: toWorld(M, q.E), X: turnWorld(M, q.X), N: turnWorld(M, q.N), NE: turnWorld(M, q.NE), D: turnWorld(M, q.D), Dn: turnWorld(M, q.Dn) }));
+const FAN_STEPS = 6;   // rows round a convex corner of the outline (the lane's outer start and end), every 15° or so of a square turn
+
 /**
- * THE PIT LANE'S OUTLINE (the user, 2026-10-31 17:18: "what about the pit lane included into the apron generation and track all at once"; 18:11: "I want it to look
- * exactly how it does on the rest of the track like the pit IS the track"). The lane grows out of the road (src/geom/pitlane.js: its width eases from TAPER_MIN_W at
- * the leave to full over the diverge, and back over the merge), so its outer edge leaves the road's edge tangentially and the open edge over the lane's span is ONE
- * line: the road's edge up to the leave, the lane's outer edge, and the road's edge from the rejoin. The apron runs along it like any other edge, one row per edge
- * vertex, every row widthM: there are no corners to turn. (A first form went round a lane that began square at full width, with fans at its corners: the user,
- * 18:02, "the pit implementation looks like garbage straight up".)
- *   - the road's rows are those of the cells withApron leaves to it (the ones the padded span touches) up to the leave and from the rejoin, so the outline starts on
- *     the last row of the main apron before it and ends on the first after it;
- *   - the lane's rows are its own grid cells' OUTER side (`laneMesh`: laneForExport's mesh, its cells, _state and cell matrices): of its first row's two end columns,
- *     the one farther from the road's edge at the leave.
- * Returns the rows in order (sideRows' shape, in world space), or null when the lane has no grid cell.
+ * THE PIT LANE'S OUTLINE (the user, 2026-10-31 17:18: "what about the pit lane included into the apron generation and track all at once"). Over the lane's span the road's
+ * edge on its side is joined (the infill and the lane), and before this the main apron simply stopped PIT_PAD_M short of it, square, and the lane's own edges had none. The
+ * open edge there is one outline: the road's edge up to the leave, the lane's FIRST ROW out to its outer edge (the lane leaves at full width, its inner edge on the road's
+ * edge: src/geom/pitlane.js), the lane's OUTER EDGE, its LAST ROW back in, and the road's edge from the rejoin. One apron runs along all of it, in world space:
+ *   - at the two CONCAVE corners (the road's edge meeting the lane's first or last row) the two sides would cross. Each runs at full width only to its last row widthM or
+ *     more from the corner, both of those rows end at ONE point Q (the road side's outer row; the lane side's is set to it), and a FAN from Q covers every edge vertex
+ *     nearer the corner than that, road and lane, the corner's two vertices included (the road's edge vertex and the lane's first inner one stand 2-9 cm apart: pitlane.js's
+ *     infill). A first form cut both sides back to the corner's bisector instead; its two halves met along that line at different vertices, and the downforce-ray check
+ *     read the line between them as six gaps (test/export_apron.test.js row 10). With the fan every edge there is shared, vertex for vertex;
+ *   - at the two CONVEX corners (the lane's outer start and end) FAN_STEPS rows turn from one side's outward direction to the other's, all widthM;
+ *   - the road's rows are those of the cells withApron leaves to it (the ones the padded span touches), so it starts on the last row of the main apron before it and ends
+ *     on the first after it; the lane's rows are its own grid cells' outer side (`laneMesh`: laneForExport's mesh, its cells, _state and cell matrices).
+ * Returns { A, B, C, P1, P2 } in world space, or null when the lane has no grid cell: A the road's rows before the leave and C after the rejoin, B the lane's (its first row
+ * from widthM out, the convex fan, its outer edge, the other fan, its last row in to widthM), each a run of full-width rows (sideRows' shape); P1 and P2 the concave corners'
+ * fans, each { inner: [points E, NE, uv in order from A's last row to B's first, or B's last to C's first] }.
  */
-function outlineRows(mainRows, laneMesh, lane) {
+function outlineRows(mainRows, laneMesh, lane, widthM) {
   const cells = laneMesh.cells.map((cell, k) => ({ cell, k })).filter(({ cell }) => !cell.seam && laneMesh._state.pieces[cell.piece]);
   if (!cells.length) return null;
   const nodeOf = (k) => laneMesh.scene.root.children[k], meshOf = (k) => nodeOf(k).children[0];
   const before = mainRows.filter((q) => q.s <= lane.s0), after = mainRows.filter((q) => q.s >= lane.s1);
+  // the lane's outer side: of its first row's two end columns, the one FARTHER from the road's edge at the leave (its inner edge lies on it)
   const k0 = cells[0].k, K0 = laneMesh._state.pieces[cells[0].cell.piece].K, M0 = nodeOf(k0).matrix, P0 = meshOf(k0).positions;
   const firstRow = Array.from({ length: K0 }, (_, c) => toWorld(M0, [P0[c * 3], P0[c * 3 + 1], P0[c * 3 + 2]]));
   const corner = before.length ? before[before.length - 1].E : firstRow[0];
   const outer = len(sub(firstRow[K0 - 1], corner)) > len(sub(firstRow[0], corner)) ? 'last' : 'first';
   const laneRows = [];
   for (const { cell, k } of cells) {
-    const K = laneMesh._state.pieces[cell.piece].K;
-    for (const q of rowsWorld(sideRows(meshOf(k), K, outer === 'last' ? K - 1 : 0), nodeOf(k).matrix)) if (!laneRows.length || len(sub(q.E, laneRows[laneRows.length - 1].E)) > 1e-6) laneRows.push(q);
+    const K = laneMesh._state.pieces[cell.piece].K, rows = rowsWorld(sideRows(meshOf(k), K, outer === 'last' ? K - 1 : 0), nodeOf(k).matrix);
+    for (const q of rows) if (!laneRows.length || len(sub(q.E, laneRows[laneRows.length - 1].E)) > 1e-6) laneRows.push(q);
   }
-  // the lane's FIRST and LAST rows (TAPER_MIN_W across), vertex by vertex, inner to outer and back: each a row of the strip pointing out as the lane's edge row
-  // beside it does, so the strip's inner edge IS those rows' edges (a strip that crossed one in a single step left its edges open with apron beside them, which
-  // the downforce-ray check read as gaps at the leave and the rejoin)
-  const endRow = (kc, first, like) => {
-    const K = laneMesh._state.pieces[laneMesh.cells[kc].piece].K, M = nodeOf(kc).matrix, m = meshOf(kc), R = m.positions.length / 3 / K, r = first ? 0 : R - 1, cols = Array.from({ length: K }, (_, c) => c);
-    if (outer === 'first') cols.reverse();   // inner to outer
-    return cols.map((c) => { const i = r * K + c; return { ...like, E: toWorld(M, [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]), NE: turnWorld(M, [m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]]), uv: m.uvs ? [m.uvs[i * 2], m.uvs[i * 2 + 1]] : null, du: 0 }; });
+  // the lane's first and last rows, inner to outer, with their own normals and uvs, in world space
+  const endRow = (k, which) => {
+    const K = laneMesh._state.pieces[laneMesh.cells[k].piece].K, M = nodeOf(k).matrix, m = meshOf(k), R = m.positions.length / 3 / K, r = which === 'first' ? 0 : R - 1;
+    const pts = Array.from({ length: K }, (_, c) => { const i = r * K + c; return { E: toWorld(M, [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]), NE: turnWorld(M, [m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]]), uv: m.uvs ? [m.uvs[i * 2], m.uvs[i * 2 + 1]] : null }; });
+    return outer === 'last' ? pts : pts.reverse();
   };
-  const rows = [];
-  const push = (q) => { if (!rows.length || len(sub(q.E, rows[rows.length - 1].E)) > 1e-6) rows.push(q); };
-  before.forEach(push);
-  endRow(cells[0].k, true, laneRows[0]).forEach(push);
-  laneRows.forEach(push);
-  endRow(cells[cells.length - 1].k, false, laneRows[laneRows.length - 1]).reverse().forEach(push);
-  after.forEach(push);
-  return rows;
+  const crossRow = (pts, along) => {   // a lane end row as edge rows: outward is along the lane (back at the leave, on at the rejoin), square to the row in its own plane
+    const inner = pts[0].E, across = unit(sub(pts[pts.length - 1].E, inner));
+    return pts.map((p) => { const N = unit(p.NE), o = unit(sub(sub(along, mul(across, dot(along, across))), mul(N, dot(along, N))));
+      return { E: p.E, X: o, N, NE: p.NE, D: o, Dn: mul(N, -1), uv: p.uv, du: 0, d: len(sub(p.E, inner)) }; });
+  };
+  const first = laneRows[0], last = laneRows[laneRows.length - 1], kN = cells[cells.length - 1].k;
+  const startRow = crossRow(endRow(k0, 'first'), mul(unit(sub(laneRows[Math.min(1, laneRows.length - 1)].E, first.E)), -1));
+  const endRowR = crossRow(endRow(kN, 'last'), unit(sub(last.E, laneRows[Math.max(0, laneRows.length - 2)].E))).reverse();
+  const fan = (at, from, to) => {   // rows at one point turning from one outward direction to another about its normal
+    const a = Math.acos(Math.max(-1, Math.min(1, dot(from, to)))), out = [];
+    for (let i = 1; i < FAN_STEPS; i++) {
+      const t = i / FAN_STEPS, o = a > 1e-6 ? unit(add(mul(from, Math.sin((1 - t) * a) / Math.sin(a)), mul(to, Math.sin(t * a) / Math.sin(a)))) : from;
+      out.push({ ...at, X: o, D: o, Dn: mul(at.N, -1), du: 0 });
+    }
+    return out;
+  };
+  const sOut = startRow[startRow.length - 1], eOut = endRowR[0];
+  const A = before.filter((q) => lane.s0 - q.s >= widthM), C = after.filter((q) => q.s - lane.s1 >= widthM);
+  const B = [...startRow.filter((q) => q.d >= widthM), ...fan({ ...sOut, N: first.N, NE: first.NE }, sOut.X, first.X), ...laneRows, ...fan({ ...eOut, N: last.N, NE: last.NE }, last.X, eOut.X), ...endRowR.filter((q) => q.d >= widthM)];
+  const pt = (q) => ({ E: q.E, NE: q.NE, N: q.N, uv: q.uv });
+  const P1 = { inner: [...(A.length ? [A[A.length - 1]] : []), ...before.filter((q) => lane.s0 - q.s < widthM), ...startRow.filter((q) => q.d < widthM), B[0]].map(pt) };
+  const P2 = { inner: [B[B.length - 1], ...endRowR.filter((q) => q.d < widthM), ...after.filter((q) => q.s - lane.s1 < widthM), ...(C.length ? [C[0]] : [])].map(pt) };
+  return { A, B, C, P1, P2 };
+}
+
+/** A mesh built triangle by triangle: v() adds a vertex and returns its index; tri() adds a triangle wound to face along `hint`, and drops one of no area. */
+function meshAcc() {
+  const P = [], N = [], U = [], I = [];
+  return {
+    v(p, n, uv) { P.push(p); N.push(n); U.push(uv || [0, 0]); return P.length - 1; },
+    tri(a, b, c, hint) { const n = cross(sub(P[b], P[a]), sub(P[c], P[a])); if (!(len(n) > 1e-12)) return; if (dot(n, hint) >= 0) I.push(a, b, c); else I.push(a, c, b); },
+    node(name) {
+      if (P.length > 65535) throw new Error(`withApron: ${name} has ${P.length} vertices, past a kn5 mesh's 16-bit indices`);
+      const positions = new Float32Array(P.length * 3), normals = new Float32Array(P.length * 3), uvs = new Float32Array(P.length * 2);
+      P.forEach((p, i) => { positions.set(p, i * 3); normals.set(N[i], i * 3); uvs.set(U[i], i * 2); });
+      return { type: 'mesh', name, material: -1, castShadows: true, visible: true, transparent: false, renderable: true, positions, normals, uvs, indices: Uint16Array.from(I) };
+    },
+    add(m) {   // another mesh's vertices and triangles, as they are
+      const o = P.length;
+      for (let i = 0; i < m.positions.length / 3; i++) { P.push([m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]); N.push([m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]]); U.push([m.uvs[i * 2], m.uvs[i * 2 + 1]]); }
+      for (const x of m.indices) I.push(x + o);
+    },
+  };
 }
 
 /**
- * The outline's PHYSICS (apronOf's rule on every row: out along X, down along N by widthM·tan slope; two vertices a row, its top facing along N) and its VISUAL lip
- * and underside (visualRows): { physics, lip, under }.
+ * The outline's PHYSICS (apronOf's rule on every row: out along X, down along N by widthM·tan slope) and its VISUAL lip and underside (visualRows), as three meshes:
+ * { physics, lip, under }. The concave corners' fans: the physics from Q (A's last outer point, or B's first where A is empty; B's first row takes it as its own) to every
+ * inner point; the lip the same fan; the underside a fan from Q to the inner points' underside points (E − UNDERSKIN_OFFSET_M·NE).
  */
-function outlineMeshes(rows, widthM, slopeDeg, names) {
-  const tan = Math.tan((slopeDeg * Math.PI) / 180), V = [], Nv = [], UV = [];
-  let along = 0;
-  rows.forEach((q, r) => {
-    if (r > 0) along += len(sub(q.E, rows[r - 1].E));
-    const O = add(add(q.E, mul(q.X, widthM)), mul(q.N, -widthM * tan)), T = sub((rows[r + 1] || q).E, (rows[r - 1] || q).E);
-    let n = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(O, q.E)))) : q.N; if (dot(n, q.N) < 0) n = mul(n, -1);
-    V.push([q.E, O]); Nv.push([n, n]); UV.push([[0, along / APRON_TILE_M], [widthM / APRON_TILE_M, along / APRON_TILE_M]]);
-  });
-  const vis = visualRows(rows, rows.map(() => widthM), slopeDeg, { lip: names.lip, under: names.under });
-  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), lip: vis.lip, under: vis.under };
-}
-
-/**
- * THE UNDERSIDE UNDER THE LANE (the user, 18:13, on the pit leave from below: "smooth in red before but then in after orange there is a big gap"): the lane's cells
- * and the infill get a skin as the road's cells have (UNDERSKIN_OFFSET_M along the surface's normal, away from the driver, wound the other way), so from below road,
- * infill and lane are one surface.
- * ONE NORMAL AT EVERY JOIN. Where road, infill and lane meet (the road's edge beside the lane, the lane's inner edge, every infill vertex: each IS a road or a lane
- * vertex, src/export/pitlane.js infill), each surface's own normal differs (the road's edge is cupped, the lane level), and skins hung along different normals from one
- * crease CROSS below it: a first form did, 49 times on his ELYSIUM, the road's skin (hung along the cupped edge's own normal, 13 cm outward) through the lane's. The
- * lane lies level in the road's own frame (src/geom/pitlane.js), so its normal is the road frame's UP; every skin at a join vertex (every infill vertex: on the road's
- * side, the road cell's frame up; on the lane's side, the lane's own normal) hangs along that (`joinNormal`), the road's skin edge inside the lane's span is hung
- * again along it (its own `SKIN_` node replaced, its other vertices as they were), and the apron outline's underside starts there too. (A second form took the mean
- * of the road's and the lane's normals, only where a point was both a road and a lane vertex: the infill joins them at different points, so it reached almost none.)
- * Elsewhere each keeps its own normal, as underskin.js's skinOf does.
- * Returns { add: the lane's and the infill's skin nodes, replace: Map(scene child index -> the road skin node hung again), joinNormal(p) -> the normal at a join
- * point, or null where p is not one }. A vertex of the infill that is neither a road nor a lane vertex is refused, by name.
- */
-function pitSkins(scene, mesh, laneMesh, lane, skinMat) {
-  // the road's and the lane's vertices, each in 1 cm buckets; a point is found by the nearest within OWNER_M, the neighbouring buckets searched too (a rounded key alone
-  // misses a vertex whose two transforms differ in the last float across a bucket's boundary, as raygap.js's weld once did)
-  const OWNER_M = 2e-3, B = 0.01, cellOf = (p) => p.map((x) => Math.floor(x / B));
-  const index = () => new Map(), roadIx = index(), laneIx = index();
-  const own = (ix, m, M) => { const up = unit(turnWorld(M, [0, 1, 0])); for (let i = 0; i < m.positions.length / 3; i++) { const p = toWorld(M, [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]), k = cellOf(p).join(','); let l = ix.get(k); if (!l) ix.set(k, (l = [])); l.push({ p, n: unit(turnWorld(M, [m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]])), up }); } };
-  const entry = (ix, p) => { const c = cellOf(p); let best = null, bd = OWNER_M; for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) for (const x of ix.get(`${c[0] + i},${c[1] + j},${c[2] + k}`) || []) { const d = len(sub(x.p, p)); if (d <= bd) { bd = d; best = x; } } return best; };
-  const find = (ix, p) => { const e = entry(ix, p); return e ? e.n : null; };
-  const near = [];
-  mesh.cells.forEach((cell, k) => { if (cell.s1 >= lane.s0 - 10 && cell.s0 <= lane.s1 + 10) { const c = scene.root.children[k]; own(roadIx, c.children[0], c.matrix); near.push(k); } });
-  laneMesh.cells.forEach((cell, k) => { const c = laneMesh.scene.root.children[k]; own(laneIx, c.children[0], c.matrix); });
-  const fillNode = laneMesh.scene.root.children.slice(laneMesh.cells.length).find((c) => c.children && c.children[0] && /^1ROAD_PIT_fill/.test(c.children[0].name)), fillIx = index();
-  if (fillNode) own(fillIx, fillNode.children[0], fillNode.matrix);
-  // a JOIN point is an infill vertex; its skin hangs along the road cell's frame up where it is a road vertex, else along the lane's own normal
-  const joinNormal = (p) => { if (!entry(fillIx, p)) return null; const r = entry(roadIx, p); if (r) return r.up; return find(laneIx, p); };
-  const skinNormal = (p, own_) => joinNormal(p) || own_;
-  // a world point and normal into a cell's own frame (the matrix is a rotation and a translation: its transpose undoes the rotation)
-  const toLocal = (M, p) => { const d = [p[0] - M[12], p[1] - M[13], p[2] - M[14]]; return [0, 1, 2].map((i) => d[0] * M[4 * i] + d[1] * M[4 * i + 1] + d[2] * M[4 * i + 2]); };
-  const turnLocal = (M, v) => [0, 1, 2].map((i) => v[0] * M[4 * i] + v[1] * M[4 * i + 1] + v[2] * M[4 * i + 2]);
-  const add_ = [], replace = new Map();
-  // the lane's cells: every vertex hung along its skin normal, the triangles wound the other way
-  laneMesh.cells.forEach((cell, k) => {
-    const c = laneMesh.scene.root.children[k], m = c.children[0], M = c.matrix, n = m.positions.length / 3, P = new Float32Array(n * 3), N = new Float32Array(n * 3), I = new Uint16Array(m.indices.length);
-    for (let i = 0; i < n; i++) {
-      const p = toWorld(M, [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]), nw = skinNormal(p, unit(turnWorld(M, [m.normals[i * 3], m.normals[i * 3 + 1], m.normals[i * 3 + 2]])));
-      P.set(toLocal(M, sub(p, mul(nw, UNDERSKIN_OFFSET_M))), i * 3); N.set(turnLocal(M, mul(nw, -1)), i * 3);
+function outlineMeshes(ol, widthM, slopeDeg, names) {
+  const tan = Math.tan((slopeDeg * Math.PI) / 180), Oof = (q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -widthM * tan));
+  const { A, B, C, P1, P2 } = ol;
+  const Q1 = A.length ? Oof(A[A.length - 1]) : Oof(B[0]), Q2 = C.length ? Oof(C[0]) : Oof(B[B.length - 1]);
+  const phys = meshAcc(), lip = meshAcc(), under = meshAcc();
+  const strip = (rows, firstO, lastO) => {   // two vertices a row, edge and outer; the run's first and last outer points may be given (the corners' Q)
+    let prev = null, along = 0;
+    rows.forEach((q, r) => {
+      if (r > 0) along += len(sub(q.E, rows[r - 1].E));
+      const O = r === 0 && firstO ? firstO : r === rows.length - 1 && lastO ? lastO : Oof(q), uvV = along / APRON_TILE_M;
+      const e = phys.v(q.E, q.N, [0, uvV]), o = phys.v(O, q.N, [widthM / APRON_TILE_M, uvV]);
+      if (prev) { phys.tri(prev.e, prev.o, e, q.N); phys.tri(prev.o, o, e, q.N); }
+      prev = { e, o };
+    });
+  };
+  strip(A, null, null); strip(B, Q1, Q2); strip(C, null, null);
+  const visual = (rows) => { if (rows.length < 2) return; const v = visualRows(rows, rows.map(() => widthM), slopeDeg, { lip: 'x', under: 'x' }); lip.add(v.lip); under.add(v.under); };
+  visual(A); visual(B); visual(C);
+  // THE CONCAVE CORNERS. The physics: a fan from Q over the inner points. What is drawn: a fan from the outer point of the lip row the corner hangs from (A's last at the
+  // leave, C's first at the rejoin, or B's when that side is empty) over the WHOLE curled rows either side and the inner points between, so it meets both lips along their
+  // own rows. (A first form fanned the lip from the physics Q, 0.93 m down where the lips either side reach 0.43 m: it showed as a square tab at each corner.)
+  const th = (slopeDeg * Math.PI) / 180, NC = APRON_COLS;
+  for (const [P, Q, rowF, rowL, hangF] of [[P1, Q1, A.length ? A[A.length - 1] : null, B[0], A.length > 0], [P2, Q2, B[B.length - 1], C.length ? C[0] : null, !C.length]]) {
+    const up = unit(P.inner.reduce((s, p) => add(s, p.N || unit(p.NE)), [0, 0, 0]));
+    const qp = phys.v(Q, up, [widthM / APRON_TILE_M, 0]);
+    let pp = null;
+    for (const p of P.inner) {
+      const now = phys.v(p.E, up, p.uv || [0, 0]);
+      if (pp !== null) phys.tri(qp, pp, now, up);
+      pp = now;
     }
-    for (let t = 0; t < m.indices.length; t += 3) { I[t] = m.indices[t]; I[t + 1] = m.indices[t + 2]; I[t + 2] = m.indices[t + 1]; }
-    add_.push({ type: 'dummy', name: c.name.replace(/^CELL_/, 'SKIN_'), matrix: M, children: [{ type: 'mesh', name: m.name.replace(/^1ROAD/, 'UNDERSKIN'), material: skinMat, castShadows: true, visible: true, transparent: false, renderable: true, positions: P, normals: N, uvs: m.uvs, indices: I }] });
-  });
-  // the infill: its own triangles, every vertex a join vertex (or, refused, none)
-  if (fillNode) {
-    const f = fillNode.children[0], P = new Float32Array(f.positions.length), N = new Float32Array(f.normals.length), I = new Uint16Array(f.indices.length);
-    for (let i = 0; i < f.positions.length / 3; i++) {
-      const p = toWorld(fillNode.matrix, [f.positions[i * 3], f.positions[i * 3 + 1], f.positions[i * 3 + 2]]), nw = joinNormal(p);
-      if (!nw) throw new Error(`withApron: the pit lane's infill vertex at ${p.map((x) => x.toFixed(3)).join(', ')} is neither a road nor a lane vertex, so its skin has no normal to take`);
-      for (let a = 0; a < 3; a++) { P[i * 3 + a] = p[a] - UNDERSKIN_OFFSET_M * nw[a]; N[i * 3 + a] = -nw[a]; }
+    const hang = hangF ? rowF : rowL, rF = rowF ? lipRow(rowF, widthM, th) : null, rL = rowL ? lipRow(rowL, widthM, th) : null, rH = lipRow(hang, widthM, th);
+    // the boundary round the fan, in order: rowF's curl from its outer row in to its edge (its edge is the first inner point), the inner points, rowL's curl out
+    const ring = [];
+    if (rF) for (let c = NC; c >= 1; c--) if (!(hang === rowF && c === NC)) ring.push({ l: rF.L[c], u: rF.U[c], nl: rF.NL[c], nu: rF.NU[c], uv: rF.UV[c] });
+    for (const p of P.inner) ring.push({ l: p.E, u: sub(p.E, mul(p.NE, UNDERSKIN_OFFSET_M)), nl: p.NE, nu: mul(p.NE, -1), uv: p.uv || [0, 0] });
+    if (rL) for (let c = 1; c <= NC; c++) if (!(hang === rowL && c === NC)) ring.push({ l: rL.L[c], u: rL.U[c], nl: rL.NL[c], nu: rL.NU[c], uv: rL.UV[c] });
+    const ql = lip.v(rH.L[NC], rH.NL[NC], rH.UV[NC]), qu = under.v(rH.U[NC], rH.NU[NC], rH.UV[NC]);
+    let prev = null;
+    for (const x of ring) {
+      const now = { l: lip.v(x.l, x.nl, x.uv), u: under.v(x.u, x.nu, x.uv) };
+      if (prev) { lip.tri(ql, prev.l, now.l, up); under.tri(qu, prev.u, now.u, mul(up, -1)); }
+      prev = now;
     }
-    for (let t = 0; t < f.indices.length; t += 3) { I[t] = f.indices[t]; I[t + 1] = f.indices[t + 2]; I[t + 2] = f.indices[t + 1]; }
-    add_.push({ type: 'dummy', name: 'SKIN_PIT_fill_0', matrix: IDENTITY.slice(), children: [{ type: 'mesh', name: 'UNDERSKIN_PIT_fill_0', material: skinMat, castShadows: true, visible: true, transparent: false, renderable: true, positions: P, normals: N, uvs: f.uvs, indices: I }] });
   }
-  // the road's own skin beside the lane: a vertex whose road vertex is a join vertex is hung again along the join's normal (each skin vertex is its road vertex
-  // − UNDERSKIN_OFFSET_M·N with its normal −N, underskin.js skinOf, so the road vertex is the skin vertex − UNDERSKIN_OFFSET_M·(its normal))
-  const skins = new Map(); scene.root.children.forEach((c, i) => { if (/^SKIN_/.test(c.name)) skins.set(c.matrix, i); });
-  for (const k of near) {
-    const cellNode = scene.root.children[k], si = skins.get(cellNode.matrix); if (si === undefined) continue;
-    const sn = scene.root.children[si], sm = sn.children[0], M = sn.matrix; let P = null, N = null;
-    for (let i = 0; i < sm.positions.length / 3; i++) {
-      const pl = [sm.positions[i * 3], sm.positions[i * 3 + 1], sm.positions[i * 3 + 2]], nl = [sm.normals[i * 3], sm.normals[i * 3 + 1], sm.normals[i * 3 + 2]];
-      const E = toWorld(M, sub(pl, mul(nl, UNDERSKIN_OFFSET_M))), nj = joinNormal(E); if (!nj) continue;
-      if (!P) { P = Float32Array.from(sm.positions); N = Float32Array.from(sm.normals); }
-      P.set(toLocal(M, sub(E, mul(nj, UNDERSKIN_OFFSET_M))), i * 3); N.set(turnLocal(M, mul(nj, -1)), i * 3);
-    }
-    if (P) replace.set(si, { ...sn, children: [{ ...sm, positions: P, normals: N }] });
-  }
-  return { add: add_, replace, joinNormal };
+  return { physics: phys.node(names.physics), lip: lip.node(names.lip), under: under.node(names.under) };
 }
 
 const PREFIX_RE = /^1(?:ROAD|GRIP\d{3})_/;
@@ -362,7 +365,6 @@ function withApron(scene, mesh, segments, opts = {}) {
   const kids = scene.root.children, orig = mesh.scene.root.children, materials = scene.materials.slice(), matIndex = materials.length, add = [];
   // the lip and its underside wear their road material's darker shade: one copy per road material, numbered after the apron's own (matIndex, pushed first at the end)
   const shades = new Map(), shaded = [], shadeIndex = (i) => { if (!shades.has(i)) { shades.set(i, matIndex + 1 + shaded.length); shaded.push(shadeOf(materials[i])); } return shades.get(i); };
-  let replaced = null;   // the road's own skin nodes beside the pit lane, hung again along the joins' normals (pitSkins)
   const toOutline = [];   // the road rows of the cells the lane's padded span touches, on its side: they are the pit lane outline's (outlineRows), in world space
   let outlineMat = null;
   for (const k of [...chosen].sort((a, b) => a - b)) {
@@ -400,15 +402,9 @@ function withApron(scene, mesh, segments, opts = {}) {
       add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRONSIDE${tag}_`), matrix: c.matrix, children: [{ ...vis.under, material: shadeIndex(m.material) }] });
     }
   }
-  // THE PIT LANE'S OUTLINE: new physics where there was none (the road's edge either side of the lane and the lane's outer edge), hidden like the rest, and its lip;
-  // and the skin under the lane and the infill, so from below road and lane are one surface
+  // THE PIT LANE'S OUTLINE: new physics where there was none (the road's edge either side of the lane, the lane's ends and its outer edge), hidden like the rest, and its lip
   if (lane && lane.mesh && widthM > 0) {
-    const skinMat = materials.findIndex((x) => x && x.name === 't180b_underskin');
-    if (skinMat < 0) throw new Error('withApron: the scene has no underside skin material (t180b_underskin), which the skin under the pit lane takes; run withUnderskin first');
-    const ps = pitSkins(scene, mesh, lane.mesh, lane, skinMat);
-    add.push(...ps.add); replaced = ps.replace;
-    // the outline's rows at a join take the join's normal too, so its underside starts where every other skin there does
-    const ol0 = outlineRows(toOutline, lane.mesh, lane), ol = ol0 && ol0.map((q) => { const nj = ps.joinNormal(q.E); return nj ? { ...q, NE: nj } : q; });
+    const ol = outlineRows(toOutline, lane.mesh, lane, widthM);
     if (ol) {
       const tag = `PIT_${lane.side}`, name = (p) => `${p}_${tag}`;
       const out = outlineMeshes(ol, widthM, slopeDeg, { physics: `1ROAD_${APRON_TAG}_${tag}`, lip: name(LIP_PREFIX), under: name(SIDE_PREFIX) });
@@ -419,7 +415,7 @@ function withApron(scene, mesh, segments, opts = {}) {
   }
   if (!add.length) return scene;
   materials.push(apronMaterial(), ...shaded);
-  return { ...scene, materials, root: { ...scene.root, children: [...(replaced && replaced.size ? kids.map((c, i) => replaced.get(i) || c) : kids), ...add] } };
+  return { ...scene, materials, root: { ...scene.root, children: [...kids, ...add] } };
 }
 
-module.exports = { LIP_SHADE, shadeOf, withApron, apronOf, visualOf, visualRows, outlineRows, outlineMeshes, pitSkins, apronCells, sideRows, inLaneSpan, APRON_WIDTH_M, APRON_SLOPE_DEG, APRON_COLS, WALL_DEG, APRON_TILE_M, PIT_PAD_M, SIDE_PREFIX, LIP_PREFIX };
+module.exports = { LIP_SHADE, shadeOf, withApron, apronOf, visualOf, visualRows, outlineRows, outlineMeshes, apronCells, sideRows, inLaneSpan, APRON_WIDTH_M, APRON_SLOPE_DEG, APRON_COLS, WALL_DEG, APRON_TILE_M, PIT_PAD_M, FAN_STEPS, SIDE_PREFIX, LIP_PREFIX };

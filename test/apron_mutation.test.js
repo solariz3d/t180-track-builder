@@ -30,7 +30,6 @@ const MUTATIONS = [
   // road's darker shade). The fault that matters now: the lip in the road's material at full light, not the shade.
   { id: 'P9 the lip in the road\'s material unshaded (not the darker shade)', from: 'children: [{ ...vis.lip, material: shadeIndex(m.material) }]', to: 'children: [{ ...vis.lip, material: m.material }]', caughtBy: 'row 16:' },
   { id: 'P10 the physics apron drawn again (the plank shows under the lip)', from: 'node.visible = false; node.renderable = false; node.castShadows = false;', to: '', caughtBy: 'row 16:' },
-  { id: 'P12 the road skin beside the lane hung along its own cupped normal again (it swings under the lane skin and clips through it)', from: 'if (r) return r.up;', to: 'if (r) return r.n;', caughtBy: 'row 18:' },
   { id: 'P11 the physics re-aimed along the edge\'s own segment (the step the keeper kept out)', from: 'const O = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -drop)))', to: 'const O = rows.map((q) => add(add(q.E, mul(q.D, widthM)), mul(q.Dn, drop)))', caughtBy: 'row 17:' },
 ];
 

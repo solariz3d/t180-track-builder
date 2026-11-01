@@ -53,13 +53,8 @@ function laneForExport(mainPath, mainSegments, mainMesh, pitLane, { selfCheck = 
  * texture coordinates run as the road's do at the default 10 m tile: u = metres across from the road's edge u, v = the road's own s / 10. */
 const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const WELD = 1e-4, NEAR_EDGE = 0.3;   // m: the same vertex in two cells; how far a boundary vertex may sit from the analytic edge and still be that edge's
-/**
- * The boundary polyline of `meshes` (world space) near `target(s)` over [sA, sB]: [{ p, s }] sorted by s, each a vertex of those meshes. `alongOnly`: only edges that
- * run ALONG the road count (their two ends more than 1 mm apart in s), not the ones ACROSS it; `away(s)` (optional): each end must be nearer `target` than `away`.
- * Both for the lane (D593): it tapers to 5 cm at its ends, so its whole first and last rows, and its OUTER edge for a stretch, lie within NEAR_EDGE of its inner edge;
- * a zipper that took any of them left the inner edge open beside it, which the downforce-ray check read as a gap.
- */
-function boundaryNear(meshes, sOf, target, sA, sB, alongOnly = false, away = null) {
+/** The boundary polyline of `meshes` (world space) near `target(s)` over [sA, sB]: [{ p, s }] sorted by s, each a vertex of those meshes. */
+function boundaryNear(meshes, sOf, target, sA, sB) {
   const key = (x, y, z) => `${Math.round(x / WELD)},${Math.round(y / WELD)},${Math.round(z / WELD)}`;
   const verts = new Map(), edges = new Map();
   for (const m of meshes) {
@@ -73,8 +68,7 @@ function boundaryNear(meshes, sOf, target, sA, sB, alongOnly = false, away = nul
   for (const [e, n] of edges) {
     if (n !== 1) continue;
     const ends = e.split('|').map((k) => ({ k, p: verts.get(k) }));
-    const ok = ends.every((v) => { const s = sOf(v.p); if (s < sA - 1e-6 || s > sB + 1e-6) return false; const q = target(s), dq = Math.hypot(v.p[0] - q[0], v.p[1] - q[1], v.p[2] - q[2]); if (dq > NEAR_EDGE) return false; if (!away) return true; const o = away(s); return dq < Math.hypot(v.p[0] - o[0], v.p[1] - o[1], v.p[2] - o[2]); });
-    if (ok && alongOnly && Math.abs(sOf(ends[0].p) - sOf(ends[1].p)) <= 1e-3) continue;
+    const ok = ends.every((v) => { const s = sOf(v.p); if (s < sA - 1e-6 || s > sB + 1e-6) return false; const q = target(s); return Math.hypot(v.p[0] - q[0], v.p[1] - q[1], v.p[2] - q[2]) <= NEAR_EDGE; });
     if (ok) for (const v of ends) if (!out.has(v.k)) out.set(v.k, { p: v.p, s: sOf(v.p) });
   }
   return [...out.values()].sort((a, b) => a.s - b.s);
@@ -86,8 +80,7 @@ function infill(mainPath, mainSegments, mainMesh, laneMesh, lane, pitLane, mater
   const sOf = (p) => { let best = null, bd = Infinity; for (const x of span) { const d = (p[0] - x.pos[0]) ** 2 + (p[1] - x.pos[1]) ** 2 + (p[2] - x.pos[2]) ** 2; if (d < bd) { bd = d; best = x; } } return best.s + (p[0] - best.pos[0]) * best.T[0] + (p[1] - best.pos[1]) * best.T[1] + (p[2] - best.pos[2]) * best.T[2]; };
   const cells = mainMesh.cells, roadW = walkScene(mainMesh.scene).meshes.filter((m, k) => cells[k] && cells[k].s1 >= s0 - 4 && cells[k].s0 <= s1 + 4 && m.indices && m.indices.length);
   const R = boundaryNear(roadW, sOf, (s) => lane.at(Math.min(s1, Math.max(s0, s))).edge, s0, s1);
-  const L = boundaryNear(walkScene(laneMesh.scene).meshes.filter((m) => m.indices && m.indices.length), sOf, (s) => lane.at(Math.min(s1, Math.max(s0, s))).inner, s0, s1, true,   // along the road only (not the lane's end rows), and nearer its inner edge than its outer (D593)
-    (s) => { const c = Math.min(s1, Math.max(s0, s)), x = lane.at(c, lane.widthAt(c)); return [0, 1, 2].map((d) => 2 * x.centre[d] - x.inner[d]); });
+  const L = boundaryNear(walkScene(laneMesh.scene).meshes.filter((m) => m.indices && m.indices.length), sOf, (s) => lane.at(Math.min(s1, Math.max(s0, s))).inner, s0, s1);
   if (R.length < 2 || L.length < 2) throw new Error(`PIT_INFILL: found ${R.length} road-edge and ${L.length} lane-edge vertices beside the lane; the infill needs both edges`);
   const edgeU = (s) => { let k = 0; for (let i = 0; i < st.length; i++) if (st[i] <= s + 1e-9) k = i; const P = profileAt(mainSegments[k], Math.max(0, s - st[k])); return sg > 0 ? P.u[P.u.length - 1] : P.u[0]; };
   const upAt = (s) => { let best = span[0]; for (const x of span) if (Math.abs(x.s - s) < Math.abs(best.s - s)) best = x; return best.U; };
