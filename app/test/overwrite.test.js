@@ -25,9 +25,13 @@ const OW = require('../core/overwrite.js');
 
 const REPO = path.resolve(__dirname, '..', '..');
 
+const made = [];   // every temp folder this file makes, removed when it ends
+test.after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
+
 /** A storage that keeps tracks as real FILES in a temp folder, as the native side does (save moves the old file into track-backups first). */
 function diskStore() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't180-overwrite-')), backups = path.join(dir, 'track-backups');
+  made.push(dir);
   fs.mkdirSync(backups);
   const file = (n) => path.join(dir, `${n}.t180track`);
   const calls = [];
