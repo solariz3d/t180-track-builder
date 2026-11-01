@@ -56,7 +56,7 @@ const sides = (scene) => scene.root.children.filter((c) => /^APRONSIDE[LR]_/.tes
 const pairs = (node) => { const P = node.children[0].positions, out = []; for (let i = 0; i < P.length / 3; i += 2) { const v = (j) => [P[(i + j) * 3], P[(i + j) * 3 + 1], P[(i + j) * 3 + 2]]; out.push([v(0), v(1)]); } return out; };
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cellOf = (name) => name.replace(/^APRON(SIDE|LIP)?[LR]_/, '');   // (D593: the visual lip's APRONLIP too)
-// D593: the visual lip (APRONLIP…) is gone (the keeper 21:54-21:55: a blade); vlips(scene) finds any, for the rows that hold it to none
+// D593: the visual lip (APRONLIP…) is gone (the user 21:54-21:55: a blade); vlips(scene) finds any, for the rows that hold it to none
 const vlips = (scene) => scene.root.children.filter((c) => /^APRONLIP[LR]_/.test(c.name));
 const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], unit3 = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; };
 function build(doc, opts) { const { segs, mesh } = meshOf(doc), skinned = S.withUnderskin(mesh.scene, mesh, segs); return { segs, mesh, skinned, out: AP.withApron(skinned, mesh, segs, opts) }; }
@@ -88,7 +88,7 @@ test('row 1: on a flat open road each cell gets two aprons, their outer row widt
 
 // AMENDED (D593, what is seen): the closed section was a wedge of three rows (the physics top's edge and outer row, the skin) with a flat join from the outer row to the
 // skin, the "flat surface" the user saw from below; then a visual lip and an underside that followed it. The hidden physics top is row 16's.
-// AMENDED (D593, the chair's 21:58 and 23:23, the keeper's 21:58: "we need to somehow revert back to what we had originally with the apron", after the wheels sank through
+// AMENDED (D593, the chair's 21:58 and 23:23, the user's 21:58: "we need to somehow revert back to what we had originally with the apron", after the wheels sank through
 // a drawn lip, the gap between drawn and physics): what is drawn is 0.4.34's apron, THE PHYSICS ITSELF, the plank and its join, vertex for vertex; no lip, nothing hidden.
 // Kept of D593: the apron's material (t180b_apron) is the road's own asphalt at LIP_SHADE, and the pit lane's outline has the same drawn plank and join.
 test('row 2: the wedge is closed: the join\'s lower row is the skin\'s edge vertices to the float; no face points into the wedge; the top faces up, the join down', () => {
@@ -230,7 +230,7 @@ test('row 11: a gripped piece\'s aprons are its own grip surface (1GRIP070_APRON
 
 // ── D593: what is seen (exo_memory/loop/plan_apron_reads_as_part_of_the_road_2026-10-31.md, its 17:1x amendment) ──
 // The edges the rows below look at: a flat one, one banked 30° (no cup) and one cupped 40° (under the 60° wall bar). A side's own last segment, from the ROAD's vertices, was
-// the direction the visual lip left along (D593, until the keeper's 21:54-21:55: the lip is gone).
+// the direction the visual lip left along (D593, until the user's 21:54-21:55: the lip is gone).
 const EDGES = [['flat', flat()], ['banked 30°', extend(D.createDoc('bank'), { length: 60, family: 'bowl', first: { w: 20, c: 0, phi: 30 * DEG } })], ['cupped 40°', extend(D.createDoc('cup'), { length: 60, family: 'bowl', first: { w: 20, c: 40 } })]];
 
 test('row 12: the D563 wheel: 0.86 m out the physics apron is 0.40 m below the edge row, within 0.1 m of the 0.31 m the wheel was measured to fall', () => {
@@ -243,7 +243,7 @@ test('row 12: the D563 wheel: 0.86 m out the physics apron is 0.40 m below the e
   }
 });
 
-// AMENDED (D593, the chair's 21:58 and 23:23, the keeper's 21:58: "we need to somehow revert back to what we had originally with the apron", after the wheels sank through
+// AMENDED (D593, the chair's 21:58 and 23:23, the user's 21:58: "we need to somehow revert back to what we had originally with the apron", after the wheels sank through
 // a drawn lip, the gap between drawn and physics): what is drawn is 0.4.34's apron, THE PHYSICS ITSELF, the plank and its join, vertex for vertex; no lip, nothing hidden.
 // Kept of D593: the apron's material (t180b_apron) is the road's own asphalt at LIP_SHADE, and the pit lane's outline has the same drawn plank and join.
 test('row 13: what is drawn is the physics: on a flat, a banked and a cupped edge every apron top is drawn as it is, beside its join, and no other apron mesh is drawn (no lip)', () => {
@@ -286,7 +286,7 @@ test('row 14: the pit lane is one outline: a drawn physics apron runs from the m
   assert.ok(joined.some((s) => s < s0) && joined.some((s) => s > s1), `the outline meets the main apron before the leave and after the rejoin (at s ${joined.map((s) => s.toFixed(0)).join(', ')})`);
 });
 
-// AMENDED (D593, the chair's 21:58 and 23:23, the keeper's 21:58: "we need to somehow revert back to what we had originally with the apron", after the wheels sank through
+// AMENDED (D593, the chair's 21:58 and 23:23, the user's 21:58: "we need to somehow revert back to what we had originally with the apron", after the wheels sank through
 // a drawn lip, the gap between drawn and physics): what is drawn is 0.4.34's apron, THE PHYSICS ITSELF, the plank and its join, vertex for vertex; no lip, nothing hidden.
 // Kept of D593: the apron's material (t180b_apron) is the road's own asphalt at LIP_SHADE, and the pit lane's outline has the same drawn plank and join.
 test('row 15: the apron wears the road\'s own asphalt a little darker: t180b_apron is the road material\'s texture with its ambient, diffuse and specular at LIP_SHADE, on the tops and the joins', () => {
@@ -441,7 +441,7 @@ test('row 18: the pit IS the track: nothing clips, nothing overlaps in one plane
 });
 
 // D593, the user 18:54: "a square notch" at the pit's rejoin, from above: the lane's lip stepped from the lane's uv space to the road's in one 2 m row
-// AMENDED (D593, the keeper 21:54-21:55): the lip and its underside are gone; the same check on the filled face round the lane
+// AMENDED (D593, the user 21:54-21:55): the lip and its underside are gone; the same check on the filled face round the lane
 test('row 19: the lane\'s drawn edge carries one texture along it: no face triangle edge round the lane squeezes more than 1 texture repeat into a metre', () => {
   const doc = lap('apron pit-is-track lap'), lane = { side: 'L', leave: { word: doc.pieces[0].id, along: 40 }, rejoin: { word: doc.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
   const meshes = acMeshes(exportDoc(doc, {}, { pitLane: lane })).filter((m) => /^APRONSIDE_PIT_/.test(m.name));
@@ -455,7 +455,7 @@ test('row 19: the lane\'s drawn edge carries one texture along it: no face trian
   assert.deepEqual(bad.slice(0, 4), [], `${bad.length} face edges round the lane squeeze the texture`);
 });
 
-// AMENDED (D593, the chair's 21:58 and 23:23, the keeper's 21:58: "we need to somehow revert back to what we had originally with the apron", after the wheels sank through
+// AMENDED (D593, the chair's 21:58 and 23:23, the user's 21:58: "we need to somehow revert back to what we had originally with the apron", after the wheels sank through
 // a drawn lip, the gap between drawn and physics): what is drawn is 0.4.34's apron, THE PHYSICS ITSELF, the plank and its join, vertex for vertex; no lip, nothing hidden.
 // Kept of D593: the apron's material (t180b_apron) is the road's own asphalt at LIP_SHADE, and the pit lane's outline has the same drawn plank and join.
 // The case he drove: a cupped road with a pit lane.

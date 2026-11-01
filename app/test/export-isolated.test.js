@@ -85,7 +85,7 @@ function digestOf(out) {
 // pit lane's in, out and fill surfaces (its taper starts 0.5 m wide, src/geom/pitlane.js TAPER_MIN_W, and its uvs follow its width), its new skins and its
 // outline's drawn plank and join (1ROAD_APRON_PIT_R, APRONSIDE_PIT_R), the road skin's vertices within 0.5 m of the lane hung again, and the map (data/map.ini,
 // map.png, ui/outline.png) 2 m wider on the lane's side, where that plank lies. The file counts are the same. (Two pairs between, 60e346e18df0144b / 7b587edcbcefc314
-// and 0e8de6cd745039cb / 4dba6b610fc6010e, carried a drawn lip over a hidden plank and then a filled side face; both were removed at the keeper's word, 2026-10-31
+// and 0e8de6cd745039cb / 4dba6b610fc6010e, carried a drawn lip over a hidden plank and then a filled side face; both were removed at the user's word, 2026-10-31
 // 21:54-21:58.)
 const PIN = { lap: 'sha256 74130c5b646222a5 files 10', open: 'sha256 e15aed9879bf1ca0 files 11' };
 

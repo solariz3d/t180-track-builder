@@ -35,7 +35,7 @@
 // 05:23Z): the apron is drawn as the physics it is (0.4.34's plank and its join, vertex for vertex) and its material t180b_apron is now the road's own asphalt a little
 // darker (a copy of the road material under the apron's name, ambient, diffuse and specular at 0.88). That changes the kn5 of F1 F2 and nothing else: every mesh node
 // is the same bytes, and of the materials only t180b_apron's own record changed. (A drawn lip over a hidden plank, and a filled side face, were tried and removed:
-// the keeper, 21:54-21:58 on 0.4.35.) test/fixtures/manifest.d593.json records it against a93ae51 (whose kn5 is the D572 record's after), and its row builds F1 F2
+// the user, 21:54-21:58 on 0.4.35.) test/fixtures/manifest.d593.json records it against a93ae51 (whose kn5 is the D572 record's after), and its row builds F1 F2
 // NOW and holds every mesh node to a93ae51's bytes and every material but t180b_apron to its own.
 'use strict';
 const test = require('node:test');
