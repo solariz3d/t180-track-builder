@@ -1,5 +1,5 @@
 // ailine_vertical_mutation.test.js: node --test test/ailine_vertical_mutation.test.js   (under the heavy-run lock; a few minutes)
-// A road that goes vertical has no AI line (src/export/ailine.js generateAiLine VERTICAL_TANGENT; src/export/fromwords.js and layouts.js leave the file out;
+// A road through vertical (src/export/ailine.js clearVertical: points moved until every tangent clears CLEAR_UP, VERTICAL_TANGENT where none can; src/export/fromwords.js and layouts.js leave the file out;
 // app/core/exportwords.js says so): each mutant changes it in ONE way, by an exact string replacement in a temporary copy of src/, tools/, app/ and scripts/,
 // and test/ailine_vertical.test.js runs against the copy. "Applied" means the replaced string occurs EXACTLY once; "caught" means at least one of those
 // tests FAILED on the mutant. The CONTROL runs the file on an unmutated copy, so a copy that is missing a file cannot make every mutant look caught.
@@ -10,13 +10,14 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const IR = require('./inner_run.js');   // a crashed inner run reads NOT TESTED
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const FILE = 'ailine_vertical.test.js', FIXTURES = ['F1-bowl-default-lap-closed.core2.json'];
+const FILE = 'ailine_vertical.test.js', FIXTURES = ['F1-bowl-default-lap-closed.core2.json', 'elysium-2026-10-22.t180track'];
 
 const MUTANTS = [
-  { id: 'V1 the vertical test is dropped (the line is written with a camber of ±π)', edits: [['src/export/ailine.js', "if (Math.hypot(fwd[0], fwd[2]) < Math.sin(VERTICAL_DEG * DEG) && Math.hypot(fwd[0], fwd[1], fwd[2]) > 0) throw", 'if (false) throw']] },
-  { id: 'V2 the test reads the wrong axis (x and y, not the horizontal x and z)', edits: [['src/export/ailine.js', 'if (Math.hypot(fwd[0], fwd[2]) < Math.sin(VERTICAL_DEG * DEG)', 'if (Math.hypot(fwd[0], fwd[1]) < Math.sin(VERTICAL_DEG * DEG)']] },
-  { id: 'V3 the bar is 1° from vertical, not 6°', edits: [['src/export/ailine.js', 'const VERTICAL_DEG = 6;', 'const VERTICAL_DEG = 1;']] },
-  { id: 'V4 the bar is 15° from vertical (refuses ordinary steep roads)', edits: [['src/export/ailine.js', 'const VERTICAL_DEG = 6;', 'const VERTICAL_DEG = 15;']] },
+  { id: 'V1 the line is never cleared (points stay on vertical)', edits: [['src/export/ailine.js', '  clearVertical(pts, keep, (i) => onSection(secs[i], tt[i]), st, !!opts.open);', '']] },
+  { id: 'V2 the bar is 1e-6 (the value that crashed AC), not 1e-4', edits: [['src/export/ailine.js', 'const CLEAR_UP = 1e-4;', 'const CLEAR_UP = 1e-6;']] },
+  { id: 'V3 the bar is 1e-2 (it moves points of a line AC loads)', edits: [['src/export/ailine.js', 'const CLEAR_UP = 1e-4;', 'const CLEAR_UP = 1e-2;']] },
+  { id: 'V4 only the tangent to the next point is read (not across both neighbours)', edits: [['src/export/ailine.js', '[[k - 1, k], [k, k + 1], [k - 1, k + 1], [k - 2, k], [k, k + 2]]', '[[k - 1, k], [k, k + 1]]']] },
+  { id: 'V10 a stretch that stays vertical is not refused (the line is written on it)', edits: [['src/export/ailine.js', 'if (h(a, b) < CLEAR_UP) throw', 'if (false) throw']] },
   { id: 'V5 the export does not catch the refusal (it fails instead of finishing)', edits: [['src/export/fromwords.js', "catch (e) { if (e.code !== 'VERTICAL_TANGENT') throw e; warnings.push(`${NO_AI_LINE} (${e.message})`); }", 'catch (e) { throw e; }']] },
   { id: 'V6 the export finishes without saying why', edits: [['src/export/fromwords.js', 'warnings.push(`${NO_AI_LINE} (${e.message})`);', '']] },
   { id: 'V7 the folder writes an AI line it does not have', edits: [['src/export/fromwords.js', "  if (b.ai) {   // none when the road goes vertical (buildFromSegments)", '  if (true) {']] },
@@ -44,7 +45,7 @@ function runTests(dir) {
 
 test(`CONTROL: the whole of ${FILE} passes on an unmutated copy of src/, tools/, app/ and scripts/`, () => {
   const dir = tree();
-  try { const r = runTests(dir); assert.ok(r.tests >= 6 && r.fail === 0, `tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  try { const r = runTests(dir); assert.ok(r.tests >= 8 && r.fail === 0, `tests ${r.tests}, fail ${r.fail}\n${r.out.slice(-1500)}`); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 for (const m of MUTANTS) {
   test(`mutant ${m.id}: applied, and caught by ${FILE}`, (t) => {
