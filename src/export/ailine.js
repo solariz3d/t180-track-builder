@@ -46,7 +46,9 @@ const G = 9.81, DEG = Math.PI / 180;
 const EXTRA = ['speed', 'gas', 'brake', 'latG', 'radius', 'sideLeft', 'sideRight', 'camber', 'direction',
   'nx', 'ny', 'nz', 'length', 'fx', 'fy', 'fz', 'tag', 'grade'];
 const HEADER_BYTES = 16, POINT_BYTES = 20, EXTRA_BYTES = EXTRA.length * 4;
-const VERTICAL_DEG = 6;   // a point whose forward is within this of vertical has no line AC can load (generateAiLine)
+// THE SMALLEST |tangent × up| A LINE MAY CARRY (generateAiLine, clearVertical): AC recomputes each point's direction from its neighbours and divides by this.
+// Measured: a line whose least is 1e-6 crashed AC as it loaded; ELYSIUM's, 1.93e-4 (78 points within 6° of vertical), loads.
+const CLEAR_UP = 1e-4;
 
 class AiLineError extends Error {
   constructor(code, message) { super(`${code}: ${message}`); this.name = 'AiLineError'; this.code = code; }
@@ -92,6 +94,32 @@ function wallTarget(st, font, v, WF, LW) {
 }
 
 /**
+ * A ROAD THAT GOES THROUGH VERTICAL (2026-11-01, a lap falling through 90°): AC throws the stored normals away and recomputes each point's from its tangent,
+ * taken from the neighbouring points, crossed with world up and divided by that cross's length. One point of that lap lay 1e-6 off vertical and the game
+ * crashed loading the line. So no point may leave its tangent nearer vertical than CLEAR_UP, read three ways from the float32 positions AC reads (to the
+ * next point, from the previous one, and across both): a point that does is moved along the road, to the nearest station between its neighbours where every
+ * tangent it touches clears. A road that stays vertical has no such station (moving a point along a vertical straight changes nothing): VERTICAL_TANGENT,
+ * and the export goes on without the file (fromwords.js). The two ends of a jump are never moved. Changes `pts` and `keep` in place.
+ */
+function clearVertical(pts, keep, pointAt, st, open) {
+  const m = pts.length, f = (p) => p.pos.map(Math.fround);
+  const h = (a, b) => { const A = f(pts[a]), B = f(pts[b]), d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], l = Math.hypot(d[0], d[1], d[2]); return l > 0 ? Math.hypot(d[0], d[2]) / l : 0; };
+  const idx = (k) => (open ? (k >= 0 && k < m ? k : -1) : (k + m) % m);
+  // the tangents point k takes part in: k-1 -> k, k -> k+1, k-1 -> k+1, k-2 -> k, k -> k+2 (the last two are its neighbours' central tangents)
+  const touches = (k) => [[k - 1, k], [k, k + 1], [k - 1, k + 1], [k - 2, k], [k, k + 2]].map(([a, b]) => [idx(a), idx(b)]).filter(([a, b]) => a >= 0 && b >= 0 && a !== b);
+  const clear = (k) => touches(k).every(([a, b]) => h(a, b) >= CLEAR_UP);
+  const fixed = (i) => st[i].gapNext || (i > 0 && st[i - 1].gapNext);   // a jump's two ends stay where the line spans it
+  for (let k = 0; k < m; k++) {
+    if (clear(k)) continue;
+    const lo = idx(k - 1) >= 0 ? keep[idx(k - 1)] : -1, hi = idx(k + 1) >= 0 ? keep[idx(k + 1)] : st.length, home = keep[k], was = pts[k];
+    const tries = []; for (let d = 1; home - d > lo || home + d < hi; d++) { if (home + d < hi) tries.push(home + d); if (home - d > lo) tries.push(home - d); }
+    // none clears: the point stays (the neighbour may be the one on vertical, and its own turn moves it); the last pass below refuses anything left
+    if (fixed(home) || !tries.some((i) => { if (i < 0 || i >= st.length || i <= lo || i >= hi) return false; pts[k] = pointAt(i); keep[k] = i; return clear(k); })) { pts[k] = was; keep[k] = home; }
+  }
+  for (let k = 0; k < m; k++) for (const [a, b] of touches(k)) if (h(a, b) < CLEAR_UP) throw new AiLineError('VERTICAL_TANGENT', `points ${a} and ${b} of the line run within ${h(a, b).toExponential(1)} of vertical (|tangent × up|, at least ${CLEAR_UP} is needed) and no point near them clears it: Assetto Corsa's AI line cannot describe a road that stays this close to vertical`);
+}
+
+/**
  * The line from a design: dsn { stations, length }, secs (one cross-section per station, right → left, with P and N),
  * opts { mode: 'wall' | 'floor', speedKmh, every (stations per point), easeM, WF, LW, DS }.
  */
@@ -122,6 +150,7 @@ function generateAiLine(dsn, secs, opts = {}) {
   const keep = [];
   for (let i = 0; i < n; i++) if (i % every === 0 || st[i].gapNext || (i > 0 && st[i - 1].gapNext)) keep.push(i);
   const pts = keep.map((i) => onSection(secs[i], tt[i]));
+  clearVertical(pts, keep, (i) => onSection(secs[i], tt[i]), st, !!opts.open);
 
   const m = pts.length, points = [], extra = [];
   let len = 0;
@@ -130,11 +159,6 @@ function generateAiLine(dsn, secs, opts = {}) {
     if (k > 0) len += dist(p.pos, pts[k - 1].pos);
     points.push({ pos: p.pos, length: len, id: k });
     const seg = dist(nx.pos, p.pos), fwd = last ? unit(sub(p.pos, pts[k - 1].pos)) : unit(sub(nx.pos, p.pos));
-    // A ROAD THAT GOES VERTICAL (2026-11-01, a lap falling through 90°): AC throws the stored normals away and recomputes each from the tangent crossed with
-    // world up, dividing by that cross's length, the tangent's horizontal part, so a point near vertical crashed the game as it loaded the line; and here
-    // left = up × forward came out as the zero vector, so the camber read ±π. No bytes describe such a road to AC: refused by name, and the export goes on
-    // without the file (fromwords.js).
-    if (Math.hypot(fwd[0], fwd[2]) < Math.sin(VERTICAL_DEG * DEG) && Math.hypot(fwd[0], fwd[1], fwd[2]) > 0) throw new AiLineError('VERTICAL_TANGENT', `point ${k} runs ${(Math.asin(Math.min(1, Math.abs(fwd[1]))) / DEG).toFixed(1)}° from level, within ${VERTICAL_DEG}° of vertical: Assetto Corsa's AI line cannot describe a road that steep`);
     // horizontal circumradius of (previous, this, next)
     const ax = pv.pos[0], az = pv.pos[2], bx = p.pos[0], bz = p.pos[2], cx = nx.pos[0], cz = nx.pos[2];
     const area2 = Math.abs((bx - ax) * (cz - az) - (cx - ax) * (bz - az));
@@ -194,4 +218,4 @@ function readAiLine(b) {
   return { version, lapTime, sampleCount, hasGrid, points, extra };
 }
 
-module.exports = { generateAiLine, encodeAiLine, readAiLine, AiLineError, EXTRA, VERTICAL_DEG };
+module.exports = { generateAiLine, encodeAiLine, readAiLine, AiLineError, EXTRA, CLEAR_UP };
