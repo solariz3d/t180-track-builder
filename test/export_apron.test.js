@@ -23,6 +23,10 @@
 //  17  the physics apron is byte for byte what the user drove, pinned at a93ae51, on a flat, a banked and a cupped edge
 //  18  the pit IS the track: no drawn and no physics triangle clips through another round the lane, none overlaps another in one plane, none is a sliver under
 //      1 cm, and no drawn edge is left open round either of its ends
+//  19  the lane's lip carries one texture along it: no edge of a lip or underside triangle round the lane squeezes more than 1 texture repeat into a metre (the
+//      road and the lane's three parts each have their own uv space, and a lip stepping between them in one row squeezed up to 41 per metre)
+//  20  on a cupped road the lip turns from the cupped edge's direction to the flat lane's over the road beside the lane: no lip row round the lane turns more
+//      than 0.6 of the cup from its neighbour (switched in one row it turned the whole 15.5°)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -483,4 +487,38 @@ test('row 18: the pit IS the track: nothing clips, nothing overlaps in one plane
     const holes = holesAround(meshes, at(s), 25);
     assert.deepEqual(holes.slice(0, 4), [], `${holes.length} open drawn edges round the ${name}`);
   }
+});
+
+// D593, the user 18:54: "a square notch" at the pit's rejoin, from above: the lane's lip stepped from the lane's uv space to the road's in one 2 m row
+test('row 19: the lane lip carries one texture along it: no lip or underside triangle edge round the lane squeezes more than 1 texture repeat into a metre', () => {
+  const doc = lap('apron pit-is-track lap'), lane = { side: 'L', leave: { word: doc.pieces[0].id, along: 40 }, rejoin: { word: doc.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
+  const meshes = acMeshes(exportDoc(doc, {}, { pitLane: lane })).filter((m) => /^APRON(LIP|SIDE)_PIT_/.test(m.name));
+  assert.ok(meshes.length >= 2, 'control: the lane has a lip and an underside');
+  const bad = [];
+  for (const m of meshes) for (let t = 0; t < m.indices.length; t += 3) for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
+    const i = m.indices[t + a], j = m.indices[t + b], d = Math.hypot(m.positions[i * 3] - m.positions[j * 3], m.positions[i * 3 + 1] - m.positions[j * 3 + 1], m.positions[i * 3 + 2] - m.positions[j * 3 + 2]);
+    const du = Math.hypot(m.uvs[i * 2] - m.uvs[j * 2], m.uvs[i * 2 + 1] - m.uvs[j * 2 + 1]);
+    if (du > 1 * d + 1e-6) bad.push(`${m.name} ${(du / Math.max(d, 1e-9)).toFixed(1)} per m at ${[0, 1, 2].map((k) => m.positions[i * 3 + k].toFixed(2))}`);
+  }
+  assert.deepEqual(bad.slice(0, 4), [], `${bad.length} lip or underside edges squeeze the texture`);
+});
+
+// D593, the user 18:54: "If the track is cupped, the pit is still flat and has an apron that would look the part with a flat piece": the lane's lip is the flat
+// road's, the cupped road's lip beside it is the cupped edge's, and between them the lip turns over the road the outline has (the pit test lap above is flat)
+test('row 20: on a road cupped 15.5° the lip turns to the flat lane gradually: no lip row round the lane turns more than 0.6 of the cup from its neighbour', () => {
+  const CUP = 15.5;
+  let d = extend(D.createDoc('apron cupped pit lap'), { length: 400, family: 'bowl', first: { w: 20, c: CUP } });
+  for (let i = 0; i < 4; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / Rr } });
+  d = extend(d, { length: 60, transition: 40, targets: { kh: 0 } });
+  const r = close(d, { edited: [0] }); assert.equal(r.converged, true, r.report);
+  const lane = { side: 'L', leave: { word: r.doc.pieces[0].id, along: 40 }, rejoin: { word: r.doc.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
+  const lips = acMeshes(exportDoc(r.doc, {}, { pitLane: lane })).filter((m) => /^APRONLIP_PIT_/.test(m.name));
+  assert.ok(lips.length > 0, 'control: the lane has a lip');
+  const C = AP.APRON_COLS + 1, worst = [];
+  for (const m of lips) {
+    const rows = Math.floor(m.positions.length / 3 / C), dir = [];
+    for (let k = 0; k < rows; k++) { const a = k * C, v = [0, 1, 2].map((j) => m.positions[(a + 1) * 3 + j] - m.positions[a * 3 + j]), l = Math.hypot(...v); dir.push(v.map((x) => x / l)); }
+    for (let k = 1; k < rows; k++) { const deg = Math.acos(Math.max(-1, Math.min(1, dir[k].reduce((s, x, j) => s + x * dir[k - 1][j], 0)))) / DEG; if (deg > 0.6 * CUP) worst.push(`${m.name} row ${k}: ${deg.toFixed(1)}°`); }
+  }
+  assert.deepEqual(worst.slice(0, 4), [], `${worst.length} lip rows turn more than ${(0.6 * CUP).toFixed(1)}° from their neighbour`);
 });

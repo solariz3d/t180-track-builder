@@ -274,7 +274,8 @@ const LIP_BLEND_M = 10;   // m of road over which the drawn lip turns from the r
  *     in one step between two rows 10 cm apart, the cupped road's lip twisted onto its underside (28 overlaps).
  */
 function lipRowsAtLane(rows) {
-  const out = rows.slice(), corners = [], laneAt = (end) => (end ? out.length - 1 - [...out].reverse().findIndex((q) => q.lane) : out.findIndex((q) => q.lane));
+  // one uv space along the whole drawn edge (continuousUv), walked before a corner's row is dropped so the corner's rows are on it too
+  const out = continuousUv(rows), corners = [], laneAt = (end) => (end ? out.length - 1 - [...out].reverse().findIndex((q) => q.lane) : out.findIndex((q) => q.lane));
   if (laneAt(false) < 0) return { rows: out, corners };
   const across = (q, l) => { const t = sub(l.E, q.E), d = len(t); return d > 1e-9 && Math.abs(dot(t, q.D)) > 0.7 * d; };
   let f = laneAt(false);
@@ -291,6 +292,33 @@ function lipRowsAtLane(rows) {
     for (let i = from; i >= 0 && i < out.length && !out[i].lane; i += step) { d += len(sub(out[i].E, out[i - step].E)); if (d >= span) break; turned[i] = turn(out[i], to, d, span); }
   }
   return { rows: turned, corners };
+}
+
+const UV_JUMP_PER_M = 0.3;   // a step of a row's edge uv faster than this per metre of edge is a jump between two uv spaces (the road's runs at 0.1)
+/**
+ * The drawn rows' edge uvs made CONTINUOUS (the user, 18:54: "a square notch" at the rejoin): the road and the lane's three parts each carry their own uv space,
+ * and a lip that steps from one to the next in one row squeezed up to 82 texture repeats into a 2 m cell. Within a run a row keeps its own uv step; across a
+ * jump it steps at the last run's rate per metre; and what is left at the end is spread along the edge between the first jump and the last, so the rows before
+ * the first and after the last keep their own uvs (the outline's end rows are the main lip's). Between them every row also takes the across rate (du) of the
+ * row before the first jump: the lane's own spans its whole uv width over its width, which at the taper's 10 cm is 8 repeats a metre. Rows without uvs are
+ * returned as they are.
+ */
+function continuousUv(rows) {
+  if (rows.length < 2 || rows.some((q) => !q.uv)) return rows;
+  const uv = [rows[0].uv.slice()], arc = [0], jumps = [];
+  let rate = null;
+  for (let i = 1; i < rows.length; i++) {
+    const d = len(sub(rows[i].E, rows[i - 1].E)), st = [rows[i].uv[0] - rows[i - 1].uv[0], rows[i].uv[1] - rows[i - 1].uv[1]];
+    arc.push(arc[i - 1] + d);
+    if (Math.hypot(st[0], st[1]) <= UV_JUMP_PER_M * d + 1e-6) { uv.push([uv[i - 1][0] + st[0], uv[i - 1][1] + st[1]]); if (d > 1e-6) rate = [st[0] / d, st[1] / d]; continue; }
+    jumps.push(i);
+    if (!rate) for (let j = i + 1; j < rows.length; j++) { const dj = len(sub(rows[j].E, rows[j - 1].E)), sj = [rows[j].uv[0] - rows[j - 1].uv[0], rows[j].uv[1] - rows[j - 1].uv[1]]; if (dj > 1e-6 && Math.hypot(sj[0], sj[1]) <= UV_JUMP_PER_M * dj + 1e-6) { rate = [sj[0] / dj, sj[1] / dj]; break; } }
+    const r = rate || [0, 0]; uv.push([uv[i - 1][0] + r[0] * d, uv[i - 1][1] + r[1] * d]);
+  }
+  if (!jumps.length) return rows;
+  const n = rows.length - 1, left = [rows[n].uv[0] - uv[n][0], rows[n].uv[1] - uv[n][1]], a0 = arc[jumps[0] - 1], a1 = arc[jumps[jumps.length - 1]];
+  const du = rows[jumps[0] - 1].du, iLast = jumps[jumps.length - 1];
+  return rows.map((q, i) => { const t = i >= iLast ? 1 : a1 > a0 ? Math.max(0, Math.min(1, (arc[i] - a0) / (a1 - a0))) : 0; return { ...q, uv: [uv[i][0] + left[0] * t, uv[i][1] + left[1] * t], du: i >= jumps[0] && i < iLast ? du : q.du }; });
 }
 
 /** A mesh from grid() with flat triangles appended, each three [point, normal, uv], wound to face along the sum of its normals as grid winds its own. */

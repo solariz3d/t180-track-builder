@@ -32,6 +32,10 @@ const MUTATIONS = [
   { id: 'P10 the physics apron drawn again (the plank shows under the lip)', from: 'node.visible = false; node.renderable = false; node.castShadows = false;', to: '', caughtBy: 'row 16:' },
   { id: 'P12 the road skin beside the lane hung along its own cupped normal again (it swings under the lane skin and clips through it)', from: 'if (r) return r.up;', to: 'if (r) return r.n;', caughtBy: 'row 18:' },
   { id: 'P11 the physics re-aimed along the edge\'s own segment (the step the keeper kept out)', from: 'const O = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -drop)))', to: 'const O = rows.map((q) => add(add(q.E, mul(q.D, widthM)), mul(q.Dn, drop)))', caughtBy: 'row 17:' },
+  { id: 'P13 the lane lip turns from the cupped road to the flat lane in one step again (on a cupped road it kinks the whole cup in one row)', from: 'w = 1 - t * t * (3 - 2 * t);', to: 'w = 0;', caughtBy: 'row 20:' },
+  { id: 'P14 the road row stepping across to the lane kept in the drawn lip (its cell lies flat over the underside)', from: 'return d > 1e-9 && Math.abs(dot(t, q.D)) > 0.7 * d; };', to: 'return false; };', caughtBy: 'row 18:' },
+  { id: 'P15 outline rows a few micrometres apart kept as two (a lip cell of no width)', from: 'const SAME_M = 1e-4;', to: 'const SAME_M = 1e-6;', caughtBy: 'row 18:' },
+  { id: 'P16 the lane lip in each part\'s own uv space again (the texture squeezed into one row at every switch)', from: 'const out = continuousUv(rows), corners = [],', to: 'const out = rows.slice(), corners = [],', caughtBy: 'row 19:' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
