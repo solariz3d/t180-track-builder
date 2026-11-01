@@ -6,6 +6,10 @@ real documentation of how and why it is built that way; read that before changin
 `docs/ARCHITECTURE.md`, `docs/INTERFACES.md` or research notes; those documents are not part of this repository, and the
 header text is what ships. When you add or move a module, update its line here.
 
+`BUG-ailine-vertical-tangent.md` is in this repository, and is the one bug note here: two export bugs measured on a
+13.2 km lap with a 946 m drop, one in `src/markers/layout.js` `lapSectors` and one in `src/export/ailine.js`
+`generateAiLine`. Neither is fixed; it carries the commands, the verified workarounds and candidate fixes.
+
 ## The shape in one paragraph
 
 The whole program runs in the webview. `src/` is the core: plain CommonJS with no DOM, so every part of it also runs under
@@ -75,7 +79,9 @@ file in both places.
 **`src/export/`, the Assetto Corsa track folder.**
 - `fromwords.js`: the document → a complete track folder (`exportTrack`, `buildExport`). *why: see header*
 - `kn5write.js`: the scene → a `.kn5` file (`writeKn5`). `trackfiles.js`: every other file of the folder (`surfacesIni`, `modelsIni`, `uiTrack`, `mapParams`, `mapPng`).
-- `ailine.js`: the AI line (`generateAiLine`, `readAiLine`). *why: see header* `scene.js`: the one scene shape every exporter builds to (`validateScene`).
+- `ailine.js`: the AI line (`generateAiLine`, `readAiLine`). *why: see header* A near-vertical tangent degenerates its
+  `left = up × fwd` frame into camber ±π, and AC crashes in `AISpline::calculateNormals` on the file either way:
+  `BUG-ailine-vertical-tangent.md`. `scene.js`: the one scene shape every exporter builds to (`validateScene`).
 - `acready.js`: the last step before the kn5 (`flattenForAc`, `weldSeams`, `mergeForAc`). `layouts.js`: several tracks as one folder with a layout each (`exportProject`).
 - `gripkeys.js` (grip per piece), `pitlane.js` (the lane in the scene), `pitboxes.js`, `markers.js` (`checkMarkers`, including every gate level across within 15°), `catch.js` (a catch surface under the road), `underskin.js` (the underside), `apron.js` (the edge apron: a strip outside every open edge, joined to the underside so a wheel off the edge has a surface and the side gap is closed; its width is the export option `edgeApronM`, which a track saves as `edgeApronM` in `src/core/document.js` (`setEdgeApron`, absent = 2.0 m) and the user sets in Track ▸ Edge apron, `app/menubar/items.js` `apronField`). Over a pit lane's span the apron runs along the one open edge, road to lane to road (`outlineRows`, `outlineMeshes`), and the lane and its infill get skins that meet the road's along the road frame's up at every join (`pitSkins`). What is drawn is its physics, the plank and its join, vertex for vertex (0.4.34's), on its own material `t180b_apron`, which is the road material in a darker shade (`apronMaterial`, `shadeOf`, `LIP_SHADE`), and over a pit lane's span the apron runs round the lane as one outline (`outlineRows`, `outlineMeshes`; the lane's mesh comes in as `lane.mesh` from `fromwords.js`). `test/export_apron.test.js` row 17 pins the physics the user drove (D593).
 
@@ -85,7 +91,7 @@ file in both places.
 
 **`src/texmaker/`, the procedural texture maker.** Text ↔ parameters (`text.js`, `schema.js`), pixels (`make.js` `makeTexture`), starting presets (`presets.js`).
 
-**`src/markers/`, start, grid and pit markers.** `index.js` `placeAll`, `layout.js` (the layout in track coordinates; `lapSectors` puts a closed lap's sector gates on the nearest flat road, `gateFlatAt`), `place.js` `placeMarker`, `paint.js` `paintFor` (the visible paint), `checks.js` `checkPlaced` (including every sector gate at least half the road wide seen from above).
+**`src/markers/`, start, grid and pit markers.** `index.js` `placeAll`, `layout.js` (the layout in track coordinates; `lapSectors` puts a closed lap's sector gates on the nearest flat road, `gateFlatAt` — it searches at the same 15° the export then checks at, so on an unbanking road it always lands on the bar: `BUG-ailine-vertical-tangent.md`), `place.js` `placeMarker`, `paint.js` `paintFor` (the visible paint), `checks.js` `checkPlaced` (including every sector gate at least half the road wide seen from above).
 
 **`src/lookmatch/`, comparing the preview's look with a reference render.** `raster.js` `renderView` (a CPU render), `metric.js` `compareImages`, `kn5scene.js` `readScene`, `dds.js` `decodeDds`, `cameras.js` `resolveView`.
 
