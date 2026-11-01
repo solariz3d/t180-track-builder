@@ -5,6 +5,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.36] - 2026-11-01
+
+This section also holds 0.4.31 to 0.4.35, which were installed or released without a section of their own.
+
 ### Added
 
 - **Every export now says it is running, and when it is done.** File ▸ Export, Export to Assetto Corsa, Test export, Export layouts and Export for Blender show one banner under the values band: "Exporting…" with the seconds so far, then "Done" and where the track went, or the reason it failed. It stays until you click it or do something else; before, the only sign was the small status line, easy to miss over an export of a minute or more.
