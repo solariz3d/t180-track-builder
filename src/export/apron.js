@@ -34,8 +34,11 @@
 //     down at a constant curvature to slopeDeg below that segment at its outer row, widthM along itself (APRON_COLS columns): on a cupped or banked edge it continues the
 //     curl instead of sticking out of it as a plank. It carries its own cell's ROAD material and the road's uvs continued past the edge (v the edge vertex's, u on at the
 //     road's rate across), and the road's own edge normal on its first column, so the texture and the shading run on over the edge;
-//   the UNDERSIDE (`APRONSIDE_…`, scenery, the skin's material: it replaces the flat join that was the "flat surface" seen from below) follows the lip, from the skin's edge
+//   the UNDERSIDE (`APRONSIDE_…`, scenery: it replaces the flat join that was the "flat surface" seen from below) follows the lip, from the skin's edge
 //     vertex, with the skin's own normal there, to the lip's outer row.
+//   BOTH IN THE ROAD'S OWN MATERIAL, DARKER (the user, 2026-10-31 18:0x: the road's own asphalt in a darker shade, as if in shadow): one copy of each road material
+//     a lip sits on, its samplers (so its texture) the same and its ambient, diffuse and specular LIP_SHADE of the road's, appended after the apron's own material so
+//     the physics' material index is the one it had. From above it reads as a thin dark line along the edge; up close, darker asphalt rolling over.
 //   The visual lip is not the physics surface: 0.86 m out on a flat edge the lip is 0.08 m below the edge carried on and the physics apron 0.40 m below the lateral, so a
 //   wheel that drops there is drawn into the lip by the difference (his eye in the game is the check).
 //
@@ -58,7 +61,10 @@ const WALL_DEG = 60;           // a side rising this steeply or more is a wall, 
 const APRON_TILE_M = 4;        // the uv tile, in metres
 const PIT_PAD_M = 5;           // each way past the pit lane's leave and rejoin
 const APRON_COLS = 6;          // the visual lip's columns across (a 2 m lip: one every 0.33 m, each turning about 4°)
-const APRON_TAG = 'APRON', SIDE_PREFIX = 'APRONSIDE', LIP_PREFIX = 'APRONLIP', SKIN_MATERIAL = 't180b_underskin';
+const APRON_TAG = 'APRON', SIDE_PREFIX = 'APRONSIDE', LIP_PREFIX = 'APRONLIP';
+const LIP_SHADE = 0.45;         // the lip's share of its road material's light (ambient, diffuse, specular): the road's own texture, darker, as if in shadow
+/** The road material `m` in the lip's darker shade: its name with _lipshade, its samplers as they are, ksAmbient, ksDiffuse and ksSpecular times LIP_SHADE. */
+const shadeOf = (m) => ({ ...m, name: `${m.name}_lipshade`, props: m.props.map((p) => (/^ks(Ambient|Diffuse|Specular)$/.test(p.name) ? { ...p, value: p.value.map((v) => v * LIP_SHADE) } : p)) });
 
 const apronMaterial = () => ({
   name: 't180b_apron', shader: 'ksPerPixel', alphaBlend: 0, alphaTested: false, depthMode: 0,
@@ -356,9 +362,8 @@ function withApron(scene, mesh, segments, opts = {}) {
   const chosen = apronCells(mesh, segments);
   if (!chosen.size) return scene;
   const kids = scene.root.children, orig = mesh.scene.root.children, materials = scene.materials.slice(), matIndex = materials.length, add = [];
-  // the visual lip's underside takes the underside skin's material (underskin.js runs first, fromwords.js); with none, there is nothing to take, and that is refused
-  const skin = widthM > 0 ? materials.findIndex((x) => x && x.name === SKIN_MATERIAL) : -1;
-  if (widthM > 0 && skin < 0) throw new Error(`withApron: the scene has no underside skin material (${SKIN_MATERIAL}); the apron's visual underside takes it, so run withUnderskin first`);
+  // the lip and its underside wear their road material's darker shade: one copy per road material, numbered after the apron's own (matIndex, pushed first at the end)
+  const shades = new Map(), shaded = [], shadeIndex = (i) => { if (!shades.has(i)) { shades.set(i, matIndex + 1 + shaded.length); shaded.push(shadeOf(materials[i])); } return shades.get(i); };
   const toOutline = [];   // the road rows of the cells the lane's padded span touches, on its side: they are the pit lane outline's (outlineRows), in world space
   let outlineMat = null;
   for (const k of [...chosen].sort((a, b) => a - b)) {
@@ -392,8 +397,8 @@ function withApron(scene, mesh, segments, opts = {}) {
         add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRON${tag}_`), matrix: c.matrix, children: [node] }); }
       // WHAT IS DRAWN: the visual lip and its underside (the flat join is not written)
       const vis = visualOf(m, K, side, { widthM, slopeDeg }, { lip: `${LIP_PREFIX}_${rest}_${tag}`, under: `${SIDE_PREFIX}_${rest}_${tag}` });
-      add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRONLIP${tag}_`), matrix: c.matrix, children: [{ ...vis.lip, material: m.material }] });
-      add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRONSIDE${tag}_`), matrix: c.matrix, children: [{ ...vis.under, material: skin }] });
+      add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRONLIP${tag}_`), matrix: c.matrix, children: [{ ...vis.lip, material: shadeIndex(m.material) }] });
+      add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, `APRONSIDE${tag}_`), matrix: c.matrix, children: [{ ...vis.under, material: shadeIndex(m.material) }] });
     }
   }
   // THE PIT LANE'S OUTLINE: new physics where there was none (the road's edge either side of the lane, the lane's ends and its outer edge), hidden like the rest, and its lip
@@ -403,13 +408,13 @@ function withApron(scene, mesh, segments, opts = {}) {
       const tag = `PIT_${lane.side}`, name = (p) => `${p}_${tag}`;
       const out = outlineMeshes(ol, widthM, slopeDeg, { physics: `1ROAD_${APRON_TAG}_${tag}`, lip: name(LIP_PREFIX), under: name(SIDE_PREFIX) });
       add.push({ type: 'dummy', name: name('APRON'), matrix: IDENTITY.slice(), children: [{ ...out.physics, material: matIndex, visible: false, renderable: false, castShadows: false }] });
-      add.push({ type: 'dummy', name: name('APRONLIP'), matrix: IDENTITY.slice(), children: [{ ...out.lip, material: outlineMat === null ? matIndex : outlineMat }] });
-      add.push({ type: 'dummy', name: name('APRONSIDE'), matrix: IDENTITY.slice(), children: [{ ...out.under, material: skin }] });
+      add.push({ type: 'dummy', name: name('APRONLIP'), matrix: IDENTITY.slice(), children: [{ ...out.lip, material: outlineMat === null ? matIndex : shadeIndex(outlineMat) }] });
+      add.push({ type: 'dummy', name: name('APRONSIDE'), matrix: IDENTITY.slice(), children: [{ ...out.under, material: outlineMat === null ? matIndex : shadeIndex(outlineMat) }] });
     }
   }
   if (!add.length) return scene;
-  materials.push(apronMaterial());
+  materials.push(apronMaterial(), ...shaded);
   return { ...scene, materials, root: { ...scene.root, children: [...kids, ...add] } };
 }
 
-module.exports = { withApron, apronOf, visualOf, visualRows, outlineRows, outlineMeshes, apronCells, sideRows, inLaneSpan, APRON_WIDTH_M, APRON_SLOPE_DEG, APRON_COLS, WALL_DEG, APRON_TILE_M, PIT_PAD_M, FAN_STEPS, SIDE_PREFIX, LIP_PREFIX };
+module.exports = { LIP_SHADE, shadeOf, withApron, apronOf, visualOf, visualRows, outlineRows, outlineMeshes, apronCells, sideRows, inLaneSpan, APRON_WIDTH_M, APRON_SLOPE_DEG, APRON_COLS, WALL_DEG, APRON_TILE_M, PIT_PAD_M, FAN_STEPS, SIDE_PREFIX, LIP_PREFIX };

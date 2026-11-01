@@ -112,13 +112,17 @@ test('row 2: the section under the edge is closed: the visual underside runs fro
 });
 
 // AMENDED (D593): the appended nodes were the physics top and its join (APRON… and APRONSIDE…). Now the drawn lip is appended beside them (APRONLIP…), and on a track with
-// a pit lane its one outline (APRON_PIT_L/R and its lip and underside); still only appended, still one material added.
-test('row 3: the road\'s own nodes are the same objects in the same places; the aprons are appended, with one material added', () => {
+// a pit lane its one outline (APRON_PIT_L/R and its lip and underside); still only appended. The materials: the apron's own was the one added; now after it come
+// the lips' darker shades, one per road material a lip sits on (the user, 18:0x), the earlier materials still the same objects in the same places.
+test('row 3: the road\'s own nodes are the same objects in the same places; the aprons are appended, and the apron\'s material then the lips\' shades after the scene\'s own', () => {
   const { skinned, out } = build(flat(), {});
   const k = skinned.root.children.length;
   skinned.root.children.forEach((c, i) => assert.equal(out.root.children[i], c, `node ${i} is the same object`));
   assert.ok(out.root.children.slice(k).every((c) => /^APRON(SIDE|LIP)?([LR]_|_PIT_[LR]$)/.test(c.name)));
-  assert.equal(out.materials.length, skinned.materials.length + 1); skinned.materials.forEach((m, i) => assert.equal(out.materials[i], m));
+  skinned.materials.forEach((m, i) => assert.equal(out.materials[i], m));
+  const added = out.materials.slice(skinned.materials.length);
+  assert.equal(added[0].name, 't180b_apron', 'the apron\'s own material first, at the index the physics had');
+  assert.ok(added.length >= 2 && added.slice(1).every((x) => /_lipshade$/.test(x.name)), `then the lips' shades: ${added.map((x) => x.name).join(', ')}`);
 });
 
 test('row 4: a wall side (a cup at 90°) gets none, a closed tube ring gets none, a seam row gets none', () => {
@@ -324,7 +328,11 @@ test('row 16: the physics apron is exactly apronOf\'s plank and is hidden; the v
       const m = a.children[0], road = out.root.children.find((c) => /^CELL_/.test(c.name) && c.matrix === a.matrix).children[0], left = a.name.startsWith('APRONLIPL');
       assert.match(m.name, /^APRONLIP_p\d+_.*_[LR]$/); assert.ok(!isDrivable(m.name) && !/^\d/.test(m.name), `${m.name}: scenery, no physics prefix`);
       assert.deepEqual([m.visible, m.renderable], [true, true], `${m.name}: drawn`);
-      assert.equal(m.material, road.material, `${label} ${m.name}: its own cell's road material`);
+      // AMENDED (D593, the user 18:0x): the lip wore its cell's road material; it now wears that material's darker shade (the same texture, ambient, diffuse and specular at LIP_SHADE)
+      const own = out.materials[road.material], shade = out.materials[m.material], prop = (x, n) => x.props.find((p) => p.name === n).value[0];
+      assert.equal(shade.name, `${own.name}_lipshade`, `${label} ${m.name}: its own cell's road material, in the lip's shade`);
+      assert.deepEqual(shade.samplers, own.samplers, `${label} ${m.name}: the road's own texture`);
+      for (const n of ['ksAmbient', 'ksDiffuse', 'ksSpecular']) assert.ok(Math.abs(prop(shade, n) - prop(own, n) * AP.LIP_SHADE) < 1e-12 && prop(shade, n) < prop(own, n), `${label} ${m.name}: ${n} darker, ${prop(shade, n)} against the road's ${prop(own, n)}`);
       for (let r = 0; r < m.uvs.length / 2 / C; r++) {
         const j = (r * K + (left ? K - 1 : 0)) * 2, jn = (r * K + (left ? K - 2 : 1)) * 2, last = m.uvs[(r * C + C - 1) * 2];
         assert.deepEqual([m.uvs[r * C * 2], m.uvs[r * C * 2 + 1]], [road.uvs[j], road.uvs[j + 1]], `${label} ${m.name} row ${r}: the edge vertex's own uv`);
@@ -332,7 +340,8 @@ test('row 16: the physics apron is exactly apronOf\'s plank and is hidden; the v
         assert.equal(m.uvs[(r * C + C - 1) * 2 + 1], road.uvs[j + 1], `${label} ${m.name} row ${r}: v is the road's along the whole lip`);
       }
     }
-    for (const a of sides(out)) assert.equal(out.materials[a.children[0].material].name, 't180b_underskin', `${label} ${a.name}: the underside takes the skin's material`);
+    // AMENDED (D593, the user 18:0x): the underside wore the skin's material; it now wears the same darker shade of the road as the lip above it
+    for (const a of sides(out)) { const lipNode = vlips(out).find((x) => x.matrix === a.matrix && x.name[8] === a.name[9]); assert.equal(a.children[0].material, lipNode.children[0].material, `${label} ${a.name}: the underside wears the lip's shade`); }
   }
 });
 
