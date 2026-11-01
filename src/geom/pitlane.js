@@ -51,8 +51,12 @@ const { triTri, segTri, _internal: { soup, build, query } } = require('./bvh.js'
 
 const JOIN_MAX = 35 * Math.PI / 180;  // the steepest road edge a lane joins: the reader's lip (a sharper fold is an edge, not road)
 const MAT = 'ROAD';
-const TAPER_MIN_W = 0.1;               // m: the lane's width where it leaves and rejoins (a profile needs a width). 10 cm: the lane's first and last rows have 8 columns,
-                                       // and at 5 cm they were 6 mm apart, slivers under the 1 cm floor the export's defect count holds (D593, the user 18:54)                    // drivable: its cells are 1ROAD_PIT_<part>_<n> (surfaces.ini MESHES=1ROAD?)
+const TAPER_MIN_W = 0.5;               // m: the lane's width where it leaves and rejoins (a profile needs a width). Its first and last rows have K − 1 = 8 columns, and the
+                                       // drawn apron fans out from them across the lane's end: the plank inside the 25° wedge between the lane's end edge and the road
+                                       // plank's, the join inside the 12° wedge between the skin's end edge and the plank's outer point. A triangle on two of them is at most
+                                       // their spacing · sin(wedge) thick, so for the 1 cm floor the export's defect count holds they must be 1 / sin 12° = 4.8 cm apart
+                                       // (D593: at 10 cm they were 1.25 cm apart and the plank 0.5 cm thick; at 25 cm the join needed one triangle, whose long edge met the
+                                       // skin's end row in a T and cracked; at 50 cm 6.25 cm, the plank 2.6 cm and the join 1.3 cm, every vertex shared)
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];

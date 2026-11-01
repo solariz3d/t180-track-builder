@@ -1,7 +1,7 @@
 {
  "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279, the mesh cap, the sector gates, D460 and D572; F1 F2 only, their kn5 digest only",
- "made_at": "pane O, 2026-11-01, D593 (the apron reads as part of the road), t180 branch d593-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: a93ae51 (the D572 apron as the user drove it; its kn5 is the D572 record's after, digest and bytes) and d593-o with the lip removed (the keeper, 2026-10-31 21:54-21:55).",
- "reason": "The edge apron now looks like part of the road (D593, the user, 2026-10-30 23:12Z and 2026-10-31). Its physics plank is kept byte for byte and hidden, and the road ends at its own edge, FILLED: the old scenery join under the plank (APRONSIDE_) is now one side face from the road's edge row straight down to the skin's edge row, in a material a little darker than the road (t180b_road_lipshade). A drawn lip that rolled 2 m out was tried and removed (the user, 21:54-21:55 on 0.4.35: \"the edges are this thin blade it comes to a point\"). So the two closed fixtures, which are exported, change their kn5, and nothing else: segs, path and mesh are unchanged in all nine, and in the kn5 every road, skin and paint node is the same bytes.",
+ "made_at": "pane O, 2026-11-01, D593 (the apron reads as part of the road), t180 branch d593-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: a93ae51 (the D572 apron as the user drove it; its kn5 is the D572 record's after, digest and bytes) and d593-o with the drawn 0.4.34 plank in the road's asphalt (the chair's 21:58 and 23:23).",
+ "reason": "The edge apron is drawn as the physics it is (0.4.34's plank and its join, vertex for vertex), and its material t180b_apron is now the road's own asphalt a little darker (D593, the user, 2026-10-31 18:0x and 18:17): a copy of the road material under the apron's own name, its texture the same and its ambient, diffuse and specular at 0.88. A drawn lip over a hidden plank, and a filled side face, were tried and removed (the keeper 21:54-21:58 on 0.4.35). So the two closed fixtures, which are exported, change their kn5 and nothing else: segs, path and mesh are unchanged in all nine, every mesh node of the kn5 is the same bytes, and of its materials only t180b_apron's own record changed.",
  "fixtures": {
   "F1-bowl-default-lap-closed": {
    "before_d593": {
@@ -17,25 +17,15 @@
     "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
     "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
     "meshParts": 3745,
-    "kn5": "430c9456eaad0b3fb45aafeea0e0bd93c19912d9b5571e5be7c6559e07e4e6a8",
-    "kn5Bytes": 7676824
+    "kn5": "9c8937d5b234b7b54ed7b0e1fb11ef568b9f4e528c42b86a5ab7c67d7e502205",
+    "kn5Bytes": 7676408
    },
    "measure": {
     "changed": [
      "kn5"
     ],
-    "kn5_meshes_before": 23,
-    "kn5_meshes_after": 23,
-    "materials_before": [
-     "t180b_road",
-     "t180b_paint",
-     "t180b_underskin",
-     "t180b_apron"
-    ],
-    "materials_added": [
-     "t180b_road_lipshade"
-    ],
-    "kept_byte_for_byte": [
+    "kn5_meshes": 23,
+    "meshes_kept_byte_for_byte": [
      {
       "name": "1ROAD_p1_chunk_0",
       "full": "113c105b294cc2f62031fd6556eeb1985ac00fbdefb52d986765f8a3090924a6"
@@ -95,33 +85,57 @@
      {
       "name": "UNDERSKIN_p5_chunk_3",
       "full": "93c350f3f139ce3084cf68bd1921d96b6f7509bfabf41303243b302049390261"
-     }
-    ],
-    "hidden_geometry_kept": [
+     },
      {
       "name": "1ROAD_APRON_p1_chunk_0",
-      "geo": "1c1d45f2e364cc4b0d15fab79cf970a4327ffef230fb11f05a6bc071d8c42aac"
+      "full": "95f93ea47f320b9e94dca6445c27ff0ed14db459d49db7607f2ae447f1e95d10"
+     },
+     {
+      "name": "APRONSIDE_p1_chunk_0",
+      "full": "662b7a6da103477fff398941658c433c561bf6a12eb1041e90f87b352e5a0a83"
      },
      {
       "name": "1ROAD_APRON_p2_chunk_1",
-      "geo": "08266ab893cdb0e7427e9acb0f9862bc0292e98ace126e299d4a71ce490d1e84"
+      "full": "346af6e1b1a7337c4517427f9b50244abf32551bf7b1729d1461da6ddcc16d95"
+     },
+     {
+      "name": "APRONSIDE_p2_chunk_1",
+      "full": "2d99c42e7081071d9bea77b0ad68444875f89779e62c486ac4306dcc9e15e5d9"
      },
      {
       "name": "1ROAD_APRON_p3_chunk_2",
-      "geo": "272910945399894de9ab3fd4ac6d9fb1356f6028964743009b979ee259fa84ad"
+      "full": "4778e9a6bfabf5fca9a4c3255ebc07cc3db2ebff3fb3394c871dc0bb421791a7"
+     },
+     {
+      "name": "APRONSIDE_p3_chunk_2",
+      "full": "ca7cda0c07bd449ec89c198d1c793a3fbd0029ab9e60c279764d6d1309ba1438"
      },
      {
       "name": "1ROAD_APRON_p5_chunk_3",
-      "geo": "968dc99fa7ecfcd9c78622325c0e4104f0c2230dec576c7b554f59a1348f8e9c"
+      "full": "e322c8188cc83e27d6bd078dff3037b788375cb05b2c1e3733121311809c9e70"
+     },
+     {
+      "name": "APRONSIDE_p5_chunk_3",
+      "full": "e6eb6d7ed724584403ae35606599dfc2d82f9f61bcf711040efc27375f60214a"
      }
     ],
-    "replaced_by_the_filled_face": [
-     "APRONSIDE_p1_chunk_0",
-     "APRONSIDE_p2_chunk_1",
-     "APRONSIDE_p3_chunk_2",
-     "APRONSIDE_p5_chunk_3"
+    "materials": [
+     "t180b_road",
+     "t180b_paint",
+     "t180b_underskin",
+     "t180b_apron"
     ],
-    "added": []
+    "material_digests_before": [
+     "223dc32d874d6dbba06e171b5cc5fc0547e79aa532f775020bc6e0f6674f83dd",
+     "881a8f13ab08820242ae0f41d429284d0e48bcb3fea349fe3bd0554d6e259508",
+     "1b3999c885d8116a33b0ed618252711d958f49e8563ff2d0c18814fcd49751a1",
+     "24b8537e1453d3992708ca700fb5a3fb4dc73a9d5d9ea8d3de80d6bb263531c8"
+    ],
+    "materials_changed": [
+     "t180b_apron"
+    ],
+    "t180b_apron_before": "24b8537e1453d3992708ca700fb5a3fb4dc73a9d5d9ea8d3de80d6bb263531c8",
+    "t180b_apron_after": "a07871a540376f46eaf67c83a603f46da94802ae5811cb13f6da61c22039ba82"
    }
   },
   "F2-halfpipe-default-lap-closed": {
@@ -138,25 +152,15 @@
     "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
     "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
     "meshParts": 3745,
-    "kn5": "5ff65100e08395588e02d8da9cd99cd90d413dc2fc3ad07f5b487bf2927939a2",
-    "kn5Bytes": 9998797
+    "kn5": "9a71ebb71711c2a4ae42aceef8ae32b35caaf2fe7ca08f0ddfb050ae34e44e2f",
+    "kn5Bytes": 9998381
    },
    "measure": {
     "changed": [
      "kn5"
     ],
-    "kn5_meshes_before": 24,
-    "kn5_meshes_after": 24,
-    "materials_before": [
-     "t180b_road",
-     "t180b_paint",
-     "t180b_underskin",
-     "t180b_apron"
-    ],
-    "materials_added": [
-     "t180b_road_lipshade"
-    ],
-    "kept_byte_for_byte": [
+    "kn5_meshes": 24,
+    "meshes_kept_byte_for_byte": [
      {
       "name": "1ROAD_p1_chunk_0",
       "full": "fb390a839c3e3381b0cd8fe54c61e794be690ac50511b8546d55a47e913bccbc"
@@ -220,33 +224,57 @@
      {
       "name": "UNDERSKIN_p5_chunk_3",
       "full": "a592fcf6b023f69f30f22cdd32908ffd7fec72469bfaa49e12d6f267adb16280"
-     }
-    ],
-    "hidden_geometry_kept": [
+     },
      {
       "name": "1ROAD_APRON_p1_chunk_0",
-      "geo": "b343c31b8b101deb438cd723d9c8ca2fd2903130268487fd458fffb462969a4f"
+      "full": "c79e2336991940fac94221fd7b61060f970eed9881626d08e691334945ee1799"
+     },
+     {
+      "name": "APRONSIDE_p1_chunk_0",
+      "full": "7d7ce1dbfc636dc01f4332185908f92b6295449770c992c48d67fc3a26a2ad54"
      },
      {
       "name": "1ROAD_APRON_p2_chunk_1",
-      "geo": "261016bbc57556f75619432849da80f88c6f1421154b0c7c48267ec3853e6071"
+      "full": "02c2612bb56a47fe18b9e5f3c75e940d64cfa8be39bc3ec64f18f6a9b914bbf6"
+     },
+     {
+      "name": "APRONSIDE_p2_chunk_1",
+      "full": "36305919e153285255903886cdfdf19cf46ebf925c13d0ea83ff3bd7329d97d5"
      },
      {
       "name": "1ROAD_APRON_p3_chunk_2",
-      "geo": "0107f16e52045241a887646743481c011ab65a70a7094a9557d79e7a9ff9c1e2"
+      "full": "7909941b06ba4fff124b3fed4d9a3a11a4c55b81fe98a892d53f49c58f03fdf2"
+     },
+     {
+      "name": "APRONSIDE_p3_chunk_2",
+      "full": "154a579296a795d5049f222e895c5e11e537afa376dc167d5b863086e4059522"
      },
      {
       "name": "1ROAD_APRON_p5_chunk_3",
-      "geo": "ed4ccb02042e11ba1a592740ea8437eaa0eb6a6e8a4755c97e73c9426e184039"
+      "full": "784c4690e4cd1dd9ac6148d9ff298177edb166a28981b24844fff6525175a2ee"
+     },
+     {
+      "name": "APRONSIDE_p5_chunk_3",
+      "full": "8d120f2aa8a8d54e7dbaf706d1477c13ed7cd9e6255ab8e44f575dbe85e81625"
      }
     ],
-    "replaced_by_the_filled_face": [
-     "APRONSIDE_p1_chunk_0",
-     "APRONSIDE_p2_chunk_1",
-     "APRONSIDE_p3_chunk_2",
-     "APRONSIDE_p5_chunk_3"
+    "materials": [
+     "t180b_road",
+     "t180b_paint",
+     "t180b_underskin",
+     "t180b_apron"
     ],
-    "added": []
+    "material_digests_before": [
+     "223dc32d874d6dbba06e171b5cc5fc0547e79aa532f775020bc6e0f6674f83dd",
+     "881a8f13ab08820242ae0f41d429284d0e48bcb3fea349fe3bd0554d6e259508",
+     "1b3999c885d8116a33b0ed618252711d958f49e8563ff2d0c18814fcd49751a1",
+     "24b8537e1453d3992708ca700fb5a3fb4dc73a9d5d9ea8d3de80d6bb263531c8"
+    ],
+    "materials_changed": [
+     "t180b_apron"
+    ],
+    "t180b_apron_before": "24b8537e1453d3992708ca700fb5a3fb4dc73a9d5d9ea8d3de80d6bb263531c8",
+    "t180b_apron_after": "a07871a540376f46eaf67c83a603f46da94802ae5811cb13f6da61c22039ba82"
    }
   }
  },

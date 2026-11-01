@@ -1,6 +1,6 @@
 // kn5nodes.js (D593): every MESH node of a kn5, as the bytes of its own record (the node's class, name, child count and active flag, then its mesh data, not its
 // children), for the fixture seal's D593 amendment (test/core_cup_fixtures.test.js and the script that wrote manifest.d593.json read it the same way):
-//   kn5Nodes(buffer) -> { materials: [names, in order], meshes: [{ name, full, geo, flags }] }
+//   kn5Nodes(buffer) -> { materials: [names, in order], materialDigests: [sha256 of each material's own record, in order], meshes: [{ name, full, geo, flags }] }
 //   full  sha256 of the record's bytes
 //   geo   the same with its four flags zeroed (castShadows, visible, transparent before the vertices; renderable last), so a node that was only hidden keeps it
 //   flags { castShadows, visible, transparent, renderable }
@@ -16,12 +16,12 @@ function kn5Nodes(b) {
   if (b.toString('latin1', 0, 6) !== 'sc6969') throw new Error('kn5Nodes: not a kn5 (no sc6969 magic)');
   o = 6; const version = u32(); if (version > 5) u32();
   const nTex = i32(); for (let k = 0; k < nTex; k++) { i32(); str(); const size = i32(); o += size; }
-  const nMat = i32(), materials = [];
+  const nMat = i32(), materials = [], materialDigests = [];
   for (let k = 0; k < nMat; k++) {
-    const name = str(); str(); o += 6;
+    const at = o, name = str(); str(); o += 6;
     const nProp = i32(); for (let p = 0; p < nProp; p++) { str(); o += 40; }
     const nSamp = i32(); for (let p = 0; p < nSamp; p++) { str(); i32(); str(); }
-    materials.push(name);
+    materials.push(name); materialDigests.push(sha(b.subarray(at, o)));
   }
   const meshes = [];
   const node = () => {
@@ -40,7 +40,7 @@ function kn5Nodes(b) {
   };
   node();
   if (o !== b.length) throw new Error(`kn5Nodes: ${b.length - o} bytes left after the node tree`);
-  return { materials, meshes };
+  return { materials, materialDigests, meshes };
 }
 
 module.exports = { kn5Nodes };

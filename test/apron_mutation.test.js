@@ -15,9 +15,9 @@ const MUTATIONS = [
   { id: 'P1 the slope sign flipped (the apron rises from the edge)', from: 'mul(q.N, -drop))', to: 'mul(q.N, drop))', caughtBy: 'row 1:' },
   // AMENDED (D593, what is seen): P2 dropped the flat join (`return { top, side: join };` → side null), which is no longer written at width > 0 (the visual underside closes
   // the section instead), so it would now be a mutant that changes nothing. The same fault where it now lives: the underside is left out.
-  // AMENDED (D593, the keeper 21:54-21:55 on 0.4.35: the drawn lip read as a blade, and is gone; apron.js sideFace draws the road's own edge, filled): this mutant's
-  // anchor was the lip's; the fault it stands for now is the filled face's.
-  { id: 'P2 the drawn face dropped (the section is left open under the edge)', from: 'add.push({ type: \'dummy\', name: c.name.replace(/^CELL_/, `APRONSIDE${tag}_`), matrix: c.matrix, children: [{ ...sideFace(sideRows(m, K, side), `${SIDE_PREFIX}_${rest}_${tag}`), material: shadeIndex(m.material) }] });', to: '', caughtBy: 'row 2:' },
+  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
+  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
+  { id: 'P2 the join dropped (the wedge is left open under the plank)', from: 'for (const [mm, dn] of [[ap.top, `APRON${tag}_`], [ap.side, `APRONSIDE${tag}_`]]) {', to: 'for (const [mm, dn] of [[ap.top, `APRON${tag}_`]]) {', caughtBy: 'row 2:' },
   { id: 'P3 the wall test dropped (a 90° cup gets an apron)', from: 'if (rows.some((q) => q.rim >= WALL_DEG)) return null;', to: '', caughtBy: 'row 4:' },
   // the two the build added: the pit lane's span and the piece's own surface
   // AMENDED (D593, the pit lane's outline): the span's cells were skipped by `if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) continue;`; that test now
@@ -25,31 +25,34 @@ const MUTATIONS = [
   { id: 'P4 the pit lane\'s side keeps its apron over the lane\'s span', from: 'if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) {', to: 'if (false) {', caughtBy: 'row 10:' },
   { id: 'P5 every apron is 1ROAD_ (a gripped piece\'s loses its grip)', from: 'top: `${prefix}${APRON_TAG}_${rest}_${tag}`', to: 'top: `1ROAD_${APRON_TAG}_${rest}_${tag}`', caughtBy: 'row 11:' },
   // D593 (plan_apron_reads_as_part_of_the_road_2026-10-31.md, item 5 and its 17:1x and 17:2x amendments): what is seen, the pit lane's outline, and that the physics stays as it was
-  // AMENDED (D593, the keeper 21:54-21:55 on 0.4.35: the drawn lip read as a blade, and is gone; apron.js sideFace draws the road's own edge, filled): this mutant's
-  // anchor was the lip's; the fault it stands for now is the filled face's.
-  { id: 'P6 the drawn edge reaches 2 m past the road\'s edge again (a blade)', from: 'const S = rows.map((q) => sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M))), G = rows.map', to: 'const S = rows.map((q) => add(sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)), mul(q.X, 2))), G = rows.map', caughtBy: 'row 13:' },
+  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
+  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
+  { id: 'P6 the plank hidden again (what is drawn is not the physics)', from: 'const { physics, ...node } = mm; void physics; node.material = matIndex;', to: 'const { physics, ...node } = mm; void physics; node.material = matIndex; node.visible = false; node.renderable = false; node.castShadows = false;', caughtBy: 'row 13:' },
   { id: 'P7 the pit lane\'s outline dropped (its edges bare, the main apron stopping square at the span)', from: 'if (lane && lane.mesh && widthM > 0) {', to: 'if (false) {', caughtBy: 'row 14:' },
-  // AMENDED (D593, the keeper 21:54-21:55 on 0.4.35: the drawn lip read as a blade, and is gone; apron.js sideFace draws the road's own edge, filled): this mutant's
-  // anchor was the lip's; the fault it stands for now is the filled face's.
-  { id: 'P8 the face lit from inside (its normals into the road)', from: 'return dot(x, q.X) < 0 ? mul(x, -1) : x;', to: 'return dot(x, q.X) < 0 ? x : mul(x, -1);', caughtBy: 'row 15:' },
+  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
+  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
+  { id: 'P8 the join\'s normals into the wedge (it is lit from inside)', from: 'return dot(n, sub(mid, G[r])) >= 0 ? n : mul(n, -1);', to: 'return dot(n, sub(mid, G[r])) >= 0 ? mul(n, -1) : n;', caughtBy: 'row 2:' },
   // AMENDED (D593, the user 18:0x): P9 put the skin's material on the lip (its anchor `children: [{ ...vis.lip, material: m.material }]` is gone: the lip now wears the
   // road's darker shade). The fault that matters now: the lip in the road's material at full light, not the shade.
-  // AMENDED (D593, the keeper 21:54-21:55 on 0.4.35: the drawn lip read as a blade, and is gone; apron.js sideFace draws the road's own edge, filled): this mutant's
-  // anchor was the lip's; the fault it stands for now is the filled face's.
-  { id: 'P9 the face in the road\'s material unshaded (not the darker shade)', from: '`${SIDE_PREFIX}_${rest}_${tag}`), material: shadeIndex(m.material) }]', to: '`${SIDE_PREFIX}_${rest}_${tag}`), material: m.material }]', caughtBy: 'row 16:' },
-  { id: 'P10 the physics apron drawn again (the plank shows under the lip)', from: 'node.visible = false; node.renderable = false; node.castShadows = false;', to: '', caughtBy: 'row 16:' },
+  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
+  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
+  { id: 'P9 the apron\'s material the plain dark one again (not the road\'s asphalt)', from: 'materials.push(apronMaterial(roadMat === null ? null : materials[roadMat]));', to: 'materials.push(apronMaterial(null));', caughtBy: 'row 15:' },
+  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
+  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
+  { id: 'P10 the pit lane\'s outline plank hidden (round the lane, what is drawn is not the physics)', from: 'children: [{ ...out.physics, material: matIndex }] });', to: 'children: [{ ...out.physics, material: matIndex, visible: false, renderable: false, castShadows: false }] });', caughtBy: 'row 14:' },
   { id: 'P12 the road skin beside the lane hung along its own cupped normal again (it swings under the lane skin and clips through it)', from: 'if (r) return r.up;', to: 'if (r) return r.n;', caughtBy: 'row 18:' },
   { id: 'P11 the physics re-aimed along the edge\'s own segment (the step the keeper kept out)', from: 'const O = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -drop)))', to: 'const O = rows.map((q) => add(add(q.E, mul(q.D, widthM)), mul(q.Dn, drop)))', caughtBy: 'row 17:' },
-  // AMENDED (D593, the keeper 21:54-21:55 on 0.4.35: the drawn lip read as a blade, and is gone; apron.js sideFace draws the road's own edge, filled): this mutant's
-  // anchor was the lip's; the fault it stands for now is the filled face's.
-  { id: 'P13 the face\'s uvs not the road\'s carried on (a plain tile: the asphalt does not run down it)', from: '(q.uv ? [q.uv[0], q.uv[1]] : [0, vAt[r]])', to: '[0, vAt[r]]', caughtBy: 'row 16:' },
-  // AMENDED (D593, the keeper 21:54-21:55 on 0.4.35: the drawn lip read as a blade, and is gone; apron.js sideFace draws the road's own edge, filled): this mutant's
-  // anchor was the lip's; the fault it stands for now is the filled face's.
-  { id: 'P14 the pit lane\'s outline drawn with no face (its edge a bare slice again)', from: 'add.push({ type: \'dummy\', name: name(\'APRONSIDE\'), matrix: IDENTITY.slice(), children: [{ ...out.side, material: outlineMat === null ? matIndex : shadeIndex(outlineMat) }] });', to: '', caughtBy: 'row 14:' },
+  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
+  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
+  { id: 'P13 the apron\'s asphalt at full light (not a little darker)', from: 'const LIP_SHADE = 0.88;', to: 'const LIP_SHADE = 1;', caughtBy: 'row 15:' },
+  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
+  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
+  { id: 'P14 the pit lane\'s outline drawn with no join (the wedge open along the lane)', from: 'add.push({ type: \'dummy\', name: name(\'APRONSIDE\'), matrix: IDENTITY.slice(), children: [{ ...out.side, material: matIndex }] });', to: '', caughtBy: 'row 14:' },
   { id: 'P15 outline rows a few micrometres apart kept as two (a lip cell of no width)', from: 'const SAME_M = 1e-4;', to: 'const SAME_M = 1e-6;', caughtBy: 'row 18:' },
-  // AMENDED (D593, the keeper 21:54-21:55 on 0.4.35: the drawn lip read as a blade, and is gone; apron.js sideFace draws the road's own edge, filled): this mutant's
-  // anchor was the lip's; the fault it stands for now is the filled face's.
-  { id: 'P16 the lane\'s face in each part\'s own uv space again (the texture squeezed into one row at every switch)', from: 'side: sideFace(continuousUv(rows.filter((q) => !q.end)), names.side)', to: 'side: sideFace(rows.filter((q) => !q.end), names.side)', caughtBy: 'row 19:' },
+  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
+  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
+  { id: 'P16 the across runs not fanned from the lane row\'s outer point (slivers and overlaps at the lane\'s ends)', from: 'for (const i of run) Os[i] = Os[k];', to: 'void run;', caughtBy: 'row 18:' },
+  { id: 'P17 the caps across the lane\'s ends left to the outline\'s own normal rules (half face into the lane and are culled)', from: 'for (const i of run.slice(1, -1)) capN[i] = c; }', to: 'void c; }', caughtBy: 'row 22:' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

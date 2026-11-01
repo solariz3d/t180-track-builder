@@ -79,14 +79,15 @@ function digestOf(out) {
 // soft block with SOFT_CFM=0.00005 (src/export/trackfiles.js) and an edge apron outside the road's open edges (src/export/apron.js). Each alone was proven the
 // only cause of its own move against 9f3a7040bf4356e9 / a257c20e84e68897; the pair below was read with PRINT_D437B=1 on the merged tree.
 // AMENDED BY NAME (2026-11-01, D593, the apron reads as part of the road): both pins moved from 257d550e6870bdf1 / 2b6ad34e0f135050 (a93ae51, read there with
-// PRINT_D437B=1) to the values below, because the edge apron's physics plank is now hidden and the road ends at its own edge FILLED: one side face from the edge
-// row down to the skin's, in a shade of the road's own material; and the pit lane grows out of the road with an apron, skins and a face of its own. Compared mesh by
-// mesh against a93ae51 (test/fixtures/kn5nodes.js): road physics and paint the same bytes in both exports; the physics aprons only hidden (geometry the same); the
-// APRONSIDE_ joins now the faces; the <road material>_lipshade material added; on the lap the pit lane's in, out and fill surfaces, its new skins, apron and
-// face, and the road skin's vertices within 0.5 m of the lane hung again; and the lap's map (data/map.ini, map.png, ui/outline.png) 2 m wider on the lane's side,
-// where the lane's physics apron (1ROAD_APRON_PIT_R) now lies. Nothing else moved; the file counts are the same. (An earlier pair, 60e346e18df0144b /
-// 7b587edcbcefc314, carried a drawn lip, removed at the keeper's word, 2026-10-31 21:54-21:55: "the edges are this thin blade it comes to a point".)
-const PIN = { lap: 'sha256 0e8de6cd745039cb files 10', open: 'sha256 4dba6b610fc6010e files 11' };
+// PRINT_D437B=1) to the values below. Compared with a93ae51 node by node and material by material (test/fixtures/kn5nodes.js), in both exports: every road
+// physics, paint and edge-apron node (the plank and its join) is the same bytes, and the materials are the same names in the same order, of which only t180b_apron's
+// own record changed: it is now the road's own asphalt a little darker (the road material's texture, its ambient, diffuse and specular at 0.88). On the lap only: the
+// pit lane's in, out and fill surfaces (its taper starts 0.5 m wide, src/geom/pitlane.js TAPER_MIN_W, and its uvs follow its width), its new skins and its
+// outline's drawn plank and join (1ROAD_APRON_PIT_R, APRONSIDE_PIT_R), the road skin's vertices within 0.5 m of the lane hung again, and the map (data/map.ini,
+// map.png, ui/outline.png) 2 m wider on the lane's side, where that plank lies. The file counts are the same. (Two pairs between, 60e346e18df0144b / 7b587edcbcefc314
+// and 0e8de6cd745039cb / 4dba6b610fc6010e, carried a drawn lip over a hidden plank and then a filled side face; both were removed at the keeper's word, 2026-10-31
+// 21:54-21:58.)
+const PIN = { lap: 'sha256 74130c5b646222a5 files 10', open: 'sha256 e15aed9879bf1ca0 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

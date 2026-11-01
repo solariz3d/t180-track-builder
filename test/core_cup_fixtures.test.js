@@ -31,12 +31,12 @@
 // changes the kn5 digest of the two CLOSED fixtures, F1 F2, and NOTHING ELSE: segs, path and mesh are unchanged in all nine, and the measure (the written kn5 read back mesh
 // by mesh, on this branch with the apron switched off and on) keeps every mesh of before byte for byte and adds only apron meshes and the t180b_apron material.
 // test/fixtures/manifest.d572.json records F1 F2's digests before (the last record each was amended by) and after, with the measure.
-// AMENDED BY NAME FOR D593 (the user, 2026-10-30 23:12Z and 2026-10-31: the apron must read as part of the road; the chair's ruling of 2026-11-01 01:32Z): the apron's
-// physics plank is kept byte for byte and HIDDEN, and the road ends at its own edge FILLED: the scenery join under the plank (APRONSIDE_) is now one side face from the
-// road's edge row straight down to the skin's edge row, in a material a little darker than the road (t180b_road_lipshade). (A drawn lip rolling 2 m out was tried and
-// removed: the keeper, 21:54-21:55 on 0.4.35, "the edges are this thin blade it comes to a point".) That changes the kn5 of F1 F2 and nothing else.
-// test/fixtures/manifest.d593.json records it mesh by mesh against a93ae51 (whose kn5 is the D572 record's after), and its row builds F1 F2 NOW and holds every road,
-// skin and paint node to a93ae51's bytes, the physics apron to its geometry, the four APRONSIDE_ to drawn faces, and the additions to the one material, by name.
+// AMENDED BY NAME FOR D593 (the user, 2026-10-30 23:12Z and 2026-10-31: the apron must read as part of the road; the chair's rulings of 2026-11-01 01:32Z, 03:58Z and
+// 05:23Z): the apron is drawn as the physics it is (0.4.34's plank and its join, vertex for vertex) and its material t180b_apron is now the road's own asphalt a little
+// darker (a copy of the road material under the apron's name, ambient, diffuse and specular at 0.88). That changes the kn5 of F1 F2 and nothing else: every mesh node
+// is the same bytes, and of the materials only t180b_apron's own record changed. (A drawn lip over a hidden plank, and a filled side face, were tried and removed:
+// the keeper, 21:54-21:58 on 0.4.35.) test/fixtures/manifest.d593.json records it against a93ae51 (whose kn5 is the D572 record's after), and its row builds F1 F2
+// NOW and holds every mesh node to a93ae51's bytes and every material but t180b_apron to its own.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -121,8 +121,8 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d572.json'))), '35412488b9aa9ce5f37de2c4b63bcb32880db3821f5b5512dfb802bed1ec1eb0');   // D572
   assert.deepEqual(Object.keys(AMEND10.fixtures), APRON_CHANGED);
   assert.deepEqual([...AMEND10.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !APRON_CHANGED.includes(k)).sort());
-  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d593.json'))), '145c71d7470c0802d506ca3ec47a0115f8d993c83b085539d58c4a626fe7aeee');   // D593
-  assert.equal(sha(fs.readFileSync(path.join(FX, 'kn5nodes.js'))), '37deb2ceadfa60cec816989b79237889018ed77014634a4933175c49dadc7c67');   // D593: the reader its row uses
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d593.json'))), 'defe016e74e8d7aea13253320999cd9ccb50fb8d0e155544de9c1b76ecb4b627');   // D593
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'kn5nodes.js'))), '6a332f0c710768b04e1e05c592456073234d0d15fddf9188020ecfb721fec879');   // D593: the reader its row uses
   assert.deepEqual(Object.keys(AMEND11.fixtures), LIP_CHANGED);
   assert.deepEqual([...AMEND11.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !LIP_CHANGED.includes(k)).sort());
 });
@@ -291,32 +291,23 @@ function fixtureKn5(name) {
   const ex = FW.buildFromSegments(segs, { name: 'fixture', via: 'fixture', liftPath: lift, start }, { markers: startLayout(segs, lift, start) });
   return Buffer.from(ex.kn5.buffer ? Buffer.from(ex.kn5.buffer, ex.kn5.byteOffset, ex.kn5.byteLength) : ex.kn5);
 }
-test('D593 amendment record: only F1 F2 changed, only their kn5; built now, every road, skin and paint node is a93ae51\'s byte for byte, the physics apron its geometry hidden, the four APRONSIDE_ the drawn faces, and nothing is added but the material t180b_road_lipshade', () => {
+test('D593 amendment record: only F1 F2 changed, only their kn5; built now, every mesh node is a93ae51\'s byte for byte and the only material record changed is t180b_apron\'s (the road\'s asphalt in its shade)', () => {
   assert.deepEqual(Object.keys(AMEND11.fixtures), LIP_CHANGED);
   for (const [k, v] of Object.entries(AMEND11.fixtures)) {
     assert.deepEqual(v.before_d593, AMEND10.fixtures[k].after_d572, `${k}: "before" is the record it was last amended by (D572), as a93ae51 built it`);
     for (const d of ['segs', 'path', 'mesh', 'meshParts']) assert.equal(v.after_d593[d], v.before_d593[d], `${k}: ${d} changed (the road must not move)`);
     assert.notEqual(v.after_d593.kn5, v.before_d593.kn5, `${k}: the kn5 did not change`);
+    assert.equal(v.after_d593.kn5Bytes, v.before_d593.kn5Bytes, `${k}: the kn5 is the same size (only a material's values moved)`);
     const m = v.measure;
-    assert.deepEqual(m.changed, ['kn5']);
-    // what is added, BY NAME: the faces' one material, and no mesh; the four joins under the plank are now the drawn faces
-    assert.deepEqual(m.added, []);
-    assert.deepEqual(m.materials_added, ['t180b_road_lipshade']);
-    assert.deepEqual(m.replaced_by_the_filled_face, ['APRONSIDE_p1_chunk_0', 'APRONSIDE_p2_chunk_1', 'APRONSIDE_p3_chunk_2', 'APRONSIDE_p5_chunk_3']);
-    const kinds = (re) => m.kept_byte_for_byte.filter((x) => re.test(x.name)).length;
-    assert.ok(kinds(/^1ROAD_p/) >= 4 && kinds(/^UNDERSKIN_p/) >= 4 && kinds(/^PAINT_/) >= 7, `${k}: control: the road, the skins and the paint are all among the kept`);   // F2's road is 5 chunks (the mesh cap)
-    // built NOW, read back node by node (test/fixtures/kn5nodes.js): the seal still guards everything the filled edge did not ask to change
-    const now = kn5Nodes(fixtureKn5(k)), byName = new Map(now.meshes.map((x) => [x.name, x]));
-    assert.deepEqual(now.materials, [...m.materials_before, ...m.materials_added], `${k}: the materials are before's, in order, and the faces' shade after them`);
-    for (const x of m.kept_byte_for_byte) assert.equal((byName.get(x.name) || {}).full, x.full, `${k}: ${x.name} is not a93ae51's byte for byte`);
-    for (const x of m.hidden_geometry_kept) {
-      const n = byName.get(x.name); assert.ok(n, `${k}: ${x.name} is gone`);
-      assert.equal(n.geo, x.geo, `${k}: ${x.name}'s geometry changed`);
-      assert.deepEqual(n.flags, { castShadows: false, visible: false, transparent: false, renderable: false }, `${k}: ${x.name} is not hidden`);
-    }
-    for (const x of m.replaced_by_the_filled_face) { const n = byName.get(x); assert.ok(n && n.flags.visible && n.flags.renderable, `${k}: ${x} is not a drawn face`); }
-    const named = new Set([...m.kept_byte_for_byte.map((x) => x.name), ...m.hidden_geometry_kept.map((x) => x.name), ...m.replaced_by_the_filled_face, ...m.added]);
-    assert.deepEqual(now.meshes.map((x) => x.name).filter((n) => !named.has(n)), [], `${k}: a mesh the record does not name`);
-    assert.equal(now.meshes.length, m.kn5_meshes_after); assert.equal(m.kn5_meshes_after, m.kn5_meshes_before + m.added.length);
+    assert.deepEqual(m.changed, ['kn5']); assert.deepEqual(m.materials_changed, ['t180b_apron']); assert.notEqual(m.t180b_apron_after, m.t180b_apron_before);
+    const kinds = (re) => m.meshes_kept_byte_for_byte.filter((x) => re.test(x.name)).length;
+    assert.ok(kinds(/^1ROAD_p/) >= 4 && kinds(/^UNDERSKIN_p/) >= 4 && kinds(/^PAINT_/) >= 7 && kinds(/^1ROAD_APRON_/) >= 4 && kinds(/^APRONSIDE_/) >= 4, `${k}: control: the road, skins, paint, aprons and joins are all among the kept`);   // F2's road is 5 chunks (the mesh cap)
+    // built NOW, read back node by node (test/fixtures/kn5nodes.js): every node is a93ae51's, and every material record but the apron's
+    const now = kn5Nodes(fixtureKn5(k));
+    assert.deepEqual(now.meshes.map((x) => [x.name, x.full]), m.meshes_kept_byte_for_byte.map((x) => [x.name, x.full]), `${k}: a mesh node is not a93ae51's, byte for byte`);
+    assert.equal(now.meshes.length, m.kn5_meshes);
+    assert.deepEqual(now.materials, m.materials, `${k}: the materials are a93ae51's, by name and in order`);
+    now.materials.forEach((n, i) => assert.equal(now.materialDigests[i], n === 't180b_apron' ? m.t180b_apron_after : m.material_digests_before[i], `${k}: the material ${n}`));
+    for (const x of now.meshes.filter((y) => /^1ROAD_APRON_|^APRONSIDE_/.test(y.name))) assert.ok(x.flags.visible && x.flags.renderable, `${k}: ${x.name} is not drawn`);
   }
 });

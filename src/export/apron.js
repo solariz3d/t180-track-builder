@@ -55,9 +55,9 @@ const WALL_DEG = 60;           // a side rising this steeply or more is a wall, 
 const APRON_TILE_M = 4;        // the uv tile, in metres
 const PIT_PAD_M = 5;           // each way past the pit lane's leave and rejoin
 const APRON_TAG = 'APRON', SIDE_PREFIX = 'APRONSIDE';
-const LIP_SHADE = 0.88;         // the drawn edge's share of its road material's light (ambient, diffuse, specular): the road's own texture a little darker, lit and shadowed by
+const LIP_SHADE = 0.88;         // the apron's share of its road material's light (ambient, diffuse, specular): the road's own texture a little darker, lit and shadowed by
                                // the game as the road is (the user, 18:17: "perhaps slightly darker, not like crazy dark"; it was 0.45, "not so dark")
-/** The road material `m` in the drawn edge's darker shade (the name kept from the lip it was first made for): its name with _lipshade, its samplers as they are, ksAmbient, ksDiffuse and ksSpecular times LIP_SHADE. */
+/** The road material `m` in the apron's darker shade (the name kept from the lip it was first made for): its name with _lipshade, its samplers as they are, ksAmbient, ksDiffuse and ksSpecular times LIP_SHADE. */
 const shadeOf = (m) => ({ ...m, name: `${m.name}_lipshade`, props: m.props.map((p) => (/^ks(Ambient|Diffuse|Specular)$/.test(p.name) ? { ...p, value: p.value.map((v) => v * LIP_SHADE) } : p)) });
 
 /** The apron's material: the road material `road` in its darker shade (shadeOf), under the apron's own name; with none, the plain dark one it was. */
@@ -75,7 +75,7 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 /**
  * One side of one grid cell, row by row: { E, X, N, NE, rim }. E the edge vertex; X the outward lateral (the edge minus the centre vertex, its component along the centre's
  * normal removed); N the centre vertex's normal (the section's up); NE the edge vertex's normal AS STORED (so E − UNDERSKIN_OFFSET_M·NE is the very vertex underskin.js
- * skinOf writes there); rim the side's last segment's angle above X, in degrees. For the drawn edge (D593; D and Dn were the lip's): D that segment's direction in the section (cos rim·X + sin rim·N)
+ * skinOf writes there); rim the side's last segment's angle above X, in degrees. Kept from the lip (D593, gone; nothing reads them now): D that segment's direction in the section (cos rim·X + sin rim·N)
  * and Dn the direction under it (sin rim·X − cos rim·N: −N on a flat edge); uv the edge vertex's own uv and du the road's u per metre outward across that last segment (no
  * `m.uvs`: uv null). The physics apron reads only E, X, N, NE and rim, computed as before.
  */
@@ -235,15 +235,24 @@ function outlineMeshes(rows, widthM, slopeDeg, names) {
   // cells lie in one plane with the section. Each with its own outer point, the plank there was a run of slivers (2 m long, 1.25 cm apart: 64 on the pit test lap)
   // and its plank and join bands overlapped (3); with the end row cut to its two ends, the lane's end edge met the plank's in a T and the downforce ray fell
   // through the seam. So every row of an across run takes the LANE row's outer point: its plank cells fan out from it to the end row's own vertices, and its join
-  // cells fan back from it to the skin's, in separate directions, watertight on the lane's edge
+  // cells fan back from it to the skin's, every vertex shared, watertight on the lane's edge and the skin's (one join triangle across the run, its long edge meeting the
+  // skin's end row in a T, rendered as a dotted crack: D593 overnight). The fans' thickness is the end row's spacing times sin 25° (plank) or sin 12° (join), which
+  // TAPER_MIN_W keeps over 1 cm (src/geom/pitlane.js)
   const Os = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -widthM * tan)));
+  const capN = rows.map(() => null);   // an across run's inner rows: the normal of the lane end's cap
   const across = (r) => { const d = sub(rows[r + 1].E, rows[r].E), l = len(d); return l > 0 && l < 0.5 && Math.abs(dot(d, rows[r].X)) > 0.7 * l; };
   for (let r = 0; r + 1 < rows.length; r++) {
     if (!across(r)) continue;
     let j = r; while (j + 1 < rows.length - 1 && across(j + 1)) j++;
     const run = []; for (let i = r; i <= j + 1; i++) run.push(i);
     const k = run.find((i) => rows[i].lane);
-    if (k !== undefined) for (const i of run) Os[i] = Os[k];
+    if (k !== undefined) {
+      for (const i of run) Os[i] = Os[k];
+      // the cap's facing: its cells lie in the cross-section's plane, where the rules below (away from the section's centre) have no sign, and half the cap faced
+      // inward and was culled (sky through the leave from below, D593 overnight). Its inner rows face OUT OF THE LANE'S END, toward the road row outside the run
+      const out = rows[k === run[0] ? run[run.length - 1] + 1 : run[0] - 1];
+      if (out) { let c = unit(cross(rows[k].X, rows[k].N)); if (dot(c, sub(out.E, rows[k].E)) < 0) c = mul(c, -1); for (const i of run.slice(1, -1)) capN[i] = c; }
+    }
     r = j;
   }
   let along = 0;
@@ -251,12 +260,14 @@ function outlineMeshes(rows, widthM, slopeDeg, names) {
     if (r > 0) along += len(sub(q.E, rows[r - 1].E));
     const O = Os[r], T = sub((rows[r + 1] || q).E, (rows[r - 1] || q).E);
     let n = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(O, q.E)))) : q.N; if (dot(n, q.N) < 0) n = mul(n, -1);
+    if (capN[r]) n = capN[r];
     V.push([q.E, O]); Nv.push([n, n]); UV.push([[0, along / APRON_TILE_M], [widthM / APRON_TILE_M, along / APRON_TILE_M]]);
     const S = sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)), G = mul(add(add(q.E, O), S), 1 / 3), mid = mul(add(O, S), 0.5);
     let nj = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(S, O)))) : mul(q.N, -1); if (dot(nj, sub(mid, G)) < 0) nj = mul(nj, -1);
+    if (capN[r]) nj = capN[r];
     J.push([O, S]); Nj.push([nj, nj]); UVj.push([[0, along / APRON_TILE_M], [len(sub(S, O)) / APRON_TILE_M, along / APRON_TILE_M]]);
   });
-  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), side: grid(names.side, J, Nj, UVj, rows.map(() => false)) };
+  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), side: grid(names.side, J, Nj, UVj, J.map(() => false)) };
 }
 
 /**
