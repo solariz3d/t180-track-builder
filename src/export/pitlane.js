@@ -20,7 +20,7 @@ const { MACH6 } = require('../validate/limits.js');
 
 function laneForExport(mainPath, mainSegments, mainMesh, pitLane, { selfCheck = true, mesh: meshOpts = {} } = {}) {
   const lane = buildPitLane(mainPath, mainSegments, pitLane);
-  const mesh = buildMesh(lane.path, lane.segments, { ...meshOpts, selfCheck });
+  const mesh = blendUvs(buildMesh(lane.path, lane.segments, { ...meshOpts, selfCheck }), lane.segments);
   const red = [], info = [];
   if (selfCheck) {
     for (const x of mesh.selfCheck.intersections) red.push({ reason: 'self-intersection', s0: x.s, s1: x.sOther, detail: `the pit lane meets itself (${x.cell} and ${x.other}, lane s)`, source: 'a road surface that passes through another' });
@@ -37,6 +37,29 @@ function laneForExport(mainPath, mainSegments, mainMesh, pitLane, { selfCheck = 
   const withFill = { ...mesh, scene: { ...mesh.scene, root: { ...mesh.scene.root, children: [...mesh.scene.root.children, fill] } } };
   if (selfCheck) red.push(...spanGaps(mainPath, mainMesh, withFill, lane));
   return { lane, mesh: withFill, red, info };
+}
+
+/**
+ * THE LANE'S TEXTURE WHERE IT NARROWS (D593, the user 18:54, on the pit's rejoin from above: "z-fighting stripes"). mesh.js lays a piece's u across from the piece's own
+ * profile (u = metres across / 10), one set for every row; the lane's diverge and merge are profile blends between TAPER_MIN_W and the full width, so the diverge
+ * kept the full width's u over the 10 cm where it leaves (80 times squeezed) and the merge the narrow end's over the full 8 m (80 times stretched, which read as
+ * stripes). On a blended piece every row's u is scaled to the row's own width (its end columns' distance: the lane lies flat across), so u is metres across / 10
+ * there too; the uvs are new arrays (the built mesh's are left as they are), and a piece without a blend keeps its mesh as built.
+ */
+function blendUvs(mesh, segments) {
+  const children = mesh.scene.root.children.map((node, k) => {
+    const cell = mesh.cells[k], seg = cell && segments[cell.piece], st = cell && mesh._state.pieces[cell.piece];
+    if (!seg || !seg.blend || !st || cell.seam) return node;
+    const m = node.children[0], K = st.K, R = m.positions.length / 3 / K, uvs = Float32Array.from(m.uvs), P = m.positions;
+    if (!Number.isInteger(R)) throw new Error(`blendUvs: the lane's cell ${k} has ${m.positions.length / 3} vertices, not rows of ${K}`);
+    for (let r = 0; r < R; r++) {
+      const a = r * K, b = a + K - 1, w = Math.hypot(P[b * 3] - P[a * 3], P[b * 3 + 1] - P[a * 3 + 1], P[b * 3 + 2] - P[a * 3 + 2]), span = (m.uvs[b * 2] - m.uvs[a * 2]) * 10;
+      if (!(Math.abs(span) > 1e-9)) continue;
+      for (let c = 0; c < K; c++) uvs[(a + c) * 2] = m.uvs[(a + c) * 2] * (w / Math.abs(span));
+    }
+    return { ...node, children: [{ ...m, uvs }, ...node.children.slice(1)] };
+  });
+  return { ...mesh, scene: { ...mesh.scene, root: { ...mesh.scene.root, children } } };
 }
 
 /* INFILL (the user, 2026-10-09 16:27: "the pit lane arc that is made, i wonder if the inside could just be filled in so there is no gap between the

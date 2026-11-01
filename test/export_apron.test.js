@@ -27,6 +27,8 @@
 //      road and the lane's three parts each have their own uv space, and a lip stepping between them in one row squeezed up to 41 per metre)
 //  20  on a cupped road the lip turns from the cupped edge's direction to the flat lane's over the road beside the lane: no lip row round the lane turns more
 //      than 0.6 of the cup from its neighbour (switched in one row it turned the whole 15.5°)
+//  21  the lane's surface wears the road's texture at the road's scale where it narrows too: on every lane triangle u changes 0.1 a metre (u = metres across / 10,
+//      mesh.js), within 10% (its diverge kept the full width's u over 10 cm, 80 times squeezed, and its merge the narrow end's over 8 m, 80 times stretched)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -521,4 +523,21 @@ test('row 20: on a road cupped 15.5° the lip turns to the flat lane gradually: 
     for (let k = 1; k < rows; k++) { const deg = Math.acos(Math.max(-1, Math.min(1, dir[k].reduce((s, x, j) => s + x * dir[k - 1][j], 0)))) / DEG; if (deg > 0.6 * CUP) worst.push(`${m.name} row ${k}: ${deg.toFixed(1)}°`); }
   }
   assert.deepEqual(worst.slice(0, 4), [], `${worst.length} lip rows turn more than ${(0.6 * CUP).toFixed(1)}° from their neighbour`);
+});
+
+// D593, the user 18:54, on the pit's rejoin from above: "z-fighting stripes". Not two surfaces (row 18 counts those, 0): the merge part's texture, stretched 80
+// times across, read as stripes; mesh.js lays one u per piece from the piece's own profile, and the lane's diverge and merge are blends of two widths
+test('row 21: the lane surface wears the road texture at the road scale where it narrows too: on every lane triangle u changes 0.1 a metre, within 10%', () => {
+  const doc = lap('apron pit-is-track lap'), lane = { side: 'L', leave: { word: doc.pieces[0].id, along: 40 }, rejoin: { word: doc.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
+  const parts = acMeshes(exportDoc(doc, {}, { pitLane: lane })).filter((m) => /^1ROAD_PIT_(in|body|out)_/.test(m.name));
+  assert.ok(parts.some((m) => /_in_/.test(m.name)) && parts.some((m) => /_out_/.test(m.name)), 'control: the lane has its diverge and merge parts');
+  const bad = [];
+  for (const m of parts) for (let t = 0; t < m.indices.length; t += 3) {
+    const v = [0, 1, 2].map((k) => m.indices[t + k]), p = v.map((i) => [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]), u = v.map((i) => m.uvs[i * 2]);
+    const e1 = sub(p[1], p[0]), e2 = sub(p[2], p[0]), n = cross3(e1, e2), nn = dot3(n, n); if (!(nn > 1e-12)) continue;
+    // u's gradient in the triangle's plane: (Δu1 (e2 × n) + Δu2 (n × e1)) / |n|²
+    const g = [0, 1, 2].map((k) => ((u[1] - u[0]) * cross3(e2, n)[k] + (u[2] - u[0]) * cross3(n, e1)[k]) / nn), rate = Math.hypot(...g);
+    if (Math.abs(rate - 0.1) > 0.01) bad.push(`${m.name} ${rate.toFixed(4)} a metre at ${p[0].map((x) => x.toFixed(2))}`);
+  }
+  assert.deepEqual(bad.slice(0, 4), [], `${bad.length} lane triangles wear the texture at another scale`);
 });
