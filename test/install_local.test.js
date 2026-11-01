@@ -29,7 +29,8 @@ function run(w, args, name = 't180-track-builder-none') {
 }
 const done = (w) => { try { fs.rmSync(w.dir, { recursive: true, force: true }); } catch (e) { /* best effort */ } };
 
-test('row 1: an install backs the old exe up, installs, finds the installed exe is the built one stamped NSS, and releases the lock', { skip: !WIN }, () => {
+const GH_PS = require('./on_github.js').onGitHub('Windows PowerShell started from the job\'s pwsh 7 cannot load Get-FileHash there (run 41316657421: "The term \'Get-FileHash\' is not recognized", every row); every other Windows machine runs it');
+test('row 1: an install backs the old exe up, installs, finds the installed exe is the built one stamped NSS, and releases the lock', { skip: !WIN || GH_PS }, () => {
   const w = world('t180-track-builder-none');
   try {
     const r = run(w, ['-Tag', 'row1']);
@@ -40,7 +41,7 @@ test('row 1: an install backs the old exe up, installs, finds the installed exe 
   } finally { done(w); }
 });
 
-test('row 2: an installed exe that is not the built one stamped NSS fails the compare, exit 7, and the backup is kept', { skip: !WIN }, () => {
+test('row 2: an installed exe that is not the built one stamped NSS fails the compare, exit 7, and the backup is kept', { skip: !WIN || GH_PS }, () => {
   const w = world('t180-track-builder-none', 'unstamped');
   try {
     const r = run(w, ['-Tag', 'row2']);
@@ -50,7 +51,7 @@ test('row 2: an installed exe that is not the built one stamped NSS fails the co
   } finally { done(w); }
 });
 
-test('row 3: while the builder is open it waits, never closes it, and gives up with exit 3 with nothing changed', { skip: !WIN }, () => {
+test('row 3: while the builder is open it waits, never closes it, and gives up with exit 3 with nothing changed', { skip: !WIN || GH_PS }, () => {
   // a process named like the builder: a copy of node.exe under that name, idling
   const w = world('t180-fake-open');
   const fake = path.join(w.dir, 't180-fake-open.exe'); fs.copyFileSync(process.execPath, fake);
@@ -66,7 +67,7 @@ test('row 3: while the builder is open it waits, never closes it, and gives up w
   } finally { ch.kill(); spawnSync(process.execPath, ['-e', 'setTimeout(() => {}, 500)']); done(w); }
 });
 
-test('row 4: a lock held by a live process makes it wait and give up with exit 4; a lock whose holder is gone is taken over', { skip: !WIN }, () => {
+test('row 4: a lock held by a live process makes it wait and give up with exit 4; a lock whose holder is gone is taken over', { skip: !WIN || GH_PS }, () => {
   const w = world('t180-track-builder-none');
   try {
     const me = spawnSync('powershell', ['-NoProfile', '-Command', `(Get-Process -Id ${process.pid}).StartTime.ToUniversalTime().ToString('o')`], { encoding: 'utf8' }).stdout.trim();
@@ -82,7 +83,7 @@ test('row 4: a lock held by a live process makes it wait and give up with exit 4
   } finally { done(w); }
 });
 
-test('row 5: -Take holds the lock for a merge; an install with its token runs under it and leaves it held; -Release frees it', { skip: !WIN }, () => {
+test('row 5: -Take holds the lock for a merge; an install with its token runs under it and leaves it held; -Release frees it', { skip: !WIN || GH_PS }, () => {
   const w = world('t180-track-builder-none');
   try {
     const env = { ...process.env, T180_INSTALL_LOCK: w.lock };
@@ -103,7 +104,7 @@ test('row 5: -Take holds the lock for a merge; an install with its token runs un
   } finally { done(w); }
 });
 
-test('row 6: an existing backup of that name is refused, exit 5, and nothing is installed', { skip: !WIN }, () => {
+test('row 6: an existing backup of that name is refused, exit 5, and nothing is installed', { skip: !WIN || GH_PS }, () => {
   const w = world('t180-track-builder-none');
   try {
     fs.writeFileSync(w.exe + '.before-row6', 'an earlier backup');

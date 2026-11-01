@@ -21,7 +21,7 @@ const G = require('../../src/geom/index.js');
 
 const REPO = path.join(__dirname, '..', '..');
 const CHROME = chromePath();
-const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the frames are timed in headless Chrome';
+const skip = (CHROME ? false : 'no Chrome here (set CHROME_PATH): the frames are timed in headless Chrome') || require('../../test/on_github.js').onGitHub('the runner has no GPU, so Chrome draws in software: 3 frames in 3 s on the 100 km track (run 41316657421), and the frame budget and the far road\'s thinning are judged on a machine that draws; every other machine runs it');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.css': 'text/css' };
 const BUDGET = 6.9;   // ms: one frame at 144 Hz

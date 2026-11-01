@@ -5,6 +5,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The tests on GitHub finish, and a red there means something.** The fast job's limit is 75 minutes. It took 56 min 42 s when measured, so the old 45-minute limit stopped it before it was done and the run read "cancelled". Rows that fail only on GitHub's shared runner now skip there, each saying why. On any other machine they run as before:
+  - `menubar-page` rows 16 to 19b, and every row of `texture-page`: the page does not mount within the row's wait there;
+  - every row of `preview-lod-frame`: the runner has no GPU, so frames and the far road's thinning are not judged there;
+  - `export-isolated-page`'s real out-of-memory row;
+  - every row of `install_local`: Windows PowerShell started from the job's pwsh 7 cannot load Get-FileHash.
+
+  The check is `test/on_github.js` (GitHub sets `GITHUB_ACTIONS=true`).
+
 ## [0.4.36] - 2026-11-01
 
 This section also holds 0.4.31 to 0.4.35, which were installed or released without a section of their own.

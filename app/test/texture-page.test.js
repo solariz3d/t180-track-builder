@@ -36,7 +36,7 @@ const { decode } = require('./png.js');
 
 const REPO = path.join(__dirname, '..', '..');
 const CHROME = chromePath();
-const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the textures are tested in headless Chrome';
+const skip = (CHROME ? false : 'no Chrome here (set CHROME_PATH): the textures are tested in headless Chrome') || require('../../test/on_github.js').onGitHub('the page did not mount within the rows\' own 30 s wait in any look there, with four test files at once on a shared runner (run 41316657421: every row red with "the menus mounted: not mounted"); every other machine runs it');
 const LOOKS = ['sigil', 'aqua', 'skyline', 'glass', 'aurora', 'skyline-night'];   // Skyline Night joins every row
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav', '.css': 'text/css' };
