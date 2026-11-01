@@ -89,3 +89,20 @@ test('the markers check flags a gate narrower than half the road seen from above
   assert.equal(wall.ok, false);
   assert.match(wall.problems.join(' '), /AC_TIME_1 is 7\.5 m wide seen from above on a road 30\.0 m wide/);
 });
+
+// 2026-11-01 (a lap whose third fell in a bank's exit; its export refused "AC_TIME_1 tilts 15° from level" from every start line): the search measured a gate
+// at the road, the export's check measures its two dummies, 1.5 m up each end's own normal, and on an edged or cupped road those differ. Here F1's lap with p3's
+// bank easing from 60° to 0 and a 40° edge on its right side only: the gate the search took tilted 14.55° at the road and its dummies 15.6°, over the check's bar.
+test('the sector gate the search picks passes the export\'s own gate check (its dummies, as checkMarkers reads them), on a bank exit with a one-sided edge', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(FX, 'F1-bowl-default-lap-closed.core2.json'), 'utf8')), ch = raw.pieces[2].channels, n = ch.phi.length;
+  const ease = (i) => (i < 2 ? 1 : i >= n - 2 ? 0 : 1 - (i - 1) / (n - 3)), mid = (i) => (i < 2 || i >= n - 2 ? 0 : 1);
+  raw.pieces[1].channels.phi = raw.pieces[1].channels.phi.map((_, i, a) => (i >= a.length - 2 ? 60 * DEG : 0));   // the bank meets the joint at 60°
+  Object.assign(ch, { phi: ch.phi.map((_, i) => 60 * DEG * ease(i)), e: ch.phi.map(() => 0), er: ch.phi.map((_, i) => 40 * mid(i)) });
+  const doc = D.parse(JSON.stringify(raw)), segs = AD.toSegments(doc), start = { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch }, lift = (q) => AD.offsetPath(doc, segs, q);
+  const L = startLayout(segs, lift, start), p = lift(require('../src/geom/path.js').buildPath(segs, { step: 2, closed: true, start }));   // the export's own path (fromwords.js)
+  assert.ok(L.sectors.every((a) => !a.omitted), 'both gates are placed');
+  const mk = require('../src/markers/index.js').placeAll(L, p, segs, { paintMaterial: 0, lane: null });
+  const scene = { root: { type: 'dummy', name: 'root', matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], children: mk.nodes } };
+  const gate = require('../src/export/markers.js').checkMarkers(scene).checks.find((c) => c.id === 'gate-tilt');
+  assert.ok(gate.ok, gate.problems.join(' | '));
+});
