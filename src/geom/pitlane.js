@@ -15,7 +15,11 @@
 //   φ(s)  = the lane's TILT about the road's T: 0, leave to rejoin, so the lane lies level in the road's own
 //           across-plane (it follows the road's bank and grade) at the height of the edge it leaves from
 //   A(s)  = the edge's outward across-direction tilted by φ: σ·L·cos φ + U·sin φ (= σ·L at φ = 0)
-//   inner = e + A·g,  centre = e + A·(g + width/2)      σ = +1 on the left (+u), −1 on the right
+//   w(s)  = the lane's WIDTH: TAPER_MIN_W at the leave, easing to the full width over divergeM (the same smoothstep as g), full along the run,
+//           easing back over mergeM (D593, the user 18:11: "like the pit IS the track"). It was the full width from the leave, so the lane began as a
+//           square slab beside the road with a corner at each end; now its OUTER edge leaves the road's edge tangentially too (w' = 0 there) and the
+//           lane grows out of the road. The mesh carries it as a profile BLEND on the diverge and merge parts (from TAPER_MIN_W to full and back)
+//   inner = e + A·g,  centre = e + A·(g + w/2)      σ = +1 on the left (+u), −1 on the right
 // JOINS WITH NO STEP. At the leave and the rejoin g = 0 and g' = 0, so the lane's inner edge IS the road's edge (same
 // point) and runs along it (same tangent: inner' = e' + A'g + Ag' = e').
 // The lane once tilted (on a test track it "flips up towards the beginning and end, it should be smooth even"): this
@@ -46,7 +50,8 @@ const Prof = require('./profile.js');
 const { triTri, segTri, _internal: { soup, build, query } } = require('./bvh.js');
 
 const JOIN_MAX = 35 * Math.PI / 180;  // the steepest road edge a lane joins: the reader's lip (a sharper fold is an edge, not road)
-const MAT = 'ROAD';                    // drivable: its cells are 1ROAD_PIT_<part>_<n> (surfaces.ini MESHES=1ROAD?)
+const MAT = 'ROAD';
+const TAPER_MIN_W = 0.05;              // m: the lane's width where it leaves and rejoins (a profile needs a width; 5 cm is the road's edge, nearly)                    // drivable: its cells are 1ROAD_PIT_<part>_<n> (surfaces.ini MESHES=1ROAD?)
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -86,7 +91,7 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
   const segAt = (s) => { let g = 0; for (let k = 0; k < segments.length; k++) if (st[k] <= s + 1e-9) g = k; return g; };
   const gapAt = (s) => (s <= s0 ? 0 : s < sa ? lane.offsetM * Prof.smoothstep((s - s0) / lane.divergeM) : s <= sb ? lane.offsetM : s < s1 ? lane.offsetM * Prof.smoothstep((s1 - s) / lane.mergeM) : 0);
   /** The lane at main-road s: every point of it, exactly (the main frame interpolated as src/markers/place.js does). */
-  function at(s) {
+  function at(s, width = w) {
     const i = bracket(s), a = S[i], b = S[Math.min(i + 1, S.length - 1)], t = b.s > a.s ? Math.min(1, Math.max(0, (s - a.s) / (b.s - a.s))) : 0;
     const k = segAt(s), seg = segments[k];
     if (seg.kind === 'gap') throw err('PIT_OVER_GAP', `s ${s.toFixed(1)} m is over a jump's flight: a pit lane cannot run beside it`);
@@ -96,7 +101,7 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
     const [X, Y] = Prof.offsetAt(P, uE), edge = add(pos, add(mul(L, X), mul(U, Y))), g = gapAt(s), psiEdge = Prof.psiAt(P, uE);
     const phi = 0, c = Math.cos(phi), sn = Math.sin(phi);   // level in the road's own across-plane, leave to rejoin (it was psiEdge · (1 − g/offsetM): tilted to the edge at the joins)
     const A = add(mul(L, sg * c), mul(U, sn)), Ll = add(mul(L, c), mul(U, sg * sn)), Ul = add(mul(U, c), mul(L, -sg * sn));   // the lane's across (+u = L side) and up
-    return { s, T, L, U, pos, kvec: kv, edge, psiEdge, phi, Ll, Ul, g, inner: add(edge, mul(A, g)), centre: add(edge, mul(A, g + w / 2)) };
+    return { s, T, L, U, pos, kvec: kv, edge, psiEdge, phi, Ll, Ul, g, inner: add(edge, mul(A, g)), centre: add(edge, mul(A, g + width / 2)), width };
   }
   for (const [name, s] of [['leave', s0], ['rejoin', s1]]) {
     const x = at(s); if (Math.abs(x.psiEdge) > JOIN_MAX) throw err('PIT_JOIN_NOT_FLAT', `the road's ${lane.side === 'L' ? 'left' : 'right'} edge at the ${name} (s ${s.toFixed(1)} m) turns ${(x.psiEdge * 180 / Math.PI).toFixed(1)}° from flat; a lane joins an edge of at most 35° (the reader's lip)`);
@@ -107,7 +112,14 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
   for (const sm of S) if (sm.s > s0 && sm.s < s1) ss.add(sm.s);
   for (let x = s0 + stepM; x < s1; x += stepM) ss.add(x);
   const main = [...ss].sort((x, y) => x - y).filter((x, i, arr) => i === 0 || x - arr[i - 1] > 1e-6);
-  const pts = main.map(at);
+  // THE TAPER. Pass 1 lays the stations with the width eased by main s (as the gap is); pass 2 eases it by each station's own arc length along the
+  // lane, which is what the mesh's profile blend reads (mesh.js: smoothstep(d / length) over the part), so the width the centre is set from and the
+  // width the mesh draws agree to the second order, and the inner edge stays on e + A·g
+  const ease = (x) => Prof.smoothstep(Math.min(1, Math.max(0, x)));
+  const wMain = (x) => TAPER_MIN_W + (w - TAPER_MIN_W) * (x <= s0 ? 0 : x < sa ? ease((x - s0) / lane.divergeM) : x <= sb ? 1 : x < s1 ? ease((s1 - x) / lane.mergeM) : 0);
+  const arcsOf = (ps) => { let a = 0; return ps.map((x, j) => (j ? (a += len(sub(x.centre, ps[j - 1].centre))) : 0)); };
+  const pass1 = main.map((x) => at(x, wMain(x))), a1 = arcsOf(pass1), aIn = a1[main.findIndex((x) => Math.abs(x - sa) < 1e-6)], aOut = a1[main.findIndex((x) => Math.abs(x - sb) < 1e-6)], aEnd = a1[a1.length - 1];
+  const pts = main.map((x, j) => at(x, TAPER_MIN_W + (w - TAPER_MIN_W) * (a1[j] <= aIn ? ease(a1[j] / aIn) : a1[j] < aOut ? 1 : ease((aEnd - a1[j]) / (aEnd - aOut)))));
   let arc = 0;
   const partOf = (s) => (s < sa - 1e-9 ? 0 : s < sb - 1e-9 ? 1 : 2);
   const samples = pts.map((x, j) => {
@@ -118,16 +130,17 @@ function buildPitLane(mainPath, segments, lane, { stepM = 1 } = {}) {
   });
   const sLane = (sMain) => samples.find((x) => Math.abs(x.sMain - sMain) < 1e-9).s;
   const bounds = [0, sLane(sa), sLane(sb), arc];
-  const profile = { font: 'pit', material: MAT, u: [-w / 2, 0, w / 2], psi: [0, 0, 0] };
+  const profile = { font: 'pit', material: MAT, u: [-w / 2, 0, w / 2], psi: [0, 0, 0] }, narrow = { font: 'pit', material: MAT, u: [-TAPER_MIN_W / 2, 0, TAPER_MIN_W / 2], psi: [0, 0, 0] };
   const partNames = ['in', 'body', 'out'];
-  const segs = partNames.map((part, g) => ({ id: 'PIT', part, word: 'pit', kind: 'road', length: bounds[g + 1] - bounds[g], k0: 0, k1: 0, kp0: 0, kp1: 0,
-    profile, blend: null, speed: lane.speedKmh === null ? null : lane.speedKmh / 3.6 }));
+  const segs = partNames.map((part, g) => { const length = bounds[g + 1] - bounds[g];
+    return { id: 'PIT', part, word: 'pit', kind: 'road', length, k0: 0, k1: 0, kp0: 0, kp1: 0, profile: g === 2 ? narrow : profile,
+      blend: g === 0 ? { from: narrow, s0: 0, length } : g === 2 ? { from: profile, s0: 0, length } : null, speed: lane.speedKmh === null ? null : lane.speedKmh / 3.6 }; });
   // path.js's shape: a boundary sample belongs to the part it STARTS; segEnd[g] is that sample again, as part g's end
   const segFirst = [0, 0, 0].map((_, g) => samples.findIndex((x) => x.seg === g));
   const segEnd = [0, 1, 2].map((g) => ({ ...samples[g < 2 ? segFirst[g + 1] : samples.length - 1], seg: g }));
   if (segFirst.some((i) => i < 0)) throw err('PIT_TOO_SHORT', 'a part of the lane has no length (diverge or merge fills the whole lane)');
   const path = { lengthM: arc, closed: false, samples, segFirst, segEnd, twist: 0 };
-  return { path, segments: segs, joins: { leave: { s: s0, sLane: 0 }, rejoin: { s: s1, sLane: arc } }, parts: { diverge: [s0, sa], run: [sa, sb], merge: [sb, s1] }, at };
+  return { path, segments: segs, joins: { leave: { s: s0, sLane: 0 }, rejoin: { s: s1, sLane: arc } }, parts: { diverge: [s0, sa], run: [sa, sb], merge: [sb, s1] }, at, widthAt: wMain };
 }
 
 /**
@@ -171,4 +184,4 @@ function laneCheck(mainMesh, laneMesh, lane, { stackedM = 2, exemptM = 5, main =
   return { intersections: inter, stacked, stats };
 }
 
-module.exports = { buildPitLane, laneCheck, JOIN_MAX };
+module.exports = { buildPitLane, laneCheck, JOIN_MAX, TAPER_MIN_W };
