@@ -105,4 +105,7 @@ test('the sector gate the search picks passes the export\'s own gate check (its 
   const scene = { root: { type: 'dummy', name: 'root', matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], children: mk.nodes } };
   const gate = require('../src/export/markers.js').checkMarkers(scene).checks.find((c) => c.id === 'gate-tilt');
   assert.ok(gate.ok, gate.problems.join(' | '));
+  // spawnsLayout (a start placed by hand) asks lapSectors with no options: its default height must be the markers' own, so it picks the same gates
+  const starts = segStarts(p, segs);
+  assert.deepEqual(Lay.lapSectors(p, segs, Lay.anchorS(L.line, segs, starts)), L.sectors);
 });
