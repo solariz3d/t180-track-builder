@@ -13,11 +13,29 @@ const ROOT = path.join(__dirname, '..');
 const MUTATIONS = [
   // the plan's three (plan_wheel_under_the_road_2026-10-30.md, Part A)
   { id: 'P1 the slope sign flipped (the apron rises from the edge)', from: 'mul(q.N, -drop))', to: 'mul(q.N, drop))', caughtBy: 'row 1:' },
-  { id: 'P2 the join row dropped (the wedge is left open under the apron)', from: 'return { top, side: join };', to: 'return { top, side: null };', caughtBy: 'row 2:' },
+  // AMENDED (D593, what is seen): P2 dropped the flat join (`return { top, side: join };` → side null), which is no longer written at width > 0 (the visual underside closes
+  // the section instead), so it would now be a mutant that changes nothing. The same fault where it now lives: the underside is left out.
+  { id: 'P2 the underside dropped (the section is left open under the lip)', from: 'add.push({ type: \'dummy\', name: c.name.replace(/^CELL_/, `APRONSIDE${tag}_`), matrix: c.matrix, children: [{ ...vis.under, material: shadeIndex(m.material) }] });', to: '', caughtBy: 'row 2:' },   // (D593 18:0x: its anchor follows the underside's material, now the lip's shade)
   { id: 'P3 the wall test dropped (a 90° cup gets an apron)', from: 'if (rows.some((q) => q.rim >= WALL_DEG)) return null;', to: '', caughtBy: 'row 4:' },
   // the two the build added: the pit lane's span and the piece's own surface
-  { id: 'P4 the pit lane\'s side keeps its apron over the lane\'s span', from: 'if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) continue;', to: '', caughtBy: 'row 10:' },
+  // AMENDED (D593, the pit lane's outline): the span's cells were skipped by `if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) continue;`; that test now
+  // opens the block that hands their rows to the outline, so the old line would read NOT APPLIED. The same fault: the span keeps the main road's own apron.
+  { id: 'P4 the pit lane\'s side keeps its apron over the lane\'s span', from: 'if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) {', to: 'if (false) {', caughtBy: 'row 10:' },
   { id: 'P5 every apron is 1ROAD_ (a gripped piece\'s loses its grip)', from: 'top: `${prefix}${APRON_TAG}_${rest}_${tag}`', to: 'top: `1ROAD_${APRON_TAG}_${rest}_${tag}`', caughtBy: 'row 11:' },
+  // D593 (plan_apron_reads_as_part_of_the_road_2026-10-31.md, item 5 and its 17:1x and 17:2x amendments): what is seen, the pit lane's outline, and that the physics stays as it was
+  { id: 'P6 the visual lip leaves along the frame\'s lateral again (a plank off a cupped edge)', from: 'D: add(mul(X, cr), mul(N, sr)), Dn: sub(mul(X, sr), mul(N, cr))', to: 'D: X, Dn: mul(N, -1)', caughtBy: 'row 13:' },
+  { id: 'P7 the pit lane\'s outline dropped (its edges bare, the main apron stopping square at the span)', from: 'if (lane && lane.mesh && widthM > 0) {', to: 'if (false) {', caughtBy: 'row 14:' },
+  { id: 'P8 the underside flat again (a straight sheet from the skin to the outer row)', from: 'L.push(p); U.push(c === 0 ? S : add(add(p, mul(up, -UNDERSKIN_OFFSET_M * (1 - k))), mul(fix, 1 - k)));', to: 'L.push(p); U.push(add(mul(S, 1 - k), mul(th > 0 ? add(q.E, add(mul(q.D, along * Math.sin(th)), mul(q.Dn, along * (1 - Math.cos(th))))) : add(q.E, mul(q.D, w[r])), k)));', caughtBy: 'row 15:' },
+  // AMENDED (D593, the user 18:0x): P9 put the skin's material on the lip (its anchor `children: [{ ...vis.lip, material: m.material }]` is gone: the lip now wears the
+  // road's darker shade). The fault that matters now: the lip in the road's material at full light, not the shade.
+  { id: 'P9 the lip in the road\'s material unshaded (not the darker shade)', from: 'children: [{ ...vis.lip, material: shadeIndex(m.material) }]', to: 'children: [{ ...vis.lip, material: m.material }]', caughtBy: 'row 16:' },
+  { id: 'P10 the physics apron drawn again (the plank shows under the lip)', from: 'node.visible = false; node.renderable = false; node.castShadows = false;', to: '', caughtBy: 'row 16:' },
+  { id: 'P12 the road skin beside the lane hung along its own cupped normal again (it swings under the lane skin and clips through it)', from: 'if (r) return r.up;', to: 'if (r) return r.n;', caughtBy: 'row 18:' },
+  { id: 'P11 the physics re-aimed along the edge\'s own segment (the step the keeper kept out)', from: 'const O = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -drop)))', to: 'const O = rows.map((q) => add(add(q.E, mul(q.D, widthM)), mul(q.Dn, drop)))', caughtBy: 'row 17:' },
+  { id: 'P13 the lane lip turns from the cupped road to the flat lane in one step again (on a cupped road it kinks the whole cup in one row)', from: 'w = 1 - t * t * (3 - 2 * t);', to: 'w = 0;', caughtBy: 'row 20:' },
+  { id: 'P14 the road row stepping across to the lane kept in the drawn lip (its cell lies flat over the underside)', from: 'return d > 1e-9 && Math.abs(dot(t, q.D)) > 0.7 * d; };', to: 'return false; };', caughtBy: 'row 18:' },
+  { id: 'P15 outline rows a few micrometres apart kept as two (a lip cell of no width)', from: 'const SAME_M = 1e-4;', to: 'const SAME_M = 1e-6;', caughtBy: 'row 18:' },
+  { id: 'P16 the lane lip in each part\'s own uv space again (the texture squeezed into one row at every switch)', from: 'const out = continuousUv(rows), corners = [],', to: 'const out = rows.slice(), corners = [],', caughtBy: 'row 19:' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

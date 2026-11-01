@@ -305,7 +305,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // APRON_WIDTH_M; 0 closes the gap with a side face only. After the skins and BEFORE the catch, so the catch stays the last thing appended (its material last: turning
   // it on changes nothing else); each apron takes its cell's surface (1ROAD_ or 1GRIPnnn_) itself, and the grip keys rename only the road cells. Not on the pit lane's
   // side over the lane's span, where the lane and its infill join the road
-  const laneSpan = pit && doc.pitLane ? { side: doc.pitLane.side, s0: pit.lane.joins.leave.s, s1: pit.lane.joins.rejoin.s } : null;
+  const laneSpan = pit && doc.pitLane ? { side: doc.pitLane.side, s0: pit.lane.joins.leave.s, s1: pit.lane.joins.rejoin.s, mesh: pit.mesh } : null;   // mesh: the lane's own, so the apron runs round it as one outline (apron.js outlineRows, D593)
   let aproned;
   try { aproned = withApron(withUnderskin(boxed, mesh, segs), mesh, segs, { widthM: o.edgeApronM === undefined ? APRON_WIDTH_M : o.edgeApronM, lane: laneSpan }); } catch (e) { throw new ExportError('BAD_OPTION', e.message); }
   const scene = withGripKeys(withCatch(aproned, mesh, segs, catchMode), mesh, segs);

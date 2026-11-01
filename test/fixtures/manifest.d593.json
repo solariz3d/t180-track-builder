@@ -1,0 +1,272 @@
+{
+ "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279, the mesh cap, the sector gates, D460 and D572; F1 F2 only, their kn5 digest only",
+ "made_at": "pane O, 2026-10-31, D593 (the apron reads as part of the road), t180 branch d593-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: a93ae51 (the D572 apron as the user drove it; its kn5 is the D572 record's after, digest and bytes) and d593-o after b1e95a8.",
+ "reason": "The edge apron now looks like part of the road (D593, the user, 2026-10-30 23:12Z and 2026-10-31). Its physics plank is kept byte for byte and hidden; a separate visual lip, in a material a little darker than the road (t180b_road_lipshade), rolls over the edge, and the old scenery join under the plank (APRONSIDE_) is now the lip's underside. So the two closed fixtures, which are exported, change their kn5, and nothing else: segs, path and mesh are unchanged in all nine, and in the kn5 every road, skin and paint node is the same bytes.",
+ "fixtures": {
+  "F1-bowl-default-lap-closed": {
+   "before_d593": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
+    "meshParts": 3745,
+    "kn5": "bc6acff0f6cee8d899a2f7dd612ad1f66a403976ed7cb9c947580cb6401cc3ef",
+    "kn5Bytes": 7676408
+   },
+   "after_d593": {
+    "segs": "d816d7f7ec3d6fcddc434447553aa29f67b08d26336e1c84c79102b3486ad881",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
+    "meshParts": 3745,
+    "kn5": "dad376c11ac3c19b69cbe520f248cf236e12599c5d238c444ab7d04026459ac0",
+    "kn5Bytes": 9454376
+   },
+   "measure": {
+    "changed": [
+     "kn5"
+    ],
+    "kn5_meshes_before": 23,
+    "kn5_meshes_after": 27,
+    "materials_before": [
+     "t180b_road",
+     "t180b_paint",
+     "t180b_underskin",
+     "t180b_apron"
+    ],
+    "materials_added": [
+     "t180b_road_lipshade"
+    ],
+    "kept_byte_for_byte": [
+     {
+      "name": "1ROAD_p1_chunk_0",
+      "full": "113c105b294cc2f62031fd6556eeb1985ac00fbdefb52d986765f8a3090924a6"
+     },
+     {
+      "name": "1ROAD_p2_chunk_1",
+      "full": "9bea4fa87bbe5c43855977a83a4e6bc405734fa2c3e713f80eb86193d2b07b92"
+     },
+     {
+      "name": "1ROAD_p3_chunk_2",
+      "full": "9a6f0e3935b2305937288fccef48d1e5bc38cd544bad643c7e874ea7fe421e79"
+     },
+     {
+      "name": "1ROAD_p5_chunk_3",
+      "full": "afaeaa92e19a1178850bb172b7334695273a77e6edd117ce5b883f8778d69eab"
+     },
+     {
+      "name": "PAINT_START_LINE",
+      "full": "356379fb6318d10c86eb0cf4efee68a7a5ae13f82ae20fa26a77b0aa0dc74ea1"
+     },
+     {
+      "name": "PAINT_GRID_0",
+      "full": "cf04784d8ba8c125ee5d0928f8b218c7f8fe71c4308b588114fca294a8a46035"
+     },
+     {
+      "name": "PAINT_GRID_1",
+      "full": "585dfec56e1296efd976972acb70c93133915530456a35c1d49b2bf6c491f76c"
+     },
+     {
+      "name": "PAINT_GRID_2",
+      "full": "bfb61be3ebbac309ea7773bdeb9faa797415ce0b5a3fbb7e4d9738696065ee7e"
+     },
+     {
+      "name": "PAINT_GRID_3",
+      "full": "070e827c16941dea3b5cc1e542a26823caabf21da36a6736f98f8f80200f98bf"
+     },
+     {
+      "name": "PAINT_PIT_0",
+      "full": "e91bd103e1aef884c4b064a8a25861b5915a4644a8a8ea8bb5d02b3513e52256"
+     },
+     {
+      "name": "PAINT_PIT_1",
+      "full": "9a550ee10a3881014ef5ac17c1f5a48909b30b5919b20558c260bccb94478e2e"
+     },
+     {
+      "name": "UNDERSKIN_p1_chunk_0",
+      "full": "24e8b8a3c960289e8c1c482c40d4935cd6eb97acf47fce263fe30db846b78d86"
+     },
+     {
+      "name": "UNDERSKIN_p2_chunk_1",
+      "full": "9cc4b2596a39e33282fd02b4af8c8d5c9cb063b2718985b2e0b8a0f881b36467"
+     },
+     {
+      "name": "UNDERSKIN_p3_chunk_2",
+      "full": "995a2c5a73801058064fb9921be50232c56b094493015aa6be9a6ca6ad36547f"
+     },
+     {
+      "name": "UNDERSKIN_p5_chunk_3",
+      "full": "93c350f3f139ce3084cf68bd1921d96b6f7509bfabf41303243b302049390261"
+     }
+    ],
+    "hidden_geometry_kept": [
+     {
+      "name": "1ROAD_APRON_p1_chunk_0",
+      "geo": "1c1d45f2e364cc4b0d15fab79cf970a4327ffef230fb11f05a6bc071d8c42aac"
+     },
+     {
+      "name": "1ROAD_APRON_p2_chunk_1",
+      "geo": "08266ab893cdb0e7427e9acb0f9862bc0292e98ace126e299d4a71ce490d1e84"
+     },
+     {
+      "name": "1ROAD_APRON_p3_chunk_2",
+      "geo": "272910945399894de9ab3fd4ac6d9fb1356f6028964743009b979ee259fa84ad"
+     },
+     {
+      "name": "1ROAD_APRON_p5_chunk_3",
+      "geo": "968dc99fa7ecfcd9c78622325c0e4104f0c2230dec576c7b554f59a1348f8e9c"
+     }
+    ],
+    "replaced_by_the_lip_underside": [
+     "APRONSIDE_p1_chunk_0",
+     "APRONSIDE_p2_chunk_1",
+     "APRONSIDE_p3_chunk_2",
+     "APRONSIDE_p5_chunk_3"
+    ],
+    "added_lip": [
+     "APRONLIP_p1_chunk_0",
+     "APRONLIP_p2_chunk_1",
+     "APRONLIP_p3_chunk_2",
+     "APRONLIP_p5_chunk_3"
+    ]
+   }
+  },
+  "F2-halfpipe-default-lap-closed": {
+   "before_d593": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "33ab797150b29226e62168c39b7fe8347e05ac91d90596453cbd19f12ddddc4e",
+    "kn5Bytes": 9998381
+   },
+   "after_d593": {
+    "segs": "5fdbc30e4e0e1854045ac025e5fdb817a9876b8246e5a32ccf0423691d19df8b",
+    "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
+    "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
+    "meshParts": 3745,
+    "kn5": "843c0d995d877044a536bbc8500fb45b5fce0ffd1d0ae4f57933929936ae0380",
+    "kn5Bytes": 11776349
+   },
+   "measure": {
+    "changed": [
+     "kn5"
+    ],
+    "kn5_meshes_before": 24,
+    "kn5_meshes_after": 28,
+    "materials_before": [
+     "t180b_road",
+     "t180b_paint",
+     "t180b_underskin",
+     "t180b_apron"
+    ],
+    "materials_added": [
+     "t180b_road_lipshade"
+    ],
+    "kept_byte_for_byte": [
+     {
+      "name": "1ROAD_p1_chunk_0",
+      "full": "fb390a839c3e3381b0cd8fe54c61e794be690ac50511b8546d55a47e913bccbc"
+     },
+     {
+      "name": "1ROAD_p2_chunk_1",
+      "full": "c6f7008b95c46a60c9efce30a5d41b088a7365d4afa43695e1dff04bc54a0477"
+     },
+     {
+      "name": "1ROAD_p3_chunk_2",
+      "full": "f28b7ec4f81b74b63c684b794ed07ec8840b42e4ae2d4ea10edab0628249469b"
+     },
+     {
+      "name": "1ROAD_p4_chunk_3",
+      "full": "488972d39c45ce6dcb4d75855baecdfe8cd390f9fc96b6fc59456d327fa4c288"
+     },
+     {
+      "name": "1ROAD_p5_chunk_4",
+      "full": "327be7f60d3b3fb6fef0e72a0d18e356186f020574e36a72e99987c07882f893"
+     },
+     {
+      "name": "PAINT_START_LINE",
+      "full": "b8d3d1809de6d3d4134b1650b1140ff46d3cd416d4e4da9f74d6c9c45af1a246"
+     },
+     {
+      "name": "PAINT_GRID_0",
+      "full": "697789149d96700d5818df99e9441fa53a5cd7c4027cb758d7bbbfab288fd356"
+     },
+     {
+      "name": "PAINT_GRID_1",
+      "full": "57d57109aef2f512c88a938bbed06ad5ed29bccf1c55d787977abee0146a8a12"
+     },
+     {
+      "name": "PAINT_GRID_2",
+      "full": "85068d8e4f551e6c4ecb87ed02a8b328f6e03d169aba0360b6c13a88f7eef0d0"
+     },
+     {
+      "name": "PAINT_GRID_3",
+      "full": "a60a600a33d7b2e9df223662b22993b407a3c8d172980da9e9fd802205de9b18"
+     },
+     {
+      "name": "PAINT_PIT_0",
+      "full": "83940f329a74438ce759e9ffddd2bdbc1a4d0fe66875c008d97c7c8136bdba84"
+     },
+     {
+      "name": "PAINT_PIT_1",
+      "full": "4d8c667fe6e0ac88c743504087956316e762d0a21b5edce4575fbfd6cbce2767"
+     },
+     {
+      "name": "UNDERSKIN_p1_chunk_0",
+      "full": "1e763ffcf5e245836cae8dc4d87cb7561314f571b1f43db7541e2d99cdcb328b"
+     },
+     {
+      "name": "UNDERSKIN_p2_chunk_1",
+      "full": "27a5ec35e06389fde66349a704a9715f3b35c135c371c7c4ce4b9be76a35efdc"
+     },
+     {
+      "name": "UNDERSKIN_p3_chunk_2",
+      "full": "802588a0d1f8ad54f84eee419787643723f28b880c2c4a6671efd9c0445b3c46"
+     },
+     {
+      "name": "UNDERSKIN_p5_chunk_3",
+      "full": "a592fcf6b023f69f30f22cdd32908ffd7fec72469bfaa49e12d6f267adb16280"
+     }
+    ],
+    "hidden_geometry_kept": [
+     {
+      "name": "1ROAD_APRON_p1_chunk_0",
+      "geo": "b343c31b8b101deb438cd723d9c8ca2fd2903130268487fd458fffb462969a4f"
+     },
+     {
+      "name": "1ROAD_APRON_p2_chunk_1",
+      "geo": "261016bbc57556f75619432849da80f88c6f1421154b0c7c48267ec3853e6071"
+     },
+     {
+      "name": "1ROAD_APRON_p3_chunk_2",
+      "geo": "0107f16e52045241a887646743481c011ab65a70a7094a9557d79e7a9ff9c1e2"
+     },
+     {
+      "name": "1ROAD_APRON_p5_chunk_3",
+      "geo": "ed4ccb02042e11ba1a592740ea8437eaa0eb6a6e8a4755c97e73c9426e184039"
+     }
+    ],
+    "replaced_by_the_lip_underside": [
+     "APRONSIDE_p1_chunk_0",
+     "APRONSIDE_p2_chunk_1",
+     "APRONSIDE_p3_chunk_2",
+     "APRONSIDE_p5_chunk_3"
+    ],
+    "added_lip": [
+     "APRONLIP_p1_chunk_0",
+     "APRONLIP_p2_chunk_1",
+     "APRONLIP_p3_chunk_2",
+     "APRONLIP_p5_chunk_3"
+    ]
+   }
+  }
+ },
+ "unchanged": [
+  "F3-bowl-narrow-12m-cap-binds",
+  "F4-halfpipe-width-31.5-to-12-along-s",
+  "F5-flat-20m-bank-30",
+  "F6-bowl-r-brushed",
+  "F7-hill-then-jump",
+  "F8-mixed-families",
+  "F9-empty"
+ ]
+}
