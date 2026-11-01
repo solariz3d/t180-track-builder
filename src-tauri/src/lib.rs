@@ -168,6 +168,17 @@ fn save_track(app: tauri::AppHandle, name: String, text: String, stamp: Option<S
     Ok(kept.and_then(|k| k.file_name().and_then(|f| f.to_str()).map(String::from)))
 }
 
+/// THE OVERWRITE QUESTION: when the track file at `path` was last written, in ms since 1970, or None when there is none. The page names
+/// it when it asks before a save writes over another saved track (app/core/overwrite.js).
+pub fn saved_at(path: &Path) -> Option<u64> {
+    let t = fs::metadata(path).ok()?.modified().ok()?;
+    Some(t.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64)
+}
+#[tauri::command]
+fn track_saved_at(app: tauri::AppHandle, name: String) -> Result<Option<u64>, String> {
+    Ok(saved_at(&track_path(&app, &name)?))
+}
+
 /// A copy of the track AS IT IS NOW in track-backups (the shell's backupNow: before a Close, so a Close can be undone after the app
 /// is closed). Pruned like a save's. Returns the backup's file name.
 #[tauri::command]
@@ -767,6 +778,36 @@ pub fn install_with_retire(root: &Path, docs: &Path, folder: &str, files: &[(Str
     }
 }
 
+/// THE OVERWRITE QUESTION: what is installed as `folder` now, read before Export to Assetto Corsa writes over it (app/install/install.js asks
+/// when it holds a different road). `marker`: the builder's marker file is there (a folder without one is refused by the install and never touched);
+/// `geometry` and `written`: the road hash and the time that marker records, when it records them.
+#[derive(serde::Serialize, Debug, PartialEq)]
+pub struct InstalledState { pub exists: bool, pub marker: bool, pub geometry: Option<String>, pub written: Option<String> }
+
+pub fn installed_state_in(tracks: &Path, folder: &str) -> Result<InstalledState, String> {
+    if !valid_folder(folder) {
+        return Err(format!("{folder:?} is not a folder the builder makes (t180b_…)"));
+    }
+    let target = tracks.join(folder);
+    if !target.exists() {
+        return Ok(InstalledState { exists: false, marker: false, geometry: None, written: None });
+    }
+    let marker_path = target.join(MARKER_FILE);
+    if !marker_path.is_file() {
+        return Ok(InstalledState { exists: true, marker: false, geometry: None, written: None });
+    }
+    // a marker that cannot be read is still the builder's: it records no road, so the page asks
+    let text = fs::read_to_string(&marker_path).unwrap_or_default();
+    let written = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.get("written")?.as_str().map(String::from));
+    Ok(InstalledState { exists: true, marker: true, geometry: marker_geometry(&text), written })
+}
+
+#[tauri::command]
+fn installed_state(app: tauri::AppHandle, folder: String) -> Result<InstalledState, String> {
+    let root = ac::recall_ac_root(&data_dir(&app)?)?.ok_or("no Assetto Corsa folder picked yet")?;
+    installed_state_in(&ac::tracks_of(&root)?, &folder)
+}
+
 #[tauri::command]
 fn install_track(app: tauri::AppHandle, staged: tauri::State<'_, Staged>, request: tauri::ipc::Request<'_>) -> Result<Installed, String> {
     let (head, files) = files_of(&request, &staged)?;
@@ -862,7 +903,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_tracks, save_track, open_track, backup_track, list_track_backups, open_track_backup, save_library, open_library,
             save_autosave, open_autosave, clear_autosave, write_export, write_layouts_export, stage_files, folder_is_empty, remove_empty_folder,
-            get_ac_root, find_ac_root, set_ac_root, install_track, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
+            get_ac_root, find_ac_root, set_ac_root, install_track, installed_state, track_saved_at, get_see_it_setting, set_see_it_setting, see_it_in_assetto,
             test_export_folder, find_blender, set_blender_path, write_blender_export, list_pieces, open_piece, save_piece, delete_piece, save_undo, open_undo, append_input_log
         ])
         .run(tauri::generate_context!())
@@ -1328,5 +1369,36 @@ mod tests {
         assert_eq!(utc_stamp(1_792_260_005), "2026-10-17_180005Z");
         assert_eq!(marker_geometry(&String::from_utf8(geo_marker(Some(GEO_A))).unwrap()).as_deref(), Some(GEO_A));
         for bad in [r#"{"geometry":"md5:abc"}"#, r#"{"geometry":"sha256:short"}"#, r#"{"geometry":5}"#, "{ broken", "{}"] { assert_eq!(marker_geometry(bad), None, "{bad}"); }
+    }
+
+    // ---- the overwrite question: what the page asks about before a save or an install writes over something
+    #[test]
+    fn installed_state_tells_no_folder_a_folder_not_ours_and_a_marker_with_or_without_its_road() {
+        let d = scratch("installed-state");
+        let tracks = d.join("tracks");
+        fs::create_dir_all(&tracks).unwrap();
+        assert_eq!(installed_state_in(&tracks, "t180b_x").unwrap(), InstalledState { exists: false, marker: false, geometry: None, written: None });
+        fs::create_dir_all(tracks.join("t180b_x")).unwrap();
+        assert_eq!(installed_state_in(&tracks, "t180b_x").unwrap(), InstalledState { exists: true, marker: false, geometry: None, written: None }, "a folder the builder did not make");
+        fs::write(tracks.join("t180b_x").join(MARKER_FILE), format!(r#"{{"tool":"t180-track-builder","written":"2026-10-22T19:37:36.000Z","geometry":"{GEO_A}"}}"#)).unwrap();
+        assert_eq!(installed_state_in(&tracks, "t180b_x").unwrap(), InstalledState { exists: true, marker: true, geometry: Some(GEO_A.into()), written: Some("2026-10-22T19:37:36.000Z".into()) });
+        fs::write(tracks.join("t180b_x").join(MARKER_FILE), geo_marker(None)).unwrap();
+        assert_eq!(installed_state_in(&tracks, "t180b_x").unwrap(), InstalledState { exists: true, marker: true, geometry: None, written: None }, "a marker from before the road was recorded");
+        fs::write(tracks.join("t180b_x").join(MARKER_FILE), b"{ not json").unwrap();
+        assert_eq!(installed_state_in(&tracks, "t180b_x").unwrap(), InstalledState { exists: true, marker: true, geometry: None, written: None }, "an unreadable marker is still the builder's");
+        assert!(installed_state_in(&tracks, "ks_monza").is_err(), "only a folder the builder makes is asked about");
+        assert!(installed_state_in(&tracks, "../t180b_x").is_err());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn saved_at_is_the_track_file_s_own_time_and_none_for_no_track() {
+        let d = scratch("saved-at");
+        let p = d.join("eq-ELYSIUM.t180track");
+        assert_eq!(saved_at(&p), None);
+        fs::write(&p, b"track").unwrap();
+        let want = fs::metadata(&p).unwrap().modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        assert_eq!(saved_at(&p), Some(want));
+        let _ = fs::remove_dir_all(&d);
     }
 }

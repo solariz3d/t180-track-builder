@@ -14,9 +14,10 @@ const { createInstaller, createLauncher, PREFIX_NOTE } = require('./install.js')
 
 const el = (tag, props = {}, kids = []) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
-function mount(root, shell, { native, pickFolder, getTextures, more = null, card: cardEl = null, testButton = null, banner = null }) {
+function mount(root, shell, { native, pickFolder, getTextures, more = null, card: cardEl = null, testButton = null, banner = null, confirmReplace = null }) {
   // buildExportAsync, the export in a process of its own (app/export/exportrunner.js): the user's white window was this press running out of memory on the page
-  const inst = createInstaller({ build: (opts) => shell.buildExportAsync(opts), native, getDoc: () => shell.exportDoc(), getTextures });
+  // confirmReplace: the page's overwrite question (app/core/overwrite.js), asked before a folder holding a different road is replaced
+  const inst = createInstaller({ build: (opts) => shell.buildExportAsync(opts), native, getDoc: () => shell.exportDoc(), getTextures, confirmReplace });
   const see = createLauncher({ native });
   const install = el('button', { textContent: 'Export to Assetto Corsa', title: `export straight into Assetto Corsa's content\\tracks, found through Steam; exporting the same track again updates its folder (${PREFIX_NOTE})` });
   const change = el('button', { textContent: 'Assetto Corsa folder…', title: 'the Assetto Corsa folder exports go into (the one with content\\tracks)' });
@@ -39,7 +40,8 @@ function mount(root, shell, { native, pickFolder, getTextures, more = null, card
     say(r.message); if (r.ok) last = r.folder;
     if (!r.needsRoot) dropCard();   // Export found and remembered AC (get_ac_root), so the startup card has nothing left to ask
     // the note above is cut to its box, so the whole result also shows in the page's export banner, uncut, until a click or the next action
-    if (banner && r.message) { if (r.ok) banner.done(r.message); else banner.fail(r.message); }
+    // a Cancel at the overwrite question (r.cancelled) is the user's choice, not a failure: the banner is cleared and the note says what was left
+    if (banner && r.message) { if (r.ok) banner.done(r.message); else if (r.cancelled) banner.clear(); else banner.fail(r.message); }
   };
   // a failure nobody planned for still ends the banner, with its reason, and is thrown on as before
   const guarded = async (opts) => { try { return await run(opts); } catch (e) { if (banner) banner.fail(`not exported: ${(e && e.message) || e}`); throw e; } };

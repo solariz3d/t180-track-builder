@@ -32,7 +32,7 @@ file in both places.
 | **the app's state and every action** | `app/core/coreshell.js` `createCoreShell` | no DOM and no Tauri in it, so its tests drive it headless |
 | **the 3D preview** | `app/preview/preview.js` `createPreview`, `app/preview/index.js` `mount`; the hover pick is `pickAcross` (boxes of stations, `cullBlocks`, and `halfBound` skip what is out of reach; the same answer as reading every station) | `trackmodel.js` `createTrackModel` (path and mesh kept in step with the document), `renderer.js` `createRenderer` (far from the eye the placed road is drawn from thinner index lists: `coarseIndices`, `LOD_NEAR`; the export, the checker and the readouts never see it), `batches.js`, `look.js`, `aclook.js`, `coarse.js`, `guides.js`; cameras in `app/camera/cameras.js` `createRig` |
 | **keys** | `app/core/keys.js` `keyAction`, `sculptKey`, `bindKeys` | the camera's keys: `app/camera/cameras.js` |
-| **installing into AC and "See it"** | `app/install/install.js` `createInstaller`, `createLauncher` | `src-tauri/src/ac.rs` |
+| **installing into AC and "See it"** | `app/install/install.js` `createInstaller`, `createLauncher` | `src-tauri/src/ac.rs`; before a different road is replaced, `app/core/overwrite.js` `installNeedsAsk` over `src-tauri/src/lib.rs` `installed_state` |
 
 ## Directories
 
@@ -104,7 +104,7 @@ file in both places.
 - `app/markers/`, `app/texture/`, `app/texmaker/`: those panels' logic, each with no DOM (`createMarkersController`, `createTextureController`, `createEditor`).
 - `app/lib/`: `cjs.js` (loads the CommonJS files in the webview, `loadCjs`), `theme.js` (the look per melody), `tokens.js` (the look's colours for canvas and GL).
 - `app/themes/`: one stylesheet per look. `app/sounds/`: the recorded samples. `app/sound.js`: the sounds and melodies (`createSound`).
-- Top-level files: `settings.js` (saved settings, `createSettings`), `titlebar.js`, `closer.js` (the one close handler), `askdialog.js` (a question in the builder's look), `hovertip.js` (every title's words in a hover card in the look's own colours, not Windows' tooltip), `shell.js` (the older piece builder's shell, kept only as a test driver for the shared preview and checker; its keys moved to `app/core/keys.js`).
+- Top-level files: `settings.js` (saved settings, `createSettings`), `titlebar.js`, `closer.js` (the one close handler), `askdialog.js` (a question in the builder's look; `app/core/overwrite.js` holds the two it asks before Save or Export to Assetto Corsa writes over another track, and when to ask), `hovertip.js` (every title's words in a hover card in the look's own colours, not Windows' tooltip), `shell.js` (the older piece builder's shell, kept only as a test driver for the shared preview and checker; its keys moved to `app/core/keys.js`).
 - `app/testhook/`: read-only hooks the window proof uses (`probe.js`, `ghostword.js`). `app/README.md`: how panels mount ("the seam").
 
 ## `scripts/`
