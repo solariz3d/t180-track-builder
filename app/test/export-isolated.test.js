@@ -78,7 +78,14 @@ function digestOf(out) {
 // road alone) and from ace32da6e9890964 / bfb1bda31e289ce1 (the apron alone) to the values below, because the merged exporter writes both: data/surfaces.ini's
 // soft block with SOFT_CFM=0.00005 (src/export/trackfiles.js) and an edge apron outside the road's open edges (src/export/apron.js). Each alone was proven the
 // only cause of its own move against 9f3a7040bf4356e9 / a257c20e84e68897; the pair below was read with PRINT_D437B=1 on the merged tree.
-const PIN = { lap: 'sha256 257d550e6870bdf1 files 10', open: 'sha256 2b6ad34e0f135050 files 11' };
+// AMENDED BY NAME (2026-11-01, D593, the apron reads as part of the road): both pins moved from 257d550e6870bdf1 / 2b6ad34e0f135050 (a93ae51, read there with
+// PRINT_D437B=1) to the values below, because the edge apron's physics plank is now hidden under a separate visual lip in a shade of the road's own material, and
+// the pit lane grows out of the road with an apron and skins of its own. Compared mesh by mesh against a93ae51 (test/fixtures/kn5nodes.js): road physics and
+// paint the same bytes in both exports; the physics aprons only hidden (geometry the same); the APRONSIDE_ joins now the lip's underside; APRONLIP_ meshes and the
+// <road material>_lipshade material added; on the lap the pit lane's in, out and fill surfaces, its new skins, apron and lip, and the road skin's vertices within
+// 0.5 m of the lane hung again; and the lap's map (data/map.ini, map.png, ui/outline.png) 2 m wider on the lane's side, where the lane's physics apron
+// (1ROAD_APRON_PIT_R) now lies. Nothing else moved; the file counts are the same.
+const PIN = { lap: 'sha256 60e346e18df0144b files 10', open: 'sha256 7b587edcbcefc314 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });
