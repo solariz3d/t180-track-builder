@@ -21,6 +21,7 @@
 //  15  the visual underside follows the lip (it bends with it) and meets the skin with the skin's own normal
 //  16  the physics apron is exactly apronOf's plank and is hidden (not visible, not renderable, no shadow); the lip has no physics prefix, the road's material and uvs
 //  17  the physics apron is byte for byte what the user drove, pinned at a93ae51, on a flat, a banked and a cupped edge
+//  18  the pit IS the track: no drawn and no physics triangle clips through another round the lane, and no drawn edge is left open round either of its ends
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -354,4 +355,74 @@ test('row 17: the physics apron is byte for byte what the user drove (pinned at 
   const h = require('crypto').createHash('sha256'), bytes = (x) => Buffer.from(x.buffer, x.byteOffset, x.byteLength);
   for (const [, doc] of EDGES) { const { out } = build(doc, {}); for (const a of tops(out)) { const m = a.children[0]; h.update(m.name); h.update(out.materials[m.material].name); for (const f of ['positions', 'normals', 'uvs', 'indices']) h.update(bytes(m[f])); } }
   assert.equal(h.digest('hex'), PHYSICS_SHA256);
+});
+
+// ── D593: the pit IS the track (the user, 18:11: "the pit and apron geometry clip through each other... I want it to look exactly how it does on the rest of the track
+// like the pit IS the track"; 18:13, from below: "a big gap") ──
+// CLIPS: an edge of one triangle passing through the inside of another of a different mesh (more than 0.1 mm off its plane on both sides, more than 0.1 mm inside its
+// edges), between two triangles that share no vertex (welded within 1 mm), counted apart for the DRAWN meshes (renderable and visible) and the PHYSICS ones (1ROAD_…).
+// HOLES: edges used by one triangle over all the drawn SURFACES together (road, lane, infill, lip, underside, skins; welded within 2 mm), around the lane's two ends.
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function acMeshes(b) { const out = []; const walk = (n) => { if (n.type === 'mesh') out.push(n); (n.children || []).forEach(walk); }; walk(b.acScene.root); return out; }
+function clipCount(meshes, lo, hi) {
+  const EPS = 1e-4, WELD = 1e-3, tris = [];
+  meshes.forEach((m, mi) => {
+    const drawn = m.renderable !== false && m.visible !== false, physics = /^1(?:ROAD|GRIP\d{3})_/.test(m.name), P = m.positions, I = m.indices;
+    if (!drawn && !physics) return;
+    for (let t = 0; t < I.length; t += 3) {
+      const v = [0, 1, 2].map((k) => [P[I[t + k] * 3], P[I[t + k] * 3 + 1], P[I[t + k] * 3 + 2]]);
+      if (v.every((p) => p.some((x, k) => x < lo[k] || x > hi[k]))) continue;
+      tris.push({ v, mi, drawn, physics, bl: [0, 1, 2].map((k) => Math.min(v[0][k], v[1][k], v[2][k])), bh: [0, 1, 2].map((k) => Math.max(v[0][k], v[1][k], v[2][k])), keys: v.map((p) => p.map((x) => Math.round(x / WELD)).join(',')) });
+    }
+  });
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const pierces = (p, q, a, b, c) => {
+    const n = cross(sub(b, a), sub(c, a)), ln = Math.hypot(...n); if (!(ln > 1e-12)) return false;
+    const u = n.map((x) => x / ln), dp = dot3(sub(p, a), u), dq = dot3(sub(q, a), u);
+    if (!((dp > EPS && dq < -EPS) || (dp < -EPS && dq > EPS))) return false;
+    const s = dp / (dp - dq), x = [p[0] + (q[0] - p[0]) * s, p[1] + (q[1] - p[1]) * s, p[2] + (q[2] - p[2]) * s];
+    for (const [e0, e1] of [[a, b], [b, c], [c, a]]) { const inward = cross(u, sub(e1, e0)); if (dot3(sub(x, e0), inward) / Math.hypot(...inward) <= EPS) return false; }
+    return true;
+  };
+  const CELL = 2, grid = new Map();
+  tris.forEach((t, id) => { for (let i = Math.floor(t.bl[0] / CELL); i <= Math.floor(t.bh[0] / CELL); i++) for (let j = Math.floor(t.bl[1] / CELL); j <= Math.floor(t.bh[1] / CELL); j++) for (let k = Math.floor(t.bl[2] / CELL); k <= Math.floor(t.bh[2] / CELL); k++) { const kk = `${i},${j},${k}`; if (!grid.has(kk)) grid.set(kk, []); grid.get(kk).push(id); } });
+  const seen = new Set(), out = { drawn: 0, physics: 0, where: [] };
+  for (const list of grid.values()) for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length; y++) {
+    const A = tris[list[x]], B = tris[list[y]]; if (A.mi === B.mi) continue;
+    const pk = `${Math.min(list[x], list[y])}:${Math.max(list[x], list[y])}`; if (seen.has(pk)) continue; seen.add(pk);
+    if (A.keys.some((k) => B.keys.includes(k)) || A.bh.some((h, k) => h < B.bl[k]) || B.bh.some((h, k) => h < A.bl[k])) continue;
+    const fam = A.drawn && B.drawn ? 'drawn' : A.physics && B.physics ? 'physics' : null; if (!fam) continue;
+    let hit = false; for (let i = 0; i < 3 && !hit; i++) hit = pierces(A.v[i], A.v[(i + 1) % 3], ...B.v) || pierces(B.v[i], B.v[(i + 1) % 3], ...A.v);
+    if (hit) { out[fam]++; if (out.where.length < 6) out.where.push(`${meshes[A.mi].name} × ${meshes[B.mi].name} at ${A.v[0].map((v) => v.toFixed(1))}`); }
+  }
+  return out;
+}
+function holesAround(meshes, c, R) {
+  const WELD = 2e-3, CUT = 2, ids = new Map(), pts = [], dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const idOf = (p) => { const k = p.map((x) => Math.floor(x / WELD)); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let l = -1; l <= 1; l++) for (const id of ids.get(`${k[0] + i},${k[1] + j},${k[2] + l}`) || []) if (dist(pts[id], p) <= WELD) return id; const id = pts.length; pts.push(p); const kk = k.join(','); if (!ids.has(kk)) ids.set(kk, []); ids.get(kk).push(id); return id; };
+  const edges = new Map();
+  // the SURFACES (road, lane, infill, lip, underside, skins): a painted marker is a decal laid on the road, its border open by nature, not a hole in it
+  for (const m of meshes.filter((x) => x.renderable !== false && x.visible !== false && /^(1(?:ROAD|GRIP\d{3})_|APRON|UNDERSKIN)/.test(x.name))) for (let t = 0; t < m.indices.length; t += 3) {
+    const v = [0, 1, 2].map((k) => [m.positions[m.indices[t + k] * 3], m.positions[m.indices[t + k] * 3 + 1], m.positions[m.indices[t + k] * 3 + 2]]);
+    if (v.every((p) => dist(p, c) > R + 5) || !(Math.hypot(...cross3(sub(v[1], v[0]), sub(v[2], v[0]))) > 1e-10)) continue;   // a triangle of no area closes nothing
+    const id = v.map(idOf);
+    for (const [x, y] of [[id[0], id[1]], [id[1], id[2]], [id[2], id[0]]]) { if (x === y) continue; const k = x < y ? `${x}|${y}` : `${y}|${x}`; edges.set(k, (edges.get(k) || 0) + 1); }
+  }
+  return [...edges].filter(([, n]) => n === 1).map(([k]) => k.split('|').map((i) => pts[+i])).filter(([a, b]) => dist(a, c) < R - CUT && dist(b, c) < R - CUT).map(([a, b]) => `${a.map((x) => x.toFixed(2))} → ${b.map((x) => x.toFixed(2))}`);
+}
+
+test('row 18: the pit IS the track: nothing clips (no drawn and no physics triangle through another, round the whole lane) and nothing gaps (no open edge drawn round either end)', () => {
+  const doc = lap('apron pit-is-track lap'), lane = { side: 'L', leave: { word: doc.pieces[0].id, along: 40 }, rejoin: { word: doc.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
+  const b = exportDoc(doc, {}, { pitLane: lane }), meshes = acMeshes(b);
+  const laneMeshes = meshes.filter((m) => /^1ROAD_PIT_/.test(m.name)); assert.ok(laneMeshes.length > 0, 'control: the lane is in the scene');
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const m of laneMeshes) for (let i = 0; i < m.positions.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], m.positions[i + k] - 30); hi[k] = Math.max(hi[k], m.positions[i + k] + 30); }
+  const c = clipCount(meshes, lo, hi);
+  assert.equal(c.drawn, 0, `drawn triangles clip through each other: ${c.where.join('; ')}`);
+  assert.equal(c.physics, 0, `physics triangles clip through each other: ${c.where.join('; ')}`);
+  const at = (s) => { let best = b.path.samples[0]; for (const q of b.path.samples) if (Math.abs(q.s - s) < Math.abs(best.s - s)) best = q; return best.pos; };
+  for (const [name, s] of [['leave', b.pitLane.joins.leave.s], ['rejoin', b.pitLane.joins.rejoin.s]]) {
+    const holes = holesAround(meshes, at(s), 25);
+    assert.deepEqual(holes.slice(0, 4), [], `${holes.length} open drawn edges round the ${name}`);
+  }
 });
