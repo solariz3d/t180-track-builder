@@ -71,7 +71,7 @@ function layoutSet(folder, entries, { t180 = true, softCollision = true } = {}) 
       [`${L}/data/surfaces.ini`]: tf.surfacesIni({ softCollision: !!t180 && softCollision, extendedPhysics: !!t180, grips: gripsOf(b.scene) }),
       [`${L}/data/map.ini`]: tf.mapIni(mp),
       [`${L}/map.png`]: tf.mapPng(b.scene, mp),
-      [`${L}/ai/fast_lane.ai`]: b.ai,
+      ...(b.ai ? { [`${L}/ai/fast_lane.ai`]: b.ai } : {}),   // none when the road goes vertical (fromwords.js buildFromSegments)
       [`ui/${L}/ui_track.json`]: JSON.stringify({ ...tf.uiTrack(b.scene, { ...b.desc, name: name.trim() }), priority: main ? 1 : 0 }, null, 2) + '\n',
       [`ui/${L}/preview.png`]: tf.previewPng(b.scene),
       [`ui/${L}/outline.png`]: tf.outlinePng(b.scene),

@@ -19,6 +19,7 @@ function exportWarningWords(w) {
   if (/mesh-node names repeat/.test(s)) return null;
   if (/^self-intersection NOT checked/.test(s)) return 'the road was not checked for running into itself';
   if (/^noblock:/.test(s)) return 'this folder has no soft-collision road: it was written only because it was asked for';
+  if (/^no-ai-line:/.test(s)) return 'this track goes vertical, so it has no AI line; it drives and times normally';
   if (/^amber: /.test(s)) return `past what any measured track has proven: ${plain(s.slice(7))}`;
   return plain(s);
 }

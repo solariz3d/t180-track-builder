@@ -46,6 +46,7 @@ const G = 9.81, DEG = Math.PI / 180;
 const EXTRA = ['speed', 'gas', 'brake', 'latG', 'radius', 'sideLeft', 'sideRight', 'camber', 'direction',
   'nx', 'ny', 'nz', 'length', 'fx', 'fy', 'fz', 'tag', 'grade'];
 const HEADER_BYTES = 16, POINT_BYTES = 20, EXTRA_BYTES = EXTRA.length * 4;
+const VERTICAL_DEG = 6;   // a point whose forward is within this of vertical has no line AC can load (generateAiLine)
 
 class AiLineError extends Error {
   constructor(code, message) { super(`${code}: ${message}`); this.name = 'AiLineError'; this.code = code; }
@@ -129,6 +130,11 @@ function generateAiLine(dsn, secs, opts = {}) {
     if (k > 0) len += dist(p.pos, pts[k - 1].pos);
     points.push({ pos: p.pos, length: len, id: k });
     const seg = dist(nx.pos, p.pos), fwd = last ? unit(sub(p.pos, pts[k - 1].pos)) : unit(sub(nx.pos, p.pos));
+    // A ROAD THAT GOES VERTICAL (2026-11-01, a lap falling through 90°): AC throws the stored normals away and recomputes each from the tangent crossed with
+    // world up, dividing by that cross's length, the tangent's horizontal part, so a point near vertical crashed the game as it loaded the line; and here
+    // left = up × forward came out as the zero vector, so the camber read ±π. No bytes describe such a road to AC: refused by name, and the export goes on
+    // without the file (fromwords.js).
+    if (Math.hypot(fwd[0], fwd[2]) < Math.sin(VERTICAL_DEG * DEG) && Math.hypot(fwd[0], fwd[1], fwd[2]) > 0) throw new AiLineError('VERTICAL_TANGENT', `point ${k} runs ${(Math.asin(Math.min(1, Math.abs(fwd[1]))) / DEG).toFixed(1)}° from level, within ${VERTICAL_DEG}° of vertical: Assetto Corsa's AI line cannot describe a road that steep`);
     // horizontal circumradius of (previous, this, next)
     const ax = pv.pos[0], az = pv.pos[2], bx = p.pos[0], bz = p.pos[2], cx = nx.pos[0], cz = nx.pos[2];
     const area2 = Math.abs((bx - ax) * (cz - az) - (cx - ax) * (bz - az));
@@ -188,4 +194,4 @@ function readAiLine(b) {
   return { version, lapTime, sampleCount, hasGrid, points, extra };
 }
 
-module.exports = { generateAiLine, encodeAiLine, readAiLine, AiLineError, EXTRA };
+module.exports = { generateAiLine, encodeAiLine, readAiLine, AiLineError, EXTRA, VERTICAL_DEG };

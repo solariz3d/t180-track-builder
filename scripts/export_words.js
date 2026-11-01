@@ -27,7 +27,7 @@ function main(argv) {
   const r = exportTrack(doc, { outDir, variant: arg(argv, '--variant') || 'block', csp: !argv.includes('--no-csp'), selfCheck: !argv.includes('--no-self-check') });
   console.log(`exported ${r.lengthM.toFixed(1)} m (${r.resolvedVia}); kn5 ${r.kn5Bytes} B sha256 ${r.kn5Sha.slice(0, 16)}…`);
   console.log(`  read back by tools/kn5.cjs: version ${r.readback.version}, ${r.readback.meshes} meshes, markers ${r.readback.dummies.filter((n) => /^AC_/.test(n)).join(' ')}`);
-  console.log(`  ai/fast_lane.ai: ${r.aiLine.points} points, ${r.aiLine.lengthM.toFixed(1)} m, ${r.aiLine.speedKmh} km/h`);
+  console.log(r.aiLine ? `  ai/fast_lane.ai: ${r.aiLine.points} points, ${r.aiLine.lengthM.toFixed(1)} m, ${r.aiLine.speedKmh} km/h` : '  ai/fast_lane.ai: none (the road goes vertical)');
   for (const f of r.folders) console.log(`  ${path.relative(REPO, f.dir) || f.dir}: ${f.files.length} files (${f.variant})`);
   for (const w of r.warnings) console.log(`  warning: ${w}`);
 }

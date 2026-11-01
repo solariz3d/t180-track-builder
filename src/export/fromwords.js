@@ -100,6 +100,7 @@ function endWall(path, segs, material) {
 }
 
 const MARKER_FILE = '.t180b-builder.json';   // the same ownership marker scripts/build_platform_test.js writes
+const NO_AI_LINE = 'no-ai-line: this track goes vertical, so it has no AI line; it drives and times normally';   // buildFromSegments, on ailine.js VERTICAL_TANGENT
 const LAYOUT = { height: 1.5, grid: 4, pits: 2 };   // the default layout's count, pits and height (src/markers/layout.js DEFAULTS)
 const VARIANTS = { block: [{ variant: 'block', suffix: '', softCollision: true }], noblock: [{ variant: 'noblock', suffix: '_noblock', softCollision: false }] };
 VARIANTS.both = [...VARIANTS.block, ...VARIANTS.noblock];
@@ -343,15 +344,17 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const speeds = segs.filter((g) => g.kind === 'road').map((g) => g.speed);
   const speedKmh = o.aiSpeedKmh !== undefined ? o.aiSpeedKmh : speeds.every((x) => Number.isFinite(x) && x > 0) ? Math.min(...speeds) * 3.6 : undefined;
   const { dsn, secs } = aiInput(segs, p);
-  const line = ailine.generateAiLine(dsn, secs, { mode: 'floor', speedKmh, DS: o.step, open: test });
-  const ai = ailine.encodeAiLine(line);
-  ailine.readAiLine(ai);
+  // a road that goes vertical has no AI line AC can load (ailine.js VERTICAL_TANGENT): the export goes on without ai/fast_lane.ai and says so; the track
+  // still drives and times, since AC times off the AC_TIME_ gates in the kn5
+  let line = null, ai = null;
+  try { line = ailine.generateAiLine(dsn, secs, { mode: 'floor', speedKmh, DS: o.step, open: test }); } catch (e) { if (e.code !== 'VERTICAL_TANGENT') throw e; warnings.push(`${NO_AI_LINE} (${e.message})`); }
+  if (line) { ai = ailine.encodeAiLine(line); ailine.readAiLine(ai); }
 
   const turn = segs.reduce((a, g) => a + ((g.k0 + g.k1) / 2) * g.length, 0);
   return {
     folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, acScene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, geometry: geometryOf(p, segs), resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
-    aiLine: { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh },
+    aiLine: line ? { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh } : null,
     desc: { name: (doc.name || 'Untitled') + (test ? ' (test, unfinished)' : ''), description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original', BUILDER], author, version: '0.1' },
     warnings,
   };
@@ -386,9 +389,11 @@ function writeFolder(b, outDir, v) {
   const kn5Name = `${b.folder}.kn5`;
   fs.writeFileSync(path.join(dir, kn5Name), b.kn5);
   const files = [kn5Name, ...trackfiles.writeTrackFiles(dir, b.scene, { softCollision: v.softCollision, extendedPhysics: v.extendedPhysics, kn5Files: [kn5Name], desc: b.desc })];
-  fs.mkdirSync(path.join(dir, 'ai'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'ai', 'fast_lane.ai'), b.ai);
-  files.push('ai/fast_lane.ai');
+  if (b.ai) {   // none when the road goes vertical (buildFromSegments)
+    fs.mkdirSync(path.join(dir, 'ai'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'ai', 'fast_lane.ai'), b.ai);
+    files.push('ai/fast_lane.ai');
+  }
   // a TEST export says so in the folder, with every red it did not block on
   if (b.test) { fs.writeFileSync(path.join(dir, TEST_FILE), ['TEST EXPORT OF AN UNFINISHED TRACK (t180-track-builder). Not a finished track: the loop is open, the AI line is open, and the reds below did NOT block it.', `Point-to-point gates AC_AB_START/FINISH; the finish is ${b.test.runoffM} m before the road's end (a run-off), and the road ends in a wall (${b.test.wall}).`, '', `${b.test.reds.length} red finding(s):`, ...b.test.reds.map((r) => `- ${r}`), ''].join(String.fromCharCode(13, 10))); files.push(TEST_FILE); }
   fs.writeFileSync(path.join(dir, MARKER_FILE), JSON.stringify({ tool: 't180-track-builder', module: 'src/export/fromwords.js', written: new Date().toISOString(), geometry: b.geometry, files }, null, 2) + '\n');
@@ -418,7 +423,7 @@ function writeExport(b, { outDir, variant, t180 }) {
   const warnings = [...b.warnings];
   if (t180) warnings.push(trackfiles.CSP_ONLY_WARNING);
   if (t180 && vs.some((v) => !v.softCollision)) warnings.push('noblock: this folder has no soft-collision block, which the checker reds; it is written only on request, as a test without the soft road');
-  return { folders, geometry: b.geometry, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: sha256(b.ai), aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.placed.filter((m) => !m.error).map((m) => ({ name: m.name, kind: m.kind, s: m.s, u: m.u, h: m.h })), paint: b.markers.paint.items, layout: b.markers.layout, warnings };
+  return { folders, geometry: b.geometry, kn5Sha: sha256(b.kn5), kn5Bytes: b.kn5.length, aiSha: b.ai ? sha256(b.ai) : null, aiLine: b.aiLine, readback: b.readback, lengthM: b.path.lengthM, resolvedVia: b.resolvedVia, markers: b.markers.placed.filter((m) => !m.error).map((m) => ({ name: m.name, kind: m.kind, s: m.s, u: m.u, h: m.h })), paint: b.markers.paint.items, layout: b.markers.layout, warnings };
 }
 
 module.exports = { exportTrack, buildExport, exportSegments, buildFromSegments, ExportError, folderName, LAYOUT, MARKER_FILE, _internal: { stations, aiInput, roadWidthM } };
