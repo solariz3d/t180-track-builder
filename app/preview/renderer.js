@@ -96,9 +96,15 @@ void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = 
 // (app/test/sky-dither.test.js). The pattern is the pass's own (pass_bayer2/4), so every style gets it and none carries a copy.
 // The index is built from small whole numbers only (each pixel's x and y mod 4: pass_bayer2 is the 2x2 index 0, 2, 3, 1, and the 4x4 is four times the
 // low bits' index plus the high bits'), because a form with the row squared lost levels in float32 above about 2,364 px (found in review); and it is
-// centred, (k + 0.5) / 16 for k = 0..15, so the offset runs from -15/32 to +15/32 of a step and averages zero.
+// centred, (k + 0.5) / 16 for k = 0..15, so the offset runs from -15/32 to +15/32 of a step and averages zero. Under the view's vignette (THE VIGNETTE
+// below) the offset is doubled, one step either way: at half a step a slow gradient still holds one value for up to 10 rows wherever it sits away from
+// a rounding edge, and the darkening made those read as rings; at a step either way every 4 rows of a column cross an edge (app/test/vignette-page.test.js).
+// Outside it the pass is as it was, so the stars keep their crisp half-peak width (app/test/sky-crisp.test.js; a step everywhere widened them to 2.5 px).
 const PASS_BAYER = `float pass_bayer2(vec2 p){ return 2.0 * mod(p.x + p.y, 2.0) + p.y; }
 float pass_bayer4(vec2 a){ vec2 p = mod(floor(a), 4.0), lo = mod(p, 2.0); return (4.0 * pass_bayer2(lo) + pass_bayer2(floor(p * 0.5)) + 0.5) / 16.0; }
+`;
+// the vignette's darkening at a pixel (THE VIGNETTE below): 0 inside the clear ellipse, up to 0.55 at its edge and beyond
+const VIGNETTE_K = `float vig_k(vec2 f, vec2 size){ vec2 d = (f / size - vec2(0.55, 0.62)) / vec2(1.2, 0.9); return 0.55 * clamp((length(d) - 0.55) / 0.45, 0.0, 1.0); }
 `;
 const SKY_VS = `
 attribute vec2 aPos;
@@ -112,18 +118,23 @@ precision highp float;
 precision mediump float;
 #endif
 varying vec3 vRay;
-uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime; uniform float uPx;
+uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime; uniform float uPx; uniform float uVig; uniform vec2 uSize;
 ${pattern}
-${PASS_BAYER}void main(){ vec3 c = clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0); gl_FragColor = vec4(clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0), 1.0); }`;
+${PASS_BAYER}${VIGNETTE_K}void main(){ float k = uVig * vig_k(gl_FragCoord.xy, uSize); vec3 c = clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0) * (1.0 - k);
+  if (k > 0.0) c += (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0;   // under the vignette the offset is doubled, one step either way (THE VIGNETTE)
+  gl_FragColor = vec4(clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0), 1.0); }`;
 const SKY_STRIP = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
 // THE VIGNETTE (the user, 2026-11-02: "a persistant render artifact below the red line i drew that traces it it follows me where eveer i go"). The soft
 // darkening toward the view's edges was a CSS radial-gradient on #preview::after, which the page composites in 8 bits with no dither, so over a dark sky
-// it showed as concentric steps pinned to the screen. It is now the frame's last pass, over everything drawn, with the same shape (the old gradient's:
-// centre 55% across and 38% down, radii 120% of the width and 90% of the height, clear to 55% of the way, then darkening linearly to 0.55 at 100%) and
-// the sky pass's dither added to what it leaves, so the steps break up as the sky's do (app/test/vignette.test.js). It blends ONE, SRC_ALPHA: what is
-// drawn is scaled by 1 - 0.55 t, plus up to one 8-bit step of the ordered pattern where t > 0, and the canvas's alpha is left as it was (opaque).
+// it showed as concentric steps pinned to the screen. Its shape is kept (vig_k: the old gradient's centre 55% across and 38% down, radii 120% of the
+// width and 90% of the height, clear to 55% of the way, then darkening linearly to 0.55 at 100%), and it is now applied where the final colour is
+// written, BEFORE that colour is dithered: the sky pass multiplies its colour by 1 - vig_k and then adds its ordered dither, and with no sky a backdrop
+// pass does the same for the clear colour. A first version drew it as one blended pass over the finished frame, with the dither in its colour; the
+// blend rounds the scaled frame to 8 bits with nothing to break it (the dither it added was itself rounded to 0 or 1 step), so the mean still stepped
+// (the real page, column x 1700: 6 steps; app/test/vignette-page.test.js). That blend is kept only for what is drawn ON the background (the road, its
+// lines), where a surface's own shading hides it: a quad at depth 0.9999 tested GREATER lands where something nearer was drawn, never on the sky.
 // A skin names it with --vignette (on unless it says none: Skyline's light sky keeps it off, as the page did); a renderer never told draws none.
-const VIGNETTE_VS = `attribute vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
+const VIGNETTE_VS = `attribute vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.9999, 1.0); }`;
 const VIGNETTE_FS = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -131,9 +142,18 @@ precision highp float;
 precision mediump float;
 #endif
 uniform vec2 uSize;
-${PASS_BAYER}
-void main(){ vec2 d = (gl_FragCoord.xy / uSize - vec2(0.55, 0.62)) / vec2(1.2, 0.9); float k = 0.55 * clamp((length(d) - 0.55) / 0.45, 0.0, 1.0);
-  gl_FragColor = vec4(vec3(k > 0.0 ? pass_bayer4(gl_FragCoord.xy) / 255.0 : 0.0), 1.0 - k); }`;
+${VIGNETTE_K}void main(){ gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - vig_k(gl_FragCoord.xy, uSize)); }`;
+// the backdrop with no sky: the clear colour, darkened and dithered as the sky pass is
+const BACKDROP_VS = `attribute vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
+const BACKDROP_FS = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec3 uSky; uniform vec2 uSize;
+${PASS_BAYER}${VIGNETTE_K}void main(){ float k = vig_k(gl_FragCoord.xy, uSize); if (k <= 0.0) discard;   // the clear colour itself where nothing darkens
+  vec3 c = uSky * (1.0 - k); gl_FragColor = vec4(clamp((pass_bayer4(gl_FragCoord.xy) - 0.5) / 127.5 + c, 0.0, 1.0), 1.0); }`;
 const VIGNETTES = ['on', 'none'];
 /** The inverse of a column-major 4×4 (cofactors); a singular matrix throws. */
 function invert4(m) {
@@ -294,7 +314,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   if (!gl) throw new Error('renderer: no WebGL context');
   let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // setTheme replaces these, the clear colour and the fog
   let skyStyle = 'none', skyProg = null, skyBuf = null, skyA = null, skyB = null, skyC = null;   // the sky; a colour left null is the clear colour
-  let vigProg = null;   // the vignette's pass while a skin names it (THE VIGNETTE above), else null and no pass
+  let vigProg = null;   // while a skin names the vignette (THE VIGNETTE above): { geo, back }, its pass over the drawn road and its backdrop; else null
   if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -446,26 +466,35 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
   }
   // uPx, the angle one device pixel spans at the middle of the view (2 |up| / height: up is the half-height ray offset at unit forward), so a
   // style can draw a point or an edge a pixel wide at any window size (prism's stars and moon limb)
-  function drawSky(B, time, height) {
+  function drawSky(B, time, width, height) {
     const sp = skyProg, s = clear, a = skyA || clear, b = skyB || clear, c = skyC || clear;
     if (!skyBuf) { skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.bufferData(gl.ARRAY_BUFFER, SKY_STRIP, gl.STATIC_DRAW); uploads++; }
     gl.useProgram(sp.p);
     gl.uniform3f(sp.fwd, B.fwd[0], B.fwd[1], B.fwd[2]); gl.uniform3f(sp.right, B.right[0], B.right[1], B.right[2]); gl.uniform3f(sp.up, B.up[0], B.up[1], B.up[2]);
     gl.uniform3f(sp.sky, s[0], s[1], s[2]); gl.uniform3f(sp.a, a[0], a[1], a[2]); gl.uniform3f(sp.b, b[0], b[1], b[2]); gl.uniform3f(sp.c, c[0], c[1], c[2]);
     gl.uniform1f(sp.time, time); gl.uniform1f(sp.px, 2 * Math.hypot(B.up[0], B.up[1], B.up[2]) / height);
+    gl.uniform1f(sp.vig, vigProg ? 1 : 0); gl.uniform2f(sp.size, width, height);
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
     gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.enableVertexAttribArray(sp.pos); gl.vertexAttribPointer(sp.pos, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   }
-  function drawVignette(width, height) {
-    const vp = vigProg;
+  function strip(pr) {
     if (!skyBuf) { skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.bufferData(gl.ARRAY_BUFFER, SKY_STRIP, gl.STATIC_DRAW); uploads++; }
-    gl.useProgram(vp.p); gl.uniform2f(vp.size, width, height);
-    gl.depthMask(false); gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ONE, gl.SRC_ALPHA, gl.ZERO, gl.ONE);
-    gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.enableVertexAttribArray(vp.pos); gl.vertexAttribPointer(vp.pos, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.enableVertexAttribArray(pr.pos); gl.vertexAttribPointer(pr.pos, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  }
+  // with no sky: the clear colour, darkened and dithered, writing no depth (THE VIGNETTE above)
+  function drawBackdrop(width, height) {
+    const bp = vigProg.back; gl.useProgram(bp.p); gl.uniform3f(bp.sky, clear[0], clear[1], clear[2]); gl.uniform2f(bp.size, width, height);
+    gl.depthMask(false); gl.disable(gl.DEPTH_TEST); strip(bp); gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  }
+  // over what was drawn on the background only: depth GREATER than the quad's 0.9999 fails where nothing nearer was drawn (the sky's pixels)
+  function drawVignette(width, height) {
+    const vp = vigProg.geo; gl.useProgram(vp.p); gl.uniform2f(vp.size, width, height);
+    gl.depthMask(false); gl.depthFunc(gl.GREATER); gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ZERO, gl.SRC_ALPHA, gl.ZERO, gl.ONE);
+    strip(vp);
+    gl.disable(gl.BLEND); gl.depthFunc(gl.LESS); gl.depthMask(true);
   }
   return {
     /** A skin's 3D colours, { sky, fog, edge, tie, grid }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
@@ -481,15 +510,19 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
         const src = SKY.patternSource(t.skyStyle), next = src ? program(SKY_VS, skyFS(src)) : null;
         if (next) {
           const u = (n) => gl.getUniformLocation(next.p, n);
-          Object.assign(next, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime'), px: u('uPx') });
+          Object.assign(next, { fwd: u('uFwd'), right: u('uRight'), up: u('uUp'), sky: u('uSky'), a: u('uSkyA'), b: u('uSkyB'), c: u('uSkyC'), time: u('uTime'), px: u('uPx'), vig: u('uVig'), size: u('uSize') });
         }
         if (skyProg) gl.deleteProgram(skyProg.p);
         skyProg = next; skyStyle = t.skyStyle;
       }
       if (t && t.vignette !== undefined) {
         if (!VIGNETTES.includes(t.vignette)) throw new Error(`renderer: the vignette is on or none, got ${JSON.stringify(t.vignette)}`);
-        if (t.vignette === 'on' && !vigProg) { const next = program(VIGNETTE_VS, VIGNETTE_FS); next.size = gl.getUniformLocation(next.p, 'uSize'); vigProg = next; }
-        if (t.vignette === 'none' && vigProg) { gl.deleteProgram(vigProg.p); vigProg = null; }
+        if (t.vignette === 'on' && !vigProg) {
+          const geo = program(VIGNETTE_VS, VIGNETTE_FS), back = program(BACKDROP_VS, BACKDROP_FS);
+          geo.size = gl.getUniformLocation(geo.p, 'uSize'); back.size = gl.getUniformLocation(back.p, 'uSize'); back.sky = gl.getUniformLocation(back.p, 'uSky');
+          vigProg = { geo, back };
+        }
+        if (t.vignette === 'none' && vigProg) { gl.deleteProgram(vigProg.geo.p); gl.deleteProgram(vigProg.back.p); vigProg = null; }
       }
       if (t.sky) clear = t.sky; if (t.fog) fog = t.fog; if (t.edge) edge = t.edge; if (t.tie) tie = t.tie; if (t.grid) gridColour = t.grid;
       if (t.skyA) skyA = t.skyA; if (t.skyB) skyB = t.skyB; if (t.skyC) skyC = t.skyC;
@@ -505,7 +538,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
       gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(true);
       const time = extras.time === undefined ? 0 : extras.time;
       if (!Number.isFinite(time)) throw new Error(`renderer: the sky's time is a number of seconds, got ${String(time)}`);
-      if (skyProg) drawSky(skyBasis(pose, width / height), time, height);
+      if (skyProg) drawSky(skyBasis(pose, width / height), time, width, height); else if (vigProg) drawBackdrop(width, height);
       const vp = new Float32Array(M.viewProj(pose, width / height));
       if (extras.grid) { use(line, vp); gl.enableVertexAttribArray(line.pos); drawLines(extras.grid.positions, IDENTITY, gridColour, 1); }
       let chunks;
@@ -540,7 +573,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
         }
         gl.enable(gl.DEPTH_TEST);
       }
-      if (vigProg) drawVignette(width, height);   // over everything drawn (THE VIGNETTE above)
+      if (vigProg) drawVignette(width, height);   // over the road and what else was drawn on the background (THE VIGNETTE above)
       for (const [arr, e] of buffers) if (e.gen !== gen) { gl.deleteBuffer(e.buf); buffers.delete(arr); }   // no longer drawn
       for (const [arr, e] of texes) if (e.gen !== gen) { gl.deleteTexture(e.t); texes.delete(arr); }
     },
@@ -548,10 +581,10 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     dispose() {
       for (const e of buffers.values()) gl.deleteBuffer(e.buf); buffers.clear();
       for (const e of texes.values()) gl.deleteTexture(e.t); texes.clear(); if (white) gl.deleteTexture(white);
-      if (skyProg) gl.deleteProgram(skyProg.p); if (vigProg) gl.deleteProgram(vigProg.p); if (skyBuf) gl.deleteBuffer(skyBuf);
+      if (skyProg) gl.deleteProgram(skyProg.p); if (vigProg) { gl.deleteProgram(vigProg.geo.p); gl.deleteProgram(vigProg.back.p); } if (skyBuf) gl.deleteBuffer(skyBuf);
       gl.deleteProgram(surf.p); gl.deleteProgram(line.p); for (const pr of Object.values(ac)) gl.deleteProgram(pr.p);
     },
   };
 }
 
-module.exports = { VIGNETTE_VS, VIGNETTE_FS, createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };
+module.exports = { VIGNETTE_VS, VIGNETTE_FS, BACKDROP_FS, createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };

@@ -116,16 +116,25 @@ test('row 2: the look is kept: over a flat field the darkening is the old gradie
   t.diagnostic(`mean offset from the old gradient, 8-bit steps per channel: ${JSON.stringify(report)}`);
 });
 
-test('row 3: named, the vignette is the frame\'s last draw, over everything, keeping the canvas opaque; left out, no pass; an unknown word is refused', () => {
+// AMENDED (2026-11-02, a review of the real page found it still stepped): the darkening is applied in the passes that write the background's
+// final colour, before their dither (the sky pass, or a backdrop pass when there is no sky), and the blended pass is kept only for what is drawn on the
+// background, by depth; app/test/vignette-page.test.js judges the real page
+test('row 3: named, the background pass darkens before it dithers (a backdrop when there is no sky), and a last pass darkens only what was drawn on it, keeping the canvas opaque; left out, no pass; an unknown word is refused', () => {
   const extras = { look: 'words', grid: { positions: new Float32Array([0, 0, 0, 1, 0, 0]) }, overlay: [{ positions: new Float32Array([0, 0, 0, 0, 0, 1]), colour: [1, 0, 0], alpha: 1 }] };
   const frame = (theme) => { const { gl, calls } = recordingGL(), r = R.createRenderer(gl); if (theme) r.setTheme(theme); const at = calls.length; r.draw([], POSE, { width: 800, height: 600 }, extras); return calls.slice(at); };
   const on = frame({ vignette: 'on' }), draws = on.map((c, i) => [c, i]).filter(([c]) => c[0] === 'drawArrays' || c[0] === 'drawElements');
-  const [last, li] = draws[draws.length - 1], overlayAt = on.findIndex((c) => c[0] === 'drawArrays' && c[1] === 'LINES' && c[3] === 2);
+  const [first] = draws[0], [last, li] = draws[draws.length - 1], overlayAt = on.findIndex((c) => c[0] === 'drawArrays' && c[1] === 'LINES' && c[3] === 2);
+  assert.deepEqual(first.slice(0, 4), ['drawArrays', 'TRIANGLE_STRIP', 0, 4], 'no sky: the first draw is the backdrop, one full-screen strip');
+  assert.ok(on.some((c) => c[0] === 'uniform3f' && c[1] === 'uSky'), 'the backdrop is the clear colour');
   assert.deepEqual(last.slice(0, 4), ['drawArrays', 'TRIANGLE_STRIP', 0, 4], 'the last draw is one full-screen strip');
   assert.ok(overlayAt >= 0 && overlayAt < li, 'it comes after the overlay, as the page\'s layer did');
-  const blend = on.slice(0, li).reverse().find((c) => c[0] === 'blendFuncSeparate');
-  assert.deepEqual(blend && blend.slice(1), ['ONE', 'SRC_ALPHA', 'ZERO', 'ONE'], 'it scales what is drawn (plus its dither) and leaves the alpha as it was, so the canvas stays opaque');
-  assert.ok(on.slice(li).some((c) => c[0] === 'disable' && c[1] === 'BLEND'), 'blending is off again after it');
+  const blend = on.slice(0, li).reverse().find((c) => c[0] === 'blendFuncSeparate'), depth = on.slice(0, li).reverse().find((c) => c[0] === 'depthFunc');
+  assert.deepEqual(blend && blend.slice(1), ['ZERO', 'SRC_ALPHA', 'ZERO', 'ONE'], 'it scales what is drawn and leaves the alpha as it was, so the canvas stays opaque');
+  assert.deepEqual(depth && depth.slice(1), ['GREATER'], 'only where something nearer than the background was drawn');
+  assert.ok(on.slice(li).some((c) => c[0] === 'disable' && c[1] === 'BLEND') && on.slice(li).some((c) => c[0] === 'depthFunc' && c[1] === 'LESS'), 'blending is off and the depth test is LESS again after it');
+  const sky = frame({ vignette: 'on', skyStyle: 'sun' });
+  assert.ok(sky.some((c) => c[0] === 'uniform1f' && c[1] === 'uVig' && c[2] === 1), 'with a sky, the sky pass darkens (uVig 1)');
+  assert.ok(frame({ skyStyle: 'sun' }).some((c) => c[0] === 'uniform1f' && c[1] === 'uVig' && c[2] === 0), 'a sky with no vignette named: uVig 0');
   const off = frame(null), offNone = frame({ vignette: 'none' });
   for (const [name, f] of [['no vignette named', off], ['vignette none', offNone]]) {
     assert.ok(!f.some((c) => c[0] === 'blendFuncSeparate'), `${name}: no vignette pass`);

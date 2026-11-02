@@ -225,9 +225,10 @@ function colourGL() {
     getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport() {}, clear() {}, enable() {}, disable() {}, uniformMatrix4fv() {}, uniform1f() {},
     uniform2f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {}, createBuffer: () => ({ id: ++id }), bindBuffer() {}, bufferData() {}, deleteBuffer() {}, deleteProgram() {},
     drawElements() {}, drawArrays() {},
-    // AMENDED (2026-11-02, the vignette's banding): SIGIL's frame now draws the view's vignette itself (renderer.js THE VIGNETTE, once a page's tokens name it), which
-    // blends; the stand-in takes those calls too. The colour calls this row compares are unchanged: the vignette sends no colour
-    blendFunc() {}, blendFuncSeparate() {},
+    // AMENDED (2026-11-02, the vignette's banding): SIGIL's frame now draws the view's vignette itself (renderer.js THE VIGNETTE, once a page's tokens name it):
+    // a backdrop of the clear colour (its uSky) and a blended pass by depth; the stand-in takes those calls too, and the row compares the colours without the
+    // backdrop's uSky, which it checks is the clear colour
+    blendFunc() {}, blendFuncSeparate() {}, depthFunc() {},
     clearColor: (...c) => log.push(['clear', ...c]), uniform3f: (n, ...c) => log.push([n, ...c]),
   };
   return { gl, log };
@@ -240,7 +241,9 @@ test('SIGIL\'s 3D frame is the same, call for call, with its tokens applied; a s
   const { win } = fakeWin({ '': sigilTokens(), skyline: { '--sky': 'color(srgb 0.3 0.6 0.95)', '--ground-grid': 'color(srgb 0.5 0.7 0.9)', '--fog': 'color(srgb 0.6 0.8 1)' } });
   const T = TK.createTokens(win), themed = colourGL(), r = R.createRenderer(themed.gl);
   r.setTheme(R.themeFrom(T)); r.draw([], pose, { width: 800, height: 600 }, { look: 'words', grid: lines });
-  assert.ok(base.log.length > 1, 'the frame sends colours'); assert.deepEqual(themed.log, base.log, 'SIGIL: identical colour calls');
+  const backdrop = themed.log.filter((c) => c[0] === 'uSky');
+  assert.ok(backdrop.length === 1 && backdrop[0].slice(1).every((v, i) => v === base.log[0][i + 1]), 'the vignette\'s backdrop is SIGIL\'s clear colour');
+  assert.ok(base.log.length > 1, 'the frame sends colours'); assert.deepEqual(themed.log.filter((c) => c[0] !== 'uSky'), base.log, 'SIGIL: identical colour calls');
   win.document.documentElement.setAttribute('data-theme', 'skyline'); T.refresh();
   const sky = colourGL(), r2 = R.createRenderer(sky.gl); r2.setTheme(R.themeFrom(T)); r2.draw([], pose, { width: 800, height: 600 }, { look: 'words', grid: lines });
   assert.deepEqual(sky.log[0], ['clear', 0.3, 0.6, 0.95, 1], 'the skin\'s sky is the clear colour');
