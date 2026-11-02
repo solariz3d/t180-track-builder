@@ -17,7 +17,7 @@
 //                   batch is drawn with its AC shader (acshaders.js, the Ms-PL port) and the uniforms aclook.js
 //                   uniformsFor gives, under aclook.js's ONE reference light. look 'words', or no materialOf, draws the
 //                   per-word colours instead. A sampler whose texture is not in extras.textures gets one white texel.
-//   r.setTheme({ sky, fog, edge, tie, grid, skyStyle, skyA, skyB, skyC })   a skin's 3D colours and its sky (themeFrom(tokens) reads them)
+//   r.setTheme({ sky, fog, edge, tie, grid, skyStyle, skyA, skyB, skyC, vignette })   a skin's 3D colours, its sky and its vignette (themeFrom(tokens) reads them)
 //   extras.time = seconds, for the sky's drift (the preview hands 0 under prefers-reduced-motion)
 //   r.stats()  -> { uploads, buffers, draws, lines, acDraws, textures, chunks, coarse, triangles }      uploads = bufferData + texImage2D calls;
 //                 chunks = the placed track's merged chunks drawn last frame (CHUNKS below); coarse = how many of the draws were thinned (LOD_NEAR below);
@@ -97,6 +97,9 @@ void main(){ float fog = clamp(exp(-uFogDensity * vDepth), 0.0, 1.0); float f = 
 // The index is built from small whole numbers only (each pixel's x and y mod 4: pass_bayer2 is the 2x2 index 0, 2, 3, 1, and the 4x4 is four times the
 // low bits' index plus the high bits'), because a form with the row squared lost levels in float32 above about 2,364 px (found in review); and it is
 // centred, (k + 0.5) / 16 for k = 0..15, so the offset runs from -15/32 to +15/32 of a step and averages zero.
+const PASS_BAYER = `float pass_bayer2(vec2 p){ return 2.0 * mod(p.x + p.y, 2.0) + p.y; }
+float pass_bayer4(vec2 a){ vec2 p = mod(floor(a), 4.0), lo = mod(p, 2.0); return (4.0 * pass_bayer2(lo) + pass_bayer2(floor(p * 0.5)) + 0.5) / 16.0; }
+`;
 const SKY_VS = `
 attribute vec2 aPos;
 uniform vec3 uFwd; uniform vec3 uRight; uniform vec3 uUp;
@@ -111,10 +114,27 @@ precision mediump float;
 varying vec3 vRay;
 uniform vec3 uSky; uniform vec3 uSkyA; uniform vec3 uSkyB; uniform vec3 uSkyC; uniform float uTime; uniform float uPx;
 ${pattern}
-float pass_bayer2(vec2 p){ return 2.0 * mod(p.x + p.y, 2.0) + p.y; }
-float pass_bayer4(vec2 a){ vec2 p = mod(floor(a), 4.0), lo = mod(p, 2.0); return (4.0 * pass_bayer2(lo) + pass_bayer2(floor(p * 0.5)) + 0.5) / 16.0; }
-void main(){ vec3 c = clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0); gl_FragColor = vec4(clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0), 1.0); }`;
+${PASS_BAYER}void main(){ vec3 c = clamp(skyPattern(normalize(vRay), uTime), 0.0, 1.0); gl_FragColor = vec4(clamp(c + (pass_bayer4(gl_FragCoord.xy) - 0.5) / 255.0, 0.0, 1.0), 1.0); }`;
 const SKY_STRIP = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+// THE VIGNETTE (the user, 2026-11-02: "a persistant render artifact below the red line i drew that traces it it follows me where eveer i go"). The soft
+// darkening toward the view's edges was a CSS radial-gradient on #preview::after, which the page composites in 8 bits with no dither, so over a dark sky
+// it showed as concentric steps pinned to the screen. It is now the frame's last pass, over everything drawn, with the same shape (the old gradient's:
+// centre 55% across and 38% down, radii 120% of the width and 90% of the height, clear to 55% of the way, then darkening linearly to 0.55 at 100%) and
+// the sky pass's dither added to what it leaves, so the steps break up as the sky's do (app/test/vignette.test.js). It blends ONE, SRC_ALPHA: what is
+// drawn is scaled by 1 - 0.55 t, plus up to one 8-bit step of the ordered pattern where t > 0, and the canvas's alpha is left as it was (opaque).
+// A skin names it with --vignette (on unless it says none: Skyline's light sky keeps it off, as the page did); a renderer never told draws none.
+const VIGNETTE_VS = `attribute vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
+const VIGNETTE_FS = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec2 uSize;
+${PASS_BAYER}
+void main(){ vec2 d = (gl_FragCoord.xy / uSize - vec2(0.55, 0.62)) / vec2(1.2, 0.9); float k = 0.55 * clamp((length(d) - 0.55) / 0.45, 0.0, 1.0);
+  gl_FragColor = vec4(vec3(k > 0.0 ? pass_bayer4(gl_FragCoord.xy) / 255.0 : 0.0), 1.0 - k); }`;
+const VIGNETTES = ['on', 'none'];
 /** The inverse of a column-major 4×4 (cofactors); a singular matrix throws. */
 function invert4(m) {
   const o = new Array(16);
@@ -268,12 +288,13 @@ const FOG = Object.freeze([0.07, 0.08, 0.1]);
 // a skin's 3D colours, read from the page's tokens (app/lib/tokens.js); each falls back to the literal here, which is SIGIL's token value too
 // and its sky, --sky-style (none when the page has none) with --sky-a, --sky-b and --sky-c, each falling back to the skin's --sky
 const themeFrom = (T) => { const sky = T.floats('--sky', CLEAR); return { sky, fog: T.floats('--fog', FOG), edge: T.floats('--road-edge', COLOURS.edge), tie: T.floats('--road-tie', COLOURS.tie), grid: T.floats('--ground-grid', COLOURS.grid),
-  skyStyle: T.word('--sky-style', 'none'), skyA: T.floats('--sky-a', sky), skyB: T.floats('--sky-b', sky), skyC: T.floats('--sky-c', sky) }; };
+  skyStyle: T.word('--sky-style', 'none'), skyA: T.floats('--sky-a', sky), skyB: T.floats('--sky-b', sky), skyC: T.floats('--sky-c', sky), vignette: T.word('--vignette', 'on') }; };
 
 function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chunkVertices = CHUNK_V } = {}) {
   if (!gl) throw new Error('renderer: no WebGL context');
   let edge = COLOURS.edge, tie = COLOURS.tie, gridColour = COLOURS.grid;   // setTheme replaces these, the clear colour and the fog
   let skyStyle = 'none', skyProg = null, skyBuf = null, skyA = null, skyB = null, skyC = null;   // the sky; a colour left null is the clear colour
+  let vigProg = null;   // the vignette's pass while a skin names it (THE VIGNETTE above), else null and no pass
   if (!(Number.isInteger(chunkVertices) && chunkVertices > 0 && chunkVertices <= CHUNK_V)) throw new Error(`renderer: chunkVertices must be a whole number from 1 to ${CHUNK_V}`);
   const shader = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -437,12 +458,21 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   }
+  function drawVignette(width, height) {
+    const vp = vigProg;
+    if (!skyBuf) { skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.bufferData(gl.ARRAY_BUFFER, SKY_STRIP, gl.STATIC_DRAW); uploads++; }
+    gl.useProgram(vp.p); gl.uniform2f(vp.size, width, height);
+    gl.depthMask(false); gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ONE, gl.SRC_ALPHA, gl.ZERO, gl.ONE);
+    gl.bindBuffer(gl.ARRAY_BUFFER, skyBuf); gl.enableVertexAttribArray(vp.pos); gl.vertexAttribPointer(vp.pos, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  }
   return {
     /** A skin's 3D colours, { sky, fog, edge, tie, grid }, each [r, g, b] from 0 to 1 (themeFrom(tokens) reads them); a key left out keeps its colour. */
     setTheme(t) {
       const ok = (v) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === 'number' && x >= 0 && x <= 1);
       for (const k of Object.keys(t || {})) {
-        if (k === 'skyStyle') continue;
+        if (k === 'skyStyle' || k === 'vignette') continue;
         if (!['sky', 'fog', 'edge', 'tie', 'grid', 'skyA', 'skyB', 'skyC'].includes(k)) throw new Error(`renderer: setTheme has no colour named ${k}`);
         if (!ok(t[k])) throw new Error(`renderer: the ${k} colour is three numbers from 0 to 1, got ${JSON.stringify(t[k])}`);
       }
@@ -455,6 +485,11 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
         }
         if (skyProg) gl.deleteProgram(skyProg.p);
         skyProg = next; skyStyle = t.skyStyle;
+      }
+      if (t && t.vignette !== undefined) {
+        if (!VIGNETTES.includes(t.vignette)) throw new Error(`renderer: the vignette is on or none, got ${JSON.stringify(t.vignette)}`);
+        if (t.vignette === 'on' && !vigProg) { const next = program(VIGNETTE_VS, VIGNETTE_FS); next.size = gl.getUniformLocation(next.p, 'uSize'); vigProg = next; }
+        if (t.vignette === 'none' && vigProg) { gl.deleteProgram(vigProg.p); vigProg = null; }
       }
       if (t.sky) clear = t.sky; if (t.fog) fog = t.fog; if (t.edge) edge = t.edge; if (t.tie) tie = t.tie; if (t.grid) gridColour = t.grid;
       if (t.skyA) skyA = t.skyA; if (t.skyB) skyB = t.skyB; if (t.skyC) skyC = t.skyC;
@@ -505,6 +540,7 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
         }
         gl.enable(gl.DEPTH_TEST);
       }
+      if (vigProg) drawVignette(width, height);   // over everything drawn (THE VIGNETTE above)
       for (const [arr, e] of buffers) if (e.gen !== gen) { gl.deleteBuffer(e.buf); buffers.delete(arr); }   // no longer drawn
       for (const [arr, e] of texes) if (e.gen !== gen) { gl.deleteTexture(e.t); texes.delete(arr); }
     },
@@ -512,10 +548,10 @@ function createRenderer(gl, { fog = FOG, fogDensity = 0.0012, clear = CLEAR, chu
     dispose() {
       for (const e of buffers.values()) gl.deleteBuffer(e.buf); buffers.clear();
       for (const e of texes.values()) gl.deleteTexture(e.t); texes.clear(); if (white) gl.deleteTexture(white);
-      if (skyProg) gl.deleteProgram(skyProg.p); if (skyBuf) gl.deleteBuffer(skyBuf);
+      if (skyProg) gl.deleteProgram(skyProg.p); if (vigProg) gl.deleteProgram(vigProg.p); if (skyBuf) gl.deleteBuffer(skyBuf);
       gl.deleteProgram(surf.p); gl.deleteProgram(line.p); for (const pr of Object.values(ac)) gl.deleteProgram(pr.p);
     },
   };
 }
 
-module.exports = { createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };
+module.exports = { VIGNETTE_VS, VIGNETTE_FS, createRenderer, coarseIndices, levelOf, LOD_NEAR, LOD_FAR, LOD_STEP, themeFrom, skyBasis, VS, FS, LVS, LFS, SKY_VS, skyFS, COLOURS, GHOST_ALPHA, TIE_FADE, CLEAR, FOG };

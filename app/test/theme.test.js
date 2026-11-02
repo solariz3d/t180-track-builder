@@ -225,6 +225,9 @@ function colourGL() {
     getAttribLocation: () => 0, getUniformLocation: (p, n) => n, useProgram() {}, viewport() {}, clear() {}, enable() {}, disable() {}, uniformMatrix4fv() {}, uniform1f() {},
     uniform2f() {}, enableVertexAttribArray() {}, vertexAttribPointer() {}, createBuffer: () => ({ id: ++id }), bindBuffer() {}, bufferData() {}, deleteBuffer() {}, deleteProgram() {},
     drawElements() {}, drawArrays() {},
+    // AMENDED (2026-11-02, the vignette's banding): SIGIL's frame now draws the view's vignette itself (renderer.js THE VIGNETTE, once a page's tokens name it), which
+    // blends; the stand-in takes those calls too. The colour calls this row compares are unchanged: the vignette sends no colour
+    blendFunc() {}, blendFuncSeparate() {},
     clearColor: (...c) => log.push(['clear', ...c]), uniform3f: (n, ...c) => log.push([n, ...c]),
   };
   return { gl, log };

@@ -255,8 +255,8 @@
   #camera [role="toolbar"] { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; padding: 5px 8px; background: rgba(8, 8, 7, .78); border: 1px solid var(--hair); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   #camera [role="toolbar"] button { border-color: transparent; font-size: 12px; padding: 6px 10px; }
   #camera [role="toolbar"] button[aria-pressed="true"], #camera [role="toolbar"] button.on { color: var(--accent); box-shadow: 0 -1px 0 var(--accent) inset; }
-  /* the depth behind the track: a soft vignette over the view (the road keeps its own lighting) */
-  #preview::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 55% 38%, transparent 55%, rgba(0, 0, 0, .55) 100%); }
+  /* the depth behind the track, a soft vignette over the view, is the renderer's own last pass now (app/preview/renderer.js THE VIGNETTE): drawn here in CSS it
+     banded in 8 bits over the dark skies; a skin turns it off with --vignette: none */
   /* D409: the camera label sits below the top readout (valuesoverlay.js: top 10px, about 56px tall), not under it; at 1400 px the readout reached over it */
   /* D581: its top is --hud-top (app/core/valuesoverlay.js): level with the column card where it clears the strip, else just under it */
   /* the view tag has a backing like the values strip's, so it never sits on the scene (a grid line at the horizon took it to 3.7 : 1) */
