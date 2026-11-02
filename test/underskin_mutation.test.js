@@ -13,14 +13,25 @@ const ROOT = path.join(__dirname, '..');
 const FILES = ['underskin.test.js', 'export_apron.test.js'];
 
 const MUTATIONS = [
-  { id: 'U1 the skin at 0.5 m again (a shadow skin, not the slab\'s underside)', from: 'const UNDERSKIN_OFFSET_M = 2.0 * Math.tan((25 * Math.PI) / 180);', to: 'const UNDERSKIN_OFFSET_M = 0.5;', file: 'export_apron.test.js', caughtBy: 'row 23:' },
-  { id: 'U2 the skin\'s normals not reversed (it faces the road, not away from it)', from: 'positions[d + a] = P[s + a] - UNDERSKIN_OFFSET_M * N[s + a]; normals[d + a] = -N[s + a];', to: 'positions[d + a] = P[s + a] - UNDERSKIN_OFFSET_M * N[s + a]; normals[d + a] = N[s + a];', file: 'underskin.test.js', caughtBy: 'row 1:' },
+  // AMENDED (D604 hull, the user's red line 10:44): the skin is the hull's bottom, 1.5 m under the road; U1 is the redo's plank-drop skin again (0.93 m), its fault the same (not the hull)
+  { id: 'U1 the skin at the plank\'s drop again (0.93 m: a slab, not the hull)', from: 'const UNDERSKIN_OFFSET_M = 1.5;', to: 'const UNDERSKIN_OFFSET_M = 2.0 * Math.tan((25 * Math.PI) / 180);', file: 'export_apron.test.js', caughtBy: 'row 23:' },
+  // AMENDED (D604 redo): U2's and U4's line hangs the vertex along skinDir's direction now (its row's section up), not its own normal; the faults are the same
+  // AMENDED (D604 hull, the user's red line 10:44): the line hangs each vertex at its own depth (rowDepths) now; the fault is the same
+  { id: 'U2 the skin\'s normals not reversed (it faces the road, not away from it)', from: 'positions[d + a] = P[s + a] - dep[k] * dir[a]; normals[d + a] = -dir[a];', to: 'positions[d + a] = P[s + a] - dep[k] * dir[a]; normals[d + a] = dir[a];', file: 'underskin.test.js', caughtBy: 'row 1:' },
   { id: 'U3 a seam\'s skin keeps the road\'s winding (it faces into the slab)', from: 'indices[t] = m.indices[t]; indices[t + 1] = m.indices[t + 2]; indices[t + 2] = m.indices[t + 1];', to: 'indices[t] = m.indices[t]; indices[t + 1] = m.indices[t + 1]; indices[t + 2] = m.indices[t + 2];', file: 'underskin.test.js', caughtBy: 'row 8:' },
-  { id: 'U4 the skin offset toward the driver (above the road, not under it)', from: 'positions[d + a] = P[s + a] - UNDERSKIN_OFFSET_M * N[s + a];', to: 'positions[d + a] = P[s + a] + UNDERSKIN_OFFSET_M * N[s + a];', file: 'underskin.test.js', caughtBy: 'row 2:' },
+  { id: 'U4 the skin offset toward the driver (above the road, not under it)', from: 'positions[d + a] = P[s + a] - dep[k] * dir[a];', to: 'positions[d + a] = P[s + a] + dep[k] * dir[a];', file: 'underskin.test.js', caughtBy: 'row 2:' },
+  // D604 redo: the skin hung along each vertex's OWN normal again (the second, inverted apron under a curved edge)
+  { id: 'U10 the skin hung along its own normal, not its section\'s up (the run under a plank folds back up to it)', from: 'if (a <= SECTION_UP_DEG) return c;', to: 'if (a <= SECTION_UP_DEG) return v;', file: 'export_apron.test.js', caughtBy: 'row 25:' },
+  // D604 hull: the edge never deepened (a run from the tip must make an S under a rising edge: the shoulder of the first hull), and the ease made linear (a crease 4 m in)
+  { id: 'U11 the hull not deepened under a rising edge (the run from the tip makes an S)', from: '    if (!(dE > UNDERSKIN_OFFSET_M)) continue;', to: '    continue;', file: 'export_apron.test.js', caughtBy: 'row 25:' },
+  { id: 'U12 the hull\'s depth eased back linearly (a crease where it reaches 1.5 m)', from: 'out[k] += (dE - UNDERSKIN_OFFSET_M) * x * x;', to: 'out[k] += (dE - UNDERSKIN_OFFSET_M) * x;', file: 'underskin.test.js', caughtBy: 'row 9:' },
   { id: 'U5 a closed ring\'s interior left light', from: 'return rings.has(k) ?', to: 'return false ?', file: 'underskin.test.js', caughtBy: 'row 3:' },
   { id: 'U6 a cell left without a skin (a hole in the slab\'s underside)', from: 'if (!skinned.has(k)) return c;', to: 'if (!skinned.has(k) || k === 1) return c;', file: 'underskin.test.js', caughtBy: 'row 1:' },
   { id: 'U7 the skin named as road (a physics surface under the road)', from: "replace(/^1ROAD/, 'UNDERSKIN')", to: "replace(/^1ROAD/, '1ROAD_UNDERSKIN')", file: 'underskin.test.js', caughtBy: 'row 5:' },
-  { id: 'U9 the skin deeper than a turned-down edge\'s radius (the slab\'s underside folds into itself)', from: 'const UNDERSKIN_OFFSET_M = 2.0 * Math.tan((25 * Math.PI) / 180);', to: 'const UNDERSKIN_OFFSET_M = 5;', file: 'export_apron.test.js', caughtBy: 'row 24:' },
+  // AMENDED (D604 redo): the fold U9 stood for (a skin hung along a turned-down edge's own normals, deeper than its radius) cannot happen once the skin hangs along its
+  // row's section up (underskin.js skinDir: a row moves, it does not fold); a 5 m skin now shows as the run under the plank not lying level, row 23's check
+  // AMENDED (D604 hull, the user's red line 10:44): the anchor is the hull's depth now; a 5 m skin is still not the hull
+  { id: 'U9 the skin far deeper than the hull (5 m)', from: 'const UNDERSKIN_OFFSET_M = 1.5;', to: 'const UNDERSKIN_OFFSET_M = 5;', file: 'export_apron.test.js', caughtBy: 'row 23:' },
   { id: 'U8 the skin keeps every column (a full copy of the road under it)', from: 'step = Math.max(1, Math.ceil((K - 1) / (SKIN_COLUMNS - 1)))', to: 'step = 1', file: 'underskin.test.js', caughtBy: 'row 6:' },
 ];
 

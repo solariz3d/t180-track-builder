@@ -17,7 +17,16 @@ const MUTATIONS = [
   // the section instead), so it would now be a mutant that changes nothing. The same fault where it now lives: the underside is left out.
   // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
   // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
-  { id: 'P2 the join dropped (the wedge is left open under the plank)', from: 'for (const [mm, dn] of [[ap.top, `APRON${tag}_`], [ap.side, `APRONSIDE${tag}_`]]) {', to: 'for (const [mm, dn] of [[ap.top, `APRON${tag}_`]]) {', caughtBy: 'row 2:' },
+  // AMENDED (D604 redo, the user 10:32): the join is no longer a node of its own; its run under the plank goes into the cell's skin (withRuns). The fault is the same:
+  // the run never handed over, the wedge left open under the plank
+  { id: 'P2 the join dropped (the wedge is left open under the plank)', from: 'if (ap.top) { if (!runs.has(k)) runs.set(k, []); runs.get(k).push(', to: 'if (false) { if (!runs.has(k)) runs.set(k, []); runs.get(k).push(', caughtBy: 'row 2:' },
+  // D604 redo: the run's inner row put on the skin's OTHER edge (the bottom torn across the road)
+  { id: 'P18 the run meeting the skin\'s far edge, not its own', from: 'idx.push(j === Jn ? r * C + c : base + r * Jn + j)', to: 'idx.push(j === Jn ? r * C + (C - 1 - c) : base + r * Jn + j)', caughtBy: 'row 2:' },
+  // D604 hull: the run leaving the tip shallower than its chord (it must turn the other way: an S), and meeting the skin along the road, not the skin (a corner)
+  { id: 'P19 the run leaving the tip shallower than its chord', from: 'chord + (TIP_LEAD_DEG * Math.PI) / 180', to: 'chord - (TIP_LEAD_DEG * Math.PI) / 180', caughtBy: 'row 25:' },
+  { id: 'P20 the run meeting the skin along the road\'s slope, not the skin\'s (a corner under the edge)', from: '(2 * (depthS - UNDERSKIN_OFFSET_M) / HULL_EDGE_SPAN_M)', to: '(0)', caughtBy: 'row 25:' },
+  // (D604 redo) no mutant for the outline row at an infill join (`q.atJoin`): hung by the section rule instead, it lands on the same point on every fixture, the road
+  // frame's up there being the row's centre normal to the float, so it changes no result; the branch stays because pitSkins hangs those skin vertices along the join's normal
   { id: 'P3 the wall test dropped (a 90° cup gets an apron)', from: 'if (rows.some((q) => q.rim >= WALL_DEG)) return null;', to: '', caughtBy: 'row 4:' },
   // the two the build added: the pit lane's span and the piece's own surface
   // AMENDED (D593, the pit lane's outline): the span's cells were skipped by `if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) continue;`; that test now
@@ -31,7 +40,8 @@ const MUTATIONS = [
   { id: 'P7 the pit lane\'s outline dropped (its edges bare, the main apron stopping square at the span)', from: 'if (lane && lane.mesh && widthM > 0) {', to: 'if (false) {', caughtBy: 'row 14:' },
   // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
   // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
-  { id: 'P8 the join\'s normals into the wedge (it is lit from inside)', from: 'return dot(n, sub(mid, G[r])) >= 0 ? n : mul(n, -1);', to: 'return dot(n, sub(mid, G[r])) >= 0 ? mul(n, -1) : n;', caughtBy: 'row 2:' },
+  // AMENDED (D604 hull, the user's red line 10:44): the join's own normals are gone with it (the run is the hull's, hullRun); the fault is the run's normals turned into the hull
+  { id: 'P8 the run\'s normals into the hull (it is lit from inside)', from: 'if (dot(n, sub(p, G)) < 0) n = mul(n, -1);', to: 'if (dot(n, sub(p, G)) > 0) n = mul(n, -1);', caughtBy: 'row 2:' },
   // AMENDED (D593, the user 18:0x): P9 put the skin's material on the lip (its anchor `children: [{ ...vis.lip, material: m.material }]` is gone: the lip now wears the
   // road's darker shade). The fault that matters now: the lip in the road's material at full light, not the shade.
   // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor

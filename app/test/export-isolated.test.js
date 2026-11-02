@@ -92,7 +92,14 @@ function digestOf(out) {
 // join is the slab's bottom. Compared with 8b573dd node by node and material by material (test/fixtures/kn5nodes.js), in both exports: the road physics, the paint,
 // every physics plank and the lane's own surfaces are the same bytes; the skins (UNDERSKIN_*, the lane's too) and the joins (APRONSIDE_*, the outline's too) moved;
 // of the materials only t180b_underskin's own record changed. Only the kn5 files changed; the file counts are the same.
-const PIN = { lap: 'sha256 099861d8a5eac6ec files 10', open: 'sha256 caa673fa562c20af files 11' };
+// AMENDED BY NAME (2026-11-01, D604 redo, the user 10:32: "the apron itself connects right to the other one without having an extra thicker bottom than we need"):
+// both pins moved again, from 099861d8a5eac6ec / caa673fa562c20af to the values below: the skin hangs along each row's section up (the plank's own drop) and each
+// plank's run under it is in the skin's mesh, so the core join nodes are gone into the skins. Compared with 8b573dd node by node (test/fixtures/kn5nodes.js), in both
+// exports: the road physics, the paint, every physics plank and the lane's own surfaces are the same bytes; the skins and the pit outline's join moved; the core
+// joins (APRONSIDE_p*) are gone. Only the kn5 files changed; the file counts are the same.
+// And again for the hull (the user's red line, 10:44: the bottom one smooth curve from tip to tip, 1.5 m under the road, deeper under an edge that rises): the
+// same comparison holds, with the skins and the pit outline's run as the hull's.
+const PIN = { lap: 'sha256 7048f2db72b8191c files 10', open: 'sha256 50248bc3a07ddd32 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

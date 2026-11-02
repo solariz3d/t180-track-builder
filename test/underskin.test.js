@@ -22,6 +22,7 @@ const Dw = require('../src/doc/index.js');
 const { closedRing } = require('../src/texture/flow.js');
 const { startLayout } = require('../app/core/coreshell.js');
 const { createCoreTextures } = require('../app/core/textures.js');
+const { RUN_COLUMNS } = require('../src/export/apron.js');
 
 const Rr = 180, Q = (Math.PI * Rr) / 2;
 function lap(opts, cup) {
@@ -43,29 +44,45 @@ const meshOf = (doc) => { const segs = A.toSegments(doc), { path } = A.toPath(do
 const kids = (scene) => scene.root.children;
 const prop = (m, n) => m.props.find((p) => p.name === n).value[0];
 const isSkin = (c) => /^(SKIN|JOIN)_/.test(c.name);
+// D604 redo: a seam row's first row is the piece before's (a closed lap's first seam follows the last piece)
+const kaOf = (mesh, cell) => { const pcs = mesh._state.pieces; return pcs[cell.piece === 0 ? pcs.length - 1 : cell.piece - 1].K; };
 /** The road dummies of an export's scene (the first cells.length children) and its skin dummies, in the same cell order. */
 const parts = (scene, n) => ({ road: kids(scene).slice(0, n), skins: kids(scene).filter(isSkin) });
 const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
 const sub = (a, b) => a.map((x, i) => x - b[i]);
 
-/** The checks a skin owes its road cell: every kept vertex is the road's moved `off` against its normal, normals reversed, castShadows, every triangle faces its own normal. */
-function checkSkin(sk, rd, K, label) {
-  const P = rd.positions, N = rd.normals, nv = sk.positions.length / 3;
+// AMENDED (D604 redo, the user 2026-11-01 10:32: "the apron itself connects right to the other one without having an extra thicker bottom than we need"): a skin vertex hangs along its ROW's section up (the row's centre vertex normal, the direction the apron's plank drops along)
+// while its own normal is within 60° of it, along its own normal from 80°, and between the two in between (on the arc from one to the other); its normal is the reverse
+// of the direction it hangs along. Read here from the road's own normals, not from skinDir. A seam row is two rows: `Ka` vertices of the piece before, then its own.
+const unitV = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; }, dotV = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+/** How far a skin vertex q sits from the hanging rule, for road vertex p with its own normal nv and its row's centre normal nc: { off, nrm } (0 when exact). */
+// AMENDED (D604 hull): the depth is the vertex's own, underskin.js rowDepths (1.5 m, deeper toward an edge that rises; row 9 holds that rule)
+function hangMiss(q, qn, p, nv, nc, D) {
+  const d = [(p[0] - q[0]) / D, (p[1] - q[1]) / D, (p[2] - q[2]) / D], v = unitV(nv), c = unitV(nc);
+  const ang = (x, y) => Math.acos(Math.max(-1, Math.min(1, dotV(x, y)))), a = (ang(v, c) * 180) / Math.PI;
+  const nrm = Math.hypot(qn[0] + d[0], qn[1] + d[1], qn[2] + d[2]);
+  if (a <= 60) return { off: Math.hypot(d[0] - c[0], d[1] - c[1], d[2] - c[2]) * D, nrm };
+  if (a >= 80) return { off: Math.hypot(d[0] - v[0], d[1] - v[1], d[2] - v[2]) * D, nrm };
+  const du = unitV(d); return { off: Math.abs(Math.hypot(...d) - 1) * D + Math.abs(ang(du, c) + ang(du, v) - ang(v, c)), nrm };
+}
+/** The checks a skin owes its road cell: every kept vertex is the road's moved `off` along the hanging rule, normals its reverse, castShadows, every triangle faces its own normal. */
+function checkSkin(sk, rd, K, label, Ka = null, hull = true) {
+  const P = rd.positions, N = rd.normals, nv = sk.positions.length / 3, at = (A, i) => [A[i * 3], A[i * 3 + 1], A[i * 3 + 2]];
   let worstOff = 0, worstN = 0;
-  if (K === null) { for (let i = 0; i < P.length; i++) { worstOff = Math.max(worstOff, Math.abs(sk.positions[i] - (P[i] - S.UNDERSKIN_OFFSET_M * N[i]))); worstN = Math.max(worstN, Math.abs(sk.normals[i] + N[i])); } }
+  const miss = (d, s, cIdx, D) => { const m = hangMiss(at(sk.positions, d), at(sk.normals, d), at(P, s), at(N, s), at(N, cIdx), D); worstOff = Math.max(worstOff, m.off); worstN = Math.max(worstN, m.nrm); };
+  if (K === null) { const n = P.length / 3, Kb = n - Ka, dA = S.rowDepths(P, N, 0, Ka, hull), dB = S.rowDepths(P, N, Ka, Kb, hull); for (let i = 0; i < n; i++) miss(i, i, i < Ka ? Math.floor(Ka / 2) : Ka + Math.floor(Kb / 2), i < Ka ? dA[i] : dB[i - Ka]); }
   else {
-    const R = P.length / 3 / K, C = nv / R, step = Math.max(1, Math.ceil((K - 1) / (S.SKIN_COLUMNS - 1)));
-    assert.ok(C <= S.SKIN_COLUMNS + 1 && C >= 2, `${label}: ${C} columns across`);
-    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
-      const k = c === C - 1 ? K - 1 : Math.min(c * step, K - 1), s = (r * K + k) * 3, d = (r * C + c) * 3;
-      for (let a = 0; a < 3; a++) { worstOff = Math.max(worstOff, Math.abs(sk.positions[d + a] - (P[s + a] - S.UNDERSKIN_OFFSET_M * N[s + a]))); worstN = Math.max(worstN, Math.abs(sk.normals[d + a] + N[s + a])); }
-    }
+    // (D604 redo) after the export's apron a skin carries each plank's run under it too, appended after its own R x C vertices in whole rows (export_apron rows 2, 16)
+    // (D604 hull) a run is RUN_COLUMNS − 1 points a row a side
+    const R = P.length / 3 / K, step = Math.max(1, Math.ceil((K - 1) / (S.SKIN_COLUMNS - 1))), C = Math.ceil((K - 1) / step) + 1, runs = (nv - R * C) / R / (RUN_COLUMNS - 1);
+    assert.ok(C <= S.SKIN_COLUMNS + 1 && C >= 2, `${label}: ${C} columns across`); assert.ok(Number.isInteger(runs) && runs >= 0 && runs <= 2, `${label}: ${nv} vertices, the skin's ${R * C} and whole rows of runs`);
+    for (let r = 0; r < R; r++) { const dep = S.rowDepths(P, N, r * K, K, hull); for (let c = 0; c < C; c++) { const k = c === C - 1 ? K - 1 : Math.min(c * step, K - 1); miss(r * C + c, r * K + k, r * K + Math.floor(K / 2), dep[k]); } }
   }
   // a sliver (a seam zipper between two coincident rows: weldSeams' own doc puts its area near 1e-4 m²) has no side that means anything, so only triangles over 1e-3 count
   const facing = (m, limit) => { let ok = 0, n = 0; for (let t = 0; t < Math.min(m.indices.length, limit); t += 3) { const [a, b, c] = [m.indices[t], m.indices[t + 1], m.indices[t + 2]], p = (i) => [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]], cr = cross(sub(p(b), p(a)), sub(p(c), p(a))); if (Math.hypot(...cr) < 1e-3) continue; n++; if (cr[0] * m.normals[a * 3] + cr[1] * m.normals[a * 3 + 1] + cr[2] * m.normals[a * 3 + 2] > 0) ok++; } return [ok, n]; };
   const [so, sn] = facing(sk, 1e9), [ro, rn] = facing(rd, 60);
   if (K !== null) assert.ok(sn > 0 && rn > 0, `${label}: control: the triangles have area, so the facing test can fail`);
-  assert.equal(sk.castShadows, true, label); assert.ok(worstOff < 1e-5, `${label}: a skin vertex is the road's moved ${S.UNDERSKIN_OFFSET_M} m against its normal (worst ${worstOff})`); assert.ok(worstN < 1e-6, `${label}: normals are the road's reversed (worst ${worstN})`);
+  assert.equal(sk.castShadows, true, label); assert.ok(worstOff < 1e-5, `${label}: a skin vertex is the road's moved ${S.UNDERSKIN_OFFSET_M} m along the hanging rule (worst ${worstOff})`); assert.ok(worstN < 1e-6, `${label}: normals are the hanging direction reversed (worst ${worstN})`);
   assert.equal(so, sn, `${label}: every skin triangle faces its own normal (${so} of ${sn})`); assert.equal(ro, rn, `${label}: control: the road's triangles pass the same test`);
 }
 
@@ -73,12 +90,13 @@ function checkSkin(sk, rd, K, label) {
 // 2 · tan 25° = 0.9326 m), so it is the slab's underside
 test('row 1: a closed tube export has an underside skin on every cell: the road\'s own normal, the plank\'s drop away from the driver (outward), normals out, castShadows, its own dark material', () => {
   const doc = tubeOval(40), { segs, mesh } = meshOf(doc), out = exportDoc(doc), { road, skins } = parts(out.scene, mesh.cells.length);
-  assert.ok(Math.abs(S.UNDERSKIN_OFFSET_M - 2 * Math.tan((25 * Math.PI) / 180)) < 1e-12, `the skin is the plank's drop down (${S.UNDERSKIN_OFFSET_M})`); assert.equal(S.skinCells(mesh, segs).size, mesh.cells.length, 'every cell of a core track is skinned'); assert.equal(skins.length, mesh.cells.length);
+  // AMENDED (D604 hull, the user's red line 10:44): the skin is the hull's bottom, 1.5 m under the road (deeper toward an edge that rises: row 9)
+  assert.equal(S.UNDERSKIN_OFFSET_M, 1.5, `the hull is 1.5 m under the road (${S.UNDERSKIN_OFFSET_M})`); assert.equal(S.skinCells(mesh, segs).size, mesh.cells.length, 'every cell of a core track is skinned'); assert.equal(skins.length, mesh.cells.length);
   const skinMat = out.scene.materials.findIndex((m) => m.name === 't180b_underskin'); assert.ok(skinMat >= 0); let joins = 0;
   skins.forEach((sd, k) => {
     const cell = mesh.cells[k], sk = sd.children[0], rd = road[k].children[0];
     assert.equal(sk.material, skinMat, 'its own material'); assert.deepEqual(sd.matrix, road[k].matrix, 'in the road cell\'s own frame');
-    checkSkin(sk, rd, cell.seam ? null : mesh._state.pieces[cell.piece].K, `cell ${k}`); if (cell.seam) { joins++; assert.match(sk.name, /^UNDERSKIN_join_/); }
+    checkSkin(sk, rd, cell.seam ? null : mesh._state.pieces[cell.piece].K, `cell ${k}`, cell.seam ? kaOf(mesh, cell) : null, !S.ringCells(mesh, segs).has(k)); if (cell.seam) { joins++; assert.match(sk.name, /^UNDERSKIN_join_/); }
   });
   assert.ok(joins >= 1, `control: ${joins} seam row(s) were skinned too`);
 });
@@ -88,10 +106,13 @@ test('row 1: a closed tube export has an underside skin on every cell: the road\
 test('row 2: on an OPEN road the skin is BELOW it: the road keeps its light material, the skin is under every cell, and on the flat start straight it is the plank\'s drop down', () => {
   const doc = plainOval(31), { segs, mesh } = meshOf(doc), out = exportDoc(doc), { road, skins } = parts(out.scene, mesh.cells.length);
   assert.equal(skins.length, mesh.cells.length); assert.equal(S.ringCells(mesh, segs).size, 0, 'no ring on an open road');
-  for (const [k, sd] of skins.entries()) { const cell = mesh.cells[k]; checkSkin(sd.children[0], road[k].children[0], cell.seam ? null : mesh._state.pieces[cell.piece].K, `cell ${k}`); }
+  for (const [k, sd] of skins.entries()) { const cell = mesh.cells[k]; checkSkin(sd.children[0], road[k].children[0], cell.seam ? null : mesh._state.pieces[cell.piece].K, `cell ${k}`, cell.seam ? kaOf(mesh, cell) : null); }
   const mats = out.scene.materials; for (const rd of road.filter((c) => c.name.startsWith('CELL_'))) { const m = mats[rd.children[0].material]; assert.doesNotMatch(m.name, /_dark$/); assert.equal(prop(m, 'ksAmbient'), 0.45); }
   const rd = road[3].children[0], sk = skins[3].children[0], n = [rd.normals[0], rd.normals[1], rd.normals[2]], dv = [sk.positions[0] - rd.positions[0], sk.positions[1] - rd.positions[1], sk.positions[2] - rd.positions[2]];
-  assert.ok(Math.abs(n[1]) > 0.9, `control: the start straight's surface faces up (n = ${n.map((x) => x.toFixed(2))})`); const D = S.UNDERSKIN_OFFSET_M; assert.ok(dv[1] < -0.9 * D && Math.abs(Math.hypot(...dv) - D) < 1e-5 && dv.every((x, i) => Math.abs(x + D * n[i]) < 1e-5), `the skin is ${D.toFixed(4)} m BELOW the road, along its own normal (the road's edge is tilted a little): ${dv.map((x) => x.toFixed(3))}`);
+  assert.ok(Math.abs(n[1]) > 0.9, `control: the start straight's surface faces up (n = ${n.map((x) => x.toFixed(2))})`); // AMENDED (D604 redo): along the row's section up (its centre vertex's normal), not the edge vertex's own, which is tilted a little
+  const K3 = mesh._state.pieces[mesh.cells[3].piece].K, ic = Math.floor(K3 / 2), nc = unitV([rd.normals[ic * 3], rd.normals[ic * 3 + 1], rd.normals[ic * 3 + 2]]);
+  // AMENDED (D604 hull): at the depth the hull's rule gives that vertex (an edge that rises hangs deeper: row 9)
+  const D = S.rowDepths(rd.positions, rd.normals, 0, K3)[0]; assert.ok(dv[1] < -0.9 * D && Math.abs(Math.hypot(...dv) - D) < 1e-5 && dv.every((x, i) => Math.abs(x + D * nc[i]) < 1e-5), `the skin is ${D.toFixed(4)} m BELOW the road, along its row's section up: ${dv.map((x) => x.toFixed(3))} (its own normal ${n.map((x) => x.toFixed(3))})`);
 });
 
 test('row 3: the DARK interior (ksAmbient 0.02) is on closed-ring cells only, the textured ones too; the set\'s shared material is untouched; the skin runs under the slot zone, the dark does not', () => {
@@ -147,7 +168,9 @@ test('row 5: the skin is not a physics surface: no leading digit, no 1ROAD, no "
 test('row 6: the skin is light: about SKIN_COLUMNS vertices across, a fraction of the road\'s (under 60% on an open road, under 15% on a tube)', () => {
   for (const [doc, limit] of [[plainOval(31), 0.6], [tubeOval(40), 0.15]]) {
     const { mesh } = meshOf(doc), out = exportDoc(doc), { road, skins } = parts(out.scene, mesh.cells.length);
-    const count = (ds) => ds.reduce((a, d) => a + d.children[0].positions.length / 3, 0), r = count(road), s = count(skins);
+    // AMENDED (D604 hull): the skin's own vertices; the runs under the planks it carries since D604 are the hull's, export_apron's rows 2 and 16
+    const own = (sd, k) => { const c = mesh.cells[k]; if (c.seam) return sd.children[0].positions.length / 3; const K = mesh._state.pieces[c.piece].K, R = road[k].children[0].positions.length / 3 / K; return R * S.skinColumns(K).length; };
+    const count = (ds) => ds.reduce((a, d) => a + d.children[0].positions.length / 3, 0), r = count(road), s = skins.reduce((a, d, k) => a + own(d, k), 0);
     assert.ok(s < limit * r, `the skin has ${s} vertices against the road's ${r} (${(100 * s / r).toFixed(1)}%)`); assert.ok(s > 0.03 * r, 'control: it is not empty');
   }
 });
@@ -167,9 +190,27 @@ test('row 7: the ring rule on a synthetic mesh: a seam row is a ring only when B
 
 // AMENDED (D604, the user 2026-11-01 08:49: the road a solid slab): the skin was 0.5 m under the road; it is at the apron plank's drop now (UNDERSKIN_OFFSET_M,
 // 2 · tan 25° = 0.9326 m), so it is the slab's underside
+// D604 hull (the user's red line, 10:44): under an edge that rises the hull hangs deeper, so the run from a plank's tip only flattens going in; the rule on one row
+test("row 9: the hull's depth: 1.5 m under a flat road all across; under an edge that rises it is the plank's drop plus 2 m tan(rim + 5°) at the edge (1.5 to 3 m), easing back to 1.5 m 4 m in, with no step", () => {
+  const row = (rimDeg) => { const K = 41, P = new Float32Array(K * 3), N = new Float32Array(K * 3), r = (rimDeg * Math.PI) / 180;
+    for (let k = 0; k < K; k++) { const u = (k - 20) * 0.5, out = Math.max(0, Math.abs(u) - 6); P[k * 3] = u; P[k * 3 + 1] = out * Math.tan(r); N[k * 3 + 1] = 1; }
+    return S.rowDepths(P, N, 0, K); };
+  for (const x of row(0)) assert.equal(x, 1.5, 'flat: 1.5 m all across');
+  for (const [rim, want] of [[15.5, 1.68], [30, 2.333], [40, 2.933], [55, 3]]) {
+    const d = row(rim), edge = d[0];
+    assert.ok(Math.abs(edge - want) < 2e-3, `rim ${rim}°: ${edge.toFixed(3)} m at the edge, not ${want}`); assert.equal(d[0], d[40], `rim ${rim}°: both edges alike`);
+    for (let k = 0; k < 41; k++) { const t = k * 0.5; if (t >= 4 && t <= 16) assert.ok(Math.abs(d[k] - 1.5) < 1e-9, `rim ${rim}°: 1.5 m from 4 m in (${t} m: ${d[k]})`); }
+    for (let k = 1; k < 8; k++) assert.ok(d[k] < d[k - 1], `rim ${rim}°: the depth eases back going in`);
+    assert.ok(Math.abs(d[8] - d[7]) < Math.abs(d[1] - d[0]) / 5, `rim ${rim}°: it eases in flat (C1 at 4 m)`);
+  }
+  assert.equal(S.hullDepth(60.5) > 1.5 && S.hullDepth(60.5) < 3, true, 'past the wall it eases back, no step'); assert.equal(S.hullDepth(70), 1.5); assert.equal(S.hullDepth(-20), 1.5, 'a turned-down edge keeps 1.5 m');
+});
+
 test('row 8: a seam row\'s skin (every vertex kept, no grid) is the road\'s triangles reversed and its vertices moved the plank\'s drop against the normal, on a zipper with area', () => {
   const m = { type: 'mesh', name: '1ROAD_seam_x', material: 0, positions: Float32Array.of(0, 0, 0, 2, 0, 0, 0, 0, 3, 2, 0, 3), normals: Float32Array.of(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0), uvs: new Float32Array(8), indices: Uint16Array.of(0, 2, 1, 1, 2, 3), castShadows: true, visible: true, transparent: false, renderable: true };
-  const sk = S.skinOf(m, 'UNDERSKIN_join_x');
+  // AMENDED (D604 redo): a seam's skin is told its two rows (2 vertices of the piece before, then 2), each row hanging along its own centre's normal; without them it is refused
+  assert.throws(() => S.skinOf(m, 'UNDERSKIN_join_x'), /not two rows/);
+  const sk = S.skinOf(m, 'UNDERSKIN_join_x', null, 2);
   assert.deepEqual([...sk.indices], [0, 1, 2, 1, 3, 2], 'every triangle reversed');
   assert.deepEqual([...sk.positions].filter((_, i) => i % 3 === 1), Array(4).fill(Math.fround(-S.UNDERSKIN_OFFSET_M)), 'all four vertices the plank\'s drop below');
   assert.deepEqual([...sk.normals].filter((_, i) => i % 3 === 1), [-1, -1, -1, -1], 'normals face down, away from the road');

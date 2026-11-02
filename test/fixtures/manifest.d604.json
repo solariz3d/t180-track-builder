@@ -1,7 +1,7 @@
 {
  "amends": "the D190 seal, row 5a, as already amended by D196, D222, D230, D258, D260, D279, the mesh cap, the sector gates, D460, D572 and D593; F1 F2 only, their kn5 digest only",
- "made_at": "2026-11-01, D604 (the road as a solid slab), t180 branch d604-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: 8b573dd (public main, whose kn5 is the D593 record's after) and d604-o.",
- "reason": "The road is a solid slab (the user, 2026-11-01 08:49: \"the track gets 3D depth instead of a slice of a mesh\"): the underside skin follows the road's cross-section at the edge apron plank's drop (2 m · tan 25° = 0.93 m, was 0.5 m), so each apron's join runs from the plank's outer row to the skin's edge as the slab's bottom, and the skin wears the road's asphalt at 0.88 like the apron. So the two closed fixtures, which are exported, change their kn5 and nothing else: segs, path and mesh are unchanged in all nine; in the kn5 the road, paint and the physics planks are the same bytes, the skin and joins moved, and of the materials only t180b_underskin's own record changed.",
+ "made_at": "2026-11-01, D604 (the road as a hull) as drawn by the user at 10:44, t180 branch d604-o: test/fixtures/kn5nodes.js over F1 F2 built as fixtures.js builds them, in two trees: 8b573dd (public main, whose kn5 is the D593 record's after) and d604-o.",
+ "reason": "The road is a hull (the user, 2026-11-01 08:49: \"the track gets 3D depth instead of a slice of a mesh\"; 10:32: \"the apron itself connects right to the other one without having an extra thicker bottom than we need\"; 10:44, his red line on the end-on cut): the underside skin hangs 1.5 m under the road (was 0.5 m) along each row's section up, deeper under an edge that rises (the default plank's drop plus 2 m · tan(rim + 5°), at most 3 m, easing back over 4 m in), and each plank's run under it is one smooth curve from its tip to the skin's edge, in the skin's own mesh (the join nodes are gone): the bottom is one curve from tip to tip; the skin wears the road's asphalt at 0.88 like the apron. So the two closed fixtures, which are exported, change their kn5 and nothing else: segs, path and mesh are unchanged in all nine; in the kn5 the road, paint and the physics planks are the same bytes, the skins moved, the joins are gone into them, and of the materials only t180b_underskin's own record changed.",
  "fixtures": {
   "F1-bowl-default-lap-closed": {
    "before_d604": {
@@ -17,14 +17,14 @@
     "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
     "mesh": "5e91dc2a2775576c73ce1f9c75c5650a7f4f35ff08d43edbd84e2c9655454722",
     "meshParts": 3745,
-    "kn5": "85527543288818eaf091c492e41a2727ffd53a2091b10083efd7a251adcfd1b1",
-    "kn5Bytes": 7676408
+    "kn5": "bec1c529d9f0e3f16db970373c2c23ba215946f9a26d114ff723d4fc2cb26f33",
+    "kn5Bytes": 8442052
    },
    "measure": {
     "changed": [
      "kn5"
     ],
-    "kn5_meshes": 23,
+    "kn5_meshes": 19,
     "kept_byte_for_byte": [
      {
       "name": "1ROAD_p1_chunk_0",
@@ -87,39 +87,29 @@
       "full": "e322c8188cc83e27d6bd078dff3037b788375cb05b2c1e3733121311809c9e70"
      }
     ],
-    "moved_skin_and_joins": [
+    "moved_skin": [
      {
       "name": "UNDERSKIN_p1_chunk_0",
-      "full": "cd14a32062a11cbdc2dfa8c6c334151e8135ea80707d5b0f306b0bc4d120165b"
+      "full": "1f5a285aac915763269da61eb0e2ed995040a5f5f8e3c5dd075e10def8572f51"
      },
      {
       "name": "UNDERSKIN_p2_chunk_1",
-      "full": "52b7d097bad531dc0bdc834e17a1e3021fa8a34e2772c55148cd7bc651157129"
+      "full": "5c6a4c65a533e09974bc96969ee82a623e2718a84133bb3d477cb181482c1b8a"
      },
      {
       "name": "UNDERSKIN_p3_chunk_2",
-      "full": "6c4865de615dad3b63e08d75ee4376d12a574bb3159a7039204b50f290274342"
+      "full": "5cc3d67bfbe7ad192a35be1e8f439cd676bbdacf3c07851156f1db584b09da2e"
      },
      {
       "name": "UNDERSKIN_p5_chunk_3",
-      "full": "e19c824641a908a687eff92ced52402095040139af34eecfc5d823349a8a28ad"
-     },
-     {
-      "name": "APRONSIDE_p1_chunk_0",
-      "full": "3a3b0f54ce5c1ea5918bdb9a25f31f6a6beac848529c92cdfac2d86a03d14e6b"
-     },
-     {
-      "name": "APRONSIDE_p2_chunk_1",
-      "full": "49dc0c633d4c7872ad57f091c0bccce19b765475860be6a31b7a3e3fdf997ece"
-     },
-     {
-      "name": "APRONSIDE_p3_chunk_2",
-      "full": "b6d3647c88f62785f43e3e859e0ea6d8b889cfd704479915a2709a8c5b2459ff"
-     },
-     {
-      "name": "APRONSIDE_p5_chunk_3",
-      "full": "25d438f137822ea9f0424640411cab8e6f781c139de307e0f30a43ff6c0f7c08"
+      "full": "10d327b3074950051c6beffefbe70a136ae481c234ed4bae57bf78a554f5c438"
      }
+    ],
+    "joins_into_skin": [
+     "APRONSIDE_p1_chunk_0",
+     "APRONSIDE_p2_chunk_1",
+     "APRONSIDE_p3_chunk_2",
+     "APRONSIDE_p5_chunk_3"
     ],
     "materials": [
      "t180b_road",
@@ -152,14 +142,14 @@
     "path": "d689f782e32b2e454403aee4a07d3d21814d0b7db9cdb4257a42bc8ac005f8e5",
     "mesh": "d0e2806c49debfcf590d16714e92dd6ee97ff3dec54d4a9792ac802f93757ffa",
     "meshParts": 3745,
-    "kn5": "28c73638c25e1b704b2918097c1163162f1cb5e45546cf7b087def6561f4e4b7",
-    "kn5Bytes": 9998381
+    "kn5": "7c6edc1be6496230db1355533affece9908da368d9972c1b68aa99960d818f56",
+    "kn5Bytes": 10764025
    },
    "measure": {
     "changed": [
      "kn5"
     ],
-    "kn5_meshes": 24,
+    "kn5_meshes": 20,
     "kept_byte_for_byte": [
      {
       "name": "1ROAD_p1_chunk_0",
@@ -226,39 +216,29 @@
       "full": "784c4690e4cd1dd9ac6148d9ff298177edb166a28981b24844fff6525175a2ee"
      }
     ],
-    "moved_skin_and_joins": [
+    "moved_skin": [
      {
       "name": "UNDERSKIN_p1_chunk_0",
-      "full": "fe03d48b0487fe5a43fa39f30d60ac6ec60958f3452e6ddc050220d0a5a4d83d"
+      "full": "f8dddf2403b8044dce448e5ccd72592a444e905fd56675646945f598ddf97303"
      },
      {
       "name": "UNDERSKIN_p2_chunk_1",
-      "full": "d4a881cb402ac03fee16297cbe9bd96fb3f491a4cc57af31becc7b7c89c1aadc"
+      "full": "a9ac7df38f7b4775e2ac732a70d481a3d95f7210bf98ab16b02b5cbe9e629bbc"
      },
      {
       "name": "UNDERSKIN_p3_chunk_2",
-      "full": "7fcca4b86edd9595ca8a05c8eb36bfbc3c9098824608c46bf39120cc8b90f14e"
+      "full": "83cf08644d44db35eeca862281b96d237727502b0bbc0bf8c7b4374eb55cbafd"
      },
      {
       "name": "UNDERSKIN_p5_chunk_3",
-      "full": "ff934671b55658c74bda6907ef3e64d4b0fea5e7f9345a64574b225cc4b40176"
-     },
-     {
-      "name": "APRONSIDE_p1_chunk_0",
-      "full": "3c76706ecc507e82c66b361adf7e5ecdeb2e29386f98b7e44ed9fcea016ed523"
-     },
-     {
-      "name": "APRONSIDE_p2_chunk_1",
-      "full": "a9b9e3fc07609cd48cf29bf1dd181795179d480ecb3c4d1fe3c88cd13a3e65d4"
-     },
-     {
-      "name": "APRONSIDE_p3_chunk_2",
-      "full": "dffd361221e8b65199d6f4be308c7c15431da6a1cf7ce25133dcbf3558b5ef8f"
-     },
-     {
-      "name": "APRONSIDE_p5_chunk_3",
-      "full": "e2d8c65987c7da5260a99255a5609f6f7dd00d5685bd3e08a6b66b2c6e308450"
+      "full": "5ae780a5c9840a4556dc9b47476a0c7c92a41f0bf6e428f414e3c0979a8308cf"
      }
+    ],
+    "joins_into_skin": [
+     "APRONSIDE_p1_chunk_0",
+     "APRONSIDE_p2_chunk_1",
+     "APRONSIDE_p3_chunk_2",
+     "APRONSIDE_p5_chunk_3"
     ],
     "materials": [
      "t180b_road",

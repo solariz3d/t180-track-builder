@@ -15,7 +15,7 @@ All notable changes to this project are recorded here. The format follows
 
   The check is `test/on_github.js` (GitHub sets `GITHUB_ACTIONS=true`). There, `menubar-page` also waits up to 120 s for the page to mount, instead of 30 s.
 
-- **The road is a solid slab.** It used to be a single sheet with a thin underside half a metre below it, so from the side the track read as a slice. Now the underside runs at the depth of the edge apron, about 0.93 m under the road, following the road's shape across (in a cup it stays under the cup), and closes onto the apron at both edges: from the side the track has the thickness of a slab, apron to apron, round the pit lane too. The underside wears the road's own asphalt a little darker, like the apron. How the road drives is unchanged: no surface a wheel touches has moved. Where the track crosses over itself with little room between, the two slabs meet in the gap.
+- **The road is a hull.** It used to be a single sheet with a thin underside half a metre below it, so from the side the track read as a slice. Now it has a bottom: one smooth curve from the tip of one edge apron to the tip of the other, about 1.5 m under the road and following its sag, a little deeper under an edge that rises, so from below and from the side the track reads as one solid shape, round the pit lane too. The bottom wears the road's own asphalt a little darker, like the apron. How the road drives is unchanged: no surface a wheel touches has moved. Where the track crosses over itself with little room between, the two hulls meet in the gap.
 
 ### Fixed
 

@@ -21,7 +21,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // again, so the isolation did not move it. The open TEST export has no pit lane and is unchanged. The row titles still say b6969da's;
 // they are left as they are because the mutation harness names its rows by them.
 // AMENDED BY NAME (2026-10-31, the merge of the firm road and the edge apron): the pair moved with export-isolated.test.js row 1's, which says why
-const PIN = { lap: 'sha256 099861d8a5eac6ec files 10', open: 'sha256 caa673fa562c20af files 11' };   // export-isolated.test.js row 1, from 498e735; the lap moved once more, then both for the soft block's SOFT_CFM and the edge apron, then (AMENDED, D593) both for the apron drawn as its physics in the road's asphalt and the pit lane grown out of the road, then (AMENDED, D604) both for the road as a solid slab (see there)
+const PIN = { lap: 'sha256 7048f2db72b8191c files 10', open: 'sha256 50248bc3a07ddd32 files 11' };   // export-isolated.test.js row 1, from 498e735; the lap moved once more, then both for the soft block's SOFT_CFM and the edge apron, then (AMENDED, D593) both for the apron drawn as its physics in the road's asphalt and the pit lane grown out of the road, then (AMENDED, D604) both for the road as a solid slab, then (AMENDED, D604 redo, then the hull) both for its bottom as one surface tip to tip (see there)
 const TYPES = { '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.html': 'text/html' };
 
 // The page: the app's modules from the served worktree, export-isolated.test.js's laps, and the same digest of an export's files
