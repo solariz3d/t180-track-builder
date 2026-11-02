@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.38] - 2026-11-02
+
 ### Added
 
 - **The export checks the track it is about to write.** Until now every geometry check ran before the underside, the edge apron and the pit lane's outline were added, so a step, a crack or a fold in those parts was written without a word. A last check now reads the very scene the track file is written from. A fault in a surface the car drives on stops the export, naming where on the track it is: a face standing across the road, the pit lane wider than 0.1 m where it meets the road, or a crack 5 mm or wider in the road, the apron or the lane. A fault only seen from outside is reported as a warning with its place: a fold in the underside, a line of sky through it, a step in its bottom, or a triangle thinner than 4 mm. In a test export these are listed, not blocking.
