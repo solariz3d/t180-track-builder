@@ -5,6 +5,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.37] - 2026-11-02
+
 ### Changed
 
 - **The tests on GitHub finish, and a red there means something.** The fast job's limit is 75 minutes. It took 56 min 42 s when measured, so the old 45-minute limit stopped it before it was done and the run read "cancelled". Rows that fail only on GitHub's shared runner now skip there, each saying why. On any other machine they run as before:
