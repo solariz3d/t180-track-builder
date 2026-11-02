@@ -27,7 +27,8 @@ const MUTATIONS = [
   { id: 'P20 the run meeting the skin along the road\'s slope, not the skin\'s (a corner under the edge)', from: '(2 * (depthS - UNDERSKIN_OFFSET_M) / HULL_EDGE_SPAN_M)', to: '(0)', caughtBy: 'row 25:' },
   // (D604 redo) no mutant for the outline row at an infill join (`q.atJoin`): hung by the section rule instead, it lands on the same point on every fixture, the road
   // frame's up there being the row's centre normal to the float, so it changes no result; the branch stays because pitSkins hangs those skin vertices along the join's normal
-  { id: 'P3 the wall test dropped (a 90° cup gets an apron)', from: 'if (rows.some((q) => q.rim >= WALL_DEG)) return null;', to: '', caughtBy: 'row 4:' },
+  // RE-ANCHORED BY NAME (2026-11-02): the wall test is now its own line (a wall side gets its hull's side alone, apronOf closeWall); the fault is the same
+  { id: 'P3 the wall test dropped (a 90° cup gets an apron)', from: 'const wall = rows.some((q) => q.rim >= WALL_DEG);', to: 'const wall = false;', caughtBy: 'row 4:' },
   // the two the build added: the pit lane's span and the piece's own surface
   // AMENDED (D593, the pit lane's outline): the span's cells were skipped by `if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) continue;`; that test now
   // opens the block that hands their rows to the outline, so the old line would read NOT APPLIED. The same fault: the span keeps the main road's own apron.
@@ -51,7 +52,7 @@ const MUTATIONS = [
   // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
   { id: 'P10 the pit lane\'s outline plank hidden (round the lane, what is drawn is not the physics)', from: 'children: [{ ...out.physics, material: matIndex }] });', to: 'children: [{ ...out.physics, material: matIndex, visible: false, renderable: false, castShadows: false }] });', caughtBy: 'row 14:' },
   { id: 'P12 the road skin beside the lane hung along its own cupped normal again (it swings under the lane skin and clips through it)', from: 'if (r) return r.up;', to: 'if (r) return r.n;', caughtBy: 'row 18:' },
-  { id: 'P11 the physics re-aimed along the edge\'s own segment (the step the keeper kept out)', from: 'const O = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -drop)))', to: 'const O = rows.map((q) => add(add(q.E, mul(q.D, widthM)), mul(q.Dn, drop)))', caughtBy: 'row 17:' },
+  { id: 'P11 the physics re-aimed along the edge\'s own segment (the step the user kept out)', from: ': add(add(q.E, mul(q.X, widthM)), mul(q.N, -drop))));', to: ': add(add(q.E, mul(q.D, widthM)), mul(q.Dn, drop))));', caughtBy: 'row 17:' },   // RE-ANCHORED BY NAME (2026-11-02): the full plank's O is now the branch past a taper
   // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
   // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
   { id: 'P13 the apron\'s asphalt at full light (not a little darker)', from: 'const LIP_SHADE = 0.88;', to: 'const LIP_SHADE = 1;', caughtBy: 'row 15:' },
@@ -59,10 +60,12 @@ const MUTATIONS = [
   // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
   { id: 'P14 the pit lane\'s outline drawn with no join (the wedge open along the lane)', from: 'add.push({ type: \'dummy\', name: name(\'APRONSIDE\'), matrix: IDENTITY.slice(), children: [{ ...out.side, material: matIndex }] });', to: '', caughtBy: 'row 14:' },
   { id: 'P15 outline rows a few micrometres apart kept as two (a lip cell of no width)', from: 'const SAME_M = 1e-4;', to: 'const SAME_M = 1e-6;', caughtBy: 'row 18:' },
-  // AMENDED (D593, the chair's 21:58 and 23:23: the drawn surface is the physics, 0.4.34's plank and join, in the road's asphalt at LIP_SHADE): this mutant's anchor
-  // was the lip's, then the side face's; the fault it stands for now is the drawn plank's.
-  { id: 'P16 the across runs not fanned from the lane row\'s outer point (slivers and overlaps at the lane\'s ends)', from: 'for (const i of run) Os[i] = Os[k];', to: 'void run;', caughtBy: 'row 18:' },
-  { id: 'P17 the caps across the lane\'s ends left to the outline\'s own normal rules (half face into the lane and are culled)', from: 'for (const i of run.slice(1, -1)) capN[i] = c; }', to: 'void c; }', caughtBy: 'row 22:' },
+  // DROPPED (2026-11-02, the notch at the pit's rejoin): P16 (the across runs not fanned from the lane row's outer point) and P17 (the caps left to the outline's own
+  // normal rules). Neither the plank nor the join walks an across run now (apron.js outlineMeshes: both go from the road row outside it straight to the lane row, fans
+  // cover the end row), so the outer points and the cap normals they changed were read by nothing; the cap code went with them. The fault they stood for, a cap
+  // across the lane's end, is P21's
+  { id: 'P21 the plank walking across the lane\'s end again (a cap: the notch the user marked)', from: 'if (i !== k) notJoin[i] = notPlank[i] = true;', to: 'if (i !== k) notJoin[i] = true;', caughtBy: 'row 22:' },
+  { id: 'P22 the hull not eased out beside the lane (a step in the bottom at the leave)', from: 'return x * x * (3 - 2 * x);', to: 'return 1;', caughtBy: 'row 26:' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

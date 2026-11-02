@@ -46,7 +46,7 @@
 //   zone turns down (e < 0) is open and its apron starts at the zone's outer row, which is the mesh's last column. Flights (jump segments) have no cells and no apron.
 //   The mesh's column 0 is the road's right (−u) and column K − 1 its left (+u, the frame's L).
 'use strict';
-const { UNDERSKIN_OFFSET_M, ringCells, skinDir, hullDepth, skinColumns, HULL_EDGE_SPAN_M } = require('./underskin.js');
+const { UNDERSKIN_OFFSET_M, ringCells, skinDir, hullDepth, hullEase, skinColumns, HULL_EDGE_SPAN_M } = require('./underskin.js');
 const { gripKey } = require('./gripkeys.js');
 
 const APRON_WIDTH_M = 2.0;     // the default: one measured excursion reached 0.86 m past the edge (p-d563), and 2 m covers it with room
@@ -56,6 +56,7 @@ const APRON_TILE_M = 4;        // the uv tile, in metres
 const RUN_COLUMNS = 8;
 const TIP_LEAD_DEG = 15;      // the hull's run leaves a plank's tip this much steeper than its chord to the skin's edge (D604)         // the hull's run under a plank, tip to the skin's edge, in points across (D604): 7 spans of a 2 m plank's curve
 const PIT_PAD_M = 5;           // each way past the pit lane's leave and rejoin
+const PIT_HULL_EASE_M = 30;    // the hull's deepening under the road's edge eases out over this much road before the lane's leave and after its rejoin (padEase)
 const APRON_TAG = 'APRON', SIDE_PREFIX = 'APRONSIDE';
 const LIP_SHADE = 0.88;         // the apron's share of its road material's light (ambient, diffuse, specular): the road's own texture a little darker, lit and shadowed by
                                // the game as the road is (the user, 18:17: "perhaps slightly darker, not like crazy dark"; it was 0.45, "not so dark")
@@ -110,13 +111,20 @@ function strip(name, a, b, na, nb, uva, uvb, G, physics) {
  * One side of one grid cell, in the cell's own frame: { top, side } (top null at width 0), or null for a wall side or a cell too narrow to have a centre apart from its edge.
  * `names`: { top, side }.
  */
-function apronOf(m, K, side, { widthM = APRON_WIDTH_M, slopeDeg = APRON_SLOPE_DEG } = {}, names) {
+function apronOf(m, K, side, { widthM = APRON_WIDTH_M, slopeDeg = APRON_SLOPE_DEG, ease = null, taper = null, closeWall = false } = {}, names) {
   if (!(K >= 3)) return null;
   const rows = sideRows(m, K, side);
-  if (rows.some((q) => q.rim >= WALL_DEG)) return null;
+  const wall = rows.some((q) => q.rim >= WALL_DEG);
+  if (wall && !closeWall) return null;
+  // A WALL SIDE has no plank. With `closeWall` it gets the hull's side alone (D604 follow-up, the jag at a tube's opening: there the skin's edge hung 1.5 m off the
+  // road's free edge with nothing between, a fin): a plank of no width, so its run is straight from the road's edge to the skin's, in the skin's own mesh (withRuns);
+  // `wall` says so, and its `top` is null
+  if (wall) taper = rows.map(() => 0);
   // S: the skin's edge vertex, hung as underskin.js hangs it (skinDir, its row's section up, at hullDepth: deeper under an edge that rises): the hull's bottom under the
   // road's edge (withRuns shares the skin's own vertex there)
-  const drop = widthM * Math.tan((slopeDeg * Math.PI) / 180), S = rows.map((q) => sub(q.E, mul(skinDir(q.NE, q.Nc), hullDepth(q.rim)))), vAt = [];
+  // (`ease`, per row, beside a pit lane: how much of that deepening is kept, padEase)
+  const depth = rows.map((q, r) => (!ease || ease[r] === 1 ? hullDepth(q.rim) : UNDERSKIN_OFFSET_M + (hullDepth(q.rim) - UNDERSKIN_OFFSET_M) * ease[r]));
+  const drop = widthM * Math.tan((slopeDeg * Math.PI) / 180), S = rows.map((q, r) => sub(q.E, mul(skinDir(q.NE, q.Nc), depth[r]))), vAt = [];
   let along = 0; rows.forEach((q, r) => { if (r > 0) along += len(sub(q.E, rows[r - 1].E)); vAt.push(along / APRON_TILE_M); });
   const T = rows.map((q, r) => unit(sub((rows[r + 1] || q).E, (rows[r - 1] || q).E)));
   if (!(widthM > 0)) {
@@ -124,9 +132,14 @@ function apronOf(m, K, side, { widthM = APRON_WIDTH_M, slopeDeg = APRON_SLOPE_DE
     const face = strip(names.side, rows.map((q) => q.E), S, rows.map((q) => q.X), rows.map((q) => q.X), vAt.map((v) => [0, v]), vAt.map((v) => [UNDERSKIN_OFFSET_M / APRON_TILE_M, v]), G, false);
     return { top: null, side: face };
   }
-  const O = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -drop))), G = rows.map((q, r) => mul(add(add(q.E, O[r]), S[r]), 1 / 3));
-  const nTop = rows.map((q, r) => { const n = unit(cross(T[r], unit(sub(O[r], q.E)))); return dot(n, q.N) >= 0 ? n : mul(n, -1); });
-  const top = strip(names.top, rows.map((q) => q.E), O, nTop, nTop, vAt.map((v) => [0, v]), vAt.map((v) => [widthM / APRON_TILE_M, v]), G, true);
+  // (`taper`, per row: the plank's share of its width where the apron starts or stops, underskin.js hullEase: it grows out of the road's edge there, not square)
+  const wr = rows.map((_, r) => (taper && taper[r] !== 1 ? widthM * taper[r] : widthM));
+  const O = rows.map((q, r) => (taper && taper[r] !== 1 ? add(add(q.E, mul(q.X, wr[r])), mul(q.N, -wr[r] * Math.tan((slopeDeg * Math.PI) / 180))) : add(add(q.E, mul(q.X, widthM)), mul(q.N, -drop))));
+  // G: a point inside the hull, the run's normals turned away from it; a plank of no width has no wedge, so halfway from the edge to the skin, half a metre back
+  // along the road's last segment (−D: into the road, however the edge turns; a point "in along X" lies outside the hull where the edge curls over)
+  const G = rows.map((q, r) => (wr[r] > 0 ? mul(add(add(q.E, O[r]), S[r]), 1 / 3) : sub(mul(add(q.E, S[r]), 0.5), mul(q.D, 0.5))));
+  const nTop = rows.map((q, r) => { if (!(wr[r] > 0)) return q.N; const n = unit(cross(T[r], unit(sub(O[r], q.E)))); return dot(n, q.N) >= 0 ? n : mul(n, -1); });
+  const top = strip(names.top, rows.map((q) => q.E), O, nTop, nTop, vAt.map((v) => [0, v]), vAt.map((v, r) => [wr[r] / APRON_TILE_M, v]), G, true);
   // THE HULL'S RUN under the plank (D604, the user's red line, 2026-11-01 10:44: the bottom one smooth curve from tip to tip): a cubic Hermite in the section from the
   // plank's tip O to the skin's edge S, RUN_COLUMNS points. It leaves the tip heading in and down, TIP_LEAD_DEG steeper than the chord from O to S (between 30° and
   // 85° in the section; the plank rises in from the tip, so the two part there and the hull is closed), and meets the skin's edge along the skin's own slope there
@@ -134,8 +147,8 @@ function apronOf(m, K, side, { widthM = APRON_WIDTH_M, slopeDeg = APRON_SLOPE_DE
   // the chord is steeper than the road there, so the run's slope only flattens from tip to skin. Each point's normal is the curve's own, turned away from the
   // hull's inside (G[r], between the road's edge, the tip and S). Column 0 is O, the last is S (withRuns shares it)
   const run = [], nRun = [], uvRun = [];
-  rows.forEach((q, r) => { const h = hullRun(q, O[r], S[r], T[r], G[r], hullDepth(q.rim), vAt[r]); run.push(h.pts); nRun.push(h.ns); uvRun.push(h.uvs); });
-  return { top, side: grid(names.side, run, nRun, uvRun, rows.map(() => false)) };
+  rows.forEach((q, r) => { const h = hullRun(q, O[r], S[r], T[r], G[r], depth[r], vAt[r], taper ? taper[r] : 1); run.push(h.pts); nRun.push(h.ns); uvRun.push(h.uvs); });
+  return { top: wall ? null : top, side: grid(names.side, run, nRun, uvRun, rows.map(() => false)), wall };
 }
 
 /**
@@ -144,9 +157,11 @@ function apronOf(m, K, side, { widthM = APRON_WIDTH_M, slopeDeg = APRON_SLOPE_DE
  * (−q.D), rising as the skin's depth eases back from `depthS` (underskin.js rowDepths; none when depthS is the plain depth). `T` the road's direction along, `G` a
  * point inside the hull (the normals turn away from it), `v` the row's uv v. { pts, ns, uvs } (uv u: the arc from the tip, in tiles).
  */
-function hullRun(q, O, S, T, G, depthS, v) {
+function hullRun(q, O, S, T, G, depthS, v, w = 1) {
   const c = sub(S, O), ch = len(c), chord = Math.atan2(-dot(c, q.N), -dot(c, q.X)), lead = Math.min((85 * Math.PI) / 180, Math.max((30 * Math.PI) / 180, chord + (TIP_LEAD_DEG * Math.PI) / 180));
   const tO = mul(add(mul(q.X, -Math.cos(lead)), mul(q.N, -Math.sin(lead))), ch), tS = mul(unit(add(mul(q.D, -1), mul(q.N, (2 * (depthS - UNDERSKIN_OFFSET_M) / HULL_EDGE_SPAN_M) * Math.cos((q.rim * Math.PI) / 180)))), ch), pts = [], ns = [], uvs = [];
+  // a plank tapered to width w of its own (apronOf's taper): both tangents blend to the chord's as w goes to 0, so a plank of no width leaves a straight side, not a curl
+  if (w !== 1) { const a = Math.max(0, Math.min(1, w)); for (const t of [tO, tS]) for (let i = 0; i < 3; i++) t[i] = c[i] + (t[i] - c[i]) * a; }
   let arc = 0;
   for (let j = 0; j < RUN_COLUMNS; j++) {
     const s = j / (RUN_COLUMNS - 1), s2 = s * s, s3 = s2 * s;
@@ -189,6 +204,14 @@ function inLaneSpan(cell, lane) {
   if (!lane) return false;
   const a = lane.s0 - PIT_PAD_M, b = lane.s1 + PIT_PAD_M;
   return lane.s0 <= lane.s1 ? cell.s1 >= a && cell.s0 <= b : cell.s1 >= a || cell.s0 <= b;
+}
+
+/** 0 at main s inside the lane's span, easing (smoothstep) to 1 at PIT_HULL_EASE_M before the leave or after the rejoin, 1 beyond: how much of the hull's deepening the
+ *  road's skin on the lane's side keeps there. A span with s0 > s1 wraps over a closed lap's start. */
+function padEase(s, lane) {
+  const inside = lane.s0 <= lane.s1 ? s >= lane.s0 && s <= lane.s1 : s >= lane.s0 || s <= lane.s1;
+  const x = inside ? 0 : Math.min(1, Math.min(Math.abs(lane.s0 - s), Math.abs(s - lane.s1)) / PIT_HULL_EASE_M);
+  return x * x * (3 - 2 * x);
 }
 
 /** Which of `mesh.cells` may get an apron: the core road cells that are a grid (not a seam row) and not a closed ring. Set of cell indexes. */
@@ -275,15 +298,13 @@ function withTris(m, tris) {
 function outlineMeshes(rows, widthM, slopeDeg, names) {
   const tan = Math.tan((slopeDeg * Math.PI) / 180), V = [], Nv = [], UV = [], J = [], Nj = [], UVj = [];
   // ACROSS RUNS: at the leave and the rejoin the outline walks the lane's end row, TAPER_MIN_W across in K − 1 steps along the rows' own X, all at one s, so those
-  // cells lie in one plane with the section. Each with its own outer point, the plank there was a run of slivers (2 m long, 1.25 cm apart: 64 on the pit test lap)
-  // and its plank and join bands overlapped (3); with the end row cut to its two ends, the lane's end edge met the plank's in a T and the downforce ray fell
-  // through the seam. So every row of an across run takes the LANE row's outer point: its plank cells fan out from it to the end row's own vertices, and its join
-  // cells fan back from it to the skin's, every vertex shared, watertight on the lane's edge and the skin's (one join triangle across the run, its long edge meeting the
-  // skin's end row in a T, rendered as a dotted crack: D593 overnight). The fans' thickness is the end row's spacing times sin 25° (plank) or sin 12° (join), which
-  // TAPER_MIN_W keeps over 1 cm (src/geom/pitlane.js)
+  // cells would lie in one plane with the section. Each with its own outer point, the plank there was a run of slivers (2 m long, 1.25 cm apart: 64 on the pit test
+  // lap); fanned from the lane row's outer point, it was a cap across the lane's end, a square step in the plank's edge (the notch, below). So neither the plank nor
+  // the join walks the run: both go from the road row outside it straight to the lane row, and the end row is covered by fans from that road row (`ends`), the
+  // plank's from its edge point in the road's plane, the join's from its skin point, every end-row vertex shared. A fan triangle is about the end row's spacing
+  // (TAPER_MIN_W / (K − 1), src/geom/pitlane.js) thick, the road row lying along the road from the end row, not across it
   const Os = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -widthM * tan)));
-  const capN = rows.map(() => null);   // an across run's inner rows: the normal of the lane end's cap
-  const notJoin = rows.map(() => false), ends = [];   // the join's rows left out at the lane's ends, and each end's fan: { out, list } (row indexes)
+  const notJoin = rows.map(() => false), notPlank = rows.map(() => false), ends = [];   // the rows the join and the plank leave out at the lane's ends, and each end's fans: { out, list } (row indexes)
   const across = (r) => { const d = sub(rows[r + 1].E, rows[r].E), l = len(d); return l > 0 && l < 0.5 && Math.abs(dot(d, rows[r].X)) > 0.7 * l; };
   for (let r = 0; r + 1 < rows.length; r++) {
     if (!across(r)) continue;
@@ -291,38 +312,42 @@ function outlineMeshes(rows, widthM, slopeDeg, names) {
     const run = []; for (let i = r; i <= j + 1; i++) run.push(i);
     const k = run.find((i) => rows[i].lane);
     if (k !== undefined) {
-      for (const i of run) Os[i] = Os[k];
-      // the cap's facing: its cells lie in the cross-section's plane, where the rules below (away from the section's centre) have no sign, and half the cap faced
-      // inward and was culled (sky through the leave from below, D593 overnight). Its inner rows face OUT OF THE LANE'S END, toward the road row outside the run
-      const out = rows[k === run[0] ? run[run.length - 1] + 1 : run[0] - 1];
-      if (out) { let c = unit(cross(rows[k].X, rows[k].N)); if (dot(c, sub(out.E, rows[k].E)) < 0) c = mul(c, -1); for (const i of run.slice(1, -1)) capN[i] = c; }
       // THE JOIN AT THE LANE'S END (D604): at the slab's depth (UNDERSKIN_OFFSET_M, the plank's drop) the lane's skin row, its outer point and the road row's skin point
-      // lie on one line, the lane being flat, so the run's own join cells have no area (slivers) and the lane skin's end edge would meet the road join's edge in a T.
-      // So the join leaves out the run's rows but the lane row, and the gap beside the outside road row is a fan from that row's skin point to the run's skin points
+      // lie on one line, the lane being flat, so the run's own join cells have no area (slivers) and the lane skin's end edge would meet the road join's edge in a T
       const oi = k === run[0] ? run[run.length - 1] + 1 : run[0] - 1;
-      if (out) { for (const i of run) if (i !== k) notJoin[i] = true; ends.push({ out: oi, list: k === run[0] ? run.slice().reverse() : run.slice() }); }
+      if (rows[oi]) { for (const i of run) if (i !== k) notJoin[i] = notPlank[i] = true; ends.push({ out: oi, list: k === run[0] ? run.slice().reverse() : run.slice() }); }
     }
     r = j;
   }
-  let along = 0; const Ss = [], NJ = [];
+  // THE PLANK AT THE LANE'S END: walked across the end row, the plank turned a square corner there, out along the end row and back along the lane, a step in its edge
+  // as wide as the lane's end (the notch the user marked at the rejoin, 2026-11-02, "looks small but is fatal"; the seam across the plank at the leave). So the plank
+  // leaves out the run's rows but the lane row and goes straight from the outside road row to it, and the end row is covered by a fan from that road row's edge point,
+  // flat in the road's plane: every end-row vertex shared, the plank's edge one line from the road's edge to the lane's
+  const kept = rows.map((_, r) => r).filter((r) => !notPlank[r]), nb = new Map(kept.map((r, i) => [r, [kept[i - 1], kept[i + 1]]]));
+  let along = 0; const Ss = [], NJ = [], Al = [];
   rows.forEach((q, r) => {
     if (r > 0) along += len(sub(q.E, rows[r - 1].E));
+    Al.push(along);
     const O = Os[r], T = sub((rows[r + 1] || q).E, (rows[r - 1] || q).E);
-    let n = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(O, q.E)))) : q.N; if (dot(n, q.N) < 0) n = mul(n, -1);
-    if (capN[r]) n = capN[r];
-    V.push([q.E, O]); Nv.push([n, n]); UV.push([[0, along / APRON_TILE_M], [widthM / APRON_TILE_M, along / APRON_TILE_M]]);
+    if (!notPlank[r]) {
+      const [pa, pb] = nb.get(r), Tp = sub((pb === undefined ? q : rows[pb]).E, (pa === undefined ? q : rows[pa]).E);
+      let n = len(Tp) > 1e-9 ? unit(cross(unit(Tp), unit(sub(O, q.E)))) : q.N; if (dot(n, q.N) < 0) n = mul(n, -1);
+      V.push([q.E, O]); Nv.push([n, n]); UV.push([[0, along / APRON_TILE_M], [widthM / APRON_TILE_M, along / APRON_TILE_M]]);
+    }
     // the skin's edge vertex as its own skin hangs it: the road's by skinDir (its row's section up); the lane's, its end rows' and a road row at an infill join along
     // the normal pitSkins hung them by (their own; the join's)
-    const S = q.lane || q.end || q.atJoin ? sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)) : sub(q.E, mul(skinDir(q.NE, q.Nc), hullDepth(q.rim))), G = mul(add(add(q.E, O), S), 1 / 3), mid = mul(add(O, S), 0.5);
+    const S = q.lane || q.end || q.atJoin ? sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)) : sub(q.E, mul(skinDir(q.NE, q.Nc), q.hull === undefined ? hullDepth(q.rim) : q.hull)), G = mul(add(add(q.E, O), S), 1 / 3), mid = mul(add(O, S), 0.5);
     let nj = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(S, O)))) : mul(q.N, -1); if (dot(nj, sub(mid, G)) < 0) nj = mul(nj, -1);
-    if (capN[r]) nj = capN[r];
     Ss.push(S); NJ.push(nj);
-    if (!notJoin[r]) { const h = hullRun(q, O, S, T, G, q.lane || q.end || q.atJoin ? UNDERSKIN_OFFSET_M : hullDepth(q.rim), along / APRON_TILE_M); J.push(h.pts); Nj.push(capN[r] ? h.ns.map(() => capN[r]) : h.ns); UVj.push(h.uvs); }
+    if (!notJoin[r]) { const h = hullRun(q, O, S, T, G, q.lane || q.end || q.atJoin ? UNDERSKIN_OFFSET_M : q.hull === undefined ? hullDepth(q.rim) : q.hull, along / APRON_TILE_M); J.push(h.pts); Nj.push(h.ns); UVj.push(h.uvs); }
   });
   // each lane end's fan: from the outside road row's skin point across the run's skin points, the road's first and the lane's last
-  const fans = [];
-  for (const { out, list } of ends) for (let i = 0; i + 1 < list.length; i++) fans.push([Ss[out], Ss[list[i]], Ss[list[i + 1]]].map((p) => [p, NJ[out], [0, 0]]));
-  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), side: withTris(grid(names.side, J, Nj, UVj, J.map(() => false)), fans) };
+  const fans = [], tops = [];
+  for (const { out, list } of ends) for (let i = 0; i + 1 < list.length; i++) {
+    fans.push([Ss[out], Ss[list[i]], Ss[list[i + 1]]].map((p) => [p, NJ[out], [0, 0]]));
+    tops.push([out, list[i], list[i + 1]].map((r) => [rows[r].E, rows[out].N, [dot(sub(rows[r].E, rows[out].E), rows[out].X) / APRON_TILE_M, Al[out] / APRON_TILE_M + dot(sub(rows[r].E, rows[out].E), unit(sub(rows[list[list.length - 1]].E, rows[out].E))) / APRON_TILE_M]]));
+  }
+  return { physics: withTris(grid(names.physics, V, Nv, UV, V.map(() => false)), tops), side: withTris(grid(names.side, J, Nj, UVj, J.map(() => false)), fans) };
 }
 
 /**
@@ -349,7 +374,7 @@ function pitSkins(scene, mesh, laneMesh, lane, skinMat) {
   const entry = (ix, p) => { const c = cellOf(p); let best = null, bd = OWNER_M; for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) for (const x of ix.get(`${c[0] + i},${c[1] + j},${c[2] + k}`) || []) { const d = len(sub(x.p, p)); if (d <= bd) { bd = d; best = x; } } return best; };
   const find = (ix, p) => { const e = entry(ix, p); return e ? e.n : null; };
   const near = [];
-  mesh.cells.forEach((cell, k) => { if (cell.s1 >= lane.s0 - 10 && cell.s0 <= lane.s1 + 10) { const c = scene.root.children[k]; own(roadIx, c.children[0], c.matrix); near.push(k); } });
+  mesh.cells.forEach((cell, k) => { if (cell.s1 >= lane.s0 - PIT_HULL_EASE_M - 10 && cell.s0 <= lane.s1 + PIT_HULL_EASE_M + 10) { const c = scene.root.children[k]; own(roadIx, c.children[0], c.matrix); near.push(k); } });
   laneMesh.cells.forEach((cell, k) => { const c = laneMesh.scene.root.children[k]; own(laneIx, c.children[0], c.matrix); });
   const fillNode = laneMesh.scene.root.children.slice(laneMesh.cells.length).find((c) => c.children && c.children[0] && /^1ROAD_PIT_fill/.test(c.children[0].name)), fillIx = index();
   if (fillNode) own(fillIx, fillNode.children[0], fillNode.matrix);
@@ -388,9 +413,22 @@ function pitSkins(scene, mesh, laneMesh, lane, skinMat) {
     const cellNode = scene.root.children[k], si = skins.get(cellNode.matrix); if (si === undefined) continue;
     const sn = scene.root.children[si], sm = sn.children[0], M = sn.matrix, rp = cellNode.children[0].positions, cell = mesh.cells[k]; let P = null, N = null;
     const K = cell.seam ? null : mesh._state.pieces[cell.piece].K, cols = K ? skinColumns(K) : null, C = cols ? cols.length : 0;
+    const Kr = K || rp.length / 3 / 2, R = cols ? sm.positions.length / 3 / C : 2;
     for (let i = 0; i < sm.positions.length / 3; i++) {
       const ri = cols ? Math.floor(i / C) * K + cols[i % C] : i;
-      const E = toWorld(M, [rp[ri * 3], rp[ri * 3 + 1], rp[ri * 3 + 2]]), nj = joinNormal(E); if (!nj) continue;
+      const E = toWorld(M, [rp[ri * 3], rp[ri * 3 + 1], rp[ri * 3 + 2]]), nj = joinNormal(E);
+      if (!nj) {
+        // THE HULL EASED OUT BESIDE THE LANE (D604 follow-up): the skin deepened under a rising edge (underskin.js rowDepths) on the lane's side comes back to the plain
+        // depth the lane's and the infill's skins hang at, over PIT_HULL_EASE_M of road before the leave and after the rejoin, along the direction it hangs, so the bottom does
+        // not step where the road's edge meets the lane's (the seam under the leave); the outline's road rows take the same depth (withApron)
+        const c = ri % Kr, e = padEase(cell.seam ? cell.s0 : cell.s0 + (cell.s1 - cell.s0) * Math.floor(ri / Kr) / Math.max(1, R - 1), lane);
+        if (e >= 1 || (lane.side === 'L' ? c < (Kr - 1) / 2 : c > (Kr - 1) / 2)) continue;
+        const Sv = toWorld(M, [sm.positions[i * 3], sm.positions[i * 3 + 1], sm.positions[i * 3 + 2]]), d = len(sub(E, Sv));
+        if (!(d > UNDERSKIN_OFFSET_M + 1e-6)) continue;
+        if (!P) { P = Float32Array.from(sm.positions); N = Float32Array.from(sm.normals); }
+        P.set(toLocal(M, sub(E, mul(unit(sub(E, Sv)), UNDERSKIN_OFFSET_M + (d - UNDERSKIN_OFFSET_M) * e))), i * 3);
+        continue;
+      }
       if (!P) { P = Float32Array.from(sm.positions); N = Float32Array.from(sm.normals); }
       P.set(toLocal(M, sub(E, mul(nj, UNDERSKIN_OFFSET_M))), i * 3); N.set(turnLocal(M, mul(nj, -1)), i * 3);
     }
@@ -431,7 +469,7 @@ function withApron(scene, mesh, segments, opts = {}) {
   if (!(Number.isFinite(slopeDeg) && slopeDeg >= 0 && slopeDeg < 90)) throw new Error(`the edge apron's slope must be from 0 to under 90 degrees, not ${slopeDeg}`);
   if (lane && !(lane.side === 'L' || lane.side === 'R') ) throw new Error(`the pit lane's side must be 'L' or 'R', not ${lane.side}`);
   if (!mesh || !mesh.cells || !mesh.scene) return scene;
-  const chosen = apronCells(mesh, segments);
+  const chosen = apronCells(mesh, segments), he = hullEase(mesh, segments);
   if (!chosen.size) return scene;
   const kids = scene.root.children, orig = mesh.scene.root.children, materials = scene.materials.slice(), matIndex = materials.length, add = [];
   let roadMat = null;   // the road material the first apron sits on: the apron's material is its darker shade (apronMaterial)
@@ -457,8 +495,13 @@ function withApron(scene, mesh, segments, opts = {}) {
         }
         continue;
       }
-      const ap = apronOf(m, K, side, { widthM, slopeDeg }, { top: `${prefix}${APRON_TAG}_${rest}_${tag}`, side: `${SIDE_PREFIX}_${rest}_${tag}` });
+      // each row's share of the hull's deepening: where the apron stops (underskin.js hullEase) and, on the lane's side, beside the pit lane (padEase); the skin's the same
+      const R0 = m.positions.length / 3 / K, cl = mesh.cells[k], sAt = (r) => cl.s0 + (R0 > 1 ? (cl.s1 - cl.s0) * r / (R0 - 1) : 0);
+      const taper = Array.from({ length: R0 }, (_, r) => he.at(side === 0 ? 0 : 1, sAt(r))), ease = taper.map((h, r) => h * (lane && lane.side === tag ? padEase(sAt(r), lane) : 1));
+      const ap = apronOf(m, K, side, { widthM, slopeDeg, ease: ease.some((x) => x < 1) ? ease : null, taper: taper.some((x) => x < 1) ? taper : null, closeWall: widthM > 0 }, { top: `${prefix}${APRON_TAG}_${rest}_${tag}`, side: `${SIDE_PREFIX}_${rest}_${tag}` });
       if (!ap) continue;
+      // a wall side: its hull side alone, into the cell's skin; no plank and no node of its own
+      if (ap.wall) { if (!runs.has(k)) runs.set(k, []); runs.get(k).push({ side, join: ap.side, rows: sideRows(m, K, side) }); continue; }
       if (roadMat === null) roadMat = m.material;
       // the plank DRAWN as it is (0.4.34's apron, the physics the user drove), on the apron's material; its run under the plank is the slab's bottom and goes INTO
       // the cell's own skin (withRuns, D604 redo); at width 0 the side face alone, its own node
@@ -478,7 +521,7 @@ function withApron(scene, mesh, segments, opts = {}) {
     const ps = pitSkins(scene, mesh, lane.mesh, lane, skinMat);
     add.push(...ps.add); replaced = ps.replace;
     // the outline's rows at a join take the join's normal too, so its join ends where every other skin there does
-    const ol0 = outlineRows(toOutline, lane.mesh, lane), ol = ol0 && ol0.map((q) => { const nj = ps.joinNormal(q.E); return nj ? { ...q, NE: nj, atJoin: true } : q; });
+    const ol0 = outlineRows(toOutline, lane.mesh, lane), ol = ol0 && ol0.map((q) => { const nj = ps.joinNormal(q.E); return nj ? { ...q, NE: nj, atJoin: true } : q.lane || q.end ? q : { ...q, hull: UNDERSKIN_OFFSET_M + (hullDepth(q.rim) - UNDERSKIN_OFFSET_M) * he.at(lane.side === 'R' ? 0 : 1, q.s) * padEase(q.s, lane) }; });
     if (ol) {
       const tag = `PIT_${lane.side}`, name = (p) => `${p}_${tag}`;
       const out = outlineMeshes(ol, widthM, slopeDeg, { physics: `1ROAD_${APRON_TAG}_${tag}`, side: name(SIDE_PREFIX) });

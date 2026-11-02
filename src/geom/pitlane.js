@@ -51,7 +51,7 @@ const { triTri, segTri, _internal: { soup, build, query } } = require('./bvh.js'
 
 const JOIN_MAX = 35 * Math.PI / 180;  // the steepest road edge a lane joins: the reader's lip (a sharper fold is an edge, not road)
 const MAT = 'ROAD';
-const TAPER_MIN_W = 0.5;               // m: the lane's width where it leaves and rejoins (a profile needs a width). Its first and last rows have K − 1 = 8 columns, and the
+const TAPER_MIN_W = 0.1;               // m: the lane's width where it leaves and rejoins (a profile needs a width). Its first and last rows have K − 1 = 8 columns, and the
                                        // drawn apron fans out from them across the lane's end: the plank inside the 25° wedge between the lane's end edge and the road
                                        // plank's, the join inside the 12° wedge between the skin's end edge and the plank's outer point. A triangle on two of them is at most
                                        // their spacing · sin(wedge) thick, so for the 1 cm floor the export's defect count holds they must be 1 / sin 12° = 4.8 cm apart

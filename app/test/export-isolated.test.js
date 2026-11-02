@@ -99,7 +99,13 @@ function digestOf(out) {
 // joins (APRONSIDE_p*) are gone. Only the kn5 files changed; the file counts are the same.
 // And again for the hull (the user's red line, 10:44: the bottom one smooth curve from tip to tip, 1.5 m under the road, deeper under an edge that rises): the
 // same comparison holds, with the skins and the pit outline's run as the hull's.
-const PIN = { lap: 'sha256 7048f2db72b8191c files 10', open: 'sha256 50248bc3a07ddd32 files 11' };
+// AMENDED BY NAME (2026-11-02, the notch the user marked at the pit's rejoin, "looks small but is fatal", and the seam under its leave): the lap pin moved from
+// 7048f2db72b8191c (e911792) to the value below; the open pin is unchanged. The lane's ends are 0.1 m wide again (src/geom/pitlane.js TAPER_MIN_W; 0.5 m since
+// 8fb6ecc made the step), the outline's plank no longer walks across the lane's end (a fan in the road's plane covers it), and the hull eases out to the plain
+// depth beside the lane (apron.js padEase). Compared with e911792 node by node (test/fixtures/kn5nodes.js): the road physics, the paint and every other physics plank
+// are the same bytes; the lane's in, out and fill surfaces and their skins, the outline's plank and run (1ROAD_APRON_PIT_R, APRONSIDE_PIT_R) and three road skins
+// beside the lane moved; of the lap's files the kn5, map.png and ui/outline.png changed (the lane's ends narrower); the counts are the same.
+const PIN = { lap: 'sha256 03d805db106b31b6 files 10', open: 'sha256 50248bc3a07ddd32 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

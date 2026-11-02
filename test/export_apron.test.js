@@ -533,10 +533,15 @@ test('row 21: the lane surface wears the road texture at the road scale where it
 
 // D593 overnight: the outline's caps across the lane's ends lie in the cross-section's plane, where the outline's own normal rules have no sign; half of them faced
 // into the lane and were culled, and the sky showed through the leave from below (pit-leave-low). Each must face out of the lane's end
-test('row 22: the apron caps across the lane ends face out of the lane end: every drawn outline triangle lying across the road faces away from the lane', () => {
+// AMENDED BY NAME (2026-11-02, the user on the pit's rejoin from above, "looks small but is fatal": a notch in the lane's edge, and a seam across the plank at the
+// leave): the caps were the notch. The plank walked across the lane's end, out and back, a square step as wide as the lane's end (0.5 m since 8fb6ecc); now it goes
+// straight from the road's row to the lane's and a fan in the road's plane covers the end, so NO plank triangle lies across the road there, and the lane's ends are
+// 0.1 m wide again. Any join triangle that still lies across the road faces out of the lane's end, as before
+test('row 22: the lane\'s ends have no cap and no step: no plank triangle lies across the road there, the lane is at most 0.1 m wide where it leaves and rejoins, and a join triangle across the road faces out of the lane', () => {
   const doc = lap('apron pit-is-track lap'), lane = { side: 'L', leave: { word: doc.pieces[0].id, along: 40 }, rejoin: { word: doc.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
   const b = exportDoc(doc, {}, { pitLane: lane }), outline = acMeshes(b).filter((m) => /^(1ROAD_APRON|APRONSIDE)_PIT_/.test(m.name));
   assert.ok(outline.length >= 2, 'control: the outline has its plank and its join');
+  for (const [name, s] of [['leave', b.pitLane.joins.leave.s], ['rejoin', b.pitLane.joins.rejoin.s]]) assert.ok(b.pitLane.widthAt(s) <= 0.1 + 1e-9, `the lane is ${b.pitLane.widthAt(s).toFixed(2)} m wide at its ${name}: a step that wide in the road's edge`);
   const at = (s) => { let best = b.path.samples[0]; for (const q of b.path.samples) if (Math.abs(q.s - s) < Math.abs(best.s - s)) best = q; return best; };
   const ends = [[at(b.pitLane.joins.leave.s), -1], [at(b.pitLane.joins.rejoin.s), 1]];   // out of the lane: back along the road at the leave, on along it at the rejoin
   let caps = 0; const bad = [];
@@ -547,10 +552,11 @@ test('row 22: the apron caps across the lane ends face out of the lane end: ever
     const [end, way] = ends.reduce((a, e) => (Math.hypot(...sub(e[0].pos, c)) < Math.hypot(...sub(a[0].pos, c)) ? e : a));
     const T = unit3(end.T), along = dot3(n, T) / nl;
     if (Math.abs(along) < Math.cos(25 * DEG) || Math.hypot(...sub(end.pos, c)) > 30) continue;
-    caps++; if (along * way <= 0) bad.push(`${m.name} triangle ${t / 3} faces into the lane at ${c.map((x) => x.toFixed(2))}`);
+    if (/^1ROAD_APRON_/.test(m.name)) { caps++; continue; }
+    if (along * way <= 0) bad.push(`${m.name} triangle ${t / 3} faces into the lane at ${c.map((x) => x.toFixed(2))}`);
   }
-  assert.ok(caps > 0, 'control: the caps are found');
-  assert.deepEqual(bad.slice(0, 4), [], `${bad.length} of ${caps} cap triangles face into the lane`);
+  assert.equal(caps, 0, `${caps} plank triangles lie across the road at the lane's ends: a cap, the notch`);
+  assert.deepEqual(bad.slice(0, 4), [], `${bad.length} join triangles across the road face into the lane`);
 });
 
 // D604, the user 2026-11-01 08:49: "the apron needs to connect to the other side of the track at the other apron, which creates a thickening of the track… the track
@@ -640,3 +646,30 @@ function pointTri(p, a, b, c) {
   const va = d3 * d6 - d5 * d4; if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) { const w = (d4 - d3) / (d4 - d3 + (d5 - d6)); const bc = sub(c, b); return Math.hypot(...sub(p, [b[0] + w * bc[0], b[1] + w * bc[1], b[2] + w * bc[2]])); }
   const den = 1 / (va + vb + vc), v = vb * den, w = vc * den; return Math.hypot(...sub(p, [a[0] + ab[0] * v + ac[0] * w, a[1] + ab[1] * v + ac[1] * w, a[2] + ab[2] * v + ac[2] * w]));
 }
+
+// The user 2026-11-02, on the pit's leave from below ("pit-leave-low"): a seam in the bottom. The hull hangs deeper under an edge that rises (underskin.js
+// hullDepth), but beside the lane every skin hangs at the plain depth, so on his own cupped track the bottom under the road's edge dropped 0.83 m in one 2 m row where the
+// lane began. It now eases out over apron.js PIT_HULL_EASE_M before the leave and after the rejoin (padEase), so the bottom has no step there
+test('row 26: beside the pit lane the hull\'s bottom has no step: on a cupped road the skin under the lane\'s side of the road, 0.5 m in from its edge, changes depth by at most 0.03 m a metre over the 40 m before the leave and after the rejoin', () => {
+  let d = extend(D.createDoc('apron cupped pit lap'), { length: 400, family: 'bowl', first: { w: 20, c: 15.5 } });
+  for (let i = 0; i < 4; i++) d = extend(d, { length: Q, transition: 40, targets: { kh: 1 / Rr } });
+  d = extend(d, { length: 60, transition: 40, targets: { kh: 0 } });
+  const r = close(d, { edited: [0] }); assert.equal(r.converged, true, r.report);
+  const lane = { side: 'L', leave: { word: r.doc.pieces[0].id, along: 120 }, rejoin: { word: r.doc.pieces[0].id, along: 320 }, offsetM: 12, width: 8, divergeM: 60, mergeM: 60, speedKmh: 80 };
+  const b = exportDoc(r.doc, {}, { pitLane: lane }), all = acMeshes(b);
+  const tris = (re) => { const out = []; for (const m of all.filter((x) => re.test(x.name) && x.visible !== false && x.renderable !== false)) for (let t = 0; t < m.indices.length; t += 3) out.push([0, 1, 2].map((k) => { const i = m.indices[t + k]; return [m.positions[i * 3], m.positions[i * 3 + 1], m.positions[i * 3 + 2]]; })); return out; };
+  const road = tris(/^1(ROAD|GRIP\d{3})_p/), skin = tris(/^UNDERSKIN_/);
+  // the nearest hit along a ray (Möller–Trumbore), from o along unit d, or null
+  const hit = (list, o, dd) => { let best = null; for (const [a, b2, c] of list) { const e1 = sub(b2, a), e2 = sub(c, a), pv = cross3(dd, e2), det = dot3(e1, pv); if (Math.abs(det) < 1e-12) continue; const tv = sub(o, a), u = dot3(tv, pv) / det; if (u < 0 || u > 1) continue; const qv = cross3(tv, e1), v = dot3(dd, qv) / det; if (v < 0 || u + v > 1) continue; const t = dot3(e2, qv) / det; if (t > 0 && (best === null || t < best)) best = t; } return best; };
+  const depthAt = (s) => { const x = b.pitLane.at(s), down = x.U.map((v) => -v), o = sub(x.edge, x.L.map((v) => v * 0.5)).map((v, k) => v - down[k] * 3); const tr = hit(road, o, down), ts = hit(skin, o, down); return tr === null || ts === null ? null : ts - tr; };
+  // a quarter metre off each join: at the join itself the ray runs down the line the road, the lane and the infill share
+  const { leave, rejoin } = b.pitLane.joins;
+  for (const [name, from, to] of [['leave', leave.s - 40.25, leave.s - 0.25], ['rejoin', rejoin.s + 0.25, rejoin.s + 40.25]]) {
+    const dep = []; for (let s = from; s <= to + 1e-9; s += 1) dep.push(depthAt(s));
+    assert.ok(dep.every((x) => x !== null), `${name}: control: the ray meets the road and the skin at every metre (misses at ${dep.map((x, i) => (x === null ? from + i : null)).filter((x) => x !== null).map((x) => x.toFixed(0)).join(', ')})`);
+    const far = name === 'leave' ? dep[0] : dep[dep.length - 1], near = name === 'leave' ? dep[dep.length - 1] : dep[0];
+    assert.ok(far > near + 0.05, `${name}: control: the hull is deeper 40 m from the lane (${far.toFixed(3)} m) than at it (${near.toFixed(3)} m)`);
+    let worst = 0; for (let i = 1; i < dep.length; i++) worst = Math.max(worst, Math.abs(dep[i] - dep[i - 1]));
+    assert.ok(worst <= 0.03, `${name}: the bottom steps ${worst.toFixed(3)} m in one metre beside the lane`);
+  }
+});

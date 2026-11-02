@@ -70,16 +70,65 @@ function hullDepth(rimDeg) {
   const w = Math.min(1, (HULL_WALL_DEG + HULL_EASE_DEG - rimDeg) / HULL_EASE_DEG), e = w * w * (3 - 2 * w);
   return UNDERSKIN_OFFSET_M + (deep - UNDERSKIN_OFFSET_M) * e;
 }
-/** The skin's depth at each vertex of one road row (K vertices from `base` in P, N): UNDERSKIN_OFFSET_M, deepened toward each edge that rises (hullDepth) when `hull`. */
-function rowDepths(P, N, base, K, hull = true) {
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const unit3 = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; };
+/** One road row's two edges (K vertices from `base` in P, N; side 0 the first vertex, side 1 the last): [{ E, X, rim }] with rim in degrees, as apron.js sideRows reads it. */
+function rowEdges(P, N, base, K) {
+  const p = (k) => [P[(base + k) * 3], P[(base + k) * 3 + 1], P[(base + k) * 3 + 2]];
+  const ic = Math.floor(K / 2), Cv = p(ic), Nc = unit3([N[(base + ic) * 3], N[(base + ic) * 3 + 1], N[(base + ic) * 3 + 2]]);
+  return [[0, 1], [K - 1, K - 2]].map(([i0, i1]) => {
+    const E = p(i0), lat = sub3(E, Cv), l = dot3(lat, Nc), X = unit3([lat[0] - Nc[0] * l, lat[1] - Nc[1] * l, lat[2] - Nc[2] * l]), d = sub3(E, p(i1));
+    return { E, X, rim: (Math.atan2(dot3(d, Nc), dot3(d, X)) * 180) / Math.PI };
+  });
+}
+/**
+ * THE HULL EASED OUT WHERE THE APRON STOPS (D604 follow-up: the jag at a tube's opening). A side of a cell gets its apron only when no row of it is a wall (rim
+ * HULL_WALL_DEG or more: apron.js apronOf, WALL_DEG) and it is not a closed ring; where a side has none, nothing closes the skin's deepened edge to the road, and at a
+ * tube's opening the skin hung up to HULL_EDGE_MAX_M under an edge with no plank above it, a fin, and stepped by metres where the planks began. So the deepening is
+ * kept only on a side whose apron runs on both ways: it eases (smoothstep) from none at a cell side with no apron to all of it HULL_ALONG_M along the road away from
+ * one. `hullEase(mesh, segments)` -> at(side, s) (side 0 the cells' first column, the right; 1 the last, the left), from 0 to 1.
+ */
+const HULL_ALONG_M = 10;
+function hullEase(mesh, segments) {
+  const shut = [[], []], st = mesh && mesh._state;
+  if (!st) return { at: () => 1 };
+  const rings = ringCells(mesh, segments);
+  let L = 0, closed = false;
+  mesh.cells.forEach((cell, k) => {
+    L = Math.max(L, cell.s1);
+    if (cell.seam) { if (cell.piece === 0) closed = true; return; }
+    const seg = segments[cell.piece], pc = st.pieces[cell.piece];
+    if (!seg || seg.word !== 'core' || !pc) { shut[0].push([cell.s0, cell.s1]); shut[1].push([cell.s0, cell.s1]); return; }
+    if (rings.has(k)) { shut[0].push([cell.s0, cell.s1]); shut[1].push([cell.s0, cell.s1]); return; }
+    const m = mesh.scene.root.children[k].children[0], K = pc.K, R = m.positions.length / 3 / K;
+    if (!(K >= 3)) { shut[0].push([cell.s0, cell.s1]); shut[1].push([cell.s0, cell.s1]); return; }
+    const wall = [false, false];
+    for (let r = 0; r < R; r++) rowEdges(m.positions, m.normals, r * K, K).forEach((e, j) => { if (e.rim >= HULL_WALL_DEG) wall[j] = true; });
+    wall.forEach((w, j) => { if (w) shut[j].push([cell.s0, cell.s1]); });
+  });
+  // each side's shut spans sorted and merged, so a station finds its nearest by bisection
+  const merged = shut.map((l) => l.sort((x, y) => x[0] - y[0]).reduce((o, [a, b]) => { const t = o[o.length - 1]; if (t && a <= t[1] + 1e-9) t[1] = Math.max(t[1], b); else o.push([a, b]); return o; }, []));
+  const ease = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
+  const gap = (s, [a, b]) => { if (s >= a && s <= b) return 0; const g = s < a ? a - s : s - b; return closed && L > 0 ? Math.min(g, L - g) : g; };
+  return {
+    at(side, s) {
+      const sp = merged[side]; if (!sp.length) return 1;
+      let lo = 0, hi = sp.length - 1;
+      while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (sp[mid][0] <= s) lo = mid; else hi = mid - 1; }
+      // the span starting at or before s, the one after it, and on a closed lap the first and the last (across the start)
+      const d = Math.min(gap(s, sp[lo]), lo + 1 < sp.length ? gap(s, sp[lo + 1]) : Infinity, gap(s, sp[0]), gap(s, sp[sp.length - 1]));
+      return ease(d / HULL_ALONG_M);
+    },
+  };
+}
+/** The skin's depth at each vertex of one road row (K vertices from `base` in P, N): UNDERSKIN_OFFSET_M, deepened toward each edge that rises (hullDepth) when `hull`,
+ *  by each side's share `keep` ([side 0, side 1], hullEase). */
+function rowDepths(P, N, base, K, hull = true, keep = [1, 1]) {
   const out = new Float64Array(K).fill(UNDERSKIN_OFFSET_M);
   if (!hull || K < 3) return out;
-  const p = (k) => [P[(base + k) * 3], P[(base + k) * 3 + 1], P[(base + k) * 3 + 2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], unit = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; };
-  const ic = Math.floor(K / 2), Cv = p(ic), Nc = unit([N[(base + ic) * 3], N[(base + ic) * 3 + 1], N[(base + ic) * 3 + 2]]);
-  for (const [i0, i1] of [[0, 1], [K - 1, K - 2]]) {
-    const E = p(i0), lat = sub(E, Cv), l = dot(lat, Nc), X = unit([lat[0] - Nc[0] * l, lat[1] - Nc[1] * l, lat[2] - Nc[2] * l]), d = sub(E, p(i1));
-    const dE = hullDepth((Math.atan2(dot(d, Nc), dot(d, X)) * 180) / Math.PI);   // the rim, as apron.js sideRows reads it
+  const p = (k) => [P[(base + k) * 3], P[(base + k) * 3 + 1], P[(base + k) * 3 + 2]], dot = dot3, sub = sub3;
+  for (const [j, { E, X, rim }] of rowEdges(P, N, base, K).entries()) {
+    const dE = keep[j] === 1 ? hullDepth(rim) : UNDERSKIN_OFFSET_M + (hullDepth(rim) - UNDERSKIN_OFFSET_M) * keep[j];   // the rim, as apron.js sideRows reads it
     if (!(dE > UNDERSKIN_OFFSET_M)) continue;
     for (let k = 0; k < K; k++) { const t = dot(sub(E, p(k)), X); if (t < HULL_EDGE_SPAN_M) { const x = 1 - Math.max(0, t) / HULL_EDGE_SPAN_M; out[k] += (dE - UNDERSKIN_OFFSET_M) * x * x; } }
   }
@@ -134,14 +183,14 @@ function ringCells(mesh, segments) {
  * `step`-th column and the last, so about SKIN_COLUMNS across; without K (a seam row) it keeps every vertex and the road's own triangles, reversed. A seam row is two
  * road rows, `seamKa` vertices of the piece before and then the piece's own (src/geom/mesh.js meshSeam); each row's centre is its own section's up.
  */
-function skinOf(m, name, K = null, seamKa = null, hull = true) {
+function skinOf(m, name, K = null, seamKa = null, hull = true, keep = null) {
   const P = m.positions, N = m.normals, base = { type: 'mesh', name, material: -1, castShadows: true, visible: true, transparent: false, renderable: true };
   const at = (i) => [N[i * 3], N[i * 3 + 1], N[i * 3 + 2]];
   if (!K) {
     const n = P.length / 3, Ka = seamKa, Kb = n - Ka;
     if (!(Ka >= 1 && Kb >= 1)) throw new Error(`skinOf: the seam ${name} has ${n} vertices, not two rows (${Ka} of the piece before)`);
     const positions = new Float32Array(P.length), normals = new Float32Array(N.length), indices = new Uint16Array(m.indices.length);
-    const ncA = at(Math.floor(Ka / 2)), ncB = at(Ka + Math.floor(Kb / 2)), depA = rowDepths(P, N, 0, Ka, hull), depB = rowDepths(P, N, Ka, Kb, hull);
+    const ncA = at(Math.floor(Ka / 2)), ncB = at(Ka + Math.floor(Kb / 2)), depA = rowDepths(P, N, 0, Ka, hull, keep ? keep(0) : undefined), depB = rowDepths(P, N, Ka, Kb, hull, keep ? keep(1) : undefined);
     for (let i = 0; i < n; i++) { const d = skinDir(at(i), i < Ka ? ncA : ncB), dep = i < Ka ? depA[i] : depB[i - Ka]; for (let a = 0; a < 3; a++) { positions[i * 3 + a] = P[i * 3 + a] - dep * d[a]; normals[i * 3 + a] = -d[a]; } }
     for (let t = 0; t < m.indices.length; t += 3) { indices[t] = m.indices[t]; indices[t + 1] = m.indices[t + 2]; indices[t + 2] = m.indices[t + 1]; }
     return { ...base, positions, normals, uvs: m.uvs, indices };
@@ -151,7 +200,7 @@ function skinOf(m, name, K = null, seamKa = null, hull = true) {
   const ic = Math.floor(K / 2);   // the row's centre vertex, as apron.js sideRows reads the section's up
   let dep = null;
   for (let r = 0; r < R; r++) cols.forEach((k, c) => {
-    if (c === 0) dep = rowDepths(P, N, r * K, K, hull);
+    if (c === 0) dep = rowDepths(P, N, r * K, K, hull, keep ? keep(r) : undefined);
     const s = (r * K + k) * 3, d = (r * C + c) * 3, dir = skinDir(at(r * K + k), at(r * K + ic));
     for (let a = 0; a < 3; a++) { positions[d + a] = P[s + a] - dep[k] * dir[a]; normals[d + a] = -dir[a]; }
     uvs[(r * C + c) * 2] = m.uvs[(r * K + k) * 2]; uvs[(r * C + c) * 2 + 1] = m.uvs[(r * K + k) * 2 + 1];
@@ -165,7 +214,7 @@ function withUnderskin(scene, mesh, segments) {
   if (!mesh || !mesh.cells || !mesh.scene) return scene;
   const skinned = skinCells(mesh, segments);
   if (!skinned.size) return scene;
-  const rings = ringCells(mesh, segments), kids = scene.root.children, orig = mesh.scene.root.children;
+  const rings = ringCells(mesh, segments), kids = scene.root.children, orig = mesh.scene.root.children, he = hullEase(mesh, segments);
   const materials = scene.materials.slice(), dark = new Map(), skinIndex = materials.push(skinMaterial()) - 1;
   const darkIndex = (i) => { if (!dark.has(i)) dark.set(i, materials.push(darkOf(scene.materials[i])) - 1); return dark.get(i); };
   const skins = [];
@@ -180,11 +229,13 @@ function withUnderskin(scene, mesh, segments) {
       if (!before || !own || before.K + own.K !== m.positions.length / 3) throw new Error(`withUnderskin: the seam ${m.name} has ${m.positions.length / 3} vertices, not its two pieces' rows (${before && before.K} + ${own && own.K})`);
       seamKa = before.K;
     }
-    const sk = skinOf(m, name, cell.seam ? null : pcs[cell.piece].K, seamKa, !rings.has(k)); sk.material = skinIndex;
+    // each row's share of the hull's deepening on either side (hullEase), by its main s: a grid cell's rows evenly from s0 to s1, a seam's two rows at its ends
+    const Rr = cell.seam ? 2 : m.positions.length / 3 / pcs[cell.piece].K, keep = (r) => { const sr = cell.s0 + (Rr > 1 ? (cell.s1 - cell.s0) * r / (Rr - 1) : 0); return [he.at(0, sr), he.at(1, sr)]; };
+    const sk = skinOf(m, name, cell.seam ? null : pcs[cell.piece].K, seamKa, !rings.has(k), keep); sk.material = skinIndex;
     skins.push({ type: 'dummy', name: c.name.replace(/^CELL_/, 'SKIN_').replace(/^SEAM_/, 'JOIN_'), matrix: c.matrix, children: [sk] });
     return rings.has(k) ? { ...c, children: [{ ...m, material: darkIndex(m.material) }, ...c.children.slice(1)] } : c;
   });
   return { ...scene, materials, root: { ...scene.root, children: [...children, ...skins] } };
 }
 
-module.exports = { withUnderskin, skinCells, ringCells, skinOf, skinDir, hullDepth, rowDepths, skinColumns, HULL_EDGE_SPAN_M, darkOf, UNDERSKIN_OFFSET_M, TUBE_RING_AMBIENT, SKIN_AMBIENT, SKIN_DIFFUSE, SKIN_COLUMNS };
+module.exports = { withUnderskin, skinCells, ringCells, skinOf, skinDir, hullDepth, hullEase, HULL_ALONG_M, rowDepths, skinColumns, HULL_EDGE_SPAN_M, darkOf, UNDERSKIN_OFFSET_M, TUBE_RING_AMBIENT, SKIN_AMBIENT, SKIN_DIFFUSE, SKIN_COLUMNS };

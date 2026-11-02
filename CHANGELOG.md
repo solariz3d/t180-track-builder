@@ -23,6 +23,10 @@ All notable changes to this project are recorded here. The format follows
 
 - **A lap whose third falls in a bank's exit exports.** The sector gates were placed by measuring the road under their ends, but the export checks the two gate markers that stand 1.5 m up each end; on a cupped or edged road the two differ, so the builder could choose a gate the export then refused ("AC_TIME_1 tilts 15° from level"), from every start line. The gates are now chosen by the same measure the export checks. No gate on any of the fixtures moved.
 
+- **The pit lane meets the road with no notch.** Where the lane left and rejoined the road its end was half a metre wide, so the road's edge stepped out half a metre there, and the edge apron turned a square corner round it (the notch at the rejoin, and a seam across the apron at the leave). The lane's ends are 0.1 m wide again and the apron runs straight from the road's edge to the lane's; the drivable surface changes only there: the lane's two ends and its outline's apron. Underneath, the road's deeper bottom under a rising edge now eases back to the lane's depth over the 30 m before the leave and after the rejoin, so the bottom has no step either.
+
+- **A tube's opening has no jagged edge.** Where a closed tube opened into a road, the underside's edge hung loose beside the walls with nothing joining it to the road, and the edge apron started square, so from outside the opening showed teeth. The underside is now closed along every wall, its extra depth eases out toward the wall, and the apron grows out of the edge there over 10 m. This changes the drivable apron near a tube's opening, and nowhere else.
+
 ## [0.4.36] - 2026-11-01
 
 This section also holds 0.4.31 to 0.4.35, which were installed or released without a section of their own.
