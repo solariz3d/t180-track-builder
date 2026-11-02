@@ -128,7 +128,7 @@ test('THE JAG: across the road the skin bends no more than the road it hangs und
 });
 
 test('the drawn hull has no open edge: every boundary edge is covered by another (a T-junction), except at the track\'s two ends', () => {
-  const { edges, tris, lengthM } = fixture(), bnd = [];
+  const { edges, tris, lengthM, sampleAt } = fixture(), bnd = [];
   for (const [, L] of edges) if (L.length === 1) bnd.push({ ...L[0], t: tris[L[0].ti] });
   const C = 1, grid = new Map(), cellOf = (p) => p.map((x) => Math.floor(x / C));
   bnd.forEach((e, i) => { const n = Math.ceil(Math.hypot(...sub(e.b, e.a)) / C) + 1; for (let j = 0; j <= n; j++) { const k = cellOf(e.a.map((x, m) => x + ((e.b[m] - x) * j) / n)).join(','); let S = grid.get(k); if (!S) grid.set(k, (S = new Set())); S.add(i); } });
@@ -136,7 +136,10 @@ test('the drawn hull has no open edge: every boundary edge is covered by another
   const coveredAt = (p, self) => { const c = cellOf(p); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) { const S = grid.get(`${c[0] + x},${c[1] + y},${c[2] + z}`); if (S) for (const j of S) if (j !== self && segDist(p, bnd[j].a, bnd[j].b) < COVER) return true; } return false; };
   const open = new Map();
   bnd.forEach((e, i) => {
-    if (!(e.t.s > END_M && e.t.s < lengthM - END_M)) return;
+    // the track's ends by the EDGE's own place along the road, not its triangle's centre: a strip of the light hull (src/export/lighthull.js) runs up to 40 m, so the
+    // centre of one at the track's start lies 14 m in while its end edge is the track's end
+    const qe = sampleAt(e.a.map((x, m) => (x + e.b[m]) / 2));
+    if (!qe || !(qe.s > END_M && qe.s < lengthM - END_M)) return;
     if ([0.25, 0.5, 0.75].every((f) => coveredAt(e.a.map((x, m) => x + (e.b[m] - x) * f), i))) return;
     const k = `${e.t.name}, ${e.t.f}`, o = open.get(k) || { n: 0, at: frame(e.a, e.t.q) }; o.n++; open.set(k, o);
   });

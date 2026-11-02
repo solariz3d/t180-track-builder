@@ -113,7 +113,13 @@ function digestOf(out) {
 // column by count, each plank's run into the skin is an even arc from its tip, and the pit outline's plank and run follow the same arc. Compared with f1f3416 node by
 // node: the road physics, the paint and every road plank are the same bytes; the lap's four road skins and the outline's plank and run (1ROAD_APRON_PIT_R,
 // APRONSIDE_PIT_R) moved, and the open run's three skins; of each export's files only the kn5 changed; no node or material was added, removed or changed.
-const PIN = { lap: 'sha256 d89c835f5f103a8c files 10', open: 'sha256 4e1404430764e540 files 11' };
+// AMENDED BY NAME (2026-11-02, the light hull: the user, 07:01, "does the new apron and undertrack make more geometry to lag assetto?"): both pins moved, the lap
+// from d89c835f5f103a8c and the open TEST export from 4e1404430764e540 (6f0969e). The hull's bottom is redrawn with fewer triangles (src/export/lighthull.js),
+// each kept vertex the full skin's own. Compared with 6f0969e node by node (test/fixtures/kn5nodes.js): every physics node, the paint, the planks, the lane and the
+// outline are the same bytes and every material record is; only drawn skins moved (the lap: UNDERSKIN_p1_chunk_0, _p1_chunk_1, _p3_chunk_2, and the chunk
+// that started at p5 now starts at p4, UNDERSKIN_p4_chunk_3 for UNDERSKIN_p5_chunk_3; the open: UNDERSKIN_p1_chunk_0, _p2_chunk_1, _p3_chunk_2); of each export's
+// files only the kn5 changed, and the counts are the same.
+const PIN = { lap: 'sha256 a5eef6d390282bc0 files 10', open: 'sha256 8c49973d829104e6 files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

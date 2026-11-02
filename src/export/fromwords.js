@@ -83,6 +83,7 @@ const PitBoxes = require('./pitboxes.js');
 const { withTextureSet } = require('../texture/set.js');
 const { withUnderskin } = require('./underskin.js');
 const { withApron, APRON_WIDTH_M } = require('./apron.js');   // the edge apron (src/export/apron.js)
+const { withLightHull } = require('./lighthull.js');   // the hull's bottom with as few triangles as its shape needs
 const { withCatch, catchCells, rangesOfAmber, CATCH_OFFSET_M } = require('./catch.js');   // a physical catch under the road (src/export/catch.js)
 const { withGripKeys } = require('./gripkeys.js');
 const { readKn5 } = require('../../tools/kn5.cjs');
@@ -313,6 +314,8 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   const laneSpan = pit && doc.pitLane ? { side: doc.pitLane.side, s0: pit.lane.joins.leave.s, s1: pit.lane.joins.rejoin.s, mesh: pit.mesh } : null;   // mesh: the lane's own, so the apron runs round it as one outline (apron.js outlineRows, D593)
   let aproned;
   try { aproned = withApron(withUnderskin(boxed, mesh, segs), mesh, segs, { widthM: o.edgeApronM === undefined ? APRON_WIDTH_M : o.edgeApronM, lane: laneSpan }); } catch (e) { throw new ExportError('BAD_OPTION', e.message); }
+  // the hull's bottom redrawn light (src/export/lighthull.js): drawn only, every physics node as it was; `lightHull: false` keeps the full skin, for a before/after comparison only
+  if (o.lightHull !== false) aproned = withLightHull(aproned, mesh, segs);
   const scene = withGripKeys(withCatch(aproned, mesh, segs, catchMode), mesh, segs);
   const names = new Map();
   (function walk(n) { names.set(n.name, (names.get(n.name) || 0) + 1); for (const c of n.children || []) walk(c); })(scene.root);

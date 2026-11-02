@@ -49,9 +49,11 @@ const checked = (b, o = {}) => FS.checkFinalScene((AR.weldApronJoints || ((x) =>
 const said = (list, kind) => list.filter((f) => f.kind === kind).map((f) => f.message);
 
 let memo = {};
-const pitLap = () => memo.pit || (memo.pit = (() => {
+// AMENDED BY NAME (2026-11-02, the light hull, src/export/lighthull.js): `full` builds the same lap with the full skin, one node per 2 m cell (lightHull: false), which
+// row 5's hand-made defects are cut from: "this cell's skin" sunk, "this cell and the one before" pressed. With the light hull a cell's node is a piece of up to 100 m.
+const pitLap = (full = false) => memo[full ? 'pitFull' : 'pit'] || (memo[full ? 'pitFull' : 'pit'] = (() => {
   const doc = lap('scene pit lap'), lane = { side: 'L', leave: { word: doc.pieces[0].id, along: 40 }, rejoin: { word: doc.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
-  return exportDoc(doc, {}, { pitLane: lane });
+  return exportDoc(doc, full ? { lightHull: false } : {}, { pitLane: lane });
 })());
 
 test('row 1: a clean lap with a pit lane: the check finds nothing, and the export carries exactly what the check returns on its welded scene', () => {
@@ -86,7 +88,7 @@ test('row 4: tubes opened and closed, abrupt and gradual: no fold in the skin pa
 });
 
 // ── a damaged copy of the clean lap's scene: each defect made by hand, at a known place ──
-function cleanScene() { const b = pitLap(); return { b, scene: (AR.weldApronJoints || ((x) => x))(AR.weldSeams(AR.flattenForAc(b.scene))) }; }
+function cleanScene(full = false) { const b = pitLap(full); return { b, scene: (AR.weldApronJoints || ((x) => x))(AR.weldSeams(AR.flattenForAc(b.scene))) }; }
 const meshNamed = (scene, re) => scene.root.children.find((n) => n.type === 'mesh' && re.test(n.name) && n.indices.length >= 6);
 const withMesh = (scene, name, f) => ({ ...scene, root: { ...scene.root, children: scene.root.children.map((n) => (n.name === name ? f(n) : n)) } });
 const dropTriangle = (n, k = 0) => ({ ...n, indices: Uint16Array.from([...n.indices.slice(0, 3 * k), ...n.indices.slice(3 * k + 3)]) });
@@ -94,7 +96,8 @@ const sOf = (b, n) => { const P = n.positions, p = [P[0], P[1], P[2]]; let best 
 const near = (f, s) => Math.abs(f.s - s) < 4;
 
 test('row 5: each defect made by hand is found where it was made: a hole in the road refuses, in the skin warns, a face across the road refuses, a sliver warns, a sunk skin warns, a wide lane end refuses', () => {
-  const { b, scene } = cleanScene(), opt = { path: b.path, segments: b.segments, lane: b.pitLane, open: false };
+  // AMENDED BY NAME (the light hull): the defects are cut from the full skin, a node per cell (see pitLap); rows 1 and 7 read the light one clean
+  const { b, scene } = cleanScene(true), opt = { path: b.path, segments: b.segments, lane: b.pitLane, open: false };
   const road = meshNamed(scene, /^1ROAD_p\d+_body_0_40$/), skin = meshNamed(scene, /^UNDERSKIN_p\d+_body_0_40$/), apron = meshNamed(scene, /^1ROAD_APRON_p\d+_body_0_R_40$/);
   assert.ok(road && skin && apron, 'control: the meshes to damage are in the scene');
   // a hole in the road

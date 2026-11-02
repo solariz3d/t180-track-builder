@@ -36,7 +36,9 @@ const tubeOval = (w) => lap({ first: { w, t: 360 } });
 const plainOval = (w) => lap({ family: 'bowl', first: { w } });
 function exportDoc(doc, textures) {
   const segs = A.toSegments(doc), lift = (q) => A.offsetPath(doc, segs, q), start = { pos: doc.start.pos.slice(), theta: doc.start.heading, p: doc.start.pitch };
-  return FW.buildFromSegments(segs, { name: 'skin', via: 'test', liftPath: lift, start }, { markers: startLayout(segs, lift, start), ...(textures !== undefined ? { textures } : {}) });
+  // AMENDED BY NAME (2026-11-02, the light hull): this file reads the skin as withUnderskin and withApron make it, cell by cell (its rows count its columns and its cells);
+  // src/export/lighthull.js redraws it afterwards, lighter, and test/lighthull.test.js holds that redraw, so the export here keeps the full skin (lightHull: false)
+  return FW.buildFromSegments(segs, { name: 'skin', via: 'test', liftPath: lift, start }, { markers: startLayout(segs, lift, start), lightHull: false, ...(textures !== undefined ? { textures } : {}) });
 }
 /** A track that CLOSES along the road: a plain start, a closing tube (the slot zone), then closed: open and closed cells in one scene. */
 const closingTrack = (w = 31) => extend(extend(extend(D.createDoc('x'), { length: 100, first: { w } }), { length: 100, transition: 100, targets: { t: 360 } }), { length: 120 });
