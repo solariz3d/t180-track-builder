@@ -15,6 +15,12 @@ All notable changes to this project are recorded here. The format follows
 
   The check is `test/on_github.js` (GitHub sets `GITHUB_ACTIONS=true`). There, `menubar-page` also waits up to 120 s for the page to mount, instead of 30 s.
 
+### Fixed
+
+- **A track that goes through vertical keeps an AI line Assetto Corsa can load.** Assetto Corsa rebuilds each AI line point's direction from its neighbours against world up, and a point lying almost exactly on vertical crashed the game as the track loaded. The export now moves such a point a little along the road until no direction it touches is nearer vertical than 1e-4 (ELYSIUM's loop, which loads, stays at 1.93e-4 and is untouched: its AI line is byte for byte what it was). Only a road that stays vertical over a stretch, where no point can be moved clear, gets no AI line, and the export says "this track goes vertical, so it has no AI line; it drives and times normally"; laps still time off the gates. (An older export's `fast_lane.ai` in the same folder is not removed: delete it by hand if you export over one.)
+
+- **A lap whose third falls in a bank's exit exports.** The sector gates were placed by measuring the road under their ends, but the export checks the two gate markers that stand 1.5 m up each end; on a cupped or edged road the two differ, so the builder could choose a gate the export then refused ("AC_TIME_1 tilts 15° from level"), from every start line. The gates are now chosen by the same measure the export checks. No gate on any of the fixtures moved.
+
 ## [0.4.36] - 2026-11-01
 
 This section also holds 0.4.31 to 0.4.35, which were installed or released without a section of their own.
