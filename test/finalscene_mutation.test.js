@@ -14,7 +14,8 @@ const FILES = { finalscene: { file: path.join(SRC, 'export', 'finalscene.js'), e
 
 const MUTATIONS = [
   // a face standing across the road (the notch's cap)
-  { id: 'F1 a drivable face never stands across the road', in: 'finalscene', from: 'Math.abs(dot(tri.n, q.T)) >= cosAcross', to: 'false', caughtBy: 'row 5: each defect made by hand' },
+  // AMENDED (the check's memory, 2026-11-02): the triangles are rows of typed arrays now, not objects, so the face's unit normal is the local `nu`, not `tri.n`; the fault is the same
+  { id: 'F1 a drivable face never stands across the road', in: 'finalscene', from: 'Math.abs(dot(nu, q.T)) >= cosAcross', to: 'false', caughtBy: 'row 5: each defect made by hand' },
   { id: 'F2 a seam\'s zip fan is read as a face across the road', in: 'finalscene', from: 'DRIVABLE.has(f) && !zip && Math.abs', to: 'DRIVABLE.has(f) && Math.abs', caughtBy: 'row 6: under the bars' },
   // the lane's ends (the notch's cause)
   { id: 'F3 the lane may be 1 m wide at its ends', in: 'finalscene', from: 'const LANE_END_M = 0.1;', to: 'const LANE_END_M = 1;', caughtBy: 'row 5: each defect made by hand' },
@@ -35,6 +36,11 @@ const MUTATIONS = [
   { id: 'F15 the bottom\'s own slope is ignored (a hull deepening evenly reads as a step)', in: 'finalscene', from: 'const off = a * b > 0 ? Math.min(Math.abs(a), Math.abs(b)) : 0;', to: 'const off = Math.abs(x.rate);', caughtBy: 'row 6: under the bars' },
   // slivers (the zipper)
   { id: 'F14 no triangle is a sliver', in: 'finalscene', from: "if (thick < SLIVER) { thin.push(", to: "if (false) { thin.push(", caughtBy: 'row 5: each defect made by hand' },
+  // the triangles' tables (rows of typed arrays, and the welded vertices and the edges in open-addressed tables, in place of objects and Maps)
+  { id: 'F17 an edge two triangles share reads as open (its count never passes 1)', in: 'finalscene', from: 'if (out.count[g] < 3) out.count[g]++;', to: '', caughtBy: 'row 1: a clean lap with a pit lane' },
+  { id: 'F18 the second triangle at an edge is not filed (the fold reads the first against nothing)', in: 'finalscene', from: 'if (out.count[g] === 1) out.second[g] = s;', to: '', caughtBy: 'row 5: each defect made by hand' },
+  { id: 'F19 the weld table loses its vertices when it grows', in: 'finalscene', from: 'K2[3 * g + 2] = K[3 * h + 2]; V2[g] = V[h]; }', to: 'K2[3 * g + 2] = K[3 * h + 2]; }', caughtBy: "row 11: the triangles' tables keep every vertex" },
+  { id: 'F20 the edge table loses its edges when it grows', in: 'finalscene', from: 'A2[g] = KA[h]; B2[g] = KB[h]; G2[g] = G[h]; }', to: 'A2[g] = KA[h]; B2[g] = KB[h]; }', caughtBy: "row 11: the triangles' tables keep every vertex" },
   // the wiring in the export
   { id: 'W1 a drivable fault never refuses the export', in: 'fromwords', from: "if (!test) throw new ExportError('SCENE'", to: "if (false) throw new ExportError('SCENE'", caughtBy: 'row 7: the export gives the check' },
   { id: 'W2 a drawn fault is never passed on as a warning', in: 'fromwords', from: 'for (const w of sceneCheck.warn) warnings.push(', to: 'for (const w of []) warnings.push(', caughtBy: 'row 7: the export gives the check' },

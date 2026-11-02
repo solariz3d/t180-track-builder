@@ -17,6 +17,9 @@
 //   9  a piece joint where the road's column count goes from even to odd: the export refuses nothing (the edge apron's planks were 7.8 mm apart there
 //      before the export welded them, acready.js weldApronJoints), and the skin's zipper there is no fold
 //  10  a closed lap with a free jump: the road's lip and its landing are open by design, and nothing is refused
+//  11  the triangles' tables (the welded vertices, the edges) keep every entry as they grow: one number per vertex and one group per edge, in the order first
+//      seen. A table that lost entries would file them again as duplicates, which the open-edge check reads as covered (they coincide), so a clean lap
+//      cannot show it
 // Rows 2-4 were red on the commits before their fixes: 8fb6ecc (the notch) and e911792 (the bottom's step and the tubes); see the hand-back.
 'use strict';
 const test = require('node:test');
@@ -243,4 +246,23 @@ test('row 8: bad input is refused by name', () => {
   assert.throws(() => FS.checkFinalScene(scene, { path: { samples: [] }, segments: b.segments }), /needs the scene/);
   const empty = FS.checkFinalScene({ ...scene, root: { ...scene.root, children: [] } }, { path: b.path, segments: b.segments });
   assert.deepEqual(empty, { refuse: [], warn: [] }, 'an empty scene has nothing to find');
+  const road = scene.root.children.find((m) => m.type === 'mesh' && /^1ROAD_p/.test(m.name)), P = road.positions.slice(); P[0] = NaN;
+  const broken = { ...scene, root: { ...scene.root, children: scene.root.children.map((m) => (m === road ? { ...m, positions: P } : m)) } };
+  assert.throws(() => FS.checkFinalScene(broken, { path: b.path, segments: b.segments }), /is not a finite point/, 'a vertex that is not a number is refused by name');
+});
+
+test('row 11: the triangles\' tables keep every vertex and every edge as they grow, numbered in the order first seen', () => {
+  const V = 200000, ids = FS.tripleIds();   // far past the table's first size, so it grows several times
+  for (let i = 0; i < V; i++) assert.equal(ids.id(i, -3 * i, 7 * i - 1000), i);
+  assert.equal(ids.size, V);
+  for (let i = 0; i < V; i += 997) assert.equal(ids.id(i, -3 * i, 7 * i - 1000), i, `vertex ${i} keeps its number after the table grew`);
+  assert.equal(ids.id(-5, 0, 0), V, 'a new vertex takes the next number'); assert.equal(ids.size, V + 1);
+  const E = 100000, ed = FS.edgeGroups();
+  for (let i = 0; i < E; i++) ed.add(i, i + 1, 2 * i);
+  for (let i = 0; i < E; i++) ed.add(i, i + 1, 2 * i + 1);
+  for (let i = 0; i < E; i += 7) ed.add(i, i + 1, -1);
+  assert.equal(ed.size, E, 'one group per edge');
+  for (let g = 0; g < E; g++) {
+    if (ed.first[g] !== 2 * g || ed.second[g] !== 2 * g + 1 || ed.count[g] !== (g % 7 === 0 ? 3 : 2)) assert.fail(`edge ${g}: first ${ed.first[g]}, second ${ed.second[g]}, count ${ed.count[g]}`);
+  }
 });

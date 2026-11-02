@@ -100,6 +100,61 @@ function samplesOf(path, segments) {
   return { S, seed, walk, range };
 }
 
+/**
+ * Integer triples numbered in the order first seen, in an open-addressed table of typed arrays (in place of a Map keyed by "x,y,z" strings): id(x, y, z)
+ * -> the triple's number; size: how many there are.
+ */
+function tripleIds() {
+  let cap = 1 << 16, K = new Int32Array(3 * cap), V = new Int32Array(cap).fill(-1), size = 0;
+  const slot = (x, y, z, K, V, cap) => {
+    let h = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) & (cap - 1);
+    while (V[h] >= 0 && (K[3 * h] !== x || K[3 * h + 1] !== y || K[3 * h + 2] !== z)) h = (h + 1) & (cap - 1);
+    return h;
+  };
+  const grow = () => {
+    const c2 = 2 * cap, K2 = new Int32Array(3 * c2), V2 = new Int32Array(c2).fill(-1);
+    for (let h = 0; h < cap; h++) if (V[h] >= 0) { const g = slot(K[3 * h], K[3 * h + 1], K[3 * h + 2], K2, V2, c2); K2[3 * g] = K[3 * h]; K2[3 * g + 1] = K[3 * h + 1]; K2[3 * g + 2] = K[3 * h + 2]; V2[g] = V[h]; }
+    cap = c2; K = K2; V = V2;
+  };
+  return {
+    id(x, y, z) {
+      let h = slot(x, y, z, K, V, cap);
+      if (V[h] < 0) { if (2 * (size + 1) > cap) { grow(); h = slot(x, y, z, K, V, cap); } K[3 * h] = x; K[3 * h + 1] = y; K[3 * h + 2] = z; V[h] = size++; }
+      return V[h];
+    },
+    get size() { return size; },
+  };
+}
+
+/**
+ * Edges by their two vertex ids (a < b), grouped in the order first seen, in typed arrays (the table grows at three quarters full): add(a, b, slot) files one triangle's edge (slot = 3 x the
+ * triangle + which edge); then, per group g < size, count[g] (to 3: more is 3), and first[g] and second[g], the first two slots filed.
+ */
+function edgeGroups() {
+  let cap = 1 << 16, KA = new Int32Array(cap), KB = new Int32Array(cap), G = new Int32Array(cap).fill(-1), size = 0, gcap = 1 << 15;
+  const out = { first: new Int32Array(gcap), second: new Int32Array(gcap), count: new Uint8Array(gcap), get size() { return size; } };
+  const slot = (a, b, KA, KB, G, cap) => { let h = (Math.imul(a, 73856093) ^ Math.imul(b, 19349663)) & (cap - 1); while (G[h] >= 0 && (KA[h] !== a || KB[h] !== b)) h = (h + 1) & (cap - 1); return h; };
+  const grow = () => {
+    const c2 = 2 * cap, A2 = new Int32Array(c2), B2 = new Int32Array(c2), G2 = new Int32Array(c2).fill(-1);
+    for (let h = 0; h < cap; h++) if (G[h] >= 0) { const g = slot(KA[h], KB[h], A2, B2, G2, c2); A2[g] = KA[h]; B2[g] = KB[h]; G2[g] = G[h]; }
+    cap = c2; KA = A2; KB = B2; G = G2;
+  };
+  const more = (T, n) => { const U = new T.constructor(n); U.set(T); return U; };
+  out.add = (a, b, s) => {
+    let h = slot(a, b, KA, KB, G, cap);
+    if (G[h] < 0) {
+      if (4 * (size + 1) > 3 * cap) { grow(); h = slot(a, b, KA, KB, G, cap); }
+      if (size === gcap) { gcap *= 2; out.first = more(out.first, gcap); out.second = more(out.second, gcap); out.count = more(out.count, gcap); }
+      KA[h] = a; KB[h] = b; G[h] = size; out.first[size] = s; out.count[size] = 1; size++;
+      return;
+    }
+    const g = G[h];
+    if (out.count[g] === 1) out.second[g] = s;
+    if (out.count[g] < 3) out.count[g]++;
+  };
+  return out;
+}
+
 /** Group findings by kind, piece and family, each with its count and its worst place, into one message apiece. */
 function grouped(list, say) {
   const by = new Map();
@@ -119,44 +174,76 @@ function checkFinalScene(scene, { path, segments, lane = null, open = false, det
   const atEnd = (q) => (open && (q.s < S[0].s + END_M || q.s > sEnd - END_M)) || lips.some((x) => Math.abs(q.s - x) < END_M);
   const refuse = [], warn = [], across = [], opens = [], thin = [], hairline = [], cosAcross = Math.cos(ACROSS_DEG * DEG);
 
-  // every triangle of the hull's surfaces, with its welded vertex ids, its normal, its thickness and its nearest sample
-  const ids = new Map(), vid = (x, y, z) => { const k = `${Math.round(x / WELD)},${Math.round(y / WELD)},${Math.round(z / WELD)}`; let v = ids.get(k); if (v === undefined) ids.set(k, (v = ids.size)); return v; };
+  // every triangle of the hull's surfaces, with its welded vertex ids, its normal, its thickness and its nearest sample. They are held in typed arrays, one
+  // row a triangle, and read through tri(i), a view made when it is read: as one object each (and a string key per vertex), ELYSIUM's 3.5 million kept
+  // 3.6 GB alive in the check, and its export ran out of memory under a 4 GB heap
+  let ids = tripleIds();
+  const vid = (x, y, z) => {
+    const k = [Math.round(x / WELD), Math.round(y / WELD), Math.round(z / WELD)];
+    if (!k.every((w) => Math.abs(w) <= 0x7fffffff)) throw new Error(`checkFinalScene: a vertex at (${x}, ${y}, ${z}) is not a finite point within 2,000 km of the origin`);
+    return ids.id(k[0], k[1], k[2]);
+  };
   // the hull (skin, apron, side) is built on an equation-core road only (underskin.js, apron.js); a word document's road is a surface with open edges by design, and
   // validation reads it, so on a road with no core piece only the pit lane's ends are read here
-  const hulled = segments.some((g) => g && g.word === 'core'), tris = [];
+  const hulled = segments.some((g) => g && g.word === 'core'), meshes = [];
   for (const m of hulled ? scene.root.children : []) {
     if (m.type !== 'mesh' || !m.indices || !m.indices.length) continue;
     const f = family(m.name);
     if (!f || (!DRIVABLE.has(f) && (m.visible === false || m.renderable === false))) continue;
-    const pm = /_(p\d+)_/.exec(m.name), r = pm ? range.get(pm[1]) : null, zip = zipper(m.name);
+    const pm = /_(p\d+)_/.exec(m.name);
+    meshes.push({ m, f, r: pm ? range.get(pm[1]) : null, zip: zipper(m.name) });
+  }
+  const N = meshes.reduce((a, x) => a + Math.ceil(x.m.indices.length / 3), 0);
+  let tIds = new Int32Array(3 * N);
+  const tMesh = new Int32Array(N), tAt = new Int32Array(N), tQ = new Int32Array(N), tN = new Float64Array(3 * N), tHasN = new Uint8Array(N);
+  const corner = (i, k) => { const m = meshes[tMesh[i]].m, P = m.positions, a = 3 * m.indices[tAt[i] + k]; return [P[a], P[a + 1], P[a + 2]]; };
+  class Tri {
+    constructor(i) { this.i = i; this._v = null; }
+    get mesh() { return meshes[tMesh[this.i]].m.name; }
+    get f() { return meshes[tMesh[this.i]].f; }
+    get zip() { return meshes[tMesh[this.i]].zip; }
+    get q() { return S[tQ[this.i]]; }
+    get v() { return this._v || (this._v = [corner(this.i, 0), corner(this.i, 1), corner(this.i, 2)]); }
+    get n() { const i = 3 * this.i; return tHasN[this.i] ? [tN[i], tN[i + 1], tN[i + 2]] : null; }
+    get u() { const v = this.v, q = this.q, cen = [(v[0][0] + v[1][0] + v[2][0]) / 3, (v[0][1] + v[1][1] + v[2][1]) / 3, (v[0][2] + v[1][2] + v[2][2]) / 3]; return dot(sub(cen, q.pos), q.L); }
+  }
+  const tri = (i) => new Tri(i);
+  let ti = 0;
+  meshes.forEach(({ m, f, r, zip }, mi) => {
     const P = m.positions, I = m.indices; let qi = -1;
-    for (let t = 0; t < I.length; t += 3) {
+    for (let t = 0; t < I.length; t += 3, ti++) {
       const a = 3 * I[t], b = 3 * I[t + 1], c = 3 * I[t + 2], v = [[P[a], P[a + 1], P[a + 2]], [P[b], P[b + 1], P[b + 2]], [P[c], P[c + 1], P[c + 2]]];
       const e1 = sub(v[1], v[0]), e2 = sub(v[2], v[0]), n = cross(e1, e2), area2 = Math.hypot(...n), longest = Math.max(Math.hypot(...e1), Math.hypot(...e2), Math.hypot(...sub(v[2], v[1])));
       const cen = [(v[0][0] + v[1][0] + v[2][0]) / 3, (v[0][1] + v[1][1] + v[2][1]) / 3, (v[0][2] + v[1][2] + v[2][2]) / 3];
       qi = qi < 0 ? seed(cen, r) : walk(qi, cen, r);
       const q = S[qi], thick = longest > 0 ? area2 / longest : 0, u = dot(sub(cen, q.pos), q.L);
-      const tri = { mesh: m.name, zip, v, ids: [vid(...v[0]), vid(...v[1]), vid(...v[2])], f, q, u, thick, n: thick >= SLIVER ? n.map((x) => x / area2) : null };
-      tris.push(tri);
+      tMesh[ti] = mi; tAt[ti] = t; tQ[ti] = qi;
+      for (let k = 0; k < 3; k++) tIds[3 * ti + k] = vid(...v[k]);
+      const nu = thick >= SLIVER ? n.map((x) => x / area2) : null;
+      if (nu) { tHasN[ti] = 1; tN[3 * ti] = nu[0]; tN[3 * ti + 1] = nu[1]; tN[3 * ti + 2] = nu[2]; }
       if (atEnd(q)) continue;
       if (thick < SLIVER) { thin.push({ kind: 'sliver', piece: pieceOf(q), fam: f, s: q.s, u, worst: 0 }); continue; }
-      if (DRIVABLE.has(f) && !zip && Math.abs(dot(tri.n, q.T)) >= cosAcross) across.push({ kind: 'across', piece: pieceOf(q), fam: f, s: q.s, u, worst: 0, mesh: m.name });
+      if (DRIVABLE.has(f) && !zip && Math.abs(dot(nu, q.T)) >= cosAcross) across.push({ kind: 'across', piece: pieceOf(q), fam: f, s: q.s, u, worst: 0, mesh: m.name });
     }
-  }
-
-  // edges by welded vertex pair, over the triangles at least SLIVER thick (a sliver's direction means nothing, and is counted above)
-  const nv = ids.size, edges = new Map();
-  tris.forEach((t, ti) => {
-    if (!t.n) return;
-    for (const [x, y] of [[0, 1], [1, 2], [2, 0]]) { const a = t.ids[x], b = t.ids[y]; if (a === b) continue; const k = a < b ? a * nv + b : b * nv + a; const L = edges.get(k); if (L) L.push(ti, x, y); else edges.set(k, [ti, x, y]); }
   });
+
+  // edges by welded vertex pair, over the triangles at least SLIVER thick (a sliver's direction means nothing, and is counted above), grouped in the order
+  // first seen; the vertex table and the triangles' vertex ids are not read after this, and are let go
+  ids = null;
+  const edges = edgeGroups();
+  for (let i = 0; i < N; i++) {
+    if (!tHasN[i]) continue;
+    for (let x = 0; x < 3; x++) { const y = (x + 1) % 3, a = tIds[3 * i + x], b = tIds[3 * i + y]; if (a === b) continue; if (a < b) edges.add(a, b, 3 * i + x); else edges.add(b, a, 3 * i + x); }
+  }
+  tIds = null;
 
   // FOLD: per piece, the largest bend across the road between two triangles of one surface, the road's and the skin's
   const most = new Map(), bnd = [];
-  for (const L of edges.values()) {
-    if (L.length === 3) { bnd.push(L); continue; }
-    if (L.length !== 6) continue;
-    const t = tris[L[0]], g = tris[L[3]];
+  const slotOf = (s) => [Math.floor(s / 3), s % 3, ((s % 3) + 1) % 3];   // a filed edge's triangle, and its two corners in that triangle
+  for (let e = 0; e < edges.size; e++) {
+    if (edges.count[e] === 1) { bnd.push(slotOf(edges.first[e])); continue; }
+    if (edges.count[e] !== 2) continue;
+    const L = [...slotOf(edges.first[e]), ...slotOf(edges.second[e])], t = tri(L[0]), g = tri(L[3]);
     if (t.f !== g.f || (t.f !== 'road' && t.f !== 'skin') || t.zip || g.zip || atEnd(t.q)) continue;
     const d = sub(t.v[L[2]], t.v[L[1]]);
     if (Math.abs(dot(d, t.q.T)) / Math.hypot(...d) >= 0.5) continue;   // an edge along the road (a ring's facets, the skin's columns): not a bend across it
@@ -173,13 +260,13 @@ function checkFinalScene(scene, { path, segments, lane = null, open = false, det
   // OPEN: a boundary edge (one triangle) is open unless another boundary edge covers it within COVER (a T-junction); an open one's width is how far its
   // quarter points lie from any other mesh's surface (the far side of the crack)
   const C = 1, grid = new Map(), cellOf = (p) => p.map((x) => Math.floor(x / C));
-  const ends = bnd.map(([ti, x, y]) => [tris[ti].v[x], tris[ti].v[y]]);
+  const ends = bnd.map(([i, x, y]) => { const v = tri(i).v; return [v[x], v[y]]; });
   ends.forEach(([a, b], i) => { const n = Math.ceil(Math.hypot(...sub(b, a)) / C) + 1; for (let j = 0; j <= n; j++) { const k = cellOf(a.map((x, m) => x + ((b[m] - x) * j) / n)).join(','); let L = grid.get(k); if (!L) grid.set(k, (L = [])); if (L[L.length - 1] !== i) L.push(i); } });
   const segDist = (p, a, b) => { const ab = sub(b, a), ap = sub(p, a), L = dot(ab, ab), u = L ? Math.max(0, Math.min(1, dot(ap, ab) / L)) : 0; return Math.hypot(ap[0] - u * ab[0], ap[1] - u * ab[1], ap[2] - u * ab[2]); };
   const covered = (p, self) => { const c = cellOf(p); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) { const L = grid.get(`${c[0] + x},${c[1] + y},${c[2] + z}`); if (L) for (const j of L) if (j !== self && segDist(p, ends[j][0], ends[j][1]) < COVER) return true; } return false; };
   const cand = [];
-  bnd.forEach(([ti], i) => {
-    const t = tris[ti], [a, b] = ends[i], pts = [0.25, 0.5, 0.75].map((f) => a.map((x, m) => x + (b[m] - x) * f));
+  bnd.forEach(([j], i) => {
+    const t = tri(j), [a, b] = ends[i], pts = [0.25, 0.5, 0.75].map((f) => a.map((x, m) => x + (b[m] - x) * f));
     if (atEnd(t.q) || pts.every((p) => covered(p, i))) return;
     cand.push({ t, a, b, pts });
   });
@@ -187,8 +274,8 @@ function checkFinalScene(scene, { path, segments, lane = null, open = false, det
     // the faces near the open edges, in 1 m cells, then each quarter point's nearest face of another mesh (the crack's width, capped at 1 m: nothing near)
     const want = new Set(); for (const o of cand) for (const p of o.pts) { const c = cellOf(p); for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) want.add(`${c[0] + x},${c[1] + y},${c[2] + z}`); }
     const near = new Map();
-    for (const t of tris) {
-      const lo = [0, 1, 2].map((k) => Math.floor(Math.min(t.v[0][k], t.v[1][k], t.v[2][k]) / C)), hi = [0, 1, 2].map((k) => Math.floor(Math.max(t.v[0][k], t.v[1][k], t.v[2][k]) / C));
+    for (let i = 0; i < N; i++) {
+      const t = tri(i), lo = [0, 1, 2].map((k) => Math.floor(Math.min(t.v[0][k], t.v[1][k], t.v[2][k]) / C)), hi = [0, 1, 2].map((k) => Math.floor(Math.max(t.v[0][k], t.v[1][k], t.v[2][k]) / C));
       if ((hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1) * (hi[2] - lo[2] + 1) > 512) continue;   // a face over 8 m across is no neighbour of a crack's edge
       for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) { const k = `${x},${y},${z}`; if (want.has(k)) { let L = near.get(k); if (!L) near.set(k, (L = [])); L.push(t); } }
     }
@@ -209,7 +296,6 @@ function checkFinalScene(scene, { path, segments, lane = null, open = false, det
 
   // BOTTOM: beside each open edge, a metre at a time, the depth from the road down to the skin, along a ray down the road's normal from above it
   const segStart = new Map(); for (const q of S) if (!segStart.has(q.seg)) segStart.set(q.seg, q.s);
-  const roadTris = tris.filter((t) => t.f === 'road' && t.n && !t.zip), skinTris = tris.filter((t) => t.f === 'skin' && t.n);
   // a piece that curls into a wall side or a tube anywhere, and BOTTOM_CLEAR_M of road either side of it, is not read: the hull there thins and turns by
   // design (underskin.js twistZone, eased over HULL_TWIST_EASE_M), and the fold above is the check that reads it
   const curled = new Set();
@@ -239,16 +325,19 @@ function checkFinalScene(scene, { path, segments, lane = null, open = false, det
   // (tube_cases row 6's tolerance)
   const BARY = 1e-4, RC = 4, RAY_M = 12, rgrid = new Map(), rcell = (p) => p.map((x) => Math.floor(x / RC)).join(',');
   rays.forEach((r) => { for (let j = 0; j <= RAY_M; j += 2) { const c = rcell(r.o.map((x, m) => x + r.d[m] * j)); if (!rgrid.has(c)) rgrid.set(c, { road: [], skin: [] }); } });
-  for (const [list, key] of [[roadTris, 'road'], [skinTris, 'skin']]) for (const t of list) {
+  for (let i = 0; i < N; i++) {   // the road's triangles (not a seam's zipper) and the skin's, each at least SLIVER thick, filed by triangle number
+    const t = tri(i), key = !tHasN[i] ? null : t.f === 'road' && !t.zip ? 'road' : t.f === 'skin' ? 'skin' : null;
+    if (!key) continue;
     const lo = [0, 1, 2].map((k) => Math.floor(Math.min(t.v[0][k], t.v[1][k], t.v[2][k]) / RC)), hi = [0, 1, 2].map((k) => Math.floor(Math.max(t.v[0][k], t.v[1][k], t.v[2][k]) / RC));
-    for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) { const L = rgrid.get(`${x},${y},${z}`); if (L) L[key].push(t); }
+    for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) { const L = rgrid.get(`${x},${y},${z}`); if (L) L[key].push(i); }
   }
   const hit = (r, key, after = 0) => {   // the nearest hit along the ray past `after` (the skin under the road, not a skin above it: an edge's wall, a pass overhead)
     let best = null; const seen = new Set();
     for (let j = 0; j <= RAY_M; j += 2) {
       const L = rgrid.get(rcell(r.o.map((x, m) => x + r.d[m] * j))); if (!L) continue;
-      for (const t of L[key]) {
-        if (seen.has(t)) continue; seen.add(t);
+      for (const i of L[key]) {
+        if (seen.has(i)) continue; seen.add(i);
+        const t = tri(i);
         if (Math.abs(t.q.s - r.q.s) > SAME_PASS_M) continue;   // another pass of the track (a helix, a bridge, a road stacked close): not this station's hull
         const [a, b, c] = t.v, e1 = sub(b, a), e2 = sub(c, a), pv = cross(r.d, e2), det = dot(e1, pv); if (Math.abs(det) < 1e-12) continue;
         const tv = sub(r.o, a), u = dot(tv, pv) / det; if (u < -BARY || u > 1 + BARY) continue;
@@ -299,4 +388,4 @@ function sayFindings(list) {
   return shown.join('; ') + (list.length > LISTED ? `; and ${list.length - LISTED} more` : '');
 }
 
-module.exports = { checkFinalScene, sayFindings, ACROSS_DEG, LANE_END_M, FOLD_SLACK_DEG, BOTTOM_STEP_M, COVER, DRIVE_CRACK_M, SKY_CRACK_M, END_M };
+module.exports = { checkFinalScene, sayFindings, tripleIds, edgeGroups, ACROSS_DEG, LANE_END_M, FOLD_SLACK_DEG, BOTTOM_STEP_M, COVER, DRIVE_CRACK_M, SKY_CRACK_M, END_M };

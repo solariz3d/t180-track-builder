@@ -15,6 +15,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- **A long track no longer runs out of memory at its last export check.** The check that reads the finished track for steps, cracks and folds held every triangle as its own object, which on a 25 km track with an underside added about 3.6 GB of memory on top of the track itself, and the export could fail for lack of memory. It now keeps the triangles in compact tables: on that track it adds about 0.4 GB, runs faster, and finds exactly what it found before.
+
 - **The edge apron hangs at its own slope on every piece, and has no crack where two pieces meet.** Each plank of the apron took its angle from the column in the middle of the road's grid by count, which is the middle of the road only when the road's edges are alike. With an edge brought in on one side, that column lay several metres off the centre, where a cupped road has already turned, so every plank on such a piece leaned about 10°: 15° on one side and 35° on the other instead of 25°. Where two pieces met, the planks parted at their outer edge, by a few millimetres on most tracks and by up to 44 cm on a track with edges on one side (a hole in a surface the car drives on). Every plank and the underside now hang from the road's own centre line; the road itself is unchanged. The export also welds any plank rows left a few millimetres apart at a joint, as it already welded the road's. The underside now sweeps from each plank's tip into the bottom as one even curve, with no tighter bend where it meets the bottom, and on a piece with an edge on one side the bottom's edge sits where that curve can meet it.
 
 ## [0.4.37] - 2026-11-02
