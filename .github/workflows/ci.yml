@@ -19,7 +19,7 @@ jobs:
   fast:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 75   # measured: run 41316657421's fast subset took 56 min 42 s (14:32:13 to 15:28:55 UTC); 45 cut run 41282043829 off unfinished
     env:
       NODE_OPTIONS: --max-old-space-size=4096   # the core tests' own headers ask for it
     steps:

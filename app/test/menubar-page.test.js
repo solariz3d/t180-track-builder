@@ -45,6 +45,9 @@ const { chromePath, launchChrome, connect } = require('./soundrender.js');
 const REPO = path.join(__dirname, '..', '..');
 const CHROME = chromePath();
 const skip = CHROME ? false : 'no Chrome here (set CHROME_PATH): the menus are tested in headless Chrome';
+const { onGitHub, ON_GITHUB } = require('../../test/on_github.js');
+const LOAD_TRIES = ON_GITHUB ? 600 : 150;   // tries of 200 ms for the page to mount: 30 s here, 120 s on GitHub's runner, where it mounts slowly with four test files at once (run 41322567365: rows 9 and 10 waited out 30 s)
+const GH_PAGE = onGitHub('the page did not mount within the row\'s own wait there, with four test files at once on a shared runner (run 41316657421: "the page in a 979 px frame at 125% mounted its menus" false; run 41282043829: rows 16 to 19b red); every other machine runs it');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.cjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.wav': 'audio/wav' };
 
@@ -76,7 +79,7 @@ async function load({ clear = true, blocked = false, random = null } = {}) {
   if (random !== null) pin = (await send('Page.addScriptToEvaluateOnNewDocument', { source: `Math.random = () => ${Number(random)};` })).result.identifier;
   if (clear && !blocked) { await send('Page.navigate', { url: base.replace('index.html', 'lib/cjs.js') }); await sleep(300); await ev('localStorage.clear(); return true;'); }
   await send('Page.navigate', { url: base });
-  for (let i = 0; i < 150; i++) { await sleep(200); try { if (await ev("return document.documentElement.dataset.menubar === 'ready';")) break; } catch (e) { /* loading */ } }
+  for (let i = 0; i < LOAD_TRIES; i++) { await sleep(200); try { if (await ev("return document.documentElement.dataset.menubar === 'ready';")) break; } catch (e) { /* loading */ } }
   await ev("document.title = 'zz-headless-test'; return true;");   // a headless page is always titled so; the page's own <title> replaced any set before
   if (script) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: script });
   if (pin) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: pin });
@@ -280,7 +283,7 @@ test('row 15: Settings ▸ Sound: the volume slider shows 45 on a fresh start, a
   assert.deepEqual(errors, []);
 });
 
-test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody\'s two files; it survives a reload as that look and melody; SIGIL plays its own, Obsidian (D402)', { skip }, async () => {
+test('row 16 (D394): Settings ▸ Theme: a fixed theme sets the look at once and fetches its own melody\'s two files; it survives a reload as that look and melody; SIGIL plays its own, Obsidian (D402)', { skip: skip || GH_PAGE }, async () => {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
   try {
     await load();
@@ -349,7 +352,7 @@ async function scaledChrome(scale) {
   const close = async () => { try { sock.close(); } catch (e) { /* closing */ } proc.kill(); await sleep(300); try { fs.rmSync(udir, { recursive: true, force: true }); } catch (e) { /* Chrome may hold it */ } };
   return { call, run, errs, close };
 }
-test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sides of each fold: no overflow, the window buttons wholly inside the window, a grab strip of at least 24 px, every menu and Export on one line left of them; at 125% scaling too, where a window can be a fraction of a pixel wide', { skip }, async () => {
+test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sides of each fold: no overflow, the window buttons wholly inside the window, a grab strip of at least 24 px, every menu and Export on one line left of them; at 125% scaling too, where a window can be a fraction of a pixel wide', { skip: skip || GH_PAGE }, async () => {
   const minWidth = JSON.parse(fs.readFileSync(path.join(REPO, 'src-tauri', 'tauri.conf.json'), 'utf8')).app.windows[0].minWidth;
   assert.equal(minWidth, 900, 'the narrowest window tauri.conf.json allows');
   const at = {};
@@ -368,7 +371,7 @@ test('row 17 (D396): the bar fits at 900, 1100, 1280 and 1400 px and on both sid
       for (const w of [979, 999, 1099, 1279, 1319]) {
         await sc.call('Page.navigate', { url: base.replace('index.html', 'lib/cjs.js') }); await sleep(300);
         await sc.run(`localStorage.clear(); document.documentElement.innerHTML = '<body style="margin:0"><iframe id="f" src="/app/index.html" style="display:block;width:${w}px;height:860px;border:0"></iframe></body>'; document.title = 'zz-headless-test'; return true;`);
-        let ready = false; for (let i = 0; i < 150 && !ready; i++) { await sleep(200); ready = await sc.run("const d = document.getElementById('f').contentDocument; return !!d && d.documentElement.dataset.menubar === 'ready';"); }
+        let ready = false; for (let i = 0; i < LOAD_TRIES && !ready; i++) { await sleep(200); ready = await sc.run("const d = document.getElementById('f').contentDocument; return !!d && d.documentElement.dataset.menubar === 'ready';"); }
         assert.ok(ready, `the page in a ${w} px frame at 125% mounted its menus (page errors: ${sc.errs.join(' | ') || 'none'})`);
         const m = await sc.run(BAR("document.getElementById('f').contentDocument"));
         assert.ok(m.width > w && m.width < w + 1, `a ${w} px frame at 125% is a fraction of a pixel wider (${m.width})`);
@@ -431,12 +434,12 @@ async function randomAfterGlass({ random = null } = {}) {
     return { start, picked, cached };
   } finally { onEvent = null; await send('Network.disable'); }
 }
-test('row 18 (D401, AMENDED): Settings ▸ Theme offers Random, not Music, after the named looks; a fresh start is Sigil; with Random saved, choosing it picks another look at once and that look\'s melody follows; a saved music loads as Random', { skip }, async () => {
+test('row 18 (D401, AMENDED): Settings ▸ Theme offers Random, not Music, after the named looks; a fresh start is Sigil; with Random saved, choosing it picks another look at once and that look\'s melody follows; a saved music loads as Random', { skip: skip || GH_PAGE }, async () => {
   await randomAfterGlass();
 });
 // AMENDED: the rule changed by name: the head draws among five names (SIGIL's fifth last), and after Glass Random picks among aqua, skyline, aurora,
 // skyline-night and sigil; so the draw that starts on the look it then picks is 0.1 (Aqua), and one that does not is 0.5 (starts on Glass, picks Aurora)
-test('row 18b (D401, B\'s D408 probe): the same with Math.random pinned, so both branches run every time: at 0.1 the start look is the pick (its files already in), at 0.5 it is not', { skip }, async () => {
+test('row 18b (D401, B\'s D408 probe): the same with Math.random pinned, so both branches run every time: at 0.1 the start look is the pick (its files already in), at 0.5 it is not', { skip: skip || GH_PAGE }, async () => {
   const a = await randomAfterGlass({ random: 0.1 });
   assert.deepEqual([a.start, a.picked, a.cached], ['aqua', 'aqua', true], 'at 0.1: starts on Aqua, Random after Glass picks Aqua, whose files are in');
   const b = await randomAfterGlass({ random: 0.5 });
@@ -444,7 +447,7 @@ test('row 18b (D401, B\'s D408 probe): the same with Math.random pinned, so both
   assert.deepEqual([b.start, b.picked, b.cached], ['glass', 'aurora', false], 'at 0.5: starts on Glass, Random after Glass picks Aurora, fetched');
 });
 // AMENDED: Random is no longer what a fresh start ticks (that is Sigil now); the row's rule, a click on a ticked Random picks again, runs from a SAVED Random
-test('row 19 (D401, A\'s read §8, AMENDED): Random saved and ticked: one click on Random picks another look and its melody, and so does the next', { skip }, async () => {
+test('row 19 (D401, A\'s read §8, AMENDED): Random saved and ticked: one click on Random picks another look and its melody, and so does the next', { skip: skip || GH_PAGE }, async () => {
   const urls = []; await send('Network.enable'); onEvent = (d) => { if (d.method === 'Network.requestWillBeSent') urls.push(d.params.request.url); };
   const look = () => ev("return document.documentElement.getAttribute('data-theme') || 'sigil';");   // AMENDED: no data-theme is SIGIL's look
   const fetched = async (name) => { for (let i = 0; i < 50 && !urls.some((u) => u.endsWith('sounds/' + name)); i++) await sleep(100); };
@@ -478,7 +481,7 @@ test('row 19 (D401, A\'s read §8, AMENDED): Random saved and ticked: one click 
 // Aurora; a second pick, from Aurora, would be Glass again, so the row still tells one pick from two
 // AMENDED: a fresh install starts on Sigil, whatever Math.random says, with Sigil ticked; the first click on Random (a change, undefined to music) picks once: from
 // Sigil at 0.4 that is Glass (of aqua, skyline, glass, aurora, skyline-night); two picks would land on Aurora, so the row still tells one pick from two
-test('row 19b (D401, AMENDED): on a fresh install, Sigil; the first click on Random picks once, not twice: with Math.random at 0.4, Sigil becomes Glass, then Aurora', { skip }, async () => {
+test('row 19b (D401, AMENDED): on a fresh install, Sigil; the first click on Random picks once, not twice: with Math.random at 0.4, Sigil becomes Glass, then Aurora', { skip: skip || GH_PAGE }, async () => {
   // nothing saved, so settings.set('theme', 'music') is a change (undefined to music) and tells its listener, which picks; a second pick asked for by the item itself
   // excluded only the first pick, so it could land back on the start look (menubar-page run 4 of 5, 2026-10-19: "still skyline")
   await load({ random: 0.4 });
