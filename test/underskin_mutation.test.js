@@ -23,7 +23,7 @@ const MUTATIONS = [
   // D604 redo: the skin hung along each vertex's OWN normal again (the second, inverted apron under a curved edge)
   { id: 'U10 the skin hung along its own normal, not its section\'s up (the run under a plank folds back up to it)', from: 'if (a <= SECTION_UP_DEG) return c;', to: 'if (a <= SECTION_UP_DEG) return v;', file: 'export_apron.test.js', caughtBy: 'row 25:' },
   // D604 hull: the edge never deepened (a run from the tip must make an S under a rising edge: the shoulder of the first hull), and the ease made linear (a crease 4 m in)
-  { id: 'U11 the hull not deepened under a rising edge (the run from the tip makes an S)', from: '    if (!(dE > UNDERSKIN_OFFSET_M)) continue;', to: '    continue;', file: 'export_apron.test.js', caughtBy: 'row 25:' },
+  { id: 'U11 the hull not deepened under a rising edge (the run from the tip makes an S)', from: '    if (!(dMax > UNDERSKIN_OFFSET_M)) continue;', to: '    continue;', file: 'export_apron.test.js', caughtBy: 'row 25:' },
   { id: 'U12 the hull\'s depth eased back linearly (a crease where it reaches 1.5 m)', from: 'out[k] += (dE - UNDERSKIN_OFFSET_M) * x * x;', to: 'out[k] += (dE - UNDERSKIN_OFFSET_M) * x;', file: 'underskin.test.js', caughtBy: 'row 9:' },
   { id: 'U5 a closed ring\'s interior left light', from: 'return rings.has(k) ?', to: 'return false ?', file: 'underskin.test.js', caughtBy: 'row 3:' },
   { id: 'U6 a cell left without a skin (a hole in the slab\'s underside)', from: 'if (!skinned.has(k)) return c;', to: 'if (!skinned.has(k) || (!mesh.cells[k].seam && (globalThis.__U6 = (globalThis.__U6 || 0) + 1) === 1)) return c;', file: 'underskin.test.js', caughtBy: 'row 1:' },   // RE-AIMED BY NAME (2026-11-02): the first GRID cell (a seam may now have no skin: underskin.js skinOf)
@@ -35,7 +35,9 @@ const MUTATIONS = [
   { id: 'U8 the skin keeps every column (a full copy of the road under it)', from: 'step = Math.max(1, Math.ceil((K - 1) / (SKIN_COLUMNS - 1)))', to: 'step = 1', file: 'underskin.test.js', caughtBy: 'row 6:' },
   // the tube's joints and openings (D604 follow-up), caught by the tube test (test/tube_cases.test.js, its rows by their own titles)
   { id: 'U13 a seam\'s zipper kept where it is a sliver', from: 'if (longest > 0 && Math.hypot(...x) / longest >= SLIVER) keepT.push(', to: 'if (longest > 0) keepT.push(', file: 'tube_cases.test.js', caughtBy: 'the drawn hull has no sliver' },
-  { id: 'U14 the section\'s up off the middle again when K is even (a crack at a 401 | 402 seam)', from: 'if (K % 2) return at((K - 1) / 2);', to: 'return at(Math.floor(K / 2));', file: 'tube_cases.test.js', caughtBy: 'the drawn hull has no open edge' },
+  // RE-AIMED BY NAME (the section's middle read at the centre line, centreColumn): every skin and plank now hangs by the same sectionUp, so a section's up off the middle
+  // no longer cracks a seam against its grid; underskin row 10 reads the up against the normals themselves
+  { id: 'U14 the section\'s up off the middle again when K is even (a crack at a 401 | 402 seam)', from: 'if (K % 2) return at((K - 1) / 2);', to: 'return at(Math.floor(K / 2));', caughtBy: 'row 10:' },
   { id: 'U15 the rows on a seam decimated (its chords off the seam\'s every-vertex row)', from: "if (lastOf.has(ia)) mark(lastOf.get(ia), 'last'); if (firstOf.has(c.piece)) mark(firstOf.get(c.piece), 'first');", to: '', file: 'tube_cases.test.js', caughtBy: 'the drawn hull has no open edge' },
   { id: 'U16 no twisted zone (the skin decimated under an abrupt opening)', from: 'const zone = twisted.slice();', to: 'twisted.fill(false); const zone = twisted.slice();', file: 'tube_cases.test.js', caughtBy: 'THE JAG' },   // the twisted cells cleared before the zone is widened from them (clearing the zone alone left the widening to mark it again)
   { id: 'U17 the hull not thinned in the twisted zone', from: 'const HULL_TWIST_DEPTH = 1 / 3,', to: 'const HULL_TWIST_DEPTH = 1,', file: 'tube_cases.test.js', caughtBy: 'THE JAG' },
@@ -43,6 +45,9 @@ const MUTATIONS = [
   // the centre line column (centreColumn): where the section's u is 0, between two columns when none is (an even K)
   { id: 'U19 the centre line taken by count again', from: 'if (!U || U.length !== K) return Math.floor(K / 2);', to: 'return Math.floor(K / 2);', file: 'export_apron.test.js', caughtBy: 'row 28:' },
   { id: 'U20 between two columns the nearer taken (half a column off with an even K)', from: 'return i + (U[i] === -U[i + 1] ? 0.5 : -U[i] / (U[i + 1] - U[i]));', to: 'return i + (-U[i] < U[i + 1] ? 0 : 1);', file: 'export_apron.test.js', caughtBy: 'row 28:' },
+  // the skin's edge read from the plank's tip where the re-lean moved the plank (edgeDepth), and only there
+  { id: 'U21 the edge of the skin never read from the tip of the plank', from: 'Math.abs(mid - (K - 1) / 2) > 0.5 ? edgeDepth(', to: 'Math.abs(mid - (K - 1) / 2) > 1e9 ? edgeDepth(', file: 'export_apron.test.js', caughtBy: 'row 29:' },
+  { id: 'U22 the edge of the skin read from the tip on a symmetric section too', from: 'Math.abs(mid - (K - 1) / 2) > 0.5 ? edgeDepth(', to: 'Math.abs(mid - (K - 1) / 2) >= 0 ? edgeDepth(', file: 'tube_cases.test.js', caughtBy: 'THE JAG' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -72,6 +72,9 @@ const MUTATIONS = [
   // the plank hung from the section's own middle (the centre line column, underskin.js centreColumn), not the middle by count: export_apron row 28
   { id: 'P25 a plank hung from the middle column by count again (an edge zone on one side leans it)', from: 'ic = mid === undefined ? Math.floor(K / 2) : mid,', to: 'ic = Math.floor(K / 2),', caughtBy: 'row 28:' },
   { id: 'P26 the centre line column given to no plank', from: "closeWall: widthM > 0, scale: scale.some((x) => x !== 1) ? scale : null, mid }", to: "closeWall: widthM > 0, scale: scale.some((x) => x !== 1) ? scale : null }", caughtBy: 'row 28:' },
+  // the run under the plank: it arrives along the skin's own first span (`toward`) and starts as the end's mirror about the chord, an arc: export_apron row 29
+  { id: 'P27 the run arrives as the easing depth of the edge models it, not along the skin', from: 'tS = mul(toward ? unit(sub(toward, S)) :', to: 'tS = mul(false ? unit(sub(toward, S)) :', caughtBy: 'row 29:' },
+  { id: 'P28 the run leaves the tip at the fixed lead, not as the mirror of its end', from: 'const tO = toward ? mul(', to: 'const tO = false ? mul(', caughtBy: 'row 29:' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

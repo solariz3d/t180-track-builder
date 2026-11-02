@@ -171,6 +171,19 @@ test('row 6: under the bars: a crack in the road narrower than the ray check\'s 
   };
   r = FS.checkFinalScene({ ...scene, root: { ...scene.root, children: scene.root.children.map((n) => (n.type === 'mesh' && /^UNDERSKIN_/.test(n.name) ? slope(n) : n)) } }, opt);
   assert.deepEqual(said(r.warn, 'bottom'), []);
+  // a seam's skin zipper standing in the joint's plane on the last row of a skin cell (the cell after it taken out, so the zipper meets that row alone): it stands
+  // 90° to the skin by design, and is no fold
+  const sk = meshNamed(scene, /^UNDERSKIN_p\d+_body_0_40$/), skNext = meshNamed(scene, /^UNDERSKIN_p\d+_body_0_41$/), SP = sk.positions, vtx = (i) => [SP[i * 3], SP[i * 3 + 1], SP[i * 3 + 2]];
+  const qz = b.path.samples.find((x) => Math.abs(x.s - sOf(b, sk)) < 0.6), alongZ = (p) => (p[0] - qz.pos[0]) * qz.T[0] + (p[1] - qz.pos[1]) * qz.T[1] + (p[2] - qz.pos[2]) * qz.T[2];
+  const acrossZ = (p) => (p[0] - qz.pos[0]) * qz.L[0] + (p[1] - qz.pos[1]) * qz.L[1] + (p[2] - qz.pos[2]) * qz.L[2];
+  // the cell's far row (2 m on), by the road's own frame: its two vertices nearest the centre line, an edge of one skin triangle once the next cell is gone
+  const far = Array.from({ length: SP.length / 3 }, (_, i) => i).filter((i) => alongZ(vtx(i)) > 1.5).sort((x, y) => Math.abs(acrossZ(vtx(x))) - Math.abs(acrossZ(vtx(y))));
+  const [ia, ib] = far.slice(0, 2), a = vtx(ia), c2 = vtx(ib), down = [0, 1, 2].map((k) => (a[k] + c2[k]) / 2 - qz.U[k] * 0.3);
+  assert.ok(skNext && Math.abs(alongZ(a) - alongZ(c2)) < 0.01 && Math.hypot(a[0] - c2[0], a[1] - c2[1], a[2] - c2[2]) > 0.2, 'control: two neighbouring vertices of the skin\'s far row, the next cell\'s skin there to take out');
+  const zip = { type: 'mesh', name: 'UNDERSKIN_join_p1_body', material: sk.material, visible: true, renderable: true, castShadows: true, transparent: false,
+    positions: Float32Array.from([...a, ...c2, ...down]), normals: Float32Array.from([...qz.T, ...qz.T, ...qz.T]), uvs: new Float32Array(6), indices: Uint16Array.from([0, 1, 2]) };
+  r = FS.checkFinalScene({ ...scene, root: { ...scene.root, children: [...scene.root.children.filter((n) => n !== skNext), zip] } }, opt);
+  assert.deepEqual(said(r.warn, 'fold'), []);
 });
 
 test('row 7: the export gives the check its path, segments and pit lane, refuses with SCENE on a drivable fault and writes nothing, lists it in the TEST route instead, and passes each drawn fault on as a warning', () => {

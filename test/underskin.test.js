@@ -246,3 +246,18 @@ test('row 8: a seam row\'s skin (every vertex kept, no grid) is the road\'s tria
   const p = (i) => [sk.positions[i * 3], sk.positions[i * 3 + 1], sk.positions[i * 3 + 2]], cr = cross(sub(p(sk.indices[1]), p(sk.indices[0])), sub(p(sk.indices[2]), p(sk.indices[0])));
   assert.ok(cr[1] < 0, `the skin's first triangle faces down: ${cr}`); assert.equal(sk.castShadows, true); assert.equal(sk.name, 'UNDERSKIN_join_x'); assert.equal(sk.material, -1, 'the material is set by withUnderskin');
 });
+
+// the section's up, the direction every skin vertex of a row hangs along (skinDir), is its CENTRE LINE's (centreColumn): on an odd, symmetric row the middle
+// column's normal; on an even, symmetric row the mean of the two middle ones (no column lies on the centre line); and with an edge zone on one side the normal where
+// the row's u is 0, metres from the middle by count. Read from the normals themselves, not through sectionUp, so a rule that drifts off the centre is seen
+test('row 10: the section\'s up is its centre line\'s: the middle column on an odd row, the two middle ones\' mean on an even row, the column at u = 0 with an edge on one side', () => {
+  const cupRow = (K, us) => { const N = new Float32Array(K * 3); us.forEach((u, k) => { const a = Math.atan(u / 20); N[k * 3] = -Math.sin(a); N[k * 3 + 1] = Math.cos(a); }); return N; };
+  const near = (a, b, label) => assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-6, `${label}: ${a.map((x) => x.toFixed(6))} against ${b.map((x) => x.toFixed(6))}`);
+  const unit = (v) => { const l = Math.hypot(...v); return v.map((x) => x / l); };
+  { const us = Array.from({ length: 41 }, (_, k) => (k - 20) * 0.5), N = cupRow(41, us), up = S.sectionUp(N, 0, 41, S.centreColumn({ K: 41, Us: us }));
+    near(up, unit([N[60], N[61], N[62]]), 'odd: the middle column'); }
+  { const us = Array.from({ length: 40 }, (_, k) => (k - 19.5) * 0.5), N = cupRow(40, us), up = S.sectionUp(N, 0, 40, S.centreColumn({ K: 40, Us: us }));
+    near(up, unit([N[57] + N[60], N[58] + N[61], N[59] + N[62]]), 'even: the two middle columns\' mean'); near(up, [0, 1, 0], 'even: straight up at the centre line'); }
+  { const us = [...Array.from({ length: 21 }, (_, k) => -10 + k * 0.5), ...Array.from({ length: 20 }, (_, k) => 0.25 + k * 0.25)], K = us.length, N = cupRow(K, us), c = S.centreColumn({ K, Us: us });
+    assert.equal(c, 20, 'one side: the centre line\'s column is 20, not the middle by count'); near(S.sectionUp(N, 0, K, c), [0, 1, 0], 'one side: straight up at the centre line'); }
+});

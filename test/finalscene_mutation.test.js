@@ -27,7 +27,7 @@ const MUTATIONS = [
   { id: 'F9 an open track\'s two ends are read as open edges', in: 'finalscene', from: '(open && (q.s < S[0].s + END_M', to: '(false && (q.s < S[0].s + END_M', caughtBy: 'row 4: tubes opened and closed' },
   // the fold (the jag)
   { id: 'F10 the skin never folds', in: 'finalscene', from: 'if (o.ang > ra + FOLD_SLACK_DEG) warn.push', to: 'if (false) warn.push', caughtBy: 'row 5: each defect made by hand' },
-  { id: 'F11 a seam\'s zipper is read in the fold', in: 'finalscene', from: "(t.f !== 'road' && t.f !== 'skin') || t.zip || g.zip ||", to: "(t.f !== 'road' && t.f !== 'skin') ||", caughtBy: 'row 9: a piece joint where' },
+  { id: 'F11 a seam\'s zipper is read in the fold', in: 'finalscene', from: "(t.f !== 'road' && t.f !== 'skin') || t.zip || g.zip ||", to: "(t.f !== 'road' && t.f !== 'skin') ||", caughtBy: 'row 6: under the bars' },
   { id: 'F16 the lip and landing of a jump are read as open edges', in: 'finalscene', from: 'lips.some((x) => Math.abs(q.s - x) < END_M)', to: 'false', caughtBy: 'row 10: a closed lap with a free jump' },
   // the bottom (the step under the leave)
   { id: 'F12 the bottom never steps', in: 'finalscene', from: 'if (off > BOTTOM_STEP_M) steps.push', to: 'if (false) steps.push', caughtBy: 'row 5: each defect made by hand' },

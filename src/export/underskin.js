@@ -16,8 +16,8 @@
 // side, and the track is no longer see-through from underneath. One mechanism. The ambient term (0.45) lights the inside of a tube as brightly as an open road
 // whatever the sun does, hence the low ambient on the ring's own material.
 //
-// THE SKIN IS NOT A PHYSICS SURFACE. Its meshes are named UNDERSKIN_…: no leading digit and no 1ROAD prefix, so AC reads them as scenery (a physics surface is a
-// mesh named for a surfaces.ini key, `1ROAD…`; the soft-collision block is `MESHES=1ROAD?`), and the name never contains "seam" (acready.js weldSeams would take it
+// THE SKIN IS NOT A PHYSICS SURFACE. Its meshes are named UNDERSKIN_â€¦: no leading digit and no 1ROAD prefix, so AC reads them as scenery (a physics surface is a
+// mesh named for a surfaces.ini key, `1ROADâ€¦`; the soft-collision block is `MESHES=1ROAD?`), and the name never contains "seam" (acready.js weldSeams would take it
 // for a zipper). Grip and collisions are the road cells', unchanged: the ROAD nodes of the scene are the ones mesh.js made (only a ring's material is the dark copy).
 //
 // THE SLOT ZONE (a tube closing or opening, where the section is not yet or no longer a ring): the skin runs under it like everywhere else (it is under every
@@ -33,7 +33,7 @@ const { SLIVER } = require('./acready.js');
 // how far the skin stands off the road surface, away from the driver (metres): the HULL's depth under the road (D604, the user 2026-11-01 08:49: "the track gets 3D
 // depth instead of a slice of a mesh"; 10:44, his red line drawn on the end-on cut: the bottom one smooth curve from one apron plank's tip to the other's, about 1.5 m
 // under the road at the centre, following the road's sag). It follows the road's own cross-section at this depth, not a chord, so in a cup it stays under the road (a
-// chord across a 57° cup would cut up through it); apron.js runs it on out to each plank's tip in one smooth curve. It was 0.5 m, a skin for shadows only, then for an
+// chord across a 57Â° cup would cut up through it); apron.js runs it on out to each plank's tip in one smooth curve. It was 0.5 m, a skin for shadows only, then for an
 // hour the plank's drop (0.93 m).
 const UNDERSKIN_OFFSET_M = 1.5;
 // WHICH WAY THE SKIN HANGS (D604 redo, the user 10:32: "the apron itself connects right to the other one without having an extra thicker bottom than we need"). A
@@ -41,9 +41,9 @@ const UNDERSKIN_OFFSET_M = 1.5;
 // of a cup or a bank hung outward of the edge, and the apron's join ran from the plank's tip back in to it, a second inverted apron seen from below. Along the section's
 // up the edge's skin vertex is straight under the edge at the plank's drop, level with the plank's tip, so the join is the slab's bottom run on out to the tip and
 // tip, underside and tip are one bottom. A vertex turned more than SECTION_UP_DEG from the section's up (a wall, a tube's side) blends to its own normal by
-// OWN_NORMAL_DEG, so it keeps standing off the surface: straight down, the offset of a surface at angle a stands only D·cos a off it.
+// OWN_NORMAL_DEG, so it keeps standing off the surface: straight down, the offset of a surface at angle a stands only DÂ·cos a off it.
 const SECTION_UP_DEG = 60, OWN_NORMAL_DEG = 80;
-/** The unit direction a skin vertex hangs along (its skin vertex is p − UNDERSKIN_OFFSET_M·dir), from its own normal nv and its row's centre normal nc (neither need be unit). */
+/** The unit direction a skin vertex hangs along (its skin vertex is p âˆ’ UNDERSKIN_OFFSET_MÂ·dir), from its own normal nv and its row's centre normal nc (neither need be unit). */
 function skinDir(nv, nc) {
   const lv = Math.hypot(nv[0], nv[1], nv[2]), lc = Math.hypot(nc[0], nc[1], nc[2]);
   const v = [nv[0] / lv, nv[1] / lv, nv[2] / lv], c = [nc[0] / lc, nc[1] / lc, nc[2] / lc];
@@ -80,7 +80,7 @@ function hullDepth(rimDeg) {
 /**
  * Where a piece's grid crosses its centre line, as a column number: its columns' u (`Us`) run from the right edge to the left, and the centre line is u = 0, so
  * i where u is 0 at column i, else i + t between columns i and i + 1 (t = 0.5 exactly when the two lie evenly either side). Column Math.floor(K / 2) is the
- * centre only when the columns lie evenly either side and K is odd: an edge zone on one side puts it metres off (7 m on a 15° cup with a 35° edge on one side),
+ * centre only when the columns lie evenly either side and K is odd: an edge zone on one side puts it metres off (7 m on a 15Â° cup with a 35Â° edge on one side),
  * an even K half a column, and there a cup has turned the normal. With no `Us`, the middle by count, as before.
  */
 function centreColumn(piece) {
@@ -167,11 +167,66 @@ function rowDepths(P, N, base, K, hull = true, keep = [1, 1], scale = 1, mid = M
   if (!hull || K < 3) return out;
   const p = (k) => [P[(base + k) * 3], P[(base + k) * 3 + 1], P[(base + k) * 3 + 2]], dot = dot3, sub = sub3;
   for (const [j, { E, X, rim }] of rowEdges(P, N, base, K, mid).entries()) {
-    const dE = keep[j] === 1 ? hullDepth(rim) : UNDERSKIN_OFFSET_M + (hullDepth(rim) - UNDERSKIN_OFFSET_M) * keep[j];   // the rim, as apron.js sideRows reads it
-    if (!(dE > UNDERSKIN_OFFSET_M)) continue;
+    const dMax = keep[j] === 1 ? hullDepth(rim) : UNDERSKIN_OFFSET_M + (hullDepth(rim) - UNDERSKIN_OFFSET_M) * keep[j];   // the rim, as apron.js sideRows reads it
+    if (!(dMax > UNDERSKIN_OFFSET_M)) continue;
+    // read from the plank's tip only where the section's middle is not the middle by count (an edge zone on one side): there the re-lean moved the plank, and only
+    // there hullDepth's depth no longer meets it (a symmetric section, a tube's opening, keeps hullDepth's to the bit)
+    const dE = rim < HULL_WALL_DEG && Math.abs(mid - (K - 1) / 2) > 0.5 ? edgeDepth(P, N, base, K, j, E, X, mid, dMax) : dMax;
     for (let k = 0; k < K; k++) { const t = dot(sub(E, p(k)), X); if (t < HULL_EDGE_SPAN_M) { const x = 1 - Math.max(0, t) / HULL_EDGE_SPAN_M; out[k] += (dE - UNDERSKIN_OFFSET_M) * x * x; } }
   }
   return out;
+}
+/**
+ * The road point RUN_ARRIVE_M along a row in from one of its edges (j 0: from column 0; 1: from column K − 1), between the two columns either side of it: { p, n (unit),
+ * k0, k1, w }. The hull's run arrives at the skin's edge heading for the skin under this point (apron.js), and the edge's depth is read from it (edgeDepth). A distance,
+ * not a column: two pieces meeting at a joint keep different columns (their K differ), and aimed at a column their runs on the one shared row parted by 11 mm.
+ */
+const RUN_ARRIVE_M = 1;
+function rowPointIn(P, N, base, K, j, dist = RUN_ARRIVE_M) {
+  const at = (A, k) => [A[(base + k) * 3], A[(base + k) * 3 + 1], A[(base + k) * 3 + 2]], st = j === 0 ? 1 : -1;
+  let k = j === 0 ? 0 : K - 1, gone = 0;
+  while (k + st > 0 && k + st < K - 1) {
+    const a = at(P, k), b = at(P, k + st), l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    if (gone + l >= dist && l > 0) { const w = (dist - gone) / l, na = at(N, k), nb = at(N, k + st), n = [0, 1, 2].map((c) => na[c] + (nb[c] - na[c]) * w), ln = Math.hypot(...n);
+      return { p: [0, 1, 2].map((c) => a[c] + (b[c] - a[c]) * w), n: n.map((x) => x / ln), k0: k, k1: k + st, w }; }
+    gone += l; k += st;
+  }
+  return null;
+}
+/**
+ * The skin's depth under one edge that rises (rowDepths), READ FROM THE PLANK'S TIP: hullDepth's (`dMax`) wherever the hull's run under the plank turns no more than
+ * EDGE_TURN_MAX_DEG on its way from the plank's tip into the skin; where it would turn more, the deepest depth from `dMax` up toward UNDERSKIN_OFFSET_M at which it does
+ * not (or, if none, the one where it turns least). Of the depths from UNDERSKIN_OFFSET_M to `dMax` (hullDepth's, the deepest it may
+ * go), the one at which the hull's run under the default plank (HULL_PLANK_W out, HULL_PLANK_DROP down, from the section's own middle) turns least on its way from the
+ * plank's tip into the skin: twice the angle, in the section, between its chord (tip to the skin's edge vertex) and the skin's first span (to its vertex one decimated
+ * column in, skinColumns), the turn of an arc (apron.js hullRun). hullDepth alone, its rim read at the section's true middle, set the skin 0.48 m deeper under TEST 10's
+ * right edge at s 3,725 than the plank's run could meet without a 49Â° turn; at 1.9 m it turns 7Â° (export_apron row 29). A wall side (rim at HULL_WALL_DEG or more) has
+ * no plank and keeps hullDepth's. `j`: 0 the edge at column 0, 1 the one at column K âˆ’ 1. Scanned in EDGE_DEPTH_STEPS from dMax down, so a depth that is already best stays.
+ */
+const EDGE_DEPTH_STEPS = 48, EDGE_TURN_MAX_DEG = 30;   // 30Â°: an arc that turns that much bends about 2.5Â° where it meets the skin and 3.5Â° in 0.3 m
+function edgeDepth(P, N, base, K, j, E, X, mid, dMax) {
+  const ke = j === 0 ? 0 : K - 1, rp = rowPointIn(P, N, base, K, j);
+  if (!rp) return dMax;
+  const nc = sectionUp(N, base, K, mid), at = (A, k) => [A[(base + k) * 3], A[(base + k) * 3 + 1], A[(base + k) * 3 + 2]];
+  const to2 = (v) => [dot3(v, X), dot3(v, nc)], O = [HULL_PLANK_W, -HULL_PLANK_DROP], sE = to2(skinDir(at(N, ke), nc));
+  const pk = to2(sub3(rp.p, E)), sk = to2(skinDir(rp.n, nc)), tk = -pk[0], x = Math.max(0, 1 - Math.max(0, tk) / HULL_EDGE_SPAN_M);
+  const dir = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]);
+  const turn = (d) => {
+    const S = [-d * sE[0], -d * sE[1]], dk = UNDERSKIN_OFFSET_M + (d - UNDERSKIN_OFFSET_M) * x * x, Nx = [pk[0] - dk * sk[0], pk[1] - dk * sk[1]];
+    let t = dir(O, S) - dir(S, Nx); while (t > Math.PI) t -= 2 * Math.PI; while (t < -Math.PI) t += 2 * Math.PI; return 2 * Math.abs(t);
+  };
+  const bar = (EDGE_TURN_MAX_DEG * Math.PI) / 180, step = (dMax - UNDERSKIN_OFFSET_M) / EDGE_DEPTH_STEPS;
+  if (turn(dMax) <= bar) return dMax;   // hullDepth's itself, when its run turns within the bar
+  let best = dMax, bestTurn = Infinity;
+  for (let s = 1; s <= EDGE_DEPTH_STEPS; s++) {
+    const d = dMax - step * s, t = turn(d);
+    if (t <= bar) {   // the boundary between this depth (within) and the one before (not), found exactly: the depth moves smoothly along the road, not in steps
+      let lo = d, hi = d + step; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (turn(m) <= bar) lo = m; else hi = m; }
+      return lo;
+    }
+    if (t < bestTurn - 1e-12) { bestTurn = t; best = d; }
+  }
+  return best;
 }
 /** The road columns a grid cell's skin keeps: every `step`-th and the last, about SKIN_COLUMNS across. */
 function skinColumns(K) {
@@ -183,14 +238,14 @@ function skinColumns(K) {
 const TUBE_RING_AMBIENT = 0.02;    // ksAmbient of a closed ring's interior (an open road's is 0.45, src/geom/mesh.js)
 const SKIN_AMBIENT = 0.05, SKIN_DIFFUSE = 0.1;   // the skin's own plain dark material: seen only from outside the pipe or below the road
 // The skin only has to CAST A SHADOW, so a road cell's skin keeps about this many of the road's vertices across (a closed tube's rows carry 392; a full-size copy
-// of a tube doubled the kn5). Chord sagitta at 32 columns round a 6.4 m radius ring is R(1 − cos(π/32)) = 3.1 cm against the 0.93 m offset, so the skin stays on the far
+// of a tube doubled the kn5). Chord sagitta at 32 columns round a 6.4 m radius ring is R(1 âˆ’ cos(Ï€/32)) = 3.1 cm against the 0.93 m offset, so the skin stays on the far
 // side of the road. A seam row keeps all its vertices: its zipper is not a grid.
 const SKIN_COLUMNS = 32;
 // A cell whose road normals turn more than this from one row to the next, at any column, keeps every column (withUnderskin). Decimated, a skin quad spans
 // about K / SKIN_COLUMNS road columns; where the section changes fast along the road (a tube's abrupt opening or closing: a column rises 2 m in one 2 m row) such a
-// quad twists across it and folds along its diagonal, 22° to 37° on the tube test where the road itself bends at most 12.5° (the jag outside an abrupt opening).
-// The export's own normals there turn past this; on an open road far less (his own 25 km track: no cell of more than 32 columns reaches 1°). The zone takes
-// SKIN_TWIST_PAD cells more each way along the road, where the section has begun to turn but not yet past the threshold (a 25° fold in the cell before it)
+// quad twists across it and folds along its diagonal, 22Â° to 37Â° on the tube test where the road itself bends at most 12.5Â° (the jag outside an abrupt opening).
+// The export's own normals there turn past this; on an open road far less (his own 25 km track: no cell of more than 32 columns reaches 1Â°). The zone takes
+// SKIN_TWIST_PAD cells more each way along the road, where the section has begun to turn but not yet past the threshold (a 25Â° fold in the cell before it)
 const SKIN_TWIST_DEG = 8, SKIN_TWIST_PAD = 2;
 
 const skinMaterial = () => ({
@@ -256,7 +311,7 @@ function skinOf(m, name, K = null, seamKa = null, hull = true, keep = null, full
     return { ...base, positions: pick(positions, 3), normals: pick(normals, 3), uvs: pick(m.uvs, 2), indices: Uint16Array.from(keepT.map((v) => re.get(v))), roadIndex: Int32Array.from(used) };
   }
   // `full`: the rows that keep every column (withUnderskin: a row on a seam, or every row of a cell whose section turns fast, and its neighbours' shared rows). Such a row keeps EVERY column: its
-  // decimated columns are the grid's own vertices and the others (K − C a row) are appended after the grid, so the grid's R × C layout is untouched for apron.js withRuns and
+  // decimated columns are the grid's own vertices and the others (K âˆ’ C a row) are appended after the grid, so the grid's R Ã— C layout is untouched for apron.js withRuns and
   // pitSkins (`gridColumns`, `fullRows`) and no vertex goes unused (a vertex no triangle uses is dropped by an importer: Blender's count of the skin then differs); and the strip beside it is a zipper from it to the decimated row 2 m on
   // (its triangles a column wide and a row long): so the row is the seam's own, vertex for vertex. Decimated there, its chords stood up to 3 cm off a tube's ring
   // against the seam's every-vertex row: a crack of sky at every joint (the tube test, 301 open edges each)
@@ -294,7 +349,7 @@ function skinOf(m, name, K = null, seamKa = null, hull = true, keep = null, full
  * (`kids`, the export scene's root children, one per mesh cell): a cell of more than SKIN_COLUMNS columns, not a closed ring, where some column's normal turns more than
  * SKIN_TWIST_DEG from one row to the next; widened SKIN_TWIST_PAD cells each way along an unbroken run of cells that meet. In the zone the skin keeps every column
  * (withUnderskin), and the hull is thinner: a skin hung 1.5 m off a road that twists that fast lies on the concave side of the twist and folds several times sharper than
- * the road (15° to 22° where the road bends 5°; at 0.5 m it bends within the road's own). So the whole hull's depth there scales to HULL_TWIST_DEPTH, easing back to 1
+ * the road (15Â° to 22Â° where the road bends 5Â°; at 0.5 m it bends within the road's own). So the whole hull's depth there scales to HULL_TWIST_DEPTH, easing back to 1
  * over HULL_TWIST_EASE_M of road either side of the zone (`at(s)`), on the skin and on every edge piece that meets it (apron.js). On a road with no such cell (his own
  * track) `at` is 1 everywhere and nothing changes.
  * Returns { list (the grid cells by s), zone (per list entry), meets(a, b), at(s) }.
@@ -377,4 +432,4 @@ function withUnderskin(scene, mesh, segments) {
   return { ...scene, materials, root: { ...scene.root, children: [...children, ...skins] } };
 }
 
-module.exports = { withUnderskin, skinCells, ringCells, skinOf, skinDir, sectionUp, centreColumn, colAt, twistZone, hullScaleAt, HULL_TWIST_DEPTH, hullDepth, hullEase, HULL_ALONG_M, rowDepths, skinColumns, HULL_EDGE_SPAN_M, darkOf, UNDERSKIN_OFFSET_M, TUBE_RING_AMBIENT, SKIN_AMBIENT, SKIN_DIFFUSE, SKIN_COLUMNS };
+module.exports = { withUnderskin, skinCells, ringCells, skinOf, skinDir, sectionUp, centreColumn, colAt, rowPointIn, RUN_ARRIVE_M, twistZone, hullScaleAt, HULL_TWIST_DEPTH, hullDepth, hullEase, HULL_ALONG_M, rowDepths, skinColumns, HULL_EDGE_SPAN_M, darkOf, UNDERSKIN_OFFSET_M, TUBE_RING_AMBIENT, SKIN_AMBIENT, SKIN_DIFFUSE, SKIN_COLUMNS };

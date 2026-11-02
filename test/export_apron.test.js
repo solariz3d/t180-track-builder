@@ -40,6 +40,8 @@
 //      the kn5 is written from, each side's plank ends on the next piece's first plank row to a millimetre, its outer row too, and the run under it with it
 //  28  every plank hangs at the apron's own slope from the road's frame (25° below the lateral, in the cross-section) on a cupped piece with an edge zone on
 //      one side as on a symmetric one: it hangs from the section's own middle, not from column Math.floor(K / 2)
+//  29  the run under every plank bends evenly into the skin: no more than 5° in any 0.3 m and 3° where it meets the skin's first span, with an edge zone on one
+//      side, on a symmetric cup and on a flat road (it arrives along the skin's own first span as an arc; a re-leaned plank's skin edge comes up where it must)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -739,5 +741,28 @@ test('row 28: every plank hangs at the apron\'s own slope from the road\'s frame
     }
     assert.ok(rows > 100, `control: ${rows} plank rows read`);
     assert.deepEqual(bad.slice(0, 4), [], `${JSON.stringify(first)}: ${bad.length} of ${rows} plank rows lean`);
+  }
+});
+
+// THE BEND INTO THE SKIN (his red line: the bottom one smooth sweep from tip to tip). Once the plank hangs from the section's own middle (row 28), its tip on a
+// rising edge sits lower, and the run under it from the tip to the skin's edge had to turn about 50° (TEST 10 s 3,725: 6° where it met the skin, 10° over its last
+// 0.3 m). The run now arrives along the skin's own first span and starts as its mirror about the chord (an arc, apron.js hullRun), and where that would still turn
+// more than 30° (a section whose middle the re-lean moved) the skin's edge comes up to the depth at which it does not (underskin.js edgeDepth)
+test('row 29: the run under every plank bends evenly into the skin: no more than 5° in any 0.3 m of it, and no more than 3° where it meets the skin\'s first span, on a cupped piece with an edge zone on one side, a symmetric cup and a flat road', () => {
+  for (const first of [{ w: 25, c: 15, er: 35 }, { w: 25, c: 15.5 }, { w: 20, c: 0 }]) {
+    let d = extend(D.createDoc('apron bend'), { length: 100, family: 'bowl', first }); d = extend(d, { length: 100, targets: {} });
+    const { out } = build(d), bad = []; let rows = 0, worstSpan = 0, worstJoin = 0;
+    const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot3(unit3(a), unit3(b))))) / DEG;
+    for (const tp of tops(out)) {
+      const ro = runOf(out, tp), P = ro.sk.positions, pt = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]], right = tp.name.startsWith('APRONR'), w = pairs(tp);
+      for (let i = 0; i < ro.R; i++) {
+        if (Math.hypot(...sub(w[i][1], w[i][0])) < 1.9) continue;   // a tapered plank's row near its ends
+        const run = Array.from({ length: ro.J + 1 }, (_, j) => pt(ro.at(i, j))), next = pt(i * ro.C + (right ? 1 : ro.C - 2)); rows++;
+        for (let j = 1; j < ro.J; j++) { const a = sub(run[j], run[j - 1]), b = sub(run[j + 1], run[j]), t = (ang(a, b) * 0.3) / ((Math.hypot(...a) + Math.hypot(...b)) / 2); worstSpan = Math.max(worstSpan, t); }
+        const join = ang(sub(run[ro.J], run[ro.J - 1]), sub(next, run[ro.J])); worstJoin = Math.max(worstJoin, join);
+      }
+    }
+    assert.ok(rows > 100, `control: ${rows} plank rows read`);
+    assert.ok(worstSpan <= 5 && worstJoin <= 3, `${JSON.stringify(first)}: the run turns up to ${worstSpan.toFixed(2)}° in 0.3 m and ${worstJoin.toFixed(2)}° where it meets the skin`);
   }
 });
