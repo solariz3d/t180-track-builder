@@ -22,9 +22,12 @@
 //   MARKERS            a §5c marker check is red (every problem is listed)
 //   FINS               the fin guard (acready.js findFins) found road standing up out of the surface, or off it, where two pieces meet, in the
 //                      scene about to be written. A fault in the builder, never in the track: the zipper and the weld should make none (err.fins lists them)
-//   NOT_OURS           the target folder exists and was not written by this builder (no .t180b-builder.json)
+//   SCENE              the final-scene check (src/export/finalscene.js) found a fault in a surface the car drives on, in the scene about to be written:
+//                      a face standing across the road, the pit lane wider than 0.1 m where it meets the road, or a crack in the road, the apron or the
+//                      lane. A fault in the builder, never in the track (err.sceneCheck lists them). In the TEST route it is listed, not blocking
+//   NOT_OURS          the target folder exists and was not written by this builder (no .t180b-builder.json)
 // AMBER EXPORTS, WITH A WARNING: every amber range, a lap that could not run (no speed model), each check validation
-// lists as not done, and duplicate mesh-node names (see below).
+// lists as not done, duplicate mesh-node names (see below), and each drawn-only fault the final-scene check finds ("scene: ").
 //
 // SELF-INTERSECTION is C's BVH (buildMesh selfCheck), ON by default: its findings are red. `selfCheck: false` turns it
 // off, and the result then says so in its warnings. On 2026-09-27 it reports crossings that its own rules exclude, on
@@ -69,7 +72,8 @@ const Prof = require('../geom/profile.js');
 const { validate } = require('../validate/index.js');
 const { validateScene } = require('./scene.js');
 const { writeKn5 } = require('./kn5write.js');
-const { flattenForAc, ensureDiffuse, weldSeams, findFins, mergeForAc } = require('./acready.js');
+const { flattenForAc, ensureDiffuse, weldSeams, weldApronJoints, findFins, mergeForAc } = require('./acready.js');
+const { checkFinalScene, sayFindings } = require('./finalscene.js');
 const { checkMarkers, walkScene, isDrivable } = require('./markers.js');
 const Markers = require('../markers/index.js');
 const trackfiles = require('./trackfiles.js');
@@ -327,11 +331,22 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
   // then the road and its underside skin joined into chunks (acready.js mergeForAc): the same triangles, a few dozen draw calls instead of one per 2 m
   // cell. `mergeMeshes: false` writes the unmerged meshes, for a before/after comparison only
   stage('writing the kn5');
-  const welded = weldSeams(flattenForAc(scene));
+  // the road's rows welded at its seams, then the edge apron's planks at the joints between pieces (acready.js)
+  const welded = weldApronJoints(weldSeams(flattenForAc(scene)));
   // the fin guard reads the mesh about to be written; a ray cast down cannot see a sheet standing up across the road, and the user would find one by
   // driving into it (TEST 10, s 3,700). The zipper and the weld make none; this refuses if one ever gets through
   const fins = findFins(welded);
   if (fins.length) throw new ExportError('FINS', `the road would stand up in a thin wall where two pieces meet (${fins.map((x) => x.message).join('; ')}). That is a fault in the builder, not in your track, and nothing was written. Please report it.`, { fins });
+  // the final-scene check reads what validation cannot, because validation runs before the skin, the apron and the catch exist: the drivable surfaces
+  // as they will be written (a step, a crack, the lane's ends) refuse; the drawn-only ones (a fold, a line of sky, a step under the hull, slivers) warn
+  stage('checking the scene');
+  const sceneCheck = checkFinalScene(welded, { path: p, segments: segs, lane: pit ? pit.lane : null, open: !p.closed });
+  if (sceneCheck.refuse.length) {
+    const t = sayFindings(sceneCheck.refuse);
+    if (!test) throw new ExportError('SCENE', `the road the car drives on would have a fault: ${t}. That is a fault in the builder, not in your track, and nothing was written. Please report it.`, { sceneCheck });
+    testReds.push(`scene: ${t}`);
+  }
+  for (const w of sceneCheck.warn) warnings.push(`scene: ${w.message}`);
   // acScene: the very scene the kn5 is written from (flat, welded, merged, with diffuse textures), returned too so the export for Blender (src/export/gltf.js) serialises the same meshes
   const acScene = ensureDiffuse(o.mergeMeshes === false ? welded : mergeForAc(welded)), kn5 = Buffer.from(writeKn5(acScene));
   stage('reading the kn5 back');
@@ -352,7 +367,7 @@ function buildFromSegments(segs, meta = {}, opts = {}) {
 
   const turn = segs.reduce((a, g) => a + ((g.k0 + g.k1) / 2) * g.length, 0);
   return {
-    folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, acScene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, geometry: geometryOf(p, segs), resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null,
+    folder: o.folder || folderName(doc) + (test ? '_test' : ''), scene, acScene, kn5, ai, test: test ? { reds: testReds, runoffM: TEST_RUNOFF_M, wall: TEST_WALL_NAME } : null, path: p, segments: segs, geometry: geometryOf(p, segs), resolvedVia: via, validation: v, markers: mk, markerChecks: mc, pitLane: pit ? pit.lane : null, sceneCheck,
     readback: { version: back.version, meshes: back.meshes.length, dummies: back.dummies.map((d) => d.name) },
     aiLine: line ? { points: line.points.length, lengthM: line.points[line.points.length - 1].length + line.extra[line.extra.length - 1].length, speedKmh: line.speedKmh } : null,
     desc: { name: (doc.name || 'Untitled') + (test ? ' (test, unfinished)' : ''), description: meta.description || 'Built by t180-track-builder.', length: p.lengthM, width: roadWidthM(segs), run: turn >= 0 ? 'counterclockwise' : 'clockwise', tags: ['t180', 'original', BUILDER], author, version: '0.1' },

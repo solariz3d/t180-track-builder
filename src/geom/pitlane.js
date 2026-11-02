@@ -54,7 +54,8 @@ const MAT = 'ROAD';
 const TAPER_MIN_W = 0.1;               // m: the lane's width where it leaves and rejoins (a profile needs a width). Its first and last rows have K − 1 = 8 columns, and the
                                        // drawn apron fans out from them across the lane's end: the plank inside the 25° wedge between the lane's end edge and the road
                                        // plank's, the join inside the 12° wedge between the skin's end edge and the plank's outer point. A triangle on two of them is at most
-                                       // their spacing · sin(wedge) thick, so for the 1 cm floor the export's defect count holds they must be 1 / sin 12° = 4.8 cm apart
+                                       // their spacing · sin(wedge) thick, so for the 1 cm sliver floor (held by test/export_apron.test.js row 18; the export itself warns
+                                       // under acready.js SLIVER, 4 mm, in src/export/finalscene.js) they must be 1 / sin 12° = 4.8 cm apart
                                        // (D593: at 10 cm they were 1.25 cm apart and the plank 0.5 cm thick; at 25 cm the join needed one triangle, whose long edge met the
                                        // skin's end row in a T and cracked; at 50 cm 6.25 cm, the plank 2.6 cm and the join 1.3 cm, every vertex shared)
 

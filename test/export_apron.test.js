@@ -36,6 +36,10 @@
 //      into the skin with no corner, and no bottom vertex comes within 0.15 m of the road
 //  24  the slab does not cut itself: on a flat, a banked and a cupped edge, two edges turned down (the convex case, where an offset can fold) and the pit lap, no drawn
 //      triangle of the whole export clips through another, within one mesh or between meshes, and no physics one
+//  27  the planks meet across a piece joint where the road's column count goes from even to odd (a cup ramp after a tube, then a cupped piece): in the scene
+//      the kn5 is written from, each side's plank ends on the next piece's first plank row to a millimetre, its outer row too, and the run under it with it
+//  28  every plank hangs at the apron's own slope from the road's frame (25° below the lateral, in the cross-section) on a cupped piece with an edge zone on
+//      one side as on a symmetric one: it hangs from the section's own middle, not from column Math.floor(K / 2)
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -676,5 +680,64 @@ test('row 26: beside the pit lane the hull\'s bottom has no step: on a cupped ro
     assert.ok(far > near + 0.05, `${name}: control: the hull is deeper 40 m from the lane (${far.toFixed(3)} m) than at it (${near.toFixed(3)} m)`);
     let worst = 0; for (let i = 1; i < dep.length; i++) worst = Math.max(worst, Math.abs(dep[i] - dep[i - 1]));
     assert.ok(worst <= 0.03, `${name}: the bottom steps ${worst.toFixed(3)} m in one metre beside the lane`);
+  }
+});
+
+// A plank hangs from its own cell's row (sideRows: the section's up is its centre column's normal, Math.floor(K / 2)). On a piece whose column count K is even that
+// column is half a column off the middle, so on a cupped section its normal leans: 0.2° on a 16° cup 32 m wide, after a tube (K 66). The next piece (K 65) hangs its
+// first plank row from the true middle, so the two planks met at the road's edge and parted by 7.8 mm at their outer rows: a crack in a surface the car drives on,
+// at every such joint since the apron was built (found on two of the user's tracks, 6 to 8 mm). The export welds the planks' rows across a joint, as it welds the
+// road's (acready.js weldApronJoints)
+test('row 27: the planks meet across a piece joint where the road\'s column count goes from even to odd: each side\'s plank ends on the next piece\'s first row to a millimetre, its outer row and the run under it too', () => {
+  let d = extend(D.createDoc('apron joint parity'), { length: 100, family: 'bowl', first: { w: 60, t: 360 } });
+  d = extend(d, { length: 100, targets: { t: 0, w: 32 } });
+  d = extend(d, { length: 100, targets: { c: 16 } });
+  d = extend(d, { length: 200, targets: {} });
+  const segs = A.toSegments(d), lift = (q) => A.offsetPath(d, segs, q), start = { pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch };
+  const { buildMesh } = require('../src/geom/index.js'), st = buildMesh(A.toPath(d).path, segs, { selfCheck: false })._state, K = (id) => st.pieces[segs.findIndex((g) => g.id === id)].K;
+  assert.deepEqual([K('p3') % 2, K('p4') % 2], [0, 1], `control: the cup ramp's column count is even and the next piece's odd (${K('p3')}, ${K('p4')})`);
+  const b = FW.buildFromSegments(segs, { name: 'apron parity', via: 'test', liftPath: lift, start }, { markers: startLayout(segs, lift, start, { open: true }), test: true, mergeMeshes: false });
+  const all = b.acScene.root.children.filter((n) => n.type === 'mesh'), cellNo = (n) => +((/_(\d+)$/.exec(n.name) || [0, 1])[1]);
+  const pt = (n, i) => [n.positions[3 * i], n.positions[3 * i + 1], n.positions[3 * i + 2]], mm = (a, c) => Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]) * 1000;
+  const skin = all.filter((n) => /^UNDERSKIN_p4_/.test(n.name));
+  for (const tag of ['R', 'L']) {
+    const planks = (p) => all.filter((n) => new RegExp(`^1ROAD_APRON_${p}_body_0_${tag}(_\\d+)?$`).test(n.name)).sort((x, y) => cellNo(x) - cellNo(y));
+    const last = planks('p3').pop(), first = planks('p4')[0], n = last.positions.length / 3;
+    assert.ok(last && first, `control: ${tag} has its planks either side of the joint`);
+    const gapE = mm(pt(last, n - 2), pt(first, 0)), gapO = mm(pt(last, n - 1), pt(first, 1));
+    assert.ok(gapE <= 1 && gapO <= 1, `${tag}: at the joint the planks part by ${gapE.toFixed(2)} mm at the road's edge and ${gapO.toFixed(2)} mm at their outer row`);
+    const O = pt(first, 1), tip = Math.min(...skin.map((s) => { let m = Infinity; for (let i = 0; i < s.positions.length / 3; i++) m = Math.min(m, mm(pt(s, i), O)); return m; }));
+    assert.ok(tip <= 0.01, `${tag}: the run under the next piece's first plank row starts ${tip.toFixed(3)} mm from the plank's outer row: the hull is open there`);
+  }
+});
+
+// THE LEAN behind row 27's crack, and the larger one it hides. A plank's outward lateral and its up were read at column Math.floor(K / 2), the section's
+// middle only when its columns lie evenly either side of the centre line. An edge zone on one side adds columns on that side, so the column read lies metres
+// off the centre (7.0 m on a 15° cup 25 m wide with a 35° right edge, laid as the user's TEST 10 is), where the cup has turned the normal, and every plank of
+// the piece hangs at the wrong slope (15° there instead of 25°), not only at a joint. The plank now hangs from the section's own middle, its centre line column
+test('row 28: every plank hangs at the apron\'s own slope from the road\'s frame, on a cupped piece with an edge zone on one side as on a symmetric one: 25° below the lateral, in the cross-section', () => {
+  const { buildMesh } = require('../src/geom/index.js');
+  // four sections: a 35° right edge (its middle column 7 m off the centre), a 30° left edge, a plain cup, and a cup ramp after a tube (an even K: the centre half a
+  // column off, between two columns), each read on its own piece
+  const twoPieces = (first) => extend(extend(D.createDoc('apron lean'), { length: 100, family: 'bowl', first }), { length: 100, targets: {} });
+  const afterTube = () => extend(extend(extend(extend(D.createDoc('apron lean'), { length: 100, family: 'bowl', first: { w: 60, t: 360 } }), { length: 100, targets: { t: 0, w: 32 } }), { length: 100, targets: { c: 16 } }), { length: 200, targets: {} });
+  for (const [first, d, piece] of [[{ w: 25, c: 15, er: 35 }], [{ w: 25, c: 15, e: 30 }], [{ w: 25, c: 15 }], [{ evenK: true }, afterTube(), 'p3']].map(([f0, d0, p0]) => [f0, d0 || twoPieces(f0), p0 || 'p1'])) {
+    const segs = A.toSegments(d), st = buildMesh(A.toPath(d).path, segs, { selfCheck: false })._state.pieces[segs.findIndex((g) => g.id === piece)], U = Array.from(st.Us);
+    if (first.evenK) assert.ok(st.K % 2 === 0 && !U.includes(0), `control: the cup ramp after a tube has an even K (${st.K}) and no column on the centre line`);
+    if (first.er) assert.ok(Math.abs(U[Math.floor(st.K / 2)]) > 5, `control: with a right edge zone the column Math.floor(K / 2) lies ${U[Math.floor(st.K / 2)].toFixed(2)} m off the centre`);
+    const lift = (q) => A.offsetPath(d, segs, q), start = { pos: d.start.pos.slice(), theta: d.start.heading, p: d.start.pitch };
+    const b = FW.buildFromSegments(segs, { name: 'apron lean', via: 'test', liftPath: lift, start }, { markers: startLayout(segs, lift, start, { open: true }), test: true, mergeMeshes: false });
+    const S = b.path.samples, bad = []; let rows = 0;
+    for (const n of b.acScene.root.children.filter((x) => x.type === 'mesh' && x.name.startsWith(`1ROAD_APRON_${piece}_`))) {
+      const P = n.positions;
+      for (let i = 0; i + 5 < P.length; i += 6) {
+        const E = [P[i], P[i + 1], P[i + 2]], O = [P[i + 3], P[i + 4], P[i + 5]], v = sub(O, E); if (Math.hypot(...v) < 0.5) continue;   // a tapered row near the plank's end
+        const q = S.reduce((a, x) => (Math.hypot(...sub(x.pos, E)) < Math.hypot(...sub(a.pos, E)) ? x : a)), lat = Math.abs(dot3(v, q.L)), up = dot3(v, q.U), along = dot3(v, q.T);
+        const deg = Math.atan2(-up, lat) / DEG; rows++;
+        if (Math.abs(deg - AP.APRON_SLOPE_DEG) > 0.05 || Math.abs(along) > 0.01) bad.push(`${n.name}: ${deg.toFixed(2)}° below the lateral, ${(along * 1000).toFixed(0)} mm along the road`);
+      }
+    }
+    assert.ok(rows > 100, `control: ${rows} plank rows read`);
+    assert.deepEqual(bad.slice(0, 4), [], `${JSON.stringify(first)}: ${bad.length} of ${rows} plank rows lean`);
   }
 });

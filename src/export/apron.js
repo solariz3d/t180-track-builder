@@ -46,7 +46,7 @@
 //   zone turns down (e < 0) is open and its apron starts at the zone's outer row, which is the mesh's last column. Flights (jump segments) have no cells and no apron.
 //   The mesh's column 0 is the road's right (−u) and column K − 1 its left (+u, the frame's L).
 'use strict';
-const { UNDERSKIN_OFFSET_M, ringCells, skinDir, sectionUp, hullDepth, hullEase, twistZone, hullScaleAt, skinColumns, HULL_EDGE_SPAN_M } = require('./underskin.js');
+const { UNDERSKIN_OFFSET_M, ringCells, skinDir, sectionUp, centreColumn, colAt, hullDepth, hullEase, twistZone, hullScaleAt, skinColumns, HULL_EDGE_SPAN_M } = require('./underskin.js');
 const { gripKey } = require('./gripkeys.js');
 
 const APRON_WIDTH_M = 2.0;     // the default: one measured excursion reached 0.86 m past the edge (p-d563), and 2 m covers it with room
@@ -82,15 +82,19 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
  * is the very vertex underskin.js skinOf writes there); rim the side's last segment's angle above X, in degrees. Kept from the lip (D593, gone; nothing reads them now): D that segment's direction in the section (cos rim·X + sin rim·N)
  * and Dn the direction under it (sin rim·X − cos rim·N: −N on a flat edge); uv the edge vertex's own uv and du the road's u per metre outward across that last segment (no
  * `m.uvs`: uv null). The physics apron reads only E, X, N, NE and rim, computed as before.
+ * `mid`: the section's own middle, the column on the centre line (centreColumn, from the piece's columns). Column Math.floor(K / 2) is the middle only when the
+ * columns lie evenly either side of the centre line; an edge zone on one side, or an even K, puts it off (7 m on a 15° cup with a 35° edge on one side), where
+ * the cup has turned the normal, and every plank of the piece leaned with it (15° and 35° instead of 25°; export_apron rows 27 and 28). Nc is the same column's
+ * normal (sectionUp), as the skin hangs by it. Left out (the pit lane's outline), both are read as before.
  */
-function sideRows(m, K, side) {
-  const P = m.positions, Nn = m.normals, U = m.uvs, R = P.length / 3 / K, ic = Math.floor(K / 2), i0 = side === 0 ? 0 : K - 1, i1 = side === 0 ? 1 : K - 2, rows = [];
+function sideRows(m, K, side, mid) {
+  const P = m.positions, Nn = m.normals, U = m.uvs, R = P.length / 3 / K, ic = mid === undefined ? Math.floor(K / 2) : mid, i0 = side === 0 ? 0 : K - 1, i1 = side === 0 ? 1 : K - 2, rows = [];
   const at = (A, r, k) => [A[(r * K + k) * 3], A[(r * K + k) * 3 + 1], A[(r * K + k) * 3 + 2]];
   for (let r = 0; r < R; r++) {
-    const E = at(P, r, i0), C = at(P, r, ic), N = unit(at(Nn, r, ic)), lat = sub(E, C), X = unit(sub(lat, mul(N, dot(lat, N)))), d = sub(E, at(P, r, i1));
+    const E = at(P, r, i0), C = colAt(P, r * K, ic), N = unit(colAt(Nn, r * K, ic)), lat = sub(E, C), X = unit(sub(lat, mul(N, dot(lat, N)))), d = sub(E, at(P, r, i1));
     const rimRad = Math.atan2(dot(d, N), dot(d, X)), cr = Math.cos(rimRad), sr = Math.sin(rimRad), seg = len(d);
     const uv = U ? [U[(r * K + i0) * 2], U[(r * K + i0) * 2 + 1]] : null, du = U && seg > 0 ? (U[(r * K + i0) * 2] - U[(r * K + i1) * 2]) / seg : 0;
-    rows.push({ E, X, N, NE: at(Nn, r, i0), Nc: sectionUp(Nn, r * K, K), rim: (Math.atan2(dot(d, N), dot(d, X)) * 180) / Math.PI, D: add(mul(X, cr), mul(N, sr)), Dn: sub(mul(X, sr), mul(N, cr)), uv, du });
+    rows.push({ E, X, N, NE: at(Nn, r, i0), Nc: sectionUp(Nn, r * K, K, mid), rim: (Math.atan2(dot(d, N), dot(d, X)) * 180) / Math.PI, D: add(mul(X, cr), mul(N, sr)), Dn: sub(mul(X, sr), mul(N, cr)), uv, du });
   }
   return rows;
 }
@@ -118,9 +122,9 @@ function strip(name, a, b, na, nb, uva, uvb, G, physics) {
  * One side of one grid cell, in the cell's own frame: { top, side } (top null at width 0), or null for a wall side or a cell too narrow to have a centre apart from its edge.
  * `names`: { top, side }.
  */
-function apronOf(m, K, side, { widthM = APRON_WIDTH_M, slopeDeg = APRON_SLOPE_DEG, ease = null, taper = null, closeWall = false, scale = null } = {}, names) {
+function apronOf(m, K, side, { widthM = APRON_WIDTH_M, slopeDeg = APRON_SLOPE_DEG, ease = null, taper = null, closeWall = false, scale = null, mid } = {}, names) {
   if (!(K >= 3)) return null;
-  const rows = sideRows(m, K, side);
+  const rows = sideRows(m, K, side, mid);
   const wall = rows.some((q) => q.rim >= WALL_DEG);
   if (wall && !closeWall) return null;
   // S: the skin's edge vertex, hung as underskin.js hangs it (skinDir, its row's section up, at hullDepth: deeper under an edge that rises): the hull's bottom under the
@@ -500,11 +504,11 @@ function withApron(scene, mesh, segments, opts = {}) {
     // the cell's own surface, by gripkeys.js's rule (1GRIPnnn_ for a piece whose grip is not 100, else 1ROAD_): computed here, so the apron can run BEFORE the catch and the
     // grip keys (which rename only the road cells, by index) and the catch stays the last thing appended, its material last
     const seg = segments[mesh.cells[k].piece], key = seg && seg.grip !== undefined ? gripKey(seg.grip) : null;
-    const K = mesh._state.pieces[mesh.cells[k].piece].K, prefix = key ? `1${key}_` : '1ROAD_', rest = m.name.replace(PREFIX_RE, '');
+    const K = mesh._state.pieces[mesh.cells[k].piece].K, mid = centreColumn(mesh._state.pieces[mesh.cells[k].piece]), prefix = key ? `1${key}_` : '1ROAD_', rest = m.name.replace(PREFIX_RE, '');
     for (const [side, tag] of [[0, 'R'], [K - 1, 'L']]) {
       if (lane && lane.side === tag && inLaneSpan(mesh.cells[k], lane)) {
         if (lane.mesh && widthM > 0 && K >= 3) {
-          const rows = sideRows(m, K, side), cell = mesh.cells[k], R = rows.length;
+          const rows = sideRows(m, K, side, mid), cell = mesh.cells[k], R = rows.length;
           if (!rows.some((q) => q.rim >= WALL_DEG)) {
             rowsWorld(rows, c.matrix).forEach((q, r) => { const s = cell.s0 + (R > 1 ? (cell.s1 - cell.s0) * r / (R - 1) : 0); if (!toOutline.length || len(sub(q.E, toOutline[toOutline.length - 1].E)) > 1e-6) toOutline.push({ ...q, s }); });
             if (roadMat === null) roadMat = m.material;
@@ -515,7 +519,7 @@ function withApron(scene, mesh, segments, opts = {}) {
       // each row's share of the hull's deepening: where the apron stops (underskin.js hullEase) and, on the lane's side, beside the pit lane (padEase); the skin's the same
       const R0 = m.positions.length / 3 / K, cl = mesh.cells[k], sAt = (r) => cl.s0 + (R0 > 1 ? (cl.s1 - cl.s0) * r / (R0 - 1) : 0);
       const taper = Array.from({ length: R0 }, (_, r) => he.at(side === 0 ? 0 : 1, sAt(r))), ease = taper.map((h, r) => h * (lane && lane.side === tag ? padEase(sAt(r), lane) : 1)), scale = taper.map((_, r) => hullScaleAt(he, tz, sAt(r)));
-      const ap = apronOf(m, K, side, { widthM, slopeDeg, ease: ease.some((x) => x < 1) ? ease : null, taper: taper.some((x) => x < 1) ? taper : null, closeWall: widthM > 0, scale: scale.some((x) => x !== 1) ? scale : null }, { top: `${prefix}${APRON_TAG}_${rest}_${tag}`, side: `${SIDE_PREFIX}_${rest}_${tag}` });
+      const ap = apronOf(m, K, side, { widthM, slopeDeg, ease: ease.some((x) => x < 1) ? ease : null, taper: taper.some((x) => x < 1) ? taper : null, closeWall: widthM > 0, scale: scale.some((x) => x !== 1) ? scale : null, mid }, { top: `${prefix}${APRON_TAG}_${rest}_${tag}`, side: `${SIDE_PREFIX}_${rest}_${tag}` });
       if (!ap) continue;
       if (roadMat === null) roadMat = m.material;
       // the plank DRAWN as it is (0.4.34's apron, the physics the user drove), on the apron's material; its run under the plank is the slab's bottom and goes INTO
@@ -525,7 +529,7 @@ function withApron(scene, mesh, segments, opts = {}) {
         const { physics, ...node } = mm; void physics; node.material = matIndex;
         add.push({ type: 'dummy', name: c.name.replace(/^CELL_/, dn), matrix: c.matrix, children: [node] });
       }
-      if (ap.top) { if (!runs.has(k)) runs.set(k, []); runs.get(k).push({ side, join: ap.side, rows: sideRows(m, K, side) }); }
+      if (ap.top) { if (!runs.has(k)) runs.set(k, []); runs.get(k).push({ side, join: ap.side, rows: sideRows(m, K, side, mid) }); }
     }
   }
   // THE PIT LANE'S OUTLINE: new physics where there was none (the road's edge either side of the lane and the lane's outer edge), drawn like the rest, and its join;
@@ -562,4 +566,4 @@ function withApron(scene, mesh, segments, opts = {}) {
   return { ...scene, materials, root: { ...scene.root, children: [...(replaced && replaced.size ? kids.map((c, i) => replaced.get(i) || c) : kids), ...add] } };
 }
 
-module.exports = { LIP_SHADE, RUN_COLUMNS, shadeOf, apronMaterial, withApron, apronOf, outlineRows, outlineMeshes, pitSkins, apronCells, sideRows, inLaneSpan, APRON_WIDTH_M, APRON_SLOPE_DEG, WALL_DEG, APRON_TILE_M, PIT_PAD_M, SIDE_PREFIX };
+module.exports = { LIP_SHADE, RUN_COLUMNS, shadeOf, apronMaterial, withApron, apronOf, outlineRows, outlineMeshes, pitSkins, apronCells, sideRows, centreColumn, inLaneSpan, APRON_WIDTH_M, APRON_SLOPE_DEG, WALL_DEG, APRON_TILE_M, PIT_PAD_M, SIDE_PREFIX };

@@ -122,6 +122,37 @@ test('a scene with no seam is returned as it was', () => {
   assert.strictEqual(weldSeams(s), s);
 });
 
+// ── weldApronJoints: the edge apron's planks either side of a piece joint share their road-edge vertex and may part at their outer row; they are welded ─────────
+const { weldApronJoints, APRON_SNAP } = require(process.env.ACREADY_FILE || '../src/export/acready.js');
+const mesh = (name, pts) => ({ ...tri(name), positions: Float32Array.from(pts.flat()), normals: new Float32Array(pts.length * 3), uvs: new Float32Array(pts.length * 2), indices: Uint16Array.from(pts.map((_, i) => i)) });
+// piece 1's last plank row and piece 2's first: the road's edge at z = 0, the plank's outer row 2 m out and 0.93 m down; piece 2's outer row 7 mm along the road
+const joint = (dz, roadDz = 0) => flat([
+  mesh('1ROAD_p1_body_0', [[0, 0, -2], [4, 0, -2], [0, 0, 0]]),
+  mesh('1ROAD_p2_body_0', [[0, 0, roadDz], [4, 0, roadDz], [0, 0, 2]]),
+  mesh('1ROAD_APRON_p1_body_0_R', [[0, 0, -2], [-2, -0.93, -2], [0, 0, 0], [-2, -0.93, 0]].slice(1)),
+  mesh('1ROAD_APRON_p2_body_0_R', [[0, 0, roadDz], [-2, -0.93, dz], [0, 0, 2]]),
+  mesh('UNDERSKIN_p2_body_0', [[-2, -0.93, dz], [-1, -1.5, dz], [-1, -1.5, 2]]),
+]);
+const at = (s, name, i) => { const p = s.root.children.find((n) => n.name === name).positions; return [p[3 * i], p[3 * i + 1], p[3 * i + 2]]; };
+
+test('the edge apron\'s planks are welded at a joint: a plank\'s outer row 7 mm off the one before it is moved onto it, and the hull\'s run that starts there with it', () => {
+  const s = joint(0.007), r = weldApronJoints(s);
+  assert.deepStrictEqual(at(r, '1ROAD_APRON_p2_body_0_R', 1), [-2, -0.93, 0].map((x) => Math.fround(x)), 'the outer row is on the earlier plank\'s');
+  assert.deepStrictEqual(at(r, 'UNDERSKIN_p2_body_0', 0), at(r, '1ROAD_APRON_p2_body_0_R', 1), 'the run starts on the plank\'s outer row still');
+  for (const n of ['1ROAD_p1_body_0', '1ROAD_p2_body_0', '1ROAD_APRON_p1_body_0_R']) assert.strictEqual(r.root.children.find((x) => x.name === n), s.root.children.find((x) => x.name === n), `${n} is the same object`);
+  assert.deepStrictEqual(at(r, '1ROAD_APRON_p2_body_0_R', 2), [0, 0, 2], 'a vertex not at the joint is not moved');
+});
+
+test('a plank\'s row on the road never moves, nor one under a millimetre off (float rounding), nor one APRON_SNAP or more off, and a scene with nothing to weld is returned as it was', () => {
+  // the road's edge itself 4 mm apart at the joint (its rows are weldSeams', not this weld's): the plank's row on it stays, and so does the road
+  const s1 = joint(0, 0.004), r1 = weldApronJoints(s1);
+  assert.deepStrictEqual(at(r1, '1ROAD_APRON_p2_body_0_R', 0), at(s1, '1ROAD_APRON_p2_body_0_R', 0));
+  assert.strictEqual(r1.root.children.find((x) => x.name === '1ROAD_p2_body_0'), s1.root.children.find((x) => x.name === '1ROAD_p2_body_0'));
+  for (const dz of [0.0004, APRON_SNAP * 1.5]) { const s = joint(dz); assert.strictEqual(weldApronJoints(s), s, `${dz * 1000} mm off: nothing moves`); }
+  const s0 = flat([nextPiece(0)]);
+  assert.strictEqual(weldApronJoints(s0), s0);
+});
+
 test('an exported closed track has no sliver seam left on its road', () => {
   let d = D.createDoc('Weld Loop');
   for (const w of ['straight', 'straight', 'tight', 'straight', 'tight']) d = appendOld(D, d, w, { speed: kmh(200) });

@@ -24,6 +24,11 @@ const MUTATIONS = [
   { id: 'A8 no point is welded (the next piece keeps its own edge)', from: 'if (s.d <= SNAP) { moves.set(key(...p), s.q); welded++; }', to: 'if (false) { moves.set(key(...p), s.q); welded++; }', caughtBy: 'a seam whose rows are within SNAP is dropped' },
   { id: 'A9 slivers are kept (thinness never drops a triangle)', from: 'if (longest > 0 && (2 * area) / longest >= SLIVER && !stands', to: 'if (longest > 0 && !stands', caughtBy: 'a seam whose rows are within SNAP is dropped' },
   { id: 'A10 a moved point moves only in the seam, not in the next piece', from: 'const n = moved(n0);', to: 'const n = seams.has(n0) ? moved(n0) : n0;', caughtBy: 'a seam whose rows are within SNAP is dropped' },
+  // the edge apron's planks welded at a piece joint (weldApronJoints)
+  { id: 'A11 no plank vertex is ever welded', from: 'if (best && !moves.has(k) && !onRoad.has(k)) moves.set(k, best);', to: 'if (false) moves.set(k, best);', caughtBy: 'the edge apron\'s planks are welded at a joint' },
+  { id: 'A12 a plank\'s row on the road moves too', from: 'if (best && !moves.has(k) && !onRoad.has(k)) moves.set(k, best);', to: 'if (best && !moves.has(k)) moves.set(k, best);', caughtBy: 'a plank\'s row on the road never moves' },
+  { id: 'A13 float rounding is welded (two copies of one row a hair apart)', from: 'const APRON_SNAP = 0.02, APRON_MIN = 1e-3;', to: 'const APRON_SNAP = 0.02, APRON_MIN = 1e-9;', caughtBy: 'a plank\'s row on the road never moves' },
+  { id: 'A14 a welded point moves in the plank only, not in the run under it', from: "if (n.type !== 'mesh' || !n.positions) return n;", to: "if (n.type !== 'mesh' || !n.positions || !/APRON/.test(n.name)) return n;", caughtBy: 'the edge apron\'s planks are welded at a joint' },
 ];
 
 const TEST_FILES = ['export_seam_fins', 'export_acready'].map((n) => path.join(__dirname, `${n}.test.js`));

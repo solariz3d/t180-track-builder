@@ -40,6 +40,9 @@ const MUTATIONS = [
   { id: 'U16 no twisted zone (the skin decimated under an abrupt opening)', from: 'const zone = twisted.slice();', to: 'twisted.fill(false); const zone = twisted.slice();', file: 'tube_cases.test.js', caughtBy: 'THE JAG' },   // the twisted cells cleared before the zone is widened from them (clearing the zone alone left the widening to mark it again)
   { id: 'U17 the hull not thinned in the twisted zone', from: 'const HULL_TWIST_DEPTH = 1 / 3,', to: 'const HULL_TWIST_DEPTH = 1,', file: 'tube_cases.test.js', caughtBy: 'THE JAG' },
   { id: 'U18 no floor under a plank (its tip below a thinned hull: the run folds back)', from: 'return Math.max(t, Math.min(1, (drop + HULL_TWIST_CLEAR_M) / UNDERSKIN_OFFSET_M));', to: 'return t;', file: 'tube_cases.test.js', caughtBy: 'THE JAG' },
+  // the centre line column (centreColumn): where the section's u is 0, between two columns when none is (an even K)
+  { id: 'U19 the centre line taken by count again', from: 'if (!U || U.length !== K) return Math.floor(K / 2);', to: 'return Math.floor(K / 2);', file: 'export_apron.test.js', caughtBy: 'row 28:' },
+  { id: 'U20 between two columns the nearer taken (half a column off with an even K)', from: 'return i + (U[i] === -U[i + 1] ? 0.5 : -U[i] / (U[i + 1] - U[i]));', to: 'return i + (-U[i] < U[i + 1] ? 0 : 1);', file: 'export_apron.test.js', caughtBy: 'row 28:' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

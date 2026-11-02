@@ -69,6 +69,9 @@ const MUTATIONS = [
   // the tube's openings (D604 follow-up), caught by the tube test (test/tube_cases.test.js, its rows by their own titles)
   { id: 'P23 a wall side left open (no side face: the road\'s and the skin\'s edges free at a tube\'s slot)', from: 'closeWall: widthM > 0, scale:', to: 'closeWall: false, scale:', file: 'tube_cases.test.js', caughtBy: 'the drawn hull has no open edge' },
   { id: 'P24 a strip\'s triangles of no area kept (a tapered plank\'s first row)', from: 'if (len(cross(sub(V[y], V[x]), sub(V[z], V[x]))) > 1e-12) idx.push(x, y, z);', to: 'idx.push(x, y, z);', file: 'tube_cases.test.js', caughtBy: 'the drawn hull has no sliver' },
+  // the plank hung from the section's own middle (the centre line column, underskin.js centreColumn), not the middle by count: export_apron row 28
+  { id: 'P25 a plank hung from the middle column by count again (an edge zone on one side leans it)', from: 'ic = mid === undefined ? Math.floor(K / 2) : mid,', to: 'ic = Math.floor(K / 2),', caughtBy: 'row 28:' },
+  { id: 'P26 the centre line column given to no plank', from: "closeWall: widthM > 0, scale: scale.some((x) => x !== 1) ? scale : null, mid }", to: "closeWall: widthM > 0, scale: scale.some((x) => x !== 1) ? scale : null }", caughtBy: 'row 28:' },
 ];
 
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -186,6 +186,53 @@ function weldSeams(scene) {
 }
 
 /**
+ * weldApronJoints(scene): run AFTER weldSeams (world space). The drivable edge apron's plank (<prefix>APRON_…, apron.js) hangs from its own cell's row: its outward
+ * lateral and its up come from the row's middle column (apron.js sideRows, Math.floor(K / 2)), which on a piece whose column count K is even lies half a column off
+ * the middle, so on a cupped section the plank leans (0.2° on a 16° cup 32 m wide, after a tube: K 66). Where such a piece meets one with an odd count, the two
+ * planks share their road-edge vertex and part at their outer row by millimetres (6 to 8 on two user tracks): a crack in a surface the car drives on. As weldSeams
+ * welds the road's rows, every plank vertex lying within APRON_SNAP of a vertex of a plank that comes before it in the scene, and APRON_MIN or more off it, is moved onto
+ * that vertex, in every mesh that has a vertex there (the hull's run under the plank starts on the plank's outer row, so it moves with it); a vertex on the road
+ * (the plank's row on the road's edge) never moves, so the road stays as it is. A plank's own rows are
+ * a cell apart along the road and its two rows a plank's width across, so no other vertex of one plank lies that close to another's.
+ */
+const APRON_SNAP = 0.02, APRON_MIN = 1e-3;   // under a millimetre the two are one row already: two cells' copies of it differ by float rounding, and stay as they are
+function weldApronJoints(scene) {
+  const kids = scene.root.children, key = (x, y, z) => `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}`;
+  const cellOf = (x) => Math.floor(x / APRON_SNAP), grid = new Map(), moves = new Map(), onRoad = new Set();
+  // a plank's row on the road's edge is the road's own vertex, welded with the road's rows by weldSeams: it stays where it is, and so does the road
+  for (const n of kids) if (n.type === 'mesh' && n.positions && /^1(?:ROAD|GRIP\d{3})_/.test(n.name) && !/^1(?:ROAD|GRIP\d{3})_APRON_|CATCH/.test(n.name)) for (let v = 0; v < n.positions.length; v += 3) onRoad.add(key(n.positions[v], n.positions[v + 1], n.positions[v + 2]));
+  for (const n of kids) {
+    if (n.type !== 'mesh' || !/^1(?:ROAD|GRIP\d{3})_APRON_/.test(n.name) || !n.positions) continue;
+    const P = n.positions, mine = [];
+    for (let v = 0; v < P.length; v += 3) {
+      const p = [P[v], P[v + 1], P[v + 2]], c = p.map(cellOf);
+      let best = null, bd = APRON_SNAP;
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let l = -1; l <= 1; l++) for (const q of grid.get(`${c[0] + i},${c[1] + j},${c[2] + l}`) || []) {
+        const d = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+        if (d >= APRON_MIN && d < bd) { bd = d; best = q; }
+      }
+      const k = key(...p);
+      if (best && !moves.has(k) && !onRoad.has(k)) moves.set(k, best);
+      mine.push(moves.get(k) || p);
+    }
+    for (const p of mine) { const k = p.map(cellOf).join(','); let L = grid.get(k); if (!L) grid.set(k, (L = [])); L.push(p); }   // only the planks before the next one are its partners
+  }
+  if (!moves.size) return scene;
+  const children = kids.map((n) => {
+    if (n.type !== 'mesh' || !n.positions) return n;
+    let positions = null;
+    for (let v = 0; v < n.positions.length; v += 3) {
+      const q = moves.get(key(n.positions[v], n.positions[v + 1], n.positions[v + 2]));
+      if (!q) continue;
+      if (!positions) positions = Float32Array.from(n.positions);
+      positions[v] = q[0]; positions[v + 1] = q[1]; positions[v + 2] = q[2];
+    }
+    return positions ? { ...n, positions } : n;
+  });
+  return { ...scene, root: { ...scene.root, children } };
+}
+
+/**
  * A solid-colour diffuse for every material that has none. Paint is near-white; everything else mid-grey. PURE: no node, texture data is a
  * plain Uint8Array. The PREVIEW (app/preview/aclook.js) calls this one in the webview, where there is no Buffer (a build that called the
  * Buffer version from the preview and the first Extend drew nothing). The export uses ensureDiffuse below, which is this plus a Buffer wrap.
@@ -271,4 +318,4 @@ function mergeForAc(scene, { maxVerts = MERGE_MAX_VERTS, chunkM = MERGE_CHUNK_M 
   return { ...scene, root: { ...scene.root, children } };
 }
 
-module.exports = { flattenForAc, ensureDiffuse, ensureDiffusePlain, weldSeams, findFins, mergeForAc, MERGE_MAX_VERTS, MERGE_CHUNK_M, SNAP, SLIVER, STAND_DEG, OFF_TOL };
+module.exports = { flattenForAc, ensureDiffuse, ensureDiffusePlain, weldSeams, weldApronJoints, findFins, mergeForAc, MERGE_MAX_VERTS, MERGE_CHUNK_M, SNAP, SLIVER, STAND_DEG, OFF_TOL, APRON_SNAP };

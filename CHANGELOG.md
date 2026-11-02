@@ -5,6 +5,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The export checks the track it is about to write.** Until now every geometry check ran before the underside, the edge apron and the pit lane's outline were added, so a step, a crack or a fold in those parts was written without a word. A last check now reads the very scene the track file is written from. A fault in a surface the car drives on stops the export, naming where on the track it is: a face standing across the road, the pit lane wider than 0.1 m where it meets the road, or a crack 5 mm or wider in the road, the apron or the lane. A fault only seen from outside is reported as a warning with its place: a fold in the underside, a line of sky through it, a step in its bottom, or a triangle thinner than 4 mm. In a test export these are listed, not blocking.
+
+### Fixed
+
+- **The edge apron hangs at its own slope on every piece, and has no crack where two pieces meet.** Each plank of the apron took its angle from the column in the middle of the road's grid by count, which is the middle of the road only when the road's edges are alike. With an edge brought in on one side, that column lay several metres off the centre, where a cupped road has already turned, so every plank on such a piece leaned about 10°: 15° on one side and 35° on the other instead of 25°. Where two pieces met, the planks parted at their outer edge, by a few millimetres on most tracks and by up to 44 cm on a track with edges on one side (a hole in a surface the car drives on). Every plank and the underside now hang from the road's own centre line; the road itself is unchanged. The export also welds any plank rows left a few millimetres apart at a joint, as it already welded the road's.
+
 ## [0.4.37] - 2026-11-02
 
 ### Changed
