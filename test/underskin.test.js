@@ -1,7 +1,7 @@
 // underskin.test.js: node --test test/underskin.test.js   (under the heavy-run lock, --max-old-space-size=4096; about two minutes)
 // D230 (as amended at the user's word): the underside of an equation-core track is an object that casts shadows, and the inside of a closed tube is dark.
 // The user: "during day light leaks into the tube it should be inclosed and pitch black", then "the bottom side of the track is an object that casts shadows". Rows:
-//   1  every core road cell, a closed tube's included, has an UNDERSIDE SKIN: the road's own normal, 0.5 m on the side away from the driver, normals out, castShadows, its own dark material
+//   1  every core road cell, a closed tube's included, has an UNDERSIDE SKIN: the road's own normal, UNDERSKIN_OFFSET_M (0.93 m since D604, the apron plank's drop; it was 0.5 m) on the side away from the driver, normals out, castShadows, its own dark material
 //   2  on an OPEN road the skin is BELOW it (and the road keeps its light material)
 //   3  the DARK interior (ksAmbient 0.02) only on closed-ring cells, the textured ones too, and the set's shared material is untouched; the slot zone steps over one cell
 //   4  the ROAD nodes are the ones mesh.js made (the same objects), only skin nodes and the materials are added; a word document comes back as the very same scene
@@ -69,9 +69,11 @@ function checkSkin(sk, rd, K, label) {
   assert.equal(so, sn, `${label}: every skin triangle faces its own normal (${so} of ${sn})`); assert.equal(ro, rn, `${label}: control: the road's triangles pass the same test`);
 }
 
-test('row 1: a closed tube export has an underside skin on every cell: the road\'s own normal, 0.5 m away from the driver (outward), normals out, castShadows, its own dark material', () => {
+// AMENDED (D604, the user 2026-11-01 08:49: the road a solid slab): the skin was 0.5 m under the road; it is at the apron plank's drop now (UNDERSKIN_OFFSET_M,
+// 2 · tan 25° = 0.9326 m), so it is the slab's underside
+test('row 1: a closed tube export has an underside skin on every cell: the road\'s own normal, the plank\'s drop away from the driver (outward), normals out, castShadows, its own dark material', () => {
   const doc = tubeOval(40), { segs, mesh } = meshOf(doc), out = exportDoc(doc), { road, skins } = parts(out.scene, mesh.cells.length);
-  assert.equal(S.UNDERSKIN_OFFSET_M, 0.5); assert.equal(S.skinCells(mesh, segs).size, mesh.cells.length, 'every cell of a core track is skinned'); assert.equal(skins.length, mesh.cells.length);
+  assert.ok(Math.abs(S.UNDERSKIN_OFFSET_M - 2 * Math.tan((25 * Math.PI) / 180)) < 1e-12, `the skin is the plank's drop down (${S.UNDERSKIN_OFFSET_M})`); assert.equal(S.skinCells(mesh, segs).size, mesh.cells.length, 'every cell of a core track is skinned'); assert.equal(skins.length, mesh.cells.length);
   const skinMat = out.scene.materials.findIndex((m) => m.name === 't180b_underskin'); assert.ok(skinMat >= 0); let joins = 0;
   skins.forEach((sd, k) => {
     const cell = mesh.cells[k], sk = sd.children[0], rd = road[k].children[0];
@@ -81,13 +83,15 @@ test('row 1: a closed tube export has an underside skin on every cell: the road\
   assert.ok(joins >= 1, `control: ${joins} seam row(s) were skinned too`);
 });
 
-test('row 2: on an OPEN road the skin is BELOW it: the road keeps its light material, the skin is under every cell, and on the flat start straight it is 0.5 m down', () => {
+// AMENDED (D604, the user 2026-11-01 08:49: the road a solid slab): the skin was 0.5 m under the road; it is at the apron plank's drop now (UNDERSKIN_OFFSET_M,
+// 2 · tan 25° = 0.9326 m), so it is the slab's underside
+test('row 2: on an OPEN road the skin is BELOW it: the road keeps its light material, the skin is under every cell, and on the flat start straight it is the plank\'s drop down', () => {
   const doc = plainOval(31), { segs, mesh } = meshOf(doc), out = exportDoc(doc), { road, skins } = parts(out.scene, mesh.cells.length);
   assert.equal(skins.length, mesh.cells.length); assert.equal(S.ringCells(mesh, segs).size, 0, 'no ring on an open road');
   for (const [k, sd] of skins.entries()) { const cell = mesh.cells[k]; checkSkin(sd.children[0], road[k].children[0], cell.seam ? null : mesh._state.pieces[cell.piece].K, `cell ${k}`); }
   const mats = out.scene.materials; for (const rd of road.filter((c) => c.name.startsWith('CELL_'))) { const m = mats[rd.children[0].material]; assert.doesNotMatch(m.name, /_dark$/); assert.equal(prop(m, 'ksAmbient'), 0.45); }
   const rd = road[3].children[0], sk = skins[3].children[0], n = [rd.normals[0], rd.normals[1], rd.normals[2]], dv = [sk.positions[0] - rd.positions[0], sk.positions[1] - rd.positions[1], sk.positions[2] - rd.positions[2]];
-  assert.ok(Math.abs(n[1]) > 0.9, `control: the start straight's surface faces up (n = ${n.map((x) => x.toFixed(2))})`); assert.ok(dv[1] < -0.45 && Math.abs(Math.hypot(...dv) - 0.5) < 1e-5 && dv.every((x, i) => Math.abs(x + 0.5 * n[i]) < 1e-5), `the skin is 0.5 m BELOW the road, along its own normal (the road's edge is tilted a little): ${dv.map((x) => x.toFixed(3))}`);
+  assert.ok(Math.abs(n[1]) > 0.9, `control: the start straight's surface faces up (n = ${n.map((x) => x.toFixed(2))})`); const D = S.UNDERSKIN_OFFSET_M; assert.ok(dv[1] < -0.9 * D && Math.abs(Math.hypot(...dv) - D) < 1e-5 && dv.every((x, i) => Math.abs(x + D * n[i]) < 1e-5), `the skin is ${D.toFixed(4)} m BELOW the road, along its own normal (the road's edge is tilted a little): ${dv.map((x) => x.toFixed(3))}`);
 });
 
 test('row 3: the DARK interior (ksAmbient 0.02) is on closed-ring cells only, the textured ones too; the set\'s shared material is untouched; the skin runs under the slot zone, the dark does not', () => {
@@ -161,11 +165,13 @@ test('row 7: the ring rule on a synthetic mesh: a seam row is a ring only when B
   assert.deepEqual(set([open, ring], [{ piece: 1 }, { piece: 0 }]), [0], 'a road cell is a ring when its own segment is');
 });
 
-test('row 8: a seam row\'s skin (every vertex kept, no grid) is the road\'s triangles reversed and its vertices moved 0.5 m against the normal, on a zipper with area', () => {
+// AMENDED (D604, the user 2026-11-01 08:49: the road a solid slab): the skin was 0.5 m under the road; it is at the apron plank's drop now (UNDERSKIN_OFFSET_M,
+// 2 · tan 25° = 0.9326 m), so it is the slab's underside
+test('row 8: a seam row\'s skin (every vertex kept, no grid) is the road\'s triangles reversed and its vertices moved the plank\'s drop against the normal, on a zipper with area', () => {
   const m = { type: 'mesh', name: '1ROAD_seam_x', material: 0, positions: Float32Array.of(0, 0, 0, 2, 0, 0, 0, 0, 3, 2, 0, 3), normals: Float32Array.of(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0), uvs: new Float32Array(8), indices: Uint16Array.of(0, 2, 1, 1, 2, 3), castShadows: true, visible: true, transparent: false, renderable: true };
   const sk = S.skinOf(m, 'UNDERSKIN_join_x');
   assert.deepEqual([...sk.indices], [0, 1, 2, 1, 3, 2], 'every triangle reversed');
-  assert.deepEqual([...sk.positions].filter((_, i) => i % 3 === 1), [-0.5, -0.5, -0.5, -0.5], 'all four vertices 0.5 m below');
+  assert.deepEqual([...sk.positions].filter((_, i) => i % 3 === 1), Array(4).fill(Math.fround(-S.UNDERSKIN_OFFSET_M)), 'all four vertices the plank\'s drop below');
   assert.deepEqual([...sk.normals].filter((_, i) => i % 3 === 1), [-1, -1, -1, -1], 'normals face down, away from the road');
   const p = (i) => [sk.positions[i * 3], sk.positions[i * 3 + 1], sk.positions[i * 3 + 2]], cr = cross(sub(p(sk.indices[1]), p(sk.indices[0])), sub(p(sk.indices[2]), p(sk.indices[0])));
   assert.ok(cr[1] < 0, `the skin's first triangle faces down: ${cr}`); assert.equal(sk.castShadows, true); assert.equal(sk.name, 'UNDERSKIN_join_x'); assert.equal(sk.material, -1, 'the material is set by withUnderskin');

@@ -3,7 +3,7 @@
 // track is an object that casts shadows".
 //
 //   withUnderskin(scene, mesh, segments) -> scene      the export's scene with
-//     1. an UNDERSIDE SKIN under EVERY core road cell: a second surface UNDERSKIN_OFFSET_M (0.5 m) along the road's own normal on the side AWAY from the driver
+//     1. an UNDERSIDE SKIN under EVERY core road cell: a second surface UNDERSKIN_OFFSET_M (0.93 m) along the road's own normal on the side AWAY from the driver
 //        (below an open road; OUTWARD of a closed tube, whose normal faces in), normals facing away from the road, castShadows, its own plain dark material;
 //     2. a DARK INTERIOR on the cells whose section is a CLOSED RING (a tube swept to 360, the same test as src/texture/flow.js): their material swapped for a
 //        copy of itself with ksAmbient TUBE_RING_AMBIENT (0.02, from 0.45). Open roads, cups, edge curves and open tubes keep their light material.
@@ -29,11 +29,15 @@
 'use strict';
 const { closedRing } = require('../texture/flow.js');
 
-const UNDERSKIN_OFFSET_M = 0.5;    // how far the skin stands off the road surface, away from the driver (metres)
+// how far the skin stands off the road surface, away from the driver (metres): the default edge apron plank's drop, 2 m · tan 25° = 0.9326 m (apron.js), so the skin
+// is the underside of a SOLID SLAB and the apron's join, from the plank's outer row to the skin's edge, is its bottom under the plank (D604, the user 2026-11-01
+// 08:49: "the track gets 3D depth instead of a slice of a mesh"). It follows the road's own cross-section at this depth, not a chord, so in a cup it stays under the
+// road (a chord across a 57° cup would cut up through it). It was 0.5 m, a skin for shadows only.
+const UNDERSKIN_OFFSET_M = 2.0 * Math.tan((25 * Math.PI) / 180);
 const TUBE_RING_AMBIENT = 0.02;    // ksAmbient of a closed ring's interior (an open road's is 0.45, src/geom/mesh.js)
 const SKIN_AMBIENT = 0.05, SKIN_DIFFUSE = 0.1;   // the skin's own plain dark material: seen only from outside the pipe or below the road
 // The skin only has to CAST A SHADOW, so a road cell's skin keeps about this many of the road's vertices across (a closed tube's rows carry 392; a full-size copy
-// of a tube doubled the kn5). Chord sagitta at 32 columns round a 6.4 m radius ring is R(1 − cos(π/32)) = 3.1 cm against the 0.5 m offset, so the skin stays on the far
+// of a tube doubled the kn5). Chord sagitta at 32 columns round a 6.4 m radius ring is R(1 − cos(π/32)) = 3.1 cm against the 0.93 m offset, so the skin stays on the far
 // side of the road. A seam row keeps all its vertices: its zipper is not a grid.
 const SKIN_COLUMNS = 32;
 

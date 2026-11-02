@@ -87,7 +87,12 @@ function digestOf(out) {
 // map.png, ui/outline.png) 2 m wider on the lane's side, where that plank lies. The file counts are the same. (Two pairs between, 60e346e18df0144b / 7b587edcbcefc314
 // and 0e8de6cd745039cb / 4dba6b610fc6010e, carried a drawn lip over a hidden plank and then a filled side face; both were removed at the user's word, 2026-10-31
 // 21:54-21:58.)
-const PIN = { lap: 'sha256 74130c5b646222a5 files 10', open: 'sha256 e15aed9879bf1ca0 files 11' };
+// AMENDED BY NAME (2026-11-01, D604, the road a solid slab): both pins moved from 74130c5b646222a5 / e15aed9879bf1ca0 (8b573dd, read there with PRINT_D437B=1) to the
+// values below, because the underside skin now follows the road at the apron plank's drop (0.93 m, was 0.5 m) and wears the road's asphalt at 0.88, so each apron's
+// join is the slab's bottom. Compared with 8b573dd node by node and material by material (test/fixtures/kn5nodes.js), in both exports: the road physics, the paint,
+// every physics plank and the lane's own surfaces are the same bytes; the skins (UNDERSKIN_*, the lane's too) and the joins (APRONSIDE_*, the outline's too) moved;
+// of the materials only t180b_underskin's own record changed. Only the kn5 files changed; the file counts are the same.
+const PIN = { lap: 'sha256 099861d8a5eac6ec files 10', open: 'sha256 caa673fa562c20af files 11' };
 
 test('row 1: the export\'s bytes are b6969da\'s, a textured lap with a pit lane and an open TEST export', async () => {
   const ex = await makeExporter(fromDisk, { author: AUTHOR });

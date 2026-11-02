@@ -30,6 +30,10 @@
 //      mesh.js), within 10% (its diverge kept the full width's u over 10 cm, 80 times squeezed, and its merge the narrow end's over 8 m, 80 times stretched)
 //  22  the apron's caps across the lane's two ends face out of the lane's end: every drawn outline triangle lying across the road (its normal within 25° of the
 //      road's direction there) faces away from the lane (half of them faced in and were culled: sky through the leave from below)
+//  23  the road is a SOLID SLAB: on a flat road each apron's join runs level, from the plank's outer row to the skin's edge, at the plank's drop, so the slab's bottom is
+//      one depth from apron to apron (D604, the user 08:49: "the track gets 3D depth instead of a slice of a mesh")
+//  24  the slab does not cut itself: on a flat, a banked and a cupped edge, two edges turned down (the convex case, where an offset can fold) and the pit lap, no drawn
+//      triangle of the whole export clips through another, within one mesh or between meshes, and no physics one
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -119,12 +123,17 @@ test('row 2: the wedge is closed: the join\'s lower row is the skin\'s edge vert
 });
 // AMENDED (D593, twice): the lip's shades were added after the apron's own material; with the lip gone, the apron's own is the one added again (it is now the
 // road's asphalt in its shade, row 15)
-test('row 3: the road\'s own nodes are the same objects in the same places; the aprons are appended, with one material added', () => {
+// AMENDED (D604): the skin's own material is the road's asphalt in its shade too, under its name and at its index (the slab's underside); every other earlier material
+// is the same object
+test('row 3: the road\'s own nodes are the same objects in the same places; the aprons are appended, with one material added, and the skin\'s in the road\'s shade', () => {
   const { skinned, out } = build(flat(), {});
   const k = skinned.root.children.length;
   skinned.root.children.forEach((c, i) => assert.equal(out.root.children[i], c, `node ${i} is the same object`));
   assert.ok(out.root.children.slice(k).every((c) => /^APRON(SIDE)?[LR]_/.test(c.name)));
-  assert.equal(out.materials.length, skinned.materials.length + 1); skinned.materials.forEach((m, i) => assert.equal(out.materials[i], m));
+  assert.equal(out.materials.length, skinned.materials.length + 1);
+  skinned.materials.forEach((m, i) => (m.name === 't180b_underskin' ? assert.equal(out.materials[i].name, m.name) : assert.equal(out.materials[i], m)));
+  const skin = out.materials.find((m) => m.name === 't180b_underskin'), apron = out.materials.find((m) => m.name === 't180b_apron');
+  assert.deepEqual(skin.props, apron.props, 'the skin wears the apron\'s asphalt'); assert.deepEqual(skin.samplers, apron.samplers);
   assert.equal(out.materials[out.materials.length - 1].name, 't180b_apron', 'the one material added is the apron\'s (D593: the road\'s asphalt in its shade, row 15)');
 });
 
@@ -155,7 +164,7 @@ test('row 6: width 0: no apron, and a side face from the edge row straight down 
   assert.equal(tops(out).length, 0);
   const sd = sides(out); assert.ok(sd.length > 0);
   for (const a of sd) {
-    for (const [E, Sk] of pairs(a)) assert.ok(Math.abs(E[1] - Sk[1] - 0.5) < 1e-4 && Math.abs(E[0] - Sk[0]) < 1e-4, `${a.name}: straight down 0.5 m`);
+    for (const [E, Sk] of pairs(a)) assert.ok(Math.abs(E[1] - Sk[1] - S.UNDERSKIN_OFFSET_M) < 1e-4 && Math.abs(E[0] - Sk[0]) < 1e-4, `${a.name}: straight down the skin's depth (D604: it was 0.5 m)`);
     assert.ok(Math.sign(a.children[0].normals[0]) === Math.sign(a.children[0].positions[0]), `${a.name}: the face looks outward`);
   }
 });
@@ -333,7 +342,8 @@ test('row 17: the physics apron is byte for byte what the user drove (pinned at 
 // HOLES: edges used by one triangle over all the drawn SURFACES together (road, lane, infill, lip, underside, skins; welded within 2 mm), around the lane's two ends.
 const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 function acMeshes(b) { const out = []; const walk = (n) => { if (n.type === 'mesh') out.push(n); (n.children || []).forEach(walk); }; walk(b.acScene.root); return out; }
-function clipCount(meshes, lo, hi) {
+// sameMesh (D604): count a mesh clipping ITSELF too (a fold of an offset surface is one mesh); row 18 counts between meshes only, as before
+function clipCount(meshes, lo, hi, { sameMesh = false } = {}) {
   const EPS = 1e-4, WELD = 1e-3, tris = [];
   meshes.forEach((m, mi) => {
     const drawn = m.renderable !== false && m.visible !== false, physics = /^1(?:ROAD|GRIP\d{3})_/.test(m.name), P = m.positions, I = m.indices;
@@ -357,7 +367,7 @@ function clipCount(meshes, lo, hi) {
   tris.forEach((t, id) => { for (let i = Math.floor(t.bl[0] / CELL); i <= Math.floor(t.bh[0] / CELL); i++) for (let j = Math.floor(t.bl[1] / CELL); j <= Math.floor(t.bh[1] / CELL); j++) for (let k = Math.floor(t.bl[2] / CELL); k <= Math.floor(t.bh[2] / CELL); k++) { const kk = `${i},${j},${k}`; if (!grid.has(kk)) grid.set(kk, []); grid.get(kk).push(id); } });
   const seen = new Set(), out = { drawn: 0, physics: 0, where: [] };
   for (const list of grid.values()) for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length; y++) {
-    const A = tris[list[x]], B = tris[list[y]]; if (A.mi === B.mi) continue;
+    const A = tris[list[x]], B = tris[list[y]]; if (A.mi === B.mi && !sameMesh) continue;
     const pk = `${Math.min(list[x], list[y])}:${Math.max(list[x], list[y])}`; if (seen.has(pk)) continue; seen.add(pk);
     if (A.keys.some((k) => B.keys.includes(k)) || A.bh.some((h, k) => h < B.bl[k]) || B.bh.some((h, k) => h < A.bl[k])) continue;
     const fam = A.drawn && B.drawn ? 'drawn' : A.physics && B.physics ? 'physics' : null; if (!fam) continue;
@@ -510,4 +520,34 @@ test('row 22: the apron caps across the lane ends face out of the lane end: ever
   }
   assert.ok(caps > 0, 'control: the caps are found');
   assert.deepEqual(bad.slice(0, 4), [], `${bad.length} of ${caps} cap triangles face into the lane`);
+});
+
+// D604, the user 2026-11-01 08:49: "the apron needs to connect to the other side of the track at the other apron, which creates a thickening of the track… the track
+// gets 3D depth instead of a slice of a mesh". The skin is at the plank's drop (underskin.js UNDERSKIN_OFFSET_M), so on a flat road the join under each plank is level:
+// the slab's bottom runs at one depth from one apron's outer row, under the road, to the other's
+test('row 23: the road is a solid slab: on a flat road each apron join runs level from the plank outer row to the skin edge, at the plank drop', () => {
+  const { out } = build(flat(), {});
+  const drop = AP.APRON_WIDTH_M * Math.tan((AP.APRON_SLOPE_DEG * Math.PI) / 180);
+  assert.ok(Math.abs(S.UNDERSKIN_OFFSET_M - drop) < 1e-9, `the skin is at the plank's drop (${S.UNDERSKIN_OFFSET_M} against ${drop})`);
+  assert.ok(sides(out).length > 0, 'control: the joins');
+  const bad = [];
+  for (const sd of sides(out)) for (const [O, Sk] of pairs(sd)) if (Math.abs(O[1] - Sk[1]) > 1e-4) bad.push(`${sd.name}: the outer row at ${O[1].toFixed(4)}, the skin edge at ${Sk[1].toFixed(4)}`);
+  assert.deepEqual(bad.slice(0, 4), [], `${bad.length} join rows not level`);
+});
+
+// D604: the offset underside folds where the road's cross-section is convex with a radius under the slab's depth (an edge turned down), and an offset that folds is one
+// mesh cutting itself, which row 18's count (between meshes) cannot see
+test('row 24: the slab does not cut itself: on flat, banked, cupped and turned-down edges and the pit lap, no drawn triangle clips another, within one mesh or between meshes', () => {
+  const ALL = [-Infinity, -Infinity, -Infinity], NONE = [Infinity, Infinity, Infinity];
+  const pit = lap('apron slab lap'), lane = { side: 'L', leave: { word: pit.pieces[0].id, along: 40 }, rejoin: { word: pit.pieces[0].id, along: 360 }, offsetM: 12, width: 8, divergeM: 80, mergeM: 80, speedKmh: 80 };
+  // an open road's scene (withApron's, cell frames) in world space: each mesh's points through its node's matrix (row vector times M, as apron.js toWorld); a closed
+  // lap through the whole export
+  const world = (scene) => { const out = []; for (const c of scene.root.children) for (const m of (c.children || []).filter((x) => x.type === 'mesh')) { const M = c.matrix || [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], P = m.positions, W = new Float64Array(P.length); for (let i = 0; i < P.length; i += 3) for (let j = 0; j < 3; j++) W[i + j] = P[i] * M[j] + P[i + 1] * M[4 + j] + P[i + 2] * M[8 + j] + M[12 + j]; out.push({ ...m, positions: W }); } return out; };
+  const cases = [...EDGES.map(([label, doc]) => [label, () => world(build(doc, {}).out)]), ['turned down 20°', () => world(build(flat(60, { e: -20, s: 0.8 }), {}).out)], ['turned down 30° (the floor), narrow zone', () => world(build(flat(60, { e: -30, s: 0.9 }), {}).out)], ['the pit lap', () => acMeshes(exportDoc(pit, {}, { pitLane: lane }))]];
+  for (const [label, meshesOf] of cases) {
+    const meshes = meshesOf(), c = clipCount(meshes, ALL, NONE, { sameMesh: true });
+    assert.ok(meshes.some((m) => /^UNDERSKIN_/.test(m.name)) && meshes.some((m) => /^APRONSIDE_/.test(m.name)), `${label}: control: the slab's underside and joins are there`);
+    assert.equal(c.drawn, 0, `${label}: drawn triangles clip: ${c.where.join('; ')}`);
+    assert.equal(c.physics, 0, `${label}: physics triangles clip: ${c.where.join('; ')}`);
+  }
 });

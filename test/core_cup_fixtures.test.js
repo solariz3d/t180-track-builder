@@ -37,6 +37,11 @@
 // is the same bytes, and of the materials only t180b_apron's own record changed. (A drawn lip over a hidden plank, and a filled side face, were tried and removed:
 // the user, 21:54-21:58 on 0.4.35.) test/fixtures/manifest.d593.json records it against a93ae51 (whose kn5 is the D572 record's after), and its row builds F1 F2
 // NOW and holds every mesh node to a93ae51's bytes and every material but t180b_apron to its own.
+// AMENDED BY NAME FOR D604 (the user, 2026-11-01 08:49: "the track gets 3D depth instead of a slice of a mesh"): the road is a
+// solid slab. The underside skin follows the road's cross-section at the apron plank's drop (0.93 m, was 0.5 m), so each apron's join runs from the plank's outer row to
+// the skin's edge as the slab's bottom, and the skin wears the road's asphalt at 0.88. That changes the kn5 of F1 F2 and nothing else: the road, the paint and the
+// physics planks are the same bytes, the skin (UNDERSKIN_) and the joins (APRONSIDE_) moved, and of the materials only t180b_underskin's own record changed.
+// test/fixtures/manifest.d604.json records it against 8b573dd (whose kn5 is the D593 record's after); its row builds F1 F2 NOW and holds the rest to their bytes.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -74,6 +79,9 @@ const APRON_CHANGED = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-cl
 // D593 (the apron reads as part of the road): F1 F2's kn5, and nothing else, change; manifest.d593.json records it, mesh by mesh (test/fixtures/kn5nodes.js)
 const AMEND11 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d593.json'), 'utf8'));
 const LIP_CHANGED = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-closed'];
+// D604 (the road a solid slab): F1 F2's kn5, and nothing else, change; manifest.d604.json records it, mesh by mesh
+const AMEND12 = JSON.parse(fs.readFileSync(path.join(FX, 'manifest.d604.json'), 'utf8'));
+const SLAB_CHANGED = ['F1-bowl-default-lap-closed', 'F2-halfpipe-default-lap-closed'];
 const { kn5Nodes } = require('./fixtures/kn5nodes.js');
 /** The seal's manifest with the D196 digests put in for the three amended fixtures, and the D222 digests for the two closed ones (a deep copy). */
 function amendedManifest() {
@@ -89,6 +97,7 @@ function amendedManifest() {
   for (const [k, v] of Object.entries(AMEND9.fixtures)) { const { kn5Bytes, ...digests } = v.after_d460; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D460
   for (const [k, v] of Object.entries(AMEND10.fixtures)) { const { kn5Bytes, ...digests } = v.after_d572; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D572
   for (const [k, v] of Object.entries(AMEND11.fixtures)) { const { kn5Bytes, ...digests } = v.after_d593; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D593
+  for (const [k, v] of Object.entries(AMEND12.fixtures)) { const { kn5Bytes, ...digests } = v.after_d604; man.fixtures[k].render = JSON.parse(JSON.stringify(digests)); }   // D604
   return man;
 }
 
@@ -125,6 +134,9 @@ test('the fixture kit is the seal\'s: fixtures.js and manifest.json carry the sh
   assert.equal(sha(fs.readFileSync(path.join(FX, 'kn5nodes.js'))), '6a332f0c710768b04e1e05c592456073234d0d15fddf9188020ecfb721fec879');   // D593: the reader its row uses
   assert.deepEqual(Object.keys(AMEND11.fixtures), LIP_CHANGED);
   assert.deepEqual([...AMEND11.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !LIP_CHANGED.includes(k)).sort());
+  assert.equal(sha(fs.readFileSync(path.join(FX, 'manifest.d604.json'))), '1bae9aec2bed3f44b89821c7d5bc9e911b3e241212c260f3bace446d3435998a');   // D604
+  assert.deepEqual(Object.keys(AMEND12.fixtures), SLAB_CHANGED);
+  assert.deepEqual([...AMEND12.unchanged].sort(), Object.keys(MANIFEST.fixtures).filter((k) => !SLAB_CHANGED.includes(k)).sort());
 });
 // CHANGED D258: F7 (the old jump, now a free flight to the end of its old ramp) differs in segs, path and mesh; the path is byte-identical in every OTHER fixture
 test('row 5a (amended D196, D222, D258): against the SEAL\'s manifest (c964c2d) F4, F6, F8 differ in segs and mesh only, F1, F2 in kn5 only, F7 in segs, path and mesh, and the three others are identical', () => {
@@ -303,11 +315,32 @@ test('D593 amendment record: only F1 F2 changed, only their kn5; built now, ever
     const kinds = (re) => m.meshes_kept_byte_for_byte.filter((x) => re.test(x.name)).length;
     assert.ok(kinds(/^1ROAD_p/) >= 4 && kinds(/^UNDERSKIN_p/) >= 4 && kinds(/^PAINT_/) >= 7 && kinds(/^1ROAD_APRON_/) >= 4 && kinds(/^APRONSIDE_/) >= 4, `${k}: control: the road, skins, paint, aprons and joins are all among the kept`);   // F2's road is 5 chunks (the mesh cap)
     // built NOW, read back node by node (test/fixtures/kn5nodes.js): every node is a93ae51's, and every material record but the apron's
-    const now = kn5Nodes(fixtureKn5(k));
-    assert.deepEqual(now.meshes.map((x) => [x.name, x.full]), m.meshes_kept_byte_for_byte.map((x) => [x.name, x.full]), `${k}: a mesh node is not a93ae51's, byte for byte`);
+    // AMENDED (D604): but the skin and the joins the slab moved, and the skin's material, which manifest.d604.json names and its own row holds
+    const now = kn5Nodes(fixtureKn5(k)), slab = new Set(AMEND12.fixtures[k].measure.moved_skin_and_joins.map((x) => x.name));
+    assert.deepEqual(now.meshes.map((x) => x.name), m.meshes_kept_byte_for_byte.map((x) => x.name), `${k}: the mesh nodes are not a93ae51's, by name and in order`);
+    assert.deepEqual(now.meshes.filter((x) => !slab.has(x.name)).map((x) => [x.name, x.full]), m.meshes_kept_byte_for_byte.filter((x) => !slab.has(x.name)).map((x) => [x.name, x.full]), `${k}: a mesh node is not a93ae51's, byte for byte`);
     assert.equal(now.meshes.length, m.kn5_meshes);
     assert.deepEqual(now.materials, m.materials, `${k}: the materials are a93ae51's, by name and in order`);
-    now.materials.forEach((n, i) => assert.equal(now.materialDigests[i], n === 't180b_apron' ? m.t180b_apron_after : m.material_digests_before[i], `${k}: the material ${n}`));
+    now.materials.forEach((n, i) => { if (n !== 't180b_underskin') assert.equal(now.materialDigests[i], n === 't180b_apron' ? m.t180b_apron_after : m.material_digests_before[i], `${k}: the material ${n}`); });
     for (const x of now.meshes.filter((y) => /^1ROAD_APRON_|^APRONSIDE_/.test(y.name))) assert.ok(x.flags.visible && x.flags.renderable, `${k}: ${x.name} is not drawn`);
+  }
+});
+test('D604 amendment record: only F1 F2 changed, only their kn5; built now, the road, paint and physics planks are the base\'s byte for byte, only the skin and joins moved (drawn), and the only material record changed is t180b_underskin\'s', () => {
+  assert.deepEqual(Object.keys(AMEND12.fixtures), SLAB_CHANGED);
+  for (const [k, v] of Object.entries(AMEND12.fixtures)) {
+    assert.deepEqual(v.before_d604, AMEND11.fixtures[k].after_d593, `${k}: "before" is the record it was last amended by (D593), as 8b573dd built it`);
+    for (const d of ['segs', 'path', 'mesh', 'meshParts']) assert.equal(v.after_d604[d], v.before_d604[d], `${k}: ${d} changed (the road must not move)`);
+    assert.notEqual(v.after_d604.kn5, v.before_d604.kn5, `${k}: the kn5 did not change`);
+    const m = v.measure;
+    assert.deepEqual(m.changed, ['kn5']); assert.deepEqual(m.materials_changed, ['t180b_underskin']);
+    assert.ok(m.moved_skin_and_joins.length > 0 && m.moved_skin_and_joins.every((x) => /^(UNDERSKIN|APRONSIDE)_/.test(x.name)), `${k}: only the skin and the joins moved`);
+    const kinds = (re) => m.kept_byte_for_byte.filter((x) => re.test(x.name)).length;
+    assert.ok(kinds(/^1ROAD_p/) >= 4 && kinds(/^PAINT_/) >= 7 && kinds(/^1ROAD_APRON_/) >= 4 && !m.kept_byte_for_byte.some((x) => /^(UNDERSKIN|APRONSIDE)_/.test(x.name)), `${k}: control: the road, paint and planks are among the kept, the skin and joins are not`);
+    // built NOW: every node and material as the record says
+    const now = kn5Nodes(fixtureKn5(k)), want = new Map([...m.kept_byte_for_byte, ...m.moved_skin_and_joins].map((x) => [x.name, x.full]));
+    assert.equal(now.meshes.length, m.kn5_meshes);
+    for (const x of now.meshes) assert.equal(x.full, want.get(x.name), `${k}: ${x.name} is not the record's, byte for byte`);
+    assert.deepEqual(now.materials, m.materials); assert.deepEqual(now.materialDigests, m.material_digests_after, `${k}: a material is not the record's`);
+    for (const x of now.meshes.filter((y) => /^(UNDERSKIN|APRONSIDE)_/.test(y.name))) assert.ok(x.flags.visible && x.flags.renderable, `${k}: ${x.name} is not drawn`);
   }
 });

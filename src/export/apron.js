@@ -10,7 +10,7 @@
 //     widthM = 0: no apron, and a SIDE FACE from the road's edge row straight to the skin's edge row, so the gap seen from the side is closed at every setting.
 //   the scene itself (the same object) when nothing gets one.
 //
-// WHY. The road is one single-sided physics shell; the skin 0.5 m under it is scenery (underskin.js). Between the road's edge row and the skin's edge row the section is
+// WHY. The road is one single-sided physics shell; the skin under it is scenery (underskin.js; 0.5 m deep when this was written, the plank's drop since D604). Between the road's edge row and the skin's edge row the section is
 // open to the side, and a wheel that drops past the edge and is steered back comes in UNDER the road and hangs there with nothing to lead it up (measured in the room's
 // record: the Demo's rear right went 0.86 m past the edge at 655 km/h and came back 0.31 m under the surface, exo_memory/handback/p-d563-wheel-under-O_2026-10-30.md). The
 // apron gives that wheel a surface while it is out, at the height it falls to: at 25°, 0.86 m out the apron is 0.40 m below the edge row. Steered back, it rides up onto the
@@ -223,6 +223,18 @@ function outlineRows(mainRows, laneMesh, lane) {
   return rows;
 }
 
+/** A mesh from grid() with triangles appended, each three [point, normal, uv], wound to face along the sum of its normals as grid winds its own (one of no area is left out). */
+function withTris(m, tris) {
+  const P = Array.from(m.positions), Nn = Array.from(m.normals), U = Array.from(m.uvs), idx = Array.from(m.indices);
+  for (const t of tris) {
+    const x = cross(sub(t[1][0], t[0][0]), sub(t[2][0], t[0][0])); if (!(len(x) > 1e-12)) continue;
+    const a = P.length / 3; t.forEach(([p, n, uv]) => { P.push(...p); Nn.push(...n); U.push(...uv); });
+    if (dot(x, add(add(t[0][1], t[1][1]), t[2][1])) >= 0) idx.push(a, a + 1, a + 2); else idx.push(a, a + 2, a + 1);
+  }
+  if (P.length / 3 > 65535) throw new Error(`withApron: ${m.name} has ${P.length / 3} vertices, past a kn5 mesh's 16-bit indices`);
+  return { ...m, positions: Float32Array.from(P), normals: Float32Array.from(Nn), uvs: Float32Array.from(U), indices: Uint16Array.from(idx) };
+}
+
 /**
  * The outline's PHYSICS (apronOf's rule on every row: out along X, down along N by widthM·tan slope; two vertices a row, its top facing along N) and its JOIN (apronOf's
  * too: from the outer row back to the skin's edge vertex, E − UNDERSKIN_OFFSET_M·NE, each normal turned away from the section's inside): { physics, side }. Both are
@@ -240,6 +252,7 @@ function outlineMeshes(rows, widthM, slopeDeg, names) {
   // TAPER_MIN_W keeps over 1 cm (src/geom/pitlane.js)
   const Os = rows.map((q) => add(add(q.E, mul(q.X, widthM)), mul(q.N, -widthM * tan)));
   const capN = rows.map(() => null);   // an across run's inner rows: the normal of the lane end's cap
+  const notJoin = rows.map(() => false), ends = [];   // the join's rows left out at the lane's ends, and each end's fan: { out, list } (row indexes)
   const across = (r) => { const d = sub(rows[r + 1].E, rows[r].E), l = len(d); return l > 0 && l < 0.5 && Math.abs(dot(d, rows[r].X)) > 0.7 * l; };
   for (let r = 0; r + 1 < rows.length; r++) {
     if (!across(r)) continue;
@@ -252,10 +265,15 @@ function outlineMeshes(rows, widthM, slopeDeg, names) {
       // inward and was culled (sky through the leave from below, D593 overnight). Its inner rows face OUT OF THE LANE'S END, toward the road row outside the run
       const out = rows[k === run[0] ? run[run.length - 1] + 1 : run[0] - 1];
       if (out) { let c = unit(cross(rows[k].X, rows[k].N)); if (dot(c, sub(out.E, rows[k].E)) < 0) c = mul(c, -1); for (const i of run.slice(1, -1)) capN[i] = c; }
+      // THE JOIN AT THE LANE'S END (D604): at the slab's depth (UNDERSKIN_OFFSET_M, the plank's drop) the lane's skin row, its outer point and the road row's skin point
+      // lie on one line, the lane being flat, so the run's own join cells have no area (slivers) and the lane skin's end edge would meet the road join's edge in a T.
+      // So the join leaves out the run's rows but the lane row, and the gap beside the outside road row is a fan from that row's skin point to the run's skin points
+      const oi = k === run[0] ? run[run.length - 1] + 1 : run[0] - 1;
+      if (out) { for (const i of run) if (i !== k) notJoin[i] = true; ends.push({ out: oi, list: k === run[0] ? run.slice().reverse() : run.slice() }); }
     }
     r = j;
   }
-  let along = 0;
+  let along = 0; const Ss = [], NJ = [];
   rows.forEach((q, r) => {
     if (r > 0) along += len(sub(q.E, rows[r - 1].E));
     const O = Os[r], T = sub((rows[r + 1] || q).E, (rows[r - 1] || q).E);
@@ -265,9 +283,13 @@ function outlineMeshes(rows, widthM, slopeDeg, names) {
     const S = sub(q.E, mul(q.NE, UNDERSKIN_OFFSET_M)), G = mul(add(add(q.E, O), S), 1 / 3), mid = mul(add(O, S), 0.5);
     let nj = len(T) > 1e-9 ? unit(cross(unit(T), unit(sub(S, O)))) : mul(q.N, -1); if (dot(nj, sub(mid, G)) < 0) nj = mul(nj, -1);
     if (capN[r]) nj = capN[r];
-    J.push([O, S]); Nj.push([nj, nj]); UVj.push([[0, along / APRON_TILE_M], [len(sub(S, O)) / APRON_TILE_M, along / APRON_TILE_M]]);
+    Ss.push(S); NJ.push(nj);
+    if (!notJoin[r]) { J.push([O, S]); Nj.push([nj, nj]); UVj.push([[0, along / APRON_TILE_M], [len(sub(S, O)) / APRON_TILE_M, along / APRON_TILE_M]]); }
   });
-  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), side: grid(names.side, J, Nj, UVj, J.map(() => false)) };
+  // each lane end's fan: from the outside road row's skin point across the run's skin points, the road's first and the lane's last
+  const fans = [];
+  for (const { out, list } of ends) for (let i = 0; i + 1 < list.length; i++) fans.push([Ss[out], Ss[list[i]], Ss[list[i + 1]]].map((p) => [p, NJ[out], [0, 0]]));
+  return { physics: grid(names.physics, V, Nv, UV, rows.map(() => false)), side: withTris(grid(names.side, J, Nj, UVj, J.map(() => false)), fans) };
 }
 
 /**
@@ -404,6 +426,9 @@ function withApron(scene, mesh, segments, opts = {}) {
   }
   if (!add.length) return scene;
   materials.push(apronMaterial(roadMat === null ? null : materials[roadMat]));
+  // THE SLAB'S UNDERSIDE wears the same asphalt (D604): the skin's material, under its own name and at its own index, becomes the road's in its shade too
+  const skinAt = materials.findIndex((x) => x && x.name === 't180b_underskin');
+  if (roadMat !== null && skinAt >= 0) materials[skinAt] = { ...shadeOf(materials[roadMat]), name: 't180b_underskin' };
   return { ...scene, materials, root: { ...scene.root, children: [...(replaced && replaced.size ? kids.map((c, i) => replaced.get(i) || c) : kids), ...add] } };
 }
 

@@ -15,6 +15,8 @@ All notable changes to this project are recorded here. The format follows
 
   The check is `test/on_github.js` (GitHub sets `GITHUB_ACTIONS=true`). There, `menubar-page` also waits up to 120 s for the page to mount, instead of 30 s.
 
+- **The road is a solid slab.** It used to be a single sheet with a thin underside half a metre below it, so from the side the track read as a slice. Now the underside runs at the depth of the edge apron, about 0.93 m under the road, following the road's shape across (in a cup it stays under the cup), and closes onto the apron at both edges: from the side the track has the thickness of a slab, apron to apron, round the pit lane too. The underside wears the road's own asphalt a little darker, like the apron. How the road drives is unchanged: no surface a wheel touches has moved. Where the track crosses over itself with little room between, the two slabs meet in the gap.
+
 ### Fixed
 
 - **A track that goes through vertical keeps an AI line Assetto Corsa can load.** Assetto Corsa rebuilds each AI line point's direction from its neighbours against world up, and a point lying almost exactly on vertical crashed the game as the track loaded. The export now moves such a point a little along the road until no direction it touches is nearer vertical than 1e-4 (ELYSIUM's loop, which loads, stays at 1.93e-4 and is untouched: its AI line is byte for byte what it was). Only a road that stays vertical over a stretch, where no point can be moved clear, gets no AI line, and the export says "this track goes vertical, so it has no AI line; it drives and times normally"; laps still time off the gates. (An older export's `fast_lane.ai` in the same folder is not removed: delete it by hand if you export over one.)
